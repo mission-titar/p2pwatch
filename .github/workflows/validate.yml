@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       push:
-        description: If true, the build-and-verify job also pushes the image to ghcr by digest.
+        description: If true, the build-and-verify job also pushes both images to ghcr by digest.
         type: boolean
         default: false
 
@@ -87,12 +87,14 @@ jobs:
           build-args: |
             VERSION=${{ steps.version.outputs.value }}
       - name: Build the aMule image (${{ matrix.arch }})
+        id: amule-image
         uses: ./.github/actions/docker-image
         with:
           package: amule
           platform: linux/${{ matrix.arch }}
           image: ${{ env.AMULE_IMAGE }}
           local-tag: ci-${{ github.sha }}
+          push: ${{ inputs.push }}
           cache-scope: amule-${{ matrix.arch }}
           build-args: |
             VERSION=${{ steps.version.outputs.value }}
@@ -169,19 +171,29 @@ jobs:
       - name: Stop the throwaway daemon (${{ matrix.arch }})
         if: ${{ always() }}
         run: docker rm -f amuled || true
-      - name: Export the digest
+      - name: Export the digests
         if: ${{ inputs.push }}
         run: |
-          mkdir -p /tmp/digests
-          touch "/tmp/digests/${CRAWLER_DIGEST#sha256:}"
+          mkdir -p /tmp/digests/crawler /tmp/digests/amule
+          touch "/tmp/digests/crawler/${CRAWLER_DIGEST#sha256:}"
+          touch "/tmp/digests/amule/${AMULE_DIGEST#sha256:}"
         env:
           CRAWLER_DIGEST: ${{ steps.crawler.outputs.digest }}
+          AMULE_DIGEST: ${{ steps.amule-image.outputs.digest }}
       - name: Upload the crawler digest
         if: ${{ inputs.push }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: digest-${{ matrix.arch }}
-          path: /tmp/digests/*
+          name: digest-crawler-${{ matrix.arch }}
+          path: /tmp/digests/crawler/*
+          if-no-files-found: error
+          retention-days: 1
+      - name: Upload the aMule digest
+        if: ${{ inputs.push }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: digest-amule-${{ matrix.arch }}
+          path: /tmp/digests/amule/*
           if-no-files-found: error
           retention-days: 1
 
