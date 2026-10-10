@@ -28,7 +28,7 @@ RUN cmake -S /src/amule -B /build -DCMAKE_BUILD_TYPE=Release \
     && DESTDIR=/out cmake --install /build --strip
 
 # aMule has no package metadata for Syft to find: declare it, from the same ARG as the source.
-COPY packages/crawler/docker/amule.cdx.json /tmp/amule.cdx.json
+COPY packages/amule/docker/amule.cdx.json /tmp/amule.cdx.json
 RUN sed "s/@AMULE_VERSION@/${AMULE_VERSION}/g" /tmp/amule.cdx.json \
       > /out/usr/local/share/amule/amule.cdx.json
 
@@ -92,7 +92,8 @@ COPY --from=amule /out/usr/local/share/amule/ /usr/local/share/amule/
 COPY --from=amule /src/amule/LICENSE.md /usr/local/share/doc/amule/LICENSE.md
 
 COPY --from=python /app/.venv /app/.venv
-COPY packages/crawler/docker/entrypoint.sh /usr/local/bin/
+COPY packages/amule/docker/entrypoint.sh /usr/local/bin/
+COPY packages/amule/docker/services.d/ /etc/services.d/
 COPY packages/crawler/docker/services.d/ /etc/services.d/
 
 ENV PATH="/app/.venv/bin:$PATH"
