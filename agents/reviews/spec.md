@@ -88,6 +88,6 @@ column is nullable; a grep is not a structural test.
   500 changed lines or 20 changed files (`agents/workflow.md`, "What a block is") is a finding unless
   the specification states in one line why it cannot split.
 
-**Detail.** mulewatch records its decisions in specs and handoffs, not in a separate decision
+**Detail.** p2pwatch records its decisions in specs and handoffs, not in a separate decision
 record, so a reason missing from the specification is missing everywhere: the next lot meets the
 decision with nothing to weigh against it.

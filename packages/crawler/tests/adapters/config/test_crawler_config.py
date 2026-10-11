@@ -146,7 +146,7 @@ def test_backoff_cap_below_base_is_fatal() -> None:
         parse_crawler_config(raw, _env())
 
 
-# ------------------------------------------------------- the single amuled (single container)
+# ------------------------------------------------------------------------- the single amuled
 
 
 def test_node_id_override_is_kept() -> None:

@@ -95,7 +95,7 @@ def _make_nav_context(amule_url: str) -> Callable[[Request], dict[str, Any]]:
     The match is exact, so a sub-page (``/files/{file_id}``, ``/targets/{id}``) marks no entry
     active: it is not itself a nav destination, and it names itself with its own heading.
 
-    The last entry is the container's OTHER web surface, amuleapi's own UI (design §9). Its base
+    The last entry is the aMule container's web surface, amuleapi's own UI. Its base
     is operator-configured: p2pwatch cannot know how it is reachable from the browser.
     """
 

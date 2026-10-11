@@ -46,7 +46,7 @@ class AmuleEndpoint:
     password: str
 
 
-# The aMule service in the direct stack, ed2k-gluetun's alias in the vpn one.
+# aMule's service in the direct variant, a network alias of its VPN sidecar in the vpn one.
 AMULE_API_HOST = "ed2k"
 AMULE_API_PORT = 4711
 AMULE_INSTANCE_NAME = "amuled"
@@ -82,8 +82,8 @@ class WebuiConfig:
     composition layer, not configurable here; exposure is governed by the operator's Docker
     compose (published port + networks), not by an app-level bind address.
 
-    ``amule_url`` is where the nav's aMule link points. The container publishes two web surfaces
-    (design §9) and p2pwatch cannot know how its own is reached, so this is a plain configurable
+    ``amule_url`` is where the nav's aMule link points. The two containers each publish a web
+    surface and p2pwatch cannot know how its own is reached, so this is a plain configurable
     base: the default is the no-proxy case, and an operator behind a reverse proxy overrides it.
     """
 
