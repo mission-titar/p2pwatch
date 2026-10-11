@@ -234,12 +234,12 @@ finding was fixed in block 130.
   pull** (`cycle_interval_seconds`, `search_poll_budget_seconds`, `search_poll_interval_seconds`,
   `keyword_pause_min_seconds`, `keyword_pause_max_seconds`, previous handoff): the core refuses each
   with a `ConfigError`. `docs/migration-4x.md` covers it.
-- **The first `main` push after the merge**: both images pushed, the per-image matrix legs,
-  `cosign verify` and `cosign verify-attestation --type openvex` on `p2pwatch:main` and
-  `p2pwatch-amule:main`, and `docker buildx imagetools inspect` listing `linux/amd64` and
-  `linux/arm64` for each. The new "core image holds no aMule" step on arm64.
-- **GHCR package visibility** of `p2pwatch` and `p2pwatch-amule`, created by that push with the
-  organization's default: `gh api /orgs/mission-titar/packages/container/<name> -q .visibility`.
+- **`cosign verify` and `cosign verify-attestation --type openvex`** on `p2pwatch:main` and
+  `p2pwatch-amule:main`. The first `main` push after the merge (8804128, Release run 38145305629)
+  is green on both matrix legs, the "core image holds no aMule" step included on arm64;
+  `docker buildx imagetools inspect` lists `linux/amd64` and `linux/arm64` for each image, and an
+  anonymous pull of either `main` manifest returns 200, so both GHCR packages are public
+  (verified 2026-10-11).
 - **The daily Grype scan fails until the first p2pwatch release**: it scans `latest` of both images,
   which do not exist yet (D13).
 - **amuled's stop time under s6**, against the 60 s down timeout: `time s6-svc -wD -d
