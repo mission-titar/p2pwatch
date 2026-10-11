@@ -222,7 +222,9 @@ One loop, every `PORT_SYNC_POLL_SECONDS`:
 3. Same port, or a restart less than `PORT_SYNC_RESTART_MIN_SECONDS` ago: nothing.
 4. Otherwise:
    1. `s6-svc -wD -T 60000 -d /etc/services.d/amuled`;
-   2. when it exits 0, write `[eMule] Port` and `[eMule] UDPPort` to the forwarded port;
+   2. when it exits 0, write `[eMule] Port` and `[eMule] UDPPort` to the forwarded port (Corrected: the
+      write is atomic, a temporary file then `os.replace`, so a failed write never leaves amuled a
+      truncated file; block 35);
    3. then **always** `s6-svc -u /etc/services.d/amuled`, whatever the down wait or the write did;
    4. record the restart's time.
 
@@ -275,7 +277,8 @@ How the boot step (`python -m p2pwatch_amule.config`, as root, before s6) handle
    - any other value exits naming `PORT_SYNC`.
 2. Off: it creates `/etc/services.d/port-sync/down`, so s6 never starts the service.
 3. On: it removes that file and validates the three other variables. The URL needs an `http` or `https`
-   scheme and a host; the numbers must be positive.
+   scheme and a host; the numbers must be positive. (Corrected: positive integers, and an empty variable
+   takes its default like an unset one; block 30.)
 4. A bad value exits naming the variable, before s6 starts anything, as a missing `PUID` does today.
 
 In compose:
@@ -487,7 +490,8 @@ against the aMule image alone.**
     check pass on a root-owned file.
   - block 35's s6 check, run as `amule` (section 4).
 - Its `docker compose config` test:
-  - copies `deploy/` to a temporary directory and writes a `.env` there;
+  - copies `deploy/` to a temporary directory and writes a `.env` there (Corrected: only
+    `deploy/**/*compose.yml` is copied, so a developer's `deploy/.env` and `data/` never are; block 90);
   - renders `compose.yml` with each variant, with no `PUID` in the process environment, so the render can
     only take it from the parent's `.env` (section 4);
   - never writes `deploy/.env`, which is gitignored and holds a developer's secrets.
@@ -641,7 +645,10 @@ A second claim the layout rests on: **an included file reads the parent's `.env`
   the local project's environment".
 - Proved by the smoke test's `docker compose config` (block 90, D11): a `.env` beside a temporary copy of
   `compose.yml`, no `ed2k/.env`, no `PUID` in the process environment. `ed2k`'s `PUID` must render from that
-  `.env`.
+  `.env`. (Corrected: `PUID` cannot fail in isolation, since without it the core's `user:` fails first. The
+  test also asserts `ed2k`'s `AMULE_EC_PASSWORD`, which only `ed2k/service.compose.yml` interpolates;
+  dropped from the `.env`, the render fails with `required variable AMULE_EC_PASSWORD is missing a value`,
+  watched failing in block 130.)
 - The reviewer rendered it with Compose 5.5.1 on 2026-10-10, on a scratch copy of the layout: `PUID`
   rendered, `./amule` resolved under `ed2k/`, the alias rendered.
 
@@ -699,8 +706,10 @@ files and `git grep -c` of the touched sites. Each block measures itself after c
   - `deploy/gluetun.compose.yml` sets `PORT_SYNC: ${VPN_PORT_FORWARDING:-off}`;
   - `test_app.py`, `test_crawler_config.py`.
 - **50**: `application/port_sync_loop.py` with `test_port_sync_loop.py` and `test_run_port_sync_cycle.py`.
-- **60**: `adapters/gluetun_port.py`, `adapters/s6_restart.py`, `ports/mule_restarter.py`,
-  `ports/port_forwarding.py` and their tests.
+  (Corrected: also `ports/port_forwarding.py`, whose last importer the loop was: left in place, it failed
+  the coverage gate.)
+- **60**: `adapters/gluetun_port.py`, `adapters/s6_restart.py`, `ports/mule_restarter.py` and their tests.
+  (Corrected: `ports/port_forwarding.py` left in block 50.)
 - **65**:
   - the three events, their policy arms and metrics (D7);
   - `get_listen_port` / `set_listen_port` (inline in `adapters/mule_api/client.py`) and their `FakeAmuleApi`
@@ -711,12 +720,14 @@ files and `git grep -c` of the touched sites. Each block measures itself after c
   - `packages/amule/Dockerfile`: the aMule stage copied, Python stages, runtime with s6;
   - `amule.cdx.json`, `entrypoint.sh`, `services.d/amuled` and `services.d/port-sync` move from
     `packages/crawler/docker/` to `packages/amule/docker/` (`git mv`);
-  - the crawler's Dockerfile copies them from there; its `services.d/mulewatch` stays until block 80;
+  - the crawler's Dockerfile copies them from there; its `services.d/mulewatch` stays until block 80
+    (Corrected: `services.d/p2pwatch`, renamed by block 10);
   - `validate.yml` builds the image per arch, checks the aMule version and SBOM entry on it, and runs the
     integration suites against it.
 - **80**:
   - the crawler's Dockerfile loses the aMule stage, s6, the entrypoint and `services.d/` (D8);
-  - the crawler's dependency on `p2pwatch-amule` and the crawler's `services.d/mulewatch` go;
+  - the crawler's dependency on `p2pwatch-amule` and the crawler's `services.d/mulewatch` go (Corrected:
+    `services.d/p2pwatch`, renamed by block 10);
   - `AMULE_API_HOST = "ed2k"` (D9); `__main__` docstring;
   - the smoke stack's two services and `test_compose_smoke.py` (D11);
   - `validate.yml`'s crawler-image aMule checks go;
@@ -729,7 +740,9 @@ files and `git grep -c` of the touched sites. Each block measures itself after c
 - **100**:
   - `release.yml`'s and `grype-scan.yml`'s per-image matrix (D13);
   - `security/amule.vex.openvex.json` and the crawler VEX's claims (D12);
-  - `vex_guards.repo` and its tests.
+  - `vex_guards.repo` and its tests;
+  - (Corrected: also `validate.yml`, as D12 lists: the aMule build pushes when `inputs.push`, and each
+    image uploads its own `digest-<package>-<arch>`.)
 - **110**: `docs/migration-4x.md` (D14), `install.md`, `operate.md`, `high-id.md`, `vpn.md`, `settings.md`,
   `glossary.md`, `limits.md`, `verify-image.md`, the nav in `zensical.toml`.
 - **120**: `troubleshooting.md`, `troubleshooting-start.md`, `contributing/architecture.md`,
@@ -777,6 +790,9 @@ files and `git grep -c` of the touched sites. Each block measures itself after c
   file). It keeps its right to restart amuled because the crawler's `run` still grants it.
 - Blocks 70 to 80: the aMule build stage is in both Dockerfiles, and `amule-bump` still edits the
   crawler's.
+- (Corrected: unlisted.) Blocks 80 to 90: `deploy/base.compose.yml` still runs the core image as the single
+  container, healthchecked on `s6-svstat`, but that image no longer holds aMule nor s6: `deploy/` cannot
+  start a node until block 90's layout.
 - The stack merges as a whole after block 10, so `main` carries none of them.
 
 ### Adjacent backlog items
@@ -815,7 +831,10 @@ Each criterion names the output that would prove it wrong.
     `"port_sync",` line of `_REMOVED_KEYS` in `adapters/config/crawler_config.py`. Any other line fails it.
   - `grep -c '"emule_' packages/crawler/src/p2pwatch/domain/observability/policy.py` prints `0`.
 - **The core image holds no aMule.** `docker run --rm --entrypoint sh <core image> -c 'command -v amuled
-  amuleapi s6-svscan'` prints nothing. Any path fails it.
+  amuleapi s6-svscan'` prints nothing. Any path fails it. (Corrected: Debian's `sh` is dash, whose
+  `command -v a b c` reports only the first name. One run per name instead: `for b in amuled amuleapi
+  s6-svscan; do docker run --rm --entrypoint sh <core image> -c "command -v $b"; done` prints nothing.
+  `validate.yml` runs that loop on both arches since block 130.)
 - **The two containers work together.** In the smoke stack, the dashboard (`GET /`) shows a current reading
   for the client `amuled` within 120 s of `ed2k` turning healthy. "No reading yet." at 120 s fails it, and
   so does a core still pointing at `127.0.0.1`.
@@ -829,6 +848,8 @@ Each criterion names the output that would prove it wrong.
   - with the include switched to `ed2k/vpn.compose.yml`: `ed2k-gluetun` with the alias `ed2k`, and `ed2k`
     with `network_mode: service:ed2k-gluetun` and `PORT_SYNC`;
   - a missing alias, a source outside `deploy/ed2k/` or an uninterpolated `PUID` fails it.
+  - (Corrected: added in block 130, the published ports: `ed2k`'s 4711/tcp, 4662/tcp and 4672/udp in the
+    direct variant, `ed2k-gluetun`'s 4711/tcp alone in the vpn one, the core's 8080. A `4662/udp` fails it.)
 - **Supply chain.**
   - After the stack merges, `cosign verify` and `cosign verify-attestation --type openvex` pass for both
     `ghcr.io/mission-titar/p2pwatch:main` and `ghcr.io/mission-titar/p2pwatch-amule:main`, with the new
