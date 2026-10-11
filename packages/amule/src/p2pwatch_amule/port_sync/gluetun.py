@@ -9,7 +9,7 @@ _logger = logging.getLogger(__name__)
 
 
 def forwarded_port(control_url: str) -> int | None:
-    """`GET <control_url>/v1/portforward` → `{"port": N}`; None unless N is an integer > 0."""
+    """`GET <control_url>/v1/portforward` → `{"port": N}`; None unless N is a TCP port."""
     url = control_url.rstrip("/") + "/v1/portforward"
     try:
         with urllib.request.urlopen(url, timeout=10) as response:
@@ -22,8 +22,7 @@ def forwarded_port(control_url: str) -> int | None:
         port = json.loads(body).get("port")
     except (ValueError, AttributeError):
         port = None
-    # bool is an int: true must not count as a port.
-    if not isinstance(port, int) or isinstance(port, bool) or port <= 0:
+    if not (type(port) is int and 0 < port <= 65535):
         _logger.warning("gluetun reports no forwarded port (%r)", body[:100])
         return None
     return port

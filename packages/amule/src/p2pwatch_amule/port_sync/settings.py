@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 
 # gluetun's own booleans (gosettings' parseBool), since PORT_SYNC receives VPN_PORT_FORWARDING.
 _ON = ("enabled", "yes", "on", "true")
-_OFF = ("disabled", "no", "off", "false", "")
+_OFF = ("disabled", "no", "off", "false")
 
 
 @dataclass(frozen=True)
@@ -21,13 +21,15 @@ class Settings:
 
 
 def enabled(env: Mapping[str, str]) -> bool:
-    """Return whether `PORT_SYNC` turns port-sync on; unset is off."""
+    """Return whether `PORT_SYNC` turns port-sync on; unset or empty is off."""
     value = env.get("PORT_SYNC", "")
+    if not value:
+        return False
     if value.lower() in _ON:
         return True
     if value.lower() in _OFF:
         return False
-    sys.exit(f"PORT_SYNC must be one of {', '.join(_ON + _OFF[:-1])}, got {value!r}")
+    sys.exit(f"PORT_SYNC must be one of {', '.join(_ON + _OFF)}, got {value!r}")
 
 
 def load(env: Mapping[str, str]) -> Settings:
