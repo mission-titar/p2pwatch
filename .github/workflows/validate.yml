@@ -34,12 +34,7 @@ jobs:
       - name: Unit tests
         run: uv run poe test
 
-  # One job per arch on its native runner: build the images (loaded locally, the crawler's
-  # pushed by digest when inputs.push), run the compose smoke stack against the crawler image
-  # and the daemon-facing suites against the aMule image, then upload the digest for the
-  # release merge. The push exporter runs during the build, but only publish-manifest
-  # publishes a tag, and it is downstream of this job's integration step, so no tag ever
-  # references an image that failed integration.
+  # Pushes by digest only: publish-manifest tags downstream of it, so no tag skips integration.
   build-and-verify:
     needs: [lint, test]
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
@@ -162,7 +157,6 @@ jobs:
         run: ( cd packages/crawler && uv run pytest -m compose_integration --no-cov -q )
         env:
           IMAGE_TAG: ci-${{ github.sha }}
-      # These three suites drive amuled and amuleapi only, so they run against the aMule image.
       - name: Start a throwaway daemon (${{ matrix.arch }})
         run: |
           docker run -d --rm --name amuled -p 4711:4711 \
