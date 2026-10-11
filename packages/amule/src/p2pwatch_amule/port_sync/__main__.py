@@ -16,7 +16,7 @@ from p2pwatch_amule.port_sync.gluetun import forwarded_port
 AMULED_SERVICE_DIR = "/etc/services.d/amuled"
 CONF_PATH = os.path.join(CONFIG_DIR, "amule.conf")
 
-_logger = logging.getLogger(__name__)
+_logger = logging.getLogger("p2pwatch_amule.port_sync")
 
 
 def sync_listen_port_once(
@@ -26,11 +26,10 @@ def sync_listen_port_once(
     forwarded = forwarded_port(config.gluetun_control_url)
     if forwarded is None:
         return last_restart
-    with open(CONF_PATH) as handle:
-        conf = handle.read()
     try:
-        configured = listen_port(conf)
-    except (ValueError, configparser.Error) as error:
+        with open(CONF_PATH) as handle:
+            configured = listen_port(handle.read())
+    except (OSError, ValueError, configparser.Error) as error:
         # The operator's file: a crash would only make s6 respawn port-sync every second.
         _logger.error("amule.conf's port is unreadable, amuled left as is (%s)", error)
         return last_restart
