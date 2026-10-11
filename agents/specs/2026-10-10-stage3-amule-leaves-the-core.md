@@ -285,6 +285,12 @@ In compose:
 
 - `deploy/ed2k/vpn.compose.yml` sets `PORT_SYNC: ${VPN_PORT_FORWARDING:-off}`. Turning on the tunnel's
   port forwarding in `.env` turns on port-sync, and nothing else does.
+- (Corrected: `docs/high-id.md` told the operator to keep `PORT_FORWARD_ONLY: "on"`, which no compose file
+  ever set. The operator first decided to set it from `VPN_PORT_FORWARDING` on `ed2k-gluetun`, then
+  reversed it in block 130: gluetun already defaults it on for Proton and PIA when port forwarding is on,
+  and refuses to start with it on for any other provider (`ErrPortForwardOnlyNotSupported`,
+  `internal/configuration/settings/serverselection.go` at `v3.41.3`), PrivateVPN and Perfect Privacy
+  included. No compose sets it; the page now says so.)
 - `crawler.yml` refuses a `port_sync:` section (D7).
 
 Why:
