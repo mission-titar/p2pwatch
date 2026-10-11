@@ -40,7 +40,7 @@ COPY . /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-editable --package p2pwatch
 
-# --- Runtime: the crawler and its webui, restarted by Docker, not by a supervisor ---
+# --- Runtime: the crawler and its webui ---
 FROM debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
 
 # ARG after FROM only lives in the stage that declares it, hence the re-declaration.
@@ -55,7 +55,6 @@ COPY --from=python /app/.venv /app/.venv
 
 ENV PATH="/app/.venv/bin:$PATH"
 WORKDIR /app
-# Explicit paths: the CLI defaults are relative to a repo checkout.
 CMD ["python", "-m", "p2pwatch", \
      "--config", "/app/config/crawler.yml", \
      "--targets", "/app/config/targets.yml", \
