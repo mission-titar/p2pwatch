@@ -155,9 +155,11 @@ against git (`git show --stat` of the block's commit, `git ls-tree` of `4501cda`
   (`5c0c540`), `feat/amule-port-sync-loop` twice (`fdbaa4e`, one of the two a cancelled duplicate);
   every other branch ran once. Command, per stack branch: `gh run list --branch <b> --workflow
   pr.yml --json headSha,event,conclusion,createdAt`; `--workflow validate.yml` prints nothing, it is
-  the reusable workflow `pr.yml` calls. After the review, the push of the rebased stack re-runs all
-  14 open pull requests once. More runs than blocks: by the workflow's measure, this lot's stacking
-  cost more than pull requests in series, all of the excess from the review's fix-backs.
+  the reusable workflow `pr.yml` calls. After the review, the push of the rebased stack re-ran 13 of
+  the 14 open pull requests once (`refactor/amule-package` did not move), and this count's own
+  correction re-ran #175 once: 3 + 13 + 1 = 17. More runs than blocks: by the workflow's measure,
+  this lot's stacking cost more than pull requests in series, all of the excess from the review's
+  fix-backs.
 - **Bodies the operator called unreadable: none.**
 - **Friction**: the repository rename left `.git/gh-stack` stale and the lead reset it; the spec
   reviewer could not be launched from a fork.
