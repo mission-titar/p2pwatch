@@ -5,7 +5,7 @@ COMPOSITION layer (the only one allowed to import adapters AND application). Bui
   ``SqliteSchedulerStateRepository`` (single writer, invariant §11), connections opened
   via ``open_catalog``/``open_local`` (migrations checked at startup, fail-fast §14).
 - the ``MatchingEngine`` (once), the ``node_id`` (config override or the one from local.db),
-- ONE ``MuleClient`` + ``SearchWorker`` on the container's single amuled (design §6), whose
+- ONE ``MuleClient`` + ``SearchWorker`` on the one amuled the core drives, whose
   session the status loop shares.
 
 Loops: the search tasks (``SearchTasks``), the status loop, and the download loop when

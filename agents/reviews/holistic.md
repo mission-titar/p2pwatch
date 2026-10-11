@@ -66,7 +66,7 @@ because the failure the file leaves is the short return message being cut, and t
 
 **Detail.** One webui route left in the framework's default error format breaks what the others uphold, which is why
 contract uniformity is read across the whole change. The gate enforces 100 % branch coverage on each package's unit
-tests only: the integration suites, `packages/crawler/Dockerfile` and `packages/crawler/docker/` (entrypoint, s6
+tests only: the integration suites, `packages/*/Dockerfile` and `packages/amule/docker/` (entrypoint, s6
 services), `deploy/`, `tests/smoke/` and the CI workflows are outside it, and so is any line under `# pragma: no cover`.
 Coverage anyway proves nothing about whether anyone asked for the branch. Renumbering a section silently breaks anchors
 pointing into it; `uv run poe docs-build`, run by `docs.yml` and not by the gate, fails on a dead link under `docs/` and
