@@ -133,7 +133,7 @@ def test_the_default_repo_is_upstream_authenticated_by_gh_token(
     assert opened == [("amule-org/amule", "secret")]
 
 
-def test_the_default_dockerfile_is_the_amule_image(
+def test_without_dockerfile_flag_it_bumps_the_amule_image(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     pinned = tmp_path / "packages/amule/Dockerfile"
