@@ -180,11 +180,14 @@ def test_the_restart_time_carries_from_one_round_to_the_next(
     assert node.commands == [UP, DOWN, UP]
 
 
-@pytest.mark.parametrize("conf", ["[eMule]\nPort=4662x\n", "Port=4662\n"])
+@pytest.mark.parametrize("conf", ["[eMule]\nPort=4662x\n", "Port=4662\n", None])
 def test_an_unreadable_amule_conf_calls_no_s6_command_and_is_logged(
-    node: Node, caplog: pytest.LogCaptureFixture, conf: str
+    node: Node, caplog: pytest.LogCaptureFixture, conf: str | None
 ) -> None:
-    node.conf.write_text(conf)
+    if conf is None:
+        node.conf.unlink()
+    else:
+        node.conf.write_text(conf)
     with caplog.at_level(logging.ERROR):
         assert port_sync.sync_listen_port_once(Settings(), 5.0, now=1000.0) == 5.0
     assert node.commands == []
