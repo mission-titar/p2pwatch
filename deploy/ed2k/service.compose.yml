@@ -1,5 +1,4 @@
-# aMule's service, pulled into direct.compose.yml and vpn.compose.yml with `extends:`.
-# Each variant adds its own network; this file declares none. Paths resolve against ed2k/.
+# aMule's service, shared by the direct and vpn variants through `extends:`; each adds its network.
 
 services:
   ed2k:
