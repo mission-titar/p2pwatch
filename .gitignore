@@ -31,3 +31,5 @@ site/
 
 # Rapports des agents de revue (spec, holistique), jamais versionnés
 .reviews/
+
+.serena
