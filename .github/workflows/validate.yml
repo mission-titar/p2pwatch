@@ -86,6 +86,17 @@ jobs:
           cache-scope: crawler-${{ matrix.arch }}
           build-args: |
             VERSION=${{ steps.version.outputs.value }}
+      # Looped: dash's `command -v a b c` reports only the first name.
+      - name: Check that the core image holds no aMule (${{ matrix.arch }})
+        env:
+          IMAGE: ${{ env.IMAGE }}:ci-${{ github.sha }}
+        run: |
+          for binary in amuled amuleapi s6-svscan; do
+            if docker run --rm --entrypoint sh "$IMAGE" -c "command -v $binary"; then
+              echo "::error::$binary is in the core image"
+              exit 1
+            fi
+          done
       - name: Build the aMule image (${{ matrix.arch }})
         id: amule-image
         uses: ./.github/actions/docker-image
