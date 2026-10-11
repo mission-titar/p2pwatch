@@ -1,5 +1,5 @@
-# aMule inside gluetun's network; the core stays outside the tunnel.
-# For High-ID, set VPN_PORT_FORWARDING=on in .env: it also turns port-sync on.
+# eD2k and Kad behind gluetun; the core stays outside the tunnel. VPN_PORT_FORWARDING=on in .env
+# gives High-ID and turns port-sync on. aMule's web UI on 4711 is protected by AMULE_API_PASSWORD.
 
 services:
   ed2k-gluetun:
@@ -14,11 +14,10 @@ services:
       SERVER_COUNTRIES: ${SERVER_COUNTRIES:-}
       VPN_PORT_FORWARDING: ${VPN_PORT_FORWARDING:-off}
       HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE: '{"auth":"none"}'
-    # ed2k has no network of its own: the core reaches it at ed2k:4711 through this alias.
+    # ed2k has no network of its own: the core reaches it through this alias.
     networks:
       default:
         aliases: [ed2k]
-    # 4711 (aMule's own web UI) is protected by AMULE_API_PASSWORD.
     ports:
       - "4711:4711"
     restart: unless-stopped

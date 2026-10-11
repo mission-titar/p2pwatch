@@ -1,16 +1,14 @@
-# The core, plus one include per network. Every service starts; there is no compose profile.
-# Run (from deploy/):
-#   docker compose up -d
+# The core, plus one include line per network. Each network comes in a direct and a vpn variant:
+# swap `direct` for `vpn` in its line to put that network behind its own VPN.
+# The catalog on 8080 has NO password: put it behind a reverse proxy or a VPN.
 name: p2pwatch
 
 include:
-  # eD2k and Kad through aMule. For the VPN variant, write ed2k/vpn.compose.yml here instead.
   - ed2k/direct.compose.yml
 
 services:
   p2pwatch:
     image: ghcr.io/mission-titar/p2pwatch:latest
-    # data/ must exist and be yours before the first `up`: Docker would create it as root.
     user: "${PUID:?}:${PGID:?}"
     security_opt:
       - "no-new-privileges:true"
@@ -19,8 +17,6 @@ services:
     restart: unless-stopped
     environment:
       AMULE_API_PASSWORD: ${AMULE_API_PASSWORD:?}
-    # Change the left-hand number if the port is already taken on this machine.
-    # 8080 (the catalog) has NO password: put it behind a reverse proxy or a VPN.
     ports:
       - "8080:8080"
     volumes:
