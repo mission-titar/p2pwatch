@@ -109,12 +109,12 @@ starts amuleapi, and port-sync). The core reaches amuleapi at `ed2k:4711` in bot
   image; it now builds `p2pwatch-amule` from the tree. `testing.md`'s "never run" note of 2026-09-16
   and `troubleshooting-start.md`'s `EcAuthError` cause went (both obsolete). `AGENTS.md`'s em dashes
   went with its rewrite.
-- **Block 130, `PORT_FORWARD_ONLY`** (open, asked of the operator): the operator decided to couple
-  `PORT_FORWARD_ONLY: ${VPN_PORT_FORWARDING:-off}` on `ed2k-gluetun`. gluetun's
-  `internal/configuration/settings/serverselection.go` (v3.41.3 and `master`) already defaults it
-  on when `VPN_PORT_FORWARDING` is on and the provider is Proton or PIA (l.347-349), and refuses to
-  start when it is set on with any other provider (l.280-282), PrivateVPN and Perfect Privacy
-  included. Held uncommitted pending the operator's answer.
+- **Block 130, `PORT_FORWARD_ONLY`**: the operator decided to couple
+  `PORT_FORWARD_ONLY: ${VPN_PORT_FORWARDING:-off}` on `ed2k-gluetun`, then reversed it (option 1):
+  gluetun's `internal/configuration/settings/serverselection.go` (v3.41.3 and `master`) already
+  defaults it on when `VPN_PORT_FORWARDING` is on and the provider is Proton or PIA (l.347-349), and
+  refuses to start when it is set on with any other provider (l.280-282), PrivateVPN and Perfect
+  Privacy included. No compose sets it; `docs/high-id.md` says there is nothing to set.
 
 ## Spec corrections
 
@@ -133,6 +133,8 @@ against git (`git show --stat` of the block's commit, `git ls-tree` of `4501cda`
   published ports.
 - D4 (atomic write, block 35), D5 (positive integers, empty means default, block 30), D11 (only the
   compose files are copied, block 90).
+- D5: `docs/high-id.md` told the operator to keep a `PORT_FORWARD_ONLY` no compose set; the
+  operator's coupling and its reversal.
 
 ## Wrap counts
 
@@ -237,8 +239,6 @@ finding was fixed in block 130.
 - The per-container `mem_limit: 2g` and `pids_limit: 512`, and `no-new-privileges` with `setpriv`, on
   a real node.
 - arm64: CI only.
-- `docs/high-id.md` still says to keep `PORT_FORWARD_ONLY: "on"`, which no compose file sets, until
-  the operator settles the `PORT_FORWARD_ONLY` question above.
 
 ## Next
 

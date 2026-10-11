@@ -81,8 +81,8 @@ un Low-ID permanent alors même que le port-sync fonctionne.
 **Cause.** Le renouvellement NAT-PMP, obligatoire chez Proton, passe en UDP dans le tunnel
 WireGuard. Sur une clé mal configurée, la passerelle ne préserve pas le mapping au renouvellement et
 réassigne un port neuf. C'est un problème entre gluetun et Proton, pas un problème de p2pwatch (voir
-[gluetun#3196](https://github.com/qdm12/gluetun/issues/3196)). `PORT_FORWARD_ONLY` seul ne suffit
-pas : vérifié sur le terrain, le phénomène persiste sur les serveurs P2P.
+[gluetun#3196](https://github.com/qdm12/gluetun/issues/3196)). Se limiter aux serveurs P2P ne suffit
+pas : vérifié sur le terrain, le phénomène y persiste.
 
 **Solution.** Régénérez la clé WireGuard depuis le tableau de bord Proton, en couvrant les trois
 causes connues d'un coup :
@@ -100,9 +100,13 @@ conteneur `ed2k` vit dans le namespace réseau d'`ed2k-gluetun`, il doit donc ê
 docker compose up -d --force-recreate ed2k-gluetun ed2k
 ```
 
-Gardez `PORT_FORWARD_ONLY: "on"`, qui est correct, juste insuffisant seul. Pour valider, observez
-`ed2k-gluetun` : le port doit apparaître **une fois**, puis rester silencieux plusieurs cycles (plus de
-5 minutes), sans `requested X but received Y`.
+Vous n'avez pas à régler `PORT_FORWARD_ONLY` : avec Proton et PIA, gluetun l'active de lui-même dès
+que `VPN_PORT_FORWARDING=on`, et ne garde que les serveurs à port forwarding. Avec un autre
+fournisseur, gluetun refuse de démarrer si on l'active (voir
+[`serverselection.go`](https://github.com/qdm12/gluetun/blob/v3.41.3/internal/configuration/settings/serverselection.go)).
+
+Pour valider, observez `ed2k-gluetun` : le port doit apparaître **une fois**, puis rester silencieux
+plusieurs cycles (plus de 5 minutes), sans `requested X but received Y`.
 
 Si le port-sync ne fait rien du tout, c'est un autre problème :
 [« Le port-sync reste inopérant »](troubleshooting.md#le-port-sync-reste-inopérant-toujours-low-id-alors-quil-est-activé).
