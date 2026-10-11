@@ -155,10 +155,10 @@ récupération après panne, voir [Diagnostics avancés](troubleshooting.md).
   docker compose logs ed2k-gluetun
   ```
   Un tunnel sain affiche `[gluetun] [vpn] connected` et une IP publique qui n'est pas la vôtre.
-  Sinon, corrigez la clé WireGuard et les autres variables VPN dans `.env`, puis redémarrez le seul
-  processus amuled :
+  Sinon, corrigez la clé WireGuard et les autres variables VPN dans `.env`, puis recréez les deux
+  services d'aMule (`ed2k` vit dans le namespace réseau d'`ed2k-gluetun`) :
   ```bash
-  docker compose exec ed2k s6-svc -r /etc/services.d/amuled
+  docker compose up -d --force-recreate ed2k-gluetun ed2k
   ```
   Plus de détails dans la
   [fiche opérateur](troubleshooting.md#amuled-ne-se-connecte-à-aucun-serveur-ni-réseau-tunnel).

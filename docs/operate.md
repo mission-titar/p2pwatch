@@ -70,7 +70,9 @@ docker compose exec ed2k s6-svc -u /etc/services.d/amuled   # démarrer
 
 `amuleapi` n'est pas un service s6 : c'est `amuled` qui le démarre, donc redémarrer `amuled` le
 redémarre avec lui. Un amuled arrêté par `-d` le reste jusqu'au `-u`, ou jusqu'au prochain
-redémarrage du conteneur `ed2k`.
+redémarrage du conteneur `ed2k`. Sous la variante VPN avec le port-sync, arrêtez d'abord le
+port-sync (`s6-svc -d /etc/services.d/port-sync`), sinon il relance amuled à son prochain
+changement de port ; relancez-le ensuite par `s6-svc -u /etc/services.d/port-sync`.
 
 Quand le crawler s'arrête, quelle qu'en soit la raison, Docker le relance (`restart:
 unless-stopped`), et aMule garde ses sessions eD2k et Kad. C'est ce que fait le bouton de
