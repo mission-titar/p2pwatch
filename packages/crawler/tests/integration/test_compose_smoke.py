@@ -1,4 +1,4 @@
-"""e2e smoke of the ASSEMBLED docker compose stack, without VPN (stage 3 D11).
+"""e2e smoke of the ASSEMBLED docker compose stack, without VPN.
 
 Dedicated run: ( cd packages/crawler && uv run pytest -m compose_integration --no-cov )
 Docker + docker compose v2 required. Brings up the TWO services of tests/smoke/compose.yaml,
@@ -64,7 +64,7 @@ _USES_PREBUILT = _IMAGE_TAG is not None
 _BUILD_FLAGS: tuple[str, ...] = () if _USES_PREBUILT else ("--build",)
 
 _DEPLOY = _REPO_ROOT / "deploy"
-# The include line an operator edits to switch variant (stage 3 D10).
+# The include line an operator edits to switch variant.
 _DIRECT_INCLUDE = "ed2k/direct.compose.yml"
 _VARIANTS = ("direct", "vpn")
 
@@ -95,7 +95,7 @@ _SMOKE_ENV = {
 _RENDER_DOTENV = {
     "PUID": "4242",
     "PGID": "4343",
-    "AMULE_EC_PASSWORD": "x",
+    "AMULE_EC_PASSWORD": "render-ec-password",
     "AMULE_API_PASSWORD": "x",
     "WIREGUARD_PRIVATE_KEY": "x",
     "VPN_PORT_FORWARDING": "yes",
@@ -397,6 +397,11 @@ def _binds(service: Any) -> dict[str, tuple[Path, bool]]:
     return {v["target"]: (Path(v["source"]), bool(v.get("read_only"))) for v in service["volumes"]}
 
 
+def _ports(service: Any) -> set[tuple[int, str]]:
+    """Each port a rendered service publishes: (container port, protocol)."""
+    return {(p["target"], p["protocol"]) for p in service.get("ports", [])}
+
+
 @pytest.mark.parametrize("variant", _VARIANTS)
 def test_the_deploy_layout_renders(variant: str, tmp_path: Path) -> None:
     """The core and `ed2k` render from deploy/compose.yml, `ed2k` from its own directory."""
@@ -405,21 +410,28 @@ def test_the_deploy_layout_renders(variant: str, tmp_path: Path) -> None:
     core, ed2k = services[_CORE], services[_AMULE]
 
     assert ed2k["environment"]["PUID"] == _RENDER_DOTENV["PUID"]
+    # Interpolated by the included file alone: the core takes AMULE_API_PASSWORD.
+    assert ed2k["environment"]["AMULE_EC_PASSWORD"] == _RENDER_DOTENV["AMULE_EC_PASSWORD"]
     assert core["user"] == f"{_RENDER_DOTENV['PUID']}:{_RENDER_DOTENV['PGID']}"
     for source, _ in _binds(ed2k).values():
         assert source.is_relative_to(ed2k_dir), f"{source} is outside {ed2k_dir}"
     assert _binds(core)["/downloads"] == (ed2k_dir / "downloads", True)
     assert _binds(core)["/data"] == (tmp_path / "data", False)
     assert "network_mode" not in core  # the core stays outside the tunnel
+    assert _ports(core) == {(8080, "tcp")}
 
     if variant == "direct":
         assert set(services) == {_CORE, _AMULE}
+        assert _ports(ed2k) == {(4711, "tcp"), (4662, "tcp"), (4672, "udp")}
         return
     assert set(services) == {_CORE, _AMULE, "ed2k-gluetun"}
     aliases = services["ed2k-gluetun"]["networks"]["default"]["aliases"]
     assert _AMULE in aliases
     assert ed2k["network_mode"] == "service:ed2k-gluetun"
     assert ed2k["environment"]["PORT_SYNC"] == _RENDER_DOTENV["VPN_PORT_FORWARDING"]
+    gluetun = services["ed2k-gluetun"]
+    assert _ports(gluetun) == {(4711, "tcp")}
+    assert "ports" not in ed2k
 
 
 # --- Completion scenario (scope-reduction spec §4) ---------------------------------------------
@@ -431,7 +443,7 @@ _INCOMING_DIR = "/downloads/incoming"
 _SEEDED_TARGET = "062A"
 _SEEDED_SIZE = 65536
 
-# Read from the core, at the address fixed in code (stage 3 D9).
+# Read from the core, at the address fixed in code (AMULE_API_HOST).
 _API_HOST, _API_PORT = _AMULE, 4711
 
 _SHARED_HASHES = f"""
