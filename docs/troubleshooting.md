@@ -46,9 +46,14 @@ accumulé, mais vous redémarrez d'un état connu.
   ```
   Le conteneur `ed2k` **partage le réseau d'`ed2k-gluetun`** (`network_mode:
   service:ed2k-gluetun`) : tant que le tunnel est down, amuled n'a aucune sortie. Le crawler, lui,
-  reste hors du tunnel. Si le tunnel ne monte pas, corrigez le VPN (clé WireGuard, fournisseur,
-  `SERVER_COUNTRIES`) puis relancez. Une fois `ed2k-gluetun` « up », redémarrez le processus amuled
-  sans coucher le reste :
+  reste hors du tunnel. Si le tunnel ne monte pas, corrigez le VPN dans `.env` (clé WireGuard,
+  fournisseur, `SERVER_COUNTRIES`), puis recréez les deux services d'aMule : `ed2k` vit dans le
+  namespace réseau d'`ed2k-gluetun`, il doit être recréé avec lui.
+  ```bash
+  docker compose up -d --force-recreate ed2k-gluetun ed2k
+  ```
+  Si le tunnel est seulement monté en retard, sans rien modifier, redémarrer le processus amuled
+  suffit :
   ```bash
   docker compose exec ed2k s6-svc -r /etc/services.d/amuled
   ```
