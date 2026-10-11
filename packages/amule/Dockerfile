@@ -1,22 +1,19 @@
 # syntax=docker/dockerfile:1
 
-# --- aMule stage: build amuled + amuleapi from a pinned git commit, on the runtime's Debian ---
 FROM debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS amule
 
-# The single source of truth for the aMule version: the bump workflow rewrites these two lines.
+# The aMule pin: amule-bump rewrites these two lines; never write the version elsewhere.
 ARG AMULE_VERSION=3.1.0
 ARG AMULE_COMMIT=909d304d993ee07df6c6f6acf501a6d791d53666
 
-# libwxgtk3.2-dev even for a daemon: trixie has no wxbase dev package. Its wx-config defines
-# __WXGTK__, which makes aMule's CMake require glib. git lets CMake read the version from the tag.
+# No wxbase dev package in trixie, so wxgtk (which needs glib); git gives CMake the version.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
          cmake g++ make pkgconf python3 git \
          libwxgtk3.2-dev libcrypto++-dev libboost-dev zlib1g-dev libcurl4-openssl-dev libglib2.0-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Tags are unsigned and can move: the checksum pins the peeled commit, and a version bumped
-# without its commit fails here because the tag resolves to another one.
+# Tags are unsigned and movable: the checksum pins the commit, and fails a version bumped alone.
 ADD --keep-git-dir=true --checksum=${AMULE_COMMIT} \
     https://github.com/amule-org/amule.git#${AMULE_VERSION} /src/amule
 
@@ -32,11 +29,9 @@ COPY packages/amule/docker/amule.cdx.json /tmp/amule.cdx.json
 RUN sed "s/@AMULE_VERSION@/${AMULE_VERSION}/g" /tmp/amule.cdx.json \
       > /out/usr/local/share/amule/amule.cdx.json
 
-# Keep the stage: Dependabot only reads FROM lines, so inlining it as a COPY --from=<image>
-# would freeze this digest with no update path.
+# A stage, not COPY --from=<image>: Dependabot only bumps FROM lines.
 FROM ghcr.io/astral-sh/uv:0.12.21@sha256:a7aed3216253ee804de3e2d8afa5073baa1a177335345d43845cd4165e43b711 AS uv
 
-# --- Python stage: build /app/.venv against Debian's python3, the same one the runtime holds ---
 FROM debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS python
 
 # The build context has no .git: hatch-vcs reads the version CI computed from this variable.
@@ -56,20 +51,16 @@ COPY --from=uv /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# No deps layer: the member is stdlib only, so the sync installs nothing but itself.
 COPY . /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-editable --package p2pwatch-amule
 
-# --- Runtime: amuled (which starts amuleapi) and port-sync, under s6 ---
 FROM debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
 
 # ARG after FROM only lives in the stage that declares it, hence the re-declaration.
 ARG VERSION=0.0.0
 LABEL org.opencontainers.image.version=${VERSION}
 
-# s6 comes from Debian, not from the s6-overlay tarball, so dpkg knows about it and the
-# security feed covers it.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 s6 \
          libwxbase3.2-1t64 libcrypto++8t64 libglib2.0-0t64 libcurl4t64 zlib1g \
