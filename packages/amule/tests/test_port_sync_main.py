@@ -57,7 +57,7 @@ def node(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Node:
 
 
 def test_a_new_port_stops_amuled_writes_both_ports_and_starts_it(node: Node) -> None:
-    assert port_sync.sync(Settings(), None, now=1000.0) == 1000.0
+    assert port_sync.sync_listen_port_once(Settings(), None, now=1000.0) == 1000.0
     assert node.commands == [DOWN, UP]
     assert node.conf.read_text() == with_listen_port(CONF, 51820)
     assert listen_port(node.conf.read_text()) == 51820
@@ -66,7 +66,7 @@ def test_a_new_port_stops_amuled_writes_both_ports_and_starts_it(node: Node) -> 
 def test_the_file_is_written_only_once_amuled_is_down(node: Node) -> None:
     ports_seen_at_down: list[int] = []
     node.on_down = lambda: ports_seen_at_down.append(listen_port(node.conf.read_text()))
-    port_sync.sync(Settings(), None, now=1000.0)
+    port_sync.sync_listen_port_once(Settings(), None, now=1000.0)
     assert ports_seen_at_down == [4662]
 
 
@@ -75,14 +75,14 @@ def test_the_write_keeps_what_amuled_flushed_on_exit(node: Node) -> None:
         node.conf.write_text(CONF.replace("MaxUpload=42", "MaxUpload=42\nNick=flushed"))
 
     node.on_down = flush
-    port_sync.sync(Settings(), None, now=1000.0)
+    port_sync.sync_listen_port_once(Settings(), None, now=1000.0)
     assert node.conf.read_text() == with_listen_port(
         CONF.replace("MaxUpload=42", "MaxUpload=42\nNick=flushed"), 51820
     )
 
 
 def test_the_written_file_stays_private_to_its_owner(node: Node) -> None:
-    port_sync.sync(Settings(), None, now=1000.0)
+    port_sync.sync_listen_port_once(Settings(), None, now=1000.0)
     assert node.conf.stat().st_mode & 0o777 == 0o600
 
 
@@ -91,7 +91,7 @@ def test_a_down_wait_that_fails_writes_nothing_and_still_starts_amuled(
 ) -> None:
     node.down_exit = 99
     with caplog.at_level(logging.ERROR):
-        assert port_sync.sync(Settings(), None, now=1000.0) == 1000.0
+        assert port_sync.sync_listen_port_once(Settings(), None, now=1000.0) == 1000.0
     assert node.commands == [DOWN, UP]
     assert node.conf.read_text() == CONF
     assert "exited 99: timed out" in caplog.text
@@ -105,7 +105,7 @@ def test_a_write_that_raises_still_starts_amuled_and_is_logged(
 
     monkeypatch.setattr(os, "replace", replace)
     with caplog.at_level(logging.ERROR):
-        assert port_sync.sync(Settings(), None, now=1000.0) == 1000.0
+        assert port_sync.sync_listen_port_once(Settings(), None, now=1000.0) == 1000.0
     assert node.commands == [DOWN, UP]
     assert node.conf.read_text() == CONF
     assert "No space left on device" in caplog.text
@@ -113,23 +113,23 @@ def test_a_write_that_raises_still_starts_amuled_and_is_logged(
 
 def test_the_same_port_calls_no_s6_command(node: Node) -> None:
     node.forwarded = 4662
-    assert port_sync.sync(Settings(), 5.0, now=1000.0) == 5.0
+    assert port_sync.sync_listen_port_once(Settings(), 5.0, now=1000.0) == 5.0
     assert node.commands == []
 
 
 def test_no_forwarded_port_calls_no_s6_command(node: Node) -> None:
     node.forwarded = None
-    assert port_sync.sync(Settings(), None, now=1000.0) is None
+    assert port_sync.sync_listen_port_once(Settings(), None, now=1000.0) is None
     assert node.commands == []
 
 
 def test_a_restart_within_the_window_calls_no_s6_command(node: Node) -> None:
-    assert port_sync.sync(Settings(), 1000.0, now=1299.0) == 1000.0
+    assert port_sync.sync_listen_port_once(Settings(), 1000.0, now=1299.0) == 1000.0
     assert node.commands == []
 
 
 def test_a_restart_once_the_window_is_over_goes_ahead(node: Node) -> None:
-    assert port_sync.sync(Settings(), 1000.0, now=1300.0) == 1300.0
+    assert port_sync.sync_listen_port_once(Settings(), 1000.0, now=1300.0) == 1300.0
     assert node.commands == [DOWN, UP]
 
 
@@ -186,6 +186,6 @@ def test_an_unreadable_amule_conf_calls_no_s6_command_and_is_logged(
 ) -> None:
     node.conf.write_text(conf)
     with caplog.at_level(logging.ERROR):
-        assert port_sync.sync(Settings(), 5.0, now=1000.0) == 5.0
+        assert port_sync.sync_listen_port_once(Settings(), 5.0, now=1000.0) == 5.0
     assert node.commands == []
     assert "amule.conf's port is unreadable" in caplog.text
