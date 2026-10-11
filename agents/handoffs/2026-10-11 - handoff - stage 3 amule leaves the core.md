@@ -244,7 +244,8 @@ finding was fixed in block 130.
 
 The operator reviews the stack, the lead rebases it onto `main`, and the operator merges. **No
 release is proposed** (stage 1's D16: none before the first new network). Then stage 4 or stage 5
-per `BACKLOG.md`.
+per `BACKLOG.md`. Stage 5's line now carries the free-space check per client output directory
+(D10: the core's disk floor reads `ed2k`'s only), added with the operator's agreement.
 
 **At the first p2pwatch release**: remove the "Pas encore de version p2pwatch publiée" warning at
 the top of `docs/install.md`; the daily Grype scan stops failing. The node migrates by
