@@ -138,17 +138,26 @@ against git (`git show --stat` of the block's commit, `git ls-tree` of `4501cda`
 
 ## Wrap counts
 
-- **Fix-backs: 2.** Block 30: the operator's early environment validation. Block 35: the absorption
-  of a non-numeric `Port` and a `configparser.Error`, committed after rebasing onto block 30's fix.
-- **Cascaded rebases: 1, aborted once.** After block 30's fix-back, `gh stack rebase --upstack`
-  stopped on a conflict in block 35 (`config/__main__.py`, `test_config_main.py`, both sides kept);
-  the lead aborted it, block 35's teammate rebased its branch onto the new block 30, then the
-  cascade resumed. Blocks 40 and up did not exist yet.
-- **Runs re-triggered: 3**, for 15 blocks: `feat/amule-port-sync-parts` once (`5c0c540`),
-  `feat/amule-port-sync-loop` twice (`fdbaa4e`, one of the two a cancelled duplicate). Every other
-  branch ran once. Command, per stack branch: `gh run list --branch <b> --workflow pr.yml --json
-  headSha,event,conclusion,createdAt`. `--workflow validate.yml` prints nothing: it is the reusable
-  workflow `pr.yml` calls. Fewer runs than blocks: stacking cost less than pull requests in series.
+- **Fix-backs during Act: 2.** Block 30: the operator's early environment validation. Block 35: the
+  absorption of a non-numeric `Port` and a `configparser.Error`, committed after rebasing onto block
+  30's fix.
+- **Fix-backs after the operator's review of the stack, in 5 blocks**: 30 (gluetun's port must be an
+  `int` in 1-65535; an empty `PORT_SYNC` handled before the lookup), 35 (`port_sync/__main__.py`'s
+  names: `sync_listen_port_once`, `_signal_amuled`, `_write_listen_port`, `AMULED_SERVICE_DIR`), 70,
+  80 twice (the second an `amule_bump` test rename) and 90 (comments trimmed).
+- **Cascaded rebases: 2.** During Act, after block 30's fix-back, `gh stack rebase --upstack` stopped
+  on a conflict in block 35 (`config/__main__.py`, `test_config_main.py`, both sides kept); the lead
+  aborted it, block 35's teammate rebased its branch onto the new block 30, then the cascade resumed.
+  Blocks 40 and up did not exist yet. After the review, one cascade with 3 conflicts, each aborted
+  and resolved by the branch's teammate: blocks 80 and 100 on `validate.yml`'s comment, block 130 on
+  `port_sync/__main__.py` (the new names kept, with block 130's `OSError` absorption and logger).
+- **Runs re-triggered: 17, for 15 blocks.** During Act, 3: `feat/amule-port-sync-parts` once
+  (`5c0c540`), `feat/amule-port-sync-loop` twice (`fdbaa4e`, one of the two a cancelled duplicate);
+  every other branch ran once. Command, per stack branch: `gh run list --branch <b> --workflow
+  pr.yml --json headSha,event,conclusion,createdAt`; `--workflow validate.yml` prints nothing, it is
+  the reusable workflow `pr.yml` calls. After the review, the push of the rebased stack re-runs all
+  14 open pull requests once. More runs than blocks: by the workflow's measure, this lot's stacking
+  cost more than pull requests in series, all of the excess from the review's fix-backs.
 - **Bodies the operator called unreadable: none.**
 - **Friction**: the repository rename left `.git/gh-stack` stale and the lead reset it; the spec
   reviewer could not be launched from a fork.
