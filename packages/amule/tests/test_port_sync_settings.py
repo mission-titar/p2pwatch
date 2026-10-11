@@ -23,9 +23,9 @@ def test_an_unset_port_sync_is_off() -> None:
 
 @pytest.mark.parametrize("value", ["maybe", "1", "0", " on"])
 def test_any_other_value_exits_naming_port_sync(value: str) -> None:
-    with pytest.raises(
-        SystemExit, match=f"^PORT_SYNC must be one of .*, got {re.escape(repr(value))}$"
-    ):
+    values = "enabled, yes, on, true, disabled, no, off, false"
+    message = f"PORT_SYNC must be one of {values}, got {value!r}"
+    with pytest.raises(SystemExit, match=f"^{re.escape(message)}$"):
         enabled({"PORT_SYNC": value})
 
 

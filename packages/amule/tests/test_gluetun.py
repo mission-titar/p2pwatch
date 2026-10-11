@@ -47,6 +47,7 @@ def test_the_forwarded_port_is_read_from_gluetuns_control_server(
     [
         b'{"port": 0}',
         b'{"port": -1}',
+        b'{"port": 65536}',
         b'{"port": "51820"}',
         b'{"port": 51820.0}',
         b'{"port": true}',
