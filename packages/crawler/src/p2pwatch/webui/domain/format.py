@@ -5,6 +5,11 @@ NB: building the eD2k link (with percent-encoding of the name) lives in
 webui/crawler divergence on the canonical format (webui-security#0 regression: the
 webui interpolated the raw filename, a hostile ``|`` broke the link framing)."""
 
+from datetime import UTC, datetime, timedelta
+
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+_MICROS_PER_SECOND = 1_000_000
+
 
 def short_hash(native_id: str) -> str:
     """Truncated hash for display (first 8 characters + ellipsis)."""
@@ -73,3 +78,17 @@ def seasonal_id(*, season: int, seasonal_number: int, letter: str) -> str:
     letter). Complements the canonical ``target_id`` (e.g. ``062A``, absolute-numbered) —
     operators often think in season/episode terms rather than the absolute numbering."""
     return f"S{season:02d}E{seasonal_number:02d}{letter.upper()}"
+
+
+def micros_timestamp(micros: int) -> str:
+    """Microseconds since the Unix epoch as ``YYYY-MM-DD HH:MM:SSZ``: a source range's ends, which
+    keep the seconds since a range is read every 30 s."""
+    return f"{_EPOCH + timedelta(microseconds=micros):%Y-%m-%d %H:%M:%S}Z"
+
+
+def average_rate(received_bytes: int, first_seen_at: int, last_seen_at: int) -> str:
+    """A source range's average rate, e.g. ``1 KB/s``; empty without bytes or over a single read."""
+    if received_bytes == 0 or last_seen_at == first_seen_at:
+        return ""
+    per_second = round(received_bytes * _MICROS_PER_SECOND / (last_seen_at - first_seen_at))
+    return f"{human_size(per_second)}/s"

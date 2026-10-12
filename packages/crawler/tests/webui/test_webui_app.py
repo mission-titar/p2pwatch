@@ -14,6 +14,7 @@ from catalog_matching.config import MatcherConfig
 from catalog_matching.models import TargetSegment
 from catalog_matching.validation import parse_matcher_config, parse_targets
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.source import SourceKey
 from p2pwatch.ports.client_status import ChannelStatus, ClientReading, ClientStatus
 from p2pwatch.webui.composition.app import (
     _normalize_dir,
@@ -32,7 +33,16 @@ from p2pwatch.webui.domain.views import (
     HiddenInput,
 )
 from tests.application.fakes import FakeClock
-from tests.catalog_rows import SEEN_AT, file_id, insert_decision, insert_file, insert_observation
+from tests.catalog_rows import (
+    SEEN_AT,
+    file_id,
+    insert_decision,
+    insert_file,
+    insert_observation,
+    insert_source,
+    insert_source_range,
+    insert_source_variant,
+)
 
 # ---------------------------------------------------------------------------
 # Parsed-config helpers (since P4a build_app takes already-parsed config)
@@ -707,6 +717,85 @@ async def test_file_detail_timeline_shows_each_observation_as_one_plain_line(
     line = "<tr>" + "".join(f"<td>{cell}</td>" for cell in cells) + "</tr>"
     assert line in re.sub(r">\s+<", "><", resp.text)
     assert "Times seen" not in resp.text
+
+
+_USER = "1f2e" * 8
+# Tuesday 2026-10-13 20:00:00 UTC, in microseconds since the Unix epoch.
+_TUESDAY_8PM = 1_791_921_600_000_000
+
+
+def _row(*cells: str) -> str:
+    return "<tr>" + "".join(f"<td>{cell}</td>" for cell in cells) + "</tr>"
+
+
+@pytest.mark.asyncio
+async def test_file_detail_shows_its_source_history_newest_first(
+    populated_app: tuple[Starlette, str], catalog_db: Path
+) -> None:
+    app, hash_ = populated_app
+    with sqlite3.connect(catalog_db) as conn:
+        insert_source(conn, _USER)
+        queued = insert_source_variant(
+            conn, hash_, _USER, contact_point="198.51.100.7:4661", directly_reachable=False
+        )
+        sending = insert_source_variant(conn, hash_, _USER, role="sending")
+        insert_source_range(conn, queued, _TUESDAY_8PM + 30_000_000, _TUESDAY_8PM + 60_000_000)
+        insert_source_range(
+            conn,
+            sending,
+            _TUESDAY_8PM + 90_000_000,
+            _TUESDAY_8PM + 10_330_000_000,
+            received_bytes=10 * 1024 * 1024,
+        )
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(_detail_url(hash_))
+    page = re.sub(r">\s+<", "><", resp.text)
+    name = '<a href="/sources/name?name=AnimuseeFMR">AnimuseeFMR</a>'
+    source = f'<a href="/sources/{SourceKey(Network.ED2K, _USER).source_id.hex()}">1f2e1f2e…</a>'
+    sending_line = _row(
+        name, source, "sending", "unknown", "unknown",
+        "2026-10-13 20:01:30Z", "2026-10-13 22:52:10Z", "10 MB", "1 KB/s",
+    )  # fmt: skip
+    queued_line = _row(
+        name, source, "queued", "198.51.100.7:4661", "no",
+        "2026-10-13 20:00:30Z", "2026-10-13 20:01:00Z", "", "",
+    )  # fmt: skip
+    assert "<h2>Source history</h2>" in page
+    assert page.index("<h2>Observations</h2>") < page.index("<h2>Source history</h2>")
+    assert 0 < page.index(sending_line) < page.index(queued_line)
+
+
+@pytest.mark.asyncio
+async def test_file_detail_links_only_the_name_or_the_hash_a_range_has(
+    populated_app: tuple[Starlette, str], catalog_db: Path
+) -> None:
+    app, hash_ = populated_app
+    with sqlite3.connect(catalog_db) as conn:
+        insert_source(conn, _USER)
+        unnamed = insert_source_variant(conn, hash_, _USER, name=None, directly_reachable=True)
+        hashless = insert_source_variant(conn, hash_, None, name="http://emule-project.net")
+        insert_source_range(conn, unnamed, _TUESDAY_8PM, _TUESDAY_8PM)
+        insert_source_range(conn, hashless, _TUESDAY_8PM, _TUESDAY_8PM)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(_detail_url(hash_))
+    page = re.sub(r">\s+<", "><", resp.text)
+    source = f'<a href="/sources/{SourceKey(Network.ED2K, _USER).source_id.hex()}">1f2e1f2e…</a>'
+    name = (
+        '<a href="/sources/name?name=http%3A%2F%2Femule-project.net">http://emule-project.net</a>'
+    )
+    stamp = "2026-10-13 20:00:00Z"
+    assert _row("unknown", source, "queued", "unknown", "yes", stamp, stamp, "", "") in page
+    assert _row(name, "unknown", "queued", "unknown", "unknown", stamp, stamp, "", "") in page
+
+
+@pytest.mark.asyncio
+async def test_file_detail_of_a_file_without_source_says_so(
+    populated_app: tuple[Starlette, str],
+) -> None:
+    app, hash_ = populated_app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(_detail_url(hash_))
+    assert '<td colspan="9">No source recorded.</td>' in resp.text
 
 
 @pytest.mark.asyncio

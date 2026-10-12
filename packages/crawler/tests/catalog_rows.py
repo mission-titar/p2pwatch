@@ -91,16 +91,20 @@ def insert_source_variant(
     ed2k_hash: str,
     user_hash: str | None,
     *,
-    name: str = "AnimuseeFMR",
+    name: str | None = "AnimuseeFMR",
     role: str = "queued",
+    contact_point: str | None = None,
+    directly_reachable: bool | None = None,
 ) -> int:
     """The new variant's ``variant_id``; its ``content_hash`` stands in for the writer's."""
     sid = source_id(user_hash) if user_hash is not None else None
-    key = hashlib.blake2b(repr((ed2k_hash, user_hash, name, role)).encode(), digest_size=16)
+    columns = (name, role, contact_point, directly_reachable)
+    key = hashlib.blake2b(repr((ed2k_hash, user_hash, *columns)).encode(), digest_size=16)
     row = conn.execute(
-        "INSERT INTO source_variants (file_id, source_id, name, role, raw_meta, content_hash)"
-        " VALUES (?, ?, ?, ?, '{}', ?) RETURNING variant_id",
-        (file_id(ed2k_hash), sid, name, role, key.digest()),
+        "INSERT INTO source_variants (file_id, source_id, name, role, contact_point,"
+        " directly_reachable, raw_meta, content_hash)"
+        " VALUES (?, ?, ?, ?, ?, ?, '{}', ?) RETURNING variant_id",
+        (file_id(ed2k_hash), sid, *columns, key.digest()),
     ).fetchone()
     variant_id: int = row[0]
     return variant_id

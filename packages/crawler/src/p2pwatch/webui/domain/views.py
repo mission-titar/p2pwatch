@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.observation import Sighting
+from p2pwatch.domain.source import SourceKey, SourceRole
 
 
 @dataclass(frozen=True)
@@ -137,6 +138,20 @@ class FileDetail:
     latest: Sighting | None  # the latest observation
     decisions: tuple[DecisionView, ...]  # current decisions, latest per target, 0..N
     known_filenames: tuple[str, ...]  # every distinct name, sorted
+
+
+@dataclass(frozen=True)
+class SourceRangeView:
+    """One range of a source on a file (stage 4 spec, D4); times in microseconds since the epoch."""
+
+    source: SourceKey | None  # None for a source without a user hash
+    name: str | None
+    role: SourceRole
+    contact_point: str | None
+    directly_reachable: bool | None
+    first_seen_at: int
+    last_seen_at: int
+    received_bytes: int
 
 
 # ---------------------------------------------------------------------------
@@ -357,6 +372,27 @@ class DbOption:
 
 
 @dataclass(frozen=True)
+class SourceHistoryRow:
+    """One line of a file's "Source history" (stage 4 spec, D12), precomputed for the template.
+
+    ``name_link`` and ``source_link`` hold 0 or 1 href, empty when the range has no name or no
+    user hash, so the template renders the plain text with ``{% for %}``/``{% else %}``.
+    """
+
+    name: str
+    name_link: tuple[str, ...]
+    short_hash: str
+    source_link: tuple[str, ...]
+    role: str
+    contact_point: str
+    high_id: str  # "yes", "no" or "unknown"
+    first_seen: str
+    last_seen: str
+    received: str  # empty when the range received nothing
+    rate: str  # empty without bytes or over a single read
+
+
+@dataclass(frozen=True)
 class FileDetailDisplay:
     """Full view of a file: all fields precomputed for the template.
 
@@ -371,6 +407,7 @@ class FileDetailDisplay:
     native_id: str
     size_bytes: int
     timeline: tuple[TimelineRow, ...]  # one row per sighting, oldest first
+    source_history: tuple[SourceHistoryRow, ...]  # one row per source range, newest first
     decisions: tuple[DecisionView, ...]  # 0..N elements: for template iteration
     ed2k_link: str  # precomputed from the latest sighting
     # Explanation fields (None if no explanation available)
