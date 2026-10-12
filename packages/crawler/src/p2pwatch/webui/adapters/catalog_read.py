@@ -14,6 +14,8 @@
 - ``file_detail()``: the timeline of sightings, the latest one, known names + current
   decisions for a given ``file_id``; ``None`` if the file is unknown.
 - ``source_ranges()``: a file's source history, one range per row, newest first.
+- ``list_sources()`` / ``count_sources()``: the sources with a user hash, last seen first, and
+  how many match the search.
 
 All SQL lives in module constants, parameterized (no value interpolation).
 """
@@ -35,6 +37,7 @@ from p2pwatch.webui.domain.views import (
     FileDetail,
     FileRow,
     SourceRangeView,
+    SourceRow,
 )
 
 # ---------------------------------------------------------------------------
@@ -241,6 +244,46 @@ WHERE v.file_id = ?
 ORDER BY r.first_seen_at DESC, r.variant_id DESC, r.node_id
 """
 
+# The sources with a user hash, each with its last read and its number of files (D13). A source
+# without a hash has no ``sources`` row, so it is not listed.
+_SQL_SOURCES_FROM = """\
+FROM sources AS s
+JOIN (
+    SELECT
+        v.source_id,
+        MAX(r.last_seen_at) AS last_seen_at,
+        COUNT(DISTINCT v.file_id) AS file_count
+    FROM source_variants AS v
+    JOIN source_ranges AS r ON r.variant_id = v.variant_id
+    GROUP BY v.source_id
+) AS seen ON seen.source_id = s.source_id
+"""
+
+# A hash prefix, or a substring of any name the source carried; LIKE ignores ASCII case.
+_SQL_SOURCES_SEARCH = """\
+WHERE s.native_id LIKE ? OR EXISTS (
+    SELECT 1 FROM source_variants AS nv WHERE nv.source_id = s.source_id AND nv.name LIKE ?
+)
+"""
+
+# The latest name is the one its latest named range carried: a reading without a name says
+# nothing about the name.
+_SQL_LIST_SOURCES_SELECT = """\
+SELECT
+    s.network,
+    s.native_id,
+    seen.last_seen_at,
+    seen.file_count,
+    (
+        SELECT v.name
+        FROM source_variants AS v
+        JOIN source_ranges AS r ON r.variant_id = v.variant_id
+        WHERE v.source_id = s.source_id AND v.name IS NOT NULL
+        ORDER BY r.last_seen_at DESC, r.first_seen_at DESC, v.variant_id DESC
+        LIMIT 1
+    ) AS name
+"""
+
 
 def _filter_clauses(
     target: str | None,
@@ -273,6 +316,13 @@ def _filter_clauses(
         clauses.append("obs.name LIKE ?")
         params.append(f"%{query}%")
     return clauses, params
+
+
+def _sources_search(query: str | None) -> tuple[str, list[str]]:
+    """The sources list's search clause and its parameters; none without a query."""
+    if query is None:
+        return "", []
+    return _SQL_SOURCES_SEARCH, [f"{query}%", f"%{query}%"]
 
 
 def _latest_sighting_join(query: str | None) -> str:
@@ -488,3 +538,34 @@ class CatalogReader:
             )
             for row in rows
         )
+
+    # ------------------------------------------------------------------
+    # Sources
+    # ------------------------------------------------------------------
+
+    def list_sources(self, *, query: str | None, page: int) -> tuple[SourceRow, ...]:
+        """A page of sources, last seen first; ``query`` as ``_SQL_SOURCES_SEARCH`` reads it."""
+        search, params = _sources_search(query)
+        sql = (
+            _SQL_LIST_SOURCES_SELECT
+            + _SQL_SOURCES_FROM
+            + search
+            + "ORDER BY seen.last_seen_at DESC, s.source_id\nLIMIT ? OFFSET ?\n"
+        )
+        rows = self._conn.execute(sql, [*params, _PAGE_SIZE, (page - 1) * _PAGE_SIZE])
+        return tuple(
+            SourceRow(
+                source=SourceKey(Network(row["network"]), row["native_id"]),
+                name=row["name"],
+                last_seen_at=row["last_seen_at"],
+                file_count=row["file_count"],
+            )
+            for row in rows
+        )
+
+    def count_sources(self, *, query: str | None) -> int:
+        """How many sources ``list_sources`` pages through for this ``query``."""
+        search, params = _sources_search(query)
+        row = self._conn.execute("SELECT COUNT(*) AS n\n" + _SQL_SOURCES_FROM + search, params)
+        count: int = row.fetchone()["n"]
+        return count

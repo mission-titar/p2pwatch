@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Sources · p2pwatch{% endblock %}
+{% block content %}
+<p class="files-summary">{{ summary }}</p>
+
+<div class="filter-bar">
+  <form class="files-search" action="/sources" method="get" role="search">
+    <input type="search" name="q" value="{{ query }}" placeholder="Search name or user hash">
+    <button type="submit">Search</button>
+  </form>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>User hash</th>
+      <th>Last seen</th>
+      <th>Files</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>{% for href in row.name_link %}<a href="{{ href }}">{{ row.name }}</a>{% else %}{{ row.name }}{% endfor %}</td>
+      <td>{% for href in row.source_link %}<a href="{{ href }}">{{ row.short_hash }}</a>{% else %}{{ row.short_hash }}{% endfor %}</td>
+      <td>{{ row.last_seen }}</td>
+      <td>{{ row.files }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4">No source found.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% for url in (nav.prev_url,) if url %}
+<a href="{{ url }}">← Previous</a>
+{% endfor %}
+<span>Page {{ nav.page }}</span>
+{% for url in (nav.next_url,) if url %}
+<a href="{{ url }}">Next →</a>
+{% endfor %}
+{% endblock %}

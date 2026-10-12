@@ -16,6 +16,7 @@ from catalog_matching.validation import parse_matcher_config, parse_targets
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceKey
 from p2pwatch.ports.client_status import ChannelStatus, ClientReading, ClientStatus
+from p2pwatch.webui.adapters.catalog_read import PAGE_SIZE
 from p2pwatch.webui.composition.app import (
     _normalize_dir,
     _normalize_sort,
@@ -796,6 +797,79 @@ async def test_file_detail_of_a_file_without_source_says_so(
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get(_detail_url(hash_))
     assert '<td colspan="9">No source recorded.</td>' in resp.text
+
+
+# ---------------------------------------------------------------------------
+# The sources list (stage 4 spec, D13)
+# ---------------------------------------------------------------------------
+
+_OTHER = "9c0d" * 8
+
+
+def _seed_two_sources(catalog_db: Path, ed2k_hash: str) -> None:
+    with sqlite3.connect(catalog_db) as conn:
+        for user, name in ((_USER, "AnimuseeFMR"), (_OTHER, "Shinobu")):
+            insert_source(conn, user)
+            variant = insert_source_variant(conn, ed2k_hash, user, name=name)
+            insert_source_range(conn, variant, _TUESDAY_8PM, _TUESDAY_8PM + 30_000_000)
+
+
+async def _sources_page(app: Starlette, url: str) -> str:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(url)
+    assert resp.status_code == 200
+    return re.sub(r">\s+<", "><", resp.text)
+
+
+@pytest.mark.asyncio
+async def test_sources_lists_each_source_with_its_links_last_seen_and_files(
+    populated_app: tuple[Starlette, str], catalog_db: Path
+) -> None:
+    app, hash_ = populated_app
+    _seed_two_sources(catalog_db, hash_)
+    page = await _sources_page(app, "/sources")
+    name = '<a href="/sources/name?name=AnimuseeFMR">AnimuseeFMR</a>'
+    source = f'<a href="/sources/{SourceKey(Network.ED2K, _USER).source_id.hex()}">1f2e1f2e…</a>'
+    assert _row(name, source, "2026-10-13 20:00:30Z", "1") in page
+    assert "Sources recorded: 2." in page
+    assert '<input type="search" name="q" value="" placeholder="Search name or user hash">' in page
+
+
+@pytest.mark.asyncio
+async def test_sources_search_keeps_its_query_and_counts_its_matches(
+    populated_app: tuple[Starlette, str], catalog_db: Path
+) -> None:
+    app, hash_ = populated_app
+    _seed_two_sources(catalog_db, hash_)
+    page = await _sources_page(app, "/sources?q=+shinob+")
+    assert "Shinobu</a>" in page
+    assert "AnimuseeFMR" not in page
+    assert "Sources matching the search: 1." in page
+    assert 'name="q" value="shinob"' in page
+
+
+@pytest.mark.asyncio
+async def test_sources_without_a_source_says_so(populated_app: tuple[Starlette, str]) -> None:
+    app, _ = populated_app
+    page = await _sources_page(app, "/sources?page=nope")
+    assert '<td colspan="4">No source found.</td>' in page
+    assert "<span>Page 1</span>" in page
+
+
+@pytest.mark.asyncio
+async def test_sources_pages_keep_the_search(
+    populated_app: tuple[Starlette, str], catalog_db: Path
+) -> None:
+    app, hash_ = populated_app
+    with sqlite3.connect(catalog_db) as conn:
+        for n in range(PAGE_SIZE + 1):
+            insert_source(conn, f"{n:032x}")
+            insert_source_range(conn, insert_source_variant(conn, hash_, f"{n:032x}"), n, n)
+    first = await _sources_page(app, "/sources?q=FMR")
+    second = await _sources_page(app, "/sources?q=FMR&page=2")
+    assert 'href="/sources?q=FMR&amp;page=2"' in first
+    assert 'href="/sources?q=FMR&amp;page=1"' in second
+    assert second.count("<tr><td>") == 1
 
 
 @pytest.mark.asyncio
@@ -1943,11 +2017,12 @@ async def test_target_page_has_no_filter_bar(
 # Top nav: active state + the page titles it replaces
 # ---------------------------------------------------------------------------
 
-# The four nav destinations, in render order: (path, label). Mirrors the table wired in
+# The nav destinations, in render order: (path, label). Mirrors the table wired in
 # composition.app; a test that drifts from it fails on the label or the href.
 _NAV_ENTRIES: tuple[tuple[str, str], ...] = (
     ("/", "Dashboard"),
     ("/files", "Files"),
+    ("/sources", "Sources"),
     ("/node", "Nodes"),
     ("/console", "Console"),
 )
@@ -2028,7 +2103,7 @@ async def test_nav_on_a_non_nav_path_renders_every_entry_as_a_link(
 async def test_nav_pages_render_no_page_title(
     populated_app: tuple[Starlette, str], path: str
 ) -> None:
-    """The four nav destinations carry no <h1>: the title duplicated the nav, whose bold current
+    """The nav destinations carry no <h1>: the title duplicated the nav, whose bold current
     entry now names the page. Their <h2> section headings stay."""
     app, _ = populated_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

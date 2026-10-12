@@ -20,11 +20,12 @@ from p2pwatch.webui.adapters.catalog_read import (
     _SQL_TIER_COUNTS_BASE,
     DEFAULT_DIR,
     DEFAULT_SORT,
+    PAGE_SIZE,
     SORT_COLUMNS,
     CatalogReader,
     _tier_rank_case,
 )
-from p2pwatch.webui.domain.views import FileRow, SourceRangeView
+from p2pwatch.webui.domain.views import FileRow, SourceRangeView, SourceRow
 from tests.catalog_rows import (
     file_id,
     insert_decision,
@@ -325,6 +326,69 @@ def test_source_ranges_lists_a_files_ranges_newest_first(catalog_db: Path) -> No
 def test_source_ranges_of_a_file_never_read_is_empty(catalog_db: Path) -> None:
     _seed(catalog_db)
     assert CatalogReader(open_reader(catalog_db)).source_ranges(file_id("a" * 32)) == ()
+
+
+# ---------------------------------------------------------------------------
+# Tests: the sources list (stage 4 spec, D13)
+# ---------------------------------------------------------------------------
+
+_OTHER = "9c0d" * 8
+
+
+def _seed_sources(db: Path) -> None:
+    """``_USER`` renamed on two files, then read without a name; ``_OTHER``, seen earlier."""
+    with sqlite3.connect(db) as conn:
+        insert_file(conn, "a" * 32)
+        insert_file(conn, "b" * 32)
+        insert_source(conn, _USER)
+        insert_source(conn, _OTHER)
+        old = insert_source_variant(conn, "a" * 32, _USER, name="Shinobu")
+        new = insert_source_variant(conn, "b" * 32, _USER, name="AnimuseeFMR")
+        unnamed = insert_source_variant(conn, "b" * 32, _USER, name=None, role="sending")
+        insert_source_range(conn, old, 10, 20)
+        insert_source_range(conn, new, 30, 40)
+        insert_source_range(conn, unnamed, 50, 60)
+        insert_source_range(conn, insert_source_variant(conn, "a" * 32, _OTHER), 0, 5)
+        insert_source_range(conn, insert_source_variant(conn, "a" * 32, None, name="x"), 70, 80)
+
+
+def test_list_sources_lists_each_source_once_by_last_seen_with_its_latest_name(
+    catalog_db: Path,
+) -> None:
+    _seed_sources(catalog_db)
+    rows = CatalogReader(open_reader(catalog_db)).list_sources(query=None, page=1)
+    assert rows == (
+        SourceRow(SourceKey(Network.ED2K, _USER), "AnimuseeFMR", 60, 2),
+        SourceRow(SourceKey(Network.ED2K, _OTHER), "AnimuseeFMR", 5, 1),
+    )
+
+
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [("1F2E1F", [_USER]), ("shinob", [_USER]), ("FMR", [_USER, _OTHER]), ("2e1f", [])],
+)
+def test_list_sources_matches_a_hash_prefix_or_any_name_the_source_carried(
+    catalog_db: Path, query: str, expected: list[str]
+) -> None:
+    _seed_sources(catalog_db)
+    reader = CatalogReader(open_reader(catalog_db))
+    rows = reader.list_sources(query=query, page=1)
+    assert [row.source.native_id for row in rows] == expected
+    assert reader.count_sources(query=query) == len(expected)
+
+
+def test_list_sources_pages_by_fifty(catalog_db: Path) -> None:
+    with sqlite3.connect(catalog_db) as conn:
+        insert_file(conn, "a" * 32)
+        for n in range(PAGE_SIZE + 1):
+            insert_source(conn, f"{n:032x}")
+            variant = insert_source_variant(conn, "a" * 32, f"{n:032x}")
+            insert_source_range(conn, variant, n, n)
+    reader = CatalogReader(open_reader(catalog_db))
+    first, second = reader.list_sources(query=None, page=1), reader.list_sources(query=None, page=2)
+    assert (len(first), first[0].last_seen_at) == (PAGE_SIZE, PAGE_SIZE)
+    assert [row.last_seen_at for row in second] == [0]
+    assert reader.count_sources(query=None) == PAGE_SIZE + 1
 
 
 # ---------------------------------------------------------------------------
