@@ -42,6 +42,10 @@ class ApiKadExhaustedError(ApiRejectedError):
     """``409 kad_more_exhausted``: Kad will not widen this search again."""
 
 
+class ApiNotFoundError(ApiRejectedError):
+    """``404 not_found``: what the path names is gone, apart from the daemon's other refusals."""
+
+
 def error_from_response(response: httpx.Response) -> ApiError:
     """A non-2xx response -> the adapter error the port contract calls for."""
     code, message = _envelope(response)
@@ -55,6 +59,8 @@ def error_from_response(response: httpx.Response) -> ApiError:
         detail += f" (retry after {response.headers.get('Retry-After', 'an unstated delay')}s)"
     if code == "kad_more_exhausted":
         return ApiKadExhaustedError(detail)
+    if code == "not_found":
+        return ApiNotFoundError(detail)
     if code in _OPERATION_CODES:
         return ApiRejectedError(detail)
     return ApiUnreachableError(detail)

@@ -1,4 +1,5 @@
-"""Drives ``amuled`` over amuleapi, satisfying ``MuleClient`` and ``DownloadClient``.
+"""Drives ``amuled`` over amuleapi, satisfying ``MuleClient``, ``DownloadClient`` and
+``SourceClient``.
 
 ``search()`` waits for its own search and paces its starts by the networks' rules. Beyond pacing,
 no retry but the single re-login a ``401`` mandates and Kad's "already on search list": the
@@ -19,6 +20,7 @@ from catalog_matching.ed2k_link import build_ed2k_link
 from p2pwatch.adapters.mule_api.errors import (
     ApiAuthError,
     ApiKadExhaustedError,
+    ApiNotFoundError,
     ApiRejectedError,
     ApiUnreachableError,
     error_from_response,
@@ -28,9 +30,11 @@ from p2pwatch.adapters.mule_api.mapping import (
     map_download_status,
     map_search_results,
     map_shared_download,
+    map_source,
 )
-from p2pwatch.domain.file_key import Network
+from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
+from p2pwatch.domain.source import SourceReading
 from p2pwatch.ports.client_status import ClientStatus
 from p2pwatch.ports.clock import Clock
 from p2pwatch.ports.download_client import DownloadRequest, DownloadStatus
@@ -219,6 +223,18 @@ class AmuleApiClient:
         ]
         return (*queue, *shared)
 
+    async def sources(self, file: FileKey) -> tuple[SourceReading, ...]:
+        """The rows of the download's clients that offer us the file; none once it left."""
+        if file.network is not Network.ED2K:
+            return ()
+        try:
+            rows = await self._collect(
+                f"/downloads/{file.native_id}/clients", "clients", identity="ecid"
+            )
+        except ApiNotFoundError:
+            return ()
+        return tuple(reading for row in rows if (reading := map_source(row)) is not None)
+
     async def _post_search(self, keyword: str, search_type: str) -> int:
         payload = await self._call("POST", "/search", body={"query": keyword, "type": search_type})
         search_id = payload.get("search_id")
@@ -297,12 +313,18 @@ class AmuleApiClient:
         http.headers["Authorization"] = f"Bearer {token}"
 
     async def _collect(
-        self, path: str, envelope: str, *, params: dict[str, Any] | None = None
+        self,
+        path: str,
+        envelope: str,
+        *,
+        params: dict[str, Any] | None = None,
+        identity: str = "hash",
     ) -> list[Any]:
-        """Sweeps a whole list route by KEYSET paging on ``hash``. Never ``offset``: it is a
-        position, so a row deleted below the cursor is skipped and then reported by nothing."""
+        """Sweeps a whole list route by KEYSET paging on its ``identity`` column, the only one
+        ``after`` accepts. Never ``offset``: it is a position, so a row deleted below the cursor
+        is skipped and then reported by nothing."""
         rows: list[Any] = []
-        page_params = {**(params or {}), "sort": "hash", "limit": _PAGE_SIZE}
+        page_params = {**(params or {}), "sort": identity, "limit": _PAGE_SIZE}
         while True:
             payload = await self._call("GET", path, params=page_params)
             page = payload.get(envelope)
@@ -311,8 +333,8 @@ class AmuleApiClient:
             rows.extend(page)
             if len(page) < _PAGE_SIZE:
                 return rows
-            anchor = page[-1].get("hash") if isinstance(page[-1], dict) else None
-            if not isinstance(anchor, str):
+            anchor = page[-1].get(identity) if isinstance(page[-1], dict) else None
+            if not isinstance(anchor, str | int):
                 return rows  # no anchor to advance on: stop rather than re-read page one
             page_params = {**page_params, "after": anchor}
 
