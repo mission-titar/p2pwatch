@@ -412,3 +412,15 @@ def test_a_range_closed_in_the_newer_copy_merges_before_its_successor(
     merge_catalogs(out, [older])
     merge_catalogs(out, [newer])
     assert {table: rows_without_id(out, table) for table in _SOURCE_TABLES} == merged
+
+
+def test_a_copy_diverged_from_a_restored_catalog_is_refused_whole(tmp_path: Path) -> None:
+    # An accepted limit (D6): R1 cannot grow past R3, opened after the restore.
+    restored = make_catalog(tmp_path / "restored.db", _source_ranges((10, 20), (100, 130)))
+    copy = make_catalog(tmp_path / "copy.db", _source_ranges((10, 50), (60, 70)))
+    out = tmp_path / "out.db"
+
+    with pytest.raises(MergeError, match="source_ranges only grows its latest range"):
+        merge_catalogs(out, [restored, copy])
+
+    assert rows_without_id(out, "source_ranges") == rows_without_id(restored, "source_ranges")
