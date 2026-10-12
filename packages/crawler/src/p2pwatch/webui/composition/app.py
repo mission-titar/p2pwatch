@@ -29,6 +29,7 @@ from catalog_matching.models import TargetSegment
 from p2pwatch.adapters.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.observation import Sighting
+from p2pwatch.domain.source import SourceKey
 from p2pwatch.ports.client_status import StatusReadings
 from p2pwatch.ports.crawler_control import CrawlerControl
 from p2pwatch.webui.adapters.catalog_read import (
@@ -76,7 +77,9 @@ from p2pwatch.webui.domain.views import (
     SortHeader,
     SortHeaders,
     SourceHistoryRow,
+    SourceListRow,
     SourceRangeView,
+    SourceRow,
     TargetCoverageRow,
     TierFacet,
     TimelineRow,
@@ -86,10 +89,11 @@ from p2pwatch.webui.domain.views import (
 _FILE_ID = re.compile(r"[0-9a-f]{32}")
 
 # The top-nav destinations, in render order: (path, label). The single source of truth for what
-# base.html renders; every page reaches all four.
+# base.html renders; every page reaches all of them.
 _NAV_DESTINATIONS: tuple[tuple[str, str], ...] = (
     ("/", "Dashboard"),
     ("/files", "Files"),
+    ("/sources", "Sources"),
     ("/node", "Nodes"),
     ("/console", "Console"),
 )
@@ -192,14 +196,24 @@ def _timeline_row(sighting: Sighting) -> TimelineRow:
     )
 
 
+def _name_link(name: str | None) -> tuple[str, ...]:
+    """The name page's href (D13), none without a name."""
+    return () if name is None else (f"/sources/name?{urlencode({'name': name})}",)
+
+
+def _source_link(source: SourceKey | None) -> tuple[str, ...]:
+    """The source page's href (D13), none without a user hash."""
+    return () if source is None else (f"/sources/{source.source_id.hex()}",)
+
+
 def _source_history_row(source_range: SourceRangeView) -> SourceHistoryRow:
-    """A source range as one line; its name and hash link to the pages of blocks 60 and 65 (D13)."""
+    """A source range as one line; its name and hash link to the pages of block 65 (D13)."""
     name, source = source_range.name, source_range.source
     return SourceHistoryRow(
         name="unknown" if name is None else name,
-        name_link=() if name is None else (f"/sources/name?{urlencode({'name': name})}",),
+        name_link=_name_link(name),
         short_hash="unknown" if source is None else short_hash(source.native_id),
-        source_link=() if source is None else (f"/sources/{source.source_id.hex()}",),
+        source_link=_source_link(source),
         role=source_range.role,
         contact_point=source_range.contact_point or "unknown",
         high_id=_YES_NO[source_range.directly_reachable],
@@ -212,6 +226,18 @@ def _source_history_row(source_range: SourceRangeView) -> SourceHistoryRow:
     )
 
 
+def _source_list_row(source: SourceRow) -> SourceListRow:
+    """A source as one line of ``/sources``."""
+    return SourceListRow(
+        name="unknown" if source.name is None else source.name,
+        name_link=_name_link(source.name),
+        short_hash=short_hash(source.source.native_id),
+        source_link=_source_link(source.source),
+        last_seen=micros_timestamp(source.last_seen_at),
+        files=str(source.file_count),
+    )
+
+
 def _normalize(raw: str | None) -> str | None:
     """Normalize a query param: whitespace stripped, empty ⇒ ``None``. Without it, an HTML
     select with an empty option sends ``?target=`` → ``""`` → ``dec.target_id = ''`` matches
@@ -220,6 +246,16 @@ def _normalize(raw: str | None) -> str | None:
         return None
     stripped = raw.strip()
     return stripped or None
+
+
+def _page_number(raw: str | None) -> int:
+    """The ``page`` param, 1 when absent or not a number."""
+    try:
+        page = int(raw or "1")
+    except ValueError:
+        page = 1
+    # ``max(1, ...)`` (webui-security#2): ``?page=0`` → OFFSET=-50 which SQLite treats as 0.
+    return max(1, page)
 
 
 def _page_nav(page: int, n_rows: int, base_path: str, query: dict[str, str]) -> PageNav:
@@ -575,13 +611,7 @@ def build_app(
         show_unmatched = request.query_params.get("show_unmatched") is not None
         sort_param = _normalize_sort(request.query_params.get("sort"))
         dir_param = _normalize_dir(request.query_params.get("dir"))
-        page_raw = request.query_params.get("page", "1")
-        try:
-            page = int(page_raw)
-        except ValueError:
-            page = 1
-        # ``max(1, ...)`` (webui-security#2): ``?page=0`` → OFFSET=-50 which SQLite treats as 0.
-        page = max(1, page)
+        page = _page_number(request.query_params.get("page"))
 
         catalog = CatalogReader(catalog_reader.connection())
         file_rows = catalog.list_files(
@@ -651,6 +681,28 @@ def build_app(
                 "summaries": (summary,),
                 "headers": (headers,),
                 "filter_bar": (filter_bar,),
+            },
+        )
+
+    async def handle_sources(request: Request) -> Response:
+        query = _normalize(request.query_params.get("q"))
+        page = _page_number(request.query_params.get("page"))
+        catalog = CatalogReader(catalog_reader.connection())
+        rows = tuple(_source_list_row(row) for row in catalog.list_sources(query=query, page=page))
+        count = catalog.count_sources(query=query)
+        filters = {} if query is None else {"q": query}
+        return templates.TemplateResponse(
+            request,
+            "sources.html",
+            {
+                "rows": rows,
+                "nav": _page_nav(page, len(rows), "/sources", filters),
+                "summary": (
+                    f"Sources recorded: {count:,}."
+                    if query is None
+                    else f"Sources matching the search: {count:,}."
+                ),
+                "query": query or "",
             },
         )
 
@@ -881,6 +933,7 @@ def build_app(
             Route("/", handle_dashboard),
             Route("/files", handle_files),
             Route("/files/{file_id}", handle_file_detail),
+            Route("/sources", handle_sources),
             Route("/targets/{target_id}", handle_target),
             Route("/node", handle_node),
             Route("/controls/pause", handle_pause, methods=["POST"]),

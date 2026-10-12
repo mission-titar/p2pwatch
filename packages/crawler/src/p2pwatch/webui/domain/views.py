@@ -154,6 +154,16 @@ class SourceRangeView:
     received_bytes: int
 
 
+@dataclass(frozen=True)
+class SourceRow:
+    """One source of the sources list (stage 4 spec, D13); ``last_seen_at`` in microseconds."""
+
+    source: SourceKey
+    name: str | None  # the latest name it carried, None when no reading had one
+    last_seen_at: int
+    file_count: int
+
+
 # ---------------------------------------------------------------------------
 # Node state (local.db)
 # ---------------------------------------------------------------------------
@@ -390,6 +400,18 @@ class SourceHistoryRow:
     last_seen: str
     received: str  # empty when the range received nothing
     rate: str  # empty without bytes or over a single read
+
+
+@dataclass(frozen=True)
+class SourceListRow:
+    """One line of ``/sources`` (stage 4 spec, D13), its links as ``SourceHistoryRow``'s."""
+
+    name: str
+    name_link: tuple[str, ...]
+    short_hash: str
+    source_link: tuple[str, ...]
+    last_seen: str
+    files: str
 
 
 @dataclass(frozen=True)
