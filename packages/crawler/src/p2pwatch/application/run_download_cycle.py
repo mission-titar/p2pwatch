@@ -13,8 +13,9 @@ Four things in it are not obvious:
 - **Step 0 re-connects every iteration.** It is idempotent and nearly free, and it is what makes
   "the client reconnects next round" true (2026-09-04 to 09-11: 7 days of a dead loop).
 
-Errors: ``ClientUnreachableError`` and ``OSError`` on the disk measurement skip the iteration,
-``RepositoryError`` is logged and the cycle continues. A stalled download is never abandoned.
+Errors: ``ClientUnreachableError``, a refused read and ``OSError`` on the disk measurement skip
+the iteration, ``RepositoryError`` is logged and the cycle continues. A stalled download is never
+abandoned.
 """
 
 import asyncio
@@ -57,6 +58,9 @@ _logger = logging.getLogger("p2pwatch.application.run_download_cycle")
 # Conventional subject of the download nudge (DECISION D13). D-download subscribes to THIS
 # subject; the producer side (the pipeline) calls signal("download").
 DOWNLOAD_NUDGE_SUBJECT = "download"
+
+# A read the client refuses (amuleapi's ``amuled_rejected``) is the daemon unavailable.
+_UNAVAILABLE = (ClientUnreachableError, DownloadRejectedError)
 
 # One missed read stays within three polls while a cycle lasts under half a poll (stage 4, D4).
 _TOLERATED_POLLS = 3
@@ -315,7 +319,7 @@ async def _start_unlisted(deps: DownloadDeps, listed: frozenset[FileKey]) -> Non
 
 async def _record_sources(deps: DownloadDeps, listed: tuple[DownloadStatus, ...]) -> None:
     """Records the sources of each of our downloads the client lists, completed ones aside
-    (stage 4, D8). A repo failure skips that download's; ``ClientUnreachableError`` propagates."""
+    (stage 4, D8). A repo failure skips that download's; a client failure propagates."""
     tracked = deps.downloads.active_states()
     tolerance = timedelta(seconds=_TOLERATED_POLLS * deps.poll_interval_seconds)
     for status in listed:
@@ -366,7 +370,7 @@ async def run_download_cycle(deps: DownloadDeps) -> None:
     try:
         await deps.client.connect()
         listed = await deps.client.downloads()
-    except ClientUnreachableError as error:
+    except _UNAVAILABLE as error:
         _logger.warning("download daemon unreachable (%s): iteration skipped, retry", error)
         return
     listed_files = frozenset(status.file for status in listed)
@@ -418,7 +422,7 @@ async def run_download_cycle(deps: DownloadDeps) -> None:
     # Step 5 - SOURCES: last, since it only observes; its failure must not skip a start (D8).
     try:
         await _record_sources(deps, listed)
-    except ClientUnreachableError as error:
+    except _UNAVAILABLE as error:
         _logger.warning("download daemon unreachable (%s): sources skipped, retry", error)
     except RepositoryError as error:
         _logger.error("download sources repo failure (%s): step skipped, retry", error)

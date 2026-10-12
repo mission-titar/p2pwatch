@@ -610,9 +610,15 @@ async def test_reconnect_failure_skips_the_iteration_without_raising() -> None:
     assert downloads.states == {}
 
 
+# amuleapi refuses a read with ``amuled_rejected``, a DownloadRejectedError: on a read, the
+# daemon is unavailable, not a download refused.
+_UNAVAILABLE = [ClientUnreachableError("daemon down"), DownloadRejectedError("amuled_rejected")]
+
+
 @pytest.mark.asyncio
-async def test_unreachable_client_is_tolerated_and_iteration_skipped() -> None:
-    client = FakeDownloadClient(list_failures=[ClientUnreachableError("daemon down")])
+@pytest.mark.parametrize("failure", _UNAVAILABLE, ids=["unreachable", "rejected"])
+async def test_unreachable_client_is_tolerated_and_iteration_skipped(failure: Exception) -> None:
+    client = FakeDownloadClient(list_failures=[failure])
     downloads = FakeDownloadRepo()
     deps = _deps(
         client=client,
@@ -1392,11 +1398,12 @@ async def test_a_download_the_client_reports_completed_is_not_read() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_daemon_unreachable_while_reading_sources_ends_the_round_after_the_starts() -> None:
+@pytest.mark.parametrize("failure", _UNAVAILABLE, ids=["unreachable", "rejected"])
+async def test_a_daemon_unavailable_while_reading_sources_ends_the_round_after_the_starts(
+    failure: Exception,
+) -> None:
     # The sources step only observes: it runs last, so its failure never skips a start.
-    client = FakeDownloadClient(
-        listed=[(_status(_A), _status(_B))], source_failures=[ClientUnreachableError("down")]
-    )
+    client = FakeDownloadClient(listed=[(_status(_A), _status(_B))], source_failures=[failure])
     downloads = FakeDownloadRepo()
     for ed2k_hash in (_A, _B):
         downloads.states[ed2k_hash] = DownloadState.DOWNLOADING
