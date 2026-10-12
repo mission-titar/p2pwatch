@@ -6,8 +6,9 @@ from pathlib import Path
 import pytest
 
 from catalog_matching.models import TargetSegment
-from p2pwatch.adapters.persistence_sqlite.connection import open_local
+from p2pwatch.adapters.persistence_sqlite.connection import open_catalog, open_local
 from p2pwatch.adapters.persistence_sqlite.download_repository import SqliteDownloadRepository
+from p2pwatch.adapters.persistence_sqlite.source_repository import SqliteSourceRepository
 from p2pwatch.application.run_download_cycle import (
     DownloadDeps,
     DownloadRepository,
@@ -20,6 +21,8 @@ from p2pwatch.domain.observability.events import (
     DownloadCompleted,
     DownloadQueued,
     FreeSpaceSampled,
+    SourceNew,
+    SourceReappeared,
 )
 from p2pwatch.domain.source import SourceKey, SourceReading, SourceRole
 from p2pwatch.ports.catalog_repository import DownloadCandidate, ObservedFile
@@ -31,8 +34,9 @@ from p2pwatch.ports.download_client import (
     WaitingReason,
 )
 from p2pwatch.ports.repository_errors import RepositoryError
-from p2pwatch.ports.source_repository import EarlierRanges, OpenedRange
+from p2pwatch.ports.source_repository import EarlierRanges, OpenedRange, SourceRepository
 from tests.application.fakes import RecordingTelemetry
+from tests.catalog_rows import insert_file
 
 _A = "a" * 32
 _B = "b" * 32
@@ -123,11 +127,24 @@ class FakeDownloadClient:
 
 
 class FakeSourceRepo:
-    """Records each ``record_readings`` call; raises ``RepositoryError`` for ``fail_for``."""
+    """Records each ``record_readings`` call, answering ``opened`` per hash; raises
+    ``RepositoryError`` for ``fail_for``. ``history`` answers ``earlier_ranges`` per source,
+    never useful by default, and ``baseline`` answers ``has_ranges_before``."""
 
-    def __init__(self, *, fail_for: set[str] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        fail_for: set[str] | None = None,
+        opened: dict[str, tuple[OpenedRange, ...]] | None = None,
+        history: dict[SourceKey, EarlierRanges] | None = None,
+        baseline: bool = True,
+    ) -> None:
         self.recorded: list[tuple[str, tuple[SourceReading, ...], datetime, timedelta]] = []
+        self.asked: list[tuple[SourceKey, datetime]] = []
         self._fail_for = fail_for or set()
+        self._opened = opened or {}
+        self._history = history or {}
+        self._baseline = baseline
 
     def record_readings(
         self,
@@ -139,13 +156,14 @@ class FakeSourceRepo:
         if file.native_id in self._fail_for:
             raise RepositoryError(f"record_readings({file.native_id}) failed")
         self.recorded.append((file.native_id, tuple(readings), read_at, tolerance))
-        return ()
+        return self._opened.get(file.native_id, ())
 
     def earlier_ranges(self, source: SourceKey, started_before: datetime) -> EarlierRanges:
-        raise AssertionError("the download cycle does not read the source history")
+        self.asked.append((source, started_before))
+        return self._history.get(source, EarlierRanges(useful=False, last_known_at=None))
 
     def has_ranges_before(self, started_before: datetime) -> bool:
-        raise AssertionError("the download cycle does not read the source history")
+        return self._baseline
 
 
 class FakeDownloadRepo:
@@ -310,7 +328,7 @@ def _deps(
     lost_after: float = 86400.0,
     telemetry: RecordingTelemetry | None = None,
     targets: Sequence[TargetSegment] | None = None,
-    sources: FakeSourceRepo | None = None,
+    sources: SourceRepository | None = None,
     clock: FakeClock | None = None,
 ) -> DownloadDeps:
     return DownloadDeps(
@@ -324,6 +342,7 @@ def _deps(
         min_free_bytes=min_free,
         lost_after_seconds=lost_after,
         poll_interval_seconds=30.0,
+        reappeared_after=timedelta(hours=12),
         clock=clock or FakeClock(),
         telemetry=telemetry or RecordingTelemetry(),
     )
@@ -1452,3 +1471,125 @@ async def test_a_daemon_unreachable_at_the_start_reads_no_source() -> None:
     catalog = FakeCatalogReads(observations={_C: ObservedFile(filename="c.avi", size_bytes=1)})
     await run_download_cycle(_deps(client=client, downloads=downloads, catalog=catalog))
     assert client.source_reads == []
+
+
+_PEER, _OTHER_PEER = SourceKey(Network.ED2K, "1f2e3d4c" * 4), SourceKey(Network.ED2K, "c" * 32)
+
+
+def _tracking(*hashes: str) -> FakeDownloadRepo:
+    downloads = FakeDownloadRepo()
+    for ed2k_hash in hashes:
+        downloads.states[ed2k_hash] = DownloadState.DOWNLOADING
+    return downloads
+
+
+@pytest.mark.asyncio
+async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
+    # Stage 4, D9: the first file's event, named after its decision and best name.
+    queued = (OpenedRange(_PEER, "AnimuseeFMR", SourceRole.QUEUED),)
+    sources = FakeSourceRepo(opened={_A: queued, _B: queued})
+    catalog = FakeCatalogReads(
+        candidates=(_candidate(_A, "062A"),),
+        best={_A: ObservedFile(filename="Keroro 062.avi", size_bytes=1)},
+    )
+    telemetry = RecordingTelemetry()
+    client = FakeDownloadClient(listed=[(_status(_A), _status(_B))])
+    deps = _deps(
+        client=client,
+        downloads=_tracking(_A, _B),
+        catalog=catalog,
+        sources=sources,
+        telemetry=telemetry,
+    )
+    await run_download_cycle(deps)
+    alerts = [e for e in telemetry.events if isinstance(e, SourceNew | SourceReappeared)]
+    assert alerts == [SourceNew(_PEER, "AnimuseeFMR", _key(_A), "Keroro 062.avi", (("062A", "t"),))]
+
+
+@pytest.mark.asyncio
+async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
+    # Each file asks the history before the round's start, not before its own read.
+    clock = FakeClock()
+    start = clock.now()
+    history = {_PEER: EarlierRanges(useful=True, last_known_at=start - timedelta(hours=13))}
+    opened: dict[str, tuple[OpenedRange, ...]] = {
+        _A: (OpenedRange(_OTHER_PEER, None, SourceRole.NOTHING_NEW),),
+        _B: (OpenedRange(_PEER, "AnimuseeFMR", SourceRole.SENDING),),
+    }
+    sources = FakeSourceRepo(opened=opened, history=history)
+    downloads = _tracking(_A, _B)
+    downloads._target_ids[_B] = "063A"  # queued for it, no decision left
+    telemetry = RecordingTelemetry()
+    client = FakeDownloadClient(listed=[(_status(_A), _status(_B))], clock=clock)
+    deps = _deps(
+        client=client,
+        downloads=downloads,
+        catalog=FakeCatalogReads(),
+        sources=sources,
+        telemetry=telemetry,
+        clock=clock,
+    )
+    await run_download_cycle(deps)
+    assert sources.asked == [(_OTHER_PEER, start), (_PEER, start)]
+    alerts = [e for e in telemetry.events if isinstance(e, SourceNew | SourceReappeared)]
+    assert alerts == [
+        SourceReappeared(_PEER, "AnimuseeFMR", _key(_B), _B, (("063A", "t2"),), 46800.0)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_range_opened_without_a_source_id_raises_nothing() -> None:
+    sources = FakeSourceRepo(opened={_A: (OpenedRange(None, "peer", SourceRole.QUEUED),)})
+    telemetry = RecordingTelemetry()
+    client = FakeDownloadClient(listed=[(_status(_A),)])
+    deps = _deps(
+        client=client,
+        downloads=_tracking(_A),
+        catalog=FakeCatalogReads(),
+        sources=sources,
+        telemetry=telemetry,
+    )
+    await run_download_cycle(deps)
+    assert sources.asked == []
+    assert not any(isinstance(e, SourceNew | SourceReappeared) for e in telemetry.events)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("order", [(_A, _B), (_B, _A)], ids=["a-first", "b-first"])
+async def test_the_first_recording_round_is_a_baseline(
+    tmp_path: Path, order: tuple[str, str]
+) -> None:
+    # On a real catalog: two queued sources in the node's first round, a third in the next.
+    catalog = open_catalog(tmp_path / "catalog.db")
+    for ed2k_hash in order:
+        insert_file(catalog, ed2k_hash)
+    readings: dict[str, tuple[SourceReading, ...]] = {
+        _A: (_queued(_PEER),),
+        _B: (_queued(_OTHER_PEER),),
+    }
+    clock = FakeClock()
+    rounds = [tuple(_status(h) for h in order)] * 2
+    client = FakeDownloadClient(listed=rounds, readings=readings, clock=clock)
+    telemetry = RecordingTelemetry()
+    deps = _deps(
+        client=client,
+        downloads=_tracking(_A, _B),
+        catalog=FakeCatalogReads(),
+        sources=SqliteSourceRepository(catalog, "n1"),
+        telemetry=telemetry,
+        clock=clock,
+    )
+    await run_download_cycle(deps)
+    alerts = [e for e in telemetry.events if isinstance(e, SourceNew | SourceReappeared)]
+    assert alerts == []
+    await clock.sleep(30.0)
+    third = SourceKey(Network.ED2K, "d" * 32)
+    readings[_A] = (_queued(_PEER), _queued(third))
+    await run_download_cycle(deps)
+    alerts = [e for e in telemetry.events if isinstance(e, SourceNew | SourceReappeared)]
+    assert alerts == [SourceNew(third, "peer", _key(_A), _A, ())]
+    catalog.close()
+
+
+def _queued(key: SourceKey) -> SourceReading:
+    return SourceReading(key, "peer", None, SourceRole.QUEUED, None, None, (), 0)

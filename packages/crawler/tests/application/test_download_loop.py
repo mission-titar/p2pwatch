@@ -1,5 +1,5 @@
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -54,6 +54,7 @@ def _loop_deps(
         disk=FakeDiskSpace(1_000_000),
         min_free_bytes=0,
         lost_after_seconds=86400.0,
+        reappeared_after=timedelta(hours=12),
         clock=FakeClock(),
         telemetry=RecordingTelemetry(),
         signal=signal,

@@ -18,6 +18,7 @@ _COUNTERS: tuple[tuple[MetricName, str, tuple[str, ...]], ...] = (
     (MetricName.DECISIONS, "Match decisions recorded", ("tier",)),
     (MetricName.DOWNLOADS_QUEUED, "Downloads queued", ()),
     (MetricName.DOWNLOADS_COMPLETED, "Downloads completed", ()),
+    (MetricName.SOURCE_ALERTS, "Sources useful for the first time or again", ("network", "kind")),
 )
 _GAUGES: tuple[tuple[MetricName, str, tuple[str, ...]], ...] = (
     (MetricName.CRAWLER_UP, "Crawler running (1)", ()),

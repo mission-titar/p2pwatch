@@ -23,11 +23,12 @@ import logging
 from collections.abc import Iterable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Protocol
 
 from catalog_matching.models import TargetSegment
 from p2pwatch.application.edge_state import EdgeState
+from p2pwatch.application.source_alerts import FirstUseful, source_alert
 from p2pwatch.domain.download.policy import DownloadVerdict, download_policy
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import FileKey
@@ -36,7 +37,10 @@ from p2pwatch.domain.observability.events import (
     DownloadCompleted,
     DownloadQueued,
     FreeSpaceSampled,
+    SourceNew,
+    SourceReappeared,
 )
+from p2pwatch.domain.source import SourceKey
 from p2pwatch.ports.catalog_repository import DownloadCandidate, ObservedFile
 from p2pwatch.ports.client_errors import ClientUnreachableError, DownloadRejectedError
 from p2pwatch.ports.clock import Clock
@@ -50,7 +54,7 @@ from p2pwatch.ports.download_client import (
 )
 from p2pwatch.ports.repository_errors import RepositoryError
 from p2pwatch.ports.source_client import SourceClient
-from p2pwatch.ports.source_repository import SourceRepository
+from p2pwatch.ports.source_repository import OpenedRange, SourceRepository
 from p2pwatch.ports.telemetry import Telemetry
 
 _logger = logging.getLogger("p2pwatch.application.run_download_cycle")
@@ -130,6 +134,7 @@ class DownloadDeps:
     min_free_bytes: int
     lost_after_seconds: float
     poll_interval_seconds: float
+    reappeared_after: timedelta
     clock: Clock
     telemetry: Telemetry
     edge: EdgeState = field(default_factory=EdgeState, kw_only=True)  # low-disk warning
@@ -176,6 +181,22 @@ async def _monitor(
             states[file] = target
 
 
+def _targets(deps: DownloadDeps, file: FileKey) -> tuple[tuple[str, str], ...]:
+    """Every download target of the file, else the one it was queued for (the decision may have
+    dropped since), each with its title."""
+    target_ids = [c.target_id for c in deps.catalog.download_decisions() if c.file == file]
+    if not target_ids and (queued := deps.downloads.get_target_id(file)) is not None:
+        target_ids = [queued]
+    titles = {target.target_id: target.title for target in deps.targets}
+    return tuple((target_id, titles.get(target_id, "")) for target_id in target_ids)
+
+
+def _best_name(deps: DownloadDeps, file: FileKey) -> str:
+    """The clean name; the native id names a file whose observations are gone."""
+    best = deps.catalog.best_observation(file)
+    return file.native_id if best is None else best.filename
+
+
 async def _record_completion(
     deps: DownloadDeps, file: FileKey, states: dict[FileKey, DownloadState]
 ) -> None:
@@ -187,18 +208,8 @@ async def _record_completion(
     """
     deps.downloads.set_state(file, DownloadState.COMPLETED)
     states[file] = DownloadState.COMPLETED
-    # Every download target of the file, else the one it was queued for (the decision may have
-    # dropped since); the native id names a file whose observations are gone.
-    decided = [c.target_id for c in deps.catalog.download_decisions() if c.file == file]
-    target_ids = decided or [deps.downloads.get_target_id(file) or "unknown"]
-    titles = {target.target_id: target.title for target in deps.targets}
-    best = deps.catalog.best_observation(file)
     await deps.telemetry.emit(
-        DownloadCompleted(
-            file,
-            file.native_id if best is None else best.filename,
-            tuple((target_id, titles.get(target_id, "")) for target_id in target_ids),
-        )
+        DownloadCompleted(file, _best_name(deps, file), _targets(deps, file) or (("unknown", ""),))
     )
     _logger.info("file=%s completed", file.native_id)
 
@@ -317,18 +328,53 @@ async def _start_unlisted(deps: DownloadDeps, listed: frozenset[FileKey]) -> Non
             )
 
 
+async def _alert_sources(
+    deps: DownloadDeps,
+    file: FileKey,
+    opened: tuple[OpenedRange, ...],
+    round_started_at: datetime,
+    notified: set[SourceKey],
+) -> None:
+    """Emits D9's alerts for the ranges a committed write opened, once per source per round."""
+    for opened_range in opened:
+        source = opened_range.key
+        if source is None or source in notified:
+            continue  # a name alone is too weak to carry an event; one per source per round
+        earlier = deps.sources.earlier_ranges(source, round_started_at)
+        alert = source_alert(opened_range.role, earlier, round_started_at, deps.reappeared_after)
+        if alert is None:
+            continue
+        name, filename, targets = opened_range.name, _best_name(deps, file), _targets(deps, file)
+        event: SourceNew | SourceReappeared = (
+            SourceNew(source, name, file, filename, targets)
+            if isinstance(alert, FirstUseful)
+            else SourceReappeared(
+                source, name, file, filename, targets, alert.absent.total_seconds()
+            )
+        )
+        notified.add(source)
+        await deps.telemetry.emit(event)
+
+
 async def _record_sources(deps: DownloadDeps, listed: tuple[DownloadStatus, ...]) -> None:
-    """Records the sources of each of our downloads the client lists, completed ones aside
-    (stage 4, D8). A repo failure skips that download's; a client failure propagates."""
+    """Records the sources of each of our downloads the client lists, completed ones aside, then
+    alerts on them (stage 4, D8, D9). A repo failure skips that download's; a client failure
+    propagates."""
     tracked = deps.downloads.active_states()
     tolerance = timedelta(seconds=_TOLERATED_POLLS * deps.poll_interval_seconds)
+    round_started_at = deps.clock.now()
+    # A node's first recording round is a baseline, not news; decided before its first write.
+    alerting = deps.sources.has_ranges_before(round_started_at)
+    notified: set[SourceKey] = set()
     for status in listed:
         if status.completed or status.file not in tracked:
             continue
         read_at = deps.clock.now()
         readings = await deps.source_client.sources(status.file)
         try:
-            deps.sources.record_readings(status.file, readings, read_at, tolerance)
+            opened = deps.sources.record_readings(status.file, readings, read_at, tolerance)
+            if alerting:
+                await _alert_sources(deps, status.file, opened, round_started_at, notified)
         except RepositoryError as error:
             _logger.error(
                 "sources file=%s repo failure (%s): file skipped, continues",

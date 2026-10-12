@@ -256,6 +256,7 @@ class CrawlerApp:
             min_free_bytes=download_config.min_free_bytes,
             lost_after_seconds=download_config.lost_after_seconds,
             poll_interval_seconds=download_config.poll_interval_seconds,
+            reappeared_after=download_config.reappeared_after,
             clock=self._clock,
             telemetry=telemetry,
             signal=self._signal,
