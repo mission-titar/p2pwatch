@@ -76,7 +76,9 @@ d'un autre chercheur, fusionnez-le au vôtre avec l'outil `merge`, décrit dans
 
 La fusion est sûre : chaque fichier est identifié par son empreinte de contenu, donc deux chercheurs
 qui ont vu le même fichier écrivent la même ligne. Refusionner deux fois le même catalogue ne change
-rien, et rien n'est écrasé sans que vous le demandiez.
+rien, et rien n'est écrasé sans que vous le demandiez. Une limite : un catalogue restauré d'une
+sauvegarde, ou remplacé par le catalogue fusionné pendant que le nœud tournait, ne peut plus
+absorber une copie de lui-même prise avant ([Outils de catalogue](operate.md#outils-de-catalogue)).
 
 Un catalogue partagé contient aussi l'historique des sources de vos téléchargements : les user
 hashes et les noms que des tiers annoncent sur le réseau, et quand vous les avez vus : des
