@@ -461,6 +461,24 @@ refusée. Les règles d'écriture :
   relance au démarrage suivant. Toute autre première ligne commençant par `-- migration:` est refusée
   au chargement des scripts.
 
+### 8.2 Ce qui mérite un `CHECK`
+
+SQLite ne sait pas modifier un `CHECK` : en changer un reconstruit la table (la recette de §8.1). Une
+colonne reçoit donc un `CHECK` seulement si les trois conditions tiennent :
+
+1. **Quelque chose en dépend** : une règle, une jointure, une unicité ou une route la lit, et une
+   mauvaise valeur la casserait, au lieu de seulement paraître étrange.
+2. **La ligne seule l'énonce** : un `CHECK` ne voit aucune autre table.
+3. **Elle ne change qu'avec le schéma** (un nouveau réseau, un nouveau rôle), jamais avec la version
+   d'un client ni un détail d'adaptateur.
+
+Sinon, le domaine la valide, et lui seul. Le `CHECK` n'est jamais la seule défense : le domaine
+valide d'abord, car `INSERT OR IGNORE` avale une violation de `CHECK` sans rien dire. Le `CHECK`
+arrête les écrivains qui contournent le domaine : `merge`, une migration. Par exemple,
+`sources.native_id` en 32 caractères hexadécimaux minuscules sur eD2k en a un (une majuscule ferait
+une seconde identité de la même source), mais pas `source_variants.contact_point`, dont le format
+dépend d'un réseau que la ligne ne porte pas.
+
 ## 9. Port-sync High-ID (optionnel)
 
 Derrière un VPN, le port entrant change ; sans High-ID, la connectabilité (et donc la couverture) se
