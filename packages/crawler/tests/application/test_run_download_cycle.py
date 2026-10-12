@@ -21,6 +21,7 @@ from p2pwatch.domain.observability.events import (
     DownloadQueued,
     FreeSpaceSampled,
 )
+from p2pwatch.domain.source import SourceKey, SourceReading, SourceRole
 from p2pwatch.ports.catalog_repository import DownloadCandidate, ObservedFile
 from p2pwatch.ports.client_errors import ClientUnreachableError, DownloadRejectedError
 from p2pwatch.ports.download_client import (
@@ -30,10 +31,12 @@ from p2pwatch.ports.download_client import (
     WaitingReason,
 )
 from p2pwatch.ports.repository_errors import RepositoryError
+from p2pwatch.ports.source_repository import EarlierRanges, OpenedRange
 from tests.application.fakes import RecordingTelemetry
 
 _A = "a" * 32
 _B = "b" * 32
+_C = "c" * 32
 
 _TARGETS = (
     TargetSegment(
@@ -53,6 +56,9 @@ _TARGETS = (
 class FakeDownloadClient:
     """Scripted DownloadClient: SCRIPTED ``downloads()`` snapshots, captures the started requests.
 
+    It is the SourceClient too, as the real adapter is: ``readings`` per hash, ``source_reads``
+    the hashes read, each read advancing ``clock`` by a second when one is given.
+
     ``disconnected`` models the REAL adapter's state before a login: every I/O call raises
     ``ClientUnreachableError`` until ``connect()`` succeeds.
     """
@@ -64,14 +70,21 @@ class FakeDownloadClient:
         connect_failures: list[Exception] | None = None,
         list_failures: list[Exception] | None = None,
         start_failures: list[Exception] | None = None,
+        source_failures: list[Exception] | None = None,
+        readings: dict[str, tuple[SourceReading, ...]] | None = None,
+        clock: "FakeClock | None" = None,
         disconnected: bool = False,
     ) -> None:
         self._listed = list(listed or [()])
         self._connect_failures = list(connect_failures or [])
         self._list_failures = list(list_failures or [])
         self._start_failures = list(start_failures or [])
+        self._source_failures = list(source_failures or [])
+        self._readings = readings or {}
+        self._clock = clock
         self._disconnected = disconnected
         self.started: list[DownloadRequest] = []
+        self.source_reads: list[str] = []
         self.connect_calls = 0
 
     def _require_connected(self) -> None:
@@ -98,6 +111,41 @@ class FakeDownloadClient:
         if self._list_failures:
             raise self._list_failures.pop(0)
         return self._listed.pop(0) if self._listed else ()
+
+    async def sources(self, file: FileKey) -> tuple[SourceReading, ...]:
+        self._require_connected()
+        self.source_reads.append(file.native_id)
+        if self._clock is not None:
+            await self._clock.sleep(1.0)
+        if self._source_failures:
+            raise self._source_failures.pop(0)
+        return self._readings.get(file.native_id, ())
+
+
+class FakeSourceRepo:
+    """Records each ``record_readings`` call; raises ``RepositoryError`` for ``fail_for``."""
+
+    def __init__(self, *, fail_for: set[str] | None = None) -> None:
+        self.recorded: list[tuple[str, tuple[SourceReading, ...], datetime, timedelta]] = []
+        self._fail_for = fail_for or set()
+
+    def record_readings(
+        self,
+        file: FileKey,
+        readings: Sequence[SourceReading],
+        read_at: datetime,
+        tolerance: timedelta,
+    ) -> tuple[OpenedRange, ...]:
+        if file.native_id in self._fail_for:
+            raise RepositoryError(f"record_readings({file.native_id}) failed")
+        self.recorded.append((file.native_id, tuple(readings), read_at, tolerance))
+        return ()
+
+    def earlier_ranges(self, source: SourceKey, started_before: datetime) -> EarlierRanges:
+        raise AssertionError("the download cycle does not read the source history")
+
+    def has_ranges_before(self, started_before: datetime) -> bool:
+        raise AssertionError("the download cycle does not read the source history")
 
 
 class FakeDownloadRepo:
@@ -262,16 +310,21 @@ def _deps(
     lost_after: float = 86400.0,
     telemetry: RecordingTelemetry | None = None,
     targets: Sequence[TargetSegment] | None = None,
+    sources: FakeSourceRepo | None = None,
+    clock: FakeClock | None = None,
 ) -> DownloadDeps:
     return DownloadDeps(
         client=client,
+        source_client=client,
         downloads=downloads,
+        sources=sources or FakeSourceRepo(),
         catalog=catalog,
         targets=targets if targets is not None else _TARGETS,
         disk=FakeDiskSpace(free),
         min_free_bytes=min_free,
         lost_after_seconds=lost_after,
-        clock=FakeClock(),
+        poll_interval_seconds=30.0,
+        clock=clock or FakeClock(),
         telemetry=telemetry or RecordingTelemetry(),
     )
 
@@ -1295,3 +1348,100 @@ async def test_waiting_for_sources_is_not_failing_for_a_simulated_year(tmp_path:
     row = connection.execute("SELECT state, waiting_reason, failure_reason FROM downloads")
     assert row.fetchall() == [("downloading", "no_source", None)]
     connection.close()
+
+
+def _reading(name: str, role: SourceRole | None = SourceRole.QUEUED) -> SourceReading:
+    return SourceReading(SourceKey(Network.ED2K, "1f" * 16), name, None, role, None, None, (), 0)
+
+
+@pytest.mark.asyncio
+async def test_the_sources_of_each_tracked_download_the_client_lists_are_recorded() -> None:
+    # Stage 4, D8: the untracked C is not the crawler's, and each read_at precedes its read.
+    clock = FakeClock()
+    start = clock.now()
+    readings: dict[str, tuple[SourceReading, ...]] = {
+        _A: (_reading("peer A"),),
+        _B: (_reading("peer B", None),),
+    }
+    listed = (_status(_A), _status(_C), _status(_B))
+    client = FakeDownloadClient(listed=[listed], readings=readings, clock=clock)
+    downloads = FakeDownloadRepo()
+    downloads.states[_A] = DownloadState.DOWNLOADING
+    downloads.states[_B] = DownloadState.QUEUED
+    sources = FakeSourceRepo()
+    deps = _deps(
+        client=client, downloads=downloads, catalog=FakeCatalogReads(), sources=sources, clock=clock
+    )
+    await run_download_cycle(deps)
+    assert client.source_reads == [_A, _B]
+    tolerance = timedelta(seconds=90)
+    assert sources.recorded == [
+        (_A, readings[_A], start, tolerance),
+        (_B, readings[_B], start + timedelta(seconds=1), tolerance),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_download_the_client_reports_completed_is_not_read() -> None:
+    client = FakeDownloadClient(listed=[(_status(_A, completed=True), _status(_B))])
+    downloads = FakeDownloadRepo()
+    downloads.states[_A] = DownloadState.DOWNLOADING
+    downloads.states[_B] = DownloadState.DOWNLOADING
+    await run_download_cycle(_deps(client=client, downloads=downloads, catalog=FakeCatalogReads()))
+    assert client.source_reads == [_B]
+
+
+@pytest.mark.asyncio
+async def test_a_daemon_unreachable_while_reading_sources_ends_the_round_after_the_starts() -> None:
+    # The sources step only observes: it runs last, so its failure never skips a start.
+    client = FakeDownloadClient(
+        listed=[(_status(_A), _status(_B))], source_failures=[ClientUnreachableError("down")]
+    )
+    downloads = FakeDownloadRepo()
+    for ed2k_hash in (_A, _B):
+        downloads.states[ed2k_hash] = DownloadState.DOWNLOADING
+    downloads.states[_C] = DownloadState.QUEUED
+    catalog = FakeCatalogReads(observations={_C: ObservedFile(filename="c.avi", size_bytes=1)})
+    sources = FakeSourceRepo()
+    await run_download_cycle(
+        _deps(client=client, downloads=downloads, catalog=catalog, sources=sources)
+    )  # does not raise
+    assert _started(client) == [_C]
+    assert client.source_reads == [_A]
+    assert sources.recorded == []
+
+
+@pytest.mark.asyncio
+async def test_a_repo_failure_on_one_download_skips_its_sources_only() -> None:
+    client = FakeDownloadClient(listed=[(_status(_A), _status(_B))])
+    downloads = FakeDownloadRepo()
+    downloads.states[_A] = DownloadState.DOWNLOADING
+    downloads.states[_B] = DownloadState.DOWNLOADING
+    sources = FakeSourceRepo(fail_for={_A})
+    await run_download_cycle(
+        _deps(client=client, downloads=downloads, catalog=FakeCatalogReads(), sources=sources)
+    )
+    assert [file for file, *_ in sources.recorded] == [_B]
+
+
+@pytest.mark.asyncio
+async def test_a_repo_failure_reading_the_tracked_downloads_reads_no_source() -> None:
+    client = FakeDownloadClient(listed=[(_status(_A),)])
+    downloads = FakeDownloadRepo(fail_active_states=True)
+    await run_download_cycle(
+        _deps(client=client, downloads=downloads, catalog=FakeCatalogReads())
+    )  # does not raise
+    assert client.source_reads == []
+
+
+@pytest.mark.asyncio
+async def test_a_daemon_unreachable_at_the_start_reads_no_source() -> None:
+    client = FakeDownloadClient(
+        listed=[(_status(_A),)], start_failures=[ClientUnreachableError("down")]
+    )
+    downloads = FakeDownloadRepo()
+    downloads.states[_A] = DownloadState.DOWNLOADING
+    downloads.states[_C] = DownloadState.QUEUED
+    catalog = FakeCatalogReads(observations={_C: ObservedFile(filename="c.avi", size_bytes=1)})
+    await run_download_cycle(_deps(client=client, downloads=downloads, catalog=catalog))
+    assert client.source_reads == []

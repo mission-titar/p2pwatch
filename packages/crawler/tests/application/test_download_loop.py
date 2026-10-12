@@ -19,6 +19,7 @@ from tests.application.test_run_download_cycle import (
     FakeDiskSpace,
     FakeDownloadClient,
     FakeDownloadRepo,
+    FakeSourceRepo,
 )
 
 
@@ -42,9 +43,12 @@ class RecordingSignal:
 def _loop_deps(
     *, signal: RecordingSignal, shutdown: asyncio.Event, poll_interval: float = 30.0
 ) -> DownloadLoopDeps:
+    client = FakeDownloadClient()
     return DownloadLoopDeps(
-        client=FakeDownloadClient(),
+        client=client,
+        source_client=client,
         downloads=FakeDownloadRepo(),
+        sources=FakeSourceRepo(),
         catalog=FakeCatalogReads(),
         targets=_TARGETS,
         disk=FakeDiskSpace(1_000_000),

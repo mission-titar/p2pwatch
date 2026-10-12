@@ -1,4 +1,4 @@
-"""The download loop: monitor → completions → new candidates → sleep/nudge (spec §5).
+"""The download loop: monitor → completions → new candidates → sources → sleep/nudge (spec §5).
 
 One serial task on the sole download session. ``run_download_cycle`` runs ONE iteration;
 ``download_loop`` repeats it until shutdown, waiting ``poll_interval`` or the decision nudge.
@@ -22,6 +22,7 @@ import logging
 from collections.abc import Iterable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
+from datetime import timedelta
 from typing import Protocol
 
 from catalog_matching.models import TargetSegment
@@ -47,6 +48,8 @@ from p2pwatch.ports.download_client import (
     FailureReason,
 )
 from p2pwatch.ports.repository_errors import RepositoryError
+from p2pwatch.ports.source_client import SourceClient
+from p2pwatch.ports.source_repository import SourceRepository
 from p2pwatch.ports.telemetry import Telemetry
 
 _logger = logging.getLogger("p2pwatch.application.run_download_cycle")
@@ -54,6 +57,9 @@ _logger = logging.getLogger("p2pwatch.application.run_download_cycle")
 # Conventional subject of the download nudge (DECISION D13). D-download subscribes to THIS
 # subject; the producer side (the pipeline) calls signal("download").
 DOWNLOAD_NUDGE_SUBJECT = "download"
+
+# One missed read stays within three polls while a cycle lasts under half a poll (stage 4, D4).
+_TOLERATED_POLLS = 3
 
 
 class DownloadRepository(Protocol):
@@ -111,12 +117,15 @@ class DownloadDeps:
     """
 
     client: DownloadClient
+    source_client: SourceClient
     downloads: DownloadRepository
+    sources: SourceRepository
     catalog: CatalogReader
     targets: Sequence[TargetSegment]
     disk: DiskSpace
     min_free_bytes: int
     lost_after_seconds: float
+    poll_interval_seconds: float
     clock: Clock
     telemetry: Telemetry
     edge: EdgeState = field(default_factory=EdgeState, kw_only=True)  # low-disk warning
@@ -124,10 +133,9 @@ class DownloadDeps:
 
 @dataclass
 class DownloadLoopDeps(DownloadDeps):
-    """``DownloadDeps`` + what it takes to REPEAT (nudge, cadence, shutdown) - DECISION D12."""
+    """``DownloadDeps`` + what it takes to REPEAT (nudge, shutdown) - DECISION D12."""
 
     signal: DecisionSignal
-    poll_interval_seconds: float
     shutdown: asyncio.Event
 
 
@@ -305,6 +313,26 @@ async def _start_unlisted(deps: DownloadDeps, listed: frozenset[FileKey]) -> Non
             )
 
 
+async def _record_sources(deps: DownloadDeps, listed: tuple[DownloadStatus, ...]) -> None:
+    """Records the sources of each of our downloads the client lists, completed ones aside
+    (stage 4, D8). A repo failure skips that download's; ``ClientUnreachableError`` propagates."""
+    tracked = deps.downloads.active_states()
+    tolerance = timedelta(seconds=_TOLERATED_POLLS * deps.poll_interval_seconds)
+    for status in listed:
+        if status.completed or status.file not in tracked:
+            continue
+        read_at = deps.clock.now()
+        readings = await deps.source_client.sources(status.file)
+        try:
+            deps.sources.record_readings(status.file, readings, read_at, tolerance)
+        except RepositoryError as error:
+            _logger.error(
+                "sources file=%s repo failure (%s): file skipped, continues",
+                status.file.native_id,
+                error,
+            )
+
+
 async def run_download_cycle(deps: DownloadDeps) -> None:
     """ONE iteration of the download loop (spec §5). Never raises: tolerates/absorbs.
 
@@ -384,8 +412,16 @@ async def run_download_cycle(deps: DownloadDeps) -> None:
         await _start_unlisted(deps, listed_files)
     except ClientUnreachableError as error:
         _logger.warning("download daemon unreachable (%s): iteration skipped, retry", error)
+        return
     except RepositoryError as error:
         _logger.error("download start repo failure (%s): step skipped, retry", error)
+    # Step 5 - SOURCES: last, since it only observes; its failure must not skip a start (D8).
+    try:
+        await _record_sources(deps, listed)
+    except ClientUnreachableError as error:
+        _logger.warning("download daemon unreachable (%s): sources skipped, retry", error)
+    except RepositoryError as error:
+        _logger.error("download sources repo failure (%s): step skipped, retry", error)
 
 
 async def _sleep_or_nudge(deps: DownloadLoopDeps) -> None:

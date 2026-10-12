@@ -57,6 +57,7 @@ from p2pwatch.adapters.persistence_sqlite.local_state_repository import (
 from p2pwatch.adapters.persistence_sqlite.scheduler_state_repository import (
     SqliteSchedulerStateRepository,
 )
+from p2pwatch.adapters.persistence_sqlite.source_repository import SqliteSourceRepository
 from p2pwatch.application.reevaluate_catalog import reevaluate_catalog
 from p2pwatch.application.run_backfill import run_backfill_if_policy_changed
 from p2pwatch.application.run_download_cycle import (
@@ -79,17 +80,23 @@ from p2pwatch.ports.decision_signal import DecisionSignal
 from p2pwatch.ports.download_client import DownloadClient
 from p2pwatch.ports.mule_client import MuleClient
 from p2pwatch.ports.scheduler_state_repository import SchedulerStateRepository
+from p2pwatch.ports.source_client import SourceClient
 from p2pwatch.ports.telemetry import Telemetry
 from p2pwatch.webui.composition.app import build_app as build_webui_app
 
 _logger = logging.getLogger("p2pwatch.composition.app")
 
+
+class DownloadSourceClient(DownloadClient, SourceClient, Protocol):
+    """The download loop's one session: it downloads, and reads its downloads' sources."""
+
+
 # Client factories, injectable in test; the clock is the composition's, so the pacing shares it.
 ClientFactory = Callable[[AmuleEndpoint, Clock], MuleClient]
-DownloadClientFactory = Callable[[AmuleEndpoint, Clock], DownloadClient]
+DownloadClientFactory = Callable[[AmuleEndpoint, Clock], DownloadSourceClient]
 
 
-def default_download_client_factory(endpoint: AmuleEndpoint, clock: Clock) -> DownloadClient:
+def default_download_client_factory(endpoint: AmuleEndpoint, clock: Clock) -> DownloadSourceClient:
     """An ``AmuleApiClient`` dedicated to download: its own session."""
     return AmuleApiClient(endpoint.host, endpoint.port, endpoint.password, clock=clock)
 
@@ -215,13 +222,15 @@ class CrawlerApp:
         download_config: DownloadConfig,
         stack: AsyncExitStack,
         catalog_repo: SqliteCatalogRepository,
+        source_repo: SqliteSourceRepository,
         local_conn: sqlite3.Connection,
         telemetry: Telemetry,
     ) -> DownloadLoopDeps:
         """Assemble the download loop deps (download mode, spec §7).
 
-        SHARED single repos (``catalog_repo`` already built; a ``SqliteDownloadRepository`` on
-        the SAME ``local_conn`` - single writer on the event loop, no race). Its own session to
+        SHARED single repos (``catalog_repo`` and ``source_repo`` already built on the catalog
+        connection; a ``SqliteDownloadRepository`` on the SAME ``local_conn`` - single writer
+        on the event loop, no race). Its own session to
         the daemon, connected tolerating ``ClientUnreachableError`` (a daemon not yet listening
         at startup does not kill the crawler; the loop's backoff governs).
         """
@@ -238,16 +247,18 @@ class CrawlerApp:
             )
         return DownloadLoopDeps(
             client=download_client,
+            source_client=download_client,
             downloads=SqliteDownloadRepository(local_conn),
+            sources=source_repo,
             catalog=catalog_repo,
             targets=self._targets,
             disk=ShutilDiskSpace(download_config.output_dir),
             min_free_bytes=download_config.min_free_bytes,
             lost_after_seconds=download_config.lost_after_seconds,
+            poll_interval_seconds=download_config.poll_interval_seconds,
             clock=self._clock,
             telemetry=telemetry,
             signal=self._signal,
-            poll_interval_seconds=download_config.poll_interval_seconds,
             shutdown=self._shutdown,
         )
 
@@ -468,6 +479,7 @@ class CrawlerApp:
                     download_config=download_config,
                     stack=stack,
                     catalog_repo=catalog_repo,
+                    source_repo=SqliteSourceRepository(catalog_conn, node_id),
                     local_conn=local_conn,
                     telemetry=telemetry,
                 )
