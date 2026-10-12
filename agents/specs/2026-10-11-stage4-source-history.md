@@ -40,7 +40,8 @@ What the catalog then holds for one source on one file, as the webui shows it (D
 | AnimuseeFMR `1f2e…` | `queued` | Tue 20:00:30 | 21:14:00 | |
 | AnimuseeFMR `1f2e…` | `sending` | Tue 21:14:30 | 23:59:30 | about 10 MB (1 KB/s) |
 
-The 13 blocks (Corrected: block 15 split in two over the line bound, block 15's report):
+The 14 blocks (Corrected: block 15 split in two over the line bound, block 15's report; block 65
+split in two over the line bound, block 65's report):
 
 - **10**: the domain model and the three tables.
 - **15**: a role's group, and the repository's reads for the notifications.
@@ -52,7 +53,8 @@ The 13 blocks (Corrected: block 15 split in two over the line bound, block 15's 
 - **40**: `merge` copies the source tables.
 - **50**: a "Source history" section on the file page.
 - **60**: the `/sources` list, its search and the nav entry.
-- **65**: the page of one source and the page of one name.
+- **65**: the page of one source (Corrected: block 65 split in two over the line bound, block 65's report).
+- **67**: the page of one name (Corrected: block 65 split in two over the line bound, block 65's report).
 - **70**: docs and the rewritten invariant.
 - **80**: closing.
 
@@ -689,7 +691,8 @@ the same files. Each block measures itself after committing.
 | 40 | `feat/merge-sources` | `merge` copies the source tables | 260 / 3 |
 | 50 | `feat/webui-file-sources` | The file page's "Source history" | 320 / 6 |
 | 60 | `feat/webui-sources-list` | `/sources`, its search, the nav entry | 420 / 7 |
-| 65 | `feat/webui-source-pages` | The source page and the name page | 450 / 7 |
+| 65 | `feat/webui-source-pages` | The source page (Corrected: block 65 split in two over the line bound, block 65's report) | 370 / 6 |
+| 67 | `feat/webui-name-page` | The name page (Corrected: block 65 split in two over the line bound, block 65's report) | 200 / 6 |
 | 70 | `docs/stage4-docs` | Docs and the rewritten invariant | 260 / 9 |
 | 80 | `docs/stage4-closing` | Closing | 80 / 4 |
 
@@ -744,7 +747,8 @@ the same files. Each block measures itself after committing.
 - **50**: `CatalogReader.source_ranges(file_id)`, its view rows, `file_detail.html`, `format.py` for the
   rate.
 - **60**: `CatalogReader.list_sources`, `count_sources`, the handler, `sources.html`, the nav entry.
-- **65**: `CatalogReader.source_detail`, `name_detail`, two handlers and templates.
+- **65**: `CatalogReader.source_detail`, its handler and template (Corrected: block 65 split in two over the line bound, block 65's report).
+- **67**: `CatalogReader.name_detail`, its handler and template (Corrected: block 65 split in two over the line bound, block 65's report).
 - **70**: D15's documents; `AGENTS.md:45` (D10), and its WebUI and Persistence rows.
 - **80**: the closing block (`agents/workflow.md`, Wrap).
 
@@ -754,8 +758,9 @@ the same files. Each block measures itself after committing.
 - 15 before 17: the writer needs the carried role and the contact point's check (Corrected: block 15 split in two over the line bound, block 15's report).
 - 17, 20 and 25 before 30 (Corrected: block 15 split in two over the line bound, block 15's report): the writer and the reader before the step that joins them.
 - 30 before 35: D9's events are decided on what the step writes.
-- 40 and 50 to 65 need only block 10's tables; they stay after 35 so the stack reads in the data's order.
-- 70 after 65: the docs describe the pages.
+- 40 and 50 to 67 (Corrected: block 65 split in two over the line bound, block 65's report) need only block 10's tables; they stay after 35 so the stack reads in the data's order.
+- 65 before 67: the name page reuses the source page's reads (Corrected: block 65 split in two over the line bound, block 65's report).
+- 70 after 67 (Corrected: block 65 split in two over the line bound, block 65's report): the docs describe the pages.
 
 ### Surfaces whose consumer arrives in a later block
 
@@ -763,6 +768,7 @@ the same files. Each block measures itself after committing.
 - The carried role and `is_contact_point` (block 15): called by block 17's writer.
 - `SourceRepository` (blocks 15 and 17) and `SourceClient` (blocks 20 and 25): called by block 30's step.
 - `earlier_ranges` and `has_ranges_before` (block 15): called by block 35.
+- The name links of blocks 50, 60 and 65: answered by block 67's route, and 404 until then (Corrected: block 65 split in two over the line bound, block 65's report).
 
 ### Transient states inside the stack
 
@@ -845,7 +851,7 @@ Each criterion names the output that would prove it wrong. Every test is watched
     (`rows_without_id` equal before and after);
   - copying the source ranges `ORDER BY first_seen_at DESC` makes the newer-into-older case raise D5's
     message: watched.
-- **The webui** (blocks 50 to 65): each route answers 200 on a seeded catalog and shows the seeded name and
+- **The webui** (blocks 50 to 67 (Corrected: block 65 split in two over the line bound, block 65's report)): each route answers 200 on a seeded catalog and shows the seeded name and
   shortened hash; `/sources/zz` answers 404; a name page lists two hashes sharing a name and no third hash
   reachable only through the second one's other name.
 - **Docs** (block 70): `uv run poe docs-build` passes; `git grep -n -i "never the person\|jamais la
