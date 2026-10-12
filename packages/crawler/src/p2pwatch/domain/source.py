@@ -3,6 +3,7 @@
 PURE domain. Never a network address of the peer (stage 4 spec, D2, D3 and D7).
 """
 
+import ipaddress
 import re
 import uuid
 from dataclasses import dataclass
@@ -14,6 +15,8 @@ from p2pwatch.domain.file_key import Network
 _NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "https://mission-titar.github.io/p2pwatch/source")
 
 _NATIVE_IDS = {Network.ED2K: (re.compile("[0-9a-f]{32}"), "32 lowercase hex characters")}
+
+_PORT = re.compile("[1-9][0-9]{0,4}")
 
 SourceMeta = tuple[tuple[str, str | int | bool | tuple[str, ...] | None], ...]
 
@@ -36,6 +39,14 @@ class SourceKey:
         return uuid.uuid5(_NAMESPACE, f"{self.network}:{self.native_id}").bytes
 
 
+class SourceGroup(StrEnum):
+    """Whether a source holds what we lack (D3)."""
+
+    USEFUL = "useful"
+    NOT_USEFUL = "not_useful"
+    UNKNOWN = "unknown"
+
+
 class SourceRole(StrEnum):
     """What the node knows of what a source holds for our download: useful, not, or unknown."""
 
@@ -44,6 +55,48 @@ class SourceRole(StrEnum):
     NOTHING_NEW = "nothing_new"
     STANDBY = "standby"
     UNDETERMINED = "undetermined"
+
+    @property
+    def group(self) -> SourceGroup:
+        return _GROUPS[self]
+
+
+_GROUPS = {
+    SourceRole.SENDING: SourceGroup.USEFUL,
+    SourceRole.QUEUED: SourceGroup.USEFUL,
+    SourceRole.NOTHING_NEW: SourceGroup.NOT_USEFUL,
+    SourceRole.STANDBY: SourceGroup.UNKNOWN,
+    SourceRole.UNDETERMINED: SourceGroup.UNKNOWN,
+}
+
+# Not SENDING after a useful range: a source no longer downloading is not sending (D3).
+_CARRIED = {
+    SourceGroup.USEFUL: SourceRole.QUEUED,
+    SourceGroup.NOT_USEFUL: SourceRole.NOTHING_NEW,
+    SourceGroup.UNKNOWN: SourceRole.UNDETERMINED,
+}
+
+
+def carried_role(previous: SourceRole | None) -> SourceRole:
+    """The role of a reading in a passing state, from its latest range's, ``None`` without one."""
+    return SourceRole.UNDETERMINED if previous is None else _CARRIED[previous.group]
+
+
+def is_contact_point(network: Network, contact_point: str) -> bool:
+    """Whether ``contact_point`` is a server as ``network`` names one: on eD2k, ``ip:port``."""
+    return _CONTACT_POINTS[network](contact_point)
+
+
+def _is_ed2k_server(contact_point: str) -> bool:
+    host, _, port = contact_point.rpartition(":")
+    try:
+        ipaddress.IPv4Address(host)
+    except ValueError:
+        return False
+    return _PORT.fullmatch(port) is not None and int(port) <= 65535
+
+
+_CONTACT_POINTS = {Network.ED2K: _is_ed2k_server}
 
 
 @dataclass(frozen=True)
