@@ -25,7 +25,13 @@ from p2pwatch.webui.adapters.catalog_read import (
     CatalogReader,
     _tier_rank_case,
 )
-from p2pwatch.webui.domain.views import FileRow, SourceRangeView, SourceRow
+from p2pwatch.webui.domain.views import (
+    FileRow,
+    SourceDetail,
+    SourceFileRange,
+    SourceRangeView,
+    SourceRow,
+)
 from tests.catalog_rows import (
     file_id,
     insert_decision,
@@ -34,6 +40,7 @@ from tests.catalog_rows import (
     insert_source,
     insert_source_range,
     insert_source_variant,
+    source_id,
 )
 
 # Selects the CTE under test on its own: SQLite drops the CTEs a query does not reference, so
@@ -389,6 +396,50 @@ def test_list_sources_pages_by_fifty(catalog_db: Path) -> None:
     assert (len(first), first[0].last_seen_at) == (PAGE_SIZE, PAGE_SIZE)
     assert [row.last_seen_at for row in second] == [0]
     assert reader.count_sources(query=None) == PAGE_SIZE + 1
+
+
+# ---------------------------------------------------------------------------
+# Tests: the page of a source (stage 4 spec, D13)
+# ---------------------------------------------------------------------------
+
+_THIRD = "5a6b" * 8
+
+
+def _seed_pages(db: Path) -> None:
+    """``_seed_sources``, plus ``Keroro`` on ``_OTHER`` and ``_THIRD``, and a hash-less name."""
+    _seed_sources(db)
+    with sqlite3.connect(db) as conn:
+        insert_observation(conn, "a" * 32, "keroro_062a.avi")
+        insert_source(conn, _THIRD)
+        for user, at in ((_OTHER, 6), (_THIRD, 8)):
+            variant = insert_source_variant(conn, "a" * 32, user, name="Keroro")
+            insert_source_range(conn, variant, at, at + 1)
+        hashless = insert_source_variant(conn, "b" * 32, None, name="AnimuseeFMR", role="standby")
+        insert_source_range(conn, hashless, 90, 95)
+
+
+def _queued(source: SourceKey | None, name: str | None, first: int, last: int) -> SourceRangeView:
+    return SourceRangeView(source, name, SourceRole.QUEUED, None, None, first, last, 0)
+
+
+def test_source_detail_lists_its_names_and_its_ranges_over_every_file(catalog_db: Path) -> None:
+    _seed_pages(catalog_db)
+    detail = CatalogReader(open_reader(catalog_db)).source_detail(source_id(_USER), page=1)
+    key, a, b = (
+        SourceKey(Network.ED2K, _USER),
+        FileKey(Network.ED2K, "a" * 32),
+        FileKey(Network.ED2K, "b" * 32),
+    )
+    sending = SourceRangeView(key, None, SourceRole.SENDING, None, None, 50, 60, 0)
+    assert detail == SourceDetail(
+        source=key,
+        names=(SourceRow(key, "AnimuseeFMR", 40, 1), SourceRow(key, "Shinobu", 20, 1)),
+        ranges=(
+            SourceFileRange(b, None, sending),
+            SourceFileRange(b, None, _queued(key, "AnimuseeFMR", 30, 40)),
+            SourceFileRange(a, "keroro_062a.avi", _queued(key, "Shinobu", 10, 20)),
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------

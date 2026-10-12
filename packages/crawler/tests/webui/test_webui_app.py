@@ -43,6 +43,7 @@ from tests.catalog_rows import (
     insert_source,
     insert_source_range,
     insert_source_variant,
+    source_id,
 )
 
 # ---------------------------------------------------------------------------
@@ -869,6 +870,58 @@ async def test_sources_pages_keep_the_search(
     second = await _sources_page(app, "/sources?q=FMR&page=2")
     assert 'href="/sources?q=FMR&amp;page=2"' in first
     assert 'href="/sources?q=FMR&amp;page=1"' in second
+    assert second.count("<tr><td>") == 1
+
+
+# ---------------------------------------------------------------------------
+# The page of a source (stage 4 spec, D13)
+# ---------------------------------------------------------------------------
+
+_USER_PAGE = f"/sources/{source_id(_USER).hex()}"
+
+
+@pytest.mark.asyncio
+async def test_source_page_shows_its_hash_its_names_and_its_ranges(
+    populated_app: tuple[Starlette, str], catalog_db: Path
+) -> None:
+    app, hash_ = populated_app
+    _seed_two_sources(catalog_db, hash_)
+    page = await _sources_page(app, _USER_PAGE)
+    name = '<a href="/sources/name?name=AnimuseeFMR">AnimuseeFMR</a>'
+    file = f'<a href="/files/{file_id(hash_).hex()}">keroro_s2e62a_vf.avi</a>'
+    first, last = "2026-10-13 20:00:00Z", "2026-10-13 20:00:30Z"
+    assert f"<dd>{_USER}</dd>" in page
+    assert _row(name, last, "1") in page
+    assert _row(file, name, "queued", "unknown", "unknown", first, last, "", "") in page
+    assert "Shinobu" not in page
+
+
+@pytest.mark.parametrize("url", ["/sources/zz", f"/sources/{'0' * 32}"])
+@pytest.mark.asyncio
+async def test_source_page_of_a_source_never_recorded_returns_404(
+    populated_app: tuple[Starlette, str], catalog_db: Path, url: str
+) -> None:
+    app, hash_ = populated_app
+    _seed_two_sources(catalog_db, hash_)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(url)
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_source_page_pages_its_ranges_by_fifty(
+    populated_app: tuple[Starlette, str], catalog_db: Path
+) -> None:
+    app, hash_ = populated_app
+    with sqlite3.connect(catalog_db) as conn:
+        insert_source(conn, _USER)
+        variant = insert_source_variant(conn, hash_, _USER)
+        for n in range(PAGE_SIZE + 1):
+            insert_source_range(conn, variant, n, n)
+    paged = f"{_USER_PAGE}?page="
+    first, second = await _sources_page(app, _USER_PAGE), await _sources_page(app, f"{paged}2")
+    assert f'href="{paged}2"' in first
+    assert f'href="{paged}1"' in second
     assert second.count("<tr><td>") == 1
 
 

@@ -76,6 +76,8 @@ from p2pwatch.webui.domain.views import (
     SearchBar,
     SortHeader,
     SortHeaders,
+    SourceFileRange,
+    SourceFileRow,
     SourceHistoryRow,
     SourceListRow,
     SourceRangeView,
@@ -85,8 +87,8 @@ from p2pwatch.webui.domain.views import (
     TimelineRow,
 )
 
-# The detail page's path segment: a file_id as 32 lowercase hex (stage 1 spec D13).
-_FILE_ID = re.compile(r"[0-9a-f]{32}")
+# A detail page's path segment: a file_id or a source_id as 32 lowercase hex (stage 1 and 4 D13).
+_HEX_ID = re.compile(r"[0-9a-f]{32}")
 
 # The top-nav destinations, in render order: (path, label). The single source of truth for what
 # base.html renders; every page reaches all of them.
@@ -235,6 +237,15 @@ def _source_list_row(source: SourceRow) -> SourceListRow:
         source_link=_source_link(source.source),
         last_seen=micros_timestamp(source.last_seen_at),
         files=str(source.file_count),
+    )
+
+
+def _source_file_row(item: SourceFileRange) -> SourceFileRow:
+    """A range of a source's or a name's page, with the file it was read on."""
+    return SourceFileRow(
+        file=item.file_name or short_hash(item.file.native_id),
+        file_link=f"/files/{item.file.file_id.hex()}",
+        history=_source_history_row(item.range),
     )
 
 
@@ -706,11 +717,34 @@ def build_app(
             },
         )
 
+    async def handle_source(request: Request) -> Response:
+        raw_id: str = request.path_params["source_id"]
+        page = _page_number(request.query_params.get("page"))
+        catalog = CatalogReader(catalog_reader.connection())
+        detail = (
+            catalog.source_detail(bytes.fromhex(raw_id), page=page)
+            if _HEX_ID.fullmatch(raw_id)
+            else None
+        )
+        if detail is None:
+            return templates.TemplateResponse(request, "404.html", {}, status_code=404)
+        n_rows = max(len(detail.names), len(detail.ranges))
+        return templates.TemplateResponse(
+            request,
+            "source_detail.html",
+            {
+                "source": detail.source,
+                "names": tuple(_source_list_row(row) for row in detail.names),
+                "ranges": tuple(_source_file_row(item) for item in detail.ranges),
+                "nav": _page_nav(page, n_rows, f"/sources/{raw_id}", {}),
+            },
+        )
+
     async def handle_file_detail(request: Request) -> Response:
         raw_id: str = request.path_params["file_id"]
 
         catalog = CatalogReader(catalog_reader.connection())
-        detail = catalog.file_detail(bytes.fromhex(raw_id)) if _FILE_ID.fullmatch(raw_id) else None
+        detail = catalog.file_detail(bytes.fromhex(raw_id)) if _HEX_ID.fullmatch(raw_id) else None
 
         if detail is None:
             return templates.TemplateResponse(request, "404.html", {}, status_code=404)
@@ -934,6 +968,7 @@ def build_app(
             Route("/files", handle_files),
             Route("/files/{file_id}", handle_file_detail),
             Route("/sources", handle_sources),
+            Route("/sources/{source_id}", handle_source),
             Route("/targets/{target_id}", handle_target),
             Route("/node", handle_node),
             Route("/controls/pause", handle_pause, methods=["POST"]),

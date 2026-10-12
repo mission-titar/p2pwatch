@@ -16,6 +16,7 @@
 - ``source_ranges()``: a file's source history, one range per row, newest first.
 - ``list_sources()`` / ``count_sources()``: the sources with a user hash, last seen first, and
   how many match the search.
+- ``source_detail()``: the page of a source; ``None`` if never recorded.
 
 All SQL lives in module constants, parameterized (no value interpolation).
 """
@@ -25,6 +26,7 @@ import sqlite3
 from catalog_matching.config import TIER_RANK
 from p2pwatch.adapters.persistence_sqlite.sightings import (
     LATEST_SIGHTING_CTE,
+    best_name,
     known_names,
     latest_sighting,
     sightings,
@@ -36,6 +38,8 @@ from p2pwatch.webui.domain.views import (
     FileDecision,
     FileDetail,
     FileRow,
+    SourceDetail,
+    SourceFileRange,
     SourceRangeView,
     SourceRow,
 )
@@ -224,10 +228,12 @@ FROM files
 WHERE file_id = ?
 """
 
-# A file's source ranges, newest first (stage 4 spec, D12): a source without a user hash has no
-# ``sources`` row, hence the LEFT JOIN.
+# Source ranges with their file (stage 4 spec, D12, D13): a source without a user hash has no
+# ``sources`` row, hence the LEFT JOIN. A ``_WHERE_*`` then ``_SQL_SOURCE_RANGES_ORDER`` follow.
 _SQL_SOURCE_RANGES = """\
 SELECT
+    f.network AS file_network,
+    f.native_id AS file_native_id,
     s.network,
     s.native_id,
     v.name,
@@ -239,10 +245,10 @@ SELECT
     r.received_bytes
 FROM source_variants AS v
 JOIN source_ranges AS r ON r.variant_id = v.variant_id
+JOIN files AS f ON f.file_id = v.file_id
 LEFT JOIN sources AS s ON s.source_id = v.source_id
-WHERE v.file_id = ?
-ORDER BY r.first_seen_at DESC, r.variant_id DESC, r.node_id
 """
+_SQL_SOURCE_RANGES_ORDER = "ORDER BY r.first_seen_at DESC, r.variant_id DESC, r.node_id\n"
 
 # The sources with a user hash, each with its last read and its number of files (D13). A source
 # without a hash has no ``sources`` row, so it is not listed.
@@ -284,6 +290,32 @@ SELECT
     ) AS name
 """
 
+_SQL_SOURCE = "SELECT network, native_id FROM sources WHERE source_id = ?"
+
+# One row per (source, name) pair: a source's names, or a name's sources (D13). The WHERE that
+# picks one side goes between this and ``_SQL_PAIRS_END``.
+_SQL_PAIRS = """\
+SELECT
+    s.network,
+    s.native_id,
+    v.name,
+    MAX(r.last_seen_at) AS last_seen_at,
+    COUNT(DISTINCT v.file_id) AS file_count
+FROM source_variants AS v
+JOIN source_ranges AS r ON r.variant_id = v.variant_id
+JOIN sources AS s ON s.source_id = v.source_id
+"""
+_SQL_PAIRS_END = """\
+GROUP BY v.source_id, v.name
+ORDER BY last_seen_at DESC, v.source_id, v.name
+"""
+_SQL_PAGE = "LIMIT ? OFFSET ?\n"
+
+# The WHERE of each read: a hash page lists names and a name page hashes, nothing further.
+_WHERE_FILE = "WHERE v.file_id = ?\n"
+_WHERE_SOURCE = "WHERE v.source_id = ?\n"
+_WHERE_SOURCE_NAMED = "WHERE v.source_id = ? AND v.name IS NOT NULL\n"
+
 
 def _filter_clauses(
     target: str | None,
@@ -323,6 +355,21 @@ def _sources_search(query: str | None) -> tuple[str, list[str]]:
     if query is None:
         return "", []
     return _SQL_SOURCES_SEARCH, [f"{query}%", f"%{query}%"]
+
+
+def _range_view(row: sqlite3.Row) -> SourceRangeView:
+    """A row of ``_SQL_SOURCE_RANGES`` as a range."""
+    network, reachable = row["network"], row["directly_reachable"]
+    return SourceRangeView(
+        source=None if network is None else SourceKey(Network(network), row["native_id"]),
+        name=row["name"],
+        role=SourceRole(row["role"]),
+        contact_point=row["contact_point"],
+        directly_reachable=None if reachable is None else bool(reachable),
+        first_seen_at=row["first_seen_at"],
+        last_seen_at=row["last_seen_at"],
+        received_bytes=row["received_bytes"],
+    )
 
 
 def _latest_sighting_join(query: str | None) -> str:
@@ -518,26 +565,8 @@ class CatalogReader:
 
     def source_ranges(self, file_id: bytes) -> tuple[SourceRangeView, ...]:
         """Every source range on the file, newest first; empty for a file never read."""
-        rows = self._conn.execute(_SQL_SOURCE_RANGES, (file_id,)).fetchall()
-        return tuple(
-            SourceRangeView(
-                source=(
-                    None
-                    if row["network"] is None
-                    else SourceKey(Network(row["network"]), row["native_id"])
-                ),
-                name=row["name"],
-                role=SourceRole(row["role"]),
-                contact_point=row["contact_point"],
-                directly_reachable=(
-                    None if row["directly_reachable"] is None else bool(row["directly_reachable"])
-                ),
-                first_seen_at=row["first_seen_at"],
-                last_seen_at=row["last_seen_at"],
-                received_bytes=row["received_bytes"],
-            )
-            for row in rows
-        )
+        sql = _SQL_SOURCE_RANGES + _WHERE_FILE + _SQL_SOURCE_RANGES_ORDER
+        return tuple(map(_range_view, self._conn.execute(sql, (file_id,))))
 
     # ------------------------------------------------------------------
     # Sources
@@ -569,3 +598,42 @@ class CatalogReader:
         row = self._conn.execute("SELECT COUNT(*) AS n\n" + _SQL_SOURCES_FROM + search, params)
         count: int = row.fetchone()["n"]
         return count
+
+    def source_detail(self, source_id: bytes, *, page: int) -> SourceDetail | None:
+        """A page of the source's names and of its ranges; ``None`` for an unknown source."""
+        row = self._conn.execute(_SQL_SOURCE, (source_id,)).fetchone()
+        if row is None:
+            return None
+        source = SourceKey(Network(row["network"]), row["native_id"])
+        return SourceDetail(
+            source=source,
+            names=self._pairs(_WHERE_SOURCE_NAMED, source_id, page),
+            ranges=self._file_ranges(_WHERE_SOURCE, source_id, page),
+        )
+
+    def _pairs(self, where: str, key: bytes, page: int) -> tuple[SourceRow, ...]:
+        sql = _SQL_PAIRS + where + _SQL_PAIRS_END + _SQL_PAGE
+        rows = self._conn.execute(sql, (key, _PAGE_SIZE, (page - 1) * _PAGE_SIZE))
+        return tuple(
+            SourceRow(
+                source=SourceKey(Network(row["network"]), row["native_id"]),
+                name=row["name"],
+                last_seen_at=row["last_seen_at"],
+                file_count=row["file_count"],
+            )
+            for row in rows
+        )
+
+    def _file_ranges(self, where: str, key: bytes, page: int) -> tuple[SourceFileRange, ...]:
+        sql = _SQL_SOURCE_RANGES + where + _SQL_SOURCE_RANGES_ORDER + _SQL_PAGE
+        rows = self._conn.execute(sql, (key, _PAGE_SIZE, (page - 1) * _PAGE_SIZE)).fetchall()
+        files = [FileKey(Network(row["file_network"]), row["file_native_id"]) for row in rows]
+        names = {file: self._file_name(file) for file in set(files)}
+        return tuple(
+            SourceFileRange(file=file, file_name=names[file], range=_range_view(row))
+            for file, row in zip(files, rows, strict=True)
+        )
+
+    def _file_name(self, file: FileKey) -> str | None:
+        named = best_name(self._conn, file)
+        return None if named is None else named[0]

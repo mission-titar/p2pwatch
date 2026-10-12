@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Source {{ source.native_id }} · p2pwatch{% endblock %}
+{% block content %}
+<h1>Source detail</h1>
+
+<section>
+  <h2>General information</h2>
+  <dl>
+    <dt>Network</dt>
+    <dd>{{ source.network }}</dd>
+    <dt>User hash</dt>
+    <dd>{{ source.native_id }}</dd>
+  </dl>
+</section>
+
+<section>
+  <h2>Names</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Last seen</th>
+        <th>Files</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in names %}
+      <tr>
+        <td>{% for href in row.name_link %}<a href="{{ href }}">{{ row.name }}</a>{% endfor %}</td>
+        <td>{{ row.last_seen }}</td>
+        <td>{{ row.files }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3">No name on this page.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Source history</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>File</th>
+        <th>Name</th>
+        <th>Role</th>
+        <th>Contact point</th>
+        <th>High-ID</th>
+        <th>First seen</th>
+        <th>Last seen</th>
+        <th>Received</th>
+        <th>Rate</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in ranges %}
+      <tr>
+        <td><a href="{{ row.file_link }}">{{ row.file }}</a></td>
+        <td>{% for href in row.history.name_link %}<a href="{{ href }}">{{ row.history.name }}</a>{% else %}{{ row.history.name }}{% endfor %}</td>
+        <td>{{ row.history.role }}</td>
+        <td>{{ row.history.contact_point }}</td>
+        <td>{{ row.history.high_id }}</td>
+        <td>{{ row.history.first_seen }}</td>
+        <td>{{ row.history.last_seen }}</td>
+        <td>{{ row.history.received }}</td>
+        <td>{{ row.history.rate }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9">No range on this page.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% for url in (nav.prev_url,) if url %}
+<a href="{{ url }}">← Previous</a>
+{% endfor %}
+<span>Page {{ nav.page }}</span>
+{% for url in (nav.next_url,) if url %}
+<a href="{{ url }}">Next →</a>
+{% endfor %}
+{% endblock %}
