@@ -27,7 +27,8 @@ from p2pwatch.adapters.config.crawler_config import (
 from p2pwatch.adapters.config.yaml_loader import load_yaml
 from p2pwatch.adapters.crawler_control_loop import LoopCrawlerControl
 from p2pwatch.adapters.mule_api.client import AmuleApiClient
-from p2pwatch.adapters.persistence_sqlite.connection import open_local
+from p2pwatch.adapters.persistence_sqlite.connection import open_catalog, open_local
+from p2pwatch.adapters.persistence_sqlite.download_repository import SqliteDownloadRepository
 from p2pwatch.adapters.persistence_sqlite.local_state_repository import (
     SqliteLocalStateRepository,
 )
@@ -40,13 +41,14 @@ from p2pwatch.composition.app import (
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
+from p2pwatch.domain.source import SourceKey, SourceReading, SourceRole
 from p2pwatch.ports.client_errors import ClientUnreachableError
 from p2pwatch.ports.client_status import ClientStatus
 from p2pwatch.ports.clock import Clock
 from p2pwatch.ports.download_client import DownloadRequest, DownloadStatus
 from tests.adapters.mule_api.api_fakes import PASSWORD, FakeAmuleApi
 from tests.application.fakes import FakeClock, FakeMuleClient, RecordingSignal
-from tests.catalog_rows import observation_node_ids
+from tests.catalog_rows import insert_file, observation_node_ids
 from tests.virtual_time import EPOCH, LoopClock, run_virtual
 
 _TARGETS = (
@@ -633,7 +635,7 @@ async def test_backfill_skipped_when_marker_already_matches_fingerprint(
 
 
 class FakeDownloadClient(FakeMuleClient):
-    """Test download client: also satisfies start/downloads (no-op).
+    """Test download client: also satisfies start/downloads/sources (no-op).
 
     ``queue_calls`` counts the list polls: proof that a download-loop cycle DID
     run (``downloads`` is the only network ``await`` of an empty cycle)."""
@@ -647,6 +649,9 @@ class FakeDownloadClient(FakeMuleClient):
 
     async def downloads(self) -> tuple[DownloadStatus, ...]:
         self.queue_calls += 1
+        return ()
+
+    async def sources(self, file: FileKey) -> tuple[SourceReading, ...]:
         return ()
 
 
@@ -734,6 +739,59 @@ async def test_full_mode_runs_the_download_loop(
     await asyncio.wait_for(app.run(), timeout=5.0)
     # the download loop ran ≥ 1 cycle (body ran, not just the task created).
     assert download_client.queue_calls >= 1
+
+
+class _ShutdownOnSourcesDownloadClient(FakeDownloadClient):
+    """Lists one download and one source of it, firing the shutdown on that read."""
+
+    def __init__(self, app_holder: dict[str, CrawlerApp], file: FileKey) -> None:
+        super().__init__()
+        self._app_holder = app_holder
+        self._file = file
+
+    async def downloads(self) -> tuple[DownloadStatus, ...]:
+        return (DownloadStatus(self._file, 0, 100, False, None, None),)
+
+    async def sources(self, file: FileKey) -> tuple[SourceReading, ...]:
+        self._app_holder["app"]._on_signal()
+        source = SourceKey(Network.ED2K, "1f" * 16)
+        return (SourceReading(source, "peer", None, SourceRole.QUEUED, None, None, (), 0),)
+
+
+@pytest.mark.asyncio
+async def test_full_mode_records_the_sources_of_a_download_in_the_catalog(
+    tmp_path: Path, matcher_config: MatcherConfig
+) -> None:
+    file = FileKey(Network.ED2K, "a" * 32)
+    local = open_local(tmp_path / "local.db")
+    SqliteDownloadRepository(local).record_queued(file, "062A", 100)
+    local.close()
+    catalog = open_catalog(tmp_path / "catalog.db")
+    insert_file(catalog, file.native_id)
+    catalog.close()
+    holder: dict[str, CrawlerApp] = {}
+    app = CrawlerApp(
+        crawler_config=_crawler_config(tmp_path, node_id="n1", download=_download_config(tmp_path)),
+        targets=_TARGETS,
+        matcher_config=matcher_config,
+        clock=FakeClock(),
+        rng=_NoopRng(),
+        signal_hub=RecordingSignal(),
+        policy_fingerprint=_FP,
+        client_factory=lambda endpoint, clock: FakeMuleClient(),
+        download_client_factory=lambda endpoint, clock: _ShutdownOnSourcesDownloadClient(
+            holder, file
+        ),
+    )
+    holder["app"] = app
+    await asyncio.wait_for(app.run(), timeout=5.0)
+    catalog = open_catalog(tmp_path / "catalog.db")
+    rows = catalog.execute(
+        "SELECT v.name, r.node_id FROM source_ranges AS r JOIN source_variants AS v"
+        " USING (variant_id)"
+    ).fetchall()
+    catalog.close()
+    assert rows == [("peer", "n1")]
 
 
 @pytest.mark.asyncio
