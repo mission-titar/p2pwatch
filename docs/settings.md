@@ -85,6 +85,6 @@ longues absences alertent.
 
 La clé accepte tout nombre positif, décimales comprises, mais une valeur sous l'heure (`3600`) a
 peu de sens : aMule ne réinterroge une source en attente que toutes les 15 minutes, et une source
-peut quitter sa liste puis y revenir sans s'être absentée. Une valeur nulle, négative, infinie ou `.nan`
-est refusée au démarrage, avec un message qui nomme la clé. La valeur est lue au démarrage :
+peut quitter sa liste puis y revenir sans s'être absentée. Une valeur nulle, négative, infinie ou
+`.nan` est refusée au démarrage, avec un message qui nomme la clé. La valeur est lue au démarrage :
 relancez le crawler (`docker compose restart p2pwatch`) après l'avoir changée.
