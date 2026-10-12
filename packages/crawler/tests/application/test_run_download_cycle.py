@@ -129,7 +129,8 @@ class FakeDownloadClient:
 class FakeSourceRepo:
     """Records each ``record_readings`` call, answering ``opened`` per hash; raises
     ``RepositoryError`` for ``fail_for``. ``history`` answers ``earlier_ranges`` per source,
-    never useful by default, and ``baseline`` answers ``has_ranges_before``."""
+    never useful by default, and ``baseline`` answers ``has_ranges_before``, each call noted in
+    ``baselines``."""
 
     def __init__(
         self,
@@ -141,6 +142,7 @@ class FakeSourceRepo:
     ) -> None:
         self.recorded: list[tuple[str, tuple[SourceReading, ...], datetime, timedelta]] = []
         self.asked: list[tuple[SourceKey, datetime]] = []
+        self.baselines: list[datetime] = []
         self._fail_for = fail_for or set()
         self._opened = opened or {}
         self._history = history or {}
@@ -163,6 +165,7 @@ class FakeSourceRepo:
         return self._history.get(source, EarlierRanges(useful=False, last_known_at=None))
 
     def has_ranges_before(self, started_before: datetime) -> bool:
+        self.baselines.append(started_before)
         return self._baseline
 
 
@@ -1552,6 +1555,45 @@ async def test_a_range_opened_without_a_source_id_raises_nothing() -> None:
     await run_download_cycle(deps)
     assert sources.asked == []
     assert not any(isinstance(e, SourceNew | SourceReappeared) for e in telemetry.events)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "opened", [(), (OpenedRange(None, "peer", SourceRole.QUEUED),)], ids=["none", "no-source-id"]
+)
+async def test_a_round_opening_no_range_with_a_source_id_never_asks_for_the_baseline(
+    opened: tuple[OpenedRange, ...],
+) -> None:
+    # D9's baseline is a full scan on a catalog merged with other nodes' ranges.
+    sources = FakeSourceRepo(opened={_A: opened})
+    client = FakeDownloadClient(listed=[(_status(_A),)])
+    deps = _deps(
+        client=client, downloads=_tracking(_A), catalog=FakeCatalogReads(), sources=sources
+    )
+    await run_download_cycle(deps)
+    assert sources.baselines == []
+
+
+@pytest.mark.asyncio
+async def test_the_baseline_is_asked_once_per_round_against_its_start() -> None:
+    clock = FakeClock()
+    start = clock.now()
+    opened: dict[str, tuple[OpenedRange, ...]] = {
+        _A: (OpenedRange(None, "peer", SourceRole.QUEUED),),
+        _B: (OpenedRange(_PEER, "AnimuseeFMR", SourceRole.QUEUED),),
+        _C: (OpenedRange(_OTHER_PEER, None, SourceRole.NOTHING_NEW),),
+    }
+    sources = FakeSourceRepo(opened=opened)
+    client = FakeDownloadClient(listed=[(_status(_A), _status(_B), _status(_C))], clock=clock)
+    deps = _deps(
+        client=client,
+        downloads=_tracking(_A, _B, _C),
+        catalog=FakeCatalogReads(),
+        sources=sources,
+        clock=clock,
+    )
+    await run_download_cycle(deps)
+    assert sources.baselines == [start]
 
 
 @pytest.mark.asyncio
