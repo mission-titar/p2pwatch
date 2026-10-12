@@ -4,7 +4,14 @@ import uuid
 import pytest
 
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.source import SourceKey, SourceReading, SourceRole
+from p2pwatch.domain.source import (
+    SourceGroup,
+    SourceKey,
+    SourceReading,
+    SourceRole,
+    carried_role,
+    is_contact_point,
+)
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 
@@ -63,3 +70,56 @@ def test_a_reading_in_a_passing_state_has_no_role_and_may_have_no_identity() -> 
     assert reading.role is None
     with pytest.raises(dataclasses.FrozenInstanceError):
         reading.role = SourceRole.QUEUED  # type: ignore[misc]
+
+
+def test_each_role_belongs_to_its_group() -> None:
+    assert {role: role.group for role in SourceRole} == {
+        SourceRole.SENDING: SourceGroup.USEFUL,
+        SourceRole.QUEUED: SourceGroup.USEFUL,
+        SourceRole.NOTHING_NEW: SourceGroup.NOT_USEFUL,
+        SourceRole.STANDBY: SourceGroup.UNKNOWN,
+        SourceRole.UNDETERMINED: SourceGroup.UNKNOWN,
+    }
+
+
+@pytest.mark.parametrize(
+    ("previous", "carried"),
+    [
+        (SourceRole.SENDING, SourceRole.QUEUED),
+        (SourceRole.QUEUED, SourceRole.QUEUED),
+        (SourceRole.NOTHING_NEW, SourceRole.NOTHING_NEW),
+        (SourceRole.STANDBY, SourceRole.UNDETERMINED),
+        (SourceRole.UNDETERMINED, SourceRole.UNDETERMINED),
+        (None, SourceRole.UNDETERMINED),
+    ],
+)
+def test_a_passing_state_carries_the_group_of_the_latest_range(
+    previous: SourceRole | None, carried: SourceRole
+) -> None:
+    assert carried_role(previous) is carried
+
+
+@pytest.mark.parametrize("contact_point", ["176.103.48.36:4184", "0.0.0.0:1", "1.2.3.4:65535"])
+def test_an_ed2k_contact_point_is_an_ipv4_address_and_a_port(contact_point: str) -> None:
+    assert is_contact_point(Network.ED2K, contact_point)
+
+
+@pytest.mark.parametrize(
+    "contact_point",
+    [
+        "176.103.48.36",
+        "176.103.48.36:",
+        ":4184",
+        "176.103.48.36:0",
+        "176.103.48.36:04184",
+        "176.103.48.36:65536",
+        "256.103.48.36:4184",
+        "176.103.48.036:4184",
+        "[::1]:4184",
+        "server.example:4184",
+        "176.103.48.36:4184 ",
+        "176.103.48.36:\u0664\u0661",
+    ],
+)
+def test_anything_else_is_not_an_ed2k_contact_point(contact_point: str) -> None:
+    assert not is_contact_point(Network.ED2K, contact_point)
