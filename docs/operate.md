@@ -127,6 +127,8 @@ docker compose run --rm p2pwatch python -m p2pwatch validate-config \
 
 **Fusionner des catalogues**, pour consolider ceux de plusieurs chercheurs en un seul. La fusion est
 idempotente et n'écrase rien sans `--force` ; `--into <source>` fusionne dans une source existante.
+Elle réunit les plages de l'[historique des sources](#historique-des-sources) : deux copies du
+catalogue d'un même nœud, prises à deux moments, donnent chaque plage avec sa fin la plus tardive.
 Le cycle de partage est décrit sur la [page d'accueil](index.md#partage).
 
 ```bash
@@ -135,7 +137,7 @@ docker compose exec p2pwatch python -m p2pwatch.merge \
 ```
 
 Une source doit être au même schéma que votre version : la fusion refuse une copie faite par une
-version plus ancienne (`has catalog schema version 5, expected 9`), car elle ne migre jamais une
+version plus ancienne (`has catalog schema version 5, expected 10`), car elle ne migre jamais une
 source. Migrez-la d'abord en la fusionnant dans elle-même, qui l'ouvre et la met à niveau sur place,
 de préférence sur une copie, puisqu'une version plus ancienne ne pourra plus la lire :
 
@@ -190,13 +192,56 @@ n'est notifié que si l'alerte est partie. Ces durées sont fixes, et un redéma
 leurs horloges à zéro.
 
 Les messages partent en markdown : Discord les affiche en embed, signé `p2pwatch - <node-id>` en
-ligne d'auteur, bleu pour une découverte (`🔎 Notify`, `📥 Download`), vert pour un téléchargement
-terminé (`✅ Downloaded`, avec les segments et le nom du fichier). Aucun message ne mentionne qui
+ligne d'auteur, bleu pour une découverte (`🔎 Notify`, `📥 Download`) ou une source
+(`🆕 New source`, `🔁 Source useful again`), vert pour un téléchargement terminé (`✅ Downloaded`, avec les segments et le nom du fichier). Aucun message ne mentionne qui
 que ce soit : un `@everyone` dans un nom de fichier ne notifie personne.
 
 Chaque cible préfixe le titre de ses messages de l'identifiant du nœud (`[node-id]`), utile aux
 services qui n'affichent pas d'auteur (syslog, ntfy). Une cible Discord le porte déjà dans sa ligne
 d'auteur et peut s'en passer avec `node_prefix: false`.
+
+---
+
+## Historique des sources
+
+En mode téléchargement, à chaque tour de la boucle de téléchargement (toutes les
+`download.poll_interval_seconds`, 30 s par défaut), le crawler relève les sources de chacun de ses
+téléchargements en cours : les pairs qui détiennent le fichier, sous leur user hash eD2k, avec leur
+nom, leur logiciel et leur rôle. Il les range en plages de présence : une plage dure tant que la
+source est revue avec les mêmes propriétés, une lecture manquée comprise. Un téléchargement ajouté à
+la main dans aMule n'est pas relevé. Ce qui est enregistré, et ce qui ne l'est jamais, est détaillé
+dans [Légalité et vie privée](legal.md#ce-que-votre-nœud-enregistre).
+
+Le rôle dit ce que le nœud sait de ce que la source détient :
+
+| Rôle | Groupe | Sens |
+|---|---|---|
+| `sending` | utile | elle nous envoie des parties qui nous manquent |
+| `queued` | utile | elle en détient, et nous attendons dans sa file |
+| `nothing_new` | pas utile | elle ne détient rien qui nous manque |
+| `standby` | inconnu | elle détient le fichier, mais aMule lui demande un autre de nos fichiers |
+| `undetermined` | inconnu | aMule ne sait pas encore ce qu'elle détient |
+
+Le catalogue web montre cet historique par fichier, par source et par nom
+([Routes disponibles](#routes-disponibles)).
+
+Deux alertes partent sur le canal *community*, toutes deux quand une source devient utile :
+
+- **`new-source`** : la source est utile pour la première fois sur ce nœud, tous fichiers
+  confondus ;
+- **`reappeared`** : la source est de nouveau utile après plus de
+  `download.reappeared_after_hours` (12 h par défaut, voir
+  [Régler le nœud](settings.md#le-seuil-des-sources-de-nouveau-utiles)) pendant lesquelles le nœud
+  n'a rien appris de ce qu'elle détient : absente, ou vue sans réponse.
+
+Le message donne le nom de la source, les 8 premiers caractères de son user hash, le fichier et ses
+cibles. Le nœud d'un équipier qui détient les mêmes fichiers partiels que vous reste `nothing_new`,
+et n'alerte donc pas. Une source sans user hash n'alerte jamais, pas plus que le tout premier tour
+où le nœud relève des sources : tout y serait nouveau. Les deux alertes mesurent la vue de ce nœud,
+pas la présence du pair sur le réseau : une source « réapparaît » aussi quand vous mettez en file un
+fichier qu'elle partageait déjà, ou après un arrêt du nœud de plus de 12 h. Chacune incrémente
+`p2pwatch_source_alerts`, étiqueté `network` et `kind` (`new`, `reappeared`). Un arrêt brutal entre
+l'écriture et l'envoi perd l'alerte : elle part au plus une fois.
 
 ---
 
@@ -210,7 +255,7 @@ Un nœud publie deux surfaces web, qui n'ont pas la même posture :
 | **4711** | amuleapi, l'interface propre à aMule | le mot de passe admin `AMULE_API_PASSWORD` |
 
 **Le port 8080 n'a aucune authentification, d'aucune sorte.** Quiconque l'atteint obtient le
-catalogue, les contrôles du tableau de bord qui modifient l'état, et une console SQL en lecture seule.
+catalogue, historique des sources compris, les contrôles du tableau de bord qui modifient l'état, et une console SQL en lecture seule.
 `AMULE_API_PASSWORD` ne protège que le 4711. Mettez le 8080 derrière un reverse proxy ou un VPN, ou
 gardez-le sur un réseau de confiance, et ne le posez jamais sur l'Internet ouvert.
 
@@ -229,7 +274,10 @@ le crawl en gardant aMule vivant, c'est `docker compose stop p2pwatch`.
 |---|---|
 | `/` | Tableau de bord : état de chaque client (version, API joignable, et par canal : sur le réseau, joignable par les pairs), d'après la dernière lecture de moins de deux minutes ; état du crawl, avec les boutons pause, reprise et redémarrage du crawler seul (aMule garde ses sessions) ; couverture par cible (épisodes trouvés et manquants) |
 | `/files` | Liste paginée des fichiers ; filtres `?target=`, `?tier=`, `?q=` |
-| `/files/{file_id}` | Détail d'un fichier, désigné par son `file_id` en 32 caractères hexadécimaux minuscules, tel que la console SQL l'affiche : réseau, identifiant natif, observations, décisions, explication du matching |
+| `/files/{file_id}` | Détail d'un fichier, désigné par son `file_id` en 32 caractères hexadécimaux minuscules, tel que la console SQL l'affiche : réseau, identifiant natif, observations, historique des sources, décisions, explication du matching |
+| `/sources` | Liste paginée des sources qui ont un user hash, la plus récemment vue d'abord : dernier nom, début du user hash, dernière vue, nombre de fichiers ; `?q=` cherche un début de user hash ou un morceau de n'importe quel nom porté |
+| `/sources/{source_id}` | Une source, désignée par son `source_id` en 32 caractères hexadécimaux minuscules : son user hash, chaque nom qu'elle a porté, et ses plages sur tous les fichiers |
+| `/sources/name?name=` | Un nom : les user hashes qui l'ont porté, et les plages relevées sous ce nom sans user hash. Les liens s'arrêtent là : la page d'un nom ne montre pas les autres noms de ces user hashes, pour ne pas confondre en une seule personne des inconnus qui partagent un nom par défaut |
 | `/targets/{target_id}` | Fichiers d'une cible (alias de `/files?target=`) |
 | `/node` | État du crawler : `node_id`, entrées du `scheduler_state` et téléchargements (voir [Suivre un téléchargement](#suivre-un-téléchargement)). |
 | `POST /controls/pause`, `/controls/resume`, `/controls/restart` | Les boutons du tableau de bord, qui y renvoient. La pause n'arrête pas les recherches en cours, ni celles qui attendent déjà leur créneau réseau : avec K mots-clés, jusqu'à K-1 recherches ed2k, espacées d'une minute, et la prochaine de chaque cible Kad partent encore, puis le crawler se tait. |

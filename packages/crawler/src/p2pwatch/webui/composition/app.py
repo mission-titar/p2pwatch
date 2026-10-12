@@ -478,7 +478,7 @@ def _client_lines(status: StatusReadings) -> tuple[ClientLine, ...]:
 
 
 # SQL console (spec §11). The two selectable databases, in display order: value (allowlist key)
-# + human label. Both are non-sensitive (the catalog's subject is the file, never a person), so
+# + human label. Neither holds a peer's address (a source is a pseudonymous id at most), so
 # read-only exposure of either is fine.
 _CONSOLE_DB_LABELS: tuple[tuple[str, str], ...] = (
     ("catalog", "catalog.db"),

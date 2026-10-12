@@ -18,17 +18,27 @@ Dans le catalogue (`data/catalog.db` et `data/local.db`) :
 - Les **empreintes eD2k** des fichiers vus sur le réseau, leur **nom** tel que publié par les pairs,
   leur **taille** et le nombre de sources rapporté.
 - Les **décisions de matching** : la cible qu'un fichier satisfait, selon vos règles YAML.
+- L'**historique des sources** de vos téléchargements, en mode téléchargement seulement : pour
+  chaque fichier que le nœud télécharge, les pairs qui le partagent, sous leur identifiant
+  pseudonyme eD2k (le *user hash*, que le client du pair annonce lui-même), le nom et le logiciel
+  qu'ils annoncent, s'ils ont des parties qui vous manquent, l'adresse du serveur eD2k par lequel
+  ils sont joignables, et les plages de temps où le nœud les a vus. C'est ce qui permet de
+  reconnaître un partageur récurrent d'un épisode perdu, et de le contacter.
 - Des **métadonnées techniques du nœud** : `node_id` interne, état du planificateur, dernière passe
   de catalogage.
 
 Ce qui n'y entre jamais :
 
-- **Aucune IP de pair.** Le crawler passe par le protocole EC d'aMule, qui dit combien de pairs ont
-  une copie, jamais qui.
+- **Aucune adresse de pair.** Ni IP, ni port, ni pays : amuleapi, l'interface par laquelle le
+  crawler lit aMule, les donne, et le crawler les écarte avant d'écrire quoi que ce soit. L'adresse
+  enregistrée est celle d'un serveur eD2k public, jamais celle du pair. Un identifiant n'est jamais
+  relié à celui d'un autre réseau.
 - **Aucune trace utilisateur.** Ni cookie, ni session, ni journal d'accès : la WebUI est en lecture
   seule et n'authentifie personne. Exposée, elle exige un reverse proxy pour l'authentification.
-- **Aucune télémétrie sortante.** Rien ne part vers un service tiers ; `/metrics` est un endpoint
-  local, à scraper si vous le voulez, sans Prometheus ni Grafana dans la pile.
+- **Aucune télémétrie.** Rien ne part vers un service que vous n'avez pas choisi : les
+  notifications vont aux seules cibles d'`observability.notifications`, et une alerte de source y
+  porte le nom et le début du user hash de la source. `/metrics` est un endpoint local, à scraper si
+  vous le voulez, sans Prometheus ni Grafana dans la pile.
 - **Aucun contenu de fichier.** Même en téléchargement actif, p2pwatch ne lit jamais les octets
   d'un fichier : ni détection de type, ni sonde média, ni antivirus. Le fichier vit à part dans
   `downloads/incoming`.
@@ -93,4 +103,6 @@ Il ne protège pas contre :
 - **Ne mélangez pas les usages.** Ce nœud ne sert qu'à p2pwatch : pas de bibliothèque P2P partagée
   pré-existante, pas d'autres tests.
 
-Pour échanger un catalogue avec d'autres chercheurs, voir [la page d'accueil](index.md#partage).
+Un catalogue que vous partagez contient l'historique des sources : les user hashes et les noms de
+tiers, en plus des fichiers. Pour échanger un catalogue avec d'autres chercheurs, voir
+[la page d'accueil](index.md#partage).
