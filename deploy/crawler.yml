@@ -50,5 +50,5 @@ download:
   lost_after_seconds: 86400
   # Measured with statvfs, never read. amuled writes incoming/ and temp/ under it.
   output_dir: /downloads
-  # `reappeared` notifies a source useful again after this many hours neither useful nor not.
-  reappeared_after_hours: 12
+  # `reappeared` notifies a source useful again after this long neither useful nor not. 12 h.
+  reappeared_after_seconds: 43200

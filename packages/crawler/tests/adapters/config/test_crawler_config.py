@@ -46,7 +46,7 @@ def _full_download_section() -> dict[str, Any]:
         "min_free_bytes": 1_000_000_000,
         "lost_after_seconds": 3600.0,
         "output_dir": "/data/out",
-        "reappeared_after_hours": 1.5,
+        "reappeared_after_seconds": 5400.0,
     }
 
 
@@ -113,7 +113,7 @@ def test_bool_is_not_accepted_as_a_number() -> None:
         ("observability", "notification_timeout_seconds"),
         ("download", "poll_interval_seconds"),
         ("download", "lost_after_seconds"),
-        ("download", "reappeared_after_hours"),
+        ("download", "reappeared_after_seconds"),
         (None, "decision_poll_interval_seconds"),
         (None, "shutdown_deadline_seconds"),
     ],
@@ -298,7 +298,7 @@ def test_download_enabled_true_full_is_download_mode() -> None:
         min_free_bytes=1_000_000_000,
         lost_after_seconds=3600.0,
         output_dir="/data/out",
-        reappeared_after=timedelta(hours=1.5),
+        reappeared_after=timedelta(seconds=5400),
     )
 
 
@@ -339,17 +339,17 @@ def test_download_space_and_ttl_knobs_have_defaults() -> None:
 
 def test_a_source_reappears_after_12_hours_by_default() -> None:
     section = _full_download_section()
-    del section["reappeared_after_hours"]
+    del section["reappeared_after_seconds"]
     cfg = parse_crawler_config(_minimal_raw() | {"download": section}, _env())
     assert cfg.download is not None
     assert cfg.download.reappeared_after == timedelta(hours=12)
 
 
-@pytest.mark.parametrize("hours", [0, -1, float("inf"), float("nan"), 1e12])
-def test_reappeared_after_hours_is_a_positive_finite_duration(hours: float) -> None:
+@pytest.mark.parametrize("seconds", [0, -1, float("inf"), float("nan"), 1e15])
+def test_reappeared_after_seconds_is_a_positive_finite_duration(seconds: float) -> None:
     # .inf overflows a duration and .nan would silently disable the event (D9).
-    section = _full_download_section() | {"reappeared_after_hours": hours}
-    with pytest.raises(ConfigError, match=r"download\.reappeared_after_hours"):
+    section = _full_download_section() | {"reappeared_after_seconds": seconds}
+    with pytest.raises(ConfigError, match=r"download\.reappeared_after_seconds"):
         parse_crawler_config(_minimal_raw() | {"download": section}, _env())
 
 

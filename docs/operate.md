@@ -230,7 +230,7 @@ Deux alertes partent sur le canal *community*, toutes deux quand une source devi
 - **`new-source`** : la source est utile pour la première fois sur ce nœud, tous fichiers
   confondus ;
 - **`reappeared`** : la source est de nouveau utile après plus de
-  `download.reappeared_after_hours` (12 h par défaut, voir
+  `download.reappeared_after_seconds` (12 h par défaut, voir
   [Régler le nœud](settings.md#le-seuil-des-sources-de-nouveau-utiles)) pendant lesquelles le nœud
   n'a rien appris de ce qu'elle détient : absente, ou vue sans réponse.
 
