@@ -102,6 +102,32 @@ def test_bool_is_not_accepted_as_a_number() -> None:
         parse_crawler_config(raw, _env())
 
 
+@pytest.mark.parametrize("value", [float("inf"), float("nan")], ids=["inf", "nan"])
+@pytest.mark.parametrize(
+    ("section", "key"),
+    [
+        ("backoff", "base_seconds"),
+        ("backoff", "cap_seconds"),
+        ("backoff", "factor"),
+        ("backoff", "jitter_ratio"),
+        ("observability", "notification_timeout_seconds"),
+        ("download", "poll_interval_seconds"),
+        ("download", "lost_after_seconds"),
+        ("download", "reappeared_after_hours"),
+        (None, "decision_poll_interval_seconds"),
+        (None, "shutdown_deadline_seconds"),
+    ],
+)
+def test_a_number_that_is_not_finite_is_refused_by_name(
+    section: str | None, key: str, value: float
+) -> None:
+    # .inf would make a sleep endless and .nan passes every comparison.
+    raw = _minimal_raw() | {"download": _full_download_section(), "observability": {}}
+    (raw if section is None else raw[section])[key] = value
+    with pytest.raises(ConfigError, match=rf"\.{key}: finite number expected"):
+        parse_crawler_config(raw, _env())
+
+
 def test_non_positive_value_is_fatal() -> None:
     raw = _minimal_raw()
     raw["decision_poll_interval_seconds"] = 0
