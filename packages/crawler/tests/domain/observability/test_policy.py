@@ -15,11 +15,17 @@ from p2pwatch.domain.observability.policy import (
     Severity,
     describe,
 )
+from p2pwatch.domain.source import SourceKey
 
 _COMMUNITY = frozenset({Audience.COMMUNITY})
 _OPERATIONS = frozenset({Audience.OPERATIONS})
 _AMULED_KAD = (("client", "amuled"), ("network", "kad"))
 _AMULED_ED2K = (("client", "amuled"), ("network", "ed2k"))
+_ED2K_NEW = (("network", "ed2k"), ("kind", "new"))
+_ED2K_REAPPEARED = (("network", "ed2k"), ("kind", "reappeared"))
+_SOURCE = SourceKey(Network.ED2K, "1f2e3d4c" * 4)
+_FILE = FileKey(Network.ED2K, "8f3a1c0b9e7d44a2b6c1f0e9d8a7b6c5")
+_062A = (("062A", "Les demoiselles cambrioleuses"),)
 
 
 CASES: list[tuple[ev.Event, Report]] = [
@@ -133,6 +139,32 @@ CASES: list[tuple[ev.Event, Report]] = [
             "🟢 instance online (mode full)",
             (MetricInstruction(MetricName.CRAWLER_UP, "set", (), 1.0),),
             _OPERATIONS,
+        ),
+    ),
+    (
+        ev.SourceNew(_SOURCE, "AnimuseeFMR", _FILE, "Keroro 062.avi", _062A),
+        Report(
+            Severity.INFO,
+            "source 1f2e3d4c… useful for the first time: Keroro 062.avi",
+            (MetricInstruction(MetricName.SOURCE_ALERTS, "inc", _ED2K_NEW),),
+            _COMMUNITY,
+            "**Source**\n`AnimuseeFMR` 1f2e3d4c…, useful for the first time\n\n"
+            "**Targets**\n062A - Les demoiselles cambrioleuses\n\n"
+            "**File**\n`Keroro 062.avi`",
+            "🆕 New source",
+        ),
+    ),
+    (
+        ev.SourceReappeared(_SOURCE, "AnimuseeFMR", _FILE, "Keroro 062.avi", _062A, 93_600.0),
+        Report(
+            Severity.INFO,
+            "source 1f2e3d4c… useful again after 26 h: Keroro 062.avi",
+            (MetricInstruction(MetricName.SOURCE_ALERTS, "inc", _ED2K_REAPPEARED),),
+            _COMMUNITY,
+            "**Source**\n`AnimuseeFMR` 1f2e3d4c…, useful again after 26 h\n\n"
+            "**Targets**\n062A - Les demoiselles cambrioleuses\n\n"
+            "**File**\n`Keroro 062.avi`",
+            "🔁 Source useful again",
         ),
     ),
 ]
@@ -262,4 +294,19 @@ def test_a_completed_download_is_a_green_message_naming_its_targets_and_file() -
             "`Keroro '062'.avi`"
         ),
         title="✅ Downloaded",
+    )
+
+
+def test_a_source_without_a_name_or_a_target_names_its_hash_and_its_file() -> None:
+    report = describe(ev.SourceNew(_SOURCE, None, _FILE, "Keroro 062.avi", ()))
+    assert report.notification == (
+        "**Source**\n1f2e3d4c…, useful for the first time\n\n**File**\n`Keroro 062.avi`"
+    )
+
+
+def test_a_backtick_in_a_source_name_cannot_close_its_code_span() -> None:
+    event = ev.SourceReappeared(_SOURCE, "a`@everyone`b", _FILE, "x.avi", (), 43_200.000001)
+    report = describe(event)
+    assert report.notification.startswith(
+        "**Source**\n`a'@everyone'b` 1f2e3d4c…, useful again after 12 h\n"
     )

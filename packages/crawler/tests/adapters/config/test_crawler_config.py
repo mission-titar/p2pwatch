@@ -1,3 +1,4 @@
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -45,6 +46,7 @@ def _full_download_section() -> dict[str, Any]:
         "min_free_bytes": 1_000_000_000,
         "lost_after_seconds": 3600.0,
         "output_dir": "/data/out",
+        "reappeared_after_hours": 1.5,
     }
 
 
@@ -270,6 +272,7 @@ def test_download_enabled_true_full_is_download_mode() -> None:
         min_free_bytes=1_000_000_000,
         lost_after_seconds=3600.0,
         output_dir="/data/out",
+        reappeared_after=timedelta(hours=1.5),
     )
 
 
@@ -306,6 +309,22 @@ def test_download_space_and_ttl_knobs_have_defaults() -> None:
     assert cfg.download.min_free_bytes == 10_737_418_240  # 10 GiB
     assert cfg.download.lost_after_seconds == 86_400.0  # 24 h
     assert cfg.download.output_dir == "/downloads"  # what deploy/compose.yml mounts
+
+
+def test_a_source_reappears_after_12_hours_by_default() -> None:
+    section = _full_download_section()
+    del section["reappeared_after_hours"]
+    cfg = parse_crawler_config(_minimal_raw() | {"download": section}, _env())
+    assert cfg.download is not None
+    assert cfg.download.reappeared_after == timedelta(hours=12)
+
+
+@pytest.mark.parametrize("hours", [0, -1, float("inf"), float("nan"), 1e12])
+def test_reappeared_after_hours_is_a_positive_finite_duration(hours: float) -> None:
+    # .inf overflows a duration and .nan would silently disable the event (D9).
+    section = _full_download_section() | {"reappeared_after_hours": hours}
+    with pytest.raises(ConfigError, match=r"download\.reappeared_after_hours"):
+        parse_crawler_config(_minimal_raw() | {"download": section}, _env())
 
 
 def test_download_output_dir_must_be_a_string() -> None:

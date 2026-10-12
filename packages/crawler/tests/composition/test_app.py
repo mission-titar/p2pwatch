@@ -4,6 +4,7 @@ import logging
 import sqlite3
 import threading
 from dataclasses import replace
+from datetime import timedelta
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
@@ -112,6 +113,7 @@ def _download_config(tmp_path: Path) -> DownloadConfig:
         min_free_bytes=1_000_000_000,
         lost_after_seconds=86_400.0,
         output_dir=str(tmp_path),
+        reappeared_after=timedelta(hours=12),
     )
 
 

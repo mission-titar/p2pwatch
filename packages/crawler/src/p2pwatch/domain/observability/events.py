@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from p2pwatch.domain.file_key import FileKey
+from p2pwatch.domain.source import SourceKey
 
 
 @dataclass(frozen=True)
@@ -118,6 +119,27 @@ class DiskSpaceLow:
 
 
 @dataclass(frozen=True)
+class SourceNew:
+    # A source opened its first useful range on this node (stage 4 spec, D9).
+    source: SourceKey
+    name: str | None
+    file: FileKey
+    filename: str  # the clean name, the most sourced
+    targets: tuple[tuple[str, str], ...]  # (target_id, title), none for a file without one
+
+
+@dataclass(frozen=True)
+class SourceReappeared:
+    # A source useful again after ``absent_seconds`` neither useful nor not useful here (D9).
+    source: SourceKey
+    name: str | None
+    file: FileKey
+    filename: str
+    targets: tuple[tuple[str, str], ...]
+    absent_seconds: float
+
+
+@dataclass(frozen=True)
 class CrawlerStarted:
     mode: str
 
@@ -137,5 +159,7 @@ type Event = (
     | ClientReachableAgain
     | FreeSpaceSampled
     | DiskSpaceLow
+    | SourceNew
+    | SourceReappeared
     | CrawlerStarted
 )

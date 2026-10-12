@@ -92,4 +92,5 @@ def test_exposed_names() -> None:
         "p2pwatch_crawler_up",
         "p2pwatch_channel_on_network",
         "p2pwatch_channel_connectable",
+        "p2pwatch_source_alerts",
     }

@@ -14,6 +14,7 @@ true`` ⇒ all wiring fields required.
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any
 
 from p2pwatch.adapters.config.errors import ConfigError as ConfigError  # explicit re-export
@@ -71,6 +72,7 @@ class DownloadConfig:
     min_free_bytes: int
     lost_after_seconds: float
     output_dir: str
+    reappeared_after: timedelta
 
 
 @dataclass(frozen=True)
@@ -303,6 +305,18 @@ def _parse_observability(raw: dict[str, Any], env: Mapping[str, str]) -> Observa
 _DEFAULT_MIN_FREE_BYTES = 10_737_418_240  # 10 GiB
 _DEFAULT_LOST_AFTER_SECONDS = 86_400.0
 _DEFAULT_OUTPUT_DIR = "/downloads"  # the bind mount in deploy/compose.yml
+_DEFAULT_REAPPEARED_AFTER_HOURS = 12.0  # a night off does not notify (stage 4 spec, D9)
+
+
+def _hours_default(mapping: dict[str, Any], key: str, default: float, what: str) -> timedelta:
+    """OPTIONAL strictly positive number of hours, refusing what no duration holds (``.inf``)."""
+    hours = _positive_default(mapping, key, default, what)
+    try:
+        return timedelta(hours=hours)
+    except (OverflowError, ValueError) as error:  # .nan passes ``> 0`` and fails here
+        raise ConfigError(
+            f"{what}.{key}: finite number of hours within a duration's range expected, got {hours}"
+        ) from error
 
 
 def _parse_download(raw: dict[str, Any]) -> DownloadConfig | None:
@@ -323,6 +337,9 @@ def _parse_download(raw: dict[str, Any]) -> DownloadConfig | None:
             section, "lost_after_seconds", _DEFAULT_LOST_AFTER_SECONDS, "download"
         ),
         output_dir=output_dir,
+        reappeared_after=_hours_default(
+            section, "reappeared_after_hours", _DEFAULT_REAPPEARED_AFTER_HOURS, "download"
+        ),
     )
 
 

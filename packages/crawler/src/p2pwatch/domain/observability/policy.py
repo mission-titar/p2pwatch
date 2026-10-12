@@ -37,6 +37,8 @@ from p2pwatch.domain.observability.events import (
     ObservationRecorded,
     SearchExecuted,
     SearchFailed,
+    SourceNew,
+    SourceReappeared,
 )
 
 
@@ -71,6 +73,7 @@ class MetricName(StrEnum):
     CRAWLER_UP = "p2pwatch_crawler_up"
     CHANNEL_ON_NETWORK = "p2pwatch_channel_on_network"
     CHANNEL_CONNECTABLE = "p2pwatch_channel_connectable"
+    SOURCE_ALERTS = "p2pwatch_source_alerts"
 
 
 MetricKind = Literal["inc", "set", "remove"]
@@ -198,6 +201,26 @@ def _describe_decisions(event: DecisionsRecorded) -> Report:
     )
 
 
+def _describe_source(
+    event: SourceNew | SourceReappeared, kind: str, what: str, title: str
+) -> Report:
+    short = f"{event.source.native_id[:8]}…"  # as the webui shortens a hash
+    named = f"{_code_name(event.name)} " if event.name else ""
+    sections = [f"**Source**\n{named}{short}, {what}"]
+    if event.targets:
+        sections.append(_targets_section(event.targets))
+    sections.append(f"**File**\n{_code_name(event.filename)}")
+    labels = (("network", event.source.network.value), ("kind", kind))
+    return Report(
+        Severity.INFO,
+        f"source {short} {what}: {event.filename}",
+        (MetricInstruction(MetricName.SOURCE_ALERTS, "inc", labels),),
+        frozenset({Audience.COMMUNITY}),
+        "\n\n".join(sections),
+        title,
+    )
+
+
 def describe(event: Event) -> Report:
     """Map an event to its ``Report`` (EXHAUSTIVE match → 100% branch)."""
     match event:
@@ -295,6 +318,15 @@ def describe(event: Event) -> Report:
                 f"under the {event.min_free_bytes / 2**30:.1f} GiB floor (no new download)",
                 (),
                 frozenset({Audience.OPERATIONS}),
+            )
+        case SourceNew():
+            return _describe_source(event, "new", "useful for the first time", "🆕 New source")
+        case SourceReappeared():
+            return _describe_source(
+                event,
+                "reappeared",
+                f"useful again after {event.absent_seconds / 3600:.0f} h",
+                "🔁 Source useful again",
             )
         case CrawlerStarted():
             return Report(
