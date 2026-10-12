@@ -244,7 +244,8 @@ SELECT
     v.directly_reachable,
     r.first_seen_at,
     r.last_seen_at,
-    r.received_bytes
+    r.received_bytes,
+    r.node_id
 FROM source_variants AS v
 JOIN source_ranges AS r ON r.variant_id = v.variant_id
 JOIN files AS f ON f.file_id = v.file_id
@@ -374,6 +375,7 @@ def _range_view(row: sqlite3.Row) -> SourceRangeView:
         first_seen_at=row["first_seen_at"],
         last_seen_at=row["last_seen_at"],
         received_bytes=row["received_bytes"],
+        node_id=row["node_id"],
     )
 
 

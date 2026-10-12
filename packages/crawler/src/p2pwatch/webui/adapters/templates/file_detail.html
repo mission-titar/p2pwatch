@@ -105,6 +105,7 @@
         <th>Last seen</th>
         <th>Received</th>
         <th>Rate</th>
+        <th>Node</th>
       </tr>
     </thead>
     <tbody>
@@ -119,9 +120,10 @@
         <td>{{ row.last_seen }}</td>
         <td>{{ row.received }}</td>
         <td>{{ row.rate }}</td>
+        <td>{{ row.node }}</td>
       </tr>
       {% else %}
-      <tr><td colspan="9">No source recorded.</td></tr>
+      <tr><td colspan="10">No source recorded.</td></tr>
       {% endfor %}
     </tbody>
   </table>

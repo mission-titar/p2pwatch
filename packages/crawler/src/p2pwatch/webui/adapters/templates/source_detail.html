@@ -51,6 +51,7 @@
         <th>Last seen</th>
         <th>Received</th>
         <th>Rate</th>
+        <th>Node</th>
       </tr>
     </thead>
     <tbody>
@@ -65,9 +66,10 @@
         <td>{{ row.history.last_seen }}</td>
         <td>{{ row.history.received }}</td>
         <td>{{ row.history.rate }}</td>
+        <td>{{ row.history.node }}</td>
       </tr>
       {% else %}
-      <tr><td colspan="9">No range on this page.</td></tr>
+      <tr><td colspan="10">No range on this page.</td></tr>
       {% endfor %}
     </tbody>
   </table>

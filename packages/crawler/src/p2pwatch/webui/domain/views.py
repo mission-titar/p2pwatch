@@ -152,6 +152,7 @@ class SourceRangeView:
     first_seen_at: int
     last_seen_at: int
     received_bytes: int
+    node_id: str  # the node that read it: a merged catalog holds several
 
 
 @dataclass(frozen=True)
@@ -427,6 +428,7 @@ class SourceHistoryRow:
     last_seen: str
     received: str  # empty when the range received nothing
     rate: str  # empty without bytes or over a single read
+    node: str
 
 
 @dataclass(frozen=True)
