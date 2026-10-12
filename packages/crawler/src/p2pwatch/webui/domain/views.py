@@ -182,6 +182,15 @@ class SourceDetail:
     ranges: tuple[SourceFileRange, ...]
 
 
+@dataclass(frozen=True)
+class NameDetail:
+    """A page of a name (D13): one ``SourceRow`` per hash that carried it, its hash-less ranges."""
+
+    name: str
+    sources: tuple[SourceRow, ...]
+    ranges: tuple[SourceFileRange, ...]
+
+
 # ---------------------------------------------------------------------------
 # Node state (local.db)
 # ---------------------------------------------------------------------------
