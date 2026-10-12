@@ -1,9 +1,11 @@
 """Catalog rows for tests, written and read here only so that a schema change edits one module."""
 
+import hashlib
 import sqlite3
 
 from p2pwatch.adapters.persistence_sqlite.variants import content_hash, iso_to_micros
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.source import SourceKey
 
 SEEN_AT = "2026-06-22T10:00:00.000000+00:00"
 
@@ -70,6 +72,54 @@ def insert_decision(
         " (file_id, target_id, rule_name, tier, decided_at, node_id)"
         " VALUES (?, ?, ?, ?, ?, ?)",
         (file_id(ed2k_hash), target_id, rule_name, tier, decided_at, node_id),
+    )
+
+
+def source_id(user_hash: str) -> bytes:
+    return SourceKey(Network.ED2K, user_hash).source_id
+
+
+def insert_source(conn: sqlite3.Connection, user_hash: str) -> None:
+    conn.execute(
+        "INSERT INTO sources (source_id, network, native_id) VALUES (?, 'ed2k', ?)",
+        (source_id(user_hash), user_hash),
+    )
+
+
+def insert_source_variant(
+    conn: sqlite3.Connection,
+    ed2k_hash: str,
+    user_hash: str | None,
+    *,
+    name: str = "AnimuseeFMR",
+    role: str = "queued",
+) -> int:
+    """The new variant's ``variant_id``; its ``content_hash`` stands in for the writer's."""
+    sid = source_id(user_hash) if user_hash is not None else None
+    key = hashlib.blake2b(repr((ed2k_hash, user_hash, name, role)).encode(), digest_size=16)
+    row = conn.execute(
+        "INSERT INTO source_variants (file_id, source_id, name, role, raw_meta, content_hash)"
+        " VALUES (?, ?, ?, ?, '{}', ?) RETURNING variant_id",
+        (file_id(ed2k_hash), sid, name, role, key.digest()),
+    ).fetchone()
+    variant_id: int = row[0]
+    return variant_id
+
+
+def insert_source_range(
+    conn: sqlite3.Connection,
+    variant_id: int,
+    first_seen_at: int,
+    last_seen_at: int,
+    *,
+    node_id: str = "n1",
+    received_bytes: int = 0,
+    transfer_counter: int = 0,
+) -> None:
+    conn.execute(
+        "INSERT INTO source_ranges (variant_id, node_id, first_seen_at, last_seen_at,"
+        " received_bytes, transfer_counter) VALUES (?, ?, ?, ?, ?, ?)",
+        (variant_id, node_id, first_seen_at, last_seen_at, received_bytes, transfer_counter),
     )
 
 

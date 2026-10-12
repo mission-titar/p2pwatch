@@ -3,7 +3,6 @@
 import sqlite3
 from pathlib import Path
 
-from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
 from tests.adapters.persistence_sqlite.older_catalog import open_catalog_at
 from tests.catalog_rows import insert_file
 
@@ -27,7 +26,7 @@ def test_0009_vacuums_the_free_pages_away_and_keeps_the_rows(tmp_path: Path) -> 
     path = tmp_path / "catalog.db"
     _catalog_at_8_with_free_pages(path)
 
-    connection = open_catalog(path)
+    connection = open_catalog_at(path, 9)
     try:
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 9
         assert connection.execute("PRAGMA freelist_count").fetchone()[0] == 0
@@ -39,12 +38,12 @@ def test_0009_vacuums_the_free_pages_away_and_keeps_the_rows(tmp_path: Path) -> 
 def test_0009_is_safe_to_replay(tmp_path: Path) -> None:
     """A stop between the VACUUM and the stamp runs it again at the next start."""
     path = tmp_path / "catalog.db"
-    open_catalog(path).close()
+    open_catalog_at(path, 9).close()
     raw = sqlite3.connect(path)
     raw.execute("PRAGMA user_version = 8")
     raw.close()
 
-    connection = open_catalog(path)
+    connection = open_catalog_at(path, 9)
     try:
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 9
     finally:
@@ -56,7 +55,7 @@ def test_0009_leaves_the_wal_truncated(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
     _catalog_at_8_with_free_pages(path)
 
-    connection = open_catalog(path)
+    connection = open_catalog_at(path, 9)
     try:
         page_size = connection.execute("PRAGMA page_size").fetchone()[0]
         # The WAL header, then the one frame of the user_version stamp that follows 0009.

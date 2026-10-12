@@ -17,7 +17,15 @@ from p2pwatch.adapters.persistence_sqlite.connection import (
 from p2pwatch.adapters.persistence_sqlite.errors import MigrationError, PersistenceError
 from tests.catalog_rows import insert_decision, insert_file
 
-_CATALOG_TABLES = {"files", "observation_variants", "observations", "match_decisions"}
+_CATALOG_TABLES = {
+    "files",
+    "observation_variants",
+    "observations",
+    "match_decisions",
+    "sources",
+    "source_variants",
+    "source_ranges",
+}
 _LOCAL_TABLES = {
     "node_runtime",
     "downloads",
@@ -45,7 +53,24 @@ def test_open_catalog_creates_the_tables_and_versions_the_schema(tmp_path: Path)
     connection = open_catalog(tmp_path / "catalog.db")
     try:
         assert _table_names(connection) == _CATALOG_TABLES
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 9
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 10
+    finally:
+        connection.close()
+
+
+def test_open_catalog_indexes_the_source_variants(tmp_path: Path) -> None:
+    connection = open_catalog(tmp_path / "catalog.db")
+    try:
+        rows = connection.execute(
+            "SELECT l.name, i.name FROM pragma_index_list('source_variants') AS l,"
+            " pragma_index_info(l.name) AS i WHERE l.origin = 'c' ORDER BY l.name, i.seqno"
+        ).fetchall()
+        assert rows == [
+            ("idx_source_variants_file_source", "file_id"),
+            ("idx_source_variants_file_source", "source_id"),
+            ("idx_source_variants_name", "name"),
+            ("idx_source_variants_source_id", "source_id"),
+        ]
     finally:
         connection.close()
 
@@ -108,7 +133,7 @@ def test_reopen_is_idempotent_and_keeps_data(tmp_path: Path) -> None:
     first.close()
     second = open_catalog(path)  # versions already applied: NO script replays
     try:
-        assert second.execute("PRAGMA user_version").fetchone()[0] == 9
+        assert second.execute("PRAGMA user_version").fetchone()[0] == 10
         assert second.execute("SELECT count(*) FROM files").fetchone()[0] == 1
     finally:
         second.close()
