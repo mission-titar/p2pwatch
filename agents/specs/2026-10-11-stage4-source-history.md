@@ -40,10 +40,11 @@ What the catalog then holds for one source on one file, as the webui shows it (D
 | AnimuseeFMR `1f2e…` | `queued` | Tue 20:00:30 | 21:14:00 | |
 | AnimuseeFMR `1f2e…` | `sending` | Tue 21:14:30 | 23:59:30 | about 10 MB (1 KB/s) |
 
-The 12 blocks:
+The 13 blocks (Corrected: block 15 split in two over the line bound, block 15's report):
 
 - **10**: the domain model and the three tables.
-- **15**: the repository that writes readings as ranges.
+- **15**: a role's group, and the repository's reads for the notifications.
+- **17**: the repository that writes readings as ranges.
 - **20**: the amuleapi adapter lists a download's sources.
 - **25**: the detail call and the mapper.
 - **30**: the download cycle records sources.
@@ -678,7 +679,8 @@ the same files. Each block measures itself after committing.
 | # | Branch | Goal | Est. lines / files |
 |---|---|---|---|
 | 10 | `feat/source-tables` | Domain model and the three tables | 380 / 9 |
-| 15 | `feat/source-repository` | Readings written as ranges | 450 / 5 |
+| 15 | `feat/source-repository` | A role's group and D9's reads | 300 / 5 |
+| 17 | `feat/source-writer` | Readings written as ranges | 490 / 3 |
 | 20 | `feat/amuleapi-source-list` | The port, the list paging and its fake | 300 / 6 |
 | 25 | `feat/amuleapi-source-detail` | The detail call and the mapper | 330 / 4 |
 | 30 | `feat/record-sources` | The download cycle records sources | 330 / 6 |
@@ -701,13 +703,21 @@ the same files. Each block measures itself after committing.
   - `test_connection.py`: the catalog table set and `user_version == 10`;
   - `test_append_only.py`: `sources` and `source_variants`;
   - a migration test for `source_ranges`' trigger rules, one test per rule of D5.
-- **15**:
-  - `ports/source_repository.py`: `record_readings(file, readings, read_at, tolerance)` returning the
-    ranges it opened with their roles, `earlier_ranges(source_id, started_before)` answering D9's two
-    queries (whether a useful range exists, and the latest `last_seen_at` of the useful and not-useful
-    ones), and `has_ranges_before(started_before)` for D9's first round; the carried group of D3 for a
-    reading in a passing state;
-  - `adapters/persistence_sqlite/source_repository.py` with D4's rule, in one transaction per call;
+- **15** (Corrected: block 15 split in two over the line bound, block 15's report):
+  - `domain/source.py`: a role's group (D3), the role a passing state carries from it, and
+    `is_contact_point`, `contact_point`'s format per network (eD2k: `ip:port`), which the writer checks
+    since a reading without `key` does not know its network (Corrected: unlisted; contact_point's
+    validation, block 10's report);
+  - `ports/source_repository.py`: `earlier_ranges(source, started_before)` answering D9's two queries
+    (whether a useful range exists, and the latest `last_seen_at` of the useful and not-useful ones), and
+    `has_ranges_before(started_before)` for D9's first round (Corrected: `earlier_ranges` takes the
+    `SourceKey`, as the other ports take a `FileKey`, block 15's report);
+  - `adapters/persistence_sqlite/source_repository.py` with both reads;
+  - tests on a real catalog, its ranges seeded through `tests/catalog_rows.py`.
+- **17** (Corrected: block 15 split in two over the line bound, block 15's report):
+  - `record_readings(file, readings, read_at, tolerance)` on the port and the adapter, returning the
+    ranges it opened with their roles: D4's rule in one transaction per call, D3's carried group for a
+    reading in a passing state, `contact_point` checked against the file's network;
   - tests on a real catalog: each condition of D4 extending and failing to extend.
 - **20**:
   - `ports/source_client.py`; `AmuleApiClient.sources` over the list only; `_collect` parameterised with
@@ -736,17 +746,19 @@ the same files. Each block measures itself after committing.
 
 ### Order
 
-- 10 before 15: the tables before their writer.
-- 15, 20 and 25 before 30: the writer and the reader before the step that joins them.
+- 10 before 15 and 17: the tables before their reads and their writer.
+- 15 before 17: the writer needs the carried role and the contact point's check (Corrected: block 15 split in two over the line bound, block 15's report).
+- 17, 20 and 25 before 30 (Corrected: block 15 split in two over the line bound, block 15's report): the writer and the reader before the step that joins them.
 - 30 before 35: D9's events are decided on what the step writes.
 - 40 and 50 to 65 need only block 10's tables; they stay after 35 so the stack reads in the data's order.
 - 70 after 65: the docs describe the pages.
 
 ### Surfaces whose consumer arrives in a later block
 
-- `domain/source.py` and the tables (block 10): written by block 15's repository.
-- `SourceRepository` (block 15) and `SourceClient` (blocks 20 and 25): called by block 30's step.
-- `earlier_ranges` (block 15): called by block 35.
+- `domain/source.py` and the tables (block 10): written by block 17's repository (Corrected: block 15 split in two over the line bound, block 15's report).
+- The carried role and `is_contact_point` (block 15): called by block 17's writer.
+- `SourceRepository` (blocks 15 and 17) and `SourceClient` (blocks 20 and 25): called by block 30's step.
+- `earlier_ranges` and `has_ranges_before` (block 15): called by block 35.
 
 ### Transient states inside the stack
 
@@ -778,7 +790,7 @@ Each criterion names the output that would prove it wrong. Every test is watched
   `transfer_counter`, extending a range that a later one follows; and one `UPDATE` growing all three that
   must succeed; one `UPDATE` setting every column to its own value must succeed even when a later range
   follows. A `DELETE` raises. Removing any `WHEN` clause makes its test pass the bad update: watched.
-- **D4's rule** (block 15), on a real catalog with a fixed `read_at`: a second reading 30 s later with the
+- **D4's rule** (block 17 (Corrected: block 15 split in two over the line bound, block 15's report)), on a real catalog with a fixed `read_at`: a second reading 30 s later with the
   same variant leaves one range whose `last_seen_at` moved; each of these leaves two ranges: a gap of
   the tolerance plus 1 µs, another variant of the same source, a lower counter. The sequence `queued`,
   `sending`, `queued` leaves three ranges; `nothing_new`, a state that says nothing, `nothing_new` leaves
