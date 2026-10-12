@@ -728,7 +728,7 @@ the same files. Each block measures itself after committing.
 | 65 | `feat/webui-source-pages` | The source page (Corrected: block 65 split in two over the line bound, block 65's report) | 370 / 6 |
 | 67 | `feat/webui-name-page` | The name page (Corrected: block 65 split in two over the line bound, block 65's report) | 200 / 6 |
 | 70 | `docs/stage4-docs` | Docs and the rewritten invariant | 260 / 9 |
-| 75 | `fix/stage4-review` | The holistic review's code fixes (Corrected: closing block split over the file bound, block 80's report) | 143 / 15 |
+| 75 | `fix/stage4-review` | The holistic review's code fixes (Corrected: closing block split over the file bound, block 80's report) | 169 / 15 |
 | 80 | `docs/stage4-closing` | Closing | 80 / 4 |
 
 ### Contents per block

@@ -110,10 +110,12 @@ source becomes useful for the first time or again.
   `architecture.md` §7 points at the sources step and §12 names `ports/source_client.py`.
 - **Block 80 split**, over the 20-file bound (22 files, 181 lines against `docs/stage4-docs`), lead's
   decision: its first three commits, the holistic review's code fixes, became block 75
-  (`fix/stage4-review`, 15 files, 143 lines); block 80 kept the docs, the merge test, the spec and
-  this handoff.
+  (`fix/stage4-review`, 15 files, 143 lines at the split, 169 once block 75 added its two commits);
+  block 80 kept the docs, the merge test, the spec and this handoff.
 - **Block 75**: the baseline's memo lives in a small `_AlertRound` (start, notified sources,
-  baseline) passed to `_alert_sources`.
+  baseline) passed to `_alert_sources`. Its teammate added a test for the departure below (a failed
+  baseline read skips only that download's alerts, and the next download asks again) and rewrapped
+  `docs/settings.md`'s threshold paragraph.
 - **Block 80**: beyond the brief, `test_merger.py` pins the accepted merge limit, so a fix that
   lifts it is a visible change.
 
@@ -181,7 +183,8 @@ MINOR 11. Each finding's exit, in block 75 for 4, 7, 8, 10 and 12, in block 80 f
 11. D6's unqualified "order-independent": covered by 1.
 12. `has_ranges_before` asked every round: **fixed**, asked when the round's first range with a
     `source_id` opens, memoised for the round. A `RepositoryError` from it now skips that download's
-    alerts, as one from `earlier_ranges` does, instead of the whole step.
+    alerts, as one from `earlier_ranges` does, instead of the whole step, and the next download
+    asks again (`test_a_repo_failure_asking_the_baseline_skips_that_downloads_alerts_only`).
 
 ## Pitfalls
 
