@@ -209,7 +209,7 @@ def _source_link(source: SourceKey | None) -> tuple[str, ...]:
 
 
 def _source_history_row(source_range: SourceRangeView) -> SourceHistoryRow:
-    """A source range as one line; its name and hash link to the pages of block 65 (D13)."""
+    """A source range as one line; its name links to the name page, its hash to the source page."""
     name, source = source_range.name, source_range.source
     return SourceHistoryRow(
         name="unknown" if name is None else name,
@@ -225,6 +225,7 @@ def _source_history_row(source_range: SourceRangeView) -> SourceHistoryRow:
         rate=average_rate(
             source_range.received_bytes, source_range.first_seen_at, source_range.last_seen_at
         ),
+        node=source_range.node_id,
     )
 
 

@@ -741,7 +741,9 @@ async def test_file_detail_shows_its_source_history_newest_first(
             conn, hash_, _USER, contact_point="198.51.100.7:4661", directly_reachable=False
         )
         sending = insert_source_variant(conn, hash_, _USER, role="sending")
-        insert_source_range(conn, queued, _TUESDAY_8PM + 30_000_000, _TUESDAY_8PM + 60_000_000)
+        insert_source_range(
+            conn, queued, _TUESDAY_8PM + 30_000_000, _TUESDAY_8PM + 60_000_000, node_id="n2"
+        )
         insert_source_range(
             conn,
             sending,
@@ -756,11 +758,11 @@ async def test_file_detail_shows_its_source_history_newest_first(
     source = f'<a href="/sources/{SourceKey(Network.ED2K, _USER).source_id.hex()}">1f2e1f2e…</a>'
     sending_line = _row(
         name, source, "sending", "unknown", "unknown",
-        "2026-10-13 20:01:30Z", "2026-10-13 22:52:10Z", "10 MB", "1 KB/s",
+        "2026-10-13 20:01:30Z", "2026-10-13 22:52:10Z", "10 MB", "1 KB/s", "n1",
     )  # fmt: skip
     queued_line = _row(
         name, source, "queued", "198.51.100.7:4661", "no",
-        "2026-10-13 20:00:30Z", "2026-10-13 20:01:00Z", "", "",
+        "2026-10-13 20:00:30Z", "2026-10-13 20:01:00Z", "", "", "n2",
     )  # fmt: skip
     assert "<h2>Source history</h2>" in page
     assert page.index("<h2>Observations</h2>") < page.index("<h2>Source history</h2>")
@@ -786,8 +788,8 @@ async def test_file_detail_links_only_the_name_or_the_hash_a_range_has(
         '<a href="/sources/name?name=http%3A%2F%2Femule-project.net">http://emule-project.net</a>'
     )
     stamp = "2026-10-13 20:00:00Z"
-    assert _row("unknown", source, "queued", "unknown", "yes", stamp, stamp, "", "") in page
-    assert _row(name, "unknown", "queued", "unknown", "unknown", stamp, stamp, "", "") in page
+    assert _row("unknown", source, "queued", "unknown", "yes", stamp, stamp, "", "", "n1") in page
+    assert _row(name, "unknown", "queued", "unknown", "unknown", stamp, stamp, "", "", "n1") in page
 
 
 @pytest.mark.asyncio
@@ -797,7 +799,7 @@ async def test_file_detail_of_a_file_without_source_says_so(
     app, hash_ = populated_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get(_detail_url(hash_))
-    assert '<td colspan="9">No source recorded.</td>' in resp.text
+    assert '<td colspan="10">No source recorded.</td>' in resp.text
 
 
 # ---------------------------------------------------------------------------
@@ -902,8 +904,11 @@ async def test_source_page_shows_its_hash_its_names_and_its_ranges(
     first, last = "2026-10-13 20:00:00Z", "2026-10-13 20:00:30Z"
     assert f"<dd>{_USER}</dd>" in page
     assert _row(name, last, "2") in page
-    assert _row(file, name, "queued", "unknown", "unknown", first, last, "", "") in page
-    assert _row(unseen_file, name, "standby", "unknown", "unknown", first, first, "", "") in page
+    assert _row(file, name, "queued", "unknown", "unknown", first, last, "", "", "n1") in page
+    unseen_line = _row(
+        unseen_file, name, "standby", "unknown", "unknown", first, first, "", "", "n1"
+    )
+    assert unseen_line in page
     assert "Shinobu" not in page
 
 
@@ -931,7 +936,7 @@ async def test_name_page_lists_the_hashes_that_carried_it_and_nothing_further(
     assert _row(_hash_link(_USER), "2026-10-13 20:00:30Z", "1") in page
     assert _row(_hash_link(_OTHER), stamp, "1") in page
     assert _THIRD[:8] not in page
-    assert _row(file, "standby", "unknown", "unknown", stamp, stamp, "", "") in page
+    assert _row(file, "standby", "unknown", "unknown", stamp, stamp, "", "", "n1") in page
 
 
 @pytest.mark.parametrize(

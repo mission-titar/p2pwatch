@@ -323,11 +323,11 @@ def test_source_ranges_lists_a_files_ranges_newest_first(catalog_db: Path) -> No
     ranges = CatalogReader(open_reader(catalog_db)).source_ranges(file_id("a" * 32))
     key = SourceKey(Network.ED2K, _USER)
     assert ranges == (
-        SourceRangeView(key, "AnimuseeFMR", SourceRole.SENDING, None, None, 90, 150, 2048),
+        SourceRangeView(key, "AnimuseeFMR", SourceRole.SENDING, None, None, 90, 150, 2048, "n1"),
         SourceRangeView(
-            key, "AnimuseeFMR", SourceRole.QUEUED, "198.51.100.7:4661", False, 30, 60, 0
+            key, "AnimuseeFMR", SourceRole.QUEUED, "198.51.100.7:4661", False, 30, 60, 0, "n1"
         ),
-        SourceRangeView(None, None, SourceRole.QUEUED, None, True, 0, 0, 0),
+        SourceRangeView(None, None, SourceRole.QUEUED, None, True, 0, 0, 0, "n2"),
     )
 
 
@@ -420,7 +420,7 @@ def _seed_pages(db: Path) -> None:
 
 
 def _queued(source: SourceKey | None, name: str | None, first: int, last: int) -> SourceRangeView:
-    return SourceRangeView(source, name, SourceRole.QUEUED, None, None, first, last, 0)
+    return SourceRangeView(source, name, SourceRole.QUEUED, None, None, first, last, 0, "n1")
 
 
 def test_source_detail_lists_its_names_and_its_ranges_over_every_file(catalog_db: Path) -> None:
@@ -431,7 +431,7 @@ def test_source_detail_lists_its_names_and_its_ranges_over_every_file(catalog_db
         FileKey(Network.ED2K, "a" * 32),
         FileKey(Network.ED2K, "b" * 32),
     )
-    sending = SourceRangeView(key, None, SourceRole.SENDING, None, None, 50, 60, 0)
+    sending = SourceRangeView(key, None, SourceRole.SENDING, None, None, 50, 60, 0, "n1")
     assert detail == SourceDetail(
         source=key,
         names=(SourceRow(key, "AnimuseeFMR", 40, 1), SourceRow(key, "Shinobu", 20, 1)),
@@ -447,7 +447,7 @@ def test_name_detail_lists_its_hashes_and_its_ranges_without_one(catalog_db: Pat
     _seed_pages(catalog_db)
     detail = CatalogReader(open_reader(catalog_db)).name_detail("AnimuseeFMR", page=1)
     user, other = SourceKey(Network.ED2K, _USER), SourceKey(Network.ED2K, _OTHER)
-    hashless = SourceRangeView(None, "AnimuseeFMR", SourceRole.STANDBY, None, None, 90, 95, 0)
+    hashless = SourceRangeView(None, "AnimuseeFMR", SourceRole.STANDBY, None, None, 90, 95, 0, "n1")
     assert detail == NameDetail(
         name="AnimuseeFMR",
         sources=(SourceRow(user, "AnimuseeFMR", 40, 1), SourceRow(other, "AnimuseeFMR", 5, 1)),
