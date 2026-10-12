@@ -1,14 +1,14 @@
 # Handoff: stage 4, source history and the `new-source` and `reappeared` notifications
 
-Drafted by block 70, to be corrected by the closing block 80.
+Drafted by block 70, corrected by the closing block 80.
 
 ## State
 
 Tier Spec lot, spec `agents/specs/2026-10-11-stage4-source-history.md` (approved 2026-10-12).
 Fourteen blocks, one stack cut from `main` at `c7cd2c6`: #177 (10), #178 (15), #180 (17), #181
 (20), #182 (25), #183 (30), #184 (35), #185 (40), #186 (50), #187 (60), #188 (65), #189 (67),
-block 70 (`docs/stage4-docs`), then the closing block 80 (`docs/stage4-closing`). Two blocks split
-over the 500-line bound during Act: 15 into 15 and 17, 65 into 65 and 67.
+#190 (70), then the closing block 80 (`docs/stage4-closing`). Two blocks split over the 500-line
+bound during Act: 15 into 15 and 17, 65 into 65 and 67.
 
 Nothing of the stack is merged and no release follows (spec section 2; stage 1's D16): the node
 pulls `latest`, which stays on `mulewatch` 4.1.0. `git tag -l 'v*'` still ends at `v4.1.0`.
@@ -44,8 +44,8 @@ source becomes useful for the first time or again.
   `DownloadSourceClient` (the intersection of both ports).
 - **The notifications** (block 35): `application/source_alerts.py` (a pure decision), `SourceNew`
   and `SourceReappeared`, titles `🆕 New source` and `🔁 Source useful again`, audience community,
-  counter `p2pwatch_source_alerts{network, kind}`; `download.reappeared_after_hours` (default 12)
-  parsed into `reappeared_after: timedelta`. Every number of `crawler.yml` now refuses `.inf` and
+  counter `p2pwatch_source_alerts{network, kind}`; `download.reappeared_after_seconds` (default
+  43200, named `reappeared_after_hours` until block 80) parsed into `reappeared_after: timedelta`. Every number of `crawler.yml` now refuses `.inf` and
   `.nan` at boot (class 2, below).
 - **`merge`** (block 40): `sources` and `source_variants` copied with `INSERT OR IGNORE`, the
   variant remapped through `content_hash`; `source_ranges` upserted with `MAX` of each growing
@@ -54,13 +54,14 @@ source becomes useful for the first time or again.
   search (`q`: a hash prefix, or a substring of any name the source carried) and a nav entry after
   "Files"; `/sources/{source_id}` (the full hash, its names, its ranges over every file);
   `/sources/name?name=` (the hashes that carried the name and the hash-less ranges under it, direct
-  links only). `_FILE_ID` became `_HEX_ID`, shared by both detail routes.
+  links only). `_FILE_ID` became `_HEX_ID`, shared by both detail routes. Since block 80, every
+  range table (file, source and name pages) ends with a Node column.
 - **Docs** (block 70): the invariant rewritten to umbrella D10's text in `AGENTS.md`, `README.md`,
   `docs/index.md`, `docs/contributing/architecture.md` (§1 and §11), `domain/observation.py`'s
   docstring and a comment of `webui/composition/app.py`; `docs/legal.md` (what a node records, no
   peer address, notifications, a shared catalog); `docs/operate.md` (a "Historique des sources"
   section with the roles and both alerts, the three routes, `merge`'s range union);
-  `docs/settings.md` (`download.reappeared_after_hours`); `architecture.md` §8.3 (the three tables,
+  `docs/settings.md` (the reappeared threshold); `architecture.md` §8.3 (the three tables,
   the writer's rule, the trigger, the union); `AGENTS.md`'s WebUI and Persistence rows.
 
 ## Decisions taken during Act
@@ -92,8 +93,8 @@ source becomes useful for the first time or again.
   `poll_interval_seconds` moved to `DownloadDeps`; an unreachable daemon at `_start_unlisted` ends
   the round before the sources step.
 - **Block 35**: `earlier_ranges` is asked for every opened range with a user hash, the role check
-  stays in the pure decision; a `RepositoryError` from `has_ranges_before` skips the step, one from
-  `earlier_ranges` that download's remaining alerts.
+  stays in the pure decision; a `RepositoryError` from `has_ranges_before` skips the step (that
+  download's alerts since block 80), one from `earlier_ranges` that download's remaining alerts.
 - **Block 50**: times read `2026-10-13 20:00:30Z` (seconds kept), not "At a glance"'s
   `Tue 20:00:00`; "unknown" for a missing value; Received and Rate blank outside `sending`.
 - **Block 60**: "latest name" is the latest named range's; ties on last seen order by `source_id`.
@@ -104,39 +105,75 @@ source becomes useful for the first time or again.
   their own, "Historique des sources", and their titles joined the embed colours' paragraph. Class 1:
   `operate.md`'s merge example read `expected 9`, now `expected 10`. Beyond D15's list:
   `architecture.md` §7 points at the sources step and §12 names `ports/source_client.py`.
+- **Block 80**: beyond the brief, `test_merger.py` pins the accepted merge limit, so a fix that
+  lifts it is a visible change; the baseline's memo lives in a small `_AlertRound` (start, notified
+  sources, baseline) passed to `_alert_sources`.
 
 ## Spec corrections
 
-For the closing block to check against the spec and apply, each with a `(Corrected: ...)` marker:
-
-- "Transient states inside the stack", "Blocks 30 to 65: sources are recorded and readable only
-  through the SQL console": the webui reads them from block 50 on (block 67's report).
-- D8, "a `RepositoryError` skips this step": per download for a write (block 30).
-- D9, `download.reappeared_after_hours`: carried as a `timedelta`; every key now refuses `.inf` and
-  `.nan`, not only this one (block 35).
-- D12 against "At a glance": the time format (block 50).
-- Section 6, "The webui": the source page shows the full hash, not a shortened one (block 65).
-- D13: a name page's hash rows count only the ranges under that name (block 67); `/sources`' `q`
-  matches any name ever carried (block 60).
-- D15: `docs/operate.md`'s "community list" does not exist (block 70).
+Applied by block 80, each marked `(Corrected: ...)` in the spec: the seven the draft listed
+(the transient state of blocks 30 to 65, D8's per-download write failure, D9's `timedelta` and
+the `.inf`/`.nan` refusal of every key, D12's time format, section 6's full hash on the source page,
+D13's name-page counts and `q` over every name, D15's missing community list), the four the
+holistic review found missing (D7's one `identity` parameter; D3's table and D7, `directly_reachable`
+also `NULL` when `ed2k_user_id` is absent or `high_id` is not a boolean; D8, a refused read ends the
+round and an unreachable `_start_unlisted` ends it before the sources step; D13, one `page` moves
+both tables), and the holistic exits that change a decision: D6's reason and section 7 (the merge
+limit), D9's key renamed to `reappeared_after_seconds` and its baseline asked lazily, D12 and D13's
+Node column.
 
 ## Wrap counts
 
-Draft, to be re-counted by the closing block after its own runs; command, per stack branch:
-`gh run list --branch <b> --workflow pr.yml --json headSha,event,conclusion,createdAt`.
+Recounted by block 80 with `gh run list --branch <b> --workflow pr.yml --json
+headSha,event,conclusion,createdAt` on each stack branch, before its own push.
 
-- **Fix-backs during Act**: none forwarded by the lead as of block 70. Blocks 30 and 35 each pushed
-  a class 2 fix after their first push.
-- **Cascaded rebases**: none known to block 70; the lead counts them.
-- **Runs, for 12 pull requests (#177 to #189)**: 18. One per branch, plus `feat/record-sources` 2
+- **Fix-backs**: 3. Block 30's class 2 fix and block 35's class 2 fix, each pushed after the block's
+  first push, and block 65's test `d942c0d` (the short-hash fallback that lost its only test in the
+  split).
+- **Cascaded rebases**: 1, `gh stack rebase --upstack` from block 65 after `d942c0d`.
+- **Splits**: 3. Block 15 into 15 and 17, the 20/25 boundary moved along the call, block 65 into 65
+  and 67.
+- **Runs, for 13 pull requests (#177 to #190)**: 19. One per branch, plus `feat/record-sources` 2
   (`5675a67` cancelled, `421e893`), `feat/source-alerts` 2 (`c344b8f`, `0c0ddbd`),
-  `feat/webui-source-pages` 2 (`2da4f0a`, `d942c0d`), `feat/webui-name-page` 4 (`4ab1be5` and one
-  `c7c9094` cancelled, `c7c9094`, `cdbd356`). Re-triggered: 6. Block 70's and 80's runs not counted.
-- **Bodies the operator called unreadable**: to be filled after the operator's review.
+  `feat/webui-source-pages` 2 (`2da4f0a`, `d942c0d`), `feat/webui-name-page` 4 (`4ab1be5` cancelled,
+  `c7c9094` cancelled, `c7c9094`, `cdbd356`). Re-triggered: 6, fewer than the 14 blocks. Block 80's
+  own runs are in its report.
+- **Bodies the operator called unreadable**: none.
 
 ## Holistic review
 
-Pending: run at the head of Wrap over `git diff origin/main...origin/docs/stage4-docs`.
+Run at the head of Wrap over `git diff origin/main...origin/docs/stage4-docs`: CRITICAL 0, MAJOR 1,
+MINOR 11. Each finding's exit, all in block 80:
+
+1. **MAJOR, `merge` refuses for good a copy diverged from the destination's history** (a catalog
+   restored from a backup, or replaced by a merged one while the node ran, then fed a copy taken
+   before): **accepted limit**, operator, 2026-10-12: "On va noter que c'est une limite au backlog,
+   et garder le comportement actuel." Written where the decision lives: D6 `(Corrected: ...)` and
+   section 7, `docs/operate.md`'s merge paragraph, `docs/index.md`'s "La fusion est sûre". At the
+   operator's request it also has a `BACKLOG.md` entry, "Merge diverged copies of one node's
+   catalog". `test_merger.py` pins the refusal; the review's option (a), a `WHERE NOT EXISTS` on the
+   upsert, fails only that test.
+2. The draft's "Spec corrections" missed four departures: **fixed**, added and marked.
+3. `AGENTS.md`'s paging gotcha named `hash` only: **fixed**, the route's identity column (`hash`
+   for downloads and shared files, `ecid` for a download's clients).
+4. `run_download_cycle`'s docstring and step 0 comment ignored step 5 and the refused read:
+   **fixed**.
+5. `persistence_sqlite/__init__.py` called catalog.db append-only: **fixed**, `source_ranges`
+   excepted.
+6. `architecture.md`'s mermaid label in English: **fixed**, "append-only, sauf source_ranges".
+7. `_source_history_row`'s docstring named block 65: **fixed**.
+8. `download.reappeared_after_hours`, the one duration key not in seconds: **fixed**, renamed
+   `download.reappeared_after_seconds`, default 43200 (operator's choice): parser and tests,
+   `deploy/crawler.yml`, `docs/settings.md`, `docs/operate.md`, spec D9. No released config carries
+   the old key, so `_REMOVED_KEYS` does not name it.
+9. `docs/glossary.md` had no "user hash": **fixed**, an entry and its abbreviation.
+10. No node on the file, source and name pages: **fixed**, a last column "Node" on the three range
+    tables (operator's choice), `docs/operate.md` says a merged catalog shows several; D12 and D13
+    `(Corrected: ...)`.
+11. D6's unqualified "order-independent": covered by 1.
+12. `has_ranges_before` asked every round: **fixed**, asked when the round's first range with a
+    `source_id` opens, memoised for the round. A `RepositoryError` from it now skips that download's
+    alerts, as one from `earlier_ranges` does, instead of the whole step.
 
 ## Pitfalls
 
@@ -193,12 +230,14 @@ Pending: run at the head of Wrap over `git diff origin/main...origin/docs/stage4
 - **The webui pages in a browser, and their timing on the node's catalog**: `/sources` aggregates
   every range per request; the source page reads `best_name` per file, at most 50 per page.
 - **`has_ranges_before` after a `merge --into`** of other nodes' ranges: no index leads with
-  `node_id`, so a miss is a full scan, once per round.
+  `node_id`, so a miss is a full scan; since block 80 only in a round that opens a range with a
+  `source_id`, once.
 - **A `merge` of real node catalogs holding source ranges**: none exists yet.
 
 ## Next
 
 The operator reviews the stack, the lead rebases it onto `main`, and the operator merges. **No
 release is proposed** (stage 1's D16: none before the first new network). `BACKLOG.md`'s "Stage 4"
-entry is deleted by the closing block; stage 5 stays open, with D2's table of identities to verify
-per client. Once the node runs this stack, section 4's count above.
+entry is deleted; stage 5 stays open, with D2's table of identities to verify per client, beside the
+new "Merge diverged copies of one node's catalog". Once the node runs this stack, section 4's count
+above.
