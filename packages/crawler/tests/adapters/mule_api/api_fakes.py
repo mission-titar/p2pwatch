@@ -22,6 +22,7 @@ TOKEN = "eyJhbGciOi.fake.token"
 DEFAULT_LIMIT = 100
 
 _SEARCH_ROUTE = re.compile(r"^/api/v1/search/(\d+)/")
+_CLIENTS_ROUTE = re.compile(r"^/api/v1/downloads/([^/]+)/clients$")
 
 
 def error(status: int, code: str, message: str = "nope", **headers: str) -> httpx.Response:
@@ -41,6 +42,7 @@ class FakeAmuleApi:
         results: list[dict[str, Any]] | None = None,
         downloads: list[dict[str, Any]] | None = None,
         shared: list[dict[str, Any]] | None = None,
+        clients: dict[str, list[dict[str, Any]]] | None = None,
         status: dict[str, Any] | None = None,
         version: dict[str, Any] | None = None,
         progress: dict[str, Any] | None = None,
@@ -51,6 +53,8 @@ class FakeAmuleApi:
         self.results = results if results is not None else []
         self.downloads = downloads if downloads is not None else []
         self.shared = shared if shared is not None else []
+        # Download hash -> its client rows; a hash missing here is a download that left.
+        self.clients = clients if clients is not None else {}
         self.status = (
             status if status is not None else {"ec_connected": True, "ed2k": {}, "kad": {}}
         )
@@ -80,7 +84,10 @@ class FakeAmuleApi:
         override = self.overrides.get(route)
         if override is not None:
             return override(request)
-        handler = _ROUTES.get((request.method, _SEARCH_ROUTE.sub("/api/v1/search/{id}/", route[1])))
+        path = _SEARCH_ROUTE.sub("/api/v1/search/{id}/", route[1])
+        handler = _ROUTES.get(
+            (request.method, _CLIENTS_ROUTE.sub("/api/v1/downloads/{hash}/clients", path))
+        )
         if handler is None:
             return error(404, "not_found", f"no route {route}")
         unauthenticated = route[1] in ("/api/v1/auth/login", "/api/v1/health")
@@ -149,6 +156,15 @@ class FakeAmuleApi:
         window = _page(request, self.shared)
         return httpx.Response(200, json={"shared": window, "total": len(self.shared)})
 
+    def _get_clients(self, request: httpx.Request) -> httpx.Response:
+        match = _CLIENTS_ROUTE.match(request.url.path)
+        assert match is not None
+        rows = self.clients.get(match.group(1))
+        if rows is None:
+            return error(404, "not_found", "no download with that hash")
+        window = _page(request, rows, identity="ecid")
+        return httpx.Response(200, json={"clients": window, "total": len(rows)})
+
 
 def _search_id(request: httpx.Request) -> int:
     match = _SEARCH_ROUTE.match(request.url.path)
@@ -156,13 +172,18 @@ def _search_id(request: httpx.Request) -> int:
     return int(match.group(1))
 
 
-def _page(request: httpx.Request, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Keyset paging on ``hash``, with the surface's own 100-row default for ``limit``."""
+def _page(
+    request: httpx.Request, rows: list[dict[str, Any]], *, identity: str = "hash"
+) -> list[dict[str, Any]]:
+    """Keyset paging on the route's identity column, with the surface's own 100-row default for
+    ``limit``. The rows are given in that column's order; ``ecid`` compares as a number."""
     params = request.url.params
     after = params.get("after")
     window = rows
-    if after is not None:
-        window = [row for row in rows if str(row.get("hash", "")) > after]
+    if after is not None and identity == "ecid":
+        window = [row for row in rows if int(row["ecid"]) > int(after)]
+    elif after is not None:
+        window = [row for row in rows if str(row.get(identity, "")) > after]
     limit = int(params.get("limit", DEFAULT_LIMIT))
     return window[:limit]
 
@@ -178,4 +199,5 @@ _ROUTES: dict[tuple[str, str], Callable[[FakeAmuleApi, httpx.Request], httpx.Res
     ("POST", "/api/v1/downloads"): FakeAmuleApi._add_links,
     ("GET", "/api/v1/downloads"): FakeAmuleApi._get_downloads,
     ("GET", "/api/v1/shared"): FakeAmuleApi._get_shared,
+    ("GET", "/api/v1/downloads/{hash}/clients"): FakeAmuleApi._get_clients,
 }

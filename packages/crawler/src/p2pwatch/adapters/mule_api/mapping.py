@@ -1,7 +1,8 @@
 """Maps the amuleapi payloads onto the ports' DTOs. An unknown key is never an error.
 
-Typed JSON does not preserve the capture-all invariant on its own, so every key no structured
-field consumes lands in ``raw_meta`` - except ``ecid``, a session-local id we never persist.
+Typed JSON does not preserve the capture-all invariant on its own, so every key of a search
+result no structured field consumes lands in ``raw_meta`` - except ``ecid``, a session-local id
+we never persist. A source keeps only D7's keys (stage 4 spec).
 """
 
 import json
@@ -9,10 +10,49 @@ from typing import Any
 
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation, fold_raw_meta
+from p2pwatch.domain.source import SourceKey, SourceReading, SourceRole
 from p2pwatch.ports.client_status import ChannelStatus, ClientStatus
 from p2pwatch.ports.download_client import DownloadStatus, FailureReason, WaitingReason
 
 _HASH_LENGTH = 32
+
+# What amuleapi reports for a peer that has not sent its hash yet (stage 4 spec, D7).
+_NO_USER_HASH = "0" * _HASH_LENGTH
+
+# The relations of a row we ask the file of; any other row is a source only when parked (D1).
+_ASKED = ("downloading_from", "both")
+
+# The download states that say what a source holds of what we lack (D3).
+_SOURCE_ROLES = {
+    "downloading": SourceRole.SENDING,
+    "queued": SourceRole.QUEUED,
+    "no_needed_parts": SourceRole.NOTHING_NEW,
+}
+
+# States aMule leaves on its own: no role, the writer carries the latest range's group (D3).
+_PASSING_STATES = frozenset(
+    {
+        "idle",
+        "connecting",
+        "connected",
+        "waiting_callback",
+        "waiting_callback_kad",
+        "requesting_hashset",
+        "too_many_connections",
+        "too_many_connections_kad",
+        "remote_queue_full",
+    }
+)
+
+# A source row's stable keys, never an address nor a value that moves between reads (D3, D7).
+_SOURCE_META_KEYS = (
+    "ident_state",
+    "source_origin",
+    "client_mod_name",
+    "reported_os",
+    "shared_files_browsable",
+    "protocol_extensions",
+)
 
 # Result keys consumed by a structured field, hence EXCLUDED from raw_meta.
 _MAPPED_KEYS = frozenset(
@@ -90,6 +130,53 @@ def map_client_status(status: object, version: object) -> ClientStatus:
         _channel("kad", kad, not firewalled if isinstance(firewalled, bool) else None),
     )
     return ClientStatus(version=_string(_object(version).get("daemon_version")), channels=channels)
+
+
+def map_source(row: object) -> SourceReading | None:
+    """A row of ``GET /downloads/{hash}/clients``, or ``None`` when it offers us nothing (D1)."""
+    if not isinstance(row, dict):
+        return None
+    asked = row.get("role") in _ASKED
+    if not asked and row.get("a4af") is not True:
+        return None
+    software = (_string(row.get("software")), _string(row.get("software_version")))
+    return SourceReading(
+        key=_source_key(row.get("user_hash")),
+        name=_string(row.get("name")),
+        software=" ".join(part for part in software if part) or None,
+        role=_source_role(row.get("download_state")) if asked else SourceRole.STANDBY,
+        contact_point=None,
+        directly_reachable=None,
+        raw_meta=tuple((key, _meta_value(row[key])) for key in _SOURCE_META_KEYS if key in row),
+        transfer_counter=_int(row.get("downloaded_bytes_session")),
+    )
+
+
+def _source_key(user_hash: object) -> SourceKey | None:
+    """No identity for a hash amuleapi does not have yet, rather than one shared by all (D7)."""
+    native_id = _hash_hex(user_hash)
+    if native_id is None or native_id == _NO_USER_HASH:
+        return None
+    return SourceKey(Network.ED2K, native_id)
+
+
+def _source_role(state: object) -> SourceRole | None:
+    """Any state that is neither says nothing of the parts we lack: ``undetermined`` (D3)."""
+    if not isinstance(state, str):
+        return SourceRole.UNDETERMINED
+    if state in _PASSING_STATES:
+        return None
+    return _SOURCE_ROLES.get(state, SourceRole.UNDETERMINED)
+
+
+def _meta_value(value: object) -> str | int | bool | tuple[str, ...] | None:
+    """A JSON value in a shape ``SourceMeta`` holds: a list as a tuple of text, anything else
+    unforeseen as its JSON text."""
+    if value is None or isinstance(value, str | int | bool):
+        return value
+    if isinstance(value, list):
+        return tuple(_render(item) for item in value)
+    return _render(value)
 
 
 def _channel(name: str, network: dict[str, Any], connectable: bool | None) -> ChannelStatus:

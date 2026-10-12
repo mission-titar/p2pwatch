@@ -15,6 +15,7 @@ from p2pwatch.adapters.mule_api.errors import (
     ApiUnreachableError,
 )
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.source import SourceRole
 from p2pwatch.ports.client_errors import (
     ClientUnreachableError,
     DownloadRejectedError,
@@ -22,6 +23,7 @@ from p2pwatch.ports.client_errors import (
 )
 from p2pwatch.ports.client_status import ChannelStatus
 from p2pwatch.ports.download_client import DownloadClient, DownloadRequest, DownloadStatus
+from p2pwatch.ports.source_client import SourceClient
 from tests.adapters.mule_api.api_fakes import PASSWORD, TOKEN, FakeAmuleApi, error
 
 _HASH = "8b54a3c20fae9e4b9f7e0c2c8c01b6b1"
@@ -667,3 +669,91 @@ async def test_downloads_drops_the_rows_without_a_usable_hash() -> None:
 
     assert await client.downloads() == ()
     await client.close()
+
+
+def _source(ecid: int, **overrides: object) -> dict[str, object]:
+    row: dict[str, object] = {
+        "ecid": ecid,
+        "name": f"peer {ecid}",
+        "user_hash": f"{ecid:032x}",
+        "role": "downloading_from",
+        "a4af": False,
+        "download_state": "queued",
+        "downloaded_bytes_session": 0,
+    }
+    row.update(overrides)
+    return row
+
+
+@pytest.mark.asyncio
+async def test_sources_pages_every_client_of_the_download_past_the_first_hundred() -> None:
+    """Every list route returns 100 rows when `limit` is omitted (stage 4 spec, D7)."""
+    api = FakeAmuleApi(clients={_HASH: [_source(ecid) for ecid in range(1, 601)]})
+    client = await _connected(api)
+    port: SourceClient = client
+
+    readings = await port.sources(_KEY)
+    await client.close()
+
+    assert len(readings) == 600
+    assert readings[-1].name == "peer 600"
+    # Keyset paging on the route's identity column, which is an integer here.
+    sweep = _paths(api, f"/api/v1/downloads/{_HASH}/clients")
+    assert [url.params.get("sort") for url in sweep] == ["ecid", "ecid"]
+    assert all(url.params.get("offset") is None for url in sweep)
+    assert sweep[-1].params.get("after") == "500"
+
+
+@pytest.mark.asyncio
+async def test_sources_keep_only_the_rows_that_offer_us_the_file() -> None:
+    rows = [
+        _source(1),
+        _source(2, role="uploading_to"),
+        _source(3, role="none", a4af=True),
+    ]
+    api = FakeAmuleApi(clients={_HASH: rows})
+    client = await _connected(api)
+
+    readings = await client.sources(_KEY)
+    await client.close()
+
+    assert [(reading.name, reading.role) for reading in readings] == [
+        ("peer 1", SourceRole.QUEUED),
+        ("peer 3", SourceRole.STANDBY),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_download_that_left_has_no_source() -> None:
+    api = FakeAmuleApi()
+    client = await _connected(api)
+
+    assert await client.sources(_KEY) == ()
+    await client.close()
+
+    assert len(_paths(api, f"/api/v1/downloads/{_HASH}/clients")) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_refusal_other_than_a_missing_download_still_fails_the_read() -> None:
+    """`not_found` and `amuled_rejected` map to one class: the read tells them apart."""
+    api = FakeAmuleApi(clients={_HASH: []})
+    api.overrides[("GET", f"/api/v1/downloads/{_HASH}/clients")] = lambda _: error(
+        500, "amuled_rejected"
+    )
+    client = await _connected(api)
+
+    with pytest.raises(ApiRejectedError):
+        await client.sources(_KEY)
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_sources_of_a_file_of_another_network_are_none_without_asking() -> None:
+    api = FakeAmuleApi()
+    client = await _connected(api)
+
+    assert await client.sources(FileKey(cast(Network, "soulseek"), "Keroro/095.avi")) == ()
+    await client.close()
+
+    assert [request.url.path for request in api.requests if "clients" in request.url.path] == []
