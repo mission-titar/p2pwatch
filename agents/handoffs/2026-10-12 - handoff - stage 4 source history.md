@@ -5,10 +5,12 @@ Drafted by block 70, corrected by the closing block 80.
 ## State
 
 Tier Spec lot, spec `agents/specs/2026-10-11-stage4-source-history.md` (approved 2026-10-12).
-Fourteen blocks, one stack cut from `main` at `c7cd2c6`: #177 (10), #178 (15), #180 (17), #181
+Fifteen blocks, one stack cut from `main` at `c7cd2c6`: #177 (10), #178 (15), #180 (17), #181
 (20), #182 (25), #183 (30), #184 (35), #185 (40), #186 (50), #187 (60), #188 (65), #189 (67),
-#190 (70), then the closing block 80 (`docs/stage4-closing`). Two blocks split over the 500-line
-bound during Act: 15 into 15 and 17, 65 into 65 and 67.
+#190 (70), block 75 (`fix/stage4-review`), then the closing block 80 (`docs/stage4-closing`).
+Two blocks split over the 500-line bound during Act, 15 into 15 and 17 and 65 into 65 and 67, and
+the closing block over the 20-file bound during Wrap: block 75 took the holistic review's code
+fixes.
 
 Nothing of the stack is merged and no release follows (spec section 2; stage 1's D16): the node
 pulls `latest`, which stays on `mulewatch` 4.1.0. `git tag -l 'v*'` still ends at `v4.1.0`.
@@ -45,8 +47,9 @@ source becomes useful for the first time or again.
 - **The notifications** (block 35): `application/source_alerts.py` (a pure decision), `SourceNew`
   and `SourceReappeared`, titles `🆕 New source` and `🔁 Source useful again`, audience community,
   counter `p2pwatch_source_alerts{network, kind}`; `download.reappeared_after_seconds` (default
-  43200, named `reappeared_after_hours` until block 80) parsed into `reappeared_after: timedelta`. Every number of `crawler.yml` now refuses `.inf` and
-  `.nan` at boot (class 2, below).
+  43200, named `reappeared_after_hours` until block 75) parsed into
+  `reappeared_after: timedelta`. Every number of `crawler.yml` now refuses `.inf` and `.nan` at
+  boot (class 2, below).
 - **`merge`** (block 40): `sources` and `source_variants` copied with `INSERT OR IGNORE`, the
   variant remapped through `content_hash`; `source_ranges` upserted with `MAX` of each growing
   value, `ORDER BY first_seen_at`. `--help` reads "rows appended, source ranges united".
@@ -54,7 +57,7 @@ source becomes useful for the first time or again.
   search (`q`: a hash prefix, or a substring of any name the source carried) and a nav entry after
   "Files"; `/sources/{source_id}` (the full hash, its names, its ranges over every file);
   `/sources/name?name=` (the hashes that carried the name and the hash-less ranges under it, direct
-  links only). `_FILE_ID` became `_HEX_ID`, shared by both detail routes. Since block 80, every
+  links only). `_FILE_ID` became `_HEX_ID`, shared by both detail routes. Since block 75, every
   range table (file, source and name pages) ends with a Node column.
 - **Docs** (block 70): the invariant rewritten to umbrella D10's text in `AGENTS.md`, `README.md`,
   `docs/index.md`, `docs/contributing/architecture.md` (§1 and §11), `domain/observation.py`'s
@@ -94,7 +97,7 @@ source becomes useful for the first time or again.
   the round before the sources step.
 - **Block 35**: `earlier_ranges` is asked for every opened range with a user hash, the role check
   stays in the pure decision; a `RepositoryError` from `has_ranges_before` skips the step (that
-  download's alerts since block 80), one from `earlier_ranges` that download's remaining alerts.
+  download's alerts since block 75), one from `earlier_ranges` that download's remaining alerts.
 - **Block 50**: times read `2026-10-13 20:00:30Z` (seconds kept), not "At a glance"'s
   `Tue 20:00:00`; "unknown" for a missing value; Received and Rate blank outside `sending`.
 - **Block 60**: "latest name" is the latest named range's; ties on last seen order by `source_id`.
@@ -105,9 +108,14 @@ source becomes useful for the first time or again.
   their own, "Historique des sources", and their titles joined the embed colours' paragraph. Class 1:
   `operate.md`'s merge example read `expected 9`, now `expected 10`. Beyond D15's list:
   `architecture.md` §7 points at the sources step and §12 names `ports/source_client.py`.
+- **Block 80 split**, over the 20-file bound (22 files, 181 lines against `docs/stage4-docs`), lead's
+  decision: its first three commits, the holistic review's code fixes, became block 75
+  (`fix/stage4-review`, 15 files, 143 lines); block 80 kept the docs, the merge test, the spec and
+  this handoff.
+- **Block 75**: the baseline's memo lives in a small `_AlertRound` (start, notified sources,
+  baseline) passed to `_alert_sources`.
 - **Block 80**: beyond the brief, `test_merger.py` pins the accepted merge limit, so a fix that
-  lifts it is a visible change; the baseline's memo lives in a small `_AlertRound` (start, notified
-  sources, baseline) passed to `_alert_sources`.
+  lifts it is a visible change.
 
 ## Spec corrections
 
@@ -131,19 +139,19 @@ headSha,event,conclusion,createdAt` on each stack branch, before its own push.
   first push, and block 65's test `d942c0d` (the short-hash fallback that lost its only test in the
   split).
 - **Cascaded rebases**: 1, `gh stack rebase --upstack` from block 65 after `d942c0d`.
-- **Splits**: 3. Block 15 into 15 and 17, the 20/25 boundary moved along the call, block 65 into 65
-  and 67.
+- **Splits**: 4. Block 15 into 15 and 17, the 20/25 boundary moved along the call, block 65 into 65
+  and 67, block 80 into 75 and 80.
 - **Runs, for 13 pull requests (#177 to #190)**: 19. One per branch, plus `feat/record-sources` 2
   (`5675a67` cancelled, `421e893`), `feat/source-alerts` 2 (`c344b8f`, `0c0ddbd`),
   `feat/webui-source-pages` 2 (`2da4f0a`, `d942c0d`), `feat/webui-name-page` 4 (`4ab1be5` cancelled,
-  `c7c9094` cancelled, `c7c9094`, `cdbd356`). Re-triggered: 6, fewer than the 14 blocks. Block 80's
-  own runs are in its report.
+  `c7c9094` cancelled, `c7c9094`, `cdbd356`). Re-triggered: 6, fewer than the 15 blocks. Blocks 75
+  and 80's own runs are in their reports.
 - **Bodies the operator called unreadable**: none.
 
 ## Holistic review
 
 Run at the head of Wrap over `git diff origin/main...origin/docs/stage4-docs`: CRITICAL 0, MAJOR 1,
-MINOR 11. Each finding's exit, all in block 80:
+MINOR 11. Each finding's exit, in block 75 for 4, 7, 8, 10 and 12, in block 80 for the others:
 
 1. **MAJOR, `merge` refuses for good a copy diverged from the destination's history** (a catalog
    restored from a backup, or replaced by a merged one while the node ran, then fed a copy taken
@@ -230,7 +238,7 @@ MINOR 11. Each finding's exit, all in block 80:
 - **The webui pages in a browser, and their timing on the node's catalog**: `/sources` aggregates
   every range per request; the source page reads `best_name` per file, at most 50 per page.
 - **`has_ranges_before` after a `merge --into`** of other nodes' ranges: no index leads with
-  `node_id`, so a miss is a full scan; since block 80 only in a round that opens a range with a
+  `node_id`, so a miss is a full scan; since block 75 only in a round that opens a range with a
   `source_id`, once.
 - **A `merge` of real node catalogs holding source ranges**: none exists yet.
 
