@@ -12,6 +12,7 @@ Deployment-sensitive values (secrets, URLs) are interpolated from the environmen
 true`` ⇒ all wiring fields required.
 """
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import timedelta
@@ -181,6 +182,8 @@ def _number(mapping: dict[str, Any], key: str, what: str) -> float:
     value = mapping[key]
     if not isinstance(value, int | float) or isinstance(value, bool):
         raise ConfigError(f"{what}.{key}: number expected, got {value!r}")
+    if not math.isfinite(value):  # .inf makes a sleep endless, .nan passes every comparison
+        raise ConfigError(f"{what}.{key}: finite number expected, got {value!r}")
     return float(value)
 
 
@@ -309,13 +312,13 @@ _DEFAULT_REAPPEARED_AFTER_HOURS = 12.0  # a night off does not notify (stage 4 s
 
 
 def _hours_default(mapping: dict[str, Any], key: str, default: float, what: str) -> timedelta:
-    """OPTIONAL strictly positive number of hours, refusing what no duration holds (``.inf``)."""
+    """OPTIONAL strictly positive number of hours, refusing what no duration holds."""
     hours = _positive_default(mapping, key, default, what)
     try:
         return timedelta(hours=hours)
-    except (OverflowError, ValueError) as error:  # .nan passes ``> 0`` and fails here
+    except OverflowError as error:
         raise ConfigError(
-            f"{what}.{key}: finite number of hours within a duration's range expected, got {hours}"
+            f"{what}.{key}: number of hours within a duration's range expected, got {hours}"
         ) from error
 
 
