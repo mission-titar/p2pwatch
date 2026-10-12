@@ -17,6 +17,8 @@ Idempotence (spec §4):
   comparisons with the ``IS`` operator (not ``=``) because some columns are nullable
   (``NULL = NULL`` is false in SQL → re-insertion → not idempotent; ``NULL IS NULL`` is
   true). Re-merging = no-op (each source row already has its exact twin).
+- ``sources`` and ``source_variants`` as ``files`` and ``observation_variants``; ``source_ranges``
+  mapped the same way, then united on their key: the larger end wins (stage 4, D6).
 
 The SQL lives in **Python constants** (consistent with ``catalog_repository.py``; no
 new ``.sql`` for sqlfluff to lint). We NEVER write to the source (only SELECTs).
@@ -94,8 +96,47 @@ _COPY_MATCH_DECISIONS = _copy_journal(
     ("file_id", "target_id", "rule_name", "tier", "decided_at", "node_id"),
 )
 
+_COPY_SOURCES = (
+    f"INSERT OR IGNORE INTO main.sources (source_id, network, native_id) "
+    f"SELECT source_id, network, native_id FROM {_SRC}.sources"
+)
+
+_SOURCE_VARIANT_COLUMNS = (
+    "file_id, source_id, name, software, role, contact_point, directly_reachable, raw_meta,"
+    " content_hash"
+)
+
+_COPY_SOURCE_VARIANTS = (
+    f"INSERT OR IGNORE INTO main.source_variants ({_SOURCE_VARIANT_COLUMNS}) "
+    f"SELECT {_SOURCE_VARIANT_COLUMNS} FROM {_SRC}.source_variants ORDER BY variant_id"
+)
+
+# Start order grows a range before its successor lands, which the only-grow trigger requires.
+_COPY_SOURCE_RANGES = f"""
+INSERT INTO main.source_ranges
+    (variant_id, node_id, first_seen_at, last_seen_at, received_bytes, transfer_counter)
+SELECT d.variant_id, r.node_id, r.first_seen_at, r.last_seen_at, r.received_bytes,
+    r.transfer_counter
+FROM {_SRC}.source_ranges AS r
+JOIN {_SRC}.source_variants AS s ON s.variant_id = r.variant_id
+JOIN main.source_variants AS d ON d.content_hash = s.content_hash
+ORDER BY r.first_seen_at
+ON CONFLICT (variant_id, node_id, first_seen_at) DO UPDATE SET
+    last_seen_at = MAX(last_seen_at, excluded.last_seen_at),
+    received_bytes = MAX(received_bytes, excluded.received_bytes),
+    transfer_counter = MAX(transfer_counter, excluded.transfer_counter)
+"""
+
 # MANDATORY FK order (spec §4.3): the identities (files) BEFORE the journals that reference them.
-_STATEMENTS = (_COPY_FILES, _COPY_VARIANTS, _COPY_OBSERVATIONS, _COPY_MATCH_DECISIONS)
+_STATEMENTS = (
+    _COPY_FILES,
+    _COPY_VARIANTS,
+    _COPY_OBSERVATIONS,
+    _COPY_MATCH_DECISIONS,
+    _COPY_SOURCES,
+    _COPY_SOURCE_VARIANTS,
+    _COPY_SOURCE_RANGES,
+)
 
 
 def merge_catalogs(output: Path, sources: Sequence[Path], *, dest_is_source: bool = False) -> None:
