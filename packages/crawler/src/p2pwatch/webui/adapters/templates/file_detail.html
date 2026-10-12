@@ -90,4 +90,40 @@
     </tbody>
   </table>
 </section>
+
+<section>
+  <h2>Source history</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>User hash</th>
+        <th>Role</th>
+        <th>Contact point</th>
+        <th>High-ID</th>
+        <th>First seen</th>
+        <th>Last seen</th>
+        <th>Received</th>
+        <th>Rate</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in file.source_history %}
+      <tr>
+        <td>{% for href in row.name_link %}<a href="{{ href }}">{{ row.name }}</a>{% else %}{{ row.name }}{% endfor %}</td>
+        <td>{% for href in row.source_link %}<a href="{{ href }}">{{ row.short_hash }}</a>{% else %}{{ row.short_hash }}{% endfor %}</td>
+        <td>{{ row.role }}</td>
+        <td>{{ row.contact_point }}</td>
+        <td>{{ row.high_id }}</td>
+        <td>{{ row.first_seen }}</td>
+        <td>{{ row.last_seen }}</td>
+        <td>{{ row.received }}</td>
+        <td>{{ row.rate }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9">No source recorded.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
 {% endblock %}

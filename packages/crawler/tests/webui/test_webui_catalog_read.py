@@ -10,6 +10,7 @@ import pytest
 from catalog_matching.config import TIER_RANK
 from p2pwatch.adapters.persistence_sqlite.reader import open_reader
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch.webui.adapters.catalog_read import (
     _JOIN_DECISIONS,
     _JOIN_LATEST_SIGHTING,
@@ -23,8 +24,16 @@ from p2pwatch.webui.adapters.catalog_read import (
     CatalogReader,
     _tier_rank_case,
 )
-from p2pwatch.webui.domain.views import FileRow
-from tests.catalog_rows import file_id, insert_decision, insert_file, insert_observation
+from p2pwatch.webui.domain.views import FileRow, SourceRangeView
+from tests.catalog_rows import (
+    file_id,
+    insert_decision,
+    insert_file,
+    insert_observation,
+    insert_source,
+    insert_source_range,
+    insert_source_variant,
+)
 
 # Selects the CTE under test on its own: SQLite drops the CTEs a query does not reference, so
 # the resulting plan is exactly how ``latest_sighting`` is resolved.
@@ -279,6 +288,43 @@ def test_file_detail_whole_episode_lists_both_decisions(catalog_db: Path) -> Non
     detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("a" * 32))
     assert detail is not None
     assert [d.target_id for d in detail.decisions] == ["072A", "072B"]
+
+
+# ---------------------------------------------------------------------------
+# Tests: a file's source history (stage 4 spec, D12)
+# ---------------------------------------------------------------------------
+
+_USER = "1f2e" * 8
+
+
+def test_source_ranges_lists_a_files_ranges_newest_first(catalog_db: Path) -> None:
+    with sqlite3.connect(catalog_db) as conn:
+        insert_file(conn, "a" * 32)
+        insert_file(conn, "b" * 32)
+        insert_source(conn, _USER)
+        queued = insert_source_variant(
+            conn, "a" * 32, _USER, contact_point="198.51.100.7:4661", directly_reachable=False
+        )
+        sending = insert_source_variant(conn, "a" * 32, _USER, role="sending")
+        unnamed = insert_source_variant(conn, "a" * 32, None, name=None, directly_reachable=True)
+        insert_source_range(conn, queued, 30, 60)
+        insert_source_range(conn, sending, 90, 150, received_bytes=2048)
+        insert_source_range(conn, unnamed, 0, 0, node_id="n2")
+        insert_source_range(conn, insert_source_variant(conn, "b" * 32, _USER), 200, 200)
+    ranges = CatalogReader(open_reader(catalog_db)).source_ranges(file_id("a" * 32))
+    key = SourceKey(Network.ED2K, _USER)
+    assert ranges == (
+        SourceRangeView(key, "AnimuseeFMR", SourceRole.SENDING, None, None, 90, 150, 2048),
+        SourceRangeView(
+            key, "AnimuseeFMR", SourceRole.QUEUED, "198.51.100.7:4661", False, 30, 60, 0
+        ),
+        SourceRangeView(None, None, SourceRole.QUEUED, None, True, 0, 0, 0),
+    )
+
+
+def test_source_ranges_of_a_file_never_read_is_empty(catalog_db: Path) -> None:
+    _seed(catalog_db)
+    assert CatalogReader(open_reader(catalog_db)).source_ranges(file_id("a" * 32)) == ()
 
 
 # ---------------------------------------------------------------------------

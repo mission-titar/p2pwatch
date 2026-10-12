@@ -48,7 +48,14 @@ from p2pwatch.webui.adapters.sql_console import (
     run_query,
 )
 from p2pwatch.webui.domain.coverage import coverage_for
-from p2pwatch.webui.domain.format import human_size, seasonal_id, short_hash, short_timestamp
+from p2pwatch.webui.domain.format import (
+    average_rate,
+    human_size,
+    micros_timestamp,
+    seasonal_id,
+    short_hash,
+    short_timestamp,
+)
 from p2pwatch.webui.domain.views import (
     ChannelLine,
     ClientLine,
@@ -68,6 +75,8 @@ from p2pwatch.webui.domain.views import (
     SearchBar,
     SortHeader,
     SortHeaders,
+    SourceHistoryRow,
+    SourceRangeView,
     TargetCoverageRow,
     TierFacet,
     TimelineRow,
@@ -180,6 +189,26 @@ def _timeline_row(sighting: Sighting) -> TimelineRow:
         sources=str(sighting.source_count),
         keyword=sighting.keyword,
         observed_at=sighting.observed_at,
+    )
+
+
+def _source_history_row(source_range: SourceRangeView) -> SourceHistoryRow:
+    """A source range as one line; its name and hash link to the pages of blocks 60 and 65 (D13)."""
+    name, source = source_range.name, source_range.source
+    return SourceHistoryRow(
+        name="unknown" if name is None else name,
+        name_link=() if name is None else (f"/sources/name?{urlencode({'name': name})}",),
+        short_hash="unknown" if source is None else short_hash(source.native_id),
+        source_link=() if source is None else (f"/sources/{source.source_id.hex()}",),
+        role=source_range.role,
+        contact_point=source_range.contact_point or "unknown",
+        high_id=_YES_NO[source_range.directly_reachable],
+        first_seen=micros_timestamp(source_range.first_seen_at),
+        last_seen=micros_timestamp(source_range.last_seen_at),
+        received=human_size(source_range.received_bytes) if source_range.received_bytes else "",
+        rate=average_rate(
+            source_range.received_bytes, source_range.first_seen_at, source_range.last_seen_at
+        ),
     )
 
 
@@ -672,6 +701,10 @@ def build_app(
             native_id=detail.file.native_id,
             size_bytes=detail.size_bytes,
             timeline=tuple(_timeline_row(sighting) for sighting in detail.sightings),
+            source_history=tuple(
+                _source_history_row(source_range)
+                for source_range in catalog.source_ranges(detail.file.file_id)
+            ),
             decisions=detail.decisions,
             ed2k_link=link,
             explanation_target_id=explanation_target_id,

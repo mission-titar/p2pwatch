@@ -1,4 +1,14 @@
-from p2pwatch.webui.domain.format import human_size, seasonal_id, short_hash, short_timestamp
+from p2pwatch.webui.domain.format import (
+    average_rate,
+    human_size,
+    micros_timestamp,
+    seasonal_id,
+    short_hash,
+    short_timestamp,
+)
+
+# Tuesday 2026-10-13 20:00:00 UTC, in microseconds since the Unix epoch.
+TUESDAY_8PM = 1_791_921_600_000_000
 
 
 def test_short_hash_truncates_with_ellipsis() -> None:
@@ -107,3 +117,24 @@ def test_seasonal_id_zero_pads_season_and_number() -> None:
 
 def test_seasonal_id_uppercases_letter() -> None:
     assert seasonal_id(season=1, seasonal_number=5, letter="b") == "S01E05B"
+
+
+# ---------------------------------------------------------------------------
+# micros_timestamp and average_rate: a source range's ends and rate (stage 4 spec, D12)
+# ---------------------------------------------------------------------------
+
+
+def test_micros_timestamp_keeps_the_seconds_of_a_range_end() -> None:
+    assert micros_timestamp(TUESDAY_8PM + 30_999_999) == "2026-10-13 20:00:30Z"
+
+
+def test_average_rate_is_the_bytes_over_the_range_length() -> None:
+    assert average_rate(10 * 1024 * 1024, TUESDAY_8PM, TUESDAY_8PM + 10_240_000_000) == "1 KB/s"
+
+
+def test_average_rate_of_a_range_without_bytes_is_empty() -> None:
+    assert average_rate(0, TUESDAY_8PM, TUESDAY_8PM + 30_000_000) == ""
+
+
+def test_average_rate_of_a_single_read_is_empty() -> None:
+    assert average_rate(1024, TUESDAY_8PM, TUESDAY_8PM) == ""

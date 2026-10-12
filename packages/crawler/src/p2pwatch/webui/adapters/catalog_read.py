@@ -1,6 +1,6 @@
 """Read-only reads of the catalog (webui spec W-D6 / §6).
 
-``CatalogReader`` exposes four reads:
+``CatalogReader`` exposes these reads:
 
 - ``target_coverage()``: per ``target_id``, the list of ``(file_id, tier)`` from each
   file's LATEST match decision **per target** (ROW_NUMBER window PARTITION BY
@@ -13,6 +13,7 @@
   /files summary line.
 - ``file_detail()``: the timeline of sightings, the latest one, known names + current
   decisions for a given ``file_id``; ``None`` if the file is unknown.
+- ``source_ranges()``: a file's source history, one range per row, newest first.
 
 All SQL lives in module constants, parameterized (no value interpolation).
 """
@@ -27,11 +28,13 @@ from p2pwatch.adapters.persistence_sqlite.sightings import (
     sightings,
 )
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch.webui.domain.views import (
     DecisionView,
     FileDecision,
     FileDetail,
     FileRow,
+    SourceRangeView,
 )
 
 # ---------------------------------------------------------------------------
@@ -216,6 +219,26 @@ _SQL_FILE = """\
 SELECT network, native_id, size_bytes
 FROM files
 WHERE file_id = ?
+"""
+
+# A file's source ranges, newest first (stage 4 spec, D12): a source without a user hash has no
+# ``sources`` row, hence the LEFT JOIN.
+_SQL_SOURCE_RANGES = """\
+SELECT
+    s.network,
+    s.native_id,
+    v.name,
+    v.role,
+    v.contact_point,
+    v.directly_reachable,
+    r.first_seen_at,
+    r.last_seen_at,
+    r.received_bytes
+FROM source_variants AS v
+JOIN source_ranges AS r ON r.variant_id = v.variant_id
+LEFT JOIN sources AS s ON s.source_id = v.source_id
+WHERE v.file_id = ?
+ORDER BY r.first_seen_at DESC, r.variant_id DESC, r.node_id
 """
 
 
@@ -441,4 +464,27 @@ class CatalogReader:
             latest=latest_sighting(self._conn, file),
             decisions=decisions,
             known_filenames=known_names(self._conn, file),
+        )
+
+    def source_ranges(self, file_id: bytes) -> tuple[SourceRangeView, ...]:
+        """Every source range on the file, newest first; empty for a file never read."""
+        rows = self._conn.execute(_SQL_SOURCE_RANGES, (file_id,)).fetchall()
+        return tuple(
+            SourceRangeView(
+                source=(
+                    None
+                    if row["network"] is None
+                    else SourceKey(Network(row["network"]), row["native_id"])
+                ),
+                name=row["name"],
+                role=SourceRole(row["role"]),
+                contact_point=row["contact_point"],
+                directly_reachable=(
+                    None if row["directly_reachable"] is None else bool(row["directly_reachable"])
+                ),
+                first_seen_at=row["first_seen_at"],
+                last_seen_at=row["last_seen_at"],
+                received_bytes=row["received_bytes"],
+            )
+            for row in rows
         )
