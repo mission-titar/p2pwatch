@@ -308,17 +308,17 @@ def _parse_observability(raw: dict[str, Any], env: Mapping[str, str]) -> Observa
 _DEFAULT_MIN_FREE_BYTES = 10_737_418_240  # 10 GiB
 _DEFAULT_LOST_AFTER_SECONDS = 86_400.0
 _DEFAULT_OUTPUT_DIR = "/downloads"  # the bind mount in deploy/compose.yml
-_DEFAULT_REAPPEARED_AFTER_HOURS = 12.0  # a night off does not notify (stage 4 spec, D9)
+_DEFAULT_REAPPEARED_AFTER_SECONDS = 43_200.0  # 12 h: a night off does not notify (stage 4 spec, D9)
 
 
-def _hours_default(mapping: dict[str, Any], key: str, default: float, what: str) -> timedelta:
-    """OPTIONAL strictly positive number of hours, refusing what no duration holds."""
-    hours = _positive_default(mapping, key, default, what)
+def _duration_default(mapping: dict[str, Any], key: str, default: float, what: str) -> timedelta:
+    """OPTIONAL strictly positive number of seconds, refusing what no duration holds."""
+    seconds = _positive_default(mapping, key, default, what)
     try:
-        return timedelta(hours=hours)
+        return timedelta(seconds=seconds)
     except OverflowError as error:
         raise ConfigError(
-            f"{what}.{key}: number of hours within a duration's range expected, got {hours}"
+            f"{what}.{key}: number of seconds within a duration's range expected, got {seconds}"
         ) from error
 
 
@@ -340,8 +340,8 @@ def _parse_download(raw: dict[str, Any]) -> DownloadConfig | None:
             section, "lost_after_seconds", _DEFAULT_LOST_AFTER_SECONDS, "download"
         ),
         output_dir=output_dir,
-        reappeared_after=_hours_default(
-            section, "reappeared_after_hours", _DEFAULT_REAPPEARED_AFTER_HOURS, "download"
+        reappeared_after=_duration_default(
+            section, "reappeared_after_seconds", _DEFAULT_REAPPEARED_AFTER_SECONDS, "download"
         ),
     )
 
