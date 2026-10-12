@@ -17,15 +17,8 @@ from p2pwatch.adapters.persistence_sqlite.connection import (
 from p2pwatch.adapters.persistence_sqlite.errors import MigrationError, PersistenceError
 from tests.catalog_rows import insert_decision, insert_file
 
-_CATALOG_TABLES = {
-    "files",
-    "observation_variants",
-    "observations",
-    "match_decisions",
-    "sources",
-    "source_variants",
-    "source_ranges",
-}
+_SOURCES = {"sources", "source_variants", "source_ranges"}
+_CATALOG_TABLES = {"files", "observation_variants", "observations", "match_decisions"} | _SOURCES
 _LOCAL_TABLES = {
     "node_runtime",
     "downloads",

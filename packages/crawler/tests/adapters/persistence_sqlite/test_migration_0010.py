@@ -48,17 +48,15 @@ def _ranges(connection: sqlite3.Connection) -> list[tuple[object, ...]]:
 # --- The CHECKs of D17's table ---
 
 
-def test_a_source_of_an_unknown_network_is_refused(catalog: sqlite3.Connection) -> None:
-    with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
-        catalog.execute("INSERT INTO sources VALUES (?, 'kad', ?)", (b"\x01" * 16, "b" * 32))
-
-
-@pytest.mark.parametrize("native_id", ["B" * 32, "b" * 31, "g" * 32])
-def test_an_ed2k_source_whose_native_id_is_not_32_lowercase_hex_is_refused(
-    catalog: sqlite3.Connection, native_id: str
+@pytest.mark.parametrize(
+    ("network", "native_id"),
+    [("kad", "b" * 32), ("ed2k", "B" * 32), ("ed2k", "b" * 31), ("ed2k", "g" * 32)],
+)
+def test_a_source_of_an_unknown_network_or_not_32_lowercase_hex_on_ed2k_is_refused(
+    catalog: sqlite3.Connection, network: str, native_id: str
 ) -> None:
     with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
-        catalog.execute("INSERT INTO sources VALUES (?, 'ed2k', ?)", (b"\x01" * 16, native_id))
+        catalog.execute("INSERT INTO sources VALUES (?, ?, ?)", (b"\x01" * 16, network, native_id))
 
 
 def test_every_role_of_the_domain_is_accepted(catalog: sqlite3.Connection) -> None:
