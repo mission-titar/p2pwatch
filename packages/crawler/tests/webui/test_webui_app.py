@@ -886,13 +886,19 @@ async def test_source_page_shows_its_hash_its_names_and_its_ranges(
 ) -> None:
     app, hash_ = populated_app
     _seed_two_sources(catalog_db, hash_)
+    with sqlite3.connect(catalog_db) as conn:
+        insert_file(conn, "c" * 32)
+        unseen = insert_source_variant(conn, "c" * 32, _USER, role="standby")
+        insert_source_range(conn, unseen, _TUESDAY_8PM, _TUESDAY_8PM)
     page = await _sources_page(app, _USER_PAGE)
     name = '<a href="/sources/name?name=AnimuseeFMR">AnimuseeFMR</a>'
     file = f'<a href="/files/{file_id(hash_).hex()}">keroro_s2e62a_vf.avi</a>'
+    unseen_file = f'<a href="/files/{file_id("c" * 32).hex()}">cccccccc…</a>'
     first, last = "2026-10-13 20:00:00Z", "2026-10-13 20:00:30Z"
     assert f"<dd>{_USER}</dd>" in page
-    assert _row(name, last, "1") in page
+    assert _row(name, last, "2") in page
     assert _row(file, name, "queued", "unknown", "unknown", first, last, "", "") in page
+    assert _row(unseen_file, name, "standby", "unknown", "unknown", first, first, "", "") in page
     assert "Shinobu" not in page
 
 
