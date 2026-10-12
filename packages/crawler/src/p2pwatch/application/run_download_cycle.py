@@ -328,20 +328,30 @@ async def _start_unlisted(deps: DownloadDeps, listed: frozenset[FileKey]) -> Non
             )
 
 
+@dataclass
+class _AlertRound:
+    """A round's alert state: D9's baseline is asked once, when a range with an id first opens."""
+
+    started_at: datetime
+    notified: set[SourceKey] = field(default_factory=set)
+    alerting: bool | None = None
+
+
 async def _alert_sources(
-    deps: DownloadDeps,
-    file: FileKey,
-    opened: tuple[OpenedRange, ...],
-    round_started_at: datetime,
-    notified: set[SourceKey],
+    deps: DownloadDeps, file: FileKey, opened: tuple[OpenedRange, ...], round_: _AlertRound
 ) -> None:
     """Emits D9's alerts for the ranges a committed write opened, once per source per round."""
     for opened_range in opened:
         source = opened_range.key
-        if source is None or source in notified:
+        if source is None or source in round_.notified:
             continue  # a name alone is too weak to carry an event; one per source per round
-        earlier = deps.sources.earlier_ranges(source, round_started_at)
-        alert = source_alert(opened_range.role, earlier, round_started_at, deps.reappeared_after)
+        if round_.alerting is None:
+            # The same answer at any point of the round: "before" excludes the round's writes.
+            round_.alerting = deps.sources.has_ranges_before(round_.started_at)
+        if not round_.alerting:
+            return  # the node's first recording round is a baseline, not news
+        earlier = deps.sources.earlier_ranges(source, round_.started_at)
+        alert = source_alert(opened_range.role, earlier, round_.started_at, deps.reappeared_after)
         if alert is None:
             continue
         name, filename, targets = opened_range.name, _best_name(deps, file), _targets(deps, file)
@@ -352,7 +362,7 @@ async def _alert_sources(
                 source, name, file, filename, targets, alert.absent.total_seconds()
             )
         )
-        notified.add(source)
+        round_.notified.add(source)
         await deps.telemetry.emit(event)
 
 
@@ -362,10 +372,7 @@ async def _record_sources(deps: DownloadDeps, listed: tuple[DownloadStatus, ...]
     propagates."""
     tracked = deps.downloads.active_states()
     tolerance = timedelta(seconds=_TOLERATED_POLLS * deps.poll_interval_seconds)
-    round_started_at = deps.clock.now()
-    # A node's first recording round is a baseline, not news; decided before its first write.
-    alerting = deps.sources.has_ranges_before(round_started_at)
-    notified: set[SourceKey] = set()
+    round_ = _AlertRound(deps.clock.now())
     for status in listed:
         if status.completed or status.file not in tracked:
             continue
@@ -373,8 +380,7 @@ async def _record_sources(deps: DownloadDeps, listed: tuple[DownloadStatus, ...]
         readings = await deps.source_client.sources(status.file)
         try:
             opened = deps.sources.record_readings(status.file, readings, read_at, tolerance)
-            if alerting:
-                await _alert_sources(deps, status.file, opened, round_started_at, notified)
+            await _alert_sources(deps, status.file, opened, round_)
         except RepositoryError as error:
             _logger.error(
                 "sources file=%s repo failure (%s): file skipped, continues",
@@ -388,15 +394,17 @@ async def run_download_cycle(deps: DownloadDeps) -> None:
 
     Two distinct error DOCTRINES (item I2 - anti-starvation):
 
-    - ``ClientUnreachableError`` (client out of reach, from step 0 or ``_start_unlisted``) =
-      dead client → ABORT the iteration ("a dead client makes everything fail"). We skip the
-      rest; the next iteration retries.
+    - An unavailable client (``ClientUnreachableError`` from step 0, ``_start_unlisted`` or the
+      sources step; on the two reads, also a refused read, ``DownloadRejectedError``) = dead
+      client → ABORT the iteration ("a dead client makes everything fail"). We skip the rest;
+      the next iteration retries.
     - ``RepositoryError`` (persistence failure, NO client I/O) → ISOLATED PER STEP: a repo
       failure in one step must NOT starve the others. Each step that can raise
-      ``RepositoryError`` (monitor/completions/candidates) is wrapped separately (log +
-      ``continue`` to the next step). ``_start_unlisted`` re-reads ``active_states`` FRESHLY, so it
+      ``RepositoryError`` is wrapped separately (log + ``continue`` to the next step), and the
+      sources step per download. ``_start_unlisted`` re-reads ``active_states`` FRESHLY, so it
       runs even if an upstream step partially failed. "NEVER abandon a stalled download": the
-      1→2→3→4 order is preserved, each step is best-effort.
+      1→2→3→4 order is preserved, each step is best-effort, and step 5, the sources, only
+      observes, so it comes last (stage 4, D8).
 
     The repos are sync → cancellation (shutdown) lands at the network ``await``, never mid-write.
 
@@ -407,7 +415,7 @@ async def run_download_cycle(deps: DownloadDeps) -> None:
     unavailability is handled by the next cycle's retry + the warning log. Intentional
     asymmetry.
     """
-    # Step 0 - CONNECT + SNAPSHOT: client I/O → ClientUnreachableError = dead daemon = ABORT.
+    # Step 0 - CONNECT + SNAPSHOT: client I/O → unreachable or refused = dead daemon = ABORT.
     # ``connect()`` is IDEMPOTENT (the adapter no-ops when its transport is live) and is the ONLY
     # thing that re-arms a stream the adapter discarded after a failed read. SKIPPING IT WEDGES
     # THE LOOP: the port-sync restarts the client on every VPN renegotiation, and nothing else
