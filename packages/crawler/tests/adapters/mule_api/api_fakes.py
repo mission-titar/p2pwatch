@@ -23,6 +23,10 @@ DEFAULT_LIMIT = 100
 
 _SEARCH_ROUTE = re.compile(r"^/api/v1/search/(\d+)/")
 _CLIENTS_ROUTE = re.compile(r"^/api/v1/downloads/([^/]+)/clients$")
+_CLIENT_ROUTE = re.compile(r"^/api/v1/clients/(\d+)$")
+
+# The keys a per-file client row adds to the client object, absent from its detail.
+_FILE_RELATION_KEYS = ("role", "a4af")
 
 
 def error(status: int, code: str, message: str = "nope", **headers: str) -> httpx.Response:
@@ -43,6 +47,7 @@ class FakeAmuleApi:
         downloads: list[dict[str, Any]] | None = None,
         shared: list[dict[str, Any]] | None = None,
         clients: dict[str, list[dict[str, Any]]] | None = None,
+        details: dict[int, dict[str, Any]] | None = None,
         status: dict[str, Any] | None = None,
         version: dict[str, Any] | None = None,
         progress: dict[str, Any] | None = None,
@@ -55,6 +60,8 @@ class FakeAmuleApi:
         self.shared = shared if shared is not None else []
         # Download hash -> its client rows; a hash missing here is a download that left.
         self.clients = clients if clients is not None else {}
+        # Ecid -> its detail-only fields, over the client object of its rows.
+        self.details = details if details is not None else {}
         self.status = (
             status if status is not None else {"ec_connected": True, "ed2k": {}, "kad": {}}
         )
@@ -85,9 +92,8 @@ class FakeAmuleApi:
         if override is not None:
             return override(request)
         path = _SEARCH_ROUTE.sub("/api/v1/search/{id}/", route[1])
-        handler = _ROUTES.get(
-            (request.method, _CLIENTS_ROUTE.sub("/api/v1/downloads/{hash}/clients", path))
-        )
+        path = _CLIENTS_ROUTE.sub("/api/v1/downloads/{hash}/clients", path)
+        handler = _ROUTES.get((request.method, _CLIENT_ROUTE.sub("/api/v1/clients/{ecid}", path)))
         if handler is None:
             return error(404, "not_found", f"no route {route}")
         unauthenticated = route[1] in ("/api/v1/auth/login", "/api/v1/health")
@@ -165,6 +171,16 @@ class FakeAmuleApi:
         window = _page(request, rows, identity="ecid")
         return httpx.Response(200, json={"clients": window, "total": len(rows)})
 
+    def _get_client(self, request: httpx.Request) -> httpx.Response:
+        match = _CLIENT_ROUTE.match(request.url.path)
+        assert match is not None
+        ecid = int(match.group(1))
+        rows = [row for listed in self.clients.values() for row in listed if row["ecid"] == ecid]
+        if not rows:
+            return error(404, "not_found", "no client with that ECID in the current snapshot")
+        client = {key: value for key, value in rows[0].items() if key not in _FILE_RELATION_KEYS}
+        return httpx.Response(200, json={**client, **self.details.get(ecid, {})})
+
 
 def _search_id(request: httpx.Request) -> int:
     match = _SEARCH_ROUTE.match(request.url.path)
@@ -200,4 +216,5 @@ _ROUTES: dict[tuple[str, str], Callable[[FakeAmuleApi, httpx.Request], httpx.Res
     ("GET", "/api/v1/downloads"): FakeAmuleApi._get_downloads,
     ("GET", "/api/v1/shared"): FakeAmuleApi._get_shared,
     ("GET", "/api/v1/downloads/{hash}/clients"): FakeAmuleApi._get_clients,
+    ("GET", "/api/v1/clients/{ecid}"): FakeAmuleApi._get_client,
 }

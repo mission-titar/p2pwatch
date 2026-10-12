@@ -1,5 +1,7 @@
 """Mapping of the amuleapi JSON payloads (spec amuleapi §4.2, D4/D5)."""
 
+import dataclasses
+import json
 from typing import Any
 
 import pytest
@@ -10,6 +12,8 @@ from p2pwatch.adapters.mule_api.mapping import (
     map_search_results,
     map_shared_download,
     map_source,
+    merge_duplicate_sources,
+    source_ecid,
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
@@ -420,14 +424,29 @@ def _client_row(**overrides: Any) -> dict[str, Any]:
     return row
 
 
-def test_a_source_row_maps_to_a_reading_of_its_list_fields() -> None:
-    assert map_source(_client_row()) == SourceReading(
+def _client_detail(**overrides: Any) -> dict[str, Any]:
+    """GET /clients/{ecid}: the /clients list object plus its detail-only fields."""
+    detail = {key: value for key, value in _client_row().items() if key not in ("role", "a4af")}
+    detail.update(
+        ed2k_user_id=3232238090,
+        high_id=True,
+        server_ip="176.103.48.36",
+        server_port=4184,
+        server_name="eMule Security",
+        kad_port=4672,
+    )
+    detail.update(overrides)
+    return detail
+
+
+def test_a_source_maps_to_a_reading_of_its_row_and_its_detail() -> None:
+    assert map_source(_client_row(), _client_detail()) == SourceReading(
         key=SourceKey(Network.ED2K, "1f2e3a4b5c6d7e8f90a1b2c3d4e5f607"),
         name="AnimuseeFMR",
         software="emule 0.50a",
         role=SourceRole.QUEUED,
-        contact_point=None,
-        directly_reachable=None,
+        contact_point="176.103.48.36:4184",
+        directly_reachable=True,
         raw_meta=(
             ("ident_state", "identified"),
             ("source_origin", "kad"),
@@ -435,9 +454,53 @@ def test_a_source_row_maps_to_a_reading_of_its_list_fields() -> None:
             ("reported_os", "Linux"),
             ("shared_files_browsable", False),
             ("protocol_extensions", ("extended_source_exchange",)),
+            ("server_name", "eMule Security"),
         ),
         transfer_counter=1024,
     )
+
+
+def test_no_address_of_the_peer_reaches_the_reading() -> None:
+    """D7: the addresses are set on the row and the detail, and none is copied."""
+    addresses = {
+        "ip": "198.51.100.77",
+        "port": 46629,
+        "kad_port": 46739,
+        "country_code": "xq",
+        "ed2k_user_id": 1298396614,
+    }
+    row = _client_row(**addresses)
+    del row["ed2k_user_id"]  # detail-only
+
+    reading = map_source(row, _client_detail(**addresses))
+
+    serialized = json.dumps(dataclasses.asdict(reading))
+    assert [value for value in addresses.values() if str(value) in serialized] == []
+
+
+@pytest.mark.parametrize(
+    ("relation", "a4af", "kept"),
+    [
+        ("downloading_from", False, True),
+        ("both", False, True),
+        ("downloading_from", True, True),
+        ("none", True, True),
+        ("uploading_to", True, True),
+        ("uploading_to", False, False),
+        ("none", False, False),
+        (None, None, False),
+    ],
+)
+def test_a_row_is_a_source_when_we_ask_it_the_file_or_it_is_parked_on_another(
+    relation: str | None, a4af: bool | None, kept: bool
+) -> None:
+    """D1: a row that only takes the file from us offers nothing, so its detail is not asked."""
+    assert source_ecid(_client_row(role=relation, a4af=a4af)) == (4382 if kept else None)
+
+
+@pytest.mark.parametrize("row", ["nonsense", _client_row(ecid=None), _client_row(ecid=True)])
+def test_a_row_without_an_ecid_to_ask_is_no_source(row: object) -> None:
+    assert source_ecid(row) is None
 
 
 @pytest.mark.parametrize(
@@ -445,25 +508,16 @@ def test_a_source_row_maps_to_a_reading_of_its_list_fields() -> None:
     [
         ("downloading_from", False, SourceRole.QUEUED),
         ("both", False, SourceRole.QUEUED),
-        ("downloading_from", True, SourceRole.QUEUED),
         ("none", True, SourceRole.STANDBY),
         ("uploading_to", True, SourceRole.STANDBY),
-        ("uploading_to", False, None),
-        ("none", False, None),
-        (None, None, None),
     ],
 )
-def test_a_row_is_a_source_when_we_ask_it_the_file_or_it_is_parked_on_another(
-    relation: str | None, a4af: bool | None, role: SourceRole | None
+def test_a_source_we_ask_takes_its_state_and_a_parked_one_is_standby(
+    relation: str, a4af: bool, role: SourceRole
 ) -> None:
-    """D1: a row that only takes the file from us offers nothing."""
-    reading = map_source(_client_row(role=relation, a4af=a4af))
+    reading = map_source(_client_row(role=relation, a4af=a4af), _client_detail())
 
-    assert (reading.role if reading is not None else None) == role
-
-
-def test_a_row_that_is_not_an_object_is_no_source() -> None:
-    assert map_source("nonsense") is None
+    assert reading.role == role
 
 
 @pytest.mark.parametrize(
@@ -496,26 +550,23 @@ def test_a_sources_role_is_what_its_download_state_says_of_the_parts_we_lack(
     state: str | None, role: SourceRole | None
 ) -> None:
     """D3: a passing state reads ``None``, for the writer to carry the latest range's group."""
-    reading = map_source(_client_row(download_state=state))
+    reading = map_source(_client_row(download_state=state), _client_detail())
 
-    assert reading is not None
     assert reading.role == role
 
 
 def test_a_parked_source_is_standby_whatever_it_does_for_another_file() -> None:
     # download_state is the client's, so on an A4AF row it describes the other file.
-    reading = map_source(_client_row(role="none", a4af=True, download_state="downloading"))
+    row = _client_row(role="none", a4af=True, download_state="downloading")
 
-    assert reading is not None
-    assert reading.role is SourceRole.STANDBY
+    assert map_source(row, _client_detail()).role is SourceRole.STANDBY
 
 
 @pytest.mark.parametrize("user_hash", [None, "", "0" * 32, "8b54a3c2", "zz" * 16])
 def test_a_source_without_a_usable_user_hash_has_no_identity(user_hash: str | None) -> None:
     """D7: amuleapi reports a peer that has not sent its hash yet with 32 zeros."""
-    reading = map_source(_client_row(user_hash=user_hash))
+    reading = map_source(_client_row(user_hash=user_hash), _client_detail())
 
-    assert reading is not None
     assert reading.key is None
     assert reading.name == "AnimuseeFMR"
 
@@ -524,10 +575,7 @@ def test_a_source_without_a_user_hash_key_has_no_identity() -> None:
     row = _client_row()
     del row["user_hash"]
 
-    reading = map_source(row)
-
-    assert reading is not None
-    assert reading.key is None
+    assert map_source(row, _client_detail()).key is None
 
 
 @pytest.mark.parametrize(
@@ -537,19 +585,16 @@ def test_a_source_without_a_user_hash_key_has_no_identity() -> None:
 def test_a_sources_software_joins_its_client_and_version(
     software: str | None, version: str | None, expected: str | None
 ) -> None:
-    reading = map_source(_client_row(software=software, software_version=version))
+    reading = map_source(_client_row(software=software, software_version=version), {})
 
-    assert reading is not None
     assert reading.software == expected
 
 
-def test_a_sparse_row_keeps_the_meta_keys_it_carries_and_reads_no_counter_as_zero() -> None:
-    row = {"role": "downloading_from", "name": "", "ident_state": "unknown"}
+def test_a_sparse_row_and_detail_keep_the_meta_keys_they_carry_and_read_unknown() -> None:
+    reading = map_source({"role": "downloading_from", "name": "", "ident_state": "unknown"}, {})
 
-    reading = map_source(row)
-
-    assert reading is not None
     assert (reading.name, reading.software) == (None, None)
+    assert (reading.contact_point, reading.directly_reachable) == (None, None)
     assert reading.raw_meta == (("ident_state", "unknown"),)
     assert reading.transfer_counter == 0
 
@@ -565,7 +610,103 @@ def test_a_sparse_row_keeps_the_meta_keys_it_carries_and_reads_no_counter_as_zer
     ],
 )
 def test_a_meta_value_is_kept_in_a_shape_the_catalog_stores(value: object, kept: object) -> None:
-    reading = map_source(_client_row(protocol_extensions=value))
+    reading = map_source(_client_row(protocol_extensions=value), _client_detail())
 
-    assert reading is not None
     assert dict(reading.raw_meta)["protocol_extensions"] == kept
+
+
+@pytest.mark.parametrize(
+    ("server_ip", "server_port", "contact_point"),
+    [
+        ("176.103.48.36", 4184, "176.103.48.36:4184"),
+        (None, None, None),
+        ("176.103.48.36", None, None),
+        (None, 4184, None),
+        ("176.103.48.36", 0, None),
+        ("176.103.48.36", True, None),
+        ("2001:db8::1", 4184, None),
+    ],
+)
+def test_a_sources_contact_point_is_its_server_as_ip_and_port(
+    server_ip: str | None, server_port: object, contact_point: str | None
+) -> None:
+    """D3: anything but an eD2k ``ip:port`` reads unknown, since the writer refuses it."""
+    detail = _client_detail(server_ip=server_ip, server_port=server_port)
+
+    assert map_source(_client_row(), detail).contact_point == contact_point
+
+
+def test_the_server_name_is_kept_unknown_when_the_server_is() -> None:
+    detail = _client_detail(server_ip=None, server_port=None, server_name=None)
+
+    assert dict(map_source(_client_row(), detail).raw_meta)["server_name"] is None
+
+
+@pytest.mark.parametrize(
+    ("ed2k_user_id", "high_id", "directly_reachable"),
+    [
+        (3232238090, True, True),
+        (4242, False, False),
+        (0, False, None),
+        (None, False, None),
+        (3232238090, None, None),
+        (3232238090, "true", None),
+    ],
+)
+def test_a_source_is_directly_reachable_when_its_ed2k_id_is_a_high_id(
+    ed2k_user_id: int | None, high_id: object, directly_reachable: bool | None
+) -> None:
+    """D3: without an eD2k id yet (0), ``high_id`` false says nothing."""
+    detail = _client_detail(ed2k_user_id=ed2k_user_id, high_id=high_id)
+
+    assert map_source(_client_row(), detail).directly_reachable is directly_reachable
+
+
+def _reading(
+    role: SourceRole | None, counter: int = 0, *, native_id: str | None = "1f" * 16, name: str = "x"
+) -> SourceReading:
+    key = SourceKey(Network.ED2K, native_id) if native_id is not None else None
+    return SourceReading(key, name, None, role, None, None, (), counter)
+
+
+# D7's order, the most informative first: a passing state (None) above `undetermined`.
+_INFORMATIVE: list[SourceRole | None] = [
+    SourceRole.SENDING,
+    SourceRole.QUEUED,
+    SourceRole.NOTHING_NEW,
+    None,
+    SourceRole.UNDETERMINED,
+    SourceRole.STANDBY,
+]
+
+
+@pytest.mark.parametrize(
+    ("better", "worse"), [pair for pair in zip(_INFORMATIVE, _INFORMATIVE[1:], strict=False)]
+)
+def test_two_rows_of_one_source_keep_the_more_informative_role_and_the_larger_counter(
+    better: SourceRole | None, worse: SourceRole | None
+) -> None:
+    """D7: a user hash is not unique among a client's simultaneous connections."""
+    for rows in (
+        [_reading(better, 5), _reading(worse, 9)],
+        [_reading(worse, 9), _reading(better, 5)],
+    ):
+        assert merge_duplicate_sources(rows) == (_reading(better, 9),)
+
+
+def test_two_rows_without_a_hash_are_one_source_by_name_only() -> None:
+    rows = [
+        _reading(SourceRole.QUEUED, native_id=None, name="peer"),
+        _reading(SourceRole.STANDBY, native_id=None, name="peer"),
+        _reading(SourceRole.STANDBY, native_id=None, name="other"),
+        _reading(SourceRole.STANDBY, name="peer"),
+        _reading(SourceRole.STANDBY, native_id="2e" * 16, name="peer"),
+    ]
+
+    assert merge_duplicate_sources(rows) == (rows[0], *rows[2:])
+
+
+def test_rows_with_neither_hash_nor_name_are_never_merged() -> None:
+    nameless = SourceReading(None, None, None, SourceRole.QUEUED, None, None, (), 0)
+
+    assert merge_duplicate_sources([nameless, nameless]) == (nameless, nameless)

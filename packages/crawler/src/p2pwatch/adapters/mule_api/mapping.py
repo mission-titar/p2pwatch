@@ -6,11 +6,19 @@ we never persist. A source keeps only D7's keys (stage 4 spec).
 """
 
 import json
+from collections.abc import Iterable
+from dataclasses import replace
 from typing import Any
 
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation, fold_raw_meta
-from p2pwatch.domain.source import SourceKey, SourceReading, SourceRole
+from p2pwatch.domain.source import (
+    SourceKey,
+    SourceMeta,
+    SourceReading,
+    SourceRole,
+    is_contact_point,
+)
 from p2pwatch.ports.client_status import ChannelStatus, ClientStatus
 from p2pwatch.ports.download_client import DownloadStatus, FailureReason, WaitingReason
 
@@ -52,6 +60,17 @@ _SOURCE_META_KEYS = (
     "reported_os",
     "shared_files_browsable",
     "protocol_extensions",
+)
+_SOURCE_DETAIL_META_KEYS = ("server_name",)
+
+# D7's order, the most informative role first: a passing state (None) says more than unknown.
+_INFORMATIVE_ROLES: tuple[SourceRole | None, ...] = (
+    SourceRole.SENDING,
+    SourceRole.QUEUED,
+    SourceRole.NOTHING_NEW,
+    None,
+    SourceRole.UNDETERMINED,
+    SourceRole.STANDBY,
 )
 
 # Result keys consumed by a structured field, hence EXCLUDED from raw_meta.
@@ -132,24 +151,48 @@ def map_client_status(status: object, version: object) -> ClientStatus:
     return ClientStatus(version=_string(_object(version).get("daemon_version")), channels=channels)
 
 
-def map_source(row: object) -> SourceReading | None:
-    """A row of ``GET /downloads/{hash}/clients``, or ``None`` when it offers us nothing (D1)."""
+def source_ecid(row: object) -> int | None:
+    """The ``ecid`` to ask the detail of, for a row of ``GET /downloads/{hash}/clients`` that
+    offers us the file (D1); ``None`` for any other."""
     if not isinstance(row, dict):
         return None
-    asked = row.get("role") in _ASKED
-    if not asked and row.get("a4af") is not True:
+    if row.get("role") not in _ASKED and row.get("a4af") is not True:
         return None
+    return _optional_int(row.get("ecid"))
+
+
+def map_source(row: dict[str, Any], detail: dict[str, Any]) -> SourceReading:
+    """A source's row, which alone carries its relation to the file, and its client detail."""
+    asked = row.get("role") in _ASKED
     software = (_string(row.get("software")), _string(row.get("software_version")))
     return SourceReading(
         key=_source_key(row.get("user_hash")),
         name=_string(row.get("name")),
         software=" ".join(part for part in software if part) or None,
         role=_source_role(row.get("download_state")) if asked else SourceRole.STANDBY,
-        contact_point=None,
-        directly_reachable=None,
-        raw_meta=tuple((key, _meta_value(row[key])) for key in _SOURCE_META_KEYS if key in row),
+        contact_point=_contact_point(detail),
+        directly_reachable=_directly_reachable(detail),
+        raw_meta=(
+            *_source_meta(row, _SOURCE_META_KEYS),
+            *_source_meta(detail, _SOURCE_DETAIL_META_KEYS),
+        ),
         transfer_counter=_int(row.get("downloaded_bytes_session")),
     )
+
+
+def merge_duplicate_sources(readings: Iterable[SourceReading]) -> tuple[SourceReading, ...]:
+    """One reading per source, by user hash or else by name: the most informative role, and the
+    larger counter (D7). A reading with neither is never merged."""
+    merged: dict[object, SourceReading] = {}
+    for reading in readings:
+        identity = reading.key or reading.name or object()
+        held = merged.get(identity)
+        if held is not None:
+            best = min(held, reading, key=lambda kept: _INFORMATIVE_ROLES.index(kept.role))
+            counter = max(held.transfer_counter, reading.transfer_counter)
+            reading = replace(best, transfer_counter=counter)
+        merged[identity] = reading
+    return tuple(merged.values())
 
 
 def _source_key(user_hash: object) -> SourceKey | None:
@@ -167,6 +210,26 @@ def _source_role(state: object) -> SourceRole | None:
     if state in _PASSING_STATES:
         return None
     return _SOURCE_ROLES.get(state, SourceRole.UNDETERMINED)
+
+
+def _contact_point(detail: dict[str, Any]) -> str | None:
+    """The eD2k server the source connects through, as ``ip:port``, the one form the writer
+    accepts (D3); ``None`` for anything else, an unknown server's ``null`` included."""
+    contact_point = f"{detail.get('server_ip')}:{detail.get('server_port')}"
+    return contact_point if is_contact_point(Network.ED2K, contact_point) else None
+
+
+def _directly_reachable(detail: dict[str, Any]) -> bool | None:
+    """``high_id``, unknown while the client has no eD2k id (``ed2k_user_id`` 0) (D3)."""
+    high_id = detail.get("high_id")
+    if not _optional_int(detail.get("ed2k_user_id")) or not isinstance(high_id, bool):
+        return None
+    return high_id
+
+
+def _source_meta(fields: dict[str, Any], keys: tuple[str, ...]) -> SourceMeta:
+    """The ``keys`` the payload carries; an absent one is left out, not read as ``None``."""
+    return tuple((key, _meta_value(fields[key])) for key in keys if key in fields)
 
 
 def _meta_value(value: object) -> str | int | bool | tuple[str, ...] | None:
