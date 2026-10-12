@@ -164,6 +164,24 @@ class SourceRow:
     file_count: int
 
 
+@dataclass(frozen=True)
+class SourceFileRange:
+    """A source range with the file it was read on and that file's best name, if ever seen."""
+
+    file: FileKey
+    file_name: str | None
+    range: SourceRangeView
+
+
+@dataclass(frozen=True)
+class SourceDetail:
+    """A page of a source (D13): one ``SourceRow`` per name it carried, its ranges newest first."""
+
+    source: SourceKey
+    names: tuple[SourceRow, ...]
+    ranges: tuple[SourceFileRange, ...]
+
+
 # ---------------------------------------------------------------------------
 # Node state (local.db)
 # ---------------------------------------------------------------------------
@@ -412,6 +430,15 @@ class SourceListRow:
     source_link: tuple[str, ...]
     last_seen: str
     files: str
+
+
+@dataclass(frozen=True)
+class SourceFileRow:
+    """One line of a source's or a name's ranges (D13): the file it was read on, then the range."""
+
+    file: str  # the file's best name, its short hash when never seen
+    file_link: str
+    history: SourceHistoryRow
 
 
 @dataclass(frozen=True)
