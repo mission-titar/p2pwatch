@@ -31,6 +31,8 @@ from p2pwatch.adapters.mule_api.mapping import (
     map_search_results,
     map_shared_download,
     map_source,
+    merge_duplicate_sources,
+    source_ecid,
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
@@ -224,7 +226,8 @@ class AmuleApiClient:
         return (*queue, *shared)
 
     async def sources(self, file: FileKey) -> tuple[SourceReading, ...]:
-        """The rows of the download's clients that offer us the file; none once it left."""
+        """The download's clients that offer us the file, each with its detail; none once it
+        left. One detail call per source: only the detail names its server (D7)."""
         if file.network is not Network.ED2K:
             return ()
         try:
@@ -233,7 +236,17 @@ class AmuleApiClient:
             )
         except ApiNotFoundError:
             return ()
-        return tuple(reading for row in rows if (reading := map_source(row)) is not None)
+        readings: list[SourceReading] = []
+        for row in rows:
+            ecid = source_ecid(row)
+            if ecid is None:
+                continue
+            try:
+                detail = await self._call("GET", f"/clients/{ecid}")
+            except ApiNotFoundError:
+                continue  # the client left between the list and its detail
+            readings.append(map_source(row, detail))
+        return merge_duplicate_sources(readings)
 
     async def _post_search(self, keyword: str, search_type: str) -> int:
         payload = await self._call("POST", "/search", body={"query": keyword, "type": search_type})

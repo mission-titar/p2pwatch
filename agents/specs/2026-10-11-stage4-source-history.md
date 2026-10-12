@@ -377,7 +377,8 @@ ON CONFLICT (variant_id, node_id, first_seen_at) DO UPDATE SET
   - A `404` there means the client left between the two calls (`REFERENCE.md`, `GET /clients/{ecid}`
     errors): the row is dropped from this reading. `error_from_response` maps `not_found` to
     `ApiRejectedError` (`adapters/mule_api/errors.py:58-59`) together with `amuled_rejected`, so the
-    adapter checks the 404 status per row instead of catching the class.
+    adapter checks the 404 status per row instead of catching the class (Corrected: block 20 added
+    `ApiNotFoundError` for the `not_found` code, which the per-row 404 catches, block 25's report).
   - A `404` on the list (the download left) gives an empty reading.
   - Any other failure raises `ClientUnreachableError` as today.
 - **Two rows with one identity in one reading**, the same `source_id`, or the same name without one, keep

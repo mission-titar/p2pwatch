@@ -705,22 +705,73 @@ async def test_sources_pages_every_client_of_the_download_past_the_first_hundred
 
 
 @pytest.mark.asyncio
-async def test_sources_keep_only_the_rows_that_offer_us_the_file() -> None:
+async def test_sources_ask_the_detail_of_only_the_rows_that_offer_us_the_file() -> None:
     rows = [
         _source(1),
         _source(2, role="uploading_to"),
         _source(3, role="none", a4af=True),
     ]
+    server = {"ed2k_user_id": 4242, "high_id": False, "server_ip": "176.103.48.36"}
+    api = FakeAmuleApi(clients={_HASH: rows}, details={1: {**server, "server_port": 4184}})
+    client = await _connected(api)
+
+    readings = await client.sources(_KEY)
+    await client.close()
+
+    assert [
+        (reading.name, reading.role, reading.contact_point, reading.directly_reachable)
+        for reading in readings
+    ] == [
+        ("peer 1", SourceRole.QUEUED, "176.103.48.36:4184", False),
+        ("peer 3", SourceRole.STANDBY, None, None),
+    ]
+    asked = [r.url.path for r in api.requests if r.url.path.startswith("/api/v1/clients/")]
+    assert asked == ["/api/v1/clients/1", "/api/v1/clients/3"]
+
+
+@pytest.mark.asyncio
+async def test_a_client_gone_between_the_list_and_its_detail_is_dropped() -> None:
+    """D7: a `404` on the detail drops that row only."""
+    api = FakeAmuleApi(clients={_HASH: [_source(1), _source(2), _source(3)]})
+    api.overrides[("GET", "/api/v1/clients/2")] = lambda _: error(
+        404, "not_found", "no client with that ECID in the current snapshot"
+    )
+    client = await _connected(api)
+
+    readings = await client.sources(_KEY)
+    await client.close()
+
+    assert [reading.name for reading in readings] == ["peer 1", "peer 3"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "code", "raised"),
+    [(503, "ec_unavailable", ClientUnreachableError), (500, "amuled_rejected", ApiRejectedError)],
+)
+async def test_any_other_failure_of_a_detail_fails_the_read(
+    status: int, code: str, raised: type[Exception]
+) -> None:
+    api = FakeAmuleApi(clients={_HASH: [_source(1)]})
+    api.overrides[("GET", "/api/v1/clients/1")] = lambda _: error(status, code)
+    client = await _connected(api)
+
+    with pytest.raises(raised):
+        await client.sources(_KEY)
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_two_rows_of_one_source_read_as_one() -> None:
+    """D7: a user hash is not unique among a client's simultaneous connections."""
+    rows = [_source(1, user_hash="1f" * 16), _source(2, user_hash="1f" * 16)]
     api = FakeAmuleApi(clients={_HASH: rows})
     client = await _connected(api)
 
     readings = await client.sources(_KEY)
     await client.close()
 
-    assert [(reading.name, reading.role) for reading in readings] == [
-        ("peer 1", SourceRole.QUEUED),
-        ("peer 3", SourceRole.STANDBY),
-    ]
+    assert [reading.name for reading in readings] == ["peer 1"]
 
 
 @pytest.mark.asyncio
