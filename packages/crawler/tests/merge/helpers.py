@@ -11,7 +11,14 @@ from pathlib import Path
 from typing import Any
 
 from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
-from tests.catalog_rows import insert_decision, insert_file, insert_observation
+from tests.catalog_rows import (
+    insert_decision,
+    insert_file,
+    insert_observation,
+    insert_source,
+    insert_source_range,
+    insert_source_variant,
+)
 
 # Natural-key reads, a file named by its native id; an observation with its variant's columns.
 _ROWS_BY_TABLE: Mapping[str, str] = {
@@ -25,6 +32,16 @@ _ROWS_BY_TABLE: Mapping[str, str] = {
     "match_decisions": (
         "SELECT f.native_id, d.target_id, d.rule_name, d.tier, d.decided_at, d.node_id"
         " FROM match_decisions AS d JOIN files AS f USING (file_id)"
+    ),
+    "sources": "SELECT network, native_id FROM sources",
+    "source_variants": (
+        "SELECT f.native_id, s.native_id, v.name, v.role, v.content_hash"
+        " FROM source_variants AS v JOIN files AS f USING (file_id)"
+        " LEFT JOIN sources AS s ON s.source_id = v.source_id"
+    ),
+    "source_ranges": (
+        "SELECT v.content_hash, r.node_id, r.first_seen_at, r.last_seen_at, r.received_bytes,"
+        " r.transfer_counter FROM source_ranges AS r JOIN source_variants AS v USING (variant_id)"
     ),
 }
 
@@ -55,9 +72,25 @@ def make_catalog(
                 insert_observation(connection, **row)
             for row in content.get("match_decisions", ()):
                 insert_decision(connection, **row)
+            _insert_source_ranges(connection, content.get("source_ranges", ()))
     finally:
         connection.close()
     return path
+
+
+def _insert_source_ranges(
+    connection: sqlite3.Connection, rows: Sequence[Mapping[str, Any]]
+) -> None:
+    """Each row: its variant's ``ed2k_hash`` and ``user_hash``, then its range's arguments."""
+    variants: dict[tuple[str, str | None], int] = {}
+    for row in rows:
+        ed2k_hash, user_hash = row["ed2k_hash"], row["user_hash"]
+        if (ed2k_hash, user_hash) not in variants:
+            if user_hash is not None and user_hash not in {key[1] for key in variants}:
+                insert_source(connection, user_hash)
+            variants[ed2k_hash, user_hash] = insert_source_variant(connection, ed2k_hash, user_hash)
+        range_args = {k: v for k, v in row.items() if k not in ("ed2k_hash", "user_hash")}
+        insert_source_range(connection, variants[ed2k_hash, user_hash], **range_args)
 
 
 def stamp_user_version(path: Path, version: int) -> None:

@@ -44,7 +44,7 @@ def _file_observation(ed2k_hash: str, *, node_id: str, observed_at: str) -> dict
 
 
 def _full_catalog(letter: str, *, node_id: str) -> dict[str, list[dict[str, object]]]:
-    """A consistent catalog: 1 file and 1 row in each of the 2 journals."""
+    """A consistent catalog: 1 file, 1 row in each of the 2 journals, 1 source range."""
     ed2k = hash_for(letter)
     return {
         "files": [{"ed2k_hash": ed2k, "size_bytes": 100}],
@@ -59,10 +59,47 @@ def _full_catalog(letter: str, *, node_id: str) -> dict[str, list[dict[str, obje
                 "node_id": node_id,
             }
         ],
+        "source_ranges": [
+            {
+                "ed2k_hash": ed2k,
+                "user_hash": ed2k,
+                "first_seen_at": 10,
+                "last_seen_at": 20,
+                "node_id": node_id,
+            }
+        ],
     }
 
 
-_ALL_TABLES = ("files", "observations", "match_decisions")
+_ALL_TABLES = (
+    "files",
+    "observations",
+    "match_decisions",
+    "sources",
+    "source_variants",
+    "source_ranges",
+)
+_SOURCE_TABLES = ("sources", "source_variants", "source_ranges")
+
+
+def _source_ranges(
+    *bounds: tuple[int, int], user_hash: str | None = HASH_B
+) -> dict[str, list[dict[str, object]]]:
+    """One source on one file, a range per ``(first, last)``; both counters grow with time."""
+    return {
+        "files": [{"ed2k_hash": HASH_A, "size_bytes": 100}],
+        "source_ranges": [
+            {
+                "ed2k_hash": HASH_A,
+                "user_hash": user_hash,
+                "first_seen_at": first,
+                "last_seen_at": last,
+                "received_bytes": last - first,
+                "transfer_counter": last,
+            }
+            for first, last in bounds
+        ],
+    }
 
 
 def test_t1_merge_two_distinct_catalogs(tmp_path: Path) -> None:
@@ -342,3 +379,36 @@ def test_an_output_open_catalog_refuses_raises_a_merge_error(tmp_path: Path) -> 
 
     with pytest.raises(MergeError, match=f"cannot open output {out}"):
         merge_catalogs(out, [src])
+
+
+@pytest.mark.parametrize("user_hash", [HASH_B, None])
+@pytest.mark.parametrize("older_first", [True, False])
+def test_two_copies_of_one_range_merge_into_its_later_end(
+    tmp_path: Path, user_hash: str | None, older_first: bool
+) -> None:
+    older = make_catalog(tmp_path / "older.db", _source_ranges((10, 20), user_hash=user_hash))
+    newer = make_catalog(tmp_path / "newer.db", _source_ranges((10, 30), user_hash=user_hash))
+    out = tmp_path / "out.db"
+
+    merge_catalogs(out, [older, newer] if older_first else [newer, older])
+
+    assert rows_without_id(out, "source_ranges") == rows_without_id(newer, "source_ranges")
+    assert count(out, "source_variants") == 1
+
+
+@pytest.mark.parametrize("older_first", [True, False])
+def test_a_range_closed_in_the_newer_copy_merges_before_its_successor(
+    tmp_path: Path, older_first: bool
+) -> None:
+    # Copied in start order, R1 grows before R2 lands, so the trigger lets it (D6).
+    older = make_catalog(tmp_path / "older.db", _source_ranges((10, 20)))
+    newer = make_catalog(tmp_path / "newer.db", _source_ranges((10, 30), (40, 50)))
+    out = tmp_path / "out.db"
+
+    merge_catalogs(out, [older, newer] if older_first else [newer, older])
+
+    assert rows_without_id(out, "source_ranges") == rows_without_id(newer, "source_ranges")
+    merged = {table: rows_without_id(out, table) for table in _SOURCE_TABLES}
+    merge_catalogs(out, [older])
+    merge_catalogs(out, [newer])
+    assert {table: rows_without_id(out, table) for table in _SOURCE_TABLES} == merged
