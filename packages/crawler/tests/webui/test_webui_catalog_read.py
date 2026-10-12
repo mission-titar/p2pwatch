@@ -27,6 +27,7 @@ from p2pwatch.webui.adapters.catalog_read import (
 )
 from p2pwatch.webui.domain.views import (
     FileRow,
+    NameDetail,
     SourceDetail,
     SourceFileRange,
     SourceRangeView,
@@ -399,7 +400,7 @@ def test_list_sources_pages_by_fifty(catalog_db: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tests: the page of a source (stage 4 spec, D13)
+# Tests: the page of a source and the page of a name (stage 4 spec, D13)
 # ---------------------------------------------------------------------------
 
 _THIRD = "5a6b" * 8
@@ -439,6 +440,18 @@ def test_source_detail_lists_its_names_and_its_ranges_over_every_file(catalog_db
             SourceFileRange(b, None, _queued(key, "AnimuseeFMR", 30, 40)),
             SourceFileRange(a, "keroro_062a.avi", _queued(key, "Shinobu", 10, 20)),
         ),
+    )
+
+
+def test_name_detail_lists_its_hashes_and_its_ranges_without_one(catalog_db: Path) -> None:
+    _seed_pages(catalog_db)
+    detail = CatalogReader(open_reader(catalog_db)).name_detail("AnimuseeFMR", page=1)
+    user, other = SourceKey(Network.ED2K, _USER), SourceKey(Network.ED2K, _OTHER)
+    hashless = SourceRangeView(None, "AnimuseeFMR", SourceRole.STANDBY, None, None, 90, 95, 0)
+    assert detail == NameDetail(
+        name="AnimuseeFMR",
+        sources=(SourceRow(user, "AnimuseeFMR", 40, 1), SourceRow(other, "AnimuseeFMR", 5, 1)),
+        ranges=(SourceFileRange(FileKey(Network.ED2K, "b" * 32), None, hashless),),
     )
 
 

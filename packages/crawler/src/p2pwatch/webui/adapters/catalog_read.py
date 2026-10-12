@@ -16,7 +16,8 @@
 - ``source_ranges()``: a file's source history, one range per row, newest first.
 - ``list_sources()`` / ``count_sources()``: the sources with a user hash, last seen first, and
   how many match the search.
-- ``source_detail()``: the page of a source; ``None`` if never recorded.
+- ``source_detail()`` / ``name_detail()``: the page of a source and the page of a name; ``None``
+  if never recorded.
 
 All SQL lives in module constants, parameterized (no value interpolation).
 """
@@ -38,6 +39,7 @@ from p2pwatch.webui.domain.views import (
     FileDecision,
     FileDetail,
     FileRow,
+    NameDetail,
     SourceDetail,
     SourceFileRange,
     SourceRangeView,
@@ -291,6 +293,7 @@ SELECT
 """
 
 _SQL_SOURCE = "SELECT network, native_id FROM sources WHERE source_id = ?"
+_SQL_NAME_EXISTS = "SELECT 1 FROM source_variants WHERE name = ? LIMIT 1"
 
 # One row per (source, name) pair: a source's names, or a name's sources (D13). The WHERE that
 # picks one side goes between this and ``_SQL_PAIRS_END``.
@@ -315,6 +318,8 @@ _SQL_PAGE = "LIMIT ? OFFSET ?\n"
 _WHERE_FILE = "WHERE v.file_id = ?\n"
 _WHERE_SOURCE = "WHERE v.source_id = ?\n"
 _WHERE_SOURCE_NAMED = "WHERE v.source_id = ? AND v.name IS NOT NULL\n"
+_WHERE_NAME = "WHERE v.name = ?\n"
+_WHERE_NAME_HASHLESS = "WHERE v.name = ? AND v.source_id IS NULL\n"
 
 
 def _filter_clauses(
@@ -611,7 +616,18 @@ class CatalogReader:
             ranges=self._file_ranges(_WHERE_SOURCE, source_id, page),
         )
 
-    def _pairs(self, where: str, key: bytes, page: int) -> tuple[SourceRow, ...]:
+    def name_detail(self, name: str, *, page: int) -> NameDetail | None:
+        """A page of the hashes that carried the name and of its hash-less ranges; ``None`` for a
+        name never recorded."""
+        if self._conn.execute(_SQL_NAME_EXISTS, (name,)).fetchone() is None:
+            return None
+        return NameDetail(
+            name=name,
+            sources=self._pairs(_WHERE_NAME, name, page),
+            ranges=self._file_ranges(_WHERE_NAME_HASHLESS, name, page),
+        )
+
+    def _pairs(self, where: str, key: bytes | str, page: int) -> tuple[SourceRow, ...]:
         sql = _SQL_PAIRS + where + _SQL_PAIRS_END + _SQL_PAGE
         rows = self._conn.execute(sql, (key, _PAGE_SIZE, (page - 1) * _PAGE_SIZE))
         return tuple(
@@ -624,7 +640,7 @@ class CatalogReader:
             for row in rows
         )
 
-    def _file_ranges(self, where: str, key: bytes, page: int) -> tuple[SourceFileRange, ...]:
+    def _file_ranges(self, where: str, key: bytes | str, page: int) -> tuple[SourceFileRange, ...]:
         sql = _SQL_SOURCE_RANGES + where + _SQL_SOURCE_RANGES_ORDER + _SQL_PAGE
         rows = self._conn.execute(sql, (key, _PAGE_SIZE, (page - 1) * _PAGE_SIZE)).fetchall()
         files = [FileKey(Network(row["file_network"]), row["file_native_id"]) for row in rows]

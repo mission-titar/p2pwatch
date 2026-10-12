@@ -874,10 +874,15 @@ async def test_sources_pages_keep_the_search(
 
 
 # ---------------------------------------------------------------------------
-# The page of a source (stage 4 spec, D13)
+# The page of a source and the page of a name (stage 4 spec, D13)
 # ---------------------------------------------------------------------------
 
+_THIRD = "5a6b" * 8
 _USER_PAGE = f"/sources/{source_id(_USER).hex()}"
+
+
+def _hash_link(user: str) -> str:
+    return f'<a href="/sources/{source_id(user).hex()}">{user[:8]}…</a>'
 
 
 @pytest.mark.asyncio
@@ -902,9 +907,38 @@ async def test_source_page_shows_its_hash_its_names_and_its_ranges(
     assert "Shinobu" not in page
 
 
-@pytest.mark.parametrize("url", ["/sources/zz", f"/sources/{'0' * 32}"])
 @pytest.mark.asyncio
-async def test_source_page_of_a_source_never_recorded_returns_404(
+async def test_name_page_lists_the_hashes_that_carried_it_and_nothing_further(
+    populated_app: tuple[Starlette, str], catalog_db: Path
+) -> None:
+    app, hash_ = populated_app
+    _seed_two_sources(catalog_db, hash_)
+    unseen = "c" * 32
+    with sqlite3.connect(catalog_db) as conn:
+        insert_file(conn, unseen)
+        insert_source(conn, _THIRD)
+        for user, name, on in (
+            (_OTHER, "AnimuseeFMR", hash_),
+            (_THIRD, "Shinobu", hash_),
+            (None, "AnimuseeFMR", unseen),
+        ):
+            variant = insert_source_variant(conn, on, user, name=name, role="standby")
+            insert_source_range(conn, variant, _TUESDAY_8PM, _TUESDAY_8PM)
+    page = await _sources_page(app, "/sources/name?name=AnimuseeFMR")
+    file = f'<a href="/files/{file_id(unseen).hex()}">cccccccc…</a>'
+    stamp = "2026-10-13 20:00:00Z"
+    assert "<dd>AnimuseeFMR</dd>" in page
+    assert _row(_hash_link(_USER), "2026-10-13 20:00:30Z", "1") in page
+    assert _row(_hash_link(_OTHER), stamp, "1") in page
+    assert _THIRD[:8] not in page
+    assert _row(file, "standby", "unknown", "unknown", stamp, stamp, "", "") in page
+
+
+@pytest.mark.parametrize(
+    "url", ["/sources/zz", f"/sources/{'0' * 32}", "/sources/name", "/sources/name?name=nobody"]
+)
+@pytest.mark.asyncio
+async def test_source_and_name_pages_of_what_was_never_recorded_return_404(
     populated_app: tuple[Starlette, str], catalog_db: Path, url: str
 ) -> None:
     app, hash_ = populated_app
@@ -914,20 +948,27 @@ async def test_source_page_of_a_source_never_recorded_returns_404(
     assert resp.status_code == 404
 
 
+@pytest.mark.parametrize(
+    ("user", "url", "paged"),
+    [
+        (None, "/sources/name?name=AnimuseeFMR", "/sources/name?name=AnimuseeFMR&page="),
+        (_USER, _USER_PAGE, f"{_USER_PAGE}?page="),
+    ],
+)
 @pytest.mark.asyncio
-async def test_source_page_pages_its_ranges_by_fifty(
-    populated_app: tuple[Starlette, str], catalog_db: Path
+async def test_source_and_name_pages_page_their_ranges_by_fifty(
+    populated_app: tuple[Starlette, str], catalog_db: Path, user: str | None, url: str, paged: str
 ) -> None:
     app, hash_ = populated_app
     with sqlite3.connect(catalog_db) as conn:
-        insert_source(conn, _USER)
-        variant = insert_source_variant(conn, hash_, _USER)
+        if user is not None:
+            insert_source(conn, user)
+        variant = insert_source_variant(conn, hash_, user)
         for n in range(PAGE_SIZE + 1):
             insert_source_range(conn, variant, n, n)
-    paged = f"{_USER_PAGE}?page="
-    first, second = await _sources_page(app, _USER_PAGE), await _sources_page(app, f"{paged}2")
-    assert f'href="{paged}2"' in first
-    assert f'href="{paged}1"' in second
+    first, second = await _sources_page(app, url), await _sources_page(app, f"{paged}2")
+    assert f'href="{paged.replace("&", "&amp;")}2"' in first
+    assert f'href="{paged.replace("&", "&amp;")}1"' in second
     assert second.count("<tr><td>") == 1
 
 

@@ -740,6 +740,25 @@ def build_app(
             },
         )
 
+    async def handle_source_name(request: Request) -> Response:
+        name = request.query_params.get("name")
+        page = _page_number(request.query_params.get("page"))
+        catalog = CatalogReader(catalog_reader.connection())
+        detail = None if name is None else catalog.name_detail(name, page=page)
+        if detail is None:
+            return templates.TemplateResponse(request, "404.html", {}, status_code=404)
+        n_rows = max(len(detail.sources), len(detail.ranges))
+        return templates.TemplateResponse(
+            request,
+            "source_name.html",
+            {
+                "name": detail.name,
+                "sources": tuple(_source_list_row(row) for row in detail.sources),
+                "ranges": tuple(_source_file_row(item) for item in detail.ranges),
+                "nav": _page_nav(page, n_rows, "/sources/name", {"name": detail.name}),
+            },
+        )
+
     async def handle_file_detail(request: Request) -> Response:
         raw_id: str = request.path_params["file_id"]
 
@@ -968,6 +987,8 @@ def build_app(
             Route("/files", handle_files),
             Route("/files/{file_id}", handle_file_detail),
             Route("/sources", handle_sources),
+            # Before ``/sources/{source_id}``, which would otherwise take ``name`` (D13).
+            Route("/sources/name", handle_source_name),
             Route("/sources/{source_id}", handle_source),
             Route("/targets/{target_id}", handle_target),
             Route("/node", handle_node),
