@@ -40,8 +40,9 @@ What the catalog then holds for one source on one file, as the webui shows it (D
 | AnimuseeFMR `1f2e…` | `queued` | Tue 20:00:30 | 21:14:00 | |
 | AnimuseeFMR `1f2e…` | `sending` | Tue 21:14:30 | 23:59:30 | about 10 MB (1 KB/s) |
 
-The 14 blocks (Corrected: block 15 split in two over the line bound, block 15's report; block 65
-split in two over the line bound, block 65's report):
+The 15 blocks (Corrected: block 15 split in two over the line bound, block 15's report; block 65
+split in two over the line bound, block 65's report; closing block split over the file bound, block
+80's report):
 
 - **10**: the domain model and the three tables.
 - **15**: a role's group, and the repository's reads for the notifications.
@@ -56,6 +57,7 @@ split in two over the line bound, block 65's report):
 - **65**: the page of one source (Corrected: block 65 split in two over the line bound, block 65's report).
 - **67**: the page of one name (Corrected: block 65 split in two over the line bound, block 65's report).
 - **70**: docs and the rewritten invariant.
+- **75**: the holistic review's code fixes (Corrected: closing block split over the file bound, block 80's report).
 - **80**: closing.
 
 ## 1. Context and goals
@@ -726,6 +728,7 @@ the same files. Each block measures itself after committing.
 | 65 | `feat/webui-source-pages` | The source page (Corrected: block 65 split in two over the line bound, block 65's report) | 370 / 6 |
 | 67 | `feat/webui-name-page` | The name page (Corrected: block 65 split in two over the line bound, block 65's report) | 200 / 6 |
 | 70 | `docs/stage4-docs` | Docs and the rewritten invariant | 260 / 9 |
+| 75 | `fix/stage4-review` | The holistic review's code fixes (Corrected: closing block split over the file bound, block 80's report) | 143 / 15 |
 | 80 | `docs/stage4-closing` | Closing | 80 / 4 |
 
 ### Contents per block
@@ -783,6 +786,8 @@ the same files. Each block measures itself after committing.
 - **65**: `CatalogReader.source_detail`, its handler and template (Corrected: block 65 split in two over the line bound, block 65's report).
 - **67**: `CatalogReader.name_detail`, its handler and template (Corrected: block 65 split in two over the line bound, block 65's report).
 - **70**: D15's documents; `AGENTS.md:45` (D10), and its WebUI and Persistence rows.
+- **75**: the holistic review's findings 4, 7, 8, 10 and 12: the reappeared key in seconds, D9's
+  baseline asked lazily, the Node column, two docstrings (Corrected: closing block split over the file bound, block 80's report).
 - **80**: the closing block (`agents/workflow.md`, Wrap).
 
 ### Order
@@ -794,6 +799,7 @@ the same files. Each block measures itself after committing.
 - 40 and 50 to 67 (Corrected: block 65 split in two over the line bound, block 65's report) need only block 10's tables; they stay after 35 so the stack reads in the data's order.
 - 65 before 67: the name page reuses the source page's reads (Corrected: block 65 split in two over the line bound, block 65's report).
 - 70 after 67 (Corrected: block 65 split in two over the line bound, block 65's report): the docs describe the pages.
+- 75 before 80: the closing block's spec and handoff describe block 75's fixes (Corrected: closing block split over the file bound, block 80's report).
 
 ### Surfaces whose consumer arrives in a later block
 
