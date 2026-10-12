@@ -13,9 +13,11 @@ connecté, puis s'évanouissent. Une recherche manuelle tombe presque toujours a
 nœud qui tourne jour et nuit, non : il cherche sans relâche, note tout ce qu'il croise, et vous
 prévient dès qu'un épisode manquant apparaît.
 
-**Le sujet du catalogue est le fichier, jamais la personne.** p2pwatch ne piste personne et ne
-cherche à désanonymiser personne. Il enregistre qu'un fichier existe, où et quand il a été vu, et
-rien d'autre.
+**Le catalogue enregistre des fichiers et, là où un protocole en publie un, l'identifiant
+pseudonyme de la source qui les partageait**, pour qu'un chercheur puisse reconnaître un partageur
+récurrent et contacter un archiviste possible. Il ne stocke jamais l'adresse réseau d'un pair (IP,
+port, pays), et ne relie jamais des identifiants d'un réseau à l'autre. Le détail est dans
+[Légalité et vie privée](legal.md#ce-que-votre-nœud-enregistre).
 
 ## Par où commencer
 
@@ -75,6 +77,10 @@ d'un autre chercheur, fusionnez-le au vôtre avec l'outil `merge`, décrit dans
 La fusion est sûre : chaque fichier est identifié par son empreinte de contenu, donc deux chercheurs
 qui ont vu le même fichier écrivent la même ligne. Refusionner deux fois le même catalogue ne change
 rien, et rien n'est écrasé sans que vous le demandiez.
+
+Un catalogue partagé contient aussi l'historique des sources de vos téléchargements : les user
+hashes et les noms que des tiers annoncent sur le réseau, et quand vous les avez vus : des
+pseudonymes, jamais des adresses. La fusion réunit ces historiques comme les fichiers.
 
 Le cycle habituel : vous cataloguez quelques semaines, vous échangez votre `catalog.db`, vous
 fusionnez ce que vous recevez, et vous remplacez votre catalogue par le catalogue fusionné.

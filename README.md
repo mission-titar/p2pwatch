@@ -5,9 +5,11 @@ première mission : la version française de *Keroro mission Titar* (Teletoon, 2
 quasiment introuvable. Ces épisodes n'ont pas tout à fait disparu : ils refont surface par
 intermittence, le temps qu'un détenteur reste connecté, puis s'évanouissent. Une recherche manuelle
 tombe presque toujours au mauvais moment ; une veille permanente, non. Un nœud cherche sans relâche,
-catalogue ce qu'il croise, et alerte dès qu'un épisode manquant apparaît. Le sujet du catalogue est
-**le fichier, jamais la personne** : p2pwatch ne piste personne et ne cherche à désanonymiser
-personne.
+catalogue ce qu'il croise, et alerte dès qu'un épisode manquant apparaît. Le catalogue enregistre
+des fichiers et, là où un protocole en publie un, **l'identifiant pseudonyme de la source qui les
+partageait**, pour qu'un chercheur puisse reconnaître un partageur récurrent et contacter un
+archiviste possible. Il ne stocke jamais l'adresse réseau d'un pair (IP, port, pays), et ne relie
+jamais des identifiants d'un réseau à l'autre.
 
 **[Documentation complète](https://mission-titar.github.io/p2pwatch/)** : installer un nœud, le
 faire tourner, le dépanner, et ce qu'il faut savoir côté légalité et vie privée.

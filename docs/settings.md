@@ -74,3 +74,17 @@ scrape_configs:
 
 Pour couper entièrement le point d'accès, mettez `observability.metrics.enabled: false` dans
 `crawler.yml`. Le crawl et le catalogue web continuent normalement.
+
+## Le seuil des sources de nouveau utiles
+
+`download.reappeared_after_hours` (`12` par défaut) règle l'alerte `reappeared`
+([Historique des sources](operate.md#historique-des-sources)) : une source de nouveau utile
+n'alerte que si le nœud n'a rien appris de ce qu'elle détient pendant plus de ce nombre d'heures.
+Plus court, une source qui revient chaque soir alerte plus souvent ; plus long, seules les longues
+absences alertent.
+
+La clé accepte tout nombre positif, décimales comprises, mais une valeur sous l'heure a peu de
+sens : aMule ne réinterroge une source en attente que toutes les 15 minutes, et une source peut
+quitter sa liste puis y revenir sans s'être absentée. Une valeur nulle, négative, infinie ou `.nan`
+est refusée au démarrage, avec un message qui nomme la clé. La valeur est lue au démarrage :
+relancez le crawler (`docker compose restart p2pwatch`) après l'avoir changée.

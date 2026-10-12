@@ -28,9 +28,9 @@ The crawler is Clean/Hexagonal: `domain/` pure, `application/` async use-cases, 
 | Subsystem | Location | Role |
 |---|---|---|
 | Matching engine | `packages/matching/src/catalog_matching/` | declarative YAML-policy file→episode matcher (see Architecture), shared by the crawler and the in-process webui |
-| WebUI (in-process) | c: `webui/` | read-only catalog viewer + client status and runtime controls on the dashboard (`/`) + read-only SQL console (`/console`); Starlette/Jinja2 served on its own thread by `python -m p2pwatch`; the bind is FIXED at `0.0.0.0:8080` in code, `crawler.yml`'s `webui.enabled` only gates the whole surface |
+| WebUI (in-process) | c: `webui/` | read-only catalog viewer (files, and the source history: `/sources`, a source's page `/sources/{source_id}`, a name's page `/sources/name`) + client status and runtime controls on the dashboard (`/`) + read-only SQL console (`/console`); Starlette/Jinja2 served on its own thread by `python -m p2pwatch`; the bind is FIXED at `0.0.0.0:8080` in code, `crawler.yml`'s `webui.enabled` only gates the whole surface |
 | amuleapi adapter | c: `adapters/mule_api/` | REST client / JSON mapping / error contract for amuled (no probe tool: `curl` and amuleapi's own web UI replace them) |
-| Persistence | c: `adapters/persistence_sqlite/` | append-only catalog.db + local.db; `.sql` migrations; sync repos |
+| Persistence | c: `adapters/persistence_sqlite/` | catalog.db, append-only but for `source_ranges`, whose trigger lets only a source's latest range grow; local.db; `.sql` migrations; sync repos |
 | Search / crawl loop | c: `domain/search/`, `application/` | keywords/backoff; one search task per (client, channel, keyword), persisted backoff |
 | Download | c: `domain/download/` + ports/adapters | candidate → eD2k link → amuled queue → completion. Nothing moves or opens the file |
 | Observability | c: `domain/observability/`, `adapters/observability/` | events → policy → dispatcher; Prometheus + apprise |
@@ -42,7 +42,7 @@ The crawler is Clean/Hexagonal: `domain/` pure, `application/` async use-cases, 
 
 ## Design invariants (do not violate)
 
-- **The catalog's subject is the file, never the person**: no tracking, no deanonymization.
+- **The catalog records files and, where a protocol publishes one, the pseudonymous identifier of the source that shared them**, so that a researcher can recognise a recurring sharer and contact a possible archivist. It never stores a peer's network address (IP, port, country), and never links identifiers across networks.
 - **The crawler never reads downloaded bytes, and never touches the filesystem of the output directory.** The core mounts the output directory read-only, for the disk floor's `statvfs` only. One deliberate exception, in the aMule container: its boot step `p2pwatch_amule.config` creates the mount points `/downloads/incoming` and `/downloads/temp` and chowns them, not recursively, to `PUID:PGID`, so that amuled, running as `amule`, can write there. It runs once as root before s6 starts anything, the crawler never imports it, and it never lists, opens or changes what the mounts contain. It lives in `packages/amule/`, under the same gate (mypy, coverage, the VEX source guard).
 - **`docs/` is the Zensical root and is published in full**: every `.md` under it becomes a page on https://mission-titar.github.io/p2pwatch/, because Zensical builds every file in `docs_dir` whether or not the nav references it. Anything that should not be published goes in `agents/` (specs, plans, handoffs, reference notes), never in `docs/`. The site is built by `uv run poe docs-build`, which passes `--strict` so a broken link or a dead anchor fails the build instead of shipping silently.
 - **Package boundary:** `catalog_matching` is a pure shared library imported by the crawler (and by its in-process webui), never the reverse. `p2pwatch_amule` never imports the crawler, nor the crawler it. `vex_guards` and `amule_bump` are dev/CI tooling: never imported by shipped code, nor installed in the prod image.

@@ -54,7 +54,7 @@ def fold_raw_meta(
 
 @dataclass(frozen=True)
 class FileObservation:
-    """A file observed during a search (the file, never the person); ``keyword`` is its provenance.
+    """A file observed during a search, whose result names no source; ``keyword`` is its provenance.
     Media fields are ``None`` when the network did not report them (self-declared, unreliable)."""
 
     file: FileKey

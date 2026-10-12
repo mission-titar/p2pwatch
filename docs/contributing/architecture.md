@@ -17,8 +17,9 @@ description: "Vue d'ensemble du crawler : sous-systèmes, interactions et cycles
 
 `p2pwatch` surveille en continu le réseau eMule (eD2k + Kad, via un `amuled` piloté par l'API REST
 d'**amuleapi**) pour retrouver les épisodes perdus du doublage français de *Keroro mission Titar*, en
-cataloguant au passage chaque métadonnée croisée. **Le sujet du catalogue est le fichier, jamais la
-personne.**
+cataloguant au passage chaque métadonnée croisée. **Le catalogue enregistre des fichiers et, là où
+un protocole en publie un, l'identifiant pseudonyme de la source qui les partageait ; jamais
+l'adresse réseau d'un pair.**
 
 ## 2. Vue d'ensemble des sous-systèmes
 
@@ -305,7 +306,7 @@ flowchart LR
 ## 7. Du téléchargement à la complétion
 
 Actif en mode téléchargement seulement. Une itération de `run_download_cycle` enchaîne trois étapes
-sur une seule session amuleapi.
+sur une seule session amuleapi, puis relève les sources des téléchargements du crawler (§8.3).
 
 ```mermaid
 flowchart TD
@@ -372,11 +373,14 @@ est terminal ; `failed` n'est terminal que jusqu'à ce qu'amuled en décide autr
 
 ```mermaid
 flowchart LR
-  subgraph cat["catalog.db · append-only"]
+  subgraph cat["catalog.db · append-only, but source_ranges"]
     f["files"]
     ov["observation_variants"]
     o["observations"]
     md["match_decisions"]
+    s["sources"]
+    sv["source_variants"]
+    sr["source_ranges"]
   end
   subgraph loc["local.db · per node"]
     nr["node_runtime"]
@@ -385,8 +389,8 @@ flowchart LR
   end
 ```
 
-- **`catalog.db`** (version de schéma 9) : la connaissance accumulée, **append-only** (triggers
-  `BEFORE UPDATE/DELETE -> ABORT`), pour que N nœuds fusionnent en un seul catalogue (`python -m
+- **`catalog.db`** (version de schéma 10) : la connaissance accumulée, **append-only** (triggers
+  `BEFORE UPDATE/DELETE -> ABORT`) sauf `source_ranges` (§8.3), pour que N nœuds fusionnent en un seul catalogue (`python -m
   p2pwatch.merge`). Les insertions sont **idempotentes** (`INSERT OR IGNORE` /
   `ON CONFLICT DO NOTHING`), donc sans danger en cas de redémarrage en pleine écriture.
 - **`local.db`** (version de schéma 8) : l'état d'exécution du nœud (identité, suivi des
@@ -409,6 +413,7 @@ microsecondes, et le nombre de sources. `codec`, `file_type` et `complete_source
 repliés dans `raw_meta`. `catalog/0008` identifie un fichier par `(network, native_id)`, avec pour
 clé `file_id`, un UUID v5 de ce couple, identique sur tous les nœuds ; `aich_hash` disparaît.
 `catalog/0009` rend au disque, par un `VACUUM`, la place que ces réécritures ont libérée.
+`catalog/0010` crée l'historique des sources (§8.3).
 `local/0006` efface l'état du cycle de recherche, qui n'existe plus, et la carte des backoffs.
 `local/0007` identifie un téléchargement par le même `file_id` que le catalogue, et garde
 `(network, native_id)` : `file_id` est à sens unique, et la boucle doit retrouver le fichier.
@@ -479,6 +484,52 @@ arrête les écrivains qui contournent le domaine : `merge`, une migration. Par 
 une seconde identité de la même source), mais pas `source_variants.contact_point`, dont le format
 dépend d'un réseau que la ligne ne porte pas.
 
+### 8.3 L'historique des sources
+
+La dernière étape du cycle de téléchargement lit les sources de chaque téléchargement du crawler que
+l'instantané de file liste sans le dire terminé (`SourceClient.sources` : `GET
+/downloads/{hash}/clients` en pages, puis un `GET /clients/{ecid}` par source), et les écrit en une
+transaction par téléchargement. Elle vient après les étapes qui font avancer les téléchargements,
+pour qu'une erreur en lisant des sources n'en saute aucune.
+
+```mermaid
+flowchart LR
+  s["sources<br/>network, native_id"] --> v["source_variants<br/>file_id, name, software, role,<br/>contact_point, directly_reachable, raw_meta"]
+  v --> r["source_ranges<br/>node_id, first_seen_at, last_seen_at,<br/>received_bytes, transfer_counter"]
+```
+
+- **`sources`**, l'identité : `source_id` est un UUID v5 de `network:native_id`, comme `file_id`
+  mais sous son propre espace de noms. Sur eD2k, `native_id` est le user hash en minuscules ; un
+  hash de 32 zéros, celui d'un pair qui ne l'a pas encore envoyé, ne fait pas une identité.
+- **`source_variants`**, un jeu de propriétés vu sur un fichier, dédupliqué par `content_hash`, sans
+  `node_id` : l'observateur appartient à la plage. `source_id` est `NULL` sans user hash.
+  `raw_meta` ne garde que les clés stables que l'adaptateur choisit : une vitesse, un rang de file
+  ou un compteur ouvrirait une plage à chaque lecture. Aucune colonne ne porte l'adresse d'un pair ;
+  `contact_point` est celle du serveur eD2k de la source.
+- **`source_ranges`**, la présence, en microsecondes. L'écrivain prend la dernière plage de ce nœud
+  pour la même source sur le même fichier (par `source_id`, ou par nom sans user hash) et l'allonge
+  si la variante est la même, si la lecture tombe dans les `3 x download.poll_interval_seconds` qui
+  suivent sa fin, et si le compteur d'octets d'aMule n'a pas baissé ; sinon il ouvre une plage.
+  Seule une plage `sending` cumule les octets reçus. Un état qu'aMule traverse de lui-même
+  (`idle`, `connecting`...) prend le groupe de la plage précédente, pour que sa remise à zéro
+  périodique n'ouvre pas de plage.
+
+`sources` et `source_variants` sont append-only. **`source_ranges` est la seule table du catalogue
+qui ne l'est pas** : ses triggers refusent tout `DELETE`, et un `UPDATE` sauf si la clé
+(`variant_id`, `node_id`, `first_seen_at`) est inchangée, qu'aucune de `last_seen_at`,
+`received_bytes` et `transfer_counter` ne baisse et, si l'une monte, qu'aucune plage plus récente du
+même `(variant_id, node_id)` n'existe. Un `UPDATE` qui ne change rien passe, ce dont `merge` a
+besoin. Le message est `source_ranges only grows its latest range`.
+
+`merge` copie `sources` et `source_variants` comme les autres tables et réunit les plages : un
+upsert sur la clé qui garde le `MAX` de chaque valeur, dans l'ordre de `first_seen_at`, pour qu'une
+plage s'allonge avant que la suivante n'arrive. `MAX` étant commutatif et idempotent, la fusion
+reste indépendante de l'ordre et rejouable.
+
+Les alertes `new-source` et `reappeared` se décident sur les plages qu'une écriture vient d'ouvrir,
+une fois sa transaction validée, d'après l'historique de la source antérieur au début du tour
+([Historique des sources](../operate.md#historique-des-sources)).
+
 ## 9. Port-sync High-ID (optionnel)
 
 Derrière un VPN, le port entrant change ; sans High-ID, la connectabilité (et donc la couverture) se
@@ -546,8 +597,9 @@ démon sont
 
 ## 11. Invariants de conception (récapitulatif)
 
-- **Le sujet du catalogue est le fichier, jamais la personne** : pas de pistage, pas de
-  désanonymisation.
+- **Le catalogue enregistre des fichiers et, là où un protocole en publie un, l'identifiant
+  pseudonyme de la source qui les partageait** ; il ne stocke jamais l'adresse réseau d'un pair
+  (IP, port, pays), et ne relie jamais des identifiants d'un réseau à l'autre.
 - **Le crawler PROD ne lit jamais les octets et ne touche jamais au répertoire de sortie** ; la
   complétion est un signal positif.
 - **Frontières de paquets** : `catalog_matching` n'importe jamais `p2pwatch` ; `p2pwatch_amule` et
@@ -558,7 +610,8 @@ démon sont
 - **Politique de matching 100 % en YAML** ; le moteur reste fixe et minimal.
 - **`domain/` est pur** ; toutes les I/O vivent dans `adapters/` ; le graphe de dépendances est un
   DAG.
-- **`catalog.db` est append-only et fusionnable ; `local.db` n'est jamais fusionnée.**
+- **`catalog.db` est append-only, sauf `source_ranges` qui n'allonge que ses dernières plages, et
+  fusionnable ; `local.db` n'est jamais fusionnée.**
 - **Discipline de frontière** : absorber les échecs d'I/O externes attendus, laisser crasher le code
   interne testé.
 
@@ -570,7 +623,7 @@ démon sont
 | Cas d'usage | `application/search_tasks.py`, `status_loop.py`, `run_download_cycle.py` |
 | Recherche (pure) | `domain/search/` (`keywords`, `backoff`) |
 | Matching | `packages/matching/src/catalog_matching/` (moteur + politique `deploy/matcher.yml`) |
-| Frontière amuleapi | `adapters/mule_api/` (client / mapping / erreurs) ; ports `ports/mule_client.py`, `ports/download_client.py` |
+| Frontière amuleapi | `adapters/mule_api/` (client / mapping / erreurs) ; ports `ports/mule_client.py`, `ports/download_client.py`, `ports/source_client.py` |
 | Persistance | `adapters/persistence_sqlite/` (migrations `.sql`, repos) |
 | Observabilité | `domain/observability/`, `adapters/observability/` |
 | WebUI | `webui/` (in-process, thread dédié) |
