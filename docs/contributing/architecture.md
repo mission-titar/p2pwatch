@@ -373,7 +373,7 @@ est terminal ; `failed` n'est terminal que jusqu'à ce qu'amuled en décide autr
 
 ```mermaid
 flowchart LR
-  subgraph cat["catalog.db · append-only, but source_ranges"]
+  subgraph cat["catalog.db · append-only, sauf source_ranges"]
     f["files"]
     ov["observation_variants"]
     o["observations"]

@@ -28,6 +28,11 @@ Low-ID
     fonctionne quand même, simplement avec moins de sources. C'est l'état par défaut, et il
     convient parfaitement pour cataloguer.
 
+user hash
+:   L'identifiant qu'un client eD2k annonce aux autres : un pseudonyme, stable tant que la même
+    installation tourne, jamais une adresse. C'est sous lui que l'historique des sources range une
+    source.
+
 IncomingDir
 :   Le dossier où le client eMule dépose un fichier une fois terminé. Ici, il correspond à
     `ed2k/downloads/incoming` dans votre dossier de travail.
@@ -75,6 +80,7 @@ dossier de travail
 *[Kad]: Kademlia, le réseau eMule décentralisé, sans serveur
 *[High-ID]: Nœud joignable depuis l'extérieur : plus de sources, téléchargements plus rapides
 *[Low-ID]: Nœud non joignable de l'extérieur : moins de sources, mais tout fonctionne
+*[user hash]: L'identifiant pseudonyme qu'un client eD2k annonce, stable pour une installation, jamais une adresse
 *[IncomingDir]: Le dossier où le client eMule dépose un fichier terminé, ici ed2k/downloads/incoming
 *[s6]: Le superviseur qui fait tourner amuled et le port-sync dans le conteneur ed2k, et les relance
 *[EC]: External Connection, le canal interne par lequel amuleapi parle à amuled

@@ -129,6 +129,10 @@ docker compose run --rm p2pwatch python -m p2pwatch validate-config \
 idempotente et n'écrase rien sans `--force` ; `--into <source>` fusionne dans une source existante.
 Elle réunit les plages de l'[historique des sources](#historique-des-sources) : deux copies du
 catalogue d'un même nœud, prises à deux moments, donnent chaque plage avec sa fin la plus tardive.
+Ces copies doivent suivre une même histoire : un catalogue restauré d'une sauvegarde, ou remplacé
+par un catalogue fusionné pendant que le nœud tournait, ne peut plus absorber une copie de lui-même
+prise avant : la fusion peut alors la refuser entière, à chaque essai, avec
+`source_ranges only grows its latest range`.
 Le cycle de partage est décrit sur la [page d'accueil](index.md#partage).
 
 ```bash
@@ -223,7 +227,8 @@ Le rôle dit ce que le nœud sait de ce que la source détient :
 | `undetermined` | inconnu | aMule ne sait pas encore ce qu'elle détient |
 
 Le catalogue web montre cet historique par fichier, par source et par nom
-([Routes disponibles](#routes-disponibles)).
+([Routes disponibles](#routes-disponibles)). Chaque plage y nomme le nœud qui l'a relevée : un
+catalogue fusionné en réunit plusieurs.
 
 Deux alertes partent sur le canal *community*, toutes deux quand une source devient utile :
 
