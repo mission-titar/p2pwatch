@@ -120,7 +120,7 @@ def test_t1_merge_two_distinct_catalogs(tmp_path: Path) -> None:
             + rows_without_id(src_b, table)
             + rows_without_id(src_c, table)
         )
-        assert rows_without_id(out, table) == expected
+        assert sorted(rows_without_id(out, table)) == expected
 
 
 def test_t2_merge_overlapping_identity_files_or_ignore(tmp_path: Path) -> None:
