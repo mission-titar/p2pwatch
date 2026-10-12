@@ -8,7 +8,7 @@
 - **Lost media** : doublage **VF de « Keroro mission Titar »** (diffusé en 2008 sur Teletoon, France). Majorité des épisodes perdue ; liste canonique connue (Wikipédia) + statut par épisode (complet/partiel/perdu/piètre). Communauté sur Discord.
 - **Objectif** : retrouver un maximum d'épisodes perdus, et **cataloguer un maximum de métadonnées** (fichiers, sources, durées) même sans téléchargement.
 - **Mécanisme** : les fichiers apparaissent **par intermittence** quand un détenteur se connecte → il faut une **surveillance permanente et distribuée** (plusieurs chercheurs) pour transformer le hasard en couverture.
-- **Limite éthique** : le sujet du catalogue est **le fichier, pas la personne**. Pas de pistage ni de désanonymisation ; minimisation des données.
+- **Limite éthique** : le sujet du catalogue est **le fichier, pas la personne**. Pas de pistage ni de désanonymisation ; minimisation des données. (Corrected: the catalog records files and, where a protocol publishes one, the pseudonymous identifier of the source that shared them; it never stores a peer's network address, and never links identifiers across networks; stage 4's spec, D10.)
 
 ## 2. Périmètre de ce sous-projet & hors-scope
 
@@ -212,7 +212,7 @@ Prank/mauvais contenu · malware déguisé · exploit player/codec (chez le cons
 
 ## 11. Modèle de données — deux bases
 
-**`catalog.db`** — partageable, **append-only, adressé par contenu**, mergeable (UNION ; dédup par clés ; observations taguées `node_id` ; **sans conflit**). Principe **capture-all** : colonnes structurées **+ `raw_meta` JSON** (on ne perd jamais une métadonnée).
+**`catalog.db`** — partageable, **append-only, adressé par contenu** (Corrected: except `source_ranges`, whose latest range per variant and node may grow; stage 4's spec, D5), mergeable (UNION ; dédup par clés ; observations taguées `node_id` ; **sans conflit**). Principe **capture-all** : colonnes structurées **+ `raw_meta` JSON** (on ne perd jamais une métadonnée).
 ```
 files(ed2k_hash PK, size_bytes, aich_hash?)
 file_observations(id, ed2k_hash FK, filename, source_count, complete_source_count,

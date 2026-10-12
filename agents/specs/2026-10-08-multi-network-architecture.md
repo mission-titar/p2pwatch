@@ -319,6 +319,9 @@ The invariant "the catalog's subject is the file, never the person" is rewritten
 > a possible archivist. It never stores a network address (IP, port, country), and never links
 > identifiers across networks.
 
+(Corrected: "a peer's network address", since a source's eD2k server is recorded as its contact
+point; stage 4's spec, D10.)
+
 Why addresses are excluded: an address is the one field that leads to a subscriber through their
 ISP, and it is a poor identifier anyway (dynamic IPs, CGNAT, VPNs). Pseudonymous identifiers are
 stable for an installation and identify a sharer without saying who they are.
@@ -345,11 +348,14 @@ active partfile (`PartFile.cpp:1806`, `DownloadQueue.cpp:1612`). Hence, on eD2k:
 - **Never done**: a download started only to obtain sources.
 
 The history is kept in full for now, one row per (file, source, day). It must stay compactable:
-the backlog's storage-growth entry applies to it too.
+the backlog's storage-growth entry applies to it too. (Corrected: the history is time ranges at the
+download poll's resolution, one per continuous sighting with one set of properties, and the
+backlog entry no longer exists; stage 4's spec, D4.)
 
 The dormant `sources` and `source_observations` tables (catalog `0001`, written by no application
 code, copied by `merge` and `compact`) are replaced, not reused: they carry `ip`, `port` and
-`country`.
+`country`. (Corrected: catalog migration `0006` already dropped them, so nothing is replaced; stage
+4's spec, D2 to D4.)
 
 `docs/legal.md` ("Aucune IP de pair") is updated in the same stage.
 
@@ -358,6 +364,9 @@ code, copied by `merge` and `compact`) are replaced, not reused: they carry `ip`
 `new-location` (a known file seen at a new source) and `reappeared` (a known location seen again
 after a configurable silence, 48 h in the prototype) join the existing decision-change
 notifications. They describe observations: a reappearance does not prove the sharer was offline.
+(Corrected: `new-location` is dropped; `new-source` notifies a source useful for the first time,
+and `reappeared` one useful again after 12 h by default; only a source with parts we lack
+notifies; stage 4's spec, D9 and D11.)
 
 ### D12. One version for every image
 
@@ -397,7 +406,8 @@ Rules every download adapter follows, each with its test:
    download mount, outstanding bytes from each client's queue, summed across clients sharing a
    filesystem.
 7. **Sources are the identities that sent us data**, per D10, read from the client after or
-   during the transfer.
+   during the transfer. (Corrected: a source is any peer our download gets data from or could,
+   queued and A4AF included; stage 4's spec, D1.)
 
 | | aMule | slskd | AirDC++ | gtk-gnutella | qBittorrent |
 |---|---|---|---|---|---|
@@ -475,7 +485,7 @@ Domain changes come before topology changes, so that every stage ships on its ow
 | 1 | Generic identity | D8: catalog migration to `(network, native_id)`, network-agnostic `FileObservation`, in today's single container |
 | 2 | Search, download and status ports | D9, D13, D14: generic ports, aMule adapters on them; persistent and passive search ports declared (Corrected: not declared in stage 2, they arrive with their first client in stage 5; stage 2's spec, D1) |
 | 3 | aMule leaves the core | D1, D4, D5, D6, D7 for aMule: rename to p2pwatch (D15), `p2pwatch-amule` image, local port-sync, base compose with includes, core hardening (Corrected: no core hardening; stage 3's spec, Non-goals). Breaking: `v5.0.0` (Corrected: no `v5.0.0` here, the major release waits for the first new network; stage 1's spec, D16) |
-| 4 | Sources and events | D10, D11: source history, eD2k download sources, `docs/legal.md` |
+| 4 | Sources and events | D10, D11: source history, eD2k download sources, `docs/legal.md` (Corrected: the history is ranges, not one row per day; no `new-location`; `new-source` and `reappeared` after 12 h, for a source with parts we lack; stage 4's spec, D4, D9 and D11) |
 | 5 | New networks, one by one | search, download (D13) and status (D14) per client: Soulseek (slskd), Direct Connect (AirDC++), Gnutella (gtk-gnutella + patch + shim), Bitmagnet + qBittorrent (opt-in) |
 
 ## 5. Lessons from the prototype, as test cases

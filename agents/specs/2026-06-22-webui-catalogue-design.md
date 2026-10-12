@@ -92,7 +92,9 @@ paquet partagé.
    custom** (filtres/recherche/pagination côté serveur via query-params).
 9. **W-D9 — Minimisation / le sujet = le fichier.** Jamais d'IP ni de `user_hash` brut ; uniquement des
    **compteurs** de sources. `source_observations` (dormante) **non exposée**. `raw_meta` repliable,
-   sur demande. Pas d'export en masse. (MVP §1 / §10.1.)
+   sur demande. Pas d'export en masse. (MVP §1 / §10.1.) (Corrected: superseded, the source pages
+   show user hashes and names, and the SQL console reads and exports the source tables; no peer
+   address is ever stored; stage 4's spec, D14.)
 10. **W-D10 — Stack & deps.** `catalog_matching` : `google-re2` + `rapidfuzz` (pur, aucune I/O, pas de
     pyyaml). `catalog_webui` : `starlette` + `uvicorn` + `jinja2` + `pyyaml` + `catalog-matching`
     (workspace) ; **pas** de `httpx`. Versions/idiomes exacts (Jinja2 sur Starlette, `StaticFiles`,
