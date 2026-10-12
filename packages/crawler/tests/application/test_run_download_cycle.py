@@ -130,7 +130,7 @@ class FakeSourceRepo:
     """Records each ``record_readings`` call, answering ``opened`` per hash; raises
     ``RepositoryError`` for ``fail_for``. ``history`` answers ``earlier_ranges`` per source,
     never useful by default, and ``baseline`` answers ``has_ranges_before``, each call noted in
-    ``baselines``."""
+    ``baselines``, the first ``baseline_failures`` raising ``RepositoryError``."""
 
     def __init__(
         self,
@@ -139,6 +139,7 @@ class FakeSourceRepo:
         opened: dict[str, tuple[OpenedRange, ...]] | None = None,
         history: dict[SourceKey, EarlierRanges] | None = None,
         baseline: bool = True,
+        baseline_failures: int = 0,
     ) -> None:
         self.recorded: list[tuple[str, tuple[SourceReading, ...], datetime, timedelta]] = []
         self.asked: list[tuple[SourceKey, datetime]] = []
@@ -147,6 +148,7 @@ class FakeSourceRepo:
         self._opened = opened or {}
         self._history = history or {}
         self._baseline = baseline
+        self._baseline_failures = baseline_failures
 
     def record_readings(
         self,
@@ -166,6 +168,8 @@ class FakeSourceRepo:
 
     def has_ranges_before(self, started_before: datetime) -> bool:
         self.baselines.append(started_before)
+        if len(self.baselines) <= self._baseline_failures:
+            raise RepositoryError("has_ranges_before failed")
         return self._baseline
 
 
@@ -1594,6 +1598,26 @@ async def test_the_baseline_is_asked_once_per_round_against_its_start() -> None:
     )
     await run_download_cycle(deps)
     assert sources.baselines == [start]
+
+
+@pytest.mark.asyncio
+async def test_a_repo_failure_asking_the_baseline_skips_that_downloads_alerts_only() -> None:
+    queued = (OpenedRange(_PEER, "AnimuseeFMR", SourceRole.QUEUED),)
+    sources = FakeSourceRepo(opened={_A: queued, _B: queued}, baseline_failures=1)
+    telemetry = RecordingTelemetry()
+    client = FakeDownloadClient(listed=[(_status(_A), _status(_B))])
+    deps = _deps(
+        client=client,
+        downloads=_tracking(_A, _B),
+        catalog=FakeCatalogReads(),
+        sources=sources,
+        telemetry=telemetry,
+    )
+    await run_download_cycle(deps)
+    assert [file for file, *_ in sources.recorded] == [_A, _B]
+    assert len(sources.baselines) == 2
+    alerts = [e for e in telemetry.events if isinstance(e, SourceNew | SourceReappeared)]
+    assert alerts == [SourceNew(_PEER, "AnimuseeFMR", _key(_B), _B, ())]
 
 
 @pytest.mark.asyncio
