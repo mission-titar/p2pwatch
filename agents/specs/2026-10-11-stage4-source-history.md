@@ -183,7 +183,7 @@ queries and the name page (D13).
 | `software` | `software` and `software_version`, space-joined (`emule 0.50a`) | its client |
 | `role` | the role table below | what the node knows of what the source holds, for our download |
 | `contact_point` | `server_ip:server_port` of `GET /clients/{ecid}`, `NULL` when unknown | where it can be reached: an eD2k server, a DC hub |
-| `directly_reachable` | `high_id` of `GET /clients/{ecid}`, `NULL` when its `ed2k_user_id` is 0 | High-ID, active mode, not firewalled |
+| `directly_reachable` | `high_id` of `GET /clients/{ecid}`, `NULL` when its `ed2k_user_id` is 0 (Corrected: also when `ed2k_user_id` is absent or `high_id` is not a boolean, block 25's report) | High-ID, active mode, not firewalled |
 | `raw_meta` | D7's keys | the rest, per network, chosen by the adapter |
 
 - **One `CHECK`, on `role`**, by D17's rule: D9 decides the notifications on it. `contact_point` has none:
@@ -340,7 +340,18 @@ ON CONFLICT (variant_id, node_id, first_seen_at) DO UPDATE SET
 
 - *Reason: two copies of one node's catalog hold the same range at two moments, with the same key; keeping
   the larger end is their union. `MAX` is commutative and idempotent, so the merge stays order-independent
-  and re-runnable, the two properties append-only gave `merge` (MVP spec §11).*
+  and re-runnable, the two properties append-only gave `merge` (MVP spec §11).* (Corrected: only for
+  copies on one line of a node's history. When a node's catalog is restored from a backup, or replaced
+  by a merged catalog while the node ran, its new ranges diverge from a copy taken before: the
+  destination holds a range R1 with an older end and a later range R3 of the same `(variant, node)`, the
+  copy holds R1 with a later end, and growing R1 hits D5's third rule. `merge` then refuses the whole copy,
+  on every attempt; the `ORDER BY` cannot help, since R3 is already in the destination. Kept as an
+  accepted limit (operator, 2026-10-12: "On va noter que c'est une limite au backlog, et garder le
+  comportement actuel."), stated in §7, `docs/operate.md` and `docs/index.md`, pinned by
+  `test_merger.py::test_a_copy_diverged_from_a_restored_catalog_is_refused_whole`, and in `BACKLOG.md`.
+  The holistic review's fix, a `WHERE NOT EXISTS` (a later range of the same variant and node in `main`)
+  on the `DO UPDATE`, keeps the destination's end for such a range: it never refuses, but that range's
+  merge is no longer commutative. It fails only that test of `test_merger.py` (closing block's report).)
 - *Why the `ORDER BY`: only a range that was still open in the older copy grows, and in the newer copy it
   may already be followed by a later range. Copied in start order, the earlier range grows before the later
   one lands, so D5's third rule holds; a range met again unchanged is a no-op, which D5 lets pass. The first
@@ -371,7 +382,8 @@ ON CONFLICT (variant_id, node_id, first_seen_at) DO UPDATE SET
   `:1979`) and changed 26 times in 65 minutes over 4 sources (section 4).
 - **Paging**: `GET /downloads/{hash}/clients` with `sort=ecid`, `after=<last ecid>`, `limit=500`.
   `_collect` (`adapters/mule_api/client.py:299-317`) takes the sort key and its anchor field as parameters
-  instead of `hash`. *Reason: every list endpoint returns 100 rows by default (`REFERENCE.md:269`);
+  instead of `hash` (Corrected: one `identity` parameter names both, since amuleapi accepts `after` only
+  with `sort` on the route's identity column, block 20's report). *Reason: every list endpoint returns 100 rows by default (`REFERENCE.md:269`);
   `ecid` is this route's identity column (`REFERENCE.md:313-314`).*
 - **One `GET /clients/{ecid}` per kept row**, for `server_ip`, `server_port` and `high_id`, which the list
   row does not carry: the probe found them only in the detail (its detail-only keys: `ed2k_user_id`,
@@ -389,7 +401,8 @@ ON CONFLICT (variant_id, node_id, first_seen_at) DO UPDATE SET
   connections" (`REFERENCE.md:1326`), and two hash-less rows may share a name. The probes saw neither, so
   this is the cheapest correct rule, not a measured need.*
 - The mapper copies no address field (D3). It reads `ed2k_user_id` only to test it against 0 for
-  `directly_reachable`. Its test feeds a row whose addresses are set and asserts none reaches the reading.
+  `directly_reachable` (Corrected: an absent `ed2k_user_id`, or a `high_id` that is not a boolean, also
+  leaves it `NULL`, block 25's report). Its test feeds a row whose addresses are set and asserts none reaches the reading.
 
 #### D8. When sources are read
 
@@ -400,7 +413,11 @@ ON CONFLICT (variant_id, node_id, first_seen_at) DO UPDATE SET
   *Reason: the cycle already reads the queue at `download.poll_interval_seconds`, the resolution the
   operator kept (2026-10-11), and already knows which downloads are the crawler's.*
 - Errors follow the cycle's doctrine: a `RepositoryError` skips this step, `ClientUnreachableError` ends the
-  round (`run_download_cycle.py:308-388`).
+  round (`run_download_cycle.py:308-388`). (Corrected: a `RepositoryError` writing one download's
+  readings skips that download only, and one reading the tracked downloads skips the step, block 30's
+  report. A `DownloadRejectedError` on the queue read or the sources read ends the round like
+  `ClientUnreachableError`, block 30's class 2 fix, and a daemon unreachable at `_start_unlisted` ends the
+  round before the sources step, block 30's report.)
 - **Cost**: one list call and one detail call per source, per download, per round. With the probe's 52 rows
   over 21 downloads, that is 73 calls per 30 s round, about 2.4 per second, against a local amuleapi.
 - **Volume**: one range per continuous sighting with one set of properties. From the node's catalog (2026-10-11, the 25 files a
@@ -427,7 +444,7 @@ Two community notifications, both about a source becoming **useful** (D3's group
 | Event | Emitted when a source with a `source_id` opens a useful range during a round that started at `round_started_at`, and |
 |---|---|
 | `new-source` | it never had a useful range on this node, on any file |
-| `reappeared` | it is not `new-source`, and it had no useful or not-useful range on this node, on any file, during the `download.reappeared_after_hours` before `round_started_at` |
+| `reappeared` | it is not `new-source`, and it had no useful or not-useful range on this node, on any file, during the `download.reappeared_after_seconds` before `round_started_at` (Corrected: named `reappeared_after_hours` at approval, holistic review) |
 
 - **Only a source becoming useful.** *Reason: the sources on the node today are the team's nodes, at the
   same point as ours (D1); a teammate who switches off overnight must not notify. A list of hashes to
@@ -452,7 +469,11 @@ Two community notifications, both about a source becoming **useful** (D3's group
 - **Not emitted** for a source without `source_id`. *Reason: a name is too weak to carry an event, since
   default names are shared.*
 - **Not emitted on this node's first recording round**: when the node has no range with `first_seen_at <
-  round_started_at`, decided once at the start of the round. *Reason: on the deploy of this stack, or on a
+  round_started_at`, decided once at the start of the round. (Corrected: asked once per round, when the
+  round's first range with a `source_id` opens, since the miss is a full scan on a catalog merged with
+  other nodes' ranges; the answer is the same at any point of the round, since "before" excludes the
+  round's own writes. A `RepositoryError` from it skips that download's alerts, like one from
+  `earlier_ranges`, holistic review.) *Reason: on the deploy of this stack, or on a
   node starting from an empty catalog, every useful source would be "new" at once; a baseline is not news.
   Decided per round, not per file, since the round's first file already writes ranges.*
 - **Emitted after the commit.** `record_readings` returns the ranges it opened with their roles (a carried
@@ -461,7 +482,11 @@ Two community notifications, both about a source becoming **useful** (D3's group
   the same answer. A crash between the commit and the emission loses the event: delivery is at most once,
   an accepted limit, since emitting before the write would repeat events after a failed write.
 - **`download.reappeared_after_hours`**, default `12`, a positive **finite** number, read by
-  `_parse_download` (`adapters/config/crawler_config.py:308-326`). `_positive_default` alone accepts `.inf`
+  `_parse_download` (`adapters/config/crawler_config.py:308-326`). (Corrected:
+  `download.reappeared_after_seconds`, default `43200`, so that every duration of `crawler.yml` is in
+  seconds, operator's choice on the holistic review; parsed into a `timedelta`, a value no `timedelta`
+  holds refused as a `ConfigError` naming the key, block 35's report; and every number of `crawler.yml`
+  now refuses `.inf` and `.nan`, not only this one, block 35's class 2 fix.) `_positive_default` alone accepts `.inf`
   and `.nan` (`crawler_config.py:176-189`): `inf` overflows when converted to microseconds, and `nan`
   silently disables the event (the umbrella's prototype lessons name the same trap for `Retry-After`).
   *Reasons:*
@@ -519,7 +544,10 @@ source rather than per file (D9).
 #### D12. A "Source history" section on the file page
 
 On `/files/{file_id}`, after "Observations": one row per range, newest first, with name, shortened user
-hash, role, contact point, High-ID, first and last seen, received bytes and average rate. The name links to
+hash, role, contact point, High-ID, first and last seen, received bytes and average rate. (Corrected:
+times read `2026-10-13 20:00:30Z`, seconds kept, not "At a glance"'s `Tue 20:00:00`, block 50's report;
+a last column, Node, names the node that read the range, since a merged catalog shows two nodes'
+readings of one source as identical rows, operator's choice on the holistic review.) The name links to
 the name page, the hash to the source page (D13). *Reason for the title: the "Observations" table already
 has a "Sources" column, the count a search reports (`file_detail.html:73`).*
 
@@ -527,9 +555,9 @@ has a "Sources" column, the count a search reports (`file_detail.html:73`).*
 
 | Route | Shows |
 |---|---|
-| `GET /sources?q=&page=` | one row per `source_id`: latest name, shortened hash, last seen, number of files; `q` matches a hash prefix or a name substring |
+| `GET /sources?q=&page=` | one row per `source_id`: latest name, shortened hash, last seen, number of files; `q` matches a hash prefix or a name substring (Corrected: a substring of any name the source ever carried, block 60's report) |
 | `GET /sources/{source_id}` | its ranges over every file, and every name it carried, each linking to the name page |
-| `GET /sources/name?name=` | the hashes that carried this name, each linking to its page, and the ranges without a hash under this name |
+| `GET /sources/name?name=` | the hashes that carried this name, each linking to its page, and the ranges without a hash under this name (Corrected: a hash row's last seen and number of files count only its ranges under this name, block 67's report) |
 
 - A "Sources" entry in `_NAV_DESTINATIONS` (`webui/composition/app.py:80-85`).
 - `/sources/name` is declared before `/sources/{source_id}`, and `source_id` is validated as 32 hex
@@ -537,7 +565,10 @@ has a "Sources" column, the count a search reports (`file_detail.html:73`).*
 - **Direct links only**: a name page lists hashes, a hash page lists names, nothing chains further.
   *Reason: chaining hash to names to hashes would merge strangers through a default name into one
   "person" (operator, 2026-10-11).*
-- Pages are 50 rows like `/files`.
+- Pages are 50 rows like `/files`. (Corrected: on the source and name pages, one `page` parameter moves
+  both tables, blocks 65 and 67's reports.)
+- (Corrected: the range tables of the source and name pages carry D12's Node column, operator's choice on
+  the holistic review.)
 
 #### D14. What the webui exposes
 
@@ -564,9 +595,10 @@ the webui is the researcher's tool. The address ban is kept by never storing one
   (`merge/__main__.py:32`), in block 40.
 - Sharing a catalog: `docs/index.md`'s "partage" section and `docs/legal.md:96` say what a shared catalog
   now holds, third parties' user hashes and names.
-- `docs/operate.md`: the two notifications in the community list, the three routes in "Routes disponibles",
+- `docs/operate.md`: the two notifications in the community list (Corrected: no such list existed; a
+  section of their own, "Historique des sources", block 70's report), the three routes in "Routes disponibles",
   `merge`'s range union in "Outils de catalogue".
-- `docs/settings.md`: `download.reappeared_after_hours`.
+- `docs/settings.md`: `download.reappeared_after_hours` (Corrected: `reappeared_after_seconds`, D9).
 - `docs/contributing/architecture.md`: the three tables and D5's trigger rule.
 
 #### D16. Corrections to the umbrella spec and to the webui spec
@@ -742,7 +774,8 @@ the same files. Each block measures itself after committing.
   - `SourceNew`, `SourceReappeared`, their `describe` cases, `p2pwatch_source_alerts`;
   - the decision in the application (pure: the role, `earlier_ranges`'s answer, `round_started_at`, the
     threshold), and the per-round set of sources already notified;
-  - `download.reappeared_after_hours` in `DownloadConfig`, `_parse_download`, `deploy/crawler.yml`.
+  - `download.reappeared_after_hours` in `DownloadConfig`, `_parse_download`, `deploy/crawler.yml`
+    (Corrected: `reappeared_after_seconds`, D9).
 - **40**: `merge/merger.py`'s three statements and its `--help` text; `test_merger.py`: D6's criterion.
 - **50**: `CatalogReader.source_ranges(file_id)`, its view rows, `file_detail.html`, `format.py` for the
   rate.
@@ -775,7 +808,8 @@ the same files. Each block measures itself after committing.
 - Blocks 10 to 20: catalog.db has the three tables, empty; `merge` does not copy them until block 40, which
   loses nothing since nothing writes them before block 30.
 - Blocks 30 to 40: the node writes sources that `merge` does not copy yet.
-- Blocks 30 to 65: sources are recorded and readable only through the SQL console.
+- Blocks 30 to 65: sources are recorded and readable only through the SQL console. (Corrected: from
+  block 50 on, the webui reads them too, block 67's report.)
 - The stack merges as a whole, so `main` carries none of them.
 
 ### Adjacent backlog items
@@ -842,7 +876,8 @@ Each criterion names the output that would prove it wrong. Every test is watched
   different `queued` source, emits nothing, in either file order; the next round, with a third `queued`
   source, emits one `SourceNew`.
 - **The config key** (block 35): absent gives 12; `0`, `-1`, `.inf` and `.nan` raise a `ConfigError` naming
-  `download.reappeared_after_hours`.
+  `download.reappeared_after_hours`. (Corrected: absent gives `43200` seconds, and the error names
+  `download.reappeared_after_seconds`, D9.)
 - **`merge`** (block 40):
   - two catalogs holding one range with ends `t1 < t2` merge, in either order, into one range ending at
     `t2`;
@@ -852,7 +887,8 @@ Each criterion names the output that would prove it wrong. Every test is watched
   - copying the source ranges `ORDER BY first_seen_at DESC` makes the newer-into-older case raise D5's
     message: watched.
 - **The webui** (blocks 50 to 67 (Corrected: block 65 split in two over the line bound, block 65's report)): each route answers 200 on a seeded catalog and shows the seeded name and
-  shortened hash; `/sources/zz` answers 404; a name page lists two hashes sharing a name and no third hash
+  shortened hash (Corrected: the source page shows the full hash, its subject, block 65's report);
+  `/sources/zz` answers 404; a name page lists two hashes sharing a name and no third hash
   reachable only through the second one's other name.
 - **Docs** (block 70): `uv run poe docs-build` passes; `git grep -n -i "never the person\|jamais la
   personne\|never a person" -- . ':!agents/'` prints nothing (6 lines on 2026-10-12), and
@@ -873,6 +909,10 @@ Each criterion names the output that would prove it wrong. Every test is watched
   stack.
 - **One aMule, one server**: a Low-ID source on another server is not recorded (D11).
 - **At-most-once events** (D9): a crash between the commit and the emission loses one.
+- **`merge` refuses a diverged copy** (Corrected: added on the holistic review, D6): a catalog restored
+  from a backup, or replaced by a merged catalog while the node ran, can no longer absorb a copy of
+  itself taken before; the whole copy is refused, on every attempt. Accepted by the operator
+  (2026-10-12), with a `BACKLOG.md` entry for the fix.
 - **A node stopped longer than 12 h** notifies `reappeared` for every source back with parts we lack in its
   first round: from this node's view, they were absent. Accepted by the operator (2026-10-11): suppressing it
   would need a record of the node's rounds, a table for a rare case.
