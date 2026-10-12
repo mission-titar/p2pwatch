@@ -45,8 +45,8 @@ The 13 blocks (Corrected: block 15 split in two over the line bound, block 15's 
 - **10**: the domain model and the three tables.
 - **15**: a role's group, and the repository's reads for the notifications.
 - **17**: the repository that writes readings as ranges.
-- **20**: the amuleapi adapter lists a download's sources.
-- **25**: the detail call and the mapper.
+- **20**: the amuleapi adapter lists a download's sources and maps the list rows (Corrected: block boundary moved along the call, block 20's question).
+- **25**: the detail call, its fields and the de-duplication (Corrected: block boundary moved along the call, block 20's question).
 - **30**: the download cycle records sources.
 - **35**: the `new-source` and `reappeared` notifications.
 - **40**: `merge` copies the source tables.
@@ -681,8 +681,8 @@ the same files. Each block measures itself after committing.
 | 10 | `feat/source-tables` | Domain model and the three tables | 380 / 9 |
 | 15 | `feat/source-repository` | A role's group and D9's reads | 300 / 5 |
 | 17 | `feat/source-writer` | Readings written as ranges | 490 / 3 |
-| 20 | `feat/amuleapi-source-list` | The port, the list paging and its fake | 300 / 6 |
-| 25 | `feat/amuleapi-source-detail` | The detail call and the mapper | 330 / 4 |
+| 20 | `feat/amuleapi-source-list` | The port, the list paging, its fake and the list row's mapping (Corrected: block boundary moved along the call, block 20's question) | 330 / 6 |
+| 25 | `feat/amuleapi-source-detail` | The detail call and the de-duplication (Corrected: block boundary moved along the call, block 20's question) | 250 / 4 |
 | 30 | `feat/record-sources` | The download cycle records sources | 330 / 6 |
 | 35 | `feat/source-alerts` | The `new-source` and `reappeared` notifications | 460 / 13 |
 | 40 | `feat/merge-sources` | `merge` copies the source tables | 260 / 3 |
@@ -722,10 +722,13 @@ the same files. Each block measures itself after committing.
 - **20**:
   - `ports/source_client.py`; `AmuleApiClient.sources` over the list only; `_collect` parameterised with
     the sort key and an anchor that may be an integer (today it requires a `str`, `client.py:314-316`);
+  - `mapping.map_source` over the list row: D1's filter, the role mapping, the all-zero hash, `name`,
+    `software`, the counter and the D7 keys the list row carries; `contact_point` and
+    `directly_reachable` stay `None` (Corrected: block boundary moved along the call, block 20's question);
   - `FakeAmuleApi`'s `/downloads/{hash}/clients` route.
 - **25**:
-  - the `GET /clients/{ecid}` call and its per-row 404; `mapping.map_source` (D3's columns, D7's keys,
-    the all-zero hash, the role mapping, the de-duplication);
+  - the `GET /clients/{ecid}` call and its per-row 404; the detail's fields in `map_source`
+    (`contact_point`, `directly_reachable`, `server_name`) and the de-duplication (Corrected: block boundary moved along the call, block 20's question);
   - `FakeAmuleApi`'s `/clients/{ecid}` route.
 - **30**:
   - the cycle's sources step (D8), `DownloadDeps` gains the source client and repository;
@@ -802,7 +805,7 @@ Each criterion names the output that would prove it wrong. Every test is watched
 - **No address** (block 25): `map_source` on a row and detail with `ip`, `port`, `kad_port`,
   `country_code` and `ed2k_user_id` set returns a reading whose `raw_meta` and fields hold none of their
   values (asserted on the serialized reading). Any of them present fails it.
-- **No fabricated identity** (block 25): a row with an all-zero `user_hash` maps to a reading without
+- **No fabricated identity** (block 20 (Corrected: block boundary moved along the call, block 20's question)): a row with an all-zero `user_hash` maps to a reading without
   `key`. **Format** (block 10): `SourceKey` raises on an eD2k `native_id` in uppercase or of 31
   characters, and inserting such a row in `sources` raises the `CHECK`.
 - **Paging** (block 20): a fake download with 600 clients yields 600 readings; with the `limit` dropped from
