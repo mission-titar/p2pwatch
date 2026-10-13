@@ -280,7 +280,7 @@ def test_record_retraction_round_trip(
         "SELECT file_id, target_id, rule_name, tier, decided_at, node_id FROM match_decisions"
     ).fetchone()
     assert row == (_KEY.file_id, "062A", "", RETRACTED_TIER, _FROZEN_ISO, _NODE)
-    assert repository.last_decisions(_KEY) == {
+    assert repository.latest_decisions(_KEY) == {
         "062A": DecisionRecord(target_id="062A", rule_name="", tier=RETRACTED_TIER)
     }
 
@@ -311,7 +311,7 @@ def test_record_retraction_row_is_append_only(
     with pytest.raises(sqlite3.IntegrityError, match="match_decisions is append-only"):
         connection.execute("DELETE FROM match_decisions")
     # The retracted row SURVIVED both attempts, untouched.
-    assert repository.last_decisions(_KEY) == {
+    assert repository.latest_decisions(_KEY) == {
         "062A": DecisionRecord(target_id="062A", rule_name="", tier=RETRACTED_TIER)
     }
 
@@ -389,4 +389,4 @@ def test_last_observation_of_a_file_never_observed_is_none(
     repository: SqliteCatalogRepository, connection: sqlite3.Connection
 ) -> None:
     insert_file(connection, _HASH, 1)
-    assert repository.last_observation(_KEY) is None
+    assert repository.latest_observation(_KEY) is None

@@ -39,7 +39,7 @@ class _HangingNotifier:
 
 
 _COMPLETED = ev.DownloadCompleted(
-    FileKey(Network.ED2K, "a" * 32), "Keroro 062.avi", (("062A", "t"),)
+    FileKey(Network.ED2K, "a" * 32), "Keroro 062.avi", (ev.TargetTitle("062A", "t"),)
 )
 
 

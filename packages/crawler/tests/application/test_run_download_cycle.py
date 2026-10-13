@@ -24,6 +24,7 @@ from p2pwatch.domain.observability.events import (
     FreeSpaceSampled,
     SourceNew,
     SourceReappeared,
+    TargetTitle,
 )
 from p2pwatch.domain.source import SourceKey, SourceReading, SourceRole
 from p2pwatch.ports.catalog_repository import DownloadCandidate, ObservedFile
@@ -251,7 +252,7 @@ class FakeDownloadRepo:
 
 
 class FakeCatalogReads:
-    """Catalog read side: download_decisions, last_observation and best_observation scripted."""
+    """Catalog read side: download_candidates, latest_observation and best_observation scripted."""
 
     def __init__(
         self,
@@ -264,10 +265,10 @@ class FakeCatalogReads:
         self._observations = observations or {}
         self._best = best or {}
 
-    def download_decisions(self) -> tuple[DownloadCandidate, ...]:
+    def download_candidates(self) -> tuple[DownloadCandidate, ...]:
         return self._candidates
 
-    def last_observation(self, file: FileKey) -> ObservedFile | None:
+    def latest_observation(self, file: FileKey) -> ObservedFile | None:
         return self._observations.get(file.native_id)
 
     def best_observation(self, file: FileKey) -> ObservedFile | None:
@@ -393,7 +394,7 @@ async def test_already_downloaded_candidate_is_deduped() -> None:
 @pytest.mark.asyncio
 async def test_two_segment_candidates_same_hash_dedup_to_one_download() -> None:
     # spec §8: a whole-episode file yields BOTH (hash,062A) and (hash,062B) in
-    # download_decisions; is_downloaded(hash) dedups them to ONE physical download.
+    # download_candidates; is_downloaded(hash) dedups them to ONE physical download.
     #
     # Both targets are DOWNLOAD-eligible ("lost", not "complete") so the ONLY thing that
     # can collapse the two candidates is the `is_downloaded(hash)` guard in
@@ -952,7 +953,7 @@ async def test_emits_download_completed() -> None:
     await run_download_cycle(deps)
     completed = [e for e in telemetry.events if isinstance(e, DownloadCompleted)]
     # No observation, no decision left: the hash names the file, the queued row its target.
-    assert completed == [DownloadCompleted(_key(_A), _A, (("062A", "t"),))]
+    assert completed == [DownloadCompleted(_key(_A), _A, (TargetTitle("062A", "t"),))]
 
 
 @pytest.mark.asyncio
@@ -984,7 +985,9 @@ async def test_a_completion_names_the_clean_file_and_every_download_target_of_th
     await run_download_cycle(deps)
     completed = [e for e in telemetry.events if isinstance(e, DownloadCompleted)]
     assert completed == [
-        DownloadCompleted(_key(_A), "Keroro é.avi", (("062A", "ta"), ("062B", "tb")))
+        DownloadCompleted(
+            _key(_A), "Keroro é.avi", (TargetTitle("062A", "ta"), TargetTitle("062B", "tb"))
+        )
     ]
 
 
@@ -1555,7 +1558,9 @@ async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
     )
     await run_download_cycle(deps)
     alerts = [e for e in telemetry.events if isinstance(e, SourceNew | SourceReappeared)]
-    assert alerts == [SourceNew(_PEER, "AnimuseeFMR", _key(_A), "Keroro 062.avi", (("062A", "t"),))]
+    assert alerts == [
+        SourceNew(_PEER, "AnimuseeFMR", _key(_A), "Keroro 062.avi", (TargetTitle("062A", "t"),))
+    ]
 
 
 @pytest.mark.asyncio
@@ -1588,7 +1593,7 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
     assert sources.asked == [(_OTHER_PEER, start), (_PEER, start)]
     alerts = [e for e in telemetry.events if isinstance(e, SourceNew | SourceReappeared)]
     assert alerts == [
-        SourceReappeared(_PEER, "AnimuseeFMR", _key(_B), _B, (("063A", "t2"),), 46800.0)
+        SourceReappeared(_PEER, "AnimuseeFMR", _key(_B), _B, (TargetTitle("063A", "t2"),), 46800.0)
     ]
 
 

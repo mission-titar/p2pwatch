@@ -49,7 +49,7 @@ from tests.catalog_rows import (
 
 # Selects the CTE under test on its own: SQLite drops the CTEs a query does not reference, so
 # the resulting plan is exactly how ``latest_sighting`` is resolved.
-LATEST_SIGHTING_PROBE = "SELECT file_id, name, source_count_max, last_seen FROM latest_sighting"
+LATEST_SIGHTING_PROBE = "SELECT file_id, filename, source_count, last_seen FROM latest_sighting"
 # Every instant a test writes, from the epoch to the year 3000.
 _ALL_TIME = PeriodWindow(since=0, until=32_503_680_000_000_000, gap=0)
 
@@ -260,7 +260,7 @@ def test_file_detail_carries_observations_and_decisions(catalog_db: Path) -> Non
     assert detail.size_bytes == 100
     assert len(detail.decisions) == 1
     assert detail.decisions[0].target_id == "062A"
-    assert [s.name for s in detail.sightings] == ["keroro_062.avi"]
+    assert [s.filename for s in detail.sightings] == ["keroro_062.avi"]
     assert detail.latest == detail.sightings[0]
     assert detail.known_filenames == ("keroro_062.avi",)
 
@@ -275,8 +275,8 @@ def test_file_detail_reads_its_timeline_in_the_window_and_its_latest_sighting_in
     window = PeriodWindow(since=since, until=iso_to_micros(SEEN_AT), gap=0)
     detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("a" * 32), window)
     assert detail is not None
-    assert [s.name for s in detail.sightings] == ["older.avi"]
-    assert detail.latest is not None and detail.latest.name == "keroro_062.avi"
+    assert [s.filename for s in detail.sightings] == ["older.avi"]
+    assert detail.latest is not None and detail.latest.filename == "keroro_062.avi"
 
 
 def test_file_detail_unknown_file_id_is_none(catalog_db: Path) -> None:

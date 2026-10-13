@@ -25,7 +25,7 @@ _ED2K_NEW = (("network", "ed2k"), ("kind", "new"))
 _ED2K_REAPPEARED = (("network", "ed2k"), ("kind", "reappeared"))
 _SOURCE = SourceKey(Network.ED2K, "1f2e3d4c" * 4)
 _FILE = FileKey(Network.ED2K, "8f3a1c0b9e7d44a2b6c1f0e9d8a7b6c5")
-_062A = (("062A", "Les demoiselles cambrioleuses"),)
+_062A = (ev.TargetTitle("062A", "Les demoiselles cambrioleuses"),)
 
 
 CASES: list[tuple[ev.Event, Report]] = [
@@ -283,14 +283,15 @@ def test_a_backtick_in_the_name_cannot_close_its_code_span() -> None:
     assert "`ed2k://|file|a%60%40everyone%60b.avi|" in report.notification
 
 
-def _completed(*targets: tuple[str, str]) -> ev.DownloadCompleted:
-    return ev.DownloadCompleted(FileKey(Network.ED2K, _HASH), "Keroro `062`.avi", targets)
+def _completed(*target_titles: ev.TargetTitle) -> ev.DownloadCompleted:
+    return ev.DownloadCompleted(FileKey(Network.ED2K, _HASH), "Keroro `062`.avi", target_titles)
 
 
 def test_a_completed_download_is_a_green_message_naming_its_targets_and_file() -> None:
     report = describe(
         _completed(
-            ("062A", "Les demoiselles cambrioleuses"), ("062B", "Le grand combat sous-marin")
+            ev.TargetTitle("062A", "Les demoiselles cambrioleuses"),
+            ev.TargetTitle("062B", "Le grand combat sous-marin"),
         )
     )
     assert report == Report(

@@ -3,8 +3,8 @@
 APPLICATION layer. Iterates every catalogued hash's LATEST observation
 (``catalog.iter_reevaluation_rows()``), rebuilds a :class:`FileCandidate` via
 ``candidate_from_fields`` (the single conversion, spec re-evaluation §6), and delegates to
-the shared ``record_decision_if_changed`` helper (``decisions.py``, which judges the hash on
-all its known names) so retraction + notify/download wakes happen identically to the live
+the shared ``rejudge_file`` helper (``decisions.py``, which judges the hash on
+all its known filenames) so retraction + notify/download wakes happen identically to the live
 per-observation path (spec §4). Only the counting + per-row error absorption are specific
 to the backfill.
 
@@ -16,7 +16,7 @@ import logging
 from dataclasses import dataclass
 
 from catalog_matching.engine import MatchingEngine
-from p2pwatch.application.decisions import record_decision_if_changed
+from p2pwatch.application.decisions import rejudge_file
 from p2pwatch.domain.observation import candidate_from_fields
 from p2pwatch.ports.catalog_repository import CatalogRepository
 from p2pwatch.ports.repository_errors import RepositoryError
@@ -34,7 +34,7 @@ class ReevalSummary:
     """Outcome of one backfill pass (spec §7).
 
     ``evaluated``: rows iterated (one per catalogued hash). ``written``: rows actually
-    appended by ``record_decision_if_changed`` (a re-tiered decision OR a retraction -
+    appended by ``rejudge_file`` (a re-tiered decision OR a retraction -
     no separate retracted count, spec Task 5: "a retraction is just a written row").
     """
 
@@ -63,7 +63,7 @@ async def reevaluate_catalog(
             row.filename, row.size_bytes, row.media_length_sec, row.bitrate_kbps
         )
         try:
-            written += await record_decision_if_changed(
+            written += await rejudge_file(
                 row.file,
                 candidate,
                 catalog=catalog,

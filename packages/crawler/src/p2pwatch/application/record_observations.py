@@ -4,8 +4,8 @@ APPLICATION layer (orchestration spec §4): orchestrates PORTS (sync repos + pur
 + async wake hub), does no I/O itself. For EACH observation (spec §4):
 
 1. ``record_observation`` ALWAYS (periodic re-observation is the goal, spec §3/§6).
-2. ``record_decision_if_changed`` (``decisions.py``) does the rest: evaluate via the pure
-   engine, compare against the last known verdict, and append (or retract) + emit + wake
+2. ``rejudge_file`` (``decisions.py``) does the rest: evaluate via the pure
+   engine, compare against the latest known verdict, and append (or retract) + emit + wake
    only on a genuine change. Identical verdict, or a file that was never matched and still
    isn't → no write, no emit, no wake.
 
@@ -20,7 +20,7 @@ VISIBLE (``error``-level log, so a persistent failure gets noticed).
 import logging
 
 from catalog_matching.engine import MatchingEngine
-from p2pwatch.application.decisions import record_decision_if_changed
+from p2pwatch.application.decisions import rejudge_file
 from p2pwatch.domain.observability.events import ObservationRecorded
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.ports.catalog_repository import CatalogRepository
@@ -48,7 +48,7 @@ async def record_observation(
     try:
         catalog.record_observation(observation)
         await telemetry.emit(ObservationRecorded(client_name, channel))
-        return await record_decision_if_changed(
+        return await rejudge_file(
             observation.file,
             observation.to_candidate(),
             catalog=catalog,

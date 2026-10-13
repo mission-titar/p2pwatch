@@ -54,7 +54,7 @@ def _raw(
 def _raw_sighting(name: str, at: str, *, media: int | None = None) -> Sighting:
     return Sighting(
         file=_key(_A),
-        name=name,
+        filename=name,
         observed_at=at,
         source_count=5,
         size_bytes=100,
@@ -82,7 +82,7 @@ def test_latest_sighting_breaks_an_observed_at_tie_on_the_newest_variant_then_th
     _raw(connection, _A, "second.avi", _TIE, sources=4)
     latest = sightings.latest_sighting(connection, _key(_A))
     assert latest is not None
-    assert (latest.name, latest.source_count) == ("second.avi", 4)
+    assert (latest.filename, latest.source_count) == ("second.avi", 4)
 
 
 def test_latest_sighting_of_a_file_never_seen_or_unknown_is_none(
@@ -118,27 +118,27 @@ def test_known_names_are_every_distinct_name_of_the_file_sorted(
     _raw(connection, _A, "raw.avi", "2026-06-02T10:00:00.000000+00:00")
     _raw(connection, _A, "old [ES].avi", "2026-05-01T10:00:00.000000+00:00")
     _raw(connection, _B, "other.avi", "2026-05-01T10:00:00.000000+00:00")
-    assert sightings.known_names(connection, _key(_A)) == ("old [ES].avi", "raw.avi")
-    assert sightings.known_names(connection, _key(_C)) == ()
+    assert sightings.known_filenames(connection, _key(_A)) == ("old [ES].avi", "raw.avi")
+    assert sightings.known_filenames(connection, _key(_C)) == ()
 
 
 def test_best_name_of_raw_rows_is_the_most_sourced(connection: sqlite3.Connection) -> None:
     insert_file(connection, _A)
     _raw(connection, _A, "clean.avi", "2026-06-01T10:00:00.000000+00:00", sources=8)
     _raw(connection, _A, "mojibake.avi", "2026-06-02T10:00:00.000000+00:00", sources=3)
-    assert sightings.best_name(connection, _key(_A)) == ("clean.avi", 100)
+    assert sightings.best_filename_and_size(connection, _key(_A)) == ("clean.avi", 100)
 
 
 def test_best_name_takes_the_latest_seen_on_a_source_tie(connection: sqlite3.Connection) -> None:
     insert_file(connection, _A)
     _raw(connection, _A, "later.avi", "2026-06-02T10:00:00.000000+00:00")
     _raw(connection, _A, "earlier.avi", "2026-06-01T10:00:00.000000+00:00")
-    assert sightings.best_name(connection, _key(_A)) == ("later.avi", 100)
+    assert sightings.best_filename_and_size(connection, _key(_A)) == ("later.avi", 100)
 
 
 def test_best_name_of_a_file_never_seen_is_none(connection: sqlite3.Connection) -> None:
     insert_file(connection, _A)
-    assert sightings.best_name(connection, _key(_A)) is None
+    assert sightings.best_filename_and_size(connection, _key(_A)) is None
 
 
 def test_sightings_are_the_timeline_oldest_first(connection: sqlite3.Connection) -> None:
@@ -181,7 +181,7 @@ def test_the_timeline_reads_its_interval_only(connection: sqlite3.Connection) ->
         sightings.SELECT_LATEST_SIGHTING,
         sightings.SELECT_LATEST_SIGHTINGS,
         sightings._SELECT_SIGHTINGS,
-        sightings._SELECT_BEST_NAME,
+        sightings._SELECT_BEST_FILENAME_AND_SIZE,
     ],
     ids=["latest of one file", "latest of every file", "timeline", "best name"],
 )
@@ -220,5 +220,5 @@ def test_known_names_read_the_variants_alone(connection: sqlite3.Connection) -> 
         return sqlite3.SQLITE_OK
 
     connection.set_authorizer(record)
-    sightings.known_names(connection, _key(_A))
+    sightings.known_filenames(connection, _key(_A))
     assert tables == {"observation_variants"}

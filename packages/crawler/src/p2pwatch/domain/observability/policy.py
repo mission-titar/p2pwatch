@@ -39,6 +39,7 @@ from p2pwatch.domain.observability.events import (
     SearchFailed,
     SourceNew,
     SourceReappeared,
+    TargetTitle,
 )
 
 
@@ -121,11 +122,12 @@ def _rank(tier: str | None) -> int:
 
 
 def _is_rise(change: DecisionChange) -> bool:
-    return change.after in _RISE_HEADINGS and _rank(change.after) > _rank(change.before)
+    new_tier, previous_tier = change.new_tier, change.previous_tier
+    return new_tier in _RISE_HEADINGS and _rank(new_tier) > _rank(previous_tier)
 
 
-def _targets_section(targets: Iterable[tuple[str, str]]) -> str:
-    return "**Targets**\n" + "\n".join(f"{target_id} - {title}" for target_id, title in targets)
+def _targets_section(target_titles: Iterable[TargetTitle]) -> str:
+    return "**Targets**\n" + "\n".join(f"{t.target_id} - {t.title}" for t in target_titles)
 
 
 def _code_name(filename: str) -> str:
@@ -174,19 +176,21 @@ def _channel_alert(
 
 
 def _describe_decisions(event: DecisionsRecorded) -> Report:
-    changes = ", ".join(f"{c.target_id} {c.before or 'none'} → {c.after}" for c in event.changes)
+    changes = ", ".join(
+        f"{c.target_id} {c.previous_tier or 'none'} → {c.new_tier}" for c in event.changes
+    )
     report = Report(
         Severity.INFO,
         f"decisions for {event.filename} ({event.file.native_id}): {changes}",
         tuple(
-            MetricInstruction(MetricName.DECISIONS, "inc", (("tier", c.after),))
+            MetricInstruction(MetricName.DECISIONS, "inc", (("tier", c.new_tier),))
             for c in event.changes
         ),
     )
     risen = [c for c in event.changes if _is_rise(c)]
     if not risen:
         return report
-    top = max((c.after for c in risen), key=_rank)
+    top = max((c.new_tier for c in risen), key=_rank)
     match event.file.network:
         case Network.ED2K:
             link = build_ed2k_link(event.filename, event.size_bytes, event.file.native_id)
@@ -196,7 +200,7 @@ def _describe_decisions(event: DecisionsRecorded) -> Report:
         report,
         audiences=frozenset({Audience.COMMUNITY}),
         notification=(
-            _targets_section((c.target_id, c.title) for c in risen)
+            _targets_section(TargetTitle(c.target_id, c.title) for c in risen)
             + f"\n\n**File**\n{event.size_bytes / 2**20:.1f} MiB - {_code_name(event.filename)}"
             + f"\n\n**ed2k**\n`{link}`"
         ),
@@ -210,8 +214,8 @@ def _describe_source(
     short = f"{event.source.native_id[:8]}…"  # as the webui shortens a hash
     named = f"{_code_name(event.name)} " if event.name else ""
     sections = [f"**Source**\n{named}{short}, {what}"]
-    if event.targets:
-        sections.append(_targets_section(event.targets))
+    if event.target_titles:
+        sections.append(_targets_section(event.target_titles))
     sections.append(f"**File**\n{_code_name(event.filename)}")
     labels = (("network", event.source.network.value), ("kind", kind))
     return Report(
@@ -266,10 +270,11 @@ def describe(event: Event) -> Report:
         case DownloadCompleted():
             return Report(
                 Severity.SUCCESS,
-                f"✅ download completed: {', '.join(t for t, _ in event.targets)}",
+                f"✅ download completed: {', '.join(t.target_id for t in event.target_titles)}",
                 (MetricInstruction(MetricName.DOWNLOADS_COMPLETED, "inc"),),
                 frozenset({Audience.COMMUNITY}),
-                _targets_section(event.targets) + f"\n\n**File**\n{_code_name(event.filename)}",
+                _targets_section(event.target_titles)
+                + f"\n\n**File**\n{_code_name(event.filename)}",
                 "✅ Downloaded",
             )
         case ChannelStatusSampled():
