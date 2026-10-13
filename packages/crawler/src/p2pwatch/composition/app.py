@@ -485,9 +485,8 @@ class CrawlerApp:
             _logger.info("crawler started: node_id=%s", node_id)
 
             download_deps: DownloadLoopDeps | None = None
-            # FULL mode ⟺ the ``download`` section is present (``enabled: true``). The unified
-            # parser then guarantees the wiring is complete (endpoint) - no more
-            # ``_require_full_config`` gate at composition.
+            # Download enabled ⟺ the ``download`` section is present (``enabled: true``); the
+            # unified parser then guarantees the wiring is complete (endpoint).
             download_config = self._crawler_config.download
             if download_config is not None:
                 download_deps = await self._build_download_deps(
@@ -500,7 +499,7 @@ class CrawlerApp:
                     local_conn=local_conn,
                     telemetry=telemetry,
                 )
-                _logger.info("full mode: download loop armed")
+                _logger.info("download enabled: download loop armed")
 
             await telemetry.emit(CrawlerStarted(download_enabled=download_config is not None))
 

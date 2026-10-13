@@ -132,16 +132,16 @@ _COPY_STATEMENTS = (
 
 
 def merge_catalogs(
-    output: Path, source_catalogs: Sequence[Path], *, output_is_source: bool = False
+    output: Path, source_catalogs: Sequence[Path], *, output_is_source_catalog: bool = False
 ) -> None:
     """Merges ``source_catalogs`` into ``output``, idempotent.
 
     ``output`` is opened via ``open_catalog``: a new file gets the schema + the triggers, an
     existing older catalog is first migrated in place, and the merge APPENDS (never a truncate).
 
-    ``output_is_source`` (``--into`` mode): the output is itself one of the ``source_catalogs``;
-    we do not re-attach to ourselves (idempotence guarantees we duplicate nothing there),
-    so we skip the source whose path resolves to ``output``.
+    ``output_is_source_catalog`` (``--into`` mode): the output is itself one of the
+    ``source_catalogs``; we do not re-attach to ourselves (idempotence guarantees we duplicate
+    nothing there), so we skip the source catalog whose path resolves to ``output``.
 
     Any ``sqlite3.Error`` (corrupt source, incompatible schema, FK…), and ``open_catalog``'s
     ``PersistenceError`` on the output, is wrapped in ``MergeError``; ``ROLLBACK`` is best-effort.
@@ -161,7 +161,7 @@ def merge_catalogs(
         expected_version = int(connection.execute("PRAGMA user_version").fetchone()[0])
         output_resolved = Path(output).resolve()
         for source_catalog in source_catalogs:
-            if not (output_is_source and Path(source_catalog).resolve() == output_resolved):
+            if not (output_is_source_catalog and Path(source_catalog).resolve() == output_resolved):
                 _merge_catalog(connection, source_catalog, expected_version)
     finally:
         connection.close()
@@ -184,14 +184,14 @@ def _merge_catalog(
         # avoids a self-attach if the same DB is passed under two path forms.
         connection.execute(f"ATTACH DATABASE ? AS {_SRC}", (str(Path(source_catalog).resolve()),))
     except sqlite3.Error as error:
-        raise MergeError(f"cannot attach source {source_catalog}: {error}") from error
+        raise MergeError(f"cannot attach source catalog {source_catalog}: {error}") from error
     try:
         source_version = int(connection.execute(f"PRAGMA {_SRC}.user_version").fetchone()[0])
         if source_version != expected_version:
             raise SchemaVersionMismatchError(
-                f"source {source_catalog} has catalog schema version {source_version}, "
-                f"expected {expected_version} (the current schema); "
-                "merge refuses an out-of-version source (it never migrates a source in place)"
+                f"source catalog {source_catalog} has schema version {source_version}, "
+                f"expected {expected_version} (the current schema); merge refuses an "
+                "out-of-version catalog (it never migrates a source catalog in place)"
             )
         connection.execute("BEGIN")
         try:

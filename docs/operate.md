@@ -114,7 +114,7 @@ identifier le coupable, puis faites le ménage dans `ed2k/downloads/incoming`.
 ## Outils de catalogue
 
 Ces deux outils sont ponctuels et jamais déclenchés par le crawler. La fusion **n'écrit que dans sa
-destination** : un fichier neuf (`--output`), ou la source que vous désignez par `--into`.
+destination** : un fichier neuf (`--output`), ou le catalogue que vous désignez par `--into`.
 
 **Valider la configuration**, sans rien démarrer. À lancer avant un déploiement. Sort en erreur si
 l'un des trois fichiers de config est invalide.
@@ -126,25 +126,25 @@ docker compose run --rm p2pwatch python -m p2pwatch validate-config \
 ```
 
 **Fusionner des catalogues**, pour consolider ceux de plusieurs chercheurs en un seul. La fusion est
-idempotente et n'écrase rien sans `--force` ; `--into <source>` fusionne dans une source existante.
-Elle réunit l'[historique des sources](#historique-des-sources) comme le reste, par l'union des
-lignes : deux copies du catalogue d'un même nœud se fusionnent toujours, même quand l'une a été
-restaurée d'une sauvegarde ou remplacée par un catalogue fusionné entre-temps.
+idempotente et n'écrase rien sans `--force` ; `--into <catalogue>` fusionne dans un catalogue
+existant. Elle réunit l'[historique des sources](#historique-des-sources) comme le reste, par
+l'union des lignes : deux copies du catalogue d'un même nœud se fusionnent toujours, même quand
+l'une a été restaurée d'une sauvegarde ou remplacée par un catalogue fusionné entre-temps.
 Le cycle de partage est décrit sur la [page d'accueil](index.md#partage).
 
 ```bash
 docker compose exec p2pwatch python -m p2pwatch.merge \
-  --output /data/catalog-merged.db /data/catalog.db /data/source-b.db
+  --output /data/catalog-merged.db /data/catalog.db /data/catalog-b.db
 ```
 
-Une source doit être au même schéma que votre version : la fusion refuse une copie faite par une
-version plus ancienne (`has catalog schema version 5, expected 11`), car elle ne migre jamais une
-source. Migrez-la d'abord en la fusionnant dans elle-même, qui l'ouvre et la met à niveau sur place,
-de préférence sur une copie, puisqu'une version plus ancienne ne pourra plus la lire :
+Un catalogue source doit être au même schéma que votre version : la fusion refuse une copie faite
+par une version plus ancienne (`has schema version 5, expected 12`), car elle ne migre jamais un
+catalogue source. Migrez-le d'abord en le fusionnant dans lui-même, qui l'ouvre et le met à niveau
+sur place, de préférence sur une copie, puisqu'une version plus ancienne ne pourra plus le lire :
 
 ```bash
 docker compose exec p2pwatch python -m p2pwatch.merge \
-  --into /data/source-b.db /data/source-b.db
+  --into /data/catalog-b.db /data/catalog-b.db
 ```
 
 Pour valider en profondeur (suites d'intégration, smoke, CI), voyez

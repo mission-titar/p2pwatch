@@ -68,7 +68,7 @@ Dans `matcher.yml`, `min` et `fuzz` deviennent `min_coverage` et `min_similarity
 `coverage` comme sur une référence `{ token: … }`, et le paramètre `{segment}` des regex devient
 `{letter}`. Dans la politique livrée, cela touche deux lignes : la regex de `segment_id` finit par
 `\\s*{letter}`, et `title_hit` s'écrit ainsi. Un ancien nom est refusé en nommant le nouveau :
-`coverage token: key 'min' was renamed 'min_coverage', rename it in matcher.yml`.
+`token 'title_hit': key 'min' was renamed 'min_coverage', rename it in matcher.yml`.
 
 ```yaml
 tokens:

@@ -279,9 +279,11 @@ def test_coverage_override_min_out_of_unit_range_is_rejected() -> None:
 def test_a_coverage_tokens_4x_key_is_refused_with_its_new_name(
     coverage_token: dict[str, object], old_key: str, new_key: str
 ) -> None:
-    message = f"coverage token: key '{old_key}' was renamed '{new_key}', rename it in matcher.yml"
+    message = (
+        f"token 'title_hit': key '{old_key}' was renamed '{new_key}', rename it in matcher.yml"
+    )
     with pytest.raises(MatchingConfigError, match=re.escape(message)):
-        parse_matcher_config({"tokens": {"t": coverage_token}, "rules": []})
+        parse_matcher_config({"tokens": {"title_hit": coverage_token}, "rules": []})
 
 
 @pytest.mark.parametrize(

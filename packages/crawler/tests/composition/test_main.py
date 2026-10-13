@@ -297,3 +297,12 @@ def test_validate_config_rejects_config_error_in_targets(
     code = entry.main(argv)
     assert code == 1
     assert "Invalid config" in capsys.readouterr().err
+
+
+def test_the_help_names_no_observer_mode(capsys: pytest.CaptureFixture[str]) -> None:
+    # The config says ``download.enabled``; 4.x's "observer" mode has no name left.
+    with pytest.raises(SystemExit):
+        entry._parse_args(["--help"])
+    help_text = capsys.readouterr().out
+    assert "eMule crawler" in help_text
+    assert "observer" not in help_text

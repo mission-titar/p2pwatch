@@ -159,7 +159,7 @@ class CrawlerConfig:
     Wiring (ex-local): ``amule_api_password`` (the daemon's amuleapi admin password, the same
     one the aMule web UI takes; host/port are code
     constants), DB paths, ``node_id`` (``None`` = the one from ``local.db``), ``observability``,
-    ``download`` (``None`` ⟺ observer mode).
+    ``download`` (``None`` ⟺ download off, crawl-only).
     """
 
     search: SearchConfig

@@ -725,7 +725,7 @@ async def test_observer_mode_runs_without_the_download_loop(
 
 @pytest.mark.asyncio
 async def test_full_mode_runs_the_download_loop(
-    tmp_path: Path, matcher_config: MatcherConfig
+    tmp_path: Path, matcher_config: MatcherConfig, caplog: pytest.LogCaptureFixture
 ) -> None:
     # The shutdown is driven DETERMINISTICALLY by the DOWNLOAD loop itself (the download
     # client fires the shutdown on its 1st queue poll) → we prove that the BODY of the download
@@ -748,9 +748,11 @@ async def test_full_mode_runs_the_download_loop(
         download_client_factory=lambda endpoint, clock: download_client,
     )
     holder["app"] = app
-    await asyncio.wait_for(app.run(), timeout=5.0)
+    with caplog.at_level(logging.INFO, logger="p2pwatch.composition.app"):
+        await asyncio.wait_for(app.run(), timeout=5.0)
     # the download loop ran ≥ 1 cycle (body ran, not just the task created).
     assert download_client.queue_calls >= 1
+    assert "download enabled: download loop armed" in caplog.messages
 
 
 class _ShutdownOnSourcesDownloadClient(FakeDownloadClient):
