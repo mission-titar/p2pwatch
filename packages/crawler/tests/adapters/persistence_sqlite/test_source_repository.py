@@ -1,7 +1,8 @@
-"""D5's reads of a source's history on a real catalog (source points spec, block 10's criteria)."""
+"""D4's and D5's reads of a source's history on a real catalog (source points spec, section 7)."""
 
+import dataclasses
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -9,10 +10,11 @@ import pytest
 
 from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.persistence_sqlite.source_repository import SqliteSourceRepository
-from p2pwatch.domain.file_key import Network
-from p2pwatch.domain.source import SourceKey
+from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.source import SourceKey, SourceReading, SourceRole
 from p2pwatch.ports.source_repository import EarlierPoints, SourceRepository
 from tests.catalog_rows import (
+    file_id,
     insert_file,
     insert_source,
     insert_source_point,
@@ -96,8 +98,8 @@ def test_has_points_before_reads_only_this_nodes_points_before(
     assert repository.has_points_before(_T0 + timedelta(microseconds=1))
 
 
-def _steps(connection: sqlite3.Connection, source: SourceKey, before: datetime) -> int:
-    """The SQLite VM instructions ``earlier_points`` runs."""
+def _steps(connection: sqlite3.Connection, read: Callable[[], object]) -> int:
+    """The SQLite VM instructions ``read`` runs."""
     steps = 0
 
     def count() -> int:
@@ -106,9 +108,18 @@ def _steps(connection: sqlite3.Connection, source: SourceKey, before: datetime) 
         return 0
 
     connection.set_progress_handler(count, 1)
-    SqliteSourceRepository(connection, "n1", timedelta(seconds=30)).earlier_points(source, before)
+    read()
     connection.set_progress_handler(None, 1)
     return steps
+
+
+def _other_variants(catalog: sqlite3.Connection, numbers: range) -> None:
+    """Other peers' variants on this node, which an index on ``node_id`` alone would walk."""
+    catalog.executemany(
+        "INSERT INTO source_variants (file_id, name, role, raw_meta, node_id, content_hash)"
+        " VALUES (?, ?, 'queued', '{}', 'n1', ?)",
+        ((file_id(_OTHER_FILE), f"peer {n}", n.to_bytes(16)) for n in numbers),
+    )
 
 
 def test_earlier_points_seek_once_per_variant_whatever_the_history(
@@ -123,7 +134,41 @@ def test_earlier_points_seek_once_per_variant_whatever_the_history(
                 "INSERT INTO source_observations VALUES (?, ?, 0)",
                 ((variant_id, _us(_T0) + n * 300_000_000) for n in range(count // 2)),
             )
-    small, large = _steps(catalog, _KEY, before), _steps(catalog, _OTHER_KEY, before)
+    repository = SqliteSourceRepository(catalog, "n1", timedelta(seconds=30))
+    small = _steps(catalog, lambda: repository.earlier_points(_KEY, before))
+    large = _steps(catalog, lambda: repository.earlier_points(_OTHER_KEY, before))
+    assert abs(large - small) <= small // 10
+
+
+def test_earlier_points_seek_this_sources_variants_whatever_the_node_holds(
+    repository: SqliteSourceRepository, catalog: sqlite3.Connection
+) -> None:
+    _points(catalog, _T0)
+    _other_variants(catalog, range(100))
+    repository.earlier_points(_KEY, _T0)  # the first call prepares the statement
+    small = _steps(catalog, lambda: repository.earlier_points(_KEY, _T0 + timedelta(hours=1)))
+    _other_variants(catalog, range(100, 10_000))
+    large = _steps(catalog, lambda: repository.earlier_points(_KEY, _T0 + timedelta(hours=1)))
+    assert abs(large - small) <= small // 10
+
+
+def test_a_passing_state_seeks_this_sources_variants_whatever_the_node_holds(
+    repository: SqliteSourceRepository, catalog: sqlite3.Connection
+) -> None:
+    file = FileKey(Network.ED2K, _FILE)
+    reading = SourceReading(_KEY, "AnimuseeFMR", None, SourceRole.QUEUED, None, None, (), 0)
+    passing = dataclasses.replace(reading, role=None)
+    repository.record_readings(file, [reading], _T0)
+    _other_variants(catalog, range(100))
+    # The first passing call prepares the statements.
+    repository.record_readings(file, [passing], _T0 + timedelta(seconds=30))
+    small = _steps(
+        catalog, lambda: repository.record_readings(file, [passing], _T0 + timedelta(seconds=60))
+    )
+    _other_variants(catalog, range(100, 10_000))
+    large = _steps(
+        catalog, lambda: repository.record_readings(file, [passing], _T0 + timedelta(seconds=90))
+    )
     assert abs(large - small) <= small // 10
 
 
