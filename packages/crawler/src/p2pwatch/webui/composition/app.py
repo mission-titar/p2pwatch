@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, assert_never
 from urllib.parse import parse_qs, urlencode
 
+from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware import Middleware
@@ -609,8 +610,14 @@ def build_app(
     from ``webui.amule_url``. ``source_period_gap`` is the longest gap within a source period, from
     ``webui.source_period_gap_seconds`` (source points spec, D6)."""
 
+    # No type checker reads templates: a name missing from the context raises, never prints "".
     templates = Jinja2Templates(
-        directory=templates_dir, context_processors=[_make_nav_context(amule_url)]
+        env=Environment(
+            loader=FileSystemLoader(templates_dir),
+            autoescape=select_autoescape(),
+            undefined=StrictUndefined,
+        ),
+        context_processors=[_make_nav_context(amule_url)],
     )
     target_segments = targets
     explainer = MatchingExplainer(matcher_config=matcher_config, targets=targets)
