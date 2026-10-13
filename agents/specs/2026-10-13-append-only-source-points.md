@@ -1,7 +1,7 @@
 # An append-only catalog again: sources as points
 
 - Date: 2026-10-13 (discussion 2026-10-12 and 2026-10-13)
-- Status: SPEC, awaiting its review (`agents/reviews/spec.md`) and the operator's approval.
+- Status: approved by the operator on 2026-10-13.
 - Tier: Spec (catalog.db's schema and invariant, a config key, `merge`, the webui's readers)
 - Replaces: the draft `agents/specs/2026-10-13-monotone-catalog-ranges.md` (commit `367e4df`), which turned
   search observations into ranges; the operator dropped ranges altogether (2026-10-13, section 5).
@@ -105,6 +105,9 @@ CREATE TABLE source_observations (
 
 `sources` is stage 4's, unchanged. `source_variants` keeps stage 4's three indexes (`(file_id, source_id)`,
 `(source_id)`, `(name)`) and gains one on `node_id`. Times are microseconds since the epoch, as everywhere.
+(Corrected: the `node_id` index serves `has_points_before` only; D4's and D5's per-source reads write
+`+v.node_id`, since without `ANALYZE` the planner took it and walked every variant of the node. Holistic
+review.)
 
 - **`node_id` moves into the variant**, as in `observation_variants`, and into its `content_hash`. *Reason: a
   point then holds an integer, a time and a counter, 23.9 B with its B-tree (the spec review's bench, `dbstat`);
@@ -126,7 +129,9 @@ CREATE TABLE source_observations (
 ### D3. Sources are read every `download.sources_interval_seconds`
 
 - **A new key, `download.sources_interval_seconds`, default 300**, a positive finite number like every number
-  of `crawler.yml` (`adapters/config/crawler_config.py`, `_positive`). The cycle's sources step
+  of `crawler.yml` (`adapters/config/crawler_config.py`, `_positive`). (Corrected: at most a year, 31,536,000,
+  as `webui.source_period_gap_seconds`: beyond it the tolerance in microseconds can leave SQLite's int64.
+  Holistic review.) The cycle's sources step
   (`application/run_download_cycle.py`, `_record_sources`) runs on a round when at least that long has passed
   since its last run; the first round after a start runs it. The time of the last run is held in memory.
 - **The last run's time is taken when the step starts**, whether it ends well or on an unreachable client:
@@ -402,7 +407,8 @@ sake alone, the split the operator refused for the draft's search switch (2026-1
     Operator, 2026-10-13.)
 - **40**: D9's documents.
 - **50**: the closing block (`agents/workflow.md`, Wrap), which adds section 9's and the time zone's
-  `BACKLOG.md` entries.
+  `BACKLOG.md` entries. (Corrected: also the `backoff` and the monotonic clock entries, and the holistic
+  review's fixes.)
 
 ### Order
 
@@ -459,6 +465,8 @@ Each criterion names the output that would prove it wrong. Every test is watched
   "`new-source` and `reappeared`") hold over points; a source useful at three consecutive reads emits one
   `SourceNew` in total; the number of SQLite VM steps of both queries (`set_progress_handler`) is the same,
   within 10%, for a source of 1,000 points and one of 100,000; the join form of D5's reason fails it.
+  (Corrected: also within 10% with 100 and with 10,000 other variants on this node, for D5's read and D4's
+  carried role; the plan on the `node_id` index fails it. Holistic review.)
 - **D6** (block 10): points at 0, 30, 60 s then 600 s, one variant, a tolerance of 90 s, give two periods, and
   a gap of exactly 90 s keeps one; a counter that drops between two points 30 s apart cuts a period; a `sending`
   period from counter 400 to 900 shows 500 B received; a `queued` one shows none. One identity read `queued`,
@@ -477,7 +485,8 @@ Each criterion names the output that would prove it wrong. Every test is watched
 - **D3** (block 30): with an interval of 300 s and a poll of 30 s on a fake clock, eleven rounds 30 s apart read
   sources at the first and the eleventh only; absent, the key gives 300; `0`, `-1`, `.inf` and `.nan` raise a
   `ConfigError` naming `download.sources_interval_seconds`. (Corrected: a `crawler.yml` holding
-  `decision_poll_interval_seconds` raises the removed-key `ConfigError`.)
+  `decision_poll_interval_seconds` raises the removed-key `ConfigError`; a year passes, a year and a second
+  raises a `ConfigError` naming the key, for both source keys.)
 - (Corrected: **`webui.source_period_gap_seconds`** (block 10): absent, the key gives 990; `0`, `-1`, `.inf`
   and `.nan` raise a `ConfigError` naming it; the composition hands it to the webui in every run mode.)
 - **Docs** (block 40): `uv run poe docs-build` passes; `sed -n '77,81p' docs/index.md` and
@@ -500,6 +509,24 @@ Each criterion names the output that would prove it wrong. Every test is watched
 - **A merged catalog's periods are cut with the displaying node's tolerance** (D6): another node's reads at a
   longer interval show as one-point periods. (Corrected: with the displaying node's
   `webui.source_period_gap_seconds`, which its operator may raise.)
+- **Intervals measured on the wall clock**: below. (Corrected: added at Wrap, operator 2026-10-13.)
+
+### Intervals measured on the wall clock
+
+(Corrected: added at Wrap. Block 30 fixed the first case alone, `735679d`; the operator had it removed
+on 2026-10-13 for one change over every case, a `BACKLOG.md` item.)
+
+- **In memory**, an interval or a deadline is measured with the injected wall clock: the sources step's gate
+  (D3, `DownloadDeps.sources_read_at`), and the amuleapi client's ed2k and Kad start pacing and search
+  deadlines (`adapters/mule_api/client.py`). A clock stepped back suspends the sources step until it passes
+  the last start plus the interval again; stepped forward, it ends a wait early.
+- **Persisted**, the search backoff's `retry_after` in `local.db` is a wall-clock instant: a clock stepped
+  back makes the wait longer than its policy's maximum.
+- **The fix, for its own lot**: a monotonic clock for what stays in memory, the wall clock kept for every
+  stamp the catalog or the events carry, and a wait derived from a persisted time capped by its policy's
+  maximum.
+- *Accepted for this lot (operator, 2026-10-13): the cost is a wait too long or too short, never a wrong
+  row.*
 
 ### Not measured before Act
 
