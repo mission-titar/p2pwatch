@@ -1167,9 +1167,10 @@ async def test_the_webui_reads_the_status_loops_board_and_the_pause_gate(
 
 
 @pytest.mark.asyncio
-async def test_the_webui_cuts_periods_at_three_polls_and_reads_the_crawlers_clock(
+async def test_the_webui_cuts_periods_at_its_configured_gap_and_reads_the_crawlers_clock(
     tmp_path: Path, matcher_config: MatcherConfig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # A reading option, so a crawl-only node has one too (source points spec, D6).
     holder: dict[str, CrawlerApp] = {}
     wired: dict[str, Any] = {}
 
@@ -1179,11 +1180,9 @@ async def test_the_webui_cuts_periods_at_three_polls_and_reads_the_crawlers_cloc
 
     monkeypatch.setattr(composition_app, "build_webui_app", build)
     clock = FakeClock()
-    config = _crawler_config(
-        tmp_path, download=_download_config(tmp_path), webui=WebuiConfig(enabled=True)
-    )
+    webui = WebuiConfig(enabled=True, source_period_gap=timedelta(seconds=600))
     app = CrawlerApp(
-        crawler_config=config,
+        crawler_config=_crawler_config(tmp_path, webui=webui),
         targets=_TARGETS,
         matcher_config=matcher_config,
         clock=clock,
@@ -1191,12 +1190,11 @@ async def test_the_webui_cuts_periods_at_three_polls_and_reads_the_crawlers_cloc
         signal_hub=RecordingSignal(),
         policy_fingerprint=_FP,
         client_factory=lambda endpoint, clock: _ShutdownOnStatusClient(holder),
-        download_client_factory=lambda endpoint, clock: FakeDownloadClient(),
         webui_server_factory=lambda webui: _FakeWebuiServer(),
     )
     holder["app"] = app
     await asyncio.wait_for(app.run(), timeout=5.0)
-    assert wired["source_tolerance"] == timedelta(seconds=90)
+    assert wired["source_tolerance"] == timedelta(seconds=600)
     assert wired["clock"] is clock
 
 

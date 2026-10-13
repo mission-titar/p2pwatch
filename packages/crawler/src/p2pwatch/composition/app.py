@@ -74,7 +74,6 @@ from p2pwatch.application.search_worker import (
 )
 from p2pwatch.application.status_loop import StatusBoard, StatusLoopDeps, status_loop
 from p2pwatch.domain.observability.events import CrawlerStarted
-from p2pwatch.domain.source import source_tolerance
 from p2pwatch.ports.client_errors import ClientUnreachableError
 from p2pwatch.ports.clock import Clock, Rng
 from p2pwatch.ports.crawler_control import CrawlerControl
@@ -140,9 +139,6 @@ _WEBUI_BIND_PORT = 8080
 # ``_stop_webui``) so the crawler's armed shutdown ``asyncio.timeout`` can still cancel it.
 _WEBUI_JOIN_TIMEOUT_SECONDS = 5.0
 
-# ``deploy/crawler.yml``'s ``download.poll_interval_seconds``, for a node that reads no source.
-_SHIPPED_POLL_SECONDS = 30.0
-
 
 def default_webui_server_factory(app: Starlette) -> uvicorn.Server:
     """A real ``uvicorn.Server`` bound to the fixed 0.0.0.0:8080 serving the webui ASGI ``app``
@@ -157,11 +153,9 @@ def _human(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
 
 
-def _sources_spacing(download: DownloadConfig | None) -> timedelta:
-    """The longest time between two reads of the sources: one poll (source points spec, D3).
-    A crawl-only node reads none; it cuts another node's periods at the shipped poll."""
-    seconds = _SHIPPED_POLL_SECONDS if download is None else download.poll_interval_seconds
-    return timedelta(seconds=seconds)
+def _sources_spacing(download: DownloadConfig) -> timedelta:
+    """The longest time between two reads of the sources: one poll (source points spec, D3)."""
+    return timedelta(seconds=download.poll_interval_seconds)
 
 
 def _build_policy(config: CrawlerConfig) -> WorkerPolicy:
@@ -360,7 +354,7 @@ class CrawlerApp:
             status=status,
             amule_url=self._crawler_config.webui.amule_url,
             clock=self._clock,
-            source_tolerance=source_tolerance(_sources_spacing(self._crawler_config.download)),
+            source_tolerance=self._crawler_config.webui.source_period_gap,
         )
         server = self._webui_server_factory(app)
         thread = threading.Thread(

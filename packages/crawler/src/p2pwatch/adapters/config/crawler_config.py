@@ -76,6 +76,10 @@ class DownloadConfig:
     reappeared_after: timedelta
 
 
+# 3 x (300 + 30): the writer's tolerance at the shipped intervals (source points spec, D6).
+_DEFAULT_SOURCE_PERIOD_GAP = timedelta(seconds=990)
+
+
 @dataclass(frozen=True)
 class WebuiConfig:
     """In-process read-only webui HTTP surface (monolith-consolidation spec §8).
@@ -88,10 +92,14 @@ class WebuiConfig:
     ``amule_url`` is where the nav's aMule link points. The two containers each publish a web
     surface and p2pwatch cannot know how its own is reached, so this is a plain configurable
     base: the default is the no-proxy case, and an operator behind a reverse proxy overrides it.
+
+    ``source_period_gap`` is the longest gap within a displayed source period (source points
+    spec, D6): a reading option, so a crawl-only node viewing a merged catalog has one too.
     """
 
     enabled: bool
     amule_url: str = "http://localhost:4711"
+    source_period_gap: timedelta = _DEFAULT_SOURCE_PERIOD_GAP
 
 
 _DEFAULT_WEBUI = WebuiConfig(enabled=True)
@@ -365,7 +373,7 @@ def _parse_search_keywords(raw: dict[str, Any]) -> tuple[str, ...]:
 
 
 def _parse_webui(raw: dict[str, Any], env: Mapping[str, str]) -> WebuiConfig:
-    """`webui` section (optional). Absent ⇒ enabled, default aMule link.
+    """`webui` section (optional). Absent ⇒ enabled, default aMule link and period gap.
 
     The bind is FIXED at 0.0.0.0:8080 in the composition layer, so this reads no host/port: an
     unknown key (a legacy ``host``/``port``) is ignored silently, no fail-fast."""
@@ -373,9 +381,13 @@ def _parse_webui(raw: dict[str, Any], env: Mapping[str, str]) -> WebuiConfig:
         return _DEFAULT_WEBUI
     section = _require_mapping(raw["webui"], "section 'webui'")
     enabled = _bool_default(section, "enabled", True, "webui")
+    gap = _duration_default(
+        section, "source_period_gap_seconds", _DEFAULT_SOURCE_PERIOD_GAP.total_seconds(), "webui"
+    )
     if "amule_url" not in section:
-        return WebuiConfig(enabled=enabled)
-    return WebuiConfig(enabled=enabled, amule_url=_require_str(section, "amule_url", "webui", env))
+        return WebuiConfig(enabled=enabled, source_period_gap=gap)
+    amule_url = _require_str(section, "amule_url", "webui", env)
+    return WebuiConfig(enabled=enabled, amule_url=amule_url, source_period_gap=gap)
 
 
 def parse_crawler_config(raw: dict[str, Any], env: Mapping[str, str]) -> CrawlerConfig:

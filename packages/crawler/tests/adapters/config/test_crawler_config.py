@@ -574,6 +574,28 @@ def test_webui_amule_url_is_interpolated_from_env() -> None:
     assert cfg.webui.amule_url == "http://nas.lan:4711"
 
 
+@pytest.mark.parametrize("webui", [None, {"enabled": True}], ids=["no-section", "no-key"])
+def test_webui_source_period_gap_defaults_to_the_writers_tolerance_at_the_shipped_defaults(
+    webui: dict[str, Any] | None,
+) -> None:
+    # 3 x (300 + 30): three reads' spacing at the shipped intervals (source points spec, D6).
+    raw = _minimal_raw() if webui is None else _minimal_raw() | {"webui": webui}
+    cfg = parse_crawler_config(raw, _env())
+    assert cfg.webui.source_period_gap == timedelta(seconds=990)
+
+
+def test_webui_source_period_gap_is_configurable() -> None:
+    raw = _minimal_raw() | {"webui": {"source_period_gap_seconds": 600}}
+    assert parse_crawler_config(raw, _env()).webui.source_period_gap == timedelta(seconds=600)
+
+
+@pytest.mark.parametrize("seconds", [0, -1, float("inf"), float("nan")])
+def test_webui_source_period_gap_is_a_positive_finite_number(seconds: float) -> None:
+    raw = _minimal_raw() | {"webui": {"source_period_gap_seconds": seconds}}
+    with pytest.raises(ConfigError, match=r"webui\.source_period_gap_seconds"):
+        parse_crawler_config(raw, _env())
+
+
 def test_webui_amule_url_empty_is_fatal() -> None:
     raw = _minimal_raw() | {"webui": {"amule_url": ""}}
     with pytest.raises(ConfigError, match="non-empty string"):
