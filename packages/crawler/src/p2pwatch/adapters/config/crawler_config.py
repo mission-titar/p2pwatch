@@ -317,7 +317,9 @@ _DEFAULT_MIN_FREE_BYTES = 10_737_418_240  # 10 GiB
 _DEFAULT_LOST_AFTER_SECONDS = 86_400.0
 _DEFAULT_OUTPUT_DIR = "/downloads"  # the bind mount in deploy/compose.yml
 _DEFAULT_REAPPEARED_AFTER_SECONDS = 43_200.0  # 12 h: a night off does not notify (stage 4 spec, D9)
-_DEFAULT_SOURCES_INTERVAL_SECONDS = 300.0  # source points spec, D3
+# 5 min: enough to recognise a sharer, a tenth of the detail calls (source points spec, D3).
+_DEFAULT_SOURCES_INTERVAL_SECONDS = 300.0
+_MAX_SOURCE_DURATION = timedelta(days=365)
 
 
 def _duration_default(mapping: dict[str, Any], key: str, default: float, what: str) -> timedelta:
@@ -329,6 +331,17 @@ def _duration_default(mapping: dict[str, Any], key: str, default: float, what: s
         raise ConfigError(
             f"{what}.{key}: number of seconds within a duration's range expected, got {seconds}"
         ) from error
+
+
+def _source_duration(mapping: dict[str, Any], key: str, default: float, what: str) -> timedelta:
+    """``_duration_default`` within a year, whose tolerances in microseconds SQLite holds."""
+    duration = _duration_default(mapping, key, default, what)
+    if duration > _MAX_SOURCE_DURATION:
+        raise ConfigError(
+            f"{what}.{key}: at most {_MAX_SOURCE_DURATION.total_seconds():.0f} (a year) expected,"
+            f" got {duration.total_seconds()}"
+        )
+    return duration
 
 
 def _parse_download(raw: dict[str, Any]) -> DownloadConfig | None:
@@ -352,7 +365,7 @@ def _parse_download(raw: dict[str, Any]) -> DownloadConfig | None:
         reappeared_after=_duration_default(
             section, "reappeared_after_seconds", _DEFAULT_REAPPEARED_AFTER_SECONDS, "download"
         ),
-        sources_interval=_duration_default(
+        sources_interval=_source_duration(
             section, "sources_interval_seconds", _DEFAULT_SOURCES_INTERVAL_SECONDS, "download"
         ),
     )
@@ -385,7 +398,7 @@ def _parse_webui(raw: dict[str, Any], env: Mapping[str, str]) -> WebuiConfig:
         return _DEFAULT_WEBUI
     section = _require_mapping(raw["webui"], "section 'webui'")
     enabled = _bool_default(section, "enabled", True, "webui")
-    gap = _duration_default(
+    gap = _source_duration(
         section, "source_period_gap_seconds", _DEFAULT_SOURCE_PERIOD_GAP.total_seconds(), "webui"
     )
     if "amule_url" not in section:
