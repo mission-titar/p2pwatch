@@ -30,8 +30,8 @@ def candidate_from_fields(
     bitrate = float(bitrate_kbps) if bitrate_kbps is not None else None
     return FileCandidate(
         filename=filename,
-        size_mb=size_bytes / _BYTES_PER_MIB,
-        duration_sec=duration,
+        size_mib=size_bytes / _BYTES_PER_MIB,
+        duration_seconds=duration,
         bitrate_kbps=bitrate,
     )
 

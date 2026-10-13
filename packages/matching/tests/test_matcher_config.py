@@ -34,12 +34,12 @@ def test_coverage_def_defaults() -> None:
 
 
 def test_attr_between_def_holds_bounds() -> None:
-    ab = AttrBetweenDef(attr="size_mb", min_bound=30.0, max_bound=600.0)
-    assert ab.attr == "size_mb"
+    ab = AttrBetweenDef(attr="size_mib", min_bound=30.0, max_bound=600.0)
+    assert ab.attr == "size_mib"
     assert ab.min_bound == 30.0
     assert ab.max_bound == 600.0
-    assert AttrBetweenDef(attr="size_mb").min_bound is None
-    assert AttrBetweenDef(attr="size_mb").max_bound is None
+    assert AttrBetweenDef(attr="size_mib").min_bound is None
+    assert AttrBetweenDef(attr="size_mib").max_bound is None
 
 
 def test_composite_defs_hold_operands() -> None:

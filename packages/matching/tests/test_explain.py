@@ -11,7 +11,7 @@ _MATCHER = {
         "ita": {"regex": r"\bITA\b"},
         "kor": {"regex": r"\bKOR\b"},
         "sample": {"regex": "sample"},
-        "title_hit": {"coverage": "title", "min": 0.6},
+        "title_hit": {"coverage": "title", "min_coverage": 0.6},
     },
     "vetoes": ["sample", "kor", "ita"],
     "rules": [

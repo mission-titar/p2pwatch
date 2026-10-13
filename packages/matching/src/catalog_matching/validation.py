@@ -36,6 +36,9 @@ from catalog_matching.matchers import ATTR_NAMES
 from catalog_matching.models import LOST, TARGET_STATUSES, TargetSegment
 
 _CONDITION_KEYS = ("all", "any", "not")
+# 4.x names, refused at load with their 5.0 name (``{segment}`` too, in _check_regexes_compile).
+_RENAMED_COVERAGE_KEYS = {"min": "min_coverage", "fuzz": "min_similarity"}
+_RENAMED_ATTRS = {"size_mb": "size_mib", "duration_sec": "duration_seconds"}
 
 
 class MatchingConfigError(Exception):
@@ -74,13 +77,13 @@ def _parse_operand(raw: Any) -> Operand:
         if any(key in raw for key in _CONDITION_KEYS):
             return _parse_condition(raw)
         # Treated as a token-ref (with or without the "token" key) - _parse_token_ref
-        # will raise ConfigError if the "token" key is missing or invalid.
+        # will raise MatchingConfigError if the "token" key is missing or invalid.
         return _parse_token_ref(raw)
     raise MatchingConfigError(f"operand of invalid type: {type(raw).__name__} ({raw!r})")
 
 
 def _require_unit_fraction(value: float, error_label: str) -> float:
-    """Validates that a logical fraction (coverage/fuzz threshold) is in [0, 1] (fail-fast §8.4).
+    """Validates that a fraction (min_coverage, min_similarity) is in [0, 1] (fail-fast §8.4).
 
     Outside [0, 1], the rule is silently inert (threshold never reached): that is a config
     error (typically a percentage entered for a fraction), rejected at load time.
@@ -90,13 +93,22 @@ def _require_unit_fraction(value: float, error_label: str) -> float:
     return value
 
 
+def _refuse_renamed_coverage_keys(mapping: dict[str, Any], error_label: str) -> None:
+    for old_key, new_key in _RENAMED_COVERAGE_KEYS.items():
+        if old_key in mapping:
+            raise MatchingConfigError(
+                f"{error_label}: key {old_key!r} was renamed {new_key!r}, rename it in matcher.yml"
+            )
+
+
 def _parse_token_ref(raw: dict[str, Any]) -> TokenRef:
     name = raw.get("token")
     if not isinstance(name, str):
         raise MatchingConfigError(f"operand {{token: …}} without a valid token name: {raw!r}")
-    min_value = raw.get("min")
-    fuzz_value = raw.get("fuzz")
-    # The legality of a min/fuzz override (coverage-only, cf. EBNF §8.3) is checked at the
+    _refuse_renamed_coverage_keys(raw, f"operand {{token: {name!r}}}")
+    min_coverage = raw.get("min_coverage")
+    min_similarity = raw.get("min_similarity")
+    # The legality of an override (coverage-only, cf. EBNF §8.3) is checked at the
     # graph level (validate_config), not here: parsing stays purely structural and independent
     # of the token definition order (forward references allowed). The [0, 1] BOUNDS, on the
     # other hand, are structural → validated here.
@@ -104,13 +116,15 @@ def _parse_token_ref(raw: dict[str, Any]) -> TokenRef:
         name=name,
         min_coverage=(
             None
-            if min_value is None
-            else _require_unit_fraction(float(min_value), f"'min' override of {name!r}")
+            if min_coverage is None
+            else _require_unit_fraction(float(min_coverage), f"'min_coverage' override of {name!r}")
         ),
         min_similarity=(
             None
-            if fuzz_value is None
-            else _require_unit_fraction(float(fuzz_value), f"'fuzz' override of {name!r}")
+            if min_similarity is None
+            else _require_unit_fraction(
+                float(min_similarity), f"'min_similarity' override of {name!r}"
+            )
         ),
     )
 
@@ -166,8 +180,8 @@ def _expand_fragments(pattern: str, fragments: dict[str, str]) -> str:
 def _parse_token_def(raw: Any, fragments: dict[str, str]) -> TokenDef:
     """Dispatch of a token def: composite (all/any/not) or leaf (4 types).
 
-    Reads ALL the def's ancillary keys (``flags`` of regex, ``min``/``fuzz`` of coverage,
-    ``min``/``max`` of attr_between), not only the type-key.
+    Reads ALL the def's ancillary keys (``flags`` of regex, ``min_coverage``/``min_similarity``
+    of coverage, ``min``/``max`` of attr_between), not only the type-key.
     """
     mapping = _require_mapping(raw, "token definition")
     if any(key in mapping for key in _CONDITION_KEYS):
@@ -182,18 +196,27 @@ def _parse_token_def(raw: Any, fragments: dict[str, str]) -> TokenDef:
         pattern = _expand_fragments(str(mapping["regex"]), fragments)
         return RegexDef(pattern=pattern, flags=str(flags))
     if "coverage" in mapping:
-        min_value = _optional_float(mapping, "min")
-        if min_value is None:
-            raise MatchingConfigError("a coverage token must declare 'min'")
-        fuzz_value = _optional_float(mapping, "fuzz")
-        fuzz = 0.85 if fuzz_value is None else _require_unit_fraction(fuzz_value, "coverage 'fuzz'")
+        _refuse_renamed_coverage_keys(mapping, "coverage token")
+        min_coverage = _optional_float(mapping, "min_coverage")
+        if min_coverage is None:
+            raise MatchingConfigError("a coverage token must declare 'min_coverage'")
+        min_similarity = _optional_float(mapping, "min_similarity")
         return CoverageDef(
             reference=str(mapping["coverage"]),
-            min_coverage=_require_unit_fraction(min_value, "coverage 'min'"),
-            min_similarity=fuzz,
+            min_coverage=_require_unit_fraction(min_coverage, "coverage 'min_coverage'"),
+            min_similarity=(
+                0.85
+                if min_similarity is None
+                else _require_unit_fraction(min_similarity, "coverage 'min_similarity'")
+            ),
         )
     if "attr_between" in mapping:
         attr = str(mapping["attr_between"])
+        if attr in _RENAMED_ATTRS:
+            raise MatchingConfigError(
+                f"attr_between {attr!r} was renamed {_RENAMED_ATTRS[attr]!r}, "
+                "rename it in matcher.yml"
+            )
         if attr not in ATTR_NAMES:
             raise MatchingConfigError(
                 f"unknown attr_between: {attr!r} (expected one of {sorted(ATTR_NAMES)})"
@@ -262,7 +285,7 @@ def parse_matcher_config(raw: dict[str, Any]) -> MatcherConfig:
 _DEFAULT_MAX_DEPTH = 32
 
 # Probe target for the compile-check: provides season/seasonal_number/absolute_number/
-# segment/title so that the interpolation of any RegexDef is testable at load time.
+# letter/title so that the interpolation of any RegexDef is testable at load time.
 _PROBE_TARGET = TargetSegment(
     season=2,
     seasonal_number=11,
@@ -326,7 +349,7 @@ def _def_token_refs(token_def: TokenDef) -> tuple[TokenRef, ...]:
 
 
 def _check_overrides_only_on_coverage(config: MatcherConfig) -> None:
-    """A min/fuzz override is only legal on a coverage token (cf. EBNF §8.3).
+    """A min_coverage/min_similarity override is only legal on a coverage token (EBNF §8.3).
 
     Checked HERE (not at parsing) so as not to depend on the definition order: a forward
     reference to a coverage token must be accepted.
@@ -341,7 +364,7 @@ def _check_overrides_only_on_coverage(config: MatcherConfig) -> None:
             config.tokens.get(ref.name), CoverageDef
         ):
             raise MatchingConfigError(
-                f"min/fuzz override forbidden on non-coverage token {ref.name!r}"
+                f"min_coverage/min_similarity override forbidden on non-coverage token {ref.name!r}"
             )
 
 
@@ -425,6 +448,11 @@ def _check_regexes_compile(config: MatcherConfig) -> None:
     for name, token_def in config.tokens.items():
         if not isinstance(token_def, RegexDef):
             continue
+        if "segment" in PLACEHOLDER.findall(token_def.pattern):
+            raise MatchingConfigError(
+                f"token {name!r}: placeholder '{{segment}}' was renamed '{{letter}}', "
+                "rename it in matcher.yml"
+            )
         try:
             pattern = interpolate(token_def.pattern, _PROBE_TARGET)
         except InterpolationError as exc:
@@ -441,7 +469,7 @@ def validate_config(config: MatcherConfig, *, max_depth: int = _DEFAULT_MAX_DEPT
     """Validates the graph (references, DAG, depth) and the regexes (cf. spec §8.4).
 
     Raises :class:`UnknownTokenError`, :class:`CycleError`, :class:`DepthExceededError`
-    or :class:`ConfigError` (regex/interpolation). To be called after schema parsing.
+    or :class:`MatchingConfigError` (regex/interpolation). To be called after schema parsing.
     """
     _check_references_exist(config)
     _check_vetoes(config)

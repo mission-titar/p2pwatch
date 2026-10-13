@@ -31,7 +31,7 @@ tokens:
   idf1:          { regex: "\\bidf\\s?1\\b" }
   vf:            { regex: "\\b(?:vf|vff|vfb)\\b|version\\s?francaise" }
   source_marker: { any: [teletoon, idf1, vf] }
-  segment_id:    { regex: "(?:n[°o]?\\s*0*{absolute_number}|s0*{season}\\s*e0*{seasonal_number}|0*{season}\\s*x\\s*0*{seasonal_number})\\s*{segment}" }
+  segment_id:    { regex: "(?:n[°o]?\\s*0*{absolute_number}|s0*{season}\\s*e0*{seasonal_number}|0*{season}\\s*x\\s*0*{seasonal_number})\\s*{letter}" }
   segment_id_loose: { regex: "(?:^|[^0-9A-Za-z])0*{absolute_number}{not_a_date}(?:[^0-9A-Za-z]|$)" }
   # Target-agnostic bare episode number (Approach 1): a 2-3 digit run bordered by non-alphanumerics
   # on BOTH sides, minus the same date vetoes as segment_id_loose (month name / numeric d/m).
@@ -39,7 +39,7 @@ tokens:
   # catch-all is beyond the last target (out of range), so it drops out. Seasonal SxE / NNxNN
   # forms (no A/B letter) are not bare numbers and are deliberately left in the catalog.
   episode_number: { regex: "(?:^|[^0-9A-Za-z])\\d{2,3}{not_a_date}(?:[^0-9A-Za-z]|$)" }
-  title_hit:     { coverage: title, min: 0.6 }
+  title_hit:     { coverage: title, min_coverage: 0.6 }
   is_video:      { regex: "\\.(avi|mkv|mp4|mpg|mpeg|divx|m4v|ogm)$" }
   is_archive:    { regex: "\\.(zip|7z|rar|r\\d\\d|z\\d\\d|part\\d+\\.rar)$" }
 

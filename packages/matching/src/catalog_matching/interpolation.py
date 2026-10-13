@@ -9,7 +9,7 @@ from catalog_matching.models import TargetSegment
 PLACEHOLDER = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 # Placeholders filled per target by ``interpolate``; fragments may not shadow them.
 TARGET_PLACEHOLDERS: frozenset[str] = frozenset(
-    {"season", "seasonal_number", "absolute_number", "segment", "title"}
+    {"season", "seasonal_number", "absolute_number", "letter", "title"}
 )
 
 
@@ -18,7 +18,7 @@ class InterpolationError(Exception):
 
 
 def interpolate(pattern: str, target: TargetSegment) -> str:
-    """Substitutes the whitelist ``{season} {seasonal_number} {absolute_number} {segment}
+    """Substitutes the whitelist ``{season} {seasonal_number} {absolute_number} {letter}
     {title}``.
 
     All values are inserted ``re.escape``-d (literal). Any other placeholder raises
@@ -33,7 +33,7 @@ def interpolate(pattern: str, target: TargetSegment) -> str:
             return str(re.escape(str(target.seasonal_number)))
         if name == "absolute_number":
             return str(re.escape(str(target.absolute_number)))
-        if name == "segment":
+        if name == "letter":
             return str(re.escape(target.letter.upper()))
         if name == "title":
             return str(re.escape(target.title))

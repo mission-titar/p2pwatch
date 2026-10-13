@@ -84,7 +84,7 @@ def build_crawler_app(args: argparse.Namespace) -> CrawlerApp:
 
 
 def validate_config(argv: list[str]) -> int:
-    """Loads + validates the config via the EXISTING parsers — a PURE check, starts NOTHING.
+    """Loads + validates the config via the EXISTING parsers: a PURE check, starts NOTHING.
 
     Strictly reuses ``load_yaml`` + ``parse_{crawler_config,targets,matcher_config}`` (no new
     validation logic). Since the config is interpolated from ``os.environ``, the INTENDED side
@@ -120,7 +120,7 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     tokens = sys.argv[1:] if argv is None else argv
     # Dispatch up front: the ``validate-config`` subcommand routes to the pure check. The BARE
-    # invocation (no subcommand) falls back EXACTLY onto the run path — a backward-compat
+    # invocation (no subcommand) falls back EXACTLY onto the run path, a backward-compat
     # constraint (compose runs ``python -m p2pwatch --config … --targets …`` with no subcmd).
     if tokens and tokens[0] == "validate-config":
         return validate_config(list(tokens[1:]))

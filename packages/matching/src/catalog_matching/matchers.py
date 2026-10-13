@@ -104,7 +104,7 @@ class CoverageMatcher:
 
 # Closed enum of FileCandidate numeric attributes usable by attr_between
 # (cf. spec §8.2). Any other name -> error.
-ATTR_NAMES: frozenset[str] = frozenset({"size_mb", "duration_sec", "bitrate_kbps"})
+ATTR_NAMES: frozenset[str] = frozenset({"size_mib", "duration_seconds", "bitrate_kbps"})
 
 
 class AttrBetweenMatcher:

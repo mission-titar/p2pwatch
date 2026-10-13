@@ -13,7 +13,7 @@ def _target() -> TargetSegment:
 
 
 def test_interpolate_substitutes_absolute_number_and_segment_escaped() -> None:
-    pattern = r"n[°o]?\s*0*{absolute_number}\s*{segment}"
+    pattern = r"n[°o]?\s*0*{absolute_number}\s*{letter}"
     assert interpolate(pattern, _target()) == r"n[°o]?\s*0*62\s*A"
 
 
