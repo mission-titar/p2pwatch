@@ -7,11 +7,11 @@ from catalog_matching.engine import MatchingEngine
 from p2pwatch.adapters.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.application.search_worker import (
     SEARCH_BUDGET_SECONDS,
+    BackoffPolicy,
     BackoffRegistry,
     SearchTask,
     SearchWorker,
     WorkerDeps,
-    WorkerPolicy,
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability.events import (
@@ -21,7 +21,7 @@ from p2pwatch.domain.observability.events import (
     SearchFailed,
 )
 from p2pwatch.domain.observation import FileObservation
-from p2pwatch.ports.scheduler_state_repository import ChannelBackoff
+from p2pwatch.ports.scheduler_state_repository import BackoffState
 from tests.application.fakes import (
     FakeClock,
     FakeMuleClient,
@@ -37,11 +37,11 @@ _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _DL_NAME = "Keroro N°062A Les demoiselles cambrioleuses.avi"
 
 # jitter_ratio 0.0 + FakeRng(jitter_value=0.0) → backoff = exact NOMINAL delay (clean assertions).
-_POLICY = WorkerPolicy(
-    backoff_base_seconds=2.0,
-    backoff_cap_seconds=60.0,
-    backoff_factor=2.0,
-    backoff_jitter_ratio=0.0,
+_POLICY = BackoffPolicy(
+    base_seconds=2.0,
+    cap_seconds=60.0,
+    factor=2.0,
+    jitter_ratio=0.0,
 )
 
 
@@ -126,7 +126,7 @@ def test_backoff_registry_unknown_key_is_not_in_backoff() -> None:
 
 def test_backoff_registry_jitter_extends_the_delay() -> None:
     clock = FakeClock()
-    policy = dataclasses.replace(_POLICY, backoff_jitter_ratio=0.5)  # jitter in [0, 0.5*delay)
+    policy = dataclasses.replace(_POLICY, jitter_ratio=0.5)  # jitter in [0, 0.5*delay)
     rng = FakeRng(jitter_value=1.0)  # constant 1.0s jitter
     registry = BackoffRegistry(policy, clock, rng)
     delay = registry.record_failure("k")
@@ -140,7 +140,7 @@ def test_backoff_registry_snapshot_and_load_round_trip() -> None:
     registry.record_failure("amule-1:kad")
     snapshot = registry.snapshot()
     assert "amule-1:kad" in snapshot
-    assert isinstance(snapshot["amule-1:kad"], ChannelBackoff)
+    assert isinstance(snapshot["amule-1:kad"], BackoffState)
     # Reload into a FRESH registry (simulates a restart) → same skip applied.
     reborn = _registry(clock)
     assert reborn.is_in_backoff("amule-1:kad") is False  # empty before load
@@ -305,8 +305,8 @@ async def test_the_client_backoff_grows_until_a_search_succeeds(
     delays = []
     for _ in range(4):
         await worker.run_task(SearchTask(keyword="k", channel="ed2k"))
-        delays.append(registry.remaining("amule-1"))
-        clock.advance(registry.remaining("amule-1"))
+        delays.append(registry.seconds_remaining("amule-1"))
+        clock.advance(registry.seconds_remaining("amule-1"))
     assert delays == [2.0, 4.0, 8.0, 16.0]
     await worker.run_task(SearchTask(keyword="k", channel="ed2k"))
     assert "amule-1" not in registry.snapshot()

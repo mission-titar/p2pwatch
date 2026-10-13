@@ -174,7 +174,7 @@ accumulé, mais vous redémarrez d'un état connu.
   partagés, le téléchargement se termine et la notification part. Un fichier qu'amuled signale en
   erreur reste `failed`, avec la raison `error` sur `/node`. Regardez `ed2k/downloads/incoming`
   avant de conclure que le fichier est perdu.
-- **Pour en réessayer un à la main**, supprimez sa ligne : `is_downloaded()` ignore l'état, donc une
+- **Pour en réessayer un à la main**, supprimez sa ligne : `is_tracked()` ignore l'état, donc une
   ligne `failed` continue de bloquer la remise en file automatique, à dessein. Il n'existe pas de
   contrôle webui pour cela et la console SQL est en lecture seule : c'est donc une écriture manuelle
   sur `local.db`. Remplacez `<hash>` par le hash eD2k de la ligne à supprimer :

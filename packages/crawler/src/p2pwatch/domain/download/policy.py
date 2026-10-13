@@ -1,4 +1,4 @@
-"""PURE auto-download policy (spec download §6 — DECISION D4/D5).
+"""PURE auto-download policy (spec download §6, DECISION D4/D5).
 
 PURE domain: no I/O, no repo. ``download_policy`` returns a
 ``DownloadVerdict`` (enum, not bool → explainability + future metric) from PRIMITIVES:
@@ -6,9 +6,9 @@ the ``target_id → status`` lookup is done by the APPLICATION (from the loaded 
 and passed as a bool/string (the domain never imports a port).
 
 Guard order (spec §6): a non-``download`` is a conservative guard (DECISION D5:
-never download — the application should not call the policy outside download, but we do
-not crash); a ``complete`` target no longer needs the file; an already-downloaded hash
-is deduplicated; a candidate that would push the filesystem below its free-space floor is
+never download; the application should not call the policy outside download, but we do
+not crash); a ``complete`` target no longer needs the file; an already-tracked file is
+deduplicated; a candidate that would push the filesystem below its free-space floor is
 DEFERRED (the decision stays in the journal, retried when space frees up, spec §7);
 otherwise we download.
 """
@@ -29,7 +29,7 @@ def download_policy(
     *,
     tier: str,
     target_status: str,
-    already_downloaded: bool,
+    already_tracked: bool,
     free_bytes: int,
     outstanding_bytes: int,
     file_size: int,
@@ -49,7 +49,7 @@ def download_policy(
         return DownloadVerdict.SKIP_COMPLETE  # conservative guard (DECISION D5)
     if target_status == "complete":
         return DownloadVerdict.SKIP_COMPLETE
-    if already_downloaded:
+    if already_tracked:
         return DownloadVerdict.SKIP_DEDUP
     if free_bytes - outstanding_bytes - file_size < min_free_bytes:
         return DownloadVerdict.SKIP_DISK_CAP

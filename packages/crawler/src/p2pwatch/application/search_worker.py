@@ -17,7 +17,7 @@ from p2pwatch.domain.search.backoff import backoff_delay
 from p2pwatch.ports.catalog_repository import CatalogRepository
 from p2pwatch.ports.client_errors import ClientUnreachableError, SearchFailedError
 from p2pwatch.ports.clock import Clock, Rng
-from p2pwatch.ports.scheduler_state_repository import ChannelBackoff
+from p2pwatch.ports.scheduler_state_repository import BackoffState
 from p2pwatch.ports.search_client import SearchClient
 from p2pwatch.ports.telemetry import Telemetry
 from p2pwatch.ports.wake_hub import WakeHub
@@ -44,23 +44,23 @@ class SearchTask:
 
 
 @dataclass(frozen=True)
-class WorkerPolicy:
-    """A worker's policy parameters, as PRIMITIVES (spec §5; injected by composition).
+class BackoffPolicy:
+    """The backoff's parameters, as PRIMITIVES (spec §5; injected by composition).
 
-    ``backoff_jitter_ratio``: fraction of the nominal delay drawn as additional jitter
+    ``jitter_ratio``: fraction of the nominal delay drawn as additional jitter
     (anti-thundering-herd, spec §3) - e.g. 0.3 ⇒ jitter in ``[0, 0.3 * delay)``.
     """
 
-    backoff_base_seconds: float
-    backoff_cap_seconds: float
-    backoff_factor: float
-    backoff_jitter_ratio: float
+    base_seconds: float
+    cap_seconds: float
+    factor: float
+    jitter_ratio: float
 
 
 class BackoffRegistry:
     """SHARED backoff registry keyed (by client, or "client:channel"), PERSISTABLE.
 
-    Holds a map ``key → ChannelBackoff(attempts, retry_after)`` (spec §3/§7). ``retry_after``
+    Holds a map ``backoff_key → BackoffState(attempts, retry_after)`` (spec §3/§7). ``retry_after``
     is computed on failure: ``clock.now() + backoff_delay(attempts) + jitter`` (jitter drawn from
     the ``Rng`` port, deterministic in test) → fixed-width ISO-8601 UTC. ``is_in_backoff`` skips
     a key while
@@ -68,54 +68,56 @@ class BackoffRegistry:
     (the persistence survives a restart). Deterministic logic (injected clock/rng).
     """
 
-    def __init__(self, policy: WorkerPolicy, clock: Clock, rng: Rng) -> None:
+    def __init__(self, policy: BackoffPolicy, clock: Clock, rng: Rng) -> None:
         self._policy = policy
         self._clock = clock
         self._rng = rng
-        self._states: dict[str, ChannelBackoff] = {}
+        self._state_by_key: dict[str, BackoffState] = {}
 
-    def load_from(self, states: dict[str, ChannelBackoff]) -> None:
+    def load_from(self, states: dict[str, BackoffState]) -> None:
         """Reloads the registry from a persisted snapshot (recovery after crash, spec §7)."""
-        self._states = dict(states)
+        self._state_by_key = dict(states)
 
-    def snapshot(self) -> dict[str, ChannelBackoff]:
+    def snapshot(self) -> dict[str, BackoffState]:
         """Copy of the current map (to persist, spec §7)."""
-        return dict(self._states)
+        return dict(self._state_by_key)
 
-    def is_in_backoff(self, key: str) -> bool:
-        """``True`` if ``key`` has a ``retry_after`` still in the FUTURE (to skip)."""
-        return self.remaining(key) > 0
+    def is_in_backoff(self, backoff_key: str) -> bool:
+        """``True`` if ``backoff_key`` has a ``retry_after`` still in the FUTURE (to skip)."""
+        return self.seconds_remaining(backoff_key) > 0
 
-    def remaining(self, key: str) -> float:
-        """Seconds until ``key``'s ``retry_after``, 0 when it has none or it has passed."""
-        state = self._states.get(key)
+    def seconds_remaining(self, backoff_key: str) -> float:
+        """Seconds until ``backoff_key``'s ``retry_after``, 0 when it has none or it has passed."""
+        state = self._state_by_key.get(backoff_key)
         if state is None:
             return 0.0
         left = datetime.fromisoformat(state.retry_after) - self._clock.now()
         return max(0.0, left.total_seconds())
 
-    def record_failure(self, key: str) -> float:
+    def record_failure(self, backoff_key: str) -> float:
         """Increments ``attempts``, computes delay+jitter, sets ``retry_after``. Returns the delay.
 
         The delay is for the LOG; the operational decision is the ``retry_after`` (skip).
         """
-        if self.is_in_backoff(key):  # a concurrent search started before it: same round
-            return self.remaining(key)
-        attempts = self._states[key].attempts + 1 if key in self._states else 1
+        if self.is_in_backoff(backoff_key):  # a concurrent search started before it: same round
+            return self.seconds_remaining(backoff_key)
+        attempts = (
+            self._state_by_key[backoff_key].attempts + 1 if backoff_key in self._state_by_key else 1
+        )
         delay = backoff_delay(
             attempts,
-            base=self._policy.backoff_base_seconds,
-            cap=self._policy.backoff_cap_seconds,
-            factor=self._policy.backoff_factor,
+            base=self._policy.base_seconds,
+            cap=self._policy.cap_seconds,
+            factor=self._policy.factor,
         )
-        delay += self._rng.jitter(self._policy.backoff_jitter_ratio * delay)
+        delay += self._rng.jitter(self._policy.jitter_ratio * delay)
         retry_after = _iso(self._clock.now() + timedelta(seconds=delay))
-        self._states[key] = ChannelBackoff(attempts=attempts, retry_after=retry_after)
+        self._state_by_key[backoff_key] = BackoffState(attempts=attempts, retry_after=retry_after)
         return delay
 
-    def reset(self, key: str) -> None:
+    def reset(self, backoff_key: str) -> None:
         """Clears the backoff of a key (success)."""
-        self._states.pop(key, None)
+        self._state_by_key.pop(backoff_key, None)
 
 
 @dataclass
@@ -151,8 +153,8 @@ class SearchWorker:
         """How long until neither the client nor ``channel`` is backed off."""
         backoff = self._deps.backoff
         return max(
-            backoff.remaining(self._client_name),
-            backoff.remaining(f"{self._client_name}:{channel}"),
+            backoff.seconds_remaining(self._client_name),
+            backoff.seconds_remaining(f"{self._client_name}:{channel}"),
         )
 
     async def _ensure_connected(self) -> bool:

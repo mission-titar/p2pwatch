@@ -63,7 +63,7 @@ class SearchTasks:
         if current == self._saved:
             return
         try:
-            self._scheduler_state.save_channel_backoff(current)
+            self._scheduler_state.save_backoff_states(current)
         except RepositoryError as error:
             _logger.error("backoff not saved (%s): retried after the next search", error)
             return

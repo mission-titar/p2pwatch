@@ -52,7 +52,7 @@ def repository(connection: sqlite3.Connection) -> SqliteDownloadRepository:
 
 def test_record_queued_inserts_a_new_download(repository: SqliteDownloadRepository) -> None:
     assert repository.record_queued(_A, "062A", 100) is True
-    assert repository.is_downloaded(_A) is True
+    assert repository.is_tracked(_A) is True
 
 
 def test_record_queued_keys_the_row_by_file_id_and_keeps_the_file_key(
@@ -70,13 +70,13 @@ def test_record_queued_is_dedup_safe(repository: SqliteDownloadRepository) -> No
 
 
 def test_is_downloaded_is_false_for_unknown_hash(repository: SqliteDownloadRepository) -> None:
-    assert repository.is_downloaded(_A) is False
+    assert repository.is_tracked(_A) is False
 
 
 def test_set_state_updates_the_state(repository: SqliteDownloadRepository) -> None:
     repository.record_queued(_A, "062A", 100)
     repository.set_state(_A, DownloadState.DOWNLOADING)
-    assert repository.active_states()[_A] is DownloadState.DOWNLOADING
+    assert repository.tracked_states()[_A] is DownloadState.DOWNLOADING
 
 
 def test_set_state_to_completed_stamps_completed_at(
@@ -111,7 +111,7 @@ def test_active_states_maps_hash_to_state(repository: SqliteDownloadRepository) 
     repository.record_queued(_A, "062A", 100)
     repository.record_queued(_B, "063A", 200)
     repository.set_state(_B, DownloadState.FAILED)
-    states = repository.active_states()
+    states = repository.tracked_states()
     assert states == {_A: DownloadState.QUEUED, _B: DownloadState.FAILED}
 
 
@@ -124,18 +124,18 @@ def test_record_queued_is_atomic_on_injected_failure(
     )
     with pytest.raises(PersistenceError, match="injected failure"):
         repository.record_queued(_A, "062A", 100)
-    assert repository.is_downloaded(_A) is False
+    assert repository.is_tracked(_A) is False
 
 
 def test_get_target_id_returns_target_for_known_hash(
     repository: SqliteDownloadRepository,
 ) -> None:
     repository.record_queued(_A, "062A", 100)
-    assert repository.get_target_id(_A) == "062A"
+    assert repository.queued_target_id(_A) == "062A"
 
 
 def test_get_target_id_is_none_for_unknown_hash(repository: SqliteDownloadRepository) -> None:
-    assert repository.get_target_id(_A) is None
+    assert repository.queued_target_id(_A) is None
 
 
 def _last_seen(connection: sqlite3.Connection, file: FileKey) -> str:
@@ -171,7 +171,7 @@ def test_mark_seen_ignores_a_hash_it_does_not_know(
     repository: SqliteDownloadRepository,
 ) -> None:
     repository.mark_seen([_status(_A)])  # a shared file the crawler never queued: no row, no raise
-    assert repository.is_downloaded(_A) is False
+    assert repository.is_tracked(_A) is False
 
 
 def test_expire_lost_fails_the_rows_amuled_stopped_showing(
@@ -185,7 +185,7 @@ def test_expire_lost_fails_the_rows_amuled_stopped_showing(
     clock.advance(25 * 3600)
     repository.mark_seen([_status(_B)])  # _B is still in amuled's queue, _A vanished 25 h ago
     assert repository.expire_lost(86400) == (_A,)
-    assert repository.active_states() == {_A: DownloadState.FAILED, _B: DownloadState.QUEUED}
+    assert repository.tracked_states() == {_A: DownloadState.FAILED, _B: DownloadState.QUEUED}
     assert _lifecycle(connection, _A)[3] == "lost"
 
 
@@ -197,7 +197,7 @@ def test_expire_lost_spares_a_row_seen_within_the_ttl(
     repository.record_queued(_A, "062A", 100)
     clock.advance(23 * 3600)
     assert repository.expire_lost(86400) == ()
-    assert repository.active_states() == {_A: DownloadState.QUEUED}
+    assert repository.tracked_states() == {_A: DownloadState.QUEUED}
 
 
 def test_expire_lost_leaves_terminal_rows_alone(connection: sqlite3.Connection) -> None:
@@ -207,7 +207,7 @@ def test_expire_lost_leaves_terminal_rows_alone(connection: sqlite3.Connection) 
     repository.set_state(_A, DownloadState.COMPLETED)
     clock.advance(30 * 86400)
     assert repository.expire_lost(86400) == ()
-    assert repository.active_states() == {_A: DownloadState.COMPLETED}
+    assert repository.tracked_states() == {_A: DownloadState.COMPLETED}
 
 
 def test_a_queued_download_starts_at_zero_bytes_with_no_progress(
@@ -233,6 +233,14 @@ def test_mark_seen_stamps_progress_only_when_the_bytes_grow(
     assert _lifecycle(connection, _A) == (40, grown_at, None, None)
 
 
+def test_mark_seen_stores_the_client_hashing_or_allocating_as_local_processing(
+    repository: SqliteDownloadRepository, connection: sqlite3.Connection
+) -> None:
+    repository.record_queued(_A, "062A", 100)
+    repository.mark_seen([_status(_A, 0, WaitingReason.LOCAL_PROCESSING)])
+    assert _lifecycle(connection, _A) == (0, None, "local_processing", None)
+
+
 def test_a_download_migrated_without_bytes_does_not_invent_progress(
     repository: SqliteDownloadRepository, connection: sqlite3.Connection
 ) -> None:
@@ -254,7 +262,7 @@ def test_a_download_waiting_for_sources_a_whole_year_is_never_lost(
         clock.advance(86400)
         repository.mark_seen([_status(_A, 0, WaitingReason.NO_SOURCE)])
         assert repository.expire_lost(86400) == ()
-    assert repository.active_states() == {_A: DownloadState.DOWNLOADING}
+    assert repository.tracked_states() == {_A: DownloadState.DOWNLOADING}
     assert _lifecycle(connection, _A) == (0, None, "no_source", None)
 
 

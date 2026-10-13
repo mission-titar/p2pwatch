@@ -10,7 +10,7 @@ Methods take a ``FileKey``; rows are keyed by its ``file_id`` (stage 2 spec D19)
 ``record_queued`` is dedup-safe (PK = ``file_id``, ``ON CONFLICT DO NOTHING``); ``set_state``
 stamps ``completed_at`` on completion (injected clock); ``mark_seen``/``expire_lost`` carry
 the lost-download TTL (2026-09-13 spec §2) and the lifecycle columns (stage 2 spec D12);
-``active_states`` returns the file→state map (the loop's monitor reconciles against it).
+``tracked_states`` returns the file→state map (the loop reconciles the client's list with it).
 """
 
 import sqlite3
@@ -25,7 +25,7 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.ports.clock import Clock
 from p2pwatch.ports.download_client import DownloadStatus, FailureReason
 
-_INSERT = """
+_INSERT_QUEUED = """
 INSERT INTO downloads
     (file_id, network, native_id, target_id, state, queued_at, size_bytes, last_seen_at,
      bytes_done)
@@ -39,11 +39,11 @@ _SET_STATE_COMPLETED = """
 UPDATE downloads SET state = ?, failure_reason = NULL, completed_at = ? WHERE file_id = ?
 """
 
-_IS_DOWNLOADED = "SELECT 1 FROM downloads WHERE file_id = ?"
+_IS_TRACKED = "SELECT 1 FROM downloads WHERE file_id = ?"
 
-_ACTIVE_STATES = "SELECT network, native_id, state FROM downloads"
+_TRACKED_STATES = "SELECT network, native_id, state FROM downloads"
 
-_GET_TARGET_ID = "SELECT target_id FROM downloads WHERE file_id = ?"
+_QUEUED_TARGET_ID = "SELECT target_id FROM downloads WHERE file_id = ?"
 
 # Every right-hand side reads the row as it was, so the CASE compares against the old bytes.
 _MARK_SEEN = """
@@ -77,7 +77,7 @@ class SqliteDownloadRepository:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
                 cursor = self._connection.execute(
-                    _INSERT,
+                    _INSERT_QUEUED,
                     (
                         file.file_id,
                         file.network,
@@ -115,10 +115,10 @@ class SqliteDownloadRepository:
         if cursor.rowcount != 1:
             raise PersistenceError(f"download {file.native_id} not found (caller bug)")
 
-    def is_downloaded(self, file: FileKey) -> bool:
+    def is_tracked(self, file: FileKey) -> bool:
         """``True`` if this file is already known to ``downloads`` (dedup, spec §6)."""
         with wrap_sqlite_errors():
-            row = self._connection.execute(_IS_DOWNLOADED, (file.file_id,)).fetchone()
+            row = self._connection.execute(_IS_TRACKED, (file.file_id,)).fetchone()
         return row is not None
 
     def mark_seen(self, statuses: Iterable[DownloadStatus]) -> None:
@@ -142,32 +142,32 @@ class SqliteDownloadRepository:
                 ],
             )
 
-    def expire_lost(self, max_age_seconds: float) -> tuple[FileKey, ...]:
-        """Fails the non-terminal downloads amuled has not shown for ``max_age_seconds``.
+    def expire_lost(self, lost_after_seconds: float) -> tuple[FileKey, ...]:
+        """Fails the non-terminal downloads amuled has not shown for ``lost_after_seconds``.
 
         Returns the files it failed, for the caller to log. An entry stays in amuled's queue
         even with zero sources, so absence is a strong signal: the entry was removed, or the
         file completed and was moved out of IncomingDir before the next poll.
         """
-        cutoff = utc_iso(self._clock.now() - timedelta(seconds=max_age_seconds))
+        cutoff = utc_iso(self._clock.now() - timedelta(seconds=lost_after_seconds))
         with wrap_sqlite_errors():
             rows = self._connection.execute(_EXPIRE_LOST, (cutoff,)).fetchall()
         return tuple(FileKey(Network(row[0]), row[1]) for row in rows)
 
-    def active_states(self) -> dict[FileKey, DownloadState]:
-        """File→state map of ALL known downloads (the monitor reconciles against it)."""
+    def tracked_states(self) -> dict[FileKey, DownloadState]:
+        """File→state map of ALL tracked downloads, whatever their state."""
         with wrap_sqlite_errors():
-            rows = self._connection.execute(_ACTIVE_STATES).fetchall()
+            rows = self._connection.execute(_TRACKED_STATES).fetchall()
         return {FileKey(Network(row[0]), row[1]): DownloadState(row[2]) for row in rows}
 
-    def get_target_id(self, file: FileKey) -> str | None:
-        """``target_id`` of a downloaded file, or ``None`` (never queued) — READ.
+    def queued_target_id(self, file: FileKey) -> str | None:
+        """``target_id`` the file was queued for, or ``None`` (never queued).
 
         The download loop uses it to label the completion notification; ``None`` is a normal
         case (a shared file the crawler never queued), reported as ``unknown``.
         """
         with wrap_sqlite_errors():
-            row = self._connection.execute(_GET_TARGET_ID, (file.file_id,)).fetchone()
+            row = self._connection.execute(_QUEUED_TARGET_ID, (file.file_id,)).fetchone()
         if row is None:
             return None
         return str(row[0])

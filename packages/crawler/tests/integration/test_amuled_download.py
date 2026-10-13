@@ -42,7 +42,7 @@ async def test_start_then_appears_in_downloads(amuled: ApiEndpoint) -> None:
         # start ACCEPTED: a real-size link (no source) creates a listed partfile, and
         # `status=all` is what makes it visible whatever its state (§4.3).
         listed = {download.file: download for download in await client.downloads()}
-        assert listed[file].bytes_total == _SIZE
+        assert listed[file].size_bytes == _SIZE
         assert not listed[file].completed
     finally:
         await client.close()

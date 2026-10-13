@@ -85,10 +85,10 @@ _WAITING_STATUSES = {
     "insufficient_disk": WaitingReason.DISK_FULL,
     "paused": WaitingReason.PAUSED,
     "stopped": WaitingReason.PAUSED,
-    "waiting": WaitingReason.LOCAL,
-    "hashing": WaitingReason.LOCAL,
-    "allocating": WaitingReason.LOCAL,
-    "completing": WaitingReason.LOCAL,
+    "waiting": WaitingReason.LOCAL_PROCESSING,
+    "hashing": WaitingReason.LOCAL_PROCESSING,
+    "allocating": WaitingReason.LOCAL_PROCESSING,
+    "completing": WaitingReason.LOCAL_PROCESSING,
 }
 
 
@@ -120,7 +120,7 @@ def map_download_status(row: object) -> DownloadStatus | None:
     return DownloadStatus(
         file=FileKey(Network.ED2K, ed2k_hash),
         bytes_done=_int(row.get("completed_bytes")),
-        bytes_total=_int(row.get("size_bytes")),
+        size_bytes=_int(row.get("size_bytes")),
         completed=completed,
         waiting_reason=waiting,
         failure_reason=failure,
@@ -136,7 +136,14 @@ def map_shared_download(row: object) -> DownloadStatus | None:
     if ed2k_hash is None:
         return None
     size = _int(row.get("size_bytes"))
-    return DownloadStatus(FileKey(Network.ED2K, ed2k_hash), size, size, True, None, None)
+    return DownloadStatus(
+        file=FileKey(Network.ED2K, ed2k_hash),
+        bytes_done=size,
+        size_bytes=size,
+        completed=True,
+        waiting_reason=None,
+        failure_reason=None,
+    )
 
 
 def map_client_status(status: object, version: object) -> ClientStatus:

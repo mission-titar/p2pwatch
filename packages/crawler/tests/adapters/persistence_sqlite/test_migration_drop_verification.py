@@ -80,7 +80,7 @@ def test_local_rewrites_a_legacy_quarantined_download_as_completed(tmp_path: Pat
     connection = open_local(path)
     try:
         repository = SqliteDownloadRepository(connection, clock=FakeClock())
-        assert repository.active_states() == {
+        assert repository.tracked_states() == {
             FileKey(Network.ED2K, "a1" * 16): DownloadState.COMPLETED
         }
     finally:

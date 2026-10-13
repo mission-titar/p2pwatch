@@ -15,7 +15,7 @@ class WaitingReason(StrEnum):
 
     DISK_FULL = "disk_full"
     PAUSED = "paused"
-    LOCAL = "local"
+    LOCAL_PROCESSING = "local_processing"
     NO_SOURCE = "no_source"
     REMOTE_QUEUE = "remote_queue"
 
@@ -41,7 +41,7 @@ class DownloadStatus:
 
     file: FileKey
     bytes_done: int
-    bytes_total: int
+    size_bytes: int
     completed: bool
     waiting_reason: WaitingReason | None
     failure_reason: FailureReason | None

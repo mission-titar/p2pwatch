@@ -14,7 +14,7 @@ def _verdict(
     return download_policy(
         tier=tier,
         target_status=target_status,
-        already_downloaded=already_downloaded,
+        already_tracked=already_downloaded,
         free_bytes=free_bytes,
         outstanding_bytes=outstanding_bytes,
         file_size=file_size,
@@ -114,7 +114,7 @@ def test_found_target_still_downloads_a_new_file() -> None:
     verdict = download_policy(
         tier="download",
         target_status="found",
-        already_downloaded=False,
+        already_tracked=False,
         free_bytes=100_000_000_000,
         outstanding_bytes=0,
         file_size=100_000_000,

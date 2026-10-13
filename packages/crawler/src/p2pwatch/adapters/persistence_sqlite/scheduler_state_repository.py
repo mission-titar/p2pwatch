@@ -1,9 +1,9 @@
 """``SqliteSchedulerStateRepository``: scheduler state as KV (orchestration spec §4/§7).
 
 STRUCTURALLY implements the ``SchedulerStateRepository`` port. Stores one key in the
-``scheduler_state`` table of ``local.db``: ``channel_backoff`` (JSON map of
-:class:`ChannelBackoff` keyed by client/client:channel). ``save_channel_backoff`` replaces
-the map ENTIRELY (registry snapshot); ``load_channel_backoff`` returns an empty dict if the key
+``scheduler_state`` table of ``local.db``: ``backoff_states`` (JSON map of
+:class:`BackoffState` keyed by client/client:channel). ``save_backoff_states`` replaces
+the map ENTIRELY (registry snapshot); ``load_backoff_states`` returns an empty dict if the key
 is absent.
 
 ``scheduler_state`` is NOT append-only (mutable state, not the catalog): no
@@ -16,9 +16,9 @@ from contextlib import suppress
 from typing import Any
 
 from p2pwatch.adapters.persistence_sqlite.errors import wrap_sqlite_errors
-from p2pwatch.ports.scheduler_state_repository import ChannelBackoff
+from p2pwatch.ports.scheduler_state_repository import BackoffState
 
-_SELECT_BACKOFF = "SELECT value FROM scheduler_state WHERE key = 'channel_backoff'"
+_SELECT_BACKOFF = "SELECT value FROM scheduler_state WHERE key = 'backoff_states'"
 
 _UPSERT = """
 INSERT INTO scheduler_state (key, value) VALUES (?, ?)
@@ -32,11 +32,11 @@ class SqliteSchedulerStateRepository:
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
 
-    def load_channel_backoff(self) -> dict[str, ChannelBackoff]:
+    def load_backoff_states(self) -> dict[str, BackoffState]:
         """Re-reads the persisted backoff map, ``{}`` if never written (first startup).
 
         Each JSON entry ``{"attempts": int, "retry_after": str}`` is reconstructed into a
-        :class:`ChannelBackoff`. Harmless read: no explicit transaction.
+        :class:`BackoffState`. Harmless read: no explicit transaction.
         """
         with wrap_sqlite_errors():
             row = self._connection.execute(_SELECT_BACKOFF).fetchone()
@@ -44,13 +44,13 @@ class SqliteSchedulerStateRepository:
             return {}
         raw: dict[str, dict[str, Any]] = json.loads(row[0])
         return {
-            key: ChannelBackoff(
+            key: BackoffState(
                 attempts=int(entry["attempts"]), retry_after=str(entry["retry_after"])
             )
             for key, entry in raw.items()
         }
 
-    def save_channel_backoff(self, backoff: dict[str, ChannelBackoff]) -> None:
+    def save_backoff_states(self, backoff: dict[str, BackoffState]) -> None:
         """Replaces the persisted map ENTIRELY (registry snapshot, at each change).
 
         Serialized as sorted JSON (``sort_keys`` → stable diff, determinism). Atomic UPSERT
@@ -66,7 +66,7 @@ class SqliteSchedulerStateRepository:
         with wrap_sqlite_errors():
             self._connection.execute("BEGIN IMMEDIATE")
             try:
-                self._connection.execute(_UPSERT, ("channel_backoff", blob))
+                self._connection.execute(_UPSERT, ("backoff_states", blob))
                 self._connection.execute("COMMIT")
             except BaseException:
                 with suppress(sqlite3.Error):

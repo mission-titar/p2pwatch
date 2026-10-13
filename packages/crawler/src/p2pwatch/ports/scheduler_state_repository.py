@@ -5,11 +5,11 @@ PORTS layer, SYNCHRONOUS Protocol (same principle as ``LocalStateRepository``: s
 must survive a restart), as KV in the ``scheduler_state`` table of ``local.db`` (never
 merged, invariant §11).
 
-The backoff is serialized as JSON under ONE key (``channel_backoff``): a map
-``{ "amule-1:kad": {attempts, retry_after}, "amule-1": {...} }``, where the key is either
+The backoff is serialized as JSON under ONE key (``backoff_states``): a map
+``{ "amule-1:kad": {attempts, retry_after}, "amule-1": {...} }``, where the backoff key is either
 ``client:channel`` (a channel failure), or ``client`` alone (reconnection). ``retry_after``
 is a fixed-width ISO-8601 UTC.
-``load_channel_backoff`` returns an empty dict if never written (first startup).
+``load_backoff_states`` returns an empty dict if never written (first startup).
 """
 
 from dataclasses import dataclass
@@ -17,8 +17,8 @@ from typing import Protocol
 
 
 @dataclass(frozen=True)
-class ChannelBackoff:
-    """Backoff state of a key (client, or client:channel): counter + deadline.
+class BackoffState:
+    """Backoff state of a backoff key (client, or client:channel): counter + deadline.
 
     ``attempts`` = number of CONSECUTIVE failures (used for the exponential computation).
     ``retry_after`` = fixed-width ISO-8601 UTC: as long as ``now < retry_after``, the key is
@@ -32,9 +32,9 @@ class ChannelBackoff:
 class SchedulerStateRepository(Protocol):
     """Sync scheduling-state contract (the backoff).
 
-    ``save_channel_backoff`` ENTIRELY replaces the persisted map (registry snapshot).
+    ``save_backoff_states`` ENTIRELY replaces the persisted map (registry snapshot).
     """
 
-    def load_channel_backoff(self) -> dict[str, ChannelBackoff]: ...
+    def load_backoff_states(self) -> dict[str, BackoffState]: ...
 
-    def save_channel_backoff(self, backoff: dict[str, ChannelBackoff]) -> None: ...
+    def save_backoff_states(self, backoff: dict[str, BackoffState]) -> None: ...

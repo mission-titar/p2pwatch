@@ -177,7 +177,7 @@ class FakeDownloadRepo:
     Keyed by ``native_id``; ``failures`` and ``waiting`` hold the lifecycle reasons.
     ``fail_set_state_for``: hashes for which ``set_state`` raises ``RepositoryError`` —
     lets us simulate a mid-cycle repo failure (cf. logic-download#2/error-boundary#2).
-    ``fail_active_states``: ``active_states()`` raises — lets us simulate persistence being down
+    ``fail_active_states``: ``tracked_states()`` raises, to simulate persistence being down
     also at re-read time (every step of the cycle absorbs). ``lost``: hashes ``expire_lost``
     should condemn (scripted, so the fake needs no clock)."""
 
@@ -203,7 +203,7 @@ class FakeDownloadRepo:
         self._lost = lost or set()
         self._target_ids: dict[str, str] = {}
 
-    def get_target_id(self, file: FileKey) -> str | None:
+    def queued_target_id(self, file: FileKey) -> str | None:
         return self._target_ids.get(file.native_id)
 
     def record_queued(self, file: FileKey, target_id: str, size_bytes: int) -> bool:
@@ -223,7 +223,7 @@ class FakeDownloadRepo:
         self.states[file.native_id] = state
         self.failures[file.native_id] = failure_reason
 
-    def is_downloaded(self, file: FileKey) -> bool:
+    def is_tracked(self, file: FileKey) -> bool:
         return file.native_id in self.states
 
     def mark_seen(self, statuses: Iterable[DownloadStatus]) -> None:
@@ -233,8 +233,8 @@ class FakeDownloadRepo:
         self.seen.append({status.file.native_id for status in statuses})
         self.waiting.update({s.file.native_id: s.waiting_reason for s in statuses})
 
-    def expire_lost(self, max_age_seconds: float) -> tuple[FileKey, ...]:
-        self.expired_after.append(max_age_seconds)
+    def expire_lost(self, lost_after_seconds: float) -> tuple[FileKey, ...]:
+        self.expired_after.append(lost_after_seconds)
         condemned = tuple(
             h
             for h in self._lost
@@ -245,9 +245,9 @@ class FakeDownloadRepo:
             self.failures[ed2k_hash] = FailureReason.LOST
         return tuple(_key(h) for h in condemned)
 
-    def active_states(self) -> dict[FileKey, DownloadState]:
+    def tracked_states(self) -> dict[FileKey, DownloadState]:
         if self._fail_active_states:
-            raise RepositoryError("active_states failed")
+            raise RepositoryError("tracked_states failed")
         return {_key(h): state for h, state in self.states.items()}
 
 
@@ -394,11 +394,11 @@ async def test_already_downloaded_candidate_is_deduped() -> None:
 @pytest.mark.asyncio
 async def test_two_segment_candidates_same_hash_dedup_to_one_download() -> None:
     # spec §8: a whole-episode file yields BOTH (hash,062A) and (hash,062B) in
-    # download_candidates; is_downloaded(hash) dedups them to ONE physical download.
+    # download_candidates; is_tracked(hash) dedups them to ONE physical download.
     #
     # Both targets are DOWNLOAD-eligible ("lost", not "complete") so the ONLY thing that
-    # can collapse the two candidates is the `is_downloaded(hash)` guard in
-    # _queue_new_candidates — never `_target_status` falling back to its "complete"
+    # can collapse the two candidates is the `is_tracked(hash)` guard in
+    # _queue_new_candidates, never `_target_status` falling back to its "complete"
     # default for an absent target (that would be an unrelated skip path, spec §6).
     targets = (
         TargetSegment(
@@ -429,7 +429,7 @@ async def test_two_segment_candidates_same_hash_dedup_to_one_download() -> None:
     # Load-bearing assertion: exactly ONE DownloadQueued event. _queue_new_candidates
     # emits one per NON-skipped candidate (run_download_cycle.py, end of the loop body);
     # both candidates are policy-eligible here, so a SECOND event would only appear if the
-    # `is_downloaded` continue-guard were removed — unlike the hash-keyed dict observables
+    # `is_tracked` continue-guard were removed, unlike the hash-keyed dict observables
     # above (states/started), which stay collapsed regardless thanks to
     # FakeDownloadRepo.record_queued's own idempotency guard.
     queued_events = [e for e in telemetry.events if isinstance(e, DownloadQueued)]
@@ -539,8 +539,8 @@ async def test_monitor_marks_in_progress_when_not_complete() -> None:
 
 @pytest.mark.asyncio
 async def test_monitor_does_not_regress_a_completed_queue_entry() -> None:
-    # _monitor: a COMPLETED hash present in the amuled queue MUST NOT regress to DOWNLOADING
-    # (the completion notification already fired; re-firing it would be noise).
+    # _reconcile_states: a COMPLETED hash present in the amuled queue MUST NOT regress to
+    # DOWNLOADING (the completion notification already fired; re-firing it would be noise).
     class _NoSetStateRepo(FakeDownloadRepo):
         def set_state(
             self, file: FileKey, state: DownloadState, failure_reason: FailureReason | None = None
@@ -673,18 +673,18 @@ async def test_repository_error_is_absorbed() -> None:
 
 @pytest.mark.asyncio
 async def test_monitor_repo_error_still_promotes_completions_in_same_cycle() -> None:
-    # Regression logic-download#2: if ``_monitor`` raises ``RepositoryError`` (set_state down on
-    # another hash), the old code set ``states={}`` then called ``_handle_completions``
+    # Regression logic-download#2: if ``_reconcile_states`` raises ``RepositoryError`` (set_state
+    # down on another hash), the old code set ``states={}`` then called ``_handle_completions``
     # → each shared hash → ``states.get(...) is None`` → ignored → NO completion recorded
     # in the whole cycle (latency +1 cycle although we already have the signal). The fix re-reads
-    # ``active_states()`` BEFORE ``_handle_completions`` so the completions are seen.
+    # ``tracked_states()`` BEFORE ``_handle_completions`` so the completions are seen.
     client = FakeDownloadClient(
         # _A completed: the completion must be recorded in this very cycle. _B is listed and
         # fails its set_state transition.
         listed=[(_status(_B), _status(_A, completed=True))],
     )
     downloads = FakeDownloadRepo(fail_set_state_for={_B})
-    # _A already DOWNLOADING (no transition by _monitor); _B QUEUED → _monitor will try
+    # _A already DOWNLOADING (no transition by _reconcile_states); _B QUEUED → it will try
     # set_state(_B, DOWNLOADING) which raises → step 1 crashes, but _A is completed.
     downloads.states[_A] = DownloadState.DOWNLOADING
     downloads.states[_B] = DownloadState.QUEUED
@@ -694,13 +694,13 @@ async def test_monitor_repo_error_still_promotes_completions_in_same_cycle() -> 
         catalog=FakeCatalogReads(),
     )
     await run_download_cycle(deps)
-    # _A's completion is recorded despite the failure of _monitor on _B
+    # _A's completion is recorded despite the failure of _reconcile_states on _B
     assert downloads.states[_A] is DownloadState.COMPLETED
 
 
 @pytest.mark.asyncio
 async def test_active_states_repo_failure_is_absorbed_at_step_2() -> None:
-    # ``active_states`` that raises IN A LOOP (persistent repo failure): step 1 absorbs, then the
+    # ``tracked_states`` that raises IN A LOOP (persistent repo failure): step 1 absorbs, then the
     # re-read of step 2 (logic-download#2) absorbs in turn → the cycle ends without
     # crashing the loop (the next cycle will replay). We exercise HERE the branch
     # ``except RepositoryError`` of step 2 separately from that of step 1.
@@ -789,8 +789,8 @@ async def test_candidate_for_unknown_target_is_treated_as_complete() -> None:
 
 @pytest.mark.asyncio
 async def test_monitor_no_op_when_state_already_matches() -> None:
-    # _monitor: in-progress entry (done=3/full=10) and repo already DOWNLOADING → target == current
-    # → NO set_state (FALSE branch of `if target != current`).
+    # _reconcile_states: in-progress entry (done=3/full=10) and repo already DOWNLOADING →
+    # wanted_state is current → NO set_state (FALSE branch of `if current is not wanted_state`).
     client = FakeDownloadClient(listed=[(_status(_A, done=3, total=10),)])
     downloads = FakeDownloadRepo()
     downloads.states[_A] = DownloadState.DOWNLOADING
@@ -1075,7 +1075,7 @@ async def test_monitor_unreachable_aborts_subsequent_steps() -> None:
 
 @pytest.mark.asyncio
 async def test_monitor_repo_failure_is_isolated_and_does_not_starve_candidates() -> None:
-    # _monitor raises RepositoryError (set_state fails during reconciliation) → step 1 is
+    # _reconcile_states raises RepositoryError (set_state fails during reconciliation) → step 1 is
     # ISOLATED (log + continue), it does NOT starve step 3: _B is enqueued anyway.
     class _MonitorFailRepo(FakeDownloadRepo):
         def set_state(

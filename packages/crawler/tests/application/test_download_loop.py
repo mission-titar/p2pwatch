@@ -108,7 +108,7 @@ async def test_nudge_wakes_the_loop_before_poll_expires() -> None:
 
 
 class _ShutdownDuringCycleCatalog(FakeCatalogReads):
-    """CatalogReader setting ``shutdown`` on the 1st ``download_candidates`` (DURING the cycle)."""
+    """DownloadCatalogReader setting ``shutdown`` on the 1st ``download_candidates``, mid-cycle."""
 
     def __init__(self, shutdown: asyncio.Event) -> None:
         super().__init__()
