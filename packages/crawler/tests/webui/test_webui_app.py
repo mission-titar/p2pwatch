@@ -10,6 +10,7 @@ from urllib.parse import urlencode
 import pytest
 import yaml
 from httpx import ASGITransport, AsyncClient
+from jinja2 import UndefinedError
 from starlette.applications import Starlette
 
 from catalog_matching.config import MatcherConfig
@@ -1264,6 +1265,39 @@ async def test_file_detail_unknown_hash_returns_styled_404(
         resp = await client.get(f"/files/{unknown}")
     assert resp.status_code == 404
     assert "not found" in resp.text.lower()
+
+
+@pytest.mark.parametrize(
+    "template",
+    ["{{ missing }}", "{% for item in nav_items %}{{ item.missing }}{% endfor %}"],
+    ids=["missing-name", "missing-attribute"],
+)
+@pytest.mark.asyncio
+async def test_a_template_reading_what_its_context_lacks_raises(
+    template: str, catalog_db: Path, local_db: Path, tmp_path: Path
+) -> None:
+    """A renamed context key or field fails the render instead of printing an empty string."""
+    import p2pwatch.webui
+
+    templates_dir = tmp_path / "templates"
+    templates_dir.mkdir()
+    (templates_dir / "404.html").write_text(template, encoding="utf-8")
+    app = build_app(
+        catalog_db=catalog_db,
+        local_db=local_db,
+        matcher_config=_matcher(),
+        targets=_targets(),
+        templates_dir=templates_dir,
+        static_dir=Path(p2pwatch.webui.__file__).parent / "adapters" / "static",
+        control=_RecordingControl(),
+        status=_NO_STATUS,
+        amule_url=_AMULE_URL,
+        clock=_CLOCK,
+        source_period_gap=_GAP,
+    )
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        with pytest.raises(UndefinedError):
+            await client.get("/sources/not-a-hex-id")
 
 
 @pytest.fixture
