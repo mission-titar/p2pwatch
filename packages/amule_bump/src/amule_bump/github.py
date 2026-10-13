@@ -15,8 +15,8 @@ class Repo(Protocol):
 
 
 class GitHubRepo:
-    def __init__(self, name: str, token: str | None) -> None:
-        self._name = name
+    def __init__(self, full_name: str, token: str | None) -> None:
+        self._full_name = full_name
         self._token = token
 
     def json(self, path: str) -> Any:
@@ -35,7 +35,7 @@ class GitHubRepo:
         headers = {"Accept": accept, "X-GitHub-Api-Version": "2022-11-28"}
         if self._token:
             headers["Authorization"] = f"Bearer {self._token}"
-        request = Request(f"https://api.github.com/repos/{self._name}/{path}", headers=headers)
+        request = Request(f"https://api.github.com/repos/{self._full_name}/{path}", headers=headers)
         with urlopen(request, timeout=30) as response:
             content: bytes = response.read()
         return content

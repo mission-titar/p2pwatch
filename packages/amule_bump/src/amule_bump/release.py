@@ -4,7 +4,7 @@ from amule_bump import BumpError
 from amule_bump.github import Repo
 
 
-def latest_release(repo: Repo) -> str:
+def latest_release_tag(repo: Repo) -> str:
     tag = str(repo.json("releases/latest")["tag_name"])
     # The tag ends up in a URL, a branch name and the Dockerfile: accept a plain version only.
     if not _is_plain_version(tag):
@@ -18,12 +18,12 @@ def is_newer(candidate: str, pinned: str) -> bool:
 
 def peeled_commit(repo: Repo, tag: str) -> str:
     """The commit the tag names, never the annotated tag object: BuildKit's --checksum wants it."""
-    target = repo.json(f"git/ref/tags/{tag}")["object"]
-    while target["type"] == "tag":
-        target = repo.json(f"git/tags/{target['sha']}")["object"]
-    if target["type"] != "commit":
-        raise BumpError(f"tag {tag} points at a {target['type']}, not a commit")
-    return str(target["sha"])
+    git_object = repo.json(f"git/ref/tags/{tag}")["object"]
+    while git_object["type"] == "tag":
+        git_object = repo.json(f"git/tags/{git_object['sha']}")["object"]
+    if git_object["type"] != "commit":
+        raise BumpError(f"tag {tag} points at a {git_object['type']}, not a commit")
+    return str(git_object["sha"])
 
 
 def _version(text: str) -> tuple[int, ...]:

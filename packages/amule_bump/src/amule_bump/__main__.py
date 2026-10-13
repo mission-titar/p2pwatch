@@ -11,10 +11,10 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from amule_bump import BumpError
-from amule_bump.body import build_body
+from amule_bump.body import build_pull_request_body
 from amule_bump.dockerfile import Pin, read_pin, rewrite_pin
 from amule_bump.github import UPSTREAM, GitHubRepo, Repo
-from amule_bump.release import is_newer, latest_release, peeled_commit
+from amule_bump.release import is_newer, latest_release_tag, peeled_commit
 
 
 def main(
@@ -42,9 +42,9 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 
 
 def _bump(args: argparse.Namespace, repo: Repo, env: Mapping[str, str]) -> int:
-    dockerfile = args.dockerfile.read_text()
-    old = read_pin(dockerfile)
-    latest = latest_release(repo)
+    dockerfile_text = args.dockerfile.read_text()
+    old = read_pin(dockerfile_text)
+    latest = latest_release_tag(repo)
     if latest == old.version:
         print(f"aMule {old.version} is the latest release: nothing to do")
         return 0
@@ -56,20 +56,20 @@ def _bump(args: argparse.Namespace, repo: Repo, env: Mapping[str, str]) -> int:
         return 0
 
     new = Pin(latest, peeled_commit(repo, latest))
-    body = build_body(repo, old, new)
+    body = build_pull_request_body(repo, old, new)
     if args.dry_run:
         print(new.arg_lines())
         print(f"--- PR body ({len(body)} characters) ---")
         print(body, end="")
         return 0
 
-    args.dockerfile.write_text(rewrite_pin(dockerfile, new))
+    args.dockerfile.write_text(rewrite_pin(dockerfile_text, new))
     args.body_file.write_text(body)
-    _announce(env.get("GITHUB_OUTPUT"), new.version, args.body_file)
+    _write_step_outputs(env.get("GITHUB_OUTPUT"), new.version, args.body_file)
     return 0
 
 
-def _announce(github_output: str | None, version: str, body_file: Path) -> None:
+def _write_step_outputs(github_output: str | None, version: str, body_file: Path) -> None:
     """Hand the new version and the body's path to the workflow's next step, when in Actions."""
     if github_output:
         with open(github_output, "a") as output:
