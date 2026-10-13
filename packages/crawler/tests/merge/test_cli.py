@@ -139,11 +139,11 @@ def test_cli_logs_the_output_once_done(tmp_path: Path, caplog: pytest.LogCapture
     assert caplog.messages[-1] == f"merge done: {out}"
 
 
-def test_help_says_source_ranges_are_united(capsys: pytest.CaptureFixture[str]) -> None:
-    # source_ranges is not append-only: the help must not promise it (stage 4, D15).
+def test_help_says_the_catalog_stays_append_only(capsys: pytest.CaptureFixture[str]) -> None:
+    # Every table is append-only again, source points included (source points spec, D1).
     with pytest.raises(SystemExit):
         main(["--help"])
 
     text = " ".join(capsys.readouterr().out.split())
-    assert "source ranges united" in text
-    assert "append-only preserved" not in text
+    assert "append-only preserved" in text
+    assert "ranges" not in text

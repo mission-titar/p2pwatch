@@ -789,7 +789,7 @@ async def test_full_mode_records_the_sources_of_a_download_in_the_catalog(
     await asyncio.wait_for(app.run(), timeout=5.0)
     catalog = open_catalog(tmp_path / "catalog.db")
     rows = catalog.execute(
-        "SELECT v.name, r.node_id FROM source_ranges AS r JOIN source_variants AS v"
+        "SELECT v.name, v.node_id FROM source_observations AS o JOIN source_variants AS v"
         " USING (variant_id)"
     ).fetchall()
     catalog.close()
@@ -1164,6 +1164,40 @@ async def test_the_webui_reads_the_status_loops_board_and_the_pause_gate(
     assert reading.status == await FakeMuleClient().status()
     assert wired["status"].is_current(reading)
     assert wired["control"].is_paused() is False
+
+
+@pytest.mark.asyncio
+async def test_the_webui_cuts_periods_at_three_polls_and_reads_the_crawlers_clock(
+    tmp_path: Path, matcher_config: MatcherConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    holder: dict[str, CrawlerApp] = {}
+    wired: dict[str, Any] = {}
+
+    def build(**kwargs: Any) -> Starlette:
+        wired.update(kwargs)
+        return Starlette()
+
+    monkeypatch.setattr(composition_app, "build_webui_app", build)
+    clock = FakeClock()
+    config = _crawler_config(
+        tmp_path, download=_download_config(tmp_path), webui=WebuiConfig(enabled=True)
+    )
+    app = CrawlerApp(
+        crawler_config=config,
+        targets=_TARGETS,
+        matcher_config=matcher_config,
+        clock=clock,
+        rng=_NoopRng(),
+        signal_hub=RecordingSignal(),
+        policy_fingerprint=_FP,
+        client_factory=lambda endpoint, clock: _ShutdownOnStatusClient(holder),
+        download_client_factory=lambda endpoint, clock: FakeDownloadClient(),
+        webui_server_factory=lambda webui: _FakeWebuiServer(),
+    )
+    holder["app"] = app
+    await asyncio.wait_for(app.run(), timeout=5.0)
+    assert wired["source_tolerance"] == timedelta(seconds=90)
+    assert wired["clock"] is clock
 
 
 @pytest.mark.asyncio

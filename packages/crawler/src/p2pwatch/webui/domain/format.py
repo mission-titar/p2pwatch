@@ -81,13 +81,13 @@ def seasonal_id(*, season: int, seasonal_number: int, letter: str) -> str:
 
 
 def micros_timestamp(micros: int) -> str:
-    """Microseconds since the Unix epoch as ``YYYY-MM-DD HH:MM:SSZ``: a source range's ends, which
-    keep the seconds since a range is read every 30 s."""
+    """Microseconds since the Unix epoch as ``YYYY-MM-DD HH:MM:SSZ``: a source period's ends, to
+    the second."""
     return f"{_EPOCH + timedelta(microseconds=micros):%Y-%m-%d %H:%M:%S}Z"
 
 
 def average_rate(received_bytes: int, first_seen_at: int, last_seen_at: int) -> str:
-    """A source range's average rate, e.g. ``1 KB/s``; empty without bytes or over a single read."""
+    """A source period's average rate, e.g. ``1 KB/s``; empty without bytes or over one read."""
     if received_bytes == 0 or last_seen_at == first_seen_at:
         return ""
     per_second = round(received_bytes * _MICROS_PER_SECOND / (last_seen_at - first_seen_at))

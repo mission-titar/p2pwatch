@@ -1,5 +1,6 @@
 import dataclasses
 import uuid
+from datetime import timedelta
 
 import pytest
 
@@ -11,6 +12,7 @@ from p2pwatch.domain.source import (
     SourceRole,
     carried_role,
     is_contact_point,
+    source_tolerance,
 )
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
@@ -93,10 +95,14 @@ def test_each_role_belongs_to_its_group() -> None:
         (None, SourceRole.UNDETERMINED),
     ],
 )
-def test_a_passing_state_carries_the_group_of_the_latest_range(
+def test_a_passing_state_carries_the_group_of_the_latest_point(
     previous: SourceRole | None, carried: SourceRole
 ) -> None:
     assert carried_role(previous) is carried
+
+
+def test_the_tolerance_lets_one_read_be_missed() -> None:
+    assert source_tolerance(timedelta(seconds=330)) == timedelta(seconds=990)
 
 
 @pytest.mark.parametrize("contact_point", ["176.103.48.36:4184", "0.0.0.0:1", "1.2.3.4:65535"])

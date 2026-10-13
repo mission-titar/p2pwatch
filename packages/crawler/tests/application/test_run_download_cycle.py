@@ -1,5 +1,6 @@
 import asyncio
-from collections.abc import Iterable, Sequence
+import sqlite3
+from collections.abc import Iterable, Iterator, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -34,7 +35,7 @@ from p2pwatch.ports.download_client import (
     WaitingReason,
 )
 from p2pwatch.ports.repository_errors import RepositoryError
-from p2pwatch.ports.source_repository import EarlierRanges, OpenedRange, SourceRepository
+from p2pwatch.ports.source_repository import EarlierPoints, RecordedReading, SourceRepository
 from tests.application.fakes import RecordingTelemetry
 from tests.catalog_rows import insert_file
 
@@ -127,49 +128,45 @@ class FakeDownloadClient:
 
 
 class FakeSourceRepo:
-    """Records each ``record_readings`` call, answering ``opened`` per hash; raises
-    ``RepositoryError`` for ``fail_for``. ``history`` answers ``earlier_ranges`` per source,
-    never useful by default, and ``baseline`` answers ``has_ranges_before``, each call noted in
+    """Records each ``record_readings`` call, answering ``kept`` per hash; raises
+    ``RepositoryError`` for ``fail_for``. ``history`` answers ``earlier_points`` per source,
+    never useful by default, and ``baseline`` answers ``has_points_before``, each call noted in
     ``baselines``, the first ``baseline_failures`` raising ``RepositoryError``."""
 
     def __init__(
         self,
         *,
         fail_for: set[str] | None = None,
-        opened: dict[str, tuple[OpenedRange, ...]] | None = None,
-        history: dict[SourceKey, EarlierRanges] | None = None,
+        kept: dict[str, tuple[RecordedReading, ...]] | None = None,
+        history: dict[SourceKey, EarlierPoints] | None = None,
         baseline: bool = True,
         baseline_failures: int = 0,
     ) -> None:
-        self.recorded: list[tuple[str, tuple[SourceReading, ...], datetime, timedelta]] = []
+        self.recorded: list[tuple[str, tuple[SourceReading, ...], datetime]] = []
         self.asked: list[tuple[SourceKey, datetime]] = []
         self.baselines: list[datetime] = []
         self._fail_for = fail_for or set()
-        self._opened = opened or {}
+        self._kept = kept or {}
         self._history = history or {}
         self._baseline = baseline
         self._baseline_failures = baseline_failures
 
     def record_readings(
-        self,
-        file: FileKey,
-        readings: Sequence[SourceReading],
-        read_at: datetime,
-        tolerance: timedelta,
-    ) -> tuple[OpenedRange, ...]:
+        self, file: FileKey, readings: Sequence[SourceReading], read_at: datetime
+    ) -> tuple[RecordedReading, ...]:
         if file.native_id in self._fail_for:
             raise RepositoryError(f"record_readings({file.native_id}) failed")
-        self.recorded.append((file.native_id, tuple(readings), read_at, tolerance))
-        return self._opened.get(file.native_id, ())
+        self.recorded.append((file.native_id, tuple(readings), read_at))
+        return self._kept.get(file.native_id, ())
 
-    def earlier_ranges(self, source: SourceKey, started_before: datetime) -> EarlierRanges:
-        self.asked.append((source, started_before))
-        return self._history.get(source, EarlierRanges(useful=False, last_known_at=None))
+    def earlier_points(self, source: SourceKey, before: datetime) -> EarlierPoints:
+        self.asked.append((source, before))
+        return self._history.get(source, EarlierPoints(useful=False, last_known_at=None))
 
-    def has_ranges_before(self, started_before: datetime) -> bool:
-        self.baselines.append(started_before)
+    def has_points_before(self, before: datetime) -> bool:
+        self.baselines.append(before)
         if len(self.baselines) <= self._baseline_failures:
-            raise RepositoryError("has_ranges_before failed")
+            raise RepositoryError("has_points_before failed")
         return self._baseline
 
 
@@ -1406,10 +1403,9 @@ async def test_the_sources_of_each_tracked_download_the_client_lists_are_recorde
     )
     await run_download_cycle(deps)
     assert client.source_reads == [_A, _B]
-    tolerance = timedelta(seconds=90)
     assert sources.recorded == [
-        (_A, readings[_A], start, tolerance),
-        (_B, readings[_B], start + timedelta(seconds=1), tolerance),
+        (_A, readings[_A], start),
+        (_B, readings[_B], start + timedelta(seconds=1)),
     ]
 
 
@@ -1493,8 +1489,8 @@ def _tracking(*hashes: str) -> FakeDownloadRepo:
 @pytest.mark.asyncio
 async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
     # Stage 4, D9: the first file's event, named after its decision and best name.
-    queued = (OpenedRange(_PEER, "AnimuseeFMR", SourceRole.QUEUED),)
-    sources = FakeSourceRepo(opened={_A: queued, _B: queued})
+    queued = (RecordedReading(_PEER, "AnimuseeFMR", SourceRole.QUEUED),)
+    sources = FakeSourceRepo(kept={_A: queued, _B: queued})
     catalog = FakeCatalogReads(
         candidates=(_candidate(_A, "062A"),),
         best={_A: ObservedFile(filename="Keroro 062.avi", size_bytes=1)},
@@ -1518,12 +1514,15 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
     # Each file asks the history before the round's start, not before its own read.
     clock = FakeClock()
     start = clock.now()
-    history = {_PEER: EarlierRanges(useful=True, last_known_at=start - timedelta(hours=13))}
-    opened: dict[str, tuple[OpenedRange, ...]] = {
-        _A: (OpenedRange(_OTHER_PEER, None, SourceRole.NOTHING_NEW),),
-        _B: (OpenedRange(_PEER, "AnimuseeFMR", SourceRole.SENDING),),
+    history = {
+        _PEER: EarlierPoints(useful=True, last_known_at=start - timedelta(hours=13)),
+        _OTHER_PEER: EarlierPoints(useful=True, last_known_at=start - timedelta(seconds=30)),
     }
-    sources = FakeSourceRepo(opened=opened, history=history)
+    kept: dict[str, tuple[RecordedReading, ...]] = {
+        _A: (RecordedReading(_OTHER_PEER, None, SourceRole.QUEUED),),
+        _B: (RecordedReading(_PEER, "AnimuseeFMR", SourceRole.SENDING),),
+    }
+    sources = FakeSourceRepo(kept=kept, history=history)
     downloads = _tracking(_A, _B)
     downloads._target_ids[_B] = "063A"  # queued for it, no decision left
     telemetry = RecordingTelemetry()
@@ -1545,8 +1544,8 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_range_opened_without_a_source_id_raises_nothing() -> None:
-    sources = FakeSourceRepo(opened={_A: (OpenedRange(None, "peer", SourceRole.QUEUED),)})
+async def test_a_reading_without_a_source_id_raises_nothing() -> None:
+    sources = FakeSourceRepo(kept={_A: (RecordedReading(None, "peer", SourceRole.QUEUED),)})
     telemetry = RecordingTelemetry()
     client = FakeDownloadClient(listed=[(_status(_A),)])
     deps = _deps(
@@ -1563,13 +1562,18 @@ async def test_a_range_opened_without_a_source_id_raises_nothing() -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "opened", [(), (OpenedRange(None, "peer", SourceRole.QUEUED),)], ids=["none", "no-source-id"]
+    "kept",
+    [
+        (),
+        (RecordedReading(None, "peer", SourceRole.QUEUED),),
+        (RecordedReading(_PEER, "peer", SourceRole.NOTHING_NEW),),
+    ],
+    ids=["none", "no-source-id", "not-useful"],
 )
-async def test_a_round_opening_no_range_with_a_source_id_never_asks_for_the_baseline(
-    opened: tuple[OpenedRange, ...],
+async def test_a_round_without_a_useful_reading_with_a_source_id_never_asks_for_the_baseline(
+    kept: tuple[RecordedReading, ...],
 ) -> None:
-    # D9's baseline is a full scan on a catalog merged with other nodes' ranges.
-    sources = FakeSourceRepo(opened={_A: opened})
+    sources = FakeSourceRepo(kept={_A: kept})
     client = FakeDownloadClient(listed=[(_status(_A),)])
     deps = _deps(
         client=client, downloads=_tracking(_A), catalog=FakeCatalogReads(), sources=sources
@@ -1582,12 +1586,12 @@ async def test_a_round_opening_no_range_with_a_source_id_never_asks_for_the_base
 async def test_the_baseline_is_asked_once_per_round_against_its_start() -> None:
     clock = FakeClock()
     start = clock.now()
-    opened: dict[str, tuple[OpenedRange, ...]] = {
-        _A: (OpenedRange(None, "peer", SourceRole.QUEUED),),
-        _B: (OpenedRange(_PEER, "AnimuseeFMR", SourceRole.QUEUED),),
-        _C: (OpenedRange(_OTHER_PEER, None, SourceRole.NOTHING_NEW),),
+    kept: dict[str, tuple[RecordedReading, ...]] = {
+        _A: (RecordedReading(None, "peer", SourceRole.QUEUED),),
+        _B: (RecordedReading(_PEER, "AnimuseeFMR", SourceRole.QUEUED),),
+        _C: (RecordedReading(_OTHER_PEER, None, SourceRole.SENDING),),
     }
-    sources = FakeSourceRepo(opened=opened)
+    sources = FakeSourceRepo(kept=kept)
     client = FakeDownloadClient(listed=[(_status(_A), _status(_B), _status(_C))], clock=clock)
     deps = _deps(
         client=client,
@@ -1602,8 +1606,8 @@ async def test_the_baseline_is_asked_once_per_round_against_its_start() -> None:
 
 @pytest.mark.asyncio
 async def test_a_repo_failure_asking_the_baseline_skips_that_downloads_alerts_only() -> None:
-    queued = (OpenedRange(_PEER, "AnimuseeFMR", SourceRole.QUEUED),)
-    sources = FakeSourceRepo(opened={_A: queued, _B: queued}, baseline_failures=1)
+    queued = (RecordedReading(_PEER, "AnimuseeFMR", SourceRole.QUEUED),)
+    sources = FakeSourceRepo(kept={_A: queued, _B: queued}, baseline_failures=1)
     telemetry = RecordingTelemetry()
     client = FakeDownloadClient(listed=[(_status(_A), _status(_B))])
     deps = _deps(
@@ -1630,8 +1634,8 @@ async def test_the_first_recording_round_is_a_baseline(
     for ed2k_hash in order:
         insert_file(catalog, ed2k_hash)
     readings: dict[str, tuple[SourceReading, ...]] = {
-        _A: (_queued(_PEER),),
-        _B: (_queued(_OTHER_PEER),),
+        _A: (_peer(_PEER),),
+        _B: (_peer(_OTHER_PEER),),
     }
     clock = FakeClock()
     rounds = [tuple(_status(h) for h in order)] * 2
@@ -1641,7 +1645,7 @@ async def test_the_first_recording_round_is_a_baseline(
         client=client,
         downloads=_tracking(_A, _B),
         catalog=FakeCatalogReads(),
-        sources=SqliteSourceRepository(catalog, "n1"),
+        sources=SqliteSourceRepository(catalog, "n1", timedelta(seconds=30)),
         telemetry=telemetry,
         clock=clock,
     )
@@ -1650,12 +1654,80 @@ async def test_the_first_recording_round_is_a_baseline(
     assert alerts == []
     await clock.sleep(30.0)
     third = SourceKey(Network.ED2K, "d" * 32)
-    readings[_A] = (_queued(_PEER), _queued(third))
+    readings[_A] = (_peer(_PEER), _peer(third))
     await run_download_cycle(deps)
     alerts = [e for e in telemetry.events if isinstance(e, SourceNew | SourceReappeared)]
     assert alerts == [SourceNew(third, "peer", _key(_A), _A, ())]
     catalog.close()
 
 
-def _queued(key: SourceKey) -> SourceReading:
-    return SourceReading(key, "peer", None, SourceRole.QUEUED, None, None, (), 0)
+def _peer(key: SourceKey, role: SourceRole = SourceRole.QUEUED) -> SourceReading:
+    return SourceReading(key, "peer", None, role, None, None, (), 0)
+
+
+@pytest.fixture
+def real_catalog(tmp_path: Path) -> Iterator[sqlite3.Connection]:
+    catalog = open_catalog(tmp_path / "catalog.db")
+    insert_file(catalog, _A)
+    yield catalog
+    catalog.close()
+
+
+def _real_deps(
+    catalog: sqlite3.Connection,
+    client: FakeDownloadClient,
+    telemetry: RecordingTelemetry,
+    clock: FakeClock,
+) -> DownloadDeps:
+    """``_A`` tracked, its sources written to a real catalog."""
+    sources = SqliteSourceRepository(catalog, "n1", timedelta(seconds=30))
+    return _deps(
+        client=client,
+        downloads=_tracking(_A),
+        catalog=FakeCatalogReads(),
+        sources=sources,
+        telemetry=telemetry,
+        clock=clock,
+    )
+
+
+def _alerts(telemetry: RecordingTelemetry) -> list[object]:
+    return [e for e in telemetry.events if isinstance(e, SourceNew | SourceReappeared)]
+
+
+@pytest.mark.asyncio
+async def test_a_source_useful_at_three_consecutive_reads_is_new_once(
+    real_catalog: sqlite3.Connection,
+) -> None:
+    # From its second read on, its earlier useful point is recent: no event (D5).
+    readings: dict[str, tuple[SourceReading, ...]] = {_A: (_peer(_OTHER_PEER),)}
+    clock, telemetry = FakeClock(), RecordingTelemetry()
+    client = FakeDownloadClient(listed=[(_status(_A),)] * 4, readings=readings, clock=clock)
+    deps = _real_deps(real_catalog, client, telemetry, clock)
+    await run_download_cycle(deps)  # the node's first round, a baseline
+    readings[_A] = (_peer(_OTHER_PEER), _peer(_PEER))
+    for _ in range(3):
+        await clock.sleep(30.0)
+        await run_download_cycle(deps)
+    assert _alerts(telemetry) == [SourceNew(_PEER, "peer", _key(_A), _A, ())]
+
+
+@pytest.mark.asyncio
+async def test_a_source_back_after_13_hours_through_an_undetermined_read_reappears(
+    real_catalog: sqlite3.Connection,
+) -> None:
+    # An unknown point does not end an absence (stage 4, D9).
+    readings: dict[str, tuple[SourceReading, ...]] = {_A: (_peer(_PEER),)}
+    clock, telemetry = FakeClock(), RecordingTelemetry()
+    client = FakeDownloadClient(listed=[(_status(_A),)] * 3, readings=readings, clock=clock)
+    deps = _real_deps(real_catalog, client, telemetry, clock)
+    last_useful = clock.now()
+    await run_download_cycle(deps)
+    await clock.sleep(13 * 3600.0)
+    readings[_A] = (_peer(_PEER, SourceRole.UNDETERMINED),)
+    await run_download_cycle(deps)
+    await clock.sleep(30.0)
+    readings[_A] = (_peer(_PEER),)
+    absent = (clock.now() - last_useful).total_seconds()
+    await run_download_cycle(deps)
+    assert _alerts(telemetry) == [SourceReappeared(_PEER, "peer", _key(_A), _A, (), absent)]

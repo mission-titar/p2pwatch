@@ -6,6 +6,7 @@ has a real ``mode=ro`` file to open, exactly like the ``test_reader.py`` persist
 The route tests build the app with the shared webui fixtures + a no-op control.
 """
 
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -285,6 +286,8 @@ def _build(catalog_db: Path, local_db: Path) -> Starlette:
         control=_StubControl(),
         status=StatusBoard((), FakeClock()),
         amule_url="http://localhost:4711",
+        clock=FakeClock(),
+        source_tolerance=timedelta(seconds=90),
     )
 
 

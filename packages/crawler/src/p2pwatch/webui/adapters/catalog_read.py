@@ -13,7 +13,7 @@
   /files summary line.
 - ``file_detail()``: the timeline of sightings, the latest one, known names + current
   decisions for a given ``file_id``; ``None`` if the file is unknown.
-- ``source_ranges()``: a file's source history, one range per row, newest first.
+- ``source_periods()``: a file's source history in a window, one period per row, newest first.
 - ``list_sources()`` / ``count_sources()``: the sources with a user hash, last seen first, and
   how many match the search.
 - ``source_detail()`` / ``name_detail()``: the page of a source and the page of a name; ``None``
@@ -40,9 +40,10 @@ from p2pwatch.webui.domain.views import (
     FileDetail,
     FileRow,
     NameDetail,
+    PeriodWindow,
     SourceDetail,
-    SourceFileRange,
-    SourceRangeView,
+    SourceFilePeriod,
+    SourcePeriodView,
     SourceRow,
 )
 
@@ -230,9 +231,61 @@ FROM files
 WHERE file_id = ?
 """
 
-# Source ranges with their file (stage 4 spec, D12, D13): a source without a user hash has no
-# ``sources`` row, hence the LEFT JOIN. A ``_WHERE_*`` then ``_SQL_SOURCE_RANGES_ORDER`` follow.
-_SQL_SOURCE_RANGES = """\
+# A period joins the consecutive points of one identity (the source_id, else the name) on one
+# file and one node, cut where the variant changes, the gap passes the tolerance or the counter
+# drops (source points spec, D6). Only the window's points are read, a seek on the primary key
+# bounded by ``observed_at``. A ``_WHERE_*`` goes between this and ``_SQL_PERIODS_END``.
+_SQL_PERIODS = """\
+WITH points AS (
+    SELECT
+        o.variant_id,
+        o.observed_at,
+        o.transfer_counter,
+        v.file_id,
+        v.node_id,
+        v.source_id,
+        IIF(v.source_id IS NULL, v.name, NULL) AS hashless_name
+    FROM source_variants AS v
+    JOIN source_observations AS o ON o.variant_id = v.variant_id
+"""
+_SQL_PERIODS_END = """\
+        AND o.observed_at >= :since AND o.observed_at < :until
+),
+starts AS (
+    SELECT
+        *,
+        (
+            variant_id IS NOT LAG(variant_id) OVER identity
+            OR observed_at - LAG(observed_at) OVER identity > :tolerance
+            OR transfer_counter < LAG(transfer_counter) OVER identity
+        ) AS starts_period
+    FROM points
+    WINDOW identity AS (
+        PARTITION BY file_id, node_id, source_id, hashless_name
+        ORDER BY observed_at, variant_id
+    )
+),
+numbered AS (
+    SELECT
+        variant_id,
+        observed_at,
+        transfer_counter,
+        SUM(starts_period) OVER (
+            PARTITION BY file_id, node_id, source_id, hashless_name
+            ORDER BY observed_at, variant_id
+            ROWS UNBOUNDED PRECEDING
+        ) AS period
+    FROM starts
+),
+periods AS (
+    SELECT
+        variant_id,
+        MIN(observed_at) AS first_seen_at,
+        MAX(observed_at) AS last_seen_at,
+        MAX(transfer_counter) - MIN(transfer_counter) AS growth
+    FROM numbered
+    GROUP BY variant_id, period
+)
 SELECT
     f.network AS file_network,
     f.native_id AS file_native_id,
@@ -242,28 +295,32 @@ SELECT
     v.role,
     v.contact_point,
     v.directly_reachable,
-    r.first_seen_at,
-    r.last_seen_at,
-    r.received_bytes,
-    r.node_id
-FROM source_variants AS v
-JOIN source_ranges AS r ON r.variant_id = v.variant_id
+    p.first_seen_at,
+    p.last_seen_at,
+    p.growth,
+    v.node_id
+FROM periods AS p
+JOIN source_variants AS v ON v.variant_id = p.variant_id
 JOIN files AS f ON f.file_id = v.file_id
 LEFT JOIN sources AS s ON s.source_id = v.source_id
+ORDER BY p.first_seen_at DESC, p.variant_id DESC
 """
-_SQL_SOURCE_RANGES_ORDER = "ORDER BY r.first_seen_at DESC, r.variant_id DESC, r.node_id\n"
+
+# A variant's latest point, one seek on the primary key, never an aggregate of every point.
+_SQL_VARIANT_LAST_SEEN = (
+    "(SELECT MAX(o.observed_at) FROM source_observations AS o WHERE o.variant_id = v.variant_id)"
+)
 
 # The sources with a user hash, each with its last read and its number of files (D13). A source
 # without a hash has no ``sources`` row, so it is not listed.
-_SQL_SOURCES_FROM = """\
+_SQL_SOURCES_FROM = f"""\
 FROM sources AS s
 JOIN (
     SELECT
         v.source_id,
-        MAX(r.last_seen_at) AS last_seen_at,
+        MAX({_SQL_VARIANT_LAST_SEEN}) AS last_seen_at,
         COUNT(DISTINCT v.file_id) AS file_count
     FROM source_variants AS v
-    JOIN source_ranges AS r ON r.variant_id = v.variant_id
     GROUP BY v.source_id
 ) AS seen ON seen.source_id = s.source_id
 """
@@ -275,9 +332,9 @@ WHERE s.native_id LIKE ? OR EXISTS (
 )
 """
 
-# The latest name is the one its latest named range carried: a reading without a name says
+# The latest name is its named variant with the latest point: a reading without a name says
 # nothing about the name.
-_SQL_LIST_SOURCES_SELECT = """\
+_SQL_LIST_SOURCES_SELECT = f"""\
 SELECT
     s.network,
     s.native_id,
@@ -286,9 +343,8 @@ SELECT
     (
         SELECT v.name
         FROM source_variants AS v
-        JOIN source_ranges AS r ON r.variant_id = v.variant_id
         WHERE v.source_id = s.source_id AND v.name IS NOT NULL
-        ORDER BY r.last_seen_at DESC, r.first_seen_at DESC, v.variant_id DESC
+        ORDER BY {_SQL_VARIANT_LAST_SEEN} DESC, v.variant_id DESC
         LIMIT 1
     ) AS name
 """
@@ -298,29 +354,28 @@ _SQL_NAME_EXISTS = "SELECT 1 FROM source_variants WHERE name = ? LIMIT 1"
 
 # One row per (source, name) pair: a source's names, or a name's sources (D13). The WHERE that
 # picks one side goes between this and ``_SQL_PAIRS_END``.
-_SQL_PAIRS = """\
+_SQL_PAIRS = f"""\
 SELECT
     s.network,
     s.native_id,
     v.name,
-    MAX(r.last_seen_at) AS last_seen_at,
+    MAX({_SQL_VARIANT_LAST_SEEN}) AS last_seen_at,
     COUNT(DISTINCT v.file_id) AS file_count
 FROM source_variants AS v
-JOIN source_ranges AS r ON r.variant_id = v.variant_id
 JOIN sources AS s ON s.source_id = v.source_id
 """
 _SQL_PAIRS_END = """\
 GROUP BY v.source_id, v.name
 ORDER BY last_seen_at DESC, v.source_id, v.name
+LIMIT :limit OFFSET :offset
 """
-_SQL_PAGE = "LIMIT ? OFFSET ?\n"
 
 # The WHERE of each read: a hash page lists names and a name page hashes, nothing further.
-_WHERE_FILE = "WHERE v.file_id = ?\n"
-_WHERE_SOURCE = "WHERE v.source_id = ?\n"
-_WHERE_SOURCE_NAMED = "WHERE v.source_id = ? AND v.name IS NOT NULL\n"
-_WHERE_NAME = "WHERE v.name = ?\n"
-_WHERE_NAME_HASHLESS = "WHERE v.name = ? AND v.source_id IS NULL\n"
+_WHERE_FILE = "WHERE v.file_id = :key\n"
+_WHERE_SOURCE = "WHERE v.source_id = :key\n"
+_WHERE_SOURCE_NAMED = "WHERE v.source_id = :key AND v.name IS NOT NULL\n"
+_WHERE_NAME = "WHERE v.name = :key\n"
+_WHERE_NAME_HASHLESS = "WHERE v.name = :key AND v.source_id IS NULL\n"
 
 
 def _filter_clauses(
@@ -363,18 +418,19 @@ def _sources_search(query: str | None) -> tuple[str, list[str]]:
     return _SQL_SOURCES_SEARCH, [f"{query}%", f"%{query}%"]
 
 
-def _range_view(row: sqlite3.Row) -> SourceRangeView:
-    """A row of ``_SQL_SOURCE_RANGES`` as a range."""
+def _period_view(row: sqlite3.Row) -> SourcePeriodView:
+    """A row of ``_SQL_PERIODS`` as a period; only a sending one received its growth (D6)."""
     network, reachable = row["network"], row["directly_reachable"]
-    return SourceRangeView(
+    role = SourceRole(row["role"])
+    return SourcePeriodView(
         source=None if network is None else SourceKey(Network(network), row["native_id"]),
         name=row["name"],
-        role=SourceRole(row["role"]),
+        role=role,
         contact_point=row["contact_point"],
         directly_reachable=None if reachable is None else bool(reachable),
         first_seen_at=row["first_seen_at"],
         last_seen_at=row["last_seen_at"],
-        received_bytes=row["received_bytes"],
+        received_bytes=row["growth"] if role is SourceRole.SENDING else 0,
         node_id=row["node_id"],
     )
 
@@ -570,10 +626,9 @@ class CatalogReader:
             known_filenames=known_names(self._conn, file),
         )
 
-    def source_ranges(self, file_id: bytes) -> tuple[SourceRangeView, ...]:
-        """Every source range on the file, newest first; empty for a file never read."""
-        sql = _SQL_SOURCE_RANGES + _WHERE_FILE + _SQL_SOURCE_RANGES_ORDER
-        return tuple(map(_range_view, self._conn.execute(sql, (file_id,))))
+    def source_periods(self, file_id: bytes, window: PeriodWindow) -> tuple[SourcePeriodView, ...]:
+        """The file's source periods in ``window``, newest first; empty for a file never read."""
+        return tuple(map(_period_view, self._periods(_WHERE_FILE, file_id, window)))
 
     # ------------------------------------------------------------------
     # Sources
@@ -606,8 +661,11 @@ class CatalogReader:
         count: int = row.fetchone()["n"]
         return count
 
-    def source_detail(self, source_id: bytes, *, page: int) -> SourceDetail | None:
-        """A page of the source's names and of its ranges; ``None`` for an unknown source."""
+    def source_detail(
+        self, source_id: bytes, *, page: int, window: PeriodWindow
+    ) -> SourceDetail | None:
+        """A page of the source's names, and its periods in ``window``; ``None`` for an unknown
+        source."""
         row = self._conn.execute(_SQL_SOURCE, (source_id,)).fetchone()
         if row is None:
             return None
@@ -615,23 +673,23 @@ class CatalogReader:
         return SourceDetail(
             source=source,
             names=self._pairs(_WHERE_SOURCE_NAMED, source_id, page),
-            ranges=self._file_ranges(_WHERE_SOURCE, source_id, page),
+            periods=self._file_periods(_WHERE_SOURCE, source_id, window),
         )
 
-    def name_detail(self, name: str, *, page: int) -> NameDetail | None:
-        """A page of the hashes that carried the name and of its hash-less ranges; ``None`` for a
-        name never recorded."""
+    def name_detail(self, name: str, *, page: int, window: PeriodWindow) -> NameDetail | None:
+        """A page of the hashes that carried the name, and its hash-less periods in ``window``;
+        ``None`` for a name never recorded."""
         if self._conn.execute(_SQL_NAME_EXISTS, (name,)).fetchone() is None:
             return None
         return NameDetail(
             name=name,
             sources=self._pairs(_WHERE_NAME, name, page),
-            ranges=self._file_ranges(_WHERE_NAME_HASHLESS, name, page),
+            periods=self._file_periods(_WHERE_NAME_HASHLESS, name, window),
         )
 
     def _pairs(self, where: str, key: bytes | str, page: int) -> tuple[SourceRow, ...]:
-        sql = _SQL_PAIRS + where + _SQL_PAIRS_END + _SQL_PAGE
-        rows = self._conn.execute(sql, (key, _PAGE_SIZE, (page - 1) * _PAGE_SIZE))
+        params = {"key": key, "limit": _PAGE_SIZE, "offset": (page - 1) * _PAGE_SIZE}
+        rows = self._conn.execute(_SQL_PAIRS + where + _SQL_PAIRS_END, params)
         return tuple(
             SourceRow(
                 source=SourceKey(Network(row["network"]), row["native_id"]),
@@ -642,13 +700,23 @@ class CatalogReader:
             for row in rows
         )
 
-    def _file_ranges(self, where: str, key: bytes | str, page: int) -> tuple[SourceFileRange, ...]:
-        sql = _SQL_SOURCE_RANGES + where + _SQL_SOURCE_RANGES_ORDER + _SQL_PAGE
-        rows = self._conn.execute(sql, (key, _PAGE_SIZE, (page - 1) * _PAGE_SIZE)).fetchall()
+    def _periods(self, where: str, key: bytes | str, window: PeriodWindow) -> list[sqlite3.Row]:
+        params = {
+            "key": key,
+            "since": window.since,
+            "until": window.until,
+            "tolerance": window.tolerance,
+        }
+        return self._conn.execute(_SQL_PERIODS + where + _SQL_PERIODS_END, params).fetchall()
+
+    def _file_periods(
+        self, where: str, key: bytes | str, window: PeriodWindow
+    ) -> tuple[SourceFilePeriod, ...]:
+        rows = self._periods(where, key, window)
         files = [FileKey(Network(row["file_network"]), row["file_native_id"]) for row in rows]
         names = {file: self._file_name(file) for file in set(files)}
         return tuple(
-            SourceFileRange(file=file, file_name=names[file], range=_range_view(row))
+            SourceFilePeriod(file=file, file_name=names[file], period=_period_view(row))
             for file, row in zip(files, rows, strict=True)
         )
 

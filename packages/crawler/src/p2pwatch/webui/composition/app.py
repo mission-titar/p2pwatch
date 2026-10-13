@@ -8,6 +8,7 @@ import csv
 import io
 import re
 from collections.abc import Callable, Iterable, Mapping
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, assert_never
 from urllib.parse import parse_qs, urlencode
@@ -31,6 +32,7 @@ from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.observation import Sighting
 from p2pwatch.domain.source import SourceKey
 from p2pwatch.ports.client_status import StatusReadings
+from p2pwatch.ports.clock import Clock
 from p2pwatch.ports.crawler_control import CrawlerControl
 from p2pwatch.webui.adapters.catalog_read import (
     DEFAULT_DIR,
@@ -72,15 +74,16 @@ from p2pwatch.webui.domain.views import (
     HiddenInput,
     NavItem,
     PageNav,
+    PeriodWindow,
     SchedulerEntry,
     SearchBar,
     SortHeader,
     SortHeaders,
-    SourceFileRange,
+    SourceFilePeriod,
     SourceFileRow,
     SourceHistoryRow,
     SourceListRow,
-    SourceRangeView,
+    SourcePeriodView,
     SourceRow,
     TargetCoverageRow,
     TierFacet,
@@ -89,6 +92,11 @@ from p2pwatch.webui.domain.views import (
 
 # A detail page's path segment: a file_id or a source_id as 32 lowercase hex (stage 1 and 4 D13).
 _HEX_ID = re.compile(r"[0-9a-f]{32}")
+
+# The period tables read the last 7 days, which bounds their cost (source points spec, D6).
+_PERIOD_SPAN = timedelta(days=7)
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+_MICROSECOND = timedelta(microseconds=1)
 
 # The top-nav destinations, in render order: (path, label). The single source of truth for what
 # base.html renders; every page reaches all of them.
@@ -208,24 +216,33 @@ def _source_link(source: SourceKey | None) -> tuple[str, ...]:
     return () if source is None else (f"/sources/{source.source_id.hex()}",)
 
 
-def _source_history_row(source_range: SourceRangeView) -> SourceHistoryRow:
-    """A source range as one line; its name links to the name page, its hash to the source page."""
-    name, source = source_range.name, source_range.source
+def _source_history_row(period: SourcePeriodView) -> SourceHistoryRow:
+    """A source period as one line; its name links to the name page, its hash to the source
+    page."""
+    name, source = period.name, period.source
     return SourceHistoryRow(
         name="unknown" if name is None else name,
         name_link=_name_link(name),
         short_hash="unknown" if source is None else short_hash(source.native_id),
         source_link=_source_link(source),
-        role=source_range.role,
-        contact_point=source_range.contact_point or "unknown",
-        high_id=_YES_NO[source_range.directly_reachable],
-        first_seen=micros_timestamp(source_range.first_seen_at),
-        last_seen=micros_timestamp(source_range.last_seen_at),
-        received=human_size(source_range.received_bytes) if source_range.received_bytes else "",
-        rate=average_rate(
-            source_range.received_bytes, source_range.first_seen_at, source_range.last_seen_at
-        ),
-        node=source_range.node_id,
+        role=period.role,
+        contact_point=period.contact_point or "unknown",
+        high_id=_YES_NO[period.directly_reachable],
+        first_seen=micros_timestamp(period.first_seen_at),
+        last_seen=micros_timestamp(period.last_seen_at),
+        received=human_size(period.received_bytes) if period.received_bytes else "",
+        rate=average_rate(period.received_bytes, period.first_seen_at, period.last_seen_at),
+        node=period.node_id,
+    )
+
+
+def _period_window(now: datetime, tolerance: timedelta) -> PeriodWindow:
+    """The last ``_PERIOD_SPAN`` up to ``now``, the period tables' fixed interval for now."""
+    until = (now - _EPOCH) // _MICROSECOND
+    return PeriodWindow(
+        since=until - _PERIOD_SPAN // _MICROSECOND,
+        until=until,
+        tolerance=tolerance // _MICROSECOND,
     )
 
 
@@ -241,12 +258,12 @@ def _source_list_row(source: SourceRow) -> SourceListRow:
     )
 
 
-def _source_file_row(item: SourceFileRange) -> SourceFileRow:
-    """A range of a source's or a name's page, with the file it was read on."""
+def _source_file_row(item: SourceFilePeriod) -> SourceFileRow:
+    """A period of a source's or a name's page, with the file it was read on."""
     return SourceFileRow(
         file=item.file_name or short_hash(item.file.native_id),
         file_link=f"/files/{item.file.file_id.hex()}",
-        history=_source_history_row(item.range),
+        history=_source_history_row(item.period),
     )
 
 
@@ -537,6 +554,8 @@ def build_app(
     control: CrawlerControl,
     status: StatusReadings,
     amule_url: str,
+    clock: Clock,
+    source_tolerance: timedelta,
 ) -> Starlette:
     """Build and return the wired Starlette application.
 
@@ -551,7 +570,8 @@ def build_app(
     no write connection (spec §4/§10). ``status`` holds the status loops' last readings.
 
     ``amule_url`` is the base the nav's aMule entry points at (design §9); the caller reads it
-    from ``webui.amule_url``."""
+    from ``webui.amule_url``. ``source_tolerance`` is the longest gap within a source period, the
+    crawler's own (source points spec, D6)."""
 
     templates = Jinja2Templates(
         directory=templates_dir, context_processors=[_make_nav_context(amule_url)]
@@ -565,6 +585,9 @@ def build_app(
     # reuse); ``quiesce()`` is the seam livrable 3's maintenance swap will use.
     catalog_reader = ReaderProvider(catalog_db)
     local_reader = ReaderProvider(local_db)
+
+    def _window() -> PeriodWindow:
+        return _period_window(clock.now(), source_tolerance)
 
     # Title by target_id (quick access)
     _title_by_id = {seg.target_id: seg.title for seg in target_segments}
@@ -723,21 +746,20 @@ def build_app(
         page = _page_number(request.query_params.get("page"))
         catalog = CatalogReader(catalog_reader.connection())
         detail = (
-            catalog.source_detail(bytes.fromhex(raw_id), page=page)
+            catalog.source_detail(bytes.fromhex(raw_id), page=page, window=_window())
             if _HEX_ID.fullmatch(raw_id)
             else None
         )
         if detail is None:
             return templates.TemplateResponse(request, "404.html", {}, status_code=404)
-        n_rows = max(len(detail.names), len(detail.ranges))
         return templates.TemplateResponse(
             request,
             "source_detail.html",
             {
                 "source": detail.source,
                 "names": tuple(_source_list_row(row) for row in detail.names),
-                "ranges": tuple(_source_file_row(item) for item in detail.ranges),
-                "nav": _page_nav(page, n_rows, f"/sources/{raw_id}", {}),
+                "periods": tuple(_source_file_row(item) for item in detail.periods),
+                "nav": _page_nav(page, len(detail.names), f"/sources/{raw_id}", {}),
             },
         )
 
@@ -745,18 +767,17 @@ def build_app(
         name = request.query_params.get("name")
         page = _page_number(request.query_params.get("page"))
         catalog = CatalogReader(catalog_reader.connection())
-        detail = None if name is None else catalog.name_detail(name, page=page)
+        detail = None if name is None else catalog.name_detail(name, page=page, window=_window())
         if detail is None:
             return templates.TemplateResponse(request, "404.html", {}, status_code=404)
-        n_rows = max(len(detail.sources), len(detail.ranges))
         return templates.TemplateResponse(
             request,
             "source_name.html",
             {
                 "name": detail.name,
                 "sources": tuple(_source_list_row(row) for row in detail.sources),
-                "ranges": tuple(_source_file_row(item) for item in detail.ranges),
-                "nav": _page_nav(page, n_rows, "/sources/name", {"name": detail.name}),
+                "periods": tuple(_source_file_row(item) for item in detail.periods),
+                "nav": _page_nav(page, len(detail.sources), "/sources/name", {"name": detail.name}),
             },
         )
 
@@ -808,8 +829,8 @@ def build_app(
             size_bytes=detail.size_bytes,
             timeline=tuple(_timeline_row(sighting) for sighting in detail.sightings),
             source_history=tuple(
-                _source_history_row(source_range)
-                for source_range in catalog.source_ranges(detail.file.file_id)
+                _source_history_row(period)
+                for period in catalog.source_periods(detail.file.file_id, _window())
             ),
             decisions=detail.decisions,
             ed2k_link=link,

@@ -549,7 +549,7 @@ def test_a_source_we_ask_takes_its_state_and_a_parked_one_is_standby(
 def test_a_sources_role_is_what_its_download_state_says_of_the_parts_we_lack(
     state: str | None, role: SourceRole | None
 ) -> None:
-    """D3: a passing state reads ``None``, for the writer to carry the latest range's group."""
+    """D3: a passing state reads ``None``, for the writer to carry the latest point's group."""
     reading = map_source(_client_row(download_state=state), _client_detail())
 
     assert reading.role == role

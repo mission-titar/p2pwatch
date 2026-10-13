@@ -141,8 +141,18 @@ class FileDetail:
 
 
 @dataclass(frozen=True)
-class SourceRangeView:
-    """One range of a source on a file (stage 4 spec, D4); times in microseconds since the epoch."""
+class PeriodWindow:
+    """The points a period table reads, ``since`` included to ``until`` excluded, and the gap
+    that cuts a period (source points spec, D6); all in microseconds."""
+
+    since: int
+    until: int
+    tolerance: int
+
+
+@dataclass(frozen=True)
+class SourcePeriodView:
+    """One period of a source on a file (source points spec, D6); times in microseconds."""
 
     source: SourceKey | None  # None for a source without a user hash
     name: str | None
@@ -166,30 +176,30 @@ class SourceRow:
 
 
 @dataclass(frozen=True)
-class SourceFileRange:
-    """A source range with the file it was read on and that file's best name, if ever seen."""
+class SourceFilePeriod:
+    """A source period with the file it was read on and that file's best name, if ever seen."""
 
     file: FileKey
     file_name: str | None
-    range: SourceRangeView
+    period: SourcePeriodView
 
 
 @dataclass(frozen=True)
 class SourceDetail:
-    """A page of a source (D13): one ``SourceRow`` per name it carried, its ranges newest first."""
+    """A page of a source (D13): one ``SourceRow`` per name it carried, its periods newest first."""
 
     source: SourceKey
     names: tuple[SourceRow, ...]
-    ranges: tuple[SourceFileRange, ...]
+    periods: tuple[SourceFilePeriod, ...]
 
 
 @dataclass(frozen=True)
 class NameDetail:
-    """A page of a name (D13): one ``SourceRow`` per hash that carried it, its hash-less ranges."""
+    """A page of a name (D13): one ``SourceRow`` per hash that carried it, its hash-less periods."""
 
     name: str
     sources: tuple[SourceRow, ...]
-    ranges: tuple[SourceFileRange, ...]
+    periods: tuple[SourceFilePeriod, ...]
 
 
 # ---------------------------------------------------------------------------
@@ -413,7 +423,7 @@ class DbOption:
 class SourceHistoryRow:
     """One line of a file's "Source history" (stage 4 spec, D12), precomputed for the template.
 
-    ``name_link`` and ``source_link`` hold 0 or 1 href, empty when the range has no name or no
+    ``name_link`` and ``source_link`` hold 0 or 1 href, empty when the period has no name or no
     user hash, so the template renders the plain text with ``{% for %}``/``{% else %}``.
     """
 
@@ -426,7 +436,7 @@ class SourceHistoryRow:
     high_id: str  # "yes", "no" or "unknown"
     first_seen: str
     last_seen: str
-    received: str  # empty when the range received nothing
+    received: str  # empty when the period received nothing
     rate: str  # empty without bytes or over a single read
     node: str
 
@@ -445,7 +455,7 @@ class SourceListRow:
 
 @dataclass(frozen=True)
 class SourceFileRow:
-    """One line of a source's or a name's ranges (D13): the file it was read on, then the range."""
+    """One period of a source's or a name's page (D13): the file it was read on, then the period."""
 
     file: str  # the file's best name, its short hash when never seen
     file_link: str
@@ -467,7 +477,7 @@ class FileDetailDisplay:
     native_id: str
     size_bytes: int
     timeline: tuple[TimelineRow, ...]  # one row per sighting, oldest first
-    source_history: tuple[SourceHistoryRow, ...]  # one row per source range, newest first
+    source_history: tuple[SourceHistoryRow, ...]  # one row per source period, newest first
     decisions: tuple[DecisionView, ...]  # 0..N elements: for template iteration
     ed2k_link: str  # precomputed from the latest sighting
     # Explanation fields (None if no explanation available)

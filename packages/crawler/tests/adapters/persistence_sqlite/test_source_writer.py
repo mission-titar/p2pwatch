@@ -1,4 +1,4 @@
-"""D4's writer on a real catalog (stage 4 spec, block 17's criteria)."""
+"""D4's writer on a real catalog (source points spec, block 10's criteria)."""
 
 import dataclasses
 import hashlib
@@ -15,7 +15,7 @@ from p2pwatch.adapters.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.persistence_sqlite.source_repository import SqliteSourceRepository
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceKey, SourceReading, SourceRole
-from p2pwatch.ports.source_repository import OpenedRange
+from p2pwatch.ports.source_repository import RecordedReading
 from tests.catalog_rows import insert_file
 
 _FILE, _OTHER_FILE = FileKey(Network.ED2K, "a" * 32), FileKey(Network.ED2K, "b" * 32)
@@ -24,6 +24,7 @@ _T0 = datetime(2026, 10, 13, 20, 0, tzinfo=UTC)
 _T0_US = int(_T0.timestamp()) * 1_000_000
 _POLL = timedelta(seconds=30)
 _TOLERANCE = 3 * _POLL
+_MICROSECOND = timedelta(microseconds=1)
 _Q, _S, _NN = SourceRole.QUEUED, SourceRole.SENDING, SourceRole.NOTHING_NEW
 _ST, _UN = SourceRole.STANDBY, SourceRole.UNDETERMINED
 
@@ -54,166 +55,160 @@ def catalog(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 @pytest.fixture
 def repository(catalog: sqlite3.Connection) -> SqliteSourceRepository:
-    return SqliteSourceRepository(catalog, "n1")
+    return SqliteSourceRepository(catalog, "n1", _POLL)
 
 
 def _record(
     repository: SqliteSourceRepository, *readings: SourceReading, step: timedelta = _POLL
-) -> list[OpenedRange]:
-    """Records each reading alone, ``step`` apart from ``_T0``; every range opened."""
-    opened: list[OpenedRange] = []
+) -> list[RecordedReading]:
+    """Records each reading alone, ``step`` apart from ``_T0``; every reading recorded."""
+    recorded: list[RecordedReading] = []
     for index, reading in enumerate(readings):
-        opened += repository.record_readings(_FILE, [reading], _T0 + index * step, _TOLERANCE)
-    return opened
+        recorded += repository.record_readings(_FILE, [reading], _T0 + index * step)
+    return recorded
 
 
-def _ranges(catalog: sqlite3.Connection) -> list[tuple[object, ...]]:
-    """``(role, first_seen_at, last_seen_at, received_bytes, transfer_counter)`` in time order."""
+def _points(catalog: sqlite3.Connection) -> list[tuple[object, ...]]:
+    """``(role, observed_at, transfer_counter)`` in time order."""
     return catalog.execute(
-        "SELECT v.role, r.first_seen_at, r.last_seen_at, r.received_bytes, r.transfer_counter"
-        " FROM source_ranges AS r JOIN source_variants AS v USING (variant_id)"
-        " ORDER BY r.first_seen_at, r.node_id"
+        "SELECT v.role, o.observed_at, o.transfer_counter"
+        " FROM source_observations AS o JOIN source_variants AS v USING (variant_id)"
+        " ORDER BY o.observed_at, v.node_id"
     ).fetchall()
+
+
+def _variants(catalog: sqlite3.Connection) -> int:
+    count: int = catalog.execute("SELECT COUNT(*) FROM source_variants").fetchone()[0]
+    return count
 
 
 def _seconds(seconds: float) -> int:
     return _T0_US + int(seconds * 1_000_000)
 
 
-@pytest.mark.parametrize("gap", [_POLL, _TOLERANCE])
-def test_the_same_variant_within_the_tolerance_extends_the_range(
-    repository: SqliteSourceRepository, catalog: sqlite3.Connection, gap: timedelta
+def test_three_reads_of_one_source_leave_one_variant_and_three_points(
+    repository: SqliteSourceRepository, catalog: sqlite3.Connection
 ) -> None:
-    opened = _record(repository, _reading(), _reading(), step=gap)
-    assert opened == [OpenedRange(_KEY, "AnimuseeFMR", _Q)]
-    assert _ranges(catalog) == [("queued", _T0_US, _T0_US + gap // timedelta(microseconds=1), 0, 0)]
+    recorded = _record(repository, *[_reading(counter=counter) for counter in (5, 5, 9)])
+    assert recorded == [RecordedReading(_KEY, "AnimuseeFMR", _Q)] * 3
+    assert _variants(catalog) == 1
+    assert _points(catalog) == [
+        ("queued", _T0_US, 5),
+        ("queued", _seconds(30), 5),
+        ("queued", _seconds(60), 9),
+    ]
+
+
+def test_a_change_of_role_leaves_two_variants(
+    repository: SqliteSourceRepository, catalog: sqlite3.Connection
+) -> None:
+    _record(repository, _reading(), _reading(_S), _reading())
+    assert _variants(catalog) == 2
+    assert [row[0] for row in _points(catalog)] == ["queued", "sending", "queued"]
 
 
 @pytest.mark.parametrize(
-    ("second", "gap"),
+    ("gap", "counter", "carried"),
     [
-        (_reading(counter=5), _TOLERANCE + timedelta(microseconds=1)),
-        (dataclasses.replace(_reading(counter=5), software="emule 0.70b"), _POLL),
-        (_reading(counter=4), _POLL),
+        (_POLL, 5, _Q),
+        (_TOLERANCE, 5, _Q),
+        (_TOLERANCE + _MICROSECOND, 5, _UN),
+        (_POLL, 4, _UN),
     ],
-    ids=["past-the-tolerance", "another-variant", "a-lower-counter"],
+    ids=["30s", "the-tolerance", "past-the-tolerance", "a-lower-counter"],
 )
-def test_each_condition_of_d4_failing_opens_a_second_range(
+def test_a_passing_state_carries_the_latest_point_within_the_tolerance_and_its_counter(
     repository: SqliteSourceRepository,
     catalog: sqlite3.Connection,
-    second: SourceReading,
     gap: timedelta,
+    counter: int,
+    carried: SourceRole,
 ) -> None:
-    _record(repository, _reading(counter=5), second, step=gap)
-    assert len(_ranges(catalog)) == 2
+    recorded = _record(repository, _reading(counter=5), _reading(None, counter=counter), step=gap)
+    assert recorded[1].role is carried
+    assert _points(catalog)[1] == (carried.value, _T0_US + gap // _MICROSECOND, counter)
 
 
 @pytest.mark.parametrize(
-    ("roles", "opened"),
+    ("roles", "recorded"),
     [
-        ([_Q, _S, _Q], [_Q, _S, _Q]),
-        ([_NN, None, _NN], [_NN]),
-        ([_Q, None, _Q], [_Q]),
-        ([_Q, _UN], [_Q, _UN]),
+        ([_NN, None, _NN], [_NN, _NN, _NN]),
         ([_S, None], [_S, _Q]),
         ([_ST, None], [_ST, _UN]),
+        ([_Q, _UN, None], [_Q, _UN, _UN]),
         ([None], [_UN]),
     ],
 )
-def test_a_passing_state_carries_the_group_of_the_latest_range(
+def test_a_passing_state_carries_the_group_of_the_latest_point(
     repository: SqliteSourceRepository,
     catalog: sqlite3.Connection,
     roles: list[SourceRole | None],
-    opened: list[SourceRole],
+    recorded: list[SourceRole],
 ) -> None:
-    ranges = _record(repository, *[_reading(role) for role in roles])
-    assert [opened_range.role for opened_range in ranges] == opened
-    assert [row[0] for row in _ranges(catalog)] == opened
-
-
-@pytest.mark.parametrize(
-    ("gap", "counter"), [(_TOLERANCE + timedelta(microseconds=1), 5), (_POLL, 4)]
-)
-def test_a_passing_state_carries_nothing_from_a_range_it_could_not_extend(
-    repository: SqliteSourceRepository, catalog: sqlite3.Connection, gap: timedelta, counter: int
-) -> None:
-    _record(repository, _reading(_NN, counter=5), _reading(None, counter=counter), step=gap)
-    assert [row[0] for row in _ranges(catalog)] == ["nothing_new", "undetermined"]
-
-
-@pytest.mark.parametrize("read_at", [_T0 + _POLL, _T0])
-def test_a_reading_at_or_before_the_latest_range_end_writes_nothing(
-    repository: SqliteSourceRepository, catalog: sqlite3.Connection, read_at: datetime
-) -> None:
-    _record(repository, _reading(), _reading())
-    assert repository.record_readings(_FILE, [_reading(_S, counter=9)], read_at, _TOLERANCE) == ()
-    assert _ranges(catalog) == [("queued", _T0_US, _seconds(30), 0, 0)]
-
-
-def test_a_second_reading_of_one_identity_in_one_call_writes_nothing(
-    repository: SqliteSourceRepository, catalog: sqlite3.Connection
-) -> None:
-    repository.record_readings(_FILE, [_reading(), _reading(_S)], _T0, _TOLERANCE)
-    assert [row[0] for row in _ranges(catalog)] == ["queued"]
-
-
-@pytest.mark.parametrize(("role", "received"), [(_ST, 0), (_S, 250)])
-def test_only_a_sending_range_adds_the_counters_growth(
-    repository: SqliteSourceRepository, catalog: sqlite3.Connection, role: SourceRole, received: int
-) -> None:
-    _record(repository, *[_reading(role, counter=counter) for counter in (50, 150, 300)])
-    assert _ranges(catalog) == [(role.value, _T0_US, _seconds(60), received, 300)]
+    assert [r.role for r in _record(repository, *[_reading(role) for role in roles])] == recorded
+    assert [row[0] for row in _points(catalog)] == [role.value for role in recorded]
 
 
 def test_a_reading_with_neither_identity_nor_name_writes_nothing(
     repository: SqliteSourceRepository, catalog: sqlite3.Connection
 ) -> None:
     reading = dataclasses.replace(_reading(key=None), name=None)
-    assert repository.record_readings(_FILE, [reading], _T0, _TOLERANCE) == ()
-    assert _ranges(catalog) == []
+    assert repository.record_readings(_FILE, [reading], _T0) == ()
+    assert (_variants(catalog), _points(catalog)) == (0, [])
 
 
-def test_a_reading_without_identity_extends_only_a_range_of_its_name_without_identity(
+def test_the_same_read_written_twice_leaves_the_points_unchanged(
     repository: SqliteSourceRepository, catalog: sqlite3.Connection
 ) -> None:
-    opened = _record(repository, _reading(key=None), _reading(), _reading(key=None))
-    assert [opened_range.key for opened_range in opened] == [None, _KEY]
-    assert _ranges(catalog) == [
-        ("queued", _T0_US, _seconds(60), 0, 0),
-        ("queued", _seconds(30), _seconds(30), 0, 0),
-    ]
+    _record(repository, _reading(counter=5), _reading(None, counter=5))
+    points = _points(catalog)
+    again = repository.record_readings(_FILE, [_reading(None, counter=5)], _T0 + _POLL)
+    assert again == (RecordedReading(_KEY, "AnimuseeFMR", _Q),)
+    assert _points(catalog) == points
 
 
-def test_two_sources_without_identity_are_told_apart_by_name(
+def test_a_negative_counter_is_refused_not_dropped(repository: SqliteSourceRepository) -> None:
+    with pytest.raises(PersistenceError, match="CHECK constraint failed") as raised:
+        repository.record_readings(_FILE, [_reading(counter=-1)], _T0)
+    assert isinstance(raised.value.__cause__, sqlite3.IntegrityError)
+
+
+def test_a_clock_stepped_back_writes_its_point_and_carries_only_from_an_earlier_one(
     repository: SqliteSourceRepository, catalog: sqlite3.Connection
 ) -> None:
-    other = dataclasses.replace(_reading(key=None), name="Teammate")
-    repository.record_readings(_FILE, [_reading(key=None), other], _T0, _TOLERANCE)
-    assert len(_ranges(catalog)) == 2
+    repository.record_readings(_FILE, [_reading(_NN)], _T0 + _POLL)
+    assert repository.record_readings(_FILE, [_reading(None)], _T0)[0].role is _UN
+    assert _points(catalog) == [("undetermined", _T0_US, 0), ("nothing_new", _seconds(30), 0)]
 
 
-def test_a_source_on_another_file_neither_stops_nor_carries_into_this_files_range(
+def test_a_reading_without_identity_carries_only_from_its_name_without_identity(
     repository: SqliteSourceRepository, catalog: sqlite3.Connection
 ) -> None:
-    repository.record_readings(_OTHER_FILE, [_reading(_S)], _T0, _TOLERANCE)
-    opened = _record(repository, _reading(None), _reading(None))
-    assert [opened_range.role for opened_range in opened] == [_UN]
-    assert sorted(_ranges(catalog)) == [
-        ("sending", _T0_US, _T0_US, 0, 0),
-        ("undetermined", _T0_US, _seconds(30), 0, 0),
-    ]
+    other = dataclasses.replace(_reading(None, key=None), name="Teammate")
+    recorded = _record(repository, _reading(_NN), _reading(_S, key=None), _reading(None, key=None))
+    recorded += repository.record_readings(_FILE, [other], _T0 + 3 * _POLL)
+    assert [(r.key, r.role) for r in recorded] == [(_KEY, _NN), (None, _S), (None, _Q), (None, _UN)]
+    assert _variants(catalog) == 4
 
 
-def test_another_nodes_range_is_never_extended_and_its_variant_is_shared(
+def test_a_source_on_another_file_or_another_node_carries_nothing(
     repository: SqliteSourceRepository, catalog: sqlite3.Connection
 ) -> None:
-    SqliteSourceRepository(catalog, "n2").record_readings(_FILE, [_reading()], _T0, _TOLERANCE)
-    _record(repository, _reading(), _reading())
-    assert catalog.execute("SELECT COUNT(*) FROM source_variants").fetchone() == (1,)
-    assert len(_ranges(catalog)) == 2
+    repository.record_readings(_OTHER_FILE, [_reading(_S)], _T0)
+    SqliteSourceRepository(catalog, "n2", _POLL).record_readings(_FILE, [_reading(_NN)], _T0)
+    assert repository.record_readings(_FILE, [_reading(None)], _T0 + _POLL)[0].role is _UN
 
 
-def test_the_variant_and_the_source_are_written_as_d3_states(
+def test_another_nodes_identical_reading_is_its_own_variant(
+    repository: SqliteSourceRepository, catalog: sqlite3.Connection
+) -> None:
+    SqliteSourceRepository(catalog, "n2", _POLL).record_readings(_FILE, [_reading()], _T0)
+    repository.record_readings(_FILE, [_reading()], _T0)
+    assert _variants(catalog) == 2
+    assert len(_points(catalog)) == 2
+
+
+def test_the_variant_and_the_source_are_written_as_d2_states(
     repository: SqliteSourceRepository, catalog: sqlite3.Connection
 ) -> None:
     reading = dataclasses.replace(
@@ -222,14 +217,14 @@ def test_the_variant_and_the_source_are_written_as_d3_states(
         directly_reachable=True,
         raw_meta=(("source_origin", "kad"), ("protocol_extensions", ("a", "b"))),
     )
-    repository.record_readings(_FILE, [reading], _T0, _TOLERANCE)
+    repository.record_readings(_FILE, [reading], _T0)
     raw_meta = '{"protocol_extensions": ["a", "b"], "source_origin": "kad"}'
     columns: list[object] = [_FILE.file_id.hex(), _KEY.source_id.hex(), "AnimuseeFMR"]
-    columns += ["emule 0.50a", "queued", "176.103.48.36:4184", True, raw_meta]
+    columns += ["emule 0.50a", "queued", "176.103.48.36:4184", True, raw_meta, "n1"]
     canonical = json.dumps(columns, ensure_ascii=False, separators=(",", ":")).encode()
     assert catalog.execute(
         "SELECT file_id, source_id, name, software, role, contact_point, directly_reachable,"
-        " raw_meta, content_hash FROM source_variants"
+        " raw_meta, node_id, content_hash FROM source_variants"
     ).fetchall() == [
         (
             _FILE.file_id,
@@ -240,6 +235,7 @@ def test_the_variant_and_the_source_are_written_as_d3_states(
             "176.103.48.36:4184",
             1,
             raw_meta,
+            "n1",
             hashlib.blake2b(canonical, digest_size=16).digest(),
         )
     ]
@@ -253,8 +249,8 @@ def test_a_contact_point_that_is_not_the_files_networks_writes_nothing(
 ) -> None:
     bad = dataclasses.replace(_reading(key=_OTHER_KEY), contact_point="server.example:4184")
     with pytest.raises(PersistenceError, match="server.example:4184"):
-        repository.record_readings(_FILE, [_reading(), bad], _T0, _TOLERANCE)
-    assert _ranges(catalog) == []
+        repository.record_readings(_FILE, [_reading(), bad], _T0)
+    assert _points(catalog) == []
 
 
 def test_a_failed_write_rolls_back_the_whole_call(
@@ -262,6 +258,6 @@ def test_a_failed_write_rolls_back_the_whole_call(
 ) -> None:
     unknown = FileKey(Network.ED2K, "d" * 32)
     with pytest.raises(PersistenceError, match="FOREIGN KEY"):
-        repository.record_readings(unknown, [_reading()], _T0, _TOLERANCE)
+        repository.record_readings(unknown, [_reading()], _T0)
     assert catalog.execute("SELECT COUNT(*) FROM sources").fetchone() == (0,)
     assert not catalog.in_transaction
