@@ -161,11 +161,12 @@ def _sources_spacing(download: DownloadConfig) -> timedelta:
 
 def _build_policy(config: CrawlerConfig) -> WorkerPolicy:
     """Unpacks the policy config into primitives for the application (dependency rule)."""
+    backoff = config.search.backoff
     return WorkerPolicy(
-        backoff_base_seconds=config.backoff.base_seconds,
-        backoff_cap_seconds=config.backoff.cap_seconds,
-        backoff_factor=config.backoff.factor,
-        backoff_jitter_ratio=config.backoff.jitter_ratio,
+        backoff_base_seconds=backoff.base_seconds,
+        backoff_cap_seconds=backoff.cap_seconds,
+        backoff_factor=backoff.factor,
+        backoff_jitter_ratio=backoff.jitter_ratio,
     )
 
 
@@ -309,7 +310,7 @@ class CrawlerApp:
                 group.create_task(
                     SearchTasks(
                         workers=workers,
-                        keywords=self._crawler_config.search_keywords,
+                        keywords=self._crawler_config.search.keywords,
                         resumed=self._resumed,
                         backoff=backoff,
                         scheduler_state=scheduler_state,

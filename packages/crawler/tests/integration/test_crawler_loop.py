@@ -18,6 +18,7 @@ from p2pwatch.adapters.config.crawler_config import (
     AmuleEndpoint,
     BackoffConfig,
     CrawlerConfig,
+    SearchConfig,
     WebuiConfig,
 )
 from p2pwatch.adapters.config.yaml_loader import load_yaml
@@ -83,14 +84,16 @@ async def test_real_loop_runs_one_search_and_stops(amuled: ApiEndpoint, tmp_path
 
     matcher_config = parse_matcher_config(load_yaml(_MATCHER))
     crawler_config = CrawlerConfig(
-        backoff=BackoffConfig(base_seconds=2.0, cap_seconds=60.0, factor=2.0, jitter_ratio=0.3),
+        # One keyword: a Kad search lasts 45 s at most, so a task comes back within a minute.
+        search=SearchConfig(
+            keywords=("titar",),
+            backoff=BackoffConfig(base_seconds=2.0, cap_seconds=60.0, factor=2.0, jitter_ratio=0.3),
+        ),
         shutdown_deadline_seconds=30.0,
         amule_api_password=amuled.password,
         catalog_db_path=str(tmp_path / "catalog.db"),
         local_db_path=str(tmp_path / "local.db"),
         node_id=None,
-        # One keyword: a Kad search lasts 45 s at most, so a task comes back within a minute.
-        search_keywords=("titar",),
         # The webui binds a FIXED 0.0.0.0:8080; off here so the test never collides with
         # whatever already listens there on the developer's machine.
         webui=WebuiConfig(enabled=False),
