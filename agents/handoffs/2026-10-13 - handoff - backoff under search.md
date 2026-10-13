@@ -17,6 +17,10 @@ changes.
   section reads `search: key 'keywords' missing`.
 - **Documents**: `docs/settings.md` (the bounds table), `docs/migration-4x.md` (step 3 moves the section),
   `docs/contributing/architecture.md` §5 (the keywords without a default). `BACKLOG.md` loses the entry.
+- **Pyright sees the venv** (`[tool.pyright]`, root `pyproject.toml`). Serena's language server, pyright
+  1.1.403 run by `uvx` in its own environment, resolved no dependency and no other workspace package, so
+  `find_referencing_symbols` returned no usage from a test or from another package (checked on
+  `SearchConfig`, imported by three tests). With it, `test_app.py` has 0 unresolved imports, against 26.
 
 ## Decisions
 
@@ -29,6 +33,7 @@ changes.
 - **Class 2, the keywords' code default**, against the multi-network spec's section 5 ("No keyword lives
   anywhere but in config, not in a patch and not in a code default"). Operator: "corrige, c'est une
   bonne suggestion."
+- **Serena's blind spot fixed in this lot**. Operator: "Je suggère qu'on fix serena au passage."
 
 ## Class 1 fixes
 
@@ -40,7 +45,8 @@ changes.
 
 - `uv run poe check`: exit 0, every package at 100 %, no warning; `uv run poe docs-build`: "No issues
   found".
-- Budget: 202 lines, 12 files, against `main`.
+- Budget: 207 lines, 13 files, against `main`.
+- CI on `0c29ba0` to `51b2ab9`: run `38433245547` green, integration suites on amd64 and arm64 included.
 - Watched failing first: the root `backoff` (`Failed: DID NOT RAISE ConfigError`), a missing
   `search.backoff` (`Actual message: "backoff: key 'factor' missing"`), a missing `search` section and
   missing keywords (`Expected regex: "search: key 'keywords' missing"`). With the keywords' default put
@@ -54,9 +60,8 @@ changes.
 - **A node whose `crawler.yml` keeps `backoff` at the root refuses to boot**, like one keeping
   `decision_poll_interval_seconds`: the 5.0 release notes must say to move it (`migration-4x.md`,
   step 3).
-- **Serena's `find_referencing_symbols` returns no reference from a test file** in this repository
-  (checked on `SearchConfig`, imported by three tests; the cause was not looked for): test usages still
-  need a text search.
+- **Serena's language server reads `[tool.pyright]` only when it starts**: after changing it, restart
+  Serena (`/mcp`), or its references stay those of the old configuration.
 
 ## Validated by CI only
 
