@@ -12,6 +12,7 @@ from p2pwatch.adapters.config.crawler_config import (
     MetricsConfig,
     NotificationTarget,
     ObservabilityConfig,
+    SearchConfig,
     WebuiConfig,
     parse_crawler_config,
 )
@@ -19,13 +20,16 @@ from p2pwatch.domain.observability.policy import Audience
 
 
 def _minimal_raw() -> dict[str, Any]:
-    """Valid policy + minimal wiring (EC password without ${}, base paths) — observer mode."""
+    """Valid policy + minimal wiring (password without ${}, base paths), observer mode."""
     return {
-        "backoff": {
-            "base_seconds": 2.0,
-            "cap_seconds": 300.0,
-            "factor": 2.0,
-            "jitter_ratio": 0.3,
+        "search": {
+            "keywords": ["keroro", "titar"],
+            "backoff": {
+                "base_seconds": 2.0,
+                "cap_seconds": 300.0,
+                "factor": 2.0,
+                "jitter_ratio": 0.3,
+            },
         },
         "shutdown_deadline_seconds": 10.0,
         "amule_api_password": "secret",
@@ -50,13 +54,25 @@ def _full_download_section() -> dict[str, Any]:
     }
 
 
+def _section(raw: dict[str, Any], path: str | None) -> dict[str, Any]:
+    """The mapping at the dotted ``path`` of ``raw``, ``raw`` itself for ``None``."""
+    for name in path.split(".") if path else ():
+        raw = raw[name]
+    return raw
+
+
 # --------------------------------------------------------------------- policy
 
 
 def test_parses_a_valid_config() -> None:
     config = parse_crawler_config(_minimal_raw(), _env())
     assert config == CrawlerConfig(
-        backoff=BackoffConfig(base_seconds=2.0, cap_seconds=300.0, factor=2.0, jitter_ratio=0.3),
+        search=SearchConfig(
+            keywords=("keroro", "titar"),
+            backoff=BackoffConfig(
+                base_seconds=2.0, cap_seconds=300.0, factor=2.0, jitter_ratio=0.3
+            ),
+        ),
         shutdown_deadline_seconds=10.0,
         amule_api_password="secret",
         catalog_db_path="/data/catalog.db",
@@ -69,13 +85,13 @@ def test_parses_a_valid_config() -> None:
 
 def test_jitter_ratio_zero_is_accepted() -> None:
     raw = _minimal_raw()
-    raw["backoff"]["jitter_ratio"] = 0.0  # 0 = no jitter (≥ 0 allowed)
-    assert parse_crawler_config(raw, _env()).backoff.jitter_ratio == 0.0
+    raw["search"]["backoff"]["jitter_ratio"] = 0.0  # 0 = no jitter (≥ 0 allowed)
+    assert parse_crawler_config(raw, _env()).search.backoff.jitter_ratio == 0.0
 
 
 def test_negative_jitter_ratio_is_fatal() -> None:
     raw = _minimal_raw()
-    raw["backoff"]["jitter_ratio"] = -0.1
+    raw["search"]["backoff"]["jitter_ratio"] = -0.1
     with pytest.raises(ConfigError, match="≥ 0 expected"):
         parse_crawler_config(raw, _env())
 
@@ -105,10 +121,10 @@ def test_bool_is_not_accepted_as_a_number() -> None:
 @pytest.mark.parametrize(
     ("section", "key"),
     [
-        ("backoff", "base_seconds"),
-        ("backoff", "cap_seconds"),
-        ("backoff", "factor"),
-        ("backoff", "jitter_ratio"),
+        ("search.backoff", "base_seconds"),
+        ("search.backoff", "cap_seconds"),
+        ("search.backoff", "factor"),
+        ("search.backoff", "jitter_ratio"),
         ("observability", "notification_timeout_seconds"),
         ("download", "poll_interval_seconds"),
         ("download", "lost_after_seconds"),
@@ -122,7 +138,7 @@ def test_a_number_that_is_not_finite_is_refused_by_name(
 ) -> None:
     # .inf would make a sleep endless and .nan passes every comparison.
     raw = _minimal_raw() | {"download": _full_download_section(), "observability": {}}
-    (raw if section is None else raw[section])[key] = value
+    _section(raw, section)[key] = value
     with pytest.raises(ConfigError, match=rf"\.{key}: finite number expected"):
         parse_crawler_config(raw, _env())
 
@@ -130,8 +146,8 @@ def test_a_number_that_is_not_finite_is_refused_by_name(
 def _with_seconds(section: str | None, key: str, seconds: int) -> dict[str, Any]:
     """A full config whose ``key`` holds ``seconds``, the backoff's cap above any floor."""
     raw = _minimal_raw() | {"download": _full_download_section(), "observability": {}, "webui": {}}
-    raw["backoff"]["cap_seconds"] = 86_400
-    (raw if section is None else raw[section])[key] = seconds
+    raw["search"]["backoff"]["cap_seconds"] = 86_400
+    _section(raw, section)[key] = seconds
     return raw
 
 
@@ -141,8 +157,8 @@ def _with_seconds(section: str | None, key: str, seconds: int) -> dict[str, Any]
         ("download", "poll_interval_seconds"),
         ("download", "sources_interval_seconds"),
         ("webui", "source_period_gap_seconds"),
-        ("backoff", "base_seconds"),
-        ("backoff", "cap_seconds"),
+        ("search.backoff", "base_seconds"),
+        ("search.backoff", "cap_seconds"),
         ("observability", "notification_timeout_seconds"),
         (None, "shutdown_deadline_seconds"),
     ],
@@ -187,25 +203,38 @@ def test_a_removed_key_is_refused_by_name(key: str) -> None:
         parse_crawler_config(raw, _env())
 
 
+def test_the_root_backoff_is_refused_with_its_new_place() -> None:
+    raw = _minimal_raw() | {"backoff": _minimal_raw()["search"]["backoff"]}
+    with pytest.raises(ConfigError, match=r"key 'backoff' moved to 'search\.backoff'"):
+        parse_crawler_config(raw, _env())
+
+
+def test_a_missing_backoff_is_fatal() -> None:
+    raw = _minimal_raw()
+    del raw["search"]["backoff"]
+    with pytest.raises(ConfigError, match=r"search\.backoff: key '\w+' missing"):
+        parse_crawler_config(raw, _env())
+
+
 def test_backoff_section_must_be_a_mapping() -> None:
     raw = _minimal_raw()
-    raw["backoff"] = [1, 2, 3]
-    with pytest.raises(ConfigError, match="section 'backoff'"):
+    raw["search"]["backoff"] = [1, 2, 3]
+    with pytest.raises(ConfigError, match=r"section 'search\.backoff'"):
         parse_crawler_config(raw, _env())
 
 
 def test_backoff_factor_below_one_is_fatal() -> None:
     raw = _minimal_raw()
-    raw["backoff"]["factor"] = 0.5
-    with pytest.raises(ConfigError, match="factor must be ≥ 1"):
+    raw["search"]["backoff"]["factor"] = 0.5
+    with pytest.raises(ConfigError, match=r"search\.backoff\.factor must be ≥ 1"):
         parse_crawler_config(raw, _env())
 
 
 def test_backoff_cap_below_base_is_fatal() -> None:
     raw = _minimal_raw()
-    raw["backoff"]["cap_seconds"] = 1.0
-    raw["backoff"]["base_seconds"] = 10.0
-    with pytest.raises(ConfigError, match="cap below floor"):
+    raw["search"]["backoff"]["cap_seconds"] = 1.0
+    raw["search"]["backoff"]["base_seconds"] = 10.0
+    with pytest.raises(ConfigError, match=r"search\.backoff\.cap_seconds .* cap below floor"):
         parse_crawler_config(raw, _env())
 
 
@@ -414,36 +443,38 @@ def test_download_output_dir_must_be_a_string() -> None:
 # ------------------------------------------------------------------- search
 
 
-def test_search_keywords_defaults_to_keroro_and_titar_when_section_absent() -> None:
-    config = parse_crawler_config(_minimal_raw(), {})
-    assert config.search_keywords == ("keroro", "titar")
-
-
-def test_search_keywords_defaults_when_section_present_without_keywords_key() -> None:
+def test_a_missing_search_section_is_fatal() -> None:
     raw = _minimal_raw()
-    raw["search"] = {}
-    config = parse_crawler_config(raw, {})
-    assert config.search_keywords == ("keroro", "titar")
+    del raw["search"]
+    with pytest.raises(ConfigError, match="search: key 'keywords' missing"):
+        parse_crawler_config(raw, {})
+
+
+def test_missing_search_keywords_are_fatal() -> None:
+    raw = _minimal_raw()
+    del raw["search"]["keywords"]
+    with pytest.raises(ConfigError, match="search: key 'keywords' missing"):
+        parse_crawler_config(raw, {})
 
 
 def test_search_keywords_read_from_section() -> None:
     raw = _minimal_raw()
-    raw["search"] = {"keywords": ["keroro", "titar", "mission titar"]}
+    raw["search"]["keywords"] = ["keroro", "titar", "mission titar"]
     config = parse_crawler_config(raw, {})
-    assert config.search_keywords == ("keroro", "titar", "mission titar")
+    assert config.search.keywords == ("keroro", "titar", "mission titar")
 
 
 def test_search_keywords_rejects_empty_list() -> None:
     raw = _minimal_raw()
-    raw["search"] = {"keywords": []}
-    with pytest.raises(ConfigError):
+    raw["search"]["keywords"] = []
+    with pytest.raises(ConfigError, match=r"search\.keywords: non-empty list"):
         parse_crawler_config(raw, {})
 
 
 def test_search_keywords_rejects_non_string_entry() -> None:
     raw = _minimal_raw()
-    raw["search"] = {"keywords": ["keroro", 42]}
-    with pytest.raises(ConfigError):
+    raw["search"]["keywords"] = ["keroro", 42]
+    with pytest.raises(ConfigError, match=r"search\.keywords: non-empty string expected, got 42"):
         parse_crawler_config(raw, {})
 
 

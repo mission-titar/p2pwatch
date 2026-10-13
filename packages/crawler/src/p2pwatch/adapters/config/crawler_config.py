@@ -38,6 +38,14 @@ class BackoffConfig:
 
 
 @dataclass(frozen=True)
+class SearchConfig:
+    """The ``search`` section: the keywords every search queries, and the backoff of a failure."""
+
+    keywords: tuple[str, ...]
+    backoff: BackoffConfig
+
+
+@dataclass(frozen=True)
 class AmuleEndpoint:
     """An ``amuled`` daemon reachable through ``amuleapi``. ``name`` is the instance label
     (logging, backoff/scheduler_state key)."""
@@ -118,6 +126,9 @@ _REMOVED_KEYS = (
     "search_poll_interval_seconds",
 )
 
+# Keys read elsewhere now: refused with their new place, so an operator never edits a dead one.
+_MOVED_KEYS = {"backoff": "search.backoff"}
+
 
 @dataclass(frozen=True)
 class MetricsConfig:
@@ -142,24 +153,21 @@ class ObservabilityConfig:
 class CrawlerConfig:
     """Unified crawler config (policy + wiring). All durations in SECONDS.
 
-    Policy: ``backoff``, ``shutdown_deadline_seconds`` (hard bound of the clean shutdown).
+    Policy: ``search`` (keywords and backoff), ``shutdown_deadline_seconds`` (hard bound of the
+    clean shutdown).
 
     Wiring (ex-local): ``amule_api_password`` (the daemon's amuleapi admin password, the same
     one the aMule web UI takes; host/port are code
     constants), DB paths, ``node_id`` (``None`` = the one from ``local.db``), ``observability``,
     ``download`` (``None`` ⟺ observer mode).
-
-    ``search_keywords``: keywords queried by the search loop (``search`` section
-    optional; default ``("keroro", "titar")`` if absent).
     """
 
-    backoff: BackoffConfig
+    search: SearchConfig
     shutdown_deadline_seconds: float
     amule_api_password: str
     catalog_db_path: str
     local_db_path: str
     node_id: str | None
-    search_keywords: tuple[str, ...] = ("keroro", "titar")
     observability: ObservabilityConfig | None = None
     download: DownloadConfig | None = None
     webui: WebuiConfig = _DEFAULT_WEBUI
@@ -371,13 +379,11 @@ def _parse_download(raw: dict[str, Any]) -> DownloadConfig | None:
     )
 
 
-def _parse_search_keywords(raw: dict[str, Any]) -> tuple[str, ...]:
-    """`search.keywords`: list of non-empty keywords. Absent → default (keroro, titar)."""
-    if "search" not in raw:
-        return ("keroro", "titar")
-    section = _require_mapping(raw["search"], "section 'search'")
+def _parse_search(raw: dict[str, Any]) -> SearchConfig:
+    """`search` section, required: its non-empty keywords and its backoff."""
+    section = _require_mapping(raw.get("search", {}), "section 'search'")
     if "keywords" not in section:
-        return ("keroro", "titar")
+        raise ConfigError("search: key 'keywords' missing")
     keywords = section["keywords"]
     if not isinstance(keywords, list) or not keywords:
         raise ConfigError("search.keywords: non-empty list of strings expected")
@@ -386,7 +392,27 @@ def _parse_search_keywords(raw: dict[str, Any]) -> tuple[str, ...]:
         if not isinstance(entry, str) or not entry:
             raise ConfigError(f"search.keywords: non-empty string expected, got {entry!r}")
         result.append(entry)
-    return tuple(result)
+    return SearchConfig(keywords=tuple(result), backoff=_parse_backoff(section))
+
+
+def _parse_backoff(search: dict[str, Any]) -> BackoffConfig:
+    """`search.backoff`, required: a factor that grows, a cap at least the base."""
+    section = _require_mapping(search.get("backoff", {}), "section 'search.backoff'")
+    factor = _positive(section, "factor", "search.backoff")
+    if factor < 1:
+        raise ConfigError(f"search.backoff.factor must be ≥ 1 (growth), got {factor}")
+    backoff = BackoffConfig(
+        base_seconds=_seconds(section, "base_seconds", "search.backoff"),
+        cap_seconds=_seconds(section, "cap_seconds", "search.backoff"),
+        factor=factor,
+        jitter_ratio=_non_negative(section, "jitter_ratio", "search.backoff"),
+    )
+    if backoff.cap_seconds < backoff.base_seconds:
+        raise ConfigError(
+            f"search.backoff.cap_seconds ({backoff.cap_seconds}) < base_seconds "
+            f"({backoff.base_seconds}): cap below floor"
+        )
+    return backoff
 
 
 def _parse_webui(raw: dict[str, Any], env: Mapping[str, str]) -> WebuiConfig:
@@ -418,21 +444,9 @@ def parse_crawler_config(raw: dict[str, Any], env: Mapping[str, str]) -> Crawler
     for key in _REMOVED_KEYS:
         if key in raw:
             raise ConfigError(f"crawler: key '{key}' was removed, delete it from crawler.yml")
-    backoff_raw = _require_mapping(raw.get("backoff", {}), "section 'backoff'")
-    factor = _positive(backoff_raw, "factor", "backoff")
-    if factor < 1:
-        raise ConfigError(f"backoff.factor must be ≥ 1 (growth), got {factor}")
-    backoff = BackoffConfig(
-        base_seconds=_seconds(backoff_raw, "base_seconds", "backoff"),
-        cap_seconds=_seconds(backoff_raw, "cap_seconds", "backoff"),
-        factor=factor,
-        jitter_ratio=_non_negative(backoff_raw, "jitter_ratio", "backoff"),
-    )
-    if backoff.cap_seconds < backoff.base_seconds:
-        raise ConfigError(
-            f"backoff.cap_seconds ({backoff.cap_seconds}) < base_seconds "
-            f"({backoff.base_seconds}): cap below floor"
-        )
+    for key, place in _MOVED_KEYS.items():
+        if key in raw:
+            raise ConfigError(f"crawler: key '{key}' moved to '{place}', move it in crawler.yml")
     node_id_raw = raw.get("node_id")
     if node_id_raw is not None and (not isinstance(node_id_raw, str) or not node_id_raw):
         raise ConfigError(f"node_id: non-empty string or absent expected, got {node_id_raw!r}")
@@ -442,13 +456,12 @@ def parse_crawler_config(raw: dict[str, Any], env: Mapping[str, str]) -> Crawler
             _require_mapping(raw["observability"], "section 'observability'"), env
         )
     return CrawlerConfig(
-        backoff=backoff,
+        search=_parse_search(raw),
         shutdown_deadline_seconds=_seconds(raw, "shutdown_deadline_seconds", "crawler"),
         amule_api_password=_require_str(raw, "amule_api_password", "crawler", env),
         catalog_db_path=_require_str(raw, "catalog_db_path", "crawler", env),
         local_db_path=_require_str(raw, "local_db_path", "crawler", env),
         node_id=node_id_raw,
-        search_keywords=_parse_search_keywords(raw),
         observability=observability,
         download=_parse_download(raw),
         webui=_parse_webui(raw, env),

@@ -14,11 +14,13 @@ _CONFIG = Path(__file__).resolve().parents[4] / "deploy"
 # actually load a config write their own fixture into tmp_path.
 _UNIFIED_CONFIG = """\
 shutdown_deadline_seconds: 10.0
-backoff:
-  base_seconds: 2.0
-  cap_seconds: 300.0
-  factor: 2.0
-  jitter_ratio: 0.3
+search:
+  keywords: [keroro, titar]
+  backoff:
+    base_seconds: 2.0
+    cap_seconds: 300.0
+    factor: 2.0
+    jitter_ratio: 0.3
 amule_api_password: ${AMULE_API_PASSWORD}
 catalog_db_path: /data/catalog.db
 local_db_path: /data/local.db

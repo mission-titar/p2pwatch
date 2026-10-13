@@ -23,6 +23,7 @@ from p2pwatch.adapters.config.crawler_config import (
     DownloadConfig,
     MetricsConfig,
     ObservabilityConfig,
+    SearchConfig,
     WebuiConfig,
 )
 from p2pwatch.adapters.config.yaml_loader import load_yaml
@@ -90,13 +91,17 @@ def _crawler_config(
     tmp_path: Path,
     shutdown_deadline: float = 30.0,
     *,
+    keywords: tuple[str, ...] = ("keroro", "titar"),
     node_id: str | None = None,
     observability: ObservabilityConfig | None = None,
     download: DownloadConfig | None = None,
     webui: WebuiConfig = _WEBUI_OFF,
 ) -> CrawlerConfig:
     return CrawlerConfig(
-        backoff=BackoffConfig(base_seconds=2.0, cap_seconds=60.0, factor=2.0, jitter_ratio=0.0),
+        search=SearchConfig(
+            keywords=keywords,
+            backoff=BackoffConfig(base_seconds=2.0, cap_seconds=60.0, factor=2.0, jitter_ratio=0.0),
+        ),
         shutdown_deadline_seconds=shutdown_deadline,
         amule_api_password="p",
         catalog_db_path=str(tmp_path / "catalog.db"),
@@ -527,7 +532,7 @@ def test_an_hour_of_the_running_app_keeps_to_the_networks_rules(
 
     async def main() -> None:
         app = CrawlerApp(
-            crawler_config=replace(_crawler_config(tmp_path), search_keywords=tuple(_DURATIONS)),
+            crawler_config=_crawler_config(tmp_path, keywords=tuple(_DURATIONS)),
             targets=_TARGETS,
             matcher_config=matcher_config,
             clock=api.clock,
