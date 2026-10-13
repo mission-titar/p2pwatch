@@ -127,12 +127,9 @@ docker compose run --rm p2pwatch python -m p2pwatch validate-config \
 
 **Fusionner des catalogues**, pour consolider ceux de plusieurs chercheurs en un seul. La fusion est
 idempotente et n'écrase rien sans `--force` ; `--into <source>` fusionne dans une source existante.
-Elle réunit les plages de l'[historique des sources](#historique-des-sources) : deux copies du
-catalogue d'un même nœud, prises à deux moments, donnent chaque plage avec sa fin la plus tardive.
-Ces copies doivent suivre une même histoire : un catalogue restauré d'une sauvegarde, ou remplacé
-par un catalogue fusionné pendant que le nœud tournait, ne peut plus absorber une copie de lui-même
-prise avant : la fusion peut alors la refuser entière, à chaque essai, avec
-`source_ranges only grows its latest range`.
+Elle réunit l'[historique des sources](#historique-des-sources) comme le reste, par l'union des
+lignes : deux copies du catalogue d'un même nœud se fusionnent toujours, même quand l'une a été
+restaurée d'une sauvegarde ou remplacée par un catalogue fusionné entre-temps.
 Le cycle de partage est décrit sur la [page d'accueil](index.md#partage).
 
 ```bash
@@ -141,7 +138,7 @@ docker compose exec p2pwatch python -m p2pwatch.merge \
 ```
 
 Une source doit être au même schéma que votre version : la fusion refuse une copie faite par une
-version plus ancienne (`has catalog schema version 5, expected 10`), car elle ne migre jamais une
+version plus ancienne (`has catalog schema version 5, expected 11`), car elle ne migre jamais une
 source. Migrez-la d'abord en la fusionnant dans elle-même, qui l'ouvre et la met à niveau sur place,
 de préférence sur une copie, puisqu'une version plus ancienne ne pourra plus la lire :
 
@@ -208,13 +205,16 @@ d'auteur et peut s'en passer avec `node_prefix: false`.
 
 ## Historique des sources
 
-En mode téléchargement, à chaque tour de la boucle de téléchargement (toutes les
-`download.poll_interval_seconds`, 30 s par défaut), le crawler relève les sources de chacun de ses
-téléchargements en cours : les pairs qui détiennent le fichier, sous leur user hash eD2k, avec leur
-nom, leur logiciel et leur rôle. Il les range en plages de présence : une plage dure tant que la
-source est revue avec les mêmes propriétés, une lecture manquée comprise. Un téléchargement ajouté à
-la main dans aMule n'est pas relevé. Ce qui est enregistré, et ce qui ne l'est jamais, est détaillé
-dans [Légalité et vie privée](legal.md#ce-que-votre-nœud-enregistre).
+En mode téléchargement, toutes les `download.sources_interval_seconds` (5 minutes par défaut, voir
+[Régler le nœud](settings.md#la-fréquence-de-relevé-des-sources)), le crawler relève les sources de
+chacun de ses téléchargements en cours : les pairs qui détiennent le fichier, sous leur user hash
+eD2k, avec leur nom, leur logiciel et leur rôle. Chaque relevé ajoute un point par source : son
+instant et le compteur d'octets qu'aMule tient pour elle. Le catalogue web en tire, à l'affichage,
+des périodes de présence : une période dure tant que la source est revue avec les mêmes propriétés,
+sans plus de `webui.source_period_gap_seconds` entre deux points (16,5 minutes par défaut, une
+lecture manquée comprise). Un téléchargement ajouté à la main dans aMule n'est pas relevé. Ce qui
+est enregistré, et ce qui ne l'est jamais, est détaillé dans
+[Légalité et vie privée](legal.md#ce-que-votre-nœud-enregistre).
 
 Le rôle dit ce que le nœud sait de ce que la source détient :
 
@@ -227,8 +227,9 @@ Le rôle dit ce que le nœud sait de ce que la source détient :
 | `undetermined` | inconnu | aMule ne sait pas encore ce qu'elle détient |
 
 Le catalogue web montre cet historique par fichier, par source et par nom
-([Routes disponibles](#routes-disponibles)). Chaque plage y nomme le nœud qui l'a relevée : un
-catalogue fusionné en réunit plusieurs.
+([Routes disponibles](#routes-disponibles)), sur un intervalle de 7 jours au plus
+([L'intervalle des pages de détail](#lintervalle-des-pages-de-détail)). Chaque période y nomme le
+nœud qui l'a relevée : un catalogue fusionné en réunit plusieurs.
 
 Deux alertes partent sur le canal *community*, toutes deux quand une source devient utile :
 
@@ -240,9 +241,10 @@ Deux alertes partent sur le canal *community*, toutes deux quand une source devi
   n'a rien appris de ce qu'elle détient : absente, ou vue sans réponse.
 
 Le message donne le nom de la source, les 8 premiers caractères de son user hash, le fichier et ses
-cibles. Le nœud d'un équipier qui détient les mêmes fichiers partiels que vous reste `nothing_new`,
-et n'alerte donc pas. Une source sans user hash n'alerte jamais, pas plus que le tout premier tour
-où le nœud relève des sources : tout y serait nouveau. Les deux alertes mesurent la vue de ce nœud,
+cibles. Il part au premier relevé qui la voit utile, jusqu'à un intervalle de relevé après qu'elle
+l'est devenue. Le nœud d'un équipier qui détient les mêmes fichiers partiels que vous reste
+`nothing_new`, et n'alerte donc pas. Une source sans user hash n'alerte jamais, pas plus que le tout
+premier relevé du nœud : tout y serait nouveau. Les deux alertes mesurent la vue de ce nœud,
 pas la présence du pair sur le réseau : une source « réapparaît » aussi quand vous mettez en file un
 fichier qu'elle partageait déjà, ou après un arrêt du nœud de plus de 12 h. Chacune incrémente
 `p2pwatch_source_alerts`, étiqueté `network` et `kind` (`new`, `reappeared`). Un arrêt brutal entre
@@ -279,10 +281,10 @@ le crawl en gardant aMule vivant, c'est `docker compose stop p2pwatch`.
 |---|---|
 | `/` | Tableau de bord : état de chaque client (version, API joignable, et par canal : sur le réseau, joignable par les pairs), d'après la dernière lecture de moins de deux minutes ; état du crawl, avec les boutons pause, reprise et redémarrage du crawler seul (aMule garde ses sessions) ; couverture par cible (épisodes trouvés et manquants) |
 | `/files` | Liste paginée des fichiers ; filtres `?target=`, `?tier=`, `?q=` |
-| `/files/{file_id}` | Détail d'un fichier, désigné par son `file_id` en 32 caractères hexadécimaux minuscules, tel que la console SQL l'affiche : réseau, identifiant natif, observations, historique des sources, décisions, explication du matching |
+| `/files/{file_id}` | Détail d'un fichier, désigné par son `file_id` en 32 caractères hexadécimaux minuscules, tel que la console SQL l'affiche : réseau, identifiant natif, observations et historique des sources dans l'intervalle choisi, décisions, explication du matching |
 | `/sources` | Liste paginée des sources qui ont un user hash, la plus récemment vue d'abord : dernier nom, début du user hash, dernière vue, nombre de fichiers ; `?q=` cherche un début de user hash ou un morceau de n'importe quel nom porté |
-| `/sources/{source_id}` | Une source, désignée par son `source_id` en 32 caractères hexadécimaux minuscules : son user hash, chaque nom qu'elle a porté, et ses plages sur tous les fichiers |
-| `/sources/name?name=` | Un nom : les user hashes qui l'ont porté, et les plages relevées sous ce nom sans user hash. Les liens s'arrêtent là : la page d'un nom ne montre pas les autres noms de ces user hashes, pour ne pas confondre en une seule personne des inconnus qui partagent un nom par défaut |
+| `/sources/{source_id}` | Une source, désignée par son `source_id` en 32 caractères hexadécimaux minuscules : son user hash, chaque nom qu'elle a porté, et ses périodes sur tous les fichiers, dans l'intervalle choisi |
+| `/sources/name?name=` | Un nom : les user hashes qui l'ont porté, et les périodes relevées sous ce nom sans user hash, dans l'intervalle choisi. Les liens s'arrêtent là : la page d'un nom ne montre pas les autres noms de ces user hashes, pour ne pas confondre en une seule personne des inconnus qui partagent un nom par défaut |
 | `/targets/{target_id}` | Fichiers d'une cible (alias de `/files?target=`) |
 | `/node` | État du crawler : `node_id`, entrées du `scheduler_state` et téléchargements (voir [Suivre un téléchargement](#suivre-un-téléchargement)). |
 | `POST /controls/pause`, `/controls/resume`, `/controls/restart` | Les boutons du tableau de bord, qui y renvoient. La pause n'arrête pas les recherches en cours, ni celles qui attendent déjà leur créneau réseau : avec K mots-clés, jusqu'à K-1 recherches ed2k, espacées d'une minute, et la prochaine de chaque cible Kad partent encore, puis le crawler se tait. |
@@ -294,6 +296,26 @@ authentification, par conception. `/console` est structurellement en lecture seu
 le déni de service (délai maximum, plafond de lignes rendues, une seule instruction). **Ces deux surfaces ne sont
 défendables que derrière votre propre périmètre** : réseau privé, VPN ou reverse proxy authentifié,
 jamais sur Internet.
+
+### L'intervalle des pages de détail
+
+La page d'un fichier, celle d'une source et celle d'un nom lisent leurs périodes, et la page d'un
+fichier ses observations, dans un seul intervalle de temps, de 7 jours au plus : au-delà, calculer
+les périodes à chaque affichage coûterait trop. Le bloc « Interval » de ces pages le choisit :
+
+- sans rien choisir, les 7 derniers jours ;
+- quatre préréglages : la dernière heure, les 6 dernières heures, les 24 dernières heures et les 7
+  derniers jours ;
+- un intervalle libre, par les champs « From (UTC) » et « To (UTC) », lus en UTC comme toutes les
+  heures du catalogue web ;
+- **Previous** et **Next**, qui décalent l'intervalle de sa propre longueur ; Next disparaît une
+  fois le présent atteint.
+
+L'intervalle vit dans l'adresse de la page (`?from=` et `?to=`) : un lien le garde. Un intervalle
+demandé de plus de 7 jours est ramené aux 7 jours qui finissent à sa fin, et la page le dit. Les
+périodes sont coupées aux bords de l'intervalle : une période commencée avant montre son premier
+point dans l'intervalle. Les listes de ces pages, les noms d'une source et les user hashes d'un nom,
+restent paginées et ne dépendent pas de l'intervalle.
 
 ### Suivre un téléchargement
 

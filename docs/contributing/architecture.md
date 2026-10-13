@@ -306,7 +306,8 @@ flowchart LR
 ## 7. Du téléchargement à la complétion
 
 Actif en mode téléchargement seulement. Une itération de `run_download_cycle` enchaîne trois étapes
-sur une seule session amuleapi, puis relève les sources des téléchargements du crawler (§8.3).
+sur une seule session amuleapi, puis, toutes les `download.sources_interval_seconds`, relève les
+sources des téléchargements du crawler (§8.3).
 
 ```mermaid
 flowchart TD
@@ -373,14 +374,14 @@ est terminal ; `failed` n'est terminal que jusqu'à ce qu'amuled en décide autr
 
 ```mermaid
 flowchart LR
-  subgraph cat["catalog.db · append-only, sauf source_ranges"]
+  subgraph cat["catalog.db · append-only"]
     f["files"]
     ov["observation_variants"]
     o["observations"]
     md["match_decisions"]
     s["sources"]
     sv["source_variants"]
-    sr["source_ranges"]
+    so["source_observations"]
   end
   subgraph loc["local.db · per node"]
     nr["node_runtime"]
@@ -389,9 +390,9 @@ flowchart LR
   end
 ```
 
-- **`catalog.db`** (version de schéma 10) : la connaissance accumulée, **append-only** (triggers
-  `BEFORE UPDATE/DELETE -> ABORT`) sauf `source_ranges` (§8.3), pour que N nœuds fusionnent en un seul catalogue (`python -m
-  p2pwatch.merge`). Les insertions sont **idempotentes** (`INSERT OR IGNORE` /
+- **`catalog.db`** (version de schéma 11) : la connaissance accumulée, **append-only**, chaque table
+  (triggers `BEFORE UPDATE/DELETE -> ABORT`), pour que N nœuds fusionnent en un seul catalogue
+  (`python -m p2pwatch.merge`). Les insertions sont **idempotentes** (`INSERT OR IGNORE` /
   `ON CONFLICT DO NOTHING`), donc sans danger en cas de redémarrage en pleine écriture.
 - **`local.db`** (version de schéma 8) : l'état d'exécution du nœud (identité, suivi des
   téléchargements, progression et backoff de l'ordonnanceur). **Jamais fusionnée** : elle appartient
@@ -413,7 +414,9 @@ microsecondes, et le nombre de sources. `codec`, `file_type` et `complete_source
 repliés dans `raw_meta`. `catalog/0008` identifie un fichier par `(network, native_id)`, avec pour
 clé `file_id`, un UUID v5 de ce couple, identique sur tous les nœuds ; `aich_hash` disparaît.
 `catalog/0009` rend au disque, par un `VACUUM`, la place que ces réécritures ont libérée.
-`catalog/0010` crée l'historique des sources (§8.3).
+`catalog/0010` crée l'historique des sources en plages de présence. `catalog/0011` le refait en
+points (§8.3) : il supprime `source_ranges` et `source_variants`, et recrée la seconde avec
+`node_id`, vide, à côté de `source_observations`. Aucune version livrée n'avait écrit ces plages.
 `local/0006` efface l'état du cycle de recherche, qui n'existe plus, et la carte des backoffs.
 `local/0007` identifie un téléchargement par le même `file_id` que le catalogue, et garde
 `(network, native_id)` : `file_id` est à sens unique, et la boucle doit retrouver le fichier.
@@ -490,45 +493,53 @@ La dernière étape du cycle de téléchargement lit les sources de chaque tél�
 l'instantané de file liste sans le dire terminé (`SourceClient.sources` : `GET
 /downloads/{hash}/clients` en pages, puis un `GET /clients/{ecid}` par source), et les écrit en une
 transaction par téléchargement. Elle vient après les étapes qui font avancer les téléchargements,
-pour qu'une erreur en lisant des sources n'en saute aucune.
+pour qu'une erreur en lisant des sources n'en saute aucune. Elle tourne au premier tour après un
+démarrage, puis au premier tour qui suit `download.sources_interval_seconds` (300 s par défaut)
+depuis son dernier départ, que la lecture ait abouti ou non : deux lectures sont donc espacées de
+l'intervalle, plus un tour au plus.
 
 ```mermaid
 flowchart LR
-  s["sources<br/>network, native_id"] --> v["source_variants<br/>file_id, name, software, role,<br/>contact_point, directly_reachable, raw_meta"]
-  v --> r["source_ranges<br/>node_id, first_seen_at, last_seen_at,<br/>received_bytes, transfer_counter"]
+  s["sources<br/>network, native_id"] --> v["source_variants<br/>file_id, name, software, role,<br/>contact_point, directly_reachable,<br/>raw_meta, node_id"]
+  v --> o["source_observations<br/>observed_at, transfer_counter"]
 ```
 
 - **`sources`**, l'identité : `source_id` est un UUID v5 de `network:native_id`, comme `file_id`
   mais sous son propre espace de noms. Sur eD2k, `native_id` est le user hash en minuscules ; un
   hash de 32 zéros, celui d'un pair qui ne l'a pas encore envoyé, ne fait pas une identité.
-- **`source_variants`**, un jeu de propriétés vu sur un fichier, dédupliqué par `content_hash`, sans
-  `node_id` : l'observateur appartient à la plage. `source_id` est `NULL` sans user hash.
-  `raw_meta` ne garde que les clés stables que l'adaptateur choisit : une vitesse, un rang de file
-  ou un compteur ouvrirait une plage à chaque lecture. Aucune colonne ne porte l'adresse d'un pair ;
-  `contact_point` est celle du serveur eD2k de la source.
-- **`source_ranges`**, la présence, en microsecondes. L'écrivain prend la dernière plage de ce nœud
-  pour la même source sur le même fichier (par `source_id`, ou par nom sans user hash) et l'allonge
-  si la variante est la même, si la lecture tombe dans les `3 x download.poll_interval_seconds` qui
-  suivent sa fin, et si le compteur d'octets d'aMule n'a pas baissé ; sinon il ouvre une plage.
-  Seule une plage `sending` cumule les octets reçus. Un état qu'aMule traverse de lui-même
-  (`idle`, `connecting`...) prend le groupe de la plage précédente, pour que sa remise à zéro
-  périodique n'ouvre pas de plage.
+- **`source_variants`**, un jeu de propriétés qu'un nœud a vu sur un fichier, `node_id` compris,
+  dédupliqué par `content_hash`, comme `observation_variants`. `source_id` est `NULL` sans user
+  hash. `raw_meta` ne garde que les clés stables que l'adaptateur choisit : une vitesse, un rang de
+  file ou un compteur ferait une variante à chaque lecture. Aucune colonne ne porte l'adresse d'un
+  pair ; `contact_point` est celle du serveur eD2k de la source.
+- **`source_observations`**, un point par variante et par lecture, en microsecondes, avec le
+  compteur d'octets qu'aMule tient pour ce client (reçus de lui tous fichiers confondus, remis à zéro
+  quand aMule recrée le client). La clé primaire `(variant_id, observed_at)` refuse un second point
+  au même instant ; l'écrivain l'insère avec `ON CONFLICT DO NOTHING`, jamais `OR IGNORE`, qui
+  avalerait aussi le `CHECK` du compteur (§8.2).
 
-`sources` et `source_variants` sont append-only. **`source_ranges` est la seule table du catalogue
-qui ne l'est pas** : ses triggers refusent tout `DELETE`, et un `UPDATE` sauf si la clé
-(`variant_id`, `node_id`, `first_seen_at`) est inchangée, qu'aucune de `last_seen_at`,
-`received_bytes` et `transfer_counter` ne baisse et, si l'une monte, qu'aucune plage plus récente du
-même `(variant_id, node_id)` n'existe. Un `UPDATE` qui ne change rien passe, ce dont `merge` a
-besoin. Le message est `source_ranges only grows its latest range`.
+Un état qu'aMule traverse de lui-même (`idle`, `connecting`...) prend le groupe du dernier point de
+la source sur ce fichier et ce nœud (par `source_id`, ou par nom sans user hash), si ce point tombe
+dans les `3 x (download.sources_interval_seconds + download.poll_interval_seconds)` qui précèdent la
+lecture et que son compteur ne dépasse pas celui de la lecture ; sinon le rôle est `undetermined`.
+Le délai tolère une lecture manquée.
 
-`merge` copie `sources` et `source_variants` comme les autres tables et réunit les plages : un
-upsert sur la clé qui garde le `MAX` de chaque valeur, dans l'ordre de `first_seen_at`, pour qu'une
-plage s'allonge avant que la suivante n'arrive. `MAX` étant commutatif et idempotent, la fusion
-reste indépendante de l'ordre et rejouable.
+Toutes ces tables sont append-only, comme le reste du catalogue. `merge` copie `sources` et
+`source_variants` comme les autres tables, et les points comme `observations`, la variante
+retrouvée par son `content_hash` : une union, indépendante de l'ordre et rejouable.
 
-Les alertes `new-source` et `reappeared` se décident sur les plages qu'une écriture vient d'ouvrir,
-une fois sa transaction validée, d'après l'historique de la source antérieur au début du tour
-([Historique des sources](../operate.md#historique-des-sources)).
+La webui ne stocke aucune période : elle les calcule à l'affichage, en SQL, par des fonctions de
+fenêtre sur les seuls points de l'intervalle de la page, 7 jours au plus. Une période réunit les
+points consécutifs d'une source sur un fichier et un nœud, et se coupe quand la variante change,
+quand l'écart entre deux points passe `webui.source_period_gap_seconds`, ou quand le compteur
+baisse. Seule une période `sending` montre des octets reçus : la croissance du compteur entre son
+premier et son dernier point.
+
+Les alertes `new-source` et `reappeared` se décident pour chaque lecture utile d'un téléchargement,
+une fois sa transaction validée, d'après les points de la source antérieurs au début du tour
+([Historique des sources](../operate.md#historique-des-sources)). Le dernier point de chaque
+variante avant ce début coûte une recherche sur la clé primaire, quelle que soit la longueur de
+l'historique.
 
 ## 9. Port-sync High-ID (optionnel)
 
@@ -610,8 +621,8 @@ démon sont
 - **Politique de matching 100 % en YAML** ; le moteur reste fixe et minimal.
 - **`domain/` est pur** ; toutes les I/O vivent dans `adapters/` ; le graphe de dépendances est un
   DAG.
-- **`catalog.db` est append-only, sauf `source_ranges` qui n'allonge que ses dernières plages, et
-  fusionnable ; `local.db` n'est jamais fusionnée.**
+- **`catalog.db` est append-only, chaque table, et fusionnable ; `local.db` n'est jamais
+  fusionnée.**
 - **Discipline de frontière** : absorber les échecs d'I/O externes attendus, laisser crasher le code
   interne testé.
 
