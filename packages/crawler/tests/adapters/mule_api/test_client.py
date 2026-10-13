@@ -627,7 +627,7 @@ async def test_downloads_reads_the_whole_queue_before_the_shared_files() -> None
         DownloadStatus(
             file=_KEY,
             bytes_done=4,
-            bytes_total=10,
+            size_bytes=10,
             completed=False,
             waiting_reason=None,
             failure_reason=None,

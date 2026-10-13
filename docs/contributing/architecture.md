@@ -363,7 +363,7 @@ Invariants porteurs (à ne pas violer) :
   disparu. Le client reste l'autorité : une ligne `failed` qui réapparaît dans sa liste repasse en
   `downloading`, sauf s'il y signale lui-même une erreur (raison `error`), et une ligne qui se
   complète notifie, même `failed`.
-- Le plancher ne supprime jamais rien, et `is_downloaded()` reste aveugle à l'état : une ligne
+- Le plancher ne supprime jamais rien, et `is_tracked()` reste aveugle à l'état : une ligne
   `failed` continue de bloquer la remise en file automatique, donc les fichiers terminés
   s'accumulent toujours sans borne et une nouvelle tentative manuelle passe par la suppression de la
   ligne.
@@ -395,7 +395,7 @@ flowchart LR
   (triggers `BEFORE UPDATE/DELETE -> ABORT`), pour que N nœuds fusionnent en un seul catalogue
   (`python -m p2pwatch.merge`). Les insertions sont **idempotentes** (`INSERT OR IGNORE` /
   `ON CONFLICT DO NOTHING`), donc sans danger en cas de redémarrage en pleine écriture.
-- **`local.db`** (version de schéma 9) : l'état d'exécution du nœud (identité, suivi des
+- **`local.db`** (version de schéma 10) : l'état d'exécution du nœud (identité, suivi des
   téléchargements, progression et backoff de l'ordonnanceur). **Jamais fusionnée** : elle appartient
   à un seul nœud.
 
@@ -425,7 +425,9 @@ points (§8.3) : il supprime `source_ranges` et `source_variants`, et recrée la
 d'attente et raison d'échec. `bytes_done` reste `NULL` sur les lignes existantes, dont on ignore
 la progression passée, pour que la première lecture n'invente pas un progrès.
 `local/0009` renomme la table et la colonne de l'empreinte de la politique, désormais
-`reevaluation_state.policy_fingerprint`, sans toucher à sa valeur.
+`reevaluation_state.policy_fingerprint`, sans toucher à sa valeur. `local/0010` renomme la clé de
+la carte des backoffs, désormais `backoff_states`, et la raison d'attente d'un fichier qu'aMule
+vérifie ou alloue, désormais `local_processing`.
 
 ### 8.1 Écrire une migration
 

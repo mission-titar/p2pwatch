@@ -67,10 +67,10 @@ from p2pwatch.application.run_download_cycle import (
 )
 from p2pwatch.application.search_tasks import SearchTasks
 from p2pwatch.application.search_worker import (
+    BackoffPolicy,
     BackoffRegistry,
     SearchWorker,
     WorkerDeps,
-    WorkerPolicy,
 )
 from p2pwatch.application.status_loop import StatusBoard, StatusLoopDeps, status_loop
 from p2pwatch.domain.observability.events import CrawlerStarted
@@ -159,14 +159,14 @@ def _sources_spacing(download: DownloadConfig) -> timedelta:
     return download.sources_interval + timedelta(seconds=download.poll_interval_seconds)
 
 
-def _build_policy(config: CrawlerConfig) -> WorkerPolicy:
-    """Unpacks the policy config into primitives for the application (dependency rule)."""
+def _backoff_policy(config: CrawlerConfig) -> BackoffPolicy:
+    """Unpacks the backoff config into primitives for the application (dependency rule)."""
     backoff = config.search.backoff
-    return WorkerPolicy(
-        backoff_base_seconds=backoff.base_seconds,
-        backoff_cap_seconds=backoff.cap_seconds,
-        backoff_factor=backoff.factor,
-        backoff_jitter_ratio=backoff.jitter_ratio,
+    return BackoffPolicy(
+        base_seconds=backoff.base_seconds,
+        cap_seconds=backoff.cap_seconds,
+        factor=backoff.factor,
+        jitter_ratio=backoff.jitter_ratio,
     )
 
 
@@ -224,7 +224,7 @@ class CrawlerApp:
             _human("Forced shutdown.")
             raise SystemExit(1)
 
-    async def _build_download_loop(
+    async def _build_download_deps(
         self,
         *,
         download_config: DownloadConfig,
@@ -446,9 +446,8 @@ class CrawlerApp:
             # SHARED backoff registry: built ONCE, RELOADED from scheduler_state
             # (backoff survives restart, spec §3/§7), injected into ALL workers
             # + passed to the search tasks that persist it. Single writer on the event loop.
-            policy = _build_policy(self._crawler_config)
-            backoff = BackoffRegistry(policy, self._clock, self._rng)
-            backoff.load_from(scheduler_state.load_channel_backoff())
+            backoff = BackoffRegistry(_backoff_policy(self._crawler_config), self._clock, self._rng)
+            backoff.load_from(scheduler_state.load_backoff_states())
             deps = WorkerDeps(
                 catalog=catalog_repo,
                 engine=engine,
@@ -487,7 +486,7 @@ class CrawlerApp:
             # ``_require_full_config`` gate at composition.
             download_config = self._crawler_config.download
             if download_config is not None:
-                download_deps = await self._build_download_loop(
+                download_deps = await self._build_download_deps(
                     download_config=download_config,
                     stack=stack,
                     catalog_repo=catalog_repo,

@@ -1,4 +1,4 @@
-"""The download loop: monitor → completions → new candidates → sources → sleep/wake (spec §5).
+"""The download loop: reconcile → completions → new candidates → sources → sleep/wake (spec §5).
 
 One serial task on the sole download session. ``run_download_cycle`` runs ONE iteration;
 ``download_loop`` repeats it until shutdown, waiting ``poll_interval`` or the download wake.
@@ -72,7 +72,7 @@ class DownloadRepository(Protocol):
     """STRUCTURAL Protocol of the downloads repo (local typing; the adapter satisfies it).
 
     Minimal Protocol so the application depends ONLY on what it needs
-    (record_queued/set_state/is_downloaded/mark_seen/expire_lost/active_states), without
+    (record_queued/set_state/is_tracked/mark_seen/expire_lost/tracked_states), without
     importing the adapter. The real ``SqliteDownloadRepository`` (and the test fake) satisfies it
     structurally. Stubs on ONE line (the ``def`` is covered when the class is created).
     """
@@ -83,18 +83,18 @@ class DownloadRepository(Protocol):
         self, file: FileKey, state: DownloadState, failure_reason: FailureReason | None = None
     ) -> None: ...
 
-    def is_downloaded(self, file: FileKey) -> bool: ...
+    def is_tracked(self, file: FileKey) -> bool: ...
 
     def mark_seen(self, statuses: Iterable[DownloadStatus]) -> None: ...
 
-    def expire_lost(self, max_age_seconds: float) -> tuple[FileKey, ...]: ...
+    def expire_lost(self, lost_after_seconds: float) -> tuple[FileKey, ...]: ...
 
-    def active_states(self) -> dict[FileKey, DownloadState]: ...
+    def tracked_states(self) -> dict[FileKey, DownloadState]: ...
 
-    def get_target_id(self, file: FileKey) -> str | None: ...
+    def queued_target_id(self, file: FileKey) -> str | None: ...
 
 
-class CatalogReader(Protocol):
+class DownloadCatalogReader(Protocol):
     """STRUCTURAL Protocol of the catalog READS the loop needs (DECISION D9).
 
     Subset of ``CatalogRepository`` (download_candidates, latest_observation, best_observation):
@@ -116,17 +116,16 @@ class DownloadDeps:
 
     ``targets`` serves the ``target_id → status`` lookup (pure policy). ``disk`` measures the
     free space of the filesystem the client writes to (metadata only, no file is opened).
-    ``catalog`` is typed to
-    the NARROW ``CatalogReader`` Protocol above: the loop depends only on the subset it reads
-    (consistent with the local ``DownloadRepository`` Protocol), so the minimal test fakes are
-    accepted.
+    ``catalog`` is typed to the NARROW ``DownloadCatalogReader`` Protocol above: the loop depends
+    only on the subset it reads (consistent with the local ``DownloadRepository`` Protocol), so the
+    minimal test fakes are accepted.
     """
 
     download_client: DownloadClient
     source_client: SourceClient
     downloads: DownloadRepository
     sources: SourceRepository
-    catalog: CatalogReader
+    catalog: DownloadCatalogReader
     targets: Sequence[TargetSegment]
     disk: DiskSpace
     min_free_bytes: int
@@ -136,7 +135,7 @@ class DownloadDeps:
     sources_interval: timedelta
     clock: Clock
     telemetry: Telemetry
-    edge: EdgeState = field(default_factory=EdgeState, kw_only=True)  # low-disk warning
+    disk_low_edge: EdgeState = field(default_factory=EdgeState, kw_only=True)  # low-disk warning
     sources_read_at: datetime | None = field(default=None, kw_only=True)  # the step's last start
 
 
@@ -157,17 +156,17 @@ def _target_status(targets: Sequence[TargetSegment], target_id: str) -> str:
     return "complete"
 
 
-async def _monitor(
+async def _reconcile_states(
     deps: DownloadDeps,
     states: dict[FileKey, DownloadState],
-    listed: tuple[DownloadStatus, ...],
+    listed_statuses: tuple[DownloadStatus, ...],
 ) -> None:
     """Reconciles ``downloads`` with the client's list: a failure it reports, else DOWNLOADING.
 
     ``FAILED`` is a wall only while the client reports a failure, so an erroneous download does
     not flap back each round; ``COMPLETED`` is one, so its notification never fires twice.
     """
-    for status in listed:
+    for status in listed_statuses:
         file = status.file
         current = states.get(file)
         if current is None:
@@ -175,17 +174,17 @@ async def _monitor(
         if current is DownloadState.COMPLETED:
             continue  # already notified: don't regress and don't re-fire
         failed = status.failure_reason is not None
-        target = DownloadState.FAILED if failed else DownloadState.DOWNLOADING
-        if current is not target:
-            deps.downloads.set_state(file, target, status.failure_reason)
-            states[file] = target
+        wanted_state = DownloadState.FAILED if failed else DownloadState.DOWNLOADING
+        if current is not wanted_state:
+            deps.downloads.set_state(file, wanted_state, status.failure_reason)
+            states[file] = wanted_state
 
 
 def _target_titles(deps: DownloadDeps, file: FileKey) -> tuple[TargetTitle, ...]:
     """Every download target of the file, else the one it was queued for (the decision may have
     dropped since), each with its title."""
     target_ids = [c.target_id for c in deps.catalog.download_candidates() if c.file == file]
-    if not target_ids and (queued := deps.downloads.get_target_id(file)) is not None:
+    if not target_ids and (queued := deps.downloads.queued_target_id(file)) is not None:
         target_ids = [queued]
     titles = {target.target_id: target.title for target in deps.targets}
     return tuple(TargetTitle(target_id, titles.get(target_id, "")) for target_id in target_ids)
@@ -221,14 +220,14 @@ async def _record_completion(
 async def _handle_completions(
     deps: DownloadDeps,
     states: dict[FileKey, DownloadState],
-    listed: tuple[DownloadStatus, ...],
+    listed_statuses: tuple[DownloadStatus, ...],
 ) -> None:
     """Completes each tracked file the client reports ``completed``.
 
     A ``failed`` file completes too: the TTL can condemn a download that had in fact finished.
     A repo failure on one file skips that file only.
     """
-    for status in listed:
+    for status in listed_statuses:
         file = status.file
         current = states.get(file)
         if not status.completed or current is None:
@@ -249,7 +248,7 @@ def _expire_lost(deps: DownloadDeps) -> None:
     """Fails the downloads the client has not listed for ``lost_after_seconds`` (spec §2).
 
     It bounds a client that accepts ``start()`` without ever listing the download.
-    ``is_downloaded`` stays state-blind, so a ``failed`` row still blocks automatic re-queuing;
+    ``is_tracked`` stays state-blind, so a ``failed`` row still blocks automatic re-queuing;
     the manual retry is deleting the row.
     """
     for file in deps.downloads.expire_lost(deps.lost_after_seconds):
@@ -260,20 +259,22 @@ def _expire_lost(deps: DownloadDeps) -> None:
         )
 
 
-async def _queue_new_candidates(deps: DownloadDeps, outstanding: int) -> None:
+async def _queue_new_candidates(deps: DownloadDeps, outstanding_bytes: int) -> None:
     """Replays tier=download decisions missing from ``downloads`` (step 3, spec §5).
 
-    ``outstanding`` is what the client still has to transfer, measured from the cycle's
-    snapshot; ``free`` is read once here. Both are MEASURED, never declared.
+    ``outstanding_bytes`` is what the client still has to transfer, measured from the cycle's
+    snapshot; ``free_bytes`` is read once here. Both are MEASURED, never declared.
     """
-    free = deps.disk.free_bytes()
-    await deps.telemetry.emit(FreeSpaceSampled(free_bytes=free))
-    if free >= deps.min_free_bytes:
-        deps.edge.leave("disk_low")
-    elif deps.edge.enter("disk_low"):
-        await deps.telemetry.emit(DiskSpaceLow(free_bytes=free, min_free_bytes=deps.min_free_bytes))
+    free_bytes = deps.disk.free_bytes()
+    await deps.telemetry.emit(FreeSpaceSampled(free_bytes=free_bytes))
+    if free_bytes >= deps.min_free_bytes:
+        deps.disk_low_edge.leave("disk_low")
+    elif deps.disk_low_edge.enter("disk_low"):
+        await deps.telemetry.emit(
+            DiskSpaceLow(free_bytes=free_bytes, min_free_bytes=deps.min_free_bytes)
+        )
     for candidate in deps.catalog.download_candidates():
-        if deps.downloads.is_downloaded(candidate.file):
+        if deps.downloads.is_tracked(candidate.file):
             continue
         observation = deps.catalog.latest_observation(candidate.file)
         if observation is None:
@@ -285,9 +286,9 @@ async def _queue_new_candidates(deps: DownloadDeps, outstanding: int) -> None:
         verdict = download_policy(
             tier="download",
             target_status=_target_status(deps.targets, candidate.target_id),
-            already_downloaded=False,
-            free_bytes=free,
-            outstanding_bytes=outstanding,
+            already_tracked=False,
+            free_bytes=free_bytes,
+            outstanding_bytes=outstanding_bytes,
             file_size=observation.size_bytes,
             min_free_bytes=deps.min_free_bytes,
         )
@@ -299,12 +300,12 @@ async def _queue_new_candidates(deps: DownloadDeps, outstanding: int) -> None:
         # record_queued ONLY here (sync DB write); _start_unlisted sends it (network I/O): the
         # write precedes the network, and a start that raises leaves it 'queued' for next round.
         deps.downloads.record_queued(candidate.file, candidate.target_id, observation.size_bytes)
-        outstanding += observation.size_bytes  # not listed by the client yet: carried in memory
+        outstanding_bytes += observation.size_bytes  # the client does not list it yet
         _logger.info("candidate file=%s queued for download", candidate.file.native_id)
         await deps.telemetry.emit(DownloadQueued(target_id=candidate.target_id))
 
 
-async def _start_unlisted(deps: DownloadDeps, listed: frozenset[FileKey]) -> None:
+async def _start_unlisted(deps: DownloadDeps, listed_files: frozenset[FileKey]) -> None:
     """Starts every ``queued`` or ``downloading`` download the client does not list (D13).
 
     A new download and a forgotten one are the same case. ``DownloadRejectedError`` fails THAT
@@ -312,9 +313,9 @@ async def _start_unlisted(deps: DownloadDeps, listed: frozenset[FileKey]) -> Non
     propagates and the caller skips the iteration.
     """
     # FRESH re-read: _queue_new_candidates wrote new QUEUED rows this cycle.
-    states = deps.downloads.active_states()
+    states = deps.downloads.tracked_states()
     for file, state in states.items():
-        if state not in {DownloadState.QUEUED, DownloadState.DOWNLOADING} or file in listed:
+        if state not in {DownloadState.QUEUED, DownloadState.DOWNLOADING} or file in listed_files:
             continue
         observation = deps.catalog.latest_observation(file)
         if observation is None:
@@ -339,7 +340,7 @@ class _AlertRound:
 
     started_at: datetime
     decided: set[SourceKey] = field(default_factory=set)
-    alerting: bool | None = None
+    alerts_allowed: bool | None = None
 
 
 async def _alert_sources(
@@ -352,10 +353,10 @@ async def _alert_sources(
             continue  # a name alone is too weak to carry an event
         if source in round_.decided:
             continue  # one event per source per round
-        if round_.alerting is None:
+        if round_.alerts_allowed is None:
             # The same answer at any point of the round: "before" excludes the round's writes.
-            round_.alerting = deps.sources.has_points_before(round_.started_at)
-        if not round_.alerting:
+            round_.alerts_allowed = deps.sources.has_points_before(round_.started_at)
+        if not round_.alerts_allowed:
             return  # the node's first recording round is a baseline, not news
         earlier = deps.sources.earlier_points(source, round_.started_at)
         alert = source_alert(reading.role, earlier, round_.started_at, deps.reappeared_after)
@@ -374,7 +375,7 @@ async def _alert_sources(
         await deps.telemetry.emit(event)
 
 
-async def _record_sources(deps: DownloadDeps, listed: tuple[DownloadStatus, ...]) -> None:
+async def _record_sources(deps: DownloadDeps, listed_statuses: tuple[DownloadStatus, ...]) -> None:
     """Records the sources of each of our downloads the client lists, completed ones aside, then
     alerts on them (stage 4, D8; source points, D5). A repo failure skips that download's; a
     client failure propagates.
@@ -385,9 +386,9 @@ async def _record_sources(deps: DownloadDeps, listed: tuple[DownloadStatus, ...]
     if last is not None and started_at - last < deps.sources_interval:
         return
     deps.sources_read_at = started_at
-    tracked = deps.downloads.active_states()
+    tracked = deps.downloads.tracked_states()
     round_ = _AlertRound(started_at)
-    for status in listed:
+    for status in listed_statuses:
         if status.completed or status.file not in tracked:
             continue
         read_at = deps.clock.now()
@@ -415,7 +416,7 @@ async def run_download_cycle(deps: DownloadDeps) -> None:
     - ``RepositoryError`` (persistence failure, NO client I/O) → ISOLATED PER STEP: a repo
       failure in one step must NOT starve the others. Each step that can raise
       ``RepositoryError`` is wrapped separately (log + ``continue`` to the next step), and the
-      sources step per download. ``_start_unlisted`` re-reads ``active_states`` FRESHLY, so it
+      sources step per download. ``_start_unlisted`` re-reads ``tracked_states`` FRESHLY, so it
       runs even if an upstream step partially failed. "NEVER abandon a stalled download": the
       1→2→3→4 order is preserved, each step is best-effort, and step 5, the sources, only
       observes, so it comes last (stage 4, D8).
@@ -437,21 +438,23 @@ async def run_download_cycle(deps: DownloadDeps) -> None:
     # Same guard as ``SearchWorker._ensure_connected``.
     try:
         await deps.download_client.connect()
-        listed = await deps.download_client.downloads()
+        listed_statuses = await deps.download_client.downloads()
     except _UNAVAILABLE as error:
         _logger.warning("download daemon unreachable (%s): iteration skipped, retry", error)
         return
-    listed_files = frozenset(status.file for status in listed)
+    listed_files = frozenset(status.file for status in listed_statuses)
     # Clamped at 0: a nascent download (total not known yet) must not invent free space.
-    outstanding = sum(max(status.bytes_total - status.bytes_done, 0) for status in listed)
-    # Step 1 - MONITOR: NO client I/O left (the list came from step 0) → only RepositoryError.
+    outstanding_bytes = sum(
+        max(status.size_bytes - status.bytes_done, 0) for status in listed_statuses
+    )
+    # Step 1 - RECONCILE: NO client I/O left (the list came from step 0) → only RepositoryError.
     # Every step shares that ONE snapshot: a second read could only contradict the first.
     try:
-        states = deps.downloads.active_states()
-        await _monitor(deps, states, listed)
+        states = deps.downloads.tracked_states()
+        await _reconcile_states(deps, states, listed_statuses)
     except RepositoryError as error:
-        _logger.error("download monitor repo failure (%s): step skipped, continues", error)
-    # Step 2 - COMPLETIONS: we RE-READ ``active_states`` FRESHLY (logic-download#2). Without it,
+        _logger.error("download reconciliation repo failure (%s): step skipped, continues", error)
+    # Step 2 - COMPLETIONS: we RE-READ ``tracked_states`` FRESHLY (logic-download#2). Without it,
     # a failure in step 1 left ``states`` frozen/empty → every completed file → ``states.get is
     # None`` → ignored → NO completion recorded the entire cycle. The re-read is also better
     # aligned than ``states={}`` with the nominal case (fresh states), at the cost of one extra
@@ -459,19 +462,19 @@ async def run_download_cycle(deps: DownloadDeps) -> None:
     # Steps 2 & 3 - NO client I/O → only RepositoryError possible, ISOLATED per step (I2):
     # a repo failure in one must NOT prevent the other from running.
     try:
-        fresh_states = deps.downloads.active_states()
-        await _handle_completions(deps, fresh_states, listed)
+        fresh_states = deps.downloads.tracked_states()
+        await _handle_completions(deps, fresh_states, listed_statuses)
     except RepositoryError as error:
         _logger.error("download completions repo failure (%s): step skipped, continues", error)
     # Step 2b - PRESENCE + TTL: stamp FIRST, condemn after. The reverse order would fail a row
     # the client is showing us right now.
     try:
-        deps.downloads.mark_seen(listed)
+        deps.downloads.mark_seen(listed_statuses)
         _expire_lost(deps)
     except RepositoryError as error:
         _logger.error("download presence repo failure (%s): step skipped, continues", error)
     try:
-        await _queue_new_candidates(deps, outstanding)
+        await _queue_new_candidates(deps, outstanding_bytes)
     except RepositoryError as error:
         _logger.error("download candidates repo failure (%s): step skipped, continues", error)
     except OSError as error:
@@ -479,7 +482,7 @@ async def run_download_cycle(deps: DownloadDeps) -> None:
         # the crawler, which also catalogues. Conservative, loud, and retried next cycle.
         _logger.error("output directory unmeasurable (%s): no candidate admitted, retry", error)
     # Step 4 - START: client I/O → ClientUnreachableError = dead daemon = ABORT. Re-reads
-    # ``active_states`` FRESHLY, so it runs even if step 3 partially failed.
+    # ``tracked_states`` FRESHLY, so it runs even if step 3 partially failed.
     try:
         await _start_unlisted(deps, listed_files)
     except ClientUnreachableError as error:
@@ -489,7 +492,7 @@ async def run_download_cycle(deps: DownloadDeps) -> None:
         _logger.error("download start repo failure (%s): step skipped, retry", error)
     # Step 5 - SOURCES: last, since it only observes; its failure must not skip a start (D8).
     try:
-        await _record_sources(deps, listed)
+        await _record_sources(deps, listed_statuses)
     except _UNAVAILABLE as error:
         _logger.warning("download daemon unreachable (%s): sources skipped, retry", error)
     except RepositoryError as error:

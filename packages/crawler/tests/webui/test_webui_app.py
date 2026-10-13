@@ -1201,13 +1201,14 @@ async def test_node_page_shows_a_downloads_lifecycle(
         conn.execute(
             "INSERT INTO downloads (file_id, network, native_id, target_id, state, queued_at,"
             " last_progress_at, waiting_reason, failure_reason) VALUES"
-            " (?, 'ed2k', ?, '062A', 'failed', '2026-10-10', '2026-10-11', 'local', 'error')",
+            " (?, 'ed2k', ?, '062A', 'failed', '2026-10-10', '2026-10-11', 'local_processing',"
+            " 'error')",
             (file_id(hash_), hash_),
         )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/node")
     assert "<td>2026-10-11</td>" in resp.text
-    assert "<td>local</td>" in resp.text
+    assert "<td>local_processing</td>" in resp.text
     assert "<td>error</td>" in resp.text
     assert "None" not in resp.text  # an unknown value shows blank
 

@@ -104,6 +104,9 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
   lieu de `🟢 instance online (mode full)` ou `(mode observer)`.
 - **Dans `local.db`, la table `backfill_state` devient `reevaluation_state`**, et sa colonne
   `policy_sha256` devient `policy_fingerprint`. Adaptez vos requêtes de la console SQL.
+- **Dans `local.db`, la raison d'attente `local` devient `local_processing`**, et la clé
+  `channel_backoff` de `scheduler_state` devient `backoff_states`. La table de `/node` montre la
+  nouvelle raison ; adaptez vos requêtes de la console SQL.
 - **La documentation** est désormais sur <https://mission-titar.github.io/p2pwatch/>.
 
 ## Retour arrière

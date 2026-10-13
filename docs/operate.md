@@ -325,8 +325,8 @@ La table des téléchargements de `/node` montre pourquoi un téléchargement av
   Vide tant qu'il ne l'a jamais vu augmenter, ce qui vaut aussi pour un téléchargement antérieur
   à la mise à niveau, jusqu'à son prochain progrès.
 - **Attente** : `no_source` (aucune source connue), `remote_queue` (des sources, aucune
-  n'envoie), `local` (aMule vérifie ou alloue le fichier), `paused` (en pause dans aMule),
-  `disk_full` (disque plein côté aMule).
+  n'envoie), `local_processing` (aMule vérifie ou alloue le fichier), `paused` (en pause dans
+  aMule), `disk_full` (disque plein côté aMule).
 - **Échec** : `error` (aMule signale le fichier en erreur), `rejected` (aMule a refusé de le
   démarrer), `lost` (aMule ne le montre plus depuis `download.lost_after_seconds`).
 
