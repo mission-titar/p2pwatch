@@ -1,13 +1,13 @@
 """Per-observation pipeline: record → delegate to the shared decision helper (spec §4).
 
 APPLICATION layer (orchestration spec §4): orchestrates PORTS (sync repos + pure engine
-+ async nudge hub), does no I/O itself. For EACH observation (spec §4):
++ async wake hub), does no I/O itself. For EACH observation (spec §4):
 
 1. ``record_observation`` ALWAYS (periodic re-observation is the goal, spec §3/§6).
 2. ``record_decision_if_changed`` (``decisions.py``) does the rest: evaluate via the pure
-   engine, compare against the last known verdict, and append (or retract) + emit + nudge
+   engine, compare against the last known verdict, and append (or retract) + emit + wake
    only on a genuine change. Identical verdict, or a file that was never matched and still
-   isn't → no write, no emit, no nudge.
+   isn't → no write, no emit, no wake.
 
 The repos are SYNCHRONOUS, called DIRECTLY (spec §3: sub-ms, no ``to_thread`` in the
 MVP; accepted consequence: DB writes are de facto serialized on the event loop).
@@ -24,9 +24,9 @@ from p2pwatch.application.decisions import record_decision_if_changed
 from p2pwatch.domain.observability.events import ObservationRecorded
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.ports.catalog_repository import CatalogRepository
-from p2pwatch.ports.decision_signal import DecisionSignal
 from p2pwatch.ports.repository_errors import RepositoryError
 from p2pwatch.ports.telemetry import Telemetry
+from p2pwatch.ports.wake_hub import WakeHub
 
 _logger = logging.getLogger("p2pwatch.application.record_observations")
 
@@ -36,7 +36,7 @@ async def record_observation(
     *,
     catalog: CatalogRepository,
     engine: MatchingEngine,
-    signal: DecisionSignal,
+    wake_hub: WakeHub,
     telemetry: Telemetry,
     client_name: str,
     channel: str,
@@ -53,7 +53,7 @@ async def record_observation(
             observation.to_candidate(),
             catalog=catalog,
             engine=engine,
-            signal=signal,
+            wake_hub=wake_hub,
             telemetry=telemetry,
         )
     except RepositoryError as error:

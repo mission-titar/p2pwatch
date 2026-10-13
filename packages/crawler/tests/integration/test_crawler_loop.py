@@ -22,7 +22,7 @@ from p2pwatch.adapters.config.crawler_config import (
     WebuiConfig,
 )
 from p2pwatch.adapters.config.yaml_loader import load_yaml
-from p2pwatch.adapters.decision_signal_asyncio import AsyncioDecisionSignal
+from p2pwatch.adapters.wake_hub_asyncio import AsyncioWakeHub
 from p2pwatch.composition.app import CrawlerApp
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.ports.client_status import ClientStatus
@@ -115,7 +115,7 @@ async def test_real_loop_runs_one_search_and_stops(amuled: ApiEndpoint, tmp_path
         matcher_config=matcher_config,
         clock=AsyncioClock(),
         rng=SeededRng(),
-        signal_hub=AsyncioDecisionSignal(),
+        wake_hub=AsyncioWakeHub(),
         policy_fingerprint="test-policy-fingerprint",
         client_factory=factory,
     )

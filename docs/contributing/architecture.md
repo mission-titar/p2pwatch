@@ -218,7 +218,7 @@ sequenceDiagram
   participant A as amuled
   participant C as catalog.db
   participant E as MatchingEngine
-  participant D as Download signal
+  participant D as WakeHub
 
   W->>A: search(keyword, channel, budget)
   A-->>W: FileObservation[]
@@ -228,7 +228,7 @@ sequenceDiagram
     E-->>W: MatchDecision | None
     alt decision
       W->>C: record_decision(target_id, tier, rule)
-      W-)D: nudge (if download tier)
+      W-)D: wake (if download tier)
     end
   end
 ```

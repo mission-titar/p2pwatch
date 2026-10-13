@@ -30,7 +30,7 @@ from p2pwatch.domain.observation import FileObservation
 from p2pwatch.ports.client_errors import SearchFailedError
 from p2pwatch.ports.repository_errors import RepositoryError
 from p2pwatch.ports.scheduler_state_repository import ChannelBackoff
-from tests.application.fakes import FakeRng, RecordingSignal, RecordingTelemetry, make_unreachable
+from tests.application.fakes import FakeRng, RecordingTelemetry, RecordingWakeHub, make_unreachable
 from tests.virtual_time import LoopClock, run_virtual
 
 _HOUR = 3600.0
@@ -128,8 +128,8 @@ def tasks(
     connection = open_local(tmp_path / "local.db")
     clock = LoopClock()
     backoff = BackoffRegistry(_POLICY, clock, FakeRng())
-    signal, telemetry = RecordingSignal(), RecordingTelemetry()
-    deps = WorkerDeps(catalog, engine, signal, backoff, telemetry)
+    wake_hub, telemetry = RecordingWakeHub(), RecordingTelemetry()
+    deps = WorkerDeps(catalog, engine, wake_hub, backoff, telemetry)
     yield _Tasks(deps, _SavesRecorded(connection))
     connection.close()
 

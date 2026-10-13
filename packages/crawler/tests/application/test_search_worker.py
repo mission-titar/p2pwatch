@@ -26,8 +26,8 @@ from tests.application.fakes import (
     FakeClock,
     FakeMuleClient,
     FakeRng,
-    RecordingSignal,
     RecordingTelemetry,
+    RecordingWakeHub,
     make_search_failed,
     make_unreachable,
 )
@@ -69,7 +69,7 @@ def _deps(
     return WorkerDeps(
         catalog=catalog,
         engine=engine,
-        signal=RecordingSignal(),
+        wake_hub=RecordingWakeHub(),
         backoff=backoff,
         telemetry=telemetry or RecordingTelemetry(),
     )

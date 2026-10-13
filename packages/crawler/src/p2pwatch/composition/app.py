@@ -77,12 +77,12 @@ from p2pwatch.domain.observability.events import CrawlerStarted
 from p2pwatch.ports.client_errors import ClientUnreachableError
 from p2pwatch.ports.clock import Clock, Rng
 from p2pwatch.ports.crawler_control import CrawlerControl
-from p2pwatch.ports.decision_signal import DecisionSignal
 from p2pwatch.ports.download_client import DownloadClient
 from p2pwatch.ports.mule_client import MuleClient
 from p2pwatch.ports.scheduler_state_repository import SchedulerStateRepository
 from p2pwatch.ports.source_client import SourceClient
 from p2pwatch.ports.telemetry import Telemetry
+from p2pwatch.ports.wake_hub import WakeHub
 from p2pwatch.webui.composition.app import build_app as build_webui_app
 
 _logger = logging.getLogger("p2pwatch.composition.app")
@@ -186,7 +186,7 @@ class CrawlerApp:
         matcher_config: MatcherConfig,
         clock: Clock,
         rng: Rng,
-        signal_hub: DecisionSignal,
+        wake_hub: WakeHub,
         policy_fingerprint: str,
         client_factory: MuleClientFactory = default_mule_client_factory,
         download_client_factory: DownloadClientFactory = default_download_client_factory,
@@ -198,7 +198,7 @@ class CrawlerApp:
         self._matcher_config = matcher_config
         self._clock = clock
         self._rng = rng
-        self._signal = signal_hub
+        self._wake_hub = wake_hub
         self._policy_fingerprint = policy_fingerprint
         self._client_factory = client_factory
         self._download_client_factory = download_client_factory
@@ -268,7 +268,7 @@ class CrawlerApp:
             sources_interval=download_config.sources_interval,
             clock=self._clock,
             telemetry=telemetry,
-            signal=self._signal,
+            wake_hub=self._wake_hub,
             shutdown=self._shutdown,
         )
 
@@ -295,7 +295,7 @@ class CrawlerApp:
         PROMPT SHUTDOWN OF ALL LOOPS: each sibling task must be cancelled EXPLICITLY -
         cancelling the search tasks does NOT cancel the status/download loops, which are
         their siblings in the ``TaskGroup``. Without this, shutdown would wait on each loop's
-        in-cycle sleep (``_sleep_or_nudge`` of the download watches ONLY poll/nudge, not
+        in-cycle sleep (``_sleep_or_wake`` of the download watches ONLY poll/wake, not
         ``self._shutdown``), and the ``shutdown_deadline`` armed
         above would fire a ``TimeoutError`` FIRST - a routine Ctrl-C would then force the
         exit instead of a clean shutdown. So we cancel the ENTIRE set of created tasks.
@@ -452,7 +452,7 @@ class CrawlerApp:
             deps = WorkerDeps(
                 catalog=catalog_repo,
                 engine=engine,
-                signal=self._signal,
+                wake_hub=self._wake_hub,
                 backoff=backoff,
                 telemetry=telemetry,
             )
@@ -505,13 +505,16 @@ class CrawlerApp:
             # current matcher, gated by a policy fingerprint stored in local.db (a
             # comment/whitespace-only edit to matcher.yml/targets.yml still triggers one
             # harmless extra pass, which then writes nothing before the marker updates).
-            # Runs to completion BEFORE the loops so tier actions (download nudge, notify)
+            # Runs to completion BEFORE the loops so tier actions (download wake, notify)
             # fire for the very first search, not a search later.
             summary = await run_backfill_if_policy_changed(
                 fingerprint=self._policy_fingerprint,
                 local_repo=local_repo,
                 run_backfill=lambda: reevaluate_catalog(
-                    catalog=catalog_repo, engine=engine, signal=self._signal, telemetry=telemetry
+                    catalog=catalog_repo,
+                    engine=engine,
+                    wake_hub=self._wake_hub,
+                    telemetry=telemetry,
                 ),
             )
             if summary is None:

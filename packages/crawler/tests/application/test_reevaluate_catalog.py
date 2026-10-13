@@ -1,7 +1,7 @@
 """Tests for the backfill use-case ``reevaluate_catalog`` (spec §7, plan Task 5).
 
 Real engine + real SQLite catalog repo (same convention as ``test_decisions.py``: "real
-repos on tmp_path"); only ``signal``/``telemetry`` are fakes (``RecordingSignal``/
+repos on tmp_path"); only ``wake_hub``/``telemetry`` are fakes (``RecordingWakeHub``/
 ``RecordingTelemetry``). Each hash under test is seeded via ``catalog.record_observation``
 first so it shows up in ``iter_reevaluation_rows`` (the source the backfill iterates).
 """
@@ -15,11 +15,11 @@ from catalog_matching.engine import DecisionRecord, Explanation, MatchDecision, 
 from p2pwatch.adapters.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.application import reevaluate_catalog as reevaluate_module
 from p2pwatch.application.reevaluate_catalog import ReevalSummary, reevaluate_catalog
-from p2pwatch.application.run_download_cycle import DOWNLOAD_NUDGE_SUBJECT
+from p2pwatch.application.run_download_cycle import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.retraction import RETRACTED_TIER
-from tests.application.fakes import RecordingSignal, RecordingTelemetry
+from tests.application.fakes import RecordingTelemetry, RecordingWakeHub
 from tests.catalog_rows import decision_tiers
 
 _HASH_DL = "31d6cfe0d16ae931b73c59d7e0c089c0"
@@ -60,16 +60,16 @@ async def test_two_changed_rows_are_all_evaluated_and_written(
     catalog.record_observation(_obs(_HASH_DL, _DL_NAME))  # never decided -> will change
     catalog.record_observation(_obs(_HASH_CAT, _CAT_NAME))  # never decided -> will change
     telemetry = RecordingTelemetry()
-    signal = RecordingSignal()
+    wake_hub = RecordingWakeHub()
     summary = await reevaluate_catalog(
-        catalog=catalog, engine=engine, signal=signal, telemetry=telemetry
+        catalog=catalog, engine=engine, wake_hub=wake_hub, telemetry=telemetry
     )
     assert summary == ReevalSummary(evaluated=2, written=2)
     tiers = dict(decision_tiers(catalog_connection))
     assert tiers == {_HASH_DL: "download", _HASH_CAT: "catalog"}
     assert len(telemetry.events) == 2
     # Iteration is ORDER BY native_id: "31d6..." sorts before "aaaa..." (ASCII '3' < 'a').
-    assert signal.signalled == [DOWNLOAD_NUDGE_SUBJECT]
+    assert wake_hub.woken_subjects == [DOWNLOAD_WAKE_SUBJECT]
 
 
 @pytest.mark.asyncio
@@ -85,14 +85,14 @@ async def test_unchanged_row_is_evaluated_but_not_written(
     # pre-seed the "already correct" verdict
     catalog.record_decision(FileKey(Network.ED2K, _HASH_CAT), decisions[0])
     telemetry = RecordingTelemetry()
-    signal = RecordingSignal()
+    wake_hub = RecordingWakeHub()
     summary = await reevaluate_catalog(
-        catalog=catalog, engine=engine, signal=signal, telemetry=telemetry
+        catalog=catalog, engine=engine, wake_hub=wake_hub, telemetry=telemetry
     )
     assert summary == ReevalSummary(evaluated=1, written=0)
     assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 1
     assert telemetry.events == []
-    assert signal.signalled == []
+    assert wake_hub.woken_subjects == []
 
 
 @pytest.mark.asyncio
@@ -112,9 +112,9 @@ async def test_repository_error_on_one_row_is_absorbed_and_sweep_continues(
         " BEGIN SELECT RAISE(ABORT, 'injected failure'); END"
     )
     telemetry = RecordingTelemetry()
-    signal = RecordingSignal()
+    wake_hub = RecordingWakeHub()
     summary = await reevaluate_catalog(
-        catalog=catalog, engine=engine, signal=signal, telemetry=telemetry
+        catalog=catalog, engine=engine, wake_hub=wake_hub, telemetry=telemetry
     )
     assert summary == ReevalSummary(evaluated=2, written=1)
     assert decision_tiers(catalog_connection) == [(_HASH_CAT, "catalog")]
@@ -127,13 +127,13 @@ async def test_empty_catalogue_yields_zero_summary(
     catalog: SqliteCatalogRepository, engine: MatchingEngine
 ) -> None:
     telemetry = RecordingTelemetry()
-    signal = RecordingSignal()
+    wake_hub = RecordingWakeHub()
     summary = await reevaluate_catalog(
-        catalog=catalog, engine=engine, signal=signal, telemetry=telemetry
+        catalog=catalog, engine=engine, wake_hub=wake_hub, telemetry=telemetry
     )
     assert summary == ReevalSummary(evaluated=0, written=0)
     assert telemetry.events == []
-    assert signal.signalled == []
+    assert wake_hub.woken_subjects == []
 
 
 @pytest.mark.asyncio
@@ -148,9 +148,9 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
     catalog.record_decision(
         FileKey(Network.ED2K, _HASH_MULTI), _legacy_row("001A", "keroro_large", "catalog")
     )
-    telemetry, signal = RecordingTelemetry(), RecordingSignal()
+    telemetry, wake_hub = RecordingTelemetry(), RecordingWakeHub()
     summary = await reevaluate_catalog(
-        catalog=catalog, engine=engine, signal=signal, telemetry=telemetry
+        catalog=catalog, engine=engine, wake_hub=wake_hub, telemetry=telemetry
     )
     assert summary == ReevalSummary(evaluated=1, written=3)  # 062A + 062B + retract 001A
     assert catalog.last_decisions(FileKey(Network.ED2K, _HASH_MULTI)) == {
@@ -169,9 +169,9 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
     # §10: the old whole-file retraction sentinel (target_id="") is invisible to the set-diff.
     catalog.record_observation(_obs(_HASH_MULTI, _MULTI_NAME))
     catalog.record_decision(FileKey(Network.ED2K, _HASH_MULTI), _legacy_row("", "", RETRACTED_TIER))
-    telemetry, signal = RecordingTelemetry(), RecordingSignal()
+    telemetry, wake_hub = RecordingTelemetry(), RecordingWakeHub()
     summary = await reevaluate_catalog(
-        catalog=catalog, engine=engine, signal=signal, telemetry=telemetry
+        catalog=catalog, engine=engine, wake_hub=wake_hub, telemetry=telemetry
     )
     assert summary == ReevalSummary(evaluated=1, written=2)  # only 062A + 062B; "" untouched
     assert set(catalog.last_decisions(FileKey(Network.ED2K, _HASH_MULTI))) == {"062A", "062B"}
@@ -190,7 +190,7 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
     catalog.record_observation(_obs(_HASH_DL, _DL_NAME))
     catalog.record_observation(_obs(_HASH_DL, "random.txt"))  # latest name matches nothing
     summary = await reevaluate_catalog(
-        catalog=catalog, engine=engine, signal=RecordingSignal(), telemetry=RecordingTelemetry()
+        catalog=catalog, engine=engine, wake_hub=RecordingWakeHub(), telemetry=RecordingTelemetry()
     )
     assert summary == ReevalSummary(evaluated=1, written=1)
     assert catalog.last_decisions(FileKey(Network.ED2K, _HASH_DL)) == {
@@ -213,7 +213,7 @@ async def test_progress_is_logged_at_each_multiple_of_the_cadence_only(
         await reevaluate_catalog(
             catalog=catalog,
             engine=engine,
-            signal=RecordingSignal(),
+            wake_hub=RecordingWakeHub(),
             telemetry=RecordingTelemetry(),
         )
     assert [record.getMessage() for record in caplog.records] == [

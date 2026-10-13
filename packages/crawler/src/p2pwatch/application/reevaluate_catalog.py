@@ -4,7 +4,7 @@ APPLICATION layer. Iterates every catalogued hash's LATEST observation
 (``catalog.iter_reevaluation_rows()``), rebuilds a :class:`FileCandidate` via
 ``candidate_from_fields`` (the single conversion, spec re-evaluation §6), and delegates to
 the shared ``record_decision_if_changed`` helper (``decisions.py``, which judges the hash on
-all its known names) so retraction + notify/download nudges happen identically to the live
+all its known names) so retraction + notify/download wakes happen identically to the live
 per-observation path (spec §4). Only the counting + per-row error absorption are specific
 to the backfill.
 
@@ -19,9 +19,9 @@ from catalog_matching.engine import MatchingEngine
 from p2pwatch.application.decisions import record_decision_if_changed
 from p2pwatch.domain.observation import candidate_from_fields
 from p2pwatch.ports.catalog_repository import CatalogRepository
-from p2pwatch.ports.decision_signal import DecisionSignal
 from p2pwatch.ports.repository_errors import RepositoryError
 from p2pwatch.ports.telemetry import Telemetry
+from p2pwatch.ports.wake_hub import WakeHub
 
 _logger = logging.getLogger("p2pwatch.application.reevaluate_catalog")
 
@@ -46,7 +46,7 @@ async def reevaluate_catalog(
     *,
     catalog: CatalogRepository,
     engine: MatchingEngine,
-    signal: DecisionSignal,
+    wake_hub: WakeHub,
     telemetry: Telemetry,
 ) -> ReevalSummary:
     """Re-evaluate every catalogued hash's latest observation against ``engine``.
@@ -68,7 +68,7 @@ async def reevaluate_catalog(
                 candidate,
                 catalog=catalog,
                 engine=engine,
-                signal=signal,
+                wake_hub=wake_hub,
                 telemetry=telemetry,
             )
         except RepositoryError as error:
