@@ -442,7 +442,7 @@ def _client_detail(**overrides: Any) -> dict[str, Any]:
 def test_a_source_maps_to_a_reading_of_its_row_and_its_detail() -> None:
     assert map_source(_client_row(), _client_detail()) == SourceReading(
         source=SourceKey(Network.ED2K, "1f2e3a4b5c6d7e8f90a1b2c3d4e5f607"),
-        name="AnimuseeFMR",
+        source_name="AnimuseeFMR",
         software="emule 0.50a",
         role=SourceRole.QUEUED,
         contact_point="176.103.48.36:4184",
@@ -568,7 +568,7 @@ def test_a_source_without_a_usable_user_hash_has_no_identity(user_hash: str | No
     reading = map_source(_client_row(user_hash=user_hash), _client_detail())
 
     assert reading.source is None
-    assert reading.name == "AnimuseeFMR"
+    assert reading.source_name == "AnimuseeFMR"
 
 
 def test_a_source_without_a_user_hash_key_has_no_identity() -> None:
@@ -593,7 +593,7 @@ def test_a_sources_software_joins_its_client_and_version(
 def test_a_sparse_row_and_detail_keep_the_meta_keys_they_carry_and_read_unknown() -> None:
     reading = map_source({"role": "downloading_from", "name": "", "ident_state": "unknown"}, {})
 
-    assert (reading.name, reading.software) == (None, None)
+    assert (reading.source_name, reading.software) == (None, None)
     assert (reading.contact_point, reading.connectable) == (None, None)
     assert reading.raw_meta == (("ident_state", "unknown"),)
     assert reading.session_received_bytes == 0

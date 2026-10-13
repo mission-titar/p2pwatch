@@ -70,7 +70,7 @@ def test_earlier_points_count_neither_the_rounds_points_nor_unknown_ones(
     _points(catalog, _T0 + timedelta(hours=2), role="undetermined")
     _points(catalog, round_started_at, round_started_at + timedelta(seconds=30))
     assert repository.earlier_points(_KEY, round_started_at) == EarlierPoints(
-        has_useful_point=False, last_known_at=_T0 + timedelta(seconds=30)
+        has_useful_point=False, latest_known_at=_T0 + timedelta(seconds=30)
     )
 
 
@@ -82,7 +82,7 @@ def test_earlier_points_read_this_sources_points_on_every_file_of_this_node_only
     _points(catalog, later, user_hash=_OTHER_USER)
     _points(catalog, later, node_id="n2")
     assert repository.earlier_points(_KEY, later + timedelta(seconds=30)) == EarlierPoints(
-        has_useful_point=True, last_known_at=_T0
+        has_useful_point=True, latest_known_at=_T0
     )
     assert repository.earlier_points(_OTHER_KEY, later) == EarlierPoints(False, None)
 

@@ -174,7 +174,7 @@ def map_source(row: dict[str, Any], detail: dict[str, Any]) -> SourceReading:
     software = (_string(row.get("software")), _string(row.get("software_version")))
     return SourceReading(
         source=_source_key(row.get("user_hash")),
-        name=_string(row.get("name")),
+        source_name=_string(row.get("name")),
         software=" ".join(part for part in software if part) or None,
         role=_source_role(row.get("download_state")) if asked else SourceRole.STANDBY,
         contact_point=_contact_point(detail),
@@ -192,7 +192,7 @@ def merge_duplicate_sources(readings: Iterable[SourceReading]) -> tuple[SourceRe
     larger ``session_received_bytes`` (D7). A reading with neither is never merged."""
     merged: dict[object, SourceReading] = {}
     for reading in readings:
-        identity = reading.source or reading.name or object()
+        identity = reading.source or reading.source_name or object()
         held = merged.get(identity)
         if held is not None:
             best = min(held, reading, key=lambda kept: _INFORMATIVE_ROLES.index(kept.role))

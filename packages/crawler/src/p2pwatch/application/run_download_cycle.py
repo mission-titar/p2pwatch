@@ -363,7 +363,7 @@ async def _alert_sources(
         round_.decided.add(source)
         if alert is None:
             continue
-        source_name, filename = reading.name, _best_filename(deps, file)
+        source_name, filename = reading.source_name, _best_filename(deps, file)
         target_titles = _target_titles(deps, file)
         event: SourceFirstUseful | SourceReappeared = (
             SourceFirstUseful(source, source_name, file, filename, target_titles)

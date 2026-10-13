@@ -115,7 +115,7 @@ class SourceReading:
     role the writer carries from the source's latest point (D3)."""
 
     source: SourceKey | None
-    name: str | None
+    source_name: str | None
     software: str | None
     role: SourceRole | None
     contact_point: str | None

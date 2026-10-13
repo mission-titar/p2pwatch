@@ -162,7 +162,9 @@ class FakeSourceRepo:
 
     def earlier_points(self, source: SourceKey, before: datetime) -> EarlierPoints:
         self.asked.append((source, before))
-        return self._history.get(source, EarlierPoints(has_useful_point=False, last_known_at=None))
+        return self._history.get(
+            source, EarlierPoints(has_useful_point=False, latest_known_at=None)
+        )
 
     def has_points_before(self, before: datetime) -> bool:
         self.baselines.append(before)
@@ -1571,9 +1573,9 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
     clock = FakeClock()
     start = clock.now()
     history = {
-        _PEER: EarlierPoints(has_useful_point=True, last_known_at=start - timedelta(hours=13)),
+        _PEER: EarlierPoints(has_useful_point=True, latest_known_at=start - timedelta(hours=13)),
         _OTHER_PEER: EarlierPoints(
-            has_useful_point=True, last_known_at=start - timedelta(seconds=30)
+            has_useful_point=True, latest_known_at=start - timedelta(seconds=30)
         ),
     }
     kept: dict[str, tuple[RecordedReading, ...]] = {
