@@ -66,6 +66,11 @@ files = [
   "packages/amule_bump/tests",
 ]
 
+# For editors' and Serena's language server, not the gate: without the venv, no import resolves.
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+
 # Task runner (poethepoet). The gate lives here as the single source of truth; the
 # pre-push hook and CI both call these tasks. `uv run poe` lists them with their help.
 [tool.poe.tasks]
