@@ -347,14 +347,14 @@ class CrawlerApp:
             shutdown=self._shutdown,
         )
         app = build_webui_app(
-            catalog_db=Path(self._crawler_config.catalog_db_path),
-            local_db=Path(self._crawler_config.local_db_path),
+            catalog_db_path=Path(self._crawler_config.catalog_db_path),
+            local_db_path=Path(self._crawler_config.local_db_path),
             matcher_config=self._matcher_config,
-            targets=self._targets,
+            target_segments=self._targets,
             templates_dir=webui_pkg_dir / "adapters" / "templates",
             static_dir=webui_pkg_dir / "adapters" / "static",
             control=control,
-            status=status_board,
+            status_readings=status_board,
             amule_url=self._crawler_config.webui.amule_url,
             clock=self._clock,
             source_period_gap=self._crawler_config.webui.source_period_gap,

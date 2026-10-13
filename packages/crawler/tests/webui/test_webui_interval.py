@@ -45,9 +45,9 @@ def test_an_interval_up_to_7_days_is_kept() -> None:
 def test_an_interval_past_7_days_keeps_the_7_ending_at_its_to() -> None:
     to = datetime(2026, 10, 1, tzinfo=UTC)
     interval = requested_interval("2026-09-01 00:00:00Z", "2026-10-01 00:00:00Z", _NOW)
-    assert interval == Interval(to - 7 * _DAY, to, cut=True)
+    assert interval == Interval(to - 7 * _DAY, to, clamped=True)
     second_more = requested_interval("2026-09-23 23:59:59Z", "2026-10-01 00:00:00Z", _NOW)
-    assert second_more == Interval(to - 7 * _DAY, to, cut=True)
+    assert second_more == Interval(to - 7 * _DAY, to, clamped=True)
 
 
 def test_a_missing_to_is_now_and_a_missing_from_is_7_days_before_to() -> None:
@@ -66,4 +66,4 @@ def test_a_from_not_before_to_counts_as_absent(raw_from: str) -> None:
 
 def test_a_cut_interval_shifts_by_the_7_days_it_shows_and_is_no_longer_cut() -> None:
     to = datetime(2026, 10, 1, tzinfo=UTC)
-    assert Interval(to - 7 * _DAY, to, cut=True).shifted(1) == Interval(to, to + 7 * _DAY)
+    assert Interval(to - 7 * _DAY, to, clamped=True).shifted(1) == Interval(to, to + 7 * _DAY)

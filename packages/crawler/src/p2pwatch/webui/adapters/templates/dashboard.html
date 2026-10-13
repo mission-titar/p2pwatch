@@ -37,7 +37,7 @@
 
 <section>
   <h2>Crawl</h2>
-  <p>The crawl is {{ crawl }}.</p>
+  <p>The crawl is {{ crawl_state }}.</p>
   <form method="post" action="/controls/pause">
     <button type="submit">Pause crawl</button>
   </form>
@@ -72,7 +72,7 @@
       </tr>
     </thead>
     <tbody>
-      {% for row in rows %}
+      {% for row in coverage_rows %}
       <tr>
         <td><a href="/targets/{{ row.target_id }}">{{ row.target_id }}</a></td>
         <td>{{ row.title }}</td>

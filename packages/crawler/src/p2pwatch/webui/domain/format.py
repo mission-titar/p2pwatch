@@ -73,9 +73,9 @@ def short_timestamp(iso: str) -> str:
     return f"{date_part} {time_part[:5]}Z"
 
 
-def seasonal_id(*, season: int, seasonal_number: int, letter: str) -> str:
+def seasonal_locator(*, season: int, seasonal_number: int, letter: str) -> str:
     """Seasonal locator for display, e.g. ``S02E11A`` (zero-padded season/episode + segment
-    letter). Complements the canonical ``target_id`` (e.g. ``062A``, absolute-numbered) —
+    letter). Complements the canonical ``target_id`` (e.g. ``062A``, absolute-numbered):
     operators often think in season/episode terms rather than the absolute numbering."""
     return f"S{season:02d}E{seasonal_number:02d}{letter.upper()}"
 
