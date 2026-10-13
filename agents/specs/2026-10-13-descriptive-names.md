@@ -200,7 +200,10 @@ breaks `crawler.yml`.*
 The webui's Jinja takes `StrictUndefined`. *Reason: today a template reading a missing name renders an empty
 string, and the language server does not see templates, so a rename would blank a column silently.* The spec
 review's probe: strict, the 324 webui tests pass on today's tree, and each of the templates' 154 attribute
-accesses, renamed, fails a test. It is block 20, before any rename a template reads.
+accesses, renamed, fails a test. (Corrected: block 20 renamed each of the 209 attribute accesses one at a time;
+three, in `{% else %}` branches, failed no test. Block 20 tests the two reachable ones; the third,
+`sources.html:26`, is dead, since a `/sources` row always has a user hash.) It is block 20, before any rename a
+template reads.
 
 ### D7. The repositories take the `Clock` port
 
