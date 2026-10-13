@@ -29,7 +29,7 @@ def test_empty_violations_yields_valid_sarif_with_no_results() -> None:
 
 def test_one_violation_yields_one_error_result_pointing_at_the_vex_file() -> None:
     violation = Violation(
-        cve="CVE-2026-11940",
+        advisory_id="CVE-2026-11940",
         message="tarfile is imported at src/p2pwatch/foo.py",
         location="packages/crawler/src/p2pwatch/foo.py",
     )
@@ -46,7 +46,7 @@ def test_one_violation_yields_one_error_result_pointing_at_the_vex_file() -> Non
 
     message = cast(dict[str, object], result["message"])
     text = cast(str, message["text"])
-    assert violation.cve in text
+    assert violation.advisory_id in text
 
     locations = cast(list[dict[str, object]], result["locations"])
     physical = cast(dict[str, object], locations[0]["physicalLocation"])

@@ -3,7 +3,7 @@
 A ``not_affected`` claim asserts a fact about a live vulnerability. Once Grype
 stops reporting that vulnerability for the image, the claim has outlived its
 subject and should be pruned. Given a Syft SBOM (scanned by Grype) and the VEX
-document authored for that image, this lists every claimed CVE that Grype no
+document authored for that image, this lists every claimed advisory that Grype no
 longer reports. In ``fail`` mode a stale entry prints a GitHub ``::error::``
 annotation and exits non-zero; in ``sarif`` mode the same entries are written to
 ``--output`` as a SARIF report (always exit zero).
@@ -37,17 +37,17 @@ def main(argv: list[str] | None = None, runner: GrypeRunner | None = None) -> in
     reported = runner.run(Path(args.sbom))
     vex_relpath = repo.display_path(Path(args.vex))
     stale = [
-        Violation(cve, "no longer reported by Grype", vex_relpath)
-        for cve in load_claims(Path(args.vex))
-        if cve not in reported
+        Violation(advisory_id, "no longer reported by Grype", vex_relpath)
+        for advisory_id in load_claims(Path(args.vex))
+        if advisory_id not in reported
     ]
 
     if args.format == "sarif":
         Path(args.output).write_text(json.dumps(build_sarif(_RULE_ID, stale, vex_relpath)))
         return 0
 
-    for v in stale:
-        print(f"::error::{v.cve}: {v.message} ({v.location})")
+    for violation in stale:
+        print(f"::error::{violation.advisory_id}: {violation.message} ({violation.location})")
     return 1 if stale else 0
 
 

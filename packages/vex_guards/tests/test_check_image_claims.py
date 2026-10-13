@@ -7,10 +7,10 @@ import pytest
 from vex_guards import check_image_claims, registry
 from vex_guards.descriptors import (
     DeclaredMinVersion,
+    DpkgMinVersion,
+    DpkgPackageAbsent,
     Guard,
     ModuleNotImported,
-    PackageAbsent,
-    PackageMinVersion,
 )
 from vex_guards.repo import repo_root
 
@@ -27,9 +27,9 @@ _CLAIMED_SOURCE_CVE = "CVE-2025-15366"
 # Three guards, one per branch of main's filter: an image guard whose CVE is claimed (kept),
 # a source guard whose CVE is claimed (scoped out), an image guard nothing claims (skipped).
 _GUARDS: dict[str, Guard] = {
-    _CLAIMED_IMAGE_CVE: PackageAbsent("nghttp2"),
+    _CLAIMED_IMAGE_CVE: DpkgPackageAbsent("nghttp2"),
     _CLAIMED_SOURCE_CVE: ModuleNotImported("imaplib"),
-    "CVE-UNCLAIMED": PackageMinVersion("curl", "99.0"),
+    "CVE-UNCLAIMED": DpkgMinVersion("curl", "99.0"),
     "CVE-2006-2691": DeclaredMinVersion("amule", "2.1.2"),
 }
 

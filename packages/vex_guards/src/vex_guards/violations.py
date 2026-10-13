@@ -5,6 +5,6 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Violation:
-    cve: str
+    advisory_id: str
     message: str
     location: str  # repo-relative path pointing at the offending file

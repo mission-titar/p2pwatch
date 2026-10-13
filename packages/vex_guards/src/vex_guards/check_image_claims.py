@@ -39,19 +39,23 @@ def main(argv: list[str] | None = None) -> int:
     # Iterate GUARDS so the value binds the narrowed loop variable: is_image_guard
     # is a TypeGuard, so ``guard`` types as ImageGuard here with no cast/ignore.
     guards: dict[str, ImageGuard] = {
-        cve: guard for cve, guard in GUARDS.items() if cve in claims and is_image_guard(guard)
+        advisory_id: guard
+        for advisory_id, guard in GUARDS.items()
+        if advisory_id in claims and is_image_guard(guard)
     }
     vex_relpath = repo.display_path(Path(args.vex))
     sbom = Path(args.sbom)
-    raw = evaluate_image_guards(guards, load_dpkg_packages(sbom), load_declared_components(sbom))
-    violations = [dataclasses.replace(v, location=vex_relpath) for v in raw]
+    unlocated = evaluate_image_guards(
+        guards, load_dpkg_packages(sbom), load_declared_components(sbom)
+    )
+    violations = [dataclasses.replace(violation, location=vex_relpath) for violation in unlocated]
 
     if args.format == "sarif":
         Path(args.output).write_text(json.dumps(build_sarif(_RULE_ID, violations, vex_relpath)))
         return 0
 
-    for v in violations:
-        print(f"::error::{v.cve}: {v.message} ({v.location})")
+    for violation in violations:
+        print(f"::error::{violation.advisory_id}: {violation.message} ({violation.location})")
     return 1 if violations else 0
 
 
