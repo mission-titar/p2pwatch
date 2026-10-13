@@ -5,11 +5,11 @@ import textwrap
 from amule_bump.dockerfile import Pin
 from amule_bump.github import UPSTREAM, Repo
 
-GITHUB_BODY_LIMIT = 65536
-CHANGELOG_LIMIT = 20_000
-DIFF_LIMIT = 18_000
+GITHUB_BODY_MAX_CHARACTERS = 65536
+CHANGELOG_MAX_CHARACTERS = 20_000
+DIFF_MAX_CHARACTERS = 18_000
 WATCHED_FILES = ("cmake/options.cmake", "docs/api/REFERENCE.md")
-TRUNCATED = "[truncated, see the compare link above]"
+TRUNCATION_NOTICE = "[truncated, see the compare link above]"
 
 CHECKLIST = """## Checklist
 
@@ -22,7 +22,7 @@ CHECKLIST = """## Checklist
 """
 
 
-def build_body(repo: Repo, old: Pin, new: Pin) -> str:
+def build_pull_request_body(repo: Repo, old: Pin, new: Pin) -> str:
     upstream = f"https://github.com/{UPSTREAM}"
     parts = [
         f"Bumps aMule from {old.version} to [{new.version}]({upstream}/releases/tag/{new.version})"
@@ -68,7 +68,7 @@ def clip(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
     kept = text[:limit].rpartition("\n")[0]
-    return f"{kept}\n{TRUNCATED}\n"
+    return f"{kept}\n{TRUNCATION_NOTICE}\n"
 
 
 def fenced(text: str, language: str) -> str:
@@ -82,11 +82,11 @@ def _changelog_part(repo: Repo, new: Pin) -> str:
     section = changelog_section(repo.file(new.version, "docs/CHANGELOG.md"), new.version)
     if not section:
         return f"No `## Version {new.version}` section in upstream's docs/CHANGELOG.md."
-    return fenced(clip(wrap(section), CHANGELOG_LIMIT), "text")
+    return fenced(clip(wrap(section), CHANGELOG_MAX_CHARACTERS), "text")
 
 
 def _diff_part(repo: Repo, old: Pin, new: Pin, path: str) -> str:
     diff = tag_diff(repo, old, new, path)
     if not diff:
         return "No change between the two tags."
-    return fenced(clip(diff, DIFF_LIMIT), "diff")
+    return fenced(clip(diff, DIFF_MAX_CHARACTERS), "diff")

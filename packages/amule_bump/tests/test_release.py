@@ -1,7 +1,7 @@
 import pytest
 
 from amule_bump import BumpError
-from amule_bump.release import is_newer, latest_release, peeled_commit
+from amule_bump.release import is_newer, latest_release_tag, peeled_commit
 from fakes import FakeRepo
 
 TAG_OBJECT = "6ccbfdf785390c25c8b01652684f5b06fb18e034"
@@ -10,14 +10,14 @@ COMMIT = "909d304d993ee07df6c6f6acf501a6d791d53666"
 
 def test_latest_release_returns_the_tag_name() -> None:
     repo = FakeRepo(json={"releases/latest": {"tag_name": "3.1.0"}})
-    assert latest_release(repo) == "3.1.0"
+    assert latest_release_tag(repo) == "3.1.0"
 
 
 @pytest.mark.parametrize("tag", ["v3.1.0", "3.1", "3.1.0-rc1", "3.1.0\n", "../3.1.0"])
 def test_latest_release_rejects_a_tag_that_is_not_a_plain_version(tag: str) -> None:
     repo = FakeRepo(json={"releases/latest": {"tag_name": tag}})
     with pytest.raises(BumpError, match="unexpected upstream release tag"):
-        latest_release(repo)
+        latest_release_tag(repo)
 
 
 @pytest.mark.parametrize(
