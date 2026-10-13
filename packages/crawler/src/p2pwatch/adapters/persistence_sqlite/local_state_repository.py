@@ -8,8 +8,9 @@ import sqlite3
 import uuid
 from contextlib import suppress
 
-from p2pwatch.adapters.persistence_sqlite.connection import Clock, utc_iso, utc_now
+from p2pwatch.adapters.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.persistence_sqlite.errors import wrap_sqlite_errors
+from p2pwatch.ports.clock import Clock
 
 _SELECT_NODE_ID = "SELECT value FROM node_runtime WHERE key = 'node_id'"
 
@@ -30,7 +31,7 @@ ON CONFLICT (id) DO UPDATE SET policy_sha256 = excluded.policy_sha256
 class SqliteLocalStateRepository:
     """SQLite implementation of the ``LocalStateRepository`` port (STRUCTURAL satisfaction)."""
 
-    def __init__(self, connection: sqlite3.Connection, *, clock: Clock = utc_now) -> None:
+    def __init__(self, connection: sqlite3.Connection, *, clock: Clock) -> None:
         self._connection = connection
         self._clock = clock
 
@@ -43,14 +44,14 @@ class SqliteLocalStateRepository:
             generated = str(uuid.uuid4())
             # Stamp computed BEFORE the BEGIN (same hygiene as the catalog repo): a
             # buggy clock must not raise in the middle of a transaction.
-            created_at = utc_iso(self._clock())
+            created_at = utc_iso(self._clock.now())
             self._connection.execute("BEGIN IMMEDIATE")
             try:
                 self._connection.execute(_INSERT_NODE_IDENTITY, (generated, created_at))
                 self._connection.execute("COMMIT")
             except BaseException:
                 # Rollback on BaseException (same discipline as catalog_repository):
-                # a NON-sqlite failure must not leave the connection in_transaction —
+                # a NON-sqlite failure must not leave the connection in_transaction,
                 # otherwise the repository would be permanently broken.
                 with suppress(sqlite3.Error):
                     self._connection.execute("ROLLBACK")

@@ -94,7 +94,7 @@ class SqliteSourceRepository:
     def __init__(self, connection: sqlite3.Connection, node_id: str, spacing: timedelta) -> None:
         self._connection = connection
         self._node_id = node_id
-        self._tolerance = source_tolerance(spacing) // _MICROSECOND
+        self._carried_role_max_age_micros = source_tolerance(spacing) // _MICROSECOND
 
     def record_readings(
         self, file: FileKey, readings: Sequence[SourceReading], read_at: datetime
@@ -104,7 +104,7 @@ class SqliteSourceRepository:
             point = reading.contact_point
             if point is not None and not is_contact_point(file.network, point):
                 raise PersistenceError(f"not a {file.network} contact point: {point!r}")
-        now = _micros(read_at)
+        read_at_micros = _micros(read_at)
         recorded: list[RecordedReading] = []
         with wrap_sqlite_errors():
             self._connection.execute("BEGIN IMMEDIATE")
@@ -112,7 +112,7 @@ class SqliteSourceRepository:
                 for reading in readings:
                     if reading.key is None and reading.name is None:
                         continue  # nothing could tell it from the next one (D4)
-                    role = self._record(file, reading, now)
+                    role = self._record(file, reading, read_at_micros)
                     recorded.append(RecordedReading(reading.key, reading.name, role))
                 self._connection.execute("COMMIT")
             except BaseException:
@@ -121,11 +121,11 @@ class SqliteSourceRepository:
                 raise
         return tuple(recorded)
 
-    def _record(self, file: FileKey, reading: SourceReading, now: int) -> SourceRole:
+    def _record(self, file: FileKey, reading: SourceReading, read_at_micros: int) -> SourceRole:
         """Writes the reading's variant and point; its role, a carried one included."""
         role = reading.role
         if role is None:
-            role = carried_role(self._carried_from(file, reading, now))
+            role = carried_role(self._carried_from(file, reading, read_at_micros))
         variant = _variant(file, reading, role, self._node_id)
         key = _content_hash(variant)
         if reading.key is not None:
@@ -134,10 +134,12 @@ class SqliteSourceRepository:
                 _INSERT_SOURCE, (source.source_id, source.network, source.native_id)
             )
         self._connection.execute(_INSERT_VARIANT, (*variant, key))
-        self._connection.execute(_INSERT_POINT, (now, reading.transfer_counter, key))
+        self._connection.execute(_INSERT_POINT, (read_at_micros, reading.transfer_counter, key))
         return role
 
-    def _carried_from(self, file: FileKey, reading: SourceReading, now: int) -> SourceRole | None:
+    def _carried_from(
+        self, file: FileKey, reading: SourceReading, read_at_micros: int
+    ) -> SourceRole | None:
         """The role of the latest point, unless aMule recreated the client since (its counter)."""
         row = self._connection.execute(
             _LATEST_POINT,
@@ -146,8 +148,8 @@ class SqliteSourceRepository:
                 "source_id": None if reading.key is None else reading.key.source_id,
                 "name": reading.name,
                 "node_id": self._node_id,
-                "since": now - self._tolerance,
-                "read_at": now,
+                "since": read_at_micros - self._carried_role_max_age_micros,
+                "read_at": read_at_micros,
             },
         ).fetchone()
         if row is None or row[1] > reading.transfer_counter:

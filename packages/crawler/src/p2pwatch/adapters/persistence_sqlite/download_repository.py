@@ -18,10 +18,11 @@ from collections.abc import Iterable
 from contextlib import suppress
 from datetime import timedelta
 
-from p2pwatch.adapters.persistence_sqlite.connection import Clock, utc_iso, utc_now
+from p2pwatch.adapters.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.persistence_sqlite.errors import PersistenceError, wrap_sqlite_errors
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.ports.clock import Clock
 from p2pwatch.ports.download_client import DownloadStatus, FailureReason
 
 _INSERT = """
@@ -65,13 +66,13 @@ RETURNING network, native_id
 class SqliteDownloadRepository:
     """SQLite implementation of download persistence (STRUCTURAL satisfaction)."""
 
-    def __init__(self, connection: sqlite3.Connection, *, clock: Clock = utc_now) -> None:
+    def __init__(self, connection: sqlite3.Connection, *, clock: Clock) -> None:
         self._connection = connection
         self._clock = clock
 
     def record_queued(self, file: FileKey, target_id: str, size_bytes: int) -> bool:
         """INSERT of a ``queued`` download (dedup-safe). ``True`` if new, ``False`` if duplicate."""
-        queued_at = utc_iso(self._clock())
+        queued_at = utc_iso(self._clock.now())
         with wrap_sqlite_errors():
             self._connection.execute("BEGIN IMMEDIATE")
             try:
@@ -105,7 +106,7 @@ class SqliteDownloadRepository:
         with wrap_sqlite_errors():
             if state == DownloadState.COMPLETED:
                 cursor = self._connection.execute(
-                    _SET_STATE_COMPLETED, (state.value, utc_iso(self._clock()), file.file_id)
+                    _SET_STATE_COMPLETED, (state.value, utc_iso(self._clock.now()), file.file_id)
                 )
             else:
                 cursor = self._connection.execute(
@@ -126,7 +127,7 @@ class SqliteDownloadRepository:
         ``last_progress_at`` moves only when ``bytes_done`` grows. An unknown file updates
         nothing (a shared file the crawler never queued): no error.
         """
-        seen_at = utc_iso(self._clock())
+        seen_at = utc_iso(self._clock.now())
         with wrap_sqlite_errors():
             self._connection.executemany(
                 _MARK_SEEN,
@@ -148,7 +149,7 @@ class SqliteDownloadRepository:
         even with zero sources, so absence is a strong signal: the entry was removed, or the
         file completed and was moved out of IncomingDir before the next poll.
         """
-        cutoff = utc_iso(self._clock() - timedelta(seconds=max_age_seconds))
+        cutoff = utc_iso(self._clock.now() - timedelta(seconds=max_age_seconds))
         with wrap_sqlite_errors():
             rows = self._connection.execute(_EXPIRE_LOST, (cutoff,)).fetchall()
         return tuple(FileKey(Network(row[0]), row[1]) for row in rows)

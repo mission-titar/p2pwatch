@@ -4,7 +4,7 @@ import logging
 import sqlite3
 import threading
 from dataclasses import replace
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
@@ -29,7 +29,8 @@ from p2pwatch.adapters.config.crawler_config import (
 from p2pwatch.adapters.config.yaml_loader import load_yaml
 from p2pwatch.adapters.crawler_control_loop import LoopCrawlerControl
 from p2pwatch.adapters.mule_api.client import AmuleApiClient
-from p2pwatch.adapters.persistence_sqlite.connection import open_catalog, open_local
+from p2pwatch.adapters.persistence_sqlite.catalog_repository import SqliteCatalogRepository
+from p2pwatch.adapters.persistence_sqlite.connection import open_catalog, open_local, utc_iso
 from p2pwatch.adapters.persistence_sqlite.download_repository import SqliteDownloadRepository
 from p2pwatch.adapters.persistence_sqlite.local_state_repository import (
     SqliteLocalStateRepository,
@@ -611,7 +612,9 @@ async def test_backfill_skipped_when_marker_already_matches_fingerprint(
     # the pass (a restart with an unchanged matcher.yml/targets.yml does no redundant work).
     local_conn = open_local(tmp_path / "local.db")
     try:
-        SqliteLocalStateRepository(local_conn).set_last_backfill_policy("fp-unchanged")
+        SqliteLocalStateRepository(local_conn, clock=FakeClock()).set_last_backfill_policy(
+            "fp-unchanged"
+        )
     finally:
         local_conn.close()
     holder: dict[str, CrawlerApp] = {}
@@ -773,7 +776,7 @@ async def test_full_mode_records_the_sources_of_a_download_in_the_catalog(
 ) -> None:
     file = FileKey(Network.ED2K, "a" * 32)
     local = open_local(tmp_path / "local.db")
-    SqliteDownloadRepository(local).record_queued(file, "062A", 100)
+    SqliteDownloadRepository(local, clock=FakeClock()).record_queued(file, "062A", 100)
     local.close()
     catalog = open_catalog(tmp_path / "catalog.db")
     insert_file(catalog, file.native_id)
@@ -801,6 +804,54 @@ async def test_full_mode_records_the_sources_of_a_download_in_the_catalog(
     ).fetchall()
     catalog.close()
     assert rows == [("peer", "n1")]
+
+
+@pytest.mark.asyncio
+async def test_the_repositories_stamp_their_rows_with_the_apps_clock(
+    tmp_path: Path, matcher_config: MatcherConfig
+) -> None:
+    # A year the wall clock cannot be in, so a repository on its own clock fails the bounds.
+    clock = FakeClock(datetime(2030, 1, 1, tzinfo=UTC))
+    seeded = FakeClock(datetime(2029, 12, 31, 23, tzinfo=UTC))
+    file = FileKey(Network.ED2K, "a" * 32)
+    catalog = open_catalog(tmp_path / "catalog.db")
+    SqliteCatalogRepository(catalog, "n1", clock=seeded).record_observation(
+        FileObservation(file=file, filename=_DL_NAME, size_bytes=100, source_count=1, keyword="k")
+    )
+    catalog.close()
+    local = open_local(tmp_path / "local.db")
+    SqliteDownloadRepository(local, clock=seeded).record_queued(file, "062A", 100)
+    local.close()
+    holder: dict[str, CrawlerApp] = {}
+    app = CrawlerApp(
+        crawler_config=_full_crawler_config(tmp_path),
+        targets=_TARGETS,
+        matcher_config=matcher_config,
+        clock=clock,
+        rng=_NoopRng(),
+        wake_hub=RecordingWakeHub(),
+        policy_fingerprint=_FP,
+        client_factory=lambda endpoint, clock: FakeMuleClient(),
+        download_client_factory=lambda endpoint, clock: _ShutdownOnSourcesDownloadClient(
+            holder, file
+        ),
+    )
+    start = utc_iso(clock.now())
+    holder["app"] = app
+    await asyncio.wait_for(app.run(), timeout=5.0)
+    catalog = open_catalog(tmp_path / "catalog.db")
+    local = open_local(tmp_path / "local.db")
+    stamps = {
+        "decided_at": catalog.execute("SELECT decided_at FROM match_decisions").fetchone()[0],
+        "created_at": local.execute(
+            "SELECT value FROM node_runtime WHERE key = 'created_at'"
+        ).fetchone()[0],
+        "last_seen_at": local.execute("SELECT last_seen_at FROM downloads").fetchone()[0],
+    }
+    catalog.close()
+    local.close()
+    end = utc_iso(clock.now())
+    assert all(start <= stamp <= end for stamp in stamps.values()), (start, stamps, end)
 
 
 @pytest.mark.asyncio

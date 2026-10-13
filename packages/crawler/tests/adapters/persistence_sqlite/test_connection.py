@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -12,7 +12,6 @@ from p2pwatch.adapters.persistence_sqlite.connection import (
     open_catalog,
     open_local,
     utc_iso,
-    utc_now,
 )
 from p2pwatch.adapters.persistence_sqlite.errors import MigrationError, PersistenceError
 from tests.catalog_rows import insert_decision, insert_file
@@ -253,11 +252,6 @@ def test_utc_iso_is_fixed_width_and_normalizes_to_utc() -> None:
     paris = timezone(timedelta(hours=2))
     moment = datetime(2026, 6, 11, 14, 0, 0, tzinfo=paris)
     assert utc_iso(moment) == "2026-06-11T12:00:00.000000+00:00"
-
-
-def test_utc_now_returns_an_aware_utc_datetime() -> None:
-    now = utc_now()
-    assert now.tzinfo == UTC
 
 
 # --- MANDATED AMENDMENT: recursive_triggers guards append-only against INSERT OR REPLACE ---

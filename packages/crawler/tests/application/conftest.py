@@ -8,6 +8,7 @@ import pytest
 
 from catalog_matching.engine import MatchingEngine
 from catalog_matching.validation import parse_matcher_config, parse_targets
+from p2pwatch.adapters.clock_asyncio import AsyncioClock
 from p2pwatch.adapters.config.yaml_loader import load_yaml
 from p2pwatch.adapters.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
@@ -37,4 +38,4 @@ def catalog_connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 @pytest.fixture
 def catalog(catalog_connection: sqlite3.Connection) -> SqliteCatalogRepository:
-    return SqliteCatalogRepository(catalog_connection, _NODE)
+    return SqliteCatalogRepository(catalog_connection, _NODE, clock=AsyncioClock())
