@@ -33,10 +33,11 @@ mkdir ed2k
 mv amule downloads ed2k/
 ```
 
-**3. Éditez `crawler.yml`.** Retirez la section `port_sync:` entière, et ces cinq clés de la
-racine : `cycle_interval_seconds`, `search_poll_budget_seconds`, `search_poll_interval_seconds`,
-`keyword_pause_min_seconds` et `keyword_pause_max_seconds`. Tant que l'une reste, le crawler refuse
-de démarrer en la nommant : `crawler: key 'port_sync' was removed, delete it from crawler.yml`.
+**3. Éditez `crawler.yml`.** Retirez la section `port_sync:` entière, et ces six clés de la
+racine : `cycle_interval_seconds`, `decision_poll_interval_seconds`, `search_poll_budget_seconds`,
+`search_poll_interval_seconds`, `keyword_pause_min_seconds` et `keyword_pause_max_seconds`. Tant
+que l'une reste, le crawler refuse de démarrer en la nommant :
+`crawler: key 'port_sync' was removed, delete it from crawler.yml`.
 
 **4. Remplacez les fichiers compose** par ceux du dossier `deploy` de la 5.0 : `compose.yml` à la
 racine, et les trois fichiers de son dossier `ed2k/` dans le vôtre.

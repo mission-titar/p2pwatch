@@ -30,7 +30,7 @@ The crawler is Clean/Hexagonal: `domain/` pure, `application/` async use-cases, 
 | Matching engine | `packages/matching/src/catalog_matching/` | declarative YAML-policy file→episode matcher (architecture: `packages/matching/AGENTS.md`), shared by the crawler and the in-process webui |
 | WebUI (in-process) | c: `webui/` | read-only catalog viewer (files, and the source history: `/sources`, a source's page `/sources/{source_id}`, a name's page `/sources/name`) + client status and runtime controls on the dashboard (`/`) + read-only SQL console (`/console`); Starlette/Jinja2 served on its own thread by `python -m p2pwatch`; the bind is FIXED at `0.0.0.0:8080` in code, `crawler.yml`'s `webui.enabled` only gates the whole surface |
 | amuleapi adapter | c: `adapters/mule_api/` | REST client / JSON mapping / error contract for amuled (no probe tool: `curl` and amuleapi's own web UI replace them) |
-| Persistence | c: `adapters/persistence_sqlite/` | catalog.db, append-only but for `source_ranges`, whose trigger lets only a source's latest range grow; local.db; `.sql` migrations; sync repos |
+| Persistence | c: `adapters/persistence_sqlite/` | catalog.db, append-only, every table; local.db; `.sql` migrations; sync repos |
 | Search / crawl loop | c: `domain/search/`, `application/` | keywords/backoff; one search task per (client, channel, keyword), persisted backoff |
 | Download | c: `domain/download/` + ports/adapters | candidate → eD2k link → amuled queue → completion. Nothing moves or opens the file |
 | Observability | c: `domain/observability/`, `adapters/observability/` | events → policy → dispatcher; Prometheus + apprise |

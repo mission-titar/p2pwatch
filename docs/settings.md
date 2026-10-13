@@ -88,3 +88,38 @@ peu de sens : aMule ne réinterroge une source en attente que toutes les 15 minu
 peut quitter sa liste puis y revenir sans s'être absentée. Une valeur nulle, négative, infinie ou
 `.nan` est refusée au démarrage, avec un message qui nomme la clé. La valeur est lue au démarrage :
 relancez le crawler (`docker compose restart p2pwatch`) après l'avoir changée.
+
+## La fréquence de relevé des sources
+
+`download.sources_interval_seconds` (`300` par défaut, soit 5 minutes) règle tous les combien le
+crawler relève les sources de ses téléchargements
+([Historique des sources](operate.md#historique-des-sources)). Le relevé a lieu au premier tour de
+la boucle de téléchargement qui suit cet intervalle : deux relevés sont donc espacés de l'intervalle,
+plus `download.poll_interval_seconds` au plus.
+
+Chaque relevé ajoute au catalogue un point par source : à 5 minutes, de l'ordre de 0,13 Go par an
+pour une cinquantaine de sources (estimation du 2026-10-13). Plus court, l'historique est plus fin
+et les alertes `new-source` et `reappeared` partent plus tôt, mais le catalogue grossit d'autant et
+le crawler interroge amuleapi plus souvent. Plus long, une source restée moins longtemps que
+l'intervalle peut passer inaperçue. Si vous le changez, ajustez aussi
+[l'écart qui coupe une période](#lécart-qui-coupe-une-période-de-source).
+
+Une valeur nulle, négative, infinie ou `.nan` est refusée au démarrage, avec un message qui nomme la
+clé. La valeur est lue au démarrage : relancez le crawler après l'avoir changée.
+
+## L'écart qui coupe une période de source
+
+`webui.source_period_gap_seconds` (`990` par défaut) règle l'affichage de l'historique des sources
+dans le catalogue web : deux points d'une même source plus éloignés que ce nombre de secondes ouvrent
+une nouvelle période. 990, c'est 3 x (300 + 30), trois écarts entre relevés aux réglages par défaut,
+pour qu'une lecture manquée ne coupe pas une période. Si vous changez
+`download.sources_interval_seconds` ou `download.poll_interval_seconds`, gardez-le à
+3 x (`sources_interval_seconds` + `poll_interval_seconds`).
+
+Il ne change que l'affichage : le catalogue garde ses points, et rien n'est réécrit. Un catalogue
+fusionné est coupé par l'écart du nœud qui l'affiche : les points d'un nœud qui relève plus rarement
+y apparaissent en périodes d'un seul point, et augmenter l'écart les réunit. La clé vaut aussi sur un
+nœud qui ne télécharge pas, puisqu'il peut afficher un catalogue fusionné.
+
+Une valeur nulle, négative, infinie ou `.nan` est refusée au démarrage, avec un message qui nomme la
+clé. La valeur est lue au démarrage : relancez le crawler après l'avoir changée.

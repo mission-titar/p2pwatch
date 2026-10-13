@@ -120,7 +120,7 @@ class DiskSpaceLow:
 
 @dataclass(frozen=True)
 class SourceNew:
-    # A source opened its first useful range on this node (stage 4 spec, D9).
+    # A source read useful for the first time on this node (source points spec, D5).
     source: SourceKey
     name: str | None
     file: FileKey

@@ -22,8 +22,9 @@ Dans le catalogue (`data/catalog.db` et `data/local.db`) :
   chaque fichier que le nœud télécharge, les pairs qui le partagent, sous leur identifiant
   pseudonyme eD2k (le *user hash*, que le client du pair annonce lui-même), le nom et le logiciel
   qu'ils annoncent, s'ils ont des parties qui vous manquent, l'adresse du serveur eD2k par lequel
-  ils sont joignables, et les plages de temps où le nœud les a vus. C'est ce qui permet de
-  reconnaître un partageur récurrent d'un épisode perdu, et de le contacter.
+  ils sont joignables, et l'instant de chaque relevé où le nœud les a vus (toutes les 5 minutes
+  par défaut). C'est ce qui permet de reconnaître un partageur récurrent d'un épisode perdu, et de
+  le contacter.
 - Des **métadonnées techniques du nœud** : `node_id` interne, état du planificateur, dernière passe
   de catalogage.
 
