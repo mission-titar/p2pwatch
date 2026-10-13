@@ -75,12 +75,11 @@ scrape_configs:
 Pour couper entièrement le point d'accès, mettez `observability.metrics.enabled: false` dans
 `crawler.yml`. Le crawl et le catalogue web continuent normalement.
 
-## Le seuil des sources de nouveau utiles
+## Le seuil de l'alerte reappeared
 
 `download.reappeared_after_seconds` (`43200` par défaut, soit 12 h) règle l'alerte `reappeared`
-([Historique des sources](operate.md#historique-des-sources)) : une source de nouveau utile
-n'alerte que si le nœud n'a rien appris de ce qu'elle détient pendant plus de ce nombre de
-secondes. Plus court, une source qui revient chaque soir alerte plus souvent ; plus long, seules les
+([Historique des sources](operate.md#historique-des-sources)) : une source utile ne la déclenche que
+si le nœud n'a rien appris de ce qu'elle détient pendant plus de ce nombre de secondes. Plus court, une source qui revient chaque soir alerte plus souvent ; plus long, seules les
 longues absences alertent.
 
 La clé accepte tout nombre positif, décimales comprises, mais une valeur sous l'heure (`3600`) a

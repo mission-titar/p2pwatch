@@ -646,7 +646,7 @@ démon sont
 | Persistance | `adapters/persistence_sqlite/` (migrations `.sql`, repos) |
 | Observabilité | `domain/observability/`, `adapters/observability/` |
 | WebUI | `webui/` (in-process, thread dédié) |
-| Conteneur d'aMule | `packages/amule/src/p2pwatch_amule/` (`config/` le one-shot, `port_sync/`) ; image `packages/amule/Dockerfile`, services s6 sous `packages/amule/docker/services.d/` |
+| Conteneur d'aMule | `packages/amule/src/p2pwatch_amule/` (`boot/` le one-shot, `port_sync/`) ; image `packages/amule/Dockerfile`, services s6 sous `packages/amule/docker/services.d/` |
 | Déploiement | `deploy/compose.yml` (le cœur et un `include:`), `deploy/ed2k/` (`service`, `direct` et `vpn.compose.yml`) |
 
 ## 13. Le healthcheck lit la sortie de s6-svstat, pas son code de retour

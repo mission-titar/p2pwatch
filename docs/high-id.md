@@ -48,7 +48,7 @@ Une valeur invalide arrête le conteneur `ed2k` au démarrage, en nommant la var
 Une fois actif, le port-sync écrit chaque changement et chaque échec dans
 `docker compose logs ed2k`. Le High-ID se lit sur le tableau de bord (le canal `ed2k` joignable
 par les pairs) et dans la jauge `p2pwatch_channel_connectable`. Un canal non joignable depuis
-5 minutes est notifié sur le canal *operations*. Pendant un redémarrage, le crawler voit aMule
+5 minutes est notifié à l'audience *operations*. Pendant un redémarrage, le crawler voit aMule
 injoignable, mais ne le notifie qu'au-delà de 2 minutes.
 
 ## Route B : ouvrir un port vous-même

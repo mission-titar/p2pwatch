@@ -130,6 +130,7 @@ a function does.
 | `tracked` | a download with a row in `downloads`, whatever its state | `downloaded`, `active` |
 | `wake` | `WakeHub` wakes the loops waiting on a subject | `signal`, `nudge` |
 | `first useful`, `reappeared` | a source's two alerts | `new`, `useful again` |
+| `audience` | who a notification is for: `community`, `operations` | `tag` (apprise's keyword aside), `channel` |
 | `error_label` | the label a parser prints in its errors | `what`, `label`, `field` |
 | `micros` | an integer of microseconds: an instant counts from the epoch | a bare `_at` on an `int` |
 | `id`, `db`, `sql`, `url`, `api`, `json`, `ecid`, `mib`, `iso`, `min`, `max`, `conf` | the abbreviations allowed (`conf`: aMule's `amule.conf`) | |
