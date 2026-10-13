@@ -79,8 +79,9 @@ qui ont vu le même fichier écrivent la même ligne. Refusionner deux fois le m
 rien, l'ordre des fusions non plus, et rien n'est écrasé sans que vous le demandiez.
 
 Un catalogue partagé contient aussi l'historique des sources de vos téléchargements : les user
-hashes et les noms que des tiers annoncent sur le réseau, et quand vous les avez vus : des
-pseudonymes, jamais des adresses. La fusion réunit ces historiques comme les fichiers.
+hashes et les noms que des tiers annoncent sur le réseau, quand vous les avez vus et combien
+d'octets votre nœud en avait reçus. Ce sont des pseudonymes, jamais des adresses. La fusion réunit
+ces historiques comme les fichiers.
 
 Le cycle habituel : vous cataloguez quelques semaines, vous échangez votre `catalog.db`, vous
 fusionnez ce que vous recevez, et vous remplacez votre catalogue par le catalogue fusionné.
