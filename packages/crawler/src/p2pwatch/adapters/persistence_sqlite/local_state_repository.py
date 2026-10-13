@@ -1,6 +1,6 @@
-"""``SqliteLocalStateRepository``: node identity + backfill policy marker (spec §4/§6).
+"""``SqliteLocalStateRepository``: node identity + reevaluated policy fingerprint (spec §4/§6).
 
-``node_id`` (spec §3): UUID generated on the first call, persisted in ``node_runtime``
+``get_or_create_node_id`` (spec §3): UUID generated on the first call, persisted in ``node_runtime``
 with ``created_at``, stable thereafter (scheduler seed §6 MVP + observation tag).
 """
 
@@ -19,12 +19,12 @@ INSERT INTO node_runtime (key, value)
 VALUES ('node_id', ?), ('created_at', ?)
 """
 
-_SELECT_BACKFILL_POLICY = "SELECT policy_sha256 FROM backfill_state WHERE id = 1"
+_SELECT_POLICY_FINGERPRINT = "SELECT policy_fingerprint FROM reevaluation_state WHERE id = 1"
 
-_UPSERT_BACKFILL_POLICY = """
-INSERT INTO backfill_state (id, policy_sha256)
+_UPSERT_POLICY_FINGERPRINT = """
+INSERT INTO reevaluation_state (id, policy_fingerprint)
 VALUES (1, ?)
-ON CONFLICT (id) DO UPDATE SET policy_sha256 = excluded.policy_sha256
+ON CONFLICT (id) DO UPDATE SET policy_fingerprint = excluded.policy_fingerprint
 """
 
 
@@ -35,19 +35,19 @@ class SqliteLocalStateRepository:
         self._connection = connection
         self._clock = clock
 
-    def node_id(self) -> str:
+    def get_or_create_node_id(self) -> str:
         """UUID created (and persisted with ``created_at``) on the first call, stable after."""
         with wrap_sqlite_errors():
             row = self._connection.execute(_SELECT_NODE_ID).fetchone()
             if row is not None:
                 return str(row[0])
-            generated = str(uuid.uuid4())
+            node_id = str(uuid.uuid4())
             # Stamp computed BEFORE the BEGIN (same hygiene as the catalog repo): a
             # buggy clock must not raise in the middle of a transaction.
             created_at = utc_iso(self._clock.now())
             self._connection.execute("BEGIN IMMEDIATE")
             try:
-                self._connection.execute(_INSERT_NODE_IDENTITY, (generated, created_at))
+                self._connection.execute(_INSERT_NODE_IDENTITY, (node_id, created_at))
                 self._connection.execute("COMMIT")
             except BaseException:
                 # Rollback on BaseException (same discipline as catalog_repository):
@@ -56,15 +56,15 @@ class SqliteLocalStateRepository:
                 with suppress(sqlite3.Error):
                     self._connection.execute("ROLLBACK")
                 raise
-        return generated
+        return node_id
 
-    def last_backfill_policy(self) -> str | None:
-        """The stored policy fingerprint, or ``None`` if no backfill ever ran (spec §7.1)."""
+    def reevaluated_policy_fingerprint(self) -> str | None:
+        """The stored policy fingerprint, or ``None`` if no re-evaluation ever ran (spec §7.1)."""
         with wrap_sqlite_errors():
-            row = self._connection.execute(_SELECT_BACKFILL_POLICY).fetchone()
+            row = self._connection.execute(_SELECT_POLICY_FINGERPRINT).fetchone()
         return str(row[0]) if row is not None else None
 
-    def set_last_backfill_policy(self, sha256: str) -> None:
-        """Upserts the single-row marker (called only AFTER a full backfill pass)."""
+    def set_reevaluated_policy_fingerprint(self, fingerprint: str) -> None:
+        """Upserts the single-row marker (called only AFTER a full re-evaluation pass)."""
         with wrap_sqlite_errors():
-            self._connection.execute(_UPSERT_BACKFILL_POLICY, (sha256,))
+            self._connection.execute(_UPSERT_POLICY_FINGERPRINT, (fingerprint,))

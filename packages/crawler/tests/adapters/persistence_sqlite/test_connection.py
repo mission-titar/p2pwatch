@@ -22,7 +22,7 @@ _LOCAL_TABLES = {
     "node_runtime",
     "downloads",
     "scheduler_state",
-    "backfill_state",
+    "reevaluation_state",
 }
 
 # Canonical 32-char lowercase hex hash (satisfies the CHECK constraint).
@@ -87,7 +87,7 @@ def test_open_local_creates_the_tables_and_versions_the_schema(tmp_path: Path) -
     connection = open_local(tmp_path / "local.db")
     try:
         assert _table_names(connection) == _LOCAL_TABLES
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 9
     finally:
         connection.close()
 

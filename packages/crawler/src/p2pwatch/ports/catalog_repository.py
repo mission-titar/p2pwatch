@@ -42,7 +42,7 @@ class DownloadCandidate:
 class ReevalRow:
     """One file's latest observation, enough to rebuild a :class:`FileCandidate`.
 
-    Read by the re-evaluation backfill (spec re-evaluation §6): each row feeds
+    Read by the re-evaluation (spec re-evaluation §6): each row feeds
     ``domain.observation.candidate_from_fields`` to re-run the matching engine against
     the whole catalogue, one row per catalogued file.
     """
@@ -66,7 +66,7 @@ class CatalogRepository(Protocol):
     and size for the ed2k link), or ``None``. ``best_observation`` returns the file's clean
     filename (the most sourced, then the latest) with its size, or ``None``.
     ``iter_reevaluation_rows`` streams every file's latest observation as a :class:`ReevalRow`
-    (spec re-evaluation §6), for the startup backfill to rebuild a candidate per file;
+    (spec re-evaluation §6), for the startup re-evaluation to rebuild a candidate per file;
     ``count_files`` is its progress total.
     ``known_filenames`` returns every distinct filename of a file, sorted.
     These reads are harmless (no write).

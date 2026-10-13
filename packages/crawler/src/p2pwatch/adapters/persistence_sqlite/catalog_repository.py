@@ -237,7 +237,7 @@ class SqliteCatalogRepository:
         return int(row[0])
 
     def iter_reevaluation_rows(self) -> Iterator[ReevalRow]:
-        """Every seen file's latest sighting, streamed (backfill spec §6)."""
+        """Every seen file's latest sighting, streamed (spec re-evaluation §6)."""
         with wrap_sqlite_errors():
             for latest in sightings.iter_latest_sightings(self._connection):
                 yield ReevalRow(

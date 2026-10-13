@@ -1,4 +1,4 @@
-"""Backfill use-case: re-evaluate the whole catalogue against the current matcher (spec §7).
+"""Re-evaluation use-case: re-evaluate the whole catalogue against the current matcher (spec §7).
 
 APPLICATION layer. Iterates every catalogued hash's LATEST observation
 (``catalog.iter_reevaluation_rows()``), rebuilds a :class:`FileCandidate` via
@@ -6,7 +6,7 @@ APPLICATION layer. Iterates every catalogued hash's LATEST observation
 the shared ``rejudge_file`` helper (``decisions.py``, which judges the hash on
 all its known filenames) so retraction + notify/download wakes happen identically to the live
 per-observation path (spec §4). Only the counting + per-row error absorption are specific
-to the backfill.
+to the re-evaluation.
 
 A per-row ``RepositoryError`` is logged (error level) and absorbed here: one bad file must
 not abort the whole sweep (spec §7, same discipline as ``record_observation``).
@@ -30,16 +30,16 @@ _PROGRESS_EVERY = 200
 
 
 @dataclass(frozen=True)
-class ReevalSummary:
-    """Outcome of one backfill pass (spec §7).
+class ReevaluationSummary:
+    """Outcome of one re-evaluation pass (spec §7).
 
-    ``evaluated``: rows iterated (one per catalogued hash). ``written``: rows actually
+    ``files_evaluated``: rows iterated (one per catalogued hash). ``rows_written``: rows actually
     appended by ``rejudge_file`` (a re-tiered decision OR a retraction -
     no separate retracted count, spec Task 5: "a retraction is just a written row").
     """
 
-    evaluated: int
-    written: int
+    files_evaluated: int
+    rows_written: int
 
 
 async def reevaluate_catalog(
@@ -48,22 +48,22 @@ async def reevaluate_catalog(
     engine: MatchingEngine,
     wake_hub: WakeHub,
     telemetry: Telemetry,
-) -> ReevalSummary:
+) -> ReevaluationSummary:
     """Re-evaluate every catalogued hash's latest observation against ``engine``.
 
     Per-item isolation (spec §7): a ``RepositoryError`` on one row is logged and the sweep
     continues with the next row.
     """
     total = catalog.count_files()
-    evaluated = 0
-    written = 0
+    files_evaluated = 0
+    rows_written = 0
     for row in catalog.iter_reevaluation_rows():
-        evaluated += 1
+        files_evaluated += 1
         candidate = candidate_from_fields(
             row.filename, row.size_bytes, row.media_length_sec, row.bitrate_kbps
         )
         try:
-            written += await rejudge_file(
+            rows_written += await rejudge_file(
                 row.file,
                 candidate,
                 catalog=catalog,
@@ -78,8 +78,11 @@ async def reevaluate_catalog(
                 row.file.native_id,
                 error,
             )
-        if evaluated % _PROGRESS_EVERY == 0:
+        if files_evaluated % _PROGRESS_EVERY == 0:
             _logger.info(
-                "catalogue re-evaluation: %d/%d files, %d rows written", evaluated, total, written
+                "catalogue re-evaluation: %d/%d files, %d rows written",
+                files_evaluated,
+                total,
+                rows_written,
             )
-    return ReevalSummary(evaluated=evaluated, written=written)
+    return ReevaluationSummary(files_evaluated=files_evaluated, rows_written=rows_written)

@@ -1,9 +1,9 @@
-"""Tests for the backfill use-case ``reevaluate_catalog`` (spec §7, plan Task 5).
+"""Tests for the re-evaluation use-case ``reevaluate_catalog`` (spec §7, plan Task 5).
 
 Real engine + real SQLite catalog repo (same convention as ``test_decisions.py``: "real
 repos on tmp_path"); only ``wake_hub``/``telemetry`` are fakes (``RecordingWakeHub``/
 ``RecordingTelemetry``). Each hash under test is seeded via ``catalog.record_observation``
-first so it shows up in ``iter_reevaluation_rows`` (the source the backfill iterates).
+first so it shows up in ``iter_reevaluation_rows`` (the source the re-evaluation iterates).
 """
 
 import logging
@@ -14,7 +14,7 @@ import pytest
 from catalog_matching.engine import DecisionRecord, Explanation, MatchDecision, MatchingEngine
 from p2pwatch.adapters.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.application import reevaluate_catalog as reevaluate_module
-from p2pwatch.application.reevaluate_catalog import ReevalSummary, reevaluate_catalog
+from p2pwatch.application.reevaluate_catalog import ReevaluationSummary, reevaluate_catalog
 from p2pwatch.application.run_download_cycle import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
@@ -64,7 +64,7 @@ async def test_two_changed_rows_are_all_evaluated_and_written(
     summary = await reevaluate_catalog(
         catalog=catalog, engine=engine, wake_hub=wake_hub, telemetry=telemetry
     )
-    assert summary == ReevalSummary(evaluated=2, written=2)
+    assert summary == ReevaluationSummary(files_evaluated=2, rows_written=2)
     tiers = dict(decision_tiers(catalog_connection))
     assert tiers == {_HASH_DL: "download", _HASH_CAT: "catalog"}
     assert len(telemetry.events) == 2
@@ -89,7 +89,7 @@ async def test_unchanged_row_is_evaluated_but_not_written(
     summary = await reevaluate_catalog(
         catalog=catalog, engine=engine, wake_hub=wake_hub, telemetry=telemetry
     )
-    assert summary == ReevalSummary(evaluated=1, written=0)
+    assert summary == ReevaluationSummary(files_evaluated=1, rows_written=0)
     assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 1
     assert telemetry.events == []
     assert wake_hub.woken_subjects == []
@@ -116,7 +116,7 @@ async def test_repository_error_on_one_row_is_absorbed_and_sweep_continues(
     summary = await reevaluate_catalog(
         catalog=catalog, engine=engine, wake_hub=wake_hub, telemetry=telemetry
     )
-    assert summary == ReevalSummary(evaluated=2, written=1)
+    assert summary == ReevaluationSummary(files_evaluated=2, rows_written=1)
     assert decision_tiers(catalog_connection) == [(_HASH_CAT, "catalog")]
     assert catalog.latest_decisions(FileKey(Network.ED2K, _HASH_DL)) == {}
     assert f"file=ed2k:{_HASH_DL} " in caplog.text
@@ -131,7 +131,7 @@ async def test_empty_catalogue_yields_zero_summary(
     summary = await reevaluate_catalog(
         catalog=catalog, engine=engine, wake_hub=wake_hub, telemetry=telemetry
     )
-    assert summary == ReevalSummary(evaluated=0, written=0)
+    assert summary == ReevaluationSummary(files_evaluated=0, rows_written=0)
     assert telemetry.events == []
     assert wake_hub.woken_subjects == []
 
@@ -143,7 +143,7 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
     engine: MatchingEngine,
 ) -> None:
     # §10: an old "unidentified" row under an arbitrary target_id (001A/catalog) is retracted
-    # by the set-diff when the file becomes identified (062A + 062B) on the backfill pass.
+    # by the set-diff when the file becomes identified (062A + 062B) on the re-evaluation pass.
     catalog.record_observation(_obs(_HASH_MULTI, _MULTI_NAME))
     catalog.record_decision(
         FileKey(Network.ED2K, _HASH_MULTI), _legacy_row("001A", "keroro_large", "catalog")
@@ -152,7 +152,9 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
     summary = await reevaluate_catalog(
         catalog=catalog, engine=engine, wake_hub=wake_hub, telemetry=telemetry
     )
-    assert summary == ReevalSummary(evaluated=1, written=3)  # 062A + 062B + retract 001A
+    assert summary == ReevaluationSummary(
+        files_evaluated=1, rows_written=3
+    )  # 062A + 062B + retract 001A
     assert catalog.latest_decisions(FileKey(Network.ED2K, _HASH_MULTI)) == {
         "062A": DecisionRecord(target_id="062A", rule_name="numero_nu_confirmed", tier="download"),
         "062B": DecisionRecord(target_id="062B", rule_name="numero_nu_confirmed", tier="download"),
@@ -173,7 +175,9 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
     summary = await reevaluate_catalog(
         catalog=catalog, engine=engine, wake_hub=wake_hub, telemetry=telemetry
     )
-    assert summary == ReevalSummary(evaluated=1, written=2)  # only 062A + 062B; "" untouched
+    assert summary == ReevaluationSummary(
+        files_evaluated=1, rows_written=2
+    )  # only 062A + 062B; "" untouched
     assert set(catalog.latest_decisions(FileKey(Network.ED2K, _HASH_MULTI))) == {"062A", "062B"}
     assert (
         catalog_connection.execute(
@@ -192,7 +196,7 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
     summary = await reevaluate_catalog(
         catalog=catalog, engine=engine, wake_hub=RecordingWakeHub(), telemetry=RecordingTelemetry()
     )
-    assert summary == ReevalSummary(evaluated=1, written=1)
+    assert summary == ReevaluationSummary(files_evaluated=1, rows_written=1)
     assert catalog.latest_decisions(FileKey(Network.ED2K, _HASH_DL)) == {
         "062A": DecisionRecord(target_id="062A", rule_name="id_segment_exact", tier="download")
     }

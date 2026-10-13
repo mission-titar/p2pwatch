@@ -60,7 +60,7 @@ from p2pwatch.adapters.persistence_sqlite.scheduler_state_repository import (
 )
 from p2pwatch.adapters.persistence_sqlite.source_repository import SqliteSourceRepository
 from p2pwatch.application.reevaluate_catalog import reevaluate_catalog
-from p2pwatch.application.run_backfill import run_backfill_if_policy_changed
+from p2pwatch.application.reevaluate_if_policy_changed import reevaluate_if_policy_changed
 from p2pwatch.application.run_download_cycle import (
     DownloadLoopDeps,
     download_loop,
@@ -414,7 +414,7 @@ class CrawlerApp:
             stack.callback(local_conn.close)
 
             local_repo = SqliteLocalStateRepository(local_conn, clock=self._clock)
-            node_id = self._crawler_config.node_id or local_repo.node_id()
+            node_id = self._crawler_config.node_id or local_repo.get_or_create_node_id()
             obs = self._crawler_config.observability
             notifications = obs.notifications if obs is not None else ()
             registry = CollectorRegistry()
@@ -437,7 +437,7 @@ class CrawlerApp:
             endpoint = self._crawler_config.amule_endpoint
             board = StatusBoard((endpoint.client_name,), self._clock)
             # In-process webui (spec §5): own thread + loop, started EARLY (before the daemon client
-            # + startup backfill) so it is up promptly and stays isolated from the crawler's
+            # + startup re-evaluation) so it is up promptly and stays isolated from the crawler's
             # synchronous work. Gated by ``webui.enabled``; a crash degrades (spec §17.1). Its
             # graceful stop is on ``stack`` → runs at the normal shutdown unwind (after DB conns
             # are pushed, so it stops the thread before those close during LIFO teardown).
@@ -501,16 +501,16 @@ class CrawlerApp:
 
             await telemetry.emit(CrawlerStarted(download_enabled=download_config is not None))
 
-            # Startup backfill (spec §7/§7.1): re-evaluate the WHOLE catalogue against the
+            # Startup re-evaluation (spec §7/§7.1): re-evaluate the WHOLE catalogue against the
             # current matcher, gated by a policy fingerprint stored in local.db (a
             # comment/whitespace-only edit to matcher.yml/targets.yml still triggers one
             # harmless extra pass, which then writes nothing before the marker updates).
             # Runs to completion BEFORE the loops so tier actions (download wake, notify)
             # fire for the very first search, not a search later.
-            summary = await run_backfill_if_policy_changed(
+            summary = await reevaluate_if_policy_changed(
                 fingerprint=self._policy_fingerprint,
                 local_repo=local_repo,
-                run_backfill=lambda: reevaluate_catalog(
+                reevaluate=lambda: reevaluate_catalog(
                     catalog=catalog_repo,
                     engine=engine,
                     wake_hub=self._wake_hub,
@@ -522,8 +522,8 @@ class CrawlerApp:
             else:
                 _logger.info(
                     "catalogue re-evaluated: %d files, %d rows written",
-                    summary.evaluated,
-                    summary.written,
+                    summary.files_evaluated,
+                    summary.rows_written,
                 )
 
             # Bound ENTERED DISARMED (None): the steady state is unbounded; ``_supervise`` arms it

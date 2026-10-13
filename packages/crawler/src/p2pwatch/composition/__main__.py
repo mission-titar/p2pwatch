@@ -64,9 +64,9 @@ def build_app(args: argparse.Namespace) -> CrawlerApp:
     ``main`` catches it, logs clearly, and refuses to start (spec §14).
 
     The policy fingerprint (spec §7.1) is computed here, once, from the RAW bytes of
-    ``matcher.yml``/``targets.yml`` (both feed ``MatchingEngine``) — a source-level fingerprint,
+    ``matcher.yml``/``targets.yml`` (both feed ``MatchingEngine``): a source-level fingerprint,
     not derived from the parsed config, so a comment/whitespace-only edit still triggers one
-    harmless backfill pass at the next start.
+    harmless re-evaluation pass at the next start.
     """
     crawler_config = parse_crawler_config(load_yaml(args.config), os.environ)
     if crawler_config.observability is not None:

@@ -23,7 +23,7 @@ def candidate_from_fields(
     """Bridge to the matching engine: unit conversions (bytes -> MiB, int -> float).
 
     Single source of the conversion (spec re-evaluation §6): both ``FileObservation.
-    to_candidate`` (live path) and the re-evaluation backfill (``ReevalRow`` ->
+    to_candidate`` (live path) and the re-evaluation (``ReevalRow`` ->
     candidate) call this.
     """
     duration = float(media_length_sec) if media_length_sec is not None else None
