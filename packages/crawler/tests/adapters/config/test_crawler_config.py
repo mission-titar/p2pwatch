@@ -1,3 +1,4 @@
+import re
 from datetime import timedelta
 from typing import Any
 
@@ -61,6 +62,11 @@ def _section(raw: dict[str, Any], path: str | None) -> dict[str, Any]:
     return raw
 
 
+def _printed_path(section: str | None, key: str) -> str:
+    """The pattern of ``key``'s path in an error: a root key prints bare."""
+    return re.escape(f"{section}.{key}" if section else key)
+
+
 # --------------------------------------------------------------------- policy
 
 
@@ -99,7 +105,7 @@ def test_negative_jitter_ratio_is_fatal() -> None:
 def test_missing_key_is_fatal() -> None:
     raw = _minimal_raw()
     del raw["shutdown_deadline_seconds"]
-    with pytest.raises(ConfigError, match="shutdown_deadline_seconds"):
+    with pytest.raises(ConfigError, match=r"^key 'shutdown_deadline_seconds' missing$"):
         parse_crawler_config(raw, _env())
 
 
@@ -139,7 +145,9 @@ def test_a_number_that_is_not_finite_is_refused_by_name(
     # .inf would make a sleep endless and .nan passes every comparison.
     raw = _minimal_raw() | {"download": _full_download_section(), "observability": {}}
     _section(raw, section)[key] = value
-    with pytest.raises(ConfigError, match=rf"\.{key}: finite number expected"):
+    with pytest.raises(
+        ConfigError, match=rf"^{_printed_path(section, key)}: finite number expected"
+    ):
         parse_crawler_config(raw, _env())
 
 
@@ -165,7 +173,10 @@ def _with_seconds(section: str | None, key: str, seconds: int) -> dict[str, Any]
 )
 def test_a_duration_is_at_most_a_day(section: str | None, key: str) -> None:
     parse_crawler_config(_with_seconds(section, key, 86_400), _env())
-    with pytest.raises(ConfigError, match=rf"\.{key}: at most 86400 seconds expected, got 86401"):
+    with pytest.raises(
+        ConfigError,
+        match=rf"^{_printed_path(section, key)}: at most 86400 seconds expected, got 86401",
+    ):
         parse_crawler_config(_with_seconds(section, key, 86_401), _env())
 
 
@@ -199,13 +210,18 @@ def test_non_positive_value_is_fatal() -> None:
 )
 def test_a_removed_key_is_refused_by_name(key: str) -> None:
     raw = _minimal_raw() | {key: 5.0}
-    with pytest.raises(ConfigError, match=f"key '{key}' was removed"):
+    with pytest.raises(
+        ConfigError, match=rf"^key '{key}' was removed, delete it from crawler\.yml$"
+    ):
         parse_crawler_config(raw, _env())
 
 
 def test_the_root_backoff_is_refused_with_its_new_place() -> None:
     raw = _minimal_raw() | {"backoff": _minimal_raw()["search"]["backoff"]}
-    with pytest.raises(ConfigError, match=r"key 'backoff' moved to 'search\.backoff'"):
+    with pytest.raises(
+        ConfigError,
+        match=r"^key 'backoff' moved to 'search\.backoff', move it in crawler\.yml$",
+    ):
         parse_crawler_config(raw, _env())
 
 
@@ -257,19 +273,23 @@ def test_endpoint_is_derived_from_code_constants_and_the_password() -> None:
 def test_missing_amule_api_password_is_fatal() -> None:
     raw = _minimal_raw()
     del raw["amule_api_password"]
-    with pytest.raises(ConfigError, match="amule_api_password"):
+    with pytest.raises(ConfigError, match=r"^key 'amule_api_password' missing$"):
         parse_crawler_config(raw, _env())
 
 
 def test_empty_amule_api_password_is_fatal() -> None:
     raw = _minimal_raw() | {"amule_api_password": ""}
-    with pytest.raises(ConfigError, match="non-empty string"):
+    with pytest.raises(
+        ConfigError, match=r"^amule_api_password: non-empty string expected, got ''$"
+    ):
         parse_crawler_config(raw, _env())
 
 
 def test_non_string_amule_api_password_is_fatal() -> None:
     raw = _minimal_raw() | {"amule_api_password": 1234}
-    with pytest.raises(ConfigError, match="non-empty string"):
+    with pytest.raises(
+        ConfigError, match=r"^amule_api_password: non-empty string expected, got 1234$"
+    ):
         parse_crawler_config(raw, _env())
 
 
@@ -286,7 +306,7 @@ def test_leftover_pool_keys_are_ignored() -> None:
 def test_missing_db_path_is_fatal() -> None:
     raw = _minimal_raw()
     del raw["catalog_db_path"]
-    with pytest.raises(ConfigError, match="catalog_db_path"):
+    with pytest.raises(ConfigError, match=r"^key 'catalog_db_path' missing$"):
         parse_crawler_config(raw, _env())
 
 
@@ -311,7 +331,11 @@ def test_password_interpolated_from_env() -> None:
 
 def test_missing_env_var_raises() -> None:
     raw = _minimal_raw() | {"amule_api_password": "${AMULE_API_PASSWORD}"}
-    with pytest.raises(ConfigError):
+    with pytest.raises(
+        ConfigError,
+        match=r"^amule_api_password: environment variable 'AMULE_API_PASSWORD' "
+        r"referenced but not set$",
+    ):
         parse_crawler_config(raw, {})  # AMULE_API_PASSWORD not set
 
 

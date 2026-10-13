@@ -186,144 +186,159 @@ class CrawlerConfig:
         )
 
 
-def _require_mapping(value: Any, label: str) -> dict[str, Any]:
+def _require_mapping(value: Any, error_label: str) -> dict[str, Any]:
     if not isinstance(value, dict):
-        raise ConfigError(f"{label}: mapping expected, got {type(value).__name__}")
+        raise ConfigError(f"{error_label}: mapping expected, got {type(value).__name__}")
     return value
 
 
-def _number(mapping: dict[str, Any], key: str, section: str) -> float:
-    if key not in mapping:
-        raise ConfigError(f"{section}: key {key!r} missing")
-    value = mapping[key]
+# The root's error label: crawler.yml has no section around its root keys, so they print bare.
+_ROOT = ""
+
+
+def _key_path(error_label: str, key: str) -> str:
+    return f"{error_label}.{key}" if error_label else key
+
+
+def _required(section: dict[str, Any], key: str, error_label: str) -> Any:
+    if key in section:
+        return section[key]
+    prefix = f"{error_label}: " if error_label else ""
+    raise ConfigError(f"{prefix}key {key!r} missing")
+
+
+def _number(section: dict[str, Any], key: str, error_label: str) -> float:
+    value = _required(section, key, error_label)
     if not isinstance(value, int | float) or isinstance(value, bool):
-        raise ConfigError(f"{section}.{key}: number expected, got {value!r}")
+        raise ConfigError(f"{_key_path(error_label, key)}: number expected, got {value!r}")
     if not math.isfinite(value):  # .inf makes a sleep endless, .nan passes every comparison
-        raise ConfigError(f"{section}.{key}: finite number expected, got {value!r}")
+        raise ConfigError(f"{_key_path(error_label, key)}: finite number expected, got {value!r}")
     return float(value)
 
 
-def _positive(mapping: dict[str, Any], key: str, section: str) -> float:
-    number = _number(mapping, key, section)
+def _positive(section: dict[str, Any], key: str, error_label: str) -> float:
+    number = _number(section, key, error_label)
     if number <= 0:
-        raise ConfigError(f"{section}.{key}: strictly positive expected, got {number}")
+        raise ConfigError(
+            f"{_key_path(error_label, key)}: strictly positive expected, got {number}"
+        )
     return number
 
 
-def _non_negative(mapping: dict[str, Any], key: str, section: str) -> float:
-    number = _number(mapping, key, section)
+def _non_negative(section: dict[str, Any], key: str, error_label: str) -> float:
+    number = _number(section, key, error_label)
     if number < 0:
-        raise ConfigError(f"{section}.{key}: ≥ 0 expected, got {number}")
+        raise ConfigError(f"{_key_path(error_label, key)}: ≥ 0 expected, got {number}")
     return number
 
 
-def _positive_int(mapping: dict[str, Any], key: str, section: str) -> int:
+def _positive_int(section: dict[str, Any], key: str, error_label: str) -> int:
     """Strictly positive integer (bool refused), else ``ConfigError`` (fail-fast §5/§14)."""
-    if key not in mapping:
-        raise ConfigError(f"{section}: key {key!r} missing")
-    value = mapping[key]
+    value = _required(section, key, error_label)
     if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
-        raise ConfigError(f"{section}.{key}: strictly positive integer expected, got {value!r}")
+        raise ConfigError(
+            f"{_key_path(error_label, key)}: strictly positive integer expected, got {value!r}"
+        )
     return value
 
 
-def _bool(mapping: dict[str, Any], key: str, section: str) -> bool:
+def _bool(section: dict[str, Any], key: str, error_label: str) -> bool:
     """REQUIRED boolean, else ``ConfigError`` (fail-fast §5/§14)."""
-    if key not in mapping:
-        raise ConfigError(f"{section}: key {key!r} missing")
-    value = mapping[key]
+    value = _required(section, key, error_label)
     if not isinstance(value, bool):
-        raise ConfigError(f"{section}.{key}: boolean expected, got {value!r}")
+        raise ConfigError(f"{_key_path(error_label, key)}: boolean expected, got {value!r}")
     return value
 
 
 # Coherent bounds for a P2P watch: a day for a delay, 30 days for an absence (operator, 2026-10-13).
-_A_DAY = 86_400.0
-_THIRTY_DAYS = 2_592_000.0
+_A_DAY_SECONDS = 86_400.0
+_THIRTY_DAYS_SECONDS = 2_592_000.0
 
 
 def _seconds(
-    mapping: dict[str, Any],
+    section: dict[str, Any],
     key: str,
-    section: str,
+    error_label: str,
     default: float | None = None,
     *,
-    at_most: float = _A_DAY,
+    at_most: float = _A_DAY_SECONDS,
 ) -> float:
     """Strictly positive seconds up to ``at_most``; OPTIONAL when given a ``default``."""
-    if default is not None and key not in mapping:
+    if default is not None and key not in section:
         return default
-    seconds = _positive(mapping, key, section)
+    seconds = _positive(section, key, error_label)
     if seconds > at_most:
-        raise ConfigError(f"{section}.{key}: at most {at_most:.0f} seconds expected, got {seconds}")
+        raise ConfigError(
+            f"{_key_path(error_label, key)}: at most {at_most:.0f} seconds expected, got {seconds}"
+        )
     return seconds
 
 
-def _positive_int_default(mapping: dict[str, Any], key: str, default: int, section: str) -> int:
+def _positive_int_default(section: dict[str, Any], key: str, error_label: str, default: int) -> int:
     """OPTIONAL strictly positive integer (default ``default``)."""
-    if key not in mapping:
+    if key not in section:
         return default
-    return _positive_int(mapping, key, section)
+    return _positive_int(section, key, error_label)
 
 
-def _bool_default(mapping: dict[str, Any], key: str, default: bool, section: str) -> bool:
-    """OPTIONAL boolean (default ``default``); refuses a non-bool — fail-fast (§5/§14)."""
-    if key not in mapping:
+def _bool_default(section: dict[str, Any], key: str, error_label: str, default: bool) -> bool:
+    """OPTIONAL boolean (default ``default``); refuses a non-bool, fail-fast (§5/§14)."""
+    if key not in section:
         return default
-    value = mapping[key]
+    value = section[key]
     if not isinstance(value, bool):
-        raise ConfigError(f"{section}.{key}: boolean expected, got {value!r}")
+        raise ConfigError(f"{_key_path(error_label, key)}: boolean expected, got {value!r}")
     return value
 
 
-def _require_str(mapping: dict[str, Any], key: str, section: str, env: Mapping[str, str]) -> str:
+def _string(section: dict[str, Any], key: str, error_label: str, env: Mapping[str, str]) -> str:
     """Non-empty string, ``${NAME}``-interpolated from ``env`` AFTER reading, BEFORE the non-empty
     check (fail-fast §5/§14). Missing env variable ⇒ ``ConfigError`` (via ``interpolate``)."""
-    if key not in mapping:
-        raise ConfigError(f"{section}: key {key!r} missing")
-    value = mapping[key]
+    key_path = _key_path(error_label, key)
+    value = _required(section, key, error_label)
     if not isinstance(value, str):
-        raise ConfigError(f"{section}.{key}: non-empty string expected, got {value!r}")
-    interpolated = interpolate(value, env, f"{section}.{key}")
+        raise ConfigError(f"{key_path}: non-empty string expected, got {value!r}")
+    interpolated = interpolate(value, env, key_path)
     if not interpolated:
-        raise ConfigError(f"{section}.{key}: non-empty string expected, got {interpolated!r}")
+        raise ConfigError(f"{key_path}: non-empty string expected, got {interpolated!r}")
     return interpolated
 
 
-def _parse_observability(raw: dict[str, Any], env: Mapping[str, str]) -> ObservabilityConfig:
-    log_level = raw.get("log_level", "INFO")
+def _parse_observability(section: dict[str, Any], env: Mapping[str, str]) -> ObservabilityConfig:
+    log_level = section.get("log_level", "INFO")
     if not isinstance(log_level, str) or log_level not in _LOG_LEVELS:
         raise ConfigError(
             f"observability.log_level: one of {sorted(_LOG_LEVELS)} expected, got {log_level!r}"
         )
     metrics: MetricsConfig | None = None
-    if "metrics" in raw:
-        metrics_raw = _require_mapping(raw["metrics"], "observability.metrics")
+    if "metrics" in section:
+        metrics_raw = _require_mapping(section["metrics"], "observability.metrics")
         metrics = MetricsConfig(
             enabled=_bool(metrics_raw, "enabled", "observability.metrics"),
             port=_positive_int(metrics_raw, "port", "observability.metrics"),
         )
-    timeout = _seconds(raw, "notification_timeout_seconds", "observability", 5.0)
+    timeout = _seconds(section, "notification_timeout_seconds", "observability", 5.0)
     notifications: list[NotificationTarget] = []
-    for index, entry in enumerate(raw.get("notifications", [])):
-        section = f"observability.notifications[{index}]"
-        mapping = _require_mapping(entry, section)
-        if "tag" in mapping:  # the 4.x name, refused like _MOVED_KEYS
+    for index, entry in enumerate(section.get("notifications", [])):
+        error_label = f"observability.notifications[{index}]"
+        notification = _require_mapping(entry, error_label)
+        if "tag" in notification:  # the 4.x name, refused like _MOVED_KEYS
             raise ConfigError(
-                f"{section}: key 'tag' was renamed 'audience', rename it in crawler.yml"
+                f"{error_label}: key 'tag' was renamed 'audience', rename it in crawler.yml"
             )
-        audience_raw = _require_str(mapping, "audience", section, env)
+        audience_raw = _string(notification, "audience", error_label, env)
         try:
             audience = Audience(audience_raw)
         except ValueError as error:
             raise ConfigError(
-                f"{section}.audience: 'community' or 'operations' expected, got {audience_raw!r}"
+                f"{error_label}.audience: 'community' or 'operations' expected, "
+                f"got {audience_raw!r}"
             ) from error
         notifications.append(
             NotificationTarget(
-                url=_require_str(mapping, "url", section, env),
+                url=_string(notification, "url", error_label, env),
                 audience=audience,
-                node_prefix=_bool_default(mapping, "node_prefix", True, section),
+                node_prefix=_bool_default(notification, "node_prefix", error_label, True),
             )
         )
     return ObservabilityConfig(
@@ -344,11 +359,11 @@ _DEFAULT_REAPPEARED_AFTER_SECONDS = 43_200.0  # 12 h: a night off does not notif
 _DEFAULT_SOURCES_INTERVAL_SECONDS = 300.0
 
 
-def _parse_download(raw: dict[str, Any]) -> DownloadConfig | None:
-    if "download" not in raw:
+def _parse_download(document: dict[str, Any]) -> DownloadConfig | None:
+    if "download" not in document:
         return None
-    section = _require_mapping(raw["download"], "section 'download'")
-    if not _bool_default(section, "enabled", False, "download"):
+    section = _require_mapping(document["download"], "section 'download'")
+    if not _bool_default(section, "enabled", "download", False):
         return None  # laziness: we read/interpolate NOTHING else (no variable required)
     output_dir = section.get("output_dir", _DEFAULT_OUTPUT_DIR)
     if not isinstance(output_dir, str) or not output_dir:
@@ -356,14 +371,14 @@ def _parse_download(raw: dict[str, Any]) -> DownloadConfig | None:
     return DownloadConfig(
         poll_interval_seconds=_seconds(section, "poll_interval_seconds", "download"),
         min_free_bytes=_positive_int_default(
-            section, "min_free_bytes", _DEFAULT_MIN_FREE_BYTES, "download"
+            section, "min_free_bytes", "download", _DEFAULT_MIN_FREE_BYTES
         ),
         lost_after_seconds=_seconds(
             section,
             "lost_after_seconds",
             "download",
             _DEFAULT_LOST_AFTER_SECONDS,
-            at_most=_THIRTY_DAYS,
+            at_most=_THIRTY_DAYS_SECONDS,
         ),
         output_dir=output_dir,
         reappeared_after=timedelta(
@@ -372,7 +387,7 @@ def _parse_download(raw: dict[str, Any]) -> DownloadConfig | None:
                 "reappeared_after_seconds",
                 "download",
                 _DEFAULT_REAPPEARED_AFTER_SECONDS,
-                at_most=_THIRTY_DAYS,
+                at_most=_THIRTY_DAYS_SECONDS,
             )
         ),
         sources_interval=timedelta(
@@ -383,20 +398,18 @@ def _parse_download(raw: dict[str, Any]) -> DownloadConfig | None:
     )
 
 
-def _parse_search(raw: dict[str, Any]) -> SearchConfig:
+def _parse_search(document: dict[str, Any]) -> SearchConfig:
     """`search` section, required: its non-empty keywords and its backoff."""
-    section = _require_mapping(raw.get("search", {}), "section 'search'")
-    if "keywords" not in section:
-        raise ConfigError("search: key 'keywords' missing")
-    keywords = section["keywords"]
+    section = _require_mapping(document.get("search", {}), "section 'search'")
+    keywords = _required(section, "keywords", "search")
     if not isinstance(keywords, list) or not keywords:
         raise ConfigError("search.keywords: non-empty list of strings expected")
-    result: list[str] = []
+    parsed_keywords: list[str] = []
     for entry in keywords:
         if not isinstance(entry, str) or not entry:
             raise ConfigError(f"search.keywords: non-empty string expected, got {entry!r}")
-        result.append(entry)
-    return SearchConfig(keywords=tuple(result), backoff=_parse_backoff(section))
+        parsed_keywords.append(entry)
+    return SearchConfig(keywords=tuple(parsed_keywords), backoff=_parse_backoff(section))
 
 
 def _parse_backoff(search: dict[str, Any]) -> BackoffConfig:
@@ -419,15 +432,15 @@ def _parse_backoff(search: dict[str, Any]) -> BackoffConfig:
     return backoff
 
 
-def _parse_webui(raw: dict[str, Any], env: Mapping[str, str]) -> WebuiConfig:
+def _parse_webui(document: dict[str, Any], env: Mapping[str, str]) -> WebuiConfig:
     """`webui` section (optional). Absent ⇒ enabled, default aMule link and period gap.
 
     The bind is FIXED at 0.0.0.0:8080 in the composition layer, so this reads no host/port: an
     unknown key (a legacy ``host``/``port``) is ignored silently, no fail-fast."""
-    if "webui" not in raw:
+    if "webui" not in document:
         return _DEFAULT_WEBUI
-    section = _require_mapping(raw["webui"], "section 'webui'")
-    enabled = _bool_default(section, "enabled", True, "webui")
+    section = _require_mapping(document["webui"], "section 'webui'")
+    enabled = _bool_default(section, "enabled", "webui", True)
     gap = timedelta(
         seconds=_seconds(
             section,
@@ -438,35 +451,35 @@ def _parse_webui(raw: dict[str, Any], env: Mapping[str, str]) -> WebuiConfig:
     )
     if "amule_url" not in section:
         return WebuiConfig(enabled=enabled, source_period_gap=gap)
-    amule_url = _require_str(section, "amule_url", "webui", env)
+    amule_url = _string(section, "amule_url", "webui", env)
     return WebuiConfig(enabled=enabled, amule_url=amule_url, source_period_gap=gap)
 
 
-def parse_crawler_config(raw: dict[str, Any], env: Mapping[str, str]) -> CrawlerConfig:
+def parse_crawler_config(document: dict[str, Any], env: Mapping[str, str]) -> CrawlerConfig:
     """Builds a validated ``CrawlerConfig`` from the parsed YAML dict + the ``env`` environment
     (interpolation of ``${NAME}``). Fail-fast §5/§14: any inconsistency → ``ConfigError``."""
     for key in _REMOVED_KEYS:
-        if key in raw:
-            raise ConfigError(f"crawler: key '{key}' was removed, delete it from crawler.yml")
-    for key, place in _MOVED_KEYS.items():
-        if key in raw:
-            raise ConfigError(f"crawler: key '{key}' moved to '{place}', move it in crawler.yml")
-    node_id_raw = raw.get("node_id")
+        if key in document:
+            raise ConfigError(f"key '{key}' was removed, delete it from crawler.yml")
+    for key, new_path in _MOVED_KEYS.items():
+        if key in document:
+            raise ConfigError(f"key '{key}' moved to '{new_path}', move it in crawler.yml")
+    node_id_raw = document.get("node_id")
     if node_id_raw is not None and (not isinstance(node_id_raw, str) or not node_id_raw):
         raise ConfigError(f"node_id: non-empty string or absent expected, got {node_id_raw!r}")
     observability: ObservabilityConfig | None = None
-    if "observability" in raw:
+    if "observability" in document:
         observability = _parse_observability(
-            _require_mapping(raw["observability"], "section 'observability'"), env
+            _require_mapping(document["observability"], "section 'observability'"), env
         )
     return CrawlerConfig(
-        search=_parse_search(raw),
-        shutdown_deadline_seconds=_seconds(raw, "shutdown_deadline_seconds", "crawler"),
-        amule_api_password=_require_str(raw, "amule_api_password", "crawler", env),
-        catalog_db_path=_require_str(raw, "catalog_db_path", "crawler", env),
-        local_db_path=_require_str(raw, "local_db_path", "crawler", env),
+        search=_parse_search(document),
+        shutdown_deadline_seconds=_seconds(document, "shutdown_deadline_seconds", _ROOT),
+        amule_api_password=_string(document, "amule_api_password", _ROOT, env),
+        catalog_db_path=_string(document, "catalog_db_path", _ROOT, env),
+        local_db_path=_string(document, "local_db_path", _ROOT, env),
         node_id=node_id_raw,
         observability=observability,
-        download=_parse_download(raw),
-        webui=_parse_webui(raw, env),
+        download=_parse_download(document),
+        webui=_parse_webui(document, env),
     )

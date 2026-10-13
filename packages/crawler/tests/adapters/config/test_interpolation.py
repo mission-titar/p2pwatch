@@ -23,9 +23,9 @@ def test_repeated_variable() -> None:
 
 def test_missing_variable_raises_naming_var_and_field() -> None:
     with pytest.raises(ConfigError) as err:
-        interpolate("${MISSING}", {}, "crawler.amule_api_password")
+        interpolate("${MISSING}", {}, "webui.amule_url")
     assert "MISSING" in str(err.value)
-    assert "crawler.amule_api_password" in str(err.value)
+    assert "webui.amule_url" in str(err.value)
 
 
 def test_dollar_without_braces_is_literal() -> None:
