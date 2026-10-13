@@ -77,7 +77,7 @@ _CARRIED = {
     SourceGroup.UNKNOWN: SourceRole.UNDETERMINED,
 }
 
-# One missed read stays within three spacings while a cycle lasts under half of one (D4).
+# One missed read stays within three spacings, a cycle under half of one (source points spec, D4).
 _TOLERATED_READS = 3
 
 
@@ -87,7 +87,7 @@ def carried_role(previous: SourceRole | None) -> SourceRole:
 
 
 def source_tolerance(spacing: timedelta) -> timedelta:
-    """The longest gap between two reads of one source that still joins them (D4, D6)."""
+    """The longest gap over which the writer carries a role (source points spec, D4)."""
     return _TOLERATED_READS * spacing
 
 

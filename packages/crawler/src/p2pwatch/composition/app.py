@@ -356,7 +356,7 @@ class CrawlerApp:
             status=status,
             amule_url=self._crawler_config.webui.amule_url,
             clock=self._clock,
-            source_tolerance=self._crawler_config.webui.source_period_gap,
+            source_period_gap=self._crawler_config.webui.source_period_gap,
         )
         server = self._webui_server_factory(app)
         thread = threading.Thread(

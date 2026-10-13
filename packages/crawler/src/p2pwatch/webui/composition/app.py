@@ -240,12 +240,12 @@ def _source_history_row(period: SourcePeriodView) -> SourceHistoryRow:
     )
 
 
-def _period_window(interval: Interval, tolerance: timedelta) -> PeriodWindow:
+def _period_window(interval: Interval, gap: timedelta) -> PeriodWindow:
     """The interval in microseconds, with the gap that cuts a period."""
     return PeriodWindow(
         since=(interval.since - _EPOCH) // _MICROSECOND,
         until=(interval.until - _EPOCH) // _MICROSECOND,
-        tolerance=tolerance // _MICROSECOND,
+        gap=gap // _MICROSECOND,
     )
 
 
@@ -591,7 +591,7 @@ def build_app(
     status: StatusReadings,
     amule_url: str,
     clock: Clock,
-    source_tolerance: timedelta,
+    source_period_gap: timedelta,
 ) -> Starlette:
     """Build and return the wired Starlette application.
 
@@ -606,7 +606,7 @@ def build_app(
     no write connection (spec §4/§10). ``status`` holds the status loops' last readings.
 
     ``amule_url`` is the base the nav's aMule entry points at (design §9); the caller reads it
-    from ``webui.amule_url``. ``source_tolerance`` is the longest gap within a source period, from
+    from ``webui.amule_url``. ``source_period_gap`` is the longest gap within a source period, from
     ``webui.source_period_gap_seconds`` (source points spec, D6)."""
 
     templates = Jinja2Templates(
@@ -784,7 +784,7 @@ def build_app(
         raw_id: str = request.path_params["source_id"]
         page = _page_number(request.query_params.get("page"))
         now, interval = _interval(request)
-        window = _period_window(interval, source_tolerance)
+        window = _period_window(interval, source_period_gap)
         catalog = CatalogReader(catalog_reader.connection())
         detail = (
             catalog.source_detail(bytes.fromhex(raw_id), page=page, window=window)
@@ -810,7 +810,7 @@ def build_app(
         name = request.query_params.get("name")
         page = _page_number(request.query_params.get("page"))
         now, interval = _interval(request)
-        window = _period_window(interval, source_tolerance)
+        window = _period_window(interval, source_period_gap)
         catalog = CatalogReader(catalog_reader.connection())
         detail = None if name is None else catalog.name_detail(name, page=page, window=window)
         if detail is None:
@@ -834,7 +834,7 @@ def build_app(
         raw_id: str = request.path_params["file_id"]
 
         now, interval = _interval(request)
-        window = _period_window(interval, source_tolerance)
+        window = _period_window(interval, source_period_gap)
         catalog = CatalogReader(catalog_reader.connection())
         detail = (
             catalog.file_detail(bytes.fromhex(raw_id), window)

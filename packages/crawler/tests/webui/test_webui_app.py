@@ -56,7 +56,7 @@ TEST_HASH = "aabbccdd00112233aabbccdd00112233"
 _AMULE_URL = "http://localhost:4711"
 # Wednesday 2026-10-14 20:00 UTC: the period tables read the 7 days before it.
 _CLOCK = FakeClock(datetime(2026, 10, 14, 20, 0, tzinfo=UTC))
-_TOLERANCE = timedelta(seconds=90)
+_GAP = timedelta(seconds=90)
 
 
 class _Readings:
@@ -197,7 +197,7 @@ def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
-        source_tolerance=_TOLERANCE,
+        source_period_gap=_GAP,
     )
     return app, TEST_HASH
 
@@ -242,7 +242,7 @@ def app_no_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
-        source_tolerance=_TOLERANCE,
+        source_period_gap=_GAP,
     )
     return app, TEST_HASH
 
@@ -299,7 +299,7 @@ def app_retracted_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette,
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
-        source_tolerance=_TOLERANCE,
+        source_period_gap=_GAP,
     )
     return app, TEST_HASH
 
@@ -337,7 +337,7 @@ def app_no_observations(catalog_db: Path, local_db: Path) -> tuple[Starlette, st
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
-        source_tolerance=_TOLERANCE,
+        source_period_gap=_GAP,
     )
     return app, TEST_HASH
 
@@ -383,7 +383,7 @@ def app_unknown_target(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
-        source_tolerance=_TOLERANCE,
+        source_period_gap=_GAP,
     )
     return app, TEST_HASH
 
@@ -429,7 +429,7 @@ def app_download_tier_known_target(catalog_db: Path, local_db: Path) -> tuple[St
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
-        source_tolerance=_TOLERANCE,
+        source_period_gap=_GAP,
     )
     return app, TEST_HASH
 
@@ -475,7 +475,7 @@ def app_download_tier_unknown_target(catalog_db: Path, local_db: Path) -> tuple[
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
-        source_tolerance=_TOLERANCE,
+        source_period_gap=_GAP,
     )
     return app, TEST_HASH
 
@@ -722,7 +722,7 @@ def app_vetoed_alias(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
-        source_tolerance=_TOLERANCE,
+        source_period_gap=_GAP,
     )
     return app, TEST_HASH
 
@@ -1008,7 +1008,7 @@ async def test_source_and_name_pages_show_every_period_of_the_window_on_one_page
         if user is not None:
             insert_source(conn, user)
         variant = insert_source_variant(conn, hash_, user)
-        for n in range(PAGE_SIZE + 1):  # one period each, past the tolerance
+        for n in range(PAGE_SIZE + 1):  # one period each, past the gap
             insert_source_point(conn, variant, _TUESDAY_8PM + n * 100_000_000)
     first, second = await _sources_page(app, url), await _sources_page(app, f"{url}page=2")
     assert first.count("<tr><td>") == PAGE_SIZE + 1 + lists
@@ -1236,7 +1236,7 @@ def app_with_media_obs(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
-        source_tolerance=_TOLERANCE,
+        source_period_gap=_GAP,
     )
     return app, TEST_HASH
 
@@ -1298,7 +1298,7 @@ def app_with_hostile_filename(catalog_db: Path, local_db: Path) -> tuple[Starlet
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
-        source_tolerance=_TOLERANCE,
+        source_period_gap=_GAP,
     )
     return app, TEST_HASH
 
@@ -1377,7 +1377,7 @@ async def test_files_page_shows_pagination_navigation(catalog_db: Path, local_db
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
-        source_tolerance=_TOLERANCE,
+        source_period_gap=_GAP,
     )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp1 = await client.get("/files")
@@ -1697,7 +1697,7 @@ def app_whole_episode(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
-        source_tolerance=_TOLERANCE,
+        source_period_gap=_GAP,
     )
     return app, TEST_HASH
 
@@ -1770,7 +1770,7 @@ def _dashboard_app(
         status=status,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
-        source_tolerance=_TOLERANCE,
+        source_period_gap=_GAP,
     )
 
 
@@ -2015,7 +2015,7 @@ def sortable_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, list[str]
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
-        source_tolerance=_TOLERANCE,
+        source_period_gap=_GAP,
     )
     return app, [big, mid, small]
 
@@ -2234,7 +2234,7 @@ async def test_nav_amule_link_uses_the_configured_base(catalog_db: Path, local_d
         status=_NO_STATUS,
         amule_url="https://mule.example.org/amule",
         clock=_CLOCK,
-        source_tolerance=_TOLERANCE,
+        source_period_gap=_GAP,
     )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/")

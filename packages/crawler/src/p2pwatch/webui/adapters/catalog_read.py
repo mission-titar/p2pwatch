@@ -232,7 +232,7 @@ WHERE file_id = ?
 """
 
 # A period joins the consecutive points of one identity (the source_id, else the name) on one
-# file and one node, cut where the variant changes, the gap passes the tolerance or the counter
+# file and one node, cut where the variant changes, a gap passes the window's gap or the counter
 # drops (source points spec, D6). Only the window's points are read, a seek on the primary key
 # bounded by ``observed_at``. A ``_WHERE_*`` goes between this and ``_SQL_PERIODS_END``.
 _SQL_PERIODS = """\
@@ -256,7 +256,7 @@ starts AS (
         *,
         (
             variant_id IS NOT LAG(variant_id) OVER identity
-            OR observed_at - LAG(observed_at) OVER identity > :tolerance
+            OR observed_at - LAG(observed_at) OVER identity > :gap
             OR transfer_counter < LAG(transfer_counter) OVER identity
         ) AS starts_period
     FROM points
@@ -705,7 +705,7 @@ class CatalogReader:
             "key": key,
             "since": window.since,
             "until": window.until,
-            "tolerance": window.tolerance,
+            "gap": window.gap,
         }
         return self._conn.execute(_SQL_PERIODS + where + _SQL_PERIODS_END, params).fetchall()
 

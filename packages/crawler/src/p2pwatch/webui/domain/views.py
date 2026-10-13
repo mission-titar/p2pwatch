@@ -147,7 +147,7 @@ class PeriodWindow:
 
     since: int
     until: int
-    tolerance: int
+    gap: int
 
 
 @dataclass(frozen=True)
