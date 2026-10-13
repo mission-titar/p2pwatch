@@ -154,8 +154,9 @@ def _human(message: str) -> None:
 
 
 def _sources_spacing(download: DownloadConfig) -> timedelta:
-    """The longest time between two reads of the sources: one poll (source points spec, D3)."""
-    return timedelta(seconds=download.poll_interval_seconds)
+    """The longest time between two reads of the sources: the interval plus a poll (source
+    points spec, D3), since the step runs on the first round past its interval."""
+    return download.sources_interval + timedelta(seconds=download.poll_interval_seconds)
 
 
 def _build_policy(config: CrawlerConfig) -> WorkerPolicy:
@@ -263,6 +264,7 @@ class CrawlerApp:
             lost_after_seconds=download_config.lost_after_seconds,
             poll_interval_seconds=download_config.poll_interval_seconds,
             reappeared_after=download_config.reappeared_after,
+            sources_interval=download_config.sources_interval,
             clock=self._clock,
             telemetry=telemetry,
             signal=self._signal,

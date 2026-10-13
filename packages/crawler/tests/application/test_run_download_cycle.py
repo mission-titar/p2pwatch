@@ -334,6 +334,7 @@ def _deps(
     targets: Sequence[TargetSegment] | None = None,
     sources: SourceRepository | None = None,
     clock: FakeClock | None = None,
+    sources_interval: timedelta = timedelta(seconds=30),
 ) -> DownloadDeps:
     return DownloadDeps(
         client=client,
@@ -347,6 +348,7 @@ def _deps(
         lost_after_seconds=lost_after,
         poll_interval_seconds=30.0,
         reappeared_after=timedelta(hours=12),
+        sources_interval=sources_interval,
         clock=clock or FakeClock(),
         telemetry=telemetry or RecordingTelemetry(),
     )
@@ -1474,6 +1476,53 @@ async def test_a_daemon_unreachable_at_the_start_reads_no_source() -> None:
     catalog = FakeCatalogReads(observations={_C: ObservedFile(filename="c.avi", size_bytes=1)})
     await run_download_cycle(_deps(client=client, downloads=downloads, catalog=catalog))
     assert client.source_reads == []
+
+
+@pytest.mark.asyncio
+async def test_sources_are_read_once_per_interval_however_often_the_cycle_runs() -> None:
+    # Source points spec, D3: rounds 30 s apart, sources every 300 s, the first round included.
+    clock = FakeClock()
+    start = clock.now()
+    client = FakeDownloadClient(listed=[(_status(_A),)] * 11)
+    sources = FakeSourceRepo()
+    deps = _deps(
+        client=client,
+        downloads=_tracking(_A),
+        catalog=FakeCatalogReads(),
+        sources=sources,
+        clock=clock,
+        sources_interval=timedelta(seconds=300),
+    )
+    for _ in range(11):
+        await run_download_cycle(deps)
+        await clock.sleep(30.0)
+    assert [read_at for _, _, read_at in sources.recorded] == [
+        start,
+        start + timedelta(seconds=300),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_sources_read_the_daemon_failed_waits_for_the_next_interval() -> None:
+    # The step's time is taken when it starts, so an unreachable client is not retried each poll.
+    clock = FakeClock()
+    client = FakeDownloadClient(
+        listed=[(_status(_A),)] * 3, source_failures=[ClientUnreachableError("down")]
+    )
+    deps = _deps(
+        client=client,
+        downloads=_tracking(_A),
+        catalog=FakeCatalogReads(),
+        clock=clock,
+        sources_interval=timedelta(seconds=300),
+    )
+    await run_download_cycle(deps)
+    await clock.sleep(30.0)
+    await run_download_cycle(deps)
+    assert client.source_reads == [_A]
+    await clock.sleep(270.0)
+    await run_download_cycle(deps)
+    assert client.source_reads == [_A, _A]
 
 
 _PEER, _OTHER_PEER = SourceKey(Network.ED2K, "1f2e3d4c" * 4), SourceKey(Network.ED2K, "c" * 32)

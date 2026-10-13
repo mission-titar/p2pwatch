@@ -132,9 +132,11 @@ class DownloadDeps:
     lost_after_seconds: float
     poll_interval_seconds: float
     reappeared_after: timedelta
+    sources_interval: timedelta
     clock: Clock
     telemetry: Telemetry
     edge: EdgeState = field(default_factory=EdgeState, kw_only=True)  # low-disk warning
+    sources_read_at: datetime | None = field(default=None, kw_only=True)  # the step's last start
 
 
 @dataclass
@@ -369,9 +371,16 @@ async def _alert_sources(
 async def _record_sources(deps: DownloadDeps, listed: tuple[DownloadStatus, ...]) -> None:
     """Records the sources of each of our downloads the client lists, completed ones aside, then
     alerts on them (stage 4, D8; source points, D5). A repo failure skips that download's; a
-    client failure propagates."""
+    client failure propagates.
+
+    Runs once ``sources_interval`` has passed since its last start, failed or not (D3)."""
+    started_at = deps.clock.now()
+    last = deps.sources_read_at
+    if last is not None and started_at - last < deps.sources_interval:
+        return
+    deps.sources_read_at = started_at
     tracked = deps.downloads.active_states()
-    round_ = _AlertRound(deps.clock.now())
+    round_ = _AlertRound(started_at)
     for status in listed:
         if status.completed or status.file not in tracked:
             continue

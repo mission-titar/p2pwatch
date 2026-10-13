@@ -1,5 +1,4 @@
 # SMOKE crawler.yml: download mode (download.enabled: true), short intervals.
-decision_poll_interval_seconds: 2.0
 shutdown_deadline_seconds: 5.0
 
 amule_api_password: ${AMULE_API_PASSWORD}
