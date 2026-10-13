@@ -7,20 +7,20 @@ from packaging.version import Version
 
 from vex_guards.descriptors import (
     DeclaredMinVersion,
+    DpkgMinVersion,
+    DpkgPackageAbsent,
     ImageGuard,
-    PackageAbsent,
-    PackageMinVersion,
 )
 from vex_guards.violations import Violation
 
 
 @dataclass(frozen=True)
-class DebPackage:
+class DpkgPackage:
     name: str
     version: str
 
 
-def load_dpkg_packages(path: Path) -> list[DebPackage]:
+def load_dpkg_packages(path: Path) -> list[DpkgPackage]:
     """The dpkg packages of a Syft JSON SBOM, in document order.
 
     Syft types those "deb". aMule (declared by hand, see ``load_declared_components``)
@@ -28,7 +28,7 @@ def load_dpkg_packages(path: Path) -> list[DebPackage]:
     """
     doc = json.loads(path.read_text())
     return [
-        DebPackage(name=a["name"], version=a["version"])
+        DpkgPackage(name=a["name"], version=a["version"])
         for a in doc["artifacts"]
         if a["type"] == "deb"
     ]
@@ -68,37 +68,38 @@ def _upstream(version: str) -> str:
 
 def evaluate_image_guards(
     guards: dict[str, ImageGuard],
-    packages: list[DebPackage],
-    declared: list[DeclaredComponent],
+    packages: list[DpkgPackage],
+    declared_components: list[DeclaredComponent],
 ) -> list[Violation]:
-    by_name: dict[str, list[DebPackage]] = {}
+    by_name: dict[str, list[DpkgPackage]] = {}
     for pkg in packages:
         by_name.setdefault(pkg.name, []).append(pkg)
     violations: list[Violation] = []
-    for cve, guard in guards.items():
+    for advisory_id, guard in guards.items():
         match guard:
-            case PackageAbsent(package):
+            case DpkgPackageAbsent(package):
                 if package in by_name:
                     violations.append(
-                        Violation(cve, f"dpkg package {package!r} is present", "security")
+                        Violation(advisory_id, f"dpkg package {package!r} is present", "security")
                     )
-            case PackageMinVersion(package, minimum):
+            case DpkgMinVersion(package, minimum):
                 for pkg in by_name.get(package, []):
                     if Version(_upstream(pkg.version)) < Version(minimum):
                         violations.append(
                             Violation(
-                                cve,
+                                advisory_id,
                                 f"{package} {pkg.version} is below {minimum}",
                                 "security",
                             )
                         )
-            case DeclaredMinVersion(package, minimum):
-                for component in (c for c in declared if c.name == package):
-                    if Version(component.version) < Version(minimum):
+            case DeclaredMinVersion(component, minimum):
+                for declared_component in (c for c in declared_components if c.name == component):
+                    if Version(declared_component.version) < Version(minimum):
                         violations.append(
                             Violation(
-                                cve,
-                                f"declared {package} {component.version} is below {minimum}",
+                                advisory_id,
+                                f"declared {component} {declared_component.version}"
+                                f" is below {minimum}",
                                 "security",
                             )
                         )

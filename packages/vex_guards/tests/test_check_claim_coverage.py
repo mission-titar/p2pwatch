@@ -1,7 +1,7 @@
 import pytest
 
 from vex_guards import check_claim_coverage
-from vex_guards.descriptors import ModuleNotImported, PackageAbsent
+from vex_guards.descriptors import DpkgPackageAbsent, ModuleNotImported
 
 
 def test_main_returns_zero_on_the_real_registry_and_vex() -> None:
@@ -56,7 +56,7 @@ def test_justification_that_mismatches_the_guard_family_fails(
     monkeypatch.setattr(
         check_claim_coverage,
         "GUARDS",
-        {"CVE-7777": PackageAbsent("nghttp2")},
+        {"CVE-7777": DpkgPackageAbsent("nghttp2")},
     )
 
     assert check_claim_coverage.main() == 1

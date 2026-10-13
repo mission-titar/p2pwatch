@@ -16,16 +16,18 @@ from vex_guards.vex_io import all_claims
 def main() -> int:
     claims = all_claims(list(vex_files().values()))
     problems: list[str] = []
-    for cve in set(claims) - set(GUARDS):
-        problems.append(f"{cve}: claim has no guard")
-    for cve in set(GUARDS) - set(claims):
-        problems.append(f"{cve}: guard has no claim")
-    for cve in set(claims) & set(GUARDS):
-        expected = JUSTIFICATION_BY_FAMILY[family(GUARDS[cve])]
-        if claims[cve] != expected:
-            problems.append(f"{cve}: justification {claims[cve]!r} does not match guard family")
-    for p in problems:
-        print(f"::error::{p}")
+    for advisory_id in set(claims) - set(GUARDS):
+        problems.append(f"{advisory_id}: claim has no guard")
+    for advisory_id in set(GUARDS) - set(claims):
+        problems.append(f"{advisory_id}: guard has no claim")
+    for advisory_id in set(claims) & set(GUARDS):
+        expected = JUSTIFICATION_BY_FAMILY[family(GUARDS[advisory_id])]
+        if claims[advisory_id] != expected:
+            problems.append(
+                f"{advisory_id}: justification {claims[advisory_id]!r} does not match guard family"
+            )
+    for problem in problems:
+        print(f"::error::{problem}")
     return 1 if problems else 0
 
 

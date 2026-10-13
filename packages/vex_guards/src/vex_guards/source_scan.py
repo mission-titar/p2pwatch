@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import assert_never
 
 from vex_guards import repo
-from vex_guards.descriptors import ModuleNotImported, SourceGuard, SubprocessDenies
+from vex_guards.descriptors import ModuleNotImported, ProgramNeverInvoked, SourceGuard
 from vex_guards.violations import Violation
 
 
@@ -71,7 +71,7 @@ def _string_words(tree: ast.AST) -> set[str]:
     return words
 
 
-def _rel(path: Path) -> str:
+def _repository_relative(path: Path) -> str:
     return str(path.relative_to(repo.repo_root(), walk_up=True))
 
 
@@ -84,30 +84,36 @@ def _parse_sources(src_dirs: list[Path]) -> list[tuple[Path, ast.AST]]:
 
 
 def _module_violation(
-    cve: str, module: str, parsed: list[tuple[Path, ast.AST]]
+    advisory_id: str, module: str, parsed: list[tuple[Path, ast.AST]]
 ) -> Violation | None:
     for path, tree in parsed:
         if module in _imported_modules(tree):
-            return Violation(cve, f"module {module!r} is imported", _rel(path))
+            return Violation(
+                advisory_id, f"module {module!r} is imported", _repository_relative(path)
+            )
     return None
 
 
-def _word_violation(cve: str, word: str, parsed: list[tuple[Path, ast.AST]]) -> Violation | None:
+def _word_violation(
+    advisory_id: str, word: str, parsed: list[tuple[Path, ast.AST]]
+) -> Violation | None:
     for path, tree in parsed:
         if word in _string_words(tree):
-            return Violation(cve, f"{word!r} appears in a string literal", _rel(path))
+            return Violation(
+                advisory_id, f"{word!r} appears in a string literal", _repository_relative(path)
+            )
     return None
 
 
-def evaluate(guards: dict[str, SourceGuard], src_dirs: list[Path]) -> list[Violation]:
+def evaluate_source_guards(guards: dict[str, SourceGuard], src_dirs: list[Path]) -> list[Violation]:
     parsed = _parse_sources(src_dirs)
     violations: list[Violation] = []
-    for cve, guard in guards.items():
+    for advisory_id, guard in guards.items():
         match guard:
             case ModuleNotImported(module=module):
-                found = _module_violation(cve, module, parsed)
-            case SubprocessDenies(program=program):
-                found = _word_violation(cve, program, parsed)
+                found = _module_violation(advisory_id, module, parsed)
+            case ProgramNeverInvoked(program=program):
+                found = _word_violation(advisory_id, program, parsed)
             case _:  # pragma: no cover
                 assert_never(guard)
         if found is not None:

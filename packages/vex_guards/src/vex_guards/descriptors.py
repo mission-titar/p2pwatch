@@ -17,29 +17,29 @@ class ModuleNotImported:
 
 
 @dataclass(frozen=True)
-class SubprocessDenies:
+class ProgramNeverInvoked:
     program: str
 
 
 @dataclass(frozen=True)
-class PackageAbsent:
+class DpkgPackageAbsent:
     package: str
 
 
 @dataclass(frozen=True)
-class PackageMinVersion:
+class DpkgMinVersion:
     package: str
     minimum: str
 
 
 @dataclass(frozen=True)
 class DeclaredMinVersion:
-    package: str
+    component: str
     minimum: str
 
 
-SourceGuard = ModuleNotImported | SubprocessDenies
-ImageGuard = PackageAbsent | PackageMinVersion | DeclaredMinVersion
+SourceGuard = ModuleNotImported | ProgramNeverInvoked
+ImageGuard = DpkgPackageAbsent | DpkgMinVersion | DeclaredMinVersion
 Guard = SourceGuard | ImageGuard
 
 Family = Literal["source", "image"]
@@ -52,9 +52,9 @@ JUSTIFICATION_BY_FAMILY: dict[Family, str] = {
 
 def family(guard: Guard) -> Family:
     match guard:
-        case ModuleNotImported() | SubprocessDenies():
+        case ModuleNotImported() | ProgramNeverInvoked():
             return "source"
-        case PackageAbsent() | PackageMinVersion() | DeclaredMinVersion():
+        case DpkgPackageAbsent() | DpkgMinVersion() | DeclaredMinVersion():
             return "image"
         case _:  # pragma: no cover
             assert_never(guard)

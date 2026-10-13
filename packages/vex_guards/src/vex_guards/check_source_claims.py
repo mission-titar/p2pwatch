@@ -9,14 +9,16 @@ import sys
 from vex_guards.descriptors import SourceGuard, is_source_guard
 from vex_guards.registry import GUARDS
 from vex_guards.repo import source_dirs
-from vex_guards.source_scan import evaluate
+from vex_guards.source_scan import evaluate_source_guards
 
 
 def main() -> int:
-    guards: dict[str, SourceGuard] = {cve: g for cve, g in GUARDS.items() if is_source_guard(g)}
-    violations = evaluate(guards, source_dirs())
-    for v in violations:
-        print(f"::error::{v.cve}: {v.message} ({v.location})")
+    guards: dict[str, SourceGuard] = {
+        advisory_id: guard for advisory_id, guard in GUARDS.items() if is_source_guard(guard)
+    }
+    violations = evaluate_source_guards(guards, source_dirs())
+    for violation in violations:
+        print(f"::error::{violation.advisory_id}: {violation.message} ({violation.location})")
     return 1 if violations else 0
 
 
