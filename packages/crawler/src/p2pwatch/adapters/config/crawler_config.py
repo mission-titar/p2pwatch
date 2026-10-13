@@ -74,6 +74,7 @@ class DownloadConfig:
     lost_after_seconds: float
     output_dir: str
     reappeared_after: timedelta
+    sources_interval: timedelta
 
 
 # 3 x (300 + 30): the writer's tolerance at the shipped intervals (source points spec, D6).
@@ -109,6 +110,7 @@ _LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
 # Keys no longer read: refused, so an operator never believes they still apply.
 _REMOVED_KEYS = (
     "cycle_interval_seconds",
+    "decision_poll_interval_seconds",
     "keyword_pause_max_seconds",
     "keyword_pause_min_seconds",
     "port_sync",
@@ -140,8 +142,7 @@ class ObservabilityConfig:
 class CrawlerConfig:
     """Unified crawler config (policy + wiring). All durations in SECONDS.
 
-    Policy: ``backoff``, ``decision_poll_interval_seconds`` (nudge safety net),
-    ``shutdown_deadline_seconds`` (hard bound of the clean shutdown).
+    Policy: ``backoff``, ``shutdown_deadline_seconds`` (hard bound of the clean shutdown).
 
     Wiring (ex-local): ``amule_api_password`` (the daemon's amuleapi admin password, the same
     one the aMule web UI takes; host/port are code
@@ -153,7 +154,6 @@ class CrawlerConfig:
     """
 
     backoff: BackoffConfig
-    decision_poll_interval_seconds: float
     shutdown_deadline_seconds: float
     amule_api_password: str
     catalog_db_path: str
@@ -317,6 +317,7 @@ _DEFAULT_MIN_FREE_BYTES = 10_737_418_240  # 10 GiB
 _DEFAULT_LOST_AFTER_SECONDS = 86_400.0
 _DEFAULT_OUTPUT_DIR = "/downloads"  # the bind mount in deploy/compose.yml
 _DEFAULT_REAPPEARED_AFTER_SECONDS = 43_200.0  # 12 h: a night off does not notify (stage 4 spec, D9)
+_DEFAULT_SOURCES_INTERVAL_SECONDS = 300.0  # source points spec, D3
 
 
 def _duration_default(mapping: dict[str, Any], key: str, default: float, what: str) -> timedelta:
@@ -350,6 +351,9 @@ def _parse_download(raw: dict[str, Any]) -> DownloadConfig | None:
         output_dir=output_dir,
         reappeared_after=_duration_default(
             section, "reappeared_after_seconds", _DEFAULT_REAPPEARED_AFTER_SECONDS, "download"
+        ),
+        sources_interval=_duration_default(
+            section, "sources_interval_seconds", _DEFAULT_SOURCES_INTERVAL_SECONDS, "download"
         ),
     )
 
@@ -421,7 +425,6 @@ def parse_crawler_config(raw: dict[str, Any], env: Mapping[str, str]) -> Crawler
         )
     return CrawlerConfig(
         backoff=backoff,
-        decision_poll_interval_seconds=_positive(raw, "decision_poll_interval_seconds", "crawler"),
         shutdown_deadline_seconds=_positive(raw, "shutdown_deadline_seconds", "crawler"),
         amule_api_password=_require_str(raw, "amule_api_password", "crawler", env),
         catalog_db_path=_require_str(raw, "catalog_db_path", "crawler", env),

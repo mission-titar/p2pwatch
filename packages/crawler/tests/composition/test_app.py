@@ -33,6 +33,8 @@ from p2pwatch.adapters.persistence_sqlite.download_repository import SqliteDownl
 from p2pwatch.adapters.persistence_sqlite.local_state_repository import (
     SqliteLocalStateRepository,
 )
+from p2pwatch.adapters.persistence_sqlite.source_repository import SqliteSourceRepository
+from p2pwatch.application.run_download_cycle import DownloadLoopDeps
 from p2pwatch.composition import app as composition_app
 from p2pwatch.composition.app import (
     CrawlerApp,
@@ -95,7 +97,6 @@ def _crawler_config(
 ) -> CrawlerConfig:
     return CrawlerConfig(
         backoff=BackoffConfig(base_seconds=2.0, cap_seconds=60.0, factor=2.0, jitter_ratio=0.0),
-        decision_poll_interval_seconds=5.0,
         shutdown_deadline_seconds=shutdown_deadline,
         amule_api_password="p",
         catalog_db_path=str(tmp_path / "catalog.db"),
@@ -114,6 +115,7 @@ def _download_config(tmp_path: Path) -> DownloadConfig:
         lost_after_seconds=86_400.0,
         output_dir=str(tmp_path),
         reappeared_after=timedelta(hours=12),
+        sources_interval=timedelta(minutes=5),
     )
 
 
@@ -794,6 +796,45 @@ async def test_full_mode_records_the_sources_of_a_download_in_the_catalog(
     ).fetchall()
     catalog.close()
     assert rows == [("peer", "n1")]
+
+
+@pytest.mark.asyncio
+async def test_full_mode_reads_sources_at_their_interval_and_spaces_them_by_a_poll_more(
+    tmp_path: Path, matcher_config: MatcherConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Source points spec, D3: the writer's tolerance follows the spacing, interval plus a poll.
+    holder: dict[str, CrawlerApp] = {}
+    spacings: list[timedelta] = []
+    loops: list[DownloadLoopDeps] = []
+
+    def source_repository(
+        connection: sqlite3.Connection, node_id: str, spacing: timedelta
+    ) -> SqliteSourceRepository:
+        spacings.append(spacing)
+        return SqliteSourceRepository(connection, node_id, spacing)
+
+    async def loop(deps: DownloadLoopDeps) -> None:
+        loops.append(deps)
+        holder["app"]._on_signal()
+
+    monkeypatch.setattr(composition_app, "SqliteSourceRepository", source_repository)
+    monkeypatch.setattr(composition_app, "download_loop", loop)
+    download = replace(_download_config(tmp_path), sources_interval=timedelta(seconds=120))
+    app = CrawlerApp(
+        crawler_config=_crawler_config(tmp_path, download=download),
+        targets=_TARGETS,
+        matcher_config=matcher_config,
+        clock=FakeClock(),
+        rng=_NoopRng(),
+        signal_hub=RecordingSignal(),
+        policy_fingerprint=_FP,
+        client_factory=lambda endpoint, clock: FakeMuleClient(),
+        download_client_factory=lambda endpoint, clock: FakeDownloadClient(),
+    )
+    holder["app"] = app
+    await asyncio.wait_for(app.run(), timeout=5.0)
+    assert spacings == [timedelta(seconds=150)]
+    assert [deps.sources_interval for deps in loops] == [timedelta(seconds=120)]
 
 
 @pytest.mark.asyncio

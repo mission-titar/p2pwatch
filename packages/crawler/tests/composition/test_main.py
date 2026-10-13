@@ -13,7 +13,6 @@ _CONFIG = Path(__file__).resolve().parents[4] / "deploy"
 # Minimal UNIFIED crawler config (policy + observer wiring), secret via ${...}. The tests that
 # actually load a config write their own fixture into tmp_path.
 _UNIFIED_CONFIG = """\
-decision_poll_interval_seconds: 5.0
 shutdown_deadline_seconds: 10.0
 backoff:
   base_seconds: 2.0

@@ -27,7 +27,6 @@ def _minimal_raw() -> dict[str, Any]:
             "factor": 2.0,
             "jitter_ratio": 0.3,
         },
-        "decision_poll_interval_seconds": 5.0,
         "shutdown_deadline_seconds": 10.0,
         "amule_api_password": "secret",
         "catalog_db_path": "/data/catalog.db",
@@ -47,6 +46,7 @@ def _full_download_section() -> dict[str, Any]:
         "lost_after_seconds": 3600.0,
         "output_dir": "/data/out",
         "reappeared_after_seconds": 5400.0,
+        "sources_interval_seconds": 120.0,
     }
 
 
@@ -57,7 +57,6 @@ def test_parses_a_valid_config() -> None:
     config = parse_crawler_config(_minimal_raw(), _env())
     assert config == CrawlerConfig(
         backoff=BackoffConfig(base_seconds=2.0, cap_seconds=300.0, factor=2.0, jitter_ratio=0.3),
-        decision_poll_interval_seconds=5.0,
         shutdown_deadline_seconds=10.0,
         amule_api_password="secret",
         catalog_db_path="/data/catalog.db",
@@ -83,21 +82,21 @@ def test_negative_jitter_ratio_is_fatal() -> None:
 
 def test_missing_key_is_fatal() -> None:
     raw = _minimal_raw()
-    del raw["decision_poll_interval_seconds"]
-    with pytest.raises(ConfigError, match="decision_poll_interval_seconds"):
+    del raw["shutdown_deadline_seconds"]
+    with pytest.raises(ConfigError, match="shutdown_deadline_seconds"):
         parse_crawler_config(raw, _env())
 
 
 def test_non_numeric_value_is_fatal() -> None:
     raw = _minimal_raw()
-    raw["decision_poll_interval_seconds"] = "souvent"
+    raw["shutdown_deadline_seconds"] = "souvent"
     with pytest.raises(ConfigError, match="number expected"):
         parse_crawler_config(raw, _env())
 
 
 def test_bool_is_not_accepted_as_a_number() -> None:
     raw = _minimal_raw()
-    raw["decision_poll_interval_seconds"] = True
+    raw["shutdown_deadline_seconds"] = True
     with pytest.raises(ConfigError, match="number expected"):
         parse_crawler_config(raw, _env())
 
@@ -114,7 +113,7 @@ def test_bool_is_not_accepted_as_a_number() -> None:
         ("download", "poll_interval_seconds"),
         ("download", "lost_after_seconds"),
         ("download", "reappeared_after_seconds"),
-        (None, "decision_poll_interval_seconds"),
+        ("download", "sources_interval_seconds"),
         (None, "shutdown_deadline_seconds"),
     ],
 )
@@ -130,7 +129,7 @@ def test_a_number_that_is_not_finite_is_refused_by_name(
 
 def test_non_positive_value_is_fatal() -> None:
     raw = _minimal_raw()
-    raw["decision_poll_interval_seconds"] = 0
+    raw["shutdown_deadline_seconds"] = 0
     with pytest.raises(ConfigError, match="strictly positive"):
         parse_crawler_config(raw, _env())
 
@@ -139,6 +138,7 @@ def test_non_positive_value_is_fatal() -> None:
     "key",
     [
         "cycle_interval_seconds",
+        "decision_poll_interval_seconds",
         "keyword_pause_max_seconds",
         "keyword_pause_min_seconds",
         "port_sync",
@@ -299,7 +299,23 @@ def test_download_enabled_true_full_is_download_mode() -> None:
         lost_after_seconds=3600.0,
         output_dir="/data/out",
         reappeared_after=timedelta(seconds=5400),
+        sources_interval=timedelta(seconds=120),
     )
+
+
+def test_download_sources_interval_defaults_to_five_minutes() -> None:
+    section = _full_download_section()
+    del section["sources_interval_seconds"]
+    cfg = parse_crawler_config(_minimal_raw() | {"download": section}, _env())
+    assert cfg.download is not None
+    assert cfg.download.sources_interval == timedelta(seconds=300)
+
+
+@pytest.mark.parametrize("seconds", [0, -1, float("inf"), float("nan")])
+def test_download_sources_interval_is_a_positive_finite_number(seconds: float) -> None:
+    section = _full_download_section() | {"sources_interval_seconds": seconds}
+    with pytest.raises(ConfigError, match=r"download\.sources_interval_seconds"):
+        parse_crawler_config(_minimal_raw() | {"download": section}, _env())
 
 
 def test_download_poll_interval_must_be_positive() -> None:

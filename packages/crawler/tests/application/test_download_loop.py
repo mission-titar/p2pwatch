@@ -55,6 +55,7 @@ def _loop_deps(
         min_free_bytes=0,
         lost_after_seconds=86400.0,
         reappeared_after=timedelta(hours=12),
+        sources_interval=timedelta(minutes=5),
         clock=FakeClock(),
         telemetry=RecordingTelemetry(),
         signal=signal,
