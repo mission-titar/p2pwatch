@@ -195,7 +195,8 @@ Points clés en chemin :
   `ed2k` à 60 s d'écart au moins, un seul en vol ; deux départs Kad sur une même cible (le premier
   mot de 3 octets du mot-clé) à 60 s d'écart au moins. Un canal lent ne retient jamais un canal
   rapide.
-- **Mots-clés minimaux, depuis la config** : `search.keywords` (défaut `keroro` + `titar`). `keroro`
+- **Mots-clés minimaux, depuis la config** : `search.keywords`, obligatoire et sans défaut dans le code
+  (`keroro` + `titar` dans le `crawler.yml` livré). `keroro`
   ratisse large ; `titar` est une **sentinelle française** rare et non saturable (voir le handoff de
   simplification de la recherche pour le *pourquoi* : les données réelles ont montré que chercher
   davantage n'aide pas). La génération de mots-clés par cible a été supprimée.

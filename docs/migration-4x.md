@@ -39,6 +39,20 @@ racine : `cycle_interval_seconds`, `decision_poll_interval_seconds`, `search_pol
 que l'une reste, le crawler refuse de démarrer en la nommant :
 `crawler: key 'port_sync' was removed, delete it from crawler.yml`.
 
+Déplacez ensuite la section `backoff:` sous `search:`, à côté de `keywords`, que la 5.0 rend
+obligatoire. Laissée à la racine, elle est refusée de même :
+`crawler: key 'backoff' moved to 'search.backoff', move it in crawler.yml`.
+
+```yaml
+search:
+  keywords: [keroro, titar]
+  backoff:
+    base_seconds: 2.0
+    cap_seconds: 300.0
+    factor: 2.0
+    jitter_ratio: 0.3
+```
+
 **4. Remplacez les fichiers compose** par ceux du dossier `deploy` de la 5.0 : `compose.yml` à la
 racine, et les trois fichiers de son dossier `ed2k/` dans le vôtre.
 

@@ -136,7 +136,7 @@ message qui nomme la clé et sa borne.
 | Clé | Borne |
 |---|---|
 | `shutdown_deadline_seconds` | 1 jour (`86400`) |
-| `backoff.base_seconds`, `backoff.cap_seconds` | 1 jour (`86400`) |
+| `search.backoff.base_seconds`, `search.backoff.cap_seconds` | 1 jour (`86400`) |
 | `observability.notification_timeout_seconds` | 1 jour (`86400`) |
 | `download.poll_interval_seconds` | 1 jour (`86400`) |
 | `download.sources_interval_seconds` | 1 jour (`86400`) |
