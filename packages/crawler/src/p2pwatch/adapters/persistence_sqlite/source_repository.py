@@ -89,7 +89,7 @@ SELECT EXISTS (
 class SqliteSourceRepository:
     """SQLite implementation of the ``SourceRepository`` port (STRUCTURAL satisfaction).
 
-    ``spacing`` is the longest time between two reads of the sources (D3)."""
+    ``spacing`` is the reads' spacing the tolerance assumes (D3)."""
 
     def __init__(self, connection: sqlite3.Connection, node_id: str, spacing: timedelta) -> None:
         self._connection = connection

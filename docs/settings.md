@@ -95,7 +95,7 @@ relancez le crawler (`docker compose restart p2pwatch`) après l'avoir changée.
 crawler relève les sources de ses téléchargements
 ([Historique des sources](operate.md#historique-des-sources)). Le relevé a lieu au premier tour de
 la boucle de téléchargement qui suit cet intervalle : deux relevés sont donc espacés de l'intervalle,
-plus `download.poll_interval_seconds` au plus.
+plus un tour de la boucle au plus (`download.poll_interval_seconds` et la durée du cycle).
 
 Chaque relevé ajoute au catalogue un point par source : à 5 minutes, de l'ordre de 0,13 Go par an
 pour une cinquantaine de sources (estimation du 2026-10-13). Plus court, l'historique est plus fin
@@ -104,8 +104,9 @@ le crawler interroge amuleapi plus souvent. Plus long, une source restée moins 
 l'intervalle peut passer inaperçue. Si vous le changez, ajustez aussi
 [l'écart qui coupe une période](#lécart-qui-coupe-une-période-de-source).
 
-Une valeur nulle, négative, infinie ou `.nan` est refusée au démarrage, avec un message qui nomme la
-clé. La valeur est lue au démarrage : relancez le crawler après l'avoir changée.
+Une valeur nulle, négative, infinie, `.nan` ou supérieure à un an (31536000) est refusée au
+démarrage, avec un message qui nomme la clé. La valeur est lue au démarrage : relancez le crawler
+après l'avoir changée.
 
 ## L'écart qui coupe une période de source
 
@@ -121,5 +122,6 @@ fusionné est coupé par l'écart du nœud qui l'affiche : les points d'un nœud
 y apparaissent en périodes d'un seul point, et augmenter l'écart les réunit. La clé vaut aussi sur un
 nœud qui ne télécharge pas, puisqu'il peut afficher un catalogue fusionné.
 
-Une valeur nulle, négative, infinie ou `.nan` est refusée au démarrage, avec un message qui nomme la
-clé. La valeur est lue au démarrage : relancez le crawler après l'avoir changée.
+Une valeur nulle, négative, infinie, `.nan` ou supérieure à un an (31536000) est refusée au
+démarrage, avec un message qui nomme la clé. La valeur est lue au démarrage : relancez le crawler
+après l'avoir changée.
