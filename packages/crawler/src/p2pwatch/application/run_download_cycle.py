@@ -1,7 +1,7 @@
-"""The download loop: monitor → completions → new candidates → sources → sleep/nudge (spec §5).
+"""The download loop: monitor → completions → new candidates → sources → sleep/wake (spec §5).
 
 One serial task on the sole download session. ``run_download_cycle`` runs ONE iteration;
-``download_loop`` repeats it until shutdown, waiting ``poll_interval`` or the decision nudge.
+``download_loop`` repeats it until shutdown, waiting ``poll_interval`` or the download wake.
 Four things in it are not obvious:
 
 - **A completion is the client's own signal, never the bytes** (2026-09-02: 065B was stamped
@@ -44,7 +44,6 @@ from p2pwatch.domain.source import SourceGroup, SourceKey
 from p2pwatch.ports.catalog_repository import DownloadCandidate, ObservedFile
 from p2pwatch.ports.client_errors import ClientUnreachableError, DownloadRejectedError
 from p2pwatch.ports.clock import Clock
-from p2pwatch.ports.decision_signal import DecisionSignal
 from p2pwatch.ports.disk_space import DiskSpace
 from p2pwatch.ports.download_client import (
     DownloadClient,
@@ -56,12 +55,13 @@ from p2pwatch.ports.repository_errors import RepositoryError
 from p2pwatch.ports.source_client import SourceClient
 from p2pwatch.ports.source_repository import RecordedReading, SourceRepository
 from p2pwatch.ports.telemetry import Telemetry
+from p2pwatch.ports.wake_hub import WakeHub
 
 _logger = logging.getLogger("p2pwatch.application.run_download_cycle")
 
-# Conventional subject of the download nudge (DECISION D13). D-download subscribes to THIS
-# subject; the producer side (the pipeline) calls signal("download").
-DOWNLOAD_NUDGE_SUBJECT = "download"
+# Conventional subject of the download wake (DECISION D13). D-download subscribes to THIS
+# subject; the producer side (the pipeline) calls wake("download").
+DOWNLOAD_WAKE_SUBJECT = "download"
 
 # A read the client refuses (amuleapi's ``amuled_rejected``) is the daemon unavailable.
 _UNAVAILABLE = (ClientUnreachableError, DownloadRejectedError)
@@ -141,9 +141,9 @@ class DownloadDeps:
 
 @dataclass
 class DownloadLoopDeps(DownloadDeps):
-    """``DownloadDeps`` + what it takes to REPEAT (nudge, shutdown) - DECISION D12."""
+    """``DownloadDeps`` + what it takes to REPEAT (wake hub, shutdown) - DECISION D12."""
 
-    signal: DecisionSignal
+    wake_hub: WakeHub
     shutdown: asyncio.Event
 
 
@@ -490,19 +490,19 @@ async def run_download_cycle(deps: DownloadDeps) -> None:
         _logger.error("download sources repo failure (%s): step skipped, retry", error)
 
 
-async def _sleep_or_nudge(deps: DownloadLoopDeps) -> None:
-    """Waits ``poll_interval`` OR the ``download`` nudge, whichever comes FIRST (spec §5).
+async def _sleep_or_wake(deps: DownloadLoopDeps) -> None:
+    """Waits ``poll_interval`` OR the ``download`` wake, whichever comes FIRST (spec §5).
 
-    ``asyncio.wait(FIRST_COMPLETED)`` then cancel the loser: a decision change (nudge) wakes the
+    ``asyncio.wait(FIRST_COMPLETED)`` then cancel the loser: a download decision's wake resumes the
     loop immediately; otherwise the fallback poll wakes it at the cadence.
     Shutdown cancellation lands HERE (an ``await``), never mid DB write (sync).
     """
     sleep_task = asyncio.ensure_future(deps.clock.sleep(deps.poll_interval_seconds))
-    nudge_task = asyncio.ensure_future(deps.signal.wait(DOWNLOAD_NUDGE_SUBJECT))
+    wake_task = asyncio.ensure_future(deps.wake_hub.wait(DOWNLOAD_WAKE_SUBJECT))
     try:
-        await asyncio.wait({sleep_task, nudge_task}, return_when=asyncio.FIRST_COMPLETED)
+        await asyncio.wait({sleep_task, wake_task}, return_when=asyncio.FIRST_COMPLETED)
     finally:
-        for task in (sleep_task, nudge_task):
+        for task in (sleep_task, wake_task):
             if not task.done():
                 task.cancel()
                 with suppress(asyncio.CancelledError):
@@ -510,13 +510,13 @@ async def _sleep_or_nudge(deps: DownloadLoopDeps) -> None:
 
 
 async def download_loop(deps: DownloadLoopDeps) -> None:
-    """Repeats ``run_download_cycle`` then waits (poll/nudge) until shutdown (DECISION D12).
+    """Repeats ``run_download_cycle`` then waits (poll/wake) until shutdown (DECISION D12).
 
     Wired by ``CrawlerApp`` into the ``TaskGroup``; cancellation (shutdown) lands
-    at the next ``await`` (a poll or the sleep/nudge wait), never mid DB write.
+    at the next ``await`` (a poll or the sleep/wake wait), never mid DB write.
     """
     while not deps.shutdown.is_set():
         await run_download_cycle(deps)
         if deps.shutdown.is_set():
             break
-        await _sleep_or_nudge(deps)
+        await _sleep_or_wake(deps)

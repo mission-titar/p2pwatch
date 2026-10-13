@@ -17,10 +17,10 @@ from p2pwatch.domain.search.backoff import backoff_delay
 from p2pwatch.ports.catalog_repository import CatalogRepository
 from p2pwatch.ports.client_errors import ClientUnreachableError, SearchFailedError
 from p2pwatch.ports.clock import Clock, Rng
-from p2pwatch.ports.decision_signal import DecisionSignal
 from p2pwatch.ports.scheduler_state_repository import ChannelBackoff
 from p2pwatch.ports.search_client import SearchClient
 from p2pwatch.ports.telemetry import Telemetry
+from p2pwatch.ports.wake_hub import WakeHub
 
 _logger = logging.getLogger("p2pwatch.application.search_worker")
 
@@ -128,7 +128,7 @@ class WorkerDeps:
 
     catalog: CatalogRepository
     engine: MatchingEngine
-    signal: DecisionSignal
+    wake_hub: WakeHub
     backoff: "BackoffRegistry"
     telemetry: Telemetry
 
@@ -189,7 +189,7 @@ class SearchWorker:
                 observation,
                 catalog=self._deps.catalog,
                 engine=self._deps.engine,
-                signal=self._deps.signal,
+                wake_hub=self._deps.wake_hub,
                 telemetry=self._deps.telemetry,
                 client_name=self._client_name,
                 channel=channel,

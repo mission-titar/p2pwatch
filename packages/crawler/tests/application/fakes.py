@@ -4,8 +4,8 @@
 (``ClientUnreachableError``/``SearchFailedError``) at ``connect``/``search``.
 ``FakeClock``: advanceable clock (``advance`` without I/O) + ``sleep`` that advances WITHOUT
 a real wait (determinism). ``FakeRng``: FIXED jitter (determinism).
-``RecordingSignal``: captures nudged subjects. The repos are the REAL SQLite repos
-(spec §8: "real repos on tmp_path") — no fakes here.
+``RecordingWakeHub``: captures woken subjects. The repos are the REAL SQLite repos
+(spec §8: "real repos on tmp_path"): no fakes here.
 """
 
 import asyncio
@@ -66,15 +66,15 @@ class RecordingTelemetry:
         self.events.append(event)
 
 
-class RecordingSignal:
-    """Nudge hub that RECORDS signalled subjects (the test inspects/awaits)."""
+class RecordingWakeHub:
+    """Wake hub that RECORDS woken subjects (the test inspects/awaits)."""
 
     def __init__(self) -> None:
-        self.signalled: list[str] = []
+        self.woken_subjects: list[str] = []
         self._events: dict[str, asyncio.Event] = {}
 
-    def signal(self, subject: str) -> None:
-        self.signalled.append(subject)
+    def wake(self, subject: str) -> None:
+        self.woken_subjects.append(subject)
         self._events.setdefault(subject, asyncio.Event()).set()
 
     async def wait(self, subject: str) -> None:

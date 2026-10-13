@@ -1,30 +1,31 @@
-"""Shared decision helper: evaluate → set-diff → record / retract → nudge → emit (spec §7).
+"""Shared decision helper: evaluate → set-diff → record / retract → wake → emit (spec §7).
 
 APPLICATION layer, PURE orchestration (no ``try/except`` here: a ``RepositoryError`` is a
 port contract each CALLER absorbs on its own terms, cf. ``record_observation`` and the backfill
 use-case). Used by BOTH the per-observation pipeline (``record_observations.py``) and the
-startup catalogue re-evaluation, so the set-diff + retraction + nudge logic is written once.
+startup catalogue re-evaluation, so the set-diff + retraction + wake logic is written once.
 
 Set diff keyed by ``(file, target_id)`` (spec §7). The file is judged on EVERY name the
 catalog knows for it (``engine.evaluate_all``, spec amuleapi-migration §8.4), so its names no
-longer retract each other. A fresh decision is persisted (and nudged) only when it differs from
-the file's LATEST persisted :class:`DecisionRecord` for THAT target; a target that dropped out
-of the fresh set is retracted, unless it is already retracted (no-op). Returns the number of
-rows written (0..N; a decision OR a retraction each counts as one). The rows written are emitted
-once, as one ``DecisionsRecorded`` for the file (spec researcher-notifications §2).
+longer retract each other. A fresh decision is persisted (a download one also wakes the
+download loop) only when it differs from the file's LATEST persisted :class:`DecisionRecord`
+for THAT target; a target that dropped out of the fresh set is retracted, unless it is already
+retracted (no-op). Returns the number of rows written (0..N; a decision OR a retraction each
+counts as one). The rows written are emitted once, as one ``DecisionsRecorded`` for the file
+(spec researcher-notifications §2).
 """
 
 from dataclasses import replace
 
 from catalog_matching.engine import MatchingEngine, to_record
 from catalog_matching.models import FileCandidate
-from p2pwatch.application.run_download_cycle import DOWNLOAD_NUDGE_SUBJECT
+from p2pwatch.application.run_download_cycle import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.observability.events import DecisionChange, DecisionsRecorded
 from p2pwatch.domain.retraction import RETRACTED_TIER
 from p2pwatch.ports.catalog_repository import CatalogRepository, ObservedFile
-from p2pwatch.ports.decision_signal import DecisionSignal
 from p2pwatch.ports.telemetry import Telemetry
+from p2pwatch.ports.wake_hub import WakeHub
 
 
 async def record_decision_if_changed(
@@ -33,7 +34,7 @@ async def record_decision_if_changed(
     *,
     catalog: CatalogRepository,
     engine: MatchingEngine,
-    signal: DecisionSignal,
+    wake_hub: WakeHub,
     telemetry: Telemetry,
 ) -> int:
     """Judge the file on all its known names (``candidate`` gives the other fields).
@@ -63,7 +64,7 @@ async def record_decision_if_changed(
         catalog.record_decision(file, decision)
         changes.append(change(decision.target_id, decision.tier))
         if decision.tier == "download":
-            signal.signal(DOWNLOAD_NUDGE_SUBJECT)
+            wake_hub.wake(DOWNLOAD_WAKE_SUBJECT)
     for target_id in sorted(persisted):
         if persisted[target_id].tier == RETRACTED_TIER or target_id in fresh_ids:
             continue

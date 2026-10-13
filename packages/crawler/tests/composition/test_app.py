@@ -51,7 +51,7 @@ from p2pwatch.ports.client_status import ClientStatus
 from p2pwatch.ports.clock import Clock
 from p2pwatch.ports.download_client import DownloadRequest, DownloadStatus
 from tests.adapters.mule_api.api_fakes import PASSWORD, FakeAmuleApi
-from tests.application.fakes import FakeClock, FakeMuleClient, RecordingSignal
+from tests.application.fakes import FakeClock, FakeMuleClient, RecordingWakeHub
 from tests.catalog_rows import insert_file, observation_node_ids
 from tests.virtual_time import EPOCH, LoopClock, run_virtual
 
@@ -151,7 +151,7 @@ def _make_app(
         matcher_config=matcher_config,
         clock=clock or FakeClock(),
         rng=_NoopRng(),
-        signal_hub=RecordingSignal(),
+        wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         client_factory=factory,  # type: ignore[arg-type]
         **extra,  # type: ignore[arg-type]
@@ -537,7 +537,7 @@ def test_an_hour_of_the_running_app_keeps_to_the_networks_rules(
             matcher_config=matcher_config,
             clock=api.clock,
             rng=_NoopRng(),
-            signal_hub=RecordingSignal(),
+            wake_hub=RecordingWakeHub(),
             policy_fingerprint=_FP,
             client_factory=lambda endpoint, clock: AmuleApiClient(
                 endpoint.host, endpoint.port, PASSWORD, transport=api.transport(), clock=clock
@@ -583,7 +583,7 @@ async def test_backfill_runs_and_stores_marker_when_policy_never_set(
         matcher_config=matcher_config,
         clock=FakeClock(),
         rng=_NoopRng(),
-        signal_hub=RecordingSignal(),
+        wake_hub=RecordingWakeHub(),
         policy_fingerprint="fp-first-run",
         client_factory=factory,
     )
@@ -625,7 +625,7 @@ async def test_backfill_skipped_when_marker_already_matches_fingerprint(
         matcher_config=matcher_config,
         clock=FakeClock(),
         rng=_NoopRng(),
-        signal_hub=RecordingSignal(),
+        wake_hub=RecordingWakeHub(),
         policy_fingerprint="fp-unchanged",
         client_factory=factory,
     )
@@ -710,7 +710,7 @@ async def test_observer_mode_runs_without_the_download_loop(
         matcher_config=matcher_config,
         clock=FakeClock(),
         rng=_NoopRng(),
-        signal_hub=RecordingSignal(),
+        wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         client_factory=factory,
         download_client_factory=download_factory,
@@ -739,7 +739,7 @@ async def test_full_mode_runs_the_download_loop(
         matcher_config=matcher_config,
         clock=FakeClock(),
         rng=_NoopRng(),
-        signal_hub=RecordingSignal(),
+        wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         client_factory=search_factory,
         download_client_factory=lambda endpoint, clock: download_client,
@@ -785,7 +785,7 @@ async def test_full_mode_records_the_sources_of_a_download_in_the_catalog(
         matcher_config=matcher_config,
         clock=FakeClock(),
         rng=_NoopRng(),
-        signal_hub=RecordingSignal(),
+        wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         client_factory=lambda endpoint, clock: FakeMuleClient(),
         download_client_factory=lambda endpoint, clock: _ShutdownOnSourcesDownloadClient(
@@ -831,7 +831,7 @@ async def test_full_mode_reads_sources_at_their_interval_and_spaces_them_by_a_po
         matcher_config=matcher_config,
         clock=FakeClock(),
         rng=_NoopRng(),
-        signal_hub=RecordingSignal(),
+        wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         client_factory=lambda endpoint, clock: FakeMuleClient(),
         download_client_factory=lambda endpoint, clock: FakeDownloadClient(),
@@ -862,7 +862,7 @@ async def test_full_mode_tolerates_download_daemon_unreachable_at_startup(
         matcher_config=matcher_config,
         clock=FakeClock(),
         rng=_NoopRng(),
-        signal_hub=RecordingSignal(),
+        wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         client_factory=search_factory,
         download_client_factory=download_factory,
@@ -874,7 +874,7 @@ async def test_full_mode_tolerates_download_daemon_unreachable_at_startup(
 class _BlockingPollClock(FakeClock):
     """Clock whose LONG sleeps (≥ 5 s) BLOCK for good (on an Event that is never set).
 
-    Models the IN-CYCLE sleep of the download loop (``_sleep_or_nudge``, 30 s poll): it stays
+    Models the IN-CYCLE sleep of the download loop (``_sleep_or_wake``, 30 s poll): it stays
     BLOCKED in ``clock.sleep``, so the loop CANNOT re-test ``self._shutdown`` on its own; only
     an explicit CANCELLATION by ``_supervise`` gets it out. A BARRIER: as soon as the download
     poll has entered a long sleep, we ARM ``self._shutdown`` - the shutdown is thus requested
@@ -908,7 +908,7 @@ async def test_full_mode_shutdown_cancels_the_download_loop_promptly(
 ) -> None:
     # REGRESSION (holistic review): at shutdown, ``_supervise`` must EXPLICITLY cancel the
     # download loop (sibling task of the search ``loop_task``). Without this, it stays
-    # blocked in its in-cycle sleep (``_sleep_or_nudge`` does NOT watch ``self._shutdown``),
+    # blocked in its in-cycle sleep (``_sleep_or_wake`` does NOT watch ``self._shutdown``),
     # the ``TaskGroup`` waits on its poll (30 s), the ``shutdown_deadline`` fires a
     # ``TimeoutError`` FIRST and the shutdown is FORCED - not clean. Here: a clock whose long
     # sleeps BLOCK, which ARMS the shutdown once the loop is blocked in its poll. If the
@@ -924,7 +924,7 @@ async def test_full_mode_shutdown_cancels_the_download_loop_promptly(
         matcher_config=matcher_config,
         clock=clock,
         rng=_NoopRng(),
-        signal_hub=RecordingSignal(),
+        wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         client_factory=lambda endpoint, clock: FakeMuleClient(),
         download_client_factory=lambda endpoint, clock: FakeDownloadClient(),
@@ -958,7 +958,7 @@ async def test_full_mode_shutdown_leaves_no_task_leaked(
         matcher_config=matcher_config,
         clock=clock,
         rng=_NoopRng(),
-        signal_hub=RecordingSignal(),
+        wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         client_factory=lambda endpoint, clock: FakeMuleClient(),
         download_client_factory=lambda endpoint, clock: FakeDownloadClient(),
@@ -1096,7 +1096,7 @@ async def test_emits_crawler_started_full_mode(
         matcher_config=matcher_config,
         clock=FakeClock(),
         rng=_NoopRng(),
-        signal_hub=RecordingSignal(),
+        wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         client_factory=lambda endpoint, clock: FakeMuleClient(),
         download_client_factory=lambda endpoint, clock: download_client,
@@ -1164,7 +1164,7 @@ async def test_webui_starts_on_own_thread_and_stops_at_shutdown(
         matcher_config=matcher_config,
         clock=FakeClock(),
         rng=_NoopRng(),
-        signal_hub=RecordingSignal(),
+        wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         client_factory=factory,
         webui_server_factory=fake_factory,
@@ -1199,7 +1199,7 @@ async def test_the_webui_reads_the_status_loops_board_and_the_pause_gate(
         matcher_config=matcher_config,
         clock=FakeClock(),
         rng=_NoopRng(),
-        signal_hub=RecordingSignal(),
+        wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         client_factory=lambda endpoint, clock: _ShutdownOnStatusClient(holder),
         webui_server_factory=lambda webui: _FakeWebuiServer(),
@@ -1233,7 +1233,7 @@ async def test_the_webui_cuts_periods_at_its_configured_gap_and_reads_the_crawle
         matcher_config=matcher_config,
         clock=clock,
         rng=_NoopRng(),
-        signal_hub=RecordingSignal(),
+        wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         client_factory=lambda endpoint, clock: _ShutdownOnStatusClient(holder),
         webui_server_factory=lambda webui: _FakeWebuiServer(),
@@ -1264,7 +1264,7 @@ async def test_webui_not_started_when_disabled(
         matcher_config=matcher_config,
         clock=FakeClock(),
         rng=_NoopRng(),
-        signal_hub=RecordingSignal(),
+        wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         client_factory=factory,
         webui_server_factory=boom_factory,
@@ -1295,7 +1295,7 @@ async def test_webui_crash_degrades_and_crawler_shuts_down_cleanly(
         matcher_config=matcher_config,
         clock=FakeClock(),
         rng=_NoopRng(),
-        signal_hub=RecordingSignal(),
+        wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         client_factory=factory,
         webui_server_factory=crash_factory,
