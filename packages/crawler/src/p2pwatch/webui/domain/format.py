@@ -83,7 +83,17 @@ def seasonal_id(*, season: int, seasonal_number: int, letter: str) -> str:
 def micros_timestamp(micros: int) -> str:
     """Microseconds since the Unix epoch as ``YYYY-MM-DD HH:MM:SSZ``: a source period's ends, to
     the second."""
-    return f"{_EPOCH + timedelta(microseconds=micros):%Y-%m-%d %H:%M:%S}Z"
+    return utc_timestamp(_EPOCH + timedelta(microseconds=micros))
+
+
+def utc_timestamp(at: datetime) -> str:
+    """A UTC instant as ``YYYY-MM-DD HH:MM:SSZ``, the webui's time format."""
+    return f"{at:%Y-%m-%d %H:%M:%S}Z"
+
+
+def input_timestamp(at: datetime) -> str:
+    """A UTC instant as a ``datetime-local`` input's value, to the second."""
+    return f"{at:%Y-%m-%dT%H:%M:%S}"
 
 
 def average_rate(received_bytes: int, first_seen_at: int, last_seen_at: int) -> str:

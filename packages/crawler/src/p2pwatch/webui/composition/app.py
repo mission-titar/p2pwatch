@@ -54,11 +54,14 @@ from p2pwatch.webui.domain.coverage import coverage_for
 from p2pwatch.webui.domain.format import (
     average_rate,
     human_size,
+    input_timestamp,
     micros_timestamp,
     seasonal_id,
     short_hash,
     short_timestamp,
+    utc_timestamp,
 )
+from p2pwatch.webui.domain.interval import PRESETS, Interval, last, requested_interval
 from p2pwatch.webui.domain.views import (
     ChannelLine,
     ClientLine,
@@ -72,6 +75,8 @@ from p2pwatch.webui.domain.views import (
     FilesSummary,
     FilterBar,
     HiddenInput,
+    IntervalLink,
+    IntervalSelector,
     NavItem,
     PageNav,
     PeriodWindow,
@@ -93,8 +98,7 @@ from p2pwatch.webui.domain.views import (
 # A detail page's path segment: a file_id or a source_id as 32 lowercase hex (stage 1 and 4 D13).
 _HEX_ID = re.compile(r"[0-9a-f]{32}")
 
-# The period tables read the last 7 days, which bounds their cost (source points spec, D6).
-_PERIOD_SPAN = timedelta(days=7)
+_CUT_NOTICE = "The interval requested is longer than 7 days: showing the 7 days ending at its end."
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _MICROSECOND = timedelta(microseconds=1)
 
@@ -236,13 +240,45 @@ def _source_history_row(period: SourcePeriodView) -> SourceHistoryRow:
     )
 
 
-def _period_window(now: datetime, tolerance: timedelta) -> PeriodWindow:
-    """The last ``_PERIOD_SPAN`` up to ``now``, the period tables' fixed interval for now."""
-    until = (now - _EPOCH) // _MICROSECOND
+def _period_window(interval: Interval, tolerance: timedelta) -> PeriodWindow:
+    """The interval in microseconds, with the gap that cuts a period."""
     return PeriodWindow(
-        since=until - _PERIOD_SPAN // _MICROSECOND,
-        until=until,
+        since=(interval.since - _EPOCH) // _MICROSECOND,
+        until=(interval.until - _EPOCH) // _MICROSECOND,
         tolerance=tolerance // _MICROSECOND,
+    )
+
+
+def _interval_params(request: Request) -> dict[str, str]:
+    """The request's own ``from`` and ``to``, which a page's list links keep."""
+    query = request.query_params
+    return {key: query[key] for key in ("from", "to") if key in query}
+
+
+def _page_param(page: int) -> dict[str, str]:
+    """The ``page`` param an interval's links keep, none on the first page."""
+    return {"page": str(page)} if page > 1 else {}
+
+
+def _interval_selector(
+    interval: Interval, now: datetime, path: str, kept: dict[str, str]
+) -> IntervalSelector:
+    """The selector of the page at ``path``, whose other params are ``kept`` (D6): the presets end
+    ``now``, and Next is offered until the interval reaches it."""
+
+    def url(shown: Interval) -> str:
+        ends = {"from": utc_timestamp(shown.since), "to": utc_timestamp(shown.until)}
+        return f"{path}?{urlencode({**kept, **ends})}"
+
+    return IntervalSelector(
+        hidden=tuple(HiddenInput(name=name, value=value) for name, value in kept.items()),
+        shown=f"{utc_timestamp(interval.since)} to {utc_timestamp(interval.until)}",
+        notices=(_CUT_NOTICE,) if interval.cut else (),
+        presets=tuple(IntervalLink(label, url(last(span, now))) for label, span in PRESETS),
+        from_value=input_timestamp(interval.since),
+        to_value=input_timestamp(interval.until),
+        previous_url=url(interval.shifted(-1)),
+        next_urls=() if interval.until >= now else (url(interval.shifted(1)),),
     )
 
 
@@ -586,8 +622,11 @@ def build_app(
     catalog_reader = ReaderProvider(catalog_db)
     local_reader = ReaderProvider(local_db)
 
-    def _window() -> PeriodWindow:
-        return _period_window(clock.now(), source_tolerance)
+    def _interval(request: Request) -> tuple[datetime, Interval]:
+        """The second the request is read at, and the interval it asks for."""
+        now = clock.now().replace(microsecond=0)
+        query = request.query_params
+        return now, requested_interval(query.get("from"), query.get("to"), now)
 
     # Title by target_id (quick access)
     _title_by_id = {seg.target_id: seg.title for seg in target_segments}
@@ -744,14 +783,17 @@ def build_app(
     async def handle_source(request: Request) -> Response:
         raw_id: str = request.path_params["source_id"]
         page = _page_number(request.query_params.get("page"))
+        now, interval = _interval(request)
+        window = _period_window(interval, source_tolerance)
         catalog = CatalogReader(catalog_reader.connection())
         detail = (
-            catalog.source_detail(bytes.fromhex(raw_id), page=page, window=_window())
+            catalog.source_detail(bytes.fromhex(raw_id), page=page, window=window)
             if _HEX_ID.fullmatch(raw_id)
             else None
         )
         if detail is None:
             return templates.TemplateResponse(request, "404.html", {}, status_code=404)
+        path = f"/sources/{raw_id}"
         return templates.TemplateResponse(
             request,
             "source_detail.html",
@@ -759,17 +801,21 @@ def build_app(
                 "source": detail.source,
                 "names": tuple(_source_list_row(row) for row in detail.names),
                 "periods": tuple(_source_file_row(item) for item in detail.periods),
-                "nav": _page_nav(page, len(detail.names), f"/sources/{raw_id}", {}),
+                "nav": _page_nav(page, len(detail.names), path, _interval_params(request)),
+                "interval": _interval_selector(interval, now, path, _page_param(page)),
             },
         )
 
     async def handle_source_name(request: Request) -> Response:
         name = request.query_params.get("name")
         page = _page_number(request.query_params.get("page"))
+        now, interval = _interval(request)
+        window = _period_window(interval, source_tolerance)
         catalog = CatalogReader(catalog_reader.connection())
-        detail = None if name is None else catalog.name_detail(name, page=page, window=_window())
+        detail = None if name is None else catalog.name_detail(name, page=page, window=window)
         if detail is None:
             return templates.TemplateResponse(request, "404.html", {}, status_code=404)
+        path, named = "/sources/name", {"name": detail.name}
         return templates.TemplateResponse(
             request,
             "source_name.html",
@@ -777,15 +823,24 @@ def build_app(
                 "name": detail.name,
                 "sources": tuple(_source_list_row(row) for row in detail.sources),
                 "periods": tuple(_source_file_row(item) for item in detail.periods),
-                "nav": _page_nav(page, len(detail.sources), "/sources/name", {"name": detail.name}),
+                "nav": _page_nav(
+                    page, len(detail.sources), path, {**named, **_interval_params(request)}
+                ),
+                "interval": _interval_selector(interval, now, path, {**named, **_page_param(page)}),
             },
         )
 
     async def handle_file_detail(request: Request) -> Response:
         raw_id: str = request.path_params["file_id"]
 
+        now, interval = _interval(request)
+        window = _period_window(interval, source_tolerance)
         catalog = CatalogReader(catalog_reader.connection())
-        detail = catalog.file_detail(bytes.fromhex(raw_id)) if _HEX_ID.fullmatch(raw_id) else None
+        detail = (
+            catalog.file_detail(bytes.fromhex(raw_id), window)
+            if _HEX_ID.fullmatch(raw_id)
+            else None
+        )
 
         if detail is None:
             return templates.TemplateResponse(request, "404.html", {}, status_code=404)
@@ -830,7 +885,7 @@ def build_app(
             timeline=tuple(_timeline_row(sighting) for sighting in detail.sightings),
             source_history=tuple(
                 _source_history_row(period)
-                for period in catalog.source_periods(detail.file.file_id, _window())
+                for period in catalog.source_periods(detail.file.file_id, window)
             ),
             decisions=detail.decisions,
             ed2k_link=link,
@@ -844,7 +899,11 @@ def build_app(
         return templates.TemplateResponse(
             request,
             "file_detail.html",
-            {"file": display, "title_by_id": _title_by_id},
+            {
+                "file": display,
+                "title_by_id": _title_by_id,
+                "interval": _interval_selector(interval, now, f"/files/{raw_id}", {}),
+            },
         )
 
     async def handle_target(request: Request) -> Response:

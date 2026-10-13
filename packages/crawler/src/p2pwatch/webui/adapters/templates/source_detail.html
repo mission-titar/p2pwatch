@@ -45,8 +45,11 @@
 <a href="{{ url }}">Next →</a>
 {% endfor %}
 
+{% include "interval.html" %}
+
 <section>
   <h2>Source history</h2>
+  <p>Periods are cut at the interval's edges.</p>
   <table>
     <thead>
       <tr>
@@ -77,7 +80,7 @@
         <td>{{ row.history.node }}</td>
       </tr>
       {% else %}
-      <tr><td colspan="10">No period in the last 7 days.</td></tr>
+      <tr><td colspan="10">No period in this interval.</td></tr>
       {% endfor %}
     </tbody>
   </table>

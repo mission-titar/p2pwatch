@@ -60,14 +60,15 @@ SELECT_LATEST_SIGHTINGS = f"""WITH {LATEST_SIGHTING_CTE}
 SELECT {_COLUMNS} FROM latest_sighting WHERE name IS NOT NULL ORDER BY network, native_id
 """
 
-# The file's timeline, oldest first; an instant's observations by variant_id, then source_count.
+# The file's timeline in an interval, oldest first; an instant's observations by variant_id, then
+# source_count.
 _SELECT_SIGHTINGS = f"""
 SELECT f.network, f.native_id, v.filename, {_ISO.format("o.observed_at")}, o.source_count,
     v.size_bytes, v.media_length_sec, v.bitrate_kbps, v.keyword
 FROM files AS f
 JOIN observation_variants AS v ON v.file_id = f.file_id
 JOIN observations AS o ON o.variant_id = v.variant_id
-WHERE f.file_id = ?
+WHERE f.file_id = ? AND o.observed_at >= ? AND o.observed_at < ?
 ORDER BY o.observed_at, v.variant_id, o.source_count
 """
 
@@ -124,7 +125,10 @@ def best_name(connection: sqlite3.Connection, file: FileKey) -> tuple[str, int] 
     return None if row is None else (row[0], row[1])
 
 
-def sightings(connection: sqlite3.Connection, file: FileKey) -> tuple[Sighting, ...]:
-    """The file's timeline, oldest first."""
-    rows = connection.execute(_SELECT_SIGHTINGS, (file.file_id,)).fetchall()
+def sightings(
+    connection: sqlite3.Connection, file: FileKey, since: int, until: int
+) -> tuple[Sighting, ...]:
+    """The file's timeline from ``since`` included to ``until`` excluded, in microseconds, oldest
+    first."""
+    rows = connection.execute(_SELECT_SIGHTINGS, (file.file_id, since, until)).fetchall()
     return tuple(map(_sighting, rows))

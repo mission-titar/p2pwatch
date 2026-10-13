@@ -142,8 +142,8 @@ class FileDetail:
 
 @dataclass(frozen=True)
 class PeriodWindow:
-    """The points a period table reads, ``since`` included to ``until`` excluded, and the gap
-    that cuts a period (source points spec, D6); all in microseconds."""
+    """The points a page reads, ``since`` included to ``until`` excluded, and the gap that cuts a
+    period (source points spec, D6); all in microseconds."""
 
     since: int
     until: int
@@ -352,7 +352,7 @@ class TierFacet:
 
 @dataclass(frozen=True)
 class HiddenInput:
-    """One hidden form field carried by the search GET form (name/value already stringified)."""
+    """One hidden form field carried by a GET form (name/value already stringified)."""
 
     name: str
     value: str
@@ -365,6 +365,29 @@ class SearchBar:
 
     query: str
     hidden: tuple[HiddenInput, ...]
+
+
+@dataclass(frozen=True)
+class IntervalLink:
+    """A preset of the interval selector: its label and its href."""
+
+    label: str
+    url: str
+
+
+@dataclass(frozen=True)
+class IntervalSelector:
+    """A page's interval selector (source points spec, D6), precomputed (W-D8): ``hidden`` carries
+    the page's other params, ``notices`` and ``next_urls`` hold 0 or 1 element."""
+
+    hidden: tuple[HiddenInput, ...]
+    shown: str
+    notices: tuple[str, ...]
+    presets: tuple[IntervalLink, ...]
+    from_value: str
+    to_value: str
+    previous_url: str
+    next_urls: tuple[str, ...]
 
 
 @dataclass(frozen=True)

@@ -11,7 +11,7 @@
   latest decision, optional filters + LIMIT/OFFSET).
 - ``count_files()``: ``(matched, total)`` counts over the same filtered source, for the
   /files summary line.
-- ``file_detail()``: the timeline of sightings, the latest one, known names + current
+- ``file_detail()``: the timeline of sightings in a window, the latest one, known names + current
   decisions for a given ``file_id``; ``None`` if the file is unknown.
 - ``source_periods()``: a file's source history in a window, one period per row, newest first.
 - ``list_sources()`` / ``count_sources()``: the sources with a user hash, last seen first, and
@@ -597,8 +597,8 @@ class CatalogReader:
     # Detail
     # ------------------------------------------------------------------
 
-    def file_detail(self, file_id: bytes) -> FileDetail | None:
-        """Return the full detail of a file, or ``None`` if unknown."""
+    def file_detail(self, file_id: bytes, window: PeriodWindow) -> FileDetail | None:
+        """Return the full detail of a file, its timeline in ``window``, or ``None`` if unknown."""
         file_row = self._conn.execute(_SQL_FILE, (file_id,)).fetchone()
         if file_row is None:
             return None
@@ -620,7 +620,7 @@ class CatalogReader:
         return FileDetail(
             file=file,
             size_bytes=file_row["size_bytes"],
-            sightings=sightings(self._conn, file),
+            sightings=sightings(self._conn, file, window.since, window.until),
             latest=latest_sighting(self._conn, file),
             decisions=decisions,
             known_filenames=known_names(self._conn, file),

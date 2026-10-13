@@ -307,3 +307,6 @@ pre {
   color: #664d03;
 }
 .console-table { overflow-x: auto; display: block; }
+
+/* The interval selector: presets, then the custom form, then Previous and Next, each on one row. */
+.interval-links, .interval form { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
