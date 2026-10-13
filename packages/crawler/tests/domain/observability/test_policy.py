@@ -30,10 +30,10 @@ _062A = (ev.TargetTitle("062A", "Les demoiselles cambrioleuses"),)
 
 CASES: list[tuple[ev.Event, Report]] = [
     (
-        ev.SearchExecuted(client_name="amuled", channel="ed2k", result_count=7),
+        ev.SearchExecuted(client_name="amuled", channel="ed2k", observation_count=7),
         Report(
             Severity.DEBUG,
-            "search ed2k: 7 result(s)",
+            "search ed2k: 7 observation(s)",
             (MetricInstruction(MetricName.SEARCHES, "inc", _AMULED_ED2K),),
         ),
     ),
@@ -96,11 +96,15 @@ CASES: list[tuple[ev.Event, Report]] = [
         ),
     ),
     (
-        ev.ChannelDegraded(client_name="amuled", channel="ed2k", field="connected", seconds=300.0),
+        ev.ChannelDegraded(
+            client_name="amuled", channel="ed2k", field="connected", degraded_for_seconds=300.0
+        ),
         Report(Severity.WARNING, "amuled ed2k: off its network for 5 min", (), _OPERATIONS),
     ),
     (
-        ev.ChannelDegraded(client_name="amuled", channel="kad", field="connectable", seconds=300.0),
+        ev.ChannelDegraded(
+            client_name="amuled", channel="kad", field="connectable", degraded_for_seconds=300.0
+        ),
         Report(Severity.WARNING, "amuled kad: not connectable for 5 min", (), _OPERATIONS),
     ),
     (
@@ -112,7 +116,7 @@ CASES: list[tuple[ev.Event, Report]] = [
         Report(Severity.INFO, "amuled kad: connectable again", (), _OPERATIONS),
     ),
     (
-        ev.ClientUnreachableLasting(client_name="amuled", seconds=120.0),
+        ev.ClientUnreachableLasting(client_name="amuled", unreachable_for_seconds=120.0),
         Report(Severity.WARNING, "amuled unreachable for 2 min", (), _OPERATIONS),
     ),
     (
@@ -234,8 +238,8 @@ def test_a_file_with_risen_targets_is_one_message_naming_the_file_and_targets() 
     report = describe(
         _decisions(_change("062A", None, "download"), _change("062B", None, "notify"))
     )
-    assert report.title == "📥 Download"
-    assert report.notification == (
+    assert report.notification_title == "📥 Download"
+    assert report.notification_body == (
         "**Targets**\n"
         "062A - Les demoiselles cambrioleuses\n"
         "062B - Le grand combat sous-marin\n"
@@ -256,8 +260,10 @@ def test_the_message_lists_only_the_risen_targets_under_their_highest_tier() -> 
     report = describe(
         _decisions(_change("062A", "catalog", "notify"), _change("062B", "notify", "retracted"))
     )
-    assert report.title == "🔎 Notify"
-    assert report.notification.startswith("**Targets**\n062A - Les demoiselles cambrioleuses\n\n")
+    assert report.notification_title == "🔎 Notify"
+    assert report.notification_body.startswith(
+        "**Targets**\n062A - Les demoiselles cambrioleuses\n\n"
+    )
 
 
 def test_decisions_log_one_line_listing_every_change() -> None:
@@ -272,15 +278,15 @@ def test_decisions_log_one_line_listing_every_change() -> None:
 
 def test_a_change_without_a_rise_has_no_notification_body() -> None:
     report = describe(_decisions(_change("062A", "download", "notify")))
-    assert (report.title, report.notification) == ("", "")
+    assert (report.notification_title, report.notification_body) == ("", "")
 
 
 def test_a_backtick_in_the_name_cannot_close_its_code_span() -> None:
     # Discord pings a mention outside code: a name must not escape its span.
     event = replace(_decisions(_change("062A", None, "download")), filename="a`@everyone`b.avi")
     report = describe(event)
-    assert "\n350.2 MiB - `a'@everyone'b.avi`\n" in report.notification
-    assert "`ed2k://|file|a%60%40everyone%60b.avi|" in report.notification
+    assert "\n350.2 MiB - `a'@everyone'b.avi`\n" in report.notification_body
+    assert "`ed2k://|file|a%60%40everyone%60b.avi|" in report.notification_body
 
 
 def _completed(*target_titles: ev.TargetTitle) -> ev.DownloadCompleted:
@@ -299,7 +305,7 @@ def test_a_completed_download_is_a_green_message_naming_its_targets_and_file() -
         "✅ download completed: 062A, 062B",
         (MetricInstruction(MetricName.DOWNLOADS_COMPLETED, "inc"),),
         _COMMUNITY,
-        notification=(
+        notification_body=(
             "**Targets**\n"
             "062A - Les demoiselles cambrioleuses\n"
             "062B - Le grand combat sous-marin\n"
@@ -307,13 +313,13 @@ def test_a_completed_download_is_a_green_message_naming_its_targets_and_file() -
             "**File**\n"
             "`Keroro '062'.avi`"
         ),
-        title="✅ Downloaded",
+        notification_title="✅ Downloaded",
     )
 
 
 def test_a_source_without_a_name_or_a_target_names_its_hash_and_its_file() -> None:
     report = describe(ev.SourceFirstUseful(_SOURCE, None, _FILE, "Keroro 062.avi", ()))
-    assert report.notification == (
+    assert report.notification_body == (
         "**Source**\n1f2e3d4c…, useful for the first time\n\n**File**\n`Keroro 062.avi`"
     )
 
@@ -321,6 +327,6 @@ def test_a_source_without_a_name_or_a_target_names_its_hash_and_its_file() -> No
 def test_a_backtick_in_a_source_name_cannot_close_its_code_span() -> None:
     event = ev.SourceReappeared(_SOURCE, "a`@everyone`b", _FILE, "x.avi", (), 43_200.000001)
     report = describe(event)
-    assert report.notification.startswith(
+    assert report.notification_body.startswith(
         "**Source**\n`a'@everyone'b` 1f2e3d4c…, reappeared after 12 h\n"
     )

@@ -341,7 +341,7 @@ async def test_successful_search_emits_search_executed_with_network_and_count(
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
     assert telemetry.events[0] == SearchExecuted(
-        client_name="amule-1", channel="ed2k", result_count=1
+        client_name="amule-1", channel="ed2k", observation_count=1
     )
     kinds = [type(e).__name__ for e in telemetry.events]
     assert kinds == ["SearchExecuted", "ObservationRecorded", "DecisionsRecorded"]

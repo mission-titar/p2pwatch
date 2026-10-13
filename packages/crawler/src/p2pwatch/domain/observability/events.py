@@ -17,7 +17,7 @@ from p2pwatch.domain.source import SourceKey
 class SearchExecuted:
     client_name: str
     channel: str
-    result_count: int
+    observation_count: int
 
 
 @dataclass(frozen=True)
@@ -86,11 +86,11 @@ class ChannelStatusSampled:
 
 @dataclass(frozen=True)
 class ChannelDegraded:
-    # A field of a channel has read False for ``seconds``: emitted once until it recovers.
+    # A channel's field has read False for ``degraded_for_seconds``: emitted once until it recovers.
     client_name: str
     channel: str
     field: ChannelField
-    seconds: float
+    degraded_for_seconds: float
 
 
 @dataclass(frozen=True)
@@ -102,9 +102,9 @@ class ChannelRecovered:
 
 @dataclass(frozen=True)
 class ClientUnreachableLasting:
-    # The client's API has not answered for ``seconds``: emitted once until it answers.
+    # No answer from the client's API for ``unreachable_for_seconds``: emitted once until one comes.
     client_name: str
-    seconds: float
+    unreachable_for_seconds: float
 
 
 @dataclass(frozen=True)

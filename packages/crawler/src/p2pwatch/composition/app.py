@@ -419,13 +419,13 @@ class CrawlerApp:
             notifications = obs.notifications if obs is not None else ()
             registry = CollectorRegistry()
             notifier = AppriseNotifier(
-                tuple((t.url, t.tag, t.node_prefix) for t in notifications),
+                tuple((t.url, t.audience, t.node_prefix) for t in notifications),
                 node_id=node_id,
             )
             telemetry = ObservabilityDispatcher(
                 metrics=PrometheusSink(registry),
                 notifier=notifier,
-                notify_timeout_seconds=(
+                notification_timeout_seconds=(
                     obs.notification_timeout_seconds if obs is not None else 5.0
                 ),
             )

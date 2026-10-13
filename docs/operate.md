@@ -168,10 +168,11 @@ Deux effets possibles pour un fichier déjà catalogué :
   jamais : un fichier déjà récupéré reste.
 - **Re-classement.** Un fichier qui change de palier déclenche l'action du nouveau palier : le
   palier `download` le met en file. Un fichier qui **monte** à `notify` ou `download` notifie le
-  canal *community* (configurez une cible `tag: community` sous `observability.notifications` dans
-  `crawler.yml`) : un seul message par fichier, avec son nom, sa taille, son lien ed2k et les
-  segments concernés. Une baisse, un passage à `catalog`, une rétractation ou un changement de
-  règle sans changement de palier restent dans les logs, sans notification.
+  canal *community* (configurez une cible `audience: community` sous
+  `observability.notifications` dans `crawler.yml`) : un seul message par fichier, avec son nom, sa
+  taille, son lien ed2k et les segments concernés. Une baisse, un passage à `catalog`, une
+  rétractation ou un changement de règle sans changement de palier restent dans les logs, sans
+  notification.
 
 Un gros changement de règles peut donc émettre une rafale de notifications, une par fichier dont le
 palier a monté. C'est voulu. La passe est idempotente et tourne que le téléchargement soit activé ou

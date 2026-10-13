@@ -77,7 +77,7 @@ class MetricName(StrEnum):
     SOURCE_ALERTS = "p2pwatch_source_alerts"
 
 
-MetricKind = Literal["inc", "set", "remove"]
+MetricOperation = Literal["inc", "set", "remove"]
 
 
 @dataclass(frozen=True)
@@ -89,7 +89,7 @@ class MetricInstruction:
     """
 
     name: MetricName
-    kind: MetricKind
+    operation: MetricOperation
     labels: tuple[tuple[str, str], ...] = ()
     value: float = 1.0
 
@@ -100,16 +100,16 @@ class Report:
 
     ``metrics`` is a TUPLE (one event can feed several metrics: ``ChannelStatusSampled`` sets
     two gauges). Empty ``audiences`` = no notif.
-    ``notification`` is the notified body when it differs from the logged ``message``; ``title``
-    heads it.
+    ``notification_body`` is the notified body when it differs from the logged ``message``;
+    ``notification_title`` heads it.
     """
 
     severity: Severity
     message: str
     metrics: tuple[MetricInstruction, ...] = ()
     audiences: frozenset[Audience] = frozenset()
-    notification: str = ""
-    title: str = ""
+    notification_body: str = ""
+    notification_title: str = ""
 
 
 # The tiers a rise announces, with the heading of the message.
@@ -135,17 +135,17 @@ def _code_name(filename: str) -> str:
     return "`" + filename.replace("`", "'") + "`"
 
 
-_DEGRADED: dict[ChannelField, str] = {
+_DEGRADED_PHRASE_BY_FIELD: dict[ChannelField, str] = {
     "connected": "off its network",
     "connectable": "not connectable",
 }
-_RECOVERED: dict[ChannelField, str] = {
+_RECOVERED_PHRASE_BY_FIELD: dict[ChannelField, str] = {
     "connected": "back on its network",
     "connectable": "connectable again",
 }
 
 
-def _word(value: bool | None) -> str:
+def _yes_no(value: bool | None) -> str:
     return "unknown" if value is None else "yes" if value else "no"
 
 
@@ -165,11 +165,11 @@ def _channel_gauge(
 
 
 def _channel_alert(
-    severity: Severity, event: ChannelDegraded | ChannelRecovered, what: str
+    severity: Severity, event: ChannelDegraded | ChannelRecovered, state_phrase: str
 ) -> Report:
     return Report(
         severity,
-        f"{event.client_name} {event.channel}: {what}",
+        f"{event.client_name} {event.channel}: {state_phrase}",
         (),
         frozenset({Audience.OPERATIONS}),
     )
@@ -199,32 +199,35 @@ def _describe_decisions(event: DecisionsRecorded) -> Report:
     return replace(
         report,
         audiences=frozenset({Audience.COMMUNITY}),
-        notification=(
+        notification_body=(
             _targets_section(TargetTitle(c.target_id, c.title) for c in risen)
             + f"\n\n**File**\n{event.size_bytes / 2**20:.1f} MiB - {_code_name(event.filename)}"
             + f"\n\n**ed2k**\n`{link}`"
         ),
-        title=_RISE_HEADINGS[top],
+        notification_title=_RISE_HEADINGS[top],
     )
 
 
 def _describe_source(
-    event: SourceFirstUseful | SourceReappeared, kind: str, what: str, title: str
+    event: SourceFirstUseful | SourceReappeared,
+    alert_kind: str,
+    state_phrase: str,
+    notification_title: str,
 ) -> Report:
     short = f"{event.source.native_id[:8]}…"  # as the webui shortens a hash
     named = f"{_code_name(event.source_name)} " if event.source_name else ""
-    sections = [f"**Source**\n{named}{short}, {what}"]
+    sections = [f"**Source**\n{named}{short}, {state_phrase}"]
     if event.target_titles:
         sections.append(_targets_section(event.target_titles))
     sections.append(f"**File**\n{_code_name(event.filename)}")
-    labels = (("network", event.source.network.value), ("kind", kind))
+    labels = (("network", event.source.network.value), ("kind", alert_kind))
     return Report(
         Severity.INFO,
-        f"source {short} {what}: {event.filename}",
+        f"source {short} {state_phrase}: {event.filename}",
         (MetricInstruction(MetricName.SOURCE_ALERTS, "inc", labels),),
         frozenset({Audience.COMMUNITY}),
         "\n\n".join(sections),
-        title,
+        notification_title,
     )
 
 
@@ -234,7 +237,7 @@ def describe(event: Event) -> Report:
         case SearchExecuted():
             return Report(
                 Severity.DEBUG,
-                f"search {event.channel}: {event.result_count} result(s)",
+                f"search {event.channel}: {event.observation_count} observation(s)",
                 (MetricInstruction(MetricName.SEARCHES, "inc", _search_labels(event)),),
             )
         case ClientUnreachable():
@@ -280,8 +283,8 @@ def describe(event: Event) -> Report:
         case ChannelStatusSampled():
             return Report(
                 Severity.DEBUG,
-                f"status {event.client_name} {event.channel}: connected {_word(event.connected)}, "
-                f"connectable {_word(event.connectable)}",
+                f"status {event.client_name} {event.channel}: "
+                f"connected {_yes_no(event.connected)}, connectable {_yes_no(event.connectable)}",
                 (
                     _channel_gauge(MetricName.CHANNEL_CONNECTED, event, event.connected),
                     _channel_gauge(MetricName.CHANNEL_CONNECTABLE, event, event.connectable),
@@ -291,14 +294,15 @@ def describe(event: Event) -> Report:
             return _channel_alert(
                 Severity.WARNING,
                 event,
-                f"{_DEGRADED[event.field]} for {event.seconds / 60:.0f} min",
+                f"{_DEGRADED_PHRASE_BY_FIELD[event.field]} "
+                f"for {event.degraded_for_seconds / 60:.0f} min",
             )
         case ChannelRecovered():
-            return _channel_alert(Severity.INFO, event, _RECOVERED[event.field])
+            return _channel_alert(Severity.INFO, event, _RECOVERED_PHRASE_BY_FIELD[event.field])
         case ClientUnreachableLasting():
             return Report(
                 Severity.WARNING,
-                f"{event.client_name} unreachable for {event.seconds / 60:.0f} min",
+                f"{event.client_name} unreachable for {event.unreachable_for_seconds / 60:.0f} min",
                 (),
                 frozenset({Audience.OPERATIONS}),
             )

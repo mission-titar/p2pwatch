@@ -1,8 +1,8 @@
 """One client's status loop: a reading every minute feeds the channel gauges, and a degraded state
 alerts once it has lasted, whatever came before it, boot included (spec stage 2, D15).
 
-The clocks live in memory: a restart restarts them, so an ongoing degradation alerts at most one
-delay later.
+The alert timers live in memory: a restart restarts them, so an ongoing degradation alerts at most
+one delay later.
 """
 
 import asyncio
@@ -27,9 +27,9 @@ from p2pwatch.ports.clock import Clock
 from p2pwatch.ports.telemetry import Telemetry
 
 STATUS_PERIOD_SECONDS = 60.0
-CHANNEL_ALERT_SECONDS = 300.0
-UNREACHABLE_ALERT_SECONDS = 120.0
-CURRENT_FOR_SECONDS = 2 * STATUS_PERIOD_SECONDS
+CHANNEL_ALERT_AFTER_SECONDS = 300.0
+UNREACHABLE_ALERT_AFTER_SECONDS = 120.0
+READING_FRESH_FOR_SECONDS = 2 * STATUS_PERIOD_SECONDS
 
 
 class StatusBoard:
@@ -47,7 +47,7 @@ class StatusBoard:
         return self._readings
 
     def is_current(self, reading: StatusReading) -> bool:
-        return (self._clock.now() - reading.read_at).total_seconds() <= CURRENT_FOR_SECONDS
+        return (self._clock.now() - reading.read_at).total_seconds() <= READING_FRESH_FOR_SECONDS
 
 
 @dataclass
@@ -60,7 +60,7 @@ class StatusLoopDeps:
     board: StatusBoard
 
 
-class _Watch:
+class _AlertTimer:
     """Since when one state reads degraded, and whether its alert has fired."""
 
     def __init__(self, delay_seconds: float) -> None:
@@ -68,11 +68,11 @@ class _Watch:
         self._since: datetime | None = None
         self._alerted = False
 
-    def read(self, good: bool | None, now: datetime) -> Literal["alert", "recovery"] | None:
-        if good is None:  # unknown stops the clock; a recovery stays due until a good reading
+    def observe(self, healthy: bool | None, now: datetime) -> Literal["alert", "recovery"] | None:
+        if healthy is None:  # unknown stops the timer; a recovery stays due until a healthy reading
             self._since = None
             return None
-        if good:
+        if healthy:
             self._since = None
             recovered, self._alerted = self._alerted, False
             return "recovery" if recovered else None
@@ -85,11 +85,13 @@ class _Watch:
 
 async def status_loop(deps: StatusLoopDeps) -> None:
     """Reads the status every period until shutdown."""
-    api = _Watch(UNREACHABLE_ALERT_SECONDS)
-    channels: dict[tuple[str, ChannelField], _Watch] = {}
+    api_timer = _AlertTimer(UNREACHABLE_ALERT_AFTER_SECONDS)
+    channel_timers: dict[tuple[str, ChannelField], _AlertTimer] = {}
 
-    async def watch(watch: _Watch, good: bool | None, alert: Event, recovery: Event) -> None:
-        change = watch.read(good, deps.clock.now())
+    async def _observe(
+        timer: _AlertTimer, healthy: bool | None, alert: Event, recovery: Event
+    ) -> None:
+        change = timer.observe(healthy, deps.clock.now())
         if change is not None:
             await deps.telemetry.emit(alert if change == "alert" else recovery)
 
@@ -104,17 +106,17 @@ async def status_loop(deps: StatusLoopDeps) -> None:
             await deps.telemetry.emit(ClientUnreachable(deps.client_name))
             # Every channel is unknown while the API is: only the API's own alert can fire.
             readings: list[tuple[str, bool | None, bool | None]] = [
-                (channel, None, None) for channel in dict.fromkeys(c for c, _ in channels)
+                (channel, None, None) for channel in dict.fromkeys(c for c, _ in channel_timers)
             ]
             reachable = False
         else:
             deps.board.publish(deps.client_name, StatusReading(deps.clock.now(), status))
             readings = [(c.channel, c.connected, c.connectable) for c in status.channels]
             reachable = True
-        await watch(
-            api,
+        await _observe(
+            api_timer,
             reachable,
-            ClientUnreachableLasting(deps.client_name, UNREACHABLE_ALERT_SECONDS),
+            ClientUnreachableLasting(deps.client_name, UNREACHABLE_ALERT_AFTER_SECONDS),
             ClientReachableAgain(deps.client_name),
         )
         for channel, connected, connectable in readings:
@@ -125,11 +127,13 @@ async def status_loop(deps: StatusLoopDeps) -> None:
                 ("connected", connected),
                 ("connectable", connectable),
             )
-            for field, good in fields:
-                await watch(
-                    channels.setdefault((channel, field), _Watch(CHANNEL_ALERT_SECONDS)),
-                    good,
-                    ChannelDegraded(deps.client_name, channel, field, CHANNEL_ALERT_SECONDS),
+            for field, healthy in fields:
+                await _observe(
+                    channel_timers.setdefault(
+                        (channel, field), _AlertTimer(CHANNEL_ALERT_AFTER_SECONDS)
+                    ),
+                    healthy,
+                    ChannelDegraded(deps.client_name, channel, field, CHANNEL_ALERT_AFTER_SECONDS),
                     ChannelRecovered(deps.client_name, channel, field),
                 )
         await deps.clock.sleep(STATUS_PERIOD_SECONDS)

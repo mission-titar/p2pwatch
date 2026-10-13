@@ -42,10 +42,10 @@ class PrometheusSink:
 
     def apply(self, instruction: MetricInstruction) -> None:
         labels = dict(instruction.labels)
-        if instruction.kind == "inc":
+        if instruction.operation == "inc":
             counter = self._counters[instruction.name]
             (counter.labels(**labels) if labels else counter).inc(instruction.value)
-        elif instruction.kind == "set":
+        elif instruction.operation == "set":
             gauge = self._gauges[instruction.name]
             (gauge.labels(**labels) if labels else gauge).set(instruction.value)
         else:
