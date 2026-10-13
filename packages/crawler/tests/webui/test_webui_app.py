@@ -954,6 +954,23 @@ async def test_source_page_shows_its_hash_its_names_and_its_periods(
 
 
 @pytest.mark.asyncio
+async def test_a_source_without_a_name_reads_unknown_unlinked_on_the_list_and_its_page(
+    populated_app: tuple[Starlette, str], catalog_db: Path
+) -> None:
+    app, hash_ = populated_app
+    with sqlite3.connect(catalog_db) as conn:
+        insert_source(conn, _USER)
+        unnamed = insert_source_variant(conn, hash_, _USER, name=None)
+        insert_source_point(conn, unnamed, _TUESDAY_8PM)
+    source = f'<a href="/sources/{SourceKey(Network.ED2K, _USER).source_id.hex()}">1f2e1f2e…</a>'
+    file = f'<a href="/files/{file_id(hash_).hex()}">keroro_s2e62a_vf.avi</a>'
+    stamp = "2026-10-13 20:00:00Z"
+    assert _row("unknown", source, stamp, "1") in await _sources_page(app, "/sources")
+    period = _row(file, "unknown", "queued", "unknown", "unknown", stamp, stamp, "", "", "n1")
+    assert period in await _sources_page(app, _USER_PAGE)
+
+
+@pytest.mark.asyncio
 async def test_name_page_lists_the_hashes_that_carried_it_and_nothing_further(
     populated_app: tuple[Starlette, str], catalog_db: Path
 ) -> None:
