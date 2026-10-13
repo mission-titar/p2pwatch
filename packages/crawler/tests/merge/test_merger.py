@@ -276,7 +276,7 @@ def test_t16_merger_wraps_source_copy_in_a_transaction(tmp_path: Path) -> None:
     merge_catalogs(out, [good])  # the good source first, in its own successful merge.
 
     with pytest.raises(MergeError, match="copy of .* failed"):
-        merge_catalogs(out, [broken], output_is_source=False)
+        merge_catalogs(out, [broken], output_is_source_catalog=False)
 
     # files (1st table) may have been copied BEFORE the failure on observation_variants (missing
     # table); the ROLLBACK must have undone it → the output still has ONLY the content of `good`.
@@ -290,7 +290,7 @@ def test_t16_unattachable_source_errors(tmp_path: Path) -> None:
     not_a_db.write_bytes(b"not a sqlite database header" * 8)
     out = tmp_path / "out.db"
 
-    with pytest.raises(MergeError, match="cannot attach"):
+    with pytest.raises(MergeError, match="cannot attach source catalog"):
         merge_catalogs(out, [not_a_db])
 
 
@@ -316,7 +316,7 @@ def test_rejects_source_with_older_schema_version(tmp_path: Path) -> None:
         merge_catalogs(out, [src])
 
     message = str(excinfo.value)
-    assert str(src) in message
+    assert f"source catalog {src} has schema version" in message
     assert str(_CURRENT_SCHEMA_VERSION - 1) in message
     assert str(_CURRENT_SCHEMA_VERSION) in message
     # Rejected before its BEGIN: no row of the source reached the output.

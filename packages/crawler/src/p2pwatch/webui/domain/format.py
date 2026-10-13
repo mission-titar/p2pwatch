@@ -35,7 +35,7 @@ def human_size(size_bytes: int) -> str:
     display, not a precise byte count.
 
     The unit is picked on the ROUNDED value, not the raw byte count: e.g. ``1024**2 - 1``
-    bytes rounds to 1024 when divided by 1024 (KiB) — that must promote to ``"1 MB"``, not
+    bytes rounds to 1024 when divided by 1024 (KiB): that must promote to ``"1 MB"``, not
     render as ``"1024 KB"``. Comparing on the un-rounded byte count against a fixed threshold
     (the previous bug) misses that a value just under a unit boundary can still round UP to
     the next unit's first whole number.

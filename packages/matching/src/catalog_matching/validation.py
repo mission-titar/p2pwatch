@@ -177,7 +177,7 @@ def _expand_fragments(pattern: str, fragments: dict[str, str]) -> str:
     return PLACEHOLDER.sub(lambda m: fragments.get(m.group(1), m.group(0)), pattern)
 
 
-def _parse_token_def(raw: Any, fragments: dict[str, str]) -> TokenDef:
+def _parse_token_def(token_name: str, raw: Any, fragments: dict[str, str]) -> TokenDef:
     """Dispatch of a token def: composite (all/any/not) or leaf (4 types).
 
     Reads ALL the def's ancillary keys (``flags`` of regex, ``min_coverage``/``min_similarity``
@@ -196,7 +196,7 @@ def _parse_token_def(raw: Any, fragments: dict[str, str]) -> TokenDef:
         pattern = _expand_fragments(str(mapping["regex"]), fragments)
         return RegexDef(pattern=pattern, flags=str(flags))
     if "coverage" in mapping:
-        _refuse_renamed_coverage_keys(mapping, "coverage token")
+        _refuse_renamed_coverage_keys(mapping, f"token {token_name!r}")
         min_coverage = _optional_float(mapping, "min_coverage")
         if min_coverage is None:
             raise MatchingConfigError("a coverage token must declare 'min_coverage'")
@@ -266,7 +266,7 @@ def parse_matcher_config(raw: dict[str, Any]) -> MatcherConfig:
     tokens_raw = _require_mapping(raw.get("tokens", {}), "'tokens' section")
     tokens: dict[str, TokenDef] = {}
     for token_name, token_raw in tokens_raw.items():
-        tokens[str(token_name)] = _parse_token_def(token_raw, fragments)
+        tokens[str(token_name)] = _parse_token_def(str(token_name), token_raw, fragments)
     rules_raw = raw.get("rules", [])
     if not isinstance(rules_raw, list):
         raise MatchingConfigError(f"'rules' section: list expected, got {type(rules_raw).__name__}")

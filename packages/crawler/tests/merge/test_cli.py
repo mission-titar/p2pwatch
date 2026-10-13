@@ -79,7 +79,9 @@ def test_t9_into_explicit_dest_is_a_source(tmp_path: Path) -> None:
     assert count(src_a, "files") == 2
 
 
-def test_t10_into_must_be_a_listed_source(tmp_path: Path) -> None:
+def test_t10_into_must_be_a_listed_source(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     src_a = _seed(tmp_path / "a.db", "a")
     src_b = _seed(tmp_path / "b.db", "b")
     other = _seed(tmp_path / "other.db", "a")  # exists but is NOT in the list.
@@ -87,6 +89,7 @@ def test_t10_into_must_be_a_listed_source(tmp_path: Path) -> None:
     code = main(["--into", str(other), str(src_a), str(src_b)])
 
     assert code == 2
+    assert f"--into must name a listed source catalog: {other}" in capsys.readouterr().err
 
 
 def test_t11_output_and_into_mutually_exclusive(tmp_path: Path) -> None:
@@ -117,7 +120,9 @@ def test_t12_force_with_into_is_rejected(tmp_path: Path) -> None:
     assert code == 2
 
 
-def test_t13_missing_source_file_errors_before_output_created(tmp_path: Path) -> None:
+def test_t13_missing_source_file_errors_before_output_created(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     src = _seed(tmp_path / "a.db", "a")
     missing = tmp_path / "missing.db"
     out = tmp_path / "out.db"
@@ -125,6 +130,7 @@ def test_t13_missing_source_file_errors_before_output_created(tmp_path: Path) ->
     code = main(["--output", str(out), str(src), str(missing)])
 
     assert code == 2
+    assert f"source catalog not found: {missing}" in capsys.readouterr().err
     # Fail-fast: the output was NOT created (we fail before opening/creating the output).
     assert not out.exists()
 
@@ -136,6 +142,7 @@ def test_cli_logs_the_output_once_done(tmp_path: Path, caplog: pytest.LogCapture
 
     assert main(["--output", str(out), str(src)]) == 0
 
+    assert f"merge → {out} (1 source catalog(s))" in caplog.messages
     assert caplog.messages[-1] == f"merge done: {out}"
 
 
@@ -147,3 +154,13 @@ def test_help_says_the_catalog_stays_append_only(capsys: pytest.CaptureFixture[s
     text = " ".join(capsys.readouterr().out.split())
     assert "append-only preserved" in text
     assert "ranges" not in text
+
+
+def test_help_calls_the_merged_files_catalogs(capsys: pytest.CaptureFixture[str]) -> None:
+    # A bare "source" is a peer sharing a file everywhere else in p2pwatch.
+    with pytest.raises(SystemExit):
+        main(["--help"])
+
+    text = " ".join(capsys.readouterr().out.split())
+    assert "CATALOG [CATALOG ...]" in text
+    assert "one of the listed source catalogs" in text

@@ -1,11 +1,11 @@
 """Entry point ``python -m p2pwatch``: loads the config, builds the app, runs (§4).
 
-OBSERVER mode (spec §2): observe, catalog, decide, loop — nothing else. DOWNLOAD mode
-activates via ``download.enabled: true`` in the config (the unified parser then wires the
-download loop). Loads the unified crawler config (``crawler.yml``) + ``targets`` +
-the matcher config (fail-fast at the slightest issue → refuses to start, spec §5/§14), assembles the
-real adapters (clock/RNG/wake hub), then ``asyncio.run(app.run())``. The clean & bounded shutdown is
-carried by ``CrawlerApp`` (spec §6).
+Download off (crawl-only, spec §2): observe, catalog, decide, loop, nothing else. Download
+enabled by ``download.enabled: true`` in the config (the unified parser then wires the download
+loop). Loads the unified crawler config (``crawler.yml``) + ``targets`` + the matcher config
+(fail-fast at the slightest issue → refuses to start, spec §5/§14), assembles the real adapters
+(clock/RNG/wake hub), then ``asyncio.run(app.run())``. The clean & bounded shutdown is carried by
+``CrawlerApp`` (spec §6).
 
 The config paths are passed as arguments (``--config``/``--targets``/``--matcher``) with
 defaults ``deploy/*.yml``. The sensitive config values (secrets, URLs) are
@@ -40,7 +40,7 @@ def _add_config_options(parser: argparse.ArgumentParser) -> None:
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="p2pwatch", description="eMule crawler (observer)")
+    parser = argparse.ArgumentParser(prog="p2pwatch", description="eMule crawler")
     _add_config_options(parser)
     return parser.parse_args(argv)
 
