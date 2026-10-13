@@ -19,7 +19,7 @@ from p2pwatch.adapters.persistence_sqlite.connection import open_local
 from p2pwatch.adapters.persistence_sqlite.scheduler_state_repository import (
     SqliteSchedulerStateRepository,
 )
-from p2pwatch.application.search_tasks import SearchTasks
+from p2pwatch.application.search_tasks import SearchTaskRunner
 from p2pwatch.application.search_worker import (
     BackoffPolicy,
     BackoffRegistry,
@@ -101,7 +101,7 @@ class _Tasks:
         self.resumed.set()
 
     def searching(self, client: Any, keywords: list[str]) -> Coroutine[Any, Any, None]:
-        return SearchTasks(
+        return SearchTaskRunner(
             workers=[SearchWorker("amuled", client, self.deps)],
             keywords=keywords,
             resumed=self.resumed,

@@ -32,7 +32,7 @@ from p2pwatch.adapters.persistence_sqlite.errors import (
     PersistenceError,
     wrap_sqlite_errors,
 )
-from p2pwatch.adapters.persistence_sqlite.variants import register_functions
+from p2pwatch.adapters.persistence_sqlite.variants import register_sql_functions
 
 _logger = logging.getLogger("p2pwatch.adapters.persistence_sqlite.connection")
 
@@ -63,25 +63,25 @@ def utc_iso(moment: datetime) -> str:
 
 def open_catalog(path: Path | str) -> sqlite3.Connection:
     """Opens/migrates ``catalog.db`` (the append-only triggers are part of the schema)."""
-    return _open(path, _MIGRATIONS / "catalog", register_functions)
+    return _open(path, _MIGRATIONS / "catalog", register_sql_functions)
 
 
 def open_local(path: Path | str) -> sqlite3.Connection:
     """Opens/migrates ``local.db``."""
-    return _open(path, _MIGRATIONS / "local", register_functions)
+    return _open(path, _MIGRATIONS / "local", register_sql_functions)
 
 
 def _open(
     path: Path | str,
     scripts_dir: Traversable,
-    register: Callable[[sqlite3.Connection], None],
+    register_sql_functions: Callable[[sqlite3.Connection], None],
 ) -> sqlite3.Connection:
     with wrap_sqlite_errors():
         connection = sqlite3.connect(path, autocommit=True)
     try:
         with wrap_sqlite_errors():
             _configure(connection)
-            register(connection)
+            register_sql_functions(connection)
             _apply_migrations(connection, _load_scripts(scripts_dir))
     except BaseException:
         # Unconditional close: a NON-sqlite error (e.g. OSError from iterdir) must not

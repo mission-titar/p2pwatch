@@ -1,4 +1,4 @@
-from p2pwatch.domain.download.policy import DownloadVerdict, download_policy
+from p2pwatch.domain.download.policy import DownloadVerdict, decide_download
 
 
 def _verdict(
@@ -11,13 +11,13 @@ def _verdict(
     file_size: int = 100,
     min_free_bytes: int = 1_000,
 ) -> DownloadVerdict:
-    return download_policy(
+    return decide_download(
         tier=tier,
         target_status=target_status,
         already_tracked=already_downloaded,
         free_bytes=free_bytes,
         outstanding_bytes=outstanding_bytes,
-        file_size=file_size,
+        size_bytes=file_size,
         min_free_bytes=min_free_bytes,
     )
 
@@ -111,13 +111,13 @@ def test_found_target_still_downloads_a_new_file() -> None:
     # Product invariant (spec search-simplification, Batch C): an already-"found" episode is
     # re-downloaded when a NEW file matches it (intended archival redundancy).
     # Only target_status == "complete" skips; "found" never does in PROD.
-    verdict = download_policy(
+    verdict = decide_download(
         tier="download",
         target_status="found",
         already_tracked=False,
         free_bytes=100_000_000_000,
         outstanding_bytes=0,
-        file_size=100_000_000,
+        size_bytes=100_000_000,
         min_free_bytes=10_737_418_240,
     )
     assert verdict is DownloadVerdict.DOWNLOAD

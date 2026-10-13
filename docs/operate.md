@@ -289,7 +289,7 @@ le crawl en gardant aMule vivant, c'est `docker compose stop p2pwatch`.
 | `/sources/name?name=` | Un nom : les user hashes qui l'ont porté, et les périodes relevées sous ce nom sans user hash, dans l'intervalle choisi. Les liens s'arrêtent là : la page d'un nom ne montre pas les autres noms de ces user hashes, pour ne pas confondre en une seule personne des inconnus qui partagent un nom par défaut |
 | `/targets/{target_id}` | Fichiers d'une cible (alias de `/files?target=`) |
 | `/node` | État du crawler : `node_id`, entrées du `scheduler_state` et téléchargements (voir [Suivre un téléchargement](#suivre-un-téléchargement)). |
-| `POST /controls/pause`, `/controls/resume`, `/controls/restart` | Les boutons du tableau de bord, qui y renvoient. La pause n'arrête pas les recherches en cours, ni celles qui attendent déjà leur créneau réseau : avec K mots-clés, jusqu'à K-1 recherches ed2k, espacées d'une minute, et la prochaine de chaque cible Kad partent encore, puis le crawler se tait. |
+| `POST /controls/pause`, `/controls/resume`, `/controls/restart` | Les boutons du tableau de bord, qui y renvoient. La pause n'arrête pas les recherches en cours, ni celles qui attendent déjà leur créneau réseau : avec K mots-clés, jusqu'à K-1 recherches ed2k, espacées d'une minute, et la prochaine de chaque mot Kad partent encore, puis le crawler se tait. |
 | `/console` | Console SQL en lecture seule : un unique `SELECT` sur `catalog.db` ou `local.db`, avec export CSV. Toujours active. |
 | `/health` | Healthcheck JSON : répond `{"status": "ok"}` si le service est opérationnel |
 

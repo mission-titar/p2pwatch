@@ -62,9 +62,9 @@ def _argv(config: Path) -> list[str]:
 
 
 def test_build_app_assembles_a_crawler_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # Config WITHOUT observability section → covers build_app's `observability is None` branch.
+    # Config WITHOUT observability section → covers build_crawler_app's `observability is None`.
     monkeypatch.setenv("AMULE_API_PASSWORD", "s3cr3t")
-    app = entry.build_app(_args(_write_config(tmp_path)))
+    app = entry.build_crawler_app(_args(_write_config(tmp_path)))
     assert isinstance(app, CrawlerApp)
 
 
@@ -76,7 +76,7 @@ def test_build_app_computes_policy_fingerprint_from_matcher_and_targets_bytes(
     # compare it against the marker stored in local.db.
     monkeypatch.setenv("AMULE_API_PASSWORD", "s3cr3t")
     args = _args(_write_config(tmp_path))
-    app = entry.build_app(args)
+    app = entry.build_crawler_app(args)
     expected = policy_fingerprint(args.matcher.read_bytes(), args.targets.read_bytes())
     assert app._policy_fingerprint == expected
 
@@ -84,10 +84,10 @@ def test_build_app_computes_policy_fingerprint_from_matcher_and_targets_bytes(
 def test_build_app_applies_log_level_when_observability_configured(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """build_app's observability is not None branch calls setLevel."""
+    """build_crawler_app's observability is not None branch calls setLevel."""
     monkeypatch.setenv("AMULE_API_PASSWORD", "s3cr3t")
     config = _write_config(tmp_path, body=_UNIFIED_CONFIG_WITH_OBS)
-    app = entry.build_app(_args(config))
+    app = entry.build_crawler_app(_args(config))
     assert isinstance(app, CrawlerApp)
     assert logging.getLogger().level == logging.DEBUG  # root level applied (DEBUG=10)
 
@@ -104,7 +104,7 @@ def test_main_returns_zero_on_clean_run(monkeypatch: pytest.MonkeyPatch) -> None
         coro.close()  # type: ignore[attr-defined]  # close the coroutine without running it
 
     monkeypatch.setattr("p2pwatch.composition.__main__.asyncio.run", fake_run)
-    monkeypatch.setattr(entry, "build_app", lambda args: _SpyApp())
+    monkeypatch.setattr(entry, "build_crawler_app", lambda args: _SpyApp())
     assert entry.main([]) == 0
 
 
@@ -112,8 +112,8 @@ def test_main_renders_runtime_config_error_from_run_as_clean_message(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     # The full-mode gate raises a ``ConfigError`` AT RUNTIME (verifier health-check KO) from
-    # ``app.run()`` — not from ``build_app``. ``main`` must render it with the SAME clean message
-    # + exit code 1 (and not a bare traceback).
+    # ``app.run()``, not from ``build_crawler_app``. ``main`` must render it with the SAME clean
+    # message + exit code 1 (and not a bare traceback).
     from p2pwatch.adapters.config.crawler_config import ConfigError
 
     def fake_run(coro: object) -> None:
@@ -121,7 +121,7 @@ def test_main_renders_runtime_config_error_from_run_as_clean_message(
         raise ConfigError("verifier unreachable at startup (health-check failed)")
 
     monkeypatch.setattr("p2pwatch.composition.__main__.asyncio.run", fake_run)
-    monkeypatch.setattr(entry, "build_app", lambda args: _SpyApp())
+    monkeypatch.setattr(entry, "build_crawler_app", lambda args: _SpyApp())
     code = entry.main([])
     assert code == 1
     assert "Invalid config" in capsys.readouterr().err
@@ -136,7 +136,7 @@ def test_main_returns_zero_when_the_shutdown_deadline_fires(
         raise TimeoutError
 
     monkeypatch.setattr("p2pwatch.composition.__main__.asyncio.run", fake_run)
-    monkeypatch.setattr(entry, "build_app", lambda args: _SpyApp())
+    monkeypatch.setattr(entry, "build_crawler_app", lambda args: _SpyApp())
     assert entry.main([]) == 0
     assert "Shutdown deadline" in capsys.readouterr().err
 
@@ -177,7 +177,7 @@ def test_package_main_shim_reexports_main() -> None:
 
 def test_bare_invocation_still_runs_the_crawler(monkeypatch: pytest.MonkeyPatch) -> None:
     # HARD backward-compat CONSTRAINT: WITHOUT a subcommand, we fall back EXACTLY onto the
-    # run path (build_app → asyncio.run). This is what compose does.
+    # run path (build_crawler_app → asyncio.run). This is what compose does.
     seen: dict[str, object] = {}
 
     def fake_run(coro: object) -> None:
@@ -188,7 +188,7 @@ def test_bare_invocation_still_runs_the_crawler(monkeypatch: pytest.MonkeyPatch)
         return _SpyApp()
 
     monkeypatch.setattr("p2pwatch.composition.__main__.asyncio.run", fake_run)
-    monkeypatch.setattr(entry, "build_app", fake_build_app)
+    monkeypatch.setattr(entry, "build_crawler_app", fake_build_app)
     assert entry.main(_argv(Path("crawler.yml"))) == 0
     assert seen["config"] == Path("crawler.yml")
 
@@ -196,17 +196,17 @@ def test_bare_invocation_still_runs_the_crawler(monkeypatch: pytest.MonkeyPatch)
 def test_validate_config_does_not_start_the_app(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # validate-config starts NOTHING: neither build_app nor asyncio.run.
+    # validate-config starts NOTHING: neither build_crawler_app nor asyncio.run.
     monkeypatch.setenv("AMULE_API_PASSWORD", "s3cr3t")
 
     def boom_run(coro: object) -> None:  # pragma: no cover - must never be called
         raise AssertionError("asyncio.run must not be called by validate-config")
 
     def boom_build_app(args: argparse.Namespace) -> CrawlerApp:  # pragma: no cover
-        raise AssertionError("build_app must not be called by validate-config")
+        raise AssertionError("build_crawler_app must not be called by validate-config")
 
     monkeypatch.setattr("p2pwatch.composition.__main__.asyncio.run", boom_run)
-    monkeypatch.setattr(entry, "build_app", boom_build_app)
+    monkeypatch.setattr(entry, "build_crawler_app", boom_build_app)
     assert entry.main(["validate-config", *_argv(_write_config(tmp_path))]) == 0
 
 

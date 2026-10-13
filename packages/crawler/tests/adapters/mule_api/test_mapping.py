@@ -13,7 +13,7 @@ from p2pwatch.adapters.mule_api.mapping import (
     map_shared_download,
     map_source,
     merge_duplicate_sources,
-    source_ecid,
+    offering_source_ecid,
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
@@ -495,12 +495,12 @@ def test_a_row_is_a_source_when_we_ask_it_the_file_or_it_is_parked_on_another(
     relation: str | None, a4af: bool | None, kept: bool
 ) -> None:
     """D1: a row that only takes the file from us offers nothing, so its detail is not asked."""
-    assert source_ecid(_client_row(role=relation, a4af=a4af)) == (4382 if kept else None)
+    assert offering_source_ecid(_client_row(role=relation, a4af=a4af)) == (4382 if kept else None)
 
 
 @pytest.mark.parametrize("row", ["nonsense", _client_row(ecid=None), _client_row(ecid=True)])
 def test_a_row_without_an_ecid_to_ask_is_no_source(row: object) -> None:
-    assert source_ecid(row) is None
+    assert offering_source_ecid(row) is None
 
 
 @pytest.mark.parametrize(

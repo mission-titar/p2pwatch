@@ -28,7 +28,7 @@ _HASH_LENGTH = 32
 _NO_USER_HASH = "0" * _HASH_LENGTH
 
 # The relations of a row we ask the file of; any other row is a source only when parked (D1).
-_ASKED = ("downloading_from", "both")
+_ASKING_RELATIONS = ("downloading_from", "both")
 
 # The download states that say what a source holds of what we lack (D3).
 _SOURCE_ROLES = {
@@ -110,17 +110,17 @@ def map_download_status(row: object) -> DownloadStatus | None:
     is the one status amuleapi reserves for a file verified and moved (spec stage 2, D10)."""
     if not isinstance(row, dict):
         return None
-    ed2k_hash = _hash_hex(row.get("hash"))
-    if ed2k_hash is None:
+    native_id = _hash_hex(row.get("hash"))
+    if native_id is None:
         return None
     status = _string(row.get("status")) or ""
     completed = status == "completed"
     failure = FailureReason.ERROR if status == "erroneous" else None
     waiting = None if completed or failure else _waiting_reason(status, row.get("sources"))
     return DownloadStatus(
-        file=FileKey(Network.ED2K, ed2k_hash),
-        bytes_done=_int(row.get("completed_bytes")),
-        size_bytes=_int(row.get("size_bytes")),
+        file=FileKey(Network.ED2K, native_id),
+        bytes_done=_int_or_zero(row.get("completed_bytes")),
+        size_bytes=_int_or_zero(row.get("size_bytes")),
         completed=completed,
         waiting_reason=waiting,
         failure_reason=failure,
@@ -132,12 +132,12 @@ def map_shared_download(row: object) -> DownloadStatus | None:
     Partfiles are shared too, so the caller reads it only for a file the queue no longer lists."""
     if not isinstance(row, dict):
         return None
-    ed2k_hash = _hash_hex(row.get("hash"))
-    if ed2k_hash is None:
+    native_id = _hash_hex(row.get("hash"))
+    if native_id is None:
         return None
-    size = _int(row.get("size_bytes"))
+    size = _int_or_zero(row.get("size_bytes"))
     return DownloadStatus(
-        file=FileKey(Network.ED2K, ed2k_hash),
+        file=FileKey(Network.ED2K, native_id),
         bytes_done=size,
         size_bytes=size,
         completed=True,
@@ -148,29 +148,29 @@ def map_shared_download(row: object) -> DownloadStatus | None:
 
 def map_client_status(status: object, version: object) -> ClientStatus:
     """A /status and a /version body → ``ClientStatus``. Never raises: missing reads unknown."""
-    body = _object(status)
-    ed2k, kad = _object(body.get("ed2k")), _object(body.get("kad"))
+    body = _as_dict(status)
+    ed2k, kad = _as_dict(body.get("ed2k")), _as_dict(body.get("kad"))
     high_id, firewalled = ed2k.get("high_id"), kad.get("firewalled_tcp")
     channels = (
         _channel("ed2k", ed2k, high_id if isinstance(high_id, bool) else None),
         _channel("kad", kad, not firewalled if isinstance(firewalled, bool) else None),
     )
-    return ClientStatus(version=_string(_object(version).get("daemon_version")), channels=channels)
+    return ClientStatus(version=_string(_as_dict(version).get("daemon_version")), channels=channels)
 
 
-def source_ecid(row: object) -> int | None:
+def offering_source_ecid(row: object) -> int | None:
     """The ``ecid`` to ask the detail of, for a row of ``GET /downloads/{hash}/clients`` that
     offers us the file (D1); ``None`` for any other."""
     if not isinstance(row, dict):
         return None
-    if row.get("role") not in _ASKED and row.get("a4af") is not True:
+    if row.get("role") not in _ASKING_RELATIONS and row.get("a4af") is not True:
         return None
     return _optional_int(row.get("ecid"))
 
 
 def map_source(row: dict[str, Any], detail: dict[str, Any]) -> SourceReading:
     """A source's row, which alone carries its relation to the file, and its client detail."""
-    asked = row.get("role") in _ASKED
+    asked = row.get("role") in _ASKING_RELATIONS
     software = (_string(row.get("software")), _string(row.get("software_version")))
     return SourceReading(
         source=_source_key(row.get("user_hash")),
@@ -183,7 +183,7 @@ def map_source(row: dict[str, Any], detail: dict[str, Any]) -> SourceReading:
             *_source_meta(row, _SOURCE_META_KEYS),
             *_source_meta(detail, _SOURCE_DETAIL_META_KEYS),
         ),
-        session_received_bytes=_int(row.get("downloaded_bytes_session")),
+        session_received_bytes=_int_or_zero(row.get("downloaded_bytes_session")),
     )
 
 
@@ -259,11 +259,11 @@ def _map_result(result: object, keyword: str) -> tuple[list[FileObservation], in
     """One result row → one observation PER FILENAME, plus the skipped count."""
     if not isinstance(result, dict):
         return [], 1
-    ed2k_hash = _hash_hex(result.get("hash"))
+    native_id = _hash_hex(result.get("hash"))
     size_bytes = result.get("size_bytes")
-    if ed2k_hash is None or not isinstance(size_bytes, int) or isinstance(size_bytes, bool):
+    if native_id is None or not isinstance(size_bytes, int) or isinstance(size_bytes, bool):
         return [], 1
-    media = _object(result.get("media"))
+    media = _as_dict(result.get("media"))
     raw_meta = _raw_meta(result, media)
     codec, file_type = _string(media.get("codec")), _string(result.get("file_type"))
     alternates = result.get("alternate_names")
@@ -271,15 +271,15 @@ def _map_result(result: object, keyword: str) -> tuple[list[FileObservation], in
     observations: list[FileObservation] = []
     skipped = 0
     for entry in entries:
-        fields = _object(entry)
+        fields = _as_dict(entry)
         name = _string(fields.get("name"))
         if name is None:
             skipped += 1
             continue
-        total, complete = _sources(fields.get("sources"))
+        total, complete = _source_counts(fields.get("sources"))
         observations.append(
             FileObservation(
-                file=FileKey(Network.ED2K, ed2k_hash),
+                file=FileKey(Network.ED2K, native_id),
                 filename=name,
                 size_bytes=size_bytes,
                 source_count=total,
@@ -308,7 +308,7 @@ def _render(value: object) -> str:
     return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
 
 
-def _object(value: object) -> dict[str, Any]:
+def _as_dict(value: object) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
@@ -325,7 +325,7 @@ def _hash_hex(value: object) -> str | None:
     return lowered if all(character in "0123456789abcdef" for character in lowered) else None
 
 
-def _int(value: object) -> int:
+def _int_or_zero(value: object) -> int:
     """Absent or malformed reads as 0, and ``bool`` is not a count though it is an ``int``."""
     return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
@@ -335,9 +335,9 @@ def _optional_int(value: object) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
-def _sources(value: object) -> tuple[int, int]:
-    sources = _object(value)
-    return _int(sources.get("total")), _int(sources.get("complete"))
+def _source_counts(value: object) -> tuple[int, int]:
+    sources = _as_dict(value)
+    return _int_or_zero(sources.get("total")), _int_or_zero(sources.get("complete"))
 
 
 def _waiting_reason(status: str, sources: object) -> WaitingReason | None:
@@ -345,7 +345,7 @@ def _waiting_reason(status: str, sources: object) -> WaitingReason | None:
     reason = _WAITING_STATUSES.get(status)
     if reason is not None:
         return reason
-    counts = _object(sources)
-    if _int(counts.get("total")) == 0:
+    counts = _as_dict(sources)
+    if _int_or_zero(counts.get("total")) == 0:
         return WaitingReason.NO_SOURCE
-    return WaitingReason.REMOTE_QUEUE if _int(counts.get("transferring")) == 0 else None
+    return WaitingReason.REMOTE_QUEUE if _int_or_zero(counts.get("transferring")) == 0 else None

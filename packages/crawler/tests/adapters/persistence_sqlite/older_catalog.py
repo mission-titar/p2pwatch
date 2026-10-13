@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.adapters.persistence_sqlite import connection as connection_module
-from p2pwatch.adapters.persistence_sqlite.variants import content_hash, register_functions
+from p2pwatch.adapters.persistence_sqlite.variants import content_hash, register_sql_functions
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceKey
 
@@ -26,7 +26,7 @@ def open_local_at(path: Path, version: int) -> sqlite3.Connection:
 def _open_at(path: Path, database: str, version: int) -> sqlite3.Connection:
     connection = sqlite3.connect(path, autocommit=True)
     connection_module._configure(connection)
-    register_functions(connection)
+    register_sql_functions(connection)
     scripts = connection_module._load_scripts(_MIGRATIONS / database)
     connection_module._apply_migrations(
         connection, tuple(s for s in scripts if s.version <= version)

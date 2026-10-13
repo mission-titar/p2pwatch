@@ -51,7 +51,7 @@ def file_id(network: str, native_id: str) -> bytes:
     return FileKey(Network(network), native_id).file_id
 
 
-def register_functions(connection: sqlite3.Connection) -> None:
+def register_sql_functions(connection: sqlite3.Connection) -> None:
     """Registers ``content_hash``, ``file_id``, ``fold_raw_meta`` and ``iso_to_micros``."""
 
     # A stored raw_meta, folded and serialized as record_observation serializes it.

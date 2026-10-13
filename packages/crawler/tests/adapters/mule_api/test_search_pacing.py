@@ -227,7 +227,7 @@ def test_a_keyword_without_a_kad_target_is_logged_once(caplog: pytest.LogCapture
 
     run_virtual(main())
 
-    assert [record.getMessage().count("no Kad target") for record in caplog.records] == [1, 1]
+    assert [record.getMessage().count("no Kad word") for record in caplog.records] == [1, 1]
     assert ["'62'" in record.getMessage() for record in caplog.records] == [True, False]
 
 

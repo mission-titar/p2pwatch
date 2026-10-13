@@ -192,7 +192,7 @@ Points clés en chemin :
   opaques pour le cœur, qui ne teste jamais leur valeur.
 - **Pas d'intervalle dans le cœur** : un canal cherche aussi souvent que les règles de son réseau
   le permettent, et c'est l'adaptateur qui les applique dans `search()`. Pour aMule : deux départs
-  `ed2k` à 60 s d'écart au moins, un seul en vol ; deux départs Kad sur une même cible (le premier
+  `ed2k` à 60 s d'écart au moins, un seul en vol ; deux départs Kad sur un même mot Kad (le premier
   mot de 3 octets du mot-clé) à 60 s d'écart au moins. Un canal lent ne retient jamais un canal
   rapide.
 - **Mots-clés minimaux, depuis la config** : `search.keywords`, obligatoire et sans défaut dans le code
@@ -314,7 +314,7 @@ sources des téléchargements du crawler (§8.3).
 flowchart TD
   dec["Decision<br/>download tier"]
   cand["New candidates"]
-  pol["download_policy"]
+  pol["decide_download"]
   add["start · amuled"]
   mon["Monitor"]
   comp["Completion<br/>completed flag"]
@@ -338,8 +338,9 @@ Invariants porteurs (à ne pas violer) :
 - **Rien n'inspecte le fichier.** Il n'y a pas de sniffing de type, pas d'`ffprobe`, pas d'analyse
   antivirus : depuis la réduction de périmètre du 2026-09-13, juger si un téléchargement terminé est
   réellement l'épisode est une étape manuelle effectuée par l'opérateur sur le répertoire de sortie.
-- `download_policy` est conservatrice : on saute si `tier != download`, si la cible est `complete`,
-  si le hash a déjà été téléchargé (dédup), ou si admettre le fichier casserait le plancher disque.
+- La décision (`decide_download`) est conservatrice : on saute si `tier != download`, si la cible est
+  `complete`, si le hash a déjà été téléchargé (dédup), ou si admettre le fichier casserait le plancher
+  disque.
   Un épisode déjà `found` **est retéléchargé** quand un *nouveau* hash lui correspond (redondance
   d'archivage délibérée).
 - Le plancher disque (`download.min_free_bytes`) est **mesuré, pas comptabilisé** (2026-09-13) : un

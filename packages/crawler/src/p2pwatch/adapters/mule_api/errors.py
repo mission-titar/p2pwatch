@@ -48,7 +48,7 @@ class ApiNotFoundError(ApiRejectedError):
 
 def error_from_response(response: httpx.Response) -> ApiError:
     """A non-2xx response -> the adapter error the port contract calls for."""
-    code, message = _envelope(response)
+    code, message = _error_code_and_message(response)
     detail = (
         f"{response.request.method} {response.request.url.path}: "
         f"{response.status_code} {code}: {message}"
@@ -66,7 +66,7 @@ def error_from_response(response: httpx.Response) -> ApiError:
     return ApiUnreachableError(detail)
 
 
-def _envelope(response: httpx.Response) -> tuple[str, str]:
+def _error_code_and_message(response: httpx.Response) -> tuple[str, str]:
     """``{"error": {code, message}}`` -> the pair, or placeholders if the body is not one."""
     try:
         payload = json.loads(response.content)

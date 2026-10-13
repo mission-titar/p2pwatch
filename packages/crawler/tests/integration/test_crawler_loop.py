@@ -104,7 +104,7 @@ async def test_real_loop_runs_one_search_and_stops(amuled: ApiEndpoint, tmp_path
     def factory(endpoint: AmuleEndpoint, clock: Clock) -> _ShutdownAfterFirstSearchClient:
         # The endpoint is derived from code constants now: use the caller's daemon instead.
         inner = AmuleApiClient(
-            amuled.host, amuled.port, endpoint.password, timeout=30.0, clock=clock
+            amuled.host, amuled.port, endpoint.password, timeout_seconds=30.0, clock=clock
         )
         clients.append(_ShutdownAfterFirstSearchClient(inner, app_holder))
         return clients[-1]
