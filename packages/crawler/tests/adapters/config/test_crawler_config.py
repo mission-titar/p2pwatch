@@ -318,6 +318,17 @@ def test_download_sources_interval_is_a_positive_finite_number(seconds: float) -
         parse_crawler_config(_minimal_raw() | {"download": section}, _env())
 
 
+def test_download_sources_interval_is_at_most_a_year() -> None:
+    # Beyond it, the writer's tolerance in microseconds can leave SQLite's int64.
+    section = _full_download_section() | {"sources_interval_seconds": 31_536_000}
+    cfg = parse_crawler_config(_minimal_raw() | {"download": section}, _env())
+    assert cfg.download is not None
+    assert cfg.download.sources_interval == timedelta(days=365)
+    section["sources_interval_seconds"] = 31_536_001
+    with pytest.raises(ConfigError, match=r"download\.sources_interval_seconds: at most"):
+        parse_crawler_config(_minimal_raw() | {"download": section}, _env())
+
+
 def test_download_poll_interval_must_be_positive() -> None:
     section = _full_download_section() | {"poll_interval_seconds": 0.0}
     raw = _minimal_raw() | {"download": section}
@@ -609,6 +620,14 @@ def test_webui_source_period_gap_is_configurable() -> None:
 def test_webui_source_period_gap_is_a_positive_finite_number(seconds: float) -> None:
     raw = _minimal_raw() | {"webui": {"source_period_gap_seconds": seconds}}
     with pytest.raises(ConfigError, match=r"webui\.source_period_gap_seconds"):
+        parse_crawler_config(raw, _env())
+
+
+def test_webui_source_period_gap_is_at_most_a_year() -> None:
+    raw = _minimal_raw() | {"webui": {"source_period_gap_seconds": 31_536_000}}
+    assert parse_crawler_config(raw, _env()).webui.source_period_gap == timedelta(days=365)
+    raw["webui"]["source_period_gap_seconds"] = 31_536_001
+    with pytest.raises(ConfigError, match=r"webui\.source_period_gap_seconds: at most"):
         parse_crawler_config(raw, _env())
 
 
