@@ -127,6 +127,41 @@ def test_a_number_that_is_not_finite_is_refused_by_name(
         parse_crawler_config(raw, _env())
 
 
+def _with_seconds(section: str | None, key: str, seconds: int) -> dict[str, Any]:
+    """A full config whose ``key`` holds ``seconds``, the backoff's cap above any floor."""
+    raw = _minimal_raw() | {"download": _full_download_section(), "observability": {}, "webui": {}}
+    raw["backoff"]["cap_seconds"] = 86_400
+    (raw if section is None else raw[section])[key] = seconds
+    return raw
+
+
+@pytest.mark.parametrize(
+    ("section", "key"),
+    [
+        ("download", "poll_interval_seconds"),
+        ("download", "sources_interval_seconds"),
+        ("webui", "source_period_gap_seconds"),
+        ("backoff", "base_seconds"),
+        ("backoff", "cap_seconds"),
+        ("observability", "notification_timeout_seconds"),
+        (None, "shutdown_deadline_seconds"),
+    ],
+)
+def test_a_duration_is_at_most_a_day(section: str | None, key: str) -> None:
+    parse_crawler_config(_with_seconds(section, key, 86_400), _env())
+    with pytest.raises(ConfigError, match=rf"\.{key}: at most 86400 seconds expected, got 86401"):
+        parse_crawler_config(_with_seconds(section, key, 86_401), _env())
+
+
+@pytest.mark.parametrize("key", ["lost_after_seconds", "reappeared_after_seconds"])
+def test_an_absence_is_at_most_thirty_days(key: str) -> None:
+    parse_crawler_config(_with_seconds("download", key, 2_592_000), _env())
+    with pytest.raises(
+        ConfigError, match=rf"download\.{key}: at most 2592000 seconds expected, got 2592001"
+    ):
+        parse_crawler_config(_with_seconds("download", key, 2_592_001), _env())
+
+
 def test_non_positive_value_is_fatal() -> None:
     raw = _minimal_raw()
     raw["shutdown_deadline_seconds"] = 0
@@ -315,17 +350,6 @@ def test_download_sources_interval_defaults_to_five_minutes() -> None:
 def test_download_sources_interval_is_a_positive_finite_number(seconds: float) -> None:
     section = _full_download_section() | {"sources_interval_seconds": seconds}
     with pytest.raises(ConfigError, match=r"download\.sources_interval_seconds"):
-        parse_crawler_config(_minimal_raw() | {"download": section}, _env())
-
-
-def test_download_sources_interval_is_at_most_a_year() -> None:
-    # Beyond it, the writer's tolerance in microseconds can leave SQLite's int64.
-    section = _full_download_section() | {"sources_interval_seconds": 31_536_000}
-    cfg = parse_crawler_config(_minimal_raw() | {"download": section}, _env())
-    assert cfg.download is not None
-    assert cfg.download.sources_interval == timedelta(days=365)
-    section["sources_interval_seconds"] = 31_536_001
-    with pytest.raises(ConfigError, match=r"download\.sources_interval_seconds: at most"):
         parse_crawler_config(_minimal_raw() | {"download": section}, _env())
 
 
@@ -620,14 +644,6 @@ def test_webui_source_period_gap_is_configurable() -> None:
 def test_webui_source_period_gap_is_a_positive_finite_number(seconds: float) -> None:
     raw = _minimal_raw() | {"webui": {"source_period_gap_seconds": seconds}}
     with pytest.raises(ConfigError, match=r"webui\.source_period_gap_seconds"):
-        parse_crawler_config(raw, _env())
-
-
-def test_webui_source_period_gap_is_at_most_a_year() -> None:
-    raw = _minimal_raw() | {"webui": {"source_period_gap_seconds": 31_536_000}}
-    assert parse_crawler_config(raw, _env()).webui.source_period_gap == timedelta(days=365)
-    raw["webui"]["source_period_gap_seconds"] = 31_536_001
-    with pytest.raises(ConfigError, match=r"webui\.source_period_gap_seconds: at most"):
         parse_crawler_config(raw, _env())
 
 
