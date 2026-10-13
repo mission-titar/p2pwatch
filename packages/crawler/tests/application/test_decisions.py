@@ -11,7 +11,7 @@ import pytest
 
 from catalog_matching.engine import DecisionRecord, Explanation, MatchDecision, MatchingEngine
 from p2pwatch.adapters.persistence_sqlite.catalog_repository import SqliteCatalogRepository
-from p2pwatch.application.decisions import record_decision_if_changed
+from p2pwatch.application.decisions import rejudge_file
 from p2pwatch.application.record_observations import record_observation
 from p2pwatch.application.run_download_cycle import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.domain.file_key import FileKey, Network
@@ -73,7 +73,7 @@ async def _record(
     telemetry: RecordingTelemetry,
 ) -> int:
     catalog.record_observation(_obs(ed2k_hash, filename))
-    return await record_decision_if_changed(
+    return await rejudge_file(
         _key(ed2k_hash),
         _obs(ed2k_hash, filename).to_candidate(),
         catalog=catalog,
@@ -180,7 +180,7 @@ async def test_a_target_no_name_supports_is_retracted_without_nudge(
     telemetry, wake_hub = RecordingTelemetry(), RecordingWakeHub()
     written = await _record(_HASH_CAT, _DISCARD_NAME, catalog, engine, wake_hub, telemetry)
     assert written == 1
-    assert catalog.last_decisions(_key(_HASH_CAT)) == {
+    assert catalog.latest_decisions(_key(_HASH_CAT)) == {
         "062A": DecisionRecord(target_id="062A", rule_name="", tier=RETRACTED_TIER)
     }
     assert telemetry.events == [
@@ -200,7 +200,7 @@ async def test_every_unsupported_target_is_retracted(
     telemetry, wake_hub = RecordingTelemetry(), RecordingWakeHub()
     written = await _record(_HASH_MULTI, _DISCARD_NAME, catalog, engine, wake_hub, telemetry)
     assert written == 2
-    assert catalog.last_decisions(_key(_HASH_MULTI)) == {
+    assert catalog.latest_decisions(_key(_HASH_MULTI)) == {
         "062A": DecisionRecord(target_id="062A", rule_name="", tier=RETRACTED_TIER),
         "062B": DecisionRecord(target_id="062B", rule_name="", tier=RETRACTED_TIER),
     }
@@ -265,7 +265,7 @@ async def test_a_second_name_that_matches_nothing_does_not_retract_the_first(
         for name in (_DL_NAME, _DISCARD_NAME, _DL_NAME, _DISCARD_NAME)
     ]
     assert written == [1, 0, 0, 0]
-    assert catalog.last_decisions(_key(_HASH_DL)) == {
+    assert catalog.latest_decisions(_key(_HASH_DL)) == {
         "062A": DecisionRecord(target_id="062A", rule_name="id_segment_exact", tier="download")
     }
 
@@ -281,7 +281,7 @@ async def test_a_weaker_name_seen_again_does_not_downgrade_the_verdict(
         for name in (_NOTIFY_NAME, _DL_NAME, _NOTIFY_NAME, _DL_NAME)
     ]
     assert written == [1, 1, 0, 0]
-    assert catalog.last_decisions(_key(_HASH_DL))["062A"].tier == "download"
+    assert catalog.latest_decisions(_key(_HASH_DL))["062A"].tier == "download"
 
 
 @pytest.mark.asyncio
@@ -317,7 +317,7 @@ async def test_a_file_with_no_name_left_is_named_by_the_candidate(
     insert_file(catalog_connection, _HASH_CAT, 1)
     _seed_decision(catalog, _HASH_CAT, "062A")
     telemetry, wake_hub = RecordingTelemetry(), RecordingWakeHub()
-    await record_decision_if_changed(
+    await rejudge_file(
         _key(_HASH_CAT),
         _obs(_HASH_CAT, _DISCARD_NAME).to_candidate(),
         catalog=catalog,

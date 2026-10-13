@@ -5,7 +5,11 @@ import dataclasses
 import pytest
 
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.observability.events import DownloadCompleted, ObservationRecorded
+from p2pwatch.domain.observability.events import (
+    DownloadCompleted,
+    ObservationRecorded,
+    TargetTitle,
+)
 
 
 def test_observation_recorded_carries_client_and_network() -> None:
@@ -15,7 +19,9 @@ def test_observation_recorded_carries_client_and_network() -> None:
 
 def test_event_is_frozen() -> None:
     event = DownloadCompleted(
-        file=FileKey(Network.ED2K, "a" * 32), filename="x.avi", targets=(("062A", "t"),)
+        file=FileKey(Network.ED2K, "a" * 32),
+        filename="x.avi",
+        target_titles=(TargetTitle("062A", "t"),),
     )
     # Pass the attribute via a variable to avoid ruff B010 while still
     # triggering FrozenInstanceError at runtime (frozen=True).

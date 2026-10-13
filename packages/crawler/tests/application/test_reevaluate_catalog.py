@@ -118,7 +118,7 @@ async def test_repository_error_on_one_row_is_absorbed_and_sweep_continues(
     )
     assert summary == ReevalSummary(evaluated=2, written=1)
     assert decision_tiers(catalog_connection) == [(_HASH_CAT, "catalog")]
-    assert catalog.last_decisions(FileKey(Network.ED2K, _HASH_DL)) == {}
+    assert catalog.latest_decisions(FileKey(Network.ED2K, _HASH_DL)) == {}
     assert f"file=ed2k:{_HASH_DL} " in caplog.text
 
 
@@ -153,7 +153,7 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
         catalog=catalog, engine=engine, wake_hub=wake_hub, telemetry=telemetry
     )
     assert summary == ReevalSummary(evaluated=1, written=3)  # 062A + 062B + retract 001A
-    assert catalog.last_decisions(FileKey(Network.ED2K, _HASH_MULTI)) == {
+    assert catalog.latest_decisions(FileKey(Network.ED2K, _HASH_MULTI)) == {
         "062A": DecisionRecord(target_id="062A", rule_name="numero_nu_confirmed", tier="download"),
         "062B": DecisionRecord(target_id="062B", rule_name="numero_nu_confirmed", tier="download"),
         "001A": DecisionRecord(target_id="001A", rule_name="", tier=RETRACTED_TIER),
@@ -174,7 +174,7 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
         catalog=catalog, engine=engine, wake_hub=wake_hub, telemetry=telemetry
     )
     assert summary == ReevalSummary(evaluated=1, written=2)  # only 062A + 062B; "" untouched
-    assert set(catalog.last_decisions(FileKey(Network.ED2K, _HASH_MULTI))) == {"062A", "062B"}
+    assert set(catalog.latest_decisions(FileKey(Network.ED2K, _HASH_MULTI))) == {"062A", "062B"}
     assert (
         catalog_connection.execute(
             "SELECT count(*) FROM match_decisions WHERE target_id = ''"
@@ -193,7 +193,7 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
         catalog=catalog, engine=engine, wake_hub=RecordingWakeHub(), telemetry=RecordingTelemetry()
     )
     assert summary == ReevalSummary(evaluated=1, written=1)
-    assert catalog.last_decisions(FileKey(Network.ED2K, _HASH_DL)) == {
+    assert catalog.latest_decisions(FileKey(Network.ED2K, _HASH_DL)) == {
         "062A": DecisionRecord(target_id="062A", rule_name="id_segment_exact", tier="download")
     }
 

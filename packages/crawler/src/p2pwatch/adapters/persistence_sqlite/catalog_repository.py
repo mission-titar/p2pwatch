@@ -184,7 +184,7 @@ class SqliteCatalogRepository:
                 ),
             )
 
-    def last_decisions(self, file: FileKey) -> dict[str, DecisionRecord]:
+    def latest_decisions(self, file: FileKey) -> dict[str, DecisionRecord]:
         """Latest verdict per target for this file (set-diff anti-redundancy, spec §7), READ.
 
         Maps ``target_id`` → its latest :class:`DecisionRecord`. INCLUDES a target whose latest
@@ -198,7 +198,7 @@ class SqliteCatalogRepository:
             row[0]: DecisionRecord(target_id=row[0], rule_name=row[1], tier=row[2]) for row in rows
         }
 
-    def download_decisions(self) -> tuple[DownloadCandidate, ...]:
+    def download_candidates(self) -> tuple[DownloadCandidate, ...]:
         """``(file, target_id)`` whose LATEST verdict is tier=download, to replay (download §5).
 
         Keyed per ``(file, target_id)``: a whole-episode file matching both segments now yields
@@ -211,24 +211,24 @@ class SqliteCatalogRepository:
             for row in rows
         )
 
-    def last_observation(self, file: FileKey) -> ObservedFile | None:
-        """Name and size of the latest sighting (the ed2k link), or ``None`` (read)."""
+    def latest_observation(self, file: FileKey) -> ObservedFile | None:
+        """Filename and size of the latest sighting (the ed2k link), or ``None`` (read)."""
         with wrap_sqlite_errors():
             latest = sightings.latest_sighting(self._connection, file)
         if latest is None:
             return None
-        return ObservedFile(filename=latest.name, size_bytes=latest.size_bytes)
+        return ObservedFile(filename=latest.filename, size_bytes=latest.size_bytes)
 
     def best_observation(self, file: FileKey) -> ObservedFile | None:
-        """The clean name (most sources, then latest) and size, or ``None`` (read)."""
+        """The clean filename (most sources, then latest) and size, or ``None`` (read)."""
         with wrap_sqlite_errors():
-            best = sightings.best_name(self._connection, file)
+            best = sightings.best_filename_and_size(self._connection, file)
         return None if best is None else ObservedFile(filename=best[0], size_bytes=best[1])
 
     def known_filenames(self, file: FileKey) -> tuple[str, ...]:
-        """Every distinct name this file was observed under, sorted (read)."""
+        """Every distinct filename this file was observed under, sorted (read)."""
         with wrap_sqlite_errors():
-            return sightings.known_names(self._connection, file)
+            return sightings.known_filenames(self._connection, file)
 
     def count_files(self) -> int:
         """Number of catalogued files, the re-evaluation progress total (read)."""
@@ -242,7 +242,7 @@ class SqliteCatalogRepository:
             for latest in sightings.iter_latest_sightings(self._connection):
                 yield ReevalRow(
                     file=latest.file,
-                    filename=latest.name,
+                    filename=latest.filename,
                     size_bytes=latest.size_bytes,
                     media_length_sec=latest.media_length_sec,
                     bitrate_kbps=latest.bitrate_kbps,

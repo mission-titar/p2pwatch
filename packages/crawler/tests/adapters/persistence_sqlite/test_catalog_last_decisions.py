@@ -61,7 +61,7 @@ def test_last_decisions_is_empty_when_never_decided(
     repository: SqliteCatalogRepository,
 ) -> None:
     repository.record_observation(_obs(_A))
-    assert repository.last_decisions(_A) == {}
+    assert repository.latest_decisions(_A) == {}
 
 
 def test_last_decisions_returns_the_latest_record_per_target(
@@ -71,7 +71,7 @@ def test_last_decisions_returns_the_latest_record_per_target(
     repository.record_decision(_A, _decision("keroro_large", "catalog", "062A"))
     repository.record_decision(_A, _decision("id_segment_exact", "download", "062A"))  # newer
     repository.record_decision(_A, _decision("numero_nu", "notify", "062B"))
-    assert repository.last_decisions(_A) == {
+    assert repository.latest_decisions(_A) == {
         "062A": DecisionRecord(target_id="062A", rule_name="id_segment_exact", tier="download"),
         "062B": DecisionRecord(target_id="062B", rule_name="numero_nu", tier="notify"),
     }
@@ -83,7 +83,7 @@ def test_last_decisions_includes_a_target_whose_latest_tier_is_retracted(
     repository.record_observation(_obs(_A))
     repository.record_decision(_A, _decision("id_segment_exact", "download", "062A"))
     repository.record_decision(_A, _decision("", RETRACTED_TIER, "062A"))
-    assert repository.last_decisions(_A) == {
+    assert repository.latest_decisions(_A) == {
         "062A": DecisionRecord(target_id="062A", rule_name="", tier=RETRACTED_TIER)
     }
 
@@ -94,7 +94,7 @@ def test_last_decisions_excludes_the_legacy_empty_sentinel(
     repository.record_observation(_obs(_A))
     repository.record_decision(_A, _decision("numero_nu", "notify", "062A"))
     repository.record_decision(_A, _decision("", RETRACTED_TIER, ""))  # legacy target_id="" row
-    assert repository.last_decisions(_A) == {
+    assert repository.latest_decisions(_A) == {
         "062A": DecisionRecord(target_id="062A", rule_name="numero_nu", tier="notify")
     }
 
@@ -102,4 +102,4 @@ def test_last_decisions_excludes_the_legacy_empty_sentinel(
 def test_last_decisions_for_unknown_hash_is_empty(
     repository: SqliteCatalogRepository,
 ) -> None:
-    assert repository.last_decisions(_A) == {}
+    assert repository.latest_decisions(_A) == {}

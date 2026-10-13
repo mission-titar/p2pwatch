@@ -41,8 +41,14 @@ class ObservationRecorded:
 class DecisionChange:
     target_id: str
     title: str
-    before: str | None  # the persisted tier, None for a target never judged
-    after: str  # the fresh tier, or "retracted"
+    previous_tier: str | None  # the persisted tier, None for a target never judged
+    new_tier: str  # the fresh tier, or "retracted"
+
+
+@dataclass(frozen=True)
+class TargetTitle:
+    target_id: str
+    title: str
 
 
 @dataclass(frozen=True)
@@ -63,7 +69,7 @@ class DownloadQueued:
 class DownloadCompleted:
     file: FileKey
     filename: str  # the clean name, the most sourced
-    targets: tuple[tuple[str, str], ...]  # (target_id, title), every download target of the file
+    target_titles: tuple[TargetTitle, ...]  # every download target of the file
 
 
 type ChannelField = Literal["connected", "connectable"]
@@ -125,7 +131,7 @@ class SourceNew:
     name: str | None
     file: FileKey
     filename: str  # the clean name, the most sourced
-    targets: tuple[tuple[str, str], ...]  # (target_id, title), none for a file without one
+    target_titles: tuple[TargetTitle, ...]  # none for a file without one
 
 
 @dataclass(frozen=True)
@@ -135,7 +141,7 @@ class SourceReappeared:
     name: str | None
     file: FileKey
     filename: str
-    targets: tuple[tuple[str, str], ...]
+    target_titles: tuple[TargetTitle, ...]
     absent_seconds: float
 
 

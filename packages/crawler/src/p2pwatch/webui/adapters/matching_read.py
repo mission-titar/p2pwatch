@@ -45,9 +45,9 @@ class MatchingExplainer:
         bitrate_kbps: int | None,
         target_id: str,
     ) -> Explanation | None:
-        """Recompute the explanation of target ``target_id`` over every name of one file.
+        """Recompute the explanation of target ``target_id`` over every filename of one file.
 
-        Each name carries the same fields, as ``record_decision_if_changed`` judges a file.
+        Each filename carries the same fields, as ``rejudge_file`` judges a file.
         Return ``None`` if ``target_id`` is unknown to the current config.
         """
         if size_bytes is None:

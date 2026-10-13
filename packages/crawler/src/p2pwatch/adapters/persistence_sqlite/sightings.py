@@ -21,9 +21,9 @@ LATEST_SIGHTING_CTE = f"""latest_sighting AS (
         f.file_id AS file_id,
         f.network AS network,
         f.native_id AS native_id,
-        v.filename AS name,
+        v.filename AS filename,
         {_ISO.format("o.observed_at")} AS last_seen,
-        o.source_count AS source_count_max,
+        o.source_count AS source_count,
         v.size_bytes AS size_bytes,
         v.media_length_sec AS media_length_sec,
         v.bitrate_kbps AS bitrate_kbps,
@@ -48,16 +48,16 @@ LATEST_SIGHTING_CTE = f"""latest_sighting AS (
 
 # Every query below returns these columns in this order, so ``_sighting`` maps them all.
 _COLUMNS = (
-    "network, native_id, name, last_seen, source_count_max, size_bytes, media_length_sec,"
+    "network, native_id, filename, last_seen, source_count, size_bytes, media_length_sec,"
     " bitrate_kbps, keyword"
 )
 
 SELECT_LATEST_SIGHTING = f"""WITH {LATEST_SIGHTING_CTE}
-SELECT {_COLUMNS} FROM latest_sighting WHERE file_id = ? AND name IS NOT NULL
+SELECT {_COLUMNS} FROM latest_sighting WHERE file_id = ? AND filename IS NOT NULL
 """
 
 SELECT_LATEST_SIGHTINGS = f"""WITH {LATEST_SIGHTING_CTE}
-SELECT {_COLUMNS} FROM latest_sighting WHERE name IS NOT NULL ORDER BY network, native_id
+SELECT {_COLUMNS} FROM latest_sighting WHERE filename IS NOT NULL ORDER BY network, native_id
 """
 
 # The file's timeline in an interval, oldest first; an instant's observations by variant_id, then
@@ -72,14 +72,14 @@ WHERE f.file_id = ? AND o.observed_at >= ? AND o.observed_at < ?
 ORDER BY o.observed_at, v.variant_id, o.source_count
 """
 
-# Every name a file was ever seen under (a file-level veto judges them all); a variant is only
-# ever written with an observation, so the variants alone hold every name.
-_SELECT_KNOWN_NAMES = """
+# Every filename a file was ever seen under (a file-level veto judges them all); a variant is
+# only ever written with an observation, so the variants alone hold every filename.
+_SELECT_KNOWN_FILENAMES = """
 SELECT DISTINCT filename FROM observation_variants WHERE file_id = ? ORDER BY 1
 """
 
-# The name seen with the most sources, latest seen on a tie.
-_SELECT_BEST_NAME = """
+# The filename seen with the most sources, latest seen on a tie, and its size.
+_SELECT_BEST_FILENAME_AND_SIZE = """
 SELECT v.filename, v.size_bytes
 FROM observation_variants AS v
 JOIN observations AS o ON o.variant_id = v.variant_id
@@ -92,7 +92,7 @@ LIMIT 1
 def _sighting(row: Any) -> Sighting:
     return Sighting(
         file=FileKey(Network(row[0]), row[1]),
-        name=row[2],
+        filename=row[2],
         observed_at=row[3],
         source_count=row[4],
         size_bytes=row[5],
@@ -113,15 +113,15 @@ def iter_latest_sightings(connection: sqlite3.Connection) -> Iterator[Sighting]:
     return map(_sighting, connection.execute(SELECT_LATEST_SIGHTINGS))
 
 
-def known_names(connection: sqlite3.Connection, file: FileKey) -> tuple[str, ...]:
-    """Every distinct name of the file, sorted."""
-    rows = connection.execute(_SELECT_KNOWN_NAMES, (file.file_id,)).fetchall()
+def known_filenames(connection: sqlite3.Connection, file: FileKey) -> tuple[str, ...]:
+    """Every distinct filename of the file, sorted."""
+    rows = connection.execute(_SELECT_KNOWN_FILENAMES, (file.file_id,)).fetchall()
     return tuple(row[0] for row in rows)
 
 
-def best_name(connection: sqlite3.Connection, file: FileKey) -> tuple[str, int] | None:
-    """The file's clean name (most sources, then latest) and its size; ``None`` if never seen."""
-    row = connection.execute(_SELECT_BEST_NAME, (file.file_id,)).fetchone()
+def best_filename_and_size(connection: sqlite3.Connection, file: FileKey) -> tuple[str, int] | None:
+    """The clean filename (most sources, then latest) and its size; ``None`` if never seen."""
+    row = connection.execute(_SELECT_BEST_FILENAME_AND_SIZE, (file.file_id,)).fetchone()
     return None if row is None else (row[0], row[1])
 
 

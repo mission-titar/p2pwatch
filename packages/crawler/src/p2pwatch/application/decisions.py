@@ -5,9 +5,9 @@ port contract each CALLER absorbs on its own terms, cf. ``record_observation`` a
 use-case). Used by BOTH the per-observation pipeline (``record_observations.py``) and the
 startup catalogue re-evaluation, so the set-diff + retraction + wake logic is written once.
 
-Set diff keyed by ``(file, target_id)`` (spec §7). The file is judged on EVERY name the
-catalog knows for it (``engine.evaluate_all``, spec amuleapi-migration §8.4), so its names no
-longer retract each other. A fresh decision is persisted (a download one also wakes the
+Set diff keyed by ``(file, target_id)`` (spec §7). The file is judged on EVERY filename the
+catalog knows for it (``engine.evaluate_all``, spec amuleapi-migration §8.4), so its filenames
+no longer retract each other. A fresh decision is persisted (a download one also wakes the
 download loop) only when it differs from the file's LATEST persisted :class:`DecisionRecord`
 for THAT target; a target that dropped out of the fresh set is retracted, unless it is already
 retracted (no-op). Returns the number of rows written (0..N; a decision OR a retraction each
@@ -28,32 +28,35 @@ from p2pwatch.ports.telemetry import Telemetry
 from p2pwatch.ports.wake_hub import WakeHub
 
 
-async def record_decision_if_changed(
+async def rejudge_file(
     file: FileKey,
-    candidate: FileCandidate,
+    base_candidate: FileCandidate,
     *,
     catalog: CatalogRepository,
     engine: MatchingEngine,
     wake_hub: WakeHub,
     telemetry: Telemetry,
 ) -> int:
-    """Judge the file on all its known names (``candidate`` gives the other fields).
+    """Judge the file on all its known filenames for every target, then record what changed
+    (``base_candidate`` gives the fields other than the filename).
 
     Returns the number of rows written (0..N). May propagate ``RepositoryError`` (pure
     orchestration; the caller absorbs it)."""
-    names = catalog.known_filenames(file)
-    fresh = engine.evaluate_all(replace(candidate, filename=name) for name in names)
-    persisted = catalog.last_decisions(file)
+    filenames = catalog.known_filenames(file)
+    fresh = engine.evaluate_all(
+        replace(base_candidate, filename=filename) for filename in filenames
+    )
+    persisted = catalog.latest_decisions(file)
     changes: list[DecisionChange] = []
 
-    def change(target_id: str, after: str) -> DecisionChange:
+    def change(target_id: str, new_tier: str) -> DecisionChange:
         target = engine.target(target_id)
-        before = persisted.get(target_id)
+        previous_record = persisted.get(target_id)
         return DecisionChange(
             target_id,
             "" if target is None else target.title,
-            None if before is None else before.tier,
-            after,
+            None if previous_record is None else previous_record.tier,
+            new_tier,
         )
 
     fresh_ids: set[str] = set()
@@ -71,8 +74,8 @@ async def record_decision_if_changed(
         catalog.record_retraction(file, target_id)
         changes.append(change(target_id, RETRACTED_TIER))
     if changes:
-        # No name left means only retractions were written, which are never notified.
-        best = catalog.best_observation(file) or ObservedFile(candidate.filename, 0)
+        # No filename left means only retractions were written, which are never notified.
+        best = catalog.best_observation(file) or ObservedFile(base_candidate.filename, 0)
         await telemetry.emit(
             DecisionsRecorded(file, best.filename, best.size_bytes, tuple(changes))
         )

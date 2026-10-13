@@ -27,8 +27,8 @@ import sqlite3
 from catalog_matching.config import TIER_RANK
 from p2pwatch.adapters.persistence_sqlite.sightings import (
     LATEST_SIGHTING_CTE,
-    best_name,
-    known_names,
+    best_filename_and_size,
+    known_filenames,
     latest_sighting,
     sightings,
 )
@@ -58,9 +58,9 @@ _PAGE_SIZE = PAGE_SIZE  # historical alias (internal); the public value is used 
 # param value is ever interpolated into SQL. ``tier`` sorts by the file's strongest tier rank
 # (``dec.best_tier_rank``, MAX of the TIER_RANK CASE). Direction maps through a fixed set too.
 SORT_COLUMNS: dict[str, str] = {
-    "name": "obs.name",
+    "name": "obs.filename",
     "size": "f.size_bytes",
-    "sources": "obs.source_count_max",
+    "sources": "obs.source_count",
     "last_seen": "obs.last_seen",
     "tier": "dec.best_tier_rank",
 }
@@ -162,8 +162,8 @@ SELECT
     f.network,
     f.native_id,
     f.size_bytes,
-    obs.name AS filename,
-    obs.source_count_max AS source_count,
+    obs.filename AS filename,
+    obs.source_count AS source_count,
     obs.last_seen AS last_seen,
     dec.target_ids,
     dec.tiers
@@ -406,7 +406,7 @@ def _filter_clauses(
         )
         params.append(tier)
     if query is not None:
-        clauses.append("obs.name LIKE ?")
+        clauses.append("obs.filename LIKE ?")
         params.append(f"%{query}%")
     return clauses, params
 
@@ -623,7 +623,7 @@ class CatalogReader:
             sightings=sightings(self._conn, file, window.since, window.until),
             latest=latest_sighting(self._conn, file),
             decisions=decisions,
-            known_filenames=known_names(self._conn, file),
+            known_filenames=known_filenames(self._conn, file),
         )
 
     def source_periods(self, file_id: bytes, window: PeriodWindow) -> tuple[SourcePeriodView, ...]:
@@ -721,5 +721,5 @@ class CatalogReader:
         )
 
     def _file_name(self, file: FileKey) -> str | None:
-        named = best_name(self._conn, file)
+        named = best_filename_and_size(self._conn, file)
         return None if named is None else named[0]

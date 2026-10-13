@@ -78,7 +78,7 @@ class Sighting:
     """A file seen once: one observation."""
 
     file: FileKey
-    name: str
+    filename: str
     observed_at: str
     source_count: int
     size_bytes: int

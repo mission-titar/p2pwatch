@@ -203,7 +203,7 @@ def _to_display_rows(
 def _timeline_row(sighting: Sighting) -> TimelineRow:
     """A sighting as one timeline line."""
     return TimelineRow(
-        name=sighting.name,
+        name=sighting.filename,
         size_bytes=sighting.size_bytes,
         sources=str(sighting.source_count),
         keyword=sighting.keyword,
@@ -857,7 +857,9 @@ def build_app(
         if latest is not None:
             match detail.file.network:
                 case Network.ED2K:
-                    link = build_ed2k_link(latest.name, latest.size_bytes, detail.file.native_id)
+                    link = build_ed2k_link(
+                        latest.filename, latest.size_bytes, detail.file.native_id
+                    )
                 case _:  # pragma: no cover
                     assert_never(detail.file.network)
 

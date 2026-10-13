@@ -30,13 +30,13 @@ class _StubRepository:
     def record_retraction(self, file: FileKey, target_id: str) -> None:
         self.retractions.append((file, target_id))
 
-    def last_decisions(self, file: FileKey) -> dict[str, DecisionRecord]:
+    def latest_decisions(self, file: FileKey) -> dict[str, DecisionRecord]:
         return {}
 
-    def download_decisions(self) -> tuple[DownloadCandidate, ...]:
+    def download_candidates(self) -> tuple[DownloadCandidate, ...]:
         return ()
 
-    def last_observation(self, file: FileKey) -> ObservedFile | None:
+    def latest_observation(self, file: FileKey) -> ObservedFile | None:
         return None
 
     def best_observation(self, file: FileKey) -> ObservedFile | None:
@@ -83,9 +83,9 @@ def test_protocol_is_satisfied_structurally() -> None:
     repository.record_observation(observation)
     repository.record_decision(_KEY, decision)
     repository.record_retraction(_KEY, "062A")
-    assert repository.last_decisions(_KEY) == {}
-    assert repository.download_decisions() == ()
-    assert repository.last_observation(_KEY) is None
+    assert repository.latest_decisions(_KEY) == {}
+    assert repository.download_candidates() == ()
+    assert repository.latest_observation(_KEY) is None
     assert repository.best_observation(_KEY) is None
     assert repository.known_filenames(_KEY) == ()
     assert repository.count_files() == 1

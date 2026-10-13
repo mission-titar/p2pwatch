@@ -39,6 +39,7 @@ from p2pwatch.domain.observability.events import (
     FreeSpaceSampled,
     SourceNew,
     SourceReappeared,
+    TargetTitle,
 )
 from p2pwatch.domain.source import SourceGroup, SourceKey
 from p2pwatch.ports.catalog_repository import DownloadCandidate, ObservedFile
@@ -96,15 +97,15 @@ class DownloadRepository(Protocol):
 class CatalogReader(Protocol):
     """STRUCTURAL Protocol of the catalog READS the loop needs (DECISION D9).
 
-    Subset of ``CatalogRepository`` (download_decisions, last_observation, best_observation): the
-    loop depends ONLY on what it reads, so the minimal test fake satisfies it without implementing
-    record_observation/record_decision. The real ``SqliteCatalogRepository``
+    Subset of ``CatalogRepository`` (download_candidates, latest_observation, best_observation):
+    the loop depends ONLY on what it reads, so the minimal test fake satisfies it without
+    implementing record_observation/record_decision. The real ``SqliteCatalogRepository``
     satisfies it too. Stubs on ONE line.
     """
 
-    def download_decisions(self) -> tuple[DownloadCandidate, ...]: ...
+    def download_candidates(self) -> tuple[DownloadCandidate, ...]: ...
 
-    def last_observation(self, file: FileKey) -> ObservedFile | None: ...
+    def latest_observation(self, file: FileKey) -> ObservedFile | None: ...
 
     def best_observation(self, file: FileKey) -> ObservedFile | None: ...
 
@@ -180,18 +181,18 @@ async def _monitor(
             states[file] = target
 
 
-def _targets(deps: DownloadDeps, file: FileKey) -> tuple[tuple[str, str], ...]:
+def _target_titles(deps: DownloadDeps, file: FileKey) -> tuple[TargetTitle, ...]:
     """Every download target of the file, else the one it was queued for (the decision may have
     dropped since), each with its title."""
-    target_ids = [c.target_id for c in deps.catalog.download_decisions() if c.file == file]
+    target_ids = [c.target_id for c in deps.catalog.download_candidates() if c.file == file]
     if not target_ids and (queued := deps.downloads.get_target_id(file)) is not None:
         target_ids = [queued]
     titles = {target.target_id: target.title for target in deps.targets}
-    return tuple((target_id, titles.get(target_id, "")) for target_id in target_ids)
+    return tuple(TargetTitle(target_id, titles.get(target_id, "")) for target_id in target_ids)
 
 
-def _best_name(deps: DownloadDeps, file: FileKey) -> str:
-    """The clean name; the native id names a file whose observations are gone."""
+def _best_filename(deps: DownloadDeps, file: FileKey) -> str:
+    """The clean filename; the native id names a file whose observations are gone."""
     best = deps.catalog.best_observation(file)
     return file.native_id if best is None else best.filename
 
@@ -208,7 +209,11 @@ async def _record_completion(
     deps.downloads.set_state(file, DownloadState.COMPLETED)
     states[file] = DownloadState.COMPLETED
     await deps.telemetry.emit(
-        DownloadCompleted(file, _best_name(deps, file), _targets(deps, file) or (("unknown", ""),))
+        DownloadCompleted(
+            file,
+            _best_filename(deps, file),
+            _target_titles(deps, file) or (TargetTitle("unknown", ""),),
+        )
     )
     _logger.info("file=%s completed", file.native_id)
 
@@ -267,10 +272,10 @@ async def _queue_new_candidates(deps: DownloadDeps, outstanding: int) -> None:
         deps.edge.leave("disk_low")
     elif deps.edge.enter("disk_low"):
         await deps.telemetry.emit(DiskSpaceLow(free_bytes=free, min_free_bytes=deps.min_free_bytes))
-    for candidate in deps.catalog.download_decisions():
+    for candidate in deps.catalog.download_candidates():
         if deps.downloads.is_downloaded(candidate.file):
             continue
-        observation = deps.catalog.last_observation(candidate.file)
+        observation = deps.catalog.latest_observation(candidate.file)
         if observation is None:
             _logger.warning(
                 "candidate file=%s without observation: link impossible, skipped",
@@ -311,7 +316,7 @@ async def _start_unlisted(deps: DownloadDeps, listed: frozenset[FileKey]) -> Non
     for file, state in states.items():
         if state not in {DownloadState.QUEUED, DownloadState.DOWNLOADING} or file in listed:
             continue
-        observation = deps.catalog.last_observation(file)
+        observation = deps.catalog.latest_observation(file)
         if observation is None:
             continue
         try:
@@ -357,12 +362,13 @@ async def _alert_sources(
         round_.decided.add(source)
         if alert is None:
             continue
-        name, filename, targets = reading.name, _best_name(deps, file), _targets(deps, file)
+        name, filename = reading.name, _best_filename(deps, file)
+        target_titles = _target_titles(deps, file)
         event: SourceNew | SourceReappeared = (
-            SourceNew(source, name, file, filename, targets)
+            SourceNew(source, name, file, filename, target_titles)
             if isinstance(alert, FirstUseful)
             else SourceReappeared(
-                source, name, file, filename, targets, alert.absent.total_seconds()
+                source, name, file, filename, target_titles, alert.absent.total_seconds()
             )
         )
         await deps.telemetry.emit(event)
