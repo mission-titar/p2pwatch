@@ -310,7 +310,8 @@ see, which section 5's check greps.
 - `domain/observability/events.py`: `SearchExecuted.network`, `SearchFailed.network`,
   `ObservationRecorded.network` → `channel`; every `client: str` field → `client_name`; `InstanceUnreachable` →
   `ClientUnreachable`; `CrawlerStarted.mode` → `download_enabled: bool`; `SearchExecuted.n_results` →
-  `result_count`; `ChannelStatusSampled.on_network` → `connected`.
+  `result_count` (Corrected: it counts observations, one per filename, not search results; block 100 renames it
+  `observation_count`); `ChannelStatusSampled.on_network` → `connected`.
 - `application/record_observations.py`: `record_observation(client=, network=)` → `client_name=`, `channel=`.
 - `application/search_worker.py`: `instance_name`, `_instance` → `client_name`, `_client_name`;
   `_record(channel, results)` → `_record_observations(channel, observations)`.
@@ -427,7 +428,8 @@ D7, and in the same adapters the integers of microseconds: `catalog_repository.p
   `_describe_source(event, kind, what, title)` → `state_phrase`, `alert_kind`, `notification_title`;
   `_DEGRADED`, `_RECOVERED` → `_DEGRADED_PHRASE_BY_FIELD`, `_RECOVERED_PHRASE_BY_FIELD`; `_word` → `_yes_no`.
 - `domain/observability/events.py`: `ChannelDegraded.seconds`, `ClientUnreachableLasting.seconds` →
-  `degraded_for_seconds`, `unreachable_for_seconds`.
+  `degraded_for_seconds`, `unreachable_for_seconds`; `SearchExecuted.result_count` → `observation_count`, and its
+  debug log's "result(s)" → "observation(s)" (Corrected: added after block 30, which found it counts observations).
 - `application/status_loop.py`: `_Watch.read(good, now)` → `_AlertTimer.observe(healthy, now)`;
   `CHANNEL_ALERT_SECONDS`, `UNREACHABLE_ALERT_SECONDS`, `CURRENT_FOR_SECONDS` → `CHANNEL_ALERT_AFTER_SECONDS`,
   `UNREACHABLE_ALERT_AFTER_SECONDS`, `READING_FRESH_FOR_SECONDS`; locals `api`, `channels`, `watch` →
