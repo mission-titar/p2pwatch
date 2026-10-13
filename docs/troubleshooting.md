@@ -268,7 +268,7 @@ amuled`. Si la ligne revient toutes les minutes avec un port différent, voyez
   dans votre dossier de travail (`data/`, `ed2k/amule/`, `ed2k/downloads/`, plus les trois `.yml`
   montés en lecture seule). Le crawler tourne directement sous votre `PUID:PGID` (`user:` dans
   `compose.yml`) et ne change la propriété de rien : `data/` doit déjà vous appartenir. Au démarrage
-  d'`ed2k`, le one-shot `p2pwatch_amule.config` tourne en root, crée l'utilisateur `amule` avec
+  d'`ed2k`, le one-shot `p2pwatch_amule.boot` tourne en root, crée l'utilisateur `amule` avec
   `PUID:PGID`, puis lui donne les points de montage (`/home/amule/.aMule`, `/downloads/incoming`,
   `/downloads/temp`).
 - **Ce qu'il ne fait pas : ce `chown` n'est PAS récursif** sur `ed2k/downloads/` ni sur

@@ -1,4 +1,4 @@
-"""config main: env check, port-sync's variables, user, mount points, amule.conf, admin pass."""
+"""boot main: env check, port-sync's variables, user, mount points, amule.conf, admin pass."""
 
 import grp
 import hashlib
@@ -12,8 +12,8 @@ from typing import Any
 
 import pytest
 
-from p2pwatch_amule.config import __main__ as entry
-from p2pwatch_amule.config.conf import reconcile_conf
+from p2pwatch_amule.boot import __main__ as entry
+from p2pwatch_amule.boot.conf import reconcile_conf
 
 DIGEST = hashlib.md5(b"hunter2").hexdigest()
 ENV = {
@@ -54,7 +54,8 @@ class Boot:
         monkeypatch.setattr(entry, "CONFIG_DIR", str(self.config))
         monkeypatch.setattr(entry, "INCOMING_DIR", str(self.incoming))
         monkeypatch.setattr(entry, "TEMP_DIR", str(self.temp))
-        monkeypatch.setattr(entry, "PORT_SYNC_DOWN", str(self.port_sync_down))
+        monkeypatch.setattr(entry, "AMULE_CONF_PATH", str(self.conf))
+        monkeypatch.setattr(entry, "PORT_SYNC_DOWN_FILE", str(self.port_sync_down))
         monkeypatch.setattr(grp, "getgrnam", self._lookup)
         monkeypatch.setattr(pwd, "getpwnam", self._lookup)
         monkeypatch.setattr(subprocess, "run", self._run)

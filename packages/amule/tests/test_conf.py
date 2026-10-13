@@ -1,9 +1,9 @@
-"""reconcile_conf, listen_port and with_listen_port: amule.conf for the boot step and port-sync."""
+"""reconcile_conf, tcp_listen_port, with_listen_port: amule.conf for the boot step and port-sync."""
 
 import configparser
 import hashlib
 
-from p2pwatch_amule.config.conf import listen_port, reconcile_conf, with_listen_port
+from p2pwatch_amule.boot.conf import reconcile_conf, tcp_listen_port, with_listen_port
 
 DIGEST = hashlib.md5(b"hunter2").hexdigest()
 
@@ -92,12 +92,12 @@ def test_a_duplicate_key_does_not_abort_and_the_last_value_wins() -> None:
 
 
 def test_the_listen_port_is_read_from_the_emule_section() -> None:
-    assert listen_port("[Obfuscation]\nPort=1\n\n[eMule]\nPort=51820\n") == 51820
+    assert tcp_listen_port("[Obfuscation]\nPort=1\n\n[eMule]\nPort=51820\n") == 51820
 
 
 def test_an_absent_listen_port_is_amules_default() -> None:
-    assert listen_port("[eMule]\nMaxUpload=42\n") == 4662
-    assert listen_port("") == 4662
+    assert tcp_listen_port("[eMule]\nMaxUpload=42\n") == 4662
+    assert tcp_listen_port("") == 4662
 
 
 def test_the_listen_port_is_written_to_both_tcp_and_udp() -> None:
