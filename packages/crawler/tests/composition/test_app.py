@@ -1235,7 +1235,7 @@ async def test_the_webui_cuts_periods_at_its_configured_gap_and_reads_the_crawle
     )
     holder["app"] = app
     await asyncio.wait_for(app.run(), timeout=5.0)
-    assert wired["source_tolerance"] == timedelta(seconds=600)
+    assert wired["source_period_gap"] == timedelta(seconds=600)
     assert wired["clock"] is clock
 
 

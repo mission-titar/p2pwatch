@@ -51,7 +51,7 @@ from tests.catalog_rows import (
 # the resulting plan is exactly how ``latest_sighting`` is resolved.
 LATEST_SIGHTING_PROBE = "SELECT file_id, name, source_count_max, last_seen FROM latest_sighting"
 # Every instant a test writes, from the epoch to the year 3000.
-_ALL_TIME = PeriodWindow(since=0, until=32_503_680_000_000_000, tolerance=0)
+_ALL_TIME = PeriodWindow(since=0, until=32_503_680_000_000_000, gap=0)
 
 # ---------------------------------------------------------------------------
 # Seed helpers
@@ -272,7 +272,7 @@ def test_file_detail_reads_its_timeline_in_the_window_and_its_latest_sighting_in
     with sqlite3.connect(catalog_db) as conn:
         insert_observation(conn, "a" * 32, "older.avi", observed_at="2026-06-21T10:00:00+00:00")
     since = iso_to_micros("2026-06-01T00:00:00+00:00")
-    window = PeriodWindow(since=since, until=iso_to_micros(SEEN_AT), tolerance=0)
+    window = PeriodWindow(since=since, until=iso_to_micros(SEEN_AT), gap=0)
     detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("a" * 32), window)
     assert detail is not None
     assert [s.name for s in detail.sightings] == ["older.avi"]
@@ -324,7 +324,7 @@ def test_file_detail_whole_episode_lists_both_decisions(catalog_db: Path) -> Non
 
 _USER = "1f2e" * 8
 _S = 1_000_000  # a second in microseconds
-_WINDOW = PeriodWindow(since=0, until=100_000 * _S, tolerance=90 * _S)
+_WINDOW = PeriodWindow(since=0, until=100_000 * _S, gap=90 * _S)
 
 # (role, observed_at, transfer_counter) of one source's points on file a, one variant per role.
 _Points = Sequence[tuple[str, int, int]]
@@ -402,7 +402,7 @@ def test_a_sending_period_never_counts_the_bytes_of_a_standby_one_between(
 
 def test_only_the_windows_points_are_read(catalog_db: Path) -> None:
     _seed_points(catalog_db, [("queued", at * _S, 0) for at in (0, 30, 60, 90)])
-    window = PeriodWindow(since=30 * _S, until=90 * _S, tolerance=90 * _S)
+    window = PeriodWindow(since=30 * _S, until=90 * _S, gap=90 * _S)
     assert _periods(catalog_db, window) == [("queued", 30 * _S, 60 * _S, 0)]
 
 
@@ -571,7 +571,7 @@ def test_name_detail_lists_its_hashes_and_its_periods_without_one(catalog_db: Pa
 def test_the_pages_periods_are_read_in_the_window_only(catalog_db: Path) -> None:
     _seed_pages(catalog_db)
     reader = CatalogReader(open_reader(catalog_db))
-    window = PeriodWindow(since=55, until=1_000, tolerance=_WINDOW.tolerance)
+    window = PeriodWindow(since=55, until=1_000, gap=_WINDOW.gap)
     source = reader.source_detail(source_id(_USER), page=1, window=window)
     name = reader.name_detail("AnimuseeFMR", page=1, window=window)
     assert source is not None and name is not None

@@ -287,7 +287,7 @@ def _build(catalog_db: Path, local_db: Path) -> Starlette:
         status=StatusBoard((), FakeClock()),
         amule_url="http://localhost:4711",
         clock=FakeClock(),
-        source_tolerance=timedelta(seconds=90),
+        source_period_gap=timedelta(seconds=90),
     )
 
 
