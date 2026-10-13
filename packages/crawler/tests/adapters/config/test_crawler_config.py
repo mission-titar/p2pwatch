@@ -550,16 +550,16 @@ def test_notifications_parsed() -> None:
         "observability": {
             "log_level": "INFO",
             "notifications": [
-                {"url": "discord://a", "tag": "community", "node_prefix": False},
-                {"url": "discord://b", "tag": "operations"},
+                {"url": "discord://a", "audience": "community", "node_prefix": False},
+                {"url": "discord://b", "audience": "operations"},
             ],
         }
     }
     cfg = parse_crawler_config(raw, _env())
     assert cfg.observability is not None
     assert cfg.observability.notifications == (
-        NotificationTarget(url="discord://a", tag=Audience.COMMUNITY, node_prefix=False),
-        NotificationTarget(url="discord://b", tag=Audience.OPERATIONS, node_prefix=True),
+        NotificationTarget(url="discord://a", audience=Audience.COMMUNITY, node_prefix=False),
+        NotificationTarget(url="discord://b", audience=Audience.OPERATIONS, node_prefix=True),
     )
 
 
@@ -567,18 +567,36 @@ def test_notification_node_prefix_non_bool_rejected() -> None:
     raw = _minimal_raw() | {
         "observability": {
             "log_level": "INFO",
-            "notifications": [{"url": "x", "tag": "community", "node_prefix": "no"}],
+            "notifications": [{"url": "x", "audience": "community", "node_prefix": "no"}],
         }
     }
     with pytest.raises(ConfigError, match=r"notifications\[0\]\.node_prefix: boolean expected"):
         parse_crawler_config(raw, _env())
 
 
-def test_notifications_bad_tag_rejected() -> None:
+def test_notifications_bad_audience_rejected() -> None:
     raw = _minimal_raw() | {
-        "observability": {"log_level": "INFO", "notifications": [{"url": "x", "tag": "nope"}]}
+        "observability": {
+            "log_level": "INFO",
+            "notifications": [{"url": "x", "audience": "nope"}],
+        }
     }
-    with pytest.raises(ConfigError, match="tag"):
+    with pytest.raises(
+        ConfigError, match=r"notifications\[0\]\.audience: 'community' or 'operations' expected"
+    ):
+        parse_crawler_config(raw, _env())
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        {"url": "x", "tag": "community"},
+        {"url": "x", "tag": "community", "audience": "community"},
+    ],
+)
+def test_a_notification_tag_is_refused_with_its_new_name(target: dict[str, str]) -> None:
+    raw = _minimal_raw() | {"observability": {"log_level": "INFO", "notifications": [target]}}
+    with pytest.raises(ConfigError, match=r"notifications\[0\]: key 'tag' was renamed 'audience'"):
         parse_crawler_config(raw, _env())
 
 
@@ -586,7 +604,7 @@ def test_notification_url_interpolated_substring() -> None:
     raw = _minimal_raw() | {
         "observability": {
             "log_level": "INFO",
-            "notifications": [{"url": "discord://${WID}/${WTOK}", "tag": "operations"}],
+            "notifications": [{"url": "discord://${WID}/${WTOK}", "audience": "operations"}],
         }
     }
     cfg = parse_crawler_config(raw, _env() | {"WID": "1", "WTOK": "t"})

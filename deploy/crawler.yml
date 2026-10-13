@@ -33,10 +33,10 @@ observability:
   notification_timeout_seconds: 5.0
   # notifications:
   #   - url: "discord://${DISCORD_WEBHOOK_ID}/${DISCORD_WEBHOOK_TOKEN}"
-  #     tag: operations
+  #     audience: operations
   #   # Findings for researchers; the embed's author line already names the node.
   #   - url: "discord://${DISCORD_COMMUNITY_ID}/${DISCORD_COMMUNITY_TOKEN}"
-  #     tag: community
+  #     audience: community
   #     node_prefix: false
 
 download:

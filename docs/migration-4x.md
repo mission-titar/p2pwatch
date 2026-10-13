@@ -53,6 +53,17 @@ search:
     jitter_ratio: 0.3
 ```
 
+Dans chaque cible de `observability.notifications`, renommez enfin la clé `tag` en `audience`, sans
+changer sa valeur. Laissée telle quelle, elle est refusée en nommant la nouvelle :
+`observability.notifications[0]: key 'tag' was renamed 'audience', rename it in crawler.yml`.
+
+```yaml
+observability:
+  notifications:
+    - url: "discord://${DISCORD_WEBHOOK_ID}/${DISCORD_WEBHOOK_TOKEN}"
+      audience: operations
+```
+
 **4. Remplacez les fichiers compose** par ceux du dossier `deploy` de la 5.0 : `compose.yml` à la
 racine, et les trois fichiers de son dossier `ed2k/` dans le vôtre.
 

@@ -47,7 +47,9 @@ def _dispatcher(
     sink: MetricsSink, notifier: Notifier, timeout: float = 5.0
 ) -> ObservabilityDispatcher:
     # _RecordingSink/_RecordingNotifier/… structurally satisfy MetricsSink/Notifier.
-    return ObservabilityDispatcher(metrics=sink, notifier=notifier, notify_timeout_seconds=timeout)
+    return ObservabilityDispatcher(
+        metrics=sink, notifier=notifier, notification_timeout_seconds=timeout
+    )
 
 
 @pytest.mark.asyncio

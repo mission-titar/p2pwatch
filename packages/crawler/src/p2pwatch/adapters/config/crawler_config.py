@@ -64,11 +64,11 @@ AMULE_CLIENT_NAME = "amuled"
 
 @dataclass(frozen=True)
 class NotificationTarget:
-    """An apprise target (secret via ``${...}``). ``tag`` = the consuming audience (E-D7).
+    """An apprise target (secret via ``${...}``), notified for one ``audience`` (E-D7).
     ``node_prefix: false`` drops the ``[node-id]`` prefix, for a service with its own identity."""
 
     url: str
-    tag: Audience
+    audience: Audience
     node_prefix: bool = True
 
 
@@ -308,17 +308,21 @@ def _parse_observability(raw: dict[str, Any], env: Mapping[str, str]) -> Observa
     for index, entry in enumerate(raw.get("notifications", [])):
         section = f"observability.notifications[{index}]"
         mapping = _require_mapping(entry, section)
-        tag_raw = _require_str(mapping, "tag", section, env)
+        if "tag" in mapping:  # the 4.x name, refused like _MOVED_KEYS
+            raise ConfigError(
+                f"{section}: key 'tag' was renamed 'audience', rename it in crawler.yml"
+            )
+        audience_raw = _require_str(mapping, "audience", section, env)
         try:
-            tag = Audience(tag_raw)
+            audience = Audience(audience_raw)
         except ValueError as error:
             raise ConfigError(
-                f"{section}.tag: 'community' or 'operations' expected, got {tag_raw!r}"
+                f"{section}.audience: 'community' or 'operations' expected, got {audience_raw!r}"
             ) from error
         notifications.append(
             NotificationTarget(
                 url=_require_str(mapping, "url", section, env),
-                tag=tag,
+                audience=audience,
                 node_prefix=_bool_default(mapping, "node_prefix", True, section),
             )
         )
