@@ -129,9 +129,10 @@ review.)
 ### D3. Sources are read every `download.sources_interval_seconds`
 
 - **A new key, `download.sources_interval_seconds`, default 300**, a positive finite number like every number
-  of `crawler.yml` (`adapters/config/crawler_config.py`, `_positive`). (Corrected: at most a year, 31,536,000,
-  as `webui.source_period_gap_seconds`: beyond it the tolerance in microseconds can leave SQLite's int64.
-  Holistic review.) The cycle's sources step
+  of `crawler.yml` (`adapters/config/crawler_config.py`, `_positive`). (Corrected: at most a day, 86,400, as every
+  delay of `crawler.yml`, and 30 days for `lost_after_seconds` and `reappeared_after_seconds`, read by one
+  helper; an unbounded value overflowed the tolerance in microseconds. Operator, 2026-10-13, on block 50's
+  question.) The cycle's sources step
   (`application/run_download_cycle.py`, `_record_sources`) runs on a round when at least that long has passed
   since its last run; the first round after a start runs it. The time of the last run is held in memory.
 - **The last run's time is taken when the step starts**, whether it ends well or on an unreachable client:
@@ -230,7 +231,8 @@ The file page's "Source history", the source page and the name page show periods
   `crawler.yml`, default 990, which is 3 x (300 + 30), the writer's tolerance at the shipped defaults. It
   exists in every run mode, so a crawl-only node, which reads no source, has one too; the composition
   passes it to the webui, which never reads the download section for it. Operator, 2026-10-13, on block
-  10's question.) It shows first and last seen, the variant's columns and its node.
+  10's question. Corrected again: at most a day, as D3's key, block 50.) It shows first and last seen,
+  the variant's columns and its node.
   *Reason: joined per variant, `queued`, `sending`, `queued` would make one `queued` period over the `sending`
   one, and `sending`, `standby`, `sending` one `sending` period counting the bytes of the file the source sent
   meanwhile.*
@@ -485,8 +487,9 @@ Each criterion names the output that would prove it wrong. Every test is watched
 - **D3** (block 30): with an interval of 300 s and a poll of 30 s on a fake clock, eleven rounds 30 s apart read
   sources at the first and the eleventh only; absent, the key gives 300; `0`, `-1`, `.inf` and `.nan` raise a
   `ConfigError` naming `download.sources_interval_seconds`. (Corrected: a `crawler.yml` holding
-  `decision_poll_interval_seconds` raises the removed-key `ConfigError`; a year passes, a year and a second
-  raises a `ConfigError` naming the key, for both source keys.)
+  `decision_poll_interval_seconds` raises the removed-key `ConfigError`; for every delay key of `crawler.yml`, this one and
+  `webui.source_period_gap_seconds` included, a day passes and a day and a second raises a `ConfigError`
+  naming the key and its bound, 30 days for `lost_after_seconds` and `reappeared_after_seconds`.)
 - (Corrected: **`webui.source_period_gap_seconds`** (block 10): absent, the key gives 990; `0`, `-1`, `.inf`
   and `.nan` raise a `ConfigError` naming it; the composition hands it to the webui in every run mode.)
 - **Docs** (block 40): `uv run poe docs-build` passes; `sed -n '77,81p' docs/index.md` and
