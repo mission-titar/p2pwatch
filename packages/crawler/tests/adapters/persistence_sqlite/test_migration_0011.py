@@ -3,13 +3,13 @@
 import sqlite3
 from pathlib import Path
 
-from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
 from tests.adapters.persistence_sqlite.older_catalog import (
     insert_stage4_range,
     insert_stage4_variant,
+    insert_v11_observation,
     open_catalog_at,
 )
-from tests.catalog_rows import insert_decision, insert_file, insert_observation, insert_source
+from tests.catalog_rows import insert_decision, insert_file, insert_source
 
 _A, _B = "a" * 32, "b" * 32
 _USER, _OTHER = "1f2e" * 8, "c" * 32
@@ -21,7 +21,7 @@ def _catalog_at_10(path: Path) -> None:
     connection = open_catalog_at(path, 10)
     for ed2k_hash in (_A, _B):
         insert_file(connection, ed2k_hash)
-        insert_observation(connection, ed2k_hash, f"{ed2k_hash[0]}.avi")
+        insert_v11_observation(connection, ed2k_hash, f"{ed2k_hash[0]}.avi")
     insert_decision(connection, _A, "062A", "download")
     for user in (_USER, _OTHER):
         insert_source(connection, user)
@@ -49,7 +49,7 @@ def test_0011_drops_the_ranges_and_recreates_the_source_tables_empty(tmp_path: P
     before = open_catalog_at(path, 10)
     kept = _rows(before)
     before.close()
-    connection = open_catalog(path)
+    connection = open_catalog_at(path, 11)
     try:
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 11
         assert _columns(connection, "source_ranges") == []

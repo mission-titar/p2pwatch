@@ -6,13 +6,13 @@ import pytest
 
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import (
-    SourceGroup,
     SourceKey,
     SourceReading,
     SourceRole,
+    SourceUsefulness,
     carried_role,
+    carried_role_max_age,
     is_contact_point,
-    source_tolerance,
 )
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
@@ -59,28 +59,28 @@ def test_source_roles_are_the_five_values_the_catalog_accepts() -> None:
 
 def test_a_reading_in_a_passing_state_has_no_role_and_may_have_no_identity() -> None:
     reading = SourceReading(
-        key=None,
+        source=None,
         name="AnimuseeFMR",
         software="emule 0.50a",
         role=None,
         contact_point=None,
-        directly_reachable=None,
+        connectable=None,
         raw_meta=(("protocol_extensions", ()), ("source_origin", "kad")),
-        transfer_counter=0,
+        session_received_bytes=0,
     )
-    assert reading.key is None
+    assert reading.source is None
     assert reading.role is None
     with pytest.raises(dataclasses.FrozenInstanceError):
         reading.role = SourceRole.QUEUED  # type: ignore[misc]
 
 
 def test_each_role_belongs_to_its_group() -> None:
-    assert {role: role.group for role in SourceRole} == {
-        SourceRole.SENDING: SourceGroup.USEFUL,
-        SourceRole.QUEUED: SourceGroup.USEFUL,
-        SourceRole.NOTHING_NEW: SourceGroup.NOT_USEFUL,
-        SourceRole.STANDBY: SourceGroup.UNKNOWN,
-        SourceRole.UNDETERMINED: SourceGroup.UNKNOWN,
+    assert {role: role.usefulness for role in SourceRole} == {
+        SourceRole.SENDING: SourceUsefulness.USEFUL,
+        SourceRole.QUEUED: SourceUsefulness.USEFUL,
+        SourceRole.NOTHING_NEW: SourceUsefulness.NOT_USEFUL,
+        SourceRole.STANDBY: SourceUsefulness.UNKNOWN,
+        SourceRole.UNDETERMINED: SourceUsefulness.UNKNOWN,
     }
 
 
@@ -102,7 +102,7 @@ def test_a_passing_state_carries_the_group_of_the_latest_point(
 
 
 def test_the_tolerance_lets_one_read_be_missed() -> None:
-    assert source_tolerance(timedelta(seconds=330)) == timedelta(seconds=990)
+    assert carried_role_max_age(timedelta(seconds=330)) == timedelta(seconds=990)
 
 
 @pytest.mark.parametrize("contact_point", ["176.103.48.36:4184", "0.0.0.0:1", "1.2.3.4:65535"])

@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from p2pwatch.domain.source import SourceGroup, SourceRole
+from p2pwatch.domain.source import SourceRole, SourceUsefulness
 from p2pwatch.ports.source_repository import EarlierPoints
 
 
@@ -13,24 +13,24 @@ class FirstUseful:
 
 
 @dataclass(frozen=True)
-class UsefulAgain:
-    """The source had no useful or not-useful point on this node for ``absent``."""
+class Reappeared:
+    """The source had no useful or not-useful point on this node for ``absent_for``."""
 
-    absent: timedelta
+    absent_for: timedelta
 
 
 def source_alert(
     role: SourceRole,
-    earlier: EarlierPoints,
+    earlier_points: EarlierPoints,
     round_started_at: datetime,
     reappeared_after: timedelta,
-) -> FirstUseful | UsefulAgain | None:
+) -> FirstUseful | Reappeared | None:
     """The alert a reading with ``role`` raises, from the source's points before the round."""
-    if role.group is not SourceGroup.USEFUL:
+    if role.usefulness is not SourceUsefulness.USEFUL:
         return None
-    if not earlier.useful:
+    if not earlier_points.has_useful_point:
         return FirstUseful()
-    last = earlier.last_known_at
+    last = earlier_points.last_known_at
     if last is None or round_started_at - last <= reappeared_after:
         return None
-    return UsefulAgain(round_started_at - last)
+    return Reappeared(round_started_at - last)

@@ -194,7 +194,8 @@ leurs horloges à zéro.
 
 Les messages partent en markdown : Discord les affiche en embed, signé `p2pwatch - <node-id>` en
 ligne d'auteur, bleu pour une découverte (`🔎 Notify`, `📥 Download`) ou une source
-(`🆕 New source`, `🔁 Source useful again`), vert pour un téléchargement terminé (`✅ Downloaded`, avec les segments et le nom du fichier). Aucun message ne mentionne qui
+(`🆕 Source useful for the first time`, `🔁 Source reappeared`), vert pour un téléchargement
+terminé (`✅ Downloaded`, avec les segments et le nom du fichier). Aucun message ne mentionne qui
 que ce soit : un `@everyone` dans un nom de fichier ne notifie personne.
 
 Chaque cible préfixe le titre de ses messages de l'identifiant du nœud (`[node-id]`), utile aux
@@ -233,7 +234,7 @@ nœud qui l'a relevée : un catalogue fusionné en réunit plusieurs.
 
 Deux alertes partent sur le canal *community*, toutes deux quand une source devient utile :
 
-- **`new-source`** : la source est utile pour la première fois sur ce nœud, tous fichiers
+- **`first_useful`** : la source est utile pour la première fois sur ce nœud, tous fichiers
   confondus ;
 - **`reappeared`** : la source est de nouveau utile après plus de
   `download.reappeared_after_seconds` (12 h par défaut, voir
@@ -247,8 +248,8 @@ l'est devenue. Le nœud d'un équipier qui détient les mêmes fichiers partiels
 premier relevé du nœud : tout y serait nouveau. Les deux alertes mesurent la vue de ce nœud,
 pas la présence du pair sur le réseau : une source « réapparaît » aussi quand vous mettez en file un
 fichier qu'elle partageait déjà, ou après un arrêt du nœud de plus de 12 h. Chacune incrémente
-`p2pwatch_source_alerts`, étiqueté `network` et `kind` (`new`, `reappeared`). Un arrêt brutal entre
-l'écriture et l'envoi perd l'alerte : elle part au plus une fois.
+`p2pwatch_source_alerts`, étiqueté `network` et `kind` (`first_useful`, `reappeared`). Un arrêt
+brutal entre l'écriture et l'envoi perd l'alerte : elle part au plus une fois.
 
 ---
 

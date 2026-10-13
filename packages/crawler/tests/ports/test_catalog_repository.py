@@ -55,7 +55,7 @@ class _StubRepository:
                     file=_KEY,
                     filename="Keroro 062A.avi",
                     size_bytes=100,
-                    media_length_sec=None,
+                    duration_seconds=None,
                     bitrate_kbps=None,
                 ),
             )
@@ -94,7 +94,7 @@ def test_protocol_is_satisfied_structurally() -> None:
             file=_KEY,
             filename=observation.filename,
             size_bytes=observation.size_bytes,
-            media_length_sec=None,
+            duration_seconds=None,
             bitrate_kbps=None,
         ),
     )

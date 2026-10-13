@@ -107,6 +107,13 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
 - **Dans `local.db`, la raison d'attente `local` devient `local_processing`**, et la clé
   `channel_backoff` de `scheduler_state` devient `backoff_states`. La table de `/node` montre la
   nouvelle raison ; adaptez vos requêtes de la console SQL.
+- **Dans le catalogue, trois colonnes changent de nom** : `media_length_sec` devient
+  `duration_seconds` dans `observation_variants`, `directly_reachable` devient `connectable` dans
+  `source_variants`, et `transfer_counter` devient `session_received_bytes` dans
+  `source_observations`. Adaptez vos requêtes de la console SQL.
+- **Les alertes de source changent de nom** : `p2pwatch_source_alerts` porte `kind="first_useful"`
+  au lieu de `kind="new"`, et leurs titres deviennent `🆕 Source useful for the first time` et
+  `🔁 Source reappeared`, au lieu de `🆕 New source` et `🔁 Source useful again`.
 - **La documentation** est désormais sur <https://mission-titar.github.io/p2pwatch/>.
 
 ## Retour arrière

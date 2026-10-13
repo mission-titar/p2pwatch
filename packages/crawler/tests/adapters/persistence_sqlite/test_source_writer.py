@@ -33,14 +33,14 @@ def _reading(
     role: SourceRole | None = _Q, *, counter: int = 0, key: SourceKey | None = _KEY
 ) -> SourceReading:
     return SourceReading(
-        key=key,
+        source=key,
         name="AnimuseeFMR",
         software="emule 0.50a",
         role=role,
         contact_point=None,
-        directly_reachable=None,
+        connectable=None,
         raw_meta=(),
-        transfer_counter=counter,
+        session_received_bytes=counter,
     )
 
 
@@ -69,9 +69,9 @@ def _record(
 
 
 def _points(catalog: sqlite3.Connection) -> list[tuple[object, ...]]:
-    """``(role, observed_at, transfer_counter)`` in time order."""
+    """``(role, observed_at, session_received_bytes)`` in time order."""
     return catalog.execute(
-        "SELECT v.role, o.observed_at, o.transfer_counter"
+        "SELECT v.role, o.observed_at, o.session_received_bytes"
         " FROM source_observations AS o JOIN source_variants AS v USING (variant_id)"
         " ORDER BY o.observed_at, v.node_id"
     ).fetchall()
@@ -187,7 +187,12 @@ def test_a_reading_without_identity_carries_only_from_its_name_without_identity(
     other = dataclasses.replace(_reading(None, key=None), name="Teammate")
     recorded = _record(repository, _reading(_NN), _reading(_S, key=None), _reading(None, key=None))
     recorded += repository.record_readings(_FILE, [other], _T0 + 3 * _POLL)
-    assert [(r.key, r.role) for r in recorded] == [(_KEY, _NN), (None, _S), (None, _Q), (None, _UN)]
+    assert [(r.source, r.role) for r in recorded] == [
+        (_KEY, _NN),
+        (None, _S),
+        (None, _Q),
+        (None, _UN),
+    ]
     assert _variants(catalog) == 4
 
 
@@ -214,7 +219,7 @@ def test_the_variant_and_the_source_are_written_as_d2_states(
     reading = dataclasses.replace(
         _reading(),
         contact_point="176.103.48.36:4184",
-        directly_reachable=True,
+        connectable=True,
         raw_meta=(("source_origin", "kad"), ("protocol_extensions", ("a", "b"))),
     )
     repository.record_readings(_FILE, [reading], _T0)
@@ -223,7 +228,7 @@ def test_the_variant_and_the_source_are_written_as_d2_states(
     columns += ["emule 0.50a", "queued", "176.103.48.36:4184", True, raw_meta, "n1"]
     canonical = json.dumps(columns, ensure_ascii=False, separators=(",", ":")).encode()
     assert catalog.execute(
-        "SELECT file_id, source_id, name, software, role, contact_point, directly_reachable,"
+        "SELECT file_id, source_id, name, software, role, contact_point, connectable,"
         " raw_meta, node_id, content_hash FROM source_variants"
     ).fetchall() == [
         (

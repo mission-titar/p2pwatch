@@ -16,7 +16,7 @@ from p2pwatch.domain.source import SourceKey, SourceReading, SourceRole
 class RecordedReading:
     """A reading ``record_readings`` kept, with its role, a carried one included."""
 
-    key: SourceKey | None
+    source: SourceKey | None
     name: str | None
     role: SourceRole
 
@@ -25,7 +25,7 @@ class RecordedReading:
 class EarlierPoints:
     """D5's two answers: a useful point exists, and when the latest useful or not-useful one was."""
 
-    useful: bool
+    has_useful_point: bool
     last_known_at: datetime | None
 
 

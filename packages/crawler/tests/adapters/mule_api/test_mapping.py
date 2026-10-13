@@ -88,7 +88,7 @@ def test_media_fills_the_columns_that_ec_never_could() -> None:
     }
     (observation,), _ = map_search_results([_result(media=media)], "keroro")
 
-    assert observation.media_length_sec == 1440
+    assert observation.duration_seconds == 1440
     assert observation.bitrate_kbps == 1500
     assert _meta(observation)["codec"] == "H.264"
     # artist/album/title have no column: they survive in raw_meta (spec §4.2).
@@ -98,7 +98,7 @@ def test_media_fills_the_columns_that_ec_never_could() -> None:
 def test_a_null_media_leaves_the_media_columns_empty() -> None:
     (observation,), _ = map_search_results([_result()], "keroro")
 
-    assert observation.media_length_sec is None
+    assert observation.duration_seconds is None
     assert observation.bitrate_kbps is None
     assert _meta(observation)["codec"] is None
 
@@ -107,7 +107,7 @@ def test_a_malformed_media_object_is_tolerated() -> None:
     (observation,), _ = map_search_results([_result(media={"codec": 7})], "keroro")
 
     assert _meta(observation)["codec"] is None
-    assert observation.media_length_sec is None
+    assert observation.duration_seconds is None
 
 
 def test_unmapped_keys_land_in_raw_meta() -> None:
@@ -441,12 +441,12 @@ def _client_detail(**overrides: Any) -> dict[str, Any]:
 
 def test_a_source_maps_to_a_reading_of_its_row_and_its_detail() -> None:
     assert map_source(_client_row(), _client_detail()) == SourceReading(
-        key=SourceKey(Network.ED2K, "1f2e3a4b5c6d7e8f90a1b2c3d4e5f607"),
+        source=SourceKey(Network.ED2K, "1f2e3a4b5c6d7e8f90a1b2c3d4e5f607"),
         name="AnimuseeFMR",
         software="emule 0.50a",
         role=SourceRole.QUEUED,
         contact_point="176.103.48.36:4184",
-        directly_reachable=True,
+        connectable=True,
         raw_meta=(
             ("ident_state", "identified"),
             ("source_origin", "kad"),
@@ -456,7 +456,7 @@ def test_a_source_maps_to_a_reading_of_its_row_and_its_detail() -> None:
             ("protocol_extensions", ("extended_source_exchange",)),
             ("server_name", "eMule Security"),
         ),
-        transfer_counter=1024,
+        session_received_bytes=1024,
     )
 
 
@@ -567,7 +567,7 @@ def test_a_source_without_a_usable_user_hash_has_no_identity(user_hash: str | No
     """D7: amuleapi reports a peer that has not sent its hash yet with 32 zeros."""
     reading = map_source(_client_row(user_hash=user_hash), _client_detail())
 
-    assert reading.key is None
+    assert reading.source is None
     assert reading.name == "AnimuseeFMR"
 
 
@@ -575,7 +575,7 @@ def test_a_source_without_a_user_hash_key_has_no_identity() -> None:
     row = _client_row()
     del row["user_hash"]
 
-    assert map_source(row, _client_detail()).key is None
+    assert map_source(row, _client_detail()).source is None
 
 
 @pytest.mark.parametrize(
@@ -594,9 +594,9 @@ def test_a_sparse_row_and_detail_keep_the_meta_keys_they_carry_and_read_unknown(
     reading = map_source({"role": "downloading_from", "name": "", "ident_state": "unknown"}, {})
 
     assert (reading.name, reading.software) == (None, None)
-    assert (reading.contact_point, reading.directly_reachable) == (None, None)
+    assert (reading.contact_point, reading.connectable) == (None, None)
     assert reading.raw_meta == (("ident_state", "unknown"),)
-    assert reading.transfer_counter == 0
+    assert reading.session_received_bytes == 0
 
 
 @pytest.mark.parametrize(
@@ -643,7 +643,7 @@ def test_the_server_name_is_kept_unknown_when_the_server_is() -> None:
 
 
 @pytest.mark.parametrize(
-    ("ed2k_user_id", "high_id", "directly_reachable"),
+    ("ed2k_user_id", "high_id", "connectable"),
     [
         (3232238090, True, True),
         (4242, False, False),
@@ -654,12 +654,12 @@ def test_the_server_name_is_kept_unknown_when_the_server_is() -> None:
     ],
 )
 def test_a_source_is_directly_reachable_when_its_ed2k_id_is_a_high_id(
-    ed2k_user_id: int | None, high_id: object, directly_reachable: bool | None
+    ed2k_user_id: int | None, high_id: object, connectable: bool | None
 ) -> None:
     """D3: without an eD2k id yet (0), ``high_id`` false says nothing."""
     detail = _client_detail(ed2k_user_id=ed2k_user_id, high_id=high_id)
 
-    assert map_source(_client_row(), detail).directly_reachable is directly_reachable
+    assert map_source(_client_row(), detail).connectable is connectable
 
 
 def _reading(

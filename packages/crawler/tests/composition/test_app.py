@@ -864,10 +864,10 @@ async def test_full_mode_reads_sources_at_their_interval_and_spaces_them_by_a_po
     loops: list[DownloadLoopDeps] = []
 
     def source_repository(
-        connection: sqlite3.Connection, node_id: str, spacing: timedelta
+        connection: sqlite3.Connection, node_id: str, time_between_reads: timedelta
     ) -> SqliteSourceRepository:
-        spacings.append(spacing)
-        return SqliteSourceRepository(connection, node_id, spacing)
+        spacings.append(time_between_reads)
+        return SqliteSourceRepository(connection, node_id, time_between_reads)
 
     async def loop(deps: DownloadLoopDeps) -> None:
         loops.append(deps)

@@ -153,8 +153,8 @@ def _human(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
 
 
-def _sources_spacing(download: DownloadConfig) -> timedelta:
-    """The reads' spacing the writer's tolerance assumes: the interval plus a poll (source
+def _time_between_source_reads(download: DownloadConfig) -> timedelta:
+    """The time between reads the carried role's max age assumes: the interval plus a poll (source
     points spec, D3), since the step runs on the first round past its interval."""
     return download.sources_interval + timedelta(seconds=download.poll_interval_seconds)
 
@@ -491,7 +491,7 @@ class CrawlerApp:
                     stack=stack,
                     catalog_repo=catalog_repo,
                     source_repo=SqliteSourceRepository(
-                        catalog_conn, node_id, _sources_spacing(download_config)
+                        catalog_conn, node_id, _time_between_source_reads(download_config)
                     ),
                     local_conn=local_conn,
                     telemetry=telemetry,

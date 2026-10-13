@@ -29,7 +29,7 @@ def insert_observation(
     observed_at: str = SEEN_AT,
     size_bytes: int = 100,
     source_count: int = 1,
-    media_length_sec: int | None = None,
+    duration_seconds: int | None = None,
     bitrate_kbps: int | None = None,
     node_id: str = "n1",
 ) -> None:
@@ -37,7 +37,7 @@ def insert_observation(
         file_id(ed2k_hash),
         filename,
         size_bytes,
-        media_length_sec,
+        duration_seconds,
         bitrate_kbps,
         "[]",
         "keroro",
@@ -46,7 +46,7 @@ def insert_observation(
     key = content_hash(*variant)
     conn.execute(
         "INSERT OR IGNORE INTO observation_variants"
-        " (file_id, filename, size_bytes, media_length_sec, bitrate_kbps, raw_meta, keyword,"
+        " (file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_meta, keyword,"
         " node_id, content_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (*variant, key),
     )
@@ -94,16 +94,16 @@ def insert_source_variant(
     name: str | None = "AnimuseeFMR",
     role: str = "queued",
     contact_point: str | None = None,
-    directly_reachable: bool | None = None,
+    connectable: bool | None = None,
     node_id: str = "n1",
 ) -> int:
     """The new variant's ``variant_id``; its ``content_hash`` stands in for the writer's."""
     sid = source_id(user_hash) if user_hash is not None else None
-    columns = (name, role, contact_point, directly_reachable)
+    columns = (name, role, contact_point, connectable)
     key = hashlib.blake2b(repr((ed2k_hash, user_hash, *columns, node_id)).encode(), digest_size=16)
     row = conn.execute(
         "INSERT INTO source_variants (file_id, source_id, name, role, contact_point,"
-        " directly_reachable, raw_meta, node_id, content_hash)"
+        " connectable, raw_meta, node_id, content_hash)"
         " VALUES (?, ?, ?, ?, ?, ?, '{}', ?, ?) RETURNING variant_id",
         (file_id(ed2k_hash), sid, *columns, node_id, key.digest()),
     ).fetchone()
@@ -112,12 +112,12 @@ def insert_source_variant(
 
 
 def insert_source_point(
-    conn: sqlite3.Connection, variant_id: int, observed_at: int, *, transfer_counter: int = 0
+    conn: sqlite3.Connection, variant_id: int, observed_at: int, *, session_received_bytes: int = 0
 ) -> None:
     conn.execute(
-        "INSERT INTO source_observations (variant_id, observed_at, transfer_counter)"
+        "INSERT INTO source_observations (variant_id, observed_at, session_received_bytes)"
         " VALUES (?, ?, ?)",
-        (variant_id, observed_at, transfer_counter),
+        (variant_id, observed_at, session_received_bytes),
     )
 
 

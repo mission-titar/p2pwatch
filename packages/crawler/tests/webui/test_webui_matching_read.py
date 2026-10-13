@@ -68,7 +68,7 @@ def test_explainer_returns_explanation_on_matching_filename() -> None:
     result = explainer.explain(
         filenames=["Keroro_062A_VF.avi"],
         size_bytes=None,
-        media_length_sec=None,
+        duration_seconds=None,
         bitrate_kbps=None,
         target_id="062A",
     )
@@ -86,7 +86,7 @@ def test_explainer_returns_none_for_unknown_target() -> None:
     result = explainer.explain(
         filenames=["Keroro_062A_VF.avi"],
         size_bytes=None,
-        media_length_sec=None,
+        duration_seconds=None,
         bitrate_kbps=None,
         target_id="S9E999Z",
     )
@@ -129,7 +129,7 @@ rules:
     result = explainer.explain(
         filenames=["keroro_062a.avi"],
         size_bytes=104857600,
-        media_length_sec=None,
+        duration_seconds=None,
         bitrate_kbps=None,
         target_id="062A",
     )
@@ -138,7 +138,7 @@ rules:
 
 
 def test_explainer_media_length_and_bitrate_forwarded() -> None:
-    """media_length_sec and bitrate_kbps are forwarded as-is to the FileCandidate."""
+    """duration_seconds and bitrate_kbps are forwarded as-is to the FileCandidate."""
     # Matcher with attr_between on duration_sec and bitrate_kbps
     matcher_config = parse_matcher_config(
         yaml.safe_load(
@@ -173,7 +173,7 @@ rules:
     result = explainer.explain(
         filenames=["keroro_062a.avi"],
         size_bytes=None,
-        media_length_sec=1350,
+        duration_seconds=1350,
         bitrate_kbps=1500,
         target_id="062A",
     )
@@ -191,14 +191,14 @@ def test_explainer_engine_cached_across_calls() -> None:
     r1 = explainer.explain(
         filenames=["keroro_vf.avi"],
         size_bytes=None,
-        media_length_sec=None,
+        duration_seconds=None,
         bitrate_kbps=None,
         target_id="062A",
     )
     r2 = explainer.explain(
         filenames=["keroro_vf.avi"],
         size_bytes=None,
-        media_length_sec=None,
+        duration_seconds=None,
         bitrate_kbps=None,
         target_id="062A",
     )
@@ -232,7 +232,7 @@ rules:
     result = explainer.explain(
         filenames=["ita.avi", "keroro.avi"],
         size_bytes=100 * 1024 * 1024,
-        media_length_sec=None,
+        duration_seconds=None,
         bitrate_kbps=None,
         target_id="062A",
     )

@@ -45,7 +45,7 @@ _INSERT_FILE = (
 
 _INSERT_VARIANT = """
 INSERT OR IGNORE INTO observation_variants (
-    file_id, filename, size_bytes, media_length_sec, bitrate_kbps, raw_meta, keyword, node_id,
+    file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_meta, keyword, node_id,
     content_hash
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
@@ -114,13 +114,13 @@ class SqliteCatalogRepository:
             file.file_id,
             observation.filename,
             observation.size_bytes,
-            observation.media_length_sec,
+            observation.duration_seconds,
             observation.bitrate_kbps,
             json.dumps(observation.raw_meta, ensure_ascii=False),
             observation.keyword,
             self._node_id,
         )
-        key = content_hash(*variant)
+        variant_content_hash = content_hash(*variant)
         observed_at_micros = iso_to_micros(utc_iso(self._clock.now()))
         with wrap_sqlite_errors():
             self._connection.execute("BEGIN")
@@ -129,9 +129,10 @@ class SqliteCatalogRepository:
                     _INSERT_FILE,
                     (file.file_id, file.network, file.native_id, observation.size_bytes),
                 )
-                self._connection.execute(_INSERT_VARIANT, (*variant, key))
+                self._connection.execute(_INSERT_VARIANT, (*variant, variant_content_hash))
                 self._connection.execute(
-                    _INSERT_OBSERVATION, (observed_at_micros, observation.source_count, key)
+                    _INSERT_OBSERVATION,
+                    (observed_at_micros, observation.source_count, variant_content_hash),
                 )
                 self._connection.execute("COMMIT")
             except BaseException:
@@ -244,6 +245,6 @@ class SqliteCatalogRepository:
                     file=latest.file,
                     filename=latest.filename,
                     size_bytes=latest.size_bytes,
-                    media_length_sec=latest.media_length_sec,
+                    duration_seconds=latest.duration_seconds,
                     bitrate_kbps=latest.bitrate_kbps,
                 )

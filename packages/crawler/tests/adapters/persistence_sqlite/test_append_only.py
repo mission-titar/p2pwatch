@@ -33,7 +33,7 @@ _UPDATES = {
     "match_decisions": "UPDATE match_decisions SET tier = 'notify'",
     "sources": f"UPDATE sources SET native_id = '{'b' * 32}'",
     "source_variants": "UPDATE source_variants SET name = 'autre'",
-    "source_observations": "UPDATE source_observations SET transfer_counter = 2",
+    "source_observations": "UPDATE source_observations SET session_received_bytes = 2",
 }
 
 

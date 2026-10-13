@@ -232,7 +232,7 @@ def _source_history_row(period: SourcePeriodView) -> SourceHistoryRow:
         source_link=_source_link(source),
         role=period.role,
         contact_point=period.contact_point or "unknown",
-        high_id=_YES_NO[period.directly_reachable],
+        connectable=_YES_NO[period.connectable],
         first_seen=micros_timestamp(period.first_seen_at),
         last_seen=micros_timestamp(period.last_seen_at),
         received=human_size(period.received_bytes) if period.received_bytes else "",
@@ -876,7 +876,7 @@ def build_app(
             explanation = explainer.explain(
                 filenames=detail.known_filenames,
                 size_bytes=latest.size_bytes,
-                media_length_sec=latest.media_length_sec,
+                duration_seconds=latest.duration_seconds,
                 bitrate_kbps=latest.bitrate_kbps,
                 target_id=first_decision.target_id,
             )

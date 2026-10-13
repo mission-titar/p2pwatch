@@ -40,7 +40,7 @@ def _observation(
     *,
     filename: str = "Keroro 062A.avi",
     size_bytes: int = 234567890,
-    media_length_sec: int | None = None,
+    duration_seconds: int | None = None,
     bitrate_kbps: int | None = None,
 ) -> FileObservation:
     # raw_meta with a DUPLICATE, wire order, non-ASCII and the fold's native types.
@@ -50,7 +50,7 @@ def _observation(
         size_bytes=size_bytes,
         source_count=5,
         keyword="keroro",
-        media_length_sec=media_length_sec,
+        duration_seconds=duration_seconds,
         bitrate_kbps=bitrate_kbps,
         raw_meta=fold_raw_meta(
             (("0x0308", "0"), ("0x0308", "0"), ("0x0999", "mystère")), None, None, 2
@@ -88,7 +88,7 @@ def test_record_observation_round_trip(
         _NODE,
     )
     row = connection.execute(
-        "SELECT file_id, filename, size_bytes, media_length_sec, bitrate_kbps, raw_meta,"
+        "SELECT file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_meta,"
         " keyword, node_id, content_hash FROM observation_variants"
     ).fetchone()
     assert row == (*variant, content_hash(*variant))
@@ -139,9 +139,9 @@ def test_an_observation_equal_in_every_column_is_stored_once(
 def test_record_observation_with_media_metadata(
     repository: SqliteCatalogRepository, connection: sqlite3.Connection
 ) -> None:
-    repository.record_observation(_observation(media_length_sec=1474, bitrate_kbps=1200))
+    repository.record_observation(_observation(duration_seconds=1474, bitrate_kbps=1200))
     row = connection.execute(
-        "SELECT media_length_sec, bitrate_kbps FROM observation_variants"
+        "SELECT duration_seconds, bitrate_kbps FROM observation_variants"
     ).fetchone()
     assert row == (1474, 1200)
 
@@ -327,7 +327,7 @@ def test_iter_reevaluation_rows_returns_the_latest_observation_per_hash(
     repository.record_observation(
         dataclasses.replace(
             _observation(
-                filename="other.avi", size_bytes=300, media_length_sec=1234, bitrate_kbps=1500
+                filename="other.avi", size_bytes=300, duration_seconds=1234, bitrate_kbps=1500
             ),
             file=FileKey(Network.ED2K, _HASH_B),
         )
@@ -338,14 +338,14 @@ def test_iter_reevaluation_rows_returns_the_latest_observation_per_hash(
             file=_KEY,
             filename="new.avi",
             size_bytes=200,
-            media_length_sec=None,
+            duration_seconds=None,
             bitrate_kbps=None,
         ),
         ReevalRow(
             file=FileKey(Network.ED2K, _HASH_B),
             filename="other.avi",
             size_bytes=300,
-            media_length_sec=1234,
+            duration_seconds=1234,
             bitrate_kbps=1500,
         ),
     ]

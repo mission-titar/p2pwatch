@@ -37,7 +37,7 @@ from p2pwatch.domain.observability.events import (
     ObservationRecorded,
     SearchExecuted,
     SearchFailed,
-    SourceNew,
+    SourceFirstUseful,
     SourceReappeared,
     TargetTitle,
 )
@@ -209,10 +209,10 @@ def _describe_decisions(event: DecisionsRecorded) -> Report:
 
 
 def _describe_source(
-    event: SourceNew | SourceReappeared, kind: str, what: str, title: str
+    event: SourceFirstUseful | SourceReappeared, kind: str, what: str, title: str
 ) -> Report:
     short = f"{event.source.native_id[:8]}…"  # as the webui shortens a hash
-    named = f"{_code_name(event.name)} " if event.name else ""
+    named = f"{_code_name(event.source_name)} " if event.source_name else ""
     sections = [f"**Source**\n{named}{short}, {what}"]
     if event.target_titles:
         sections.append(_targets_section(event.target_titles))
@@ -327,14 +327,19 @@ def describe(event: Event) -> Report:
                 (),
                 frozenset({Audience.OPERATIONS}),
             )
-        case SourceNew():
-            return _describe_source(event, "new", "useful for the first time", "🆕 New source")
+        case SourceFirstUseful():
+            return _describe_source(
+                event,
+                "first_useful",
+                "useful for the first time",
+                "🆕 Source useful for the first time",
+            )
         case SourceReappeared():
             return _describe_source(
                 event,
                 "reappeared",
-                f"useful again after {event.absent_seconds / 3600:.0f} h",
-                "🔁 Source useful again",
+                f"reappeared after {event.absent_seconds / 3600:.0f} h",
+                "🔁 Source reappeared",
             )
         case CrawlerStarted():
             return Report(
