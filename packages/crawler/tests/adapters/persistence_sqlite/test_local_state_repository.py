@@ -41,17 +41,17 @@ def repository(connection: sqlite3.Connection, clock: FakeClock) -> SqliteLocalS
 def test_node_id_is_created_on_first_call_and_stable(
     repository: SqliteLocalStateRepository, connection: sqlite3.Connection
 ) -> None:
-    created = repository.node_id()
+    created = repository.get_or_create_node_id()
     assert uuid.UUID(created)  # a REAL UUID, verifiable
-    assert repository.node_id() == created  # stable on the second call
+    assert repository.get_or_create_node_id() == created  # stable on the second call
     fresh = SqliteLocalStateRepository(connection, clock=FakeClock())  # and any future instance
-    assert fresh.node_id() == created
+    assert fresh.get_or_create_node_id() == created
 
 
 def test_node_id_persists_created_at_alongside(
     repository: SqliteLocalStateRepository, connection: sqlite3.Connection
 ) -> None:
-    repository.node_id()
+    repository.get_or_create_node_id()
     row = connection.execute("SELECT value FROM node_runtime WHERE key = 'created_at'").fetchone()
     assert row == ("2026-06-11T12:00:00.000000+00:00",)
 
@@ -62,7 +62,7 @@ def test_node_id_creation_failure_is_wrapped_and_rolled_back(
     # 'created_at' pre-existing -> the two-row INSERT violates the PK -> full rollback.
     connection.execute("INSERT INTO node_runtime (key, value) VALUES ('created_at', 'already')")
     with pytest.raises(PersistenceError, match="UNIQUE"):
-        repository.node_id()
+        repository.get_or_create_node_id()
     assert connection.execute(_NODE_ID_QUERY).fetchone() is None
 
 
@@ -74,11 +74,11 @@ def test_node_id_clock_failure_does_not_wedge_the_connection(
     # "cannot start a transaction within a transaction", a misleading diagnostic).
     broken = SqliteLocalStateRepository(connection, clock=FakeClock(datetime(2026, 6, 11, 12)))
     with pytest.raises(ValueError, match="aware"):
-        broken.node_id()
+        broken.get_or_create_node_id()
     assert connection.in_transaction is False  # healthy connection, no zombie transaction
     assert connection.execute(_NODE_ID_QUERY).fetchone() is None  # nothing half-written
     healthy = SqliteLocalStateRepository(connection, clock=clock)
-    assert uuid.UUID(healthy.node_id())  # the SAME connection stays fully usable
+    assert uuid.UUID(healthy.get_or_create_node_id())  # the SAME connection stays fully usable
 
 
 # --- port satisfaction ------------------------------------------------------------------
@@ -88,28 +88,28 @@ def test_repository_satisfies_the_port_structurally(
     repository: SqliteLocalStateRepository,
 ) -> None:
     port: LocalStateRepository = repository  # mypy proves structural satisfaction
-    assert port.last_backfill_policy() is None
+    assert port.reevaluated_policy_fingerprint() is None
 
 
-# --- backfill policy marker (spec §7.1 — startup re-evaluation gate) -------------------
+# --- reevaluated policy fingerprint (spec §7.1: startup re-evaluation gate) ------------
 
 
 def test_last_backfill_policy_is_none_before_any_set(
     repository: SqliteLocalStateRepository,
 ) -> None:
-    assert repository.last_backfill_policy() is None
+    assert repository.reevaluated_policy_fingerprint() is None
 
 
 def test_set_last_backfill_policy_then_read_back(
     repository: SqliteLocalStateRepository,
 ) -> None:
-    repository.set_last_backfill_policy("abc")
-    assert repository.last_backfill_policy() == "abc"
+    repository.set_reevaluated_policy_fingerprint("abc")
+    assert repository.reevaluated_policy_fingerprint() == "abc"
 
 
 def test_set_last_backfill_policy_overwrites_on_a_second_call(
     repository: SqliteLocalStateRepository,
 ) -> None:
-    repository.set_last_backfill_policy("abc")
-    repository.set_last_backfill_policy("def")
-    assert repository.last_backfill_policy() == "def"
+    repository.set_reevaluated_policy_fingerprint("abc")
+    repository.set_reevaluated_policy_fingerprint("def")
+    assert repository.reevaluated_policy_fingerprint() == "def"

@@ -1,9 +1,9 @@
 """Shared decision helper: evaluate → set-diff → record / retract → wake → emit (spec §7).
 
 APPLICATION layer, PURE orchestration (no ``try/except`` here: a ``RepositoryError`` is a
-port contract each CALLER absorbs on its own terms, cf. ``record_observation`` and the backfill
-use-case). Used by BOTH the per-observation pipeline (``record_observations.py``) and the
-startup catalogue re-evaluation, so the set-diff + retraction + wake logic is written once.
+port contract each CALLER absorbs on its own terms, cf. ``record_observation`` and
+``reevaluate_catalog``). Used by BOTH the per-observation pipeline (``record_observations.py``)
+and the startup catalogue re-evaluation, so the set-diff + retraction + wake logic is written once.
 
 Set diff keyed by ``(file, target_id)`` (spec §7). The file is judged on EVERY filename the
 catalog knows for it (``engine.evaluate_all``, spec amuleapi-migration §8.4), so its filenames

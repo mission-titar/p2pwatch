@@ -395,7 +395,7 @@ flowchart LR
   (triggers `BEFORE UPDATE/DELETE -> ABORT`), pour que N nœuds fusionnent en un seul catalogue
   (`python -m p2pwatch.merge`). Les insertions sont **idempotentes** (`INSERT OR IGNORE` /
   `ON CONFLICT DO NOTHING`), donc sans danger en cas de redémarrage en pleine écriture.
-- **`local.db`** (version de schéma 8) : l'état d'exécution du nœud (identité, suivi des
+- **`local.db`** (version de schéma 9) : l'état d'exécution du nœud (identité, suivi des
   téléchargements, progression et backoff de l'ordonnanceur). **Jamais fusionnée** : elle appartient
   à un seul nœud.
 
@@ -424,6 +424,8 @@ points (§8.3) : il supprime `source_ranges` et `source_variants`, et recrée la
 `local/0008` ajoute le cycle de vie d'un téléchargement : octets reçus, dernier progrès, raison
 d'attente et raison d'échec. `bytes_done` reste `NULL` sur les lignes existantes, dont on ignore
 la progression passée, pour que la première lecture n'invente pas un progrès.
+`local/0009` renomme la table et la colonne de l'empreinte de la politique, désormais
+`reevaluation_state.policy_fingerprint`, sans toucher à sa valeur.
 
 ### 8.1 Écrire une migration
 

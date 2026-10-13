@@ -67,7 +67,7 @@ _TARGETS = (
 )
 _MATCHER = Path(__file__).resolve().parents[4] / "deploy" / "matcher.yml"
 _DL_NAME = "Keroro N°062A Les demoiselles cambrioleuses.avi"
-# Arbitrary policy fingerprint for tests that do not exercise the backfill gate itself
+# Arbitrary policy fingerprint for tests that do not exercise the re-evaluation gate itself
 # (Task 6 tests below construct their OWN fingerprint to drive the "ran"/"skipped" branches).
 _FP = "test-policy-fingerprint"
 # Existing app tests do not exercise the webui: keep it OFF by default so run() never builds a
@@ -562,7 +562,7 @@ def test_an_hour_of_the_running_app_keeps_to_the_networks_rules(
 
 
 # ---------------------------------------------------------------------------
-# Task 6 - startup backfill wiring (policy-fingerprint gate)
+# Task 6 - startup re-evaluation wiring (policy-fingerprint gate)
 # ---------------------------------------------------------------------------
 
 
@@ -570,7 +570,7 @@ def test_an_hour_of_the_running_app_keeps_to_the_networks_rules(
 async def test_backfill_runs_and_stores_marker_when_policy_never_set(
     tmp_path: Path, matcher_config: MatcherConfig, caplog: pytest.LogCaptureFixture
 ) -> None:
-    # Fresh local.db (never backfilled before) -> the gate RUNS the backfill (against an
+    # Fresh local.db (never re-evaluated before) -> the gate RUNS the re-evaluation (against an
     # EMPTY catalog.db, since it runs BEFORE the first search records anything) and
     # stores the fingerprint, so a LATER restart with the SAME policy would skip it.
     holder: dict[str, CrawlerApp] = {}
@@ -597,7 +597,7 @@ async def test_backfill_runs_and_stores_marker_when_policy_never_set(
     local_conn = sqlite3.connect(tmp_path / "local.db")
     try:
         stored = local_conn.execute(
-            "SELECT policy_sha256 FROM backfill_state WHERE id = 1"
+            "SELECT policy_fingerprint FROM reevaluation_state WHERE id = 1"
         ).fetchone()
     finally:
         local_conn.close()
@@ -612,9 +612,9 @@ async def test_backfill_skipped_when_marker_already_matches_fingerprint(
     # the pass (a restart with an unchanged matcher.yml/targets.yml does no redundant work).
     local_conn = open_local(tmp_path / "local.db")
     try:
-        SqliteLocalStateRepository(local_conn, clock=FakeClock()).set_last_backfill_policy(
-            "fp-unchanged"
-        )
+        SqliteLocalStateRepository(
+            local_conn, clock=FakeClock()
+        ).set_reevaluated_policy_fingerprint("fp-unchanged")
     finally:
         local_conn.close()
     holder: dict[str, CrawlerApp] = {}
