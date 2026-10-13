@@ -178,54 +178,54 @@ class CrawlerConfig:
         )
 
 
-def _require_mapping(value: Any, what: str) -> dict[str, Any]:
+def _require_mapping(value: Any, label: str) -> dict[str, Any]:
     if not isinstance(value, dict):
-        raise ConfigError(f"{what}: mapping expected, got {type(value).__name__}")
+        raise ConfigError(f"{label}: mapping expected, got {type(value).__name__}")
     return value
 
 
-def _number(mapping: dict[str, Any], key: str, what: str) -> float:
+def _number(mapping: dict[str, Any], key: str, section: str) -> float:
     if key not in mapping:
-        raise ConfigError(f"{what}: key {key!r} missing")
+        raise ConfigError(f"{section}: key {key!r} missing")
     value = mapping[key]
     if not isinstance(value, int | float) or isinstance(value, bool):
-        raise ConfigError(f"{what}.{key}: number expected, got {value!r}")
+        raise ConfigError(f"{section}.{key}: number expected, got {value!r}")
     if not math.isfinite(value):  # .inf makes a sleep endless, .nan passes every comparison
-        raise ConfigError(f"{what}.{key}: finite number expected, got {value!r}")
+        raise ConfigError(f"{section}.{key}: finite number expected, got {value!r}")
     return float(value)
 
 
-def _positive(mapping: dict[str, Any], key: str, what: str) -> float:
-    number = _number(mapping, key, what)
+def _positive(mapping: dict[str, Any], key: str, section: str) -> float:
+    number = _number(mapping, key, section)
     if number <= 0:
-        raise ConfigError(f"{what}.{key}: strictly positive expected, got {number}")
+        raise ConfigError(f"{section}.{key}: strictly positive expected, got {number}")
     return number
 
 
-def _non_negative(mapping: dict[str, Any], key: str, what: str) -> float:
-    number = _number(mapping, key, what)
+def _non_negative(mapping: dict[str, Any], key: str, section: str) -> float:
+    number = _number(mapping, key, section)
     if number < 0:
-        raise ConfigError(f"{what}.{key}: ≥ 0 expected, got {number}")
+        raise ConfigError(f"{section}.{key}: ≥ 0 expected, got {number}")
     return number
 
 
-def _positive_int(mapping: dict[str, Any], key: str, what: str) -> int:
+def _positive_int(mapping: dict[str, Any], key: str, section: str) -> int:
     """Strictly positive integer (bool refused), else ``ConfigError`` (fail-fast §5/§14)."""
     if key not in mapping:
-        raise ConfigError(f"{what}: key {key!r} missing")
+        raise ConfigError(f"{section}: key {key!r} missing")
     value = mapping[key]
     if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
-        raise ConfigError(f"{what}.{key}: strictly positive integer expected, got {value!r}")
+        raise ConfigError(f"{section}.{key}: strictly positive integer expected, got {value!r}")
     return value
 
 
-def _bool(mapping: dict[str, Any], key: str, what: str) -> bool:
+def _bool(mapping: dict[str, Any], key: str, section: str) -> bool:
     """REQUIRED boolean, else ``ConfigError`` (fail-fast §5/§14)."""
     if key not in mapping:
-        raise ConfigError(f"{what}: key {key!r} missing")
+        raise ConfigError(f"{section}: key {key!r} missing")
     value = mapping[key]
     if not isinstance(value, bool):
-        raise ConfigError(f"{what}.{key}: boolean expected, got {value!r}")
+        raise ConfigError(f"{section}.{key}: boolean expected, got {value!r}")
     return value
 
 
@@ -237,7 +237,7 @@ _THIRTY_DAYS = 2_592_000.0
 def _seconds(
     mapping: dict[str, Any],
     key: str,
-    what: str,
+    section: str,
     default: float | None = None,
     *,
     at_most: float = _A_DAY,
@@ -245,40 +245,40 @@ def _seconds(
     """Strictly positive seconds up to ``at_most``; OPTIONAL when given a ``default``."""
     if default is not None and key not in mapping:
         return default
-    seconds = _positive(mapping, key, what)
+    seconds = _positive(mapping, key, section)
     if seconds > at_most:
-        raise ConfigError(f"{what}.{key}: at most {at_most:.0f} seconds expected, got {seconds}")
+        raise ConfigError(f"{section}.{key}: at most {at_most:.0f} seconds expected, got {seconds}")
     return seconds
 
 
-def _positive_int_default(mapping: dict[str, Any], key: str, default: int, what: str) -> int:
+def _positive_int_default(mapping: dict[str, Any], key: str, default: int, section: str) -> int:
     """OPTIONAL strictly positive integer (default ``default``)."""
     if key not in mapping:
         return default
-    return _positive_int(mapping, key, what)
+    return _positive_int(mapping, key, section)
 
 
-def _bool_default(mapping: dict[str, Any], key: str, default: bool, what: str) -> bool:
+def _bool_default(mapping: dict[str, Any], key: str, default: bool, section: str) -> bool:
     """OPTIONAL boolean (default ``default``); refuses a non-bool — fail-fast (§5/§14)."""
     if key not in mapping:
         return default
     value = mapping[key]
     if not isinstance(value, bool):
-        raise ConfigError(f"{what}.{key}: boolean expected, got {value!r}")
+        raise ConfigError(f"{section}.{key}: boolean expected, got {value!r}")
     return value
 
 
-def _require_str(mapping: dict[str, Any], key: str, what: str, env: Mapping[str, str]) -> str:
+def _require_str(mapping: dict[str, Any], key: str, section: str, env: Mapping[str, str]) -> str:
     """Non-empty string, ``${NAME}``-interpolated from ``env`` AFTER reading, BEFORE the non-empty
     check (fail-fast §5/§14). Missing env variable ⇒ ``ConfigError`` (via ``interpolate``)."""
     if key not in mapping:
-        raise ConfigError(f"{what}: key {key!r} missing")
+        raise ConfigError(f"{section}: key {key!r} missing")
     value = mapping[key]
     if not isinstance(value, str):
-        raise ConfigError(f"{what}.{key}: non-empty string expected, got {value!r}")
-    interpolated = interpolate(value, env, f"{what}.{key}")
+        raise ConfigError(f"{section}.{key}: non-empty string expected, got {value!r}")
+    interpolated = interpolate(value, env, f"{section}.{key}")
     if not interpolated:
-        raise ConfigError(f"{what}.{key}: non-empty string expected, got {interpolated!r}")
+        raise ConfigError(f"{section}.{key}: non-empty string expected, got {interpolated!r}")
     return interpolated
 
 
@@ -298,20 +298,20 @@ def _parse_observability(raw: dict[str, Any], env: Mapping[str, str]) -> Observa
     timeout = _seconds(raw, "notification_timeout_seconds", "observability", 5.0)
     notifications: list[NotificationTarget] = []
     for index, entry in enumerate(raw.get("notifications", [])):
-        what = f"observability.notifications[{index}]"
-        mapping = _require_mapping(entry, what)
-        tag_raw = _require_str(mapping, "tag", what, env)
+        section = f"observability.notifications[{index}]"
+        mapping = _require_mapping(entry, section)
+        tag_raw = _require_str(mapping, "tag", section, env)
         try:
             tag = Audience(tag_raw)
         except ValueError as error:
             raise ConfigError(
-                f"{what}.tag: 'community' or 'operations' expected, got {tag_raw!r}"
+                f"{section}.tag: 'community' or 'operations' expected, got {tag_raw!r}"
             ) from error
         notifications.append(
             NotificationTarget(
-                url=_require_str(mapping, "url", what, env),
+                url=_require_str(mapping, "url", section, env),
                 tag=tag,
-                node_prefix=_bool_default(mapping, "node_prefix", True, what),
+                node_prefix=_bool_default(mapping, "node_prefix", True, section),
             )
         )
     return ObservabilityConfig(
