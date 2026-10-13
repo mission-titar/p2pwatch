@@ -27,7 +27,7 @@ The crawler is Clean/Hexagonal: `domain/` pure, `application/` async use-cases, 
 
 | Subsystem | Location | Role |
 |---|---|---|
-| Matching engine | `packages/matching/src/catalog_matching/` | declarative YAML-policy file→episode matcher (see Architecture), shared by the crawler and the in-process webui |
+| Matching engine | `packages/matching/src/catalog_matching/` | declarative YAML-policy file→episode matcher (architecture: `packages/matching/AGENTS.md`), shared by the crawler and the in-process webui |
 | WebUI (in-process) | c: `webui/` | read-only catalog viewer (files, and the source history: `/sources`, a source's page `/sources/{source_id}`, a name's page `/sources/name`) + client status and runtime controls on the dashboard (`/`) + read-only SQL console (`/console`); Starlette/Jinja2 served on its own thread by `python -m p2pwatch`; the bind is FIXED at `0.0.0.0:8080` in code, `crawler.yml`'s `webui.enabled` only gates the whole surface |
 | amuleapi adapter | c: `adapters/mule_api/` | REST client / JSON mapping / error contract for amuled (no probe tool: `curl` and amuleapi's own web UI replace them) |
 | Persistence | c: `adapters/persistence_sqlite/` | catalog.db, append-only but for `source_ranges`, whose trigger lets only a source's latest range grow; local.db; `.sql` migrations; sync repos |
@@ -89,33 +89,6 @@ Integration suites (Docker, deselected by default, excluded from coverage) are d
 ## Workflow
 
 Tiers, phases, blocks, the stack, pull requests, Wrap and review findings: `agents/workflow.md`.
-
-## Architecture: the matching engine
-
-The core is one layered, declarative matching engine under `packages/matching/src/catalog_matching/`. **The matcher/rule policy is 100% in YAML config; the code is a minimal fixed engine.**
-
-```
-load_yaml(path)                         # adapters/config/yaml_loader.py: the ONLY I/O
-  → parse_matcher_config / parse_targets   # validation.py: schema + fail-fast graph validation:
-  →                                        #   DAG/named-cycle, depth bound (32), regex compile-check,
-  →                                        #   unique target_id, closed tier/attr enums → ConfigError
-  → MatchingEngine(config, targets)        # engine.py: pre-resolves a matcher tree PER TARGET once
-  → engine.evaluate(FileCandidate(...))    #   brute-force over all targets (no funnel)
-       → MatchDecision(target_id, rule_name, tier, explanation)  |  None  (file discarded)
-```
-
-Module roles (each file is single-purpose):
-- `normalization.py`: `fold()` (NFKD + strip diacritics + casefold + `{œ→oe, æ→ae}`, keeps punctuation/digits), `normalize()`/`tokenize()` (alphanumerics only).
-- `models.py`: `FileCandidate`, `TargetSegment` (`season`/`seasonal_number`/`absolute_number`/`segment`/`title`/`status`/`sole_segment`; `.target_id` = `062A` from `absolute_number`, zero-padded; double numérotation absolu+saisonnal).
-- `matchers.py`: the 4 leaf matchers (`KeywordMatcher`, `RegexMatcher` over stdlib **`re`** (`re.ASCII`), `CoverageMatcher` via rapidfuzz, `AttrBetweenMatcher`).
-- `interpolation.py`: per-target regex placeholder interpolation (`{season} {seasonal_number} {absolute_number} {segment} {title}`). Named `fragments:` are expanded earlier, at parse time, in `validation.py`.
-- `combinators.py`: the `Matcher` Protocol (`matches(candidate) -> bool`) + `All/Any/NotMatcher`; leaf matchers satisfy it structurally.
-- `config.py`: frozen tagged-union config model (`*Def`, `Rule`, `MatcherConfig`, `TIERS`).
-- `validation.py`: `parse_*` (structural) + `validate_config` (semantic/graph pass; checks needing the full token table live here, not in parsing).
-- `resolver.py`: builds the per-target `Matcher` tree; regex interpolated+compiled per target, coverage bound to the title.
-- `engine.py`: `MatchingEngine`; a target is skipped when any `vetoes:` token matches ANY name of the file, then the best rule over all names wins per target; the fan-out is driven by each rule's required `scope` (`segment`/`episode`/`unattributed`), never by rule names; `Explanation` is **returned, not logged**.
-
-Invariants: the decision is order-independent (target_ids are unique); `MatchDecision`'s three string fields are exactly the future `match_decisions` columns (persistence columns like `decided_at`/`node_id` are an adapter's job). Regex tokens compile under stdlib `re` with `re.ASCII` (was RE2 until 2026-07-03: see Gotchas).
 
 ## Gotchas
 
