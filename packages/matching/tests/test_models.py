@@ -23,14 +23,14 @@ def test_file_candidate_with_attributes() -> None:
 
 def test_target_segment_defaults() -> None:
     target = TargetSegment(
-        season=2, seasonal_number=11, absolute_number=62, segment="a", title="Les demoiselles"
+        season=2, seasonal_number=11, absolute_number=62, letter="a", title="Les demoiselles"
     )
     assert target.status == "lost"
 
 
 def test_target_segment_target_id_pads_and_uppercases() -> None:
     target = TargetSegment(
-        season=2, seasonal_number=11, absolute_number=62, segment="a", title="Les demoiselles"
+        season=2, seasonal_number=11, absolute_number=62, letter="a", title="Les demoiselles"
     )
     assert target.target_id == "062A"
 
@@ -40,7 +40,7 @@ def test_target_segment_full_fields() -> None:
         season=1,
         seasonal_number=5,
         absolute_number=5,
-        segment="b",
+        letter="b",
         title="Le grand combat",
         status="found",
     )

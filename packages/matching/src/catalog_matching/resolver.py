@@ -49,8 +49,8 @@ class ResolvedTarget:
     """Matcher trees built for a target: named tokens + rules, by name."""
 
     target: TargetSegment
-    tokens: Mapping[str, Matcher]
-    rules: Mapping[str, Matcher]
+    matcher_by_token_name: Mapping[str, Matcher]
+    matcher_by_rule_name: Mapping[str, Matcher]
 
 
 class MatcherResolver:
@@ -63,21 +63,25 @@ class MatcherResolver:
         self,
         name: str,
         target: TargetSegment,
-        min_override: float | None = None,
-        fuzz_override: float | None = None,
+        min_coverage_override: float | None = None,
+        min_similarity_override: float | None = None,
     ) -> Matcher:
         """Builds the matcher of token ``name`` for ``target`` (coverage overrides)."""
-        return self._build_def(self.config.tokens[name], target, min_override, fuzz_override)
+        return self._build_def(
+            self.config.tokens[name], target, min_coverage_override, min_similarity_override
+        )
 
     def resolve_rule(self, rule: Rule, target: TargetSegment) -> Matcher:
         """Builds the matcher of a rule's condition for ``target``."""
         return self._build_def(rule.condition, target, None, None)
 
-    def resolve_all(self, target: TargetSegment) -> ResolvedTarget:
+    def resolve_target(self, target: TargetSegment) -> ResolvedTarget:
         """Builds all the trees (tokens + rules) for ``target``."""
         tokens = {name: self.resolve_token(name, target) for name in self.config.tokens}
         rules = {rule.name: self.resolve_rule(rule, target) for rule in self.config.rules}
-        return ResolvedTarget(target=target, tokens=tokens, rules=rules)
+        return ResolvedTarget(
+            target=target, matcher_by_token_name=tokens, matcher_by_rule_name=rules
+        )
 
     def _build_operand(
         self,
@@ -87,30 +91,40 @@ class MatcherResolver:
         if isinstance(operand, str):
             return self.resolve_token(operand, target)
         if isinstance(operand, TokenRef):
-            return self.resolve_token(operand.name, target, operand.min, operand.fuzz)
+            return self.resolve_token(
+                operand.name, target, operand.min_coverage, operand.min_similarity
+            )
         return self._build_def(operand, target, None, None)
 
     def _build_def(
         self,
         token_def: TokenDef,
         target: TargetSegment,
-        min_override: float | None,
-        fuzz_override: float | None,
+        min_coverage_override: float | None,
+        min_similarity_override: float | None,
     ) -> Matcher:
         match token_def:
             case KeywordDef(phrase=phrase):
                 return KeywordMatcher(phrase)
             case RegexDef(pattern=pattern, flags=flags):
                 return RegexMatcher(interpolate(pattern, target), flags=flags)
-            case CoverageDef(reference=reference, min=min_value, fuzz=fuzz_value):
-                text = target.title if reference == _TITLE_KEYWORD else reference
+            case CoverageDef(
+                reference=reference, min_coverage=min_coverage, min_similarity=min_similarity
+            ):
+                reference_text = target.title if reference == _TITLE_KEYWORD else reference
                 return CoverageMatcher(
-                    reference=text,
-                    min=min_value if min_override is None else min_override,
-                    fuzz=fuzz_value if fuzz_override is None else fuzz_override,
+                    reference=reference_text,
+                    min_coverage=(
+                        min_coverage if min_coverage_override is None else min_coverage_override
+                    ),
+                    min_similarity=(
+                        min_similarity
+                        if min_similarity_override is None
+                        else min_similarity_override
+                    ),
                 )
-            case AttrBetweenDef(attr=attr, min=min_value, max=max_value):
-                return AttrBetweenMatcher(attr, min=min_value, max=max_value)
+            case AttrBetweenDef(attr=attr, min_bound=min_bound, max_bound=max_bound):
+                return AttrBetweenMatcher(attr, min_bound=min_bound, max_bound=max_bound)
             case AllDef(operands=operands):
                 return AllMatcher(tuple(self._build_operand(op, target) for op in operands))
             case AnyDef(operands=operands):

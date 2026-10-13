@@ -166,7 +166,7 @@ def _resolve_target_display(
             resolved.append((dec.target_id, "·"))
             continue
         locator = seasonal_locator(
-            season=seg.season, seasonal_number=seg.seasonal_number, letter=seg.segment
+            season=seg.season, seasonal_number=seg.seasonal_number, letter=seg.letter
         )
         resolved.append((f"{dec.target_id} / {locator}", seg.title))
     return resolved

@@ -35,8 +35,8 @@ class CoverageDef:
     """
 
     reference: str
-    min: float
-    fuzz: float = 0.85
+    min_coverage: float
+    min_similarity: float = 0.85
 
 
 @dataclass(frozen=True)
@@ -44,8 +44,8 @@ class AttrBetweenDef:
     """``{ attr_between: size_mb, min: 30, max: 600 }``: bound on a numeric attribute."""
 
     attr: str
-    min: float | None = None
-    max: float | None = None
+    min_bound: float | None = None
+    max_bound: float | None = None
 
 
 # --- COMPOSITE defs / conditions (cf. spec §8.3: all/any/not) ---
@@ -88,8 +88,8 @@ class TokenRef:
     """
 
     name: str
-    min: float | None = None
-    fuzz: float | None = None
+    min_coverage: float | None = None
+    min_similarity: float | None = None
 
 
 # Union of token defs nameable in the `tokens` table.

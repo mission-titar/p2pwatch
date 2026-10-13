@@ -8,7 +8,7 @@ from catalog_matching.models import TargetSegment
 
 def _target() -> TargetSegment:
     return TargetSegment(
-        season=2, seasonal_number=11, absolute_number=62, segment="a", title="Les demoiselles"
+        season=2, seasonal_number=11, absolute_number=62, letter="a", title="Les demoiselles"
     )
 
 
@@ -23,7 +23,7 @@ def test_interpolate_substitutes_season_and_seasonal_number() -> None:
 
 def test_interpolate_escapes_regex_special_title() -> None:
     target = TargetSegment(
-        season=1, seasonal_number=1, absolute_number=1, segment="a", title="C++ (demo)"
+        season=1, seasonal_number=1, absolute_number=1, letter="a", title="C++ (demo)"
     )
     result = interpolate(r"prefix {title} suffix", target)
     assert result == r"prefix " + re.escape("C++ (demo)") + r" suffix"

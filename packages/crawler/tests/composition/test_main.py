@@ -263,7 +263,7 @@ def test_validate_config_rejects_matcher_config_error(
 ) -> None:
     monkeypatch.setenv("AMULE_API_PASSWORD", "s3cr3t")
     bad_matcher = tmp_path / "matcher.yaml"
-    # rules non-list → MatcherConfigError (structural parse)
+    # rules non-list → MatchingConfigError (structural parse)
     bad_matcher.write_text("tokens: {}\nrules: {}\n", encoding="utf-8")
     argv = [
         "validate-config",

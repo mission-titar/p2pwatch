@@ -1565,10 +1565,10 @@ async def test_hostile_filename_is_escaped_in_ed2k_link(
 # ---------------------------------------------------------------------------
 
 _SEGMENT_062A = TargetSegment(
-    season=2, seasonal_number=11, absolute_number=62, segment="a", title="La Grenouille Cosmique"
+    season=2, seasonal_number=11, absolute_number=62, letter="a", title="La Grenouille Cosmique"
 )
 _SEGMENT_062B = TargetSegment(
-    season=2, seasonal_number=11, absolute_number=62, segment="b", title="Duel Contre Giroro"
+    season=2, seasonal_number=11, absolute_number=62, letter="b", title="Duel Contre Giroro"
 )
 _SEGMENT_BY_ID = {_SEGMENT_062A.target_id: _SEGMENT_062A}
 _SEGMENTS_AB = {s.target_id: s for s in (_SEGMENT_062A, _SEGMENT_062B)}

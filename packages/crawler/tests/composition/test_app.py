@@ -61,7 +61,7 @@ _TARGETS = (
         season=2,
         seasonal_number=11,
         absolute_number=62,
-        segment="A",
+        letter="A",
         title="Les demoiselles cambrioleuses",
     ),
 )

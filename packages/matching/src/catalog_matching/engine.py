@@ -10,6 +10,7 @@ later plan.
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from typing import NamedTuple
 
 from catalog_matching.combinators import Matcher
 from catalog_matching.config import TIER_RANK, MatcherConfig
@@ -22,9 +23,10 @@ from catalog_matching.resolver import MatcherResolver, ResolvedTarget
 class Explanation:
     """Why this decision (cf. spec §8.5): fired rules, tokens and vetoes, coverage values.
 
-    Concerns ONE target, over the names given: a rule, token or veto is listed when true on
-    at least one name. ``rules_fired`` in config order; ``tokens_matched`` and ``vetoes_fired``
-    sorted; ``coverage_values`` holds EVERY coverage token with its best value, sorted by name.
+    Concerns ONE target, over the candidates given: a rule, token or veto is listed when true
+    on at least one candidate. ``rules_fired`` in config order; ``tokens_matched`` and
+    ``vetoes_fired`` sorted; ``coverage_values`` holds EVERY coverage token with its best
+    value, sorted by name.
     """
 
     target_id: str
@@ -77,14 +79,14 @@ def to_record(decision: MatchDecision) -> DecisionRecord:
     )
 
 
-# Re-export of the tier rank (source of truth ``catalog_matching.config.TIER_RANK``, shared
-# with ``p2pwatch.webui.domain.coverage``). The internal name stays ``_TIER_RANK`` so as not
-# to break historical imports on the internal-test side.
-_TIER_RANK = TIER_RANK
+class _RuleHit(NamedTuple):
+    """The first rule ``candidate`` fires for one resolved target."""
 
-
-# (resolved target, rule index, rule name, tier, the name that fired it)
-_Match = tuple[ResolvedTarget, int, str, str, FileCandidate]
+    resolved: ResolvedTarget
+    rule_index: int
+    rule_name: str
+    tier: str
+    candidate: FileCandidate
 
 
 def _first_matching_rule(
@@ -99,7 +101,7 @@ def _first_matching_rule(
     no rule matches (the target contributes nothing).
     """
     for index, rule in enumerate(config.rules):
-        if resolved.rules[rule.name].matches(candidate):
+        if resolved.matcher_by_rule_name[rule.name].matches(candidate):
             return (index, rule.name, rule.tier)
     return None
 
@@ -107,23 +109,37 @@ def _first_matching_rule(
 def _explain(
     config: MatcherConfig,
     resolved: ResolvedTarget,
-    names: Sequence[FileCandidate],
+    candidates: Sequence[FileCandidate],
 ) -> Explanation:
-    """Builds the explanation of ``resolved`` over ``names`` (cf. :class:`Explanation`)."""
+    """Builds the explanation of ``resolved`` over ``candidates`` (cf. :class:`Explanation`)."""
 
     def fired(matcher: Matcher) -> bool:
-        return any(matcher.matches(name) for name in names)
+        return any(matcher.matches(candidate) for candidate in candidates)
 
+    matcher_by_token_name = resolved.matcher_by_token_name
     return Explanation(
         target_id=resolved.target.target_id,
-        rules_fired=tuple(rule.name for rule in config.rules if fired(resolved.rules[rule.name])),
-        tokens_matched=tuple(sorted(n for n, m in resolved.tokens.items() if fired(m))),
+        rules_fired=tuple(
+            rule.name for rule in config.rules if fired(resolved.matcher_by_rule_name[rule.name])
+        ),
+        tokens_matched=tuple(
+            sorted(
+                token_name
+                for token_name, matcher in matcher_by_token_name.items()
+                if fired(matcher)
+            )
+        ),
         coverage_values=tuple(
-            (name, max((matcher.value(c) for c in names), default=0.0))
-            for name, matcher in sorted(resolved.tokens.items())
+            (
+                token_name,
+                max((matcher.coverage(candidate) for candidate in candidates), default=0.0),
+            )
+            for token_name, matcher in sorted(matcher_by_token_name.items())
             if isinstance(matcher, CoverageMatcher)
         ),
-        vetoes_fired=tuple(sorted(v for v in config.vetoes if fired(resolved.tokens[v]))),
+        vetoes_fired=tuple(
+            sorted(veto for veto in config.vetoes if fired(matcher_by_token_name[veto]))
+        ),
     )
 
 
@@ -133,7 +149,7 @@ class MatchingEngine:
     Brute-force §8.5: each file is evaluated against ALL targets (no funnel heuristic). The
     matcher trees (regexes interpolated+compiled per target) are built ONCE at construction.
     ``max_filename_length`` bounds the filename length before matching (§8.5/§14): a longer
-    name is discarded (``[]``).
+    filename's candidate is discarded (``[]``).
     """
 
     def __init__(
@@ -147,7 +163,7 @@ class MatchingEngine:
         self._max_filename_length = max_filename_length
         resolver = MatcherResolver(config)
         self._resolved: tuple[ResolvedTarget, ...] = tuple(
-            resolver.resolve_all(target) for target in targets
+            resolver.resolve_target(target) for target in targets
         )
         self._resolved_by_target: dict[str, ResolvedTarget] = {
             r.target.target_id: r for r in self._resolved
@@ -159,99 +175,105 @@ class MatchingEngine:
         return None if resolved is None else resolved.target
 
     def explain(self, candidates: Iterable[FileCandidate], target_id: str) -> Explanation | None:
-        """Explains target ``target_id`` over every name of one file; ``None`` if unknown.
+        """Explains target ``target_id`` over every candidate of one file; ``None`` if unknown.
 
-        Over-long names are skipped, as in :meth:`evaluate_all`.
+        Over-long filenames are skipped, as in :meth:`evaluate_file`.
         """
         resolved = self._resolved_by_target.get(target_id)
         if resolved is None:
             return None
-        return _explain(self._config, resolved, self._names(candidates))
+        return _explain(self._config, resolved, self._matchable_candidates(candidates))
 
     def evaluate(self, candidate: FileCandidate) -> list[MatchDecision]:
         """All decisions for ``candidate`` (spec §4); ``[]`` = file discarded."""
-        return self.evaluate_all((candidate,))
+        return self.evaluate_file((candidate,))
 
-    def evaluate_all(self, candidates: Iterable[FileCandidate]) -> list[MatchDecision]:
-        """All decisions for ONE file known under every name in ``candidates``; ``[]`` = discard.
+    def evaluate_file(self, candidates: Iterable[FileCandidate]) -> list[MatchDecision]:
+        """All decisions for ONE file, one candidate per filename; ``[]`` = discard.
 
-        A target is skipped when any veto matches any name (over-long names skipped). Per
-        surviving target, the best rule over all names (min-key below).
-        Matches of a ``segment`` or ``episode`` scoped rule fan out per episode: a
-        segment-scoped match on any segment of an episode emits only those segments,
-        otherwise the episode-scoped matches emit every segment (spec §3). With none, the
-        single-winner min-key over ALL matches yields one ``unattributed`` decision, or ``[]``.
+        A target is skipped when any veto matches any candidate (over-long filenames skipped).
+        Per surviving target, the best rule over all candidates (min-key below).
+        Hits of a ``segment`` or ``episode`` scoped rule fan out per episode: a
+        segment-scoped hit on any segment of an episode emits only those segments,
+        otherwise the episode-scoped hits emit every segment (spec §3). With none, the
+        single-winner min-key over ALL hits yields one ``unattributed`` decision, or ``[]``.
         """
-        names = self._names(candidates)
-        best: dict[str, _Match] = {}
+        matchable_candidates = self._matchable_candidates(candidates)
+        best_by_target_id: dict[str, _RuleHit] = {}
         for resolved in self._resolved:
-            if self._vetoed(resolved, names):
+            if self._vetoed(resolved, matchable_candidates):
                 continue
-            for candidate in names:
+            for candidate in matchable_candidates:
                 outcome = _first_matching_rule(self._config, resolved, candidate)
                 if outcome is None:
                     continue
                 index, rule_name, tier = outcome
                 target_id = resolved.target.target_id
-                current = best.get(target_id)
-                if current is None or (-_TIER_RANK[tier], index) < (
-                    -_TIER_RANK[current[3]],
-                    current[1],
+                current = best_by_target_id.get(target_id)
+                if current is None or (-TIER_RANK[tier], index) < (
+                    -TIER_RANK[current.tier],
+                    current.rule_index,
                 ):
-                    best[target_id] = (resolved, index, rule_name, tier, candidate)
-        matches = list(best.values())
-        attributable = self._fan_out(matches)
+                    best_by_target_id[target_id] = _RuleHit(
+                        resolved, index, rule_name, tier, candidate
+                    )
+        hits = list(best_by_target_id.values())
+        attributable = self._fan_out(hits)
         if attributable:
             return attributable
-        return self._single_winner(matches)
+        return self._single_winner(hits)
 
-    def _names(self, candidates: Iterable[FileCandidate]) -> list[FileCandidate]:
-        return [c for c in candidates if len(c.filename) <= self._max_filename_length]
+    def _matchable_candidates(self, candidates: Iterable[FileCandidate]) -> list[FileCandidate]:
+        return [
+            candidate
+            for candidate in candidates
+            if len(candidate.filename) <= self._max_filename_length
+        ]
 
-    def _vetoed(self, resolved: ResolvedTarget, names: Sequence[FileCandidate]) -> bool:
-        """True when any veto matches any name: the target is out for the whole file."""
+    def _vetoed(self, resolved: ResolvedTarget, candidates: Sequence[FileCandidate]) -> bool:
+        """True when any veto matches any candidate: the target is out for the whole file."""
         return any(
-            resolved.tokens[veto].matches(name) for veto in self._config.vetoes for name in names
+            resolved.matcher_by_token_name[veto].matches(candidate)
+            for veto in self._config.vetoes
+            for candidate in candidates
         )
 
-    def _fan_out(self, matches: list[_Match]) -> list[MatchDecision]:
-        """Selects the emitted segments from the segment/episode scoped matches (spec §3/§4)."""
+    def _fan_out(self, hits: list[_RuleHit]) -> list[MatchDecision]:
+        """Selects the emitted segments from the segment/episode scoped hits (spec §3/§4)."""
         rules = self._config.rules
-        by_episode: dict[int, list[_Match]] = {}
-        for entry in matches:
-            if rules[entry[1]].scope == "unattributed":
+        hits_by_episode: dict[int, list[_RuleHit]] = {}
+        for hit in hits:
+            if rules[hit.rule_index].scope == "unattributed":
                 continue
-            by_episode.setdefault(entry[0].target.absolute_number, []).append(entry)
-        emitted: list[_Match] = []
-        for group in by_episode.values():
-            segment_level = [entry for entry in group if rules[entry[1]].scope == "segment"]
+            hits_by_episode.setdefault(hit.resolved.target.absolute_number, []).append(hit)
+        emitted: list[_RuleHit] = []
+        for group in hits_by_episode.values():
+            segment_level = [hit for hit in group if rules[hit.rule_index].scope == "segment"]
             emitted.extend(segment_level or group)
-        emitted.sort(key=lambda entry: entry[0].target.target_id)
-        return [self._decision(entry) for entry in emitted]
+        emitted.sort(key=lambda hit: hit.resolved.target.target_id)
+        return [self._decision(hit) for hit in emitted]
 
-    def _single_winner(self, matches: list[_Match]) -> list[MatchDecision]:
-        """Existing min-key: one catch-all decision over ALL matches, or ``[]`` (spec §4 step 6).
+    def _single_winner(self, hits: list[_RuleHit]) -> list[MatchDecision]:
+        """Existing min-key: one catch-all decision over ALL hits, or ``[]`` (spec §4 step 6).
 
         Key = (highest tier, smallest rule index, smallest ``target_id``); ``target_id`` is
         unique, so the key is a strict total order -> a unique, target-order-independent winner.
         """
-        best: tuple[int, int, str] | None = None
-        best_entry: _Match | None = None
-        for entry in matches:
-            resolved, index, _rule_name, tier, _candidate = entry
-            key = (-_TIER_RANK[tier], index, resolved.target.target_id)
-            if best is None or key < best:
-                best = key
-                best_entry = entry
-        if best_entry is None:
+        best_key: tuple[int, int, str] | None = None
+        best_hit: _RuleHit | None = None
+        for hit in hits:
+            key = (-TIER_RANK[hit.tier], hit.rule_index, hit.resolved.target.target_id)
+            if best_key is None or key < best_key:
+                best_key = key
+                best_hit = hit
+        if best_hit is None:
             return []
-        return [self._decision(best_entry)]
+        return [self._decision(best_hit)]
 
-    def _decision(self, entry: _Match) -> MatchDecision:
-        resolved, _index, rule_name, tier, candidate = entry
+    def _decision(self, hit: _RuleHit) -> MatchDecision:
         return MatchDecision(
-            target_id=resolved.target.target_id,
-            rule_name=rule_name,
-            tier=tier,
-            explanation=_explain(self._config, resolved, (candidate,)),
+            target_id=hit.resolved.target.target_id,
+            rule_name=hit.rule_name,
+            tier=hit.tier,
+            explanation=_explain(self._config, hit.resolved, (hit.candidate,)),
         )

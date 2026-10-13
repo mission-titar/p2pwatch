@@ -38,31 +38,31 @@ from catalog_matching.models import LOST, TARGET_STATUSES, TargetSegment
 _CONDITION_KEYS = ("all", "any", "not")
 
 
-class ConfigError(Exception):
+class MatchingConfigError(Exception):
     """Fatal configuration error at load time (schema, tier, enum, override)."""
 
 
-class UnknownTokenError(ConfigError):
+class UnknownTokenError(MatchingConfigError):
     """A reference points to a token missing from the table."""
 
 
-class CycleError(ConfigError):
+class CycleError(MatchingConfigError):
     """The token->token reference graph contains a cycle (the message names it)."""
 
 
-class DepthExceededError(ConfigError):
+class DepthExceededError(MatchingConfigError):
     """The resolution depth exceeds the bound (default 32)."""
 
 
-def _require_mapping(value: Any, what: str) -> dict[str, Any]:
+def _require_mapping(value: Any, error_label: str) -> dict[str, Any]:
     if not isinstance(value, dict):
-        raise ConfigError(f"{what}: mapping expected, got {type(value).__name__}")
+        raise MatchingConfigError(f"{error_label}: mapping expected, got {type(value).__name__}")
     return value
 
 
-def _require_key(mapping: dict[str, Any], key: str, what: str) -> Any:
+def _require_key(mapping: dict[str, Any], key: str, error_label: str) -> Any:
     if key not in mapping:
-        raise ConfigError(f"{what}: key {key!r} missing")
+        raise MatchingConfigError(f"{error_label}: key {key!r} missing")
     return mapping[key]
 
 
@@ -76,24 +76,24 @@ def _parse_operand(raw: Any) -> Operand:
         # Treated as a token-ref (with or without the "token" key) - _parse_token_ref
         # will raise ConfigError if the "token" key is missing or invalid.
         return _parse_token_ref(raw)
-    raise ConfigError(f"operand of invalid type: {type(raw).__name__} ({raw!r})")
+    raise MatchingConfigError(f"operand of invalid type: {type(raw).__name__} ({raw!r})")
 
 
-def _require_unit_fraction(value: float, what: str) -> float:
+def _require_unit_fraction(value: float, error_label: str) -> float:
     """Validates that a logical fraction (coverage/fuzz threshold) is in [0, 1] (fail-fast §8.4).
 
     Outside [0, 1], the rule is silently inert (threshold never reached): that is a config
     error (typically a percentage entered for a fraction), rejected at load time.
     """
     if not 0.0 <= value <= 1.0:
-        raise ConfigError(f"{what} must be in [0, 1], got {value}")
+        raise MatchingConfigError(f"{error_label} must be in [0, 1], got {value}")
     return value
 
 
 def _parse_token_ref(raw: dict[str, Any]) -> TokenRef:
     name = raw.get("token")
     if not isinstance(name, str):
-        raise ConfigError(f"operand {{token: …}} without a valid token name: {raw!r}")
+        raise MatchingConfigError(f"operand {{token: …}} without a valid token name: {raw!r}")
     min_value = raw.get("min")
     fuzz_value = raw.get("fuzz")
     # The legality of a min/fuzz override (coverage-only, cf. EBNF §8.3) is checked at the
@@ -102,12 +102,12 @@ def _parse_token_ref(raw: dict[str, Any]) -> TokenRef:
     # other hand, are structural → validated here.
     return TokenRef(
         name=name,
-        min=(
+        min_coverage=(
             None
             if min_value is None
             else _require_unit_fraction(float(min_value), f"'min' override of {name!r}")
         ),
-        fuzz=(
+        min_similarity=(
             None
             if fuzz_value is None
             else _require_unit_fraction(float(fuzz_value), f"'fuzz' override of {name!r}")
@@ -118,27 +118,27 @@ def _parse_token_ref(raw: dict[str, Any]) -> TokenRef:
 def _parse_condition(raw: dict[str, Any]) -> Condition:
     present = [key for key in _CONDITION_KEYS if key in raw]
     if len(present) != 1:
-        raise ConfigError(f"exactly one condition (all/any/not) expected, got {present!r}")
+        raise MatchingConfigError(f"exactly one condition (all/any/not) expected, got {present!r}")
     key = present[0]
     body = raw[key]
     if key == "not":
         return NotDef(operand=_parse_operand(body))
     if not isinstance(body, list):
-        raise ConfigError(f"'{key}:' expects a list of operands, got {type(body).__name__}")
+        raise MatchingConfigError(f"'{key}:' expects a list of operands, got {type(body).__name__}")
     if not body:
         # EBNF §8.3: operand (',' operand)* = at least one operand. An empty list would give
         # AllMatcher([]).matches()==all([])==True (matches EVERYTHING) or AnyMatcher([])==False
         # (mute): degenerate config, rejected at load time (fail-fast §8.4). all([])/any([])
         # remains the legitimate internal semantics of the combinators - it is the empty CONFIG
         # that we forbid.
-        raise ConfigError(f"'{key}:' requires at least one operand (empty list received)")
+        raise MatchingConfigError(f"'{key}:' requires at least one operand (empty list received)")
     operands = tuple(_parse_operand(item) for item in body)
     if key == "all":
         return AllDef(operands=operands)
     return AnyDef(operands=operands)
 
 
-def _require_float(mapping: dict[str, Any], key: str) -> float | None:
+def _optional_float(mapping: dict[str, Any], key: str) -> float | None:
     """Reads an optional float bound (``None`` if absent)."""
     value = mapping.get(key)
     return None if value is None else float(value)
@@ -151,10 +151,10 @@ def _parse_fragments(raw: Any) -> dict[str, str]:
     }
     for name, text in fragments.items():
         if name in TARGET_PLACEHOLDERS:
-            raise ConfigError(f"fragment {name!r} collides with a target placeholder")
+            raise MatchingConfigError(f"fragment {name!r} collides with a target placeholder")
         for ref in PLACEHOLDER.findall(text):
             if ref in fragments:
-                raise ConfigError(f"fragment {name!r} references fragment {ref!r}")
+                raise MatchingConfigError(f"fragment {name!r} references fragment {ref!r}")
     return fragments
 
 
@@ -174,7 +174,7 @@ def _parse_token_def(raw: Any, fragments: dict[str, str]) -> TokenDef:
         return _parse_condition(mapping)
     leaf_keys = [k for k in ("keyword", "regex", "coverage", "attr_between") if k in mapping]
     if len(leaf_keys) > 1:
-        raise ConfigError(f"a leaf token has exactly one type-key, got {sorted(leaf_keys)}")
+        raise MatchingConfigError(f"a leaf token has exactly one type-key, got {sorted(leaf_keys)}")
     if "keyword" in mapping:
         return KeywordDef(phrase=str(mapping["keyword"]))
     if "regex" in mapping:
@@ -182,52 +182,58 @@ def _parse_token_def(raw: Any, fragments: dict[str, str]) -> TokenDef:
         pattern = _expand_fragments(str(mapping["regex"]), fragments)
         return RegexDef(pattern=pattern, flags=str(flags))
     if "coverage" in mapping:
-        min_value = _require_float(mapping, "min")
+        min_value = _optional_float(mapping, "min")
         if min_value is None:
-            raise ConfigError("a coverage token must declare 'min'")
-        fuzz_value = _require_float(mapping, "fuzz")
+            raise MatchingConfigError("a coverage token must declare 'min'")
+        fuzz_value = _optional_float(mapping, "fuzz")
         fuzz = 0.85 if fuzz_value is None else _require_unit_fraction(fuzz_value, "coverage 'fuzz'")
         return CoverageDef(
             reference=str(mapping["coverage"]),
-            min=_require_unit_fraction(min_value, "coverage 'min'"),
-            fuzz=fuzz,
+            min_coverage=_require_unit_fraction(min_value, "coverage 'min'"),
+            min_similarity=fuzz,
         )
     if "attr_between" in mapping:
         attr = str(mapping["attr_between"])
         if attr not in ATTR_NAMES:
-            raise ConfigError(
+            raise MatchingConfigError(
                 f"unknown attr_between: {attr!r} (expected one of {sorted(ATTR_NAMES)})"
             )
-        min_bound = _require_float(mapping, "min")
-        max_bound = _require_float(mapping, "max")
+        min_bound = _optional_float(mapping, "min")
+        max_bound = _optional_float(mapping, "max")
         # Open bounds (min only / max only / none) are legitimate; only an explicit inverted
         # range min > max is an EMPTY range (rule mute forever) → fail-fast §8.4.
         if min_bound is not None and max_bound is not None and min_bound > max_bound:
-            raise ConfigError(
+            raise MatchingConfigError(
                 f"attr_between {attr!r}: min ({min_bound}) > max ({max_bound}) (empty range)"
             )
-        return AttrBetweenDef(attr=attr, min=min_bound, max=max_bound)
-    raise ConfigError(f"unknown token shape: keys {sorted(mapping)}")
+        return AttrBetweenDef(attr=attr, min_bound=min_bound, max_bound=max_bound)
+    raise MatchingConfigError(f"unknown token shape: keys {sorted(mapping)}")
 
 
 def _parse_rule(raw: Any) -> Rule:
     mapping = _require_mapping(raw, "rule")
     name = str(mapping.get("name", ""))
     if not name:
-        raise ConfigError(f"rule without 'name': {raw!r}")
+        raise MatchingConfigError(f"rule without 'name': {raw!r}")
     tier = mapping.get("tier")
     if tier not in TIERS:
-        raise ConfigError(f"unknown tier for rule {name!r}: {tier!r} (expected {sorted(TIERS)})")
+        raise MatchingConfigError(
+            f"unknown tier for rule {name!r}: {tier!r} (expected {sorted(TIERS)})"
+        )
     if "scope" not in mapping:
-        raise ConfigError(f"rule {name!r} without 'scope' (expected one of {sorted(SCOPES)})")
+        raise MatchingConfigError(
+            f"rule {name!r} without 'scope' (expected one of {sorted(SCOPES)})"
+        )
     scope = mapping["scope"]
     if scope not in SCOPES:
-        raise ConfigError(f"unknown scope for rule {name!r}: {scope!r} (expected {sorted(SCOPES)})")
+        raise MatchingConfigError(
+            f"unknown scope for rule {name!r}: {scope!r} (expected {sorted(SCOPES)})"
+        )
     present = [key for key in _CONDITION_KEYS if key in mapping]
     if not present:
-        raise ConfigError(f"rule {name!r} without a condition (all/any/not)")
+        raise MatchingConfigError(f"rule {name!r} without a condition (all/any/not)")
     if len(present) != 1:
-        raise ConfigError(f"rule {name!r}: exactly one condition expected, got {present!r}")
+        raise MatchingConfigError(f"rule {name!r}: exactly one condition expected, got {present!r}")
     return Rule(name=name, tier=str(tier), scope=str(scope), condition=_parse_condition(mapping))
 
 
@@ -240,11 +246,13 @@ def parse_matcher_config(raw: dict[str, Any]) -> MatcherConfig:
         tokens[str(token_name)] = _parse_token_def(token_raw, fragments)
     rules_raw = raw.get("rules", [])
     if not isinstance(rules_raw, list):
-        raise ConfigError(f"'rules' section: list expected, got {type(rules_raw).__name__}")
+        raise MatchingConfigError(f"'rules' section: list expected, got {type(rules_raw).__name__}")
     rules = tuple(_parse_rule(rule_raw) for rule_raw in rules_raw)
     vetoes_raw = raw.get("vetoes", [])
     if not isinstance(vetoes_raw, list):
-        raise ConfigError(f"'vetoes' section: list expected, got {type(vetoes_raw).__name__}")
+        raise MatchingConfigError(
+            f"'vetoes' section: list expected, got {type(vetoes_raw).__name__}"
+        )
     vetoes = tuple(str(name) for name in vetoes_raw)
     config = MatcherConfig(tokens=tokens, rules=rules, vetoes=vetoes)
     validate_config(config)
@@ -259,35 +267,35 @@ _PROBE_TARGET = TargetSegment(
     season=2,
     seasonal_number=11,
     absolute_number=62,
-    segment="a",
+    letter="a",
     title="probe",
 )
 
 
-def _operand_refs(operand: Operand) -> tuple[str, ...]:
+def _operand_token_names(operand: Operand) -> tuple[str, ...]:
     """Names of tokens directly referenced by an operand (str, TokenRef or inline)."""
     if isinstance(operand, str):
         return (operand,)
     if isinstance(operand, TokenRef):
         return (operand.name,)
     if isinstance(operand, NotDef):
-        return _operand_refs(operand.operand)
+        return _operand_token_names(operand.operand)
     # AllDef | AnyDef
     refs: list[str] = []
     for child in operand.operands:
-        refs.extend(_operand_refs(child))
+        refs.extend(_operand_token_names(child))
     return tuple(refs)
 
 
-def _def_refs(token_def: TokenDef) -> tuple[str, ...]:
+def _def_token_names(token_def: TokenDef) -> tuple[str, ...]:
     """Names of tokens directly referenced by a def (empty for a leaf)."""
     if isinstance(token_def, AllDef | AnyDef):
         refs: list[str] = []
         for child in token_def.operands:
-            refs.extend(_operand_refs(child))
+            refs.extend(_operand_token_names(child))
         return tuple(refs)
     if isinstance(token_def, NotDef):
-        return _operand_refs(token_def.operand)
+        return _operand_token_names(token_def.operand)
     return ()
 
 
@@ -317,7 +325,7 @@ def _def_token_refs(token_def: TokenDef) -> tuple[TokenRef, ...]:
     return ()
 
 
-def _check_overrides_target_coverage(config: MatcherConfig) -> None:
+def _check_overrides_only_on_coverage(config: MatcherConfig) -> None:
     """A min/fuzz override is only legal on a coverage token (cf. EBNF §8.3).
 
     Checked HERE (not at parsing) so as not to depend on the definition order: a forward
@@ -329,21 +337,23 @@ def _check_overrides_target_coverage(config: MatcherConfig) -> None:
     for rule in config.rules:
         refs.extend(_operand_token_refs(rule.condition))
     for ref in refs:
-        if (ref.min is not None or ref.fuzz is not None) and not isinstance(
+        if (ref.min_coverage is not None or ref.min_similarity is not None) and not isinstance(
             config.tokens.get(ref.name), CoverageDef
         ):
-            raise ConfigError(f"min/fuzz override forbidden on non-coverage token {ref.name!r}")
+            raise MatchingConfigError(
+                f"min/fuzz override forbidden on non-coverage token {ref.name!r}"
+            )
 
 
 def _check_references_exist(config: MatcherConfig) -> None:
     """Every reference (in a composite token OR a rule) must exist."""
     known = set(config.tokens)
     for token_def in config.tokens.values():
-        for ref in _def_refs(token_def):
+        for ref in _def_token_names(token_def):
             if ref not in known:
                 raise UnknownTokenError(f"reference to an unknown token: {ref!r}")
     for rule in config.rules:
-        for ref in _operand_refs(rule.condition):
+        for ref in _operand_token_names(rule.condition):
             if ref not in known:
                 raise UnknownTokenError(
                     f"rule {rule.name!r}: reference to an unknown token: {ref!r}"
@@ -357,7 +367,7 @@ def _check_vetoes(config: MatcherConfig) -> None:
         if name not in config.tokens:
             raise UnknownTokenError(f"veto references an unknown token: {name!r}")
         if name in seen:
-            raise ConfigError(f"duplicate veto: {name!r}")
+            raise MatchingConfigError(f"duplicate veto: {name!r}")
         seen.add(name)
 
 
@@ -368,7 +378,7 @@ def _check_acyclic(config: MatcherConfig, max_depth: int) -> None:
     ``max_depth`` is already a depth violation, raised cleanly here (avoids a Python
     ``RecursionError`` on a pathological chain).
     """
-    graph = {name: _def_refs(token_def) for name, token_def in config.tokens.items()}
+    graph = {name: _def_token_names(token_def) for name, token_def in config.tokens.items()}
     visiting: set[str] = set()
     done: set[str] = set()
     stack: list[str] = []
@@ -396,7 +406,7 @@ def _check_acyclic(config: MatcherConfig, max_depth: int) -> None:
 
 def _max_resolution_depth(config: MatcherConfig) -> int:
     """Maximum depth of a token (leaf = 1). Assumes the graph is acyclic."""
-    graph = {name: _def_refs(token_def) for name, token_def in config.tokens.items()}
+    graph = {name: _def_token_names(token_def) for name, token_def in config.tokens.items()}
     memo: dict[str, int] = {}
 
     def depth(name: str) -> int:
@@ -418,13 +428,13 @@ def _check_regexes_compile(config: MatcherConfig) -> None:
         try:
             pattern = interpolate(token_def.pattern, _PROBE_TARGET)
         except InterpolationError as exc:
-            raise ConfigError(f"token {name!r}: invalid interpolation: {exc}") from exc
+            raise MatchingConfigError(f"token {name!r}: invalid interpolation: {exc}") from exc
         if "i" in token_def.flags:
             pattern = "(?i)" + pattern
         try:
             re.compile(pattern, re.ASCII)
         except re.error as exc:
-            raise ConfigError(f"token {name!r}: regex not compilable: {exc}") from exc
+            raise MatchingConfigError(f"token {name!r}: regex not compilable: {exc}") from exc
 
 
 def validate_config(config: MatcherConfig, *, max_depth: int = _DEFAULT_MAX_DEPTH) -> None:
@@ -435,7 +445,7 @@ def validate_config(config: MatcherConfig, *, max_depth: int = _DEFAULT_MAX_DEPT
     """
     _check_references_exist(config)
     _check_vetoes(config)
-    _check_overrides_target_coverage(config)
+    _check_overrides_only_on_coverage(config)
     _check_acyclic(config, max_depth)
     depth = _max_resolution_depth(config)
     if depth > max_depth:
@@ -449,19 +459,19 @@ def parse_targets(raw: dict[str, Any]) -> tuple[TargetSegment, ...]:
     """Builds the :class:`TargetSegment`s from parsed ``targets.yaml`` (cf. spec §7)."""
     episodes = raw.get("episodes")
     if not isinstance(episodes, list):
-        raise ConfigError("'episodes' section: list expected")
+        raise MatchingConfigError("'episodes' section: list expected")
     segments: list[TargetSegment] = []
     for episode in episodes:
-        ep = _require_mapping(episode, "episode")
-        season = int(_require_key(ep, "season", "episode"))
-        seasonal_number = int(_require_key(ep, "seasonal_number", "episode"))
-        absolute_number = int(_require_key(ep, "absolute_number", "episode"))
-        seg_list = ep.get("segments", [])
-        for seg in seg_list:
-            seg_map = _require_mapping(seg, "segment")
-            status = str(seg_map.get("status", LOST))
+        episode_mapping = _require_mapping(episode, "episode")
+        season = int(_require_key(episode_mapping, "season", "episode"))
+        seasonal_number = int(_require_key(episode_mapping, "seasonal_number", "episode"))
+        absolute_number = int(_require_key(episode_mapping, "absolute_number", "episode"))
+        segment_entries = episode_mapping.get("segments", [])
+        for segment_entry in segment_entries:
+            segment_mapping = _require_mapping(segment_entry, "segment")
+            status = str(segment_mapping.get("status", LOST))
             if status not in TARGET_STATUSES:
-                raise ConfigError(
+                raise MatchingConfigError(
                     f"segment status {status!r} unknown (expected one of {sorted(TARGET_STATUSES)})"
                 )
             segments.append(
@@ -469,19 +479,19 @@ def parse_targets(raw: dict[str, Any]) -> tuple[TargetSegment, ...]:
                     season=season,
                     seasonal_number=seasonal_number,
                     absolute_number=absolute_number,
-                    segment=str(_require_key(seg_map, "letter", "segment")),
-                    title=str(_require_key(seg_map, "title", "segment")),
+                    letter=str(_require_key(segment_mapping, "letter", "segment")),
+                    title=str(_require_key(segment_mapping, "title", "segment")),
                     status=status,
                 )
             )
-    result = tuple(segments)
+    parsed_segments = tuple(segments)
     seen: set[str] = set()
-    for segment in result:
+    for segment in parsed_segments:
         if segment.target_id in seen:
-            raise ConfigError(
+            raise MatchingConfigError(
                 f"duplicate target_id: {segment.target_id!r}. Target segments must be "
                 f"unique (note: the segment letter is uppercased by target_id, so 'a' and 'A' "
                 f"collide). The evaluation engine depends on it (deterministic tie-break)."
             )
         seen.add(segment.target_id)
-    return result
+    return parsed_segments

@@ -6,7 +6,7 @@ port contract each CALLER absorbs on its own terms, cf. ``record_observation`` a
 and the startup catalogue re-evaluation, so the set-diff + retraction + wake logic is written once.
 
 Set diff keyed by ``(file, target_id)`` (spec §7). The file is judged on EVERY filename the
-catalog knows for it (``engine.evaluate_all``, spec amuleapi-migration §8.4), so its filenames
+catalog knows for it (``engine.evaluate_file``, spec amuleapi-migration §8.4), so its filenames
 no longer retract each other. A fresh decision is persisted (a download one also wakes the
 download loop) only when it differs from the file's LATEST persisted :class:`DecisionRecord`
 for THAT target; a target that dropped out of the fresh set is retracted, unless it is already
@@ -43,7 +43,7 @@ async def rejudge_file(
     Returns the number of rows written (0..N). May propagate ``RepositoryError`` (pure
     orchestration; the caller absorbs it)."""
     filenames = catalog.known_filenames(file)
-    fresh = engine.evaluate_all(
+    fresh = engine.evaluate_file(
         replace(base_candidate, filename=filename) for filename in filenames
     )
     persisted = catalog.latest_decisions(file)

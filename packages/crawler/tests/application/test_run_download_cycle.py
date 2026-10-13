@@ -46,13 +46,13 @@ _C = "c" * 32
 
 _TARGETS = (
     TargetSegment(
-        season=2, seasonal_number=11, absolute_number=62, segment="A", title="t", status="lost"
+        season=2, seasonal_number=11, absolute_number=62, letter="A", title="t", status="lost"
     ),
     TargetSegment(
         season=2,
         seasonal_number=63,
         absolute_number=63,
-        segment="A",
+        letter="A",
         title="t2",
         status="complete",
     ),
@@ -402,10 +402,10 @@ async def test_two_segment_candidates_same_hash_dedup_to_one_download() -> None:
     # default for an absent target (that would be an unrelated skip path, spec §6).
     targets = (
         TargetSegment(
-            season=2, seasonal_number=11, absolute_number=62, segment="A", title="t", status="lost"
+            season=2, seasonal_number=11, absolute_number=62, letter="A", title="t", status="lost"
         ),
         TargetSegment(
-            season=2, seasonal_number=12, absolute_number=62, segment="B", title="t", status="lost"
+            season=2, seasonal_number=12, absolute_number=62, letter="B", title="t", status="lost"
         ),
     )
     telemetry = RecordingTelemetry()
@@ -960,10 +960,10 @@ async def test_emits_download_completed() -> None:
 async def test_a_completion_names_the_clean_file_and_every_download_target_of_the_hash() -> None:
     targets = (
         TargetSegment(
-            season=2, seasonal_number=11, absolute_number=62, segment="A", title="ta", status="lost"
+            season=2, seasonal_number=11, absolute_number=62, letter="A", title="ta", status="lost"
         ),
         TargetSegment(
-            season=2, seasonal_number=12, absolute_number=62, segment="B", title="tb", status="lost"
+            season=2, seasonal_number=12, absolute_number=62, letter="B", title="tb", status="lost"
         ),
     )
     telemetry = RecordingTelemetry()
