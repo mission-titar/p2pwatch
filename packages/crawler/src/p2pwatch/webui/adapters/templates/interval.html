@@ -1,0 +1,20 @@
+<section class="interval">
+  <h2>Interval</h2>
+  <p>Showing {{ interval.shown }}.</p>
+  {% for notice in interval.notices %}
+  <p>{{ notice }}</p>
+  {% endfor %}
+  <p class="interval-links">
+    {% for preset in interval.presets %}<a href="{{ preset.url }}">{{ preset.label }}</a>{% endfor %}
+  </p>
+  <form method="get">
+    {% for h in interval.hidden %}<input type="hidden" name="{{ h.name }}" value="{{ h.value }}">{% endfor %}
+    <label>From (UTC) <input type="datetime-local" name="from" step="1" value="{{ interval.from_value }}"></label>
+    <label>To (UTC) <input type="datetime-local" name="to" step="1" value="{{ interval.to_value }}"></label>
+    <button type="submit">Show</button>
+  </form>
+  <p class="interval-links">
+    <a href="{{ interval.previous_url }}">← Previous</a>
+    {% for url in interval.next_urls %}<a href="{{ url }}">Next →</a>{% endfor %}
+  </p>
+</section>

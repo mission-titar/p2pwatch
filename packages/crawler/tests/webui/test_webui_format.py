@@ -1,10 +1,14 @@
+from datetime import UTC, datetime
+
 from p2pwatch.webui.domain.format import (
     average_rate,
     human_size,
+    input_timestamp,
     micros_timestamp,
     seasonal_id,
     short_hash,
     short_timestamp,
+    utc_timestamp,
 )
 
 # Tuesday 2026-10-13 20:00:00 UTC, in microseconds since the Unix epoch.
@@ -138,3 +142,9 @@ def test_average_rate_of_a_range_without_bytes_is_empty() -> None:
 
 def test_average_rate_of_a_single_read_is_empty() -> None:
     assert average_rate(1024, TUESDAY_8PM, TUESDAY_8PM) == ""
+
+
+def test_an_interval_end_shows_in_the_webui_format_and_in_a_datetime_local_input() -> None:
+    at = datetime(2026, 10, 13, 20, 0, 30, 999_999, tzinfo=UTC)
+    assert utc_timestamp(at) == "2026-10-13 20:00:30Z"
+    assert input_timestamp(at) == "2026-10-13T20:00:30"

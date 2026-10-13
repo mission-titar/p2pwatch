@@ -10,12 +10,14 @@ import pytest
 
 from p2pwatch.adapters.persistence_sqlite import sightings
 from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
+from p2pwatch.adapters.persistence_sqlite.variants import iso_to_micros
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import Sighting
 from tests.catalog_rows import insert_file, insert_observation
 
 _A, _B, _C = "a" * 32, "b" * 32, "c" * 32
 _TIE = "2026-06-01T10:00:00.000000+00:00"
+_YEAR_3000 = 32_503_680_000_000_000
 
 
 def _key(ed2k_hash: str) -> FileKey:
@@ -147,13 +149,30 @@ def test_sightings_are_the_timeline_oldest_first(connection: sqlite3.Connection)
     _raw(connection, _A, "tie 1.avi", "2026-05-15T10:00:00.000000+00:00")
     _raw(connection, _A, "tie 2.avi", "2026-05-15T10:00:00.000000+00:00")
     _raw(connection, _B, "other.avi", "2026-05-20T10:00:00.000000+00:00")
-    assert sightings.sightings(connection, _key(_A)) == (
+    assert sightings.sightings(connection, _key(_A), 0, _YEAR_3000) == (
         _raw_sighting("early.avi", "2026-05-01T10:00:00.000000+00:00"),
         _raw_sighting("tie 1.avi", "2026-05-15T10:00:00.000000+00:00"),
         _raw_sighting("tie 2.avi", "2026-05-15T10:00:00.000000+00:00"),
         _raw_sighting("late.avi", "2026-06-02T10:00:00.000000+00:00"),
     )
-    assert sightings.sightings(connection, _key(_C)) == ()
+    assert sightings.sightings(connection, _key(_C), 0, _YEAR_3000) == ()
+
+
+def test_the_timeline_reads_its_interval_only(connection: sqlite3.Connection) -> None:
+    insert_file(connection, _A)
+    ats = [
+        "2026-10-06T19:59:59.999999+00:00",
+        "2026-10-06T20:00:00.000000+00:00",
+        "2026-10-13T19:59:59.999999+00:00",
+        "2026-10-13T20:00:00.000000+00:00",
+    ]
+    for n, at in enumerate(ats):
+        _raw(connection, _A, f"{n}.avi", at)
+    since, until = iso_to_micros(ats[1]), iso_to_micros(ats[3])
+    assert sightings.sightings(connection, _key(_A), since, until) == (
+        _raw_sighting("1.avi", ats[1]),
+        _raw_sighting("2.avi", ats[2]),
+    )
 
 
 @pytest.mark.parametrize(
@@ -178,6 +197,18 @@ def test_observation_reads_seek_a_variant_s_observations_by_primary_key(
         plan
     )
     assert not any(step.startswith("SCAN o") for step in plan), plan
+
+
+def test_the_timeline_seeks_its_interval_by_primary_key(connection: sqlite3.Connection) -> None:
+    plan = [
+        str(row[3])
+        for row in connection.execute(
+            "EXPLAIN QUERY PLAN " + sightings._SELECT_SIGHTINGS, (_A, 0, 1)
+        )
+    ]
+    assert (
+        "SEARCH o USING PRIMARY KEY (variant_id=? AND observed_at>? AND observed_at<?)" in plan
+    ), plan
 
 
 def test_known_names_read_the_variants_alone(connection: sqlite3.Connection) -> None:

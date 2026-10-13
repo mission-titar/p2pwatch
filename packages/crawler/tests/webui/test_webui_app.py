@@ -5,6 +5,7 @@ import sqlite3
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlencode
 
 import pytest
 import yaml
@@ -77,6 +78,17 @@ _NO_STATUS = _Readings({})
 
 def _detail_url(ed2k_hash: str) -> str:
     return f"/files/{file_id(ed2k_hash).hex()}"
+
+
+def _query(since: datetime, until: datetime, **kept: str) -> str:
+    """An interval's query string, in the webui's time format."""
+    ends = {"from": f"{since:%Y-%m-%d %H:%M:%S}Z", "to": f"{until:%Y-%m-%d %H:%M:%S}Z"}
+    return urlencode({**kept, **ends})
+
+
+def _href(path: str, since: datetime, until: datetime, **kept: str) -> str:
+    """An interval's link as the page escapes it."""
+    return f'href="{path}?{_query(since, until, **kept)}"'.replace("&", "&amp;")
 
 
 class _RecordingControl:
@@ -733,8 +745,9 @@ async def test_file_detail_timeline_shows_each_observation_as_one_plain_line(
     populated_app: tuple[Starlette, str],
 ) -> None:
     app, hash_ = populated_app
+    day = _query(datetime(2026, 6, 22, tzinfo=UTC), datetime(2026, 6, 23, tzinfo=UTC))
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get(_detail_url(hash_))
+        resp = await client.get(f"{_detail_url(hash_)}?{day}")
     cells = ("keroro_s2e62a_vf.avi", "100000000", "5", "keroro", SEEN_AT)
     line = "<tr>" + "".join(f"<td>{cell}</td>" for cell in cells) + "</tr>"
     assert line in re.sub(r">\s+<", "><", resp.text)
@@ -825,7 +838,7 @@ async def test_file_detail_shows_no_source_older_than_7_days(
         )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get(_detail_url(hash_))
-    assert '<td colspan="10">No source read in the last 7 days.</td>' in resp.text
+    assert '<td colspan="10">No source read in this interval.</td>' in resp.text
 
 
 # ---------------------------------------------------------------------------
@@ -1117,7 +1130,7 @@ async def test_file_detail_no_observations_returns_200(
         resp = await client.get(_detail_url(hash_))
     assert resp.status_code == 200
     assert "ed2k://" not in resp.text
-    assert "No observations." in resp.text
+    assert "No observation in this interval." in resp.text
 
 
 @pytest.mark.asyncio
@@ -2268,3 +2281,123 @@ async def test_target_page_renders_its_own_heading(
         resp = await client.get("/targets/062A")
     assert resp.status_code == 200
     assert "<h1>Files for target 062A</h1>" in resp.text
+
+
+# ---------------------------------------------------------------------------
+# The interval selector (source points spec, D6)
+# ---------------------------------------------------------------------------
+
+_SECOND = timedelta(seconds=1)
+_OCT_8, _OCT_11 = datetime(2026, 10, 8, tzinfo=UTC), datetime(2026, 10, 11, tzinfo=UTC)
+_EDGES = "<p>Periods are cut at the interval's edges.</p>"
+
+
+def _micros(moment: datetime) -> int:
+    return (moment - datetime(1970, 1, 1, tzinfo=UTC)) // timedelta(microseconds=1)
+
+
+def _seed_points(catalog_db: Path, ed2k_hash: str, *moments: datetime) -> None:
+    """One source's points on the file, one variant, and an observation named after each."""
+    with sqlite3.connect(catalog_db) as conn:
+        insert_source(conn, _USER)
+        variant = insert_source_variant(conn, ed2k_hash, _USER)
+        for n, moment in enumerate(moments):
+            insert_source_point(conn, variant, _micros(moment))
+            insert_observation(conn, ed2k_hash, f"{n}.avi", observed_at=moment.isoformat())
+
+
+@pytest.mark.asyncio
+async def test_an_interval_of_3_days_shows_those_days_only_and_moves_by_3_days(
+    populated_app: tuple[Starlette, str], catalog_db: Path
+) -> None:
+    app, hash_ = populated_app
+    _seed_points(catalog_db, hash_, _OCT_8 - _SECOND, _OCT_8, _OCT_11 - _SECOND, _OCT_11)
+    path = _detail_url(hash_)
+    page = await _sources_page(app, f"{path}?{_query(_OCT_8, _OCT_11)}")
+    assert [f"<td>{n}.avi</td>" in page for n in range(4)] == [False, True, True, False]
+    cells = ("2026-10-07 23:59:59Z", "2026-10-08 00:00:00Z", "2026-10-10 23:59:59Z")
+    assert [f"<td>{cell}</td>" in page for cell in cells] == [False, True, True]
+    assert "<td>2026-10-11 00:00:00Z</td>" not in page
+    days = timedelta(days=3)
+    assert f"<a {_href(path, _OCT_8 - days, _OCT_8)}>← Previous</a>" in page
+    assert f"<a {_href(path, _OCT_11, _OCT_11 + days)}>Next →</a>" in page
+    assert "Showing 2026-10-08 00:00:00Z to 2026-10-11 00:00:00Z." in page
+    assert _EDGES in page
+
+
+@pytest.mark.asyncio
+async def test_an_interval_of_30_days_shows_the_7_ending_at_its_to_and_says_so(
+    populated_app: tuple[Starlette, str], catalog_db: Path
+) -> None:
+    app, hash_ = populated_app
+    week_before = _OCT_11 - timedelta(days=7)
+    _seed_points(catalog_db, hash_, week_before - _SECOND, week_before)
+    month = _query(_OCT_11 - timedelta(days=30), _OCT_11)
+    page = await _sources_page(app, f"{_detail_url(hash_)}?{month}")
+    notice = "The interval requested is longer than 7 days: showing the 7 days ending at its end."
+    assert f"<p>{notice}</p>" in page
+    assert '<input type="datetime-local" name="from" step="1" value="2026-10-04T00:00:00">' in page
+    assert '<input type="datetime-local" name="to" step="1" value="2026-10-11T00:00:00">' in page
+    assert ["<td>0.avi</td>" in page, "<td>1.avi</td>" in page] == [False, True]
+
+
+@pytest.mark.asyncio
+async def test_no_parameter_shows_the_last_7_days_and_no_next(
+    populated_app: tuple[Starlette, str],
+) -> None:
+    app, hash_ = populated_app
+    path = _detail_url(hash_)
+    page = await _sources_page(app, path)
+    now = _CLOCK.now()
+    assert "Showing 2026-10-07 20:00:00Z to 2026-10-14 20:00:00Z." in page
+    assert f"<a {_href(path, now - timedelta(days=14), now - timedelta(days=7))}>" in page
+    assert "Next →" not in page
+    assert "longer than 7 days" not in page
+
+
+@pytest.mark.asyncio
+async def test_the_presets_end_now(populated_app: tuple[Starlette, str]) -> None:
+    app, hash_ = populated_app
+    path = _detail_url(hash_)
+    page = await _sources_page(app, f"{path}?{_query(_OCT_8, _OCT_11)}")
+    now, hours = _CLOCK.now(), {"hour": 1, "6 hours": 6, "24 hours": 24, "7 days": 168}
+    for label, span in hours.items():
+        assert f"<a {_href(path, now - timedelta(hours=span), now)}>Last {label}</a>" in page
+
+
+@pytest.mark.asyncio
+async def test_a_period_crossing_from_starts_at_its_first_point_inside(
+    populated_app: tuple[Starlette, str], catalog_db: Path
+) -> None:
+    app, hash_ = populated_app
+    _seed_points(catalog_db, hash_, *(_OCT_8 + n * 30 * _SECOND for n in (-1, 1, 2)))
+    page = await _sources_page(app, f"{_detail_url(hash_)}?{_query(_OCT_8, _OCT_11)}")
+    period = ("queued", "unknown", "unknown", "2026-10-08 00:00:30Z", "2026-10-08 00:01:00Z")
+    assert "".join(f"<td>{cell}</td>" for cell in period) in page
+
+
+@pytest.mark.parametrize(
+    ("path", "kept"),
+    [(_USER_PAGE, {}), ("/sources/name", {"name": "AnimuseeFMR"})],
+    ids=["source", "name"],
+)
+@pytest.mark.asyncio
+async def test_the_source_and_name_pages_keep_their_parameters_and_their_interval(
+    populated_app: tuple[Starlette, str], catalog_db: Path, path: str, kept: dict[str, str]
+) -> None:
+    app, hash_ = populated_app
+    _seed_points(catalog_db, hash_, _OCT_8)
+    with sqlite3.connect(catalog_db) as conn:
+        insert_source_point(conn, insert_source_variant(conn, hash_, None), _micros(_OCT_8))
+    on_page_2 = {**kept, "page": "2"}
+    page = await _sources_page(app, f"{path}?{_query(_OCT_8, _OCT_11, **on_page_2)}")
+    hidden = "".join(
+        f'<input type="hidden" name="{name}" value="{value}">' for name, value in on_page_2.items()
+    )
+    assert f'<form method="get">{hidden}<label>' in page
+    previous_interval = _href(path, _OCT_8 - timedelta(days=3), _OCT_8, **on_page_2)
+    assert f"<a {previous_interval}>← Previous</a>" in page
+    first_page = _href(path, _OCT_8, _OCT_11, **kept).removesuffix('"') + '&amp;page=1"'
+    assert f"<a {first_page}>← Previous</a>" in page
+    assert "<td>2026-10-08 00:00:00Z</td>" in page
+    assert _EDGES in page

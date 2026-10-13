@@ -9,6 +9,7 @@ import pytest
 
 from catalog_matching.config import TIER_RANK
 from p2pwatch.adapters.persistence_sqlite.reader import open_reader
+from p2pwatch.adapters.persistence_sqlite.variants import iso_to_micros
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch.webui.adapters.catalog_read import (
@@ -35,6 +36,7 @@ from p2pwatch.webui.domain.views import (
     SourceRow,
 )
 from tests.catalog_rows import (
+    SEEN_AT,
     file_id,
     insert_decision,
     insert_file,
@@ -48,6 +50,8 @@ from tests.catalog_rows import (
 # Selects the CTE under test on its own: SQLite drops the CTEs a query does not reference, so
 # the resulting plan is exactly how ``latest_sighting`` is resolved.
 LATEST_SIGHTING_PROBE = "SELECT file_id, name, source_count_max, last_seen FROM latest_sighting"
+# Every instant a test writes, from the epoch to the year 3000.
+_ALL_TIME = PeriodWindow(since=0, until=32_503_680_000_000_000, tolerance=0)
 
 # ---------------------------------------------------------------------------
 # Seed helpers
@@ -250,7 +254,7 @@ def test_count_files_whole_episode_counts_as_one_file(catalog_db: Path) -> None:
 
 def test_file_detail_carries_observations_and_decisions(catalog_db: Path) -> None:
     _seed(catalog_db)
-    detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("a" * 32))
+    detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("a" * 32), _ALL_TIME)
     assert detail is not None
     assert detail.file == FileKey(Network.ED2K, "a" * 32)
     assert detail.size_bytes == 100
@@ -261,9 +265,23 @@ def test_file_detail_carries_observations_and_decisions(catalog_db: Path) -> Non
     assert detail.known_filenames == ("keroro_062.avi",)
 
 
+def test_file_detail_reads_its_timeline_in_the_window_and_its_latest_sighting_in_any(
+    catalog_db: Path,
+) -> None:
+    _seed(catalog_db)
+    with sqlite3.connect(catalog_db) as conn:
+        insert_observation(conn, "a" * 32, "older.avi", observed_at="2026-06-21T10:00:00+00:00")
+    since = iso_to_micros("2026-06-01T00:00:00+00:00")
+    window = PeriodWindow(since=since, until=iso_to_micros(SEEN_AT), tolerance=0)
+    detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("a" * 32), window)
+    assert detail is not None
+    assert [s.name for s in detail.sightings] == ["older.avi"]
+    assert detail.latest is not None and detail.latest.name == "keroro_062.avi"
+
+
 def test_file_detail_unknown_file_id_is_none(catalog_db: Path) -> None:
     _seed(catalog_db)
-    assert CatalogReader(open_reader(catalog_db)).file_detail(file_id("f" * 32)) is None
+    assert CatalogReader(open_reader(catalog_db)).file_detail(file_id("f" * 32), _ALL_TIME) is None
 
 
 def test_file_detail_retracted_target_is_no_decision(catalog_db: Path) -> None:
@@ -271,7 +289,7 @@ def test_file_detail_retracted_target_is_no_decision(catalog_db: Path) -> None:
     from ``file_detail``, identical to an unmatched file (spec §9). The earlier
     (pre-retraction) real decision must not leak through."""
     _seed_retracted(catalog_db)
-    detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("c" * 32))
+    detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("c" * 32), _ALL_TIME)
     assert detail is not None
     assert detail.decisions == ()
 
@@ -287,7 +305,7 @@ def test_file_detail_no_decision(catalog_db: Path) -> None:
             observed_at="2026-06-22T09:00:00.000000+00:00",
             size_bytes=200,
         )
-    detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("b" * 32))
+    detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("b" * 32), _ALL_TIME)
     assert detail is not None
     assert detail.decisions == ()
     assert detail.size_bytes == 200
@@ -295,7 +313,7 @@ def test_file_detail_no_decision(catalog_db: Path) -> None:
 
 def test_file_detail_whole_episode_lists_both_decisions(catalog_db: Path) -> None:
     _seed_whole_episode(catalog_db)
-    detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("a" * 32))
+    detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("a" * 32), _ALL_TIME)
     assert detail is not None
     assert [d.target_id for d in detail.decisions] == ["072A", "072B"]
 
@@ -626,7 +644,7 @@ def test_coverage_tie_break_on_id(catalog_db: Path) -> None:
 def test_file_detail_observations_include_media_fields_none(catalog_db: Path) -> None:
     """A sighting's media_length_sec and bitrate_kbps are None when the observation has none."""
     _seed(catalog_db)
-    detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("a" * 32))
+    detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("a" * 32), _ALL_TIME)
     assert detail is not None
     assert len(detail.sightings) == 1
     obs = detail.sightings[0]
@@ -648,7 +666,7 @@ def test_file_detail_observations_include_media_fields_present(catalog_db: Path)
             media_length_sec=1320,
             bitrate_kbps=192,
         )
-    detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id(h))
+    detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id(h), _ALL_TIME)
     assert detail is not None
     assert len(detail.sightings) == 1
     obs = detail.sightings[0]
@@ -1076,7 +1094,7 @@ def test_list_files_observation_tie_break_on_the_newest_variant(catalog_db: Path
 
 def test_file_detail_of_a_file_never_seen_has_no_sighting(catalog_db: Path) -> None:
     h = _seed_file_without_observation(catalog_db)
-    detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id(h))
+    detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id(h), _ALL_TIME)
     assert detail is not None
     assert (detail.sightings, detail.latest, detail.known_filenames) == ((), None, ())
 
