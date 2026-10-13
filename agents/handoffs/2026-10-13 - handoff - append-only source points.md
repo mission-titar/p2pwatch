@@ -42,7 +42,8 @@ presence periods from those points at each display, within an interval of at mos
   a failed read included. The repository's tolerance is `3 x (sources_interval + poll_interval)`.
   `decision_poll_interval_seconds` joins `_REMOVED_KEYS`.
 - **The close** (block 50): the holistic review's eight findings fixed (below): the per-source reads
-  kept off the `node_id` index, both source keys bounded at a year, the webui's gap named after its
+  kept off the `node_id` index, every duration of `crawler.yml` bounded (a day, or 30 days for an
+  absence) by one helper, `_seconds`, the webui's gap named after its
   setting end to end, the byte counter in `legal.md` and `index.md`, the spec approved, with a
   section on the intervals measured on the wall clock.
 - **The documents** (block 40): the invariant without stage 4's exception in `AGENTS.md`'s Persistence
@@ -57,6 +58,14 @@ presence periods from those points at each display, within an interval of at mos
 
 ## Decisions taken during Act
 
+- **Class 2, block 50**: `download.poll_interval_seconds` was unbounded, and the writer's spacing adds
+  it, so a poll of 4e12 s still raised `OverflowError: Python int too large to convert to SQLite
+  INTEGER` in `record_readings` once the source keys were bounded at a year. Operator: "même un an est
+  absurde comme limite [...] il faut mettre une borne haute cohérente [...] une limite commune dans un
+  helper". One helper reads every duration key with an upper bound, default a day: the poll, the
+  sources interval, the gap, `backoff.base_seconds` and `cap_seconds`, `shutdown_deadline_seconds`,
+  `notification_timeout_seconds`; 30 days for `lost_after_seconds` and `reappeared_after_seconds`. The
+  one-year bounds went; `settings.md` gains "Les bornes des durées".
 - **Class 2, block 10**: the webui's tolerance on a crawl-only node, which reads no source. Operator: a
   reading option, `webui.source_period_gap_seconds` beside `webui.enabled`, default 990, in every run
   mode; block 30 hands the spacing to the repository only.
@@ -97,7 +106,8 @@ search timeline); D3 (the spacing feeds D4 only); D5 (one statement); D6 (the to
 block 10's and 30's contents, the transient surfaces, the timeline backlog entry closed, the `backoff`
 entry); section 7 (the timeline bound, the removed key, the gap key's criteria); section 8 (the
 displaying node's gap). Block 50 adds: the status approved; D2 (the `node_id` index serves
-`has_points_before` only); D3 and section 7 (both source keys at most a year); section 7's D5 criterion
+`has_points_before` only); D3, D6 and section 7 (every duration key at most a day, 30 days
+for an absence); section 7's D5 criterion
 (steps flat against the node's other variants, for D4's carried role too); section 6's block 50 row;
 section 8, "Intervals measured on the wall clock".
 
@@ -132,7 +142,7 @@ exit).
 | Severity | Finding | Exit |
 |---|---|---|
 | MAJOR | Without `ANALYZE`, `_LATEST_POINT` and `_EARLIER_POINTS` planned on `idx_source_variants_node_id`, walking every variant of the node (5.5 ms a call at 100,000 variants against 0.007 ms) | Fixed: `+v.node_id` in both; two tests count VM steps with 100 then 10,000 other variants on the node, for `earlier_points` and a passing-state `record_readings`, failing first with `assert 49493 <= (544 // 10)` and `assert 49461 <= (737 // 10)` |
-| MINOR | Both new keys accepted values whose derived tolerance overflows (`OverflowError` at composition, or an int64 bind that escaped `run_download_cycle`) | Fixed: `_source_duration` refuses more than a year (31,536,000 s) with a `ConfigError` naming the key; tests failed first with `DID NOT RAISE ConfigError`; `settings.md` states the bound |
+| MINOR | Both new keys accepted values whose derived tolerance overflows (`OverflowError` at composition, or an int64 bind that escaped `run_download_cycle`) | Fixed, widened by block 50's class 2: `_seconds` bounds every duration key at a day (30 days for an absence), with a `ConfigError` naming the key and its bound; one test per family, failing first with `DID NOT RAISE ConfigError` on all nine cases; `settings.md` lists every bound |
 | MINOR | Bare "(D4)", "(D4, D6)" read as stage 4's; `source_tolerance`'s docstring named D6; the 300 s default gave no reason | Fixed: the spec named, D6 dropped, the reason inline |
 | MINOR | One concept, four names (`source_period_gap_seconds`, `source_period_gap`, `source_tolerance=`, `PeriodWindow.tolerance`) | Fixed: `build_app(source_period_gap=...)`, `PeriodWindow.gap`, the SQL's `:gap` |
 | MINOR | "plus `download.poll_interval_seconds`" understated a round (poll plus the cycle) | Fixed in `settings.md`, `_sources_spacing` and the repository's docstring |
@@ -144,6 +154,9 @@ exit).
 
 - **A node whose `crawler.yml` still holds `decision_poll_interval_seconds` refuses to boot.** The
   release notes must say to delete the line; `docs/migration-4x.md` step 3 does.
+- **A `crawler.yml` with a duration above its new bound refuses to boot** (a day, 30 days for
+  `lost_after_seconds` and `reappeared_after_seconds`). Every shipped value is far below; the release
+  notes should name the bounds.
 - **The sources step's gate compares wall-clock times**: a clock stepped back suspends source reads until
   it passes the last start plus the interval again. An accepted limit, with the amuleapi client's pacing
   and deadlines and the persisted search backoff: spec section 8, "Intervals measured on the wall
