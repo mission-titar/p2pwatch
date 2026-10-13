@@ -229,11 +229,26 @@ def _bool(mapping: dict[str, Any], key: str, what: str) -> bool:
     return value
 
 
-def _positive_default(mapping: dict[str, Any], key: str, default: float, what: str) -> float:
-    """OPTIONAL strictly positive float (default ``default``)."""
-    if key not in mapping:
+# Coherent bounds for a P2P watch: a day for a delay, 30 days for an absence (operator, 2026-10-13).
+_A_DAY = 86_400.0
+_THIRTY_DAYS = 2_592_000.0
+
+
+def _seconds(
+    mapping: dict[str, Any],
+    key: str,
+    what: str,
+    default: float | None = None,
+    *,
+    at_most: float = _A_DAY,
+) -> float:
+    """Strictly positive seconds up to ``at_most``; OPTIONAL when given a ``default``."""
+    if default is not None and key not in mapping:
         return default
-    return _positive(mapping, key, what)
+    seconds = _positive(mapping, key, what)
+    if seconds > at_most:
+        raise ConfigError(f"{what}.{key}: at most {at_most:.0f} seconds expected, got {seconds}")
+    return seconds
 
 
 def _positive_int_default(mapping: dict[str, Any], key: str, default: int, what: str) -> int:
@@ -280,11 +295,7 @@ def _parse_observability(raw: dict[str, Any], env: Mapping[str, str]) -> Observa
             enabled=_bool(metrics_raw, "enabled", "observability.metrics"),
             port=_positive_int(metrics_raw, "port", "observability.metrics"),
         )
-    timeout = (
-        _positive(raw, "notification_timeout_seconds", "observability")
-        if "notification_timeout_seconds" in raw
-        else 5.0
-    )
+    timeout = _seconds(raw, "notification_timeout_seconds", "observability", 5.0)
     notifications: list[NotificationTarget] = []
     for index, entry in enumerate(raw.get("notifications", [])):
         what = f"observability.notifications[{index}]"
@@ -319,29 +330,6 @@ _DEFAULT_OUTPUT_DIR = "/downloads"  # the bind mount in deploy/compose.yml
 _DEFAULT_REAPPEARED_AFTER_SECONDS = 43_200.0  # 12 h: a night off does not notify (stage 4 spec, D9)
 # 5 min: enough to recognise a sharer, a tenth of the detail calls (source points spec, D3).
 _DEFAULT_SOURCES_INTERVAL_SECONDS = 300.0
-_MAX_SOURCE_DURATION = timedelta(days=365)
-
-
-def _duration_default(mapping: dict[str, Any], key: str, default: float, what: str) -> timedelta:
-    """OPTIONAL strictly positive number of seconds, refusing what no duration holds."""
-    seconds = _positive_default(mapping, key, default, what)
-    try:
-        return timedelta(seconds=seconds)
-    except OverflowError as error:
-        raise ConfigError(
-            f"{what}.{key}: number of seconds within a duration's range expected, got {seconds}"
-        ) from error
-
-
-def _source_duration(mapping: dict[str, Any], key: str, default: float, what: str) -> timedelta:
-    """``_duration_default`` within a year, whose tolerances in microseconds SQLite holds."""
-    duration = _duration_default(mapping, key, default, what)
-    if duration > _MAX_SOURCE_DURATION:
-        raise ConfigError(
-            f"{what}.{key}: at most {_MAX_SOURCE_DURATION.total_seconds():.0f} (a year) expected,"
-            f" got {duration.total_seconds()}"
-        )
-    return duration
 
 
 def _parse_download(raw: dict[str, Any]) -> DownloadConfig | None:
@@ -354,19 +342,31 @@ def _parse_download(raw: dict[str, Any]) -> DownloadConfig | None:
     if not isinstance(output_dir, str) or not output_dir:
         raise ConfigError(f"download.output_dir: non-empty string expected, got {output_dir!r}")
     return DownloadConfig(
-        poll_interval_seconds=_positive(section, "poll_interval_seconds", "download"),
+        poll_interval_seconds=_seconds(section, "poll_interval_seconds", "download"),
         min_free_bytes=_positive_int_default(
             section, "min_free_bytes", _DEFAULT_MIN_FREE_BYTES, "download"
         ),
-        lost_after_seconds=_positive_default(
-            section, "lost_after_seconds", _DEFAULT_LOST_AFTER_SECONDS, "download"
+        lost_after_seconds=_seconds(
+            section,
+            "lost_after_seconds",
+            "download",
+            _DEFAULT_LOST_AFTER_SECONDS,
+            at_most=_THIRTY_DAYS,
         ),
         output_dir=output_dir,
-        reappeared_after=_duration_default(
-            section, "reappeared_after_seconds", _DEFAULT_REAPPEARED_AFTER_SECONDS, "download"
+        reappeared_after=timedelta(
+            seconds=_seconds(
+                section,
+                "reappeared_after_seconds",
+                "download",
+                _DEFAULT_REAPPEARED_AFTER_SECONDS,
+                at_most=_THIRTY_DAYS,
+            )
         ),
-        sources_interval=_source_duration(
-            section, "sources_interval_seconds", _DEFAULT_SOURCES_INTERVAL_SECONDS, "download"
+        sources_interval=timedelta(
+            seconds=_seconds(
+                section, "sources_interval_seconds", "download", _DEFAULT_SOURCES_INTERVAL_SECONDS
+            )
         ),
     )
 
@@ -398,8 +398,13 @@ def _parse_webui(raw: dict[str, Any], env: Mapping[str, str]) -> WebuiConfig:
         return _DEFAULT_WEBUI
     section = _require_mapping(raw["webui"], "section 'webui'")
     enabled = _bool_default(section, "enabled", True, "webui")
-    gap = _source_duration(
-        section, "source_period_gap_seconds", _DEFAULT_SOURCE_PERIOD_GAP.total_seconds(), "webui"
+    gap = timedelta(
+        seconds=_seconds(
+            section,
+            "source_period_gap_seconds",
+            "webui",
+            _DEFAULT_SOURCE_PERIOD_GAP.total_seconds(),
+        )
     )
     if "amule_url" not in section:
         return WebuiConfig(enabled=enabled, source_period_gap=gap)
@@ -418,8 +423,8 @@ def parse_crawler_config(raw: dict[str, Any], env: Mapping[str, str]) -> Crawler
     if factor < 1:
         raise ConfigError(f"backoff.factor must be ≥ 1 (growth), got {factor}")
     backoff = BackoffConfig(
-        base_seconds=_positive(backoff_raw, "base_seconds", "backoff"),
-        cap_seconds=_positive(backoff_raw, "cap_seconds", "backoff"),
+        base_seconds=_seconds(backoff_raw, "base_seconds", "backoff"),
+        cap_seconds=_seconds(backoff_raw, "cap_seconds", "backoff"),
         factor=factor,
         jitter_ratio=_non_negative(backoff_raw, "jitter_ratio", "backoff"),
     )
@@ -438,7 +443,7 @@ def parse_crawler_config(raw: dict[str, Any], env: Mapping[str, str]) -> Crawler
         )
     return CrawlerConfig(
         backoff=backoff,
-        shutdown_deadline_seconds=_positive(raw, "shutdown_deadline_seconds", "crawler"),
+        shutdown_deadline_seconds=_seconds(raw, "shutdown_deadline_seconds", "crawler"),
         amule_api_password=_require_str(raw, "amule_api_password", "crawler", env),
         catalog_db_path=_require_str(raw, "catalog_db_path", "crawler", env),
         local_db_path=_require_str(raw, "local_db_path", "crawler", env),

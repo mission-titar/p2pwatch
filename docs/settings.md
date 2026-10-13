@@ -85,8 +85,9 @@ longues absences alertent.
 
 La clé accepte tout nombre positif, décimales comprises, mais une valeur sous l'heure (`3600`) a
 peu de sens : aMule ne réinterroge une source en attente que toutes les 15 minutes, et une source
-peut quitter sa liste puis y revenir sans s'être absentée. Une valeur nulle, négative, infinie ou
-`.nan` est refusée au démarrage, avec un message qui nomme la clé. La valeur est lue au démarrage :
+peut quitter sa liste puis y revenir sans s'être absentée. Une valeur nulle, négative, infinie,
+`.nan` ou supérieure à 30 jours (`2592000`) est refusée au démarrage, avec un message qui nomme la
+clé ([Les bornes des durées](#les-bornes-des-durées)). La valeur est lue au démarrage :
 relancez le crawler (`docker compose restart p2pwatch`) après l'avoir changée.
 
 ## La fréquence de relevé des sources
@@ -104,8 +105,8 @@ le crawler interroge amuleapi plus souvent. Plus long, une source restée moins 
 l'intervalle peut passer inaperçue. Si vous le changez, ajustez aussi
 [l'écart qui coupe une période](#lécart-qui-coupe-une-période-de-source).
 
-Une valeur nulle, négative, infinie, `.nan` ou supérieure à un an (31536000) est refusée au
-démarrage, avec un message qui nomme la clé. La valeur est lue au démarrage : relancez le crawler
+Une valeur nulle, négative, infinie, `.nan` ou supérieure à un jour (`86400`) est refusée au
+démarrage, avec un message qui nomme la clé ([Les bornes des durées](#les-bornes-des-durées)). La valeur est lue au démarrage : relancez le crawler
 après l'avoir changée.
 
 ## L'écart qui coupe une période de source
@@ -122,6 +123,23 @@ fusionné est coupé par l'écart du nœud qui l'affiche : les points d'un nœud
 y apparaissent en périodes d'un seul point, et augmenter l'écart les réunit. La clé vaut aussi sur un
 nœud qui ne télécharge pas, puisqu'il peut afficher un catalogue fusionné.
 
-Une valeur nulle, négative, infinie, `.nan` ou supérieure à un an (31536000) est refusée au
-démarrage, avec un message qui nomme la clé. La valeur est lue au démarrage : relancez le crawler
+Une valeur nulle, négative, infinie, `.nan` ou supérieure à un jour (`86400`) est refusée au
+démarrage, avec un message qui nomme la clé ([Les bornes des durées](#les-bornes-des-durées)). La valeur est lue au démarrage : relancez le crawler
 après l'avoir changée.
+
+## Les bornes des durées
+
+Chaque durée de `crawler.yml` est un nombre de secondes strictement positif et fini, et borné : un
+jour pour un délai, 30 jours pour une absence. Au-delà, le crawler refuse de démarrer, avec un
+message qui nomme la clé et sa borne.
+
+| Clé | Borne |
+|---|---|
+| `shutdown_deadline_seconds` | 1 jour (`86400`) |
+| `backoff.base_seconds`, `backoff.cap_seconds` | 1 jour (`86400`) |
+| `observability.notification_timeout_seconds` | 1 jour (`86400`) |
+| `download.poll_interval_seconds` | 1 jour (`86400`) |
+| `download.sources_interval_seconds` | 1 jour (`86400`) |
+| `webui.source_period_gap_seconds` | 1 jour (`86400`) |
+| `download.lost_after_seconds` | 30 jours (`2592000`) |
+| `download.reappeared_after_seconds` | 30 jours (`2592000`) |
