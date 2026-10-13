@@ -56,6 +56,8 @@ Goals:
 ## 2. Non-goals
 
 - **Search observations are unchanged**: their tables, writer and readers stay as stage 1 left them.
+  (Corrected: their tables and writer are unchanged; the file page's "Observations" timeline is
+  read within D6's interval, block 20, operator 2026-10-13.)
 - **No retention bound**, as before.
 - **No identity for an NMDC source**: stage 4's D2 stands. (The draft checked AirDC++'s API on 2026-10-13: it
   exposes no "registered" flag for a hub user, and an NMDC `cid` is a local hash of nick and hub.)
@@ -132,7 +134,7 @@ CREATE TABLE source_observations (
 - **The reads' spacing** is taken as `sources_interval_seconds + poll_interval_seconds`: the step runs on the
   first round at least the interval after the last, and rounds come every poll plus the cycle's length, so two
   reads are between the interval and the interval plus a round apart. D4 and D6 derive their tolerance from
-  it. *Reason: with the poll added, 3 x the spacing tolerates one missed read for any interval, as long as a
+  it. (Corrected: D4 only; D6's tolerance is a webui setting, operator 2026-10-13.) *Reason: with the poll added, 3 x the spacing tolerates one missed read for any interval, as long as a
   cycle stays under half the spacing, which stage 4 already assumed of the poll.*
 - *Reason (operator, 2026-10-13): at 30 s, the 52 source rows of stage 4's probe (34.5 on average) make 55M
   points a year,
@@ -204,7 +206,9 @@ notified once. `source_alerts.source_alert` keeps its rule.
 - `(SELECT MAX(observed_at) FROM source_observations WHERE variant_id = v.variant_id AND observed_at <
   :round_started_at)`, over its useful and not-useful variants, answers step 2.
 
-The primary key `(variant_id, observed_at)` answers each by one seek. *Reason: a source read for a year has about
+The primary key `(variant_id, observed_at)` answers each by one seek. (Corrected: one statement answers
+both, each variant's `MAX(observed_at)` before the round with its role, grouped in Python; a source decided
+once is not asked again in the round, since the answer cuts at `round_started_at`. Block 10's report.) *Reason: a source read for a year has about
 100k points. The join form, `MAX(o.observed_at)` over `source_variants JOIN source_observations`, plans as the same
 `SEARCH` yet reads every earlier point of each variant (2.7 ms against 0.1 ms at a year, the spec review's bench),
 so the plan alone does not tell them apart.*
@@ -216,12 +220,19 @@ The file page's "Source history", the source page and the name page show periods
 - **A period** joins consecutive points of one identity on one file and one node (stage 4's identity: the
   `source_id`, or the name without one), ordered by time, and is cut where the variant changes, where the gap
   passes the tolerance (D4's, from the same two keys of `crawler.yml`, which the composition passes to the
-  webui), or where the counter drops. It shows first and last seen, the variant's columns and its node.
+  webui), or where the counter drops. (Corrected: the tolerance is a reading option,
+  `webui.source_period_gap_seconds` beside `webui.enabled`, a positive finite number like every number of
+  `crawler.yml`, default 990, which is 3 x (300 + 30), the writer's tolerance at the shipped defaults. It
+  exists in every run mode, so a crawl-only node, which reads no source, has one too; the composition
+  passes it to the webui, which never reads the download section for it. Operator, 2026-10-13, on block
+  10's question.) It shows first and last seen, the variant's columns and its node.
   *Reason: joined per variant, `queued`, `sending`, `queued` would make one `queued` period over the `sending`
   one, and `sending`, `standby`, `sending` one `sending` period counting the bytes of the file the source sent
   meanwhile.*
 - **The tolerance is the displaying node's**: a merged catalog holding a node that reads at another interval
-  shows its reads cut by this node's tolerance, as one-point periods when that node reads more rarely. An
+  shows its reads cut by this node's tolerance, as one-point periods when that node reads more rarely.
+  (Corrected: the displaying node's `webui.source_period_gap_seconds`, which its operator may raise for
+  such a catalog.) An
   accepted limit (section 8): the points stay exact, and a merged catalog is read by its operator.
 - **Received bytes**, on a `sending` period only, are the counter's growth from its first point to its last;
   the rate divides it by the period's length (`webui/domain/format.py`, `average_rate`). *Reason: stage 4's
@@ -240,7 +251,10 @@ The file page's "Source history", the source page and the name page show periods
   ending at its `to`, and the page says so. One sentence above the table says that periods are cut at the
   interval's edges; no row is marked, since telling a cut period needs a point beyond the edge, one more seek per
   identity and edge for a minor fact (operator, 2026-10-13). *Reason: a researcher looks at a moment, not at
-  page 4; 7 days is the ceiling that keeps a display under half a second.*
+  page 4; 7 days is the ceiling that keeps a display under half a second.* (Corrected: the interval also
+  bounds the file page's search "Observations" timeline, one interval for the whole file page; the
+  timeline reads `observations` per variant of the file with `observed_at` within `from` and `to`, a seek on
+  the primary key, no new index. Operator, 2026-10-13.)
 - **The lists stay paged**: `/sources` and the source and name pages' pair lists count files and take
   the latest point by the per-variant form of D5, never by aggregating every point of the catalog (418 ms
   against 1.0 ms at a year in the spec review's bench, and `/sources` runs it twice a request). A source's
@@ -281,7 +295,9 @@ The file page's "Source history", the source page and the name page show periods
 - `docs/legal.md:25` ("les plages de temps") says the reads; `merge/__main__.py:33`'s `--help` loses "source
   ranges united".
 - `docs/index.md:77-81` loses the merge limit; `docs/settings.md` gains `download.sources_interval_seconds`;
-  `deploy/crawler.yml` gains it, commented as its neighbours are.
+  `deploy/crawler.yml` gains it, commented as its neighbours are. (Corrected: `docs/settings.md` also
+  documents `webui.source_period_gap_seconds`, which `deploy/crawler.yml` gains in block 10, beside
+  `webui.enabled`; `decision_poll_interval_seconds` leaves the docs, block 30.)
 
 ## 4. Measurements
 
@@ -336,7 +352,7 @@ Sizes are estimates from stage 4's blocks over the same files. Each block measur
 | # | Branch | Goal | Est. lines / files |
 |---|---|---|---|
 | 10 | `feat/source-observations` | The switch: D2's tables and 0011 (D8), D4's writer, D5's reads, D7's `merge`, D6's periods over the last 7 days | 950 / 22 |
-| 20 | `feat/webui-source-interval` | D6's interval selector, presets, Previous and Next, the 7-day cut | 380 / 9 |
+| 20 | `feat/webui-source-interval` | D6's interval selector, presets, Previous and Next, the 7-day cut | 380 / 9 (Corrected: about 480 with the bounded timeline) |
 | 30 | `feat/sources-interval` | D3: the key, the step's cadence, the tolerance from the spacing | 260 / 9 |
 | 40 | `docs/append-only-sources` | D9 | 200 / 10 |
 | 50 | `docs/source-points-closing` | Closing | 80 / 4 |
@@ -358,9 +374,13 @@ sake alone, the split the operator refused for the draft's search switch (2026-1
     renamed in its docstrings only;
   - `merge/merger.py`: D7; `merge/__main__.py`'s `--help`;
   - `composition/app.py`: the repository and the webui constructed with the poll, until block 30;
+    (Corrected: the repository only; the webui gets `webui.source_period_gap_seconds`;)
   - `webui/adapters/catalog_read.py`, `webui/domain/views.py`, `webui/composition/app.py`: D6's periods over a
     fixed last 7 days, the tolerance passed in, until block 30 from `3 x poll_interval_seconds`; the period
-    tables lose their `page` parameter;
+    tables lose their `page` parameter; (Corrected: the tolerance from `webui.source_period_gap_seconds`
+    for good, so block 30 does not touch it;)
+  - (Corrected: `WebuiConfig.source_period_gap` and `_parse_webui` in `adapters/config/crawler_config.py`,
+    `deploy/crawler.yml`, `test_crawler_config.py`;)
   - tests: `test_migration_0010.py` pinned at version 10, a `test_migration_0011.py`, `test_source_writer.py`,
     `test_source_repository.py`, `test_run_download_cycle.py`, `test_merger.py` and `merge/helpers.py`,
     `test_webui_catalog_read.py`, `test_webui_app.py`, `test_append_only.py`, `tests/catalog_rows.py`,
@@ -370,10 +390,16 @@ sake alone, the split the operator refused for the draft's search switch (2026-1
   - the selector, presets, Previous and Next in `file_detail.html`, `source_detail.html` and `source_name.html`,
     within the template guard (no `{% if %}`: stage 4's handoff, "Pitfalls");
   - `test_webui_app.py`, `test_webui_format.py` or a new domain test, the templates' check.
+  - (Corrected: the file page's "Observations" timeline read within the interval, `sightings.py`'s timeline
+    query and its caller, and its test.)
 - **30**:
   - `DownloadConfig.sources_interval_seconds`, `_parse_download`, `deploy/crawler.yml`;
   - the sources step's cadence in `run_download_cycle.py`, the last run held in `DownloadDeps` or the loop;
-  - the spacing (D3) handed to the repository and to the webui instead of the poll.
+  - the spacing (D3) handed to the repository and to the webui instead of the poll. (Corrected: to the
+    repository only, the webui having its own setting since block 10.)
+  - (Corrected: `decision_poll_interval_seconds`, at the root of `crawler.yml`, is parsed and required but
+    read by nothing: it joins `_REMOVED_KEYS` and leaves `CrawlerConfig`, `deploy/crawler.yml` and the docs.
+    Operator, 2026-10-13.)
 - **40**: D9's documents.
 - **50**: the closing block (`agents/workflow.md`, Wrap), which adds section 9's and the time zone's
   `BACKLOG.md` entries.
@@ -386,7 +412,8 @@ sake alone, the split the operator refused for the draft's search switch (2026-1
 
 ### Surfaces whose consumer arrives in a later block
 
-None: block 10's tolerance reads the poll interval until block 30 hands it the spacing.
+None: block 10's tolerance reads the poll interval until block 30 hands it the spacing. (Corrected: the
+writer's tolerance; the webui's is its own setting from block 10.)
 
 ### Transient states inside the stack
 
@@ -401,6 +428,7 @@ None: block 10's tolerance reads the poll interval until block 30 hands it the s
   spec's section 4 as its reason.
 - **"Merge diverged copies of one node's catalog"**: closed by D7; deleted at Wrap.
 - **"Paginate the file detail timeline"**: stays open; this lot leaves search observations as they are.
+  (Corrected: closed by block 20, which bounds the timeline by the page's interval; deleted at Wrap.)
 - **"Sort the files view by first seen"**: stays open; it touches `/files`, which this lot does not.
 - **Stage 5**: stays open; its clients feed D2's tables through `SourceReading`, at D3's interval.
 - **The webui in the visitor's time zone**: a new entry, agreed by the operator (2026-10-13), added at Wrap. The
@@ -408,6 +436,9 @@ None: block 10's tolerance reads the poll interval until block 30 hands it the s
   date's own day); it needs `AGENTS.md`'s "Python only" amended and a JS test chain. This lot stays in UTC.
 - **A copy before a migration that rewrites rows**: a new entry, agreed by the operator (2026-10-13), added at
   Wrap, linking section 9; required before the next release.
+- (Corrected: **`backoff` under the search config**: a new entry, agreed by the operator (2026-10-13), added
+  at Wrap. `backoff` sits at the root of `crawler.yml` but only search reads it (`BackoffRegistry`); it moves
+  under the per-client search config with stage 5.)
 
 ## 7. Acceptance
 
@@ -439,11 +470,16 @@ Each criterion names the output that would prove it wrong. Every test is watched
 - **D6's selector** (block 20): `from` and `to` 3 days apart show the points of those 3 days only; Previous moves
   both 3 days back and Next 3 days forward; 30 days requested show the 7 days ending at `to` and say so; no
   parameter shows the last 7 days; a period crossing `from` starts at the first point inside the interval.
+  (Corrected: a timeline over 7 days shows only those 7 days' observations; the same read without the
+  bound fails it.)
 - **D7** (block 10): two catalogs sharing a variant and holding different points merge, in either order, into
   the union; re-merging either changes no row; the diverged-copy fixture merges; any `MergeError` fails it.
 - **D3** (block 30): with an interval of 300 s and a poll of 30 s on a fake clock, eleven rounds 30 s apart read
   sources at the first and the eleventh only; absent, the key gives 300; `0`, `-1`, `.inf` and `.nan` raise a
-  `ConfigError` naming `download.sources_interval_seconds`.
+  `ConfigError` naming `download.sources_interval_seconds`. (Corrected: a `crawler.yml` holding
+  `decision_poll_interval_seconds` raises the removed-key `ConfigError`.)
+- (Corrected: **`webui.source_period_gap_seconds`** (block 10): absent, the key gives 990; `0`, `-1`, `.inf`
+  and `.nan` raise a `ConfigError` naming it; the composition hands it to the webui in every run mode.)
 - **Docs** (block 40): `uv run poe docs-build` passes; `sed -n '77,81p' docs/index.md` and
   `sed -n '127,135p;210,215p' docs/operate.md` no longer state the merge limit nor a read at every poll;
   `git grep -n -i "sauf source_ranges\|but for
@@ -462,7 +498,8 @@ Each criterion names the output that would prove it wrong. Every test is watched
 - **A catalog that ran the `main` image since 2026-10-12 loses its stage 4 source rows** (D8).
 - **At-most-once events** and **a node stopped longer than 12 h**: stage 4's D9 limits, unchanged.
 - **A merged catalog's periods are cut with the displaying node's tolerance** (D6): another node's reads at a
-  longer interval show as one-point periods.
+  longer interval show as one-point periods. (Corrected: with the displaying node's
+  `webui.source_period_gap_seconds`, which its operator may raise.)
 
 ### Not measured before Act
 
