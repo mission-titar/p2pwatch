@@ -77,7 +77,7 @@ def test_coverage_exact_title_is_one_and_matches() -> None:
 
 def test_coverage_one_typo_within_fuzz_still_matches() -> None:
     matcher = CoverageMatcher("Les demoiselles cambrioleuses", min_coverage=0.6)
-    # "demoiseles" (one missing 'l') stays >= fuzz 0.85 vs "demoiselles".
+    # "demoiseles" (one missing 'l') stays >= min_similarity 0.85 vs "demoiselles".
     candidate = FileCandidate(filename="demoiseles cambrioleuses.avi")
     assert matcher.coverage(candidate) == 1.0
     assert matcher.matches(candidate) is True
@@ -99,7 +99,7 @@ def test_coverage_empty_reference_is_zero() -> None:
 
 
 def test_coverage_partial_fraction_at_min_boundary_matches() -> None:
-    # 1 significant token covered out of 2 -> value 0.5; min=0.5 -> match (>= inclusive).
+    # 1 significant word covered out of 2 -> coverage 0.5 >= min_coverage 0.5 -> match.
     matcher = CoverageMatcher("demoiselles cambrioleuses", min_coverage=0.5)
     candidate = FileCandidate(filename="demoiselles autre.avi")
     assert matcher.coverage(candidate) == 0.5
@@ -107,7 +107,7 @@ def test_coverage_partial_fraction_at_min_boundary_matches() -> None:
 
 
 def test_coverage_partial_fraction_below_min_does_not_match() -> None:
-    # Same value 0.5 but min=0.6 -> below the threshold -> no match (non-zero value).
+    # Same coverage 0.5 but min_coverage 0.6 -> below the threshold -> no match.
     matcher = CoverageMatcher("demoiselles cambrioleuses", min_coverage=0.6)
     candidate = FileCandidate(filename="demoiselles autre.avi")
     assert matcher.coverage(candidate) == 0.5
@@ -120,35 +120,35 @@ def test_attr_between_unknown_attr_raises() -> None:
     message = str(excinfo.value)
     assert "codec" in message
     # the message lists the valid attributes to guide the config author
-    assert "size_mb" in message
-    assert "duration_sec" in message
+    assert "size_mib" in message
+    assert "duration_seconds" in message
     assert "bitrate_kbps" in message
 
 
 def test_attr_between_absent_value_is_false() -> None:
-    matcher = AttrBetweenMatcher("size_mb", min_bound=30.0, max_bound=600.0)
+    matcher = AttrBetweenMatcher("size_mib", min_bound=30.0, max_bound=600.0)
     assert matcher.matches(FileCandidate(filename="x.avi")) is False
 
 
 def test_attr_between_in_range_is_true() -> None:
-    matcher = AttrBetweenMatcher("size_mb", min_bound=30.0, max_bound=600.0)
-    assert matcher.matches(FileCandidate(filename="x.avi", size_mb=120.0)) is True
+    matcher = AttrBetweenMatcher("size_mib", min_bound=30.0, max_bound=600.0)
+    assert matcher.matches(FileCandidate(filename="x.avi", size_mib=120.0)) is True
 
 
 def test_attr_between_below_min_is_false() -> None:
-    matcher = AttrBetweenMatcher("size_mb", min_bound=30.0, max_bound=600.0)
-    assert matcher.matches(FileCandidate(filename="x.avi", size_mb=10.0)) is False
+    matcher = AttrBetweenMatcher("size_mib", min_bound=30.0, max_bound=600.0)
+    assert matcher.matches(FileCandidate(filename="x.avi", size_mib=10.0)) is False
 
 
 def test_attr_between_above_max_is_false() -> None:
-    matcher = AttrBetweenMatcher("size_mb", min_bound=30.0, max_bound=600.0)
-    assert matcher.matches(FileCandidate(filename="x.avi", size_mb=900.0)) is False
+    matcher = AttrBetweenMatcher("size_mib", min_bound=30.0, max_bound=600.0)
+    assert matcher.matches(FileCandidate(filename="x.avi", size_mib=900.0)) is False
 
 
 def test_attr_between_open_lower_bound() -> None:
-    matcher = AttrBetweenMatcher("duration_sec", max_bound=1800.0)
-    assert matcher.matches(FileCandidate(filename="x.avi", duration_sec=10.0)) is True
-    assert matcher.matches(FileCandidate(filename="x.avi", duration_sec=2000.0)) is False
+    matcher = AttrBetweenMatcher("duration_seconds", max_bound=1800.0)
+    assert matcher.matches(FileCandidate(filename="x.avi", duration_seconds=10.0)) is True
+    assert matcher.matches(FileCandidate(filename="x.avi", duration_seconds=2000.0)) is False
 
 
 def test_attr_between_open_upper_bound() -> None:
@@ -158,5 +158,5 @@ def test_attr_between_open_upper_bound() -> None:
 
 
 def test_attr_between_no_bounds_accepts_any_present_value() -> None:
-    matcher = AttrBetweenMatcher("size_mb")
-    assert matcher.matches(FileCandidate(filename="x.avi", size_mb=1.0)) is True
+    matcher = AttrBetweenMatcher("size_mib")
+    assert matcher.matches(FileCandidate(filename="x.avi", size_mib=1.0)) is True

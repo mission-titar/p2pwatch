@@ -28,10 +28,11 @@ class RegexDef:
 
 @dataclass(frozen=True)
 class CoverageDef:
-    """``{ coverage: title, min: 0.6, fuzz: 0.85 }``: fuzzy token coverage.
+    """``{ coverage: title, min_coverage: 0.6, min_similarity: 0.85 }``: fuzzy word coverage.
 
     ``reference`` is the config keyword (``title`` = the target's title); bound to
-    ``target.title`` at resolution. ``min``/``fuzz`` overridable at point of use.
+    ``target.title`` at resolution. ``min_coverage``/``min_similarity`` overridable at point
+    of use.
     """
 
     reference: str
@@ -41,7 +42,7 @@ class CoverageDef:
 
 @dataclass(frozen=True)
 class AttrBetweenDef:
-    """``{ attr_between: size_mb, min: 30, max: 600 }``: bound on a numeric attribute."""
+    """``{ attr_between: size_mib, min: 30, max: 600 }``: bound on a numeric attribute."""
 
     attr: str
     min_bound: float | None = None
@@ -81,9 +82,9 @@ class NotDef:
 
 @dataclass(frozen=True)
 class TokenRef:
-    """Operand at point of use ``{ token: name, min?, fuzz? }`` (cf. EBNF §8.3).
+    """Operand at point of use ``{ token: name, min_coverage?, min_similarity? }`` (EBNF §8.3).
 
-    References a named token; non-null ``min``/``fuzz`` override the parameters of a
+    References a named token; non-null ``min_coverage``/``min_similarity`` override the ones of a
     ``coverage`` token (and ONLY coverage, validated at load time).
     """
 

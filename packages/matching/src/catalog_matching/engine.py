@@ -97,8 +97,8 @@ def _first_matching_rule(
     """1st rule true for (candidate, resolved target) → ``(index, name, tier)`` (§8.5).
 
     Walks ``config.rules`` IN ORDER (index = position = priority); for each rule, evaluates
-    the already-built tree ``resolved.rules[rule.name]``. Returns the 1st match; ``None`` if
-    no rule matches (the target contributes nothing).
+    the already-built tree ``resolved.matcher_by_rule_name[rule.name]``. Returns the 1st
+    match; ``None`` if no rule matches (the target contributes nothing).
     """
     for index, rule in enumerate(config.rules):
         if resolved.matcher_by_rule_name[rule.name].matches(candidate):

@@ -6,7 +6,7 @@ The core is one layered, declarative matching engine under `src/catalog_matching
 load_yaml(path)                         # adapters/config/yaml_loader.py: the ONLY I/O
   → parse_matcher_config / parse_targets   # validation.py: schema + fail-fast graph validation:
   →                                        #   DAG/named-cycle, depth bound (32), regex compile-check,
-  →                                        #   unique target_id, closed tier/attr enums → ConfigError
+  →                                        #   unique target_id, closed tier/attr enums → MatchingConfigError
   → MatchingEngine(config, targets)        # engine.py: pre-resolves a matcher tree PER TARGET once
   → engine.evaluate(FileCandidate(...))    #   brute-force over all targets (no funnel)
        → MatchDecision(target_id, rule_name, tier, explanation)  |  None  (file discarded)

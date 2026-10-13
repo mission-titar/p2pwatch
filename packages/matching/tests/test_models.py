@@ -4,20 +4,20 @@ from catalog_matching.models import FileCandidate, TargetSegment
 def test_file_candidate_defaults() -> None:
     candidate = FileCandidate(filename="keroro.avi")
     assert candidate.filename == "keroro.avi"
-    assert candidate.size_mb is None
-    assert candidate.duration_sec is None
+    assert candidate.size_mib is None
+    assert candidate.duration_seconds is None
     assert candidate.bitrate_kbps is None
 
 
 def test_file_candidate_with_attributes() -> None:
     candidate = FileCandidate(
         filename="keroro.avi",
-        size_mb=120.0,
-        duration_sec=1320.0,
+        size_mib=120.0,
+        duration_seconds=1320.0,
         bitrate_kbps=900.0,
     )
-    assert candidate.size_mb == 120.0
-    assert candidate.duration_sec == 1320.0
+    assert candidate.size_mib == 120.0
+    assert candidate.duration_seconds == 1320.0
     assert candidate.bitrate_kbps == 900.0
 
 

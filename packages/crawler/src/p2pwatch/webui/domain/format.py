@@ -27,11 +27,11 @@ _TIB = _GIB * 1024
 def human_size(size_bytes: int) -> str:
     """Human-readable file size, e.g. ``349 MB``.
 
-    Unit convention: BINARY (1024-based) — matching this codebase's existing ``size_mb``
-    convention (the matching engine's ``attr_between`` on ``size_mb`` is computed as
+    Unit convention: BINARY (1024-based), matching this codebase's existing ``size_mib``
+    convention (the matching engine's ``attr_between`` on ``size_mib`` is computed as
     ``size_bytes / (1024 * 1024)``, cf. ``adapters/matching_read.py``: "binary Mio"). The
     ``KB``/``MB``/``GB``/``TB`` labels are the familiar (if technically imprecise) ones, not
-    ``KiB``/``MiB``/``GiB``/``TiB``. Rounds to the nearest whole unit — an operator-facing
+    ``KiB``/``MiB``/``GiB``/``TiB``. Rounds to the nearest whole unit: an operator-facing
     display, not a precise byte count.
 
     The unit is picked on the ROUNDED value, not the raw byte count: e.g. ``1024**2 - 1``

@@ -14,14 +14,14 @@ _CANONICAL_RAW: dict[str, object] = {
         "titar": {"keyword": "titar"},
         "keroro_titar": {"any": ["keroro", "titar"]},
         "teletoon": {"regex": "t[eé]l[eé]toon"},
-        "segment_id": {"regex": r"n[°o]?\s*0*{absolute_number}\s*{segment}"},
+        "segment_id": {"regex": r"n[°o]?\s*0*{absolute_number}\s*{letter}"},
         "foreign_lang": {
             "regex": (
                 r"\b(ITA|KOR|Korean|Italiano|Coreano|VOSTFR|VOSTA|Subs?FR|"
                 r"Espa[nñ]ol|English\s?Dub|ENG)\b"
             ),
         },
-        "title_hit": {"coverage": "title", "min": 0.6},
+        "title_hit": {"coverage": "title", "min_coverage": 0.6},
         "is_video": {"regex": r"\.(avi|mkv|mp4|mpg|ogm)$"},
     },
     "vetoes": ["foreign_lang"],
@@ -36,13 +36,13 @@ _CANONICAL_RAW: dict[str, object] = {
             "name": "teletoon_titre",
             "tier": "download",
             "scope": "segment",
-            "all": ["teletoon", {"token": "title_hit", "min": 0.6}],
+            "all": ["teletoon", {"token": "title_hit", "min_coverage": 0.6}],
         },
         {
             "name": "numero_titre",
             "tier": "notify",
             "scope": "segment",
-            "all": ["segment_id", {"token": "title_hit", "min": 0.5}],
+            "all": ["segment_id", {"token": "title_hit", "min_coverage": 0.5}],
         },
         {
             "name": "keroro_large",

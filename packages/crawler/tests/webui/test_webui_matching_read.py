@@ -94,12 +94,12 @@ def test_explainer_returns_none_for_unknown_target() -> None:
 
 
 def test_explainer_size_bytes_converted_to_mb() -> None:
-    """size_bytes → size_mb via Mio conversion (1024*1024).
+    """size_bytes → size_mib via MiB conversion (1024*1024).
 
     We verify the FileCandidate is built without error with size_bytes provided.
-    An attr_between matcher on size_mb lets us verify the passed value.
+    An attr_between matcher on size_mib lets us verify the passed value.
     """
-    # Matcher with an attr_between token on size_mb: exactly 100 MiB
+    # Matcher with an attr_between token on size_mib: exactly 100 MiB
     matcher_config = parse_matcher_config(
         yaml.safe_load(
             """\
@@ -107,7 +107,7 @@ tokens:
   keroro:
     keyword: keroro
   size_ok:
-    attr_between: size_mb
+    attr_between: size_mib
     min: 99.9
     max: 100.1
 rules:
@@ -139,7 +139,7 @@ rules:
 
 def test_explainer_media_length_and_bitrate_forwarded() -> None:
     """duration_seconds and bitrate_kbps are forwarded as-is to the FileCandidate."""
-    # Matcher with attr_between on duration_sec and bitrate_kbps
+    # Matcher with attr_between on duration_seconds and bitrate_kbps
     matcher_config = parse_matcher_config(
         yaml.safe_load(
             """\
@@ -147,7 +147,7 @@ tokens:
   keroro:
     keyword: keroro
   dur_ok:
-    attr_between: duration_sec
+    attr_between: duration_seconds
     min: 1300.0
     max: 1400.0
   bit_ok:
@@ -217,7 +217,7 @@ tokens:
   ita:
     regex: "\\\\bITA\\\\b"
   big:
-    attr_between: size_mb
+    attr_between: size_mib
     min: 99.9
 vetoes: [ita]
 rules:

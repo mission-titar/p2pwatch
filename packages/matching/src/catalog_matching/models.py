@@ -18,8 +18,8 @@ class FileCandidate:
     """
 
     filename: str
-    size_mb: float | None = None
-    duration_sec: float | None = None
+    size_mib: float | None = None
+    duration_seconds: float | None = None
     bitrate_kbps: float | None = None
 
 
@@ -27,7 +27,7 @@ class FileCandidate:
 class TargetSegment:
     """A target episode segment (segment granularity, cf. spec §7).
 
-    Provides ``{season} {seasonal_number} {absolute_number} {segment} {title}`` to the
+    Provides ``{season} {seasonal_number} {absolute_number} {letter} {title}`` to the
     interpolation of regex patterns.
     """
 

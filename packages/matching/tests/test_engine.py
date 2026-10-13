@@ -82,7 +82,7 @@ _TARGET_62A = TargetSegment(
 _TWO_RULE_RAW: dict[str, object] = {
     "tokens": {
         "is_video": {"regex": r"\.(avi|mkv)$"},
-        "seg": {"regex": r"n[°o]?\s*0*{absolute_number}\s*{segment}"},
+        "seg": {"regex": r"n[°o]?\s*0*{absolute_number}\s*{letter}"},
         "keroro": {"keyword": "keroro"},
     },
     "rules": [
@@ -199,8 +199,8 @@ def test_evaluate_tiebreak_same_tier_lowest_target_id_wins() -> None:
 _INDEX_TIEBREAK_RAW: dict[str, object] = {
     "tokens": {
         "is_video": {"regex": r"\.(avi|mkv)$"},
-        "seg": {"regex": r"n[°o]?\s*0*{absolute_number}\s*{segment}"},
-        "title_hit": {"coverage": "title", "min": 0.6},
+        "seg": {"regex": r"n[°o]?\s*0*{absolute_number}\s*{letter}"},
+        "title_hit": {"coverage": "title", "min_coverage": 0.6},
     },
     "rules": [
         {
@@ -213,7 +213,7 @@ _INDEX_TIEBREAK_RAW: dict[str, object] = {
             "name": "by_title",
             "tier": "download",
             "scope": "unattributed",
-            "all": ["is_video", {"token": "title_hit", "min": 0.6}],
+            "all": ["is_video", {"token": "title_hit", "min_coverage": 0.6}],
         },
     ],
 }
@@ -300,7 +300,7 @@ def test_explanation_single_rule_fired_and_no_coverage_token() -> None:
     raw: dict[str, object] = {
         "tokens": {
             "is_video": {"regex": r"\.(avi|mkv)$"},
-            "seg": {"regex": r"n[°o]?\s*0*{absolute_number}\s*{segment}"},
+            "seg": {"regex": r"n[°o]?\s*0*{absolute_number}\s*{letter}"},
         },
         "rules": [
             {
@@ -469,7 +469,7 @@ def test_evaluate_all_of_no_name_is_a_discard() -> None:
 _SCOPE_RAW: dict[str, object] = {
     "tokens": {
         "is_video": {"regex": r"\.(avi|mkv)$"},
-        "lettered": {"regex": r"n°0*{absolute_number}{segment}"},
+        "lettered": {"regex": r"n°0*{absolute_number}{letter}"},
         "bare": {"regex": r"\b0*{absolute_number}\b"},
         "keroro": {"keyword": "keroro"},
     },
