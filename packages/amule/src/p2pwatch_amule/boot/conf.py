@@ -4,10 +4,11 @@ import configparser
 import io
 
 CONFIG_DIR = "/home/amule/.aMule"
+AMULE_CONF_PATH = f"{CONFIG_DIR}/amule.conf"
 INCOMING_DIR = "/downloads/incoming"
 TEMP_DIR = "/downloads/temp"
 # aMule's DEFAULT_TCP_PORT (src/Preferences.cpp), what amuled binds when `Port` is absent.
-DEFAULT_PORT = 4662
+DEFAULT_TCP_PORT = 4662
 
 
 class _CaseSensitiveParser(configparser.RawConfigParser):
@@ -16,15 +17,15 @@ class _CaseSensitiveParser(configparser.RawConfigParser):
         return optionstr
 
 
-def reconcile_conf(existing: str | None, ec_digest: str) -> str:
-    """Return `existing` (None when absent) with our keys reconciled, every other key kept."""
+def reconcile_conf(existing_conf: str | None, ec_digest: str) -> str:
+    """Return `existing_conf` (None when absent) with our keys reconciled, every other key kept."""
     parser = _parser()
-    if existing is None:
+    if existing_conf is None:
         # An absent key takes aMule's declared default: only the wrong ones go in (ECPort is fine).
         parser["eMule"] = {"IncomingDir": INCOMING_DIR, "TempDir": TEMP_DIR}
         parser["ExternalConnect"] = {"AcceptExternalConnections": "1"}
     else:
-        parser.read_string(existing)
+        parser.read_string(existing_conf)
 
     # Reconciled on EVERY boot: a stale digest locks amuleapi out of a healthy-looking daemon, and
     # a moved HttpPort leaves the published 4711 dead. Operator comments are lost on rewrite.
@@ -39,11 +40,11 @@ def reconcile_conf(existing: str | None, ec_digest: str) -> str:
     return _written(parser)
 
 
-def listen_port(conf: str) -> int:
+def tcp_listen_port(conf: str) -> int:
     """Return the TCP port amuled binds, `[eMule] Port`."""
     parser = _parser()
     parser.read_string(conf)
-    return parser.getint("eMule", "Port", fallback=DEFAULT_PORT)
+    return parser.getint("eMule", "Port", fallback=DEFAULT_TCP_PORT)
 
 
 def with_listen_port(conf: str, port: int) -> str:

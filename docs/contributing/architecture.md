@@ -73,7 +73,7 @@ Conséquences de cette forme, chacune porteuse ailleurs dans ce document :
 - **Les conteneurs démarrent sans ordre** (pas de `depends_on` entre eux), donc le crawler frappe
   couramment à la porte avant qu'`amuled` n'ait démarré `amuleapi` ; « démon injoignable au
   démarrage » est toléré et absorbé par le backoff.
-- **Le PID 1 d'`ed2k` est root** (son one-shot `p2pwatch_amule.config` crée l'utilisateur `amule`
+- **Le PID 1 d'`ed2k` est root** (son one-shot `p2pwatch_amule.boot` crée l'utilisateur `amule`
   depuis `PUID`/`PGID` et prend les bind mounts), puis chaque service abandonne ses privilèges avec
   `setpriv`. Le cœur n'a ni point d'entrée ni root : `user:` dans `compose.yml` suffit à ce que
   `data/` reste à l'opérateur. Les deux gardent `no-new-privileges`, `pids_limit` et `mem_limit`,
@@ -106,7 +106,7 @@ flowchart RL
 | Paquet | Dist | Rôle |
 |---|---|---|
 | `p2pwatch` | `p2pwatch` | **Crawler** : pilote `amuled` par amuleapi, fait tourner les boucles de recherche et de téléchargement, la persistance, l'observabilité. Contient le sous-paquet webui in-process `p2pwatch.webui` (visualiseur de catalogue en lecture seule). |
-| `p2pwatch_amule` | `p2pwatch-amule` | **Le conteneur d'aMule**, bibliothèque standard seule : son one-shot de démarrage (`p2pwatch_amule.config`) et le port-sync (`p2pwatch_amule.port_sync`, §9). |
+| `p2pwatch_amule` | `p2pwatch-amule` | **Le conteneur d'aMule**, bibliothèque standard seule : son one-shot de démarrage (`p2pwatch_amule.boot`) et le port-sync (`p2pwatch_amule.port_sync`, §9). |
 | `catalog_matching` | `catalog-matching` | **Moteur de matching** (bibliothèque partagée) : politique déclarative fichier vers épisode. Importé par le crawler et par la webui. |
 | `vex_guards` | `vex-guards` | **Outillage dev/CI** : garde honnêtes nos affirmations OpenVEX. Jamais livré dans une image de prod. |
 | `amule_bump` | `amule-bump` | **Outillage CI** : monte l'épingle d'aMule et rédige la PR ([Mettre à jour aMule](amule-bump.md)). Jamais livré dans une image de prod. |

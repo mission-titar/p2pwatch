@@ -1,4 +1,4 @@
-"""Entry point `python -m p2pwatch_amule.config`: run once by the entrypoint, as root.
+"""Entry point `python -m p2pwatch_amule.boot`: run once by the entrypoint, as root.
 
 Before any change, exits naming the first variable missing or invalid, port-sync's included.
 """
@@ -13,11 +13,17 @@ import sys
 import unicodedata
 from collections.abc import Callable
 
-from p2pwatch_amule.config.conf import CONFIG_DIR, INCOMING_DIR, TEMP_DIR, reconcile_conf
+from p2pwatch_amule.boot.conf import (
+    AMULE_CONF_PATH,
+    CONFIG_DIR,
+    INCOMING_DIR,
+    TEMP_DIR,
+    reconcile_conf,
+)
 from p2pwatch_amule.port_sync import settings
 
 HOME_DIR = "/home/amule"
-PORT_SYNC_DOWN = "/etc/services.d/port-sync/down"
+PORT_SYNC_DOWN_FILE = "/etc/services.d/port-sync/down"
 
 
 def _required(name: str) -> str:
@@ -43,7 +49,7 @@ def _required_id(name: str) -> int:
     return int(value)
 
 
-def _missing(lookup: Callable[[str], object]) -> bool:
+def _amule_account_missing(lookup: Callable[[str], object]) -> bool:
     try:
         lookup("amule")
     except KeyError:
@@ -56,37 +62,36 @@ def main() -> None:
     pgid = _required_id("PGID")
     ec_password = _password("AMULE_EC_PASSWORD")
     api_password = _password("AMULE_API_PASSWORD")
-    port_sync = settings.enabled(os.environ)
-    if port_sync:
+    port_sync_enabled = settings.enabled(os.environ)
+    if port_sync_enabled:
         settings.load(os.environ)
 
     # -o tolerates a uid/gid a Debian system account already holds: PUID/PGID only have to match
     # the host's ownership of the bind mounts.
-    if _missing(grp.getgrnam):
+    if _amule_account_missing(grp.getgrnam):
         subprocess.run(["groupadd", "-o", "-g", str(pgid), "amule"], check=True)
-    if _missing(pwd.getpwnam):
+    if _amule_account_missing(pwd.getpwnam):
         useradd = ["useradd", "-o", "-u", str(puid), "-g", str(pgid), "-M", "-d", HOME_DIR]
         subprocess.run([*useradd, "-s", "/usr/sbin/nologin", "amule"], check=True)
 
     # Not recursive: the mounts can hold hundreds of gigabytes of part files the operator owns.
-    owned = [HOME_DIR, CONFIG_DIR, INCOMING_DIR, TEMP_DIR]
-    for directory in owned:
+    owned_directories = [HOME_DIR, CONFIG_DIR, INCOMING_DIR, TEMP_DIR]
+    for directory in owned_directories:
         os.makedirs(directory, exist_ok=True)
-    for directory in owned:
+    for directory in owned_directories:
         os.chown(directory, puid, pgid)
 
-    conf_path = os.path.join(CONFIG_DIR, "amule.conf")
     try:
-        with open(conf_path) as handle:
-            existing: str | None = handle.read()
+        with open(AMULE_CONF_PATH) as handle:
+            existing_conf: str | None = handle.read()
     except OSError:
-        existing = None
+        existing_conf = None
     # ECPassword is read as-is (only the GUI hashes what you type): the file holds the digest.
     digest = hashlib.md5(ec_password.encode()).hexdigest()
-    with open(conf_path, "w") as handle:
-        handle.write(reconcile_conf(existing, digest))
-    os.chown(conf_path, puid, pgid)
-    os.chmod(conf_path, 0o600)
+    with open(AMULE_CONF_PATH, "w") as handle:
+        handle.write(reconcile_conf(existing_conf, digest))
+    os.chown(AMULE_CONF_PATH, puid, pgid)
+    os.chmod(AMULE_CONF_PATH, 0o600)
 
     # A non-loopback BindAddress needs an admin password or amuleapi refuses to start. Run as
     # amule so amuleapi-passwords (0600) lands with the ownership amuled's amuleapi expects.
@@ -101,10 +106,10 @@ def main() -> None:
     )
 
     # s6's own way to keep a service down: its run script never starts.
-    if port_sync:
-        pathlib.Path(PORT_SYNC_DOWN).unlink(missing_ok=True)
+    if port_sync_enabled:
+        pathlib.Path(PORT_SYNC_DOWN_FILE).unlink(missing_ok=True)
     else:
-        pathlib.Path(PORT_SYNC_DOWN).touch()
+        pathlib.Path(PORT_SYNC_DOWN_FILE).touch()
 
 
 if __name__ == "__main__":  # pragma: no cover
