@@ -333,7 +333,7 @@ async def test_search_returns_the_results_with_their_keyword_and_counts_what_it_
 
     assert len(observations) == 501
     assert {observation.keyword for observation in observations} == {"keroro"}
-    assert client.skipped_entries_total == 1
+    assert client.skipped_results == 1
 
 
 @pytest.mark.asyncio

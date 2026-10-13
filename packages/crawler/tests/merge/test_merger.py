@@ -276,7 +276,7 @@ def test_t16_merger_wraps_source_copy_in_a_transaction(tmp_path: Path) -> None:
     merge_catalogs(out, [good])  # the good source first, in its own successful merge.
 
     with pytest.raises(MergeError, match="copy of .* failed"):
-        merge_catalogs(out, [broken], dest_is_source=False)
+        merge_catalogs(out, [broken], output_is_source=False)
 
     # files (1st table) may have been copied BEFORE the failure on observation_variants (missing
     # table); the ROLLBACK must have undone it → the output still has ONLY the content of `good`.

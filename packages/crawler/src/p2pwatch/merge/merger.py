@@ -120,7 +120,7 @@ JOIN main.source_variants AS d ON d.content_hash = s.content_hash
 """
 
 # MANDATORY FK order (spec §4.3): the identities (files) BEFORE the journals that reference them.
-_STATEMENTS = (
+_COPY_STATEMENTS = (
     _COPY_FILES,
     _COPY_VARIANTS,
     _COPY_OBSERVATIONS,
@@ -131,13 +131,15 @@ _STATEMENTS = (
 )
 
 
-def merge_catalogs(output: Path, sources: Sequence[Path], *, dest_is_source: bool = False) -> None:
-    """Merges ``sources`` into ``output``, idempotent.
+def merge_catalogs(
+    output: Path, source_catalogs: Sequence[Path], *, output_is_source: bool = False
+) -> None:
+    """Merges ``source_catalogs`` into ``output``, idempotent.
 
     ``output`` is opened via ``open_catalog``: a new file gets the schema + the triggers, an
     existing older catalog is first migrated in place, and the merge APPENDS (never a truncate).
 
-    ``dest_is_source`` (``--into`` mode): the output is itself one of the ``sources``;
+    ``output_is_source`` (``--into`` mode): the output is itself one of the ``source_catalogs``;
     we do not re-attach to ourselves (idempotence guarantees we duplicate nothing there),
     so we skip the source whose path resolves to ``output``.
 
@@ -158,15 +160,17 @@ def merge_catalogs(output: Path, sources: Sequence[Path], *, dest_is_source: boo
         # it back rather than hardcode it, so this tracks the migration set automatically.
         expected_version = int(connection.execute("PRAGMA user_version").fetchone()[0])
         output_resolved = Path(output).resolve()
-        for source in sources:
-            if not (dest_is_source and Path(source).resolve() == output_resolved):
-                _merge_one(connection, source, expected_version)
+        for source_catalog in source_catalogs:
+            if not (output_is_source and Path(source_catalog).resolve() == output_resolved):
+                _merge_catalog(connection, source_catalog, expected_version)
     finally:
         connection.close()
 
 
-def _merge_one(connection: sqlite3.Connection, source: Path, expected_version: int) -> None:
-    """Attaches ``source``, copies its tables in ONE transaction, detaches.
+def _merge_catalog(
+    connection: sqlite3.Connection, source_catalog: Path, expected_version: int
+) -> None:
+    """Attaches ``source_catalog``, copies its tables in ONE transaction, detaches.
 
     ``ATTACH``/``DETACH`` are OUTSIDE a transaction (SQLite refuses to attach inside an
     open transaction). Right after the attach, BEFORE the ``BEGIN``, we reject any source
@@ -178,26 +182,26 @@ def _merge_one(connection: sqlite3.Connection, source: Path, expected_version: i
     try:
         # RESOLVED path (consistent with the --into skip that compares ``Path.resolve()``):
         # avoids a self-attach if the same DB is passed under two path forms.
-        connection.execute(f"ATTACH DATABASE ? AS {_SRC}", (str(Path(source).resolve()),))
+        connection.execute(f"ATTACH DATABASE ? AS {_SRC}", (str(Path(source_catalog).resolve()),))
     except sqlite3.Error as error:
-        raise MergeError(f"cannot attach source {source}: {error}") from error
+        raise MergeError(f"cannot attach source {source_catalog}: {error}") from error
     try:
         source_version = int(connection.execute(f"PRAGMA {_SRC}.user_version").fetchone()[0])
         if source_version != expected_version:
             raise SchemaVersionMismatchError(
-                f"source {source} has catalog schema version {source_version}, "
+                f"source {source_catalog} has catalog schema version {source_version}, "
                 f"expected {expected_version} (the current schema); "
                 "merge refuses an out-of-version source (it never migrates a source in place)"
             )
         connection.execute("BEGIN")
         try:
-            for statement in _STATEMENTS:
+            for statement in _COPY_STATEMENTS:
                 connection.execute(statement)
             connection.execute("COMMIT")
         except sqlite3.Error as error:
             with suppress(sqlite3.Error):
                 connection.execute("ROLLBACK")
-            raise MergeError(f"copy of {source} failed: {error}") from error
+            raise MergeError(f"copy of {source_catalog} failed: {error}") from error
     finally:
         with suppress(sqlite3.Error):
             connection.execute(f"DETACH DATABASE {_SRC}")

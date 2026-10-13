@@ -9,7 +9,7 @@ import logging
 from collections.abc import Sequence
 
 from p2pwatch.application.search_worker import BackoffRegistry, SearchTask, SearchWorker
-from p2pwatch.domain.search.keywords import generate_keywords
+from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.ports.clock import Clock
 from p2pwatch.ports.repository_errors import RepositoryError
 from p2pwatch.ports.scheduler_state_repository import SchedulerStateRepository
@@ -17,7 +17,7 @@ from p2pwatch.ports.scheduler_state_repository import SchedulerStateRepository
 _logger = logging.getLogger("p2pwatch.application.search_tasks")
 
 
-class SearchTasks:
+class SearchTaskRunner:
     """The backoff last saved is the state the tasks share."""
 
     def __init__(
@@ -40,7 +40,7 @@ class SearchTasks:
 
     async def run(self) -> None:
         """Runs every task until cancelled."""
-        texts = [keyword.text for keyword in generate_keywords(self._keywords)]
+        texts = [keyword.text for keyword in dedupe_keywords(self._keywords)]
         async with asyncio.TaskGroup() as group:
             for worker in self._workers:
                 for channel in worker.channels:

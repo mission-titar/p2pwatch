@@ -29,7 +29,7 @@ from typing import Protocol
 from catalog_matching.models import TargetSegment
 from p2pwatch.application.edge_state import EdgeState
 from p2pwatch.application.source_alerts import FirstUseful, source_alert
-from p2pwatch.domain.download.policy import DownloadVerdict, download_policy
+from p2pwatch.domain.download.policy import DownloadVerdict, decide_download
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.observability.events import (
@@ -283,13 +283,13 @@ async def _queue_new_candidates(deps: DownloadDeps, outstanding_bytes: int) -> N
                 candidate.file.native_id,
             )
             continue
-        verdict = download_policy(
+        verdict = decide_download(
             tier="download",
             target_status=_target_status(deps.targets, candidate.target_id),
             already_tracked=False,
             free_bytes=free_bytes,
             outstanding_bytes=outstanding_bytes,
-            file_size=observation.size_bytes,
+            size_bytes=observation.size_bytes,
             min_free_bytes=deps.min_free_bytes,
         )
         if verdict is not DownloadVerdict.DOWNLOAD:

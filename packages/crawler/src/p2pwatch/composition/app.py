@@ -8,7 +8,7 @@ COMPOSITION layer (the only one allowed to import adapters AND application). Bui
 - ONE ``MuleClient`` + ``SearchWorker`` on the one amuled the core drives, whose
   session the status loop shares.
 
-Loops: the search tasks (``SearchTasks``), the status loop, and the download loop when
+Loops: the search tasks (``SearchTaskRunner``), the status loop, and the download loop when
 configured.
 OBSERVABLE & BOUNDED shutdown (spec §6): ``loop.add_signal_handler`` (NOT ``KeyboardInterrupt``,
 which would preempt a sync function mid-write); 1st ^C → human line on stderr +
@@ -65,7 +65,7 @@ from p2pwatch.application.run_download_cycle import (
     DownloadLoopDeps,
     download_loop,
 )
-from p2pwatch.application.search_tasks import SearchTasks
+from p2pwatch.application.search_tasks import SearchTaskRunner
 from p2pwatch.application.search_worker import (
     BackoffPolicy,
     BackoffRegistry,
@@ -148,7 +148,7 @@ def default_webui_server_factory(app: Starlette) -> uvicorn.Server:
     )
 
 
-def _human(message: str) -> None:
+def _print_progress(message: str) -> None:
     """Human shutdown line on stderr (spec §6: observable progress, outside logging)."""
     print(message, file=sys.stderr, flush=True)
 
@@ -215,13 +215,13 @@ class CrawlerApp:
         """Loop handler (never preempts a sync function, spec §6)."""
         self._signal_count += 1
         if self._signal_count == 1:
-            _human(
+            _print_progress(
                 "Shutdown requested: finishing in-flight searches, clean close… "
                 "(Ctrl-C again to force)"
             )
             self._shutdown.set()
         else:
-            _human("Forced shutdown.")
+            _print_progress("Forced shutdown.")
             raise SystemExit(1)
 
     async def _build_download_deps(
@@ -308,7 +308,7 @@ class CrawlerApp:
         async with asyncio.TaskGroup() as group:
             tasks = [
                 group.create_task(
-                    SearchTasks(
+                    SearchTaskRunner(
                         workers=workers,
                         keywords=self._crawler_config.search.keywords,
                         resumed=self._resumed,
@@ -327,9 +327,9 @@ class CrawlerApp:
             )
             for task in tasks:
                 task.cancel()
-        _human("Workers stopped.")
+        _print_progress("Workers stopped.")
 
-    def _start_webui(self, stack: AsyncExitStack, status: StatusBoard) -> None:
+    def _start_webui(self, stack: AsyncExitStack, status_board: StatusBoard) -> None:
         """Start the read-only webui on its OWN thread + loop (spec §5), sharing only IMMUTABLE
         state with the crawler (the parsed matcher/targets, the DB paths). It reads through its
         OWN ``ReaderProvider`` (inside ``build_webui_app``); nothing here touches the crawler's
@@ -354,7 +354,7 @@ class CrawlerApp:
             templates_dir=webui_pkg_dir / "adapters" / "templates",
             static_dir=webui_pkg_dir / "adapters" / "static",
             control=control,
-            status=status,
+            status=status_board,
             amule_url=self._crawler_config.webui.amule_url,
             clock=self._clock,
             source_period_gap=self._crawler_config.webui.source_period_gap,
@@ -415,8 +415,8 @@ class CrawlerApp:
 
             local_repo = SqliteLocalStateRepository(local_conn, clock=self._clock)
             node_id = self._crawler_config.node_id or local_repo.get_or_create_node_id()
-            obs = self._crawler_config.observability
-            notifications = obs.notifications if obs is not None else ()
+            observability = self._crawler_config.observability
+            notifications = observability.notifications if observability is not None else ()
             registry = CollectorRegistry()
             notifier = AppriseNotifier(
                 tuple((t.url, t.audience, t.node_prefix) for t in notifications),
@@ -426,11 +426,15 @@ class CrawlerApp:
                 metrics=PrometheusSink(registry),
                 notifier=notifier,
                 notification_timeout_seconds=(
-                    obs.notification_timeout_seconds if obs is not None else 5.0
+                    observability.notification_timeout_seconds if observability is not None else 5.0
                 ),
             )
-            if obs is not None and obs.metrics is not None and obs.metrics.enabled:
-                self._metrics_server(obs.metrics.port, registry)
+            if (
+                observability is not None
+                and observability.metrics is not None
+                and observability.metrics.enabled
+            ):
+                self._metrics_server(observability.metrics.port, registry)
             catalog_repo = SqliteCatalogRepository(catalog_conn, node_id, clock=self._clock)
             scheduler_state = SqliteSchedulerStateRepository(local_conn)
             engine = MatchingEngine(self._matcher_config, self._targets)
@@ -538,9 +542,9 @@ class CrawlerApp:
                     status_deps=status_deps,
                     download_deps=download_deps,
                 )
-                _human(f"{len(workers)} amuled session(s) closing…")
+                _print_progress(f"{len(workers)} amuled session(s) closing…")
                 await stack.aclose()
-                _human("Databases closed: exiting.")
+                _print_progress("Databases closed: exiting.")
         finally:
             # Best-effort if the bounded shutdown failed (TimeoutError) or if setup raised:
             # close what remains WITHOUT ever re-blocking (suppress any failure/cancellation).

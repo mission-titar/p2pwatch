@@ -17,7 +17,7 @@ pytestmark = pytest.mark.api_integration
 @pytest.mark.asyncio
 async def test_real_login_succeeds(amuled: ApiEndpoint) -> None:
     client = AmuleApiClient(
-        amuled.host, amuled.port, amuled.password, timeout=30.0, clock=AsyncioClock()
+        amuled.host, amuled.port, amuled.password, timeout_seconds=30.0, clock=AsyncioClock()
     )
     await client.connect()  # the admin password written by --set-admin-pass is accepted
     await client.close()
@@ -26,7 +26,7 @@ async def test_real_login_succeeds(amuled: ApiEndpoint) -> None:
 @pytest.mark.asyncio
 async def test_real_login_fails_with_wrong_password(amuled: ApiEndpoint) -> None:
     client = AmuleApiClient(
-        amuled.host, amuled.port, "wrong-password", timeout=30.0, clock=AsyncioClock()
+        amuled.host, amuled.port, "wrong-password", timeout_seconds=30.0, clock=AsyncioClock()
     )
     with pytest.raises(ApiAuthError):
         await client.connect()
@@ -35,7 +35,7 @@ async def test_real_login_fails_with_wrong_password(amuled: ApiEndpoint) -> None
 @pytest.mark.asyncio
 async def test_real_status(amuled: ApiEndpoint) -> None:
     client = AmuleApiClient(
-        amuled.host, amuled.port, amuled.password, timeout=30.0, clock=AsyncioClock()
+        amuled.host, amuled.port, amuled.password, timeout_seconds=30.0, clock=AsyncioClock()
     )
     await client.connect()
     try:
@@ -48,7 +48,7 @@ async def test_real_status(amuled: ApiEndpoint) -> None:
 @pytest.mark.asyncio
 async def test_real_search(amuled: ApiEndpoint) -> None:
     client = AmuleApiClient(
-        amuled.host, amuled.port, amuled.password, timeout=30.0, clock=AsyncioClock()
+        amuled.host, amuled.port, amuled.password, timeout_seconds=30.0, clock=AsyncioClock()
     )
     await client.connect()
     try:

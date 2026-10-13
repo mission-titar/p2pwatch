@@ -56,7 +56,7 @@ def _parse_validate_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def build_app(args: argparse.Namespace) -> CrawlerApp:
+def build_crawler_app(args: argparse.Namespace) -> CrawlerApp:
     """Loads + validates all config (fail-fast §5/§14) and assembles the ``CrawlerApp``.
 
     The unified crawler config is interpolated from ``os.environ`` (``${NAME}`` → secrets/URLs).
@@ -128,7 +128,7 @@ def main(argv: list[str] | None = None) -> int:
         return validate_config(list(tokens[1:]))
     args = _parse_args(tokens)
     try:
-        app = build_app(args)
+        app = build_crawler_app(args)
         asyncio.run(app.run())
     except (YamlLoadError, ConfigError, MatcherConfigError) as error:
         print(f"Invalid config, refusing to start: {error}", file=sys.stderr, flush=True)

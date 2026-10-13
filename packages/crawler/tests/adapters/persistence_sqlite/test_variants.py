@@ -11,7 +11,7 @@ from p2pwatch.adapters.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.persistence_sqlite.variants import (
     content_hash,
     iso_to_micros,
-    register_functions,
+    register_sql_functions,
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import fold_raw_meta
@@ -22,7 +22,7 @@ _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 @pytest.fixture
 def connection() -> Iterator[sqlite3.Connection]:
     connection = sqlite3.connect(":memory:", autocommit=True)
-    register_functions(connection)
+    register_sql_functions(connection)
     yield connection
     connection.close()
 
@@ -70,7 +70,7 @@ def test_content_hash_sql_function_hashes_each_distinct_key_once(
 
     monkeypatch.setattr(variants, "content_hash", counting)
     connection = sqlite3.connect(":memory:", autocommit=True)
-    register_functions(connection)
+    register_sql_functions(connection)
     connection.execute(
         "SELECT content_hash(h, 'f', 1, NULL, NULL, '[]', 'k', 'n')"
         " FROM (SELECT 'a' AS h UNION ALL SELECT 'a' UNION ALL SELECT 'b')"
@@ -99,7 +99,7 @@ def test_fold_raw_meta_sql_function_folds_each_distinct_key_once(
 
     monkeypatch.setattr(variants, "fold_raw_meta", counting)
     connection = sqlite3.connect(":memory:", autocommit=True)
-    register_functions(connection)
+    register_sql_functions(connection)
     connection.execute(
         "SELECT fold_raw_meta('[]', c, NULL, 0)"
         " FROM (SELECT 'a' AS c UNION ALL SELECT 'a' UNION ALL SELECT 'b')"

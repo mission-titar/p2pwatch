@@ -53,7 +53,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 def _resolve_destination(args: argparse.Namespace) -> tuple[Path, bool]:
-    """Validates the safe-by-default rules and returns ``(output, dest_is_source)``.
+    """Validates the safe-by-default rules and returns ``(output, output_is_source)``.
 
     Raises ``MergeError`` (clear message) BEFORE any opening/creation of the output:
     missing sources, ``--force`` with ``--into``, existing ``--output`` without ``--force``,
@@ -82,9 +82,9 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     args = _parse_args(sys.argv[1:] if argv is None else argv)
     try:
-        output, dest_is_source = _resolve_destination(args)
+        output, output_is_source = _resolve_destination(args)
         _LOGGER.info("merge → %s (%d source(s))", output, len(args.sources))
-        merge_catalogs(output, args.sources, dest_is_source=dest_is_source)
+        merge_catalogs(output, args.sources, output_is_source=output_is_source)
     except MergeError as error:
         print(f"Merge failed: {error}", file=sys.stderr, flush=True)
         return 2

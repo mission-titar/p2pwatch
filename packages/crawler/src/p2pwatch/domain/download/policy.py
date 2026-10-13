@@ -1,6 +1,6 @@
 """PURE auto-download policy (spec download §6, DECISION D4/D5).
 
-PURE domain: no I/O, no repo. ``download_policy`` returns a
+PURE domain: no I/O, no repo. ``decide_download`` returns a
 ``DownloadVerdict`` (enum, not bool → explainability + future metric) from PRIMITIVES:
 the ``target_id → status`` lookup is done by the APPLICATION (from the loaded ``targets``)
 and passed as a bool/string (the domain never imports a port).
@@ -25,21 +25,21 @@ class DownloadVerdict(StrEnum):
     SKIP_DISK_CAP = "skip_disk_cap"
 
 
-def download_policy(
+def decide_download(
     *,
     tier: str,
     target_status: str,
     already_tracked: bool,
     free_bytes: int,
     outstanding_bytes: int,
-    file_size: int,
+    size_bytes: int,
     min_free_bytes: int,
 ) -> DownloadVerdict:
     """Decide the fate of a download candidate (spec §6). All branches tested.
 
     Both space terms are MEASURED, never declared (2026-09-13 spec §1). ``free_bytes`` = what
     the filesystem reports free; ``outstanding_bytes`` = what the client's queue still has to
-    transfer; ``file_size`` = the candidate's size; ``min_free_bytes`` = the configured floor,
+    transfer; ``size_bytes`` = the candidate's size; ``min_free_bytes`` = the configured floor,
     an inclusive MIN (landing exactly on it is allowed).
 
     Free space alone would be wrong: ten downloads totalling 20 GB with 2 GB written look cheap
@@ -51,6 +51,6 @@ def download_policy(
         return DownloadVerdict.SKIP_COMPLETE
     if already_tracked:
         return DownloadVerdict.SKIP_DEDUP
-    if free_bytes - outstanding_bytes - file_size < min_free_bytes:
+    if free_bytes - outstanding_bytes - size_bytes < min_free_bytes:
         return DownloadVerdict.SKIP_DISK_CAP
     return DownloadVerdict.DOWNLOAD

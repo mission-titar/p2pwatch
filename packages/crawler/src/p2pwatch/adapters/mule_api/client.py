@@ -32,7 +32,7 @@ from p2pwatch.adapters.mule_api.mapping import (
     map_shared_download,
     map_source,
     merge_duplicate_sources,
-    source_ecid,
+    offering_source_ecid,
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
@@ -50,15 +50,15 @@ _POLL_INTERVAL_SECONDS = 5.0
 
 _SEARCH_TYPES = {"ed2k": "global", "kad": "kad"}
 
-# Least time between two ed2k starts, and between two Kad starts on one target (spec stage 2, D5):
-# rules of the networks, not settings, since a key would invite lowering them until the ban.
+# Least time between two ed2k starts, and between two Kad starts on one Kad word (spec stage 2,
+# D5): rules of the networks, not settings, since a key would invite lowering them until the ban.
 _START_SPACING = timedelta(seconds=60)
 
 # Kad's keyword separators (aMule `SearchManager.h:128`).
 _KAD_SEPARATORS = re.compile(r'[ ()\[\]{}<>,._\-!?:;\\/"]')
 
-# Kad refuses a target still on its search list: "not yet", someone else holds it.
-_KAD_TARGET_HELD = "already on search list"
+# Kad refuses a Kad word still on its search list: "not yet", someone else holds it.
+_KAD_WORD_HELD = "already on search list"
 
 _LONG_AGO = datetime.min.replace(tzinfo=UTC)
 
@@ -66,8 +66,8 @@ _logger = logging.getLogger("p2pwatch.adapters.mule_api.client")
 
 
 class AmuleApiClient:
-    """``skipped_entries_total`` counts discard EVENTS, not unique entries: the readout is
-    cumulative, so one unusable entry re-seen every cycle counts every time."""
+    """``skipped_results`` counts discard EVENTS, not unique results: the readout is
+    cumulative, so one unusable result re-seen every cycle counts every time."""
 
     channels: tuple[str, ...] = tuple(_SEARCH_TYPES)
 
@@ -77,13 +77,13 @@ class AmuleApiClient:
         port: int,
         password: str,
         *,
-        timeout: float = 10.0,
+        timeout_seconds: float = 10.0,
         clock: Clock,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._base_url = f"http://{host}:{port}/api/v1"
         self._password = password
-        self._timeout = timeout
+        self._timeout_seconds = timeout_seconds
         self._transport = transport
         self._clock = clock
         self._http: httpx.AsyncClient | None = None
@@ -92,8 +92,8 @@ class AmuleApiClient:
         self._ed2k_lock = asyncio.Lock()
         self._ed2k_next_start = _LONG_AGO
         self._kad_next_start: dict[str, datetime] = {}
-        self._targetless_logged: set[str] = set()
-        self.skipped_entries_total = 0
+        self._keywords_without_kad_word: set[str] = set()
+        self.skipped_results = 0
 
     async def connect(self) -> None:
         """Opens the session and logs in. IDEMPOTENT, and serialized: callers arriving during a
@@ -105,7 +105,7 @@ class AmuleApiClient:
                 raise ApiAuthError("empty amuleapi password (refused before asking the daemon)")
             http = httpx.AsyncClient(
                 base_url=self._base_url,
-                timeout=httpx.Timeout(self._timeout),
+                timeout=httpx.Timeout(self._timeout_seconds),
                 transport=self._transport,
             )
             try:
@@ -144,25 +144,23 @@ class AmuleApiClient:
                 await self._await_end(search_id, budget_seconds, widen=False)
         rows = await self._collect(f"/search/{search_id}/results", "results")
         observations, skipped = map_search_results(rows, keyword)
-        self.skipped_entries_total += skipped
+        self.skipped_results += skipped
         return observations
 
     async def _start_kad(self, keyword: str, budget_seconds: float) -> int | None:
-        """Starts in the target's next free slot, reserved before sleeping; ``None`` without a
-        target. A held target is retried each poll, for one budget from the first attempt."""
-        target = _kad_target(keyword)
-        # A keyword without a target splits on a separator or is under 3 bytes: never a target.
-        slot_key = target or keyword
+        """Starts in the Kad word's next free slot, reserved before sleeping; ``None`` without a
+        Kad word. A held Kad word is retried each poll, for one budget from the first attempt."""
+        kad_word = _kad_word(keyword)
+        # A keyword without a Kad word splits on a separator or is under 3 bytes: never a Kad word.
+        slot_key = kad_word or keyword
         now = self._clock.now()
         slot = max(now, self._kad_next_start.get(slot_key, now))
         self._kad_next_start[slot_key] = slot + _START_SPACING
         await self._sleep_until(slot)
-        if target is None:
-            if keyword not in self._targetless_logged:
-                self._targetless_logged.add(keyword)
-                _logger.info(
-                    "no Kad target in %r (no word of 3 bytes): not searched on Kad", keyword
-                )
+        if kad_word is None:
+            if keyword not in self._keywords_without_kad_word:
+                self._keywords_without_kad_word.add(keyword)
+                _logger.info("no Kad word in %r (no word of 3 bytes): not searched on Kad", keyword)
             return None
         give_up_at = self._clock.now() + timedelta(seconds=budget_seconds)
         while True:
@@ -170,7 +168,7 @@ class AmuleApiClient:
                 return await self._post_search(keyword, "kad")
             except ApiRejectedError as refusal:
                 remaining = (give_up_at - self._clock.now()).total_seconds()
-                if _KAD_TARGET_HELD not in str(refusal) or remaining <= 0:
+                if _KAD_WORD_HELD not in str(refusal) or remaining <= 0:
                     raise
                 await self._clock.sleep(min(_POLL_INTERVAL_SECONDS, remaining))
 
@@ -232,13 +230,13 @@ class AmuleApiClient:
             return ()
         try:
             rows = await self._collect(
-                f"/downloads/{file.native_id}/clients", "clients", identity="ecid"
+                f"/downloads/{file.native_id}/clients", "clients", keyset_column="ecid"
             )
         except ApiNotFoundError:
             return ()
         readings: list[SourceReading] = []
         for row in rows:
-            ecid = source_ecid(row)
+            ecid = offering_source_ecid(row)
             if ecid is None:
                 continue
             try:
@@ -286,9 +284,9 @@ class AmuleApiClient:
         """One request on the connected session, decoded into a JSON object."""
         if self._http is None:
             raise ApiUnreachableError("amuleapi client not connected (call connect() first)")
-        return await self._request(self._http, method, path, body=body, params=params)
+        return await self._send_with_relogin(self._http, method, path, body=body, params=params)
 
-    async def _request(
+    async def _send_with_relogin(
         self,
         http: httpx.AsyncClient,
         method: str,
@@ -328,25 +326,25 @@ class AmuleApiClient:
     async def _collect(
         self,
         path: str,
-        envelope: str,
+        list_key: str,
         *,
         params: dict[str, Any] | None = None,
-        identity: str = "hash",
+        keyset_column: str = "hash",
     ) -> list[Any]:
-        """Sweeps a whole list route by KEYSET paging on its ``identity`` column, the only one
+        """Sweeps a whole list route by KEYSET paging on its ``keyset_column``, the only one
         ``after`` accepts. Never ``offset``: it is a position, so a row deleted below the cursor
         is skipped and then reported by nothing."""
         rows: list[Any] = []
-        page_params = {**(params or {}), "sort": identity, "limit": _PAGE_SIZE}
+        page_params = {**(params or {}), "sort": keyset_column, "limit": _PAGE_SIZE}
         while True:
             payload = await self._call("GET", path, params=page_params)
-            page = payload.get(envelope)
+            page = payload.get(list_key)
             if not isinstance(page, list):  # an under-report would restart what it hides
-                raise ApiUnreachableError(f"GET {path} answered without its {envelope!r} list")
+                raise ApiUnreachableError(f"GET {path} answered without its {list_key!r} list")
             rows.extend(page)
             if len(page) < _PAGE_SIZE:
                 return rows
-            anchor = page[-1].get(identity) if isinstance(page[-1], dict) else None
+            anchor = page[-1].get(keyset_column) if isinstance(page[-1], dict) else None
             if not isinstance(anchor, str | int):
                 return rows  # no anchor to advance on: stop rather than re-read page one
             page_params = {**page_params, "after": anchor}
@@ -378,7 +376,7 @@ def _decode(response: httpx.Response) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _kad_target(keyword: str) -> str | None:
+def _kad_word(keyword: str) -> str | None:
     """Kad's key for a keyword search: its first word of 3 UTF-8 bytes or more, lowercased
     (aMule ``SearchManager.cpp:283-292``)."""
     words = _KAD_SEPARATORS.split(keyword)
