@@ -34,7 +34,7 @@ def _reading(
 ) -> SourceReading:
     return SourceReading(
         source=key,
-        name="AnimuseeFMR",
+        source_name="AnimuseeFMR",
         software="emule 0.50a",
         role=role,
         contact_point=None,
@@ -152,7 +152,7 @@ def test_a_passing_state_carries_the_group_of_the_latest_point(
 def test_a_reading_with_neither_identity_nor_name_writes_nothing(
     repository: SqliteSourceRepository, catalog: sqlite3.Connection
 ) -> None:
-    reading = dataclasses.replace(_reading(key=None), name=None)
+    reading = dataclasses.replace(_reading(key=None), source_name=None)
     assert repository.record_readings(_FILE, [reading], _T0) == ()
     assert (_variants(catalog), _points(catalog)) == (0, [])
 
@@ -184,7 +184,7 @@ def test_a_clock_stepped_back_writes_its_point_and_carries_only_from_an_earlier_
 def test_a_reading_without_identity_carries_only_from_its_name_without_identity(
     repository: SqliteSourceRepository, catalog: sqlite3.Connection
 ) -> None:
-    other = dataclasses.replace(_reading(None, key=None), name="Teammate")
+    other = dataclasses.replace(_reading(None, key=None), source_name="Teammate")
     recorded = _record(repository, _reading(_NN), _reading(_S, key=None), _reading(None, key=None))
     recorded += repository.record_readings(_FILE, [other], _T0 + 3 * _POLL)
     assert [(r.source, r.role) for r in recorded] == [

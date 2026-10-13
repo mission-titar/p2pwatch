@@ -60,7 +60,7 @@ def test_source_roles_are_the_five_values_the_catalog_accepts() -> None:
 def test_a_reading_in_a_passing_state_has_no_role_and_may_have_no_identity() -> None:
     reading = SourceReading(
         source=None,
-        name="AnimuseeFMR",
+        source_name="AnimuseeFMR",
         software="emule 0.50a",
         role=None,
         contact_point=None,

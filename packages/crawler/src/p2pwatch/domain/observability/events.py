@@ -136,13 +136,13 @@ class SourceFirstUseful:
 
 @dataclass(frozen=True)
 class SourceReappeared:
-    # A source reappeared: useful after ``absent_seconds`` neither useful nor not useful here (D9).
+    # A source useful after ``absent_for_seconds`` with no point, useful or not useful (D9).
     source: SourceKey
     source_name: str | None
     file: FileKey
     filename: str
     target_titles: tuple[TargetTitle, ...]
-    absent_seconds: float
+    absent_for_seconds: float
 
 
 @dataclass(frozen=True)

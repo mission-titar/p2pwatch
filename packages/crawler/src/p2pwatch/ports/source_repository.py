@@ -17,7 +17,7 @@ class RecordedReading:
     """A reading ``record_readings`` kept, with its role, a carried one included."""
 
     source: SourceKey | None
-    name: str | None
+    source_name: str | None
     role: SourceRole
 
 
@@ -26,7 +26,7 @@ class EarlierPoints:
     """D5's two answers: a useful point exists, and when the latest useful or not-useful one was."""
 
     has_useful_point: bool
-    last_known_at: datetime | None
+    latest_known_at: datetime | None
 
 
 class SourceRepository(Protocol):

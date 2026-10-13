@@ -30,7 +30,7 @@ def source_alert(
         return None
     if not earlier_points.has_useful_point:
         return FirstUseful()
-    last = earlier_points.last_known_at
-    if last is None or round_started_at - last <= reappeared_after:
+    latest = earlier_points.latest_known_at
+    if latest is None or round_started_at - latest <= reappeared_after:
         return None
-    return Reappeared(round_started_at - last)
+    return Reappeared(round_started_at - latest)

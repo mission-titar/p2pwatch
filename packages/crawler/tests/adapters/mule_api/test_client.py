@@ -696,7 +696,7 @@ async def test_sources_pages_every_client_of_the_download_past_the_first_hundred
     await client.close()
 
     assert len(readings) == 600
-    assert readings[-1].name == "peer 600"
+    assert readings[-1].source_name == "peer 600"
     # Keyset paging on the route's identity column, which is an integer here.
     sweep = _paths(api, f"/api/v1/downloads/{_HASH}/clients")
     assert [url.params.get("sort") for url in sweep] == ["ecid", "ecid"]
@@ -719,7 +719,7 @@ async def test_sources_ask_the_detail_of_only_the_rows_that_offer_us_the_file() 
     await client.close()
 
     assert [
-        (reading.name, reading.role, reading.contact_point, reading.connectable)
+        (reading.source_name, reading.role, reading.contact_point, reading.connectable)
         for reading in readings
     ] == [
         ("peer 1", SourceRole.QUEUED, "176.103.48.36:4184", False),
@@ -741,7 +741,7 @@ async def test_a_client_gone_between_the_list_and_its_detail_is_dropped() -> Non
     readings = await client.sources(_KEY)
     await client.close()
 
-    assert [reading.name for reading in readings] == ["peer 1", "peer 3"]
+    assert [reading.source_name for reading in readings] == ["peer 1", "peer 3"]
 
 
 @pytest.mark.asyncio
@@ -771,7 +771,7 @@ async def test_two_rows_of_one_source_read_as_one() -> None:
     readings = await client.sources(_KEY)
     await client.close()
 
-    assert [reading.name for reading in readings] == ["peer 1"]
+    assert [reading.source_name for reading in readings] == ["peer 1"]
 
 
 @pytest.mark.asyncio

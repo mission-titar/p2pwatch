@@ -36,7 +36,7 @@ INNER JOIN source_observations AS o ON v.variant_id = o.variant_id
 WHERE
     v.file_id = :file_id
     AND v.source_id IS :source_id
-    AND (:source_id IS NOT NULL OR v.name = :name)
+    AND (:source_id IS NOT NULL OR v.name = :source_name)
     AND +v.node_id = :node_id
     AND o.observed_at = (
         SELECT MAX(p.observed_at) FROM source_observations AS p
@@ -113,10 +113,10 @@ class SqliteSourceRepository:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
                 for reading in readings:
-                    if reading.source is None and reading.name is None:
+                    if reading.source is None and reading.source_name is None:
                         continue  # nothing could tell it from the next one (D4)
                     role = self._record(file, reading, read_at_micros)
-                    recorded.append(RecordedReading(reading.source, reading.name, role))
+                    recorded.append(RecordedReading(reading.source, reading.source_name, role))
                 self._connection.execute("COMMIT")
             except BaseException:
                 with suppress(sqlite3.Error):
@@ -152,7 +152,7 @@ class SqliteSourceRepository:
             {
                 "file_id": file.file_id,
                 "source_id": None if reading.source is None else reading.source.source_id,
-                "name": reading.name,
+                "source_name": reading.source_name,
                 "node_id": self._node_id,
                 "since": read_at_micros - self._carried_role_max_age_micros,
                 "read_at": read_at_micros,
@@ -176,7 +176,7 @@ class SqliteSourceRepository:
         ]
         return EarlierPoints(
             has_useful_point=any(usefulness is SourceUsefulness.USEFUL for usefulness, _ in seen),
-            last_known_at=_EPOCH + max(known) * _MICROSECOND if known else None,
+            latest_known_at=_EPOCH + max(known) * _MICROSECOND if known else None,
         )
 
     def has_points_before(self, before: datetime) -> bool:
@@ -199,7 +199,7 @@ def _variant_columns(
     return (
         file.file_id,
         None if reading.source is None else reading.source.source_id,
-        reading.name,
+        reading.source_name,
         reading.software,
         role.value,
         reading.contact_point,

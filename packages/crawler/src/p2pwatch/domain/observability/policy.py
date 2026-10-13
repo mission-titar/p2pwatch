@@ -342,7 +342,7 @@ def describe(event: Event) -> Report:
             return _describe_source(
                 event,
                 "reappeared",
-                f"reappeared after {event.absent_seconds / 3600:.0f} h",
+                f"reappeared after {event.absent_for_seconds / 3600:.0f} h",
                 "🔁 Source reappeared",
             )
         case CrawlerStarted():
