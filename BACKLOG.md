@@ -24,9 +24,6 @@ An agent adds an entry only after the operator has agreed to it.
 - **The webui in the visitor's time zone**: UTC rendered, the browser converts each date with JavaScript; needs
   `AGENTS.md`'s "Python only" amended and a JS test chain. Section 6 of `agents/specs/2026-10-13-append-only-source-points.md`.
 
-- **`backoff` under the per-client search config**: only search reads it, yet it sits at `crawler.yml`'s root;
-  moves with stage 5. Section 6 of `agents/specs/2026-10-13-append-only-source-points.md`.
-
 - **A monotonic clock for in-memory intervals and deadlines**, the wall clock kept for stamps, and a wait from a
   persisted time capped by its policy's maximum. Section 8 of `agents/specs/2026-10-13-append-only-source-points.md`.
 
