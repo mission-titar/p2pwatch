@@ -26,6 +26,8 @@ webui:
   # Resolved by the BROWSER, not the container: localhost only works when the browser runs on
   # the Docker host. Set it to the reachable address otherwise (NAS hostname, reverse proxy).
   amule_url: http://localhost:4711
+  # Two reads of one source further apart than this start a new period on the source pages.
+  source_period_gap_seconds: 990
 
 observability:
   log_level: INFO

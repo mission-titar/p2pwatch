@@ -570,8 +570,8 @@ def build_app(
     no write connection (spec §4/§10). ``status`` holds the status loops' last readings.
 
     ``amule_url`` is the base the nav's aMule entry points at (design §9); the caller reads it
-    from ``webui.amule_url``. ``source_tolerance`` is the longest gap within a source period, the
-    crawler's own (source points spec, D6)."""
+    from ``webui.amule_url``. ``source_tolerance`` is the longest gap within a source period, from
+    ``webui.source_period_gap_seconds`` (source points spec, D6)."""
 
     templates = Jinja2Templates(
         directory=templates_dir, context_processors=[_make_nav_context(amule_url)]
