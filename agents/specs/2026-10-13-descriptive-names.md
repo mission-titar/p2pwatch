@@ -102,10 +102,14 @@ a function does.
 | `tracked` | a download with a row in `downloads`, whatever its state | `downloaded`, `active` |
 | `wake` | `WakeHub` wakes the loops waiting on a subject | `signal`, `nudge` |
 | `first useful`, `reappeared` | a source's two alerts | `new`, `useful again` |
+| `audience` | who a notification is for: `community`, `operations` | `tag` (apprise's keyword aside), `channel` |
 | `error_label` | the label a parser prints in its errors | `what`, `label`, `field` |
 | `micros` | an integer of microseconds: an instant counts from the epoch | a bare `_at` on an `int` |
 | `id`, `db`, `sql`, `url`, `api`, `json`, `ecid`, `mib`, `iso`, `min`, `max`, `conf` | the abbreviations allowed (`conf`: aMule's `amule.conf`) | |
 ```
+
+(Corrected: the closing block adds the `audience` row, since the French docs called an audience a "canal", their
+word for a client's channel; the holistic review's finding.)
 
 - *In `AGENTS.md` (operator): it is in every session and every teammate's context, so the words are there when
   an agent names something; a separate file is opened only by an agent that thinks of it.*
@@ -164,7 +168,10 @@ function's name.
 
 ### D5. The operator surfaces
 
-All ship in the 5.0, each a step in `docs/migration-4x.md`. A renamed YAML key is refused at boot with its new
+All ship in the 5.0, each a step in `docs/migration-4x.md`. (Corrected: each that 4.1.0 shipped. The
+`waiting_reason` value, `directly_reachable`, `transfer_counter`, `p2pwatch_channel_on_network`, `kind="new"`,
+the alerts' titles and the `/sources` query keys arrived after it, so that page lists none of them; the closing
+block removed those it listed, after the holistic review.) A renamed YAML key is refused at boot with its new
 name, like `_MOVED_KEYS`. *Reason (operator): 4.x is frozen but for an urgent hotfix, and the 5.0 already
 breaks `crawler.yml`.*
 
@@ -236,7 +243,7 @@ misleading name in itself.*
 | 130 | `refactor/webui-names` | the query keys, the webui's composition, D8 |
 | 140 | `refactor/matching-names` | the matcher and its YAML keys |
 | 150 | `refactor/package-names` | amule, amule_bump, vex_guards |
-| 160 | `docs/descriptive-names-wrap` | the closing block |
+| 160 | `docs/descriptive-names-wrap` | the closing block (Corrected: 39 files, each a one-to-few-line fix the holistic review maps one by one, so it takes the one-line exemption rather than more pull requests, the operator's ruling of 2026-10-13) |
 
 - **Cut by concept; a rename block may pass a bound** (the review estimates up to 45 files for block 90).
   *One-line reason (operator): a mechanical rename is read by its mapping, not file by file, so splitting it
@@ -249,8 +256,8 @@ misleading name in itself.*
 
 ## 5. Acceptance
 
-- **The guideline**: `AGENTS.md`'s Naming holds D1's 22 glossary rows, and both mandates name
-  "`AGENTS.md`'s Naming". Wrong if either is missing.
+- **The guideline**: `AGENTS.md`'s Naming holds D1's 22 glossary rows (Corrected: 23 with `audience`, D1), and
+  both mandates name "`AGENTS.md`'s Naming". Wrong if either is missing.
 - **No old name survives**: per block, Serena's `find_symbol` finds none of the appendix's old Python names,
   and `git grep -nwF` finds none of its **Strings** outside applied migrations, their tests,
   `docs/migration-4x.md` and the refusals. The banned prose (`backfill`, `nudge`, `useful again`) is gone from
@@ -280,7 +287,7 @@ misleading name in itself.*
 - **Serena reads `[tool.pyright]` only when it starts**: a teammate whose rename finds no test reference
   restarts it.
 - **Dashboards, alert rules and SQL console queries on a renamed surface break at the 5.0**:
-  `docs/migration-4x.md` lists each.
+  `docs/migration-4x.md` lists each (Corrected: each that 4.1.0 shipped, D5).
 
 ## 7. Adjacent backlog items, and the deferred read side
 

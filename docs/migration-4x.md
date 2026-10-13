@@ -33,10 +33,10 @@ mkdir ed2k
 mv amule downloads ed2k/
 ```
 
-**3. Éditez `crawler.yml` et `matcher.yml`.** Dans `crawler.yml`, retirez la section `port_sync:` entière, et ces six clés de la
-racine : `cycle_interval_seconds`, `decision_poll_interval_seconds`, `search_poll_budget_seconds`,
-`search_poll_interval_seconds`, `keyword_pause_min_seconds` et `keyword_pause_max_seconds`. Tant
-que l'une reste, le crawler refuse de démarrer en la nommant :
+**3. Éditez `crawler.yml` et `matcher.yml`.** Dans `crawler.yml`, retirez la section `port_sync:`
+entière, et ces six clés de la racine : `cycle_interval_seconds`, `decision_poll_interval_seconds`,
+`search_poll_budget_seconds`, `search_poll_interval_seconds`, `keyword_pause_min_seconds` et
+`keyword_pause_max_seconds`. Tant que l'une reste, le crawler refuse de démarrer en la nommant :
 `key 'port_sync' was removed, delete it from crawler.yml`.
 
 Déplacez ensuite la section `backoff:` sous `search:`, à côté de `keywords`, que la 5.0 rend
@@ -127,23 +127,15 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
   tableaux de bord et de vos règles d'alerte.
 - **La notification de démarrage devient** `🟢 node online (download on)`, ou `(download off)`, au
   lieu de `🟢 instance online (mode full)` ou `(mode observer)`.
-- **Dans `local.db`, la table `backfill_state` devient `reevaluation_state`**, et sa colonne
-  `policy_sha256` devient `policy_fingerprint`. Adaptez vos requêtes de la console SQL.
-- **Dans `local.db`, la raison d'attente `local` devient `local_processing`**, et la clé
-  `channel_backoff` de `scheduler_state` devient `backoff_states`. La table de `/node` montre la
-  nouvelle raison ; adaptez vos requêtes de la console SQL.
-- **Dans le catalogue, trois colonnes changent de nom** : `media_length_sec` devient
-  `duration_seconds` dans `observation_variants`, `directly_reachable` devient `connectable` dans
-  `source_variants`, et `transfer_counter` devient `session_received_bytes` dans
-  `source_observations`. Adaptez vos requêtes de la console SQL.
-- **Les alertes de source changent de nom** : `p2pwatch_source_alerts` porte `kind="first_useful"`
-  au lieu de `kind="new"`, et leurs titres deviennent `🆕 Source useful for the first time` et
-  `🔁 Source reappeared`, au lieu de `🆕 New source` et `🔁 Source useful again`.
-- **Les paramètres d'URL du catalogue web changent de nom** : `q` devient `search` sur `/files`
-  et `/sources`, `target` devient `target_id` et `dir` devient `direction` sur `/files`, et
-  `name` devient `source_name` sur `/sources/name`. Les anciens sont ignorés : mettez à jour vos
-  favoris. Après un redémarrage depuis le tableau de bord, l'adresse se termine par
-  `?done=restarted` au lieu de `?done=restart`.
+- **Dans `local.db`, la table `backfill_state` devient `reevaluation_state`**, sa colonne
+  `policy_sha256` devient `policy_fingerprint`, et la clé `channel_backoff` de `scheduler_state`
+  devient `backoff_states`. Adaptez vos requêtes de la console SQL.
+- **Dans le catalogue, la colonne `media_length_sec` devient `duration_seconds`**, désormais dans
+  `observation_variants`. Adaptez vos requêtes de la console SQL.
+- **Les paramètres d'URL de `/files` changent de nom** : `q` devient `search`, `target` devient
+  `target_id` et `dir` devient `direction`. Les anciens sont ignorés : mettez à jour vos favoris.
+  Après un redémarrage depuis le tableau de bord, l'adresse se termine par `?done=restarted` au lieu
+  de `?done=restart`.
 - **La documentation** est désormais sur <https://mission-titar.github.io/p2pwatch/>.
 
 ## Retour arrière

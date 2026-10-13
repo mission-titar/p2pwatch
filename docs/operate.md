@@ -98,8 +98,8 @@ Des ordres de grandeur, à ajuster selon votre trafic eMule réel et le nombre d
   refuse un nouveau candidat si cela passerait sous `download.min_free_bytes` (10 Gio par défaut).
   C'est un **plancher**, pas un ménage : il bloque les nouveaux téléchargements quand le disque se
   tend, il n'efface rien. Le tri reste à votre charge. La jauge `p2pwatch_download_disk_free_bytes`
-  publie l'espace libre mesuré à chaque cycle, et le canal *operations* est notifié une fois quand
-  il passe sous le plancher, puis de nouveau seulement après être remonté au-dessus.
+  publie l'espace libre mesuré à chaque cycle, et l'audience *operations* est notifiée une fois
+  quand il passe sous le plancher, puis de nouveau seulement après être remonté au-dessus.
 - **`ed2k/amule/`** tient en quelques mégaoctets : `amule.conf`, `server.met`, `nodes.dat`, préférences.
 
 Le crawler ne fait qu'un `statvfs` sur `/downloads`, il n'ouvre jamais un fichier téléchargé. C'est
@@ -167,8 +167,8 @@ Deux effets possibles pour un fichier déjà catalogué :
   traite alors comme non identifié et il sort de la file de téléchargement. On ne « dé-télécharge »
   jamais : un fichier déjà récupéré reste.
 - **Re-classement.** Un fichier qui change de palier déclenche l'action du nouveau palier : le
-  palier `download` le met en file. Un fichier qui **monte** à `notify` ou `download` notifie le
-  canal *community* (configurez une cible `audience: community` sous
+  palier `download` le met en file. Un fichier qui **monte** à `notify` ou `download` notifie
+  l'audience *community* (configurez une cible `audience: community` sous
   `observability.notifications` dans `crawler.yml`) : un seul message par fichier, avec son nom, sa
   taille, son lien ed2k et les segments concernés. Une baisse, un passage à `catalog`, une
   rétractation ou un changement de règle sans changement de palier restent dans les logs, sans
@@ -178,7 +178,7 @@ Un gros changement de règles peut donc émettre une rafale de notifications, un
 palier a monté. C'est voulu. La passe est idempotente et tourne que le téléchargement soit activé ou
 non.
 
-Le canal *operations* reçoit l'état du nœud, et rien d'autre :
+L'audience *operations* reçoit l'état du nœud, et rien d'autre :
 
 - le démarrage du nœud, en précisant si le téléchargement est activé ;
 - l'espace disque passé sous le plancher (voir [Planification disque](#planification-disque)) ;
@@ -191,7 +191,7 @@ Une alerte part sur un état dégradé qui dure, quel que soit l'état d'avant, 
 nœud qui démarre en Low-ID est signalé au bout de 5 minutes, et la fenêtre où Kad se croit derrière
 un pare-feu après chaque reconnexion ne l'est pas tant qu'elle dure moins de 5 minutes. Le retour
 n'est notifié que si l'alerte est partie. Ces durées sont fixes, et un redémarrage du crawler remet
-leurs horloges à zéro.
+ces délais à zéro.
 
 Les messages partent en markdown : Discord les affiche en embed, signé `p2pwatch - <node-id>` en
 ligne d'auteur, bleu pour une découverte (`🔎 Notify`, `📥 Download`) ou une source
@@ -220,7 +220,7 @@ est enregistré, et ce qui ne l'est jamais, est détaillé dans
 
 Le rôle dit ce que le nœud sait de ce que la source détient :
 
-| Rôle | Groupe | Sens |
+| Rôle | Utilité | Sens |
 |---|---|---|
 | `sending` | utile | elle nous envoie des parties qui nous manquent |
 | `queued` | utile | elle en détient, et nous attendons dans sa file |
@@ -233,13 +233,13 @@ Le catalogue web montre cet historique par fichier, par source et par nom
 ([L'intervalle des pages de détail](#lintervalle-des-pages-de-détail)). Chaque période y nomme le
 nœud qui l'a relevée : un catalogue fusionné en réunit plusieurs.
 
-Deux alertes partent sur le canal *community*, toutes deux quand une source devient utile :
+Deux alertes partent vers l'audience *community*, toutes deux quand une source devient utile :
 
 - **`first_useful`** : la source est utile pour la première fois sur ce nœud, tous fichiers
   confondus ;
 - **`reappeared`** : la source est de nouveau utile après plus de
   `download.reappeared_after_seconds` (12 h par défaut, voir
-  [Régler le nœud](settings.md#le-seuil-des-sources-de-nouveau-utiles)) pendant lesquelles le nœud
+  [Régler le nœud](settings.md#le-seuil-de-lalerte-reappeared)) pendant lesquelles le nœud
   n'a rien appris de ce qu'elle détient : absente, ou vue sans réponse.
 
 Le message donne le nom de la source, les 8 premiers caractères de son user hash, le fichier et ses

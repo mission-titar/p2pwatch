@@ -27,5 +27,5 @@ An agent adds an entry only after the operator has agreed to it.
 - **A monotonic clock for in-memory intervals and deadlines**, the wall clock kept for stamps, and a wait from a
   persisted time capped by its policy's maximum. Section 8 of `agents/specs/2026-10-13-append-only-source-points.md`.
 
-- **Descriptive names**: find the symbols whose names say little (`what`), rename them consistently, and if
-  possible add a lint rule or an agent guideline that prevents them. No spec yet: https://github.com/mission-titar/p2pwatch/pull/198#discussion_r4261141305.
+- **The webui's read side**: one observation type and its own read ports, so no persistence shape reaches its domain;
+  drops the dead `{% else %}` at `sources.html:26`. Section 7 of `agents/specs/2026-10-13-descriptive-names.md`.
