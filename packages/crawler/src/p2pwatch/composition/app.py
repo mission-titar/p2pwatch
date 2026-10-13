@@ -154,7 +154,7 @@ def _human(message: str) -> None:
 
 
 def _sources_spacing(download: DownloadConfig) -> timedelta:
-    """The longest time between two reads of the sources: the interval plus a poll (source
+    """The reads' spacing the writer's tolerance assumes: the interval plus a poll (source
     points spec, D3), since the step runs on the first round past its interval."""
     return download.sources_interval + timedelta(seconds=download.poll_interval_seconds)
 
