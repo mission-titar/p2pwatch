@@ -2,7 +2,7 @@
 
 import re
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import pytest
@@ -28,9 +28,10 @@ from p2pwatch.webui.adapters.catalog_read import (
 from p2pwatch.webui.domain.views import (
     FileRow,
     NameDetail,
+    PeriodWindow,
     SourceDetail,
-    SourceFileRange,
-    SourceRangeView,
+    SourceFilePeriod,
+    SourcePeriodView,
     SourceRow,
 )
 from tests.catalog_rows import (
@@ -39,7 +40,7 @@ from tests.catalog_rows import (
     insert_file,
     insert_observation,
     insert_source,
-    insert_source_range,
+    insert_source_point,
     insert_source_variant,
     source_id,
 )
@@ -300,13 +301,94 @@ def test_file_detail_whole_episode_lists_both_decisions(catalog_db: Path) -> Non
 
 
 # ---------------------------------------------------------------------------
-# Tests: a file's source history (stage 4 spec, D12)
+# Tests: a file's source history as periods (source points spec, D6)
 # ---------------------------------------------------------------------------
 
 _USER = "1f2e" * 8
+_S = 1_000_000  # a second in microseconds
+_WINDOW = PeriodWindow(since=0, until=100_000 * _S, tolerance=90 * _S)
+
+# (role, observed_at, transfer_counter) of one source's points on file a, one variant per role.
+_Points = Sequence[tuple[str, int, int]]
 
 
-def test_source_ranges_lists_a_files_ranges_newest_first(catalog_db: Path) -> None:
+def _seed_points(db: Path, points: _Points) -> None:
+    with sqlite3.connect(db) as conn:
+        insert_file(conn, "a" * 32)
+        insert_source(conn, _USER)
+        variants: dict[str, int] = {}
+        for role, observed_at, counter in points:
+            if role not in variants:
+                variants[role] = insert_source_variant(conn, "a" * 32, _USER, role=role)
+            insert_source_point(conn, variants[role], observed_at, transfer_counter=counter)
+
+
+def _periods(db: Path, window: PeriodWindow = _WINDOW) -> list[tuple[str, int, int, int]]:
+    """``(role, first_seen_at, last_seen_at, received_bytes)`` of file a's periods."""
+    periods = CatalogReader(open_reader(db)).source_periods(file_id("a" * 32), window)
+    return [(p.role.value, p.first_seen_at, p.last_seen_at, p.received_bytes) for p in periods]
+
+
+@pytest.mark.parametrize(
+    ("seconds", "periods"),
+    [
+        ((0, 30, 60, 600), [(600, 600), (0, 60)]),
+        ((0, 30, 120), [(0, 120)]),
+    ],
+    ids=["past-the-tolerance", "at-the-tolerance"],
+)
+def test_a_gap_past_the_tolerance_cuts_a_period(
+    catalog_db: Path, seconds: tuple[int, ...], periods: list[tuple[int, int]]
+) -> None:
+    _seed_points(catalog_db, [("queued", at * _S, 0) for at in seconds])
+    assert [(first // _S, last // _S) for _, first, last, _ in _periods(catalog_db)] == periods
+
+
+def test_a_gap_a_microsecond_past_the_tolerance_cuts_a_period(catalog_db: Path) -> None:
+    _seed_points(catalog_db, [("queued", 0, 0), ("queued", 90 * _S + 1, 0)])
+    assert len(_periods(catalog_db)) == 2
+
+
+def test_a_counter_that_drops_cuts_a_period(catalog_db: Path) -> None:
+    _seed_points(catalog_db, [("sending", 0, 500), ("sending", 30 * _S, 100)])
+    assert _periods(catalog_db) == [("sending", 30 * _S, 30 * _S, 0), ("sending", 0, 0, 0)]
+
+
+@pytest.mark.parametrize(("role", "received"), [("sending", 500), ("queued", 0)])
+def test_only_a_sending_period_shows_the_counters_growth(
+    catalog_db: Path, role: str, received: int
+) -> None:
+    _seed_points(catalog_db, [(role, 0, 400), (role, 30 * _S, 650), (role, 60 * _S, 900)])
+    assert _periods(catalog_db) == [(role, 0, 60 * _S, received)]
+
+
+def test_a_change_of_variant_cuts_a_period_even_when_the_variant_comes_back(
+    catalog_db: Path,
+) -> None:
+    _seed_points(catalog_db, [("queued", 0, 0), ("sending", 30 * _S, 0), ("queued", 60 * _S, 0)])
+    assert [role for role, *_ in _periods(catalog_db)] == ["queued", "sending", "queued"]
+
+
+def test_a_sending_period_never_counts_the_bytes_of_a_standby_one_between(
+    catalog_db: Path,
+) -> None:
+    # The standby counter grows with another file the source sends meanwhile.
+    points = [("sending", 0, 100), ("standby", 30 * _S, 600), ("sending", 60 * _S, 700)]
+    _seed_points(catalog_db, points)
+    assert _periods(catalog_db) == [
+        ("sending", 60 * _S, 60 * _S, 0),
+        ("standby", 30 * _S, 30 * _S, 0),
+        ("sending", 0, 0, 0),
+    ]
+
+
+def test_only_the_windows_points_are_read(catalog_db: Path) -> None:
+    _seed_points(catalog_db, [("queued", at * _S, 0) for at in (0, 30, 60, 90)])
+    window = PeriodWindow(since=30 * _S, until=90 * _S, tolerance=90 * _S)
+    assert _periods(catalog_db, window) == [("queued", 30 * _S, 60 * _S, 0)]
+
+
+def test_source_periods_join_each_identity_on_each_node_newest_first(catalog_db: Path) -> None:
     with sqlite3.connect(catalog_db) as conn:
         insert_file(conn, "a" * 32)
         insert_file(conn, "b" * 32)
@@ -314,30 +396,37 @@ def test_source_ranges_lists_a_files_ranges_newest_first(catalog_db: Path) -> No
         queued = insert_source_variant(
             conn, "a" * 32, _USER, contact_point="198.51.100.7:4661", directly_reachable=False
         )
-        sending = insert_source_variant(conn, "a" * 32, _USER, role="sending")
+        elsewhere = insert_source_variant(conn, "a" * 32, _USER, node_id="n2")
         unnamed = insert_source_variant(conn, "a" * 32, None, name=None, directly_reachable=True)
-        insert_source_range(conn, queued, 30, 60)
-        insert_source_range(conn, sending, 90, 150, received_bytes=2048)
-        insert_source_range(conn, unnamed, 0, 0, node_id="n2")
-        insert_source_range(conn, insert_source_variant(conn, "b" * 32, _USER), 200, 200)
-    ranges = CatalogReader(open_reader(catalog_db)).source_ranges(file_id("a" * 32))
+        hashless = insert_source_variant(conn, "a" * 32, None, name="Teammate")
+        for variant, at in ((queued, 0), (elsewhere, 30), (queued, 60), (unnamed, 30)):
+            insert_source_point(conn, variant, at * _S)
+        insert_source_point(conn, hashless, 45 * _S)
+        insert_source_point(conn, insert_source_variant(conn, "b" * 32, _USER), 200 * _S)
+    periods = CatalogReader(open_reader(catalog_db)).source_periods(file_id("a" * 32), _WINDOW)
     key = SourceKey(Network.ED2K, _USER)
-    assert ranges == (
-        SourceRangeView(key, "AnimuseeFMR", SourceRole.SENDING, None, None, 90, 150, 2048, "n1"),
-        SourceRangeView(
-            key, "AnimuseeFMR", SourceRole.QUEUED, "198.51.100.7:4661", False, 30, 60, 0, "n1"
+    queued_period = SourcePeriodView(
+        key, "AnimuseeFMR", SourceRole.QUEUED, "198.51.100.7:4661", False, 0, 60 * _S, 0, "n1"
+    )
+    assert periods == (
+        SourcePeriodView(
+            None, "Teammate", SourceRole.QUEUED, None, None, 45 * _S, 45 * _S, 0, "n1"
         ),
-        SourceRangeView(None, None, SourceRole.QUEUED, None, True, 0, 0, 0, "n2"),
+        SourcePeriodView(None, None, SourceRole.QUEUED, None, True, 30 * _S, 30 * _S, 0, "n1"),
+        SourcePeriodView(
+            key, "AnimuseeFMR", SourceRole.QUEUED, None, None, 30 * _S, 30 * _S, 0, "n2"
+        ),
+        queued_period,
     )
 
 
-def test_source_ranges_of_a_file_never_read_is_empty(catalog_db: Path) -> None:
+def test_source_periods_of_a_file_never_read_is_empty(catalog_db: Path) -> None:
     _seed(catalog_db)
-    assert CatalogReader(open_reader(catalog_db)).source_ranges(file_id("a" * 32)) == ()
+    assert CatalogReader(open_reader(catalog_db)).source_periods(file_id("a" * 32), _WINDOW) == ()
 
 
 # ---------------------------------------------------------------------------
-# Tests: the sources list (stage 4 spec, D13)
+# Tests: the sources list (stage 4 spec, D13; source points spec, D6)
 # ---------------------------------------------------------------------------
 
 _OTHER = "9c0d" * 8
@@ -350,14 +439,16 @@ def _seed_sources(db: Path) -> None:
         insert_file(conn, "b" * 32)
         insert_source(conn, _USER)
         insert_source(conn, _OTHER)
-        old = insert_source_variant(conn, "a" * 32, _USER, name="Shinobu")
-        new = insert_source_variant(conn, "b" * 32, _USER, name="AnimuseeFMR")
-        unnamed = insert_source_variant(conn, "b" * 32, _USER, name=None, role="sending")
-        insert_source_range(conn, old, 10, 20)
-        insert_source_range(conn, new, 30, 40)
-        insert_source_range(conn, unnamed, 50, 60)
-        insert_source_range(conn, insert_source_variant(conn, "a" * 32, _OTHER), 0, 5)
-        insert_source_range(conn, insert_source_variant(conn, "a" * 32, None, name="x"), 70, 80)
+        for ed2k_hash, user, name, role, seconds in (
+            ("a", _USER, "Shinobu", "queued", (10, 20)),
+            ("b", _USER, "AnimuseeFMR", "queued", (30, 40)),
+            ("b", _USER, None, "sending", (50, 60)),
+            ("a", _OTHER, "AnimuseeFMR", "queued", (0, 5)),
+            ("a", None, "x", "queued", (70, 80)),
+        ):
+            variant = insert_source_variant(conn, ed2k_hash * 32, user, name=name, role=role)
+            for at in seconds:
+                insert_source_point(conn, variant, at)
 
 
 def test_list_sources_lists_each_source_once_by_last_seen_with_its_latest_name(
@@ -390,8 +481,7 @@ def test_list_sources_pages_by_fifty(catalog_db: Path) -> None:
         insert_file(conn, "a" * 32)
         for n in range(PAGE_SIZE + 1):
             insert_source(conn, f"{n:032x}")
-            variant = insert_source_variant(conn, "a" * 32, f"{n:032x}")
-            insert_source_range(conn, variant, n, n)
+            insert_source_point(conn, insert_source_variant(conn, "a" * 32, f"{n:032x}"), n)
     reader = CatalogReader(open_reader(catalog_db))
     first, second = reader.list_sources(query=None, page=1), reader.list_sources(query=None, page=2)
     assert (len(first), first[0].last_seen_at) == (PAGE_SIZE, PAGE_SIZE)
@@ -414,45 +504,61 @@ def _seed_pages(db: Path) -> None:
         insert_source(conn, _THIRD)
         for user, at in ((_OTHER, 6), (_THIRD, 8)):
             variant = insert_source_variant(conn, "a" * 32, user, name="Keroro")
-            insert_source_range(conn, variant, at, at + 1)
+            insert_source_point(conn, variant, at)
         hashless = insert_source_variant(conn, "b" * 32, None, name="AnimuseeFMR", role="standby")
-        insert_source_range(conn, hashless, 90, 95)
+        insert_source_point(conn, hashless, 95)
 
 
-def _queued(source: SourceKey | None, name: str | None, first: int, last: int) -> SourceRangeView:
-    return SourceRangeView(source, name, SourceRole.QUEUED, None, None, first, last, 0, "n1")
+def _period(source: SourceKey | None, name: str | None, first: int, last: int) -> SourcePeriodView:
+    return SourcePeriodView(source, name, SourceRole.QUEUED, None, None, first, last, 0, "n1")
 
 
-def test_source_detail_lists_its_names_and_its_ranges_over_every_file(catalog_db: Path) -> None:
+def test_source_detail_lists_its_names_and_its_periods_over_every_file(catalog_db: Path) -> None:
     _seed_pages(catalog_db)
-    detail = CatalogReader(open_reader(catalog_db)).source_detail(source_id(_USER), page=1)
+    reader = CatalogReader(open_reader(catalog_db))
+    detail = reader.source_detail(source_id(_USER), page=1, window=_WINDOW)
     key, a, b = (
         SourceKey(Network.ED2K, _USER),
         FileKey(Network.ED2K, "a" * 32),
         FileKey(Network.ED2K, "b" * 32),
     )
-    sending = SourceRangeView(key, None, SourceRole.SENDING, None, None, 50, 60, 0, "n1")
+    sending = SourcePeriodView(key, None, SourceRole.SENDING, None, None, 50, 60, 0, "n1")
     assert detail == SourceDetail(
         source=key,
         names=(SourceRow(key, "AnimuseeFMR", 40, 1), SourceRow(key, "Shinobu", 20, 1)),
-        ranges=(
-            SourceFileRange(b, None, sending),
-            SourceFileRange(b, None, _queued(key, "AnimuseeFMR", 30, 40)),
-            SourceFileRange(a, "keroro_062a.avi", _queued(key, "Shinobu", 10, 20)),
+        periods=(
+            SourceFilePeriod(b, None, sending),
+            SourceFilePeriod(b, None, _period(key, "AnimuseeFMR", 30, 40)),
+            SourceFilePeriod(a, "keroro_062a.avi", _period(key, "Shinobu", 10, 20)),
         ),
     )
 
 
-def test_name_detail_lists_its_hashes_and_its_ranges_without_one(catalog_db: Path) -> None:
+def test_name_detail_lists_its_hashes_and_its_periods_without_one(catalog_db: Path) -> None:
     _seed_pages(catalog_db)
-    detail = CatalogReader(open_reader(catalog_db)).name_detail("AnimuseeFMR", page=1)
+    detail = CatalogReader(open_reader(catalog_db)).name_detail(
+        "AnimuseeFMR", page=1, window=_WINDOW
+    )
     user, other = SourceKey(Network.ED2K, _USER), SourceKey(Network.ED2K, _OTHER)
-    hashless = SourceRangeView(None, "AnimuseeFMR", SourceRole.STANDBY, None, None, 90, 95, 0, "n1")
+    hashless = SourcePeriodView(
+        None, "AnimuseeFMR", SourceRole.STANDBY, None, None, 95, 95, 0, "n1"
+    )
     assert detail == NameDetail(
         name="AnimuseeFMR",
         sources=(SourceRow(user, "AnimuseeFMR", 40, 1), SourceRow(other, "AnimuseeFMR", 5, 1)),
-        ranges=(SourceFileRange(FileKey(Network.ED2K, "b" * 32), None, hashless),),
+        periods=(SourceFilePeriod(FileKey(Network.ED2K, "b" * 32), None, hashless),),
     )
+
+
+def test_the_pages_periods_are_read_in_the_window_only(catalog_db: Path) -> None:
+    _seed_pages(catalog_db)
+    reader = CatalogReader(open_reader(catalog_db))
+    window = PeriodWindow(since=55, until=1_000, tolerance=_WINDOW.tolerance)
+    source = reader.source_detail(source_id(_USER), page=1, window=window)
+    name = reader.name_detail("AnimuseeFMR", page=1, window=window)
+    assert source is not None and name is not None
+    assert [(p.period.first_seen_at, p.period.last_seen_at) for p in source.periods] == [(60, 60)]
+    assert [(p.period.first_seen_at, p.period.last_seen_at) for p in name.periods] == [(95, 95)]
 
 
 # ---------------------------------------------------------------------------

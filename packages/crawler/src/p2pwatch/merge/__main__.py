@@ -29,9 +29,7 @@ _LOGGER = logging.getLogger("p2pwatch.merge")
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="p2pwatch.merge",
-        description=(
-            "Merge N catalog.db into one (idempotent: rows appended, source ranges united)."
-        ),
+        description="Merge N catalog.db into one (idempotent, append-only preserved).",
     )
     parser.add_argument(
         "sources", nargs="+", type=Path, help="1..N catalog.db files to merge (≥ 1)."

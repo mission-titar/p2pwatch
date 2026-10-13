@@ -25,6 +25,7 @@ import sys
 import threading
 from collections.abc import Callable, Sequence
 from contextlib import AsyncExitStack, suppress
+from datetime import timedelta
 from importlib.metadata import version
 from pathlib import Path
 from typing import Protocol
@@ -73,6 +74,7 @@ from p2pwatch.application.search_worker import (
 )
 from p2pwatch.application.status_loop import StatusBoard, StatusLoopDeps, status_loop
 from p2pwatch.domain.observability.events import CrawlerStarted
+from p2pwatch.domain.source import source_tolerance
 from p2pwatch.ports.client_errors import ClientUnreachableError
 from p2pwatch.ports.clock import Clock, Rng
 from p2pwatch.ports.crawler_control import CrawlerControl
@@ -138,6 +140,9 @@ _WEBUI_BIND_PORT = 8080
 # ``_stop_webui``) so the crawler's armed shutdown ``asyncio.timeout`` can still cancel it.
 _WEBUI_JOIN_TIMEOUT_SECONDS = 5.0
 
+# ``deploy/crawler.yml``'s ``download.poll_interval_seconds``, for a node that reads no source.
+_SHIPPED_POLL_SECONDS = 30.0
+
 
 def default_webui_server_factory(app: Starlette) -> uvicorn.Server:
     """A real ``uvicorn.Server`` bound to the fixed 0.0.0.0:8080 serving the webui ASGI ``app``
@@ -150,6 +155,13 @@ def default_webui_server_factory(app: Starlette) -> uvicorn.Server:
 def _human(message: str) -> None:
     """Human shutdown line on stderr (spec §6: observable progress, outside logging)."""
     print(message, file=sys.stderr, flush=True)
+
+
+def _sources_spacing(download: DownloadConfig | None) -> timedelta:
+    """The longest time between two reads of the sources: one poll (source points spec, D3).
+    A crawl-only node reads none; it cuts another node's periods at the shipped poll."""
+    seconds = _SHIPPED_POLL_SECONDS if download is None else download.poll_interval_seconds
+    return timedelta(seconds=seconds)
 
 
 def _build_policy(config: CrawlerConfig) -> WorkerPolicy:
@@ -347,6 +359,8 @@ class CrawlerApp:
             control=control,
             status=status,
             amule_url=self._crawler_config.webui.amule_url,
+            clock=self._clock,
+            source_tolerance=source_tolerance(_sources_spacing(self._crawler_config.download)),
         )
         server = self._webui_server_factory(app)
         thread = threading.Thread(
@@ -480,7 +494,9 @@ class CrawlerApp:
                     download_config=download_config,
                     stack=stack,
                     catalog_repo=catalog_repo,
-                    source_repo=SqliteSourceRepository(catalog_conn, node_id),
+                    source_repo=SqliteSourceRepository(
+                        catalog_conn, node_id, _sources_spacing(download_config)
+                    ),
                     local_conn=local_conn,
                     telemetry=telemetry,
                 )

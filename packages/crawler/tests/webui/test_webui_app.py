@@ -3,6 +3,7 @@
 import re
 import sqlite3
 from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -41,7 +42,7 @@ from tests.catalog_rows import (
     insert_file,
     insert_observation,
     insert_source,
-    insert_source_range,
+    insert_source_point,
     insert_source_variant,
     source_id,
 )
@@ -52,6 +53,9 @@ from tests.catalog_rows import (
 
 TEST_HASH = "aabbccdd00112233aabbccdd00112233"
 _AMULE_URL = "http://localhost:4711"
+# Wednesday 2026-10-14 20:00 UTC: the period tables read the 7 days before it.
+_CLOCK = FakeClock(datetime(2026, 10, 14, 20, 0, tzinfo=UTC))
+_TOLERANCE = timedelta(seconds=90)
 
 
 class _Readings:
@@ -180,6 +184,8 @@ def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         control=_RecordingControl(),
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
+        clock=_CLOCK,
+        source_tolerance=_TOLERANCE,
     )
     return app, TEST_HASH
 
@@ -223,6 +229,8 @@ def app_no_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         control=_RecordingControl(),
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
+        clock=_CLOCK,
+        source_tolerance=_TOLERANCE,
     )
     return app, TEST_HASH
 
@@ -278,6 +286,8 @@ def app_retracted_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette,
         control=_RecordingControl(),
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
+        clock=_CLOCK,
+        source_tolerance=_TOLERANCE,
     )
     return app, TEST_HASH
 
@@ -314,6 +324,8 @@ def app_no_observations(catalog_db: Path, local_db: Path) -> tuple[Starlette, st
         control=_RecordingControl(),
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
+        clock=_CLOCK,
+        source_tolerance=_TOLERANCE,
     )
     return app, TEST_HASH
 
@@ -358,6 +370,8 @@ def app_unknown_target(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         control=_RecordingControl(),
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
+        clock=_CLOCK,
+        source_tolerance=_TOLERANCE,
     )
     return app, TEST_HASH
 
@@ -402,6 +416,8 @@ def app_download_tier_known_target(catalog_db: Path, local_db: Path) -> tuple[St
         control=_RecordingControl(),
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
+        clock=_CLOCK,
+        source_tolerance=_TOLERANCE,
     )
     return app, TEST_HASH
 
@@ -446,6 +462,8 @@ def app_download_tier_unknown_target(catalog_db: Path, local_db: Path) -> tuple[
         control=_RecordingControl(),
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
+        clock=_CLOCK,
+        source_tolerance=_TOLERANCE,
     )
     return app, TEST_HASH
 
@@ -691,6 +709,8 @@ def app_vetoed_alias(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         control=_RecordingControl(),
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
+        clock=_CLOCK,
+        source_tolerance=_TOLERANCE,
     )
     return app, TEST_HASH
 
@@ -738,19 +758,19 @@ async def test_file_detail_shows_its_source_history_newest_first(
     with sqlite3.connect(catalog_db) as conn:
         insert_source(conn, _USER)
         queued = insert_source_variant(
-            conn, hash_, _USER, contact_point="198.51.100.7:4661", directly_reachable=False
-        )
-        sending = insert_source_variant(conn, hash_, _USER, role="sending")
-        insert_source_range(
-            conn, queued, _TUESDAY_8PM + 30_000_000, _TUESDAY_8PM + 60_000_000, node_id="n2"
-        )
-        insert_source_range(
             conn,
-            sending,
-            _TUESDAY_8PM + 90_000_000,
-            _TUESDAY_8PM + 10_330_000_000,
-            received_bytes=10 * 1024 * 1024,
+            hash_,
+            _USER,
+            contact_point="198.51.100.7:4661",
+            directly_reachable=False,
+            node_id="n2",
         )
+        sending = insert_source_variant(conn, hash_, _USER, role="sending", node_id="n1")
+        for at in (30, 60):
+            insert_source_point(conn, queued, _TUESDAY_8PM + at * 1_000_000)
+        for step in range(129):  # every 80 s, 10 MB in 10,240 s
+            at, counter = _TUESDAY_8PM + (90 + 80 * step) * 1_000_000, step * 81_920
+            insert_source_point(conn, sending, at, transfer_counter=counter)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get(_detail_url(hash_))
     page = re.sub(r">\s+<", "><", resp.text)
@@ -770,7 +790,7 @@ async def test_file_detail_shows_its_source_history_newest_first(
 
 
 @pytest.mark.asyncio
-async def test_file_detail_links_only_the_name_or_the_hash_a_range_has(
+async def test_file_detail_links_only_the_name_or_the_hash_a_period_has(
     populated_app: tuple[Starlette, str], catalog_db: Path
 ) -> None:
     app, hash_ = populated_app
@@ -778,8 +798,8 @@ async def test_file_detail_links_only_the_name_or_the_hash_a_range_has(
         insert_source(conn, _USER)
         unnamed = insert_source_variant(conn, hash_, _USER, name=None, directly_reachable=True)
         hashless = insert_source_variant(conn, hash_, None, name="http://emule-project.net")
-        insert_source_range(conn, unnamed, _TUESDAY_8PM, _TUESDAY_8PM)
-        insert_source_range(conn, hashless, _TUESDAY_8PM, _TUESDAY_8PM)
+        insert_source_point(conn, unnamed, _TUESDAY_8PM)
+        insert_source_point(conn, hashless, _TUESDAY_8PM)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get(_detail_url(hash_))
     page = re.sub(r">\s+<", "><", resp.text)
@@ -793,13 +813,19 @@ async def test_file_detail_links_only_the_name_or_the_hash_a_range_has(
 
 
 @pytest.mark.asyncio
-async def test_file_detail_of_a_file_without_source_says_so(
-    populated_app: tuple[Starlette, str],
+async def test_file_detail_shows_no_source_older_than_7_days(
+    populated_app: tuple[Starlette, str], catalog_db: Path
 ) -> None:
     app, hash_ = populated_app
+    with sqlite3.connect(catalog_db) as conn:
+        insert_source(conn, _USER)
+        week_before = (_CLOCK.now() - timedelta(days=7, microseconds=1)).timestamp()
+        insert_source_point(
+            conn, insert_source_variant(conn, hash_, _USER), int(week_before * 1_000_000)
+        )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get(_detail_url(hash_))
-    assert '<td colspan="10">No source recorded.</td>' in resp.text
+    assert '<td colspan="10">No source read in the last 7 days.</td>' in resp.text
 
 
 # ---------------------------------------------------------------------------
@@ -814,7 +840,8 @@ def _seed_two_sources(catalog_db: Path, ed2k_hash: str) -> None:
         for user, name in ((_USER, "AnimuseeFMR"), (_OTHER, "Shinobu")):
             insert_source(conn, user)
             variant = insert_source_variant(conn, ed2k_hash, user, name=name)
-            insert_source_range(conn, variant, _TUESDAY_8PM, _TUESDAY_8PM + 30_000_000)
+            for at in (_TUESDAY_8PM, _TUESDAY_8PM + 30_000_000):
+                insert_source_point(conn, variant, at)
 
 
 async def _sources_page(app: Starlette, url: str) -> str:
@@ -867,7 +894,7 @@ async def test_sources_pages_keep_the_search(
     with sqlite3.connect(catalog_db) as conn:
         for n in range(PAGE_SIZE + 1):
             insert_source(conn, f"{n:032x}")
-            insert_source_range(conn, insert_source_variant(conn, hash_, f"{n:032x}"), n, n)
+            insert_source_point(conn, insert_source_variant(conn, hash_, f"{n:032x}"), n)
     first = await _sources_page(app, "/sources?q=FMR")
     second = await _sources_page(app, "/sources?q=FMR&page=2")
     assert 'href="/sources?q=FMR&amp;page=2"' in first
@@ -888,7 +915,7 @@ def _hash_link(user: str) -> str:
 
 
 @pytest.mark.asyncio
-async def test_source_page_shows_its_hash_its_names_and_its_ranges(
+async def test_source_page_shows_its_hash_its_names_and_its_periods(
     populated_app: tuple[Starlette, str], catalog_db: Path
 ) -> None:
     app, hash_ = populated_app
@@ -896,7 +923,7 @@ async def test_source_page_shows_its_hash_its_names_and_its_ranges(
     with sqlite3.connect(catalog_db) as conn:
         insert_file(conn, "c" * 32)
         unseen = insert_source_variant(conn, "c" * 32, _USER, role="standby")
-        insert_source_range(conn, unseen, _TUESDAY_8PM, _TUESDAY_8PM)
+        insert_source_point(conn, unseen, _TUESDAY_8PM)
     page = await _sources_page(app, _USER_PAGE)
     name = '<a href="/sources/name?name=AnimuseeFMR">AnimuseeFMR</a>'
     file = f'<a href="/files/{file_id(hash_).hex()}">keroro_s2e62a_vf.avi</a>'
@@ -928,7 +955,7 @@ async def test_name_page_lists_the_hashes_that_carried_it_and_nothing_further(
             (None, "AnimuseeFMR", unseen),
         ):
             variant = insert_source_variant(conn, on, user, name=name, role="standby")
-            insert_source_range(conn, variant, _TUESDAY_8PM, _TUESDAY_8PM)
+            insert_source_point(conn, variant, _TUESDAY_8PM)
     page = await _sources_page(app, "/sources/name?name=AnimuseeFMR")
     file = f'<a href="/files/{file_id(unseen).hex()}">cccccccc…</a>'
     stamp = "2026-10-13 20:00:00Z"
@@ -954,27 +981,26 @@ async def test_source_and_name_pages_of_what_was_never_recorded_return_404(
 
 
 @pytest.mark.parametrize(
-    ("user", "url", "paged"),
-    [
-        (None, "/sources/name?name=AnimuseeFMR", "/sources/name?name=AnimuseeFMR&page="),
-        (_USER, _USER_PAGE, f"{_USER_PAGE}?page="),
-    ],
+    ("user", "url", "lists"),
+    [(None, "/sources/name?name=AnimuseeFMR&", 0), (_USER, f"{_USER_PAGE}?", 1)],
+    ids=["name", "source"],
 )
 @pytest.mark.asyncio
-async def test_source_and_name_pages_page_their_ranges_by_fifty(
-    populated_app: tuple[Starlette, str], catalog_db: Path, user: str | None, url: str, paged: str
+async def test_source_and_name_pages_show_every_period_of_the_window_on_one_page(
+    populated_app: tuple[Starlette, str], catalog_db: Path, user: str | None, url: str, lists: int
 ) -> None:
+    # The page parameter moves the names or the hashes only (source points spec, D6).
     app, hash_ = populated_app
     with sqlite3.connect(catalog_db) as conn:
         if user is not None:
             insert_source(conn, user)
         variant = insert_source_variant(conn, hash_, user)
-        for n in range(PAGE_SIZE + 1):
-            insert_source_range(conn, variant, n, n)
-    first, second = await _sources_page(app, url), await _sources_page(app, f"{paged}2")
-    assert f'href="{paged.replace("&", "&amp;")}2"' in first
-    assert f'href="{paged.replace("&", "&amp;")}1"' in second
-    assert second.count("<tr><td>") == 1
+        for n in range(PAGE_SIZE + 1):  # one period each, past the tolerance
+            insert_source_point(conn, variant, _TUESDAY_8PM + n * 100_000_000)
+    first, second = await _sources_page(app, url), await _sources_page(app, f"{url}page=2")
+    assert first.count("<tr><td>") == PAGE_SIZE + 1 + lists
+    assert second.count("<tr><td>") == PAGE_SIZE + 1
+    assert "page=2" not in first
 
 
 @pytest.mark.asyncio
@@ -1196,6 +1222,8 @@ def app_with_media_obs(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         control=_RecordingControl(),
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
+        clock=_CLOCK,
+        source_tolerance=_TOLERANCE,
     )
     return app, TEST_HASH
 
@@ -1256,6 +1284,8 @@ def app_with_hostile_filename(catalog_db: Path, local_db: Path) -> tuple[Starlet
         control=_RecordingControl(),
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
+        clock=_CLOCK,
+        source_tolerance=_TOLERANCE,
     )
     return app, TEST_HASH
 
@@ -1333,6 +1363,8 @@ async def test_files_page_shows_pagination_navigation(catalog_db: Path, local_db
         control=_RecordingControl(),
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
+        clock=_CLOCK,
+        source_tolerance=_TOLERANCE,
     )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp1 = await client.get("/files")
@@ -1651,6 +1683,8 @@ def app_whole_episode(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]
         control=_RecordingControl(),
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
+        clock=_CLOCK,
+        source_tolerance=_TOLERANCE,
     )
     return app, TEST_HASH
 
@@ -1722,6 +1756,8 @@ def _dashboard_app(
         control=control,
         status=status,
         amule_url=_AMULE_URL,
+        clock=_CLOCK,
+        source_tolerance=_TOLERANCE,
     )
 
 
@@ -1965,6 +2001,8 @@ def sortable_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, list[str]
         control=_RecordingControl(),
         status=_NO_STATUS,
         amule_url=_AMULE_URL,
+        clock=_CLOCK,
+        source_tolerance=_TOLERANCE,
     )
     return app, [big, mid, small]
 
@@ -2182,6 +2220,8 @@ async def test_nav_amule_link_uses_the_configured_base(catalog_db: Path, local_d
         control=_RecordingControl(),
         status=_NO_STATUS,
         amule_url="https://mule.example.org/amule",
+        clock=_CLOCK,
+        source_tolerance=_TOLERANCE,
     )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/")

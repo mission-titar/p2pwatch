@@ -35,8 +35,16 @@
   </table>
 </section>
 
+{% for url in (nav.prev_url,) if url %}
+<a href="{{ url }}">← Previous</a>
+{% endfor %}
+<span>Page {{ nav.page }}</span>
+{% for url in (nav.next_url,) if url %}
+<a href="{{ url }}">Next →</a>
+{% endfor %}
+
 <section>
-  <h2>Ranges without a user hash</h2>
+  <h2>Periods without a user hash</h2>
   <table>
     <thead>
       <tr>
@@ -52,7 +60,7 @@
       </tr>
     </thead>
     <tbody>
-      {% for row in ranges %}
+      {% for row in periods %}
       <tr>
         <td><a href="{{ row.file_link }}">{{ row.file }}</a></td>
         <td>{{ row.history.role }}</td>
@@ -65,17 +73,10 @@
         <td>{{ row.history.node }}</td>
       </tr>
       {% else %}
-      <tr><td colspan="9">No range on this page.</td></tr>
+      <tr><td colspan="9">No period in the last 7 days.</td></tr>
       {% endfor %}
     </tbody>
   </table>
 </section>
 
-{% for url in (nav.prev_url,) if url %}
-<a href="{{ url }}">← Previous</a>
-{% endfor %}
-<span>Page {{ nav.page }}</span>
-{% for url in (nav.next_url,) if url %}
-<a href="{{ url }}">Next →</a>
-{% endfor %}
 {% endblock %}

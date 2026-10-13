@@ -37,7 +37,7 @@ _SOURCE_ROLES = {
     "no_needed_parts": SourceRole.NOTHING_NEW,
 }
 
-# States aMule leaves on its own: no role, the writer carries the latest range's group (D3).
+# States aMule leaves on its own: no role, the writer carries the latest point's group (D3).
 _PASSING_STATES = frozenset(
     {
         "idle",

@@ -7,6 +7,7 @@ import ipaddress
 import re
 import uuid
 from dataclasses import dataclass
+from datetime import timedelta
 from enum import StrEnum
 
 from p2pwatch.domain.file_key import Network
@@ -69,17 +70,25 @@ _GROUPS = {
     SourceRole.UNDETERMINED: SourceGroup.UNKNOWN,
 }
 
-# Not SENDING after a useful range: a source no longer downloading is not sending (D3).
+# Not SENDING after a useful point: a source no longer downloading is not sending (D3).
 _CARRIED = {
     SourceGroup.USEFUL: SourceRole.QUEUED,
     SourceGroup.NOT_USEFUL: SourceRole.NOTHING_NEW,
     SourceGroup.UNKNOWN: SourceRole.UNDETERMINED,
 }
 
+# One missed read stays within three spacings while a cycle lasts under half of one (D4).
+_TOLERATED_READS = 3
+
 
 def carried_role(previous: SourceRole | None) -> SourceRole:
-    """The role of a reading in a passing state, from its latest range's, ``None`` without one."""
+    """The role of a reading in a passing state, from its latest point's, ``None`` without one."""
     return SourceRole.UNDETERMINED if previous is None else _CARRIED[previous.group]
+
+
+def source_tolerance(spacing: timedelta) -> timedelta:
+    """The longest gap between two reads of one source that still joins them (D4, D6)."""
+    return _TOLERATED_READS * spacing
 
 
 def is_contact_point(network: Network, contact_point: str) -> bool:
@@ -102,7 +111,7 @@ _CONTACT_POINTS = {Network.ED2K: _is_ed2k_server}
 @dataclass(frozen=True)
 class SourceReading:
     """One source of one download at one read. ``role`` is ``None`` in a passing state, whose
-    role the writer carries from the source's latest range (D3)."""
+    role the writer carries from the source's latest point (D3)."""
 
     key: SourceKey | None
     name: str | None

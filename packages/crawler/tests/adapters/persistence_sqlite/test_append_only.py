@@ -1,9 +1,9 @@
 """Append-only ENFORCED BY THE DATABASE (spec data-model §3): a SCHEMA property, not the code's.
 
-Every table in ``catalog.db`` but ``source_ranges`` (``test_migration_0010.py``) carries a
-``BEFORE UPDATE`` and a ``BEFORE DELETE`` trigger → ``RAISE(ABORT, '<table> is append-only')``.
-Verified here by DIRECT UPDATE/DELETE on the connection (as a third-party tool would): the
-violation surfaces as ``sqlite3.IntegrityError`` (the REAL class observed, SQLite 3.47.1).
+Every table in ``catalog.db`` carries a ``BEFORE UPDATE`` and a ``BEFORE DELETE`` trigger →
+``RAISE(ABORT, '<table> is append-only')``. Verified here by DIRECT UPDATE/DELETE on the
+connection (as a third-party tool would): the violation surfaces as ``sqlite3.IntegrityError``
+(the REAL class observed, SQLite 3.47.1).
 """
 
 import sqlite3
@@ -18,6 +18,7 @@ from tests.catalog_rows import (
     insert_file,
     insert_observation,
     insert_source,
+    insert_source_point,
     insert_source_variant,
 )
 
@@ -32,6 +33,7 @@ _UPDATES = {
     "match_decisions": "UPDATE match_decisions SET tier = 'notify'",
     "sources": f"UPDATE sources SET native_id = '{'b' * 32}'",
     "source_variants": "UPDATE source_variants SET name = 'autre'",
+    "source_observations": "UPDATE source_observations SET transfer_counter = 2",
 }
 
 
@@ -42,7 +44,7 @@ def seeded_catalog(tmp_path: Path) -> Iterator[sqlite3.Connection]:
     insert_observation(connection, _HASH, "f")
     insert_decision(connection, _HASH, "062A", "download")
     insert_source(connection, _HASH)
-    insert_source_variant(connection, _HASH, _HASH)
+    insert_source_point(connection, insert_source_variant(connection, _HASH, _HASH), 1)
     yield connection
     connection.close()
 

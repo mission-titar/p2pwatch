@@ -95,35 +95,29 @@ def insert_source_variant(
     role: str = "queued",
     contact_point: str | None = None,
     directly_reachable: bool | None = None,
+    node_id: str = "n1",
 ) -> int:
     """The new variant's ``variant_id``; its ``content_hash`` stands in for the writer's."""
     sid = source_id(user_hash) if user_hash is not None else None
     columns = (name, role, contact_point, directly_reachable)
-    key = hashlib.blake2b(repr((ed2k_hash, user_hash, *columns)).encode(), digest_size=16)
+    key = hashlib.blake2b(repr((ed2k_hash, user_hash, *columns, node_id)).encode(), digest_size=16)
     row = conn.execute(
         "INSERT INTO source_variants (file_id, source_id, name, role, contact_point,"
-        " directly_reachable, raw_meta, content_hash)"
-        " VALUES (?, ?, ?, ?, ?, ?, '{}', ?) RETURNING variant_id",
-        (file_id(ed2k_hash), sid, *columns, key.digest()),
+        " directly_reachable, raw_meta, node_id, content_hash)"
+        " VALUES (?, ?, ?, ?, ?, ?, '{}', ?, ?) RETURNING variant_id",
+        (file_id(ed2k_hash), sid, *columns, node_id, key.digest()),
     ).fetchone()
     variant_id: int = row[0]
     return variant_id
 
 
-def insert_source_range(
-    conn: sqlite3.Connection,
-    variant_id: int,
-    first_seen_at: int,
-    last_seen_at: int,
-    *,
-    node_id: str = "n1",
-    received_bytes: int = 0,
-    transfer_counter: int = 0,
+def insert_source_point(
+    conn: sqlite3.Connection, variant_id: int, observed_at: int, *, transfer_counter: int = 0
 ) -> None:
     conn.execute(
-        "INSERT INTO source_ranges (variant_id, node_id, first_seen_at, last_seen_at,"
-        " received_bytes, transfer_counter) VALUES (?, ?, ?, ?, ?, ?)",
-        (variant_id, node_id, first_seen_at, last_seen_at, received_bytes, transfer_counter),
+        "INSERT INTO source_observations (variant_id, observed_at, transfer_counter)"
+        " VALUES (?, ?, ?)",
+        (variant_id, observed_at, transfer_counter),
     )
 
 

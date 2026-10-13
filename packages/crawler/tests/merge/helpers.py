@@ -16,7 +16,7 @@ from tests.catalog_rows import (
     insert_file,
     insert_observation,
     insert_source,
-    insert_source_range,
+    insert_source_point,
     insert_source_variant,
 )
 
@@ -35,13 +35,13 @@ _ROWS_BY_TABLE: Mapping[str, str] = {
     ),
     "sources": "SELECT network, native_id FROM sources",
     "source_variants": (
-        "SELECT f.native_id, s.native_id, v.name, v.role, v.content_hash"
+        "SELECT f.native_id, s.native_id, v.name, v.role, v.node_id, v.content_hash"
         " FROM source_variants AS v JOIN files AS f USING (file_id)"
         " LEFT JOIN sources AS s ON s.source_id = v.source_id"
     ),
-    "source_ranges": (
-        "SELECT v.content_hash, r.node_id, r.first_seen_at, r.last_seen_at, r.received_bytes,"
-        " r.transfer_counter FROM source_ranges AS r JOIN source_variants AS v USING (variant_id)"
+    "source_observations": (
+        "SELECT v.content_hash, o.observed_at, o.transfer_counter"
+        " FROM source_observations AS o JOIN source_variants AS v USING (variant_id)"
     ),
 }
 
@@ -72,25 +72,31 @@ def make_catalog(
                 insert_observation(connection, **row)
             for row in content.get("match_decisions", ()):
                 insert_decision(connection, **row)
-            _insert_source_ranges(connection, content.get("source_ranges", ()))
+            _insert_source_points(connection, content.get("source_observations", ()))
     finally:
         connection.close()
     return path
 
 
-def _insert_source_ranges(
+def _insert_source_points(
     connection: sqlite3.Connection, rows: Sequence[Mapping[str, Any]]
 ) -> None:
-    """Each row: its variant's ``ed2k_hash`` and ``user_hash``, then its range's arguments."""
-    variants: dict[tuple[str, str | None], int] = {}
+    """Each row: its variant's ``ed2k_hash``, ``user_hash`` and ``node_id``, then its point's
+    arguments."""
+    variants: dict[tuple[str, str | None, str], int] = {}
     for row in rows:
-        ed2k_hash, user_hash = row["ed2k_hash"], row["user_hash"]
-        if (ed2k_hash, user_hash) not in variants:
+        variant = (row["ed2k_hash"], row["user_hash"], row["node_id"])
+        if variant not in variants:
+            user_hash = variant[1]
             if user_hash is not None and user_hash not in {key[1] for key in variants}:
                 insert_source(connection, user_hash)
-            variants[ed2k_hash, user_hash] = insert_source_variant(connection, ed2k_hash, user_hash)
-        range_args = {k: v for k, v in row.items() if k not in ("ed2k_hash", "user_hash")}
-        insert_source_range(connection, variants[ed2k_hash, user_hash], **range_args)
+            variants[variant] = insert_source_variant(
+                connection, variant[0], user_hash, node_id=variant[2]
+            )
+        point_args = {
+            k: v for k, v in row.items() if k not in ("ed2k_hash", "user_hash", "node_id")
+        }
+        insert_source_point(connection, variants[variant], **point_args)
 
 
 def stamp_user_version(path: Path, version: int) -> None:

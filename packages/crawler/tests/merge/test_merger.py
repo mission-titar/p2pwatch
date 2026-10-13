@@ -27,7 +27,7 @@ from .helpers import (
 
 # The current catalog schema version = the last catalog migration's number.
 # open_catalog stamps the output to it; the guard rejects any source that is not at it.
-_CURRENT_SCHEMA_VERSION = 10
+_CURRENT_SCHEMA_VERSION = 11
 _T1 = "2026-06-11T12:00:00.000000+00:00"
 _T2 = "2026-06-11T13:00:00.000000+00:00"
 
@@ -44,7 +44,7 @@ def _file_observation(ed2k_hash: str, *, node_id: str, observed_at: str) -> dict
 
 
 def _full_catalog(letter: str, *, node_id: str) -> dict[str, list[dict[str, object]]]:
-    """A consistent catalog: 1 file, 1 row in each of the 2 journals, 1 source range."""
+    """A consistent catalog: 1 file, 1 row in each of the 2 journals, 1 source point."""
     ed2k = hash_for(letter)
     return {
         "files": [{"ed2k_hash": ed2k, "size_bytes": 100}],
@@ -59,14 +59,8 @@ def _full_catalog(letter: str, *, node_id: str) -> dict[str, list[dict[str, obje
                 "node_id": node_id,
             }
         ],
-        "source_ranges": [
-            {
-                "ed2k_hash": ed2k,
-                "user_hash": ed2k,
-                "first_seen_at": 10,
-                "last_seen_at": 20,
-                "node_id": node_id,
-            }
+        "source_observations": [
+            {"ed2k_hash": ed2k, "user_hash": ed2k, "node_id": node_id, "observed_at": 10}
         ],
     }
 
@@ -77,27 +71,26 @@ _ALL_TABLES = (
     "match_decisions",
     "sources",
     "source_variants",
-    "source_ranges",
+    "source_observations",
 )
-_SOURCE_TABLES = ("sources", "source_variants", "source_ranges")
+_SOURCE_TABLES = ("sources", "source_variants", "source_observations")
 
 
-def _source_ranges(
-    *bounds: tuple[int, int], user_hash: str | None = HASH_B
+def _source_points(
+    *moments: int, user_hash: str | None = HASH_B
 ) -> dict[str, list[dict[str, object]]]:
-    """One source on one file, a range per ``(first, last)``; both counters grow with time."""
+    """One source on one file, one variant, a point per moment; its counter grows with time."""
     return {
         "files": [{"ed2k_hash": HASH_A, "size_bytes": 100}],
-        "source_ranges": [
+        "source_observations": [
             {
                 "ed2k_hash": HASH_A,
                 "user_hash": user_hash,
-                "first_seen_at": first,
-                "last_seen_at": last,
-                "received_bytes": last - first,
-                "transfer_counter": last,
+                "node_id": "n1",
+                "observed_at": moment,
+                "transfer_counter": moment,
             }
-            for first, last in bounds
+            for moment in moments
         ],
     }
 
@@ -382,45 +375,32 @@ def test_an_output_open_catalog_refuses_raises_a_merge_error(tmp_path: Path) -> 
 
 
 @pytest.mark.parametrize("user_hash", [HASH_B, None])
-@pytest.mark.parametrize("older_first", [True, False])
-def test_two_copies_of_one_range_merge_into_its_later_end(
-    tmp_path: Path, user_hash: str | None, older_first: bool
+@pytest.mark.parametrize("first_first", [True, False])
+def test_two_catalogs_sharing_a_variant_merge_into_the_union_of_their_points(
+    tmp_path: Path, user_hash: str | None, first_first: bool
 ) -> None:
-    older = make_catalog(tmp_path / "older.db", _source_ranges((10, 20), user_hash=user_hash))
-    newer = make_catalog(tmp_path / "newer.db", _source_ranges((10, 30), user_hash=user_hash))
+    first = make_catalog(tmp_path / "first.db", _source_points(10, 20, user_hash=user_hash))
+    second = make_catalog(tmp_path / "second.db", _source_points(20, 30, user_hash=user_hash))
+    union = make_catalog(tmp_path / "union.db", _source_points(10, 20, 30, user_hash=user_hash))
     out = tmp_path / "out.db"
 
-    merge_catalogs(out, [older, newer] if older_first else [newer, older])
+    merge_catalogs(out, [first, second] if first_first else [second, first])
 
-    assert rows_without_id(out, "source_ranges") == rows_without_id(newer, "source_ranges")
-    assert count(out, "source_variants") == 1
-
-
-@pytest.mark.parametrize("older_first", [True, False])
-def test_a_range_closed_in_the_newer_copy_merges_before_its_successor(
-    tmp_path: Path, older_first: bool
-) -> None:
-    # Copied in start order, R1 grows before R2 lands, so the trigger lets it (D6).
-    older = make_catalog(tmp_path / "older.db", _source_ranges((10, 20)))
-    newer = make_catalog(tmp_path / "newer.db", _source_ranges((10, 30), (40, 50)))
-    out = tmp_path / "out.db"
-
-    merge_catalogs(out, [older, newer] if older_first else [newer, older])
-
-    assert rows_without_id(out, "source_ranges") == rows_without_id(newer, "source_ranges")
     merged = {table: rows_without_id(out, table) for table in _SOURCE_TABLES}
-    merge_catalogs(out, [older])
-    merge_catalogs(out, [newer])
+    assert merged == {table: rows_without_id(union, table) for table in _SOURCE_TABLES}
+    merge_catalogs(out, [first])
+    merge_catalogs(out, [second])
     assert {table: rows_without_id(out, table) for table in _SOURCE_TABLES} == merged
 
 
-def test_a_copy_diverged_from_a_restored_catalog_is_refused_whole(tmp_path: Path) -> None:
-    # An accepted limit (D6): R1 cannot grow past R3, opened after the restore.
-    restored = make_catalog(tmp_path / "restored.db", _source_ranges((10, 20), (100, 130)))
-    copy = make_catalog(tmp_path / "copy.db", _source_ranges((10, 50), (60, 70)))
+def test_a_copy_diverged_from_a_restored_catalog_merges_into_the_union(tmp_path: Path) -> None:
+    # Stage 4 refused it whole: a range could not grow past one opened after the restore.
+    restored = make_catalog(tmp_path / "restored.db", _source_points(10, 20, 100, 130))
+    copy = make_catalog(tmp_path / "copy.db", _source_points(10, 50, 60, 70))
+    union = make_catalog(tmp_path / "union.db", _source_points(10, 20, 50, 60, 70, 100, 130))
     out = tmp_path / "out.db"
 
-    with pytest.raises(MergeError, match="source_ranges only grows its latest range"):
-        merge_catalogs(out, [restored, copy])
+    merge_catalogs(out, [restored, copy])
 
-    assert rows_without_id(out, "source_ranges") == rows_without_id(restored, "source_ranges")
+    observations = rows_without_id(out, "source_observations")
+    assert observations == rows_without_id(union, "source_observations")
