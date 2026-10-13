@@ -282,12 +282,12 @@ le crawl en gardant aMule vivant, c'est `docker compose stop p2pwatch`.
 | Route | Description |
 |---|---|
 | `/` | Tableau de bord : état de chaque client (version, API joignable, et par canal : connecté à son réseau, joignable par les pairs), d'après la dernière lecture de moins de deux minutes ; état du crawl, avec les boutons pause, reprise et redémarrage du crawler seul (aMule garde ses sessions) ; couverture par cible (épisodes trouvés et manquants) |
-| `/files` | Liste paginée des fichiers ; filtres `?target=`, `?tier=`, `?q=` |
+| `/files` | Liste paginée des fichiers ; filtres `?target_id=`, `?tier=`, `?search=` |
 | `/files/{file_id}` | Détail d'un fichier, désigné par son `file_id` en 32 caractères hexadécimaux minuscules, tel que la console SQL l'affiche : réseau, identifiant natif, observations et historique des sources dans l'intervalle choisi, décisions, explication du matching |
-| `/sources` | Liste paginée des sources qui ont un user hash, la plus récemment vue d'abord : dernier nom, début du user hash, dernière vue, nombre de fichiers ; `?q=` cherche un début de user hash ou un morceau de n'importe quel nom porté |
+| `/sources` | Liste paginée des sources qui ont un user hash, la plus récemment vue d'abord : dernier nom, début du user hash, dernière vue, nombre de fichiers ; `?search=` cherche un début de user hash ou un morceau de n'importe quel nom porté |
 | `/sources/{source_id}` | Une source, désignée par son `source_id` en 32 caractères hexadécimaux minuscules : son user hash, chaque nom qu'elle a porté, et ses périodes sur tous les fichiers, dans l'intervalle choisi |
-| `/sources/name?name=` | Un nom : les user hashes qui l'ont porté, et les périodes relevées sous ce nom sans user hash, dans l'intervalle choisi. Les liens s'arrêtent là : la page d'un nom ne montre pas les autres noms de ces user hashes, pour ne pas confondre en une seule personne des inconnus qui partagent un nom par défaut |
-| `/targets/{target_id}` | Fichiers d'une cible (alias de `/files?target=`) |
+| `/sources/name?source_name=` | Un nom : les user hashes qui l'ont porté, et les périodes relevées sous ce nom sans user hash, dans l'intervalle choisi. Les liens s'arrêtent là : la page d'un nom ne montre pas les autres noms de ces user hashes, pour ne pas confondre en une seule personne des inconnus qui partagent un nom par défaut |
+| `/targets/{target_id}` | Fichiers d'une cible (alias de `/files?target_id=`) |
 | `/node` | État du crawler : `node_id`, entrées du `scheduler_state` et téléchargements (voir [Suivre un téléchargement](#suivre-un-téléchargement)). |
 | `POST /controls/pause`, `/controls/resume`, `/controls/restart` | Les boutons du tableau de bord, qui y renvoient. La pause n'arrête pas les recherches en cours, ni celles qui attendent déjà leur créneau réseau : avec K mots-clés, jusqu'à K-1 recherches ed2k, espacées d'une minute, et la prochaine de chaque mot Kad partent encore, puis le crawler se tait. |
 | `/console` | Console SQL en lecture seule : un unique `SELECT` sur `catalog.db` ou `local.db`, avec export CSV. Toujours active. |

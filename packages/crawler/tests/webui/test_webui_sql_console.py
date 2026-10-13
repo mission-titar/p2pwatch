@@ -277,14 +277,14 @@ def _build(catalog_db: Path, local_db: Path) -> Starlette:
     templates_dir = Path(p2pwatch.webui.__file__).parent / "adapters" / "templates"
     static_dir = Path(p2pwatch.webui.__file__).parent / "adapters" / "static"
     return build_app(
-        catalog_db=catalog_db,
-        local_db=local_db,
+        catalog_db_path=catalog_db,
+        local_db_path=local_db,
         matcher_config=matcher_config,
-        targets=targets,
+        target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
         control=_StubControl(),
-        status=StatusBoard((), FakeClock()),
+        status_readings=StatusBoard((), FakeClock()),
         amule_url="http://localhost:4711",
         clock=FakeClock(),
         source_period_gap=timedelta(seconds=90),

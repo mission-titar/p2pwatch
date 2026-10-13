@@ -5,7 +5,7 @@ from p2pwatch.webui.domain.format import (
     human_size,
     input_timestamp,
     micros_timestamp,
-    seasonal_id,
+    seasonal_locator,
     short_hash,
     short_timestamp,
     utc_timestamp,
@@ -111,16 +111,16 @@ def test_short_timestamp_of_an_empty_input_is_empty() -> None:
 
 
 # ---------------------------------------------------------------------------
-# seasonal_id
+# seasonal_locator
 # ---------------------------------------------------------------------------
 
 
 def test_seasonal_id_zero_pads_season_and_number() -> None:
-    assert seasonal_id(season=2, seasonal_number=11, letter="a") == "S02E11A"
+    assert seasonal_locator(season=2, seasonal_number=11, letter="a") == "S02E11A"
 
 
 def test_seasonal_id_uppercases_letter() -> None:
-    assert seasonal_id(season=1, seasonal_number=5, letter="b") == "S01E05B"
+    assert seasonal_locator(season=1, seasonal_number=5, letter="b") == "S01E05B"
 
 
 # ---------------------------------------------------------------------------

@@ -125,6 +125,11 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
 - **Les alertes de source changent de nom** : `p2pwatch_source_alerts` porte `kind="first_useful"`
   au lieu de `kind="new"`, et leurs titres deviennent `🆕 Source useful for the first time` et
   `🔁 Source reappeared`, au lieu de `🆕 New source` et `🔁 Source useful again`.
+- **Les paramètres d'URL du catalogue web changent de nom** : `q` devient `search` sur `/files`
+  et `/sources`, `target` devient `target_id` et `dir` devient `direction` sur `/files`, et
+  `name` devient `source_name` sur `/sources/name`. Les anciens sont ignorés : mettez à jour vos
+  favoris. Après un redémarrage depuis le tableau de bord, l'adresse se termine par
+  `?done=restarted` au lieu de `?done=restart`.
 - **La documentation** est désormais sur <https://mission-titar.github.io/p2pwatch/>.
 
 ## Retour arrière

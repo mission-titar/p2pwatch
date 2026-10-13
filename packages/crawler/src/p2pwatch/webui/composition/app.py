@@ -51,18 +51,23 @@ from p2pwatch.webui.adapters.sql_console import (
     ConsoleOutcome,
     run_query,
 )
-from p2pwatch.webui.domain.coverage import coverage_for
+from p2pwatch.webui.domain.coverage import coverage_of
 from p2pwatch.webui.domain.format import (
     average_rate,
     human_size,
     input_timestamp,
     micros_timestamp,
-    seasonal_id,
+    seasonal_locator,
     short_hash,
     short_timestamp,
     utc_timestamp,
 )
-from p2pwatch.webui.domain.interval import PRESETS, Interval, last, requested_interval
+from p2pwatch.webui.domain.interval import (
+    INTERVAL_PRESETS,
+    Interval,
+    interval_ending,
+    requested_interval,
+)
 from p2pwatch.webui.domain.views import (
     ChannelLine,
     ClientLine,
@@ -99,7 +104,9 @@ from p2pwatch.webui.domain.views import (
 # A detail page's path segment: a file_id or a source_id as 32 lowercase hex (stage 1 and 4 D13).
 _HEX_ID = re.compile(r"[0-9a-f]{32}")
 
-_CUT_NOTICE = "The interval requested is longer than 7 days: showing the 7 days ending at its end."
+_CLAMPED_NOTICE = (
+    "The interval requested is longer than 7 days: showing the 7 days ending at its end."
+)
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _MICROSECOND = timedelta(microseconds=1)
 
@@ -109,7 +116,7 @@ _NAV_DESTINATIONS: tuple[tuple[str, str], ...] = (
     ("/", "Dashboard"),
     ("/files", "Files"),
     ("/sources", "Sources"),
-    ("/node", "Nodes"),
+    ("/node", "Node"),
     ("/console", "Console"),
 )
 
@@ -158,7 +165,7 @@ def _resolve_target_display(
         if seg is None:
             resolved.append((dec.target_id, "·"))
             continue
-        locator = seasonal_id(
+        locator = seasonal_locator(
             season=seg.season, seasonal_number=seg.seasonal_number, letter=seg.segment
         )
         resolved.append((f"{dec.target_id} / {locator}", seg.title))
@@ -211,9 +218,11 @@ def _timeline_row(sighting: Sighting) -> TimelineRow:
     )
 
 
-def _name_link(name: str | None) -> tuple[str, ...]:
+def _name_link(source_name: str | None) -> tuple[str, ...]:
     """The name page's href (D13), none without a name."""
-    return () if name is None else (f"/sources/name?{urlencode({'name': name})}",)
+    if source_name is None:
+        return ()
+    return (f"/sources/name?{urlencode({'source_name': source_name})}",)
 
 
 def _source_link(source: SourceKey | None) -> tuple[str, ...]:
@@ -252,8 +261,8 @@ def _period_window(interval: Interval, gap: timedelta) -> PeriodWindow:
 
 def _interval_params(request: Request) -> dict[str, str]:
     """The request's own ``from`` and ``to``, which a page's list links keep."""
-    query = request.query_params
-    return {key: query[key] for key in ("from", "to") if key in query}
+    query_params = request.query_params
+    return {key: query_params[key] for key in ("from", "to") if key in query_params}
 
 
 def _page_param(page: int) -> dict[str, str]:
@@ -262,20 +271,22 @@ def _page_param(page: int) -> dict[str, str]:
 
 
 def _interval_selector(
-    interval: Interval, now: datetime, path: str, kept: dict[str, str]
+    interval: Interval, now: datetime, path: str, kept_params: dict[str, str]
 ) -> IntervalSelector:
-    """The selector of the page at ``path``, whose other params are ``kept`` (D6): the presets end
-    ``now``, and Next is offered until the interval reaches it."""
+    """The selector of the page at ``path``, whose other params are ``kept_params`` (D6): the
+    presets end ``now``, and Next is offered until the interval reaches it."""
 
     def url(shown: Interval) -> str:
         ends = {"from": utc_timestamp(shown.since), "to": utc_timestamp(shown.until)}
-        return f"{path}?{urlencode({**kept, **ends})}"
+        return f"{path}?{urlencode({**kept_params, **ends})}"
 
     return IntervalSelector(
-        hidden=tuple(HiddenInput(name=name, value=value) for name, value in kept.items()),
+        hidden=tuple(HiddenInput(name=name, value=value) for name, value in kept_params.items()),
         shown=f"{utc_timestamp(interval.since)} to {utc_timestamp(interval.until)}",
-        notices=(_CUT_NOTICE,) if interval.cut else (),
-        presets=tuple(IntervalLink(label, url(last(span, now))) for label, span in PRESETS),
+        notices=(_CLAMPED_NOTICE,) if interval.clamped else (),
+        presets=tuple(
+            IntervalLink(label, url(interval_ending(now, span))) for label, span in INTERVAL_PRESETS
+        ),
         from_value=input_timestamp(interval.since),
         to_value=input_timestamp(interval.until),
         previous_url=url(interval.shifted(-1)),
@@ -304,9 +315,9 @@ def _source_file_row(item: SourceFilePeriod) -> SourceFileRow:
     )
 
 
-def _normalize(raw: str | None) -> str | None:
+def _normalize_param(raw: str | None) -> str | None:
     """Normalize a query param: whitespace stripped, empty ⇒ ``None``. Without it, an HTML
-    select with an empty option sends ``?target=`` → ``""`` → ``dec.target_id = ''`` matches
+    select with an empty option sends ``?target_id=`` → ``""`` → ``dec.target_id = ''`` matches
     NOTHING → 0 results with no message (webui-security#0/filters)."""
     if raw is None:
         return None
@@ -324,60 +335,64 @@ def _page_number(raw: str | None) -> int:
     return max(1, page)
 
 
-def _page_nav(page: int, n_rows: int, base_path: str, query: dict[str, str]) -> PageNav:
+def _page_nav(page: int, row_count: int, base_path: str, kept_params: dict[str, str]) -> PageNav:
     """Precompute the prev/next links for a page (W-D8: view-model, no template logic).
     We don't have the total count → ``next`` is rendered when the page is FULL (standard
     heuristic; at worst a next click returns an empty page)."""
     prev_url: str | None = None
     next_url: str | None = None
     if page > 1:
-        prev = dict(query)
+        prev = dict(kept_params)
         prev["page"] = str(page - 1)
         prev_url = f"{base_path}?{urlencode(prev)}"
-    if n_rows >= PAGE_SIZE:
-        nxt = dict(query)
+    if row_count >= PAGE_SIZE:
+        nxt = dict(kept_params)
         nxt["page"] = str(page + 1)
         next_url = f"{base_path}?{urlencode(nxt)}"
     return PageNav(page=page, prev_url=prev_url, next_url=next_url)
 
 
-def _build_summary(
-    matched: int, total: int, show_unmatched: bool, filter_query: dict[str, str]
+def _files_summary(
+    matched_count: int, total_count: int, show_unmatched: bool, kept_params: dict[str, str]
 ) -> FilesSummary:
     """Precompute the /files summary line + matched/all toggle (W-D8: no template logic).
 
     The toggle preserves the active filters and drops ``page`` (counts differ between modes,
     so page N may not exist → back to page 1)."""
     if show_unmatched:
-        summary_text = f"Showing all catalogued files: {total:,} catalogued ({matched:,} matched)."
+        summary_text = (
+            f"Showing all catalogued files: {total_count:,} catalogued ({matched_count:,} matched)."
+        )
         toggle_label = "Matched only"
-        toggle_query = dict(filter_query)  # drop show_unmatched → matched only
+        toggle_params = dict(kept_params)  # drop show_unmatched → matched only
     else:
-        summary_text = f"Showing matched files only: {matched:,} of {total:,} catalogued."
+        summary_text = (
+            f"Showing matched files only: {matched_count:,} of {total_count:,} catalogued."
+        )
         toggle_label = "Show all catalogued files"
-        toggle_query = {**filter_query, "show_unmatched": "1"}
-    toggle_url = "/files?" + urlencode(toggle_query) if toggle_query else "/files"
+        toggle_params = {**kept_params, "show_unmatched": "1"}
+    toggle_url = "/files?" + urlencode(toggle_params) if toggle_params else "/files"
     return FilesSummary(summary_text=summary_text, toggle_label=toggle_label, toggle_url=toggle_url)
 
 
-# Sortable columns in display order: allowlist key -> (header label, default direction when this
-# column is NOT the active sort). Name reads best ascending; the metrics and last-seen read best
-# descending (webui spec §3.1).
-_SORT_LABELS: tuple[tuple[str, str], ...] = (
+# The sortable columns in display order: (allowlist key, header label).
+_SORTABLE_COLUMNS: tuple[tuple[str, str], ...] = (
     ("name", "Name"),
     ("size", "Size"),
     ("sources", "Sources"),
     ("last_seen", "Last seen"),
     ("tier", "Tier"),
 )
-_COLUMN_DEFAULT_DIR: dict[str, str] = {
+# A column's direction while it is not the active sort: Name reads best ascending, the metrics and
+# last-seen descending (webui spec §3.1).
+_DEFAULT_DIRECTION_BY_COLUMN: dict[str, str] = {
     "name": "asc",
     "size": "desc",
     "sources": "desc",
     "last_seen": "desc",
     "tier": "desc",
 }
-_FLIP: dict[str, str] = {"asc": "desc", "desc": "asc"}
+_OPPOSITE_BY_DIRECTION: dict[str, str] = {"asc": "desc", "desc": "asc"}
 
 
 def _normalize_sort(raw: str | None) -> str:
@@ -385,33 +400,47 @@ def _normalize_sort(raw: str | None) -> str:
     return raw if raw in SORT_COLUMNS else DEFAULT_SORT
 
 
-def _normalize_dir(raw: str | None) -> str:
-    """Map a raw ``dir`` param to ``asc``/``desc``, or the default (unknown/missing -> default)."""
+def _normalize_direction(raw: str | None) -> str:
+    """Map a raw ``direction`` param to ``asc``/``desc``, or the default when unknown or missing."""
     return raw if raw in SORT_DIRECTIONS else DEFAULT_DIR
 
 
 def _sort_header(
-    col: str, label: str, sort: str, direction: str, filters: dict[str, str]
+    column_key: str,
+    label: str,
+    active_sort: str,
+    active_direction: str,
+    kept_params: dict[str, str],
 ) -> SortHeader:
-    """Build one column header. Keeps every ``filters`` param and OVERRIDES sort/dir: the active
-    column flips direction and shows its indicator; an inactive column uses its default direction
-    and no indicator. Params equal to the default are omitted from the URL (clean, deterministic).
+    """Build one column header. Keeps every ``kept_params`` param and OVERRIDES ``sort`` and
+    ``direction``: the active column flips direction and shows its indicator; an inactive column
+    uses its default direction and no indicator. Params equal to the default are omitted from the
+    URL (clean, deterministic).
     """
-    active = col == sort
-    next_dir = _FLIP[direction] if active else _COLUMN_DEFAULT_DIR[col]
-    indicator = direction if active else ""
-    params = dict(filters)
-    if col != DEFAULT_SORT:
-        params["sort"] = col
-    if next_dir != DEFAULT_DIR:
-        params["dir"] = next_dir
-    url = "/files?" + urlencode(params) if params else "/files"
+    active = column_key == active_sort
+    next_direction = (
+        _OPPOSITE_BY_DIRECTION[active_direction]
+        if active
+        else _DEFAULT_DIRECTION_BY_COLUMN[column_key]
+    )
+    indicator = active_direction if active else ""
+    link_params = dict(kept_params)
+    if column_key != DEFAULT_SORT:
+        link_params["sort"] = column_key
+    if next_direction != DEFAULT_DIR:
+        link_params["direction"] = next_direction
+    url = "/files?" + urlencode(link_params) if link_params else "/files"
     return SortHeader(label=label, url=url, indicator=indicator)
 
 
-def _sort_headers(*, sort: str, direction: str, filters: dict[str, str]) -> SortHeaders:
+def _sort_headers(
+    *, active_sort: str, active_direction: str, kept_params: dict[str, str]
+) -> SortHeaders:
     """Precompute all five sortable headers (W-D8)."""
-    built = {col: _sort_header(col, label, sort, direction, filters) for col, label in _SORT_LABELS}
+    built = {
+        column_key: _sort_header(column_key, label, active_sort, active_direction, kept_params)
+        for column_key, label in _SORTABLE_COLUMNS
+    }
     return SortHeaders(
         name=built["name"],
         size=built["size"],
@@ -433,12 +462,13 @@ def _facet_label(tier: str) -> str:
 
 
 def _tier_facets(
-    *, counts: Mapping[str, int], active_tier: str | None, base: dict[str, str]
+    *, file_count_by_tier: Mapping[str, int], active_tier: str | None, kept_params: dict[str, str]
 ) -> tuple[TierFacet, ...]:
     """Precompute the tier facet (W-D8): an "all" reset (no count) followed by one entry per tier
-    present, in ``_FACET_TIER_ORDER``. ``base`` is the params to preserve (filters minus ``tier``,
-    plus sort/dir; page already excluded); a tier entry appends ``tier=<t>``, the reset omits it."""
-    all_url = "/files?" + urlencode(base) if base else "/files"
+    present, in ``_FACET_TIER_ORDER``. ``kept_params`` are the params to preserve (the filters but
+    ``tier``, plus ``sort`` and ``direction``; ``page`` already excluded); a tier entry appends
+    ``tier=<t>``, the reset omits it."""
+    all_url = "/files?" + urlencode(kept_params) if kept_params else "/files"
     facets = [
         TierFacet(
             label="all",
@@ -448,25 +478,25 @@ def _tier_facets(
         )
     ]
     for tier in _FACET_TIER_ORDER:
-        if tier not in counts:
+        if tier not in file_count_by_tier:
             continue
-        params = {**base, "tier": tier}
+        link_params = {**kept_params, "tier": tier}
         facets.append(
             TierFacet(
                 label=_facet_label(tier),
-                count_display=f"({counts[tier]})",
-                url="/files?" + urlencode(params),
+                count_display=f"({file_count_by_tier[tier]})",
+                url="/files?" + urlencode(link_params),
                 selected_flag="1" if active_tier == tier else "",
             )
         )
     return tuple(facets)
 
 
-def _search_bar(*, query: str | None, hidden_state: dict[str, str]) -> SearchBar:
-    """Precompute the search form (W-D8): the ``q`` prefill (empty string when none) + hidden
-    inputs from ``hidden_state`` (already excludes ``q`` and ``page``)."""
-    hidden = tuple(HiddenInput(name=k, value=v) for k, v in hidden_state.items())
-    return SearchBar(query=query or "", hidden=hidden)
+def _search_bar(*, search_text: str | None, kept_params: dict[str, str]) -> SearchBar:
+    """Precompute the search form (W-D8): the ``search`` prefill (empty string when none) + hidden
+    inputs from ``kept_params`` (already without ``search`` and ``page``)."""
+    hidden = tuple(HiddenInput(name=k, value=v) for k, v in kept_params.items())
+    return SearchBar(query=search_text or "", hidden=hidden)
 
 
 class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -501,41 +531,41 @@ _CONTROL_MESSAGES: dict[str, str] = {
         "then the crawler idles."
     ),
     "resumed": "Crawl resumed.",
-    "restart": "Restart requested. The service goes offline briefly, then returns.",
+    "restarted": "Restart requested. The service goes offline briefly, then returns.",
 }
 
 
 _YES_NO: dict[bool | None, str] = {True: "yes", False: "no", None: "unknown"}
 
 
-def _client_lines(status: StatusReadings) -> tuple[ClientLine, ...]:
+def _client_lines(status_readings: StatusReadings) -> tuple[ClientLine, ...]:
     """Each client's last reading, its values shown only while current (stage 2 D20)."""
     lines = []
-    for name, reading in status.readings().items():
+    for client_name, reading in status_readings.readings().items():
         if reading is None:
-            lines.append(ClientLine(name, "No reading yet.", "unknown", "unknown", ()))
+            lines.append(ClientLine(client_name, "No reading yet.", "unknown", "unknown", ()))
             continue
         read_at = short_timestamp(reading.read_at.isoformat())
-        client = reading.status
-        if not status.is_current(reading):
+        client_status = reading.status
+        if not status_readings.is_current(reading):
             text = f"Out of date: last reading at {read_at}."
-            lines.append(ClientLine(name, text, "unknown", "unknown", ()))
-        elif client is None:
-            lines.append(ClientLine(name, f"Read at {read_at}.", "unknown", "no", ()))
+            lines.append(ClientLine(client_name, text, "unknown", "unknown", ()))
+        elif client_status is None:
+            lines.append(ClientLine(client_name, f"Read at {read_at}.", "unknown", "no", ()))
         else:
             channels = tuple(
                 ChannelLine(c.channel, _YES_NO[c.connected], _YES_NO[c.connectable])
-                for c in client.channels
+                for c in client_status.channels
             )
-            version = client.version or "unknown"
-            lines.append(ClientLine(name, f"Read at {read_at}.", version, "yes", channels))
+            version = client_status.version or "unknown"
+            lines.append(ClientLine(client_name, f"Read at {read_at}.", version, "yes", channels))
     return tuple(lines)
 
 
 # SQL console (spec §11). The two selectable databases, in display order: value (allowlist key)
 # + human label. Neither holds a peer's address (a source is a pseudonymous id at most), so
 # read-only exposure of either is fine.
-_CONSOLE_DB_LABELS: tuple[tuple[str, str], ...] = (
+_CONSOLE_DBS: tuple[tuple[str, str], ...] = (
     ("catalog", "catalog.db"),
     ("local", "local.db"),
 )
@@ -552,7 +582,7 @@ def _console_db_options(selected: str) -> tuple[DbOption, ...]:
             label=label,
             selected_attr="selected" if value == selected else "",
         )
-        for value, label in _CONSOLE_DB_LABELS
+        for value, label in _CONSOLE_DBS
     )
 
 
@@ -582,21 +612,21 @@ def _to_console_result(outcome: ConsoleOutcome) -> ConsoleResult:
 
 def build_app(
     *,
-    catalog_db: Path,
-    local_db: Path,
+    catalog_db_path: Path,
+    local_db_path: Path,
     matcher_config: MatcherConfig,
-    targets: tuple[TargetSegment, ...],
+    target_segments: tuple[TargetSegment, ...],
     templates_dir: Path,
     static_dir: Path,
     control: CrawlerControl,
-    status: StatusReadings,
+    status_readings: StatusReadings,
     amule_url: str,
     clock: Clock,
     source_period_gap: timedelta,
 ) -> Starlette:
     """Build and return the wired Starlette application.
 
-    ``matcher_config`` + ``targets`` arrive ALREADY PARSED from the caller (``__main__`` for
+    ``matcher_config`` + ``target_segments`` arrive ALREADY PARSED from the caller (``__main__`` for
     the standalone entrypoint, ``CrawlerApp`` in-process later); this module no longer reads
     ``matcher.yml`` / ``targets.yml`` itself. Passing the crawler's own parsed matcher is what
     keeps the explainer's config from drifting from the persisted decisions (spec §8).
@@ -604,7 +634,7 @@ def build_app(
     ``control`` is the runtime-control PORT (``CrawlerControl``): the webui depends on the port,
     never on the concrete adapter (composition wires ``LoopCrawlerControl``). Every control POST
     dispatches a thread-safe, fire-and-forget intent to the crawler loop; the webui itself holds
-    no write connection (spec §4/§10). ``status`` holds the status loops' last readings.
+    no write connection (spec §4/§10). ``status_readings`` holds the status loops' last readings.
 
     ``amule_url`` is the base the nav's aMule entry points at (design §9); the caller reads it
     from ``webui.amule_url``. ``source_period_gap`` is the longest gap within a source period, from
@@ -619,24 +649,21 @@ def build_app(
         ),
         context_processors=[_make_nav_context(amule_url)],
     )
-    target_segments = targets
-    explainer = MatchingExplainer(matcher_config=matcher_config, targets=targets)
+    explainer = MatchingExplainer(matcher_config=matcher_config, targets=target_segments)
 
     # Centralized read-only connection management (spec §7): one reused, thread-affine
     # connection per DB per thread: warm page cache, no per-request cold open. Handlers
     # obtain a connection via ``provider.connection()`` and NEVER close it (the point is
     # reuse); ``quiesce()`` is the seam livrable 3's maintenance swap will use.
-    catalog_reader = ReaderProvider(catalog_db)
-    local_reader = ReaderProvider(local_db)
+    catalog_reader = ReaderProvider(catalog_db_path)
+    local_reader = ReaderProvider(local_db_path)
 
-    def _interval(request: Request) -> tuple[datetime, Interval]:
+    def _now_and_interval(request: Request) -> tuple[datetime, Interval]:
         """The second the request is read at, and the interval it asks for."""
         now = clock.now().replace(microsecond=0)
-        query = request.query_params
-        return now, requested_interval(query.get("from"), query.get("to"), now)
+        query_params = request.query_params
+        return now, requested_interval(query_params.get("from"), query_params.get("to"), now)
 
-    # Title by target_id (quick access)
-    _title_by_id = {seg.target_id: seg.title for seg in target_segments}
     # Full segment by target_id (Task 3: seasonal locator + title resolution on /files)
     _segment_by_id = {seg.target_id: seg for seg in target_segments}
 
@@ -653,11 +680,11 @@ def build_app(
         local = LocalReader(local_reader.connection())
         node_state = local.node_state()
 
-        rows = []
+        coverage_rows = []
         for seg in target_segments:
             decisions = coverage_data.get(seg.target_id, [])
-            cov = coverage_for(seg.target_id, decisions)
-            rows.append(
+            cov = coverage_of(decisions)
+            coverage_rows.append(
                 TargetCoverageRow(
                     target_id=seg.target_id,
                     title=seg.title,
@@ -673,10 +700,10 @@ def build_app(
             request,
             "dashboard.html",
             {
-                "rows": rows,
+                "coverage_rows": coverage_rows,
                 "node_state": node_state,
-                "clients": _client_lines(status),
-                "crawl": "paused" if control.is_paused() else "running",
+                "clients": _client_lines(status_readings),
+                "crawl_state": "paused" if control.is_paused() else "running",
                 # 0-or-1-element tuple the template iterates with {% for %} (no {% if %}, W-D8).
                 "messages": (message,) if message is not None else (),
             },
@@ -684,74 +711,80 @@ def build_app(
 
     async def handle_files(request: Request) -> Response:
         # Filters: ``param.strip() or None`` (webui-security#0). A select with an empty option
-        # sent ``?target=`` (empty string) that matched 0 results with no message.
-        target_param = _normalize(request.query_params.get("target"))
-        tier_param = _normalize(request.query_params.get("tier"))
-        query_param = _normalize(request.query_params.get("q"))
+        # sent ``?target_id=`` (empty string) that matched 0 results with no message.
+        target_id_param = _normalize_param(request.query_params.get("target_id"))
+        tier_param = _normalize_param(request.query_params.get("tier"))
+        search_text = _normalize_param(request.query_params.get("search"))
         # Presence of ``show_unmatched`` (any value) opts into the whole catalogue.
         show_unmatched = request.query_params.get("show_unmatched") is not None
         sort_param = _normalize_sort(request.query_params.get("sort"))
-        dir_param = _normalize_dir(request.query_params.get("dir"))
+        direction_param = _normalize_direction(request.query_params.get("direction"))
         page = _page_number(request.query_params.get("page"))
 
         catalog = CatalogReader(catalog_reader.connection())
         file_rows = catalog.list_files(
-            target=target_param,
+            target=target_id_param,
             tier=tier_param,
-            query=query_param,
+            query=search_text,
             page=page,
             matched_only=not show_unmatched,
             sort=sort_param,
-            direction=dir_param,
+            direction=direction_param,
         )
-        matched, total = catalog.count_files(
-            target=target_param,
+        matched_count, total_count = catalog.count_files(
+            target=target_id_param,
             tier=tier_param,
-            query=query_param,
+            query=search_text,
         )
 
         display_rows = _to_display_rows(file_rows, _segment_by_id)
         # Active, non-default params (page excluded). Every URL derives from these two ordered
-        # dicts, so param order is deterministic. ``filters`` is what a re-sort keeps; ``sort_dir``
-        # is what a filter/toggle/page keeps.
-        filters: dict[str, str] = {}
-        if target_param is not None:
-            filters["target"] = target_param
+        # dicts, so param order is deterministic. ``filter_params`` is what a re-sort keeps;
+        # ``sort_params`` is what a filter/toggle/page keeps.
+        filter_params: dict[str, str] = {}
+        if target_id_param is not None:
+            filter_params["target_id"] = target_id_param
         if tier_param is not None:
-            filters["tier"] = tier_param
-        if query_param is not None:
-            filters["q"] = query_param
+            filter_params["tier"] = tier_param
+        if search_text is not None:
+            filter_params["search"] = search_text
         if show_unmatched:
-            filters["show_unmatched"] = "1"
-        sort_dir: dict[str, str] = {}
+            filter_params["show_unmatched"] = "1"
+        sort_params: dict[str, str] = {}
         if sort_param != DEFAULT_SORT:
-            sort_dir["sort"] = sort_param
-        if dir_param != DEFAULT_DIR:
-            sort_dir["dir"] = dir_param
+            sort_params["sort"] = sort_param
+        if direction_param != DEFAULT_DIR:
+            sort_params["direction"] = direction_param
 
-        headers = _sort_headers(sort=sort_param, direction=dir_param, filters=filters)
+        sort_headers = _sort_headers(
+            active_sort=sort_param, active_direction=direction_param, kept_params=filter_params
+        )
 
-        # summary toggle preserves sort/dir (but not show_unmatched, which it manages itself)
-        summary_base = {k: v for k, v in filters.items() if k != "show_unmatched"}
-        summary_base.update(sort_dir)
-        summary = _build_summary(matched, total, show_unmatched, summary_base)
+        # summary toggle preserves sort and direction (not show_unmatched, which it manages itself)
+        summary_kept_params = {k: v for k, v in filter_params.items() if k != "show_unmatched"}
+        summary_kept_params.update(sort_params)
+        summary = _files_summary(matched_count, total_count, show_unmatched, summary_kept_params)
 
         # Tier facet (facet-lite: never filtered by its own tier) + filename search form. The
         # facet links carry every active param except ``tier`` and ``page`` (selecting a tier
         # replaces it, resets page); the search hidden inputs carry every active param except
-        # ``q`` and ``page`` (submitting a search preserves the rest, resets page).
-        tier_count_map = catalog.tier_counts(target=target_param, query=query_param)
-        facet_base = {k: v for k, v in filters.items() if k != "tier"}
-        facet_base.update(sort_dir)
-        facets = _tier_facets(counts=tier_count_map, active_tier=tier_param, base=facet_base)
+        # ``search`` and ``page`` (submitting a search preserves the rest, resets page).
+        file_count_by_tier = catalog.tier_counts(target=target_id_param, query=search_text)
+        facet_kept_params = {k: v for k, v in filter_params.items() if k != "tier"}
+        facet_kept_params.update(sort_params)
+        facets = _tier_facets(
+            file_count_by_tier=file_count_by_tier,
+            active_tier=tier_param,
+            kept_params=facet_kept_params,
+        )
 
-        hidden_state = {k: v for k, v in filters.items() if k != "q"}
-        hidden_state.update(sort_dir)
-        searchbar = _search_bar(query=query_param, hidden_state=hidden_state)
+        search_kept_params = {k: v for k, v in filter_params.items() if k != "search"}
+        search_kept_params.update(sort_params)
+        searchbar = _search_bar(search_text=search_text, kept_params=search_kept_params)
 
         filter_bar = FilterBar(searchbar=searchbar, facets=facets)
 
-        nav = _page_nav(page, len(display_rows), "/files", {**filters, **sort_dir})
+        nav = _page_nav(page, len(display_rows), "/files", {**filter_params, **sort_params})
         return templates.TemplateResponse(
             request,
             "files.html",
@@ -760,47 +793,49 @@ def build_app(
                 "nav": nav,
                 "headings": (),  # the nav's bold "Files" entry already names this page
                 "summaries": (summary,),
-                "headers": (headers,),
+                "sort_headers": (sort_headers,),
                 "filter_bar": (filter_bar,),
             },
         )
 
     async def handle_sources(request: Request) -> Response:
-        query = _normalize(request.query_params.get("q"))
+        search_text = _normalize_param(request.query_params.get("search"))
         page = _page_number(request.query_params.get("page"))
         catalog = CatalogReader(catalog_reader.connection())
-        rows = tuple(_source_list_row(row) for row in catalog.list_sources(query=query, page=page))
-        count = catalog.count_sources(query=query)
-        filters = {} if query is None else {"q": query}
+        rows = tuple(
+            _source_list_row(row) for row in catalog.list_sources(query=search_text, page=page)
+        )
+        count = catalog.count_sources(query=search_text)
+        kept_params = {} if search_text is None else {"search": search_text}
         return templates.TemplateResponse(
             request,
             "sources.html",
             {
                 "rows": rows,
-                "nav": _page_nav(page, len(rows), "/sources", filters),
+                "nav": _page_nav(page, len(rows), "/sources", kept_params),
                 "summary": (
                     f"Sources recorded: {count:,}."
-                    if query is None
+                    if search_text is None
                     else f"Sources matching the search: {count:,}."
                 ),
-                "query": query or "",
+                "search_text": search_text or "",
             },
         )
 
     async def handle_source(request: Request) -> Response:
-        raw_id: str = request.path_params["source_id"]
+        source_id_hex: str = request.path_params["source_id"]
         page = _page_number(request.query_params.get("page"))
-        now, interval = _interval(request)
+        now, interval = _now_and_interval(request)
         window = _period_window(interval, source_period_gap)
         catalog = CatalogReader(catalog_reader.connection())
         detail = (
-            catalog.source_detail(bytes.fromhex(raw_id), page=page, window=window)
-            if _HEX_ID.fullmatch(raw_id)
+            catalog.source_detail(bytes.fromhex(source_id_hex), page=page, window=window)
+            if _HEX_ID.fullmatch(source_id_hex)
             else None
         )
         if detail is None:
             return templates.TemplateResponse(request, "404.html", {}, status_code=404)
-        path = f"/sources/{raw_id}"
+        path = f"/sources/{source_id_hex}"
         return templates.TemplateResponse(
             request,
             "source_detail.html",
@@ -814,15 +849,19 @@ def build_app(
         )
 
     async def handle_source_name(request: Request) -> Response:
-        name = request.query_params.get("name")
+        source_name = request.query_params.get("source_name")
         page = _page_number(request.query_params.get("page"))
-        now, interval = _interval(request)
+        now, interval = _now_and_interval(request)
         window = _period_window(interval, source_period_gap)
         catalog = CatalogReader(catalog_reader.connection())
-        detail = None if name is None else catalog.name_detail(name, page=page, window=window)
+        detail = (
+            None
+            if source_name is None
+            else catalog.name_detail(source_name, page=page, window=window)
+        )
         if detail is None:
             return templates.TemplateResponse(request, "404.html", {}, status_code=404)
-        path, named = "/sources/name", {"name": detail.name}
+        path, source_name_params = "/sources/name", {"source_name": detail.name}
         return templates.TemplateResponse(
             request,
             "source_name.html",
@@ -831,21 +870,26 @@ def build_app(
                 "sources": tuple(_source_list_row(row) for row in detail.sources),
                 "periods": tuple(_source_file_row(item) for item in detail.periods),
                 "nav": _page_nav(
-                    page, len(detail.sources), path, {**named, **_interval_params(request)}
+                    page,
+                    len(detail.sources),
+                    path,
+                    {**source_name_params, **_interval_params(request)},
                 ),
-                "interval": _interval_selector(interval, now, path, {**named, **_page_param(page)}),
+                "interval": _interval_selector(
+                    interval, now, path, {**source_name_params, **_page_param(page)}
+                ),
             },
         )
 
     async def handle_file_detail(request: Request) -> Response:
-        raw_id: str = request.path_params["file_id"]
+        file_id_hex: str = request.path_params["file_id"]
 
-        now, interval = _interval(request)
+        now, interval = _now_and_interval(request)
         window = _period_window(interval, source_period_gap)
         catalog = CatalogReader(catalog_reader.connection())
         detail = (
-            catalog.file_detail(bytes.fromhex(raw_id), window)
-            if _HEX_ID.fullmatch(raw_id)
+            catalog.file_detail(bytes.fromhex(file_id_hex), window)
+            if _HEX_ID.fullmatch(file_id_hex)
             else None
         )
 
@@ -853,11 +897,11 @@ def build_app(
             return templates.TemplateResponse(request, "404.html", {}, status_code=404)
 
         latest = detail.latest
-        link = ""
+        ed2k_link = ""
         if latest is not None:
             match detail.file.network:
                 case Network.ED2K:
-                    link = build_ed2k_link(
+                    ed2k_link = build_ed2k_link(
                         latest.filename, latest.size_bytes, detail.file.native_id
                     )
                 case _:  # pragma: no cover
@@ -897,7 +941,7 @@ def build_app(
                 for period in catalog.source_periods(detail.file.file_id, window)
             ),
             decisions=detail.decisions,
-            ed2k_link=link,
+            ed2k_link=ed2k_link,
             explanation_target_id=explanation_target_id,
             explanation_rules_fired=explanation_rules_fired,
             explanation_tokens_matched=explanation_tokens_matched,
@@ -910,8 +954,7 @@ def build_app(
             "file_detail.html",
             {
                 "file": display,
-                "title_by_id": _title_by_id,
-                "interval": _interval_selector(interval, now, f"/files/{raw_id}", {}),
+                "interval": _interval_selector(interval, now, f"/files/{file_id_hex}", {}),
             },
         )
 
@@ -939,7 +982,7 @@ def build_app(
                 "nav": nav,
                 "headings": (f"Files for target {target_id}",),
                 "summaries": (),
-                "headers": (),
+                "sort_headers": (),
                 "filter_bar": (),
             },
         )
@@ -975,7 +1018,7 @@ def build_app(
 
     async def handle_restart(request: Request) -> Response:
         control.restart()
-        return RedirectResponse("/?done=restart", status_code=303)
+        return RedirectResponse("/?done=restarted", status_code=303)
 
     # ------------------------------------------------------------------
     # SQL console (spec §11): a read-only power-user console over either DB.
@@ -986,7 +1029,7 @@ def build_app(
     # NO CSRF token: consistent with the no-auth, network-trust-boundary posture (spec §12).
     # ------------------------------------------------------------------
 
-    _console_db_paths = {"catalog": catalog_db, "local": local_db}
+    _console_db_paths = {"catalog": catalog_db_path, "local": local_db_path}
 
     async def handle_console(request: Request) -> Response:
         return templates.TemplateResponse(
@@ -1001,9 +1044,9 @@ def build_app(
         )
 
     async def handle_console_run(request: Request) -> Response:
-        sql, db = await _read_console_form(request)
-        db_options = _console_db_options(db)
-        if db not in _console_db_paths:
+        sql, db_key = await _read_console_form(request)
+        db_options = _console_db_options(db_key)
+        if db_key not in _console_db_paths:
             return templates.TemplateResponse(
                 request,
                 "console.html",
@@ -1016,7 +1059,7 @@ def build_app(
             )
         outcome = await run_in_threadpool(
             run_query,
-            db_path=_console_db_paths[db],
+            db_path=_console_db_paths[db_key],
             sql=sql,
             row_cap=ROW_CAP,
             timeout_seconds=TIMEOUT_SECONDS,
@@ -1044,12 +1087,12 @@ def build_app(
         )
 
     async def handle_console_csv(request: Request) -> Response:
-        sql, db = await _read_console_form(request)
-        if db not in _console_db_paths:
+        sql, db_key = await _read_console_form(request)
+        if db_key not in _console_db_paths:
             return Response(_CONSOLE_UNKNOWN_DB, status_code=400, media_type="text/plain")
         outcome = await run_in_threadpool(
             run_query,
-            db_path=_console_db_paths[db],
+            db_path=_console_db_paths[db_key],
             sql=sql,
             row_cap=ROW_CAP,
             timeout_seconds=TIMEOUT_SECONDS,

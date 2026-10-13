@@ -2,7 +2,7 @@
 
 The tier order comes from ``catalog_matching.config.TIER_RANK`` (source of truth shared
 with the matching engine). Without this sharing, the webui reinvented its own divergent
-table — a 4th tier or a rename would have silently skewed the coverage.
+table: a 4th tier or a rename would have silently skewed the coverage.
 """
 
 from collections.abc import Sequence
@@ -11,7 +11,7 @@ from catalog_matching.config import TIER_RANK
 from p2pwatch.webui.domain.views import CoverageStatus
 
 
-def coverage_for(target_id: str, decisions: Sequence[tuple[bytes, str]]) -> CoverageStatus:
+def coverage_of(decisions: Sequence[tuple[bytes, str]]) -> CoverageStatus:
     """``decisions`` = ``(file_id, tier)`` of the latest decisions for this target.
 
     Catalog-tier decisions are the ``keroro_large`` catch-all: any keroro file with no numeric

@@ -5,13 +5,15 @@ import sqlite3
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlencode
 
 import pytest
 import yaml
 from httpx import ASGITransport, AsyncClient
-from jinja2 import UndefinedError
+from jinja2 import Environment, FileSystemLoader, UndefinedError, meta
 from starlette.applications import Starlette
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from catalog_matching.config import MatcherConfig
 from catalog_matching.models import TargetSegment
@@ -21,7 +23,7 @@ from p2pwatch.domain.source import SourceKey
 from p2pwatch.ports.client_status import ChannelStatus, ClientStatus, StatusReading
 from p2pwatch.webui.adapters.catalog_read import PAGE_SIZE
 from p2pwatch.webui.composition.app import (
-    _normalize_dir,
+    _normalize_direction,
     _normalize_sort,
     _resolve_target_display,
     _search_bar,
@@ -188,14 +190,14 @@ def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
     static_dir = Path(p2pwatch.webui.__file__).parent / "adapters" / "static"
 
     app = build_app(
-        catalog_db=catalog_db,
-        local_db=local_db,
+        catalog_db_path=catalog_db,
+        local_db_path=local_db,
         matcher_config=matcher_config,
-        targets=targets,
+        target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
         control=_RecordingControl(),
-        status=_NO_STATUS,
+        status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
         source_period_gap=_GAP,
@@ -233,14 +235,14 @@ def app_no_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
     static_dir = Path(p2pwatch.webui.__file__).parent / "adapters" / "static"
 
     app = build_app(
-        catalog_db=catalog_db,
-        local_db=local_db,
+        catalog_db_path=catalog_db,
+        local_db_path=local_db,
         matcher_config=matcher_config,
-        targets=targets,
+        target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
         control=_RecordingControl(),
-        status=_NO_STATUS,
+        status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
         source_period_gap=_GAP,
@@ -290,14 +292,14 @@ def app_retracted_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette,
     static_dir = Path(p2pwatch.webui.__file__).parent / "adapters" / "static"
 
     app = build_app(
-        catalog_db=catalog_db,
-        local_db=local_db,
+        catalog_db_path=catalog_db,
+        local_db_path=local_db,
         matcher_config=matcher_config,
-        targets=targets,
+        target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
         control=_RecordingControl(),
-        status=_NO_STATUS,
+        status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
         source_period_gap=_GAP,
@@ -328,14 +330,14 @@ def app_no_observations(catalog_db: Path, local_db: Path) -> tuple[Starlette, st
     static_dir = Path(p2pwatch.webui.__file__).parent / "adapters" / "static"
 
     app = build_app(
-        catalog_db=catalog_db,
-        local_db=local_db,
+        catalog_db_path=catalog_db,
+        local_db_path=local_db,
         matcher_config=matcher_config,
-        targets=targets,
+        target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
         control=_RecordingControl(),
-        status=_NO_STATUS,
+        status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
         source_period_gap=_GAP,
@@ -374,14 +376,14 @@ def app_unknown_target(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
     static_dir = Path(p2pwatch.webui.__file__).parent / "adapters" / "static"
 
     app = build_app(
-        catalog_db=catalog_db,
-        local_db=local_db,
+        catalog_db_path=catalog_db,
+        local_db_path=local_db,
         matcher_config=matcher_config,
-        targets=targets,
+        target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
         control=_RecordingControl(),
-        status=_NO_STATUS,
+        status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
         source_period_gap=_GAP,
@@ -420,14 +422,14 @@ def app_download_tier_known_target(catalog_db: Path, local_db: Path) -> tuple[St
     static_dir = Path(p2pwatch.webui.__file__).parent / "adapters" / "static"
 
     app = build_app(
-        catalog_db=catalog_db,
-        local_db=local_db,
+        catalog_db_path=catalog_db,
+        local_db_path=local_db,
         matcher_config=matcher_config,
-        targets=targets,
+        target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
         control=_RecordingControl(),
-        status=_NO_STATUS,
+        status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
         source_period_gap=_GAP,
@@ -466,14 +468,14 @@ def app_download_tier_unknown_target(catalog_db: Path, local_db: Path) -> tuple[
     static_dir = Path(p2pwatch.webui.__file__).parent / "adapters" / "static"
 
     app = build_app(
-        catalog_db=catalog_db,
-        local_db=local_db,
+        catalog_db_path=catalog_db,
+        local_db_path=local_db,
         matcher_config=matcher_config,
-        targets=targets,
+        target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
         control=_RecordingControl(),
-        status=_NO_STATUS,
+        status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
         source_period_gap=_GAP,
@@ -590,11 +592,24 @@ async def test_files_toggle_preserves_active_filter(
     """The matched→all toggle must carry the active q filter (spec §5: filters preserved)."""
     app, hash_ = populated_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files?q=keroro")
+        resp = await client.get("/files?search=keroro")
     assert resp.status_code == 200
     assert hash_[:8] in resp.text  # the matched file still shows under the q filter
     # Jinja2 autoescapes "&" to "&amp;" inside the href attribute.
-    assert 'href="/files?q=keroro&amp;show_unmatched=1">Show all catalogued files' in resp.text
+    assert 'href="/files?search=keroro&amp;show_unmatched=1">Show all catalogued files' in resp.text
+
+
+@pytest.mark.parametrize(("key", "old_key"), [("search", "q"), ("target_id", "target")])
+@pytest.mark.asyncio
+async def test_files_filters_on_its_query_key_and_ignores_the_4x_one(
+    populated_app: tuple[Starlette, str], key: str, old_key: str
+) -> None:
+    app, hash_ = populated_app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        filtered = await client.get(f"/files?{key}=001A")
+        unfiltered = await client.get(f"/files?{old_key}=001A")
+    assert hash_[:8] not in filtered.text
+    assert hash_[:8] in unfiltered.text
 
 
 @pytest.mark.asyncio
@@ -713,14 +728,14 @@ def app_vetoed_alias(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
 
     webui_dir = Path(p2pwatch.webui.__file__).parent / "adapters"
     app = build_app(
-        catalog_db=catalog_db,
-        local_db=local_db,
+        catalog_db_path=catalog_db,
+        local_db_path=local_db,
         matcher_config=matcher_config,
-        targets=_targets(),
+        target_segments=_targets(),
         templates_dir=webui_dir / "templates",
         static_dir=webui_dir / "static",
         control=_RecordingControl(),
-        status=_NO_STATUS,
+        status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
         source_period_gap=_GAP,
@@ -788,7 +803,7 @@ async def test_file_detail_shows_its_source_history_newest_first(
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get(_detail_url(hash_))
     page = re.sub(r">\s+<", "><", resp.text)
-    name = '<a href="/sources/name?name=AnimuseeFMR">AnimuseeFMR</a>'
+    name = '<a href="/sources/name?source_name=AnimuseeFMR">AnimuseeFMR</a>'
     source = f'<a href="/sources/{SourceKey(Network.ED2K, _USER).source_id.hex()}">1f2e1f2e…</a>'
     sending_line = _row(
         name, source, "sending", "unknown", "unknown",
@@ -818,9 +833,7 @@ async def test_file_detail_links_only_the_name_or_the_hash_a_period_has(
         resp = await client.get(_detail_url(hash_))
     page = re.sub(r">\s+<", "><", resp.text)
     source = f'<a href="/sources/{SourceKey(Network.ED2K, _USER).source_id.hex()}">1f2e1f2e…</a>'
-    name = (
-        '<a href="/sources/name?name=http%3A%2F%2Femule-project.net">http://emule-project.net</a>'
-    )
+    name = '<a href="/sources/name?source_name=http%3A%2F%2Femule-project.net">http://emule-project.net</a>'
     stamp = "2026-10-13 20:00:00Z"
     assert _row("unknown", source, "queued", "unknown", "yes", stamp, stamp, "", "", "n1") in page
     assert _row(name, "unknown", "queued", "unknown", "unknown", stamp, stamp, "", "", "n1") in page
@@ -872,11 +885,14 @@ async def test_sources_lists_each_source_with_its_links_last_seen_and_files(
     app, hash_ = populated_app
     _seed_two_sources(catalog_db, hash_)
     page = await _sources_page(app, "/sources")
-    name = '<a href="/sources/name?name=AnimuseeFMR">AnimuseeFMR</a>'
+    name = '<a href="/sources/name?source_name=AnimuseeFMR">AnimuseeFMR</a>'
     source = f'<a href="/sources/{SourceKey(Network.ED2K, _USER).source_id.hex()}">1f2e1f2e…</a>'
     assert _row(name, source, "2026-10-13 20:00:30Z", "1") in page
     assert "Sources recorded: 2." in page
-    assert '<input type="search" name="q" value="" placeholder="Search name or user hash">' in page
+    assert (
+        '<input type="search" name="search" value="" placeholder="Search name or user hash">'
+        in page
+    )
 
 
 @pytest.mark.asyncio
@@ -885,11 +901,22 @@ async def test_sources_search_keeps_its_query_and_counts_its_matches(
 ) -> None:
     app, hash_ = populated_app
     _seed_two_sources(catalog_db, hash_)
-    page = await _sources_page(app, "/sources?q=+shinob+")
+    page = await _sources_page(app, "/sources?search=+shinob+")
     assert "Shinobu</a>" in page
     assert "AnimuseeFMR" not in page
     assert "Sources matching the search: 1." in page
-    assert 'name="q" value="shinob"' in page
+    assert 'name="search" value="shinob"' in page
+
+
+@pytest.mark.asyncio
+async def test_sources_ignore_the_4x_search_key(
+    populated_app: tuple[Starlette, str], catalog_db: Path
+) -> None:
+    app, hash_ = populated_app
+    _seed_two_sources(catalog_db, hash_)
+    page = await _sources_page(app, "/sources?q=shinob")
+    assert "AnimuseeFMR</a>" in page
+    assert "Sources recorded: 2." in page
 
 
 @pytest.mark.asyncio
@@ -909,10 +936,10 @@ async def test_sources_pages_keep_the_search(
         for n in range(PAGE_SIZE + 1):
             insert_source(conn, f"{n:032x}")
             insert_source_point(conn, insert_source_variant(conn, hash_, f"{n:032x}"), n)
-    first = await _sources_page(app, "/sources?q=FMR")
-    second = await _sources_page(app, "/sources?q=FMR&page=2")
-    assert 'href="/sources?q=FMR&amp;page=2"' in first
-    assert 'href="/sources?q=FMR&amp;page=1"' in second
+    first = await _sources_page(app, "/sources?search=FMR")
+    second = await _sources_page(app, "/sources?search=FMR&page=2")
+    assert 'href="/sources?search=FMR&amp;page=2"' in first
+    assert 'href="/sources?search=FMR&amp;page=1"' in second
     assert second.count("<tr><td>") == 1
 
 
@@ -939,7 +966,7 @@ async def test_source_page_shows_its_hash_its_names_and_its_periods(
         unseen = insert_source_variant(conn, "c" * 32, _USER, role="standby")
         insert_source_point(conn, unseen, _TUESDAY_8PM)
     page = await _sources_page(app, _USER_PAGE)
-    name = '<a href="/sources/name?name=AnimuseeFMR">AnimuseeFMR</a>'
+    name = '<a href="/sources/name?source_name=AnimuseeFMR">AnimuseeFMR</a>'
     file = f'<a href="/files/{file_id(hash_).hex()}">keroro_s2e62a_vf.avi</a>'
     unseen_file = f'<a href="/files/{file_id("c" * 32).hex()}">cccccccc…</a>'
     first, last = "2026-10-13 20:00:00Z", "2026-10-13 20:00:30Z"
@@ -987,7 +1014,7 @@ async def test_name_page_lists_the_hashes_that_carried_it_and_nothing_further(
         ):
             variant = insert_source_variant(conn, on, user, name=name, role="standby")
             insert_source_point(conn, variant, _TUESDAY_8PM)
-    page = await _sources_page(app, "/sources/name?name=AnimuseeFMR")
+    page = await _sources_page(app, "/sources/name?source_name=AnimuseeFMR")
     file = f'<a href="/files/{file_id(unseen).hex()}">cccccccc…</a>'
     stamp = "2026-10-13 20:00:00Z"
     assert "<dd>AnimuseeFMR</dd>" in page
@@ -998,7 +1025,14 @@ async def test_name_page_lists_the_hashes_that_carried_it_and_nothing_further(
 
 
 @pytest.mark.parametrize(
-    "url", ["/sources/zz", f"/sources/{'0' * 32}", "/sources/name", "/sources/name?name=nobody"]
+    "url",
+    [
+        "/sources/zz",
+        f"/sources/{'0' * 32}",
+        "/sources/name",
+        "/sources/name?source_name=nobody",
+        "/sources/name?name=AnimuseeFMR",  # 4.x's key
+    ],
 )
 @pytest.mark.asyncio
 async def test_source_and_name_pages_of_what_was_never_recorded_return_404(
@@ -1013,7 +1047,7 @@ async def test_source_and_name_pages_of_what_was_never_recorded_return_404(
 
 @pytest.mark.parametrize(
     ("user", "url", "lists"),
-    [(None, "/sources/name?name=AnimuseeFMR&", 0), (_USER, f"{_USER_PAGE}?", 1)],
+    [(None, "/sources/name?source_name=AnimuseeFMR&", 0), (_USER, f"{_USER_PAGE}?", 1)],
     ids=["name", "source"],
 )
 @pytest.mark.asyncio
@@ -1245,14 +1279,14 @@ def app_with_media_obs(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
     static_dir = Path(p2pwatch.webui.__file__).parent / "adapters" / "static"
 
     app = build_app(
-        catalog_db=catalog_db,
-        local_db=local_db,
+        catalog_db_path=catalog_db,
+        local_db_path=local_db,
         matcher_config=matcher_config,
-        targets=targets,
+        target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
         control=_RecordingControl(),
-        status=_NO_STATUS,
+        status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
         source_period_gap=_GAP,
@@ -1301,14 +1335,14 @@ async def test_a_template_reading_what_its_context_lacks_raises(
     templates_dir.mkdir()
     (templates_dir / "404.html").write_text(template, encoding="utf-8")
     app = build_app(
-        catalog_db=catalog_db,
-        local_db=local_db,
+        catalog_db_path=catalog_db,
+        local_db_path=local_db,
         matcher_config=_matcher(),
-        targets=_targets(),
+        target_segments=_targets(),
         templates_dir=templates_dir,
         static_dir=Path(p2pwatch.webui.__file__).parent / "adapters" / "static",
         control=_RecordingControl(),
-        status=_NO_STATUS,
+        status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
         source_period_gap=_GAP,
@@ -1316,6 +1350,67 @@ async def test_a_template_reading_what_its_context_lacks_raises(
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         with pytest.raises(UndefinedError):
             await client.get("/sources/not-a-hex-id")
+
+
+class _TemplateRecorder:
+    """The app, each template response asked for its template and context through ASGI's debug
+    extension, which Starlette answers and httpx's transport does not request."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self._app = app
+        self.rendered: list[dict[str, Any]] = []
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        async def record(message: Message) -> None:
+            if message["type"] == "http.response.debug":
+                self.rendered.append(message["info"])
+            else:
+                await send(message)
+
+        await self._app({**scope, "extensions": {"http.response.debug": {}}}, receive, record)
+
+
+def _template_reads(loader: FileSystemLoader, name: str) -> set[str]:
+    """The context names a template reads, with those of the templates it extends or includes."""
+    env = Environment(loader=loader)
+    tree = env.parse(loader.get_source(env, name)[0])
+    reads = set(meta.find_undeclared_variables(tree))
+    for parent in meta.find_referenced_templates(tree):
+        reads |= _template_reads(loader, str(parent))
+    return reads
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "/",
+        "/files",
+        "/files/{file_id}",
+        "/files/not-a-hex-id",
+        "/sources",
+        _USER_PAGE,
+        "/sources/name?source_name=AnimuseeFMR",
+        "/targets/062A",
+        "/node",
+        "/console",
+    ],
+)
+@pytest.mark.asyncio
+async def test_each_page_passes_its_template_only_what_it_reads(
+    populated_app: tuple[Starlette, str], catalog_db: Path, url: str
+) -> None:
+    """A context key no template reads is a stale name, which strict templates cannot see."""
+    import p2pwatch.webui
+
+    app, hash_ = populated_app
+    _seed_two_sources(catalog_db, hash_)
+    recorder = _TemplateRecorder(app)
+    async with AsyncClient(transport=ASGITransport(app=recorder), base_url="http://test") as client:
+        await client.get(url.format(file_id=file_id(hash_).hex()))
+    (rendered,) = recorder.rendered
+    loader = FileSystemLoader(Path(p2pwatch.webui.__file__).parent / "adapters" / "templates")
+    passed = set(rendered["context"]) - {"request"}
+    assert passed == _template_reads(loader, rendered["template"].name)
 
 
 @pytest.fixture
@@ -1340,14 +1435,14 @@ def app_with_hostile_filename(catalog_db: Path, local_db: Path) -> tuple[Starlet
     templates_dir = Path(p2pwatch.webui.__file__).parent / "adapters" / "templates"
     static_dir = Path(p2pwatch.webui.__file__).parent / "adapters" / "static"
     app = build_app(
-        catalog_db=catalog_db,
-        local_db=local_db,
+        catalog_db_path=catalog_db,
+        local_db_path=local_db,
         matcher_config=matcher_config,
-        targets=targets,
+        target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
         control=_RecordingControl(),
-        status=_NO_STATUS,
+        status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
         source_period_gap=_GAP,
@@ -1359,12 +1454,12 @@ def app_with_hostile_filename(catalog_db: Path, local_db: Path) -> tuple[Starlet
 async def test_empty_filter_param_does_not_silently_zero_results(
     populated_app: tuple[Starlette, str],
 ) -> None:
-    # webui-security#0 regression (filters): ``?target=`` (empty, common with a <select>
-    # that has an empty option) must be treated as "no filter", not as ``target = ''`` which
+    # webui-security#0 regression (filters): ``?target_id=`` (empty, common with a <select>
+    # that has an empty option) must be treated as "no filter", not as ``target_id = ''`` which
     # matches 0 results with no message.
     app, hash_ = populated_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files?target=&tier=&q=")
+        resp = await client.get("/files?target_id=&tier=&search=")
     assert resp.status_code == 200
     assert hash_[:8] in resp.text  # the inserted file is rendered despite the empty filters
 
@@ -1419,14 +1514,14 @@ async def test_files_page_shows_pagination_navigation(catalog_db: Path, local_db
     templates_dir = Path(p2pwatch.webui.__file__).parent / "adapters" / "templates"
     static_dir = Path(p2pwatch.webui.__file__).parent / "adapters" / "static"
     app = build_app(
-        catalog_db=catalog_db,
-        local_db=local_db,
+        catalog_db_path=catalog_db,
+        local_db_path=local_db,
         matcher_config=matcher_config,
-        targets=targets,
+        target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
         control=_RecordingControl(),
-        status=_NO_STATUS,
+        status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
         source_period_gap=_GAP,
@@ -1739,14 +1834,14 @@ def app_whole_episode(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]
     templates_dir = Path(p2pwatch.webui.__file__).parent / "adapters" / "templates"
     static_dir = Path(p2pwatch.webui.__file__).parent / "adapters" / "static"
     app = build_app(
-        catalog_db=catalog_db,
-        local_db=local_db,
+        catalog_db_path=catalog_db,
+        local_db_path=local_db,
         matcher_config=matcher_config,
-        targets=targets,
+        target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
         control=_RecordingControl(),
-        status=_NO_STATUS,
+        status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
         source_period_gap=_GAP,
@@ -1812,14 +1907,14 @@ def _dashboard_app(
 
     webui_dir = Path(p2pwatch.webui.__file__).parent
     return build_app(
-        catalog_db=catalog_db,
-        local_db=local_db,
+        catalog_db_path=catalog_db,
+        local_db_path=local_db,
         matcher_config=_matcher(),
-        targets=_targets(),
+        target_segments=_targets(),
         templates_dir=webui_dir / "adapters" / "templates",
         static_dir=webui_dir / "adapters" / "static",
         control=control,
-        status=status,
+        status_readings=status,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
         source_period_gap=_GAP,
@@ -1905,7 +2000,7 @@ async def test_there_is_no_force_cycle_control(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("action", "done"), [("pause", "paused"), ("resume", "resumed"), ("restart", "restart")]
+    ("action", "done"), [("pause", "paused"), ("resume", "resumed"), ("restart", "restarted")]
 )
 async def test_each_control_dispatches_and_redirects_to_the_dashboard(
     controls_app: tuple[Starlette, _RecordingControl], action: str, done: str
@@ -1918,22 +2013,30 @@ async def test_each_control_dispatches_and_redirects_to_the_dashboard(
     assert control.calls == [action]
 
 
+@pytest.mark.parametrize(
+    ("action", "banner"),
+    [
+        (
+            "pause",
+            "Crawl paused. Searches in flight or already waiting their network slot still run, "
+            "then the crawler idles.",
+        ),
+        ("resume", "Crawl resumed."),
+        ("restart", "Restart requested. The service goes offline briefly, then returns."),
+    ],
+)
 @pytest.mark.asyncio
-async def test_post_pause_followed_lands_on_the_dashboard_banner(
-    controls_app: tuple[Starlette, _RecordingControl],
+async def test_each_control_followed_lands_on_its_dashboard_banner(
+    controls_app: tuple[Starlette, _RecordingControl], action: str, banner: str
 ) -> None:
     app, control = controls_app
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test", follow_redirects=True
     ) as client:
-        resp = await client.post("/controls/pause")
+        resp = await client.post(f"/controls/{action}")
     assert resp.status_code == 200
-    assert "control-banner" in resp.text
-    assert (
-        "Crawl paused. Searches in flight or already waiting their network slot still run, "
-        "then the crawler idles." in resp.text
-    )
-    assert control.calls == ["pause"]
+    assert f'<p class="control-banner" role="status">{banner}</p>' in resp.text
+    assert control.calls == [action]
 
 
 _CHANNELS = (ChannelStatus("ed2k", True, False), ChannelStatus("x", False, None))
@@ -2015,32 +2118,37 @@ def test_normalize_sort_valid_unknown_missing() -> None:
 
 
 def test_normalize_dir_valid_unknown_missing() -> None:
-    assert _normalize_dir("asc") == "asc"
-    assert _normalize_dir("bogus") == "desc"
-    assert _normalize_dir(None) == "desc"
+    assert _normalize_direction("asc") == "asc"
+    assert _normalize_direction("bogus") == "desc"
+    assert _normalize_direction(None) == "desc"
 
 
 def test_sort_headers_default_state_no_filters() -> None:
-    headers = _sort_headers(sort="last_seen", direction="desc", filters={})
+    headers = _sort_headers(active_sort="last_seen", active_direction="desc", kept_params={})
     # active column: last_seen, showing desc; its link flips to asc. sort=last_seen is the
-    # DEFAULT sort so it is OMITTED from the URL (the omit-defaults invariant); only dir=asc shows.
+    # DEFAULT sort so it is OMITTED from the URL (the omit-defaults invariant); only direction=asc
+    # shows.
     assert headers.last_seen.indicator == "desc"
-    assert headers.last_seen.url == "/files?dir=asc"
+    assert headers.last_seen.url == "/files?direction=asc"
     # inactive columns: no indicator, per-column default direction, sort/dir omitted when default
     assert headers.name.indicator == ""
-    assert headers.name.url == "/files?sort=name&dir=asc"  # Name default dir is asc
+    assert headers.name.url == "/files?sort=name&direction=asc"  # Name default dir is asc
     assert headers.size.url == "/files?sort=size"  # Size default dir desc == DEFAULT_DIR -> omitted
     assert headers.tier.url == "/files?sort=tier"
 
 
 def test_sort_headers_active_column_flips_and_preserves_filters() -> None:
-    headers = _sort_headers(sort="size", direction="asc", filters={"q": "keroro", "tier": "notify"})
+    headers = _sort_headers(
+        active_sort="size",
+        active_direction="asc",
+        kept_params={"search": "keroro", "tier": "notify"},
+    )
     # active column size, currently asc -> indicator asc, link flips to desc (== default -> omitted)
     assert headers.size.indicator == "asc"
-    assert headers.size.url == "/files?q=keroro&tier=notify&sort=size"
+    assert headers.size.url == "/files?search=keroro&tier=notify&sort=size"
     # an inactive column keeps the filters and sets its own sort + default dir
     assert headers.name.indicator == ""
-    assert headers.name.url == "/files?q=keroro&tier=notify&sort=name&dir=asc"
+    assert headers.name.url == "/files?search=keroro&tier=notify&sort=name&direction=asc"
 
 
 @pytest.fixture
@@ -2058,14 +2166,14 @@ def sortable_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, list[str]
     templates_dir = Path(p2pwatch.webui.__file__).parent / "adapters" / "templates"
     static_dir = Path(p2pwatch.webui.__file__).parent / "adapters" / "static"
     app = build_app(
-        catalog_db=catalog_db,
-        local_db=local_db,
+        catalog_db_path=catalog_db,
+        local_db_path=local_db,
         matcher_config=_matcher(),
-        targets=_targets(),
+        target_segments=_targets(),
         templates_dir=templates_dir,
         static_dir=static_dir,
         control=_RecordingControl(),
-        status=_NO_STATUS,
+        status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         clock=_CLOCK,
         source_period_gap=_GAP,
@@ -2077,10 +2185,14 @@ def sortable_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, list[str]
 async def test_files_sort_by_size_orders_rows(sortable_app: tuple[Starlette, list[str]]) -> None:
     app, ordered_desc = sortable_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files?sort=size&dir=asc")
+        resp = await client.get("/files?sort=size&direction=asc")
+        old_key = await client.get("/files?sort=size&dir=asc")
     assert resp.status_code == 200
     # smallest first: the three short-hashes appear in ascending-size order in the body
     positions = [resp.text.index(h[:8]) for h in reversed(ordered_desc)]
+    assert positions == sorted(positions)
+    # 4.x's ``dir`` is ignored: the default direction, largest first
+    positions = [old_key.text.index(h[:8]) for h in ordered_desc]
     assert positions == sorted(positions)
 
 
@@ -2090,7 +2202,7 @@ async def test_files_renders_sortable_header_link(populated_app: tuple[Starlette
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/files")
     # the Name header is a sort link with a data-sort attribute (default state -> not active)
-    assert 'href="/files?sort=name&amp;dir=asc"' in resp.text
+    assert 'href="/files?sort=name&amp;direction=asc"' in resp.text
     assert 'data-sort="desc"' in resp.text  # last_seen is the active default column
 
 
@@ -2114,10 +2226,10 @@ async def test_sort_header_links_preserve_target_and_tier_filters(
     ``filters`` dict is threaded into each header URL, then sort/dir override for that column)."""
     app, _ = app_download_tier_known_target
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files?target=062A&tier=download")
+        resp = await client.get("/files?target_id=062A&tier=download")
     assert resp.status_code == 200
     # the Name header keeps both filters (autoescaped & -> &amp;) then adds its own sort + dir
-    assert "target=062A&amp;tier=download&amp;sort=name&amp;dir=asc" in resp.text
+    assert "target_id=062A&amp;tier=download&amp;sort=name&amp;direction=asc" in resp.text
 
 
 # ---------------------------------------------------------------------------
@@ -2128,7 +2240,9 @@ async def test_sort_header_links_preserve_target_and_tier_filters(
 
 def test_tier_facets_all_reset_and_masks_catalog() -> None:
     facets = _tier_facets(
-        counts={"download": 1, "notify": 2, "catalog": 5}, active_tier=None, base={}
+        file_count_by_tier={"download": 1, "notify": 2, "catalog": 5},
+        active_tier=None,
+        kept_params={},
     )
     assert facets[0].label == "all"
     assert facets[0].selected_flag == "1"  # no tier active → all selected
@@ -2141,23 +2255,23 @@ def test_tier_facets_all_reset_and_masks_catalog() -> None:
 
 def test_tier_facets_selected_and_preserves_base() -> None:
     facets = _tier_facets(
-        counts={"download": 1, "notify": 2},
+        file_count_by_tier={"download": 1, "notify": 2},
         active_tier="notify",
-        base={"q": "keroro", "sort": "size"},
+        kept_params={"search": "keroro", "sort": "size"},
     )
     notify = next(f for f in facets if f.label == "notify")
     assert notify.selected_flag == "1"
-    assert notify.url == "/files?q=keroro&sort=size&tier=notify"
-    assert facets[0].url == "/files?q=keroro&sort=size"  # all-reset keeps base, drops tier
+    assert notify.url == "/files?search=keroro&sort=size&tier=notify"
+    assert facets[0].url == "/files?search=keroro&sort=size"  # all-reset keeps base, drops tier
 
 
 def test_tier_facets_only_present_tiers_appear() -> None:
-    facets = _tier_facets(counts={"notify": 3}, active_tier=None, base={})
+    facets = _tier_facets(file_count_by_tier={"notify": 3}, active_tier=None, kept_params={})
     assert [f.label for f in facets] == ["all", "notify"]
 
 
 def test_search_bar_prefill_and_hidden_excludes_q() -> None:
-    bar = _search_bar(query="keroro", hidden_state={"tier": "notify", "sort": "size"})
+    bar = _search_bar(search_text="keroro", kept_params={"tier": "notify", "sort": "size"})
     assert bar.query == "keroro"
     assert bar.hidden == (
         HiddenInput(name="tier", value="notify"),
@@ -2166,7 +2280,7 @@ def test_search_bar_prefill_and_hidden_excludes_q() -> None:
 
 
 def test_search_bar_no_query_is_empty_string() -> None:
-    bar = _search_bar(query=None, hidden_state={})
+    bar = _search_bar(search_text=None, kept_params={})
     assert bar.query == ""
     assert bar.hidden == ()
 
@@ -2177,13 +2291,13 @@ async def test_files_renders_search_prefill_and_facet(
 ) -> None:
     app, _ = populated_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files?q=keroro&show_unmatched=1")
-    assert 'name="q"' in resp.text
+        resp = await client.get("/files?search=keroro&show_unmatched=1")
+    assert 'name="search"' in resp.text
     assert 'value="keroro"' in resp.text  # prefill
     assert 'name="show_unmatched"' in resp.text  # carried as a hidden input
     # populated_app's single file is a catalog-tier decision → facet shows "unidentified (1)"
     assert "unidentified" in resp.text
-    assert 'href="/files?q=keroro&amp;show_unmatched=1&amp;tier=catalog"' in resp.text
+    assert 'href="/files?search=keroro&amp;show_unmatched=1&amp;tier=catalog"' in resp.text
 
 
 @pytest.mark.asyncio
@@ -2216,7 +2330,7 @@ async def test_target_page_has_no_filter_bar(
     app, _ = app_download_tier_known_target
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/targets/062A")
-    assert 'name="q"' not in resp.text  # no search form on a target page
+    assert 'name="search"' not in resp.text  # no search form on a target page
     assert "tier-facet" not in resp.text  # no facet on a target page
     assert "filter-bar" not in resp.text  # the wrapper itself renders nothing either
     assert "files-search" not in resp.text
@@ -2232,7 +2346,7 @@ _NAV_ENTRIES: tuple[tuple[str, str], ...] = (
     ("/", "Dashboard"),
     ("/files", "Files"),
     ("/sources", "Sources"),
-    ("/node", "Nodes"),
+    ("/node", "Node"),
     ("/console", "Console"),
 )
 
@@ -2277,14 +2391,14 @@ async def test_nav_amule_link_uses_the_configured_base(catalog_db: Path, local_d
 
     webui_dir = Path(p2pwatch.webui.__file__).parent
     app = build_app(
-        catalog_db=catalog_db,
-        local_db=local_db,
+        catalog_db_path=catalog_db,
+        local_db_path=local_db,
         matcher_config=_matcher(),
-        targets=_targets(),
+        target_segments=_targets(),
         templates_dir=webui_dir / "adapters" / "templates",
         static_dir=webui_dir / "adapters" / "static",
         control=_RecordingControl(),
-        status=_NO_STATUS,
+        status_readings=_NO_STATUS,
         amule_url="https://mule.example.org/amule",
         clock=_CLOCK,
         source_period_gap=_GAP,
@@ -2431,7 +2545,7 @@ async def test_a_period_crossing_from_starts_at_its_first_point_inside(
 
 @pytest.mark.parametrize(
     ("path", "kept"),
-    [(_USER_PAGE, {}), ("/sources/name", {"name": "AnimuseeFMR"})],
+    [(_USER_PAGE, {}), ("/sources/name", {"source_name": "AnimuseeFMR"})],
     ids=["source", "name"],
 )
 @pytest.mark.asyncio

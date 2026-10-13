@@ -1257,9 +1257,9 @@ async def test_the_webui_reads_the_status_loops_board_and_the_pause_gate(
     )
     holder["app"] = app
     await asyncio.wait_for(app.run(), timeout=5.0)
-    reading = wired["status"].readings()["amuled"]
+    reading = wired["status_readings"].readings()["amuled"]
     assert reading.status == await FakeMuleClient().status()
-    assert wired["status"].is_current(reading)
+    assert wired["status_readings"].is_current(reading)
     assert wired["control"].is_paused() is False
 
 
