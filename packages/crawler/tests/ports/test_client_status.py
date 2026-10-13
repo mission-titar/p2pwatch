@@ -6,12 +6,12 @@ from p2pwatch.ports.client_status import ChannelStatus, ClientStatus, StatusClie
 
 
 def test_a_client_status_is_frozen_and_holds_its_channels() -> None:
-    kad = ChannelStatus(channel="kad", on_network=True, connectable=None)
+    kad = ChannelStatus(channel="kad", connected=True, connectable=None)
     status = ClientStatus(version="3.0.1", channels=(kad,))
 
     assert status.channels[0].connectable is None
     with pytest.raises(dataclasses.FrozenInstanceError):
-        kad.on_network = False  # type: ignore[misc]
+        kad.connected = False  # type: ignore[misc]
     with pytest.raises(dataclasses.FrozenInstanceError):
         status.version = None  # type: ignore[misc]
 

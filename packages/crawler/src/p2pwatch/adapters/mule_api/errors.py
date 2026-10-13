@@ -27,7 +27,7 @@ class ApiError(ClientError):
 
 
 class ApiUnreachableError(ApiError, ClientUnreachableError):
-    """Transport dead, amuleapi down, or its EC link to amuled down -> instance down."""
+    """Transport dead, amuleapi down, or its EC link to amuled down -> client down."""
 
 
 class ApiAuthError(ApiError, ClientAuthError):

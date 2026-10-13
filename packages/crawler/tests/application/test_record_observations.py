@@ -46,8 +46,8 @@ async def test_observation_is_always_recorded_even_when_discarded(
         engine=engine,
         signal=signal,
         telemetry=telemetry,
-        client="amuled",
-        network="ed2k",
+        client_name="amuled",
+        channel="ed2k",
     )
     assert changed == 0
     assert count_observations(catalog_connection) == 1
@@ -69,8 +69,8 @@ async def test_new_verdict_is_persisted_and_nudged(
         engine=engine,
         signal=signal,
         telemetry=telemetry,
-        client="amuled",
-        network="ed2k",
+        client_name="amuled",
+        channel="ed2k",
     )
     assert changed == 1
     assert catalog_connection.execute("SELECT tier FROM match_decisions").fetchone() == (
@@ -95,8 +95,8 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
             engine=engine,
             signal=signal,
             telemetry=telemetry,
-            client="amuled",
-            network="ed2k",
+            client_name="amuled",
+            channel="ed2k",
         )
         == 1
     )
@@ -108,8 +108,8 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
             engine=engine,
             signal=signal,
             telemetry=telemetry,
-            client="amuled",
-            network="ed2k",
+            client_name="amuled",
+            channel="ed2k",
         )
         == 0
     )
@@ -133,8 +133,8 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
         engine=engine,
         signal=signal,
         telemetry=telemetry,
-        client="amuled",
-        network="ed2k",
+        client_name="amuled",
+        channel="ed2k",
     )
     # 2nd view of the SAME hash, DOWNLOAD name → verdict changes → re-append + nudge.
     changed = await record_observation(
@@ -143,8 +143,8 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
         engine=engine,
         signal=signal,
         telemetry=telemetry,
-        client="amuled",
-        network="ed2k",
+        client_name="amuled",
+        channel="ed2k",
     )
     assert changed == 1
     tiers = [
@@ -177,8 +177,8 @@ async def test_persistence_error_is_absorbed_and_cycle_continues(
         engine=engine,
         signal=signal,
         telemetry=telemetry,
-        client="amuled",
-        network="ed2k",
+        client_name="amuled",
+        channel="ed2k",
     )
     assert changed == 0  # absorbed, the cycle continues
     assert signal.signalled == []
@@ -202,8 +202,8 @@ async def test_signal_consumer_awaits_the_nudge(
         engine=engine,
         signal=signal,
         telemetry=telemetry,
-        client="amuled",
-        network="ed2k",
+        client_name="amuled",
+        channel="ed2k",
     )
     await asyncio.wait_for(waiter, timeout=1.0)
     assert waiter.done()
@@ -224,8 +224,8 @@ async def test_download_tier_verdict_also_nudges_the_download_subject(
         engine=engine,
         signal=signal,
         telemetry=telemetry,
-        client="amuled",
-        network="ed2k",
+        client_name="amuled",
+        channel="ed2k",
     )
     assert changed == 1
     assert signal.signalled == [DOWNLOAD_NUDGE_SUBJECT]
@@ -245,8 +245,8 @@ async def test_non_download_tier_verdict_does_not_nudge_the_download_subject(
         engine=engine,
         signal=signal,
         telemetry=telemetry,
-        client="amuled",
-        network="ed2k",
+        client_name="amuled",
+        channel="ed2k",
     )
     assert changed == 1
     assert signal.signalled == []
@@ -265,12 +265,12 @@ async def test_emits_observation_then_decision_on_change(
         engine=engine,
         signal=signal,
         telemetry=telemetry,
-        client="amuled",
-        network="ed2k",
+        client_name="amuled",
+        channel="ed2k",
     )
     kinds = [type(e).__name__ for e in telemetry.events]
     assert kinds == ["ObservationRecorded", "DecisionsRecorded"]
-    assert telemetry.events[0] == ObservationRecorded(client="amuled", network="ed2k")
+    assert telemetry.events[0] == ObservationRecorded(client_name="amuled", channel="ed2k")
 
 
 @pytest.mark.asyncio
@@ -285,8 +285,8 @@ async def test_emits_only_observation_when_discarded(
         engine=engine,
         signal=RecordingSignal(),
         telemetry=telemetry,
-        client="amuled",
-        network="kad",
+        client_name="amuled",
+        channel="kad",
     )
     assert [type(e).__name__ for e in telemetry.events] == ["ObservationRecorded"]
 
@@ -305,8 +305,8 @@ async def test_multi_segment_observation_records_two_rows(
         engine=engine,
         signal=signal,
         telemetry=telemetry,
-        client="amuled",
-        network="ed2k",
+        client_name="amuled",
+        channel="ed2k",
     )
     assert changed == 2
     assert catalog_connection.execute(

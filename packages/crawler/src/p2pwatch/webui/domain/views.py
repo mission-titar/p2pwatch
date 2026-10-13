@@ -57,7 +57,7 @@ class ChannelLine:
     """Dashboard row: one channel of a client, each field "yes", "no" or "unknown"."""
 
     channel: str
-    on_network: str
+    connected: str
     connectable: str
 
 

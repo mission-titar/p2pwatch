@@ -62,7 +62,7 @@ flowchart LR
 
 Conséquences de cette forme, chacune porteuse ailleurs dans ce document :
 
-- **Le point d'accès est une constante de code** (`ed2k:4711`, nom d'instance `amuled`), comme le
+- **Le point d'accès est une constante de code** (`ed2k:4711`, nom de client `amuled`), comme le
   bind `0.0.0.0:8080` de la webui. `ed2k` est le service d'aMule dans la variante directe, et un
   alias porté par `ed2k-gluetun` dans la variante VPN : changer de variante ne touche pas
   `crawler.yml`. Celui-ci ne configure que le mot de passe, depuis `${AMULE_API_PASSWORD}` : c'est
@@ -205,7 +205,7 @@ Points clés en chemin :
   plusieurs nœuds et de fusionner leurs catalogues.
 - **Le statut n'est pas la liveness** : « le processus est vivant » n'implique pas « on peut
   trouver quelque chose là, maintenant ». Une boucle lit le statut de chaque client toutes les
-  minutes, par canal (`on_network`, `connectable`), et alerte sur un état dégradé qui dure : 5 min
+  minutes, par canal (`connected`, `connectable`), et alerte sur un état dégradé qui dure : 5 min
   pour un canal, 2 min pour l'API injoignable, puis envoie son rétablissement.
 - **Résilience** : une `RepositoryError` à l'écriture du backoff est journalisée, et l'écriture
   retentée après la recherche suivante.

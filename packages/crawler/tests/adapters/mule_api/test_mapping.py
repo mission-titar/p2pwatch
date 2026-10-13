@@ -331,8 +331,8 @@ def test_a_connected_high_id_and_open_kad_are_connectable() -> None:
     assert status == ClientStatus(
         version="3.0.1",
         channels=(
-            ChannelStatus(channel="ed2k", on_network=True, connectable=True),
-            ChannelStatus(channel="kad", on_network=True, connectable=True),
+            ChannelStatus(channel="ed2k", connected=True, connectable=True),
+            ChannelStatus(channel="kad", connected=True, connectable=True),
         ),
     )
 
@@ -359,7 +359,7 @@ def test_connectable_is_unknown_off_the_network() -> None:
         {"daemon_version": "3.0.1"},
     )
 
-    assert [channel.on_network for channel in status.channels] == [False, False]
+    assert [channel.connected for channel in status.channels] == [False, False]
     assert [channel.connectable for channel in status.channels] == [None, None]
 
 
@@ -375,7 +375,7 @@ def test_an_empty_version_and_status_degrade_to_unknown() -> None:
 
     assert status.version is None
     assert [channel.channel for channel in status.channels] == ["ed2k", "kad"]
-    assert [channel.on_network for channel in status.channels] == [False, False]
+    assert [channel.connected for channel in status.channels] == [False, False]
 
 
 def _client_row(**overrides: Any) -> dict[str, Any]:

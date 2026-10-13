@@ -242,10 +242,10 @@ def _meta_value(value: object) -> str | int | bool | tuple[str, ...] | None:
     return _render(value)
 
 
-def _channel(name: str, network: dict[str, Any], connectable: bool | None) -> ChannelStatus:
+def _channel(channel: str, channel_json: dict[str, Any], connectable: bool | None) -> ChannelStatus:
     """Off the network the flag tells nothing: there ``high_id`` false means "no id yet"."""
-    on_network = network.get("state") == "connected"
-    return ChannelStatus(name, on_network, connectable if on_network else None)
+    connected = channel_json.get("state") == "connected"
+    return ChannelStatus(channel, connected, connectable if connected else None)
 
 
 def _map_result(result: object, keyword: str) -> tuple[list[FileObservation], int]:

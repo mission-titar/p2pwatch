@@ -40,8 +40,8 @@ from p2pwatch.composition import app as composition_app
 from p2pwatch.composition.app import (
     CrawlerApp,
     WebuiServer,
-    default_client_factory,
     default_download_client_factory,
+    default_mule_client_factory,
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
@@ -246,7 +246,7 @@ async def test_the_status_loop_reads_the_search_client_under_its_endpoint_name(
     app_holder["app"] = app
     await asyncio.wait_for(app.run(), timeout=5.0)
     gauge = registries[0].get_sample_value(
-        "p2pwatch_channel_on_network", {"client": "amuled", "network": "kad"}
+        "p2pwatch_channel_connected", {"client": "amuled", "channel": "kad"}
     )
     assert gauge == 1.0
 
@@ -288,7 +288,7 @@ async def test_unreachable_client_at_startup_does_not_crash_the_run(
     app = _make_app(tmp_path, matcher_config, factory=factory)
     app_holder["app"] = app
     with caplog.at_level(logging.WARNING, logger="p2pwatch.composition.app"):
-        await asyncio.wait_for(app.run(), timeout=5.0)  # does NOT raise (down instance tolerated)
+        await asyncio.wait_for(app.run(), timeout=5.0)  # does NOT raise (down client tolerated)
     # The tolerance warning comes from the COMPOSITION ROOT (not the worker): it is the
     # `except ClientUnreachableError` branch of the client setup.
     startup_warnings = [
@@ -398,9 +398,9 @@ async def test_normal_run_outlives_shutdown_deadline_without_a_signal(
 
 
 def test_the_default_client_factories_pace_on_the_composition_clock() -> None:
-    endpoint = AmuleEndpoint(name="amule-1", host="gluetun", port=4712, password="secret")
+    endpoint = AmuleEndpoint(client_name="amule-1", host="gluetun", port=4712, password="secret")
     clock = FakeClock()
-    for factory in (default_client_factory, default_download_client_factory):
+    for factory in (default_mule_client_factory, default_download_client_factory):
         client = factory(endpoint, clock)
         assert isinstance(client, AmuleApiClient)
         assert client._clock is clock
@@ -1069,7 +1069,7 @@ async def test_metrics_server_not_started_when_observability_absent(
 async def test_emits_crawler_started_observer_mode(
     tmp_path: Path, matcher_config: MatcherConfig, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """CrawlerStarted(mode='observer') emitted at boot in observer mode."""
+    """CrawlerStarted(download_enabled=False) emitted at boot, download off."""
     holder: dict[str, CrawlerApp] = {}
 
     def factory(endpoint: AmuleEndpoint, clock: Clock) -> _ShutdownOnStatusClient:
@@ -1079,14 +1079,14 @@ async def test_emits_crawler_started_observer_mode(
     holder["app"] = app
     with caplog.at_level(logging.INFO, logger="p2pwatch.observability"):
         await asyncio.wait_for(app.run(), timeout=5.0)
-    assert any("mode observer" in r.getMessage() for r in caplog.records)
+    assert any("download off" in r.getMessage() for r in caplog.records)
 
 
 @pytest.mark.asyncio
 async def test_emits_crawler_started_full_mode(
     tmp_path: Path, matcher_config: MatcherConfig, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """CrawlerStarted(mode='full') emitted at boot in full mode."""
+    """CrawlerStarted(download_enabled=True) emitted at boot, download on."""
     holder: dict[str, CrawlerApp] = {}
     download_client = _ShutdownOnQueueDownloadClient(holder)
 
@@ -1104,7 +1104,7 @@ async def test_emits_crawler_started_full_mode(
     holder["app"] = app
     with caplog.at_level(logging.INFO, logger="p2pwatch.observability"):
         await asyncio.wait_for(app.run(), timeout=5.0)
-    assert any("mode full" in r.getMessage() for r in caplog.records)
+    assert any("download on" in r.getMessage() for r in caplog.records)
 
 
 # ---------------------------------------------------------------------------

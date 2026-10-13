@@ -179,7 +179,7 @@ non.
 
 Le canal *operations* reçoit l'état du nœud, et rien d'autre :
 
-- le démarrage de l'instance ;
+- le démarrage du nœud, en précisant si le téléchargement est activé ;
 - l'espace disque passé sous le plancher (voir [Planification disque](#planification-disque)) ;
 - un canal d'un client (`ed2k` ou `kad` pour aMule) **hors de son réseau** ou **non joignable par
   les pairs** depuis 5 minutes, puis son retour ;
@@ -279,7 +279,7 @@ le crawl en gardant aMule vivant, c'est `docker compose stop p2pwatch`.
 
 | Route | Description |
 |---|---|
-| `/` | Tableau de bord : état de chaque client (version, API joignable, et par canal : sur le réseau, joignable par les pairs), d'après la dernière lecture de moins de deux minutes ; état du crawl, avec les boutons pause, reprise et redémarrage du crawler seul (aMule garde ses sessions) ; couverture par cible (épisodes trouvés et manquants) |
+| `/` | Tableau de bord : état de chaque client (version, API joignable, et par canal : connecté à son réseau, joignable par les pairs), d'après la dernière lecture de moins de deux minutes ; état du crawl, avec les boutons pause, reprise et redémarrage du crawler seul (aMule garde ses sessions) ; couverture par cible (épisodes trouvés et manquants) |
 | `/files` | Liste paginée des fichiers ; filtres `?target=`, `?tier=`, `?q=` |
 | `/files/{file_id}` | Détail d'un fichier, désigné par son `file_id` en 32 caractères hexadécimaux minuscules, tel que la console SQL l'affiche : réseau, identifiant natif, observations et historique des sources dans l'intervalle choisi, décisions, explication du matching |
 | `/sources` | Liste paginée des sources qui ont un user hash, la plus récemment vue d'abord : dernier nom, début du user hash, dernière vue, nombre de fichiers ; `?q=` cherche un début de user hash ou un morceau de n'importe quel nom porté |

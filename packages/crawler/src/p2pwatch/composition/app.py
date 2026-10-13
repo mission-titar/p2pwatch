@@ -93,7 +93,7 @@ class DownloadSourceClient(DownloadClient, SourceClient, Protocol):
 
 
 # Client factories, injectable in test; the clock is the composition's, so the pacing shares it.
-ClientFactory = Callable[[AmuleEndpoint, Clock], MuleClient]
+MuleClientFactory = Callable[[AmuleEndpoint, Clock], MuleClient]
 DownloadClientFactory = Callable[[AmuleEndpoint, Clock], DownloadSourceClient]
 
 
@@ -170,7 +170,7 @@ def _build_policy(config: CrawlerConfig) -> WorkerPolicy:
     )
 
 
-def default_client_factory(endpoint: AmuleEndpoint, clock: Clock) -> MuleClient:
+def default_mule_client_factory(endpoint: AmuleEndpoint, clock: Clock) -> MuleClient:
     """A real ``AmuleApiClient`` on the given endpoint (default factory, substituted in test)."""
     return AmuleApiClient(endpoint.host, endpoint.port, endpoint.password, clock=clock)
 
@@ -188,7 +188,7 @@ class CrawlerApp:
         rng: Rng,
         signal_hub: DecisionSignal,
         policy_fingerprint: str,
-        client_factory: ClientFactory = default_client_factory,
+        client_factory: MuleClientFactory = default_mule_client_factory,
         download_client_factory: DownloadClientFactory = default_download_client_factory,
         metrics_server: MetricsServer = default_metrics_server,
         webui_server_factory: WebuiServerFactory = default_webui_server_factory,
@@ -254,7 +254,7 @@ class CrawlerApp:
                 error,
             )
         return DownloadLoopDeps(
-            client=download_client,
+            download_client=download_client,
             source_client=download_client,
             downloads=SqliteDownloadRepository(local_conn),
             sources=source_repo,
@@ -435,7 +435,7 @@ class CrawlerApp:
             scheduler_state = SqliteSchedulerStateRepository(local_conn)
             engine = MatchingEngine(self._matcher_config, self._targets)
             endpoint = self._crawler_config.amule_endpoint
-            board = StatusBoard((endpoint.name,), self._clock)
+            board = StatusBoard((endpoint.client_name,), self._clock)
             # In-process webui (spec §5): own thread + loop, started EARLY (before the daemon client
             # + startup backfill) so it is up promptly and stays isolated from the crawler's
             # synchronous work. Gated by ``webui.enabled``; a crash degrades (spec §17.1). Its
@@ -473,10 +473,10 @@ class CrawlerApp:
                 _logger.warning(
                     "amuled unreachable at startup (%s): tolerated, the searches back off", error
                 )
-            workers = [SearchWorker(endpoint.name, client, deps)]
+            workers = [SearchWorker(endpoint.client_name, client, deps)]
             # The status loop shares the search session (one session per container's amuled).
             status_deps = StatusLoopDeps(
-                endpoint.name, client, self._clock, telemetry, self._shutdown, board
+                endpoint.client_name, client, self._clock, telemetry, self._shutdown, board
             )
 
             _logger.info("crawler started: node_id=%s", node_id)
@@ -499,8 +499,7 @@ class CrawlerApp:
                 )
                 _logger.info("full mode: download loop armed")
 
-            mode = "full" if download_config is not None else "observer"
-            await telemetry.emit(CrawlerStarted(mode=mode))
+            await telemetry.emit(CrawlerStarted(download_enabled=download_config is not None))
 
             # Startup backfill (spec §7/§7.1): re-evaluate the WHOLE catalogue against the
             # current matcher, gated by a policy fingerprint stored in local.db (a

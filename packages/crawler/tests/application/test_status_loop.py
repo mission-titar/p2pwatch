@@ -14,7 +14,7 @@ from p2pwatch.application.status_loop import (
 )
 from p2pwatch.domain.observability import events as ev
 from p2pwatch.ports.client_errors import ClientError
-from p2pwatch.ports.client_status import ChannelStatus, ClientReading, ClientStatus
+from p2pwatch.ports.client_status import ChannelStatus, ClientStatus, StatusReading
 from tests.application.fakes import FakeClock, make_unreachable
 
 type _Reading = ClientStatus | ClientError
@@ -104,7 +104,7 @@ async def test_a_degraded_state_lasting_four_minutes_never_alerts_nor_recovers()
 async def test_off_the_network_alerts_whatever_the_client_and_channel() -> None:
     events = await _run(*[_status(x=(False, None))] * 6, client="fake")
     assert [e for _, e in events if isinstance(e, _ALERTS)] == [
-        ev.ChannelDegraded("fake", "x", "on_network", 300.0)
+        ev.ChannelDegraded("fake", "x", "connected", 300.0)
     ]
 
 
@@ -141,7 +141,7 @@ async def test_unreachable_alerts_at_two_minutes_and_recovers_when_it_answers() 
         (120.0, ev.ClientUnreachableLasting("amuled", 120.0)),
         (180.0, ev.ClientReachableAgain("amuled")),
     ]
-    assert [e for _, e in events].count(ev.InstanceUnreachable("amuled")) == 3
+    assert [e for _, e in events].count(ev.ClientUnreachable("amuled")) == 3
 
 
 @pytest.mark.asyncio
@@ -233,12 +233,12 @@ async def test_each_reading_is_published_with_its_time(
     deps = StatusLoopDeps("amuled", client, clock, _TimedTelemetry(clock), shutdown, board)
     await asyncio.wait_for(status_loop(deps), timeout=1.0)
     read_at = clock.now() - timedelta(seconds=60)  # the loop slept one period after it
-    assert board.readings() == {"amuled": ClientReading(read_at, published)}
+    assert board.readings() == {"amuled": StatusReading(read_at, published)}
 
 
 def test_a_reading_older_than_two_status_periods_is_not_current() -> None:
     clock = FakeClock()
-    reading = ClientReading(clock.now(), None)
+    reading = StatusReading(clock.now(), None)
     board = StatusBoard((), clock)
     clock.advance(120)
     assert board.is_current(reading)
@@ -250,5 +250,5 @@ def test_publishing_replaces_the_snapshot_and_never_changes_one_already_read() -
     clock = FakeClock()
     board = StatusBoard(("amuled",), clock)
     before = board.readings()
-    board.publish("amuled", ClientReading(clock.now(), None))
+    board.publish("amuled", StatusReading(clock.now(), None))
     assert before == {"amuled": None}

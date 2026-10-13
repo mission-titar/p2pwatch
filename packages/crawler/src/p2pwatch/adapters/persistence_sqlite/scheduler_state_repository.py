@@ -2,12 +2,12 @@
 
 STRUCTURALLY implements the ``SchedulerStateRepository`` port. Stores one key in the
 ``scheduler_state`` table of ``local.db``: ``channel_backoff`` (JSON map of
-:class:`ChannelBackoff` keyed by instance/instance:channel). ``save_channel_backoff`` replaces
+:class:`ChannelBackoff` keyed by client/client:channel). ``save_channel_backoff`` replaces
 the map ENTIRELY (registry snapshot); ``load_channel_backoff`` returns an empty dict if the key
 is absent.
 
 ``scheduler_state`` is NOT append-only (mutable state, not the catalog): no
-triggers — the ``ON CONFLICT … DO UPDATE`` UPSERT is allowed.
+triggers: the ``ON CONFLICT … DO UPDATE`` UPSERT is allowed.
 """
 
 import json

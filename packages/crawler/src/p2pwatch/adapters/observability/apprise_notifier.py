@@ -2,7 +2,7 @@
 
 ADAPTER layer (implements ``Notifier``). At wiring time: ``add(url, tag=audience)`` for each
 target, into one of two apprise groups: prefixed or bare (``node_prefix``). ``notify`` sends the
-title PREFIXED with the ``node_id`` (instance ID, distributed network) to the first group and as is
+title PREFIXED with the ``node_id`` (distributed network) to the first group and as is
 to the second, since apprise sends one message to every URL of a tag. Every message is markdown
 (a Discord embed) with every ``@`` neutralised, and both groups share an asset naming the node
 (spec discord-embed-notifications §4). No URL → natural no-op (apprise with no service returns
@@ -10,7 +10,7 @@ to the second, since apprise sends one message to every URL of a tag. Every mess
 timeout/error absorption live in the dispatcher (E-D13).
 
 DECISION (audit 2026-06-23 / security-network#2): the apprise egress (Slack, Discord, SMTP,
-etc. webhooks) traverses the crawler's HOST network — not the VPN. The packaging spec accepts this
+etc. webhooks) traverses the crawler's HOST network, not the VPN. The packaging spec accepts this
 tradeoff: the P2P kill-switch stays effective (eD2k blocked outside the VPN, anonymity preserved);
 only the notification IP↔webhook CORRELATION remains (an operator who notifies on Slack exposes
 their host's IP to Slack, not their P2P traffic). This is a DELIBERATE choice, not a flaw.

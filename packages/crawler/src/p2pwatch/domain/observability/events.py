@@ -1,7 +1,7 @@
 """Observability events: PURE business facts (spec Plan E §3-4).
 
 DOMAIN layer (pure). One FROZEN dataclass per salient observable fact; tagged union
-``Event``. Business fields ONLY — no notion of log/metric/notif (that is ``policy.describe``'s
+``Event``. Business fields ONLY: no notion of log/metric/notif (that is ``policy.describe``'s
 job). Recurring failure facts carry ``first_occurrence`` (computed by the application via
 ``EdgeState``) for notification anti-spam (E-D8).
 """
@@ -15,26 +15,26 @@ from p2pwatch.domain.source import SourceKey
 
 @dataclass(frozen=True)
 class SearchExecuted:
-    client: str
-    network: str
-    n_results: int
+    client_name: str
+    channel: str
+    result_count: int
 
 
 @dataclass(frozen=True)
-class InstanceUnreachable:
-    client: str
+class ClientUnreachable:
+    client_name: str
 
 
 @dataclass(frozen=True)
 class SearchFailed:
-    client: str
-    network: str
+    client_name: str
+    channel: str
 
 
 @dataclass(frozen=True)
 class ObservationRecorded:
-    client: str
-    network: str
+    client_name: str
+    channel: str
 
 
 @dataclass(frozen=True)
@@ -66,22 +66,22 @@ class DownloadCompleted:
     targets: tuple[tuple[str, str], ...]  # (target_id, title), every download target of the file
 
 
-type ChannelField = Literal["on_network", "connectable"]
+type ChannelField = Literal["connected", "connectable"]
 
 
 @dataclass(frozen=True)
 class ChannelStatusSampled:
     # One status reading of a channel; None is unknown (the client's API did not answer).
-    client: str
+    client_name: str
     channel: str
-    on_network: bool | None
+    connected: bool | None
     connectable: bool | None
 
 
 @dataclass(frozen=True)
 class ChannelDegraded:
     # A field of a channel has read False for ``seconds``: emitted once until it recovers.
-    client: str
+    client_name: str
     channel: str
     field: ChannelField
     seconds: float
@@ -89,7 +89,7 @@ class ChannelDegraded:
 
 @dataclass(frozen=True)
 class ChannelRecovered:
-    client: str
+    client_name: str
     channel: str
     field: ChannelField
 
@@ -97,13 +97,13 @@ class ChannelRecovered:
 @dataclass(frozen=True)
 class ClientUnreachableLasting:
     # The client's API has not answered for ``seconds``: emitted once until it answers.
-    client: str
+    client_name: str
     seconds: float
 
 
 @dataclass(frozen=True)
 class ClientReachableAgain:
-    client: str
+    client_name: str
 
 
 @dataclass(frozen=True)
@@ -141,12 +141,12 @@ class SourceReappeared:
 
 @dataclass(frozen=True)
 class CrawlerStarted:
-    mode: str
+    download_enabled: bool
 
 
 type Event = (
     SearchExecuted
-    | InstanceUnreachable
+    | ClientUnreachable
     | SearchFailed
     | ObservationRecorded
     | DecisionsRecorded

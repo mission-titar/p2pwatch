@@ -1,11 +1,11 @@
 """Observability policy: ``describe(event) → Report`` (spec Plan E §3, E-D3).
 
-DOMAIN layer (pure). The ONLY place that decides — for each event — severity, message,
+DOMAIN layer (pure). The ONLY place that decides, for each event, severity, message,
 metric(s), audiences. ``describe`` is an EXHAUSTIVE match (``assert_never`` → 100% branch).
 The domain knows nothing of ``logging``, Prometheus or apprise: ``Severity``/``Audience``/
 ``MetricName`` are DOMAIN enums, translated by the adapters (E-D3).
 
-Prometheus GOTCHA: COUNTER names do NOT include ``_total`` here — ``prometheus_client``
+Prometheus GOTCHA: COUNTER names do NOT include ``_total`` here: ``prometheus_client``
 adds it at exposition (including it would produce ``…_total_total``). Gauges: name
 as-is.
 """
@@ -24,6 +24,7 @@ from p2pwatch.domain.observability.events import (
     ChannelRecovered,
     ChannelStatusSampled,
     ClientReachableAgain,
+    ClientUnreachable,
     ClientUnreachableLasting,
     CrawlerStarted,
     DecisionChange,
@@ -33,7 +34,6 @@ from p2pwatch.domain.observability.events import (
     DownloadQueued,
     Event,
     FreeSpaceSampled,
-    InstanceUnreachable,
     ObservationRecorded,
     SearchExecuted,
     SearchFailed,
@@ -53,7 +53,7 @@ class Severity(Enum):
 
 
 class Audience(Enum):
-    """Consumer of a notification (E-D7) — the VALUE is the apprise tag."""
+    """Consumer of a notification (E-D7): the VALUE is the apprise tag."""
 
     COMMUNITY = "community"
     OPERATIONS = "operations"
@@ -71,7 +71,7 @@ class MetricName(StrEnum):
     DOWNLOADS_COMPLETED = "p2pwatch_downloads_completed"
     DISK_FREE_BYTES = "p2pwatch_download_disk_free_bytes"
     CRAWLER_UP = "p2pwatch_crawler_up"
-    CHANNEL_ON_NETWORK = "p2pwatch_channel_on_network"
+    CHANNEL_CONNECTED = "p2pwatch_channel_connected"
     CHANNEL_CONNECTABLE = "p2pwatch_channel_connectable"
     SOURCE_ALERTS = "p2pwatch_source_alerts"
 
@@ -134,11 +134,11 @@ def _code_name(filename: str) -> str:
 
 
 _DEGRADED: dict[ChannelField, str] = {
-    "on_network": "off its network",
+    "connected": "off its network",
     "connectable": "not connectable",
 }
 _RECOVERED: dict[ChannelField, str] = {
-    "on_network": "back on its network",
+    "connected": "back on its network",
     "connectable": "connectable again",
 }
 
@@ -150,13 +150,13 @@ def _word(value: bool | None) -> str:
 def _search_labels(
     event: SearchExecuted | SearchFailed | ObservationRecorded,
 ) -> tuple[tuple[str, str], ...]:
-    return (("client", event.client), ("network", event.network))
+    return (("client", event.client_name), ("channel", event.channel))
 
 
 def _channel_gauge(
     name: MetricName, event: ChannelStatusSampled, value: bool | None
 ) -> MetricInstruction:
-    labels = (("client", event.client), ("network", event.channel))
+    labels = (("client", event.client_name), ("channel", event.channel))
     if value is None:  # an unknown state has no series, never a stale one
         return MetricInstruction(name, "remove", labels)
     return MetricInstruction(name, "set", labels, float(value))
@@ -166,7 +166,10 @@ def _channel_alert(
     severity: Severity, event: ChannelDegraded | ChannelRecovered, what: str
 ) -> Report:
     return Report(
-        severity, f"{event.client} {event.channel}: {what}", (), frozenset({Audience.OPERATIONS})
+        severity,
+        f"{event.client_name} {event.channel}: {what}",
+        (),
+        frozenset({Audience.OPERATIONS}),
     )
 
 
@@ -227,29 +230,29 @@ def describe(event: Event) -> Report:
         case SearchExecuted():
             return Report(
                 Severity.DEBUG,
-                f"search {event.network}: {event.n_results} result(s)",
+                f"search {event.channel}: {event.result_count} result(s)",
                 (MetricInstruction(MetricName.SEARCHES, "inc", _search_labels(event)),),
             )
-        case InstanceUnreachable():
+        case ClientUnreachable():
             return Report(
                 Severity.WARNING,
-                f"{event.client} unreachable",
+                f"{event.client_name} unreachable",
                 (
                     MetricInstruction(
-                        MetricName.CLIENT_UNREACHABLE, "inc", (("client", event.client),)
+                        MetricName.CLIENT_UNREACHABLE, "inc", (("client", event.client_name),)
                     ),
                 ),
             )
         case SearchFailed():
             return Report(
                 Severity.WARNING,
-                f"search failed on {event.network}",
+                f"search failed on {event.channel}",
                 (MetricInstruction(MetricName.SEARCH_FAILURES, "inc", _search_labels(event)),),
             )
         case ObservationRecorded():
             return Report(
                 Severity.DEBUG,
-                f"observation recorded ({event.network})",
+                f"observation recorded ({event.channel})",
                 (MetricInstruction(MetricName.OBSERVATIONS, "inc", _search_labels(event)),),
             )
         case DecisionsRecorded():
@@ -272,10 +275,10 @@ def describe(event: Event) -> Report:
         case ChannelStatusSampled():
             return Report(
                 Severity.DEBUG,
-                f"status {event.client} {event.channel}: on network {_word(event.on_network)}, "
+                f"status {event.client_name} {event.channel}: connected {_word(event.connected)}, "
                 f"connectable {_word(event.connectable)}",
                 (
-                    _channel_gauge(MetricName.CHANNEL_ON_NETWORK, event, event.on_network),
+                    _channel_gauge(MetricName.CHANNEL_CONNECTED, event, event.connected),
                     _channel_gauge(MetricName.CHANNEL_CONNECTABLE, event, event.connectable),
                 ),
             )
@@ -290,14 +293,14 @@ def describe(event: Event) -> Report:
         case ClientUnreachableLasting():
             return Report(
                 Severity.WARNING,
-                f"{event.client} unreachable for {event.seconds / 60:.0f} min",
+                f"{event.client_name} unreachable for {event.seconds / 60:.0f} min",
                 (),
                 frozenset({Audience.OPERATIONS}),
             )
         case ClientReachableAgain():
             return Report(
                 Severity.INFO,
-                f"{event.client} reachable again",
+                f"{event.client_name} reachable again",
                 (),
                 frozenset({Audience.OPERATIONS}),
             )
@@ -331,7 +334,7 @@ def describe(event: Event) -> Report:
         case CrawlerStarted():
             return Report(
                 Severity.INFO,
-                f"🟢 instance online (mode {event.mode})",
+                f"🟢 node online (download {'on' if event.download_enabled else 'off'})",
                 (MetricInstruction(MetricName.CRAWLER_UP, "set", (), 1.0),),
                 frozenset({Audience.OPERATIONS}),
             )

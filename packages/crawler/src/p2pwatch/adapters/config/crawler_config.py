@@ -25,10 +25,10 @@ from p2pwatch.domain.observability.policy import Audience
 
 @dataclass(frozen=True)
 class BackoffConfig:
-    """Exponential backoff + jitter per (instance, channel) (spec §3/§5).
+    """Exponential backoff + jitter per (client, channel) (spec §3/§5).
 
     ``jitter_ratio``: fraction of the nominal delay drawn as additional jitter
-    (anti-thundering-herd) — 0 = no jitter, 0.3 = up to +30%.
+    (anti-thundering-herd): 0 = no jitter, 0.3 = up to +30%.
     """
 
     base_seconds: float
@@ -47,10 +47,10 @@ class SearchConfig:
 
 @dataclass(frozen=True)
 class AmuleEndpoint:
-    """An ``amuled`` daemon reachable through ``amuleapi``. ``name`` is the instance label
+    """An ``amuled`` daemon reachable through ``amuleapi``. ``client_name`` is the client's label
     (logging, backoff/scheduler_state key)."""
 
-    name: str
+    client_name: str
     host: str
     port: int
     password: str
@@ -59,7 +59,7 @@ class AmuleEndpoint:
 # aMule's service in the direct variant, a network alias of its VPN sidecar in the vpn one.
 AMULE_API_HOST = "ed2k"
 AMULE_API_PORT = 4711
-AMULE_INSTANCE_NAME = "amuled"
+AMULE_CLIENT_NAME = "amuled"
 
 
 @dataclass(frozen=True)
@@ -179,7 +179,7 @@ class CrawlerConfig:
         ONE derivation point for both sessions (search, download).
         """
         return AmuleEndpoint(
-            name=AMULE_INSTANCE_NAME,
+            client_name=AMULE_CLIENT_NAME,
             host=AMULE_API_HOST,
             port=AMULE_API_PORT,
             password=self.amule_api_password,

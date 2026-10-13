@@ -53,7 +53,9 @@ def _dispatcher(
 @pytest.mark.asyncio
 async def test_logs_and_applies_metrics_no_audience() -> None:
     sink, notifier = _RecordingSink(), _RecordingNotifier()
-    await _dispatcher(sink, notifier).emit(ev.ObservationRecorded(client="amuled", network="ed2k"))
+    await _dispatcher(sink, notifier).emit(
+        ev.ObservationRecorded(client_name="amuled", channel="ed2k")
+    )
     assert [m.name.value for m in sink.applied] == ["p2pwatch_observations"]
     assert notifier.calls == []  # ObservationRecorded has no audience
 
@@ -62,10 +64,12 @@ async def test_logs_and_applies_metrics_no_audience() -> None:
 async def test_two_metrics_one_event() -> None:
     sink, notifier = _RecordingSink(), _RecordingNotifier()
     await _dispatcher(sink, notifier).emit(
-        ev.ChannelStatusSampled(client="amuled", channel="kad", on_network=True, connectable=True)
+        ev.ChannelStatusSampled(
+            client_name="amuled", channel="kad", connected=True, connectable=True
+        )
     )
     assert [m.name.value for m in sink.applied] == [
-        "p2pwatch_channel_on_network",
+        "p2pwatch_channel_connected",
         "p2pwatch_channel_connectable",
     ]
 
@@ -73,9 +77,9 @@ async def test_two_metrics_one_event() -> None:
 @pytest.mark.asyncio
 async def test_notifies_the_message_when_there_is_no_separate_body() -> None:
     sink, notifier = _RecordingSink(), _RecordingNotifier()
-    await _dispatcher(sink, notifier).emit(ev.CrawlerStarted(mode="full"))
+    await _dispatcher(sink, notifier).emit(ev.CrawlerStarted(download_enabled=True))
     assert notifier.calls == [
-        (Audience.OPERATIONS, "", "🟢 instance online (mode full)", Severity.INFO)
+        (Audience.OPERATIONS, "", "🟢 node online (download on)", Severity.INFO)
     ]
 
 
@@ -97,7 +101,7 @@ async def test_logs_the_message_but_notifies_the_body(caplog: pytest.LogCaptureF
 async def test_log_level_matches_severity(caplog: pytest.LogCaptureFixture) -> None:
     sink, notifier = _RecordingSink(), _RecordingNotifier()
     with caplog.at_level(logging.DEBUG, logger="p2pwatch.observability"):
-        await _dispatcher(sink, notifier).emit(ev.InstanceUnreachable("amuled"))
+        await _dispatcher(sink, notifier).emit(ev.ClientUnreachable("amuled"))
     assert caplog.records[-1].levelno == logging.WARNING
 
 
