@@ -1,6 +1,7 @@
 import random
 
-from catalog_matching.engine import _TIER_RANK, MatchDecision, MatchingEngine
+from catalog_matching.config import TIER_RANK
+from catalog_matching.engine import MatchDecision, MatchingEngine
 from catalog_matching.models import FileCandidate, TargetSegment
 from catalog_matching.validation import parse_matcher_config
 
@@ -59,7 +60,7 @@ def _targets() -> list[TargetSegment]:
             season=2,
             seasonal_number=11,
             absolute_number=62,
-            segment="a",
+            letter="a",
             title="Les demoiselles cambrioleuses",
             status="found",
         ),
@@ -67,7 +68,7 @@ def _targets() -> list[TargetSegment]:
             season=2,
             seasonal_number=11,
             absolute_number=62,
-            segment="b",
+            letter="b",
             title="Le grand combat sous-marin",
             status="lost",
         ),
@@ -75,7 +76,7 @@ def _targets() -> list[TargetSegment]:
             season=1,
             seasonal_number=5,
             absolute_number=5,
-            segment="a",
+            letter="a",
             title="Un titre quelconque",
             status="lost",
         ),
@@ -110,7 +111,7 @@ def test_property_decision_invariant_under_target_reordering() -> None:
 
 
 def _max_tier(decisions: list[MatchDecision]) -> int | None:
-    return max((_TIER_RANK[d.tier] for d in decisions), default=None)
+    return max((TIER_RANK[d.tier] for d in decisions), default=None)
 
 
 def test_property_higher_priority_rule_never_lowers_tier() -> None:

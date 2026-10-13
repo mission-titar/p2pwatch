@@ -41,7 +41,7 @@ def test_golden_corpus(case: dict[str, Any]) -> None:
     engine = _engine()
     # One file known under several names (aliases of one hash) is judged as a whole.
     names = case["filenames"] if "filenames" in case else [case["filename"]]
-    decisions = engine.evaluate_all([FileCandidate(filename=str(name)) for name in names])
+    decisions = engine.evaluate_file([FileCandidate(filename=str(name)) for name in names])
     if case.get("discarded", False):
         assert decisions == [], f"{case['id']}: expected discarded, got {decisions}"
         return

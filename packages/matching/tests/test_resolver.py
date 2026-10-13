@@ -7,7 +7,7 @@ _TARGET = TargetSegment(
     season=2,
     seasonal_number=11,
     absolute_number=62,
-    segment="a",
+    letter="a",
     title="Les demoiselles cambrioleuses",
 )
 
@@ -31,7 +31,7 @@ def test_resolve_regex_token_interpolates_per_target() -> None:
     assert isinstance(matcher, RegexMatcher)
     assert matcher.matches(FileCandidate(filename="Keroro N°062A.avi")) is True
     # Another target (number 7) produces a distinct matcher that does not match 062.
-    other = TargetSegment(season=2, seasonal_number=7, absolute_number=7, segment="b", title="x")
+    other = TargetSegment(season=2, seasonal_number=7, absolute_number=7, letter="b", title="x")
     assert (
         resolver.resolve_token("seg", other).matches(FileCandidate(filename="Keroro N°062A.avi"))
         is False
@@ -46,7 +46,7 @@ def test_resolve_coverage_binds_title() -> None:
     assert isinstance(matcher, CoverageMatcher)
     candidate = FileCandidate(filename="062A Les demoiselles cambrioleuses.avi")
     assert matcher.matches(candidate) is True
-    assert matcher.value(candidate) == 1.0
+    assert matcher.coverage(candidate) == 1.0
 
 
 def test_resolve_coverage_non_title_reference_used_literally() -> None:
@@ -196,9 +196,12 @@ def test_resolve_all_returns_every_token_and_rule_matcher() -> None:
             "rules": [{"name": "r", "tier": "catalog", "scope": "unattributed", "any": ["keroro"]}],
         }
     )
-    resolved = resolver.resolve_all(_TARGET)
+    resolved = resolver.resolve_target(_TARGET)
     assert resolved.target is _TARGET
-    assert set(resolved.tokens) == {"keroro", "seg"}
-    assert set(resolved.rules) == {"r"}
-    assert resolved.tokens["keroro"].matches(FileCandidate(filename="keroro.avi")) is True
-    assert resolved.rules["r"].matches(FileCandidate(filename="keroro.avi")) is True
+    assert set(resolved.matcher_by_token_name) == {"keroro", "seg"}
+    assert set(resolved.matcher_by_rule_name) == {"r"}
+    assert (
+        resolved.matcher_by_token_name["keroro"].matches(FileCandidate(filename="keroro.avi"))
+        is True
+    )
+    assert resolved.matcher_by_rule_name["r"].matches(FileCandidate(filename="keroro.avi")) is True

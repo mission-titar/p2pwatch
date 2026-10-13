@@ -4,9 +4,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from catalog_matching.config import TIERS, MatcherConfig
+from catalog_matching.config import TIER_RANK, TIERS, MatcherConfig
 from catalog_matching.engine import (
-    _TIER_RANK,
     Explanation,
     MatchDecision,
     MatchingEngine,
@@ -18,18 +17,18 @@ from catalog_matching.validation import parse_matcher_config
 
 
 def test_tier_rank_orders_download_above_notify_above_catalog() -> None:
-    assert _TIER_RANK["download"] > _TIER_RANK["notify"]
-    assert _TIER_RANK["notify"] > _TIER_RANK["catalog"]
+    assert TIER_RANK["download"] > TIER_RANK["notify"]
+    assert TIER_RANK["notify"] > TIER_RANK["catalog"]
 
 
 def test_tier_rank_catalog_is_lowest() -> None:
-    assert _TIER_RANK["catalog"] < _TIER_RANK["download"]
-    assert _TIER_RANK["catalog"] < _TIER_RANK["notify"]
+    assert TIER_RANK["catalog"] < TIER_RANK["download"]
+    assert TIER_RANK["catalog"] < TIER_RANK["notify"]
 
 
 def test_tier_rank_covers_exactly_the_valid_tiers() -> None:
     # Consistency: every licit tier (TIERS) has a rank, and no orphan rank.
-    assert set(_TIER_RANK) == TIERS
+    assert set(TIER_RANK) == TIERS
 
 
 def test_explanation_is_frozen_and_holds_fields() -> None:
@@ -74,7 +73,7 @@ _TARGET_62A = TargetSegment(
     season=2,
     seasonal_number=11,
     absolute_number=62,
-    segment="a",
+    letter="a",
     title="Les demoiselles cambrioleuses",
     status="found",
 )
@@ -95,7 +94,7 @@ _TWO_RULE_RAW: dict[str, object] = {
 
 def _resolve(raw: dict[str, object], target: TargetSegment) -> tuple[MatcherConfig, ResolvedTarget]:
     config = parse_matcher_config(raw)
-    resolved = MatcherResolver(config).resolve_all(target)
+    resolved = MatcherResolver(config).resolve_target(target)
     return config, resolved
 
 
@@ -128,7 +127,7 @@ _TARGET_62B = TargetSegment(
     season=2,
     seasonal_number=11,
     absolute_number=62,
-    segment="b",
+    letter="b",
     title="Le grand combat sous-marin",
     status="lost",
 )
@@ -224,14 +223,14 @@ def test_evaluate_tiebreak_same_tier_lowest_rule_index_wins_over_target_id() -> 
     config = parse_matcher_config(_INDEX_TIEBREAK_RAW)
     # target_high: large target_id (099Z), matches by_segment (index 0).
     target_high = TargetSegment(
-        season=2, seasonal_number=99, absolute_number=99, segment="z", title="zzz unrelated"
+        season=2, seasonal_number=99, absolute_number=99, letter="z", title="zzz unrelated"
     )
     # target_low: small target_id (001A), matches by_title (index 1).
     target_low = TargetSegment(
         season=2,
         seasonal_number=1,
         absolute_number=1,
-        segment="a",
+        letter="a",
         title="Les demoiselles cambrioleuses",
     )
     engine = MatchingEngine(config, (target_low, target_high))
@@ -325,7 +324,7 @@ _TARGET_94A = TargetSegment(
     season=2,
     seasonal_number=43,
     absolute_number=94,
-    segment="a",
+    letter="a",
     title="La Terre est à nous !",
 )
 
@@ -401,13 +400,13 @@ def test_evaluate_lettered_segment_pins_that_segment_only() -> None:
     assert _triples(decisions) == [("062A", "download", "id_segment_exact")]
 
 
-# --- evaluate_all: one file known under several names (spec amuleapi-migration §8.4) ---
+# --- evaluate_file: one file known under several names (spec amuleapi-migration §8.4) ---
 
 
 def _union(*names: str) -> list[tuple[str, str, str]]:
     engine = _fanout_engine()
-    forward = engine.evaluate_all([FileCandidate(filename=name) for name in names])
-    backward = engine.evaluate_all([FileCandidate(filename=name) for name in reversed(names)])
+    forward = engine.evaluate_file([FileCandidate(filename=name) for name in names])
+    backward = engine.evaluate_file([FileCandidate(filename=name) for name in reversed(names)])
     assert _triples(forward) == _triples(backward)
     return _triples(forward)
 
@@ -448,7 +447,7 @@ def test_evaluate_all_segment_signal_of_one_name_cuts_the_fan_out_of_another() -
 def test_evaluate_all_skips_an_over_long_name_but_keeps_the_others() -> None:
     config = parse_matcher_config(_CANONICAL_RAW)
     engine = MatchingEngine(config, (_TARGET_62A,), max_filename_length=20)
-    decisions = engine.evaluate_all(
+    decisions = engine.evaluate_file(
         [FileCandidate(filename="Keroro N°062A.avi"), FileCandidate(filename="x" * 21)]
     )
     assert _triples(decisions) == [("062A", "download", "id_segment_exact")]
@@ -456,14 +455,14 @@ def test_evaluate_all_skips_an_over_long_name_but_keeps_the_others() -> None:
 
 def test_evaluate_all_explains_with_the_winning_name() -> None:
     winner = FileCandidate(filename="Keroro N°062A.avi")
-    decisions = _fanout_engine().evaluate_all(
+    decisions = _fanout_engine().evaluate_file(
         [FileCandidate(filename="Keroro rediffusion.mkv"), winner]
     )
     assert decisions[0].explanation == _fanout_engine().explain([winner], "062A")
 
 
 def test_evaluate_all_of_no_name_is_a_discard() -> None:
-    assert _fanout_engine().evaluate_all([]) == []
+    assert _fanout_engine().evaluate_file([]) == []
 
 
 # --- The rule's scope drives the fan-out, whatever the rule is called ---
@@ -531,7 +530,7 @@ def _veto_targets(*names: str, max_filename_length: int = 4096) -> list[str]:
         (_TARGET_62A, _TARGET_62B, _TARGET_94A),
         max_filename_length=max_filename_length,
     )
-    decisions = engine.evaluate_all([FileCandidate(filename=name) for name in names])
+    decisions = engine.evaluate_file([FileCandidate(filename=name) for name in names])
     return [d.target_id for d in decisions]
 
 

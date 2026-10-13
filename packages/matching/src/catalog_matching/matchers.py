@@ -5,18 +5,18 @@ import re
 from rapidfuzz import fuzz
 
 from catalog_matching.models import FileCandidate
-from catalog_matching.normalization import fold, tokenize
+from catalog_matching.normalization import fold, split_words
 
 
 class KeywordMatcher:
-    """True if the (tokenized) phrase is a CONTIGUOUS subsequence of the filename tokens."""
+    """True if the phrase's words are a CONTIGUOUS subsequence of the filename's words."""
 
     def __init__(self, phrase: str) -> None:
-        self._tokens = tokenize(phrase)
+        self._phrase_words = split_words(phrase)
 
     def matches(self, candidate: FileCandidate) -> bool:
-        needle = self._tokens
-        haystack = tokenize(candidate.filename)
+        needle = self._phrase_words
+        haystack = split_words(candidate.filename)
         if not needle:
             return True
         # Sliding window of width len(needle): CONTIGUOUS subsequence.
@@ -36,7 +36,7 @@ class RegexMatcher:
 
     ``flags`` is a short ``re``-style string: ``"i"`` enables case-insensitivity,
     ``""`` leaves it case-sensitive. Expected values from the YAML config (Plan 2b):
-    ``"i"`` or ``""``. Detection is ``"i" in flags`` — do not pass verbose names
+    ``"i"`` or ``""``. Detection is ``"i" in flags``: do not pass verbose names
     (``"ignore_case"``…), which would enable ``(?i)`` by accident. An invalid pattern
     raises ``re.error`` at construction (config validation delegated to Plan 2b).
     """
@@ -44,16 +44,16 @@ class RegexMatcher:
     def __init__(self, pattern: str, flags: str = "i") -> None:
         if "i" in flags:
             pattern = "(?i)" + pattern
-        self._re = re.compile(pattern, re.ASCII)
+        self._compiled = re.compile(pattern, re.ASCII)
 
     def matches(self, candidate: FileCandidate) -> bool:
-        return self._re.search(fold(candidate.filename)) is not None
+        return self._compiled.search(fold(candidate.filename)) is not None
 
 
-# French stopwords (already folded by tokenize) excluded from the significant tokens
-# of a CoverageMatcher's reference (cf. spec §8.2: R = tokens(title) \ stopwords).
+# French stopwords (already folded by split_words) excluded from the significant words
+# of a CoverageMatcher's reference (cf. spec §8.2: R = words(title) \ stopwords).
 # Deliberately minimal set: under-filtering favors recall (better to keep a borderline
-# word than to drop a significant token).
+# word than to drop a significant one).
 STOPWORDS_FR: frozenset[str] = frozenset(
     {
         "le",
@@ -76,27 +76,30 @@ STOPWORDS_FR: frozenset[str] = frozenset(
 
 
 class CoverageMatcher:
-    """Fuzzy fraction of ``reference``'s significant tokens that are covered (cf. spec §8.2)."""
+    """Fuzzy fraction of ``reference``'s significant words that are covered (cf. spec §8.2)."""
 
-    def __init__(self, reference: str, min: float, fuzz: float = 0.85) -> None:
-        self._reference_tokens = [t for t in tokenize(reference) if t not in STOPWORDS_FR]
-        self._min = min
-        self._fuzz = fuzz
+    def __init__(self, reference: str, min_coverage: float, min_similarity: float = 0.85) -> None:
+        self._reference_words = [t for t in split_words(reference) if t not in STOPWORDS_FR]
+        self._min_coverage = min_coverage
+        self._min_similarity = min_similarity
 
-    def value(self, candidate: FileCandidate) -> float:
-        reference_tokens = self._reference_tokens
-        if not reference_tokens:
+    def coverage(self, candidate: FileCandidate) -> float:
+        reference_words = self._reference_words
+        if not reference_words:
             return 0.0
-        candidate_tokens = tokenize(candidate.filename)
-        hits = sum(
+        filename_words = split_words(candidate.filename)
+        covered_word_count = sum(
             1
-            for r in reference_tokens
-            if any(fuzz.ratio(r, f) / 100 >= self._fuzz for f in candidate_tokens)
+            for reference_word in reference_words
+            if any(
+                fuzz.ratio(reference_word, filename_word) / 100 >= self._min_similarity
+                for filename_word in filename_words
+            )
         )
-        return hits / len(reference_tokens)
+        return covered_word_count / len(reference_words)
 
     def matches(self, candidate: FileCandidate) -> bool:
-        return self.value(candidate) >= self._min
+        return self.coverage(candidate) >= self._min_coverage
 
 
 # Closed enum of FileCandidate numeric attributes usable by attr_between
@@ -105,27 +108,27 @@ ATTR_NAMES: frozenset[str] = frozenset({"size_mb", "duration_sec", "bitrate_kbps
 
 
 class AttrBetweenMatcher:
-    """True if the numeric attribute is PRESENT and within ``[min, max]`` (cf. spec §8.2).
+    """True if the numeric attribute is PRESENT and within ``[min_bound, max_bound]`` (§8.2).
 
-    Open bounds when ``min``/``max`` are ``None``. Missing attribute -> false.
+    Open bounds when ``min_bound``/``max_bound`` are ``None``. Missing attribute -> false.
     """
 
     def __init__(
         self,
         attr: str,
-        min: float | None = None,
-        max: float | None = None,
+        min_bound: float | None = None,
+        max_bound: float | None = None,
     ) -> None:
         if attr not in ATTR_NAMES:
             raise ValueError(f"unknown attribute: {attr!r} (expected one of {sorted(ATTR_NAMES)})")
         self._attr = attr
-        self._min = min
-        self._max = max
+        self._min_bound = min_bound
+        self._max_bound = max_bound
 
     def matches(self, candidate: FileCandidate) -> bool:
         value: float | None = getattr(candidate, self._attr)
         return (
             value is not None
-            and (self._min is None or value >= self._min)
-            and (self._max is None or value <= self._max)
+            and (self._min_bound is None or value >= self._min_bound)
+            and (self._max_bound is None or value <= self._max_bound)
         )

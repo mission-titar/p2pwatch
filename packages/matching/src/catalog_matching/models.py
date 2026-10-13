@@ -34,11 +34,11 @@ class TargetSegment:
     season: int
     seasonal_number: int
     absolute_number: int
-    segment: str
+    letter: str
     title: str
     status: str = LOST
 
     @property
     def target_id(self) -> str:
         """Stable segment id: zero-padded absolute number + segment letter, e.g. ``062A``."""
-        return f"{self.absolute_number:03d}{self.segment.upper()}"
+        return f"{self.absolute_number:03d}{self.letter.upper()}"

@@ -14,7 +14,7 @@ class Matcher(Protocol):
 
     The 4 leaf matchers (`KeywordMatcher`, `RegexMatcher`, `CoverageMatcher`,
     `AttrBetweenMatcher`) already satisfy it unchanged (they have `matches`).
-    `CoverageMatcher.value()` is NOT part of the contract: Plan 2c will access it
+    `CoverageMatcher.coverage()` is NOT part of the contract: Plan 2c will access it
     specifically for explainability.
     """
 

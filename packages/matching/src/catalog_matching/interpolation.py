@@ -34,7 +34,7 @@ def interpolate(pattern: str, target: TargetSegment) -> str:
         if name == "absolute_number":
             return str(re.escape(str(target.absolute_number)))
         if name == "segment":
-            return str(re.escape(target.segment.upper()))
+            return str(re.escape(target.letter.upper()))
         if name == "title":
             return str(re.escape(target.title))
         raise InterpolationError(f"unknown placeholder: {{{name}}}")

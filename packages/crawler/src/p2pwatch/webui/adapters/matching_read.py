@@ -51,13 +51,13 @@ class MatchingExplainer:
         Return ``None`` if ``target_id`` is unknown to the current config.
         """
         if size_bytes is None:
-            fields = FileCandidate(
+            base_candidate = FileCandidate(
                 filename="",
                 size_mb=None,
                 duration_sec=float(duration_seconds) if duration_seconds is not None else None,
                 bitrate_kbps=float(bitrate_kbps) if bitrate_kbps is not None else None,
             )
         else:
-            fields = candidate_from_fields("", size_bytes, duration_seconds, bitrate_kbps)
-        names = [replace(fields, filename=name) for name in filenames]
-        return self._engine.explain(names, target_id)
+            base_candidate = candidate_from_fields("", size_bytes, duration_seconds, bitrate_kbps)
+        candidates = [replace(base_candidate, filename=filename) for filename in filenames]
+        return self._engine.explain(candidates, target_id)

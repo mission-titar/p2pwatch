@@ -27,19 +27,19 @@ def test_regex_def_defaults_flags_to_i() -> None:
 
 
 def test_coverage_def_defaults() -> None:
-    cov = CoverageDef(reference="title", min=0.6)
+    cov = CoverageDef(reference="title", min_coverage=0.6)
     assert cov.reference == "title"
-    assert cov.min == 0.6
-    assert cov.fuzz == 0.85
+    assert cov.min_coverage == 0.6
+    assert cov.min_similarity == 0.85
 
 
 def test_attr_between_def_holds_bounds() -> None:
-    ab = AttrBetweenDef(attr="size_mb", min=30.0, max=600.0)
+    ab = AttrBetweenDef(attr="size_mb", min_bound=30.0, max_bound=600.0)
     assert ab.attr == "size_mb"
-    assert ab.min == 30.0
-    assert ab.max == 600.0
-    assert AttrBetweenDef(attr="size_mb").min is None
-    assert AttrBetweenDef(attr="size_mb").max is None
+    assert ab.min_bound == 30.0
+    assert ab.max_bound == 600.0
+    assert AttrBetweenDef(attr="size_mb").min_bound is None
+    assert AttrBetweenDef(attr="size_mb").max_bound is None
 
 
 def test_composite_defs_hold_operands() -> None:
@@ -52,9 +52,9 @@ def test_composite_defs_hold_operands() -> None:
 def test_token_ref_overrides_default_to_none() -> None:
     ref = TokenRef(name="title_hit")
     assert ref.name == "title_hit"
-    assert ref.min is None
-    assert ref.fuzz is None
-    assert TokenRef(name="title_hit", min=0.4).min == 0.4
+    assert ref.min_coverage is None
+    assert ref.min_similarity is None
+    assert TokenRef(name="title_hit", min_coverage=0.4).min_coverage == 0.4
 
 
 def test_rule_holds_name_tier_scope_condition() -> None:

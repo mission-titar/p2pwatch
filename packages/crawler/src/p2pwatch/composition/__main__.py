@@ -20,9 +20,7 @@ import sys
 from pathlib import Path
 
 from catalog_matching.validation import (
-    ConfigError as MatcherConfigError,
-)
-from catalog_matching.validation import (
+    MatchingConfigError,
     parse_matcher_config,
     parse_targets,
 )
@@ -60,7 +58,7 @@ def build_crawler_app(args: argparse.Namespace) -> CrawlerApp:
     """Loads + validates all config (fail-fast §5/§14) and assembles the ``CrawlerApp``.
 
     The unified crawler config is interpolated from ``os.environ`` (``${NAME}`` → secrets/URLs).
-    Any error (``YamlLoadError``/``ConfigError``/``MatcherConfigError``) propagates as-is:
+    Any error (``YamlLoadError``/``ConfigError``/``MatchingConfigError``) propagates as-is:
     ``main`` catches it, logs clearly, and refuses to start (spec §14).
 
     The policy fingerprint (spec §7.1) is computed here, once, from the RAW bytes of
@@ -91,7 +89,7 @@ def validate_config(argv: list[str]) -> int:
     Strictly reuses ``load_yaml`` + ``parse_{crawler_config,targets,matcher_config}`` (no new
     validation logic). Since the config is interpolated from ``os.environ``, the INTENDED side
     effect is that we ALSO validate the presence of the env variables referenced by the
-    ACTIVE sections. Any error (``YamlLoadError``/``ConfigError``/``MatcherConfigError``) →
+    ACTIVE sections. Any error (``YamlLoadError``/``ConfigError``/``MatchingConfigError``) →
     clear message on stderr + code 1, like the run's refusal to start.
     """
     args = _parse_validate_args(argv)
@@ -99,7 +97,7 @@ def validate_config(argv: list[str]) -> int:
         parse_crawler_config(load_yaml(args.config), os.environ)
         parse_targets(load_yaml(args.targets))
         parse_matcher_config(load_yaml(args.matcher))
-    except (YamlLoadError, ConfigError, MatcherConfigError) as error:
+    except (YamlLoadError, ConfigError, MatchingConfigError) as error:
         print(f"Invalid config: {error}", file=sys.stderr, flush=True)
         return 1
     print("Config valid", flush=True)
@@ -130,7 +128,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         app = build_crawler_app(args)
         asyncio.run(app.run())
-    except (YamlLoadError, ConfigError, MatcherConfigError) as error:
+    except (YamlLoadError, ConfigError, MatchingConfigError) as error:
         print(f"Invalid config, refusing to start: {error}", file=sys.stderr, flush=True)
         return 1
     except TimeoutError:

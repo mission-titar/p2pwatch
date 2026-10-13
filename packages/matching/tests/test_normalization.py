@@ -1,6 +1,6 @@
 import pytest
 
-from catalog_matching.normalization import fold, normalize, tokenize
+from catalog_matching.normalization import fold, normalize, split_words
 
 
 @pytest.mark.parametrize(
@@ -39,8 +39,8 @@ def test_fold_preserves_punctuation_and_digits(raw: str, expected: str) -> None:
 
 
 def test_tokenize_splits_normalized_string() -> None:
-    assert tokenize("N°062A « Les demoiselles »") == ["n", "062a", "les", "demoiselles"]
+    assert split_words("N°062A « Les demoiselles »") == ["n", "062a", "les", "demoiselles"]
 
 
 def test_tokenize_empty_string_yields_no_tokens() -> None:
-    assert tokenize("   ") == []
+    assert split_words("   ") == []
