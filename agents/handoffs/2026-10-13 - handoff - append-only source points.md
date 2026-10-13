@@ -1,14 +1,13 @@
 # Handoff: an append-only catalog again, sources as points
 
-Drafted by block 40, for the closing block 50 to correct.
-
 ## State
 
 Tier Spec lot, spec `agents/specs/2026-10-13-append-only-source-points.md` (approved 2026-10-13), which
 replaces the draft `2026-10-13-monotone-catalog-ranges.md` (removed in block 10) and corrects stage 4's
 D4, D5, D6 and D8. Five blocks, one stack cut from `main` at `ba32bc0`: #193 (10,
 `feat/source-observations`), #194 (20, `feat/webui-source-interval`), #196 (30, `feat/sources-interval`),
-block 40 (`docs/append-only-sources`), then the closing block 50 (`docs/source-points-closing`).
+#197 (40, `docs/append-only-sources`), then the closing block 50 (`docs/source-points-closing`), which
+holds the holistic review's fixes, `BACKLOG.md` and this handoff.
 
 Nothing of the stack is merged. `git tag -l 'v*'` still ends at `v4.1.0`; the node runs 4.1.0.
 `catalog.db` goes to schema version 11 (`catalog/0011_source_observations.sql`); `local.db` stays at 8.
@@ -42,6 +41,10 @@ presence periods from those points at each display, within an interval of at mos
   then on the first round at least the interval after its last start (`DownloadDeps.sources_read_at`),
   a failed read included. The repository's tolerance is `3 x (sources_interval + poll_interval)`.
   `decision_poll_interval_seconds` joins `_REMOVED_KEYS`.
+- **The close** (block 50): the holistic review's eight findings fixed (below): the per-source reads
+  kept off the `node_id` index, both source keys bounded at a year, the webui's gap named after its
+  setting end to end, the byte counter in `legal.md` and `index.md`, the spec approved, with a
+  section on the intervals measured on the wall clock.
 - **The documents** (block 40): the invariant without stage 4's exception in `AGENTS.md`'s Persistence
   row, `docs/contributing/architecture.md` (§8's diagram and bullet, §11) and
   `adapters/persistence_sqlite/__init__.py`; `architecture.md` §7 (the step's cadence), §8 (schema
@@ -80,6 +83,7 @@ presence periods from those points at each display, within an interval of at mos
 
 ## Class 1 fixes
 
+- Block 50: none; the fixes below are the holistic review's.
 - Block 10: `adapters/mule_api/mapping.py:40` and `test_mapping.py:552` said "latest range".
 - Block 20: the docstrings of `HiddenInput` and `PeriodWindow`.
 - Block 40: `domain/observability/events.py`'s `SourceNew` comment said "opened its first useful
@@ -92,30 +96,63 @@ search timeline); D3 (the spacing feeds D4 only); D5 (one statement); D6 (the to
 `webui.source_period_gap_seconds`, raised by a merged catalog's operator); section 6 (block 20's size,
 block 10's and 30's contents, the transient surfaces, the timeline backlog entry closed, the `backoff`
 entry); section 7 (the timeline bound, the removed key, the gap key's criteria); section 8 (the
-displaying node's gap). The closing block adds any the holistic review finds missing.
+displaying node's gap). Block 50 adds: the status approved; D2 (the `node_id` index serves
+`has_points_before` only); D3 and section 7 (both source keys at most a year); section 7's D5 criterion
+(steps flat against the node's other variants, for D4's carried role too); section 6's block 50 row;
+section 8, "Intervals measured on the wall clock".
 
 ## Wrap counts
 
-Draft, for block 50 to recount with `gh run list --branch <b> --workflow pr.yml --json
-headSha,event,conclusion,createdAt` on each stack branch.
+Counted with `gh run list --branch <b> --limit 50 --json databaseId,workflowName,headSha,event,conclusion,createdAt`
+on each stack branch, 2026-10-13, before block 50's own run.
 
-- **Fix-backs**: 0 so far.
-- **Cascaded rebases**: 0 so far.
-- **Runs**: one per branch for #193 (`3fb679b`), #194 (`4ea3b38`) and #196 (`97423d8`), all green;
-  block 40's own run in its report.
-- **Bodies the operator called unreadable**: none so far.
+- **Fix-backs**: 1. `735679d` on block 30 (a clock stepped back read the sources at once), made at the
+  operator's request on block 30's report, then removed at the operator's request in favour of the
+  monotonic clock backlog item; block 30 is back at `97423d8`.
+- **Cascaded rebases**: 2, both onto block 40: after the fix-back (`97adadc` to `4e38ca3`) and after its
+  removal (`4e38ca3` to `c395eae`). #193 and #194 never moved.
+- **Runs**: #193 one (`38415800988`, `3fb679b`, green); #194 one (`38417663729`, `4ea3b38`, green). Runs
+  the fix-back and the cascades re-triggered: **6**. On #196, `38420445348` (`735679d`, cancelled by the
+  removal's push) and `38421021009` (`97423d8` again, green), beside its first green run `38418987173`.
+  On #197, two runs per push, the first cancelled by the workflow's concurrency group: `38420442750` and
+  `38420444096` (`4e38ca3`, both cancelled), `38421018871` (cancelled) and `38421019263` (`c395eae`,
+  green); block 40's first run, `38420030413` (`97adadc`), was cancelled by the first cascade before it
+  finished, so block 40 never ran green at its original head.
+- **Bodies the operator called unreadable**: none.
+- Six runs re-triggered against five blocks: by the workflow's measure, this lot's stacking cost more
+  than pull requests in series. Four of the six are the doubled runs on #197, and the fix-back that
+  caused both cascades was withdrawn.
 
 ## Holistic review
 
-To run at the head of Wrap over `git diff origin/main...origin/docs/append-only-sources`; its findings
-and their exits go here.
+Run by `holistic-source-points` over `git diff origin/main...origin/docs/append-only-sources` at
+`c395eae`: CRITICAL 0, MAJOR 1, MINOR 7. Every finding exits as fixed, in block 50 (operator: no other
+exit).
+
+| Severity | Finding | Exit |
+|---|---|---|
+| MAJOR | Without `ANALYZE`, `_LATEST_POINT` and `_EARLIER_POINTS` planned on `idx_source_variants_node_id`, walking every variant of the node (5.5 ms a call at 100,000 variants against 0.007 ms) | Fixed: `+v.node_id` in both; two tests count VM steps with 100 then 10,000 other variants on the node, for `earlier_points` and a passing-state `record_readings`, failing first with `assert 49493 <= (544 // 10)` and `assert 49461 <= (737 // 10)` |
+| MINOR | Both new keys accepted values whose derived tolerance overflows (`OverflowError` at composition, or an int64 bind that escaped `run_download_cycle`) | Fixed: `_source_duration` refuses more than a year (31,536,000 s) with a `ConfigError` naming the key; tests failed first with `DID NOT RAISE ConfigError`; `settings.md` states the bound |
+| MINOR | Bare "(D4)", "(D4, D6)" read as stage 4's; `source_tolerance`'s docstring named D6; the 300 s default gave no reason | Fixed: the spec named, D6 dropped, the reason inline |
+| MINOR | One concept, four names (`source_period_gap_seconds`, `source_period_gap`, `source_tolerance=`, `PeriodWindow.tolerance`) | Fixed: `build_app(source_period_gap=...)`, `PeriodWindow.gap`, the SQL's `:gap` |
+| MINOR | "plus `download.poll_interval_seconds`" understated a round (poll plus the cycle) | Fixed in `settings.md`, `_sources_spacing` and the repository's docstring |
+| MINOR | `legal.md` and `index.md` omitted the byte counter each point stores | Fixed in both |
+| MINOR | The spec's status still read "awaiting" | Fixed: approved on 2026-10-13 |
+| MINOR | "Not validated" listed the integration suites, which CI ran | Fixed: below, as validated by CI |
 
 ## Pitfalls
 
 - **A node whose `crawler.yml` still holds `decision_poll_interval_seconds` refuses to boot.** The
   release notes must say to delete the line; `docs/migration-4x.md` step 3 does.
 - **The sources step's gate compares wall-clock times**: a clock stepped back suspends source reads until
-  it passes the last start plus the interval again. Not handled; D3 names no monotonic clock.
+  it passes the last start plus the interval again. An accepted limit, with the amuleapi client's pacing
+  and deadlines and the persisted search backoff: spec section 8, "Intervals measured on the wall
+  clock", and its `BACKLOG.md` item.
+- **Without `ANALYZE`, SQLite prefers the `node_id` index** whenever a query filters on `v.node_id = ?`;
+  on a single-node catalog it holds every variant. A per-source read writes `+v.node_id`, and a test
+  that varies the points only cannot see it: vary the other variants too.
+- **The first call of a statement on a connection costs VM steps** the next calls do not: a step-count
+  comparison warms the read up first.
 - **With strict `<` before `read_at`, a point at the same instant never carries its own role**: that
   is what makes the same read written twice idempotent.
 - **The file page shows the latest sighting's name in its eD2k link whatever the interval**: a
@@ -124,6 +161,13 @@ and their exits go here.
 - **The name page's period table holds hashless periods only.**
 - **`uv run poe docs-build` fails on a dead anchor** (`Aborted because --strict flag is set`), checked
   again in block 40 with a broken link to `settings.md`'s new section.
+
+## Validated by CI only
+
+The integration suites were not run locally in this lot. CI ran them in `build-and-verify`, on amd64 and
+arm64 (`Compose smoke stack integration`, then `API, download and orchestration integration`), green on
+#193 (`38415800988`), #194 (`38417663729`), #196 (`38421021009`) and #197 (`38421019263`); block 50's
+own run is in its pull request.
 
 ## Not validated
 
@@ -136,8 +180,6 @@ and their exits go here.
 - **The search points per day under stage 2's pace**: `SELECT COUNT(*) FROM observations WHERE
   observed_at >= :since` over a day, against 4.1.0's 124k.
 - **The `datetime-local` fields in a real browser**: only the rendered HTML was read.
-- **The integration suites** were not run locally by block 30 (`compose_integration` reads the smoke
-  config); CI runs them.
 - Stage 4's carried-over items: a source read against a real amuled, the step's cost inside the cycle,
   a notification on a real apprise target.
 
@@ -146,7 +188,8 @@ and their exits go here.
 The operator reviews the stack, the lead rebases it onto `main`, and the operator merges. **The lot
 changes the image, but the next release waits for section 9's lot**: the node's next upgrade runs stage
 1's 0006 to 0009 over its 5.9 GB catalog, and a copy before a migration that rewrites rows is required
-first. At Wrap, `BACKLOG.md` loses "Search observations as time ranges", "Merge diverged copies of one
-node's catalog" and "Paginate the file detail timeline", and gains the copy before a migration, the
-webui in the visitor's time zone, and `backoff` under the search config. Once the node runs this lot,
-the measures above.
+first. `BACKLOG.md`, reconciled in block 50, lost "Search observations as time ranges" (dropped, spec sections 4
+and 5), "Merge diverged copies of one node's catalog" and "Paginate the file detail timeline" (both
+shipped), and gained the copy before a migration (the next lot, required before the release), the webui
+in the visitor's time zone, `backoff` under the per-client search config, and the monotonic clock. Once
+the node runs this lot, the measures above.
