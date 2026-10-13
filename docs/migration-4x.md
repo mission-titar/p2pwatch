@@ -37,11 +37,11 @@ mv amule downloads ed2k/
 racine : `cycle_interval_seconds`, `decision_poll_interval_seconds`, `search_poll_budget_seconds`,
 `search_poll_interval_seconds`, `keyword_pause_min_seconds` et `keyword_pause_max_seconds`. Tant
 que l'une reste, le crawler refuse de démarrer en la nommant :
-`crawler: key 'port_sync' was removed, delete it from crawler.yml`.
+`key 'port_sync' was removed, delete it from crawler.yml`.
 
 Déplacez ensuite la section `backoff:` sous `search:`, à côté de `keywords`, que la 5.0 rend
 obligatoire. Laissée à la racine, elle est refusée de même :
-`crawler: key 'backoff' moved to 'search.backoff', move it in crawler.yml`.
+`key 'backoff' moved to 'search.backoff', move it in crawler.yml`.
 
 ```yaml
 search:
