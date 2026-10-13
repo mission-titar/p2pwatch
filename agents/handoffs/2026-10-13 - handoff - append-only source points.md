@@ -66,6 +66,11 @@ presence periods from those points at each display, within an interval of at mos
   sources interval, the gap, `backoff.base_seconds` and `cap_seconds`, `shutdown_deadline_seconds`,
   `notification_timeout_seconds`; 30 days for `lost_after_seconds` and `reappeared_after_seconds`. The
   one-year bounds went; `settings.md` gains "Les bornes des durées".
+- **Operator, on #198** (review comment on `crawler_config.py:240`): "`what` est un mauvais nom, pas
+  assez descriptif". The config helpers' `what` became `section` (the path prefixing the key in
+  errors), `_require_mapping`'s became `label`, and `interpolate`'s became `field`. The operator's
+  wider sweep (undescriptive names across the code, a lint rule or an agent guideline) went to
+  `BACKLOG.md`, linking that comment.
 - **Class 2, block 10**: the webui's tolerance on a crawl-only node, which reads no source. Operator: a
   reading option, `webui.source_period_gap_seconds` beside `webui.enabled`, default 990, in every run
   mode; block 30 hands the spacing to the repository only.
