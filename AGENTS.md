@@ -86,6 +86,54 @@ Integration suites (Docker, deselected by default, excluded from coverage) are d
 - **One named teammate per block of a tier Spec lot** (Act) and **the holistic review once per tier Spec lot**, at the head of Wrap over the top of the stack (`agents/workflow.md`): the cross-cutting review regularly catches bugs, don't skip it. A lot of one block is offered its waiver and the operator decides; tier Direct has none.
 - For library/framework/CLI questions, use the current docs, not recalled knowledge.
 
+## Naming
+
+A name lets a reader with partial context tell, from a signature or a call site, what a value holds and what
+a function does.
+
+- **One concept, one name, in every layer.** A value keeps its name from where it enters to where it is read.
+  An external name (an amuleapi field, a SQLite function's) is translated once, in its mapper or adapter, and
+  kept from there. The glossary below fixes the shared words.
+- **One name, one concept, within a package**: never a string in one function and a dict under the same
+  name in the next.
+- **Say what the value is, not its type or its role**: no `what`, `data`, `info`, `item`, `obj`, `result`,
+  `value`, `entry`, `payload`; a single letter only inside a one-line comprehension or lambda.
+- **A quantity carries its unit unless its type does**: `_seconds`, `_bytes`, `_mib`, `_micros`; a `datetime`
+  or a `timedelta` needs none.
+- **A boolean reads as a predicate**: `is_tracked`, `has_useful_point`, `clamped`, `enabled`.
+- **A function says what it returns or does, side effects included**: `get_or_create_node_id`,
+  `rejudge_file`. A class names what one instance is.
+- **A mapping is `<values>_by_<key>`, a collection the plural of its element.**
+- **`latest` is the most recent of a series; `last` only pairs with `first`.**
+- **No abbreviation but the glossary's**, units and protocol names (`kbps`, `tcp`, `md4`, `ed2k`) aside.
+- **Comments, docstrings and log messages use the code's words.**
+- **The most telling word wins over the most widespread one**: an existing name is not a reason to keep it.
+
+| Word | Means | Never |
+|---|---|---|
+| `network` | `Network`, a file identity's namespace; eD2k covers Kad | for `ed2k`/`kad`: that is a channel |
+| `channel` | one search channel of a client: `ed2k`, `kad` | `network` |
+| `connected` | a channel has joined its network (an eD2k server, the Kad DHT) | `on_network` |
+| `connectable` | peers can open a connection to it: one of our channels, or a source | `directly_reachable`, `high_id` |
+| `client` | a port object driving a P2P client; `client_name` is its configured label | `instance`, a bare `name` |
+| `node` | one running p2pwatch, `node_id` | `instance` |
+| `file` | a `FileKey`: `network` and `native_id` | a string |
+| `native_id` | the network's own file id (MD4 on eD2k) | `ed2k_hash` past the mapper |
+| `filename` | a file's name, a string: `latest_filename`, `best_filename`, `known_filenames` | `name`, `file_name` |
+| `source` | a peer sharing a file, `SourceKey`; `source_name` its advertised name | a bare `name` beside a filename |
+| `candidate` | a `FileCandidate`, one name of a file and its metadata, the matcher's input; a `DownloadCandidate` is a file with a download-tier decision | `names` |
+| `target` | an episode segment to recover: `target_id`, `TargetSegment`, its `letter` | `segment` for the letter; Kad's keyword target, which is a `kad_word` |
+| `tier` | a decision's strength: `catalog`, `notify`, `download` | `before`, `after` |
+| `token` | a named matcher of the policy (`tokens:`) | a word of a text |
+| `word` | a piece of normalized text | `token` |
+| `reevaluation` | re-judging every file when the policy changed | `backfill` |
+| `tracked` | a download with a row in `downloads`, whatever its state | `downloaded`, `active` |
+| `wake` | `WakeHub` wakes the loops waiting on a subject | `signal`, `nudge` |
+| `first useful`, `reappeared` | a source's two alerts | `new`, `useful again` |
+| `error_label` | the label a parser prints in its errors | `what`, `label`, `field` |
+| `micros` | an integer of microseconds: an instant counts from the epoch | a bare `_at` on an `int` |
+| `id`, `db`, `sql`, `url`, `api`, `json`, `ecid`, `mib`, `iso`, `min`, `max`, `conf` | the abbreviations allowed (`conf`: aMule's `amule.conf`) | |
+
 ## Workflow
 
 Tiers, phases, blocks, the stack, pull requests, Wrap and review findings: `agents/workflow.md`.

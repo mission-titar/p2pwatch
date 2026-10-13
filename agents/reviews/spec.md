@@ -82,6 +82,8 @@ column is nullable; a grep is not a structural test.
 
 - **Every decision the specification settles states its reason.** A decision with none, or whose
   reason only restates it, is a finding.
+- **Every name a decision introduces follows `AGENTS.md`'s Naming**, and a new concept gets its
+  glossary line in the same lot.
 - **It names every adjacent `BACKLOG.md` item and why each stays open**, or says there is none.
   Read `BACKLOG.md` and name any it missed.
 - **Its block table numbers blocks by tens and names each branch.** A block that will plainly pass

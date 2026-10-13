@@ -63,6 +63,8 @@ because the failure the file leaves is the short return message being cut, and t
 11. **Self-sufficient comments.** A comment states the why where it stands. One that defers to an identifier the reader
     must open elsewhere (a decision id, a section number, a ticket) explains nothing without that document. External
     references and clickable links are acceptable when they carry enough context.
+12. **Names.** Does every name the lot adds or renames follow `AGENTS.md`'s Naming? A concept with two names across
+    the diff, a name with two concepts, or a word the glossary maps elsewhere is a finding.
 
 **Detail.** One webui route left in the framework's default error format breaks what the others uphold, which is why
 contract uniformity is read across the whole change. The gate enforces 100 % branch coverage on each package's unit
