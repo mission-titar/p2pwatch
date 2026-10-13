@@ -50,7 +50,7 @@ download:
   lost_after_seconds: 86400
   # Measured with statvfs, never read. amuled writes incoming/ and temp/ under it.
   output_dir: /downloads
-  # `reappeared` notifies a source useful again after this long neither useful nor not. 12 h.
+  # `reappeared` notifies a source useful after this long neither useful nor not. 12 h.
   reappeared_after_seconds: 43200
   # Each download's sources are read this often for the source history and its alerts. 5 min.
   sources_interval_seconds: 300

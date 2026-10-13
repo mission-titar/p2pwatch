@@ -100,8 +100,8 @@ plus un tour de la boucle au plus (`download.poll_interval_seconds` et la durée
 
 Chaque relevé ajoute au catalogue un point par source : à 5 minutes, de l'ordre de 0,13 Go par an
 pour une cinquantaine de sources (estimation du 2026-10-13). Plus court, l'historique est plus fin
-et les alertes `new-source` et `reappeared` partent plus tôt, mais le catalogue grossit d'autant et
-le crawler interroge amuleapi plus souvent. Plus long, une source restée moins longtemps que
+et les alertes `first_useful` et `reappeared` partent plus tôt, mais le catalogue grossit d'autant
+et le crawler interroge amuleapi plus souvent. Plus long, une source restée moins longtemps que
 l'intervalle peut passer inaperçue. Si vous le changez, ajustez aussi
 [l'écart qui coupe une période](#lécart-qui-coupe-une-période-de-source).
 

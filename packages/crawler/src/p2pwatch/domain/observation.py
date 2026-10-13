@@ -17,7 +17,7 @@ _BYTES_PER_MIB = 1024 * 1024
 def candidate_from_fields(
     filename: str,
     size_bytes: int,
-    media_length_sec: int | None,
+    duration_seconds: int | None,
     bitrate_kbps: int | None,
 ) -> FileCandidate:
     """Bridge to the matching engine: unit conversions (bytes -> MiB, int -> float).
@@ -26,7 +26,7 @@ def candidate_from_fields(
     to_candidate`` (live path) and the re-evaluation (``ReevalRow`` ->
     candidate) call this.
     """
-    duration = float(media_length_sec) if media_length_sec is not None else None
+    duration = float(duration_seconds) if duration_seconds is not None else None
     bitrate = float(bitrate_kbps) if bitrate_kbps is not None else None
     return FileCandidate(
         filename=filename,
@@ -62,14 +62,14 @@ class FileObservation:
     size_bytes: int
     source_count: int
     keyword: str
-    media_length_sec: int | None = None
+    duration_seconds: int | None = None
     bitrate_kbps: int | None = None
     raw_meta: RawMeta = ()
 
     def to_candidate(self) -> FileCandidate:
         """Bridge to the matching engine (delegates to ``candidate_from_fields``)."""
         return candidate_from_fields(
-            self.filename, self.size_bytes, self.media_length_sec, self.bitrate_kbps
+            self.filename, self.size_bytes, self.duration_seconds, self.bitrate_kbps
         )
 
 
@@ -82,6 +82,6 @@ class Sighting:
     observed_at: str
     source_count: int
     size_bytes: int
-    media_length_sec: int | None
+    duration_seconds: int | None
     bitrate_kbps: int | None
     keyword: str

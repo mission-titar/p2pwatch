@@ -22,7 +22,7 @@ from p2pwatch.domain.observability.events import (
     DownloadCompleted,
     DownloadQueued,
     FreeSpaceSampled,
-    SourceNew,
+    SourceFirstUseful,
     SourceReappeared,
     TargetTitle,
 )
@@ -162,7 +162,7 @@ class FakeSourceRepo:
 
     def earlier_points(self, source: SourceKey, before: datetime) -> EarlierPoints:
         self.asked.append((source, before))
-        return self._history.get(source, EarlierPoints(useful=False, last_known_at=None))
+        return self._history.get(source, EarlierPoints(has_useful_point=False, last_known_at=None))
 
     def has_points_before(self, before: datetime) -> bool:
         self.baselines.append(before)
@@ -1557,9 +1557,11 @@ async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
         telemetry=telemetry,
     )
     await run_download_cycle(deps)
-    alerts = [e for e in telemetry.events if isinstance(e, SourceNew | SourceReappeared)]
+    alerts = [e for e in telemetry.events if isinstance(e, SourceFirstUseful | SourceReappeared)]
     assert alerts == [
-        SourceNew(_PEER, "AnimuseeFMR", _key(_A), "Keroro 062.avi", (TargetTitle("062A", "t"),))
+        SourceFirstUseful(
+            _PEER, "AnimuseeFMR", _key(_A), "Keroro 062.avi", (TargetTitle("062A", "t"),)
+        )
     ]
 
 
@@ -1569,8 +1571,10 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
     clock = FakeClock()
     start = clock.now()
     history = {
-        _PEER: EarlierPoints(useful=True, last_known_at=start - timedelta(hours=13)),
-        _OTHER_PEER: EarlierPoints(useful=True, last_known_at=start - timedelta(seconds=30)),
+        _PEER: EarlierPoints(has_useful_point=True, last_known_at=start - timedelta(hours=13)),
+        _OTHER_PEER: EarlierPoints(
+            has_useful_point=True, last_known_at=start - timedelta(seconds=30)
+        ),
     }
     kept: dict[str, tuple[RecordedReading, ...]] = {
         _A: (RecordedReading(_OTHER_PEER, None, SourceRole.QUEUED),),
@@ -1591,7 +1595,7 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
     )
     await run_download_cycle(deps)
     assert sources.asked == [(_OTHER_PEER, start), (_PEER, start)]
-    alerts = [e for e in telemetry.events if isinstance(e, SourceNew | SourceReappeared)]
+    alerts = [e for e in telemetry.events if isinstance(e, SourceFirstUseful | SourceReappeared)]
     assert alerts == [
         SourceReappeared(_PEER, "AnimuseeFMR", _key(_B), _B, (TargetTitle("063A", "t2"),), 46800.0)
     ]
@@ -1611,7 +1615,7 @@ async def test_a_reading_without_a_source_id_raises_nothing() -> None:
     )
     await run_download_cycle(deps)
     assert sources.asked == []
-    assert not any(isinstance(e, SourceNew | SourceReappeared) for e in telemetry.events)
+    assert not any(isinstance(e, SourceFirstUseful | SourceReappeared) for e in telemetry.events)
 
 
 @pytest.mark.asyncio
@@ -1674,8 +1678,8 @@ async def test_a_repo_failure_asking_the_baseline_skips_that_downloads_alerts_on
     await run_download_cycle(deps)
     assert [file for file, *_ in sources.recorded] == [_A, _B]
     assert len(sources.baselines) == 2
-    alerts = [e for e in telemetry.events if isinstance(e, SourceNew | SourceReappeared)]
-    assert alerts == [SourceNew(_PEER, "AnimuseeFMR", _key(_B), _B, ())]
+    alerts = [e for e in telemetry.events if isinstance(e, SourceFirstUseful | SourceReappeared)]
+    assert alerts == [SourceFirstUseful(_PEER, "AnimuseeFMR", _key(_B), _B, ())]
 
 
 @pytest.mark.asyncio
@@ -1704,14 +1708,14 @@ async def test_the_first_recording_round_is_a_baseline(
         clock=clock,
     )
     await run_download_cycle(deps)
-    alerts = [e for e in telemetry.events if isinstance(e, SourceNew | SourceReappeared)]
+    alerts = [e for e in telemetry.events if isinstance(e, SourceFirstUseful | SourceReappeared)]
     assert alerts == []
     await clock.sleep(30.0)
     third = SourceKey(Network.ED2K, "d" * 32)
     readings[_A] = (_peer(_PEER), _peer(third))
     await run_download_cycle(deps)
-    alerts = [e for e in telemetry.events if isinstance(e, SourceNew | SourceReappeared)]
-    assert alerts == [SourceNew(third, "peer", _key(_A), _A, ())]
+    alerts = [e for e in telemetry.events if isinstance(e, SourceFirstUseful | SourceReappeared)]
+    assert alerts == [SourceFirstUseful(third, "peer", _key(_A), _A, ())]
     catalog.close()
 
 
@@ -1746,7 +1750,7 @@ def _real_deps(
 
 
 def _alerts(telemetry: RecordingTelemetry) -> list[object]:
-    return [e for e in telemetry.events if isinstance(e, SourceNew | SourceReappeared)]
+    return [e for e in telemetry.events if isinstance(e, SourceFirstUseful | SourceReappeared)]
 
 
 @pytest.mark.asyncio
@@ -1763,7 +1767,7 @@ async def test_a_source_useful_at_three_consecutive_reads_is_new_once(
     for _ in range(3):
         await clock.sleep(30.0)
         await run_download_cycle(deps)
-    assert _alerts(telemetry) == [SourceNew(_PEER, "peer", _key(_A), _A, ())]
+    assert _alerts(telemetry) == [SourceFirstUseful(_PEER, "peer", _key(_A), _A, ())]
 
 
 @pytest.mark.asyncio

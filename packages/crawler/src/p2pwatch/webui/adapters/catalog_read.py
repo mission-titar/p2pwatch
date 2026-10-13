@@ -232,15 +232,16 @@ WHERE file_id = ?
 """
 
 # A period joins the consecutive points of one identity (the source_id, else the name) on one
-# file and one node, cut where the variant changes, a gap passes the window's gap or the counter
-# drops (source points spec, D6). Only the window's points are read, a seek on the primary key
-# bounded by ``observed_at``. A ``_WHERE_*`` goes between this and ``_SQL_PERIODS_END``.
+# file and one node, cut where the variant changes, a gap passes the window's gap or the
+# session's received bytes drop (source points spec, D6). Only the window's points are read, a
+# seek on the primary key bounded by ``observed_at``. A ``_WHERE_*`` goes between this and
+# ``_SQL_PERIODS_END``.
 _SQL_PERIODS = """\
 WITH points AS (
     SELECT
         o.variant_id,
         o.observed_at,
-        o.transfer_counter,
+        o.session_received_bytes,
         v.file_id,
         v.node_id,
         v.source_id,
@@ -257,7 +258,7 @@ starts AS (
         (
             variant_id IS NOT LAG(variant_id) OVER identity
             OR observed_at - LAG(observed_at) OVER identity > :gap
-            OR transfer_counter < LAG(transfer_counter) OVER identity
+            OR session_received_bytes < LAG(session_received_bytes) OVER identity
         ) AS starts_period
     FROM points
     WINDOW identity AS (
@@ -269,7 +270,7 @@ numbered AS (
     SELECT
         variant_id,
         observed_at,
-        transfer_counter,
+        session_received_bytes,
         SUM(starts_period) OVER (
             PARTITION BY file_id, node_id, source_id, hashless_name
             ORDER BY observed_at, variant_id
@@ -282,7 +283,7 @@ periods AS (
         variant_id,
         MIN(observed_at) AS first_seen_at,
         MAX(observed_at) AS last_seen_at,
-        MAX(transfer_counter) - MIN(transfer_counter) AS growth
+        MAX(session_received_bytes) - MIN(session_received_bytes) AS growth
     FROM numbered
     GROUP BY variant_id, period
 )
@@ -294,7 +295,7 @@ SELECT
     v.name,
     v.role,
     v.contact_point,
-    v.directly_reachable,
+    v.connectable,
     p.first_seen_at,
     p.last_seen_at,
     p.growth,
@@ -420,14 +421,14 @@ def _sources_search(query: str | None) -> tuple[str, list[str]]:
 
 def _period_view(row: sqlite3.Row) -> SourcePeriodView:
     """A row of ``_SQL_PERIODS`` as a period; only a sending one received its growth (D6)."""
-    network, reachable = row["network"], row["directly_reachable"]
+    network, connectable = row["network"], row["connectable"]
     role = SourceRole(row["role"])
     return SourcePeriodView(
         source=None if network is None else SourceKey(Network(network), row["native_id"]),
         name=row["name"],
         role=role,
         contact_point=row["contact_point"],
-        directly_reachable=None if reachable is None else bool(reachable),
+        connectable=None if connectable is None else bool(connectable),
         first_seen_at=row["first_seen_at"],
         last_seen_at=row["last_seen_at"],
         received_bytes=row["growth"] if role is SourceRole.SENDING else 0,

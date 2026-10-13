@@ -776,7 +776,7 @@ async def test_file_detail_shows_its_source_history_newest_first(
             hash_,
             _USER,
             contact_point="198.51.100.7:4661",
-            directly_reachable=False,
+            connectable=False,
             node_id="n2",
         )
         sending = insert_source_variant(conn, hash_, _USER, role="sending", node_id="n1")
@@ -784,7 +784,7 @@ async def test_file_detail_shows_its_source_history_newest_first(
             insert_source_point(conn, queued, _TUESDAY_8PM + at * 1_000_000)
         for step in range(129):  # every 80 s, 10 MB in 10,240 s
             at, counter = _TUESDAY_8PM + (90 + 80 * step) * 1_000_000, step * 81_920
-            insert_source_point(conn, sending, at, transfer_counter=counter)
+            insert_source_point(conn, sending, at, session_received_bytes=counter)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get(_detail_url(hash_))
     page = re.sub(r">\s+<", "><", resp.text)
@@ -810,7 +810,7 @@ async def test_file_detail_links_only_the_name_or_the_hash_a_period_has(
     app, hash_ = populated_app
     with sqlite3.connect(catalog_db) as conn:
         insert_source(conn, _USER)
-        unnamed = insert_source_variant(conn, hash_, _USER, name=None, directly_reachable=True)
+        unnamed = insert_source_variant(conn, hash_, _USER, name=None, connectable=True)
         hashless = insert_source_variant(conn, hash_, None, name="http://emule-project.net")
         insert_source_point(conn, unnamed, _TUESDAY_8PM)
         insert_source_point(conn, hashless, _TUESDAY_8PM)
@@ -1215,7 +1215,7 @@ async def test_node_page_shows_a_downloads_lifecycle(
 
 @pytest.fixture
 def app_with_media_obs(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
-    """File with an observation having non-null media_length_sec and bitrate_kbps."""
+    """File with an observation having non-null duration_seconds and bitrate_kbps."""
     with sqlite3.connect(catalog_db) as conn:
         insert_file(conn, TEST_HASH, 100_000_000)
         insert_observation(
@@ -1224,7 +1224,7 @@ def app_with_media_obs(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
             "keroro_s2e62a_vf.avi",
             size_bytes=100_000_000,
             source_count=5,
-            media_length_sec=1320,
+            duration_seconds=1320,
             bitrate_kbps=192,
         )
         insert_decision(conn, TEST_HASH, "062A", "catalog", rule_name="catalog")
@@ -1264,7 +1264,7 @@ def app_with_media_obs(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
 async def test_file_detail_with_media_fields_returns_200(
     app_with_media_obs: tuple[Starlette, str],
 ) -> None:
-    """/files/{file_id} with media_length_sec + bitrate_kbps → 200, explanation computed."""
+    """/files/{file_id} with duration_seconds + bitrate_kbps → 200, explanation computed."""
     app, hash_ = app_with_media_obs
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get(_detail_url(hash_))

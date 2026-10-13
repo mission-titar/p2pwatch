@@ -391,7 +391,7 @@ flowchart LR
   end
 ```
 
-- **`catalog.db`** (version de schéma 11) : la connaissance accumulée, **append-only**, chaque table
+- **`catalog.db`** (version de schéma 12) : la connaissance accumulée, **append-only**, chaque table
   (triggers `BEFORE UPDATE/DELETE -> ABORT`), pour que N nœuds fusionnent en un seul catalogue
   (`python -m p2pwatch.merge`). Les insertions sont **idempotentes** (`INSERT OR IGNORE` /
   `ON CONFLICT DO NOTHING`), donc sans danger en cas de redémarrage en pleine écriture.
@@ -418,6 +418,8 @@ clé `file_id`, un UUID v5 de ce couple, identique sur tous les nœuds ; `aich_h
 `catalog/0010` crée l'historique des sources en plages de présence. `catalog/0011` le refait en
 points (§8.3) : il supprime `source_ranges` et `source_variants`, et recrée la seconde avec
 `node_id`, vide, à côté de `source_observations`. Aucune version livrée n'avait écrit ces plages.
+`catalog/0012` donne à trois colonnes le nom du code (`duration_seconds`, `connectable`,
+`session_received_bytes`) : un `RENAME COLUMN` réécrit le schéma, aucune ligne.
 `local/0006` efface l'état du cycle de recherche, qui n'existe plus, et la carte des backoffs.
 `local/0007` identifie un téléchargement par le même `file_id` que le catalogue, et garde
 `(network, native_id)` : `file_id` est à sens unique, et la boucle doit retrouver le fichier.
@@ -505,8 +507,8 @@ l'intervalle, plus un tour au plus.
 
 ```mermaid
 flowchart LR
-  s["sources<br/>network, native_id"] --> v["source_variants<br/>file_id, name, software, role,<br/>contact_point, directly_reachable,<br/>raw_meta, node_id"]
-  v --> o["source_observations<br/>observed_at, transfer_counter"]
+  s["sources<br/>network, native_id"] --> v["source_variants<br/>file_id, name, software, role,<br/>contact_point, connectable,<br/>raw_meta, node_id"]
+  v --> o["source_observations<br/>observed_at, session_received_bytes"]
 ```
 
 - **`sources`**, l'identité : `source_id` est un UUID v5 de `network:native_id`, comme `file_id`
@@ -517,13 +519,13 @@ flowchart LR
   hash. `raw_meta` ne garde que les clés stables que l'adaptateur choisit : une vitesse, un rang de
   file ou un compteur ferait une variante à chaque lecture. Aucune colonne ne porte l'adresse d'un
   pair ; `contact_point` est celle du serveur eD2k de la source.
-- **`source_observations`**, un point par variante et par lecture, en microsecondes, avec le
-  compteur d'octets qu'aMule tient pour ce client (reçus de lui tous fichiers confondus, remis à zéro
-  quand aMule recrée le client). La clé primaire `(variant_id, observed_at)` refuse un second point
-  au même instant ; l'écrivain l'insère avec `ON CONFLICT DO NOTHING`, jamais `OR IGNORE`, qui
-  avalerait aussi le `CHECK` du compteur (§8.2).
+- **`source_observations`**, un point par variante et par lecture, en microsecondes, avec
+  `session_received_bytes`, le compteur d'octets qu'aMule tient pour ce client (reçus de lui tous
+  fichiers confondus, remis à zéro quand aMule recrée le client). La clé primaire
+  `(variant_id, observed_at)` refuse un second point au même instant ; l'écrivain l'insère avec
+  `ON CONFLICT DO NOTHING`, jamais `OR IGNORE`, qui avalerait aussi le `CHECK` du compteur (§8.2).
 
-Un état qu'aMule traverse de lui-même (`idle`, `connecting`...) prend le groupe du dernier point de
+Un état qu'aMule traverse de lui-même (`idle`, `connecting`...) prend l'utilité du dernier point de
 la source sur ce fichier et ce nœud (par `source_id`, ou par nom sans user hash), si ce point tombe
 dans les `3 x (download.sources_interval_seconds + download.poll_interval_seconds)` qui précèdent la
 lecture et que son compteur ne dépasse pas celui de la lecture ; sinon le rôle est `undetermined`.
@@ -540,7 +542,7 @@ quand l'écart entre deux points passe `webui.source_period_gap_seconds`, ou qua
 baisse. Seule une période `sending` montre des octets reçus : la croissance du compteur entre son
 premier et son dernier point.
 
-Les alertes `new-source` et `reappeared` se décident pour chaque lecture utile d'un téléchargement,
+Les alertes `first_useful` et `reappeared` se décident pour chaque lecture utile d'un téléchargement,
 une fois sa transaction validée, d'après les points de la source antérieurs au début du tour
 ([Historique des sources](../operate.md#historique-des-sources)). Le dernier point de chaque
 variante avant ce début coûte une recherche sur la clé primaire, quelle que soit la longueur de

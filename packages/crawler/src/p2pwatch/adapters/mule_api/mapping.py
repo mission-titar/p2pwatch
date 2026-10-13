@@ -37,7 +37,7 @@ _SOURCE_ROLES = {
     "no_needed_parts": SourceRole.NOTHING_NEW,
 }
 
-# States aMule leaves on its own: no role, the writer carries the latest point's group (D3).
+# States aMule leaves on its own: no role, the writer carries the latest point's usefulness (D3).
 _PASSING_STATES = frozenset(
     {
         "idle",
@@ -173,31 +173,31 @@ def map_source(row: dict[str, Any], detail: dict[str, Any]) -> SourceReading:
     asked = row.get("role") in _ASKED
     software = (_string(row.get("software")), _string(row.get("software_version")))
     return SourceReading(
-        key=_source_key(row.get("user_hash")),
+        source=_source_key(row.get("user_hash")),
         name=_string(row.get("name")),
         software=" ".join(part for part in software if part) or None,
         role=_source_role(row.get("download_state")) if asked else SourceRole.STANDBY,
         contact_point=_contact_point(detail),
-        directly_reachable=_directly_reachable(detail),
+        connectable=_connectable(detail),
         raw_meta=(
             *_source_meta(row, _SOURCE_META_KEYS),
             *_source_meta(detail, _SOURCE_DETAIL_META_KEYS),
         ),
-        transfer_counter=_int(row.get("downloaded_bytes_session")),
+        session_received_bytes=_int(row.get("downloaded_bytes_session")),
     )
 
 
 def merge_duplicate_sources(readings: Iterable[SourceReading]) -> tuple[SourceReading, ...]:
     """One reading per source, by user hash or else by name: the most informative role, and the
-    larger counter (D7). A reading with neither is never merged."""
+    larger ``session_received_bytes`` (D7). A reading with neither is never merged."""
     merged: dict[object, SourceReading] = {}
     for reading in readings:
-        identity = reading.key or reading.name or object()
+        identity = reading.source or reading.name or object()
         held = merged.get(identity)
         if held is not None:
             best = min(held, reading, key=lambda kept: _INFORMATIVE_ROLES.index(kept.role))
-            counter = max(held.transfer_counter, reading.transfer_counter)
-            reading = replace(best, transfer_counter=counter)
+            counter = max(held.session_received_bytes, reading.session_received_bytes)
+            reading = replace(best, session_received_bytes=counter)
         merged[identity] = reading
     return tuple(merged.values())
 
@@ -226,7 +226,7 @@ def _contact_point(detail: dict[str, Any]) -> str | None:
     return contact_point if is_contact_point(Network.ED2K, contact_point) else None
 
 
-def _directly_reachable(detail: dict[str, Any]) -> bool | None:
+def _connectable(detail: dict[str, Any]) -> bool | None:
     """``high_id``, unknown while the client has no eD2k id (``ed2k_user_id`` 0) (D3)."""
     high_id = detail.get("high_id")
     if not _optional_int(detail.get("ed2k_user_id")) or not isinstance(high_id, bool):
@@ -284,7 +284,7 @@ def _map_result(result: object, keyword: str) -> tuple[list[FileObservation], in
                 size_bytes=size_bytes,
                 source_count=total,
                 keyword=keyword,
-                media_length_sec=_optional_int(media.get("duration_seconds")),
+                duration_seconds=_optional_int(media.get("duration_seconds")),
                 bitrate_kbps=_optional_int(media.get("bitrate_kilobits_per_second")),
                 raw_meta=fold_raw_meta(raw_meta, codec, file_type, complete),
             )

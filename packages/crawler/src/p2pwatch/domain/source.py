@@ -40,7 +40,7 @@ class SourceKey:
         return uuid.uuid5(_NAMESPACE, f"{self.network}:{self.native_id}").bytes
 
 
-class SourceGroup(StrEnum):
+class SourceUsefulness(StrEnum):
     """Whether a source holds what we lack (D3)."""
 
     USEFUL = "useful"
@@ -58,37 +58,38 @@ class SourceRole(StrEnum):
     UNDETERMINED = "undetermined"
 
     @property
-    def group(self) -> SourceGroup:
-        return _GROUPS[self]
+    def usefulness(self) -> SourceUsefulness:
+        return _USEFULNESS_BY_ROLE[self]
 
 
-_GROUPS = {
-    SourceRole.SENDING: SourceGroup.USEFUL,
-    SourceRole.QUEUED: SourceGroup.USEFUL,
-    SourceRole.NOTHING_NEW: SourceGroup.NOT_USEFUL,
-    SourceRole.STANDBY: SourceGroup.UNKNOWN,
-    SourceRole.UNDETERMINED: SourceGroup.UNKNOWN,
+_USEFULNESS_BY_ROLE = {
+    SourceRole.SENDING: SourceUsefulness.USEFUL,
+    SourceRole.QUEUED: SourceUsefulness.USEFUL,
+    SourceRole.NOTHING_NEW: SourceUsefulness.NOT_USEFUL,
+    SourceRole.STANDBY: SourceUsefulness.UNKNOWN,
+    SourceRole.UNDETERMINED: SourceUsefulness.UNKNOWN,
 }
 
 # Not SENDING after a useful point: a source no longer downloading is not sending (D3).
 _CARRIED = {
-    SourceGroup.USEFUL: SourceRole.QUEUED,
-    SourceGroup.NOT_USEFUL: SourceRole.NOTHING_NEW,
-    SourceGroup.UNKNOWN: SourceRole.UNDETERMINED,
+    SourceUsefulness.USEFUL: SourceRole.QUEUED,
+    SourceUsefulness.NOT_USEFUL: SourceRole.NOTHING_NEW,
+    SourceUsefulness.UNKNOWN: SourceRole.UNDETERMINED,
 }
 
-# One missed read stays within three spacings, a cycle under half of one (source points spec, D4).
+# One missed read stays within three times between reads; a cycle takes under half of one (source
+# points spec, D4).
 _TOLERATED_READS = 3
 
 
 def carried_role(previous: SourceRole | None) -> SourceRole:
     """The role of a reading in a passing state, from its latest point's, ``None`` without one."""
-    return SourceRole.UNDETERMINED if previous is None else _CARRIED[previous.group]
+    return SourceRole.UNDETERMINED if previous is None else _CARRIED[previous.usefulness]
 
 
-def source_tolerance(spacing: timedelta) -> timedelta:
+def carried_role_max_age(time_between_reads: timedelta) -> timedelta:
     """The longest gap over which the writer carries a role (source points spec, D4)."""
-    return _TOLERATED_READS * spacing
+    return _TOLERATED_READS * time_between_reads
 
 
 def is_contact_point(network: Network, contact_point: str) -> bool:
@@ -113,11 +114,11 @@ class SourceReading:
     """One source of one download at one read. ``role`` is ``None`` in a passing state, whose
     role the writer carries from the source's latest point (D3)."""
 
-    key: SourceKey | None
+    source: SourceKey | None
     name: str | None
     software: str | None
     role: SourceRole | None
     contact_point: str | None
-    directly_reachable: bool | None
+    connectable: bool | None
     raw_meta: SourceMeta
-    transfer_counter: int
+    session_received_bytes: int

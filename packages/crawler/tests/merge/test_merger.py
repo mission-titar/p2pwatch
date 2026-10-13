@@ -27,7 +27,7 @@ from .helpers import (
 
 # The current catalog schema version = the last catalog migration's number.
 # open_catalog stamps the output to it; the guard rejects any source that is not at it.
-_CURRENT_SCHEMA_VERSION = 11
+_CURRENT_SCHEMA_VERSION = 12
 _T1 = "2026-06-11T12:00:00.000000+00:00"
 _T2 = "2026-06-11T13:00:00.000000+00:00"
 
@@ -88,7 +88,7 @@ def _source_points(
                 "user_hash": user_hash,
                 "node_id": "n1",
                 "observed_at": moment,
-                "transfer_counter": moment,
+                "session_received_bytes": moment,
             }
             for moment in moments
         ],
@@ -144,7 +144,7 @@ def test_t3_re_merge_is_idempotent(tmp_path: Path) -> None:
 
 
 def test_t4_journal_dedup_identical_rows_including_nulls(tmp_path: Path) -> None:
-    # BIT-FOR-BIT identical observation (same NULLs on media_length_sec and bitrate_kbps).
+    # BIT-FOR-BIT identical observation (same NULLs on duration_seconds and bitrate_kbps).
     obs = _file_observation(HASH_A, node_id="node", observed_at=_T1)
     src_a = make_catalog(
         tmp_path / "a.db",

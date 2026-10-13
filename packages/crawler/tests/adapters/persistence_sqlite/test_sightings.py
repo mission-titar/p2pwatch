@@ -46,7 +46,7 @@ def _raw(
         name,
         observed_at=at,
         source_count=sources,
-        media_length_sec=media,
+        duration_seconds=media,
         bitrate_kbps=None if media is None else 900,
     )
 
@@ -58,7 +58,7 @@ def _raw_sighting(name: str, at: str, *, media: int | None = None) -> Sighting:
         observed_at=at,
         source_count=5,
         size_bytes=100,
-        media_length_sec=media,
+        duration_seconds=media,
         bitrate_kbps=None if media is None else 900,
         keyword="keroro",
     )

@@ -25,7 +25,7 @@ LATEST_SIGHTING_CTE = f"""latest_sighting AS (
         {_ISO.format("o.observed_at")} AS last_seen,
         o.source_count AS source_count,
         v.size_bytes AS size_bytes,
-        v.media_length_sec AS media_length_sec,
+        v.duration_seconds AS duration_seconds,
         v.bitrate_kbps AS bitrate_kbps,
         v.keyword AS keyword
     FROM files AS f
@@ -48,7 +48,7 @@ LATEST_SIGHTING_CTE = f"""latest_sighting AS (
 
 # Every query below returns these columns in this order, so ``_sighting`` maps them all.
 _COLUMNS = (
-    "network, native_id, filename, last_seen, source_count, size_bytes, media_length_sec,"
+    "network, native_id, filename, last_seen, source_count, size_bytes, duration_seconds,"
     " bitrate_kbps, keyword"
 )
 
@@ -64,7 +64,7 @@ SELECT {_COLUMNS} FROM latest_sighting WHERE filename IS NOT NULL ORDER BY netwo
 # source_count.
 _SELECT_SIGHTINGS = f"""
 SELECT f.network, f.native_id, v.filename, {_ISO.format("o.observed_at")}, o.source_count,
-    v.size_bytes, v.media_length_sec, v.bitrate_kbps, v.keyword
+    v.size_bytes, v.duration_seconds, v.bitrate_kbps, v.keyword
 FROM files AS f
 JOIN observation_variants AS v ON v.file_id = f.file_id
 JOIN observations AS o ON o.variant_id = v.variant_id
@@ -96,7 +96,7 @@ def _sighting(row: Any) -> Sighting:
         observed_at=row[3],
         source_count=row[4],
         size_bytes=row[5],
-        media_length_sec=row[6],
+        duration_seconds=row[6],
         bitrate_kbps=row[7],
         keyword=row[8],
     )

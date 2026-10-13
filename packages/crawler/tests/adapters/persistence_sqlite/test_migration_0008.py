@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.adapters.persistence_sqlite.catalog_repository import SqliteCatalogRepository
+from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.persistence_sqlite.variants import content_hash
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
@@ -114,8 +115,10 @@ def test_files_refuse_a_non_canonical_ed2k_id_or_an_unknown_network(
             )
 
 
-def test_a_new_sighting_reuses_the_variant_0008_rekeyed(migrated: sqlite3.Connection) -> None:
+def test_a_new_sighting_reuses_the_variant_0008_rekeyed(tmp_path: Path) -> None:
     """The repository and 0008 hash a variant alike, or every file gets a second variant."""
+    _catalog_at_7(tmp_path / "catalog.db")
+    migrated = open_catalog(tmp_path / "catalog.db")  # the repository writes today's columns
     observation = FileObservation(
         file=FileKey(Network.ED2K, _B),
         filename="b.avi",
@@ -123,9 +126,12 @@ def test_a_new_sighting_reuses_the_variant_0008_rekeyed(migrated: sqlite3.Connec
         source_count=4,
         keyword="keroro",
     )
-    SqliteCatalogRepository(migrated, "n1", clock=FakeClock()).record_observation(observation)
-    assert migrated.execute("SELECT count(*) FROM observation_variants").fetchone()[0] == 3
-    assert migrated.execute("SELECT count(*) FROM observations").fetchone()[0] == 5
+    try:
+        SqliteCatalogRepository(migrated, "n1", clock=FakeClock()).record_observation(observation)
+        assert migrated.execute("SELECT count(*) FROM observation_variants").fetchone()[0] == 3
+        assert migrated.execute("SELECT count(*) FROM observations").fetchone()[0] == 5
+    finally:
+        migrated.close()
 
 
 def test_the_runner_restores_the_pragmas_0008_sets(

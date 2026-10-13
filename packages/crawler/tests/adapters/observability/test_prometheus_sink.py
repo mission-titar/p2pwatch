@@ -3,6 +3,7 @@
 from prometheus_client import CollectorRegistry
 
 from p2pwatch.adapters.observability.prometheus_sink import PrometheusSink
+from p2pwatch.domain.observability.events import SourceFirstUseful
 from p2pwatch.domain.observability.policy import MetricInstruction, MetricName, describe
 from tests.domain.observability.test_policy import CASES
 
@@ -108,3 +109,13 @@ def test_exposed_names() -> None:
         "p2pwatch_channel_connectable",
         "p2pwatch_source_alerts",
     }
+
+
+def test_a_first_useful_alert_counts_under_its_network_and_kind() -> None:
+    registry = CollectorRegistry()
+    sink = PrometheusSink(registry)
+    event = next(event for event, _ in CASES if isinstance(event, SourceFirstUseful))
+    for instruction in describe(event).metrics:
+        sink.apply(instruction)
+    labels = {"network": "ed2k", "kind": "first_useful"}
+    assert registry.get_sample_value("p2pwatch_source_alerts_total", labels) == 1.0

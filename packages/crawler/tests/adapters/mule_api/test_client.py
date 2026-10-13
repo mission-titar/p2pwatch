@@ -719,7 +719,7 @@ async def test_sources_ask_the_detail_of_only_the_rows_that_offer_us_the_file() 
     await client.close()
 
     assert [
-        (reading.name, reading.role, reading.contact_point, reading.directly_reachable)
+        (reading.name, reading.role, reading.contact_point, reading.connectable)
         for reading in readings
     ] == [
         ("peer 1", SourceRole.QUEUED, "176.103.48.36:4184", False),

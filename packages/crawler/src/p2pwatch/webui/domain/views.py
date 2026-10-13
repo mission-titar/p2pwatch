@@ -158,7 +158,7 @@ class SourcePeriodView:
     name: str | None
     role: SourceRole
     contact_point: str | None
-    directly_reachable: bool | None
+    connectable: bool | None
     first_seen_at: int
     last_seen_at: int
     received_bytes: int
@@ -456,7 +456,7 @@ class SourceHistoryRow:
     source_link: tuple[str, ...]
     role: str
     contact_point: str
-    high_id: str  # "yes", "no" or "unknown"
+    connectable: str  # "yes", "no" or "unknown"
     first_seen: str
     last_seen: str
     received: str  # empty when the period received nothing

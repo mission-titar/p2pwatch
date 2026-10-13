@@ -74,7 +74,7 @@ def _copy_journal(table: str, columns: Sequence[str]) -> str:
 
 
 _VARIANT_COLUMNS = (
-    "file_id, filename, size_bytes, media_length_sec, bitrate_kbps, raw_meta, keyword, node_id,"
+    "file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_meta, keyword, node_id,"
     " content_hash"
 )
 
@@ -102,7 +102,7 @@ _COPY_SOURCES = (
 )
 
 _SOURCE_VARIANT_COLUMNS = (
-    "file_id, source_id, name, software, role, contact_point, directly_reachable, raw_meta,"
+    "file_id, source_id, name, software, role, contact_point, connectable, raw_meta,"
     " node_id, content_hash"
 )
 
@@ -112,8 +112,8 @@ _COPY_SOURCE_VARIANTS = (
 )
 
 _COPY_SOURCE_OBSERVATIONS = f"""
-INSERT OR IGNORE INTO main.source_observations (variant_id, observed_at, transfer_counter)
-SELECT d.variant_id, o.observed_at, o.transfer_counter
+INSERT OR IGNORE INTO main.source_observations (variant_id, observed_at, session_received_bytes)
+SELECT d.variant_id, o.observed_at, o.session_received_bytes
 FROM {_SRC}.source_observations AS o
 JOIN {_SRC}.source_variants AS s ON s.variant_id = o.variant_id
 JOIN main.source_variants AS d ON d.content_hash = s.content_hash

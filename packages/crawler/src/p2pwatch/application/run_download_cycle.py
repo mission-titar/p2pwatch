@@ -37,11 +37,11 @@ from p2pwatch.domain.observability.events import (
     DownloadCompleted,
     DownloadQueued,
     FreeSpaceSampled,
-    SourceNew,
+    SourceFirstUseful,
     SourceReappeared,
     TargetTitle,
 )
-from p2pwatch.domain.source import SourceGroup, SourceKey
+from p2pwatch.domain.source import SourceKey, SourceUsefulness
 from p2pwatch.ports.catalog_repository import DownloadCandidate, ObservedFile
 from p2pwatch.ports.client_errors import ClientUnreachableError, DownloadRejectedError
 from p2pwatch.ports.clock import Clock
@@ -348,8 +348,8 @@ async def _alert_sources(
 ) -> None:
     """Emits D5's alerts for the useful readings of a committed write, once per source per round."""
     for reading in recorded:
-        source = reading.key
-        if source is None or reading.role.group is not SourceGroup.USEFUL:
+        source = reading.source
+        if source is None or reading.role.usefulness is not SourceUsefulness.USEFUL:
             continue  # a name alone is too weak to carry an event
         if source in round_.decided:
             continue  # one event per source per round
@@ -358,18 +358,18 @@ async def _alert_sources(
             round_.alerts_allowed = deps.sources.has_points_before(round_.started_at)
         if not round_.alerts_allowed:
             return  # the node's first recording round is a baseline, not news
-        earlier = deps.sources.earlier_points(source, round_.started_at)
-        alert = source_alert(reading.role, earlier, round_.started_at, deps.reappeared_after)
+        earlier_points = deps.sources.earlier_points(source, round_.started_at)
+        alert = source_alert(reading.role, earlier_points, round_.started_at, deps.reappeared_after)
         round_.decided.add(source)
         if alert is None:
             continue
-        name, filename = reading.name, _best_filename(deps, file)
+        source_name, filename = reading.name, _best_filename(deps, file)
         target_titles = _target_titles(deps, file)
-        event: SourceNew | SourceReappeared = (
-            SourceNew(source, name, file, filename, target_titles)
+        event: SourceFirstUseful | SourceReappeared = (
+            SourceFirstUseful(source, source_name, file, filename, target_titles)
             if isinstance(alert, FirstUseful)
             else SourceReappeared(
-                source, name, file, filename, target_titles, alert.absent.total_seconds()
+                source, source_name, file, filename, target_titles, alert.absent_for.total_seconds()
             )
         )
         await deps.telemetry.emit(event)

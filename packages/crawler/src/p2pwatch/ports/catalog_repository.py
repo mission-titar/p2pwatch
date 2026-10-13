@@ -50,7 +50,7 @@ class ReevalRow:
     file: FileKey
     filename: str
     size_bytes: int
-    media_length_sec: int | None
+    duration_seconds: int | None
     bitrate_kbps: int | None
 
 

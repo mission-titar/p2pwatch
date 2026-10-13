@@ -60,7 +60,7 @@ async def reevaluate_catalog(
     for row in catalog.iter_reevaluation_rows():
         files_evaluated += 1
         candidate = candidate_from_fields(
-            row.filename, row.size_bytes, row.media_length_sec, row.bitrate_kbps
+            row.filename, row.size_bytes, row.duration_seconds, row.bitrate_kbps
         )
         try:
             rows_written += await rejudge_file(

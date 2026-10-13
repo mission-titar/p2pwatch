@@ -125,10 +125,10 @@ class DiskSpaceLow:
 
 
 @dataclass(frozen=True)
-class SourceNew:
+class SourceFirstUseful:
     # A source read useful for the first time on this node (source points spec, D5).
     source: SourceKey
-    name: str | None
+    source_name: str | None
     file: FileKey
     filename: str  # the clean name, the most sourced
     target_titles: tuple[TargetTitle, ...]  # none for a file without one
@@ -136,9 +136,9 @@ class SourceNew:
 
 @dataclass(frozen=True)
 class SourceReappeared:
-    # A source useful again after ``absent_seconds`` neither useful nor not useful here (D9).
+    # A source reappeared: useful after ``absent_seconds`` neither useful nor not useful here (D9).
     source: SourceKey
-    name: str | None
+    source_name: str | None
     file: FileKey
     filename: str
     target_titles: tuple[TargetTitle, ...]
@@ -165,7 +165,7 @@ type Event = (
     | ClientReachableAgain
     | FreeSpaceSampled
     | DiskSpaceLow
-    | SourceNew
+    | SourceFirstUseful
     | SourceReappeared
     | CrawlerStarted
 )

@@ -85,7 +85,7 @@ class DownloadConfig:
     sources_interval: timedelta
 
 
-# 3 x (300 + 30): the writer's tolerance at the shipped intervals (source points spec, D6).
+# 3 x (300 + 30): the carried role's max age at the shipped intervals (source points spec, D6).
 _DEFAULT_SOURCE_PERIOD_GAP = timedelta(seconds=990)
 
 

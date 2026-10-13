@@ -326,7 +326,7 @@ _USER = "1f2e" * 8
 _S = 1_000_000  # a second in microseconds
 _WINDOW = PeriodWindow(since=0, until=100_000 * _S, gap=90 * _S)
 
-# (role, observed_at, transfer_counter) of one source's points on file a, one variant per role.
+# (role, observed_at, session_received_bytes) of one source's points on file a, a variant per role.
 _Points = Sequence[tuple[str, int, int]]
 
 
@@ -338,7 +338,7 @@ def _seed_points(db: Path, points: _Points) -> None:
         for role, observed_at, counter in points:
             if role not in variants:
                 variants[role] = insert_source_variant(conn, "a" * 32, _USER, role=role)
-            insert_source_point(conn, variants[role], observed_at, transfer_counter=counter)
+            insert_source_point(conn, variants[role], observed_at, session_received_bytes=counter)
 
 
 def _periods(db: Path, window: PeriodWindow = _WINDOW) -> list[tuple[str, int, int, int]]:
@@ -412,10 +412,10 @@ def test_source_periods_join_each_identity_on_each_node_newest_first(catalog_db:
         insert_file(conn, "b" * 32)
         insert_source(conn, _USER)
         queued = insert_source_variant(
-            conn, "a" * 32, _USER, contact_point="198.51.100.7:4661", directly_reachable=False
+            conn, "a" * 32, _USER, contact_point="198.51.100.7:4661", connectable=False
         )
         elsewhere = insert_source_variant(conn, "a" * 32, _USER, node_id="n2")
-        unnamed = insert_source_variant(conn, "a" * 32, None, name=None, directly_reachable=True)
+        unnamed = insert_source_variant(conn, "a" * 32, None, name=None, connectable=True)
         hashless = insert_source_variant(conn, "a" * 32, None, name="Teammate")
         for variant, at in ((queued, 0), (elsewhere, 30), (queued, 60), (unnamed, 30)):
             insert_source_point(conn, variant, at * _S)
@@ -642,18 +642,18 @@ def test_coverage_tie_break_on_id(catalog_db: Path) -> None:
 
 
 def test_file_detail_observations_include_media_fields_none(catalog_db: Path) -> None:
-    """A sighting's media_length_sec and bitrate_kbps are None when the observation has none."""
+    """A sighting's duration_seconds and bitrate_kbps are None when the observation has none."""
     _seed(catalog_db)
     detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("a" * 32), _ALL_TIME)
     assert detail is not None
     assert len(detail.sightings) == 1
     obs = detail.sightings[0]
-    assert obs.media_length_sec is None
+    assert obs.duration_seconds is None
     assert obs.bitrate_kbps is None
 
 
 def test_file_detail_observations_include_media_fields_present(catalog_db: Path) -> None:
-    """A sighting's media_length_sec and bitrate_kbps are filled when present."""
+    """A sighting's duration_seconds and bitrate_kbps are filled when present."""
     h = "d" * 32
     with sqlite3.connect(catalog_db) as conn:
         insert_file(conn, h, 150)
@@ -663,14 +663,14 @@ def test_file_detail_observations_include_media_fields_present(catalog_db: Path)
             "keroro_media.avi",
             size_bytes=150,
             source_count=3,
-            media_length_sec=1320,
+            duration_seconds=1320,
             bitrate_kbps=192,
         )
     detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id(h), _ALL_TIME)
     assert detail is not None
     assert len(detail.sightings) == 1
     obs = detail.sightings[0]
-    assert obs.media_length_sec == 1320
+    assert obs.duration_seconds == 1320
     assert obs.bitrate_kbps == 192
 
 
