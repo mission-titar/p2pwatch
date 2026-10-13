@@ -27,6 +27,7 @@ _MICROSECOND = timedelta(microseconds=1)
 
 # The source's latest point before the read, within the tolerance. Without an identity, a source
 # is its name among the variants without one (D4). One seek per variant, never a walk of the points.
+# The unary + keeps the planner off idx_source_variants_node_id, which holds all this node's rows.
 _LATEST_POINT = """
 SELECT v.role, o.transfer_counter
 FROM source_variants AS v
@@ -35,7 +36,7 @@ WHERE
     v.file_id = :file_id
     AND v.source_id IS :source_id
     AND (:source_id IS NOT NULL OR v.name = :name)
-    AND v.node_id = :node_id
+    AND +v.node_id = :node_id
     AND o.observed_at = (
         SELECT MAX(p.observed_at) FROM source_observations AS p
         WHERE p.variant_id = v.variant_id AND p.observed_at >= :since AND p.observed_at < :read_at
@@ -64,7 +65,7 @@ SELECT variant_id, ?, ? FROM source_variants WHERE content_hash = ?
 ON CONFLICT (variant_id, observed_at) DO NOTHING
 """
 
-# Each variant's latest point before the round, one seek each (D5's reason).
+# Each variant's latest point before the round, one seek each (D5's reason); + as in _LATEST_POINT.
 _EARLIER_POINTS = """
 SELECT
     v.role,
@@ -73,7 +74,7 @@ SELECT
         WHERE o.variant_id = v.variant_id AND o.observed_at < ?
     )
 FROM source_variants AS v
-WHERE v.source_id = ? AND v.node_id = ?
+WHERE v.source_id = ? AND +v.node_id = ?
 """
 
 _HAS_POINTS_BEFORE = """
