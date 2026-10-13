@@ -1368,7 +1368,7 @@ async def test_waiting_for_sources_is_not_failing_for_a_simulated_year(tmp_path:
     # The real TTL of one day, a month between rounds, the client listing the download each one.
     clock = FakeClock()
     connection = open_local(tmp_path / "local.db")
-    downloads = SqliteDownloadRepository(connection, clock=clock.now)
+    downloads = SqliteDownloadRepository(connection, clock=clock)
     downloads.record_queued(_key(_A), "062A", 10)
     waiting = _status(_A, total=10, waiting=WaitingReason.NO_SOURCE)
     client = FakeDownloadClient(listed=[(waiting,)] * 12)

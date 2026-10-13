@@ -1,6 +1,6 @@
 import sqlite3
 from collections.abc import Iterator
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -11,6 +11,7 @@ from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.ports.catalog_repository import DownloadCandidate, ObservedFile
+from tests.application.fakes import FakeClock
 
 _A = FileKey(Network.ED2K, "a" * 32)
 _B = FileKey(Network.ED2K, "b" * 32)
@@ -18,13 +19,10 @@ _C = FileKey(Network.ED2K, "c" * 32)
 _NODE = "11111111-2222-3333-4444-555555555555"
 
 
-class _AdvancingClock:
-    def __init__(self) -> None:
-        self._now = datetime(2026, 6, 13, 10, 0, 0, tzinfo=UTC)
-
-    def __call__(self) -> datetime:
-        moment = self._now
-        self._now += timedelta(minutes=1)
+class _AdvancingClock(FakeClock):
+    def now(self) -> datetime:
+        moment = super().now()
+        self.advance(60)
         return moment
 
 

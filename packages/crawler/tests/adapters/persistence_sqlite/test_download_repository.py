@@ -1,6 +1,6 @@
 import sqlite3
 from collections.abc import Iterator
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -11,28 +11,16 @@ from p2pwatch.adapters.persistence_sqlite.errors import PersistenceError
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.ports.download_client import DownloadStatus, FailureReason, WaitingReason
+from tests.application.fakes import FakeClock
 
 _A = FileKey(Network.ED2K, "a" * 32)
 _B = FileKey(Network.ED2K, "b" * 32)
 
 
-class _SettableClock:
-    """Clock the test moves by hand (the TTL needs jumps, not a fixed tick)."""
-
-    def __init__(self) -> None:
-        self.now = datetime(2026, 6, 13, 10, 0, 0, tzinfo=UTC)
-
-    def __call__(self) -> datetime:
-        return self.now
-
-
-class _AdvancingClock:
-    def __init__(self) -> None:
-        self._now = datetime(2026, 6, 13, 10, 0, 0, tzinfo=UTC)
-
-    def __call__(self) -> datetime:
-        moment = self._now
-        self._now += timedelta(minutes=1)
+class _AdvancingClock(FakeClock):
+    def now(self) -> datetime:
+        moment = super().now()
+        self.advance(60)
         return moment
 
 
@@ -59,7 +47,7 @@ def connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 @pytest.fixture
 def repository(connection: sqlite3.Connection) -> SqliteDownloadRepository:
-    return SqliteDownloadRepository(connection)
+    return SqliteDownloadRepository(connection, clock=FakeClock())
 
 
 def test_record_queued_inserts_a_new_download(repository: SqliteDownloadRepository) -> None:
@@ -161,7 +149,7 @@ def test_record_queued_stamps_last_seen_at_with_queued_at(
     connection: sqlite3.Connection,
 ) -> None:
     # A row amuled never picks up must still age out: NULL would make it immortal.
-    repository = SqliteDownloadRepository(connection, clock=_SettableClock())
+    repository = SqliteDownloadRepository(connection, clock=FakeClock())
     repository.record_queued(_A, "062A", 100)
     queued_at = connection.execute(
         "SELECT queued_at FROM downloads WHERE file_id = ?", (_A.file_id,)
@@ -170,11 +158,11 @@ def test_record_queued_stamps_last_seen_at_with_queued_at(
 
 
 def test_mark_seen_refreshes_last_seen_at(connection: sqlite3.Connection) -> None:
-    clock = _SettableClock()
+    clock = FakeClock()
     repository = SqliteDownloadRepository(connection, clock=clock)
     repository.record_queued(_A, "062A", 100)
     before = _last_seen(connection, _A)
-    clock.now += timedelta(hours=1)
+    clock.advance(3600)
     repository.mark_seen([_status(_A)])
     assert _last_seen(connection, _A) > before
 
@@ -189,12 +177,12 @@ def test_mark_seen_ignores_a_hash_it_does_not_know(
 def test_expire_lost_fails_the_rows_amuled_stopped_showing(
     connection: sqlite3.Connection,
 ) -> None:
-    clock = _SettableClock()
+    clock = FakeClock()
     repository = SqliteDownloadRepository(connection, clock=clock)
     repository.record_queued(_A, "062A", 100)
     repository.set_state(_A, DownloadState.DOWNLOADING)
     repository.record_queued(_B, "063A", 200)
-    clock.now += timedelta(hours=25)
+    clock.advance(25 * 3600)
     repository.mark_seen([_status(_B)])  # _B is still in amuled's queue, _A vanished 25 h ago
     assert repository.expire_lost(86400) == (_A,)
     assert repository.active_states() == {_A: DownloadState.FAILED, _B: DownloadState.QUEUED}
@@ -204,20 +192,20 @@ def test_expire_lost_fails_the_rows_amuled_stopped_showing(
 def test_expire_lost_spares_a_row_seen_within_the_ttl(
     connection: sqlite3.Connection,
 ) -> None:
-    clock = _SettableClock()
+    clock = FakeClock()
     repository = SqliteDownloadRepository(connection, clock=clock)
     repository.record_queued(_A, "062A", 100)
-    clock.now += timedelta(hours=23)
+    clock.advance(23 * 3600)
     assert repository.expire_lost(86400) == ()
     assert repository.active_states() == {_A: DownloadState.QUEUED}
 
 
 def test_expire_lost_leaves_terminal_rows_alone(connection: sqlite3.Connection) -> None:
-    clock = _SettableClock()
+    clock = FakeClock()
     repository = SqliteDownloadRepository(connection, clock=clock)
     repository.record_queued(_A, "062A", 100)
     repository.set_state(_A, DownloadState.COMPLETED)
-    clock.now += timedelta(days=30)
+    clock.advance(30 * 86400)
     assert repository.expire_lost(86400) == ()
     assert repository.active_states() == {_A: DownloadState.COMPLETED}
 
@@ -232,15 +220,15 @@ def test_a_queued_download_starts_at_zero_bytes_with_no_progress(
 def test_mark_seen_stamps_progress_only_when_the_bytes_grow(
     connection: sqlite3.Connection,
 ) -> None:
-    clock = _SettableClock()
+    clock = FakeClock()
     repository = SqliteDownloadRepository(connection, clock=clock)
     repository.record_queued(_A, "062A", 100)
     repository.mark_seen([_status(_A, 0, WaitingReason.NO_SOURCE)])
     assert _lifecycle(connection, _A) == (0, None, "no_source", None)
-    clock.now += timedelta(hours=1)
+    clock.advance(3600)
     repository.mark_seen([_status(_A, 40, WaitingReason.REMOTE_QUEUE)])
-    grown_at = utc_iso(clock.now)
-    clock.now += timedelta(days=3)
+    grown_at = utc_iso(clock.now())
+    clock.advance(3 * 86400)
     repository.mark_seen([_status(_A, 40)])
     assert _lifecycle(connection, _A) == (40, grown_at, None, None)
 
@@ -258,12 +246,12 @@ def test_a_download_waiting_for_sources_a_whole_year_is_never_lost(
     connection: sqlite3.Connection,
 ) -> None:
     # Waiting is not failing (stage 2, D12): the client still lists it, so the TTL spares it.
-    clock = _SettableClock()
+    clock = FakeClock()
     repository = SqliteDownloadRepository(connection, clock=clock)
     repository.record_queued(_A, "062A", 100)
     repository.set_state(_A, DownloadState.DOWNLOADING)
     for _ in range(365):
-        clock.now += timedelta(days=1)
+        clock.advance(86400)
         repository.mark_seen([_status(_A, 0, WaitingReason.NO_SOURCE)])
         assert repository.expire_lost(86400) == ()
     assert repository.active_states() == {_A: DownloadState.DOWNLOADING}

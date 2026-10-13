@@ -17,6 +17,7 @@ from p2pwatch.adapters.persistence_sqlite.connection import open_catalog, open_l
 from p2pwatch.adapters.persistence_sqlite.download_repository import SqliteDownloadRepository
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import FileKey, Network
+from tests.application.fakes import FakeClock
 
 _LOCAL_MIGRATIONS = resources.files("p2pwatch.adapters.persistence_sqlite") / "migrations/local"
 
@@ -78,7 +79,7 @@ def test_local_rewrites_a_legacy_quarantined_download_as_completed(tmp_path: Pat
 
     connection = open_local(path)
     try:
-        repository = SqliteDownloadRepository(connection)
+        repository = SqliteDownloadRepository(connection, clock=FakeClock())
         assert repository.active_states() == {
             FileKey(Network.ED2K, "a1" * 16): DownloadState.COMPLETED
         }

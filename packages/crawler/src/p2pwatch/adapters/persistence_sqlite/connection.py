@@ -11,9 +11,9 @@ crosses the append-only triggers, spec §3 post-review amendment).
 The migration runner applies the ``NNNN_*.sql`` scripts embedded in the package and tracks
 them in ``PRAGMA user_version`` (see ``_apply_migrations``).
 
-This module also carries the repositories' shared clock (``Clock``/``utc_now``/
-``utc_iso``): ISO-8601 UTC as TEXT (spec §3), FIXED microseconds so that lexicographic
-order IS chronological order (the FIFO claim sorts on ``enqueued_at``).
+This module also carries the repositories' timestamp format (``utc_iso``): ISO-8601 UTC as
+TEXT (spec §3), FIXED microseconds so that lexicographic order IS chronological order (the FIFO
+claim sorts on ``enqueued_at``).
 """
 
 import logging
@@ -34,8 +34,6 @@ from p2pwatch.adapters.persistence_sqlite.errors import (
 )
 from p2pwatch.adapters.persistence_sqlite.variants import register_functions
 
-type Clock = Callable[[], datetime]
-
 _logger = logging.getLogger("p2pwatch.adapters.persistence_sqlite.connection")
 
 _MIGRATIONS = resources.files("p2pwatch.adapters.persistence_sqlite") / "migrations"
@@ -51,11 +49,6 @@ class Migration:
     version: int
     script: str
     transactional: bool = True
-
-
-def utc_now() -> datetime:
-    """Default clock for the repositories (spec §3: injectable, ``datetime.now(UTC)``)."""
-    return datetime.now(UTC)
 
 
 def utc_iso(moment: datetime) -> str:

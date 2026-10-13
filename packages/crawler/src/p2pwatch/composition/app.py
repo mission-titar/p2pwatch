@@ -256,7 +256,7 @@ class CrawlerApp:
         return DownloadLoopDeps(
             download_client=download_client,
             source_client=download_client,
-            downloads=SqliteDownloadRepository(local_conn),
+            downloads=SqliteDownloadRepository(local_conn, clock=self._clock),
             sources=source_repo,
             catalog=catalog_repo,
             targets=self._targets,
@@ -413,7 +413,7 @@ class CrawlerApp:
             local_conn = open_local(self._crawler_config.local_db_path)
             stack.callback(local_conn.close)
 
-            local_repo = SqliteLocalStateRepository(local_conn)
+            local_repo = SqliteLocalStateRepository(local_conn, clock=self._clock)
             node_id = self._crawler_config.node_id or local_repo.node_id()
             obs = self._crawler_config.observability
             notifications = obs.notifications if obs is not None else ()
@@ -431,7 +431,7 @@ class CrawlerApp:
             )
             if obs is not None and obs.metrics is not None and obs.metrics.enabled:
                 self._metrics_server(obs.metrics.port, registry)
-            catalog_repo = SqliteCatalogRepository(catalog_conn, node_id)
+            catalog_repo = SqliteCatalogRepository(catalog_conn, node_id, clock=self._clock)
             scheduler_state = SqliteSchedulerStateRepository(local_conn)
             engine = MatchingEngine(self._matcher_config, self._targets)
             endpoint = self._crawler_config.amule_endpoint

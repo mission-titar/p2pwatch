@@ -1,8 +1,8 @@
 """``SqliteCatalogRepository``: ``FileObservation``/``MatchDecision`` → durable rows.
 
 The adapter stamps what the domain ignores (data-model spec §3): ``observed_at``/
-``decided_at`` (injectable clock, ``utc_now`` by default) and ``node_id`` (given at the
-constructor — plan C will read it from ``LocalStateRepository``). ``raw_meta`` is serialized
+``decided_at`` (the ``Clock`` port) and ``node_id`` (both given at the constructor).
+``raw_meta`` is serialized
 as a JSON LIST of pairs (``[["0x0308", "0"], …]``), wire order and duplicates preserved,
 ``ensure_ascii=False``, no sorting (spec §3). ``record_observation`` makes ONE transaction
 (spec §4): ``INSERT OR IGNORE`` into ``files`` (first sight wins), into
@@ -12,12 +12,12 @@ not become invisible).
 
 The hash canon (32 lowercase hex, v0.5.0 canon) is validated IN PYTHON before the
 transaction: ``INSERT OR IGNORE`` silently swallows a CHECK violation (documented
-SQLite behavior) — without this guard, a non-canonical hash would only be stopped
+SQLite behavior): without this guard, a non-canonical hash would only be stopped
 by the ``foreign_keys`` pragma (opaque diagnostic), and a connection without that
 pragma would commit an ORPHAN observation. The rollback catches ``BaseException``
 (same discipline as ``connection._open``): a NON-sqlite failure at binding (e.g.
 ``UnicodeEncodeError`` on a lone surrogate) must not leave the connection
-``in_transaction`` — otherwise the repository would be permanently broken.
+``in_transaction``, otherwise the repository would be permanently broken.
 """
 
 import json
@@ -28,13 +28,14 @@ from contextlib import suppress
 
 from catalog_matching.engine import DecisionRecord, MatchDecision
 from p2pwatch.adapters.persistence_sqlite import sightings
-from p2pwatch.adapters.persistence_sqlite.connection import Clock, utc_iso, utc_now
+from p2pwatch.adapters.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.persistence_sqlite.errors import PersistenceError, wrap_sqlite_errors
 from p2pwatch.adapters.persistence_sqlite.variants import content_hash, iso_to_micros
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.retraction import RETRACTED_TIER
 from p2pwatch.ports.catalog_repository import DownloadCandidate, ObservedFile, ReevalRow
+from p2pwatch.ports.clock import Clock
 
 _CANONICAL_HASH_RE = re.compile(r"[0-9a-f]{32}\Z")
 
@@ -99,9 +100,7 @@ _COUNT_FILES = "SELECT COUNT(*) FROM files"
 class SqliteCatalogRepository:
     """SQLite implementation of the ``CatalogRepository`` port (STRUCTURAL satisfaction)."""
 
-    def __init__(
-        self, connection: sqlite3.Connection, node_id: str, *, clock: Clock = utc_now
-    ) -> None:
+    def __init__(self, connection: sqlite3.Connection, node_id: str, *, clock: Clock) -> None:
         self._connection = connection
         self._node_id = node_id
         self._clock = clock
@@ -122,7 +121,7 @@ class SqliteCatalogRepository:
             self._node_id,
         )
         key = content_hash(*variant)
-        observed_at = iso_to_micros(utc_iso(self._clock()))
+        observed_at_micros = iso_to_micros(utc_iso(self._clock.now()))
         with wrap_sqlite_errors():
             self._connection.execute("BEGIN")
             try:
@@ -132,7 +131,7 @@ class SqliteCatalogRepository:
                 )
                 self._connection.execute(_INSERT_VARIANT, (*variant, key))
                 self._connection.execute(
-                    _INSERT_OBSERVATION, (observed_at, observation.source_count, key)
+                    _INSERT_OBSERVATION, (observed_at_micros, observation.source_count, key)
                 )
                 self._connection.execute("COMMIT")
             except BaseException:
@@ -156,7 +155,7 @@ class SqliteCatalogRepository:
                     decision.target_id,
                     decision.rule_name,
                     decision.tier,
-                    utc_iso(self._clock()),
+                    utc_iso(self._clock.now()),
                     self._node_id,
                 ),
             )
@@ -180,7 +179,7 @@ class SqliteCatalogRepository:
                     target_id,
                     "",
                     RETRACTED_TIER,
-                    utc_iso(self._clock()),
+                    utc_iso(self._clock.now()),
                     self._node_id,
                 ),
             )

@@ -2,20 +2,21 @@ import dataclasses
 import json
 import sqlite3
 from collections.abc import Iterator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from catalog_matching.engine import DecisionRecord, Explanation, MatchDecision
 from p2pwatch.adapters.persistence_sqlite.catalog_repository import SqliteCatalogRepository
-from p2pwatch.adapters.persistence_sqlite.connection import open_catalog, utc_iso
+from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.persistence_sqlite.variants import content_hash, iso_to_micros
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation, fold_raw_meta
 from p2pwatch.domain.retraction import RETRACTED_TIER
 from p2pwatch.ports.catalog_repository import CatalogRepository, ReevalRow
+from tests.application.fakes import FakeClock
 from tests.catalog_rows import count_observations, insert_file
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
@@ -26,19 +27,12 @@ _FROZEN_NOW = datetime(2026, 6, 11, 12, 0, 0, tzinfo=UTC)
 _FROZEN_ISO = "2026-06-11T12:00:00.000000+00:00"
 
 
-def _frozen_clock() -> datetime:
-    return _FROZEN_NOW
+class _AdvancingClock(FakeClock):
+    """A clock that ticks forward on every read (to order two observations in time)."""
 
-
-class _AdvancingClock:
-    """A clock that ticks forward on every call (to order two observations in time)."""
-
-    def __init__(self) -> None:
-        self._now = _FROZEN_NOW
-
-    def __call__(self) -> datetime:
-        moment = self._now
-        self._now += timedelta(minutes=1)
+    def now(self) -> datetime:
+        moment = super().now()
+        self.advance(60)
         return moment
 
 
@@ -73,7 +67,7 @@ def connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 @pytest.fixture
 def repository(connection: sqlite3.Connection) -> SqliteCatalogRepository:
-    return SqliteCatalogRepository(connection, _NODE, clock=_frozen_clock)
+    return SqliteCatalogRepository(connection, _NODE, clock=FakeClock(_FROZEN_NOW))
 
 
 def test_record_observation_round_trip(
@@ -127,7 +121,7 @@ def test_record_observation_twice_first_seen_wins_in_files(
 def test_a_variant_seen_again_is_stored_once_with_both_timestamps(
     connection: sqlite3.Connection,
 ) -> None:
-    repository = SqliteCatalogRepository(connection, _NODE, clock=_AdvancingClock())
+    repository = SqliteCatalogRepository(connection, _NODE, clock=_AdvancingClock(_FROZEN_NOW))
     repository.record_observation(_observation())
     repository.record_observation(_observation())
     assert connection.execute("SELECT count(*) FROM observation_variants").fetchone()[0] == 1
@@ -142,21 +136,14 @@ def test_an_observation_equal_in_every_column_is_stored_once(
     assert count_observations(connection) == 1
 
 
-def test_record_observation_with_media_metadata_and_default_clock(tmp_path: Path) -> None:
-    connection = open_catalog(tmp_path / "catalog.db")
-    try:
-        repository = SqliteCatalogRepository(connection, _NODE)  # default clock (utc_now)
-        before = iso_to_micros(utc_iso(datetime.now(UTC)))
-        repository.record_observation(_observation(media_length_sec=1474, bitrate_kbps=1200))
-        after = iso_to_micros(utc_iso(datetime.now(UTC)))
-        row = connection.execute(
-            "SELECT media_length_sec, bitrate_kbps, observed_at"
-            " FROM observation_variants JOIN observations USING (variant_id)"
-        ).fetchone()
-        assert row[:2] == (1474, 1200)
-        assert before <= row[2] <= after  # the default clock stamps now
-    finally:
-        connection.close()
+def test_record_observation_with_media_metadata(
+    repository: SqliteCatalogRepository, connection: sqlite3.Connection
+) -> None:
+    repository.record_observation(_observation(media_length_sec=1474, bitrate_kbps=1200))
+    row = connection.execute(
+        "SELECT media_length_sec, bitrate_kbps FROM observation_variants"
+    ).fetchone()
+    assert row == (1474, 1200)
 
 
 def test_record_observation_is_one_transaction(
@@ -334,7 +321,7 @@ def test_iter_reevaluation_rows_returns_the_latest_observation_per_hash(
 ) -> None:
     # _HASH gets TWO observations (advancing clock): only the LATEST must come back.
     # _HASH_B gets a single observation with media metadata present.
-    repository = SqliteCatalogRepository(connection, _NODE, clock=_AdvancingClock())
+    repository = SqliteCatalogRepository(connection, _NODE, clock=_AdvancingClock(_FROZEN_NOW))
     repository.record_observation(_observation(filename="old.avi", size_bytes=100))
     repository.record_observation(_observation(filename="new.avi", size_bytes=200))
     repository.record_observation(
