@@ -11,9 +11,9 @@ from p2pwatch.domain.observability.policy import MetricInstruction, MetricName
 
 # (name, doc, labels) of the counters.
 _COUNTERS: tuple[tuple[MetricName, str, tuple[str, ...]], ...] = (
-    (MetricName.SEARCHES, "Searches performed", ("client", "network")),
-    (MetricName.OBSERVATIONS, "Observations recorded", ("client", "network")),
-    (MetricName.SEARCH_FAILURES, "Failed searches", ("client", "network")),
+    (MetricName.SEARCHES, "Searches performed", ("client", "channel")),
+    (MetricName.OBSERVATIONS, "Observations recorded", ("client", "channel")),
+    (MetricName.SEARCH_FAILURES, "Failed searches", ("client", "channel")),
     (MetricName.CLIENT_UNREACHABLE, "Client unreachable", ("client",)),
     (MetricName.DECISIONS, "Match decisions recorded", ("tier",)),
     (MetricName.DOWNLOADS_QUEUED, "Downloads queued", ()),
@@ -23,8 +23,8 @@ _COUNTERS: tuple[tuple[MetricName, str, tuple[str, ...]], ...] = (
 _GAUGES: tuple[tuple[MetricName, str, tuple[str, ...]], ...] = (
     (MetricName.CRAWLER_UP, "Crawler running (1)", ()),
     (MetricName.DISK_FREE_BYTES, "Free bytes on the download filesystem", ()),
-    (MetricName.CHANNEL_ON_NETWORK, "Channel joined its network (1)", ("client", "network")),
-    (MetricName.CHANNEL_CONNECTABLE, "Peers can connect to the channel (1)", ("client", "network")),
+    (MetricName.CHANNEL_CONNECTED, "Channel joined its network (1)", ("client", "channel")),
+    (MetricName.CHANNEL_CONNECTABLE, "Peers can connect to the channel (1)", ("client", "channel")),
 )
 
 

@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from catalog_matching.engine import MatchingEngine
 from p2pwatch.application.record_observations import record_observation
 from p2pwatch.domain.observability.events import (
-    InstanceUnreachable,
+    ClientUnreachable,
     SearchExecuted,
     SearchFailed,
 )
@@ -58,7 +58,7 @@ class WorkerPolicy:
 
 
 class BackoffRegistry:
-    """SHARED backoff registry keyed (by instance, or "instance:channel"), PERSISTABLE.
+    """SHARED backoff registry keyed (by client, or "client:channel"), PERSISTABLE.
 
     Holds a map ``key → ChannelBackoff(attempts, retry_after)`` (spec §3/§7). ``retry_after``
     is computed on failure: ``clock.now() + backoff_delay(attempts) + jitter`` (jitter drawn from
@@ -136,8 +136,8 @@ class WorkerDeps:
 class SearchWorker:
     """Runs one client's search tasks; never closes the client, which composition owns."""
 
-    def __init__(self, instance_name: str, client: SearchClient, deps: WorkerDeps) -> None:
-        self._instance = instance_name
+    def __init__(self, client_name: str, client: SearchClient, deps: WorkerDeps) -> None:
+        self._client_name = client_name
         self._client = client
         self._deps = deps
         self._connected = False
@@ -148,53 +148,58 @@ class SearchWorker:
         return self._client.channels
 
     def seconds_until_ready(self, channel: str) -> float:
-        """How long until neither the instance nor ``channel`` is backed off."""
+        """How long until neither the client nor ``channel`` is backed off."""
         backoff = self._deps.backoff
         return max(
-            backoff.remaining(self._instance), backoff.remaining(f"{self._instance}:{channel}")
+            backoff.remaining(self._client_name),
+            backoff.remaining(f"{self._client_name}:{channel}"),
         )
 
     async def _ensure_connected(self) -> bool:
-        """Connects the client if needed. Returns ``False`` if the instance stays down."""
+        """Connects the client if needed. Returns ``False`` if the client stays down."""
         if self._connected:
             return True
         try:
             await self._client.connect()
         except ClientUnreachableError as error:
-            delay = self._deps.backoff.record_failure(self._instance)
+            delay = self._deps.backoff.record_failure(self._client_name)
             _logger.warning(
-                "instance %s unreachable (%s): reconnect backoff %.1fs",
-                self._instance,
+                "client %s unreachable (%s): reconnect backoff %.1fs",
+                self._client_name,
                 error,
                 delay,
             )
-            await self._deps.telemetry.emit(InstanceUnreachable(self._instance))
+            await self._deps.telemetry.emit(ClientUnreachable(self._client_name))
             return False
         self._connected = True
-        _logger.info("instance %s connected", self._instance)
+        _logger.info("client %s connected", self._client_name)
         return True
 
-    async def _record(self, channel: str, results: tuple[FileObservation, ...]) -> int:
+    async def _record_observations(
+        self, channel: str, observations: tuple[FileObservation, ...]
+    ) -> int:
         """Per-obs pipeline; returns the number of CHANGED verdicts (logging). A
         ``RepositoryError`` per obs is ABSORBED inside ``record_observation`` (spec §7)."""
-        await self._deps.telemetry.emit(SearchExecuted(self._instance, channel, len(results)))
+        await self._deps.telemetry.emit(
+            SearchExecuted(self._client_name, channel, len(observations))
+        )
         changed = 0
-        for observation in results:
+        for observation in observations:
             if await record_observation(
                 observation,
                 catalog=self._deps.catalog,
                 engine=self._deps.engine,
                 signal=self._deps.signal,
                 telemetry=self._deps.telemetry,
-                client=self._instance,
-                network=channel,
+                client_name=self._client_name,
+                channel=channel,
             ):
                 changed += 1
         return changed
 
     async def run_task(self, task: SearchTask) -> None:
         """One search, run once ``seconds_until_ready`` is 0. Never raises: backs off and logs."""
-        channel_key = f"{self._instance}:{task.channel}"
+        channel_key = f"{self._client_name}:{task.channel}"
         if not await self._ensure_connected():
             return
         try:
@@ -202,31 +207,31 @@ class SearchWorker:
         except SearchFailedError as error:
             delay = self._deps.backoff.record_failure(channel_key)
             _logger.warning(
-                "instance %s channel %s failed (%s): backoff %.1fs",
-                self._instance,
+                "client %s channel %s failed (%s): backoff %.1fs",
+                self._client_name,
                 task.channel,
                 error,
                 delay,
             )
-            await self._deps.telemetry.emit(SearchFailed(self._instance, task.channel))
+            await self._deps.telemetry.emit(SearchFailed(self._client_name, task.channel))
             return
         except ClientUnreachableError as error:
             self._connected = False
-            delay = self._deps.backoff.record_failure(self._instance)
+            delay = self._deps.backoff.record_failure(self._client_name)
             _logger.warning(
-                "instance %s unreachable (%s), instance down, backoff %.1fs",
-                self._instance,
+                "client %s unreachable (%s), client down, backoff %.1fs",
+                self._client_name,
                 error,
                 delay,
             )
-            await self._deps.telemetry.emit(InstanceUnreachable(self._instance))
+            await self._deps.telemetry.emit(ClientUnreachable(self._client_name))
             return
-        changed = await self._record(task.channel, results)
+        changed = await self._record_observations(task.channel, results)
         self._deps.backoff.reset(channel_key)
-        self._deps.backoff.reset(self._instance)  # connect() proves nothing: it may not log in
+        self._deps.backoff.reset(self._client_name)  # connect() proves nothing: it may not log in
         _logger.info(
-            "instance %s: '%s'/%s → %d verdict(s) changed",
-            self._instance,
+            "client %s: '%s'/%s → %d verdict(s) changed",
+            self._client_name,
             task.keyword,
             task.channel,
             changed,

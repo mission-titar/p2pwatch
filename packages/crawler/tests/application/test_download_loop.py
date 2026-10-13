@@ -45,7 +45,7 @@ def _loop_deps(
 ) -> DownloadLoopDeps:
     client = FakeDownloadClient()
     return DownloadLoopDeps(
-        client=client,
+        download_client=client,
         source_client=client,
         downloads=FakeDownloadRepo(),
         sources=FakeSourceRepo(),

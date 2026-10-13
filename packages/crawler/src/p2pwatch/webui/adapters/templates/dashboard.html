@@ -18,13 +18,13 @@
     <thead>
       <tr>
         <th>Channel</th>
-        <th>On network</th>
+        <th>Connected</th>
         <th>Connectable</th>
       </tr>
     </thead>
     <tbody>
       {% for channel in client.channels %}
-      <tr><td>{{ channel.channel }}</td><td>{{ channel.on_network }}</td><td>{{ channel.connectable }}</td></tr>
+      <tr><td>{{ channel.channel }}</td><td>{{ channel.connected }}</td><td>{{ channel.connectable }}</td></tr>
       {% else %}
       <tr><td colspan="3">No current channel reading.</td></tr>
       {% endfor %}

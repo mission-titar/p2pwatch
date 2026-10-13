@@ -250,7 +250,7 @@ def test_node_id_override_is_kept() -> None:
 def test_endpoint_is_derived_from_code_constants_and_the_password() -> None:
     config = parse_crawler_config(_minimal_raw(), _env())
     assert config.amule_endpoint == AmuleEndpoint(
-        name="amuled", host="ed2k", port=4711, password="secret"
+        client_name="amuled", host="ed2k", port=4711, password="secret"
     )
 
 

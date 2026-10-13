@@ -12,7 +12,7 @@ class ChannelStatus:
     """``connectable``: peers can connect to us; ``None`` when the client cannot tell."""
 
     channel: str
-    on_network: bool
+    connected: bool
     connectable: bool | None
 
 
@@ -29,14 +29,14 @@ class StatusClient(Protocol):
 
 
 @dataclass(frozen=True)
-class ClientReading:
+class StatusReading:
     read_at: datetime
     status: ClientStatus | None  # None: the client's API did not answer
 
 
 class StatusReadings(Protocol):
-    """Each client's last status reading, as the webui reads it."""
+    """Each client's latest status reading, as the webui reads it."""
 
-    def readings(self) -> Mapping[str, ClientReading | None]: ...
+    def readings(self) -> Mapping[str, StatusReading | None]: ...
 
-    def is_current(self, reading: ClientReading) -> bool: ...
+    def is_current(self, reading: StatusReading) -> bool: ...

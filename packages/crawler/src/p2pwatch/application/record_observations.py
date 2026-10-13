@@ -38,8 +38,8 @@ async def record_observation(
     engine: MatchingEngine,
     signal: DecisionSignal,
     telemetry: Telemetry,
-    client: str,
-    network: str,
+    client_name: str,
+    channel: str,
 ) -> int:
     """Process ONE observation (spec §7). Returns the number of rows written (0..N).
 
@@ -47,7 +47,7 @@ async def record_observation(
     A ``RepositoryError`` is absorbed (log + ``0``), the cycle continues (spec §7)."""
     try:
         catalog.record_observation(observation)
-        await telemetry.emit(ObservationRecorded(client, network))
+        await telemetry.emit(ObservationRecorded(client_name, channel))
         return await record_decision_if_changed(
             observation.file,
             observation.to_candidate(),

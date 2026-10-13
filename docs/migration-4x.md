@@ -97,6 +97,11 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
   (`emule_port_sync_triggered`, `emule_port_mismatch`, `emule_high_id_recovered`) disparaissent
   avec leurs notifications : un Low-ID se lit sur `p2pwatch_channel_connectable`, et un canal non
   joignable depuis 5 minutes est notifié.
+- **Le label `network` devient `channel`** sur `p2pwatch_searches`, `p2pwatch_observations` et
+  `p2pwatch_search_failures`, qui gagnent aussi un label `client`. Adaptez les requêtes de vos
+  tableaux de bord et de vos règles d'alerte.
+- **La notification de démarrage devient** `🟢 node online (download on)`, ou `(download off)`, au
+  lieu de `🟢 instance online (mode full)` ou `(mode observer)`.
 - **La documentation** est désormais sur <https://mission-titar.github.io/p2pwatch/>.
 
 ## Retour arrière

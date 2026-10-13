@@ -452,8 +452,8 @@ async def test_status_reads_the_channels_and_the_daemon_version() -> None:
 
     assert status.version == "GIT rev. 3.0.1-773-g500293ba3"
     assert status.channels == (
-        ChannelStatus(channel="ed2k", on_network=True, connectable=False),
-        ChannelStatus(channel="kad", on_network=False, connectable=None),
+        ChannelStatus(channel="ed2k", connected=True, connectable=False),
+        ChannelStatus(channel="kad", connected=False, connectable=None),
     )
 
 

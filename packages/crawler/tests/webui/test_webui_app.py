@@ -18,7 +18,7 @@ from catalog_matching.models import TargetSegment
 from catalog_matching.validation import parse_matcher_config, parse_targets
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceKey
-from p2pwatch.ports.client_status import ChannelStatus, ClientReading, ClientStatus
+from p2pwatch.ports.client_status import ChannelStatus, ClientStatus, StatusReading
 from p2pwatch.webui.adapters.catalog_read import PAGE_SIZE
 from p2pwatch.webui.composition.app import (
     _normalize_dir,
@@ -63,14 +63,14 @@ _GAP = timedelta(seconds=90)
 class _Readings:
     """The status board as the webui reads it: fixed readings, all current or all out of date."""
 
-    def __init__(self, readings: dict[str, ClientReading | None], *, current: bool = True) -> None:
+    def __init__(self, readings: dict[str, StatusReading | None], *, current: bool = True) -> None:
         self._readings = readings
         self._current = current
 
-    def readings(self) -> Mapping[str, ClientReading | None]:
+    def readings(self) -> Mapping[str, StatusReading | None]:
         return self._readings
 
-    def is_current(self, reading: ClientReading) -> bool:
+    def is_current(self, reading: StatusReading) -> bool:
         return self._current
 
 
@@ -1939,15 +1939,15 @@ _CHANNELS = (ChannelStatus("ed2k", True, False), ChannelStatus("x", False, None)
 
 
 async def _clients_section(
-    catalog_db: Path, local_db: Path, reading: ClientReading | None, *, current: bool = True
+    catalog_db: Path, local_db: Path, reading: StatusReading | None, *, current: bool = True
 ) -> str:
     status = _Readings({"amuled": reading}, current=current)
     text = await _dashboard(_dashboard_app(catalog_db, local_db, _RecordingControl(), status))
     return text[text.index("<h2>Clients</h2>") : text.index("<h2>Crawl</h2>")]
 
 
-def _read_now(status: ClientStatus | None) -> ClientReading:
-    return ClientReading(FakeClock().now(), status)
+def _read_now(status: ClientStatus | None) -> StatusReading:
+    return StatusReading(FakeClock().now(), status)
 
 
 @pytest.mark.asyncio
@@ -1958,6 +1958,7 @@ async def test_dashboard_shows_each_client_and_channel_of_a_current_reading(
         catalog_db, local_db, _read_now(ClientStatus("2.3.3", _CHANNELS))
     )
     assert "<h3>amuled</h3>" in section
+    assert "<th>Connected</th>" in section
     assert "<dd>2.3.3</dd>" in section
     assert "<dt>API reachable</dt><dd>yes</dd>" in section
     assert "<dd>Read at 2026-06-12 00:00Z.</dd>" in section

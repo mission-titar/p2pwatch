@@ -121,7 +121,7 @@ class DownloadDeps:
     accepted.
     """
 
-    client: DownloadClient
+    download_client: DownloadClient
     source_client: SourceClient
     downloads: DownloadRepository
     sources: SourceRepository
@@ -315,7 +315,7 @@ async def _start_unlisted(deps: DownloadDeps, listed: frozenset[FileKey]) -> Non
         if observation is None:
             continue
         try:
-            await deps.client.start(
+            await deps.download_client.start(
                 DownloadRequest(file, observation.filename, observation.size_bytes)
             )
         except DownloadRejectedError as error:
@@ -417,9 +417,9 @@ async def run_download_cycle(deps: DownloadDeps) -> None:
     The repos are sync → cancellation (shutdown) lands at the network ``await``, never mid-write.
 
     DECISION (audit 2026-06-23 / observability#5): a ``ClientUnreachableError`` here does NOT
-    emit ``InstanceUnreachable`` (unlike the search tasks). The E-D5 taxonomy files this
-    event under SEARCH only; the download loop is single-instance and the label
-    ``instance=...`` would be meaningless (counter shared with the search workers). The
+    emit ``ClientUnreachable`` (unlike the search tasks). The E-D5 taxonomy files this
+    event under SEARCH only; the download loop is single-client and the label
+    ``client=...`` would be meaningless (counter shared with the search workers). The
     unavailability is handled by the next cycle's retry + the warning log. Intentional
     asymmetry.
     """
@@ -430,8 +430,8 @@ async def run_download_cycle(deps: DownloadDeps) -> None:
     # in this loop ever reconnects (field, 2026-09-04: 7 days of "client not connected").
     # Same guard as ``SearchWorker._ensure_connected``.
     try:
-        await deps.client.connect()
-        listed = await deps.client.downloads()
+        await deps.download_client.connect()
+        listed = await deps.download_client.downloads()
     except _UNAVAILABLE as error:
         _logger.warning("download daemon unreachable (%s): iteration skipped, retry", error)
         return

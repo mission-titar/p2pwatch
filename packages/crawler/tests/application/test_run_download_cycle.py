@@ -337,7 +337,7 @@ def _deps(
     sources_interval: timedelta = timedelta(seconds=30),
 ) -> DownloadDeps:
     return DownloadDeps(
-        client=client,
+        download_client=client,
         source_client=client,
         downloads=downloads,
         sources=sources or FakeSourceRepo(),

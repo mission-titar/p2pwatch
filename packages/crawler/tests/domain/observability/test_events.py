@@ -9,8 +9,8 @@ from p2pwatch.domain.observability.events import DownloadCompleted, ObservationR
 
 
 def test_observation_recorded_carries_client_and_network() -> None:
-    event = ObservationRecorded(client="amuled", network="ed2k")
-    assert (event.client, event.network) == ("amuled", "ed2k")
+    event = ObservationRecorded(client_name="amuled", channel="ed2k")
+    assert (event.client_name, event.channel) == ("amuled", "ed2k")
 
 
 def test_event_is_frozen() -> None:

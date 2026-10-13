@@ -19,8 +19,8 @@ from p2pwatch.domain.source import SourceKey
 
 _COMMUNITY = frozenset({Audience.COMMUNITY})
 _OPERATIONS = frozenset({Audience.OPERATIONS})
-_AMULED_KAD = (("client", "amuled"), ("network", "kad"))
-_AMULED_ED2K = (("client", "amuled"), ("network", "ed2k"))
+_AMULED_KAD = (("client", "amuled"), ("channel", "kad"))
+_AMULED_ED2K = (("client", "amuled"), ("channel", "ed2k"))
 _ED2K_NEW = (("network", "ed2k"), ("kind", "new"))
 _ED2K_REAPPEARED = (("network", "ed2k"), ("kind", "reappeared"))
 _SOURCE = SourceKey(Network.ED2K, "1f2e3d4c" * 4)
@@ -30,7 +30,7 @@ _062A = (("062A", "Les demoiselles cambrioleuses"),)
 
 CASES: list[tuple[ev.Event, Report]] = [
     (
-        ev.SearchExecuted(client="amuled", network="ed2k", n_results=7),
+        ev.SearchExecuted(client_name="amuled", channel="ed2k", result_count=7),
         Report(
             Severity.DEBUG,
             "search ed2k: 7 result(s)",
@@ -38,7 +38,7 @@ CASES: list[tuple[ev.Event, Report]] = [
         ),
     ),
     (
-        ev.InstanceUnreachable(client="slskd"),
+        ev.ClientUnreachable(client_name="slskd"),
         Report(
             Severity.WARNING,
             "slskd unreachable",
@@ -46,7 +46,7 @@ CASES: list[tuple[ev.Event, Report]] = [
         ),
     ),
     (
-        ev.SearchFailed(client="amuled", network="kad"),
+        ev.SearchFailed(client_name="amuled", channel="kad"),
         Report(
             Severity.WARNING,
             "search failed on kad",
@@ -54,7 +54,7 @@ CASES: list[tuple[ev.Event, Report]] = [
         ),
     ),
     (
-        ev.ObservationRecorded(client="amuled", network="kad"),
+        ev.ObservationRecorded(client_name="amuled", channel="kad"),
         Report(
             Severity.DEBUG,
             "observation recorded (kad)",
@@ -70,49 +70,53 @@ CASES: list[tuple[ev.Event, Report]] = [
         ),
     ),
     (
-        ev.ChannelStatusSampled(client="amuled", channel="kad", on_network=True, connectable=False),
+        ev.ChannelStatusSampled(
+            client_name="amuled", channel="kad", connected=True, connectable=False
+        ),
         Report(
             Severity.DEBUG,
-            "status amuled kad: on network yes, connectable no",
+            "status amuled kad: connected yes, connectable no",
             (
-                MetricInstruction(MetricName.CHANNEL_ON_NETWORK, "set", _AMULED_KAD, 1.0),
+                MetricInstruction(MetricName.CHANNEL_CONNECTED, "set", _AMULED_KAD, 1.0),
                 MetricInstruction(MetricName.CHANNEL_CONNECTABLE, "set", _AMULED_KAD, 0.0),
             ),
         ),
     ),
     (
-        ev.ChannelStatusSampled(client="amuled", channel="kad", on_network=None, connectable=None),
+        ev.ChannelStatusSampled(
+            client_name="amuled", channel="kad", connected=None, connectable=None
+        ),
         Report(
             Severity.DEBUG,
-            "status amuled kad: on network unknown, connectable unknown",
+            "status amuled kad: connected unknown, connectable unknown",
             (
-                MetricInstruction(MetricName.CHANNEL_ON_NETWORK, "remove", _AMULED_KAD),
+                MetricInstruction(MetricName.CHANNEL_CONNECTED, "remove", _AMULED_KAD),
                 MetricInstruction(MetricName.CHANNEL_CONNECTABLE, "remove", _AMULED_KAD),
             ),
         ),
     ),
     (
-        ev.ChannelDegraded(client="amuled", channel="ed2k", field="on_network", seconds=300.0),
+        ev.ChannelDegraded(client_name="amuled", channel="ed2k", field="connected", seconds=300.0),
         Report(Severity.WARNING, "amuled ed2k: off its network for 5 min", (), _OPERATIONS),
     ),
     (
-        ev.ChannelDegraded(client="amuled", channel="kad", field="connectable", seconds=300.0),
+        ev.ChannelDegraded(client_name="amuled", channel="kad", field="connectable", seconds=300.0),
         Report(Severity.WARNING, "amuled kad: not connectable for 5 min", (), _OPERATIONS),
     ),
     (
-        ev.ChannelRecovered(client="amuled", channel="ed2k", field="on_network"),
+        ev.ChannelRecovered(client_name="amuled", channel="ed2k", field="connected"),
         Report(Severity.INFO, "amuled ed2k: back on its network", (), _OPERATIONS),
     ),
     (
-        ev.ChannelRecovered(client="amuled", channel="kad", field="connectable"),
+        ev.ChannelRecovered(client_name="amuled", channel="kad", field="connectable"),
         Report(Severity.INFO, "amuled kad: connectable again", (), _OPERATIONS),
     ),
     (
-        ev.ClientUnreachableLasting(client="amuled", seconds=120.0),
+        ev.ClientUnreachableLasting(client_name="amuled", seconds=120.0),
         Report(Severity.WARNING, "amuled unreachable for 2 min", (), _OPERATIONS),
     ),
     (
-        ev.ClientReachableAgain(client="amuled"),
+        ev.ClientReachableAgain(client_name="amuled"),
         Report(Severity.INFO, "amuled reachable again", (), _OPERATIONS),
     ),
     (
@@ -133,10 +137,19 @@ CASES: list[tuple[ev.Event, Report]] = [
         ),
     ),
     (
-        ev.CrawlerStarted(mode="full"),
+        ev.CrawlerStarted(download_enabled=True),
         Report(
             Severity.INFO,
-            "🟢 instance online (mode full)",
+            "🟢 node online (download on)",
+            (MetricInstruction(MetricName.CRAWLER_UP, "set", (), 1.0),),
+            _OPERATIONS,
+        ),
+    ),
+    (
+        ev.CrawlerStarted(download_enabled=False),
+        Report(
+            Severity.INFO,
+            "🟢 node online (download off)",
             (MetricInstruction(MetricName.CRAWLER_UP, "set", (), 1.0),),
             _OPERATIONS,
         ),

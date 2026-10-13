@@ -15,7 +15,7 @@ from p2pwatch.application.search_worker import (
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability.events import (
-    InstanceUnreachable,
+    ClientUnreachable,
     ObservationRecorded,
     SearchExecuted,
     SearchFailed,
@@ -233,7 +233,7 @@ async def test_connect_failure_arms_instance_backoff_and_skips_the_item(
     worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry))
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
     assert client.searches == []  # item dropped, never searched
-    assert registry.is_in_backoff("amule-1") is True  # instance in backoff (skip until retry)
+    assert registry.is_in_backoff("amule-1") is True  # client in backoff (skip until retry)
     assert clock.sleeps == []  # no more backoff sleep: we SKIP, we don't wait
 
 
@@ -273,7 +273,7 @@ async def test_search_failure_arms_channel_backoff(
     worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry))
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
     assert registry.is_in_backoff("amule-1:ed2k") is True  # channel in backoff
-    assert registry.is_in_backoff("amule-1") is False  # but not the whole instance
+    assert registry.is_in_backoff("amule-1") is False  # but not the whole client
 
 
 @pytest.mark.asyncio
@@ -282,7 +282,7 @@ async def test_transport_failure_marks_instance_down(
 ) -> None:
     clock = FakeClock()
     registry = _registry(clock)
-    # search raises a transport failure (dead stream) → instance down + instance backoff.
+    # search raises a transport failure (dead stream) → client down + client backoff.
     client = FakeMuleClient(search_failures=[make_unreachable()], results=[(_obs(),)])
     worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry))
     await worker.run_task(SearchTask(keyword="k1", channel="ed2k"))
@@ -340,10 +340,12 @@ async def test_successful_search_emits_search_executed_with_network_and_count(
     deps = _deps(catalog, engine, _registry(clock), telemetry=telemetry)
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
-    assert telemetry.events[0] == SearchExecuted(client="amule-1", network="ed2k", n_results=1)
+    assert telemetry.events[0] == SearchExecuted(
+        client_name="amule-1", channel="ed2k", result_count=1
+    )
     kinds = [type(e).__name__ for e in telemetry.events]
     assert kinds == ["SearchExecuted", "ObservationRecorded", "DecisionsRecorded"]
-    assert telemetry.events[1] == ObservationRecorded(client="amule-1", network="ed2k")
+    assert telemetry.events[1] == ObservationRecorded(client_name="amule-1", channel="ed2k")
 
 
 @pytest.mark.asyncio
@@ -358,32 +360,32 @@ async def test_search_failure_emits_search_failed(
     deps = _deps(catalog, engine, _registry(clock), telemetry=telemetry)
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
-    assert telemetry.events == [SearchFailed(client="amule-1", network="ed2k")]
+    assert telemetry.events == [SearchFailed(client_name="amule-1", channel="ed2k")]
 
 
 @pytest.mark.asyncio
 async def test_connect_failure_emits_instance_unreachable(
     catalog: SqliteCatalogRepository, engine: MatchingEngine
 ) -> None:
-    # A connection failure (unreachable daemon) emits InstanceUnreachable.
+    # A connection failure (unreachable daemon) emits ClientUnreachable.
     clock = FakeClock()
     telemetry = RecordingTelemetry()
     client = FakeMuleClient(connect_failures=[make_unreachable()])
     deps = _deps(catalog, engine, _registry(clock), telemetry=telemetry)
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
-    assert telemetry.events == [InstanceUnreachable("amule-1")]
+    assert telemetry.events == [ClientUnreachable("amule-1")]
 
 
 @pytest.mark.asyncio
 async def test_transport_failure_during_search_emits_instance_unreachable(
     catalog: SqliteCatalogRepository, engine: MatchingEngine
 ) -> None:
-    # A transport failure during search (dead stream) emits InstanceUnreachable.
+    # A transport failure during search (dead stream) emits ClientUnreachable.
     clock = FakeClock()
     telemetry = RecordingTelemetry()
     client = FakeMuleClient(search_failures=[make_unreachable()], results=[(_obs(),)])
     deps = _deps(catalog, engine, _registry(clock), telemetry=telemetry)
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
-    assert telemetry.events == [InstanceUnreachable("amule-1")]
+    assert telemetry.events == [ClientUnreachable("amule-1")]

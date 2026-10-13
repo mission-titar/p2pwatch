@@ -524,7 +524,7 @@ def _client_lines(status: StatusReadings) -> tuple[ClientLine, ...]:
             lines.append(ClientLine(name, f"Read at {read_at}.", "unknown", "no", ()))
         else:
             channels = tuple(
-                ChannelLine(c.channel, _YES_NO[c.on_network], _YES_NO[c.connectable])
+                ChannelLine(c.channel, _YES_NO[c.connected], _YES_NO[c.connectable])
                 for c in client.channels
             )
             version = client.version or "unknown"
