@@ -58,7 +58,8 @@ WHERE file_id = :file_id
 
 # The non-terminal states listed here MUST stay synchronized with _TERMINAL_STATES (states.py).
 _LAST_SEEN_AT_BY_FILE = """
-SELECT network, native_id, last_seen_at FROM downloads WHERE state IN ('queued', 'downloading')
+SELECT network, native_id, COALESCE(last_seen_at, queued_at) FROM downloads
+WHERE state IN ('queued', 'downloading')
 """
 
 

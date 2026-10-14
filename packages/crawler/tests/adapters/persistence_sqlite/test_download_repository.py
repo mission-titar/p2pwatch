@@ -192,6 +192,15 @@ def test_last_seen_at_by_file_leaves_the_terminal_downloads_out(
     assert repository.last_seen_at_by_file() == {_A: _T0}
 
 
+def test_last_seen_at_by_file_reads_a_row_never_stamped_at_its_queuing(
+    repository: SqliteDownloadRepository, connection: sqlite3.Connection
+) -> None:
+    # Only a row written by hand can hold a NULL: it ages from its queuing, as local 0005 did.
+    repository.record_queued(_A, "062A", 100, _T0)
+    connection.execute("UPDATE downloads SET last_seen_at = NULL")
+    assert repository.last_seen_at_by_file() == {_A: _T0}
+
+
 def test_a_queued_download_starts_at_zero_bytes_with_no_progress(
     repository: SqliteDownloadRepository, connection: sqlite3.Connection
 ) -> None:
