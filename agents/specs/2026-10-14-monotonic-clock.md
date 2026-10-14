@@ -61,7 +61,10 @@
   - asyncio's own timeouts, which run on the event loop's monotonic time already and which `TID251` cannot see
     (D10): `asyncio.wait_for` in `adapters/observability/dispatcher.py:45`, `asyncio.timeout` and `loop.time()`
     in `composition/app.py:325-326,535`, `asyncio.to_thread(thread.join, timeout)` in `composition/app.py:386`,
-    and `httpx.Timeout` in the amuleapi client;
+    and `httpx.Timeout` in the amuleapi client (Corrected: `TID251` can see `asyncio.wait_for` and
+    `asyncio.timeout`, module attributes a `banned-api` entry flags, and the lot leaves them allowed by choice;
+    only `loop.time()`, a method of an object, is out of its reach, as the holistic review probed on ruff
+    0.16.9);
   - the webui's read side (`BACKLOG.md`), apart from what a port change forces: `build_app`'s clock parameters
     (D2), `_client_lines` following `StatusBoard` (D5), the SQL console's clock (D10) and `/node`'s backoff
     section (D8).
@@ -96,7 +99,9 @@ class MonotonicClock(Protocol):
   monotonic clock" (Python's asyncio event loop documentation).
 - `sleep` takes a `timedelta`. Of its six call sites, four compute a difference of instants (`client.py:173,178,191`,
   `search_tasks.py:55`), which D3 makes a `timedelta`; the two periods (`status_loop.py:139`'s constant,
-  `run_download_cycle.py:509`'s `poll_interval_seconds`) convert once.
+  `run_download_cycle.py:509`'s `poll_interval_seconds`) convert once. (Corrected: block 40 made the constant,
+  `STATUS_PERIOD`, a `timedelta` passed to `sleep` as is, and the closing block the module's three other
+  durations; only `poll_interval_seconds` converts.)
 - `Rng` leaves `ports/clock.py` for `ports/rng.py`.
 
 *Reasons: the two clocks serve different uses, so the type injected says which time a consumer may read; the
@@ -143,7 +148,10 @@ package drops its monotonic reading from every serialized form for the same reas
   receives its two views, `fake_time.wall` (`FakeWallClock`) and `fake_time.monotonic` (`FakeMonotonicClock`,
   whose `sleep()` advances the timeline), each built by `FakeTime` with a reference to it.
   `tests/virtual_time.py`'s `LoopClock`, which runs on the event loop's virtual time, gets the same two views.
-  The other stubs (`_AdvancingClock`, `_BlockingClock`, `_StubClock`) follow the port they stand for.
+  (Corrected: block 50 deleted it for two clocks, `LoopWallClock` and `LoopMonotonicClock`, both reading the
+  loop's time.) The other stubs (`_AdvancingClock`, `_BlockingClock`, `_StubClock`) follow the port they stand
+  for. (Corrected: `_BlockingClock` and `_StubClock` did, as `_BlockingMonotonicClock` and `_StubWallClock`;
+  blocks 10 and 20 deleted `_AdvancingClock`'s four copies, their tests passing explicit instants.)
 
 *Reasons: the repository's convention is `<port>_<technology>.py` and `<Technology><Port>`
 (`wake_hub_asyncio.py`'s `AsyncioWakeHub`, `disk_space_shutil.py`'s `ShutilDiskSpace`); `SeededRng` keeps the name
@@ -315,7 +323,7 @@ ids to older decisions from other nodes.*
   `time.clock_gettime_ns` and `asyncio.sleep`, each message naming the port to inject. Exempted by
   `per-file-ignores`: the two clock adapters, every `tests/` tree, and `packages/amule/`.
 - `application/search_tasks.py:59`'s `asyncio.sleep(0)` yields to the loop and reads no clock: it keeps a
-  `# noqa: TID251` with that reason.
+  `# noqa: TID251` with that reason. (Corrected: the call is now line 61, its reason on the line above.)
 - `AGENTS.md` gains the design invariant "persistence has no clock" (D1), the hard rule "only the clock adapters
   read the system clock, asyncio's own timeouts aside", and `TID251` in its ruff line.
 
@@ -325,6 +333,8 @@ reviewer (the operator, 2026-10-14). `TID251` flags a call, `datetime.now(UTC)` 
 datetime` included, a bare reference such as `default_factory=datetime.now`, and a `from time import monotonic_ns`;
 it honours `# noqa: TID251` and cannot see `loop.time()`, a method of an object (ruff 0.16.9, probed on scratch
 files). `composition/app.py:326`'s `loop.time()` arms asyncio's shutdown timeout, hence the rule's carve-out.*
+*(Corrected: the carve-out also leaves `asyncio.wait_for` and `asyncio.timeout` allowed, by choice: `TID251`
+could ban them, as module attributes.)*
 
 ### D11. Adjacent defects fixed on the way
 
@@ -369,7 +379,8 @@ as plus or minus 20 %).
 - **Block 10 passes 20 files**: the operator chose one block over a catalog repository left half on its clock
   (2026-10-14); most of its files are tests changed by one argument.
 - **Block 50 passes 20 files** under the one-line exemption: a mechanical rename past the bounds takes the
-  exemption rather than a split (the operator, 2026-10-13).
+  exemption rather than a split (the operator, 2026-10-13). (Corrected: it passed 500 lines too, 547, under
+  the same exemption, as its brief stated.)
 - **Block 80 passes both bounds**: the operator chose one migration and a `/node` never left empty over two blocks
   (2026-10-14).
 
@@ -404,7 +415,9 @@ Each criterion names what would prove it wrong.
 1. **No repository holds a clock**: `git grep -n -i clock -- packages/crawler/src/p2pwatch/adapters/persistence_sqlite`
    prints nothing (on `main` it prints the three repositories and `connection.py`), and every repository under
    `adapters/persistence_sqlite/` takes nothing in its constructor but its connection, plus `node_id` for the
-   catalog (read with Serena's `find_symbol` on each `__init__`).
+   catalog (read with Serena's `find_symbol` on each `__init__`). (Corrected: the grep printed migration
+   0011's header, which named this spec, until the closing block reworded it; and `SqliteSourceRepository`
+   also takes `node_id` and `time_between_reads`, a duration from the 2026-10-13 spec and not a clock.)
 2. **The lint refuses a clock read**: a file under `packages/crawler/src/p2pwatch/` holding `datetime.now(UTC)` makes
    `uv run poe lint` exit non-zero with `TID251`; the same file under `packages/crawler/tests/` passes. On `main`
    the first passes. The block report quotes both runs.

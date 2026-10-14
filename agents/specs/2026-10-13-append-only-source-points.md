@@ -529,7 +529,9 @@ on 2026-10-13 for one change over every case, a `BACKLOG.md` item.)
   stamp the catalog or the events carry, and a wait derived from a persisted time capped by its policy's
   maximum.
 - *Accepted for this lot (operator, 2026-10-13): the cost is a wait too long or too short, never a wrong
-  row.*
+  row.* (Corrected: this section missed the lost-download detection, `last_seen_at < now - lost_after`: a
+  clock stepped forward past `lost_after` failed as `lost` a download absent from a single poll, a wrong
+  row. `agents/specs/2026-10-14-monotonic-clock.md` fixes it, section 1 and D7.)
 
 ### Not measured before Act
 
