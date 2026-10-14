@@ -17,6 +17,7 @@ from catalog_matching.config import MatcherConfig
 from catalog_matching.models import TargetSegment
 from catalog_matching.validation import parse_matcher_config
 from p2pwatch.adapters.config.crawler_config import (
+    AMULE_CLIENT_NAME,
     AmuleEndpoint,
     BackoffConfig,
     CrawlerConfig,
@@ -29,6 +30,9 @@ from p2pwatch.adapters.config.crawler_config import (
 from p2pwatch.adapters.config.yaml_loader import load_yaml
 from p2pwatch.adapters.crawler_control_loop import LoopCrawlerControl
 from p2pwatch.adapters.mule_api.client import AmuleApiClient
+from p2pwatch.adapters.persistence_sqlite.backoff_state_repository import (
+    SqliteBackoffStateRepository,
+)
 from p2pwatch.adapters.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.persistence_sqlite.connection import open_catalog, open_local, utc_iso
 from p2pwatch.adapters.persistence_sqlite.download_repository import SqliteDownloadRepository
@@ -47,9 +51,10 @@ from p2pwatch.composition.app import (
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.source import SourceKey, SourceReading, SourceRole
+from p2pwatch.ports.backoff_state_repository import BackoffKey, BackoffState
 from p2pwatch.ports.client_errors import ClientUnreachableError
 from p2pwatch.ports.client_status import ClientStatus
-from p2pwatch.ports.clock import MonotonicClock
+from p2pwatch.ports.clock import MonotonicClock, MonotonicInstant
 from p2pwatch.ports.download_client import DownloadRequest, DownloadStatus
 from tests.adapters.mule_api.api_fakes import PASSWORD, FakeAmuleApi
 from tests.application.fakes import (
@@ -584,6 +589,54 @@ def test_an_hour_of_the_running_app_keeps_to_the_networks_rules(
         assert len(times) > 30
         gaps = [later - earlier for earlier, later in zip(times, times[1:], strict=False)]
         assert min(gaps) >= 60, target
+
+
+class _StampedSearchClient(FakeMuleClient):
+    """Stamps each search on the monotonic clock; the first one fires the shutdown."""
+
+    def __init__(self, app_holder: dict[str, CrawlerApp], monotonic_clock: MonotonicClock) -> None:
+        super().__init__()
+        self._app_holder = app_holder
+        self._monotonic_clock = monotonic_clock
+        self.searched_at: list[MonotonicInstant] = []
+
+    async def search(
+        self, keyword: str, channel: str, budget_seconds: float
+    ) -> tuple[FileObservation, ...]:
+        if not self.searched_at:
+            self._app_holder["app"]._on_signal()
+        self.searched_at.append(self._monotonic_clock.now())
+        return await super().search(keyword, channel, budget_seconds)
+
+
+@pytest.mark.asyncio
+async def test_a_backoff_the_previous_run_saved_holds_the_first_search(
+    tmp_path: Path, matcher_config: MatcherConfig
+) -> None:
+    fake_time = FakeTime()
+    delay = timedelta(hours=1)
+    local = open_local(tmp_path / "local.db")
+    SqliteBackoffStateRepository(local).save_backoff_states(
+        {BackoffKey(AMULE_CLIENT_NAME, None): BackoffState(1, fake_time.wall.now(), delay)}
+    )
+    local.close()
+    holder: dict[str, CrawlerApp] = {}
+    client = _StampedSearchClient(holder, fake_time.monotonic)
+    app = CrawlerApp(
+        crawler_config=_crawler_config(tmp_path),
+        targets=_TARGETS,
+        matcher_config=matcher_config,
+        wall_clock=fake_time.wall,
+        monotonic_clock=fake_time.monotonic,
+        rng=_NoopRng(),
+        wake_hub=RecordingWakeHub(),
+        policy_fingerprint=_FP,
+        client_factory=lambda endpoint, monotonic_clock: client,
+    )
+    holder["app"] = app
+    started_at = fake_time.monotonic.now()
+    await asyncio.wait_for(app.run(), timeout=5.0)
+    assert client.searched_at[0] - started_at >= delay
 
 
 # ---------------------------------------------------------------------------
