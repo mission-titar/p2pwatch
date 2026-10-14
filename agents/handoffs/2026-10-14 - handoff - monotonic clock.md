@@ -1,7 +1,6 @@
 # Handoff: monotonic clock, and persistence without a clock
 
-Drafted by block 90 from the lot's block reports (#217 to #225) and its own, for the closing block 100 to
-correct.
+Drafted by block 90 from the lot's block reports (#217 to #226), corrected by the closing block 100.
 
 ## State
 
@@ -11,10 +10,10 @@ Tier Spec lot, operator surfaces included (`local.db`'s schema, the webui's `/no
 from `main` at `10b45f0`: #217 (10, `refactor/catalog-without-clock`), #218 (20,
 `refactor/downloads-without-clock`), #220 (30, `refactor/monotonic-clock-client`), #221 (40,
 `refactor/monotonic-intervals`), #222 (50, `refactor/wall-clock-port`), #223 (60, `refactor/loss-detection`),
-#224 (70, `refactor/backoff-key`), #225 (80, `refactor/backoff-states-table`), block 90
-(`refactor/console-clock-lint`, its pull request number for the closing block to fill), then the closing
-block 100 (`docs/monotonic-clock-wrap`), which holds the holistic review's fixes, `BACKLOG.md` (D12), D11's
-correction of the 2026-10-13 spec and this handoff.
+#224 (70, `refactor/backoff-key`), #225 (80, `refactor/backoff-states-table`), #226 (90,
+`refactor/console-clock-lint`), then the closing block 100 (`docs/monotonic-clock-wrap`), which holds the
+holistic review's fixes, `BACKLOG.md` (D12), the spec's corrections, D11's correction of the 2026-10-13 spec
+and this handoff.
 
 Nothing of the stack is merged. `git tag -l 'v*'` still ends at `v4.1.0`. `local.db` goes to schema
 version 11 (`local/0011_backoff_states_table.sql`); the catalog stays at 12, no catalog migration in the lot
@@ -57,10 +56,15 @@ clock read outside the two clock adapters.
   the `MonotonicClock` `build_app` passes it; `TID251` bans the 13 calls of D10, each message naming the
   port; `search_tasks.py`'s yield keeps a `# noqa: TID251`; `AGENTS.md` gains the invariant "persistence has
   no clock" and the hard rule "only the clock adapters read the system clock".
+- **Wrap** (block 100): a composition test pins the backoff's reload at boot; the status loop's four
+  durations are `timedelta`s; `BackoffRegistry.time_until_retry`, `save_backoff_states(backoff_state_by_key)`
+  and `BackoffEntry.retry_at_display`; the spec's corrections, section 8 of the 2026-10-13 spec,
+  `AGENTS.md`'s `TID251` rule, `local.db`'s tables in `docs/contributing/architecture.md`, `BACKLOG.md`.
 
 ## Decisions taken during Act
 
-No block report records a class 2 question. The operator answered two points mid-lot, both "A":
+No block report records a class 2 question. The operator answered two points mid-lot, both "A", and the
+lead chose two of the holistic review's fixes for block 100 (Holistic review below):
 
 - Block 20's `expire_lost(unseen_since)`, the loop computing the cut-off on the wall clock until block 60
   deleted it, so that the repository lost its clock in block 20; block 60 adds the transient state to the
@@ -68,6 +72,9 @@ No block report records a class 2 question. The operator answered two points mid
 - Block 60's `NULL` `last_seen_at`: `last_seen_at_by_file()` reads `COALESCE(last_seen_at, queued_at)`, as
   local 0005's backfill does, so such a row waits from its queuing instead of stopping the download loop
   (the lot's one fix-back, `0011b1c`).
+- Block 100, the lead: the status loop's four durations as `timedelta`s, one convention per module, rather
+  than `STATUS_PERIOD` back to float seconds; and `StatusBoard.is_current`'s `False` for a client not read
+  yet kept as the board's contract for an unknown client, its red quoted below.
 
 Each block's other departures, the ones a reviewer may weigh:
 
@@ -77,8 +84,9 @@ Each block's other departures, the ones a reviewer may weigh:
   `FakeAmuleApi` lives on the monotonic view; the step test covers Kad too.
 - Block 40: `Clock.sleep` leaves the port, `AsyncioClock` and `LoopClock` (its last caller moved);
   `test_run_download_cycle.py`'s `FakeClock` goes here; `STATUS_PERIOD` and `READING_FRESH_FOR` are
-  `timedelta`s, `poll_interval_seconds` stays a float converted at its sleep; the board writes the instant
-  before the reading, and a client not read yet is not current.
+  `timedelta`s (block 100 made the two alert delays follow), `poll_interval_seconds` stays a float
+  converted at its sleep; the board writes the instant before the reading, and a client not read yet is not
+  current.
 - Block 50: `LoopClock` deleted rather than given two views (D4): `LoopWallClock` and `LoopMonotonicClock`
   both read the loop's time; one `TickingWallClock` in `fakes.py`; two `clock.sleeps == []` assertions
   deleted, the type guaranteeing them.
@@ -88,10 +96,10 @@ Each block's other departures, the ones a reviewer may weigh:
 - Block 70: `BackoffKey` lives in the repository port; `channel` has no default; the JSON row keeps its
   `client` or `client:channel` format.
 - Block 80: `/node` prints the planned retry as the stored ISO-8601 UTC with microseconds, not the other
-  pages' `YYYY-MM-DD HH:MM:SSZ`; `time_until_ready` and `BackoffRegistry.remaining_wait` return a
-  `timedelta`; the repository parameter is `backoff_states`; the migration file is
-  `0011_backoff_states_table.sql`; `started_at` is written through `iso_to_micros(utc_iso(...))`; the
-  webui reads `BackoffRow` and formats `BackoffEntry`.
+  pages' `YYYY-MM-DD HH:MM:SSZ`; `time_until_ready` and `BackoffRegistry.remaining_wait` (block 100 renamed
+  it `time_until_retry`) return a `timedelta`; the runner's repository parameter is `backoff_states`; the
+  migration file is `0011_backoff_states_table.sql`; `started_at` is written through
+  `iso_to_micros(utc_iso(...))`; the webui reads `BackoffRow` and formats `BackoffEntry`.
 - Block 90: `run_query` keeps `timeout_seconds: float` and converts it once into a `timedelta` budget, since
   `TIMEOUT_SECONDS` is public and its error message counts seconds; `build_app` takes `monotonic_clock`; the
   noqa's reason sits on the line above the call, which cannot hold both under 100 columns;
@@ -106,21 +114,31 @@ Each block's other departures, the ones a reviewer may weigh:
 - Block 60: `test_record_queued_stamps_last_seen_at_with_queued_at`'s comment.
 - Block 80: `AmuleEndpoint`'s docstring named `scheduler_state`; the adapter tests' names said
   `channel_backoff`.
-- Blocks 30, 40, 50, 70 and 90: none.
+- Blocks 30, 40, 50, 70, 90 and 100: none.
 
 ## Spec corrections
 
-Every `(Corrected: ...)` in the spec at writing: section 4's transient state `expire_lost(unseen_since)`,
-blocks 20 to 50 (block 60). Candidates for the closing block, each a claim the diff falsifies:
+Every `(Corrected: ...)` in `agents/specs/2026-10-14-monotonic-clock.md`, and the block that added it:
 
-- D4: "`tests/virtual_time.py`'s `LoopClock` ... gets the same two views": block 50 deleted it for
-  `LoopWallClock` and `LoopMonotonicClock`.
-- Section 4: "Block 50 passes 20 files under the one-line exemption": it passed 500 lines too (547), under
-  the same exemption, as its brief stated.
-- Acceptance 1: `git grep -n -i clock -- packages/crawler/src/p2pwatch/adapters/persistence_sqlite` prints
-  one line, `migrations/local/0011_backoff_states_table.sql:1`, whose header names "(monotonic clock spec,
-  D8)": no repository holds a clock (the constructors), but the check as written fails. Reword the header or
-  the criterion.
+- Section 2, asyncio's timeouts: `TID251` can see `asyncio.wait_for` and `asyncio.timeout` and leaves them
+  allowed by choice; only `loop.time()` is out of its reach (block 100, the holistic review).
+- D2: `STATUS_PERIOD` is a `timedelta` passed to `sleep` as is; only `poll_interval_seconds` converts
+  (block 100, the holistic review).
+- D4: `LoopClock` deleted for `LoopWallClock` and `LoopMonotonicClock` (block 100, the draft).
+- D4: `_BlockingClock` and `_StubClock` became `_BlockingMonotonicClock` and `_StubWallClock`; blocks 10 and
+  20 deleted `_AdvancingClock`'s four copies (block 100, the holistic review).
+- D10: the yield is now `search_tasks.py:61`, its reason on line 60 (block 100, the holistic review, which
+  said line 60).
+- D10's reasons: the carve-out also leaves `asyncio.wait_for` and `asyncio.timeout` allowed, by choice
+  (block 100, the holistic review).
+- Section 4: block 50 passed 500 lines too, 547 (block 100, the draft).
+- Section 4's transient state `expire_lost(unseen_since)`, blocks 20 to 50 (block 60).
+- Acceptance 1: the grep printed migration 0011's header until block 100 reworded it, and
+  `SqliteSourceRepository` also takes `node_id` and `time_between_reads`, a duration (block 100, the draft and
+  the holistic review).
+
+Beside them, D11's `(Corrected: ...)` in section 8 of `agents/specs/2026-10-13-append-only-source-points.md`:
+it missed the lost-download detection, whose forward step wrote a wrong row (block 100).
 
 ## Wrap counts
 
@@ -139,8 +157,34 @@ Counted with `gh run list --branch <b>` on each stack branch, 2026-10-14, before
 
 ## Holistic review
 
-Not run at writing: Wrap's (a) runs once block 90's pull request is open; the closing block lists each
-finding and its exit here.
+`.reviews/monotonic-clock-holistic.md`, over `origin/main...origin/refactor/console-clock-lint`: 0 critical,
+1 major, 9 minor. Every finding exits as fixed in the lot, in block 100:
+
+- **MAJOR, the backoff's reload untested** (`composition/app.py`'s `load_from`): fixed,
+  `test_a_backoff_the_previous_run_saved_holds_the_first_search` seeds `backoff_states` with the client's
+  row, a delay of an hour, and asserts the first search waits it. With the line removed it fails on its
+  own assertion: `assert (MonotonicInstant(nanoseconds=60000000000) - MonotonicInstant(nanoseconds=0)) >=
+  datetime.timedelta(seconds=3600)`; the review's mutation (the line replaced by `pass`) now gives
+  `1 failed, 1414 passed, 14 deselected`, where it gave `1414 passed`.
+- **Acceptance 1 fails as written**: fixed, migration 0011's header names no spec and the grep prints
+  nothing (exit 1); the criterion's `(Corrected: ...)` names `SqliteSourceRepository`'s `time_between_reads`,
+  which Serena's `find_symbol` on each `__init__` shows beside `node_id`; `ReaderProvider` takes a path.
+- **`AGENTS.md` and the spec on what `TID251` cannot see**: fixed, the rule reads "it leaves
+  `asyncio.wait_for` and `asyncio.timeout` allowed and cannot see `loop.time()`"; two `(Corrected: ...)`.
+- **`remaining_wait`, a function and a method**: fixed, `BackoffRegistry.time_until_retry`.
+- **`backoff`, `backoff_states` and `retry_at`, two concepts each**: fixed,
+  `save_backoff_states(backoff_state_by_key)` in the port, the adapter and the tests' two implementations,
+  the test stub's attribute too; `LocalReader.node_state` iterates its query; `BackoffEntry.retry_at_display`.
+- **`_fail_lost`'s "(spec §2; D7)"**: fixed, both parentheses dropped.
+- **`reevaluation_state` missing from `local.db`'s description**: fixed, in the subgraph and the sentence.
+- **`status_loop.py`'s two conventions**: fixed, the four durations are `timedelta`s, `_AlertTimer` takes
+  one, `ChannelDegraded` and `ClientUnreachableLasting` convert to seconds where they are built.
+- **`StatusBoard.is_current` for a client not read yet**: fixed, the branch kept as the board's contract for
+  an unknown client. Its red: with the branch removed, `test_a_client_not_read_yet_is_not_current` fails
+  before its assertion, `TypeError: unsupported operand type(s) for //: 'NoneType' and 'datetime.timedelta'`
+  (`ports/clock.py:36`); with the branch returning `True` instead, it fails on its own assertion,
+  `AssertionError: assert not True` (`test_status_loop.py:301`).
+- **The handoff's spec corrections miss four**: fixed, Spec corrections above.
 
 ## Pitfalls
 
@@ -167,7 +211,9 @@ finding and its exit here.
   (block 40); pytest fixtures injected by parameter name (block 50); a Protocol's overrides, which are not
   references (block 20); docstrings, which `rename_symbol` does not follow (block 80); a call through an
   import alias, `build_app as build_webui_app`, of which `find_referencing_symbols` lists the import line
-  only (block 90). `rename_symbol` counts files, not sites (block 50).
+  only (block 90); a Jinja template, `node.html`'s `entry.retry_at` (block 100). `rename_symbol` counts
+  files, not sites (block 50). A parameter is renamed once per function: the port's
+  `save_backoff_states(backoff)` and each implementation's are separate symbols (block 100).
 
 ## Left as is
 
@@ -178,9 +224,10 @@ finding and its exit here.
 
 - The compose smoke and arm64, every block. Blocks 30, 40, 50, 70 and 80 ran `api_integration`,
   `download_integration` and `orchestration_integration` locally against a disposable
-  `ghcr.io/mission-titar/p2pwatch-amule:latest` on `127.0.0.1:14711` (6 passed each); blocks 10, 20 and 60
-  did not, since none of their changes is built by those suites; block 90 did not, since
-  `test_crawler_loop.py` runs with the webui off (line 101), the only wiring it changes.
+  `ghcr.io/mission-titar/p2pwatch-amule:latest` on `127.0.0.1:14711` (6 passed each), and block 100 too,
+  since it changes the status loop and the backoff's repository (6 passed); blocks 10, 20 and 60 did not,
+  since none of their changes is built by those suites; block 90 did not, since `test_crawler_loop.py` runs
+  with the webui off (line 101), the only wiring it changes.
 
 ## Not validated
 
@@ -194,9 +241,7 @@ finding and its exit here.
 
 ## Next
 
-The closing block 100 runs Wrap: the holistic review's fixes, `BACKLOG.md` (D12: "A monotonic clock for
-in-memory intervals and deadlines" removed, "Every stamp an integer of microseconds since the epoch"
-added), D11's `(Corrected: ...)` beside section 8 of `agents/specs/2026-10-13-append-only-source-points.md`,
-and this handoff corrected. Then the operator reviews the stack, the lead rebases it onto `main`, and the
-operator merges. The lot changes the image, but the next release still waits for the copy before a
-migration that rewrites rows (`BACKLOG.md`, spec section 7).
+The operator reviews the stack, #217 to the closing block's pull request; the lead rebases it onto `main`
+(`origin/main` still at `10b45f0` on 2026-10-14) and the operator merges. The lot changes the image, but
+the next release still waits for the copy before a migration that rewrites rows (`BACKLOG.md`, spec
+section 7).
