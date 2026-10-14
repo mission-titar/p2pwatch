@@ -397,6 +397,7 @@ flowchart LR
     nr["node_runtime"]
     dl["downloads"]
     bs["backoff_states"]
+    rs["reevaluation_state"]
   end
 ```
 
@@ -405,8 +406,8 @@ flowchart LR
   (`python -m p2pwatch.merge`). Les insertions sont **idempotentes** (`INSERT OR IGNORE` /
   `ON CONFLICT DO NOTHING`), donc sans danger en cas de redémarrage en pleine écriture.
 - **`local.db`** (version de schéma 11) : l'état d'exécution du nœud (identité, suivi des
-  téléchargements et de leur progression, backoff des recherches). **Jamais fusionnée** : elle
-  appartient à un seul nœud.
+  téléchargements et de leur progression, backoff des recherches, empreinte de la politique
+  réévaluée). **Jamais fusionnée** : elle appartient à un seul nœud.
 
 La migration `catalog/0005` a supprimé `file_verifications` et `local/0004` a supprimé
 `verification_tasks`, en réécrivant en `completed` toute ligne de téléchargement `quarantined`
