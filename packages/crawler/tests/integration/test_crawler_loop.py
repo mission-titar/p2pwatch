@@ -22,11 +22,12 @@ from p2pwatch.adapters.config.crawler_config import (
     WebuiConfig,
 )
 from p2pwatch.adapters.config.yaml_loader import load_yaml
+from p2pwatch.adapters.monotonic_clock_asyncio import AsyncioMonotonicClock
 from p2pwatch.adapters.wake_hub_asyncio import AsyncioWakeHub
 from p2pwatch.composition.app import CrawlerApp
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.ports.client_status import ClientStatus
-from p2pwatch.ports.clock import Clock
+from p2pwatch.ports.clock import MonotonicClock
 from tests.integration.conftest import ApiEndpoint
 
 pytestmark = pytest.mark.orchestration_integration
@@ -101,10 +102,16 @@ async def test_real_loop_runs_one_search_and_stops(amuled: ApiEndpoint, tmp_path
     app_holder: dict[str, CrawlerApp] = {}
     clients: list[_ShutdownAfterFirstSearchClient] = []
 
-    def factory(endpoint: AmuleEndpoint, clock: Clock) -> _ShutdownAfterFirstSearchClient:
+    def factory(
+        endpoint: AmuleEndpoint, monotonic_clock: MonotonicClock
+    ) -> _ShutdownAfterFirstSearchClient:
         # The endpoint is derived from code constants now: use the caller's daemon instead.
         inner = AmuleApiClient(
-            amuled.host, amuled.port, endpoint.password, timeout_seconds=30.0, clock=clock
+            amuled.host,
+            amuled.port,
+            endpoint.password,
+            timeout_seconds=30.0,
+            monotonic_clock=monotonic_clock,
         )
         clients.append(_ShutdownAfterFirstSearchClient(inner, app_holder))
         return clients[-1]
@@ -114,6 +121,7 @@ async def test_real_loop_runs_one_search_and_stops(amuled: ApiEndpoint, tmp_path
         targets=_TARGETS,
         matcher_config=matcher_config,
         clock=AsyncioClock(),
+        monotonic_clock=AsyncioMonotonicClock(),
         rng=SeededRng(),
         wake_hub=AsyncioWakeHub(),
         policy_fingerprint="test-policy-fingerprint",

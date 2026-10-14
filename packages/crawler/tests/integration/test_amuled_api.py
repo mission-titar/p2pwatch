@@ -6,7 +6,7 @@ Without eD2k access the results are empty: what is validated is the cycle, not t
 
 import pytest
 
-from p2pwatch.adapters.clock_asyncio import AsyncioClock
+from p2pwatch.adapters.monotonic_clock_asyncio import AsyncioMonotonicClock
 from p2pwatch.adapters.mule_api.client import AmuleApiClient
 from p2pwatch.adapters.mule_api.errors import ApiAuthError, ApiRejectedError
 from tests.integration.conftest import ApiEndpoint
@@ -17,7 +17,11 @@ pytestmark = pytest.mark.api_integration
 @pytest.mark.asyncio
 async def test_real_login_succeeds(amuled: ApiEndpoint) -> None:
     client = AmuleApiClient(
-        amuled.host, amuled.port, amuled.password, timeout_seconds=30.0, clock=AsyncioClock()
+        amuled.host,
+        amuled.port,
+        amuled.password,
+        timeout_seconds=30.0,
+        monotonic_clock=AsyncioMonotonicClock(),
     )
     await client.connect()  # the admin password written by --set-admin-pass is accepted
     await client.close()
@@ -26,7 +30,11 @@ async def test_real_login_succeeds(amuled: ApiEndpoint) -> None:
 @pytest.mark.asyncio
 async def test_real_login_fails_with_wrong_password(amuled: ApiEndpoint) -> None:
     client = AmuleApiClient(
-        amuled.host, amuled.port, "wrong-password", timeout_seconds=30.0, clock=AsyncioClock()
+        amuled.host,
+        amuled.port,
+        "wrong-password",
+        timeout_seconds=30.0,
+        monotonic_clock=AsyncioMonotonicClock(),
     )
     with pytest.raises(ApiAuthError):
         await client.connect()
@@ -35,7 +43,11 @@ async def test_real_login_fails_with_wrong_password(amuled: ApiEndpoint) -> None
 @pytest.mark.asyncio
 async def test_real_status(amuled: ApiEndpoint) -> None:
     client = AmuleApiClient(
-        amuled.host, amuled.port, amuled.password, timeout_seconds=30.0, clock=AsyncioClock()
+        amuled.host,
+        amuled.port,
+        amuled.password,
+        timeout_seconds=30.0,
+        monotonic_clock=AsyncioMonotonicClock(),
     )
     await client.connect()
     try:
@@ -48,7 +60,11 @@ async def test_real_status(amuled: ApiEndpoint) -> None:
 @pytest.mark.asyncio
 async def test_real_search(amuled: ApiEndpoint) -> None:
     client = AmuleApiClient(
-        amuled.host, amuled.port, amuled.password, timeout_seconds=30.0, clock=AsyncioClock()
+        amuled.host,
+        amuled.port,
+        amuled.password,
+        timeout_seconds=30.0,
+        monotonic_clock=AsyncioMonotonicClock(),
     )
     await client.connect()
     try:

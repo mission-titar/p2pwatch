@@ -4,7 +4,7 @@ Download off (crawl-only, spec §2): observe, catalog, decide, loop, nothing els
 enabled by ``download.enabled: true`` in the config (the unified parser then wires the download
 loop). Loads the unified crawler config (``crawler.yml``) + ``targets`` + the matcher config
 (fail-fast at the slightest issue → refuses to start, spec §5/§14), assembles the real adapters
-(clock/RNG/wake hub), then ``asyncio.run(app.run())``. The clean & bounded shutdown is carried by
+(clocks/RNG/wake hub), then ``asyncio.run(app.run())``. The clean & bounded shutdown is carried by
 ``CrawlerApp`` (spec §6).
 
 The config paths are passed as arguments (``--config``/``--targets``/``--matcher``) with
@@ -27,6 +27,7 @@ from catalog_matching.validation import (
 from p2pwatch.adapters.clock_asyncio import AsyncioClock, SeededRng
 from p2pwatch.adapters.config.crawler_config import ConfigError, parse_crawler_config
 from p2pwatch.adapters.config.yaml_loader import YamlLoadError, load_yaml
+from p2pwatch.adapters.monotonic_clock_asyncio import AsyncioMonotonicClock
 from p2pwatch.adapters.wake_hub_asyncio import AsyncioWakeHub
 from p2pwatch.composition.app import CrawlerApp
 from p2pwatch.domain.policy_fingerprint import policy_fingerprint
@@ -77,6 +78,7 @@ def build_crawler_app(args: argparse.Namespace) -> CrawlerApp:
         targets=targets,
         matcher_config=matcher_config,
         clock=AsyncioClock(),
+        monotonic_clock=AsyncioMonotonicClock(),
         rng=SeededRng(),
         wake_hub=AsyncioWakeHub(),
         policy_fingerprint=fingerprint,

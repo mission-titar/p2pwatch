@@ -1,21 +1,23 @@
 """``AmuleApiClient.search()`` paces its starts by the rules of eD2k and Kad (spec stage 2, D5).
 
-Concurrent searches need one shared time, so these tests run on an event loop whose clock is
+Concurrent searches need one shared time, so those tests run on an event loop whose clock is
 virtual: whenever every task waits, the loop jumps to the next timer instead of sleeping.
 """
 
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import timedelta
 from typing import Any
 
 import pytest
 
 from p2pwatch.adapters.mule_api.client import AmuleApiClient
 from p2pwatch.ports.client_errors import SearchFailedError
+from p2pwatch.ports.clock import MonotonicInstant
 from tests.adapters.mule_api.api_fakes import PASSWORD, FakeAmuleApi, error
-from tests.virtual_time import EPOCH, LoopClock, run_virtual
+from tests.application.fakes import FakeTime
+from tests.virtual_time import MONOTONIC_EPOCH, LoopClock, run_virtual
 
 _HOUR = 3600.0
 _BUDGET = 120.0
@@ -26,19 +28,23 @@ _ALREADY_SEARCHING = (
 
 
 def _api(**kwargs: Any) -> FakeAmuleApi:
-    return FakeAmuleApi(clock=LoopClock(), **kwargs)
+    return FakeAmuleApi(monotonic_clock=LoopClock().monotonic, **kwargs)
 
 
 async def _connected(api: FakeAmuleApi) -> AmuleApiClient:
     client = AmuleApiClient(
-        "amuled.test", 4711, PASSWORD, transport=api.transport(), clock=api.clock
+        "amuled.test",
+        4711,
+        PASSWORD,
+        transport=api.transport(),
+        monotonic_clock=api.monotonic_clock,
     )
     await client.connect()
     return client
 
 
-def _elapsed(moment: datetime) -> float:
-    return (moment - EPOCH).total_seconds()
+def _elapsed(moment: MonotonicInstant) -> float:
+    return (moment - MONOTONIC_EPOCH).total_seconds()
 
 
 def _starts(api: FakeAmuleApi, search_type: str) -> list[tuple[float, str]]:
@@ -90,6 +96,22 @@ def _hour_of_three_keywords() -> FakeAmuleApi:
     api = _api(search_seconds=dict(_DURATIONS))
     run_virtual(_search_for(api, list(_DURATIONS), ["ed2k", "kad"]))
     return api
+
+
+@pytest.mark.parametrize("channel", ["ed2k", "kad"])
+@pytest.mark.parametrize("step", [timedelta(hours=-1), timedelta(hours=1)])
+@pytest.mark.asyncio
+async def test_a_wall_clock_step_leaves_two_starts_a_minute_apart(
+    channel: str, step: timedelta
+) -> None:
+    fake_time = FakeTime()
+    client = await _connected(FakeAmuleApi(monotonic_clock=fake_time.monotonic))
+    await client.search("keroro", channel, _BUDGET)
+    fake_time.step_wall(step)
+    await client.search("keroro", channel, _BUDGET)
+    await client.close()
+
+    assert fake_time.sleeps == [timedelta(seconds=60)]
 
 
 def test_ed2k_starts_are_a_minute_apart_or_more() -> None:

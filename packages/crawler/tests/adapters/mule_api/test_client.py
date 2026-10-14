@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-from datetime import datetime
 from typing import cast
 
 import httpx
@@ -22,6 +21,7 @@ from p2pwatch.ports.client_errors import (
     SearchFailedError,
 )
 from p2pwatch.ports.client_status import ChannelStatus
+from p2pwatch.ports.clock import MonotonicInstant
 from p2pwatch.ports.download_client import DownloadClient, DownloadRequest, DownloadStatus
 from p2pwatch.ports.source_client import SourceClient
 from tests.adapters.mule_api.api_fakes import PASSWORD, TOKEN, FakeAmuleApi, error
@@ -31,7 +31,13 @@ _KEY = FileKey(Network.ED2K, _HASH)
 
 
 def _client(api: FakeAmuleApi, *, password: str = PASSWORD) -> AmuleApiClient:
-    return AmuleApiClient("amuled.test", 4711, password, transport=api.transport(), clock=api.clock)
+    return AmuleApiClient(
+        "amuled.test",
+        4711,
+        password,
+        transport=api.transport(),
+        monotonic_clock=api.monotonic_clock,
+    )
 
 
 async def _connected(api: FakeAmuleApi) -> AmuleApiClient:
@@ -48,7 +54,7 @@ def _paths(api: FakeAmuleApi, path: str) -> list[httpx.URL]:
 def _seconds_after_start(api: FakeAmuleApi, method: str, path: str) -> list[float]:
     """When each call to one route was made, in seconds after the search's network start."""
     assert api.search_started_at is not None
-    start: datetime = api.search_started_at
+    start: MonotonicInstant = api.search_started_at
     return [
         (moment - start).total_seconds()
         for moment, request in api.calls
@@ -106,7 +112,9 @@ async def test_concurrent_connects_log_in_once() -> None:
         return api.handle(request)
 
     transport = httpx.MockTransport(round_trip)
-    client = AmuleApiClient("amuled.test", 4711, PASSWORD, transport=transport, clock=api.clock)
+    client = AmuleApiClient(
+        "amuled.test", 4711, PASSWORD, transport=transport, monotonic_clock=api.monotonic_clock
+    )
     await asyncio.gather(*(client.connect() for _ in range(5)))
     await client.close()
 

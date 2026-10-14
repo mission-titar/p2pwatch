@@ -7,13 +7,13 @@ forgets to ask for more fail here instead of on a node with a hundred shared fil
 import json
 import re
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 import httpx
 
-from p2pwatch.ports.clock import Clock
-from tests.application.fakes import FakeClock
+from p2pwatch.ports.clock import MonotonicClock, MonotonicInstant
+from tests.application.fakes import FakeTime
 
 PASSWORD = "s3cret"
 TOKEN = "eyJhbGciOi.fake.token"
@@ -52,7 +52,7 @@ class FakeAmuleApi:
         version: dict[str, Any] | None = None,
         progress: dict[str, Any] | None = None,
         search_seconds: dict[str, float] | None = None,
-        clock: Clock | None = None,
+        monotonic_clock: MonotonicClock | None = None,
     ) -> None:
         self.password = password
         self.results = results if results is not None else []
@@ -69,12 +69,12 @@ class FakeAmuleApi:
         self.progress = progress if progress is not None else {"state": "finished", "percent": 100}
         # Per query: a search reports `running` that long after its start, then `finished`.
         self.search_seconds = search_seconds if search_seconds is not None else {}
-        self.search_started_at: datetime | None = None
+        self.search_started_at: MonotonicInstant | None = None
         # Search id -> (start, query). Ids count up from 42, so a lone search is still 42.
-        self.searches: dict[int, tuple[datetime, str]] = {}
-        self.clock: Clock = clock or FakeClock()
+        self.searches: dict[int, tuple[MonotonicInstant, str]] = {}
+        self.monotonic_clock = monotonic_clock or FakeTime().monotonic
         self.requests: list[httpx.Request] = []
-        self.calls: list[tuple[datetime, httpx.Request]] = []
+        self.calls: list[tuple[MonotonicInstant, httpx.Request]] = []
         self.logins = 0
         self.logouts = 0
         self.added_links: list[str] = []
@@ -86,7 +86,7 @@ class FakeAmuleApi:
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
-        self.calls.append((self.clock.now(), request))
+        self.calls.append((self.monotonic_clock.now(), request))
         route = (request.method, request.url.path)
         override = self.overrides.get(route)
         if override is not None:
@@ -120,7 +120,7 @@ class FakeAmuleApi:
     def _start_search(self, request: httpx.Request) -> httpx.Response:
         query = json.loads(request.content).get("query")
         search_id = 42 + len(self.searches)
-        self.search_started_at = self.clock.now()
+        self.search_started_at = self.monotonic_clock.now()
         self.searches[search_id] = (self.search_started_at, query)
         return httpx.Response(202, json={"search_id": search_id, "query": query})
 
@@ -138,7 +138,7 @@ class FakeAmuleApi:
         if seconds is None:
             return self.progress
         ends_at = started_at + timedelta(seconds=seconds)
-        return {"state": "running" if self.clock.now() < ends_at else "finished"}
+        return {"state": "running" if self.monotonic_clock.now() < ends_at else "finished"}
 
     def _more_search(self, request: httpx.Request) -> httpx.Response:
         return httpx.Response(202)
