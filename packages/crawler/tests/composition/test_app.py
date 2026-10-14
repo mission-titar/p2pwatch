@@ -1325,7 +1325,7 @@ async def test_the_webui_reads_the_status_loops_board_and_the_pause_gate(
 
 
 @pytest.mark.asyncio
-async def test_the_webui_cuts_periods_at_its_configured_gap_and_reads_the_crawlers_clock(
+async def test_the_webui_cuts_periods_at_its_configured_gap_and_reads_the_crawlers_clocks(
     tmp_path: Path, matcher_config: MatcherConfig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # A reading option, so a crawl-only node has one too (source points spec, D6).
@@ -1337,14 +1337,14 @@ async def test_the_webui_cuts_periods_at_its_configured_gap_and_reads_the_crawle
         return Starlette()
 
     monkeypatch.setattr(composition_app, "build_webui_app", build)
-    wall_clock = FakeTime().wall
+    fake_time = FakeTime()
     webui = WebuiConfig(enabled=True, source_period_gap=timedelta(seconds=600))
     app = CrawlerApp(
         crawler_config=_crawler_config(tmp_path, webui=webui),
         targets=_TARGETS,
         matcher_config=matcher_config,
-        wall_clock=wall_clock,
-        monotonic_clock=FakeTime().monotonic,
+        wall_clock=fake_time.wall,
+        monotonic_clock=fake_time.monotonic,
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
@@ -1354,7 +1354,8 @@ async def test_the_webui_cuts_periods_at_its_configured_gap_and_reads_the_crawle
     holder["app"] = app
     await asyncio.wait_for(app.run(), timeout=5.0)
     assert wired["source_period_gap"] == timedelta(seconds=600)
-    assert wired["wall_clock"] is wall_clock
+    assert wired["wall_clock"] is fake_time.wall
+    assert wired["monotonic_clock"] is fake_time.monotonic
 
 
 @pytest.mark.asyncio

@@ -57,7 +57,8 @@ class SearchTaskRunner:
                 continue
             await worker.run_task(task)
             self._save()
-            await asyncio.sleep(0)  # a search that never suspends must not starve the loop
+            # A yield that reads no clock: a search that never suspends must not starve the loop.
+            await asyncio.sleep(0)  # noqa: TID251
 
     def _save(self) -> None:
         current = self._backoff.snapshot()

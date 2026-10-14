@@ -44,7 +44,29 @@ src = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
+select = ["E", "F", "I", "UP", "B", "SIM", "TID251"]
+
+# Only the clock adapters read the system clock; asyncio's own timeouts run on the loop's time.
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"datetime.datetime.now".msg = "Inject the WallClock port."
+"datetime.datetime.utcnow".msg = "Inject the WallClock port."
+"datetime.datetime.today".msg = "Inject the WallClock port."
+"datetime.date.today".msg = "Inject the WallClock port."
+"time.time".msg = "Inject the WallClock port."
+"time.time_ns".msg = "Inject the WallClock port."
+"time.monotonic".msg = "Inject the MonotonicClock port."
+"time.monotonic_ns".msg = "Inject the MonotonicClock port."
+"time.perf_counter".msg = "Inject the MonotonicClock port."
+"time.perf_counter_ns".msg = "Inject the MonotonicClock port."
+"time.clock_gettime".msg = "Inject the WallClock or the MonotonicClock port."
+"time.clock_gettime_ns".msg = "Inject the WallClock or the MonotonicClock port."
+"asyncio.sleep".msg = "Sleep through the MonotonicClock port."
+
+[tool.ruff.lint.per-file-ignores]
+"packages/crawler/src/p2pwatch/adapters/wall_clock_system.py" = ["TID251"]
+"packages/crawler/src/p2pwatch/adapters/monotonic_clock_asyncio.py" = ["TID251"]
+"**/tests/**" = ["TID251"]
+"packages/amule/**" = ["TID251"]
 
 [tool.mypy]
 python_version = "3.13"

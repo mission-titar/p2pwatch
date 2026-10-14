@@ -369,6 +369,7 @@ class CrawlerApp:
             status_readings=status_board,
             amule_url=self._crawler_config.webui.amule_url,
             wall_clock=self._wall_clock,
+            monotonic_clock=self._monotonic_clock,
             source_period_gap=self._crawler_config.webui.source_period_gap,
         )
         server = self._webui_server_factory(app)
