@@ -358,8 +358,13 @@ Invariants porteurs (à ne pas violer) :
   qu'il est `queued` ou `downloading` et jusqu'à ce que le client le liste de nouveau : aMule garde
   ses téléchargements à travers un redémarrage, slskd non. amuled ne refuse jamais un fichier qu'il
   détient encore, donc relancer coûte une requête. Au-delà de `download.lost_after_seconds` (24 h par
-  défaut) sans apparaître, la ligne devient `failed` avec la raison `lost`. Chaque cycle estampille
-  `last_seen_at` pour chaque fichier que `downloads()` liste, en file **ou** partagé. C'est sûr parce
+  défaut) sans apparaître, la ligne devient `failed` avec la raison `lost`. L'absence se mesure en
+  mémoire, sur l'horloge monotone : `DownloadDeps.loss_deadline_by_file` tient l'échéance de chaque
+  téléchargement `queued` ou `downloading`, repoussée à chaque cycle où le client le liste. Chaque
+  cycle estampille aussi `last_seen_at` pour chaque fichier que `downloads()` liste, en file **ou**
+  partagé : au démarrage suivant, l'échéance repart de cette date, le temps écoulé borné à
+  `[0, lost_after]` par `remaining_wait` (`domain/persisted_wait.py`), si bien qu'une horloge
+  reculée pendant l'arrêt n'allonge jamais l'attente au-delà de sa durée. C'est sûr parce
   qu'une entrée reste dans la file d'amuled même avec zéro source : une absence signifie vraiment
   disparu. Le client reste l'autorité : une ligne `failed` qui réapparaît dans sa liste repasse en
   `downloading`, sauf s'il y signale lui-même une erreur (raison `error`), et une ligne qui se

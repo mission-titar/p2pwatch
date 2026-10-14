@@ -6,8 +6,9 @@ Four things in it are not obvious:
 
 - **A completion is the client's own signal, never the bytes** (2026-09-02: 065B was stamped
   complete at 20.1 %). ``DownloadStatus.completed`` carries it.
-- **Stamp presence BEFORE condemning.** ``last_seen_at`` is written for everything the client
-  still lists, and only then does the TTL fail what it has not seen.
+- **A download's absence is measured on the monotonic clock** (monotonic clock spec, D7).
+  ``last_seen_at`` only carries it across a restart, clamped by ``remaining_wait``: a wall-clock
+  step fails nothing.
 - **A download the client does not list is started again**, once per round, until it is listed
   or the TTL fails it: a client may forget its transfers on restart.
 - **Step 0 re-connects every iteration.** It is idempotent and nearly free, and it is what makes
@@ -41,6 +42,7 @@ from p2pwatch.domain.observability.events import (
     SourceReappeared,
     TargetTitle,
 )
+from p2pwatch.domain.persisted_wait import remaining_wait
 from p2pwatch.domain.source import SourceKey, SourceUsefulness
 from p2pwatch.ports.catalog_repository import DownloadCandidate, ObservedFile
 from p2pwatch.ports.client_errors import ClientUnreachableError, DownloadRejectedError
@@ -93,7 +95,7 @@ class DownloadRepository(Protocol):
 
     def mark_seen(self, statuses: Iterable[DownloadStatus], seen_at: datetime) -> None: ...
 
-    def expire_lost(self, unseen_since: datetime) -> tuple[FileKey, ...]: ...
+    def last_seen_at_by_file(self) -> dict[FileKey, datetime]: ...
 
     def tracked_states(self) -> dict[FileKey, DownloadState]: ...
 
@@ -135,7 +137,7 @@ class DownloadDeps:
     targets: Sequence[TargetSegment]
     disk: DiskSpace
     min_free_bytes: int
-    lost_after_seconds: float
+    lost_after: timedelta
     poll_interval_seconds: float
     reappeared_after: timedelta
     sources_interval: timedelta
@@ -145,6 +147,10 @@ class DownloadDeps:
     disk_low_edge: EdgeState = field(default_factory=EdgeState, kw_only=True)  # low-disk warning
     # The sources step's last start.
     sources_read_at: MonotonicInstant | None = field(default=None, kw_only=True)
+    # Each queued or downloading download's instant from which it counts as lost.
+    loss_deadline_by_file: dict[FileKey, MonotonicInstant] = field(
+        default_factory=dict, kw_only=True
+    )
 
 
 @dataclass
@@ -254,19 +260,40 @@ async def _handle_completions(
             )
 
 
-def _expire_lost(deps: DownloadDeps) -> None:
-    """Fails the downloads the client has not listed for ``lost_after_seconds`` (spec §2).
+def _reconcile_loss_deadlines(
+    deps: DownloadDeps, listed_files: frozenset[FileKey], monotonic_now: MonotonicInstant
+) -> None:
+    """Gives each queued or downloading download its loss deadline (monotonic clock, D7):
+    ``lost_after`` from now if listed, else the one held, else what its ``last_seen_at`` leaves."""
+    deadlines = deps.loss_deadline_by_file
+    last_seen_at_by_file = deps.downloads.last_seen_at_by_file()
+    for file in deadlines.keys() - last_seen_at_by_file.keys():
+        del deadlines[file]  # terminal now, or a row the operator deleted for a manual retry
+    for file, last_seen_at in last_seen_at_by_file.items():
+        if file in listed_files:
+            deadlines[file] = monotonic_now + deps.lost_after
+        elif file not in deadlines:
+            left = remaining_wait(last_seen_at, deps.lost_after, deps.wall_clock.now())
+            deadlines[file] = monotonic_now + left
+
+
+def _fail_lost(deps: DownloadDeps, listed_files: frozenset[FileKey]) -> None:
+    """Fails each download the client has not listed for ``lost_after`` (spec §2; D7).
 
     It bounds a client that accepts ``start()`` without ever listing the download.
     ``is_tracked`` stays state-blind, so a ``failed`` row still blocks automatic re-queuing;
     the manual retry is deleting the row.
     """
-    unseen_since = deps.wall_clock.now() - timedelta(seconds=deps.lost_after_seconds)
-    for file in deps.downloads.expire_lost(unseen_since):
+    monotonic_now = deps.monotonic_clock.now()
+    _reconcile_loss_deadlines(deps, listed_files, monotonic_now)
+    deadlines = deps.loss_deadline_by_file
+    for file in [file for file, deadline in deadlines.items() if deadline <= monotonic_now]:
+        deps.downloads.set_state(file, DownloadState.FAILED, FailureReason.LOST)
+        del deadlines[file]
         _logger.warning(
             "file=%s unseen by the client for %ss: marked failed",
             file.native_id,
-            deps.lost_after_seconds,
+            deps.lost_after.total_seconds(),
         )
 
 
@@ -310,9 +337,11 @@ async def _queue_new_candidates(deps: DownloadDeps, outstanding_bytes: int) -> N
             continue
         # record_queued ONLY here (sync DB write); _start_unlisted sends it (network I/O): the
         # write precedes the network, and a start that raises leaves it 'queued' for next round.
-        deps.downloads.record_queued(
+        if deps.downloads.record_queued(
             candidate.file, candidate.target_id, observation.size_bytes, deps.wall_clock.now()
-        )
+        ):
+            deadline = deps.monotonic_clock.now() + deps.lost_after
+            deps.loss_deadline_by_file[candidate.file] = deadline
         outstanding_bytes += observation.size_bytes  # the client does not list it yet
         _logger.info("candidate file=%s queued for download", candidate.file.native_id)
         await deps.telemetry.emit(DownloadQueued(target_id=candidate.target_id))
@@ -480,11 +509,10 @@ async def run_download_cycle(deps: DownloadDeps) -> None:
         await _handle_completions(deps, fresh_states, listed_statuses)
     except RepositoryError as error:
         _logger.error("download completions repo failure (%s): step skipped, continues", error)
-    # Step 2b - PRESENCE + TTL: stamp FIRST, condemn after. The reverse order would fail a row
-    # the client is showing us right now.
+    # Step 2b - PRESENCE + LOSS: ``last_seen_at`` is for the next start; loss is measured here.
     try:
         deps.downloads.mark_seen(listed_statuses, deps.wall_clock.now())
-        _expire_lost(deps)
+        _fail_lost(deps, listed_files)
     except RepositoryError as error:
         _logger.error("download presence repo failure (%s): step skipped, continues", error)
     try:
