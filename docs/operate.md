@@ -195,7 +195,7 @@ ces délais à zéro.
 
 Les messages partent en markdown : Discord les affiche en embed, signé `p2pwatch - <node-id>` en
 ligne d'auteur, bleu pour une découverte (`🔎 Notify`, `📥 Download`) ou une source
-(`🆕 Source useful for the first time`, `🔁 Source reappeared`), vert pour un téléchargement
+(`📥 Source useful for the first time`, `🔁 Source reappeared`), vert pour un téléchargement
 terminé (`✅ Downloaded`, avec les segments et le nom du fichier). Aucun message ne mentionne qui
 que ce soit : un `@everyone` dans un nom de fichier ne notifie personne.
 

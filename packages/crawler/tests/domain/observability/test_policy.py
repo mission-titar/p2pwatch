@@ -168,7 +168,7 @@ CASES: list[tuple[ev.Event, Report]] = [
             "**Source**\n`AnimuseeFMR` 1f2e3d4c…, useful for the first time\n\n"
             "**Targets**\n062A - Les demoiselles cambrioleuses\n\n"
             "**File**\n`Keroro 062.avi`",
-            "🆕 Source useful for the first time",
+            "📥 Source useful for the first time",
         ),
     ),
     (
