@@ -336,7 +336,7 @@ def describe(event: Event) -> Report:
                 event,
                 "first_useful",
                 "useful for the first time",
-                "🆕 Source useful for the first time",
+                "📥 Source useful for the first time",
             )
         case SourceReappeared():
             return _describe_source(
