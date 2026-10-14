@@ -162,6 +162,12 @@ accumulé, mais vous redémarrez d'un état connu.
   chaque cycle, jusqu'à ce qu'il le rapporte de nouveau. S'il ne l'a plus rapporté depuis
   `download.lost_after_seconds` (24 h par défaut), il est marqué `failed`, avec une ligne de
   journal : `file=... unseen by the client for 86400.0s: marked failed`.
+- **Comment l'absence se compte.** Sur l'horloge monotone du nœud, qu'un réglage de l'heure système
+  ne déplace pas. Au démarrage, le décompte reprend depuis `last_seen_at` : un téléchargement absent
+  depuis plus de `download.lost_after_seconds`, arrêt du nœud compris, passe en `failed` dès le
+  premier cycle. Une heure système reculée pendant l'arrêt ne fait jamais attendre plus de
+  `download.lost_after_seconds` ; une heure avancée pendant l'arrêt compte, elle, comme du temps
+  écoulé.
 - **Pourquoi c'est sans danger.** Une entrée reste dans la file d'amuled même avec **zéro source** :
   elle devient dormante, mais elle ne disparaît pas. Un téléchargement de lost media qui stagne à
   0 % pendant des mois n'est donc jamais menacé. Une absence côté amuled signifie que l'entrée a

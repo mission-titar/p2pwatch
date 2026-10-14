@@ -387,6 +387,9 @@ as plus or minus 20 %).
 - Blocks 30 to 40: `Clock` and `MonotonicClock` coexist, as do the old `FakeClock`s and `FakeTime`. Merging them
   away would make one block of about 820 lines and 50 files; each consumer moves once and no block leaves dead code
   (the operator, 2026-10-14).
+- Blocks 20 to 50: `expire_lost(unseen_since)` takes the cut-off the download loop computes on the wall clock,
+  so that the repository loses its clock in block 20; block 60 deletes it (D7). (Corrected: this state was not
+  listed; block 20 met it and the operator chose it, 2026-10-14.)
 - Block 70: the adapter encodes `BackoffKey` into the JSON row, about twenty lines block 80 deletes.
 - Until block 90: the SQL console reads `time.monotonic()`, as on `main`.
 

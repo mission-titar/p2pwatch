@@ -14,6 +14,7 @@ from p2pwatch.ports.download_client import DownloadStatus, FailureReason, Waitin
 
 _A = FileKey(Network.ED2K, "a" * 32)
 _B = FileKey(Network.ED2K, "b" * 32)
+_C = FileKey(Network.ED2K, "c" * 32)
 _T0 = datetime(2026, 6, 12, tzinfo=UTC)
 _DAY = timedelta(days=1)
 
@@ -147,7 +148,7 @@ def _last_seen(connection: sqlite3.Connection, file: FileKey) -> str:
 def test_record_queued_stamps_last_seen_at_with_queued_at(
     repository: SqliteDownloadRepository, connection: sqlite3.Connection
 ) -> None:
-    # A row amuled never picks up must still age out: NULL would make it immortal.
+    # A row amuled never picks up must still age out, from its queuing.
     repository.record_queued(_A, "062A", 100, _T0)
     queued_at = connection.execute(
         "SELECT queued_at FROM downloads WHERE file_id = ?", (_A.file_id,)
@@ -171,32 +172,24 @@ def test_mark_seen_ignores_a_hash_it_does_not_know(
     assert repository.is_tracked(_A) is False
 
 
-def test_expire_lost_fails_the_rows_amuled_stopped_showing(
-    repository: SqliteDownloadRepository, connection: sqlite3.Connection
-) -> None:
-    repository.record_queued(_A, "062A", 100, _T0)
-    repository.set_state(_A, DownloadState.DOWNLOADING)
-    repository.record_queued(_B, "063A", 200, _T0)
-    seen_at = _T0 + timedelta(hours=25)
-    repository.mark_seen([_status(_B)], seen_at)  # _B is still in amuled's queue, _A vanished
-    assert repository.expire_lost(seen_at - _DAY) == (_A,)
-    assert repository.tracked_states() == {_A: DownloadState.FAILED, _B: DownloadState.QUEUED}
-    assert _lifecycle(connection, _A)[3] == "lost"
-
-
-def test_expire_lost_spares_a_row_seen_within_the_ttl(
+def test_last_seen_at_by_file_reads_when_the_client_last_listed_each_download(
     repository: SqliteDownloadRepository,
 ) -> None:
     repository.record_queued(_A, "062A", 100, _T0)
-    assert repository.expire_lost(_T0 + timedelta(hours=23) - _DAY) == ()
-    assert repository.tracked_states() == {_A: DownloadState.QUEUED}
+    repository.record_queued(_B, "063A", 200, _T0)
+    repository.set_state(_B, DownloadState.DOWNLOADING)
+    repository.mark_seen([_status(_B)], _T0 + _DAY)
+    assert repository.last_seen_at_by_file() == {_A: _T0, _B: _T0 + _DAY}
 
 
-def test_expire_lost_leaves_terminal_rows_alone(repository: SqliteDownloadRepository) -> None:
-    repository.record_queued(_A, "062A", 100, _T0)
-    repository.record_completed(_A, _T0)
-    assert repository.expire_lost(_T0 + 29 * _DAY) == ()
-    assert repository.tracked_states() == {_A: DownloadState.COMPLETED}
+def test_last_seen_at_by_file_leaves_the_terminal_downloads_out(
+    repository: SqliteDownloadRepository,
+) -> None:
+    for file in (_A, _B, _C):
+        repository.record_queued(file, "062A", 100, _T0)
+    repository.record_completed(_B, _T0)
+    repository.set_state(_C, DownloadState.FAILED, FailureReason.LOST)
+    assert repository.last_seen_at_by_file() == {_A: _T0}
 
 
 def test_a_queued_download_starts_at_zero_bytes_with_no_progress(
@@ -233,20 +226,6 @@ def test_a_download_migrated_without_bytes_does_not_invent_progress(
     connection.execute("UPDATE downloads SET bytes_done = NULL")  # a row from before local 0008
     repository.mark_seen([_status(_A, 40)], _T0)
     assert _lifecycle(connection, _A) == (40, None, None, None)
-
-
-def test_a_download_waiting_for_sources_a_whole_year_is_never_lost(
-    repository: SqliteDownloadRepository, connection: sqlite3.Connection
-) -> None:
-    # Waiting is not failing (stage 2, D12): the client still lists it, so the TTL spares it.
-    repository.record_queued(_A, "062A", 100, _T0)
-    repository.set_state(_A, DownloadState.DOWNLOADING)
-    for day in range(1, 366):
-        seen_at = _T0 + day * _DAY
-        repository.mark_seen([_status(_A, 0, WaitingReason.NO_SOURCE)], seen_at)
-        assert repository.expire_lost(seen_at - _DAY) == ()
-    assert repository.tracked_states() == {_A: DownloadState.DOWNLOADING}
-    assert _lifecycle(connection, _A) == (0, None, "no_source", None)
 
 
 def test_set_state_records_a_failure_reason_and_any_other_state_clears_it(

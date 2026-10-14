@@ -273,7 +273,7 @@ class CrawlerApp:
             targets=self._targets,
             disk=ShutilDiskSpace(download_config.output_dir),
             min_free_bytes=download_config.min_free_bytes,
-            lost_after_seconds=download_config.lost_after_seconds,
+            lost_after=timedelta(seconds=download_config.lost_after_seconds),
             poll_interval_seconds=download_config.poll_interval_seconds,
             reappeared_after=download_config.reappeared_after,
             sources_interval=download_config.sources_interval,

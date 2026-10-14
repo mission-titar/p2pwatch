@@ -8,10 +8,10 @@ connection ``in_transaction``), ``wrap_sqlite_errors``.
 
 Methods take a ``FileKey``; rows are keyed by its ``file_id`` (stage 2 spec D19). Each write
 stores the instant the use-case gives it. ``record_queued`` is dedup-safe (PK = ``file_id``,
-``ON CONFLICT DO NOTHING``); ``record_completed`` stamps ``completed_at``; ``mark_seen``/
-``expire_lost`` carry the lost-download TTL (2026-09-13 spec §2) and the lifecycle columns (stage 2
-spec D12); ``tracked_states`` returns the file→state map (the loop reconciles the client's list
-with it).
+``ON CONFLICT DO NOTHING``); ``record_completed`` stamps ``completed_at``; ``mark_seen`` stamps
+``last_seen_at`` and the lifecycle columns (stage 2 spec D12), which ``last_seen_at_by_file`` reads
+back for the lost-download detection; ``tracked_states`` returns the file→state map (the loop
+reconciles the client's list with it).
 """
 
 import sqlite3
@@ -57,10 +57,8 @@ WHERE file_id = :file_id
 """
 
 # The non-terminal states listed here MUST stay synchronized with _TERMINAL_STATES (states.py).
-_EXPIRE_LOST = """
-UPDATE downloads SET state = 'failed', failure_reason = 'lost'
-WHERE state IN ('queued', 'downloading') AND last_seen_at < ?
-RETURNING network, native_id
+_LAST_SEEN_AT_BY_FILE = """
+SELECT network, native_id, last_seen_at FROM downloads WHERE state IN ('queued', 'downloading')
 """
 
 
@@ -155,16 +153,12 @@ class SqliteDownloadRepository:
                 ],
             )
 
-    def expire_lost(self, unseen_since: datetime) -> tuple[FileKey, ...]:
-        """Fails the non-terminal downloads amuled has not shown since ``unseen_since``.
-
-        Returns the files it failed, for the caller to log. An entry stays in amuled's queue
-        even with zero sources, so absence is a strong signal: the entry was removed, or the
-        file completed and was moved out of IncomingDir before the next poll.
-        """
+    def last_seen_at_by_file(self) -> dict[FileKey, datetime]:
+        """Each ``queued`` or ``downloading`` download's ``last_seen_at``: when the client last
+        listed it, else when it was queued."""
         with wrap_sqlite_errors():
-            rows = self._connection.execute(_EXPIRE_LOST, (utc_iso(unseen_since),)).fetchall()
-        return tuple(FileKey(Network(row[0]), row[1]) for row in rows)
+            rows = self._connection.execute(_LAST_SEEN_AT_BY_FILE).fetchall()
+        return {FileKey(Network(row[0]), row[1]): datetime.fromisoformat(row[2]) for row in rows}
 
     def tracked_states(self) -> dict[FileKey, DownloadState]:
         """File→state map of ALL tracked downloads, whatever their state."""

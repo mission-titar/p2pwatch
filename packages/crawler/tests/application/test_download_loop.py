@@ -58,7 +58,7 @@ def _loop_deps(
         targets=_TARGETS,
         disk=FakeDiskSpace(1_000_000),
         min_free_bytes=0,
-        lost_after_seconds=86400.0,
+        lost_after=timedelta(days=1),
         reappeared_after=timedelta(hours=12),
         sources_interval=timedelta(minutes=5),
         wall_clock=fake_time.wall,
