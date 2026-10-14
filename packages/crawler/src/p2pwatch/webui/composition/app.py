@@ -547,7 +547,7 @@ def _client_lines(status_readings: StatusReadings) -> tuple[ClientLine, ...]:
             continue
         read_at = short_timestamp(reading.read_at.isoformat())
         client_status = reading.status
-        if not status_readings.is_current(reading):
+        if not status_readings.is_current(client_name):
             text = f"Out of date: last reading at {read_at}."
             lines.append(ClientLine(client_name, text, "unknown", "unknown", ()))
         elif client_status is None:

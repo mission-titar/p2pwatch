@@ -52,7 +52,13 @@ from p2pwatch.ports.client_status import ClientStatus
 from p2pwatch.ports.clock import MonotonicClock
 from p2pwatch.ports.download_client import DownloadRequest, DownloadStatus
 from tests.adapters.mule_api.api_fakes import PASSWORD, FakeAmuleApi
-from tests.application.fakes import FakeClock, FakeMuleClient, FakeTime, RecordingWakeHub
+from tests.application.fakes import (
+    FakeClock,
+    FakeMonotonicClock,
+    FakeMuleClient,
+    FakeTime,
+    RecordingWakeHub,
+)
 from tests.catalog_rows import insert_file, observation_node_ids
 from tests.virtual_time import MONOTONIC_EPOCH, LoopClock, run_virtual
 
@@ -964,11 +970,11 @@ async def test_full_mode_tolerates_download_daemon_unreachable_at_startup(
     await asyncio.wait_for(app.run(), timeout=5.0)  # does not raise: connect tolerated
 
 
-class _BlockingPollClock(FakeClock):
-    """Clock whose LONG sleeps (≥ 5 s) BLOCK for good (on an Event that is never set).
+class _BlockingPollClock(FakeMonotonicClock):
+    """Monotonic clock whose LONG sleeps (≥ 5 s) BLOCK for good (on an Event that is never set).
 
     Models the IN-CYCLE sleep of the download loop (``_sleep_or_wake``, 30 s poll): it stays
-    BLOCKED in ``clock.sleep``, so the loop CANNOT re-test ``self._shutdown`` on its own; only
+    BLOCKED in its ``sleep``, so the loop CANNOT re-test ``self._shutdown`` on its own; only
     an explicit CANCELLATION by ``_supervise`` gets it out. A BARRIER: as soon as the download
     poll has entered a long sleep, we ARM ``self._shutdown`` - the shutdown is thus requested
     while it is blocked. If ``_supervise`` did NOT cancel it, the ``TaskGroup`` would wait
@@ -977,20 +983,20 @@ class _BlockingPollClock(FakeClock):
     fail fail-closed. The SHORT sleeps yield immediately (determinism, no real time)."""
 
     def __init__(self, app_holder: dict[str, CrawlerApp]) -> None:
-        super().__init__()
+        super().__init__(FakeTime())
         self._app_holder = app_holder
-        self._blocked_long_polls: set[float] = set()
+        self._blocked_long_polls: set[timedelta] = set()
         self._never = asyncio.Event()
 
-    async def sleep(self, seconds: float) -> None:
-        if seconds < 5.0:
-            await super().sleep(seconds)  # short pause: yields (instantaneous)
+    async def sleep(self, duration: timedelta) -> None:
+        if duration < timedelta(seconds=5):
+            await super().sleep(duration)  # short pause: yields (instantaneous)
             return
         # Long sleep (in-cycle poll of a loop): we note the pace and,
         # as soon as the download poll (30 s) is blocked, we request the shutdown WHILE it
         # sleeps, then we BLOCK for good.
-        self._blocked_long_polls.add(seconds)
-        if 30.0 in self._blocked_long_polls:
+        self._blocked_long_polls.add(duration)
+        if timedelta(seconds=30) in self._blocked_long_polls:
             self._app_holder["app"]._shutdown.set()
         await self._never.wait()  # NEVER resolves: exit only via cancellation
 
@@ -1008,15 +1014,15 @@ async def test_full_mode_shutdown_cancels_the_download_loop_promptly(
     # cancellation happens, ``run()`` RETURNS promptly (without reaching the deadline); otherwise
     # it would ``TimeoutError`` (deadline) or block until the external guard → fail-closed failure.
     holder: dict[str, CrawlerApp] = {}
-    clock = _BlockingPollClock(holder)
+    monotonic_clock = _BlockingPollClock(holder)
 
     # _full_crawler_config: download poll 30 s, shutdown_deadline 30 s.
     app = CrawlerApp(
         crawler_config=_full_crawler_config(tmp_path),
         targets=_TARGETS,
         matcher_config=matcher_config,
-        clock=clock,
-        monotonic_clock=FakeTime().monotonic,
+        clock=FakeClock(),
+        monotonic_clock=monotonic_clock,
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
@@ -1045,13 +1051,13 @@ async def test_full_mode_shutdown_leaves_no_task_leaked(
     # finished once ``run()`` has returned. The ``_BlockingPollClock`` forces the worst case: the
     # loops can only exit VIA the explicit cancellation by ``_supervise``.
     holder: dict[str, CrawlerApp] = {}
-    clock = _BlockingPollClock(holder)
+    monotonic_clock = _BlockingPollClock(holder)
     app = CrawlerApp(
         crawler_config=_full_crawler_config(tmp_path),
         targets=_TARGETS,
         matcher_config=matcher_config,
-        clock=clock,
-        monotonic_clock=FakeTime().monotonic,
+        clock=FakeClock(),
+        monotonic_clock=monotonic_clock,
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
@@ -1316,7 +1322,7 @@ async def test_the_webui_reads_the_status_loops_board_and_the_pause_gate(
     await asyncio.wait_for(app.run(), timeout=5.0)
     reading = wired["status_readings"].readings()["amuled"]
     assert reading.status == await FakeMuleClient().status()
-    assert wired["status_readings"].is_current(reading)
+    assert wired["status_readings"].is_current("amuled")
     assert wired["control"].is_paused() is False
 
 

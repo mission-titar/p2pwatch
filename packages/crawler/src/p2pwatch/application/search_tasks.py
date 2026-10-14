@@ -7,10 +7,11 @@ The backoff is saved after a search whenever it differs from what was last saved
 import asyncio
 import logging
 from collections.abc import Sequence
+from datetime import timedelta
 
 from p2pwatch.application.search_worker import BackoffRegistry, SearchTask, SearchWorker
 from p2pwatch.domain.search.keywords import dedupe_keywords
-from p2pwatch.ports.clock import Clock
+from p2pwatch.ports.clock import MonotonicClock
 from p2pwatch.ports.repository_errors import RepositoryError
 from p2pwatch.ports.scheduler_state_repository import SchedulerStateRepository
 
@@ -28,14 +29,14 @@ class SearchTaskRunner:
         resumed: asyncio.Event,
         backoff: BackoffRegistry,
         scheduler_state: SchedulerStateRepository,
-        clock: Clock,
+        monotonic_clock: MonotonicClock,
     ) -> None:
         self._workers = workers
         self._keywords = keywords
         self._resumed = resumed
         self._backoff = backoff
         self._scheduler_state = scheduler_state
-        self._clock = clock
+        self._monotonic_clock = monotonic_clock
         self._saved = backoff.snapshot()
 
     async def run(self) -> None:
@@ -52,7 +53,7 @@ class SearchTaskRunner:
             await self._resumed.wait()
             wait = worker.seconds_until_ready(task.channel)
             if wait > 0:
-                await self._clock.sleep(wait)
+                await self._monotonic_clock.sleep(timedelta(seconds=wait))
                 continue
             await worker.run_task(task)
             self._save()

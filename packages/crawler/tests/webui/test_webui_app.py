@@ -72,7 +72,7 @@ class _Readings:
     def readings(self) -> Mapping[str, StatusReading | None]:
         return self._readings
 
-    def is_current(self, reading: StatusReading) -> bool:
+    def is_current(self, client_name: str) -> bool:
         return self._current
 
 

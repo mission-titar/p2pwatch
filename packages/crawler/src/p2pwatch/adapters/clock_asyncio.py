@@ -1,11 +1,10 @@
 """Real adapters for time and randomness (orchestration spec §4).
 
-``AsyncioClock``: ``now()`` = ``datetime.now(UTC)`` (aware), ``sleep`` = ``asyncio.sleep``
-(the real event-loop sleep). ``SeededRng``: the ``Rng`` port's jitter draw. Both adapters
-are replaced in tests by advanceable/scripted fakes (fully deterministic, spec §3).
+``AsyncioClock``: ``now()`` = ``datetime.now(UTC)`` (aware). ``SeededRng``: the ``Rng`` port's
+jitter draw. Both adapters are replaced in tests by advanceable/scripted fakes (fully
+deterministic, spec §3).
 """
 
-import asyncio
 import random
 from datetime import UTC, datetime
 
@@ -16,10 +15,6 @@ class AsyncioClock:
     def now(self) -> datetime:
         """Current instant, AWARE in UTC (``Clock`` contract)."""
         return datetime.now(UTC)
-
-    async def sleep(self, seconds: float) -> None:
-        """Real event-loop sleep (cancellable at the ``await`` point, spec §6)."""
-        await asyncio.sleep(seconds)
 
 
 class SeededRng:

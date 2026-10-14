@@ -44,7 +44,7 @@ from p2pwatch.domain.observability.events import (
 from p2pwatch.domain.source import SourceKey, SourceUsefulness
 from p2pwatch.ports.catalog_repository import DownloadCandidate, ObservedFile
 from p2pwatch.ports.client_errors import ClientUnreachableError, DownloadRejectedError
-from p2pwatch.ports.clock import Clock
+from p2pwatch.ports.clock import Clock, MonotonicClock, MonotonicInstant
 from p2pwatch.ports.disk_space import DiskSpace
 from p2pwatch.ports.download_client import (
     DownloadClient,
@@ -140,9 +140,11 @@ class DownloadDeps:
     reappeared_after: timedelta
     sources_interval: timedelta
     clock: Clock
+    monotonic_clock: MonotonicClock
     telemetry: Telemetry
     disk_low_edge: EdgeState = field(default_factory=EdgeState, kw_only=True)  # low-disk warning
-    sources_read_at: datetime | None = field(default=None, kw_only=True)  # the step's last start
+    # The sources step's last start.
+    sources_read_at: MonotonicInstant | None = field(default=None, kw_only=True)
 
 
 @dataclass
@@ -391,14 +393,15 @@ async def _record_sources(deps: DownloadDeps, listed_statuses: tuple[DownloadSta
     alerts on them (stage 4, D8; source points, D5). A repo failure skips that download's; a
     client failure propagates.
 
-    Runs once ``sources_interval`` has passed since its last start, failed or not (D3)."""
-    started_at = deps.clock.now()
+    Runs once ``sources_interval`` has passed on the monotonic clock since its last start, failed
+    or not (D3)."""
+    started_at = deps.monotonic_clock.now()
     last = deps.sources_read_at
     if last is not None and started_at - last < deps.sources_interval:
         return
     deps.sources_read_at = started_at
     tracked = deps.downloads.tracked_states()
-    round_ = _AlertRound(started_at)
+    round_ = _AlertRound(deps.clock.now())
     for status in listed_statuses:
         if status.completed or status.file not in tracked:
             continue
@@ -517,7 +520,8 @@ async def _sleep_or_wake(deps: DownloadLoopDeps) -> None:
     loop immediately; otherwise the fallback poll wakes it at the cadence.
     Shutdown cancellation lands HERE (an ``await``), never mid DB write (sync).
     """
-    sleep_task = asyncio.ensure_future(deps.clock.sleep(deps.poll_interval_seconds))
+    poll_interval = timedelta(seconds=deps.poll_interval_seconds)
+    sleep_task = asyncio.ensure_future(deps.monotonic_clock.sleep(poll_interval))
     wake_task = asyncio.ensure_future(deps.wake_hub.wait(DOWNLOAD_WAKE_SUBJECT))
     try:
         await asyncio.wait({sleep_task, wake_task}, return_when=asyncio.FIRST_COMPLETED)

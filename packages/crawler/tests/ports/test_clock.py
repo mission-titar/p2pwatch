@@ -11,9 +11,6 @@ class _StubClock:
     def now(self) -> datetime:
         return datetime(2026, 6, 12, tzinfo=UTC)
 
-    async def sleep(self, seconds: float) -> None:
-        return None
-
 
 class _StubRng:
     def jitter(self, span: float) -> float:
@@ -23,12 +20,6 @@ class _StubRng:
 def test_clock_protocol_is_satisfied_structurally() -> None:
     clock: Clock = _StubClock()
     assert clock.now() == datetime(2026, 6, 12, tzinfo=UTC)
-
-
-@pytest.mark.asyncio
-async def test_clock_sleep_is_awaitable() -> None:
-    clock: Clock = _StubClock()
-    await clock.sleep(1.0)  # does not raise; returns None (contract)
 
 
 def test_two_instants_differ_by_a_timedelta() -> None:
