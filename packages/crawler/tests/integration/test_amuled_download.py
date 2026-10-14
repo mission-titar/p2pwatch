@@ -8,7 +8,7 @@ from the ephemeral container): it is the start -> list -> status cycle that is v
 
 import pytest
 
-from p2pwatch.adapters.clock_asyncio import AsyncioClock
+from p2pwatch.adapters.monotonic_clock_asyncio import AsyncioMonotonicClock
 from p2pwatch.adapters.mule_api.client import AmuleApiClient
 from p2pwatch.adapters.mule_api.errors import ApiRejectedError
 from p2pwatch.domain.file_key import FileKey, Network
@@ -27,7 +27,11 @@ _SIZE = 734003200  # ~700 MiB: a real size, hence an active partfile (never "com
 @pytest.mark.asyncio
 async def test_start_then_appears_in_downloads(amuled: ApiEndpoint) -> None:
     client = AmuleApiClient(
-        amuled.host, amuled.port, amuled.password, timeout_seconds=30.0, clock=AsyncioClock()
+        amuled.host,
+        amuled.port,
+        amuled.password,
+        timeout_seconds=30.0,
+        monotonic_clock=AsyncioMonotonicClock(),
     )
     await client.connect()
     try:

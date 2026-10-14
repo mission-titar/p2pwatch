@@ -75,7 +75,7 @@ from p2pwatch.application.search_worker import (
 from p2pwatch.application.status_loop import StatusBoard, StatusLoopDeps, status_loop
 from p2pwatch.domain.observability.events import CrawlerStarted
 from p2pwatch.ports.client_errors import ClientUnreachableError
-from p2pwatch.ports.clock import Clock, Rng
+from p2pwatch.ports.clock import Clock, MonotonicClock, Rng
 from p2pwatch.ports.crawler_control import CrawlerControl
 from p2pwatch.ports.download_client import DownloadClient
 from p2pwatch.ports.mule_client import MuleClient
@@ -92,14 +92,18 @@ class DownloadSourceClient(DownloadClient, SourceClient, Protocol):
     """The download loop's one session: it downloads, and reads its downloads' sources."""
 
 
-# Client factories, injectable in test; the clock is the composition's, so the pacing shares it.
-MuleClientFactory = Callable[[AmuleEndpoint, Clock], MuleClient]
-DownloadClientFactory = Callable[[AmuleEndpoint, Clock], DownloadSourceClient]
+# Client factories, injectable in test; they pace on the composition's monotonic clock.
+MuleClientFactory = Callable[[AmuleEndpoint, MonotonicClock], MuleClient]
+DownloadClientFactory = Callable[[AmuleEndpoint, MonotonicClock], DownloadSourceClient]
 
 
-def default_download_client_factory(endpoint: AmuleEndpoint, clock: Clock) -> DownloadSourceClient:
+def default_download_client_factory(
+    endpoint: AmuleEndpoint, monotonic_clock: MonotonicClock
+) -> DownloadSourceClient:
     """An ``AmuleApiClient`` dedicated to download: its own session."""
-    return AmuleApiClient(endpoint.host, endpoint.port, endpoint.password, clock=clock)
+    return AmuleApiClient(
+        endpoint.host, endpoint.port, endpoint.password, monotonic_clock=monotonic_clock
+    )
 
 
 MetricsServer = Callable[[int, CollectorRegistry], None]
@@ -170,9 +174,13 @@ def _backoff_policy(config: CrawlerConfig) -> BackoffPolicy:
     )
 
 
-def default_mule_client_factory(endpoint: AmuleEndpoint, clock: Clock) -> MuleClient:
+def default_mule_client_factory(
+    endpoint: AmuleEndpoint, monotonic_clock: MonotonicClock
+) -> MuleClient:
     """A real ``AmuleApiClient`` on the given endpoint (default factory, substituted in test)."""
-    return AmuleApiClient(endpoint.host, endpoint.port, endpoint.password, clock=clock)
+    return AmuleApiClient(
+        endpoint.host, endpoint.port, endpoint.password, monotonic_clock=monotonic_clock
+    )
 
 
 class CrawlerApp:
@@ -185,6 +193,7 @@ class CrawlerApp:
         targets: Sequence[TargetSegment],
         matcher_config: MatcherConfig,
         clock: Clock,
+        monotonic_clock: MonotonicClock,
         rng: Rng,
         wake_hub: WakeHub,
         policy_fingerprint: str,
@@ -197,6 +206,7 @@ class CrawlerApp:
         self._targets = tuple(targets)
         self._matcher_config = matcher_config
         self._clock = clock
+        self._monotonic_clock = monotonic_clock
         self._rng = rng
         self._wake_hub = wake_hub
         self._policy_fingerprint = policy_fingerprint
@@ -243,7 +253,7 @@ class CrawlerApp:
         at startup does not kill the crawler; the loop's backoff governs).
         """
         download_client = self._download_client_factory(
-            self._crawler_config.amule_endpoint, self._clock
+            self._crawler_config.amule_endpoint, self._monotonic_clock
         )
         stack.push_async_callback(download_client.close)
         try:
@@ -463,7 +473,7 @@ class CrawlerApp:
                 clock=self._clock,
             )
 
-            client = self._client_factory(endpoint, self._clock)
+            client = self._client_factory(endpoint, self._monotonic_clock)
             stack.push_async_callback(client.close)
             # CONNECT at setup. A daemon not yet listening must NOT bring
             # the crawler down, and that is the NORMAL case, not the exception: the core and the

@@ -11,7 +11,7 @@ import json
 import logging
 import re
 from contextlib import suppress
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 import httpx
@@ -38,7 +38,7 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.source import SourceReading
 from p2pwatch.ports.client_status import ClientStatus
-from p2pwatch.ports.clock import Clock
+from p2pwatch.ports.clock import MonotonicClock, MonotonicInstant
 from p2pwatch.ports.download_client import DownloadRequest, DownloadStatus
 
 # Rows asked for per list request. Every list route caps at 100 when `limit` is omitted, which
@@ -46,7 +46,7 @@ from p2pwatch.ports.download_client import DownloadRequest, DownloadStatus
 _PAGE_SIZE = 500
 
 # How often search() reads a search's progress: local traffic with our own daemon.
-_POLL_INTERVAL_SECONDS = 5.0
+_POLL_INTERVAL = timedelta(seconds=5)
 
 _SEARCH_TYPES = {"ed2k": "global", "kad": "kad"}
 
@@ -59,8 +59,6 @@ _KAD_SEPARATORS = re.compile(r'[ ()\[\]{}<>,._\-!?:;\\/"]')
 
 # Kad refuses a Kad word still on its search list: "not yet", someone else holds it.
 _KAD_WORD_HELD = "already on search list"
-
-_LONG_AGO = datetime.min.replace(tzinfo=UTC)
 
 _logger = logging.getLogger("p2pwatch.adapters.mule_api.client")
 
@@ -78,20 +76,20 @@ class AmuleApiClient:
         password: str,
         *,
         timeout_seconds: float = 10.0,
-        clock: Clock,
+        monotonic_clock: MonotonicClock,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._base_url = f"http://{host}:{port}/api/v1"
         self._password = password
         self._timeout_seconds = timeout_seconds
         self._transport = transport
-        self._clock = clock
+        self._monotonic_clock = monotonic_clock
         self._http: httpx.AsyncClient | None = None
         self._connect_lock = asyncio.Lock()
         # Held from an ed2k start to its end: aMule's core keeps one ed2k search anchor.
         self._ed2k_lock = asyncio.Lock()
-        self._ed2k_next_start = _LONG_AGO
-        self._kad_next_start: dict[str, datetime] = {}
+        self._ed2k_next_start: MonotonicInstant | None = None  # no ed2k start yet
+        self._kad_next_start: dict[str, MonotonicInstant] = {}
         self._keywords_without_kad_word: set[str] = set()
         self.skipped_results = 0
 
@@ -138,8 +136,9 @@ class AmuleApiClient:
             await self._await_end(search_id, budget_seconds, widen=True)
         else:
             async with self._ed2k_lock:
-                await self._sleep_until(self._ed2k_next_start)
-                self._ed2k_next_start = self._clock.now() + _START_SPACING
+                if self._ed2k_next_start is not None:
+                    await self._sleep_until(self._ed2k_next_start)
+                self._ed2k_next_start = self._monotonic_clock.now() + _START_SPACING
                 search_id = await self._post_search(keyword, search_type)
                 await self._await_end(search_id, budget_seconds, widen=False)
         rows = await self._collect(f"/search/{search_id}/results", "results")
@@ -153,7 +152,7 @@ class AmuleApiClient:
         kad_word = _kad_word(keyword)
         # A keyword without a Kad word splits on a separator or is under 3 bytes: never a Kad word.
         slot_key = kad_word or keyword
-        now = self._clock.now()
+        now = self._monotonic_clock.now()
         slot = max(now, self._kad_next_start.get(slot_key, now))
         self._kad_next_start[slot_key] = slot + _START_SPACING
         await self._sleep_until(slot)
@@ -162,33 +161,33 @@ class AmuleApiClient:
                 self._keywords_without_kad_word.add(keyword)
                 _logger.info("no Kad word in %r (no word of 3 bytes): not searched on Kad", keyword)
             return None
-        give_up_at = self._clock.now() + timedelta(seconds=budget_seconds)
+        give_up_at = self._monotonic_clock.now() + timedelta(seconds=budget_seconds)
         while True:
             try:
                 return await self._post_search(keyword, "kad")
             except ApiRejectedError as refusal:
-                remaining = (give_up_at - self._clock.now()).total_seconds()
-                if _KAD_WORD_HELD not in str(refusal) or remaining <= 0:
+                remaining = give_up_at - self._monotonic_clock.now()
+                if _KAD_WORD_HELD not in str(refusal) or remaining <= timedelta(0):
                     raise
-                await self._clock.sleep(min(_POLL_INTERVAL_SECONDS, remaining))
+                await self._monotonic_clock.sleep(min(_POLL_INTERVAL, remaining))
 
-    async def _sleep_until(self, moment: datetime) -> None:
-        delay = (moment - self._clock.now()).total_seconds()
-        if delay > 0:
-            await self._clock.sleep(delay)
+    async def _sleep_until(self, moment: MonotonicInstant) -> None:
+        delay = moment - self._monotonic_clock.now()
+        if delay > timedelta(0):
+            await self._monotonic_clock.sleep(delay)
 
     async def _await_end(self, search_id: int, budget_seconds: float, *, widen: bool) -> None:
         """Polls until amuled reports the search finished, or ``budget_seconds`` after now."""
-        deadline = self._clock.now() + timedelta(seconds=budget_seconds)
+        deadline = self._monotonic_clock.now() + timedelta(seconds=budget_seconds)
         polls = 0
         while await self._search_state(search_id) != "finished":
-            remaining = (deadline - self._clock.now()).total_seconds()
-            if remaining <= 0:
+            remaining = deadline - self._monotonic_clock.now()
+            if remaining <= timedelta(0):
                 break
             if widen and polls:  # first poll: Kad has queried nobody yet, a reask is wasted
                 widen = await self._widen(search_id)
             polls += 1
-            await self._clock.sleep(min(_POLL_INTERVAL_SECONDS, remaining))
+            await self._monotonic_clock.sleep(min(_POLL_INTERVAL, remaining))
 
     async def status(self) -> ClientStatus:
         """Raises unreachable unless amuleapi reaches amuled: otherwise it answers from its cache,

@@ -3,7 +3,8 @@
 ``FakeMuleClient``: results SCRIPTED per ``search`` call, injectable failures
 (``ClientUnreachableError``/``SearchFailedError``) at ``connect``/``search``.
 ``FakeClock``: advanceable clock (``advance`` without I/O) + ``sleep`` that advances WITHOUT
-a real wait (determinism). ``FakeRng``: FIXED jitter (determinism).
+a real wait (determinism). ``FakeTime``: one timeline read through a wall and a monotonic clock.
+``FakeRng``: FIXED jitter (determinism).
 ``RecordingWakeHub``: captures woken subjects. The repos are the REAL SQLite repos
 (spec §8: "real repos on tmp_path"): no fakes here.
 """
@@ -15,6 +16,7 @@ from p2pwatch.domain.observability.events import Event
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.ports.client_errors import ClientUnreachableError, SearchFailedError
 from p2pwatch.ports.client_status import ChannelStatus, ClientStatus
+from p2pwatch.ports.clock import MonotonicInstant
 
 
 class FakeClock:
@@ -34,6 +36,48 @@ class FakeClock:
     async def sleep(self, seconds: float) -> None:
         self.sleeps.append(seconds)
         self._now += timedelta(seconds=seconds)
+        await asyncio.sleep(0)  # yield control without a real wait
+
+
+class FakeTime:
+    """One fake timeline the test drives, read through ``wall`` and ``monotonic``: ``advance``
+    moves both clocks, ``step_wall`` the wall clock alone, as a clock step does."""
+
+    def __init__(self, start: datetime | None = None) -> None:
+        self._wall_now = start or datetime(2026, 6, 12, tzinfo=UTC)
+        self._monotonic_now = MonotonicInstant(0)
+        self.sleeps: list[timedelta] = []
+        self.wall = FakeWallClock(self)
+        self.monotonic = FakeMonotonicClock(self)
+
+    def advance(self, duration: timedelta) -> None:
+        self._wall_now += duration
+        self._monotonic_now += duration
+
+    def step_wall(self, step: timedelta) -> None:
+        self._wall_now += step
+
+
+class FakeWallClock:
+    def __init__(self, fake_time: FakeTime) -> None:
+        self._fake_time = fake_time
+
+    def now(self) -> datetime:
+        return self._fake_time._wall_now
+
+
+class FakeMonotonicClock:
+    """Its ``sleep`` advances the timeline at once, without a real wait."""
+
+    def __init__(self, fake_time: FakeTime) -> None:
+        self._fake_time = fake_time
+
+    def now(self) -> MonotonicInstant:
+        return self._fake_time._monotonic_now
+
+    async def sleep(self, duration: timedelta) -> None:
+        self._fake_time.sleeps.append(duration)
+        self._fake_time.advance(duration)
         await asyncio.sleep(0)  # yield control without a real wait
 
 
