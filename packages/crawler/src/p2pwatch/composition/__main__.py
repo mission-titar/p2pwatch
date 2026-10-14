@@ -24,11 +24,12 @@ from catalog_matching.validation import (
     parse_matcher_config,
     parse_targets,
 )
-from p2pwatch.adapters.clock_asyncio import AsyncioClock, SeededRng
 from p2pwatch.adapters.config.crawler_config import ConfigError, parse_crawler_config
 from p2pwatch.adapters.config.yaml_loader import YamlLoadError, load_yaml
 from p2pwatch.adapters.monotonic_clock_asyncio import AsyncioMonotonicClock
+from p2pwatch.adapters.rng_random import SeededRng
 from p2pwatch.adapters.wake_hub_asyncio import AsyncioWakeHub
+from p2pwatch.adapters.wall_clock_system import SystemWallClock
 from p2pwatch.composition.app import CrawlerApp
 from p2pwatch.domain.policy_fingerprint import policy_fingerprint
 
@@ -77,7 +78,7 @@ def build_crawler_app(args: argparse.Namespace) -> CrawlerApp:
         crawler_config=crawler_config,
         targets=targets,
         matcher_config=matcher_config,
-        clock=AsyncioClock(),
+        wall_clock=SystemWallClock(),
         monotonic_clock=AsyncioMonotonicClock(),
         rng=SeededRng(),
         wake_hub=AsyncioWakeHub(),

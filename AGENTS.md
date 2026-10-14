@@ -132,6 +132,7 @@ a function does.
 | `first useful`, `reappeared` | a source's two alerts | `new`, `useful again` |
 | `audience` | who a notification is for: `community`, `operations` | `tag` (apprise's keyword aside), `channel` |
 | `error_label` | the label a parser prints in its errors | `what`, `label`, `field` |
+| `wall clock` | `WallClock`, the UTC time of day: every stamp a row, an event or a display carries | an interval or a deadline kept in memory |
 | `monotonic clock` | `MonotonicClock`, its `MonotonicInstant`s: every interval and deadline kept in memory | a stamp, anything persisted |
 | `micros` | an integer of microseconds: an instant counts from the epoch | a bare `_at` on an `int` |
 | `id`, `db`, `sql`, `url`, `api`, `json`, `ecid`, `mib`, `iso`, `min`, `max`, `conf` | the abbreviations allowed (`conf`: aMule's `amule.conf`) | |

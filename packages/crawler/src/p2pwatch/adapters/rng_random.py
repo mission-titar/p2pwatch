@@ -1,20 +1,6 @@
-"""Real adapters for time and randomness (orchestration spec §4).
-
-``AsyncioClock``: ``now()`` = ``datetime.now(UTC)`` (aware). ``SeededRng``: the ``Rng`` port's
-jitter draw. Both adapters are replaced in tests by advanceable/scripted fakes (fully
-deterministic, spec §3).
-"""
+"""``SeededRng``: the ``Rng`` port's jitter draw, over ``random.Random``."""
 
 import random
-from datetime import UTC, datetime
-
-
-class AsyncioClock:
-    """Real ``Clock`` (STRUCTURAL port satisfaction)."""
-
-    def now(self) -> datetime:
-        """Current instant, AWARE in UTC (``Clock`` contract)."""
-        return datetime.now(UTC)
 
 
 class SeededRng:

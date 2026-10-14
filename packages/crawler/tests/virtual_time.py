@@ -38,6 +38,13 @@ class _VirtualLoop(asyncio.SelectorEventLoop):
         return self._virtual.time
 
 
+class LoopWallClock:
+    """The running loop's time as the ``WallClock`` port."""
+
+    def now(self) -> datetime:
+        return EPOCH + timedelta(seconds=asyncio.get_running_loop().time())
+
+
 class LoopMonotonicClock:
     """The running loop's time as the ``MonotonicClock`` port."""
 
@@ -46,17 +53,6 @@ class LoopMonotonicClock:
 
     async def sleep(self, duration: timedelta) -> None:
         await asyncio.sleep(duration.total_seconds())
-
-
-class LoopClock:
-    """The running loop's time as the ``Clock`` port, and through ``monotonic`` as the
-    ``MonotonicClock`` port."""
-
-    def __init__(self) -> None:
-        self.monotonic = LoopMonotonicClock()
-
-    def now(self) -> datetime:
-        return EPOCH + timedelta(seconds=asyncio.get_running_loop().time())
 
 
 def run_virtual[T](main: Coroutine[Any, Any, T]) -> T:

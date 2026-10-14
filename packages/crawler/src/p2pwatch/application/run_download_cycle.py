@@ -44,7 +44,7 @@ from p2pwatch.domain.observability.events import (
 from p2pwatch.domain.source import SourceKey, SourceUsefulness
 from p2pwatch.ports.catalog_repository import DownloadCandidate, ObservedFile
 from p2pwatch.ports.client_errors import ClientUnreachableError, DownloadRejectedError
-from p2pwatch.ports.clock import Clock, MonotonicClock, MonotonicInstant
+from p2pwatch.ports.clock import MonotonicClock, MonotonicInstant, WallClock
 from p2pwatch.ports.disk_space import DiskSpace
 from p2pwatch.ports.download_client import (
     DownloadClient,
@@ -139,7 +139,7 @@ class DownloadDeps:
     poll_interval_seconds: float
     reappeared_after: timedelta
     sources_interval: timedelta
-    clock: Clock
+    wall_clock: WallClock
     monotonic_clock: MonotonicClock
     telemetry: Telemetry
     disk_low_edge: EdgeState = field(default_factory=EdgeState, kw_only=True)  # low-disk warning
@@ -215,7 +215,7 @@ async def _record_completion(
     nothing opens it. The caller skips files already ``completed``, so the notification fires
     exactly once per download.
     """
-    deps.downloads.record_completed(file, deps.clock.now())
+    deps.downloads.record_completed(file, deps.wall_clock.now())
     states[file] = DownloadState.COMPLETED
     await deps.telemetry.emit(
         DownloadCompleted(
@@ -261,7 +261,7 @@ def _expire_lost(deps: DownloadDeps) -> None:
     ``is_tracked`` stays state-blind, so a ``failed`` row still blocks automatic re-queuing;
     the manual retry is deleting the row.
     """
-    unseen_since = deps.clock.now() - timedelta(seconds=deps.lost_after_seconds)
+    unseen_since = deps.wall_clock.now() - timedelta(seconds=deps.lost_after_seconds)
     for file in deps.downloads.expire_lost(unseen_since):
         _logger.warning(
             "file=%s unseen by the client for %ss: marked failed",
@@ -311,7 +311,7 @@ async def _queue_new_candidates(deps: DownloadDeps, outstanding_bytes: int) -> N
         # record_queued ONLY here (sync DB write); _start_unlisted sends it (network I/O): the
         # write precedes the network, and a start that raises leaves it 'queued' for next round.
         deps.downloads.record_queued(
-            candidate.file, candidate.target_id, observation.size_bytes, deps.clock.now()
+            candidate.file, candidate.target_id, observation.size_bytes, deps.wall_clock.now()
         )
         outstanding_bytes += observation.size_bytes  # the client does not list it yet
         _logger.info("candidate file=%s queued for download", candidate.file.native_id)
@@ -401,11 +401,11 @@ async def _record_sources(deps: DownloadDeps, listed_statuses: tuple[DownloadSta
         return
     deps.sources_read_at = started_at
     tracked = deps.downloads.tracked_states()
-    round_ = _AlertRound(deps.clock.now())
+    round_ = _AlertRound(deps.wall_clock.now())
     for status in listed_statuses:
         if status.completed or status.file not in tracked:
             continue
-        read_at = deps.clock.now()
+        read_at = deps.wall_clock.now()
         readings = await deps.source_client.sources(status.file)
         try:
             recorded = deps.sources.record_readings(status.file, readings, read_at)
@@ -483,7 +483,7 @@ async def run_download_cycle(deps: DownloadDeps) -> None:
     # Step 2b - PRESENCE + TTL: stamp FIRST, condemn after. The reverse order would fail a row
     # the client is showing us right now.
     try:
-        deps.downloads.mark_seen(listed_statuses, deps.clock.now())
+        deps.downloads.mark_seen(listed_statuses, deps.wall_clock.now())
         _expire_lost(deps)
     except RepositoryError as error:
         _logger.error("download presence repo failure (%s): step skipped, continues", error)

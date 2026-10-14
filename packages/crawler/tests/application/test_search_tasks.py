@@ -31,7 +31,7 @@ from p2pwatch.ports.client_errors import SearchFailedError
 from p2pwatch.ports.repository_errors import RepositoryError
 from p2pwatch.ports.scheduler_state_repository import BackoffState
 from tests.application.fakes import FakeRng, RecordingTelemetry, RecordingWakeHub, make_unreachable
-from tests.virtual_time import LoopClock, LoopMonotonicClock, run_virtual
+from tests.virtual_time import LoopMonotonicClock, LoopWallClock, run_virtual
 
 _HOUR = 3600.0
 _POLICY = BackoffPolicy(
@@ -126,8 +126,8 @@ def tasks(
     catalog: SqliteCatalogRepository, engine: MatchingEngine, tmp_path: Path
 ) -> Iterator[_Tasks]:
     connection = open_local(tmp_path / "local.db")
-    clock = LoopClock()
-    backoff = BackoffRegistry(_POLICY, clock, FakeRng())
+    wall_clock = LoopWallClock()
+    backoff = BackoffRegistry(_POLICY, wall_clock, FakeRng())
     wake_hub, telemetry = RecordingWakeHub(), RecordingTelemetry()
     deps = WorkerDeps(
         catalog=catalog,
@@ -135,7 +135,7 @@ def tasks(
         wake_hub=wake_hub,
         backoff=backoff,
         telemetry=telemetry,
-        clock=clock,
+        wall_clock=wall_clock,
     )
     yield _Tasks(deps, _SavesRecorded(connection))
     connection.close()

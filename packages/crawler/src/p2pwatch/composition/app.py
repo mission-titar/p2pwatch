@@ -75,10 +75,11 @@ from p2pwatch.application.search_worker import (
 from p2pwatch.application.status_loop import StatusBoard, StatusLoopDeps, status_loop
 from p2pwatch.domain.observability.events import CrawlerStarted
 from p2pwatch.ports.client_errors import ClientUnreachableError
-from p2pwatch.ports.clock import Clock, MonotonicClock, Rng
+from p2pwatch.ports.clock import MonotonicClock, WallClock
 from p2pwatch.ports.crawler_control import CrawlerControl
 from p2pwatch.ports.download_client import DownloadClient
 from p2pwatch.ports.mule_client import MuleClient
+from p2pwatch.ports.rng import Rng
 from p2pwatch.ports.scheduler_state_repository import SchedulerStateRepository
 from p2pwatch.ports.source_client import SourceClient
 from p2pwatch.ports.telemetry import Telemetry
@@ -192,7 +193,7 @@ class CrawlerApp:
         crawler_config: CrawlerConfig,
         targets: Sequence[TargetSegment],
         matcher_config: MatcherConfig,
-        clock: Clock,
+        wall_clock: WallClock,
         monotonic_clock: MonotonicClock,
         rng: Rng,
         wake_hub: WakeHub,
@@ -205,7 +206,7 @@ class CrawlerApp:
         self._crawler_config = crawler_config
         self._targets = tuple(targets)
         self._matcher_config = matcher_config
-        self._clock = clock
+        self._wall_clock = wall_clock
         self._monotonic_clock = monotonic_clock
         self._rng = rng
         self._wake_hub = wake_hub
@@ -276,7 +277,7 @@ class CrawlerApp:
             poll_interval_seconds=download_config.poll_interval_seconds,
             reappeared_after=download_config.reappeared_after,
             sources_interval=download_config.sources_interval,
-            clock=self._clock,
+            wall_clock=self._wall_clock,
             monotonic_clock=self._monotonic_clock,
             telemetry=telemetry,
             wake_hub=self._wake_hub,
@@ -367,7 +368,7 @@ class CrawlerApp:
             control=control,
             status_readings=status_board,
             amule_url=self._crawler_config.webui.amule_url,
-            clock=self._clock,
+            wall_clock=self._wall_clock,
             source_period_gap=self._crawler_config.webui.source_period_gap,
         )
         server = self._webui_server_factory(app)
@@ -426,7 +427,7 @@ class CrawlerApp:
 
             local_repo = SqliteLocalStateRepository(local_conn)
             node_id = self._crawler_config.node_id or local_repo.get_or_create_node_id(
-                self._clock.now()
+                self._wall_clock.now()
             )
             observability = self._crawler_config.observability
             notifications = observability.notifications if observability is not None else ()
@@ -463,7 +464,9 @@ class CrawlerApp:
             # SHARED backoff registry: built ONCE, RELOADED from scheduler_state
             # (backoff survives restart, spec §3/§7), injected into ALL workers
             # + passed to the search tasks that persist it. Single writer on the event loop.
-            backoff = BackoffRegistry(_backoff_policy(self._crawler_config), self._clock, self._rng)
+            backoff = BackoffRegistry(
+                _backoff_policy(self._crawler_config), self._wall_clock, self._rng
+            )
             backoff.load_from(scheduler_state.load_backoff_states())
             deps = WorkerDeps(
                 catalog=catalog_repo,
@@ -471,7 +474,7 @@ class CrawlerApp:
                 wake_hub=self._wake_hub,
                 backoff=backoff,
                 telemetry=telemetry,
-                clock=self._clock,
+                wall_clock=self._wall_clock,
             )
 
             client = self._client_factory(endpoint, self._monotonic_clock)
@@ -495,7 +498,7 @@ class CrawlerApp:
             status_deps = StatusLoopDeps(
                 endpoint.client_name,
                 client,
-                self._clock,
+                self._wall_clock,
                 self._monotonic_clock,
                 telemetry,
                 self._shutdown,
@@ -537,7 +540,7 @@ class CrawlerApp:
                     engine=engine,
                     wake_hub=self._wake_hub,
                     telemetry=telemetry,
-                    clock=self._clock,
+                    wall_clock=self._wall_clock,
                 ),
             )
             if summary is None:

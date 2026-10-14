@@ -37,7 +37,7 @@ from p2pwatch.ports.download_client import (
 )
 from p2pwatch.ports.repository_errors import RepositoryError
 from p2pwatch.ports.source_repository import EarlierPoints, RecordedReading, SourceRepository
-from tests.application.fakes import FakeTime, FakeWallClock, RecordingTelemetry
+from tests.application.fakes import FakeTime, RecordingTelemetry, TickingWallClock
 from tests.catalog_rows import insert_file
 
 _A = "a" * 32
@@ -360,7 +360,7 @@ def _deps(
         poll_interval_seconds=30.0,
         reappeared_after=timedelta(hours=12),
         sources_interval=sources_interval,
-        clock=fake_time.wall,
+        wall_clock=fake_time.wall,
         monotonic_clock=fake_time.monotonic,
         telemetry=telemetry or RecordingTelemetry(),
     )
@@ -1269,19 +1269,10 @@ async def test_a_download_amuled_no_longer_knows_becomes_failed() -> None:
     assert client.started == []  # failed by the TTL: never started again
 
 
-class _TickingWallClock(FakeWallClock):
-    """Each ``now()`` a minute after the previous one: a write shows which read it took."""
-
-    def now(self) -> datetime:
-        moment = super().now()
-        self._fake_time.advance(timedelta(minutes=1))
-        return moment
-
-
 @pytest.mark.asyncio
 async def test_each_download_write_carries_the_instant_read_right_before_it() -> None:
-    clock = _TickingWallClock(FakeTime())
-    start = clock.now()
+    wall_clock = TickingWallClock(FakeTime())
+    start = wall_clock.now()
     client = FakeDownloadClient(listed=[(_status(_A, completed=True),)])
     downloads = FakeDownloadRepo()
     downloads.states[_A] = DownloadState.DOWNLOADING
@@ -1290,7 +1281,7 @@ async def test_each_download_write_carries_the_instant_read_right_before_it() ->
         observations={_B: ObservedFile(filename="b.avi", size_bytes=100)},
     )
     deps = _deps(client=client, downloads=downloads, catalog=catalog, lost_after=3600.0)
-    deps.clock = clock
+    deps.wall_clock = wall_clock
     await run_download_cycle(deps)
     minute = timedelta(minutes=1)
     assert downloads.completed_at == {_A: start + minute}

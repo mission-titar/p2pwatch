@@ -53,14 +53,13 @@ from p2pwatch.ports.clock import MonotonicClock
 from p2pwatch.ports.download_client import DownloadRequest, DownloadStatus
 from tests.adapters.mule_api.api_fakes import PASSWORD, FakeAmuleApi
 from tests.application.fakes import (
-    FakeClock,
     FakeMonotonicClock,
     FakeMuleClient,
     FakeTime,
     RecordingWakeHub,
 )
 from tests.catalog_rows import insert_file, observation_node_ids
-from tests.virtual_time import MONOTONIC_EPOCH, LoopClock, run_virtual
+from tests.virtual_time import MONOTONIC_EPOCH, LoopMonotonicClock, LoopWallClock, run_virtual
 
 _TARGETS = (
     TargetSegment(
@@ -141,7 +140,6 @@ def _make_app(
     matcher_config: MatcherConfig,
     *,
     factory: object,
-    clock: FakeClock | None = None,
     node_id: str | None = None,
     shutdown_deadline: float = 30.0,
     observability: ObservabilityConfig | None = None,
@@ -156,7 +154,7 @@ def _make_app(
         ),
         targets=_TARGETS,
         matcher_config=matcher_config,
-        clock=clock or FakeClock(),
+        wall_clock=FakeTime().wall,
         monotonic_clock=FakeTime().monotonic,
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
@@ -380,7 +378,7 @@ async def test_signal_cancels_an_in_flight_search(
 
 
 class _RealPacedClient(FakeMuleClient):
-    """Client that paces each status reading with a SMALL REAL sleep (not the FakeClock).
+    """Client that paces each status reading with a SMALL REAL sleep (not the FakeTime).
 
     Used to prove the timing invariant: ``status`` yields REAL time instead of
     busy-spinning, so the status loop advances at a controlled real pace. The normal run
@@ -550,16 +548,16 @@ def _starts(api: FakeAmuleApi, search_type: str) -> list[tuple[float, str]]:
 def test_an_hour_of_the_running_app_keeps_to_the_networks_rules(
     tmp_path: Path, matcher_config: MatcherConfig
 ) -> None:
-    loop_clock = LoopClock()
-    api = FakeAmuleApi(monotonic_clock=loop_clock.monotonic, search_seconds=dict(_DURATIONS))
+    monotonic_clock = LoopMonotonicClock()
+    api = FakeAmuleApi(monotonic_clock=monotonic_clock, search_seconds=dict(_DURATIONS))
 
     async def main() -> None:
         app = CrawlerApp(
             crawler_config=_crawler_config(tmp_path, keywords=tuple(_DURATIONS)),
             targets=_TARGETS,
             matcher_config=matcher_config,
-            clock=loop_clock,
-            monotonic_clock=loop_clock.monotonic,
+            wall_clock=LoopWallClock(),
+            monotonic_clock=monotonic_clock,
             rng=_NoopRng(),
             wake_hub=RecordingWakeHub(),
             policy_fingerprint=_FP,
@@ -611,7 +609,7 @@ async def test_backfill_runs_and_stores_marker_when_policy_never_set(
         crawler_config=_crawler_config(tmp_path),
         targets=_TARGETS,
         matcher_config=matcher_config,
-        clock=FakeClock(),
+        wall_clock=FakeTime().wall,
         monotonic_clock=FakeTime().monotonic,
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
@@ -656,7 +654,7 @@ async def test_backfill_skipped_when_marker_already_matches_fingerprint(
         crawler_config=_crawler_config(tmp_path),
         targets=_TARGETS,
         matcher_config=matcher_config,
-        clock=FakeClock(),
+        wall_clock=FakeTime().wall,
         monotonic_clock=FakeTime().monotonic,
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
@@ -746,7 +744,7 @@ async def test_observer_mode_runs_without_the_download_loop(
         crawler_config=_crawler_config(tmp_path),  # no download → observer
         targets=_TARGETS,
         matcher_config=matcher_config,
-        clock=FakeClock(),
+        wall_clock=FakeTime().wall,
         monotonic_clock=FakeTime().monotonic,
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
@@ -776,7 +774,7 @@ async def test_full_mode_runs_the_download_loop(
         crawler_config=_full_crawler_config(tmp_path),
         targets=_TARGETS,
         matcher_config=matcher_config,
-        clock=FakeClock(),
+        wall_clock=FakeTime().wall,
         monotonic_clock=FakeTime().monotonic,
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
@@ -815,7 +813,7 @@ async def test_full_mode_records_the_sources_of_a_download_in_the_catalog(
 ) -> None:
     file = FileKey(Network.ED2K, "a" * 32)
     local = open_local(tmp_path / "local.db")
-    SqliteDownloadRepository(local).record_queued(file, "062A", 100, FakeClock().now())
+    SqliteDownloadRepository(local).record_queued(file, "062A", 100, FakeTime().wall.now())
     local.close()
     catalog = open_catalog(tmp_path / "catalog.db")
     insert_file(catalog, file.native_id)
@@ -825,7 +823,7 @@ async def test_full_mode_records_the_sources_of_a_download_in_the_catalog(
         crawler_config=_crawler_config(tmp_path, node_id="n1", download=_download_config(tmp_path)),
         targets=_TARGETS,
         matcher_config=matcher_config,
-        clock=FakeClock(),
+        wall_clock=FakeTime().wall,
         monotonic_clock=FakeTime().monotonic,
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
@@ -847,28 +845,28 @@ async def test_full_mode_records_the_sources_of_a_download_in_the_catalog(
 
 
 @pytest.mark.asyncio
-async def test_the_rows_written_carry_the_apps_clock(
+async def test_the_rows_written_carry_the_apps_wall_clock(
     tmp_path: Path, matcher_config: MatcherConfig
 ) -> None:
     # A year the wall clock cannot be in, so a row stamped on any other clock fails the bounds.
-    clock = FakeClock(datetime(2030, 1, 1, tzinfo=UTC))
-    seeded = FakeClock(datetime(2029, 12, 31, 23, tzinfo=UTC))
+    wall_clock = FakeTime(datetime(2030, 1, 1, tzinfo=UTC)).wall
+    seeded_at = datetime(2029, 12, 31, 23, tzinfo=UTC)
     file = FileKey(Network.ED2K, "a" * 32)
     catalog = open_catalog(tmp_path / "catalog.db")
     SqliteCatalogRepository(catalog, "n1").record_observation(
         FileObservation(file=file, filename=_DL_NAME, size_bytes=100, source_count=1, keyword="k"),
-        seeded.now(),
+        seeded_at,
     )
     catalog.close()
     local = open_local(tmp_path / "local.db")
-    SqliteDownloadRepository(local).record_queued(file, "062A", 100, seeded.now())
+    SqliteDownloadRepository(local).record_queued(file, "062A", 100, seeded_at)
     local.close()
     holder: dict[str, CrawlerApp] = {}
     app = CrawlerApp(
         crawler_config=_full_crawler_config(tmp_path),
         targets=_TARGETS,
         matcher_config=matcher_config,
-        clock=clock,
+        wall_clock=wall_clock,
         monotonic_clock=FakeTime().monotonic,
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
@@ -878,7 +876,7 @@ async def test_the_rows_written_carry_the_apps_clock(
             holder, file
         ),
     )
-    start = utc_iso(clock.now())
+    start = utc_iso(wall_clock.now())
     holder["app"] = app
     await asyncio.wait_for(app.run(), timeout=5.0)
     catalog = open_catalog(tmp_path / "catalog.db")
@@ -892,7 +890,7 @@ async def test_the_rows_written_carry_the_apps_clock(
     }
     catalog.close()
     local.close()
-    end = utc_iso(clock.now())
+    end = utc_iso(wall_clock.now())
     assert all(start <= stamp <= end for stamp in stamps.values()), (start, stamps, end)
 
 
@@ -922,7 +920,7 @@ async def test_full_mode_reads_sources_at_their_interval_and_spaces_them_by_a_po
         crawler_config=_crawler_config(tmp_path, download=download),
         targets=_TARGETS,
         matcher_config=matcher_config,
-        clock=FakeClock(),
+        wall_clock=FakeTime().wall,
         monotonic_clock=FakeTime().monotonic,
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
@@ -958,7 +956,7 @@ async def test_full_mode_tolerates_download_daemon_unreachable_at_startup(
         crawler_config=_full_crawler_config(tmp_path),
         targets=_TARGETS,
         matcher_config=matcher_config,
-        clock=FakeClock(),
+        wall_clock=FakeTime().wall,
         monotonic_clock=FakeTime().monotonic,
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
@@ -970,7 +968,7 @@ async def test_full_mode_tolerates_download_daemon_unreachable_at_startup(
     await asyncio.wait_for(app.run(), timeout=5.0)  # does not raise: connect tolerated
 
 
-class _BlockingPollClock(FakeMonotonicClock):
+class _BlockingPollMonotonicClock(FakeMonotonicClock):
     """Monotonic clock whose LONG sleeps (≥ 5 s) BLOCK for good (on an Event that is never set).
 
     Models the IN-CYCLE sleep of the download loop (``_sleep_or_wake``, 30 s poll): it stays
@@ -1014,14 +1012,14 @@ async def test_full_mode_shutdown_cancels_the_download_loop_promptly(
     # cancellation happens, ``run()`` RETURNS promptly (without reaching the deadline); otherwise
     # it would ``TimeoutError`` (deadline) or block until the external guard → fail-closed failure.
     holder: dict[str, CrawlerApp] = {}
-    monotonic_clock = _BlockingPollClock(holder)
+    monotonic_clock = _BlockingPollMonotonicClock(holder)
 
     # _full_crawler_config: download poll 30 s, shutdown_deadline 30 s.
     app = CrawlerApp(
         crawler_config=_full_crawler_config(tmp_path),
         targets=_TARGETS,
         matcher_config=matcher_config,
-        clock=FakeClock(),
+        wall_clock=FakeTime().wall,
         monotonic_clock=monotonic_clock,
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
@@ -1048,15 +1046,15 @@ async def test_full_mode_shutdown_leaves_no_task_leaked(
     # the group) or forgot to cancel a sibling task - a ``pending`` task would then survive
     # ``run()``. We prove it by DIFFERENCE: the tasks born DURING ``run()`` (full = both
     # loops blocked in their sleep, shutdown armed once blocked) must ALL be
-    # finished once ``run()`` has returned. The ``_BlockingPollClock`` forces the worst case: the
-    # loops can only exit VIA the explicit cancellation by ``_supervise``.
+    # finished once ``run()`` has returned. The ``_BlockingPollMonotonicClock`` forces the worst
+    # case: the loops can only exit VIA the explicit cancellation by ``_supervise``.
     holder: dict[str, CrawlerApp] = {}
-    monotonic_clock = _BlockingPollClock(holder)
+    monotonic_clock = _BlockingPollMonotonicClock(holder)
     app = CrawlerApp(
         crawler_config=_full_crawler_config(tmp_path),
         targets=_TARGETS,
         matcher_config=matcher_config,
-        clock=FakeClock(),
+        wall_clock=FakeTime().wall,
         monotonic_clock=monotonic_clock,
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
@@ -1203,7 +1201,7 @@ async def test_emits_crawler_started_full_mode(
         crawler_config=_full_crawler_config(tmp_path),
         targets=_TARGETS,
         matcher_config=matcher_config,
-        clock=FakeClock(),
+        wall_clock=FakeTime().wall,
         monotonic_clock=FakeTime().monotonic,
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
@@ -1274,7 +1272,7 @@ async def test_webui_starts_on_own_thread_and_stops_at_shutdown(
         crawler_config=_crawler_config(tmp_path, webui=WebuiConfig(enabled=True)),
         targets=_TARGETS,
         matcher_config=matcher_config,
-        clock=FakeClock(),
+        wall_clock=FakeTime().wall,
         monotonic_clock=FakeTime().monotonic,
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
@@ -1310,7 +1308,7 @@ async def test_the_webui_reads_the_status_loops_board_and_the_pause_gate(
         crawler_config=_crawler_config(tmp_path, webui=WebuiConfig(enabled=True)),
         targets=_TARGETS,
         matcher_config=matcher_config,
-        clock=FakeClock(),
+        wall_clock=FakeTime().wall,
         monotonic_clock=FakeTime().monotonic,
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
@@ -1339,13 +1337,13 @@ async def test_the_webui_cuts_periods_at_its_configured_gap_and_reads_the_crawle
         return Starlette()
 
     monkeypatch.setattr(composition_app, "build_webui_app", build)
-    clock = FakeClock()
+    wall_clock = FakeTime().wall
     webui = WebuiConfig(enabled=True, source_period_gap=timedelta(seconds=600))
     app = CrawlerApp(
         crawler_config=_crawler_config(tmp_path, webui=webui),
         targets=_TARGETS,
         matcher_config=matcher_config,
-        clock=clock,
+        wall_clock=wall_clock,
         monotonic_clock=FakeTime().monotonic,
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
@@ -1356,7 +1354,7 @@ async def test_the_webui_cuts_periods_at_its_configured_gap_and_reads_the_crawle
     holder["app"] = app
     await asyncio.wait_for(app.run(), timeout=5.0)
     assert wired["source_period_gap"] == timedelta(seconds=600)
-    assert wired["clock"] is clock
+    assert wired["wall_clock"] is wall_clock
 
 
 @pytest.mark.asyncio
@@ -1379,7 +1377,7 @@ async def test_webui_not_started_when_disabled(
         crawler_config=_crawler_config(tmp_path, webui=WebuiConfig(enabled=False)),
         targets=_TARGETS,
         matcher_config=matcher_config,
-        clock=FakeClock(),
+        wall_clock=FakeTime().wall,
         monotonic_clock=FakeTime().monotonic,
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
@@ -1413,7 +1411,7 @@ async def test_webui_crash_degrades_and_crawler_shuts_down_cleanly(
         crawler_config=_crawler_config(tmp_path, webui=WebuiConfig(enabled=True)),
         targets=_TARGETS,
         matcher_config=matcher_config,
-        clock=FakeClock(),
+        wall_clock=FakeTime().wall,
         monotonic_clock=FakeTime().monotonic,
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),

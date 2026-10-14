@@ -1,8 +1,8 @@
 """Tests for the shared decision helper (spec §7): set diff keyed by (hash, target_id).
 
 Real engine + real SQLite catalog repo (mirrors ``test_record_observations.py``: "real repos
-on tmp_path"); only ``wake_hub``/``telemetry``/``clock`` are fakes. ``_record`` observes the name
-first: the helper judges the file on every name the catalog knows for it.
+on tmp_path"); only ``wake_hub``/``telemetry``/``wall_clock`` are fakes. ``_record`` observes the
+name first: the helper judges the file on every name the catalog knows for it.
 """
 
 import sqlite3
@@ -20,7 +20,13 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability.events import DecisionChange, DecisionsRecorded
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.retraction import RETRACTED_TIER
-from tests.application.fakes import FakeClock, RecordingTelemetry, RecordingWakeHub
+from tests.application.fakes import (
+    FakeTime,
+    FakeWallClock,
+    RecordingTelemetry,
+    RecordingWakeHub,
+    TickingWallClock,
+)
 from tests.catalog_rows import insert_file
 
 _HASH_DL = "31d6cfe0d16ae931b73c59d7e0c089c0"
@@ -75,9 +81,9 @@ async def _record(
     engine: MatchingEngine,
     wake_hub: RecordingWakeHub,
     telemetry: RecordingTelemetry,
-    clock: FakeClock,
+    wall_clock: FakeWallClock,
 ) -> int:
-    catalog.record_observation(_obs(ed2k_hash, filename), clock.now())
+    catalog.record_observation(_obs(ed2k_hash, filename), wall_clock.now())
     return await rejudge_file(
         _key(ed2k_hash),
         _obs(ed2k_hash, filename).to_candidate(),
@@ -85,7 +91,7 @@ async def _record(
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
-        clock=clock,
+        wall_clock=wall_clock,
     )
 
 
@@ -94,10 +100,10 @@ async def test_new_decision_is_recorded_emitted_and_nudged(
     catalog: SqliteCatalogRepository,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
-    clock: FakeClock,
+    wall_clock: FakeWallClock,
 ) -> None:
     telemetry, wake_hub = RecordingTelemetry(), RecordingWakeHub()
-    written = await _record(_HASH_DL, _DL_NAME, catalog, engine, wake_hub, telemetry, clock)
+    written = await _record(_HASH_DL, _DL_NAME, catalog, engine, wake_hub, telemetry, wall_clock)
     assert written == 1
     assert catalog_connection.execute("SELECT target_id, tier FROM match_decisions").fetchone() == (
         "062A",
@@ -114,10 +120,12 @@ async def test_multi_segment_file_records_both_segments_then_is_idempotent(
     catalog: SqliteCatalogRepository,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
-    clock: FakeClock,
+    wall_clock: FakeWallClock,
 ) -> None:
     telemetry, wake_hub = RecordingTelemetry(), RecordingWakeHub()
-    written = await _record(_HASH_MULTI, _MULTI_NAME, catalog, engine, wake_hub, telemetry, clock)
+    written = await _record(
+        _HASH_MULTI, _MULTI_NAME, catalog, engine, wake_hub, telemetry, wall_clock
+    )
     assert written == 2
     assert catalog_connection.execute(
         "SELECT target_id, rule_name, tier FROM match_decisions ORDER BY id"
@@ -134,7 +142,9 @@ async def test_multi_segment_file_records_both_segments_then_is_idempotent(
         )
     ]
     assert wake_hub.woken_subjects == [DOWNLOAD_WAKE_SUBJECT, DOWNLOAD_WAKE_SUBJECT]
-    again = await _record(_HASH_MULTI, _MULTI_NAME, catalog, engine, wake_hub, telemetry, clock)
+    again = await _record(
+        _HASH_MULTI, _MULTI_NAME, catalog, engine, wake_hub, telemetry, wall_clock
+    )
     assert again == 0
     assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 2
 
@@ -144,11 +154,11 @@ async def test_changed_decision_is_reappended_emitted_and_nudged(
     catalog: SqliteCatalogRepository,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
-    clock: FakeClock,
+    wall_clock: FakeWallClock,
 ) -> None:
     telemetry, wake_hub = RecordingTelemetry(), RecordingWakeHub()
-    await _record(_HASH_DL, _NOTIFY_NAME, catalog, engine, wake_hub, telemetry, clock)
-    written = await _record(_HASH_DL, _DL_NAME, catalog, engine, wake_hub, telemetry, clock)
+    await _record(_HASH_DL, _NOTIFY_NAME, catalog, engine, wake_hub, telemetry, wall_clock)
+    written = await _record(_HASH_DL, _DL_NAME, catalog, engine, wake_hub, telemetry, wall_clock)
     assert written == 1
     tiers = [
         row[0]
@@ -169,11 +179,11 @@ async def test_unchanged_decision_is_not_reappended_emitted_or_signalled(
     catalog: SqliteCatalogRepository,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
-    clock: FakeClock,
+    wall_clock: FakeWallClock,
 ) -> None:
     telemetry, wake_hub = RecordingTelemetry(), RecordingWakeHub()
-    first = await _record(_HASH_CAT, _CAT_NAME, catalog, engine, wake_hub, telemetry, clock)
-    second = await _record(_HASH_CAT, _CAT_NAME, catalog, engine, wake_hub, telemetry, clock)
+    first = await _record(_HASH_CAT, _CAT_NAME, catalog, engine, wake_hub, telemetry, wall_clock)
+    second = await _record(_HASH_CAT, _CAT_NAME, catalog, engine, wake_hub, telemetry, wall_clock)
     assert (first, second) == (1, 0)
     assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 1
     assert len(telemetry.events) == 1
@@ -184,12 +194,14 @@ async def test_unchanged_decision_is_not_reappended_emitted_or_signalled(
 async def test_a_target_no_name_supports_is_retracted_without_nudge(
     catalog: SqliteCatalogRepository,
     engine: MatchingEngine,
-    clock: FakeClock,
+    wall_clock: FakeWallClock,
 ) -> None:
-    catalog.record_observation(_obs(_HASH_CAT, _DISCARD_NAME), clock.now())
-    _seed_decision(catalog, _HASH_CAT, "062A", clock.now())
+    catalog.record_observation(_obs(_HASH_CAT, _DISCARD_NAME), wall_clock.now())
+    _seed_decision(catalog, _HASH_CAT, "062A", wall_clock.now())
     telemetry, wake_hub = RecordingTelemetry(), RecordingWakeHub()
-    written = await _record(_HASH_CAT, _DISCARD_NAME, catalog, engine, wake_hub, telemetry, clock)
+    written = await _record(
+        _HASH_CAT, _DISCARD_NAME, catalog, engine, wake_hub, telemetry, wall_clock
+    )
     assert written == 1
     assert catalog.latest_decisions(_key(_HASH_CAT)) == {
         "062A": DecisionRecord(target_id="062A", rule_name="", tier=RETRACTED_TIER)
@@ -204,13 +216,15 @@ async def test_a_target_no_name_supports_is_retracted_without_nudge(
 async def test_every_unsupported_target_is_retracted(
     catalog: SqliteCatalogRepository,
     engine: MatchingEngine,
-    clock: FakeClock,
+    wall_clock: FakeWallClock,
 ) -> None:
-    catalog.record_observation(_obs(_HASH_MULTI, _DISCARD_NAME), clock.now())
-    _seed_decision(catalog, _HASH_MULTI, "062A", clock.now())
-    _seed_decision(catalog, _HASH_MULTI, "062B", clock.now())
+    catalog.record_observation(_obs(_HASH_MULTI, _DISCARD_NAME), wall_clock.now())
+    _seed_decision(catalog, _HASH_MULTI, "062A", wall_clock.now())
+    _seed_decision(catalog, _HASH_MULTI, "062B", wall_clock.now())
     telemetry, wake_hub = RecordingTelemetry(), RecordingWakeHub()
-    written = await _record(_HASH_MULTI, _DISCARD_NAME, catalog, engine, wake_hub, telemetry, clock)
+    written = await _record(
+        _HASH_MULTI, _DISCARD_NAME, catalog, engine, wake_hub, telemetry, wall_clock
+    )
     assert written == 2
     assert catalog.latest_decisions(_key(_HASH_MULTI)) == {
         "062A": DecisionRecord(target_id="062A", rule_name="", tier=RETRACTED_TIER),
@@ -223,13 +237,15 @@ async def test_every_unsupported_target_is_retracted(
 async def test_already_retracted_then_none_is_a_no_op(
     catalog: SqliteCatalogRepository,
     engine: MatchingEngine,
-    clock: FakeClock,
+    wall_clock: FakeWallClock,
 ) -> None:
-    catalog.record_observation(_obs(_HASH_CAT, _DISCARD_NAME), clock.now())
-    _seed_decision(catalog, _HASH_CAT, "062A", clock.now())
-    catalog.record_retraction(_key(_HASH_CAT), "062A", clock.now())
+    catalog.record_observation(_obs(_HASH_CAT, _DISCARD_NAME), wall_clock.now())
+    _seed_decision(catalog, _HASH_CAT, "062A", wall_clock.now())
+    catalog.record_retraction(_key(_HASH_CAT), "062A", wall_clock.now())
     telemetry, wake_hub = RecordingTelemetry(), RecordingWakeHub()
-    written = await _record(_HASH_CAT, _DISCARD_NAME, catalog, engine, wake_hub, telemetry, clock)
+    written = await _record(
+        _HASH_CAT, _DISCARD_NAME, catalog, engine, wake_hub, telemetry, wall_clock
+    )
     assert written == 0
     assert telemetry.events == []
 
@@ -239,10 +255,12 @@ async def test_never_matched_then_none_is_a_no_op(
     catalog: SqliteCatalogRepository,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
-    clock: FakeClock,
+    wall_clock: FakeWallClock,
 ) -> None:
     telemetry, wake_hub = RecordingTelemetry(), RecordingWakeHub()
-    written = await _record(_HASH_NEVER, _DISCARD_NAME, catalog, engine, wake_hub, telemetry, clock)
+    written = await _record(
+        _HASH_NEVER, _DISCARD_NAME, catalog, engine, wake_hub, telemetry, wall_clock
+    )
     assert written == 0
     assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 0
     assert telemetry.events == []
@@ -251,10 +269,10 @@ async def test_never_matched_then_none_is_a_no_op(
 
 @pytest.mark.asyncio
 async def test_non_download_tier_decision_does_not_nudge_the_download_subject(
-    catalog: SqliteCatalogRepository, engine: MatchingEngine, clock: FakeClock
+    catalog: SqliteCatalogRepository, engine: MatchingEngine, wall_clock: FakeWallClock
 ) -> None:
     telemetry, wake_hub = RecordingTelemetry(), RecordingWakeHub()
-    written = await _record(_HASH_CAT, _CAT_NAME, catalog, engine, wake_hub, telemetry, clock)
+    written = await _record(_HASH_CAT, _CAT_NAME, catalog, engine, wake_hub, telemetry, wall_clock)
     assert written == 1
     assert wake_hub.woken_subjects == []
 
@@ -263,7 +281,7 @@ async def test_non_download_tier_decision_does_not_nudge_the_download_subject(
 async def test_a_second_name_that_matches_nothing_does_not_retract_the_first(
     catalog: SqliteCatalogRepository,
     engine: MatchingEngine,
-    clock: FakeClock,
+    wall_clock: FakeWallClock,
 ) -> None:
     # Regression (spec amuleapi-migration §8.4): names of one hash used to alternate verdicts.
     telemetry, wake_hub = RecordingTelemetry(), RecordingWakeHub()
@@ -274,7 +292,7 @@ async def test_a_second_name_that_matches_nothing_does_not_retract_the_first(
             engine=engine,
             wake_hub=wake_hub,
             telemetry=telemetry,
-            clock=clock,
+            wall_clock=wall_clock,
             client_name="amuled",
             channel="ed2k",
         )
@@ -290,11 +308,11 @@ async def test_a_second_name_that_matches_nothing_does_not_retract_the_first(
 async def test_a_weaker_name_seen_again_does_not_downgrade_the_verdict(
     catalog: SqliteCatalogRepository,
     engine: MatchingEngine,
-    clock: FakeClock,
+    wall_clock: FakeWallClock,
 ) -> None:
     telemetry, wake_hub = RecordingTelemetry(), RecordingWakeHub()
     written = [
-        await _record(_HASH_DL, name, catalog, engine, wake_hub, telemetry, clock)
+        await _record(_HASH_DL, name, catalog, engine, wake_hub, telemetry, wall_clock)
         for name in (_NOTIFY_NAME, _DL_NAME, _NOTIFY_NAME, _DL_NAME)
     ]
     assert written == [1, 1, 0, 0]
@@ -303,22 +321,22 @@ async def test_a_weaker_name_seen_again_does_not_downgrade_the_verdict(
 
 @pytest.mark.asyncio
 async def test_the_event_names_the_file_by_its_most_sourced_name(
-    catalog: SqliteCatalogRepository, engine: MatchingEngine, clock: FakeClock
+    catalog: SqliteCatalogRepository, engine: MatchingEngine, wall_clock: FakeWallClock
 ) -> None:
-    catalog.record_observation(_obs(_HASH_DL, _DL_NAME, sources=9), clock.now())
+    catalog.record_observation(_obs(_HASH_DL, _DL_NAME, sources=9), wall_clock.now())
     telemetry, wake_hub = RecordingTelemetry(), RecordingWakeHub()
-    await _record(_HASH_DL, _NOTIFY_NAME, catalog, engine, wake_hub, telemetry, clock)
+    await _record(_HASH_DL, _NOTIFY_NAME, catalog, engine, wake_hub, telemetry, wall_clock)
     assert [e.filename for e in telemetry.events if isinstance(e, DecisionsRecorded)] == [_DL_NAME]
 
 
 @pytest.mark.asyncio
 async def test_a_retracted_target_gone_from_the_targets_has_no_title(
-    catalog: SqliteCatalogRepository, engine: MatchingEngine, clock: FakeClock
+    catalog: SqliteCatalogRepository, engine: MatchingEngine, wall_clock: FakeWallClock
 ) -> None:
-    catalog.record_observation(_obs(_HASH_CAT, _DISCARD_NAME), clock.now())
-    _seed_decision(catalog, _HASH_CAT, "999Z", clock.now())
+    catalog.record_observation(_obs(_HASH_CAT, _DISCARD_NAME), wall_clock.now())
+    _seed_decision(catalog, _HASH_CAT, "999Z", wall_clock.now())
     telemetry, wake_hub = RecordingTelemetry(), RecordingWakeHub()
-    await _record(_HASH_CAT, _DISCARD_NAME, catalog, engine, wake_hub, telemetry, clock)
+    await _record(_HASH_CAT, _DISCARD_NAME, catalog, engine, wake_hub, telemetry, wall_clock)
     assert telemetry.events == [
         _event(_HASH_CAT, _DISCARD_NAME, DecisionChange("999Z", "", "notify", RETRACTED_TIER))
     ]
@@ -329,11 +347,11 @@ async def test_a_file_with_no_name_left_is_named_by_the_candidate(
     catalog: SqliteCatalogRepository,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
-    clock: FakeClock,
+    wall_clock: FakeWallClock,
 ) -> None:
     # Only a retraction can be written then, and it is never notified: the size is unknown.
     insert_file(catalog_connection, _HASH_CAT, 1)
-    _seed_decision(catalog, _HASH_CAT, "062A", clock.now())
+    _seed_decision(catalog, _HASH_CAT, "062A", wall_clock.now())
     telemetry, wake_hub = RecordingTelemetry(), RecordingWakeHub()
     await rejudge_file(
         _key(_HASH_CAT),
@@ -342,7 +360,7 @@ async def test_a_file_with_no_name_left_is_named_by_the_candidate(
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
-        clock=clock,
+        wall_clock=wall_clock,
     )
     assert telemetry.events == [
         DecisionsRecorded(
@@ -352,15 +370,6 @@ async def test_a_file_with_no_name_left_is_named_by_the_candidate(
             (DecisionChange("062A", _TITLE_A, "notify", RETRACTED_TIER),),
         )
     ]
-
-
-class _TickingClock(FakeClock):
-    """A minute later at every read, so each row shows which read stamped it."""
-
-    def now(self) -> datetime:
-        moment = super().now()
-        self.advance(60)
-        return moment
 
 
 @pytest.mark.asyncio
@@ -380,7 +389,7 @@ async def test_each_row_carries_the_instant_read_right_before_its_write(
         engine=engine,
         wake_hub=RecordingWakeHub(),
         telemetry=RecordingTelemetry(),
-        clock=_TickingClock(start),
+        wall_clock=TickingWallClock(FakeTime(start)),
     )
     rows = catalog_connection.execute(
         "SELECT target_id, tier, decided_at FROM match_decisions ORDER BY id"

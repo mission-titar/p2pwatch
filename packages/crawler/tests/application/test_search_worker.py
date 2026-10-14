@@ -1,5 +1,6 @@
 import dataclasses
 import sqlite3
+from datetime import timedelta
 
 import pytest
 
@@ -25,9 +26,9 @@ from p2pwatch.domain.observability.events import (
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.ports.scheduler_state_repository import BackoffState
 from tests.application.fakes import (
-    FakeClock,
     FakeMuleClient,
     FakeRng,
+    FakeTime,
     RecordingTelemetry,
     RecordingWakeHub,
     make_search_failed,
@@ -57,15 +58,15 @@ def _obs() -> FileObservation:
     )
 
 
-def _registry(clock: FakeClock, rng: FakeRng | None = None) -> BackoffRegistry:
-    return BackoffRegistry(_POLICY, clock, rng or FakeRng())
+def _registry(fake_time: FakeTime, rng: FakeRng | None = None) -> BackoffRegistry:
+    return BackoffRegistry(_POLICY, fake_time.wall, rng or FakeRng())
 
 
 def _deps(
     catalog: SqliteCatalogRepository,
     engine: MatchingEngine,
     backoff: BackoffRegistry,
-    clock: FakeClock,
+    fake_time: FakeTime,
     *,
     telemetry: RecordingTelemetry | None = None,
 ) -> WorkerDeps:
@@ -75,18 +76,18 @@ def _deps(
         wake_hub=RecordingWakeHub(),
         backoff=backoff,
         telemetry=telemetry or RecordingTelemetry(),
-        clock=clock,
+        wall_clock=fake_time.wall,
     )
 
 
-# --- BackoffRegistry (logic, deterministic via fake clock/rng) ---
+# --- BackoffRegistry (logic, deterministic via fake time/rng) ---
 
 
 def test_backoff_registry_grows_then_resets() -> None:
-    clock = FakeClock()
-    registry = _registry(clock)
+    fake_time = FakeTime()
+    registry = _registry(fake_time)
     assert registry.record_failure("k") == 2.0  # 1st attempt = base
-    clock.advance(2.0)
+    fake_time.advance(timedelta(seconds=2.0))
     assert registry.record_failure("k") == 4.0  # × factor
     registry.reset("k")
     assert registry.record_failure("k") == 2.0  # back to base
@@ -94,59 +95,59 @@ def test_backoff_registry_grows_then_resets() -> None:
 
 def test_a_failure_while_backed_off_does_not_count_again() -> None:
     # Concurrent searches started before a backoff fail together: one round, one attempt.
-    clock = FakeClock()
-    registry = _registry(clock)
+    fake_time = FakeTime()
+    registry = _registry(fake_time)
     registry.record_failure("k")
-    clock.advance(0.5)
+    fake_time.advance(timedelta(seconds=0.5))
     assert registry.record_failure("k") == 1.5  # what is left of the backoff already set
-    clock.advance(1.5)
+    fake_time.advance(timedelta(seconds=1.5))
     assert registry.record_failure("k") == 4.0  # the second attempt
 
 
 def test_backoff_registry_keys_are_independent() -> None:
-    registry = _registry(FakeClock())
+    registry = _registry(FakeTime())
     assert registry.record_failure("a") == 2.0
     assert registry.record_failure("b") == 2.0  # 'b' did not inherit 'a's counter
 
 
 def test_backoff_registry_reset_unknown_key_is_a_noop() -> None:
-    _registry(FakeClock()).reset("jamais-vu")  # does not raise
+    _registry(FakeTime()).reset("jamais-vu")  # does not raise
 
 
 def test_backoff_registry_sets_retry_after_in_the_future() -> None:
-    clock = FakeClock()
-    registry = _registry(clock)
+    fake_time = FakeTime()
+    registry = _registry(fake_time)
     registry.record_failure("amule-1:kad")
     assert registry.is_in_backoff("amule-1:kad") is True
-    clock.advance(1.9)  # still before retry_after (2.0s)
+    fake_time.advance(timedelta(seconds=1.9))  # still before retry_after (2.0s)
     assert registry.is_in_backoff("amule-1:kad") is True
-    clock.advance(0.2)  # now past retry_after
+    fake_time.advance(timedelta(seconds=0.2))  # now past retry_after
     assert registry.is_in_backoff("amule-1:kad") is False
 
 
 def test_backoff_registry_unknown_key_is_not_in_backoff() -> None:
-    assert _registry(FakeClock()).is_in_backoff("unknown") is False
+    assert _registry(FakeTime()).is_in_backoff("unknown") is False
 
 
 def test_backoff_registry_jitter_extends_the_delay() -> None:
-    clock = FakeClock()
+    fake_time = FakeTime()
     policy = dataclasses.replace(_POLICY, jitter_ratio=0.5)  # jitter in [0, 0.5*delay)
     rng = FakeRng(jitter_value=1.0)  # constant 1.0s jitter
-    registry = BackoffRegistry(policy, clock, rng)
+    registry = BackoffRegistry(policy, fake_time.wall, rng)
     delay = registry.record_failure("k")
     assert delay == 3.0  # base 2.0 + jitter 1.0
     assert rng.jitter_spans == [1.0]  # span = jitter_ratio (0.5) * delay (2.0)
 
 
 def test_backoff_registry_snapshot_and_load_round_trip() -> None:
-    clock = FakeClock()
-    registry = _registry(clock)
+    fake_time = FakeTime()
+    registry = _registry(fake_time)
     registry.record_failure("amule-1:kad")
     snapshot = registry.snapshot()
     assert "amule-1:kad" in snapshot
     assert isinstance(snapshot["amule-1:kad"], BackoffState)
     # Reload into a FRESH registry (simulates a restart) → same skip applied.
-    reborn = _registry(clock)
+    reborn = _registry(fake_time)
     assert reborn.is_in_backoff("amule-1:kad") is False  # empty before load
     reborn.load_from(snapshot)
     assert reborn.is_in_backoff("amule-1:kad") is True
@@ -162,27 +163,27 @@ def test_a_worker_is_ready_for_a_channel_when_neither_it_nor_the_channel_is_back
     failed: tuple[str, ...],
     ready_in: float,
 ) -> None:
-    clock = FakeClock()
-    registry = _registry(clock)
+    fake_time = FakeTime()
+    registry = _registry(fake_time)
     for key in failed:
         registry.record_failure(key)
-    worker = SearchWorker("amule-1", FakeMuleClient(), _deps(catalog, engine, registry, clock))
+    worker = SearchWorker("amule-1", FakeMuleClient(), _deps(catalog, engine, registry, fake_time))
     assert worker.seconds_until_ready("kad") == ready_in
-    clock.advance(3.0)
+    fake_time.advance(timedelta(seconds=3.0))
     assert worker.seconds_until_ready("kad") == 0.0  # a past backoff is no wait
 
 
 def test_a_worker_waits_for_the_later_of_its_two_backoffs(
     catalog: SqliteCatalogRepository, engine: MatchingEngine
 ) -> None:
-    clock = FakeClock()
-    registry = _registry(clock)
+    fake_time = FakeTime()
+    registry = _registry(fake_time)
     registry.record_failure("amule-1:kad")
-    clock.advance(1.0)
+    fake_time.advance(timedelta(seconds=1.0))
     registry.record_failure("amule-1")
-    worker = SearchWorker("amule-1", FakeMuleClient(), _deps(catalog, engine, registry, clock))
+    worker = SearchWorker("amule-1", FakeMuleClient(), _deps(catalog, engine, registry, fake_time))
     assert worker.seconds_until_ready("kad") == 2.0
-    clock.advance(1.5)
+    fake_time.advance(timedelta(seconds=1.5))
     registry.reset("amule-1")
     assert worker.seconds_until_ready("kad") == 0.0  # the channel's own ended first
 
@@ -196,14 +197,16 @@ async def test_successful_task_records_observation(
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
 ) -> None:
-    clock = FakeClock()
+    fake_time = FakeTime()
     client = FakeMuleClient(results=[(_obs(),)])
-    worker = SearchWorker("amule-1", client, _deps(catalog, engine, _registry(clock), clock))
+    worker = SearchWorker(
+        "amule-1", client, _deps(catalog, engine, _registry(fake_time), fake_time)
+    )
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
     assert client.searches == [("keroro", "ed2k")]
     assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 1
     observed_at = catalog_connection.execute("SELECT observed_at FROM observations").fetchone()
-    assert observed_at == (iso_to_micros(utc_iso(clock.now())),)
+    assert observed_at == (iso_to_micros(utc_iso(fake_time.wall.now())),)
 
 
 @pytest.mark.asyncio
@@ -212,7 +215,7 @@ async def test_multiple_observations_some_unchanged_are_all_processed(
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
 ) -> None:
-    clock = FakeClock()
+    fake_time = FakeTime()
     discarded = FileObservation(
         file=FileKey(Network.ED2K, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
         filename="random.txt",  # discarded by the engine → record_observation returns False
@@ -223,7 +226,9 @@ async def test_multiple_observations_some_unchanged_are_all_processed(
     # Two observations in the same readout: the 1st is discarded (False → loop back), the 2nd
     # changes a verdict. Covers the "if False → next observation" edge.
     client = FakeMuleClient(results=[(discarded, _obs())])
-    worker = SearchWorker("amule-1", client, _deps(catalog, engine, _registry(clock), clock))
+    worker = SearchWorker(
+        "amule-1", client, _deps(catalog, engine, _registry(fake_time), fake_time)
+    )
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
     assert count_observations(catalog_connection) == 2
     assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 1
@@ -233,26 +238,27 @@ async def test_multiple_observations_some_unchanged_are_all_processed(
 async def test_connect_failure_arms_instance_backoff_and_skips_the_item(
     catalog: SqliteCatalogRepository, engine: MatchingEngine
 ) -> None:
-    clock = FakeClock()
-    registry = _registry(clock)
+    fake_time = FakeTime()
+    registry = _registry(fake_time)
     client = FakeMuleClient(connect_failures=[make_unreachable()])
-    worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, clock))
+    worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
     assert client.searches == []  # item dropped, never searched
     assert registry.is_in_backoff("amule-1") is True  # client in backoff (skip until retry)
-    assert clock.sleeps == []  # no more backoff sleep: we SKIP, we don't wait
 
 
 @pytest.mark.asyncio
 async def test_backoff_expires_and_item_runs_again(
     catalog: SqliteCatalogRepository, engine: MatchingEngine
 ) -> None:
-    clock = FakeClock()
-    registry = _registry(clock)
+    fake_time = FakeTime()
+    registry = _registry(fake_time)
     registry.record_failure("amule-1:kad")  # retry_after = +2.0s
     client = FakeMuleClient(results=[(_obs(),)])
-    worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, clock))
-    clock.advance(3.0)  # retry_after passed → the channel is no longer in backoff
+    worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
+    fake_time.advance(
+        timedelta(seconds=3.0)
+    )  # retry_after passed → the channel is no longer in backoff
     await worker.run_task(SearchTask(keyword="k", channel="kad"))
     assert client.searches == [("k", "kad")]
 
@@ -261,9 +267,11 @@ async def test_backoff_expires_and_item_runs_again(
 async def test_already_connected_does_not_reconnect(
     catalog: SqliteCatalogRepository, engine: MatchingEngine
 ) -> None:
-    clock = FakeClock()
+    fake_time = FakeTime()
     client = FakeMuleClient(results=[(), ()])
-    worker = SearchWorker("amule-1", client, _deps(catalog, engine, _registry(clock), clock))
+    worker = SearchWorker(
+        "amule-1", client, _deps(catalog, engine, _registry(fake_time), fake_time)
+    )
     await worker.run_task(SearchTask(keyword="k1", channel="ed2k"))
     await worker.run_task(SearchTask(keyword="k2", channel="ed2k"))
     assert client.connect_calls == 1  # connected only once for two tasks
@@ -273,10 +281,10 @@ async def test_already_connected_does_not_reconnect(
 async def test_search_failure_arms_channel_backoff(
     catalog: SqliteCatalogRepository, engine: MatchingEngine
 ) -> None:
-    clock = FakeClock()
-    registry = _registry(clock)
+    fake_time = FakeTime()
+    registry = _registry(fake_time)
     client = FakeMuleClient(search_failures=[make_search_failed()])
-    worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, clock))
+    worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
     assert registry.is_in_backoff("amule-1:ed2k") is True  # channel in backoff
     assert registry.is_in_backoff("amule-1") is False  # but not the whole client
@@ -286,15 +294,15 @@ async def test_search_failure_arms_channel_backoff(
 async def test_transport_failure_marks_instance_down(
     catalog: SqliteCatalogRepository, engine: MatchingEngine
 ) -> None:
-    clock = FakeClock()
-    registry = _registry(clock)
+    fake_time = FakeTime()
+    registry = _registry(fake_time)
     # search raises a transport failure (dead stream) → client down + client backoff.
     client = FakeMuleClient(search_failures=[make_unreachable()], results=[(_obs(),)])
-    worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, clock))
+    worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
     await worker.run_task(SearchTask(keyword="k1", channel="ed2k"))
     assert registry.is_in_backoff("amule-1") is True
     # After the backoff expires, the next task FORCES a reconnect (down marked).
-    clock.advance(3.0)
+    fake_time.advance(timedelta(seconds=3.0))
     await worker.run_task(SearchTask(keyword="k2", channel="ed2k"))
     assert client.connect_calls == 2
 
@@ -304,15 +312,15 @@ async def test_the_client_backoff_grows_until_a_search_succeeds(
     catalog: SqliteCatalogRepository, engine: MatchingEngine
 ) -> None:
     # The adapter's connect() succeeds without touching the network: only a search proves reach.
-    clock = FakeClock()
-    registry = _registry(clock)
+    fake_time = FakeTime()
+    registry = _registry(fake_time)
     client = FakeMuleClient(search_failures=[make_unreachable()] * 4, results=[(_obs(),)])
-    worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, clock))
+    worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
     delays = []
     for _ in range(4):
         await worker.run_task(SearchTask(keyword="k", channel="ed2k"))
         delays.append(registry.seconds_remaining("amule-1"))
-        clock.advance(registry.seconds_remaining("amule-1"))
+        fake_time.advance(timedelta(seconds=registry.seconds_remaining("amule-1")))
     assert delays == [2.0, 4.0, 8.0, 16.0]
     await worker.run_task(SearchTask(keyword="k", channel="ed2k"))
     assert "amule-1" not in registry.snapshot()
@@ -322,13 +330,14 @@ async def test_the_client_backoff_grows_until_a_search_succeeds(
 async def test_a_task_is_one_search_given_the_cores_budget(
     catalog: SqliteCatalogRepository, engine: MatchingEngine
 ) -> None:
-    clock = FakeClock()
+    fake_time = FakeTime()
     client = FakeMuleClient(results=[(_obs(),)])
-    worker = SearchWorker("amule-1", client, _deps(catalog, engine, _registry(clock), clock))
+    worker = SearchWorker(
+        "amule-1", client, _deps(catalog, engine, _registry(fake_time), fake_time)
+    )
     await worker.run_task(SearchTask(keyword="keroro", channel="kad"))
     assert client.searches == [("keroro", "kad")]
     assert client.budgets == [SEARCH_BUDGET_SECONDS] == [120.0]
-    assert clock.sleeps == []  # how to wait for the end is the client's business
 
 
 # --- observability event emission (Plan E.2) ---
@@ -340,10 +349,10 @@ async def test_successful_search_emits_search_executed_with_network_and_count(
 ) -> None:
     # A successful ed2k search emits SearchExecuted FIRST, labelled with its client,
     # before the per-observation events (ObservationRecorded/DecisionsRecorded).
-    clock = FakeClock()
+    fake_time = FakeTime()
     telemetry = RecordingTelemetry()
     client = FakeMuleClient(results=[(_obs(),)])
-    deps = _deps(catalog, engine, _registry(clock), clock, telemetry=telemetry)
+    deps = _deps(catalog, engine, _registry(fake_time), fake_time, telemetry=telemetry)
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
     assert telemetry.events[0] == SearchExecuted(
@@ -360,10 +369,10 @@ async def test_search_failure_emits_search_failed(
 ) -> None:
     # An application-level channel failure (SearchFailedError) emits
     # SearchFailed(client, network).
-    clock = FakeClock()
+    fake_time = FakeTime()
     telemetry = RecordingTelemetry()
     client = FakeMuleClient(search_failures=[make_search_failed()])
-    deps = _deps(catalog, engine, _registry(clock), clock, telemetry=telemetry)
+    deps = _deps(catalog, engine, _registry(fake_time), fake_time, telemetry=telemetry)
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
     assert telemetry.events == [SearchFailed(client_name="amule-1", channel="ed2k")]
@@ -374,10 +383,10 @@ async def test_connect_failure_emits_instance_unreachable(
     catalog: SqliteCatalogRepository, engine: MatchingEngine
 ) -> None:
     # A connection failure (unreachable daemon) emits ClientUnreachable.
-    clock = FakeClock()
+    fake_time = FakeTime()
     telemetry = RecordingTelemetry()
     client = FakeMuleClient(connect_failures=[make_unreachable()])
-    deps = _deps(catalog, engine, _registry(clock), clock, telemetry=telemetry)
+    deps = _deps(catalog, engine, _registry(fake_time), fake_time, telemetry=telemetry)
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
     assert telemetry.events == [ClientUnreachable("amule-1")]
@@ -388,10 +397,10 @@ async def test_transport_failure_during_search_emits_instance_unreachable(
     catalog: SqliteCatalogRepository, engine: MatchingEngine
 ) -> None:
     # A transport failure during search (dead stream) emits ClientUnreachable.
-    clock = FakeClock()
+    fake_time = FakeTime()
     telemetry = RecordingTelemetry()
     client = FakeMuleClient(search_failures=[make_unreachable()], results=[(_obs(),)])
-    deps = _deps(catalog, engine, _registry(clock), clock, telemetry=telemetry)
+    deps = _deps(catalog, engine, _registry(fake_time), fake_time, telemetry=telemetry)
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
     assert telemetry.events == [ClientUnreachable("amule-1")]

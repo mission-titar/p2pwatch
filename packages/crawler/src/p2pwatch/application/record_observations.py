@@ -24,7 +24,7 @@ from p2pwatch.application.decisions import rejudge_file
 from p2pwatch.domain.observability.events import ObservationRecorded
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.ports.catalog_repository import CatalogRepository
-from p2pwatch.ports.clock import Clock
+from p2pwatch.ports.clock import WallClock
 from p2pwatch.ports.repository_errors import RepositoryError
 from p2pwatch.ports.telemetry import Telemetry
 from p2pwatch.ports.wake_hub import WakeHub
@@ -39,7 +39,7 @@ async def record_observation(
     engine: MatchingEngine,
     wake_hub: WakeHub,
     telemetry: Telemetry,
-    clock: Clock,
+    wall_clock: WallClock,
     client_name: str,
     channel: str,
 ) -> int:
@@ -48,7 +48,7 @@ async def record_observation(
     Emits ``ObservationRecorded`` (always) and one ``DecisionsRecorded`` when a row was written.
     A ``RepositoryError`` is absorbed (log + ``0``), the cycle continues (spec §7)."""
     try:
-        catalog.record_observation(observation, clock.now())
+        catalog.record_observation(observation, wall_clock.now())
         await telemetry.emit(ObservationRecorded(client_name, channel))
         return await rejudge_file(
             observation.file,
@@ -57,7 +57,7 @@ async def record_observation(
             engine=engine,
             wake_hub=wake_hub,
             telemetry=telemetry,
-            clock=clock,
+            wall_clock=wall_clock,
         )
     except RepositoryError as error:
         _logger.error(

@@ -1,5 +1,6 @@
 import asyncio
 import sqlite3
+from datetime import timedelta
 
 import pytest
 
@@ -12,7 +13,7 @@ from p2pwatch.application.run_download_cycle import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability.events import ObservationRecorded
 from p2pwatch.domain.observation import FileObservation
-from tests.application.fakes import FakeClock, RecordingTelemetry, RecordingWakeHub
+from tests.application.fakes import FakeTime, FakeWallClock, RecordingTelemetry, RecordingWakeHub
 from tests.catalog_rows import count_observations
 
 _HASH_DL = "31d6cfe0d16ae931b73c59d7e0c089c0"
@@ -39,7 +40,7 @@ async def test_observation_is_always_recorded_even_when_discarded(
     catalog: SqliteCatalogRepository,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
-    clock: FakeClock,
+    wall_clock: FakeWallClock,
 ) -> None:
     telemetry = RecordingTelemetry()
     wake_hub = RecordingWakeHub()
@@ -49,7 +50,7 @@ async def test_observation_is_always_recorded_even_when_discarded(
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
-        clock=clock,
+        wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
     )
@@ -64,7 +65,7 @@ async def test_the_observation_carries_the_clocks_instant(
     catalog: SqliteCatalogRepository,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
-    clock: FakeClock,
+    wall_clock: FakeWallClock,
 ) -> None:
     await record_observation(
         _obs(_HASH_DISCARD, "random.txt"),
@@ -72,12 +73,12 @@ async def test_the_observation_carries_the_clocks_instant(
         engine=engine,
         wake_hub=RecordingWakeHub(),
         telemetry=RecordingTelemetry(),
-        clock=clock,
+        wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
     )
     observed_at = catalog_connection.execute("SELECT observed_at FROM observations").fetchone()
-    assert observed_at == (iso_to_micros(utc_iso(clock.now())),)
+    assert observed_at == (iso_to_micros(utc_iso(wall_clock.now())),)
 
 
 @pytest.mark.asyncio
@@ -85,7 +86,7 @@ async def test_new_verdict_is_persisted_and_nudged(
     catalog: SqliteCatalogRepository,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
-    clock: FakeClock,
+    wall_clock: FakeWallClock,
 ) -> None:
     telemetry = RecordingTelemetry()
     wake_hub = RecordingWakeHub()
@@ -95,7 +96,7 @@ async def test_new_verdict_is_persisted_and_nudged(
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
-        clock=clock,
+        wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
     )
@@ -111,7 +112,8 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
     catalog: SqliteCatalogRepository,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
-    clock: FakeClock,
+    fake_time: FakeTime,
+    wall_clock: FakeWallClock,
 ) -> None:
     telemetry = RecordingTelemetry()
     wake_hub = RecordingWakeHub()
@@ -123,14 +125,14 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
             engine=engine,
             wake_hub=wake_hub,
             telemetry=telemetry,
-            clock=clock,
+            wall_clock=wall_clock,
             client_name="amuled",
             channel="ed2k",
         )
         == 1
     )
     # Second observation of the SAME file a minute later: same catalog verdict → no re-append.
-    clock.advance(60)
+    fake_time.advance(timedelta(minutes=1))
     assert (
         await record_observation(
             observation,
@@ -138,7 +140,7 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
             engine=engine,
             wake_hub=wake_hub,
             telemetry=telemetry,
-            clock=clock,
+            wall_clock=wall_clock,
             client_name="amuled",
             channel="ed2k",
         )
@@ -155,7 +157,7 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
     catalog: SqliteCatalogRepository,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
-    clock: FakeClock,
+    wall_clock: FakeWallClock,
 ) -> None:
     telemetry = RecordingTelemetry()
     wake_hub = RecordingWakeHub()
@@ -165,7 +167,7 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
-        clock=clock,
+        wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
     )
@@ -176,7 +178,7 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
-        clock=clock,
+        wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
     )
@@ -196,7 +198,7 @@ async def test_persistence_error_is_absorbed_and_cycle_continues(
     catalog: SqliteCatalogRepository,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
-    clock: FakeClock,
+    wall_clock: FakeWallClock,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     # TEST trigger: makes the observation INSERT fail → RepositoryError absorbed.
@@ -212,7 +214,7 @@ async def test_persistence_error_is_absorbed_and_cycle_continues(
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
-        clock=clock,
+        wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
     )
@@ -223,7 +225,7 @@ async def test_persistence_error_is_absorbed_and_cycle_continues(
 
 @pytest.mark.asyncio
 async def test_signal_consumer_awaits_the_nudge(
-    catalog: SqliteCatalogRepository, engine: MatchingEngine, clock: FakeClock
+    catalog: SqliteCatalogRepository, engine: MatchingEngine, wall_clock: FakeWallClock
 ) -> None:
     # The hub IS consumed by an await (not dead code, DECISION 9): a consumer sleeps
     # on the subject and is woken by the post-commit wake.
@@ -238,7 +240,7 @@ async def test_signal_consumer_awaits_the_nudge(
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
-        clock=clock,
+        wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
     )
@@ -250,7 +252,7 @@ async def test_signal_consumer_awaits_the_nudge(
 async def test_download_tier_verdict_also_nudges_the_download_subject(
     catalog: SqliteCatalogRepository,
     engine: MatchingEngine,
-    clock: FakeClock,
+    wall_clock: FakeWallClock,
 ) -> None:
     # a NEW "download"-tier verdict wakes the "download" subject (the download loop, DECISION DV9).
     telemetry = RecordingTelemetry()
@@ -261,7 +263,7 @@ async def test_download_tier_verdict_also_nudges_the_download_subject(
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
-        clock=clock,
+        wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
     )
@@ -273,7 +275,7 @@ async def test_download_tier_verdict_also_nudges_the_download_subject(
 async def test_non_download_tier_verdict_does_not_nudge_the_download_subject(
     catalog: SqliteCatalogRepository,
     engine: MatchingEngine,
-    clock: FakeClock,
+    wall_clock: FakeWallClock,
 ) -> None:
     # a "catalog"-tier verdict NEVER wakes the "download" subject.
     telemetry = RecordingTelemetry()
@@ -284,7 +286,7 @@ async def test_non_download_tier_verdict_does_not_nudge_the_download_subject(
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
-        clock=clock,
+        wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
     )
@@ -294,7 +296,7 @@ async def test_non_download_tier_verdict_does_not_nudge_the_download_subject(
 
 @pytest.mark.asyncio
 async def test_emits_observation_then_decision_on_change(
-    catalog: SqliteCatalogRepository, engine: MatchingEngine, clock: FakeClock
+    catalog: SqliteCatalogRepository, engine: MatchingEngine, wall_clock: FakeWallClock
 ) -> None:
     telemetry = RecordingTelemetry()
     wake_hub = RecordingWakeHub()
@@ -305,7 +307,7 @@ async def test_emits_observation_then_decision_on_change(
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
-        clock=clock,
+        wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
     )
@@ -316,7 +318,7 @@ async def test_emits_observation_then_decision_on_change(
 
 @pytest.mark.asyncio
 async def test_emits_only_observation_when_discarded(
-    catalog: SqliteCatalogRepository, engine: MatchingEngine, clock: FakeClock
+    catalog: SqliteCatalogRepository, engine: MatchingEngine, wall_clock: FakeWallClock
 ) -> None:
     telemetry = RecordingTelemetry()
     obs = _obs(_HASH_DISCARD, "random.txt")  # discarded by the engine
@@ -326,7 +328,7 @@ async def test_emits_only_observation_when_discarded(
         engine=engine,
         wake_hub=RecordingWakeHub(),
         telemetry=telemetry,
-        clock=clock,
+        wall_clock=wall_clock,
         client_name="amuled",
         channel="kad",
     )
@@ -338,7 +340,7 @@ async def test_multi_segment_observation_records_two_rows(
     catalog: SqliteCatalogRepository,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
-    clock: FakeClock,
+    wall_clock: FakeWallClock,
 ) -> None:
     telemetry = RecordingTelemetry()
     wake_hub = RecordingWakeHub()
@@ -348,7 +350,7 @@ async def test_multi_segment_observation_records_two_rows(
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
-        clock=clock,
+        wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
     )
