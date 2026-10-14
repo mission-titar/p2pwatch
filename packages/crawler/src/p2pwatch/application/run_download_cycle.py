@@ -263,8 +263,8 @@ async def _handle_completions(
 def _reconcile_loss_deadlines(
     deps: DownloadDeps, listed_files: frozenset[FileKey], monotonic_now: MonotonicInstant
 ) -> None:
-    """Gives each queued or downloading download its loss deadline (monotonic clock, D7):
-    ``lost_after`` from now if listed, else the one held, else what its ``last_seen_at`` leaves."""
+    """Gives each queued or downloading download its loss deadline: ``lost_after`` from now if
+    listed, else the one held, else what its ``last_seen_at`` leaves."""
     deadlines = deps.loss_deadline_by_file
     last_seen_at_by_file = deps.downloads.last_seen_at_by_file()
     for file in deadlines.keys() - last_seen_at_by_file.keys():
@@ -278,7 +278,7 @@ def _reconcile_loss_deadlines(
 
 
 def _fail_lost(deps: DownloadDeps, listed_files: frozenset[FileKey]) -> None:
-    """Fails each download the client has not listed for ``lost_after`` (spec §2; D7).
+    """Fails each download the client has not listed for ``lost_after``.
 
     It bounds a client that accepts ``start()`` without ever listing the download.
     ``is_tracked`` stays state-blind, so a ``failed`` row still blocks automatic re-queuing;
