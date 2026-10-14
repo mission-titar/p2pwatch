@@ -809,16 +809,17 @@ async def test_full_mode_records_the_sources_of_a_download_in_the_catalog(
 
 
 @pytest.mark.asyncio
-async def test_the_repositories_stamp_their_rows_with_the_apps_clock(
+async def test_the_rows_written_carry_the_apps_clock(
     tmp_path: Path, matcher_config: MatcherConfig
 ) -> None:
-    # A year the wall clock cannot be in, so a repository on its own clock fails the bounds.
+    # A year the wall clock cannot be in, so a row stamped on any other clock fails the bounds.
     clock = FakeClock(datetime(2030, 1, 1, tzinfo=UTC))
     seeded = FakeClock(datetime(2029, 12, 31, 23, tzinfo=UTC))
     file = FileKey(Network.ED2K, "a" * 32)
     catalog = open_catalog(tmp_path / "catalog.db")
-    SqliteCatalogRepository(catalog, "n1", clock=seeded).record_observation(
-        FileObservation(file=file, filename=_DL_NAME, size_bytes=100, source_count=1, keyword="k")
+    SqliteCatalogRepository(catalog, "n1").record_observation(
+        FileObservation(file=file, filename=_DL_NAME, size_bytes=100, source_count=1, keyword="k"),
+        seeded.now(),
     )
     catalog.close()
     local = open_local(tmp_path / "local.db")

@@ -1,7 +1,7 @@
 """``SqliteCatalogRepository``: ``FileObservation``/``MatchDecision`` → durable rows.
 
-The adapter stamps what the domain ignores (data-model spec §3): ``observed_at``/
-``decided_at`` (the ``Clock`` port) and ``node_id`` (both given at the constructor).
+The adapter stores what the domain ignores (data-model spec §3): ``observed_at``/``decided_at``,
+given by the use-case at each write, and ``node_id``, given at the constructor.
 ``raw_meta`` is serialized as a JSON LIST of pairs (``[["0x0308", "0"], …]``), wire order and
 duplicates preserved, ``ensure_ascii=False``, no sorting (spec §3). ``record_observation`` makes
 ONE transaction (spec §4): ``INSERT OR IGNORE`` into ``files`` (first sight wins), into
@@ -24,6 +24,7 @@ import re
 import sqlite3
 from collections.abc import Iterator
 from contextlib import suppress
+from datetime import datetime
 
 from catalog_matching.engine import DecisionRecord, MatchDecision
 from p2pwatch.adapters.persistence_sqlite import sightings
@@ -34,7 +35,6 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.retraction import RETRACTED_TIER
 from p2pwatch.ports.catalog_repository import DownloadCandidate, ObservedFile, ReevalRow
-from p2pwatch.ports.clock import Clock
 
 _CANONICAL_HASH_RE = re.compile(r"[0-9a-f]{32}\Z")
 
@@ -99,12 +99,11 @@ _COUNT_FILES = "SELECT COUNT(*) FROM files"
 class SqliteCatalogRepository:
     """SQLite implementation of the ``CatalogRepository`` port (STRUCTURAL satisfaction)."""
 
-    def __init__(self, connection: sqlite3.Connection, node_id: str, *, clock: Clock) -> None:
+    def __init__(self, connection: sqlite3.Connection, node_id: str) -> None:
         self._connection = connection
         self._node_id = node_id
-        self._clock = clock
 
-    def record_observation(self, observation: FileObservation) -> None:
+    def record_observation(self, observation: FileObservation, observed_at: datetime) -> None:
         """ONE transaction: file (first sight wins), its variant, the stamped observation."""
         file = observation.file
         if not _CANONICAL_HASH_RE.fullmatch(file.native_id):
@@ -120,7 +119,7 @@ class SqliteCatalogRepository:
             self._node_id,
         )
         variant_content_hash = content_hash(*variant)
-        observed_at_micros = iso_to_micros(utc_iso(self._clock.now()))
+        observed_at_micros = iso_to_micros(utc_iso(observed_at))
         with wrap_sqlite_errors():
             self._connection.execute("BEGIN")
             try:
@@ -139,7 +138,7 @@ class SqliteCatalogRepository:
                     self._connection.execute("ROLLBACK")
                 raise
 
-    def record_decision(self, file: FileKey, decision: MatchDecision) -> None:
+    def record_decision(self, file: FileKey, decision: MatchDecision, decided_at: datetime) -> None:
         """INSERT alone (autocommit); unknown file → FK violated → ``PersistenceError``.
 
         Only the 3 columns of ``MatchDecision`` are persisted (engine spec);
@@ -155,12 +154,12 @@ class SqliteCatalogRepository:
                     decision.target_id,
                     decision.rule_name,
                     decision.tier,
-                    utc_iso(self._clock.now()),
+                    utc_iso(decided_at),
                     self._node_id,
                 ),
             )
 
-    def record_retraction(self, file: FileKey, target_id: str) -> None:
+    def record_retraction(self, file: FileKey, target_id: str, decided_at: datetime) -> None:
         """Appends a per-target ``retracted`` decision (spec §7).
 
         Mirrors ``record_decision`` (same canonical-hash guard, same autocommit ``INSERT``): a
@@ -179,7 +178,7 @@ class SqliteCatalogRepository:
                     target_id,
                     "",
                     RETRACTED_TIER,
-                    utc_iso(self._clock.now()),
+                    utc_iso(decided_at),
                     self._node_id,
                 ),
             )

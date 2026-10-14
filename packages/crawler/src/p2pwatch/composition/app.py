@@ -435,7 +435,7 @@ class CrawlerApp:
                 and observability.metrics.enabled
             ):
                 self._metrics_server(observability.metrics.port, registry)
-            catalog_repo = SqliteCatalogRepository(catalog_conn, node_id, clock=self._clock)
+            catalog_repo = SqliteCatalogRepository(catalog_conn, node_id)
             scheduler_state = SqliteSchedulerStateRepository(local_conn)
             engine = MatchingEngine(self._matcher_config, self._targets)
             endpoint = self._crawler_config.amule_endpoint
@@ -458,6 +458,7 @@ class CrawlerApp:
                 wake_hub=self._wake_hub,
                 backoff=backoff,
                 telemetry=telemetry,
+                clock=self._clock,
             )
 
             client = self._client_factory(endpoint, self._clock)
@@ -517,6 +518,7 @@ class CrawlerApp:
                     engine=engine,
                     wake_hub=self._wake_hub,
                     telemetry=telemetry,
+                    clock=self._clock,
                 ),
             )
             if summary is None:

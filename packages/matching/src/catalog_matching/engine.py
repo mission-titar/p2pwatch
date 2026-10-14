@@ -42,8 +42,8 @@ class MatchDecision:
 
     ``target_id``/``rule_name``/``tier`` = exactly the columns that ``match_decisions``
     will persist (§11). ``decided_at``/``node_id``/``file_id`` are NOT here: they are
-    persistence columns (clock + identity + content key) injected by the DB adapter of a
-    later plan. ``explanation`` carries the explainability (§8.5).
+    persistence columns (instant + identity + content key) the crawler adds when it records
+    the decision. ``explanation`` carries the explainability (§8.5).
     """
 
     target_id: str

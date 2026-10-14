@@ -129,7 +129,14 @@ def tasks(
     clock = LoopClock()
     backoff = BackoffRegistry(_POLICY, clock, FakeRng())
     wake_hub, telemetry = RecordingWakeHub(), RecordingTelemetry()
-    deps = WorkerDeps(catalog, engine, wake_hub, backoff, telemetry)
+    deps = WorkerDeps(
+        catalog=catalog,
+        engine=engine,
+        wake_hub=wake_hub,
+        backoff=backoff,
+        telemetry=telemetry,
+        clock=clock,
+    )
     yield _Tasks(deps, _SavesRecorded(connection))
     connection.close()
 
