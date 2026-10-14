@@ -24,7 +24,7 @@ from p2pwatch.domain.observability.events import (
     SearchFailed,
 )
 from p2pwatch.domain.observation import FileObservation
-from p2pwatch.ports.scheduler_state_repository import BackoffState
+from p2pwatch.ports.scheduler_state_repository import BackoffKey, BackoffState
 from tests.application.fakes import (
     FakeMuleClient,
     FakeRng,
@@ -38,6 +38,9 @@ from tests.catalog_rows import count_observations
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _DL_NAME = "Keroro N°062A Les demoiselles cambrioleuses.avi"
+_CLIENT = BackoffKey("amule-1", None)
+_KAD = BackoffKey("amule-1", "kad")
+_ED2K = BackoffKey("amule-1", "ed2k")
 
 # jitter_ratio 0.0 + FakeRng(jitter_value=0.0) → backoff = exact NOMINAL delay (clean assertions).
 _POLICY = BackoffPolicy(
@@ -86,47 +89,47 @@ def _deps(
 def test_backoff_registry_grows_then_resets() -> None:
     fake_time = FakeTime()
     registry = _registry(fake_time)
-    assert registry.record_failure("k") == 2.0  # 1st attempt = base
+    assert registry.record_failure(_KAD) == 2.0  # 1st attempt = base
     fake_time.advance(timedelta(seconds=2.0))
-    assert registry.record_failure("k") == 4.0  # × factor
-    registry.reset("k")
-    assert registry.record_failure("k") == 2.0  # back to base
+    assert registry.record_failure(_KAD) == 4.0  # × factor
+    registry.reset(_KAD)
+    assert registry.record_failure(_KAD) == 2.0  # back to base
 
 
 def test_a_failure_while_backed_off_does_not_count_again() -> None:
     # Concurrent searches started before a backoff fail together: one round, one attempt.
     fake_time = FakeTime()
     registry = _registry(fake_time)
-    registry.record_failure("k")
+    registry.record_failure(_KAD)
     fake_time.advance(timedelta(seconds=0.5))
-    assert registry.record_failure("k") == 1.5  # what is left of the backoff already set
+    assert registry.record_failure(_KAD) == 1.5  # what is left of the backoff already set
     fake_time.advance(timedelta(seconds=1.5))
-    assert registry.record_failure("k") == 4.0  # the second attempt
+    assert registry.record_failure(_KAD) == 4.0  # the second attempt
 
 
 def test_backoff_registry_keys_are_independent() -> None:
     registry = _registry(FakeTime())
-    assert registry.record_failure("a") == 2.0
-    assert registry.record_failure("b") == 2.0  # 'b' did not inherit 'a's counter
+    assert registry.record_failure(_KAD) == 2.0
+    assert registry.record_failure(_ED2K) == 2.0  # ed2k did not inherit kad's counter
 
 
 def test_backoff_registry_reset_unknown_key_is_a_noop() -> None:
-    _registry(FakeTime()).reset("jamais-vu")  # does not raise
+    _registry(FakeTime()).reset(_KAD)  # does not raise
 
 
 def test_backoff_registry_sets_retry_after_in_the_future() -> None:
     fake_time = FakeTime()
     registry = _registry(fake_time)
-    registry.record_failure("amule-1:kad")
-    assert registry.is_in_backoff("amule-1:kad") is True
+    registry.record_failure(_KAD)
+    assert registry.is_in_backoff(_KAD) is True
     fake_time.advance(timedelta(seconds=1.9))  # still before retry_after (2.0s)
-    assert registry.is_in_backoff("amule-1:kad") is True
+    assert registry.is_in_backoff(_KAD) is True
     fake_time.advance(timedelta(seconds=0.2))  # now past retry_after
-    assert registry.is_in_backoff("amule-1:kad") is False
+    assert registry.is_in_backoff(_KAD) is False
 
 
 def test_backoff_registry_unknown_key_is_not_in_backoff() -> None:
-    assert _registry(FakeTime()).is_in_backoff("unknown") is False
+    assert _registry(FakeTime()).is_in_backoff(_KAD) is False
 
 
 def test_backoff_registry_jitter_extends_the_delay() -> None:
@@ -134,7 +137,7 @@ def test_backoff_registry_jitter_extends_the_delay() -> None:
     policy = dataclasses.replace(_POLICY, jitter_ratio=0.5)  # jitter in [0, 0.5*delay)
     rng = FakeRng(jitter_value=1.0)  # constant 1.0s jitter
     registry = BackoffRegistry(policy, fake_time.wall, rng)
-    delay = registry.record_failure("k")
+    delay = registry.record_failure(_KAD)
     assert delay == 3.0  # base 2.0 + jitter 1.0
     assert rng.jitter_spans == [1.0]  # span = jitter_ratio (0.5) * delay (2.0)
 
@@ -142,25 +145,25 @@ def test_backoff_registry_jitter_extends_the_delay() -> None:
 def test_backoff_registry_snapshot_and_load_round_trip() -> None:
     fake_time = FakeTime()
     registry = _registry(fake_time)
-    registry.record_failure("amule-1:kad")
+    registry.record_failure(_KAD)
     snapshot = registry.snapshot()
-    assert "amule-1:kad" in snapshot
-    assert isinstance(snapshot["amule-1:kad"], BackoffState)
+    assert _KAD in snapshot
+    assert isinstance(snapshot[_KAD], BackoffState)
     # Reload into a FRESH registry (simulates a restart) → same skip applied.
     reborn = _registry(fake_time)
-    assert reborn.is_in_backoff("amule-1:kad") is False  # empty before load
+    assert reborn.is_in_backoff(_KAD) is False  # empty before load
     reborn.load_from(snapshot)
-    assert reborn.is_in_backoff("amule-1:kad") is True
+    assert reborn.is_in_backoff(_KAD) is True
 
 
 @pytest.mark.parametrize(
     ("failed", "ready_in"),
-    [((), 0.0), (("amule-1",), 2.0), (("amule-1:kad",), 2.0), (("amule-1:ed2k",), 0.0)],
+    [((), 0.0), ((_CLIENT,), 2.0), ((_KAD,), 2.0), ((_ED2K,), 0.0)],
 )
 def test_a_worker_is_ready_for_a_channel_when_neither_it_nor_the_channel_is_backed_off(
     catalog: SqliteCatalogRepository,
     engine: MatchingEngine,
-    failed: tuple[str, ...],
+    failed: tuple[BackoffKey, ...],
     ready_in: float,
 ) -> None:
     fake_time = FakeTime()
@@ -178,13 +181,13 @@ def test_a_worker_waits_for_the_later_of_its_two_backoffs(
 ) -> None:
     fake_time = FakeTime()
     registry = _registry(fake_time)
-    registry.record_failure("amule-1:kad")
+    registry.record_failure(_KAD)
     fake_time.advance(timedelta(seconds=1.0))
-    registry.record_failure("amule-1")
+    registry.record_failure(_CLIENT)
     worker = SearchWorker("amule-1", FakeMuleClient(), _deps(catalog, engine, registry, fake_time))
     assert worker.seconds_until_ready("kad") == 2.0
     fake_time.advance(timedelta(seconds=1.5))
-    registry.reset("amule-1")
+    registry.reset(_CLIENT)
     assert worker.seconds_until_ready("kad") == 0.0  # the channel's own ended first
 
 
@@ -244,7 +247,7 @@ async def test_connect_failure_arms_instance_backoff_and_skips_the_item(
     worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
     assert client.searches == []  # item dropped, never searched
-    assert registry.is_in_backoff("amule-1") is True  # client in backoff (skip until retry)
+    assert registry.is_in_backoff(_CLIENT) is True  # client in backoff (skip until retry)
 
 
 @pytest.mark.asyncio
@@ -253,7 +256,7 @@ async def test_backoff_expires_and_item_runs_again(
 ) -> None:
     fake_time = FakeTime()
     registry = _registry(fake_time)
-    registry.record_failure("amule-1:kad")  # retry_after = +2.0s
+    registry.record_failure(_KAD)  # retry_after = +2.0s
     client = FakeMuleClient(results=[(_obs(),)])
     worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
     fake_time.advance(
@@ -286,8 +289,8 @@ async def test_search_failure_arms_channel_backoff(
     client = FakeMuleClient(search_failures=[make_search_failed()])
     worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
-    assert registry.is_in_backoff("amule-1:ed2k") is True  # channel in backoff
-    assert registry.is_in_backoff("amule-1") is False  # but not the whole client
+    assert registry.is_in_backoff(_ED2K) is True  # channel in backoff
+    assert registry.is_in_backoff(_CLIENT) is False  # but not the whole client
 
 
 @pytest.mark.asyncio
@@ -300,7 +303,7 @@ async def test_transport_failure_marks_instance_down(
     client = FakeMuleClient(search_failures=[make_unreachable()], results=[(_obs(),)])
     worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
     await worker.run_task(SearchTask(keyword="k1", channel="ed2k"))
-    assert registry.is_in_backoff("amule-1") is True
+    assert registry.is_in_backoff(_CLIENT) is True
     # After the backoff expires, the next task FORCES a reconnect (down marked).
     fake_time.advance(timedelta(seconds=3.0))
     await worker.run_task(SearchTask(keyword="k2", channel="ed2k"))
@@ -319,11 +322,11 @@ async def test_the_client_backoff_grows_until_a_search_succeeds(
     delays = []
     for _ in range(4):
         await worker.run_task(SearchTask(keyword="k", channel="ed2k"))
-        delays.append(registry.seconds_remaining("amule-1"))
-        fake_time.advance(timedelta(seconds=registry.seconds_remaining("amule-1")))
+        delays.append(registry.seconds_remaining(_CLIENT))
+        fake_time.advance(timedelta(seconds=registry.seconds_remaining(_CLIENT)))
     assert delays == [2.0, 4.0, 8.0, 16.0]
     await worker.run_task(SearchTask(keyword="k", channel="ed2k"))
-    assert "amule-1" not in registry.snapshot()
+    assert _CLIENT not in registry.snapshot()
 
 
 @pytest.mark.asyncio
