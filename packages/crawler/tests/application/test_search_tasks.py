@@ -84,12 +84,12 @@ class _SavesRecorded(SqliteBackoffStateRepository):
         super().__init__(connection)
         self.saved: list[dict[BackoffKey, BackoffState]] = []
 
-    def save_backoff_states(self, backoff: dict[BackoffKey, BackoffState]) -> None:
+    def save_backoff_states(self, backoff_state_by_key: dict[BackoffKey, BackoffState]) -> None:
         if self.failures:
             self.failures -= 1
             raise RepositoryError("database is locked")
-        super().save_backoff_states(backoff)
-        self.saved.append(backoff)
+        super().save_backoff_states(backoff_state_by_key)
+        self.saved.append(backoff_state_by_key)
 
 
 class _Tasks:

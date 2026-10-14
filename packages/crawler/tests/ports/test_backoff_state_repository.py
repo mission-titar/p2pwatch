@@ -16,13 +16,13 @@ class _StubRepository:
     """Satisfies BackoffStateRepository structurally (without importing it)."""
 
     def __init__(self) -> None:
-        self.backoff: dict[BackoffKey, BackoffState] = {}
+        self.backoff_state_by_key: dict[BackoffKey, BackoffState] = {}
 
     def load_backoff_states(self) -> dict[BackoffKey, BackoffState]:
-        return dict(self.backoff)
+        return dict(self.backoff_state_by_key)
 
-    def save_backoff_states(self, backoff: dict[BackoffKey, BackoffState]) -> None:
-        self.backoff = dict(backoff)
+    def save_backoff_states(self, backoff_state_by_key: dict[BackoffKey, BackoffState]) -> None:
+        self.backoff_state_by_key = dict(backoff_state_by_key)
 
 
 def test_a_backoff_key_names_a_channel_or_the_whole_client() -> None:

@@ -176,7 +176,7 @@ def test_a_loaded_backoff_waits_what_is_left_of_its_delay() -> None:
     started_at = fake_time.wall.now() - timedelta(seconds=100)
     registry = _registry(fake_time)
     registry.load_from({_KAD: BackoffState(1, started_at, timedelta(seconds=300))})
-    assert registry.remaining_wait(_KAD) == timedelta(seconds=200)
+    assert registry.time_until_retry(_KAD) == timedelta(seconds=200)
 
 
 def test_a_loaded_backoff_started_in_the_future_waits_its_delay_at_most() -> None:
@@ -363,8 +363,8 @@ async def test_the_client_backoff_grows_until_a_search_succeeds(
     delays = []
     for _ in range(4):
         await worker.run_task(SearchTask(keyword="k", channel="ed2k"))
-        delays.append(registry.remaining_wait(_CLIENT))
-        fake_time.advance(registry.remaining_wait(_CLIENT))
+        delays.append(registry.time_until_retry(_CLIENT))
+        fake_time.advance(registry.time_until_retry(_CLIENT))
     assert delays == [timedelta(seconds=seconds) for seconds in (2, 4, 8, 16)]
     await worker.run_task(SearchTask(keyword="k", channel="ed2k"))
     assert _CLIENT not in registry.snapshot()

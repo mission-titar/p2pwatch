@@ -239,7 +239,7 @@ class BackoffEntry:
     client_name: str
     channel: str
     attempts: int
-    retry_at: str
+    retry_at_display: str
 
 
 @dataclass(frozen=True)
