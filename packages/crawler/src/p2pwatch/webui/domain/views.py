@@ -1,8 +1,8 @@
 """PRECOMPUTED view-models (webui spec W-D8): the templates only iterate and interpolate
 these fields. No template-side logic."""
 
-from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.observation import Sighting
@@ -223,19 +223,31 @@ class DownloadRow:
 
 
 @dataclass(frozen=True)
-class SchedulerEntry:
-    """A scheduler key/value pair (precomputed for the template)."""
+class BackoffRow:
+    """A client, or one of its channels, held back by the search backoff (backoff_states)."""
 
-    key: str
-    value: str
+    client_name: str
+    channel: str | None  # None for the whole client
+    attempts: int
+    retry_at: datetime  # its started_at plus its delay
+
+
+@dataclass(frozen=True)
+class BackoffEntry:
+    """One line of /node's backoff section (precomputed for the template)."""
+
+    client_name: str
+    channel: str
+    attempts: int
+    retry_at: str
 
 
 @dataclass(frozen=True)
 class NodeState:
-    """Full node state: downloads, scheduler, identity."""
+    """Full node state: downloads, backoff, identity."""
 
     downloads: tuple[DownloadRow, ...]
-    scheduler: Mapping[str, str]  # all scheduler_state pairs
+    backoff_rows: tuple[BackoffRow, ...]
     node_id: str | None  # None if absent from node_runtime
     created_at: str | None  # None if absent from node_runtime
 

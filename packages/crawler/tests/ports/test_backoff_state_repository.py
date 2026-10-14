@@ -1,16 +1,19 @@
 import dataclasses
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from p2pwatch.ports.scheduler_state_repository import (
+from p2pwatch.ports.backoff_state_repository import (
     BackoffKey,
     BackoffState,
-    SchedulerStateRepository,
+    BackoffStateRepository,
 )
+
+_STARTED_AT = datetime(2026, 6, 12, 10, tzinfo=UTC)
 
 
 class _StubRepository:
-    """Satisfies SchedulerStateRepository structurally (without importing it)."""
+    """Satisfies BackoffStateRepository structurally (without importing it)."""
 
     def __init__(self) -> None:
         self.backoff: dict[BackoffKey, BackoffState] = {}
@@ -31,22 +34,18 @@ def test_a_backoff_key_names_a_channel_or_the_whole_client() -> None:
         channel_key.channel = "ed2k"  # type: ignore[misc]
 
 
-def test_channel_backoff_is_frozen_and_holds_fields() -> None:
-    state = BackoffState(attempts=2, retry_after="2026-06-12T10:05:00.000000+00:00")
-    assert state.attempts == 2
-    assert state.retry_after == "2026-06-12T10:05:00.000000+00:00"
+def test_a_backoff_state_is_frozen_and_holds_its_wait() -> None:
+    state = BackoffState(attempts=2, started_at=_STARTED_AT, delay=timedelta(seconds=300))
+    assert (state.attempts, state.delay) == (2, timedelta(seconds=300))
+    assert state.started_at == _STARTED_AT
     with pytest.raises(dataclasses.FrozenInstanceError):
         state.attempts = 3  # type: ignore[misc]
 
 
 def test_protocol_is_satisfied_structurally() -> None:
-    repository: SchedulerStateRepository = _StubRepository()
+    repository: BackoffStateRepository = _StubRepository()
     assert repository.load_backoff_states() == {}
-    state = {
-        BackoffKey("amule-1", "kad"): BackoffState(
-            attempts=1, retry_after="2026-06-12T10:00:00.000000+00:00"
-        )
-    }
+    state = {BackoffKey("amule-1", "kad"): BackoffState(1, _STARTED_AT, timedelta(seconds=2))}
     repository.save_backoff_states(state)
     assert isinstance(repository, _StubRepository)
     assert repository.load_backoff_states() == state

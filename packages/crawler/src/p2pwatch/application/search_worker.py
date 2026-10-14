@@ -3,7 +3,7 @@ earns, per client when unreachable and per channel when refused (stage 2, D4 and
 
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 from catalog_matching.engine import MatchingEngine
 from p2pwatch.application.record_observations import record_observation
@@ -13,12 +13,13 @@ from p2pwatch.domain.observability.events import (
     SearchFailed,
 )
 from p2pwatch.domain.observation import FileObservation
+from p2pwatch.domain.persisted_wait import remaining_wait
 from p2pwatch.domain.search.backoff import backoff_delay
+from p2pwatch.ports.backoff_state_repository import BackoffKey, BackoffState
 from p2pwatch.ports.catalog_repository import CatalogRepository
 from p2pwatch.ports.client_errors import ClientUnreachableError, SearchFailedError
-from p2pwatch.ports.clock import WallClock
+from p2pwatch.ports.clock import MonotonicClock, MonotonicInstant, WallClock
 from p2pwatch.ports.rng import Rng
-from p2pwatch.ports.scheduler_state_repository import BackoffKey, BackoffState
 from p2pwatch.ports.search_client import SearchClient
 from p2pwatch.ports.telemetry import Telemetry
 from p2pwatch.ports.wake_hub import WakeHub
@@ -27,13 +28,6 @@ _logger = logging.getLogger("p2pwatch.application.search_worker")
 
 # A ceiling, not a duration: above Kad's 45 s and an ed2k sweep, it guards a search never ending.
 SEARCH_BUDGET_SECONDS = 120.0
-
-
-def _iso(moment: datetime) -> str:
-    """Fixed-width ISO-8601 UTC (microseconds ALWAYS written) - same rules as the adapter's
-    ``utc_iso`` (which we cannot import: dependency rule §4) so that the
-    PERSISTED format is identical to the other timestamps'."""
-    return moment.astimezone(UTC).isoformat(timespec="microseconds")
 
 
 @dataclass(frozen=True)
@@ -59,65 +53,71 @@ class BackoffPolicy:
 
 
 class BackoffRegistry:
-    """SHARED backoff registry keyed by :class:`BackoffKey`, PERSISTABLE.
+    """The backoff every worker shares, each wait a persisted wait: measured on the monotonic
+    clock, resumed through ``remaining_wait`` after a restart."""
 
-    Holds a map ``backoff_key → BackoffState(attempts, retry_after)`` (spec §3/§7). ``retry_after``
-    is computed on failure: ``wall_clock.now() + backoff_delay(attempts) + jitter`` (jitter drawn
-    from the ``Rng`` port, deterministic in test) → fixed-width ISO-8601 UTC. ``is_in_backoff``
-    skips a key while ``now < retry_after``. ``snapshot``/``load_from`` bridge to
-    ``scheduler_state`` (the persistence survives a restart).
-    """
-
-    def __init__(self, policy: BackoffPolicy, wall_clock: WallClock, rng: Rng) -> None:
+    def __init__(
+        self,
+        policy: BackoffPolicy,
+        wall_clock: WallClock,
+        monotonic_clock: MonotonicClock,
+        rng: Rng,
+    ) -> None:
         self._policy = policy
         self._wall_clock = wall_clock
+        self._monotonic_clock = monotonic_clock
         self._rng = rng
         self._state_by_key: dict[BackoffKey, BackoffState] = {}
+        self._deadline_by_key: dict[BackoffKey, MonotonicInstant] = {}
 
     def load_from(self, states: dict[BackoffKey, BackoffState]) -> None:
-        """Reloads the registry from a persisted snapshot (recovery after crash, spec §7)."""
+        """Resumes the waits a previous run persisted."""
+        wall_now = self._wall_clock.now()
+        monotonic_now = self._monotonic_clock.now()
         self._state_by_key = dict(states)
+        self._deadline_by_key = {
+            backoff_key: monotonic_now + remaining_wait(state.started_at, state.delay, wall_now)
+            for backoff_key, state in states.items()
+        }
 
     def snapshot(self) -> dict[BackoffKey, BackoffState]:
-        """Copy of the current map (to persist, spec §7)."""
+        """Copy of the current map, to persist."""
         return dict(self._state_by_key)
 
     def is_in_backoff(self, backoff_key: BackoffKey) -> bool:
-        """``True`` if ``backoff_key`` has a ``retry_after`` still in the FUTURE (to skip)."""
-        return self.seconds_remaining(backoff_key) > 0
+        return self.remaining_wait(backoff_key) > timedelta(0)
 
-    def seconds_remaining(self, backoff_key: BackoffKey) -> float:
-        """Seconds until ``backoff_key``'s ``retry_after``, 0 when it has none or it has passed."""
-        state = self._state_by_key.get(backoff_key)
-        if state is None:
-            return 0.0
-        left = datetime.fromisoformat(state.retry_after) - self._wall_clock.now()
-        return max(0.0, left.total_seconds())
+    def remaining_wait(self, backoff_key: BackoffKey) -> timedelta:
+        """What is left of ``backoff_key``'s wait, zero when it has none or it has ended."""
+        deadline = self._deadline_by_key.get(backoff_key)
+        if deadline is None:
+            return timedelta(0)
+        return max(timedelta(0), deadline - self._monotonic_clock.now())
 
-    def record_failure(self, backoff_key: BackoffKey) -> float:
-        """Increments ``attempts``, computes delay+jitter, sets ``retry_after``. Returns the delay.
-
-        The delay is for the LOG; the operational decision is the ``retry_after`` (skip).
-        """
+    def record_failure(self, backoff_key: BackoffKey) -> timedelta:
+        """Counts one more attempt and starts its wait, delay plus jitter. Returns the delay, for
+        the log."""
         if self.is_in_backoff(backoff_key):  # a concurrent search started before it: same round
-            return self.seconds_remaining(backoff_key)
+            return self.remaining_wait(backoff_key)
         attempts = (
             self._state_by_key[backoff_key].attempts + 1 if backoff_key in self._state_by_key else 1
         )
-        delay = backoff_delay(
+        delay_seconds = backoff_delay(
             attempts,
             base=self._policy.base_seconds,
             cap=self._policy.cap_seconds,
             factor=self._policy.factor,
         )
-        delay += self._rng.jitter(self._policy.jitter_ratio * delay)
-        retry_after = _iso(self._wall_clock.now() + timedelta(seconds=delay))
-        self._state_by_key[backoff_key] = BackoffState(attempts=attempts, retry_after=retry_after)
+        delay_seconds += self._rng.jitter(self._policy.jitter_ratio * delay_seconds)
+        delay = timedelta(seconds=delay_seconds)
+        self._state_by_key[backoff_key] = BackoffState(attempts, self._wall_clock.now(), delay)
+        self._deadline_by_key[backoff_key] = self._monotonic_clock.now() + delay
         return delay
 
     def reset(self, backoff_key: BackoffKey) -> None:
         """Clears the backoff of a key (success)."""
         self._state_by_key.pop(backoff_key, None)
+        self._deadline_by_key.pop(backoff_key, None)
 
 
 @dataclass
@@ -151,12 +151,12 @@ class SearchWorker:
         """The channels its client declares."""
         return self._client.channels
 
-    def seconds_until_ready(self, channel: str) -> float:
+    def time_until_ready(self, channel: str) -> timedelta:
         """How long until neither the client nor ``channel`` is backed off."""
         backoff = self._deps.backoff
         return max(
-            backoff.seconds_remaining(self._client_backoff_key),
-            backoff.seconds_remaining(BackoffKey(self._client_name, channel)),
+            backoff.remaining_wait(self._client_backoff_key),
+            backoff.remaining_wait(BackoffKey(self._client_name, channel)),
         )
 
     async def _ensure_connected(self) -> bool:
@@ -171,7 +171,7 @@ class SearchWorker:
                 "client %s unreachable (%s): reconnect backoff %.1fs",
                 self._client_name,
                 error,
-                delay,
+                delay.total_seconds(),
             )
             await self._deps.telemetry.emit(ClientUnreachable(self._client_name))
             return False
@@ -203,7 +203,7 @@ class SearchWorker:
         return changed
 
     async def run_task(self, task: SearchTask) -> None:
-        """One search, run once ``seconds_until_ready`` is 0. Never raises: backs off and logs."""
+        """One search, run once ``time_until_ready`` is zero. Never raises: backs off and logs."""
         channel_backoff_key = BackoffKey(self._client_name, task.channel)
         if not await self._ensure_connected():
             return
@@ -216,7 +216,7 @@ class SearchWorker:
                 self._client_name,
                 task.channel,
                 error,
-                delay,
+                delay.total_seconds(),
             )
             await self._deps.telemetry.emit(SearchFailed(self._client_name, task.channel))
             return
@@ -227,7 +227,7 @@ class SearchWorker:
                 "client %s unreachable (%s), client down, backoff %.1fs",
                 self._client_name,
                 error,
-                delay,
+                delay.total_seconds(),
             )
             await self._deps.telemetry.emit(ClientUnreachable(self._client_name))
             return

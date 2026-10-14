@@ -1,10 +1,13 @@
 """Read-only tests of local.db via LocalReader (Task 8 — W-D8 §node_state)."""
 
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 
 from p2pwatch.webui.adapters.local_read import LocalReader
-from p2pwatch.webui.domain.views import DownloadRow, NodeState
+from p2pwatch.webui.domain.views import BackoffRow, DownloadRow, NodeState
+
+_STARTED_AT_MICROS = 1_781_258_400_000_000  # 2026-06-12T10:00:00Z
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -24,7 +27,7 @@ def _open_local(path: Path) -> sqlite3.Connection:
 
 
 def test_node_state_populated(local_db: Path) -> None:
-    """Populated DB: downloads, scheduler_state, node_runtime."""
+    """Populated DB: downloads, backoff_states, node_runtime."""
     # --- populate ---
     with sqlite3.connect(local_db) as w:
         w.execute(
@@ -33,9 +36,9 @@ def test_node_state_populated(local_db: Path) -> None:
             " VALUES (x'00', 'ed2k', ?, '062A', 'active', '2026-06-22T10:00:00Z', ?, ?, ?, ?)",
             ("aabbccdd" * 4, 1024, "2026-06-23T10:00:00Z", "no_source", "error"),
         )
-        w.execute(
-            "INSERT INTO scheduler_state VALUES (?,?)",
-            ("cycle_index", "5"),
+        w.executemany(
+            "INSERT INTO backoff_states VALUES (?, ?, ?, ?, ?)",
+            [("amuled", "kad", 1, _STARTED_AT_MICROS, 2.5), ("amuled", None, 3, 0, 120.0)],
         )
         w.execute(
             "INSERT INTO node_runtime VALUES (?,?)",
@@ -65,8 +68,11 @@ def test_node_state_populated(local_db: Path) -> None:
     assert dl.waiting_reason == "no_source"
     assert dl.failure_reason == "error"
 
-    # scheduler KV
-    assert state.scheduler == {"cycle_index": "5"}
+    # backoff, the whole client first, each retry at its start plus its delay
+    assert state.backoff_rows == (
+        BackoffRow("amuled", None, 3, datetime(1970, 1, 1, 0, 2, tzinfo=UTC)),
+        BackoffRow("amuled", "kad", 1, datetime(2026, 6, 12, 10, 0, 2, 500000, tzinfo=UTC)),
+    )
 
     # node_runtime
     assert state.node_id == "test-node-42"
@@ -86,6 +92,6 @@ def test_node_state_empty_db(local_db: Path) -> None:
 
     assert isinstance(state, NodeState)
     assert state.downloads == ()
-    assert state.scheduler == {}
+    assert state.backoff_rows == ()
     assert state.node_id is None
     assert state.created_at is None

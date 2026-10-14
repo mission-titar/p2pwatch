@@ -175,11 +175,6 @@ def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
             "INSERT INTO node_runtime VALUES (?, ?)", ("created_at", "2024-01-01T00:00:00")
         )
         conn.commit()
-        conn.execute(
-            "INSERT INTO scheduler_state VALUES (?, ?)",
-            ("last_search_cycle", "2024-01-01T00:00:00"),
-        )
-        conn.commit()
 
     matcher_config = _matcher()
     targets = _targets()
@@ -1202,15 +1197,28 @@ async def test_base_nav_uses_singular_node_href(
 
 
 @pytest.mark.asyncio
-async def test_node_page_renders_scheduler_state(
-    populated_app: tuple[Starlette, str],
+async def test_node_page_shows_each_backoff_and_its_planned_retry_in_utc(
+    populated_app: tuple[Starlette, str], local_db: Path
 ) -> None:
-    """/node → the scheduler_state key last_search_cycle appears in the HTML."""
     app, _ = populated_app
+    started_at_micros = 1_781_258_400_000_000  # 2026-06-12T10:00:00Z
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/node")
-    assert resp.status_code == 200
-    assert "last_search_cycle" in resp.text
+        before = await client.get("/node")
+        with sqlite3.connect(local_db) as conn:
+            conn.executemany(
+                "INSERT INTO backoff_states VALUES (?, ?, ?, ?, ?)",
+                [
+                    ("amuled", None, 3, started_at_micros, 120.0),
+                    ("amuled", "kad", 1, started_at_micros, 2.5),
+                ],
+            )
+        after = await client.get("/node")
+    assert "No backoff." in before.text
+    cells = re.findall(r"<td>([^<]*)</td>", after.text)
+    assert cells == [
+        *("amuled", "whole client", "3", "2026-06-12T10:02:00.000000+00:00"),
+        *("amuled", "kad", "1", "2026-06-12T10:00:02.500000+00:00"),
+    ]
 
 
 @pytest.mark.asyncio

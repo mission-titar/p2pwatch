@@ -8,17 +8,18 @@ import logging
 import sqlite3
 from collections.abc import Coroutine, Iterator
 from contextlib import suppress
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from catalog_matching.engine import MatchingEngine
+from p2pwatch.adapters.persistence_sqlite.backoff_state_repository import (
+    SqliteBackoffStateRepository,
+)
 from p2pwatch.adapters.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.persistence_sqlite.connection import open_local
-from p2pwatch.adapters.persistence_sqlite.scheduler_state_repository import (
-    SqliteSchedulerStateRepository,
-)
 from p2pwatch.application.search_tasks import SearchTaskRunner
 from p2pwatch.application.search_worker import (
     BackoffPolicy,
@@ -27,11 +28,11 @@ from p2pwatch.application.search_worker import (
     WorkerDeps,
 )
 from p2pwatch.domain.observation import FileObservation
+from p2pwatch.ports.backoff_state_repository import BackoffKey, BackoffState
 from p2pwatch.ports.client_errors import SearchFailedError
 from p2pwatch.ports.repository_errors import RepositoryError
-from p2pwatch.ports.scheduler_state_repository import BackoffKey, BackoffState
 from tests.application.fakes import FakeRng, RecordingTelemetry, RecordingWakeHub, make_unreachable
-from tests.virtual_time import LoopMonotonicClock, LoopWallClock, run_virtual
+from tests.virtual_time import EPOCH, LoopMonotonicClock, LoopWallClock, run_virtual
 
 _HOUR = 3600.0
 _POLICY = BackoffPolicy(
@@ -74,7 +75,7 @@ class _TimedClient:
         return ()
 
 
-class _SavesRecorded(SqliteSchedulerStateRepository):
+class _SavesRecorded(SqliteBackoffStateRepository):
     """Records each saved backoff map; the first ``failures`` saves raise."""
 
     failures = 0
@@ -106,7 +107,7 @@ class _Tasks:
             keywords=keywords,
             resumed=self.resumed,
             backoff=self.deps.backoff,
-            scheduler_state=self.state,
+            backoff_states=self.state,
             monotonic_clock=LoopMonotonicClock(),
         ).run()
 
@@ -127,7 +128,7 @@ def tasks(
 ) -> Iterator[_Tasks]:
     connection = open_local(tmp_path / "local.db")
     wall_clock = LoopWallClock()
-    backoff = BackoffRegistry(_POLICY, wall_clock, FakeRng())
+    backoff = BackoffRegistry(_POLICY, wall_clock, LoopMonotonicClock(), FakeRng())
     wake_hub, telemetry = RecordingWakeHub(), RecordingTelemetry()
     deps = WorkerDeps(
         catalog=catalog,
@@ -204,9 +205,8 @@ def test_a_failed_save_is_logged_and_retried_after_the_next_search(
     with caplog.at_level(logging.ERROR, logger="p2pwatch.application.search_tasks"):
         tasks.run_for(100.0, client, ["keroro"])
     assert "database is locked" in caplog.text
-    assert tasks.state.saved == [
-        {BackoffKey("amuled", "kad"): BackoffState(2, "2026-10-09T00:03:00.000000+00:00")}
-    ]
+    second_failure = BackoffState(2, EPOCH + timedelta(seconds=60), timedelta(seconds=120))
+    assert tasks.state.saved == [{BackoffKey("amuled", "kad"): second_failure}]
 
 
 class _NeverSuspends:

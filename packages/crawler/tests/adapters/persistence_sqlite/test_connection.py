@@ -21,7 +21,7 @@ _CATALOG_TABLES = {"files", "observation_variants", "observations", "match_decis
 _LOCAL_TABLES = {
     "node_runtime",
     "downloads",
-    "scheduler_state",
+    "backoff_states",
     "reevaluation_state",
 }
 
@@ -87,7 +87,7 @@ def test_open_local_creates_the_tables_and_versions_the_schema(tmp_path: Path) -
     connection = open_local(tmp_path / "local.db")
     try:
         assert _table_names(connection) == _LOCAL_TABLES
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 10
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 11
     finally:
         connection.close()
 
