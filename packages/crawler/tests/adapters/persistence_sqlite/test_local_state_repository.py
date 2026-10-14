@@ -1,7 +1,7 @@
 import sqlite3
 import uuid
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -12,7 +12,6 @@ from p2pwatch.adapters.persistence_sqlite.local_state_repository import (
     SqliteLocalStateRepository,
 )
 from p2pwatch.ports.local_state_repository import LocalStateRepository
-from tests.application.fakes import FakeClock
 
 _START = datetime(2026, 6, 11, 12, 0, 0, tzinfo=UTC)
 _NODE_ID_QUERY = "SELECT value FROM node_runtime WHERE key = 'node_id'"
@@ -26,13 +25,8 @@ def connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 
 @pytest.fixture
-def clock() -> FakeClock:
-    return FakeClock(_START)
-
-
-@pytest.fixture
-def repository(connection: sqlite3.Connection, clock: FakeClock) -> SqliteLocalStateRepository:
-    return SqliteLocalStateRepository(connection, clock=clock)
+def repository(connection: sqlite3.Connection) -> SqliteLocalStateRepository:
+    return SqliteLocalStateRepository(connection)
 
 
 # --- node_id (spec §3) ---------------------------------------------------------------
@@ -41,17 +35,19 @@ def repository(connection: sqlite3.Connection, clock: FakeClock) -> SqliteLocalS
 def test_node_id_is_created_on_first_call_and_stable(
     repository: SqliteLocalStateRepository, connection: sqlite3.Connection
 ) -> None:
-    created = repository.get_or_create_node_id()
+    created = repository.get_or_create_node_id(_START)
     assert uuid.UUID(created)  # a REAL UUID, verifiable
-    assert repository.get_or_create_node_id() == created  # stable on the second call
-    fresh = SqliteLocalStateRepository(connection, clock=FakeClock())  # and any future instance
-    assert fresh.get_or_create_node_id() == created
+    later = _START + timedelta(days=1)
+    assert repository.get_or_create_node_id(later) == created  # stable on the second call
+    fresh = SqliteLocalStateRepository(connection)  # and any future instance
+    assert fresh.get_or_create_node_id(later) == created
 
 
 def test_node_id_persists_created_at_alongside(
     repository: SqliteLocalStateRepository, connection: sqlite3.Connection
 ) -> None:
-    repository.get_or_create_node_id()
+    repository.get_or_create_node_id(_START)
+    repository.get_or_create_node_id(_START + timedelta(days=1))
     row = connection.execute("SELECT value FROM node_runtime WHERE key = 'created_at'").fetchone()
     assert row == ("2026-06-11T12:00:00.000000+00:00",)
 
@@ -62,23 +58,21 @@ def test_node_id_creation_failure_is_wrapped_and_rolled_back(
     # 'created_at' pre-existing -> the two-row INSERT violates the PK -> full rollback.
     connection.execute("INSERT INTO node_runtime (key, value) VALUES ('created_at', 'already')")
     with pytest.raises(PersistenceError, match="UNIQUE"):
-        repository.get_or_create_node_id()
+        repository.get_or_create_node_id(_START)
     assert connection.execute(_NODE_ID_QUERY).fetchone() is None
 
 
-def test_node_id_clock_failure_does_not_wedge_the_connection(
-    connection: sqlite3.Connection, clock: FakeClock
+def test_a_naive_created_at_does_not_wedge_the_connection(
+    repository: SqliteLocalStateRepository, connection: sqlite3.Connection
 ) -> None:
-    # BUGGY clock (naive): utc_iso raises ValueError; a NON-sqlite failure must
+    # utc_iso raises ValueError on a naive instant; a NON-sqlite failure must
     # NEVER leave the connection in_transaction (otherwise every subsequent call dies with
     # "cannot start a transaction within a transaction", a misleading diagnostic).
-    broken = SqliteLocalStateRepository(connection, clock=FakeClock(datetime(2026, 6, 11, 12)))
     with pytest.raises(ValueError, match="aware"):
-        broken.get_or_create_node_id()
+        repository.get_or_create_node_id(datetime(2026, 6, 11, 12))
     assert connection.in_transaction is False  # healthy connection, no zombie transaction
     assert connection.execute(_NODE_ID_QUERY).fetchone() is None  # nothing half-written
-    healthy = SqliteLocalStateRepository(connection, clock=clock)
-    assert uuid.UUID(healthy.get_or_create_node_id())  # the SAME connection stays fully usable
+    assert uuid.UUID(repository.get_or_create_node_id(_START))  # the connection stays usable
 
 
 # --- port satisfaction ------------------------------------------------------------------

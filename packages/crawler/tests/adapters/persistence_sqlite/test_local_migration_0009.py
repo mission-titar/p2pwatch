@@ -4,7 +4,6 @@ from pathlib import Path
 
 from p2pwatch.adapters.persistence_sqlite.local_state_repository import SqliteLocalStateRepository
 from tests.adapters.persistence_sqlite.older_catalog import open_local_at
-from tests.application.fakes import FakeClock
 
 
 def test_0009_renames_the_marker_and_keeps_its_fingerprint(tmp_path: Path) -> None:
@@ -16,7 +15,7 @@ def test_0009_renames_the_marker_and_keeps_its_fingerprint(tmp_path: Path) -> No
     connection = open_local_at(path, 9)
     try:
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 9
-        repository = SqliteLocalStateRepository(connection, clock=FakeClock())
+        repository = SqliteLocalStateRepository(connection)
         assert repository.reevaluated_policy_fingerprint() == "abc"
     finally:
         connection.close()

@@ -256,7 +256,7 @@ class CrawlerApp:
         return DownloadLoopDeps(
             download_client=download_client,
             source_client=download_client,
-            downloads=SqliteDownloadRepository(local_conn, clock=self._clock),
+            downloads=SqliteDownloadRepository(local_conn),
             sources=source_repo,
             catalog=catalog_repo,
             targets=self._targets,
@@ -413,8 +413,10 @@ class CrawlerApp:
             local_conn = open_local(self._crawler_config.local_db_path)
             stack.callback(local_conn.close)
 
-            local_repo = SqliteLocalStateRepository(local_conn, clock=self._clock)
-            node_id = self._crawler_config.node_id or local_repo.get_or_create_node_id()
+            local_repo = SqliteLocalStateRepository(local_conn)
+            node_id = self._crawler_config.node_id or local_repo.get_or_create_node_id(
+                self._clock.now()
+            )
             observability = self._crawler_config.observability
             notifications = observability.notifications if observability is not None else ()
             registry = CollectorRegistry()

@@ -612,9 +612,7 @@ async def test_backfill_skipped_when_marker_already_matches_fingerprint(
     # the pass (a restart with an unchanged matcher.yml/targets.yml does no redundant work).
     local_conn = open_local(tmp_path / "local.db")
     try:
-        SqliteLocalStateRepository(
-            local_conn, clock=FakeClock()
-        ).set_reevaluated_policy_fingerprint("fp-unchanged")
+        SqliteLocalStateRepository(local_conn).set_reevaluated_policy_fingerprint("fp-unchanged")
     finally:
         local_conn.close()
     holder: dict[str, CrawlerApp] = {}
@@ -778,7 +776,7 @@ async def test_full_mode_records_the_sources_of_a_download_in_the_catalog(
 ) -> None:
     file = FileKey(Network.ED2K, "a" * 32)
     local = open_local(tmp_path / "local.db")
-    SqliteDownloadRepository(local, clock=FakeClock()).record_queued(file, "062A", 100)
+    SqliteDownloadRepository(local).record_queued(file, "062A", 100, FakeClock().now())
     local.close()
     catalog = open_catalog(tmp_path / "catalog.db")
     insert_file(catalog, file.native_id)
@@ -823,7 +821,7 @@ async def test_the_rows_written_carry_the_apps_clock(
     )
     catalog.close()
     local = open_local(tmp_path / "local.db")
-    SqliteDownloadRepository(local, clock=seeded).record_queued(file, "062A", 100)
+    SqliteDownloadRepository(local).record_queued(file, "062A", 100, seeded.now())
     local.close()
     holder: dict[str, CrawlerApp] = {}
     app = CrawlerApp(

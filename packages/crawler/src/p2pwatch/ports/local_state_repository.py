@@ -4,13 +4,14 @@ SYNCHRONOUS Protocol (same principle as ``CatalogRepository``). ``local.db`` is 
 this port does not cross the node boundary (invariant MVP §11).
 """
 
+from datetime import datetime
 from typing import Protocol
 
 
 class LocalStateRepository(Protocol):
     """Sync local-state contract: stable node identity + reevaluated policy fingerprint."""
 
-    def get_or_create_node_id(self) -> str: ...
+    def get_or_create_node_id(self, created_at: datetime) -> str: ...
 
     def reevaluated_policy_fingerprint(self) -> str | None: ...
 

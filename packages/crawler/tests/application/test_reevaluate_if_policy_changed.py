@@ -6,6 +6,8 @@ the rest are unused stubs) + a plain async callable standing in for ``reevaluate
 SQLite/engine needed: the gate is pure orchestration over the port + the injected callable.
 """
 
+from datetime import datetime
+
 import pytest
 
 from p2pwatch.application.reevaluate_catalog import ReevaluationSummary
@@ -21,7 +23,7 @@ class FakeLocalRepo:
         self._stored_policy = stored_policy
         self.set_calls: list[str] = []
 
-    def get_or_create_node_id(self) -> str:
+    def get_or_create_node_id(self, created_at: datetime) -> str:
         return "node"
 
     def reevaluated_policy_fingerprint(self) -> str | None:
