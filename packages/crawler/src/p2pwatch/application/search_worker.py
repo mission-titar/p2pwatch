@@ -16,7 +16,8 @@ from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.search.backoff import backoff_delay
 from p2pwatch.ports.catalog_repository import CatalogRepository
 from p2pwatch.ports.client_errors import ClientUnreachableError, SearchFailedError
-from p2pwatch.ports.clock import Clock, Rng
+from p2pwatch.ports.clock import WallClock
+from p2pwatch.ports.rng import Rng
 from p2pwatch.ports.scheduler_state_repository import BackoffState
 from p2pwatch.ports.search_client import SearchClient
 from p2pwatch.ports.telemetry import Telemetry
@@ -61,16 +62,15 @@ class BackoffRegistry:
     """SHARED backoff registry keyed (by client, or "client:channel"), PERSISTABLE.
 
     Holds a map ``backoff_key → BackoffState(attempts, retry_after)`` (spec §3/§7). ``retry_after``
-    is computed on failure: ``clock.now() + backoff_delay(attempts) + jitter`` (jitter drawn from
-    the ``Rng`` port, deterministic in test) → fixed-width ISO-8601 UTC. ``is_in_backoff`` skips
-    a key while
-    ``now < retry_after``. ``snapshot``/``load_from`` bridge to ``scheduler_state``
-    (the persistence survives a restart). Deterministic logic (injected clock/rng).
+    is computed on failure: ``wall_clock.now() + backoff_delay(attempts) + jitter`` (jitter drawn
+    from the ``Rng`` port, deterministic in test) → fixed-width ISO-8601 UTC. ``is_in_backoff``
+    skips a key while ``now < retry_after``. ``snapshot``/``load_from`` bridge to
+    ``scheduler_state`` (the persistence survives a restart).
     """
 
-    def __init__(self, policy: BackoffPolicy, clock: Clock, rng: Rng) -> None:
+    def __init__(self, policy: BackoffPolicy, wall_clock: WallClock, rng: Rng) -> None:
         self._policy = policy
-        self._clock = clock
+        self._wall_clock = wall_clock
         self._rng = rng
         self._state_by_key: dict[str, BackoffState] = {}
 
@@ -91,7 +91,7 @@ class BackoffRegistry:
         state = self._state_by_key.get(backoff_key)
         if state is None:
             return 0.0
-        left = datetime.fromisoformat(state.retry_after) - self._clock.now()
+        left = datetime.fromisoformat(state.retry_after) - self._wall_clock.now()
         return max(0.0, left.total_seconds())
 
     def record_failure(self, backoff_key: str) -> float:
@@ -111,7 +111,7 @@ class BackoffRegistry:
             factor=self._policy.factor,
         )
         delay += self._rng.jitter(self._policy.jitter_ratio * delay)
-        retry_after = _iso(self._clock.now() + timedelta(seconds=delay))
+        retry_after = _iso(self._wall_clock.now() + timedelta(seconds=delay))
         self._state_by_key[backoff_key] = BackoffState(attempts=attempts, retry_after=retry_after)
         return delay
 
@@ -133,7 +133,7 @@ class WorkerDeps:
     wake_hub: WakeHub
     backoff: "BackoffRegistry"
     telemetry: Telemetry
-    clock: Clock
+    wall_clock: WallClock
 
 
 class SearchWorker:
@@ -194,7 +194,7 @@ class SearchWorker:
                 engine=self._deps.engine,
                 wake_hub=self._deps.wake_hub,
                 telemetry=self._deps.telemetry,
-                clock=self._deps.clock,
+                wall_clock=self._deps.wall_clock,
                 client_name=self._client_name,
                 channel=channel,
             ):

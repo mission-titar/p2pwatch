@@ -33,7 +33,7 @@ from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.observation import Sighting
 from p2pwatch.domain.source import SourceKey
 from p2pwatch.ports.client_status import StatusReadings
-from p2pwatch.ports.clock import Clock
+from p2pwatch.ports.clock import WallClock
 from p2pwatch.ports.crawler_control import CrawlerControl
 from p2pwatch.webui.adapters.catalog_read import (
     DEFAULT_DIR,
@@ -621,7 +621,7 @@ def build_app(
     control: CrawlerControl,
     status_readings: StatusReadings,
     amule_url: str,
-    clock: Clock,
+    wall_clock: WallClock,
     source_period_gap: timedelta,
 ) -> Starlette:
     """Build and return the wired Starlette application.
@@ -660,7 +660,7 @@ def build_app(
 
     def _now_and_interval(request: Request) -> tuple[datetime, Interval]:
         """The second the request is read at, and the interval it asks for."""
-        now = clock.now().replace(microsecond=0)
+        now = wall_clock.now().replace(microsecond=0)
         query_params = request.query_params
         return now, requested_interval(query_params.get("from"), query_params.get("to"), now)
 

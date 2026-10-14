@@ -17,7 +17,7 @@ from p2pwatch.ports.client_errors import SearchFailedError
 from p2pwatch.ports.clock import MonotonicInstant
 from tests.adapters.mule_api.api_fakes import PASSWORD, FakeAmuleApi, error
 from tests.application.fakes import FakeTime
-from tests.virtual_time import MONOTONIC_EPOCH, LoopClock, run_virtual
+from tests.virtual_time import MONOTONIC_EPOCH, LoopMonotonicClock, run_virtual
 
 _HOUR = 3600.0
 _BUDGET = 120.0
@@ -28,7 +28,7 @@ _ALREADY_SEARCHING = (
 
 
 def _api(**kwargs: Any) -> FakeAmuleApi:
-    return FakeAmuleApi(monotonic_clock=LoopClock().monotonic, **kwargs)
+    return FakeAmuleApi(monotonic_clock=LoopMonotonicClock(), **kwargs)
 
 
 async def _connected(api: FakeAmuleApi) -> AmuleApiClient:

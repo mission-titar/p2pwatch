@@ -38,7 +38,7 @@ from p2pwatch.webui.domain.views import (
     FileRow,
     HiddenInput,
 )
-from tests.application.fakes import FakeClock
+from tests.application.fakes import FakeTime
 from tests.catalog_rows import (
     SEEN_AT,
     file_id,
@@ -58,7 +58,7 @@ from tests.catalog_rows import (
 TEST_HASH = "aabbccdd00112233aabbccdd00112233"
 _AMULE_URL = "http://localhost:4711"
 # Wednesday 2026-10-14 20:00 UTC: the period tables read the 7 days before it.
-_CLOCK = FakeClock(datetime(2026, 10, 14, 20, 0, tzinfo=UTC))
+_WALL_CLOCK = FakeTime(datetime(2026, 10, 14, 20, 0, tzinfo=UTC)).wall
 _GAP = timedelta(seconds=90)
 
 
@@ -199,7 +199,7 @@ def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         control=_RecordingControl(),
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
-        clock=_CLOCK,
+        wall_clock=_WALL_CLOCK,
         source_period_gap=_GAP,
     )
     return app, TEST_HASH
@@ -244,7 +244,7 @@ def app_no_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         control=_RecordingControl(),
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
-        clock=_CLOCK,
+        wall_clock=_WALL_CLOCK,
         source_period_gap=_GAP,
     )
     return app, TEST_HASH
@@ -301,7 +301,7 @@ def app_retracted_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette,
         control=_RecordingControl(),
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
-        clock=_CLOCK,
+        wall_clock=_WALL_CLOCK,
         source_period_gap=_GAP,
     )
     return app, TEST_HASH
@@ -339,7 +339,7 @@ def app_no_observations(catalog_db: Path, local_db: Path) -> tuple[Starlette, st
         control=_RecordingControl(),
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
-        clock=_CLOCK,
+        wall_clock=_WALL_CLOCK,
         source_period_gap=_GAP,
     )
     return app, TEST_HASH
@@ -385,7 +385,7 @@ def app_unknown_target(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         control=_RecordingControl(),
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
-        clock=_CLOCK,
+        wall_clock=_WALL_CLOCK,
         source_period_gap=_GAP,
     )
     return app, TEST_HASH
@@ -431,7 +431,7 @@ def app_download_tier_known_target(catalog_db: Path, local_db: Path) -> tuple[St
         control=_RecordingControl(),
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
-        clock=_CLOCK,
+        wall_clock=_WALL_CLOCK,
         source_period_gap=_GAP,
     )
     return app, TEST_HASH
@@ -477,7 +477,7 @@ def app_download_tier_unknown_target(catalog_db: Path, local_db: Path) -> tuple[
         control=_RecordingControl(),
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
-        clock=_CLOCK,
+        wall_clock=_WALL_CLOCK,
         source_period_gap=_GAP,
     )
     return app, TEST_HASH
@@ -737,7 +737,7 @@ def app_vetoed_alias(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         control=_RecordingControl(),
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
-        clock=_CLOCK,
+        wall_clock=_WALL_CLOCK,
         source_period_gap=_GAP,
     )
     return app, TEST_HASH
@@ -847,7 +847,7 @@ async def test_file_detail_shows_no_source_older_than_7_days(
     app, hash_ = populated_app
     with sqlite3.connect(catalog_db) as conn:
         insert_source(conn, _USER)
-        week_before = (_CLOCK.now() - timedelta(days=7, microseconds=1)).timestamp()
+        week_before = (_WALL_CLOCK.now() - timedelta(days=7, microseconds=1)).timestamp()
         insert_source_point(
             conn, insert_source_variant(conn, hash_, _USER), int(week_before * 1_000_000)
         )
@@ -1291,7 +1291,7 @@ def app_with_media_obs(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         control=_RecordingControl(),
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
-        clock=_CLOCK,
+        wall_clock=_WALL_CLOCK,
         source_period_gap=_GAP,
     )
     return app, TEST_HASH
@@ -1347,7 +1347,7 @@ async def test_a_template_reading_what_its_context_lacks_raises(
         control=_RecordingControl(),
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
-        clock=_CLOCK,
+        wall_clock=_WALL_CLOCK,
         source_period_gap=_GAP,
     )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -1447,7 +1447,7 @@ def app_with_hostile_filename(catalog_db: Path, local_db: Path) -> tuple[Starlet
         control=_RecordingControl(),
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
-        clock=_CLOCK,
+        wall_clock=_WALL_CLOCK,
         source_period_gap=_GAP,
     )
     return app, TEST_HASH
@@ -1526,7 +1526,7 @@ async def test_files_page_shows_pagination_navigation(catalog_db: Path, local_db
         control=_RecordingControl(),
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
-        clock=_CLOCK,
+        wall_clock=_WALL_CLOCK,
         source_period_gap=_GAP,
     )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -1846,7 +1846,7 @@ def app_whole_episode(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]
         control=_RecordingControl(),
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
-        clock=_CLOCK,
+        wall_clock=_WALL_CLOCK,
         source_period_gap=_GAP,
     )
     return app, TEST_HASH
@@ -1919,7 +1919,7 @@ def _dashboard_app(
         control=control,
         status_readings=status,
         amule_url=_AMULE_URL,
-        clock=_CLOCK,
+        wall_clock=_WALL_CLOCK,
         source_period_gap=_GAP,
     )
 
@@ -2054,7 +2054,7 @@ async def _clients_section(
 
 
 def _read_now(status: ClientStatus | None) -> StatusReading:
-    return StatusReading(FakeClock().now(), status)
+    return StatusReading(FakeTime().wall.now(), status)
 
 
 @pytest.mark.asyncio
@@ -2178,7 +2178,7 @@ def sortable_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, list[str]
         control=_RecordingControl(),
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
-        clock=_CLOCK,
+        wall_clock=_WALL_CLOCK,
         source_period_gap=_GAP,
     )
     return app, [big, mid, small]
@@ -2403,7 +2403,7 @@ async def test_nav_amule_link_uses_the_configured_base(catalog_db: Path, local_d
         control=_RecordingControl(),
         status_readings=_NO_STATUS,
         amule_url="https://mule.example.org/amule",
-        clock=_CLOCK,
+        wall_clock=_WALL_CLOCK,
         source_period_gap=_GAP,
     )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -2518,7 +2518,7 @@ async def test_no_parameter_shows_the_last_7_days_and_no_next(
     app, hash_ = populated_app
     path = _detail_url(hash_)
     page = await _sources_page(app, path)
-    now = _CLOCK.now()
+    now = _WALL_CLOCK.now()
     assert "Showing 2026-10-07 20:00:00Z to 2026-10-14 20:00:00Z." in page
     assert f"<a {_href(path, now - timedelta(days=14), now - timedelta(days=7))}>" in page
     assert "Next →" not in page
@@ -2530,7 +2530,7 @@ async def test_the_presets_end_now(populated_app: tuple[Starlette, str]) -> None
     app, hash_ = populated_app
     path = _detail_url(hash_)
     page = await _sources_page(app, f"{path}?{_query(_OCT_8, _OCT_11)}")
-    now, hours = _CLOCK.now(), {"hour": 1, "6 hours": 6, "24 hours": 24, "7 days": 168}
+    now, hours = _WALL_CLOCK.now(), {"hour": 1, "6 hours": 6, "24 hours": 24, "7 days": 168}
     for label, span in hours.items():
         assert f"<a {_href(path, now - timedelta(hours=span), now)}>Last {label}</a>" in page
 

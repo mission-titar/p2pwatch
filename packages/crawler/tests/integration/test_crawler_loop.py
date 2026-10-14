@@ -13,7 +13,6 @@ import pytest
 
 from catalog_matching.models import TargetSegment
 from catalog_matching.validation import parse_matcher_config
-from p2pwatch.adapters.clock_asyncio import AsyncioClock, SeededRng
 from p2pwatch.adapters.config.crawler_config import (
     AmuleEndpoint,
     BackoffConfig,
@@ -23,7 +22,9 @@ from p2pwatch.adapters.config.crawler_config import (
 )
 from p2pwatch.adapters.config.yaml_loader import load_yaml
 from p2pwatch.adapters.monotonic_clock_asyncio import AsyncioMonotonicClock
+from p2pwatch.adapters.rng_random import SeededRng
 from p2pwatch.adapters.wake_hub_asyncio import AsyncioWakeHub
+from p2pwatch.adapters.wall_clock_system import SystemWallClock
 from p2pwatch.composition.app import CrawlerApp
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.ports.client_status import ClientStatus
@@ -120,7 +121,7 @@ async def test_real_loop_runs_one_search_and_stops(amuled: ApiEndpoint, tmp_path
         crawler_config=crawler_config,
         targets=_TARGETS,
         matcher_config=matcher_config,
-        clock=AsyncioClock(),
+        wall_clock=SystemWallClock(),
         monotonic_clock=AsyncioMonotonicClock(),
         rng=SeededRng(),
         wake_hub=AsyncioWakeHub(),

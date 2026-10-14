@@ -19,7 +19,7 @@ from catalog_matching.engine import MatchingEngine
 from p2pwatch.application.decisions import rejudge_file
 from p2pwatch.domain.observation import candidate_from_fields
 from p2pwatch.ports.catalog_repository import CatalogRepository
-from p2pwatch.ports.clock import Clock
+from p2pwatch.ports.clock import WallClock
 from p2pwatch.ports.repository_errors import RepositoryError
 from p2pwatch.ports.telemetry import Telemetry
 from p2pwatch.ports.wake_hub import WakeHub
@@ -49,7 +49,7 @@ async def reevaluate_catalog(
     engine: MatchingEngine,
     wake_hub: WakeHub,
     telemetry: Telemetry,
-    clock: Clock,
+    wall_clock: WallClock,
 ) -> ReevaluationSummary:
     """Re-evaluate every catalogued hash's latest observation against ``engine``.
 
@@ -72,7 +72,7 @@ async def reevaluate_catalog(
                 engine=engine,
                 wake_hub=wake_hub,
                 telemetry=telemetry,
-                clock=clock,
+                wall_clock=wall_clock,
             )
         except RepositoryError as error:
             _logger.error(

@@ -61,7 +61,7 @@ def _loop_deps(
         lost_after_seconds=86400.0,
         reappeared_after=timedelta(hours=12),
         sources_interval=timedelta(minutes=5),
-        clock=fake_time.wall,
+        wall_clock=fake_time.wall,
         monotonic_clock=fake_time.monotonic,
         telemetry=RecordingTelemetry(),
         wake_hub=wake_hub,

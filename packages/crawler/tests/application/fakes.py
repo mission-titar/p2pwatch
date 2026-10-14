@@ -2,8 +2,7 @@
 
 ``FakeMuleClient``: results SCRIPTED per ``search`` call, injectable failures
 (``ClientUnreachableError``/``SearchFailedError``) at ``connect``/``search``.
-``FakeClock``: advanceable clock (``advance`` without I/O) + ``sleep`` that advances WITHOUT
-a real wait (determinism). ``FakeTime``: one timeline read through a wall and a monotonic clock.
+``FakeTime``: one timeline read through a wall and a monotonic clock.
 ``FakeRng``: FIXED jitter (determinism).
 ``RecordingWakeHub``: captures woken subjects. The repos are the REAL SQLite repos
 (spec §8: "real repos on tmp_path"): no fakes here.
@@ -17,26 +16,6 @@ from p2pwatch.domain.observation import FileObservation
 from p2pwatch.ports.client_errors import ClientUnreachableError, SearchFailedError
 from p2pwatch.ports.client_status import ChannelStatus, ClientStatus
 from p2pwatch.ports.clock import MonotonicInstant
-
-
-class FakeClock:
-    """Advanceable fake clock + instant sleep (advances now, deterministic)."""
-
-    def __init__(self, start: datetime | None = None) -> None:
-        self._now = start or datetime(2026, 6, 12, tzinfo=UTC)
-        self.sleeps: list[float] = []
-
-    def now(self) -> datetime:
-        return self._now
-
-    def advance(self, seconds: float) -> None:
-        """Advance the clock WITHOUT sleeping (to make a ``retry_after`` elapse in a test)."""
-        self._now += timedelta(seconds=seconds)
-
-    async def sleep(self, seconds: float) -> None:
-        self.sleeps.append(seconds)
-        self._now += timedelta(seconds=seconds)
-        await asyncio.sleep(0)  # yield control without a real wait
 
 
 class FakeTime:
@@ -64,6 +43,15 @@ class FakeWallClock:
 
     def now(self) -> datetime:
         return self._fake_time._wall_now
+
+
+class TickingWallClock(FakeWallClock):
+    """Each ``now()`` a minute after the previous one: a write shows which read it took."""
+
+    def now(self) -> datetime:
+        moment = super().now()
+        self._fake_time.advance(timedelta(minutes=1))
+        return moment
 
 
 class FakeMonotonicClock:

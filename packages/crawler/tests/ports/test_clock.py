@@ -2,24 +2,19 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from p2pwatch.ports.clock import Clock, MonotonicInstant, Rng
+from p2pwatch.ports.clock import MonotonicInstant, WallClock
 
 
-class _StubClock:
-    """Satisfies Clock structurally (without importing it)."""
+class _StubWallClock:
+    """Satisfies WallClock structurally (without importing it)."""
 
     def now(self) -> datetime:
         return datetime(2026, 6, 12, tzinfo=UTC)
 
 
-class _StubRng:
-    def jitter(self, span: float) -> float:
-        return 0.0
-
-
-def test_clock_protocol_is_satisfied_structurally() -> None:
-    clock: Clock = _StubClock()
-    assert clock.now() == datetime(2026, 6, 12, tzinfo=UTC)
+def test_wall_clock_protocol_is_satisfied_structurally() -> None:
+    wall_clock: WallClock = _StubWallClock()
+    assert wall_clock.now() == datetime(2026, 6, 12, tzinfo=UTC)
 
 
 def test_two_instants_differ_by_a_timedelta() -> None:
@@ -58,8 +53,3 @@ def test_an_instant_mixes_with_no_wall_clock_instant() -> None:
         _ = instant < wall  # type: ignore[operator]
     with pytest.raises(TypeError):
         timedelta(0) + instant  # type: ignore[operator]
-
-
-def test_rng_protocol_is_satisfied_structurally() -> None:
-    rng: Rng = _StubRng()
-    assert rng.jitter(5.0) == 0.0

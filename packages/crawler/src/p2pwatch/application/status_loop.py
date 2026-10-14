@@ -23,7 +23,7 @@ from p2pwatch.domain.observability.events import (
 )
 from p2pwatch.ports.client_errors import ClientAuthError, ClientError
 from p2pwatch.ports.client_status import StatusClient, StatusReading
-from p2pwatch.ports.clock import Clock, MonotonicClock, MonotonicInstant
+from p2pwatch.ports.clock import MonotonicClock, MonotonicInstant, WallClock
 from p2pwatch.ports.telemetry import Telemetry
 
 STATUS_PERIOD = timedelta(minutes=1)
@@ -64,7 +64,7 @@ class StatusBoard:
 class StatusLoopDeps:
     client_name: str  # as alerts and metrics label it
     client: StatusClient
-    clock: Clock
+    wall_clock: WallClock
     monotonic_clock: MonotonicClock
     telemetry: Telemetry
     shutdown: asyncio.Event
@@ -115,7 +115,7 @@ async def status_loop(deps: StatusLoopDeps) -> None:
         except ClientAuthError:
             raise  # a wrong password is config, not an outage
         except ClientError:  # a refused route too: a renamed /version must not end the crawler
-            deps.board.publish(deps.client_name, StatusReading(deps.clock.now(), None))
+            deps.board.publish(deps.client_name, StatusReading(deps.wall_clock.now(), None))
             await deps.telemetry.emit(ClientUnreachable(deps.client_name))
             # Every channel is unknown while the API is: only the API's own alert can fire.
             readings: list[tuple[str, bool | None, bool | None]] = [
@@ -123,7 +123,7 @@ async def status_loop(deps: StatusLoopDeps) -> None:
             ]
             reachable = False
         else:
-            deps.board.publish(deps.client_name, StatusReading(deps.clock.now(), status))
+            deps.board.publish(deps.client_name, StatusReading(deps.wall_clock.now(), status))
             readings = [(c.channel, c.connected, c.connectable) for c in status.channels]
             reachable = True
         await _observe(

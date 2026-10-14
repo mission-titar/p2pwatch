@@ -1,14 +1,13 @@
-"""Time and randomness, injectable: ``Clock`` stamps, ``MonotonicClock`` measures every interval
-and deadline kept in memory, ``Rng`` draws the backoff's jitter (spec orchestration §3)."""
+"""Time, injectable: ``WallClock`` stamps, ``MonotonicClock`` measures every interval and deadline
+kept in memory."""
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Protocol, overload
 
 
-class Clock(Protocol):
-    """Time, injectable: aware ``now()`` (UTC), every stamp (spec §3). Implemented on the adapter
-    side by ``datetime.now(UTC)``; replaced in tests by an advanceable fake clock."""
+class WallClock(Protocol):
+    """The UTC time of day, aware: every stamp a row, an event or a display carries."""
 
     def now(self) -> datetime: ...
 
@@ -43,9 +42,3 @@ class MonotonicClock(Protocol):
     def now(self) -> MonotonicInstant: ...
 
     async def sleep(self, duration: timedelta) -> None: ...
-
-
-class Rng(Protocol):
-    """Injectable randomness: ``jitter`` returns a float in ``[0, span)`` (backoff jitter)."""
-
-    def jitter(self, span: float) -> float: ...
