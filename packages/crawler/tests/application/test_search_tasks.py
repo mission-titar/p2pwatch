@@ -29,7 +29,7 @@ from p2pwatch.application.search_worker import (
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.ports.client_errors import SearchFailedError
 from p2pwatch.ports.repository_errors import RepositoryError
-from p2pwatch.ports.scheduler_state_repository import BackoffState
+from p2pwatch.ports.scheduler_state_repository import BackoffKey, BackoffState
 from tests.application.fakes import FakeRng, RecordingTelemetry, RecordingWakeHub, make_unreachable
 from tests.virtual_time import LoopMonotonicClock, LoopWallClock, run_virtual
 
@@ -81,9 +81,9 @@ class _SavesRecorded(SqliteSchedulerStateRepository):
 
     def __init__(self, connection: sqlite3.Connection) -> None:
         super().__init__(connection)
-        self.saved: list[dict[str, BackoffState]] = []
+        self.saved: list[dict[BackoffKey, BackoffState]] = []
 
-    def save_backoff_states(self, backoff: dict[str, BackoffState]) -> None:
+    def save_backoff_states(self, backoff: dict[BackoffKey, BackoffState]) -> None:
         if self.failures:
             self.failures -= 1
             raise RepositoryError("database is locked")
@@ -191,7 +191,7 @@ def test_an_unreachable_client_sleeps_until_its_backoff_ends(tasks: _Tasks) -> N
 def test_the_backoff_is_saved_at_each_change(tasks: _Tasks) -> None:
     client = _TimedClient({"kad": 30.0}, search_failures=[SearchFailedError("refused")])
     tasks.run_for(_HOUR, client, ["keroro"])
-    assert [set(saved) for saved in tasks.state.saved] == [{"amuled:kad"}, set()]
+    assert [set(saved) for saved in tasks.state.saved] == [{BackoffKey("amuled", "kad")}, set()]
     assert tasks.state.load_backoff_states() == {}
 
 
@@ -205,7 +205,7 @@ def test_a_failed_save_is_logged_and_retried_after_the_next_search(
         tasks.run_for(100.0, client, ["keroro"])
     assert "database is locked" in caplog.text
     assert tasks.state.saved == [
-        {"amuled:kad": BackoffState(2, "2026-10-09T00:03:00.000000+00:00")}
+        {BackoffKey("amuled", "kad"): BackoffState(2, "2026-10-09T00:03:00.000000+00:00")}
     ]
 
 

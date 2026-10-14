@@ -18,7 +18,7 @@ from p2pwatch.ports.catalog_repository import CatalogRepository
 from p2pwatch.ports.client_errors import ClientUnreachableError, SearchFailedError
 from p2pwatch.ports.clock import WallClock
 from p2pwatch.ports.rng import Rng
-from p2pwatch.ports.scheduler_state_repository import BackoffState
+from p2pwatch.ports.scheduler_state_repository import BackoffKey, BackoffState
 from p2pwatch.ports.search_client import SearchClient
 from p2pwatch.ports.telemetry import Telemetry
 from p2pwatch.ports.wake_hub import WakeHub
@@ -59,7 +59,7 @@ class BackoffPolicy:
 
 
 class BackoffRegistry:
-    """SHARED backoff registry keyed (by client, or "client:channel"), PERSISTABLE.
+    """SHARED backoff registry keyed by :class:`BackoffKey`, PERSISTABLE.
 
     Holds a map ``backoff_key → BackoffState(attempts, retry_after)`` (spec §3/§7). ``retry_after``
     is computed on failure: ``wall_clock.now() + backoff_delay(attempts) + jitter`` (jitter drawn
@@ -72,21 +72,21 @@ class BackoffRegistry:
         self._policy = policy
         self._wall_clock = wall_clock
         self._rng = rng
-        self._state_by_key: dict[str, BackoffState] = {}
+        self._state_by_key: dict[BackoffKey, BackoffState] = {}
 
-    def load_from(self, states: dict[str, BackoffState]) -> None:
+    def load_from(self, states: dict[BackoffKey, BackoffState]) -> None:
         """Reloads the registry from a persisted snapshot (recovery after crash, spec §7)."""
         self._state_by_key = dict(states)
 
-    def snapshot(self) -> dict[str, BackoffState]:
+    def snapshot(self) -> dict[BackoffKey, BackoffState]:
         """Copy of the current map (to persist, spec §7)."""
         return dict(self._state_by_key)
 
-    def is_in_backoff(self, backoff_key: str) -> bool:
+    def is_in_backoff(self, backoff_key: BackoffKey) -> bool:
         """``True`` if ``backoff_key`` has a ``retry_after`` still in the FUTURE (to skip)."""
         return self.seconds_remaining(backoff_key) > 0
 
-    def seconds_remaining(self, backoff_key: str) -> float:
+    def seconds_remaining(self, backoff_key: BackoffKey) -> float:
         """Seconds until ``backoff_key``'s ``retry_after``, 0 when it has none or it has passed."""
         state = self._state_by_key.get(backoff_key)
         if state is None:
@@ -94,7 +94,7 @@ class BackoffRegistry:
         left = datetime.fromisoformat(state.retry_after) - self._wall_clock.now()
         return max(0.0, left.total_seconds())
 
-    def record_failure(self, backoff_key: str) -> float:
+    def record_failure(self, backoff_key: BackoffKey) -> float:
         """Increments ``attempts``, computes delay+jitter, sets ``retry_after``. Returns the delay.
 
         The delay is for the LOG; the operational decision is the ``retry_after`` (skip).
@@ -115,7 +115,7 @@ class BackoffRegistry:
         self._state_by_key[backoff_key] = BackoffState(attempts=attempts, retry_after=retry_after)
         return delay
 
-    def reset(self, backoff_key: str) -> None:
+    def reset(self, backoff_key: BackoffKey) -> None:
         """Clears the backoff of a key (success)."""
         self._state_by_key.pop(backoff_key, None)
 
@@ -141,6 +141,7 @@ class SearchWorker:
 
     def __init__(self, client_name: str, client: SearchClient, deps: WorkerDeps) -> None:
         self._client_name = client_name
+        self._client_backoff_key = BackoffKey(client_name, None)
         self._client = client
         self._deps = deps
         self._connected = False
@@ -154,8 +155,8 @@ class SearchWorker:
         """How long until neither the client nor ``channel`` is backed off."""
         backoff = self._deps.backoff
         return max(
-            backoff.seconds_remaining(self._client_name),
-            backoff.seconds_remaining(f"{self._client_name}:{channel}"),
+            backoff.seconds_remaining(self._client_backoff_key),
+            backoff.seconds_remaining(BackoffKey(self._client_name, channel)),
         )
 
     async def _ensure_connected(self) -> bool:
@@ -165,7 +166,7 @@ class SearchWorker:
         try:
             await self._client.connect()
         except ClientUnreachableError as error:
-            delay = self._deps.backoff.record_failure(self._client_name)
+            delay = self._deps.backoff.record_failure(self._client_backoff_key)
             _logger.warning(
                 "client %s unreachable (%s): reconnect backoff %.1fs",
                 self._client_name,
@@ -203,13 +204,13 @@ class SearchWorker:
 
     async def run_task(self, task: SearchTask) -> None:
         """One search, run once ``seconds_until_ready`` is 0. Never raises: backs off and logs."""
-        channel_key = f"{self._client_name}:{task.channel}"
+        channel_backoff_key = BackoffKey(self._client_name, task.channel)
         if not await self._ensure_connected():
             return
         try:
             results = await self._client.search(task.keyword, task.channel, SEARCH_BUDGET_SECONDS)
         except SearchFailedError as error:
-            delay = self._deps.backoff.record_failure(channel_key)
+            delay = self._deps.backoff.record_failure(channel_backoff_key)
             _logger.warning(
                 "client %s channel %s failed (%s): backoff %.1fs",
                 self._client_name,
@@ -221,7 +222,7 @@ class SearchWorker:
             return
         except ClientUnreachableError as error:
             self._connected = False
-            delay = self._deps.backoff.record_failure(self._client_name)
+            delay = self._deps.backoff.record_failure(self._client_backoff_key)
             _logger.warning(
                 "client %s unreachable (%s), client down, backoff %.1fs",
                 self._client_name,
@@ -231,8 +232,9 @@ class SearchWorker:
             await self._deps.telemetry.emit(ClientUnreachable(self._client_name))
             return
         changed = await self._record_observations(task.channel, results)
-        self._deps.backoff.reset(channel_key)
-        self._deps.backoff.reset(self._client_name)  # connect() proves nothing: it may not log in
+        self._deps.backoff.reset(channel_backoff_key)
+        # connect() proves nothing: it may not log in
+        self._deps.backoff.reset(self._client_backoff_key)
         _logger.info(
             "client %s: '%s'/%s → %d verdict(s) changed",
             self._client_name,

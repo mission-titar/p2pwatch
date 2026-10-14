@@ -9,11 +9,15 @@ from p2pwatch.adapters.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.persistence_sqlite.scheduler_state_repository import (
     SqliteSchedulerStateRepository,
 )
-from p2pwatch.ports.scheduler_state_repository import BackoffState
+from p2pwatch.ports.scheduler_state_repository import BackoffKey, BackoffState
 
 _BACKOFF = {
-    "amule-1:kad": BackoffState(attempts=2, retry_after="2026-06-12T10:05:00.000000+00:00"),
-    "amule-1": BackoffState(attempts=1, retry_after="2026-06-12T10:02:00.000000+00:00"),
+    BackoffKey("amule-1", "kad"): BackoffState(
+        attempts=2, retry_after="2026-06-12T10:05:00.000000+00:00"
+    ),
+    BackoffKey("amule-1", None): BackoffState(
+        attempts=1, retry_after="2026-06-12T10:02:00.000000+00:00"
+    ),
 }
 
 
@@ -43,6 +47,19 @@ def test_channel_backoff_round_trips_through_a_new_repo_instance(
     repository.save_backoff_states(_BACKOFF)
     reborn = SqliteSchedulerStateRepository(connection)
     assert reborn.load_backoff_states() == _BACKOFF
+
+
+def test_a_row_keyed_by_client_and_client_channel_loads_and_saves_unchanged(
+    repository: SqliteSchedulerStateRepository, connection: sqlite3.Connection
+) -> None:
+    row = (
+        '{"amule-1": {"attempts": 1, "retry_after": "2026-06-12T10:02:00.000000+00:00"},'
+        ' "amule-1:kad": {"attempts": 2, "retry_after": "2026-06-12T10:05:00.000000+00:00"}}'
+    )
+    connection.execute("INSERT INTO scheduler_state VALUES ('backoff_states', ?)", (row,))
+    assert repository.load_backoff_states() == _BACKOFF
+    repository.save_backoff_states(_BACKOFF)
+    assert connection.execute("SELECT value FROM scheduler_state").fetchall() == [(row,)]
 
 
 def test_save_channel_backoff_replaces_the_whole_map(

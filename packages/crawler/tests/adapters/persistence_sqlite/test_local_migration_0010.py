@@ -6,7 +6,7 @@ from p2pwatch.adapters.persistence_sqlite.scheduler_state_repository import (
     SqliteSchedulerStateRepository,
 )
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.ports.scheduler_state_repository import BackoffState
+from p2pwatch.ports.scheduler_state_repository import BackoffKey, BackoffState
 from tests.adapters.persistence_sqlite.older_catalog import open_local_at
 
 _A = FileKey(Network.ED2K, "a" * 32)
@@ -26,7 +26,7 @@ def test_0010_renames_the_backoff_key_and_keeps_its_states(tmp_path: Path) -> No
     try:
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 10
         assert SqliteSchedulerStateRepository(connection).load_backoff_states() == {
-            "amuled:kad": BackoffState(2, "2026-10-13T00:03:00.000000+00:00")
+            BackoffKey("amuled", "kad"): BackoffState(2, "2026-10-13T00:03:00.000000+00:00")
         }
     finally:
         connection.close()

@@ -2,9 +2,9 @@
 
 STRUCTURALLY implements the ``SchedulerStateRepository`` port. Stores one key in the
 ``scheduler_state`` table of ``local.db``: ``backoff_states`` (JSON map of
-:class:`BackoffState` keyed by client/client:channel). ``save_backoff_states`` replaces
-the map ENTIRELY (registry snapshot); ``load_backoff_states`` returns an empty dict if the key
-is absent.
+:class:`BackoffState`, each :class:`BackoffKey` written ``client`` or ``client:channel``).
+``save_backoff_states`` replaces the map ENTIRELY (registry snapshot); ``load_backoff_states``
+returns an empty dict if the key is absent.
 
 ``scheduler_state`` is NOT append-only (mutable state, not the catalog): no
 triggers: the ``ON CONFLICT … DO UPDATE`` UPSERT is allowed.
@@ -16,7 +16,7 @@ from contextlib import suppress
 from typing import Any
 
 from p2pwatch.adapters.persistence_sqlite.errors import wrap_sqlite_errors
-from p2pwatch.ports.scheduler_state_repository import BackoffState
+from p2pwatch.ports.scheduler_state_repository import BackoffKey, BackoffState
 
 _SELECT_BACKOFF = "SELECT value FROM scheduler_state WHERE key = 'backoff_states'"
 
@@ -26,13 +26,24 @@ ON CONFLICT (key) DO UPDATE SET value = excluded.value
 """
 
 
+def _json_key(backoff_key: BackoffKey) -> str:
+    if backoff_key.channel is None:
+        return backoff_key.client_name
+    return f"{backoff_key.client_name}:{backoff_key.channel}"
+
+
+def _backoff_key(json_key: str) -> BackoffKey:
+    client_name, separator, channel = json_key.partition(":")
+    return BackoffKey(client_name, channel if separator else None)
+
+
 class SqliteSchedulerStateRepository:
     """SQLite implementation of the ``SchedulerStateRepository`` port (STRUCTURAL satisfaction)."""
 
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
 
-    def load_backoff_states(self) -> dict[str, BackoffState]:
+    def load_backoff_states(self) -> dict[BackoffKey, BackoffState]:
         """Re-reads the persisted backoff map, ``{}`` if never written (first startup).
 
         Each JSON entry ``{"attempts": int, "retry_after": str}`` is reconstructed into a
@@ -44,13 +55,13 @@ class SqliteSchedulerStateRepository:
             return {}
         raw: dict[str, dict[str, Any]] = json.loads(row[0])
         return {
-            key: BackoffState(
+            _backoff_key(json_key): BackoffState(
                 attempts=int(entry["attempts"]), retry_after=str(entry["retry_after"])
             )
-            for key, entry in raw.items()
+            for json_key, entry in raw.items()
         }
 
-    def save_backoff_states(self, backoff: dict[str, BackoffState]) -> None:
+    def save_backoff_states(self, backoff: dict[BackoffKey, BackoffState]) -> None:
         """Replaces the persisted map ENTIRELY (registry snapshot, at each change).
 
         Serialized as sorted JSON (``sort_keys`` → stable diff, determinism). Atomic UPSERT
@@ -58,8 +69,11 @@ class SqliteSchedulerStateRepository:
         """
         blob = json.dumps(
             {
-                key: {"attempts": state.attempts, "retry_after": state.retry_after}
-                for key, state in backoff.items()
+                _json_key(backoff_key): {
+                    "attempts": state.attempts,
+                    "retry_after": state.retry_after,
+                }
+                for backoff_key, state in backoff.items()
             },
             sort_keys=True,
         )
