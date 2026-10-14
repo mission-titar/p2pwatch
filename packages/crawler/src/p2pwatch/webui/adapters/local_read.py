@@ -58,7 +58,6 @@ class LocalReader:
     def node_state(self) -> NodeState:
         """Return the full node state read from local.db."""
         dl_rows = self._conn.execute(_SQL_DOWNLOADS).fetchall()
-        backoff_states = self._conn.execute(_SQL_BACKOFF).fetchall()
 
         node_id_row = self._conn.execute(_SQL_NODE_RUNTIME_KEY, ("node_id",)).fetchone()
         created_at_row = self._conn.execute(_SQL_NODE_RUNTIME_KEY, ("created_at",)).fetchone()
@@ -86,7 +85,7 @@ class LocalReader:
                 retry_at=_EPOCH
                 + timedelta(microseconds=row["started_at"], seconds=row["delay_seconds"]),
             )
-            for row in backoff_states
+            for row in self._conn.execute(_SQL_BACKOFF)
         )
 
         node_id: str | None = node_id_row["value"] if node_id_row is not None else None

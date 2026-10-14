@@ -36,7 +36,7 @@ class SqliteBackoffStateRepository:
             for client_name, channel, attempts, started_at_micros, delay_seconds in rows
         }
 
-    def save_backoff_states(self, backoff: dict[BackoffKey, BackoffState]) -> None:
+    def save_backoff_states(self, backoff_state_by_key: dict[BackoffKey, BackoffState]) -> None:
         """Replaces the whole table in one transaction."""
         rows = [
             (
@@ -46,7 +46,7 @@ class SqliteBackoffStateRepository:
                 iso_to_micros(utc_iso(state.started_at)),
                 state.delay.total_seconds(),
             )
-            for backoff_key, state in backoff.items()
+            for backoff_key, state in backoff_state_by_key.items()
         ]
         with wrap_sqlite_errors():
             self._connection.execute("BEGIN IMMEDIATE")

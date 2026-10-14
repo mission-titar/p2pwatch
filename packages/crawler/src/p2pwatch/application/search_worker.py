@@ -85,9 +85,9 @@ class BackoffRegistry:
         return dict(self._state_by_key)
 
     def is_in_backoff(self, backoff_key: BackoffKey) -> bool:
-        return self.remaining_wait(backoff_key) > timedelta(0)
+        return self.time_until_retry(backoff_key) > timedelta(0)
 
-    def remaining_wait(self, backoff_key: BackoffKey) -> timedelta:
+    def time_until_retry(self, backoff_key: BackoffKey) -> timedelta:
         """What is left of ``backoff_key``'s wait, zero when it has none or it has ended."""
         deadline = self._deadline_by_key.get(backoff_key)
         if deadline is None:
@@ -98,7 +98,7 @@ class BackoffRegistry:
         """Counts one more attempt and starts its wait, delay plus jitter. Returns the delay, for
         the log."""
         if self.is_in_backoff(backoff_key):  # a concurrent search started before it: same round
-            return self.remaining_wait(backoff_key)
+            return self.time_until_retry(backoff_key)
         attempts = (
             self._state_by_key[backoff_key].attempts + 1 if backoff_key in self._state_by_key else 1
         )
@@ -155,8 +155,8 @@ class SearchWorker:
         """How long until neither the client nor ``channel`` is backed off."""
         backoff = self._deps.backoff
         return max(
-            backoff.remaining_wait(self._client_backoff_key),
-            backoff.remaining_wait(BackoffKey(self._client_name, channel)),
+            backoff.time_until_retry(self._client_backoff_key),
+            backoff.time_until_retry(BackoffKey(self._client_name, channel)),
         )
 
     async def _ensure_connected(self) -> bool:

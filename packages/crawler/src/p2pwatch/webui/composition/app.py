@@ -997,7 +997,7 @@ def build_app(
                 client_name=row.client_name,
                 channel=row.channel if row.channel is not None else "whole client",
                 attempts=row.attempts,
-                retry_at=row.retry_at.isoformat(timespec="microseconds"),
+                retry_at_display=row.retry_at.isoformat(timespec="microseconds"),
             )
             for row in node_state.backoff_rows
         )
