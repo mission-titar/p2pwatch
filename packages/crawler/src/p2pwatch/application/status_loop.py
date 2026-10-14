@@ -27,8 +27,8 @@ from p2pwatch.ports.clock import MonotonicClock, MonotonicInstant, WallClock
 from p2pwatch.ports.telemetry import Telemetry
 
 STATUS_PERIOD = timedelta(minutes=1)
-CHANNEL_ALERT_AFTER_SECONDS = 300.0
-UNREACHABLE_ALERT_AFTER_SECONDS = 120.0
+CHANNEL_ALERT_AFTER = timedelta(minutes=5)
+UNREACHABLE_ALERT_AFTER = timedelta(minutes=2)
 READING_FRESH_FOR = 2 * STATUS_PERIOD
 
 
@@ -74,8 +74,8 @@ class StatusLoopDeps:
 class _AlertTimer:
     """Since when one state reads degraded, and whether its alert has fired."""
 
-    def __init__(self, delay_seconds: float) -> None:
-        self._delay = delay_seconds
+    def __init__(self, delay: timedelta) -> None:
+        self._delay = delay
         self._since: MonotonicInstant | None = None
         self._alerted = False
 
@@ -90,7 +90,7 @@ class _AlertTimer:
             recovered, self._alerted = self._alerted, False
             return "recovery" if recovered else None
         self._since = self._since or now
-        if self._alerted or (now - self._since).total_seconds() < self._delay:
+        if self._alerted or now - self._since < self._delay:
             return None
         self._alerted = True
         return "alert"
@@ -98,7 +98,7 @@ class _AlertTimer:
 
 async def status_loop(deps: StatusLoopDeps) -> None:
     """Reads the status every period until shutdown."""
-    api_timer = _AlertTimer(UNREACHABLE_ALERT_AFTER_SECONDS)
+    api_timer = _AlertTimer(UNREACHABLE_ALERT_AFTER)
     channel_timers: dict[tuple[str, ChannelField], _AlertTimer] = {}
 
     async def _observe(
@@ -129,7 +129,7 @@ async def status_loop(deps: StatusLoopDeps) -> None:
         await _observe(
             api_timer,
             reachable,
-            ClientUnreachableLasting(deps.client_name, UNREACHABLE_ALERT_AFTER_SECONDS),
+            ClientUnreachableLasting(deps.client_name, UNREACHABLE_ALERT_AFTER.total_seconds()),
             ClientReachableAgain(deps.client_name),
         )
         for channel, connected, connectable in readings:
@@ -142,11 +142,11 @@ async def status_loop(deps: StatusLoopDeps) -> None:
             )
             for field, healthy in fields:
                 await _observe(
-                    channel_timers.setdefault(
-                        (channel, field), _AlertTimer(CHANNEL_ALERT_AFTER_SECONDS)
-                    ),
+                    channel_timers.setdefault((channel, field), _AlertTimer(CHANNEL_ALERT_AFTER)),
                     healthy,
-                    ChannelDegraded(deps.client_name, channel, field, CHANNEL_ALERT_AFTER_SECONDS),
+                    ChannelDegraded(
+                        deps.client_name, channel, field, CHANNEL_ALERT_AFTER.total_seconds()
+                    ),
                     ChannelRecovered(deps.client_name, channel, field),
                 )
         await deps.monotonic_clock.sleep(STATUS_PERIOD)
