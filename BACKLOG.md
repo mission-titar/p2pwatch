@@ -24,8 +24,8 @@ An agent adds an entry only after the operator has agreed to it.
 - **The webui in the visitor's time zone**: UTC rendered, the browser converts each date with JavaScript; needs
   `AGENTS.md`'s "Python only" amended and a JS test chain. Section 6 of `agents/specs/2026-10-13-append-only-source-points.md`.
 
-- **A monotonic clock for in-memory intervals and deadlines**, the wall clock kept for stamps, and a wait from a
-  persisted time capped by its policy's maximum. Section 8 of `agents/specs/2026-10-13-append-only-source-points.md`.
+- **Every stamp an integer of microseconds since the epoch**, as the catalog's points already are: the ISO-8601 TEXT
+  stamps left in both databases converted; the catalog's waits for the copy before a migration that rewrites rows. D12 of `agents/specs/2026-10-14-monotonic-clock.md`.
 
 - **The webui's read side**: one observation type and its own read ports, so no persistence shape reaches its domain;
   drops the dead `{% else %}` at `sources.html:26`. Section 7 of `agents/specs/2026-10-13-descriptive-names.md`.
