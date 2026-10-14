@@ -346,7 +346,7 @@ def test_open_closes_the_connection_on_a_non_persistence_error(
 
 
 def test_utc_iso_rejects_a_naive_datetime() -> None:
-    with pytest.raises(ValueError, match="aware"):
+    with pytest.raises(ValueError, match=r"^utc_iso requires an aware datetime$"):
         utc_iso(datetime(2026, 6, 11, 14, 0, 0))
 
 

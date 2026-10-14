@@ -7,10 +7,10 @@ with ``created_at``, stable thereafter (scheduler seed §6 MVP + observation tag
 import sqlite3
 import uuid
 from contextlib import suppress
+from datetime import datetime
 
 from p2pwatch.adapters.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.persistence_sqlite.errors import wrap_sqlite_errors
-from p2pwatch.ports.clock import Clock
 
 _SELECT_NODE_ID = "SELECT value FROM node_runtime WHERE key = 'node_id'"
 
@@ -31,23 +31,22 @@ ON CONFLICT (id) DO UPDATE SET policy_fingerprint = excluded.policy_fingerprint
 class SqliteLocalStateRepository:
     """SQLite implementation of the ``LocalStateRepository`` port (STRUCTURAL satisfaction)."""
 
-    def __init__(self, connection: sqlite3.Connection, *, clock: Clock) -> None:
+    def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
-        self._clock = clock
 
-    def get_or_create_node_id(self) -> str:
+    def get_or_create_node_id(self, created_at: datetime) -> str:
         """UUID created (and persisted with ``created_at``) on the first call, stable after."""
         with wrap_sqlite_errors():
             row = self._connection.execute(_SELECT_NODE_ID).fetchone()
             if row is not None:
                 return str(row[0])
             node_id = str(uuid.uuid4())
-            # Stamp computed BEFORE the BEGIN (same hygiene as the catalog repo): a
-            # buggy clock must not raise in the middle of a transaction.
-            created_at = utc_iso(self._clock.now())
+            # Formatted BEFORE the BEGIN (same hygiene as the catalog repo): a naive
+            # instant must not raise in the middle of a transaction.
+            created_at_iso = utc_iso(created_at)
             self._connection.execute("BEGIN IMMEDIATE")
             try:
-                self._connection.execute(_INSERT_NODE_IDENTITY, (node_id, created_at))
+                self._connection.execute(_INSERT_NODE_IDENTITY, (node_id, created_at_iso))
                 self._connection.execute("COMMIT")
             except BaseException:
                 # Rollback on BaseException (same discipline as catalog_repository):

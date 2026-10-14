@@ -53,11 +53,10 @@ class Migration:
 
 def utc_iso(moment: datetime) -> str:
     """Fixed-width ISO-8601 UTC (microseconds ALWAYS written), e.g.
-    ``2026-06-11T12:00:00.000000+00:00``. ``moment`` must be AWARE (``Clock``
-    contract, ENFORCED: naive → ``ValueError``); a non-UTC zone is normalized,
-    never stored as-is."""
+    ``2026-06-11T12:00:00.000000+00:00``. ``moment`` must be AWARE (ENFORCED: naive →
+    ``ValueError``); a non-UTC zone is normalized, never stored as-is."""
     if moment.tzinfo is None:
-        raise ValueError("utc_iso exige un datetime aware (contrat de Clock)")
+        raise ValueError("utc_iso requires an aware datetime")
     return moment.astimezone(UTC).isoformat(timespec="microseconds")
 
 

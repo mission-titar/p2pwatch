@@ -24,7 +24,7 @@ from collections.abc import Iterable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Protocol
+from typing import Literal, Protocol
 
 from catalog_matching.models import TargetSegment
 from p2pwatch.application.edge_state import EdgeState
@@ -71,23 +71,29 @@ _UNAVAILABLE = (ClientUnreachableError, DownloadRejectedError)
 class DownloadRepository(Protocol):
     """STRUCTURAL Protocol of the downloads repo (local typing; the adapter satisfies it).
 
-    Minimal Protocol so the application depends ONLY on what it needs
-    (record_queued/set_state/is_tracked/mark_seen/expire_lost/tracked_states), without
-    importing the adapter. The real ``SqliteDownloadRepository`` (and the test fake) satisfies it
-    structurally. Stubs on ONE line (the ``def`` is covered when the class is created).
+    Minimal Protocol so the application depends ONLY on what it needs, without importing the
+    adapter. The real ``SqliteDownloadRepository`` (and the test fake) satisfies it structurally.
+    Each stub's ``...`` ends its ``def`` (which runs when the class is created: covered).
     """
 
-    def record_queued(self, file: FileKey, target_id: str, size_bytes: int) -> bool: ...
+    def record_queued(
+        self, file: FileKey, target_id: str, size_bytes: int, queued_at: datetime
+    ) -> bool: ...
+
+    def record_completed(self, file: FileKey, completed_at: datetime) -> None: ...
 
     def set_state(
-        self, file: FileKey, state: DownloadState, failure_reason: FailureReason | None = None
+        self,
+        file: FileKey,
+        state: Literal[DownloadState.DOWNLOADING, DownloadState.FAILED],
+        failure_reason: FailureReason | None = None,
     ) -> None: ...
 
     def is_tracked(self, file: FileKey) -> bool: ...
 
-    def mark_seen(self, statuses: Iterable[DownloadStatus]) -> None: ...
+    def mark_seen(self, statuses: Iterable[DownloadStatus], seen_at: datetime) -> None: ...
 
-    def expire_lost(self, lost_after_seconds: float) -> tuple[FileKey, ...]: ...
+    def expire_lost(self, unseen_since: datetime) -> tuple[FileKey, ...]: ...
 
     def tracked_states(self) -> dict[FileKey, DownloadState]: ...
 
@@ -174,7 +180,9 @@ async def _reconcile_states(
         if current is DownloadState.COMPLETED:
             continue  # already notified: don't regress and don't re-fire
         failed = status.failure_reason is not None
-        wanted_state = DownloadState.FAILED if failed else DownloadState.DOWNLOADING
+        wanted_state: Literal[DownloadState.DOWNLOADING, DownloadState.FAILED] = (
+            DownloadState.FAILED if failed else DownloadState.DOWNLOADING
+        )
         if current is not wanted_state:
             deps.downloads.set_state(file, wanted_state, status.failure_reason)
             states[file] = wanted_state
@@ -205,7 +213,7 @@ async def _record_completion(
     nothing opens it. The caller skips files already ``completed``, so the notification fires
     exactly once per download.
     """
-    deps.downloads.set_state(file, DownloadState.COMPLETED)
+    deps.downloads.record_completed(file, deps.clock.now())
     states[file] = DownloadState.COMPLETED
     await deps.telemetry.emit(
         DownloadCompleted(
@@ -251,7 +259,8 @@ def _expire_lost(deps: DownloadDeps) -> None:
     ``is_tracked`` stays state-blind, so a ``failed`` row still blocks automatic re-queuing;
     the manual retry is deleting the row.
     """
-    for file in deps.downloads.expire_lost(deps.lost_after_seconds):
+    unseen_since = deps.clock.now() - timedelta(seconds=deps.lost_after_seconds)
+    for file in deps.downloads.expire_lost(unseen_since):
         _logger.warning(
             "file=%s unseen by the client for %ss: marked failed",
             file.native_id,
@@ -299,7 +308,9 @@ async def _queue_new_candidates(deps: DownloadDeps, outstanding_bytes: int) -> N
             continue
         # record_queued ONLY here (sync DB write); _start_unlisted sends it (network I/O): the
         # write precedes the network, and a start that raises leaves it 'queued' for next round.
-        deps.downloads.record_queued(candidate.file, candidate.target_id, observation.size_bytes)
+        deps.downloads.record_queued(
+            candidate.file, candidate.target_id, observation.size_bytes, deps.clock.now()
+        )
         outstanding_bytes += observation.size_bytes  # the client does not list it yet
         _logger.info("candidate file=%s queued for download", candidate.file.native_id)
         await deps.telemetry.emit(DownloadQueued(target_id=candidate.target_id))
@@ -469,7 +480,7 @@ async def run_download_cycle(deps: DownloadDeps) -> None:
     # Step 2b - PRESENCE + TTL: stamp FIRST, condemn after. The reverse order would fail a row
     # the client is showing us right now.
     try:
-        deps.downloads.mark_seen(listed_statuses)
+        deps.downloads.mark_seen(listed_statuses, deps.clock.now())
         _expire_lost(deps)
     except RepositoryError as error:
         _logger.error("download presence repo failure (%s): step skipped, continues", error)

@@ -1,6 +1,6 @@
 import sqlite3
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -11,17 +11,11 @@ from p2pwatch.adapters.persistence_sqlite.errors import PersistenceError
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.ports.download_client import DownloadStatus, FailureReason, WaitingReason
-from tests.application.fakes import FakeClock
 
 _A = FileKey(Network.ED2K, "a" * 32)
 _B = FileKey(Network.ED2K, "b" * 32)
-
-
-class _AdvancingClock(FakeClock):
-    def now(self) -> datetime:
-        moment = super().now()
-        self.advance(60)
-        return moment
+_T0 = datetime(2026, 6, 12, tzinfo=UTC)
+_DAY = timedelta(days=1)
 
 
 def _status(file: FileKey, done: int = 0, waiting: WaitingReason | None = None) -> DownloadStatus:
@@ -47,26 +41,26 @@ def connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 @pytest.fixture
 def repository(connection: sqlite3.Connection) -> SqliteDownloadRepository:
-    return SqliteDownloadRepository(connection, clock=FakeClock())
+    return SqliteDownloadRepository(connection)
 
 
 def test_record_queued_inserts_a_new_download(repository: SqliteDownloadRepository) -> None:
-    assert repository.record_queued(_A, "062A", 100) is True
+    assert repository.record_queued(_A, "062A", 100, _T0) is True
     assert repository.is_tracked(_A) is True
 
 
 def test_record_queued_keys_the_row_by_file_id_and_keeps_the_file_key(
     repository: SqliteDownloadRepository, connection: sqlite3.Connection
 ) -> None:
-    repository.record_queued(_A, "062A", 100)
+    repository.record_queued(_A, "062A", 100, _T0)
     assert connection.execute("SELECT file_id, network, native_id FROM downloads").fetchall() == [
         (_A.file_id, "ed2k", _A.native_id)
     ]
 
 
 def test_record_queued_is_dedup_safe(repository: SqliteDownloadRepository) -> None:
-    assert repository.record_queued(_A, "062A", 100) is True
-    assert repository.record_queued(_A, "062A", 100) is False  # duplicate ignored
+    assert repository.record_queued(_A, "062A", 100, _T0) is True
+    assert repository.record_queued(_A, "062A", 100, _T0 + _DAY) is False  # duplicate ignored
 
 
 def test_is_downloaded_is_false_for_unknown_hash(repository: SqliteDownloadRepository) -> None:
@@ -74,27 +68,27 @@ def test_is_downloaded_is_false_for_unknown_hash(repository: SqliteDownloadRepos
 
 
 def test_set_state_updates_the_state(repository: SqliteDownloadRepository) -> None:
-    repository.record_queued(_A, "062A", 100)
+    repository.record_queued(_A, "062A", 100, _T0)
     repository.set_state(_A, DownloadState.DOWNLOADING)
     assert repository.tracked_states()[_A] is DownloadState.DOWNLOADING
 
 
-def test_set_state_to_completed_stamps_completed_at(
-    connection: sqlite3.Connection,
+def test_record_completed_stamps_the_completed_at_it_is_given(
+    repository: SqliteDownloadRepository, connection: sqlite3.Connection
 ) -> None:
-    repository = SqliteDownloadRepository(connection, clock=_AdvancingClock())
-    repository.record_queued(_A, "062A", 100)
-    repository.set_state(_A, DownloadState.COMPLETED)
+    repository.record_queued(_A, "062A", 100, _T0)
+    repository.record_completed(_A, _T0 + _DAY)
+    assert repository.tracked_states()[_A] is DownloadState.COMPLETED
     stamped = connection.execute(
         "SELECT completed_at FROM downloads WHERE file_id = ?", (_A.file_id,)
     ).fetchone()[0]
-    assert stamped is not None
+    assert stamped == utc_iso(_T0 + _DAY)
 
 
 def test_set_state_non_completed_leaves_completed_at_null(
     repository: SqliteDownloadRepository, connection: sqlite3.Connection
 ) -> None:
-    repository.record_queued(_A, "062A", 100)
+    repository.record_queued(_A, "062A", 100, _T0)
     repository.set_state(_A, DownloadState.DOWNLOADING)
     stamped = connection.execute(
         "SELECT completed_at FROM downloads WHERE file_id = ?", (_A.file_id,)
@@ -107,9 +101,14 @@ def test_set_state_on_unknown_hash_raises(repository: SqliteDownloadRepository) 
         repository.set_state(_A, DownloadState.DOWNLOADING)
 
 
+def test_record_completed_on_unknown_hash_raises(repository: SqliteDownloadRepository) -> None:
+    with pytest.raises(PersistenceError, match="not found"):
+        repository.record_completed(_A, _T0)
+
+
 def test_active_states_maps_hash_to_state(repository: SqliteDownloadRepository) -> None:
-    repository.record_queued(_A, "062A", 100)
-    repository.record_queued(_B, "063A", 200)
+    repository.record_queued(_A, "062A", 100, _T0)
+    repository.record_queued(_B, "063A", 200, _T0)
     repository.set_state(_B, DownloadState.FAILED)
     states = repository.tracked_states()
     assert states == {_A: DownloadState.QUEUED, _B: DownloadState.FAILED}
@@ -123,14 +122,14 @@ def test_record_queued_is_atomic_on_injected_failure(
         " BEGIN SELECT RAISE(ABORT, 'injected failure'); END"
     )
     with pytest.raises(PersistenceError, match="injected failure"):
-        repository.record_queued(_A, "062A", 100)
+        repository.record_queued(_A, "062A", 100, _T0)
     assert repository.is_tracked(_A) is False
 
 
 def test_get_target_id_returns_target_for_known_hash(
     repository: SqliteDownloadRepository,
 ) -> None:
-    repository.record_queued(_A, "062A", 100)
+    repository.record_queued(_A, "062A", 100, _T0)
     assert repository.queued_target_id(_A) == "062A"
 
 
@@ -146,122 +145,106 @@ def _last_seen(connection: sqlite3.Connection, file: FileKey) -> str:
 
 
 def test_record_queued_stamps_last_seen_at_with_queued_at(
-    connection: sqlite3.Connection,
+    repository: SqliteDownloadRepository, connection: sqlite3.Connection
 ) -> None:
     # A row amuled never picks up must still age out: NULL would make it immortal.
-    repository = SqliteDownloadRepository(connection, clock=FakeClock())
-    repository.record_queued(_A, "062A", 100)
+    repository.record_queued(_A, "062A", 100, _T0)
     queued_at = connection.execute(
         "SELECT queued_at FROM downloads WHERE file_id = ?", (_A.file_id,)
     ).fetchone()[0]
-    assert _last_seen(connection, _A) == queued_at
+    assert queued_at == _last_seen(connection, _A) == utc_iso(_T0)
 
 
-def test_mark_seen_refreshes_last_seen_at(connection: sqlite3.Connection) -> None:
-    clock = FakeClock()
-    repository = SqliteDownloadRepository(connection, clock=clock)
-    repository.record_queued(_A, "062A", 100)
-    before = _last_seen(connection, _A)
-    clock.advance(3600)
-    repository.mark_seen([_status(_A)])
-    assert _last_seen(connection, _A) > before
+def test_mark_seen_stamps_the_seen_at_it_is_given(
+    repository: SqliteDownloadRepository, connection: sqlite3.Connection
+) -> None:
+    repository.record_queued(_A, "062A", 100, _T0)
+    repository.mark_seen([_status(_A)], _T0 + _DAY)
+    assert _last_seen(connection, _A) == utc_iso(_T0 + _DAY)
 
 
 def test_mark_seen_ignores_a_hash_it_does_not_know(
     repository: SqliteDownloadRepository,
 ) -> None:
-    repository.mark_seen([_status(_A)])  # a shared file the crawler never queued: no row, no raise
+    # A shared file the crawler never queued: no row, no raise.
+    repository.mark_seen([_status(_A)], _T0)
     assert repository.is_tracked(_A) is False
 
 
 def test_expire_lost_fails_the_rows_amuled_stopped_showing(
-    connection: sqlite3.Connection,
+    repository: SqliteDownloadRepository, connection: sqlite3.Connection
 ) -> None:
-    clock = FakeClock()
-    repository = SqliteDownloadRepository(connection, clock=clock)
-    repository.record_queued(_A, "062A", 100)
+    repository.record_queued(_A, "062A", 100, _T0)
     repository.set_state(_A, DownloadState.DOWNLOADING)
-    repository.record_queued(_B, "063A", 200)
-    clock.advance(25 * 3600)
-    repository.mark_seen([_status(_B)])  # _B is still in amuled's queue, _A vanished 25 h ago
-    assert repository.expire_lost(86400) == (_A,)
+    repository.record_queued(_B, "063A", 200, _T0)
+    seen_at = _T0 + timedelta(hours=25)
+    repository.mark_seen([_status(_B)], seen_at)  # _B is still in amuled's queue, _A vanished
+    assert repository.expire_lost(seen_at - _DAY) == (_A,)
     assert repository.tracked_states() == {_A: DownloadState.FAILED, _B: DownloadState.QUEUED}
     assert _lifecycle(connection, _A)[3] == "lost"
 
 
 def test_expire_lost_spares_a_row_seen_within_the_ttl(
-    connection: sqlite3.Connection,
+    repository: SqliteDownloadRepository,
 ) -> None:
-    clock = FakeClock()
-    repository = SqliteDownloadRepository(connection, clock=clock)
-    repository.record_queued(_A, "062A", 100)
-    clock.advance(23 * 3600)
-    assert repository.expire_lost(86400) == ()
+    repository.record_queued(_A, "062A", 100, _T0)
+    assert repository.expire_lost(_T0 + timedelta(hours=23) - _DAY) == ()
     assert repository.tracked_states() == {_A: DownloadState.QUEUED}
 
 
-def test_expire_lost_leaves_terminal_rows_alone(connection: sqlite3.Connection) -> None:
-    clock = FakeClock()
-    repository = SqliteDownloadRepository(connection, clock=clock)
-    repository.record_queued(_A, "062A", 100)
-    repository.set_state(_A, DownloadState.COMPLETED)
-    clock.advance(30 * 86400)
-    assert repository.expire_lost(86400) == ()
+def test_expire_lost_leaves_terminal_rows_alone(repository: SqliteDownloadRepository) -> None:
+    repository.record_queued(_A, "062A", 100, _T0)
+    repository.record_completed(_A, _T0)
+    assert repository.expire_lost(_T0 + 29 * _DAY) == ()
     assert repository.tracked_states() == {_A: DownloadState.COMPLETED}
 
 
 def test_a_queued_download_starts_at_zero_bytes_with_no_progress(
     repository: SqliteDownloadRepository, connection: sqlite3.Connection
 ) -> None:
-    repository.record_queued(_A, "062A", 100)
+    repository.record_queued(_A, "062A", 100, _T0)
     assert _lifecycle(connection, _A) == (0, None, None, None)
 
 
 def test_mark_seen_stamps_progress_only_when_the_bytes_grow(
-    connection: sqlite3.Connection,
+    repository: SqliteDownloadRepository, connection: sqlite3.Connection
 ) -> None:
-    clock = FakeClock()
-    repository = SqliteDownloadRepository(connection, clock=clock)
-    repository.record_queued(_A, "062A", 100)
-    repository.mark_seen([_status(_A, 0, WaitingReason.NO_SOURCE)])
+    repository.record_queued(_A, "062A", 100, _T0)
+    repository.mark_seen([_status(_A, 0, WaitingReason.NO_SOURCE)], _T0)
     assert _lifecycle(connection, _A) == (0, None, "no_source", None)
-    clock.advance(3600)
-    repository.mark_seen([_status(_A, 40, WaitingReason.REMOTE_QUEUE)])
-    grown_at = utc_iso(clock.now())
-    clock.advance(3 * 86400)
-    repository.mark_seen([_status(_A, 40)])
-    assert _lifecycle(connection, _A) == (40, grown_at, None, None)
+    grown_at = _T0 + timedelta(hours=1)
+    repository.mark_seen([_status(_A, 40, WaitingReason.REMOTE_QUEUE)], grown_at)
+    repository.mark_seen([_status(_A, 40)], grown_at + 3 * _DAY)
+    assert _lifecycle(connection, _A) == (40, utc_iso(grown_at), None, None)
 
 
 def test_mark_seen_stores_the_client_hashing_or_allocating_as_local_processing(
     repository: SqliteDownloadRepository, connection: sqlite3.Connection
 ) -> None:
-    repository.record_queued(_A, "062A", 100)
-    repository.mark_seen([_status(_A, 0, WaitingReason.LOCAL_PROCESSING)])
+    repository.record_queued(_A, "062A", 100, _T0)
+    repository.mark_seen([_status(_A, 0, WaitingReason.LOCAL_PROCESSING)], _T0)
     assert _lifecycle(connection, _A) == (0, None, "local_processing", None)
 
 
 def test_a_download_migrated_without_bytes_does_not_invent_progress(
     repository: SqliteDownloadRepository, connection: sqlite3.Connection
 ) -> None:
-    repository.record_queued(_A, "062A", 100)
+    repository.record_queued(_A, "062A", 100, _T0)
     connection.execute("UPDATE downloads SET bytes_done = NULL")  # a row from before local 0008
-    repository.mark_seen([_status(_A, 40)])
+    repository.mark_seen([_status(_A, 40)], _T0)
     assert _lifecycle(connection, _A) == (40, None, None, None)
 
 
 def test_a_download_waiting_for_sources_a_whole_year_is_never_lost(
-    connection: sqlite3.Connection,
+    repository: SqliteDownloadRepository, connection: sqlite3.Connection
 ) -> None:
     # Waiting is not failing (stage 2, D12): the client still lists it, so the TTL spares it.
-    clock = FakeClock()
-    repository = SqliteDownloadRepository(connection, clock=clock)
-    repository.record_queued(_A, "062A", 100)
+    repository.record_queued(_A, "062A", 100, _T0)
     repository.set_state(_A, DownloadState.DOWNLOADING)
-    for _ in range(365):
-        clock.advance(86400)
-        repository.mark_seen([_status(_A, 0, WaitingReason.NO_SOURCE)])
-        assert repository.expire_lost(86400) == ()
+    for day in range(1, 366):
+        seen_at = _T0 + day * _DAY
+        repository.mark_seen([_status(_A, 0, WaitingReason.NO_SOURCE)], seen_at)
+        assert repository.expire_lost(seen_at - _DAY) == ()
     assert repository.tracked_states() == {_A: DownloadState.DOWNLOADING}
     assert _lifecycle(connection, _A) == (0, None, "no_source", None)
 
@@ -269,11 +252,11 @@ def test_a_download_waiting_for_sources_a_whole_year_is_never_lost(
 def test_set_state_records_a_failure_reason_and_any_other_state_clears_it(
     repository: SqliteDownloadRepository, connection: sqlite3.Connection
 ) -> None:
-    repository.record_queued(_A, "062A", 100)
+    repository.record_queued(_A, "062A", 100, _T0)
     repository.set_state(_A, DownloadState.FAILED, FailureReason.ERROR)
     assert _lifecycle(connection, _A)[3] == "error"
     repository.set_state(_A, DownloadState.DOWNLOADING)
     assert _lifecycle(connection, _A)[3] is None
     repository.set_state(_A, DownloadState.FAILED, FailureReason.ERROR)
-    repository.set_state(_A, DownloadState.COMPLETED)  # a failed download can still complete
+    repository.record_completed(_A, _T0)  # a failed download can still complete
     assert _lifecycle(connection, _A)[3] is None

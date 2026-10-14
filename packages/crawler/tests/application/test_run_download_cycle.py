@@ -3,6 +3,7 @@ import sqlite3
 from collections.abc import Iterable, Iterator, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Literal
 
 import pytest
 
@@ -176,9 +177,11 @@ class FakeSourceRepo:
 class FakeDownloadRepo:
     """In-memory downloads repo (the contract of SqliteDownloadRepository, without SQL).
 
-    Keyed by ``native_id``; ``failures`` and ``waiting`` hold the lifecycle reasons.
-    ``fail_set_state_for``: hashes for which ``set_state`` raises ``RepositoryError`` —
-    lets us simulate a mid-cycle repo failure (cf. logic-download#2/error-boundary#2).
+    Keyed by ``native_id``; ``failures`` and ``waiting`` hold the lifecycle reasons, and
+    ``queued_at``, ``completed_at``, ``seen_at`` and ``unseen_since`` the instants received.
+    ``fail_set_state_for`` and ``fail_record_completed_for``: hashes for which ``set_state`` or
+    ``record_completed`` raises ``RepositoryError``, to simulate a mid-cycle repo failure
+    (cf. logic-download#2/error-boundary#2).
     ``fail_active_states``: ``tracked_states()`` raises, to simulate persistence being down
     also at re-read time (every step of the cycle absorbs). ``lost``: hashes ``expire_lost``
     should condemn (scripted, so the fake needs no clock)."""
@@ -188,6 +191,7 @@ class FakeDownloadRepo:
         *,
         fail_record: bool = False,
         fail_set_state_for: set[str] | None = None,
+        fail_record_completed_for: set[str] | None = None,
         fail_active_states: bool = False,
         fail_mark_seen: bool = False,
         lost: set[str] | None = None,
@@ -196,10 +200,14 @@ class FakeDownloadRepo:
         self.failures: dict[str, FailureReason | None] = {}
         self.waiting: dict[str, WaitingReason | None] = {}
         self.sizes: dict[str, int] = {}
+        self.queued_at: dict[str, datetime] = {}
+        self.completed_at: dict[str, datetime] = {}
         self.seen: list[set[str]] = []
-        self.expired_after: list[float] = []
+        self.seen_at: list[datetime] = []
+        self.unseen_since: list[datetime] = []
         self._fail_record = fail_record
         self._fail_set_state_for = fail_set_state_for or set()
+        self._fail_record_completed_for = fail_record_completed_for or set()
         self._fail_active_states = fail_active_states
         self._fail_mark_seen = fail_mark_seen
         self._lost = lost or set()
@@ -208,17 +216,30 @@ class FakeDownloadRepo:
     def queued_target_id(self, file: FileKey) -> str | None:
         return self._target_ids.get(file.native_id)
 
-    def record_queued(self, file: FileKey, target_id: str, size_bytes: int) -> bool:
+    def record_queued(
+        self, file: FileKey, target_id: str, size_bytes: int, queued_at: datetime
+    ) -> bool:
         if self._fail_record:
             raise RepositoryError("downloads write failed")
         if file.native_id in self.states:
             return False
         self.states[file.native_id] = DownloadState.QUEUED
         self.sizes[file.native_id] = size_bytes
+        self.queued_at[file.native_id] = queued_at
         return True
 
+    def record_completed(self, file: FileKey, completed_at: datetime) -> None:
+        if file.native_id in self._fail_record_completed_for:
+            raise RepositoryError(f"record_completed({file.native_id}) failed")
+        self.states[file.native_id] = DownloadState.COMPLETED
+        self.failures[file.native_id] = None
+        self.completed_at[file.native_id] = completed_at
+
     def set_state(
-        self, file: FileKey, state: DownloadState, failure_reason: FailureReason | None = None
+        self,
+        file: FileKey,
+        state: Literal[DownloadState.DOWNLOADING, DownloadState.FAILED],
+        failure_reason: FailureReason | None = None,
     ) -> None:
         if file.native_id in self._fail_set_state_for:
             raise RepositoryError(f"set_state({file.native_id}) failed")
@@ -228,15 +249,16 @@ class FakeDownloadRepo:
     def is_tracked(self, file: FileKey) -> bool:
         return file.native_id in self.states
 
-    def mark_seen(self, statuses: Iterable[DownloadStatus]) -> None:
+    def mark_seen(self, statuses: Iterable[DownloadStatus], seen_at: datetime) -> None:
         if self._fail_mark_seen:
             raise RepositoryError("mark_seen failed")
         statuses = tuple(statuses)
         self.seen.append({status.file.native_id for status in statuses})
+        self.seen_at.append(seen_at)
         self.waiting.update({s.file.native_id: s.waiting_reason for s in statuses})
 
-    def expire_lost(self, lost_after_seconds: float) -> tuple[FileKey, ...]:
-        self.expired_after.append(lost_after_seconds)
+    def expire_lost(self, unseen_since: datetime) -> tuple[FileKey, ...]:
+        self.unseen_since.append(unseen_since)
         condemned = tuple(
             h
             for h in self._lost
@@ -545,7 +567,10 @@ async def test_monitor_does_not_regress_a_completed_queue_entry() -> None:
     # DOWNLOADING (the completion notification already fired; re-firing it would be noise).
     class _NoSetStateRepo(FakeDownloadRepo):
         def set_state(
-            self, file: FileKey, state: DownloadState, failure_reason: FailureReason | None = None
+            self,
+            file: FileKey,
+            state: Literal[DownloadState.DOWNLOADING, DownloadState.FAILED],
+            failure_reason: FailureReason | None = None,
         ) -> None:
             raise AssertionError("set_state must not be called (completed state)")
 
@@ -730,9 +755,9 @@ async def test_one_hash_repo_failure_does_not_starve_other_completions() -> None
             )
         ],
     )
-    # _A and _B in DOWNLOADING; set_state(_A, ...) crashes → _record_completion of _A raises;
-    # _B must nonetheless be completed (intra-cycle continuity).
-    downloads = FakeDownloadRepo(fail_set_state_for={_A})
+    # _A and _B in DOWNLOADING; record_completed(_A, ...) crashes → _record_completion of _A
+    # raises; _B must nonetheless be completed (intra-cycle continuity).
+    downloads = FakeDownloadRepo(fail_record_completed_for={_A})
     downloads.states[_A] = DownloadState.DOWNLOADING
     downloads.states[_B] = DownloadState.DOWNLOADING
     deps = _deps(
@@ -799,7 +824,10 @@ async def test_monitor_no_op_when_state_already_matches() -> None:
 
     class _NoSetStateRepo(FakeDownloadRepo):
         def set_state(
-            self, file: FileKey, state: DownloadState, failure_reason: FailureReason | None = None
+            self,
+            file: FileKey,
+            state: Literal[DownloadState.DOWNLOADING, DownloadState.FAILED],
+            failure_reason: FailureReason | None = None,
         ) -> None:
             raise AssertionError("set_state must not be called (state already up to date)")
 
@@ -1001,12 +1029,12 @@ async def test_a_completion_names_the_clean_file_and_every_download_target_of_th
 
 @pytest.mark.asyncio
 async def test_completion_repo_failure_does_not_starve_new_candidates() -> None:
-    # _handle_completions raises RepositoryError (set_state fails on the shared hash _A)
+    # _handle_completions raises RepositoryError (record_completed fails on the shared hash _A)
     # → _queue_new_candidates AND _start_unlisted run ANYWAY for _B:
     # a step-2 repo failure does not starve step 3 (anti-starvation, I2).
     client = FakeDownloadClient(listed=[(_status(_A, completed=True),)])
-    downloads = FakeDownloadRepo(fail_set_state_for={_A})  # step 2 raises RepositoryError
-    downloads.states[_A] = DownloadState.DOWNLOADING  # shared → completed step 2 (set_state raises)
+    downloads = FakeDownloadRepo(fail_record_completed_for={_A})  # step 2 raises RepositoryError
+    downloads.states[_A] = DownloadState.DOWNLOADING  # completed at step 2, which raises
     downloads.sizes[_A] = 10
     catalog = FakeCatalogReads(
         candidates=(_candidate(_B, "062A"),),  # new candidate step 3
@@ -1021,7 +1049,7 @@ async def test_completion_repo_failure_does_not_starve_new_candidates() -> None:
     # Observable effect of step 3: _B enqueued AND its link emitted despite the step-2 failure.
     assert downloads.states[_B] is DownloadState.QUEUED
     assert _B in _started(client)
-    # _A stays DOWNLOADING (the set_state failure left step 2 incomplete → retry next round).
+    # _A stays DOWNLOADING (the record_completed failure left step 2 incomplete → retry next round).
     assert downloads.states[_A] is DownloadState.DOWNLOADING
 
 
@@ -1081,13 +1109,16 @@ async def test_monitor_repo_failure_is_isolated_and_does_not_starve_candidates()
     # ISOLATED (log + continue), it does NOT starve step 3: _B is enqueued anyway.
     class _MonitorFailRepo(FakeDownloadRepo):
         def set_state(
-            self, file: FileKey, state: DownloadState, failure_reason: FailureReason | None = None
+            self,
+            file: FileKey,
+            state: Literal[DownloadState.DOWNLOADING, DownloadState.FAILED],
+            failure_reason: FailureReason | None = None,
         ) -> None:
             raise RepositoryError("set_state monitor failed")
 
     client = FakeDownloadClient(listed=[(_status(_A, done=10, total=10),)])
     downloads = _MonitorFailRepo()
-    downloads.states[_A] = DownloadState.QUEUED  # reconciled → set_state(COMPLETED) will raise
+    downloads.states[_A] = DownloadState.QUEUED  # reconciled → set_state(DOWNLOADING) will raise
     catalog = FakeCatalogReads(
         candidates=(_candidate(_B, "062A"),),
         observations={_B: ObservedFile(filename="b.avi", size_bytes=100)},
@@ -1109,7 +1140,10 @@ async def test_start_repo_failure_is_tolerated_and_does_not_raise() -> None:
     # tolerated (log), run_download_cycle does not raise. Contract "never raises".
     class _AddLinkSetStateFailRepo(FakeDownloadRepo):
         def set_state(
-            self, file: FileKey, state: DownloadState, failure_reason: FailureReason | None = None
+            self,
+            file: FileKey,
+            state: Literal[DownloadState.DOWNLOADING, DownloadState.FAILED],
+            failure_reason: FailureReason | None = None,
         ) -> None:
             if state is DownloadState.FAILED:
                 raise RepositoryError("set_state(FAILED) failed")
@@ -1167,13 +1201,11 @@ async def test_shared_file_for_untracked_hash_is_ignored() -> None:
 async def test_already_completed_shared_hash_is_not_recompleted() -> None:
     # A completed file stays in amuled's shared list forever. Without the terminal skip, every
     # cycle would re-stamp it and re-fire the community notification.
-    class _NoSetStateRepo(FakeDownloadRepo):
-        def set_state(
-            self, file: FileKey, state: DownloadState, failure_reason: FailureReason | None = None
-        ) -> None:
+    class _NoRecordCompletedRepo(FakeDownloadRepo):
+        def record_completed(self, file: FileKey, completed_at: datetime) -> None:
             raise AssertionError("must not re-stamp an already completed download")
 
-    downloads = _NoSetStateRepo()
+    downloads = _NoRecordCompletedRepo()
     downloads.states[_A] = DownloadState.COMPLETED
     telemetry = RecordingTelemetry()
     client = FakeDownloadClient(listed=[(_status(_A, completed=True),)])
@@ -1236,16 +1268,49 @@ async def test_marks_seen_every_listed_download_completed_ones_included() -> Non
 
 @pytest.mark.asyncio
 async def test_a_download_amuled_no_longer_knows_becomes_failed() -> None:
-    client = FakeDownloadClient()
+    client, clock = FakeDownloadClient(), FakeClock()
     downloads = FakeDownloadRepo(lost={_A})
     downloads.states[_A] = DownloadState.DOWNLOADING
     catalog = FakeCatalogReads(observations={_A: ObservedFile(filename="a", size_bytes=1)})
-    deps = _deps(client=client, downloads=downloads, catalog=catalog, lost_after=3600.0)
+    deps = _deps(
+        client=client, downloads=downloads, catalog=catalog, lost_after=3600.0, clock=clock
+    )
     await run_download_cycle(deps)
     assert downloads.states[_A] is DownloadState.FAILED
-    assert downloads.expired_after == [3600.0]
+    assert downloads.unseen_since == [clock.now() - timedelta(hours=1)]
     assert downloads.failures[_A] is FailureReason.LOST
     assert client.started == []  # failed by the TTL: never started again
+
+
+class _TickingClock(FakeClock):
+    """Each ``now()`` a minute after the previous one: a write shows which read it took."""
+
+    def now(self) -> datetime:
+        moment = super().now()
+        self._now += timedelta(minutes=1)
+        return moment
+
+
+@pytest.mark.asyncio
+async def test_each_download_write_carries_the_instant_read_right_before_it() -> None:
+    clock = _TickingClock()
+    start = clock.now()
+    client = FakeDownloadClient(listed=[(_status(_A, completed=True),)])
+    downloads = FakeDownloadRepo()
+    downloads.states[_A] = DownloadState.DOWNLOADING
+    catalog = FakeCatalogReads(
+        candidates=(_candidate(_B, "062A"),),
+        observations={_B: ObservedFile(filename="b.avi", size_bytes=100)},
+    )
+    deps = _deps(
+        client=client, downloads=downloads, catalog=catalog, lost_after=3600.0, clock=clock
+    )
+    await run_download_cycle(deps)
+    minute = timedelta(minutes=1)
+    assert downloads.completed_at == {_A: start + minute}
+    assert downloads.seen_at == [start + 2 * minute]
+    assert downloads.unseen_since == [start + 3 * minute - timedelta(hours=1)]
+    assert downloads.queued_at == {_B: start + 4 * minute}
 
 
 @pytest.mark.asyncio
@@ -1373,11 +1438,17 @@ async def test_waiting_for_sources_is_not_failing_for_a_simulated_year(tmp_path:
     # The real TTL of one day, a month between rounds, the client listing the download each one.
     clock = FakeClock()
     connection = open_local(tmp_path / "local.db")
-    downloads = SqliteDownloadRepository(connection, clock=clock)
-    downloads.record_queued(_key(_A), "062A", 10)
+    downloads = SqliteDownloadRepository(connection)
+    downloads.record_queued(_key(_A), "062A", 10, clock.now())
     waiting = _status(_A, total=10, waiting=WaitingReason.NO_SOURCE)
     client = FakeDownloadClient(listed=[(waiting,)] * 12)
-    deps = _deps(client=client, downloads=downloads, catalog=FakeCatalogReads(), lost_after=86400.0)
+    deps = _deps(
+        client=client,
+        downloads=downloads,
+        catalog=FakeCatalogReads(),
+        lost_after=86400.0,
+        clock=clock,
+    )
     for _ in range(12):
         await clock.sleep(30 * 86400.0)
         await run_download_cycle(deps)
