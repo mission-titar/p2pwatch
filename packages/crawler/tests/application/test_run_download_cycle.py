@@ -1,7 +1,6 @@
-import asyncio
 import sqlite3
 from collections.abc import Iterable, Iterator, Sequence
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
@@ -38,7 +37,7 @@ from p2pwatch.ports.download_client import (
 )
 from p2pwatch.ports.repository_errors import RepositoryError
 from p2pwatch.ports.source_repository import EarlierPoints, RecordedReading, SourceRepository
-from tests.application.fakes import RecordingTelemetry
+from tests.application.fakes import FakeTime, FakeWallClock, RecordingTelemetry
 from tests.catalog_rows import insert_file
 
 _A = "a" * 32
@@ -64,7 +63,7 @@ class FakeDownloadClient:
     """Scripted DownloadClient: SCRIPTED ``downloads()`` snapshots, captures the started requests.
 
     It is the SourceClient too, as the real adapter is: ``readings`` per hash, ``source_reads``
-    the hashes read, each read advancing ``clock`` by a second when one is given.
+    the hashes read, each read advancing ``fake_time`` by a second when one is given.
 
     ``disconnected`` models the REAL adapter's state before a login: every I/O call raises
     ``ClientUnreachableError`` until ``connect()`` succeeds.
@@ -79,7 +78,7 @@ class FakeDownloadClient:
         start_failures: list[Exception] | None = None,
         source_failures: list[Exception] | None = None,
         readings: dict[str, tuple[SourceReading, ...]] | None = None,
-        clock: "FakeClock | None" = None,
+        fake_time: FakeTime | None = None,
         disconnected: bool = False,
     ) -> None:
         self._listed = list(listed or [()])
@@ -88,7 +87,7 @@ class FakeDownloadClient:
         self._start_failures = list(start_failures or [])
         self._source_failures = list(source_failures or [])
         self._readings = readings or {}
-        self._clock = clock
+        self._fake_time = fake_time
         self._disconnected = disconnected
         self.started: list[DownloadRequest] = []
         self.source_reads: list[str] = []
@@ -122,8 +121,8 @@ class FakeDownloadClient:
     async def sources(self, file: FileKey) -> tuple[SourceReading, ...]:
         self._require_connected()
         self.source_reads.append(file.native_id)
-        if self._clock is not None:
-            await self._clock.sleep(1.0)
+        if self._fake_time is not None:
+            self._fake_time.advance(timedelta(seconds=1))
         if self._source_failures:
             raise self._source_failures.pop(0)
         return self._readings.get(file.native_id, ())
@@ -309,20 +308,6 @@ class FakeDiskSpace:
         return self.free
 
 
-class FakeClock:
-    def __init__(self) -> None:
-        self._now = datetime(2026, 6, 13, tzinfo=UTC)
-        self.sleeps: list[float] = []
-
-    def now(self) -> datetime:
-        return self._now
-
-    async def sleep(self, seconds: float) -> None:
-        self.sleeps.append(seconds)
-        self._now += timedelta(seconds=seconds)
-        await asyncio.sleep(0)
-
-
 def _key(hash_hex: str) -> FileKey:
     return FileKey(Network.ED2K, hash_hex)
 
@@ -358,9 +343,10 @@ def _deps(
     telemetry: RecordingTelemetry | None = None,
     targets: Sequence[TargetSegment] | None = None,
     sources: SourceRepository | None = None,
-    clock: FakeClock | None = None,
+    fake_time: FakeTime | None = None,
     sources_interval: timedelta = timedelta(seconds=30),
 ) -> DownloadDeps:
+    fake_time = fake_time or FakeTime()
     return DownloadDeps(
         download_client=client,
         source_client=client,
@@ -374,7 +360,8 @@ def _deps(
         poll_interval_seconds=30.0,
         reappeared_after=timedelta(hours=12),
         sources_interval=sources_interval,
-        clock=clock or FakeClock(),
+        clock=fake_time.wall,
+        monotonic_clock=fake_time.monotonic,
         telemetry=telemetry or RecordingTelemetry(),
     )
 
@@ -1268,32 +1255,32 @@ async def test_marks_seen_every_listed_download_completed_ones_included() -> Non
 
 @pytest.mark.asyncio
 async def test_a_download_amuled_no_longer_knows_becomes_failed() -> None:
-    client, clock = FakeDownloadClient(), FakeClock()
+    client, fake_time = FakeDownloadClient(), FakeTime()
     downloads = FakeDownloadRepo(lost={_A})
     downloads.states[_A] = DownloadState.DOWNLOADING
     catalog = FakeCatalogReads(observations={_A: ObservedFile(filename="a", size_bytes=1)})
     deps = _deps(
-        client=client, downloads=downloads, catalog=catalog, lost_after=3600.0, clock=clock
+        client=client, downloads=downloads, catalog=catalog, lost_after=3600.0, fake_time=fake_time
     )
     await run_download_cycle(deps)
     assert downloads.states[_A] is DownloadState.FAILED
-    assert downloads.unseen_since == [clock.now() - timedelta(hours=1)]
+    assert downloads.unseen_since == [fake_time.wall.now() - timedelta(hours=1)]
     assert downloads.failures[_A] is FailureReason.LOST
     assert client.started == []  # failed by the TTL: never started again
 
 
-class _TickingClock(FakeClock):
+class _TickingWallClock(FakeWallClock):
     """Each ``now()`` a minute after the previous one: a write shows which read it took."""
 
     def now(self) -> datetime:
         moment = super().now()
-        self._now += timedelta(minutes=1)
+        self._fake_time.advance(timedelta(minutes=1))
         return moment
 
 
 @pytest.mark.asyncio
 async def test_each_download_write_carries_the_instant_read_right_before_it() -> None:
-    clock = _TickingClock()
+    clock = _TickingWallClock(FakeTime())
     start = clock.now()
     client = FakeDownloadClient(listed=[(_status(_A, completed=True),)])
     downloads = FakeDownloadRepo()
@@ -1302,9 +1289,8 @@ async def test_each_download_write_carries_the_instant_read_right_before_it() ->
         candidates=(_candidate(_B, "062A"),),
         observations={_B: ObservedFile(filename="b.avi", size_bytes=100)},
     )
-    deps = _deps(
-        client=client, downloads=downloads, catalog=catalog, lost_after=3600.0, clock=clock
-    )
+    deps = _deps(client=client, downloads=downloads, catalog=catalog, lost_after=3600.0)
+    deps.clock = clock
     await run_download_cycle(deps)
     minute = timedelta(minutes=1)
     assert downloads.completed_at == {_A: start + minute}
@@ -1436,10 +1422,10 @@ async def test_a_failure_the_client_reports_stays_failed_round_after_round() -> 
 @pytest.mark.asyncio
 async def test_waiting_for_sources_is_not_failing_for_a_simulated_year(tmp_path: Path) -> None:
     # The real TTL of one day, a month between rounds, the client listing the download each one.
-    clock = FakeClock()
+    fake_time = FakeTime()
     connection = open_local(tmp_path / "local.db")
     downloads = SqliteDownloadRepository(connection)
-    downloads.record_queued(_key(_A), "062A", 10, clock.now())
+    downloads.record_queued(_key(_A), "062A", 10, fake_time.wall.now())
     waiting = _status(_A, total=10, waiting=WaitingReason.NO_SOURCE)
     client = FakeDownloadClient(listed=[(waiting,)] * 12)
     deps = _deps(
@@ -1447,10 +1433,10 @@ async def test_waiting_for_sources_is_not_failing_for_a_simulated_year(tmp_path:
         downloads=downloads,
         catalog=FakeCatalogReads(),
         lost_after=86400.0,
-        clock=clock,
+        fake_time=fake_time,
     )
     for _ in range(12):
-        await clock.sleep(30 * 86400.0)
+        fake_time.advance(timedelta(days=30))
         await run_download_cycle(deps)
     row = connection.execute("SELECT state, waiting_reason, failure_reason FROM downloads")
     assert row.fetchall() == [("downloading", "no_source", None)]
@@ -1464,20 +1450,24 @@ def _reading(name: str, role: SourceRole | None = SourceRole.QUEUED) -> SourceRe
 @pytest.mark.asyncio
 async def test_the_sources_of_each_tracked_download_the_client_lists_are_recorded() -> None:
     # Stage 4, D8: the untracked C is not the crawler's, and each read_at precedes its read.
-    clock = FakeClock()
-    start = clock.now()
+    fake_time = FakeTime()
+    start = fake_time.wall.now()
     readings: dict[str, tuple[SourceReading, ...]] = {
         _A: (_reading("peer A"),),
         _B: (_reading("peer B", None),),
     }
     listed = (_status(_A), _status(_C), _status(_B))
-    client = FakeDownloadClient(listed=[listed], readings=readings, clock=clock)
+    client = FakeDownloadClient(listed=[listed], readings=readings, fake_time=fake_time)
     downloads = FakeDownloadRepo()
     downloads.states[_A] = DownloadState.DOWNLOADING
     downloads.states[_B] = DownloadState.QUEUED
     sources = FakeSourceRepo()
     deps = _deps(
-        client=client, downloads=downloads, catalog=FakeCatalogReads(), sources=sources, clock=clock
+        client=client,
+        downloads=downloads,
+        catalog=FakeCatalogReads(),
+        sources=sources,
+        fake_time=fake_time,
     )
     await run_download_cycle(deps)
     assert client.source_reads == [_A, _B]
@@ -1557,8 +1547,8 @@ async def test_a_daemon_unreachable_at_the_start_reads_no_source() -> None:
 @pytest.mark.asyncio
 async def test_sources_are_read_once_per_interval_however_often_the_cycle_runs() -> None:
     # Source points spec, D3: rounds 30 s apart, sources every 300 s, the first round included.
-    clock = FakeClock()
-    start = clock.now()
+    fake_time = FakeTime()
+    start = fake_time.wall.now()
     client = FakeDownloadClient(listed=[(_status(_A),)] * 11)
     sources = FakeSourceRepo()
     deps = _deps(
@@ -1566,12 +1556,12 @@ async def test_sources_are_read_once_per_interval_however_often_the_cycle_runs()
         downloads=_tracking(_A),
         catalog=FakeCatalogReads(),
         sources=sources,
-        clock=clock,
+        fake_time=fake_time,
         sources_interval=timedelta(seconds=300),
     )
     for _ in range(11):
         await run_download_cycle(deps)
-        await clock.sleep(30.0)
+        fake_time.advance(timedelta(seconds=30))
     assert [read_at for _, _, read_at in sources.recorded] == [
         start,
         start + timedelta(seconds=300),
@@ -1581,7 +1571,7 @@ async def test_sources_are_read_once_per_interval_however_often_the_cycle_runs()
 @pytest.mark.asyncio
 async def test_a_sources_read_the_daemon_failed_waits_for_the_next_interval() -> None:
     # The step's time is taken when it starts, so an unreachable client is not retried each poll.
-    clock = FakeClock()
+    fake_time = FakeTime()
     client = FakeDownloadClient(
         listed=[(_status(_A),)] * 3, source_failures=[ClientUnreachableError("down")]
     )
@@ -1589,14 +1579,32 @@ async def test_a_sources_read_the_daemon_failed_waits_for_the_next_interval() ->
         client=client,
         downloads=_tracking(_A),
         catalog=FakeCatalogReads(),
-        clock=clock,
+        fake_time=fake_time,
         sources_interval=timedelta(seconds=300),
     )
     await run_download_cycle(deps)
-    await clock.sleep(30.0)
+    fake_time.advance(timedelta(seconds=30))
     await run_download_cycle(deps)
     assert client.source_reads == [_A]
-    await clock.sleep(270.0)
+    fake_time.advance(timedelta(seconds=270))
+    await run_download_cycle(deps)
+    assert client.source_reads == [_A, _A]
+
+
+@pytest.mark.asyncio
+async def test_a_wall_clock_step_back_delays_no_sources_read() -> None:
+    fake_time = FakeTime()
+    client = FakeDownloadClient(listed=[(_status(_A),)] * 2)
+    deps = _deps(
+        client=client,
+        downloads=_tracking(_A),
+        catalog=FakeCatalogReads(),
+        fake_time=fake_time,
+        sources_interval=timedelta(seconds=300),
+    )
+    await run_download_cycle(deps)
+    fake_time.step_wall(timedelta(hours=-1))
+    fake_time.advance(timedelta(seconds=300))
     await run_download_cycle(deps)
     assert client.source_reads == [_A, _A]
 
@@ -1641,8 +1649,8 @@ async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
 @pytest.mark.asyncio
 async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
     # Each file asks the history before the round's start, not before its own read.
-    clock = FakeClock()
-    start = clock.now()
+    fake_time = FakeTime()
+    start = fake_time.wall.now()
     history = {
         _PEER: EarlierPoints(has_useful_point=True, latest_known_at=start - timedelta(hours=13)),
         _OTHER_PEER: EarlierPoints(
@@ -1657,14 +1665,14 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
     downloads = _tracking(_A, _B)
     downloads._target_ids[_B] = "063A"  # queued for it, no decision left
     telemetry = RecordingTelemetry()
-    client = FakeDownloadClient(listed=[(_status(_A), _status(_B))], clock=clock)
+    client = FakeDownloadClient(listed=[(_status(_A), _status(_B))], fake_time=fake_time)
     deps = _deps(
         client=client,
         downloads=downloads,
         catalog=FakeCatalogReads(),
         sources=sources,
         telemetry=telemetry,
-        clock=clock,
+        fake_time=fake_time,
     )
     await run_download_cycle(deps)
     assert sources.asked == [(_OTHER_PEER, start), (_PEER, start)]
@@ -1715,21 +1723,23 @@ async def test_a_round_without_a_useful_reading_with_a_source_id_never_asks_for_
 
 @pytest.mark.asyncio
 async def test_the_baseline_is_asked_once_per_round_against_its_start() -> None:
-    clock = FakeClock()
-    start = clock.now()
+    fake_time = FakeTime()
+    start = fake_time.wall.now()
     kept: dict[str, tuple[RecordedReading, ...]] = {
         _A: (RecordedReading(None, "peer", SourceRole.QUEUED),),
         _B: (RecordedReading(_PEER, "AnimuseeFMR", SourceRole.QUEUED),),
         _C: (RecordedReading(_OTHER_PEER, None, SourceRole.SENDING),),
     }
     sources = FakeSourceRepo(kept=kept)
-    client = FakeDownloadClient(listed=[(_status(_A), _status(_B), _status(_C))], clock=clock)
+    client = FakeDownloadClient(
+        listed=[(_status(_A), _status(_B), _status(_C))], fake_time=fake_time
+    )
     deps = _deps(
         client=client,
         downloads=_tracking(_A, _B, _C),
         catalog=FakeCatalogReads(),
         sources=sources,
-        clock=clock,
+        fake_time=fake_time,
     )
     await run_download_cycle(deps)
     assert sources.baselines == [start]
@@ -1768,9 +1778,9 @@ async def test_the_first_recording_round_is_a_baseline(
         _A: (_peer(_PEER),),
         _B: (_peer(_OTHER_PEER),),
     }
-    clock = FakeClock()
+    fake_time = FakeTime()
     rounds = [tuple(_status(h) for h in order)] * 2
-    client = FakeDownloadClient(listed=rounds, readings=readings, clock=clock)
+    client = FakeDownloadClient(listed=rounds, readings=readings, fake_time=fake_time)
     telemetry = RecordingTelemetry()
     deps = _deps(
         client=client,
@@ -1778,12 +1788,12 @@ async def test_the_first_recording_round_is_a_baseline(
         catalog=FakeCatalogReads(),
         sources=SqliteSourceRepository(catalog, "n1", timedelta(seconds=30)),
         telemetry=telemetry,
-        clock=clock,
+        fake_time=fake_time,
     )
     await run_download_cycle(deps)
     alerts = [e for e in telemetry.events if isinstance(e, SourceFirstUseful | SourceReappeared)]
     assert alerts == []
-    await clock.sleep(30.0)
+    fake_time.advance(timedelta(seconds=30))
     third = SourceKey(Network.ED2K, "d" * 32)
     readings[_A] = (_peer(_PEER), _peer(third))
     await run_download_cycle(deps)
@@ -1808,7 +1818,7 @@ def _real_deps(
     catalog: sqlite3.Connection,
     client: FakeDownloadClient,
     telemetry: RecordingTelemetry,
-    clock: FakeClock,
+    fake_time: FakeTime,
 ) -> DownloadDeps:
     """``_A`` tracked, its sources written to a real catalog."""
     sources = SqliteSourceRepository(catalog, "n1", timedelta(seconds=30))
@@ -1818,7 +1828,7 @@ def _real_deps(
         catalog=FakeCatalogReads(),
         sources=sources,
         telemetry=telemetry,
-        clock=clock,
+        fake_time=fake_time,
     )
 
 
@@ -1832,13 +1842,13 @@ async def test_a_source_useful_at_three_consecutive_reads_is_new_once(
 ) -> None:
     # From its second read on, its earlier useful point is recent: no event (D5).
     readings: dict[str, tuple[SourceReading, ...]] = {_A: (_peer(_OTHER_PEER),)}
-    clock, telemetry = FakeClock(), RecordingTelemetry()
-    client = FakeDownloadClient(listed=[(_status(_A),)] * 4, readings=readings, clock=clock)
-    deps = _real_deps(real_catalog, client, telemetry, clock)
+    fake_time, telemetry = FakeTime(), RecordingTelemetry()
+    client = FakeDownloadClient(listed=[(_status(_A),)] * 4, readings=readings, fake_time=fake_time)
+    deps = _real_deps(real_catalog, client, telemetry, fake_time)
     await run_download_cycle(deps)  # the node's first round, a baseline
     readings[_A] = (_peer(_OTHER_PEER), _peer(_PEER))
     for _ in range(3):
-        await clock.sleep(30.0)
+        fake_time.advance(timedelta(seconds=30))
         await run_download_cycle(deps)
     assert _alerts(telemetry) == [SourceFirstUseful(_PEER, "peer", _key(_A), _A, ())]
 
@@ -1849,16 +1859,16 @@ async def test_a_source_back_after_13_hours_through_an_undetermined_read_reappea
 ) -> None:
     # An unknown point does not end an absence (stage 4, D9).
     readings: dict[str, tuple[SourceReading, ...]] = {_A: (_peer(_PEER),)}
-    clock, telemetry = FakeClock(), RecordingTelemetry()
-    client = FakeDownloadClient(listed=[(_status(_A),)] * 3, readings=readings, clock=clock)
-    deps = _real_deps(real_catalog, client, telemetry, clock)
-    last_useful = clock.now()
+    fake_time, telemetry = FakeTime(), RecordingTelemetry()
+    client = FakeDownloadClient(listed=[(_status(_A),)] * 3, readings=readings, fake_time=fake_time)
+    deps = _real_deps(real_catalog, client, telemetry, fake_time)
+    last_useful = fake_time.wall.now()
     await run_download_cycle(deps)
-    await clock.sleep(13 * 3600.0)
+    fake_time.advance(timedelta(hours=13))
     readings[_A] = (_peer(_PEER, SourceRole.UNDETERMINED),)
     await run_download_cycle(deps)
-    await clock.sleep(30.0)
+    fake_time.advance(timedelta(seconds=30))
     readings[_A] = (_peer(_PEER),)
-    absent = (clock.now() - last_useful).total_seconds()
+    absent = (fake_time.wall.now() - last_useful).total_seconds()
     await run_download_cycle(deps)
     assert _alerts(telemetry) == [SourceReappeared(_PEER, "peer", _key(_A), _A, (), absent)]

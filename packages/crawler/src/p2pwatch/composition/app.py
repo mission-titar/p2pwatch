@@ -277,6 +277,7 @@ class CrawlerApp:
             reappeared_after=download_config.reappeared_after,
             sources_interval=download_config.sources_interval,
             clock=self._clock,
+            monotonic_clock=self._monotonic_clock,
             telemetry=telemetry,
             wake_hub=self._wake_hub,
             shutdown=self._shutdown,
@@ -324,7 +325,7 @@ class CrawlerApp:
                         resumed=self._resumed,
                         backoff=backoff,
                         scheduler_state=scheduler_state,
-                        clock=self._clock,
+                        monotonic_clock=self._monotonic_clock,
                     ).run()
                 ),
                 group.create_task(status_loop(status_deps)),
@@ -451,7 +452,7 @@ class CrawlerApp:
             scheduler_state = SqliteSchedulerStateRepository(local_conn)
             engine = MatchingEngine(self._matcher_config, self._targets)
             endpoint = self._crawler_config.amule_endpoint
-            board = StatusBoard((endpoint.client_name,), self._clock)
+            board = StatusBoard((endpoint.client_name,), self._monotonic_clock)
             # In-process webui (spec §5): own thread + loop, started EARLY (before the daemon client
             # + startup re-evaluation) so it is up promptly and stays isolated from the crawler's
             # synchronous work. Gated by ``webui.enabled``; a crash degrades (spec §17.1). Its
@@ -492,7 +493,13 @@ class CrawlerApp:
             workers = [SearchWorker(endpoint.client_name, client, deps)]
             # The status loop shares the search session (one session per container's amuled).
             status_deps = StatusLoopDeps(
-                endpoint.client_name, client, self._clock, telemetry, self._shutdown, board
+                endpoint.client_name,
+                client,
+                self._clock,
+                self._monotonic_clock,
+                telemetry,
+                self._shutdown,
+                board,
             )
 
             _logger.info("crawler started: node_id=%s", node_id)

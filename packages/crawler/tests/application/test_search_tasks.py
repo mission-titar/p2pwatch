@@ -31,7 +31,7 @@ from p2pwatch.ports.client_errors import SearchFailedError
 from p2pwatch.ports.repository_errors import RepositoryError
 from p2pwatch.ports.scheduler_state_repository import BackoffState
 from tests.application.fakes import FakeRng, RecordingTelemetry, RecordingWakeHub, make_unreachable
-from tests.virtual_time import LoopClock, run_virtual
+from tests.virtual_time import LoopClock, LoopMonotonicClock, run_virtual
 
 _HOUR = 3600.0
 _POLICY = BackoffPolicy(
@@ -107,7 +107,7 @@ class _Tasks:
             resumed=self.resumed,
             backoff=self.deps.backoff,
             scheduler_state=self.state,
-            clock=LoopClock(),
+            monotonic_clock=LoopMonotonicClock(),
         ).run()
 
     def run_for(

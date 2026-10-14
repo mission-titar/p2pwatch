@@ -30,7 +30,7 @@ class StatusClient(Protocol):
 
 @dataclass(frozen=True)
 class StatusReading:
-    read_at: datetime
+    read_at: datetime  # for display: the board measures a reading's age on the monotonic clock
     status: ClientStatus | None  # None: the client's API did not answer
 
 
@@ -39,4 +39,4 @@ class StatusReadings(Protocol):
 
     def readings(self) -> Mapping[str, StatusReading | None]: ...
 
-    def is_current(self, reading: StatusReading) -> bool: ...
+    def is_current(self, client_name: str) -> bool: ...

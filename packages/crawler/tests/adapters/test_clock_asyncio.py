@@ -1,17 +1,10 @@
 from datetime import UTC
 
-import pytest
-
 from p2pwatch.adapters.clock_asyncio import AsyncioClock, SeededRng
 
 
 def test_asyncio_clock_now_is_aware_utc() -> None:
     assert AsyncioClock().now().tzinfo == UTC
-
-
-@pytest.mark.asyncio
-async def test_asyncio_clock_sleep_zero_returns() -> None:
-    await AsyncioClock().sleep(0.0)  # does not raise; no notable wait
 
 
 def test_seeded_rng_jitter_is_within_span() -> None:

@@ -7,15 +7,10 @@ from typing import Protocol, overload
 
 
 class Clock(Protocol):
-    """Time, injectable: aware ``now()`` (UTC) + async ``sleep`` (spec §3).
-
-    Implemented on the adapter side by ``datetime.now(UTC)`` + ``asyncio.sleep``; replaced
-    in tests by an advanceable fake clock (the ``sleep`` advances ``now`` without waiting).
-    """
+    """Time, injectable: aware ``now()`` (UTC), every stamp (spec §3). Implemented on the adapter
+    side by ``datetime.now(UTC)``; replaced in tests by an advanceable fake clock."""
 
     def now(self) -> datetime: ...
-
-    async def sleep(self, seconds: float) -> None: ...
 
 
 @dataclass(frozen=True, order=True)

@@ -23,7 +23,7 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.webui.adapters.sql_console import ConsoleOutcome, run_query
 from p2pwatch.webui.composition.app import build_app
 from p2pwatch.webui.domain.views import ConsoleResult, ConsoleRow, DbOption
-from tests.application.fakes import FakeClock
+from tests.application.fakes import FakeClock, FakeTime
 from tests.catalog_rows import insert_file
 
 _HASH_A = "a" * 32
@@ -284,7 +284,7 @@ def _build(catalog_db: Path, local_db: Path) -> Starlette:
         templates_dir=templates_dir,
         static_dir=static_dir,
         control=_StubControl(),
-        status_readings=StatusBoard((), FakeClock()),
+        status_readings=StatusBoard((), FakeTime().monotonic),
         amule_url="http://localhost:4711",
         clock=FakeClock(),
         source_period_gap=timedelta(seconds=90),

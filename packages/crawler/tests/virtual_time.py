@@ -58,9 +58,6 @@ class LoopClock:
     def now(self) -> datetime:
         return EPOCH + timedelta(seconds=asyncio.get_running_loop().time())
 
-    async def sleep(self, seconds: float) -> None:
-        await asyncio.sleep(seconds)
-
 
 def run_virtual[T](main: Coroutine[Any, Any, T]) -> T:
     loop = _VirtualLoop()
