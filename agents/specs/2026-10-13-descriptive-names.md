@@ -243,7 +243,7 @@ misleading name in itself.*
 | 130 | `refactor/webui-names` | the query keys, the webui's composition, D8 |
 | 140 | `refactor/matching-names` | the matcher and its YAML keys |
 | 150 | `refactor/package-names` | amule, amule_bump, vex_guards |
-| 160 | `docs/descriptive-names-wrap` | the closing block (Corrected: 39 files, each a one-to-few-line fix the holistic review maps one by one, so it takes the one-line exemption rather than more pull requests, the operator's ruling of 2026-10-13) |
+| 160 | `docs/descriptive-names-wrap` | the closing block (Corrected: 40 files, each a one-to-few-line fix the holistic review maps one by one, so it takes the one-line exemption rather than more pull requests, the operator's ruling of 2026-10-13) |
 
 - **Cut by concept; a rename block may pass a bound** (the review estimates up to 45 files for block 90).
   *One-line reason (operator): a mechanical rename is read by its mapping, not file by file, so splitting it

@@ -82,14 +82,14 @@ to the matcher, the webui and the three other packages.
   `RecordedReading.source_name` from the mapper on, `EarlierPoints.latest_known_at`,
   `SourceReappeared.absent_for_seconds`; the source history tables head "Connectable"; "download
   enabled" for "full mode" and "observer mode"; the `merge` CLI says "source catalog" (`CATALOG`,
-  `output_is_source_catalog`); the coverage token's refusal names its token; `docs/migration-4x.md`
-  lists only what 4.1.0 shipped; "audience" for a notification destination in the French docs, with
-  its glossary row.
+  `output_is_source_catalog`); the first-useful title opens with 📥; the coverage token's refusal
+  names its token; `docs/migration-4x.md` lists only what 4.1.0 shipped; "audience" for a notification
+  destination in the French docs, with its glossary row.
 
 ## Decisions taken during Act
 
-No block report records a class 2 question. The 🆕 on the first-useful title went to the operator
-(holistic finding 7, below). Each block applied its concept at sites the inventory did
+No block report records a class 2 question. The 🆕 on the first-useful title went to the operator, who
+chose 📥 (holistic finding 7, below). Each block applied its concept at sites the inventory did
 not list, named in its report; the ones a reviewer may weigh:
 
 - Block 40: the port, adapter and their test modules renamed with `git mv`.
@@ -135,8 +135,8 @@ Every `(Corrected: ...)` in the spec: D6 (block 20 renamed each of the 209 attri
 time; three, in `{% else %}` branches, failed no test); block 30's `n_results` counts observations, so
 block 100 renames it `observation_count`, and its debug log with it. The closing block adds four: D1
 gains the `audience` row, so section 5 counts 23 glossary rows; D5 and section 6's migration page lists
-only the surfaces 4.1.0 shipped; section 4's closing block passes the 20-file bound (39 files of
-one-to-few-line fixes) under the one-line exemption, by the operator's ruling.
+only the surfaces 4.1.0 shipped; section 4's closing block passes the 20-file bound (40 files of
+one-to-few-line fixes, 194 lines) under the one-line exemption, by the operator's ruling.
 
 ## Wrap counts
 
@@ -168,7 +168,8 @@ section 5's string check were green. Each finding and its exit:
 5. The source history tables headed `connectable` "High-ID": fixed, "Connectable".
 6. "full mode" and "observer mode" for `download.enabled`: fixed, "download enabled" and "download off
    (crawl-only)" in the log, the comment and the docstrings.
-7. The 🆕 on the first-useful title reads "NEW": asked of the operator.
+7. The 🆕 on the first-useful title reads "NEW": asked of the operator, who chose the lead's
+   recommendation; fixed, "📥 Source useful for the first time", `docs/operate.md`'s quote with it.
 8. `SourceReading.name` and `RecordedReading.name` for a source's name: fixed, `source_name`, the
    writer's SQL parameter with them; the column stays `name`.
 9. The `merge` CLI said "source" for a catalog: fixed, `output_is_source_catalog`, the positional
