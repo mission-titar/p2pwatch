@@ -146,8 +146,9 @@ Tier Direct is not drawn: it skips Discuss, Spec and both reviews.
   bypass it silently.
 - **Docs-only exception, tier Direct**: a diff touching only `docs/**`, `agents/**` and root `*.md` may be committed or
   merged locally to `main`, with no pull request.
-- **On the operator's "merged"**, the lead stops every teammate of the lot by name, brings the working tree back to
-  `main` (`git switch main && git pull --ff-only`) and deletes the lot's local branches.
+- **On the operator's "merged"**, the lead stops every teammate of the lot by name, drops the stack's local tracking
+  from its top branch (`gh stack unstack --local`: a merged stack left tracked makes `gh stack view` refuse `main`),
+  brings the working tree back to `main` (`git switch main && git pull --ff-only`) and deletes the lot's local branches.
 
 #### The pull request's body
 
