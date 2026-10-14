@@ -24,7 +24,7 @@ from p2pwatch.domain.observability.events import (
     SearchFailed,
 )
 from p2pwatch.domain.observation import FileObservation
-from p2pwatch.ports.scheduler_state_repository import BackoffKey, BackoffState
+from p2pwatch.ports.backoff_state_repository import BackoffKey, BackoffState
 from tests.application.fakes import (
     FakeMuleClient,
     FakeRng,
@@ -62,7 +62,7 @@ def _obs() -> FileObservation:
 
 
 def _registry(fake_time: FakeTime, rng: FakeRng | None = None) -> BackoffRegistry:
-    return BackoffRegistry(_POLICY, fake_time.wall, rng or FakeRng())
+    return BackoffRegistry(_POLICY, fake_time.wall, fake_time.monotonic, rng or FakeRng())
 
 
 def _deps(
@@ -89,11 +89,11 @@ def _deps(
 def test_backoff_registry_grows_then_resets() -> None:
     fake_time = FakeTime()
     registry = _registry(fake_time)
-    assert registry.record_failure(_KAD) == 2.0  # 1st attempt = base
+    assert registry.record_failure(_KAD) == timedelta(seconds=2)  # 1st attempt = base
     fake_time.advance(timedelta(seconds=2.0))
-    assert registry.record_failure(_KAD) == 4.0  # × factor
+    assert registry.record_failure(_KAD) == timedelta(seconds=4)  # × factor
     registry.reset(_KAD)
-    assert registry.record_failure(_KAD) == 2.0  # back to base
+    assert registry.record_failure(_KAD) == timedelta(seconds=2)  # back to base
 
 
 def test_a_failure_while_backed_off_does_not_count_again() -> None:
@@ -102,29 +102,49 @@ def test_a_failure_while_backed_off_does_not_count_again() -> None:
     registry = _registry(fake_time)
     registry.record_failure(_KAD)
     fake_time.advance(timedelta(seconds=0.5))
-    assert registry.record_failure(_KAD) == 1.5  # what is left of the backoff already set
+    # what is left of the backoff already set
+    assert registry.record_failure(_KAD) == timedelta(seconds=1.5)
     fake_time.advance(timedelta(seconds=1.5))
-    assert registry.record_failure(_KAD) == 4.0  # the second attempt
+    assert registry.record_failure(_KAD) == timedelta(seconds=4)  # the second attempt
 
 
 def test_backoff_registry_keys_are_independent() -> None:
     registry = _registry(FakeTime())
-    assert registry.record_failure(_KAD) == 2.0
-    assert registry.record_failure(_ED2K) == 2.0  # ed2k did not inherit kad's counter
+    assert registry.record_failure(_KAD) == timedelta(seconds=2)
+    assert registry.record_failure(_ED2K) == timedelta(seconds=2)  # not kad's counter
 
 
 def test_backoff_registry_reset_unknown_key_is_a_noop() -> None:
     _registry(FakeTime()).reset(_KAD)  # does not raise
 
 
-def test_backoff_registry_sets_retry_after_in_the_future() -> None:
+def test_a_failure_backs_its_key_off_for_its_delay() -> None:
     fake_time = FakeTime()
     registry = _registry(fake_time)
     registry.record_failure(_KAD)
     assert registry.is_in_backoff(_KAD) is True
-    fake_time.advance(timedelta(seconds=1.9))  # still before retry_after (2.0s)
+    fake_time.advance(timedelta(seconds=1.9))  # still before its delay (2.0s)
     assert registry.is_in_backoff(_KAD) is True
-    fake_time.advance(timedelta(seconds=0.2))  # now past retry_after
+    fake_time.advance(timedelta(seconds=0.1))
+    assert registry.is_in_backoff(_KAD) is False
+
+
+def test_a_wall_clock_step_forward_keeps_the_key_backed_off() -> None:
+    fake_time = FakeTime()
+    registry = _registry(fake_time)
+    registry.record_failure(_KAD)
+    fake_time.step_wall(timedelta(hours=1))
+    assert registry.is_in_backoff(_KAD) is True
+
+
+def test_a_wall_clock_step_back_releases_the_key_at_its_delay() -> None:
+    fake_time = FakeTime()
+    registry = _registry(fake_time)
+    registry.record_failure(_KAD)
+    fake_time.step_wall(timedelta(hours=-1))
+    fake_time.advance(timedelta(seconds=1.9))
+    assert registry.is_in_backoff(_KAD) is True
+    fake_time.advance(timedelta(seconds=0.1))
     assert registry.is_in_backoff(_KAD) is False
 
 
@@ -136,44 +156,67 @@ def test_backoff_registry_jitter_extends_the_delay() -> None:
     fake_time = FakeTime()
     policy = dataclasses.replace(_POLICY, jitter_ratio=0.5)  # jitter in [0, 0.5*delay)
     rng = FakeRng(jitter_value=1.0)  # constant 1.0s jitter
-    registry = BackoffRegistry(policy, fake_time.wall, rng)
+    registry = BackoffRegistry(policy, fake_time.wall, fake_time.monotonic, rng)
     delay = registry.record_failure(_KAD)
-    assert delay == 3.0  # base 2.0 + jitter 1.0
+    assert delay == timedelta(seconds=3)  # base 2.0 + jitter 1.0
     assert rng.jitter_spans == [1.0]  # span = jitter_ratio (0.5) * delay (2.0)
 
 
-def test_backoff_registry_snapshot_and_load_round_trip() -> None:
+def test_the_snapshot_holds_each_waits_start_on_the_wall_clock_and_its_delay() -> None:
     fake_time = FakeTime()
     registry = _registry(fake_time)
     registry.record_failure(_KAD)
-    snapshot = registry.snapshot()
-    assert _KAD in snapshot
-    assert isinstance(snapshot[_KAD], BackoffState)
-    # Reload into a FRESH registry (simulates a restart) → same skip applied.
-    reborn = _registry(fake_time)
-    assert reborn.is_in_backoff(_KAD) is False  # empty before load
-    reborn.load_from(snapshot)
-    assert reborn.is_in_backoff(_KAD) is True
+    started_at = fake_time.wall.now()
+    fake_time.advance(timedelta(seconds=1))
+    assert registry.snapshot() == {_KAD: BackoffState(1, started_at, timedelta(seconds=2))}
+
+
+def test_a_loaded_backoff_waits_what_is_left_of_its_delay() -> None:
+    fake_time = FakeTime()
+    started_at = fake_time.wall.now() - timedelta(seconds=100)
+    registry = _registry(fake_time)
+    registry.load_from({_KAD: BackoffState(1, started_at, timedelta(seconds=300))})
+    assert registry.remaining_wait(_KAD) == timedelta(seconds=200)
+
+
+def test_a_loaded_backoff_started_in_the_future_waits_its_delay_at_most() -> None:
+    fake_time = FakeTime()
+    started_at = fake_time.wall.now() + timedelta(hours=1)
+    registry = _registry(fake_time)
+    registry.load_from({_KAD: BackoffState(1, started_at, timedelta(seconds=300))})
+    fake_time.advance(timedelta(seconds=299))
+    assert registry.is_in_backoff(_KAD) is True
+    fake_time.advance(timedelta(seconds=1))
+    assert registry.is_in_backoff(_KAD) is False
+
+
+def test_a_loaded_backoff_keeps_its_attempts() -> None:
+    fake_time = FakeTime()
+    started_at = fake_time.wall.now() - timedelta(hours=1)
+    registry = _registry(fake_time)
+    registry.load_from({_KAD: BackoffState(2, started_at, timedelta(seconds=4))})
+    assert registry.is_in_backoff(_KAD) is False
+    assert registry.record_failure(_KAD) == timedelta(seconds=8)  # the third attempt
 
 
 @pytest.mark.parametrize(
-    ("failed", "ready_in"),
-    [((), 0.0), ((_CLIENT,), 2.0), ((_KAD,), 2.0), ((_ED2K,), 0.0)],
+    ("failed", "ready_in_seconds"),
+    [((), 0), ((_CLIENT,), 2), ((_KAD,), 2), ((_ED2K,), 0)],
 )
 def test_a_worker_is_ready_for_a_channel_when_neither_it_nor_the_channel_is_backed_off(
     catalog: SqliteCatalogRepository,
     engine: MatchingEngine,
     failed: tuple[BackoffKey, ...],
-    ready_in: float,
+    ready_in_seconds: int,
 ) -> None:
     fake_time = FakeTime()
     registry = _registry(fake_time)
     for key in failed:
         registry.record_failure(key)
     worker = SearchWorker("amule-1", FakeMuleClient(), _deps(catalog, engine, registry, fake_time))
-    assert worker.seconds_until_ready("kad") == ready_in
+    assert worker.time_until_ready("kad") == timedelta(seconds=ready_in_seconds)
     fake_time.advance(timedelta(seconds=3.0))
-    assert worker.seconds_until_ready("kad") == 0.0  # a past backoff is no wait
+    assert worker.time_until_ready("kad") == timedelta(0)  # a past backoff is no wait
 
 
 def test_a_worker_waits_for_the_later_of_its_two_backoffs(
@@ -185,10 +228,10 @@ def test_a_worker_waits_for_the_later_of_its_two_backoffs(
     fake_time.advance(timedelta(seconds=1.0))
     registry.record_failure(_CLIENT)
     worker = SearchWorker("amule-1", FakeMuleClient(), _deps(catalog, engine, registry, fake_time))
-    assert worker.seconds_until_ready("kad") == 2.0
+    assert worker.time_until_ready("kad") == timedelta(seconds=2)
     fake_time.advance(timedelta(seconds=1.5))
     registry.reset(_CLIENT)
-    assert worker.seconds_until_ready("kad") == 0.0  # the channel's own ended first
+    assert worker.time_until_ready("kad") == timedelta(0)  # the channel's own ended first
 
 
 # --- SearchWorker ---
@@ -256,12 +299,10 @@ async def test_backoff_expires_and_item_runs_again(
 ) -> None:
     fake_time = FakeTime()
     registry = _registry(fake_time)
-    registry.record_failure(_KAD)  # retry_after = +2.0s
+    registry.record_failure(_KAD)  # 2.0s
     client = FakeMuleClient(results=[(_obs(),)])
     worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
-    fake_time.advance(
-        timedelta(seconds=3.0)
-    )  # retry_after passed → the channel is no longer in backoff
+    fake_time.advance(timedelta(seconds=3.0))  # the channel is no longer in backoff
     await worker.run_task(SearchTask(keyword="k", channel="kad"))
     assert client.searches == [("k", "kad")]
 
@@ -322,9 +363,9 @@ async def test_the_client_backoff_grows_until_a_search_succeeds(
     delays = []
     for _ in range(4):
         await worker.run_task(SearchTask(keyword="k", channel="ed2k"))
-        delays.append(registry.seconds_remaining(_CLIENT))
-        fake_time.advance(timedelta(seconds=registry.seconds_remaining(_CLIENT)))
-    assert delays == [2.0, 4.0, 8.0, 16.0]
+        delays.append(registry.remaining_wait(_CLIENT))
+        fake_time.advance(registry.remaining_wait(_CLIENT))
+    assert delays == [timedelta(seconds=seconds) for seconds in (2, 4, 8, 16)]
     await worker.run_task(SearchTask(keyword="k", channel="ed2k"))
     assert _CLIENT not in registry.snapshot()
 

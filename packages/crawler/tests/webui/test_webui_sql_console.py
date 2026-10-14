@@ -293,16 +293,14 @@ def _build(catalog_db: Path, local_db: Path) -> Starlette:
 
 @pytest.fixture
 def console_app(catalog_db: Path, local_db: Path) -> Starlette:
-    """App wired against real (schema-only) DBs, plus one catalog file + one scheduler row so
+    """App wired against real (schema-only) DBs, plus one catalog file + one backoff row so
     both DBs return something readable through the console."""
     import sqlite3
 
     with sqlite3.connect(catalog_db) as conn:
         insert_file(conn, _HASH_A, 10)
     with sqlite3.connect(local_db) as conn:
-        conn.execute(
-            "INSERT INTO scheduler_state VALUES (?, ?)", ("last_search_cycle", "2024-01-01")
-        )
+        conn.execute("INSERT INTO backoff_states VALUES ('seeded-client', NULL, 1, 0, 1.0)")
         conn.commit()
     return _build(catalog_db, local_db)
 
@@ -396,15 +394,15 @@ async def test_post_console_bogus_db_shows_error_no_query(console_app: Starlette
 
 @pytest.mark.asyncio
 async def test_post_console_local_db_is_queried(console_app: Starlette) -> None:
-    """POST db=local reads local.db (the seeded scheduler_state row comes back)."""
+    """POST db=local reads local.db (the seeded backoff_states row comes back)."""
     async with AsyncClient(
         transport=ASGITransport(app=console_app), base_url="http://test"
     ) as client:
         resp = await client.post(
-            "/console", data={"sql": "SELECT key FROM scheduler_state", "db": "local"}
+            "/console", data={"sql": "SELECT client_name FROM backoff_states", "db": "local"}
         )
     assert resp.status_code == 200
-    assert "last_search_cycle" in resp.text
+    assert "seeded-client" in resp.text
     assert '<option value="local" selected>' in resp.text
 
 

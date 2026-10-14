@@ -48,7 +48,7 @@ class SearchConfig:
 @dataclass(frozen=True)
 class AmuleEndpoint:
     """An ``amuled`` daemon reachable through ``amuleapi``. ``client_name`` is the client's label
-    (logging, backoff/scheduler_state key)."""
+    (logging, the backoff's key)."""
 
     client_name: str
     host: str

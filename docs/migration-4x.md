@@ -128,8 +128,10 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
 - **La notification de démarrage devient** `🟢 node online (download on)`, ou `(download off)`, au
   lieu de `🟢 instance online (mode full)` ou `(mode observer)`.
 - **Dans `local.db`, la table `backfill_state` devient `reevaluation_state`**, sa colonne
-  `policy_sha256` devient `policy_fingerprint`, et la clé `channel_backoff` de `scheduler_state`
-  devient `backoff_states`. Adaptez vos requêtes de la console SQL.
+  `policy_sha256` devient `policy_fingerprint`, et la table `scheduler_state` laisse place à
+  `backoff_states`, une ligne par client ou canal en backoff. Adaptez vos requêtes de la console
+  SQL. Un backoff en cours à la mise à niveau est oublié : la recherche qu'il retenait repart
+  aussitôt.
 - **Dans le catalogue, la colonne `media_length_sec` devient `duration_seconds`**, désormais dans
   `observation_variants`. Adaptez vos requêtes de la console SQL.
 - **Les paramètres d'URL de `/files` changent de nom** : `q` devient `search`, `target` devient

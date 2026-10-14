@@ -201,8 +201,11 @@ Points clés en chemin :
   simplification de la recherche pour le *pourquoi* : les données réelles ont montré que chercher
   davantage n'aide pas). La génération de mots-clés par cible a été supprimée.
 - **Une tâche en backoff dort** jusqu'à la fin de son backoff (celui du client ou celui du canal),
-  elle ne boucle jamais à vide. La redondance multi-nœuds est entièrement affaire de faire tourner
-  plusieurs nœuds et de fusionner leurs catalogues.
+  elle ne boucle jamais à vide. L'attente se mesure sur l'horloge monotone ; `backoff_states` en
+  garde le début et le délai, et au démarrage suivant le temps écoulé est borné à `[0, délai]` par
+  `remaining_wait`, si bien qu'une horloge reculée pendant l'arrêt n'allonge jamais l'attente. La
+  redondance multi-nœuds est entièrement affaire de faire tourner plusieurs nœuds et de fusionner
+  leurs catalogues.
 - **Le statut n'est pas la liveness** : « le processus est vivant » n'implique pas « on peut
   trouver quelque chose là, maintenant ». Une boucle lit le statut de chaque client toutes les
   minutes, par canal (`connected`, `connectable`), et alerte sur un état dégradé qui dure : 5 min
@@ -393,7 +396,7 @@ flowchart LR
   subgraph loc["local.db · per node"]
     nr["node_runtime"]
     dl["downloads"]
-    ss["scheduler_state"]
+    bs["backoff_states"]
   end
 ```
 
@@ -401,9 +404,9 @@ flowchart LR
   (triggers `BEFORE UPDATE/DELETE -> ABORT`), pour que N nœuds fusionnent en un seul catalogue
   (`python -m p2pwatch.merge`). Les insertions sont **idempotentes** (`INSERT OR IGNORE` /
   `ON CONFLICT DO NOTHING`), donc sans danger en cas de redémarrage en pleine écriture.
-- **`local.db`** (version de schéma 10) : l'état d'exécution du nœud (identité, suivi des
-  téléchargements, progression et backoff de l'ordonnanceur). **Jamais fusionnée** : elle appartient
-  à un seul nœud.
+- **`local.db`** (version de schéma 11) : l'état d'exécution du nœud (identité, suivi des
+  téléchargements et de leur progression, backoff des recherches). **Jamais fusionnée** : elle
+  appartient à un seul nœud.
 
 La migration `catalog/0005` a supprimé `file_verifications` et `local/0004` a supprimé
 `verification_tasks`, en réécrivant en `completed` toute ligne de téléchargement `quarantined`
@@ -435,7 +438,10 @@ la progression passée, pour que la première lecture n'invente pas un progrès.
 `local/0009` renomme la table et la colonne de l'empreinte de la politique, désormais
 `reevaluation_state.policy_fingerprint`, sans toucher à sa valeur. `local/0010` renomme la clé de
 la carte des backoffs, désormais `backoff_states`, et la raison d'attente d'un fichier qu'aMule
-vérifie ou alloue, désormais `local_processing`.
+vérifie ou alloue, désormais `local_processing`. `local/0011` remplace `scheduler_state` par la
+table `backoff_states`, `STRICT`, une ligne par client ou canal en backoff : ses tentatives, le
+début de son attente en microsecondes et son délai. Les attentes en cours à la mise à niveau sont
+perdues, et chaque backoff repart de sa base.
 
 ### 8.1 Écrire une migration
 

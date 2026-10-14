@@ -69,6 +69,7 @@ from p2pwatch.webui.domain.interval import (
     requested_interval,
 )
 from p2pwatch.webui.domain.views import (
+    BackoffEntry,
     ChannelLine,
     ClientLine,
     ConsoleResult,
@@ -86,7 +87,6 @@ from p2pwatch.webui.domain.views import (
     NavItem,
     PageNav,
     PeriodWindow,
-    SchedulerEntry,
     SearchBar,
     SortHeader,
     SortHeaders,
@@ -991,14 +991,20 @@ def build_app(
         local = LocalReader(local_reader.connection())
         node_state = local.node_state()
 
-        scheduler_entries = tuple(
-            SchedulerEntry(key=k, value=v) for k, v in node_state.scheduler.items()
+        backoff_entries = tuple(
+            BackoffEntry(
+                client_name=row.client_name,
+                channel=row.channel if row.channel is not None else "whole client",
+                attempts=row.attempts,
+                retry_at=row.retry_at.isoformat(timespec="microseconds"),
+            )
+            for row in node_state.backoff_rows
         )
 
         return templates.TemplateResponse(
             request,
             "node.html",
-            {"node_state": node_state, "scheduler_entries": scheduler_entries},
+            {"node_state": node_state, "backoff_entries": backoff_entries},
         )
 
     # ------------------------------------------------------------------

@@ -2,7 +2,7 @@
 
 COMPOSITION layer (the only one allowed to import adapters AND application). Builds:
 - ONE ``SqliteCatalogRepository`` + ONE ``SqliteLocalStateRepository`` +
-  ``SqliteSchedulerStateRepository`` (single writer, invariant §11), connections opened
+  ``SqliteBackoffStateRepository`` (single writer, invariant §11), connections opened
   via ``open_catalog``/``open_local`` (migrations checked at startup, fail-fast §14).
 - the ``MatchingEngine`` (once), the ``node_id`` (config override or the one from local.db),
 - ONE ``MuleClient`` + ``SearchWorker`` on the one amuled the core drives, whose
@@ -49,14 +49,14 @@ from p2pwatch.adapters.mule_api.client import AmuleApiClient
 from p2pwatch.adapters.observability.apprise_notifier import AppriseNotifier
 from p2pwatch.adapters.observability.dispatcher import ObservabilityDispatcher
 from p2pwatch.adapters.observability.prometheus_sink import PrometheusSink
+from p2pwatch.adapters.persistence_sqlite.backoff_state_repository import (
+    SqliteBackoffStateRepository,
+)
 from p2pwatch.adapters.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.persistence_sqlite.connection import open_catalog, open_local
 from p2pwatch.adapters.persistence_sqlite.download_repository import SqliteDownloadRepository
 from p2pwatch.adapters.persistence_sqlite.local_state_repository import (
     SqliteLocalStateRepository,
-)
-from p2pwatch.adapters.persistence_sqlite.scheduler_state_repository import (
-    SqliteSchedulerStateRepository,
 )
 from p2pwatch.adapters.persistence_sqlite.source_repository import SqliteSourceRepository
 from p2pwatch.application.reevaluate_catalog import reevaluate_catalog
@@ -74,13 +74,13 @@ from p2pwatch.application.search_worker import (
 )
 from p2pwatch.application.status_loop import StatusBoard, StatusLoopDeps, status_loop
 from p2pwatch.domain.observability.events import CrawlerStarted
+from p2pwatch.ports.backoff_state_repository import BackoffStateRepository
 from p2pwatch.ports.client_errors import ClientUnreachableError
 from p2pwatch.ports.clock import MonotonicClock, WallClock
 from p2pwatch.ports.crawler_control import CrawlerControl
 from p2pwatch.ports.download_client import DownloadClient
 from p2pwatch.ports.mule_client import MuleClient
 from p2pwatch.ports.rng import Rng
-from p2pwatch.ports.scheduler_state_repository import SchedulerStateRepository
 from p2pwatch.ports.source_client import SourceClient
 from p2pwatch.ports.telemetry import Telemetry
 from p2pwatch.ports.wake_hub import WakeHub
@@ -289,7 +289,7 @@ class CrawlerApp:
         *,
         shutdown_timeout: asyncio.Timeout,
         workers: Sequence[SearchWorker],
-        scheduler_state: SchedulerStateRepository,
+        backoff_states: BackoffStateRepository,
         backoff: BackoffRegistry,
         status_deps: StatusLoopDeps,
         download_deps: DownloadLoopDeps | None,
@@ -325,7 +325,7 @@ class CrawlerApp:
                         keywords=self._crawler_config.search.keywords,
                         resumed=self._resumed,
                         backoff=backoff,
-                        scheduler_state=scheduler_state,
+                        backoff_states=backoff_states,
                         monotonic_clock=self._monotonic_clock,
                     ).run()
                 ),
@@ -450,7 +450,7 @@ class CrawlerApp:
             ):
                 self._metrics_server(observability.metrics.port, registry)
             catalog_repo = SqliteCatalogRepository(catalog_conn, node_id)
-            scheduler_state = SqliteSchedulerStateRepository(local_conn)
+            backoff_states = SqliteBackoffStateRepository(local_conn)
             engine = MatchingEngine(self._matcher_config, self._targets)
             endpoint = self._crawler_config.amule_endpoint
             board = StatusBoard((endpoint.client_name,), self._monotonic_clock)
@@ -461,13 +461,16 @@ class CrawlerApp:
             # are pushed, so it stops the thread before those close during LIFO teardown).
             if self._crawler_config.webui.enabled:
                 self._start_webui(stack, board)
-            # SHARED backoff registry: built ONCE, RELOADED from scheduler_state
+            # SHARED backoff registry: built ONCE, RELOADED from backoff_states
             # (backoff survives restart, spec §3/§7), injected into ALL workers
             # + passed to the search tasks that persist it. Single writer on the event loop.
             backoff = BackoffRegistry(
-                _backoff_policy(self._crawler_config), self._wall_clock, self._rng
+                _backoff_policy(self._crawler_config),
+                self._wall_clock,
+                self._monotonic_clock,
+                self._rng,
             )
-            backoff.load_from(scheduler_state.load_backoff_states())
+            backoff.load_from(backoff_states.load_backoff_states())
             deps = WorkerDeps(
                 catalog=catalog_repo,
                 engine=engine,
@@ -560,7 +563,7 @@ class CrawlerApp:
                 await self._supervise(
                     shutdown_timeout=shutdown_timeout,
                     workers=workers,
-                    scheduler_state=scheduler_state,
+                    backoff_states=backoff_states,
                     backoff=backoff,
                     status_deps=status_deps,
                     download_deps=download_deps,

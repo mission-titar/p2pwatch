@@ -46,14 +46,28 @@
 </section>
 
 <section>
-  <h2>Scheduling</h2>
-  <dl>
-    {% for entry in scheduler_entries %}
-    <dt>{{ entry.key }}</dt>
-    <dd>{{ entry.value }}</dd>
-    {% else %}
-    <dd>No scheduling entry.</dd>
-    {% endfor %}
-  </dl>
+  <h2>Backoff</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Client</th>
+        <th>Channel</th>
+        <th>Attempts</th>
+        <th>Planned retry</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in backoff_entries %}
+      <tr>
+        <td>{{ entry.client_name }}</td>
+        <td>{{ entry.channel }}</td>
+        <td>{{ entry.attempts }}</td>
+        <td>{{ entry.retry_at }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4">No backoff.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </section>
 {% endblock %}

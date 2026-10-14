@@ -11,9 +11,9 @@ from datetime import timedelta
 
 from p2pwatch.application.search_worker import BackoffRegistry, SearchTask, SearchWorker
 from p2pwatch.domain.search.keywords import dedupe_keywords
+from p2pwatch.ports.backoff_state_repository import BackoffStateRepository
 from p2pwatch.ports.clock import MonotonicClock
 from p2pwatch.ports.repository_errors import RepositoryError
-from p2pwatch.ports.scheduler_state_repository import SchedulerStateRepository
 
 _logger = logging.getLogger("p2pwatch.application.search_tasks")
 
@@ -28,14 +28,14 @@ class SearchTaskRunner:
         keywords: Sequence[str],
         resumed: asyncio.Event,
         backoff: BackoffRegistry,
-        scheduler_state: SchedulerStateRepository,
+        backoff_states: BackoffStateRepository,
         monotonic_clock: MonotonicClock,
     ) -> None:
         self._workers = workers
         self._keywords = keywords
         self._resumed = resumed
         self._backoff = backoff
-        self._scheduler_state = scheduler_state
+        self._backoff_states = backoff_states
         self._monotonic_clock = monotonic_clock
         self._saved = backoff.snapshot()
 
@@ -51,9 +51,9 @@ class SearchTaskRunner:
     async def _search_forever(self, worker: SearchWorker, task: SearchTask) -> None:
         while True:
             await self._resumed.wait()
-            wait = worker.seconds_until_ready(task.channel)
-            if wait > 0:
-                await self._monotonic_clock.sleep(timedelta(seconds=wait))
+            wait = worker.time_until_ready(task.channel)
+            if wait > timedelta(0):
+                await self._monotonic_clock.sleep(wait)
                 continue
             await worker.run_task(task)
             self._save()
@@ -64,7 +64,7 @@ class SearchTaskRunner:
         if current == self._saved:
             return
         try:
-            self._scheduler_state.save_backoff_states(current)
+            self._backoff_states.save_backoff_states(current)
         except RepositoryError as error:
             _logger.error("backoff not saved (%s): retried after the next search", error)
             return

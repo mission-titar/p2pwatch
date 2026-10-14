@@ -2,14 +2,17 @@
 
 ``LocalReader`` exposes one read:
 
-- ``node_state()`` — full node state: downloads, scheduler KV, node identity.
+- ``node_state()``: full node state: downloads, backoff, node identity.
 
 All SQL lives in module constants, parameterized (no value interpolation).
 """
 
 import sqlite3
+from datetime import UTC, datetime, timedelta
 
-from p2pwatch.webui.domain.views import DownloadRow, NodeState
+from p2pwatch.webui.domain.views import BackoffRow, DownloadRow, NodeState
+
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 # ---------------------------------------------------------------------------
 # SQL constants
@@ -30,8 +33,10 @@ FROM downloads
 ORDER BY queued_at ASC, native_id ASC
 """
 
-_SQL_SCHEDULER = """\
-SELECT key, value FROM scheduler_state
+_SQL_BACKOFF = """\
+SELECT client_name, channel, attempts, started_at, delay_seconds
+FROM backoff_states
+ORDER BY client_name ASC, channel ASC
 """
 
 _SQL_NODE_RUNTIME_KEY = """\
@@ -53,7 +58,7 @@ class LocalReader:
     def node_state(self) -> NodeState:
         """Return the full node state read from local.db."""
         dl_rows = self._conn.execute(_SQL_DOWNLOADS).fetchall()
-        sched_rows = self._conn.execute(_SQL_SCHEDULER).fetchall()
+        backoff_states = self._conn.execute(_SQL_BACKOFF).fetchall()
 
         node_id_row = self._conn.execute(_SQL_NODE_RUNTIME_KEY, ("node_id",)).fetchone()
         created_at_row = self._conn.execute(_SQL_NODE_RUNTIME_KEY, ("created_at",)).fetchone()
@@ -73,14 +78,23 @@ class LocalReader:
             for row in dl_rows
         )
 
-        scheduler = {row["key"]: row["value"] for row in sched_rows}
+        backoff_rows = tuple(
+            BackoffRow(
+                client_name=row["client_name"],
+                channel=row["channel"],
+                attempts=row["attempts"],
+                retry_at=_EPOCH
+                + timedelta(microseconds=row["started_at"], seconds=row["delay_seconds"]),
+            )
+            for row in backoff_states
+        )
 
         node_id: str | None = node_id_row["value"] if node_id_row is not None else None
         created_at: str | None = created_at_row["value"] if created_at_row is not None else None
 
         return NodeState(
             downloads=downloads,
-            scheduler=scheduler,
+            backoff_rows=backoff_rows,
             node_id=node_id,
             created_at=created_at,
         )
