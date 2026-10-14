@@ -20,13 +20,28 @@ from catalog_matching.validation import parse_matcher_config, parse_targets
 from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
 from p2pwatch.application.status_loop import StatusBoard
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.ports.clock import MonotonicClock, MonotonicInstant
 from p2pwatch.webui.adapters.sql_console import ConsoleOutcome, run_query
 from p2pwatch.webui.composition.app import build_app
 from p2pwatch.webui.domain.views import ConsoleResult, ConsoleRow, DbOption
-from tests.application.fakes import FakeTime
+from tests.application.fakes import FakeMonotonicClock, FakeTime
 from tests.catalog_rows import insert_file
 
 _HASH_A = "a" * 32
+# A few hundredths of a second of real time, past a 5 s budget on a _TickingMonotonicClock.
+_PAST_BUDGET_SQL = (
+    "WITH RECURSIVE r(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM r WHERE i < 100000)"
+    " SELECT count(*) FROM r"
+)
+
+
+class _TickingMonotonicClock(FakeMonotonicClock):
+    """Each ``now()`` a second after the previous one: a query's every check sees time pass."""
+
+    def now(self) -> MonotonicInstant:
+        moment = super().now()
+        self._fake_time.advance(timedelta(seconds=1))
+        return moment
 
 
 class _StubControl:
@@ -60,7 +75,8 @@ def _seed_catalog(path: Path) -> None:
 
 
 def test_run_query_select_returns_columns_and_rows(tmp_path: Path) -> None:
-    """A SELECT returns the column names and the stringified rows, no error, not truncated."""
+    """A SELECT returns the column names and the stringified rows, no error, not truncated, timed
+    on the monotonic clock: one tick between its start and its end."""
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
     outcome = run_query(
@@ -68,13 +84,14 @@ def test_run_query_select_returns_columns_and_rows(tmp_path: Path) -> None:
         sql="SELECT native_id, size_bytes FROM files",
         row_cap=1000,
         timeout_seconds=5.0,
+        monotonic_clock=_TickingMonotonicClock(FakeTime()),
     )
     assert outcome.error is None
     assert outcome.columns == ("native_id", "size_bytes")
     assert outcome.rows == ((_HASH_A, "10"),)
     assert outcome.row_count == 1
     assert outcome.truncated is False
-    assert outcome.elapsed_ms >= 0
+    assert outcome.elapsed_ms == 1000
 
 
 def test_run_query_renders_none_cell_as_null_literal(tmp_path: Path) -> None:
@@ -82,7 +99,11 @@ def test_run_query_renders_none_cell_as_null_literal(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
     outcome = run_query(
-        db_path=path, sql="SELECT NULL AS missing FROM files", row_cap=1000, timeout_seconds=5.0
+        db_path=path,
+        sql="SELECT NULL AS missing FROM files",
+        row_cap=1000,
+        timeout_seconds=5.0,
+        monotonic_clock=FakeTime().monotonic,
     )
     assert outcome.error is None
     assert outcome.rows == (("NULL",),)
@@ -93,7 +114,11 @@ def test_run_query_renders_a_blob_cell_as_lowercase_hex(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
     outcome = run_query(
-        db_path=path, sql="SELECT file_id FROM files", row_cap=1000, timeout_seconds=5.0
+        db_path=path,
+        sql="SELECT file_id FROM files",
+        row_cap=1000,
+        timeout_seconds=5.0,
+        monotonic_clock=FakeTime().monotonic,
     )
     assert outcome.rows == ((FileKey(Network.ED2K, _HASH_A).file_id.hex(),),)
 
@@ -107,6 +132,7 @@ def test_run_query_write_is_rejected_read_only(tmp_path: Path) -> None:
         sql="INSERT INTO files (native_id, size_bytes) VALUES ('b', 1)",
         row_cap=1000,
         timeout_seconds=5.0,
+        monotonic_clock=FakeTime().monotonic,
     )
     assert outcome.error is not None
     assert "read-only" in outcome.error
@@ -117,7 +143,13 @@ def test_run_query_multi_statement_is_rejected(tmp_path: Path) -> None:
     """Two statements in one input -> single-statement error (sqlite3.ProgrammingError)."""
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
-    outcome = run_query(db_path=path, sql="SELECT 1; SELECT 2", row_cap=1000, timeout_seconds=5.0)
+    outcome = run_query(
+        db_path=path,
+        sql="SELECT 1; SELECT 2",
+        row_cap=1000,
+        timeout_seconds=5.0,
+        monotonic_clock=FakeTime().monotonic,
+    )
     assert outcome.error is not None
     assert "single" in outcome.error.lower()
 
@@ -132,6 +164,7 @@ def test_run_query_row_cap_truncates_and_flags(tmp_path: Path) -> None:
         " SELECT x FROM r",
         row_cap=2,
         timeout_seconds=5.0,
+        monotonic_clock=FakeTime().monotonic,
     )
     assert outcome.error is None
     assert outcome.truncated is True
@@ -140,16 +173,16 @@ def test_run_query_row_cap_truncates_and_flags(tmp_path: Path) -> None:
 
 
 def test_run_query_runaway_is_aborted_by_timeout(tmp_path: Path) -> None:
-    """A runaway query (huge recursive aggregate) is aborted by the wall-clock timeout, and the
-    error is the timeout message, distinct from a generic SQL error."""
+    """A query past its budget of monotonic time is aborted, and the error is the timeout message,
+    distinct from a generic SQL error."""
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
     outcome = run_query(
         db_path=path,
-        sql="WITH RECURSIVE r(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM r WHERE i < 100000000)"
-        " SELECT count(*) FROM r",
+        sql=_PAST_BUDGET_SQL,
         row_cap=1000,
-        timeout_seconds=0.05,
+        timeout_seconds=5.0,
+        monotonic_clock=_TickingMonotonicClock(FakeTime()),
     )
     assert outcome.error is not None
     assert "time limit" in outcome.error
@@ -161,7 +194,13 @@ def test_run_query_malformed_sql_yields_error_not_exception(tmp_path: Path) -> N
     boundary absorbs arbitrary operator SQL."""
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
-    outcome = run_query(db_path=path, sql="SELECT FROM", row_cap=1000, timeout_seconds=5.0)
+    outcome = run_query(
+        db_path=path,
+        sql="SELECT FROM",
+        row_cap=1000,
+        timeout_seconds=5.0,
+        monotonic_clock=FakeTime().monotonic,
+    )
     assert outcome.error is not None
     assert "syntax" in outcome.error.lower()
 
@@ -176,6 +215,7 @@ def test_run_query_other_sqlite_error_is_absorbed(tmp_path: Path) -> None:
         sql="SELECT length(zeroblob(1000000000000))",
         row_cap=1000,
         timeout_seconds=5.0,
+        monotonic_clock=FakeTime().monotonic,
     )
     assert outcome.error is not None
     assert "too big" in outcome.error
@@ -186,7 +226,13 @@ def test_run_query_statement_without_result_columns_is_safe(tmp_path: Path) -> N
     comment-only input) yields empty columns/rows, never a crash."""
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
-    outcome = run_query(db_path=path, sql="-- just a comment", row_cap=1000, timeout_seconds=5.0)
+    outcome = run_query(
+        db_path=path,
+        sql="-- just a comment",
+        row_cap=1000,
+        timeout_seconds=5.0,
+        monotonic_clock=FakeTime().monotonic,
+    )
     assert outcome.error is None
     assert outcome.columns == ()
     assert outcome.rows == ()
@@ -269,7 +315,7 @@ rules:
     )
 
 
-def _build(catalog_db: Path, local_db: Path) -> Starlette:
+def _build(catalog_db: Path, local_db: Path, monotonic_clock: MonotonicClock) -> Starlette:
     matcher_config = _matcher()
     targets = _targets()
     import p2pwatch.webui
@@ -287,6 +333,7 @@ def _build(catalog_db: Path, local_db: Path) -> Starlette:
         status_readings=StatusBoard((), FakeTime().monotonic),
         amule_url="http://localhost:4711",
         wall_clock=FakeTime().wall,
+        monotonic_clock=monotonic_clock,
         source_period_gap=timedelta(seconds=90),
     )
 
@@ -302,7 +349,7 @@ def console_app(catalog_db: Path, local_db: Path) -> Starlette:
     with sqlite3.connect(local_db) as conn:
         conn.execute("INSERT INTO backoff_states VALUES ('seeded-client', NULL, 1, 0, 1.0)")
         conn.commit()
-    return _build(catalog_db, local_db)
+    return _build(catalog_db, local_db, FakeTime().monotonic)
 
 
 # ---------------------------------------------------------------------------
@@ -416,6 +463,17 @@ async def test_post_console_query_error_shows_error_banner(console_app: Starlett
     assert resp.status_code == 200
     assert 'class="console-error"' in resp.text
     assert 'class="console-table"' not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_post_console_measures_its_budget_on_the_apps_monotonic_clock(
+    catalog_db: Path, local_db: Path
+) -> None:
+    app = _build(catalog_db, local_db, _TickingMonotonicClock(FakeTime()))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/console", data={"sql": _PAST_BUDGET_SQL, "db": "catalog"})
+    assert resp.status_code == 200
+    assert "time limit" in resp.text
 
 
 @pytest.mark.asyncio

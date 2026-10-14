@@ -33,7 +33,7 @@ from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.observation import Sighting
 from p2pwatch.domain.source import SourceKey
 from p2pwatch.ports.client_status import StatusReadings
-from p2pwatch.ports.clock import WallClock
+from p2pwatch.ports.clock import MonotonicClock, WallClock
 from p2pwatch.ports.crawler_control import CrawlerControl
 from p2pwatch.webui.adapters.catalog_read import (
     DEFAULT_DIR,
@@ -622,6 +622,7 @@ def build_app(
     status_readings: StatusReadings,
     amule_url: str,
     wall_clock: WallClock,
+    monotonic_clock: MonotonicClock,
     source_period_gap: timedelta,
 ) -> Starlette:
     """Build and return the wired Starlette application.
@@ -1069,6 +1070,7 @@ def build_app(
             sql=sql,
             row_cap=ROW_CAP,
             timeout_seconds=TIMEOUT_SECONDS,
+            monotonic_clock=monotonic_clock,
         )
         if outcome.error is not None:
             return templates.TemplateResponse(
@@ -1102,6 +1104,7 @@ def build_app(
             sql=sql,
             row_cap=ROW_CAP,
             timeout_seconds=TIMEOUT_SECONDS,
+            monotonic_clock=monotonic_clock,
         )
         if outcome.error is not None:
             return Response(outcome.error, status_code=400, media_type="text/plain")

@@ -1,13 +1,14 @@
 """Read-only SQL console execution adapter (monolith-consolidation spec §11).
 
-This is an ADAPTER (an I/O boundary), so unlike the pure domain it MAY use ``sqlite3`` and
-``time.monotonic`` directly. It runs an operator-supplied SQL string against a FRESH read-only
-connection and returns a structured ``ConsoleOutcome`` (rows + timing, or a single error string).
+This is an ADAPTER (an I/O boundary), so unlike the pure domain it MAY use ``sqlite3`` directly;
+it measures time on the ``MonotonicClock`` it is given. It runs an operator-supplied SQL string
+against a FRESH read-only connection and returns a structured ``ConsoleOutcome`` (rows + timing, or
+a single error string).
 
 Why a fresh, dedicated connection per query (not the shared ``ReaderProvider``): the console
-sets a PER-QUERY progress handler (the wall-clock abort) and a runaway query is aborted mid-flight;
-isolating that on its own connection keeps it from disturbing the reused page-serving readers. The
-connection is always closed in a ``finally``.
+sets a PER-QUERY progress handler (the monotonic budget's abort) and a runaway query is aborted
+mid-flight; isolating that on its own connection keeps it from disturbing the reused page-serving
+readers. The connection is always closed in a ``finally``.
 
 Three guardrails make this structurally safe against a hostile / clumsy operator (writes are
 already impossible, so these are the real risks, spec §11/§12):
@@ -18,10 +19,11 @@ already impossible, so these are the real risks, spec §11/§12):
 - **Single statement**: ``Connection.execute`` runs exactly one statement and rejects a second
   ("SELECT 1; SELECT 2") with ``sqlite3.ProgrammingError`` ("You can only execute one statement at
   a time"), mapped to a single-statement error.
-- **Wall-clock timeout**: a ``set_progress_handler`` callback fires every ``_PROGRESS_INSTRUCTIONS``
-  VM steps and returns non-zero once the elapsed time exceeds the budget, which aborts the query
-  with ``sqlite3.OperationalError`` ("interrupted"). A mutable flag records the abort so the handler
-  can be distinguished from an unrelated ``OperationalError`` (e.g. a syntax error).
+- **Monotonic timeout**: a ``set_progress_handler`` callback fires every ``_PROGRESS_INSTRUCTIONS``
+  VM steps and returns non-zero once the time elapsed on the monotonic clock exceeds the budget,
+  which aborts the query with ``sqlite3.OperationalError`` ("interrupted"). A mutable flag records
+  the abort so the handler can be distinguished from an unrelated ``OperationalError`` (e.g. a
+  syntax error).
 - **Row cap**: at most ``row_cap`` rows are returned; one extra row is fetched to detect (and flag)
   truncation.
 
@@ -35,16 +37,17 @@ an internal bug (which would still surface: a bug in this module's own logic is 
 """
 
 import sqlite3
-import time
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 
 from p2pwatch.adapters.persistence_sqlite.reader import open_reader
+from p2pwatch.ports.clock import MonotonicClock
 
 # Hardcoded safety limits (spec §11). ``ROW_CAP`` / ``TIMEOUT_SECONDS`` are PUBLIC: the module's
 # contract, consumed by the webui handler (call bounds + the truncation message). They could later
 # move to ``WebuiConfig`` but are NOT wired to config in P7. ``_PROGRESS_INSTRUCTIONS`` is internal
-# (the VM-step granularity of the wall-clock check).
+# (the VM-step granularity of the budget's check).
 ROW_CAP = 1000
 TIMEOUT_SECONDS = 5.0
 _PROGRESS_INSTRUCTIONS = 1000
@@ -72,7 +75,14 @@ def _stringify(value: object) -> str:
     return value.hex() if isinstance(value, bytes) else str(value)
 
 
-def run_query(*, db_path: Path, sql: str, row_cap: int, timeout_seconds: float) -> ConsoleOutcome:
+def run_query(
+    *,
+    db_path: Path,
+    sql: str,
+    row_cap: int,
+    timeout_seconds: float,
+    monotonic_clock: MonotonicClock,
+) -> ConsoleOutcome:
     """Run ``sql`` read-only against ``db_path`` and return a structured ``ConsoleOutcome``.
 
     See the module docstring for the read-only / single-statement / timeout / row-cap guardrails
@@ -80,13 +90,14 @@ def run_query(*, db_path: Path, sql: str, row_cap: int, timeout_seconds: float) 
     """
     connection = open_reader(db_path)
     try:
-        start = time.monotonic()
+        start = monotonic_clock.now()
+        budget = timedelta(seconds=timeout_seconds)
         aborted = [False]
 
         def _progress() -> int:
-            # Abort (non-zero) once the wall-clock budget is exceeded; record it so the
+            # Abort (non-zero) once the monotonic budget is exceeded; record it so the
             # OperationalError handler can tell a timeout abort from a genuine SQL error.
-            if time.monotonic() - start > timeout_seconds:
+            if monotonic_clock.now() - start > budget:
                 aborted[0] = True
                 return 1
             return 0
@@ -95,7 +106,7 @@ def run_query(*, db_path: Path, sql: str, row_cap: int, timeout_seconds: float) 
         try:
             cursor = connection.execute(sql)
             fetched = cursor.fetchmany(row_cap + 1)
-            elapsed_ms = round((time.monotonic() - start) * 1000)
+            elapsed_ms = round((monotonic_clock.now() - start) / timedelta(milliseconds=1))
             truncated = len(fetched) > row_cap
             kept = fetched[:row_cap]
             description = cursor.description
