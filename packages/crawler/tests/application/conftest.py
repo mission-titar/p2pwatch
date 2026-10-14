@@ -8,10 +8,10 @@ import pytest
 
 from catalog_matching.engine import MatchingEngine
 from catalog_matching.validation import parse_matcher_config, parse_targets
-from p2pwatch.adapters.clock_asyncio import AsyncioClock
 from p2pwatch.adapters.config.yaml_loader import load_yaml
 from p2pwatch.adapters.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
+from tests.application.fakes import FakeClock
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 # Matcher: single source of truth = deployment config. Targets: the §7 subset of the golden
@@ -38,4 +38,9 @@ def catalog_connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 @pytest.fixture
 def catalog(catalog_connection: sqlite3.Connection) -> SqliteCatalogRepository:
-    return SqliteCatalogRepository(catalog_connection, _NODE, clock=AsyncioClock())
+    return SqliteCatalogRepository(catalog_connection, _NODE)
+
+
+@pytest.fixture
+def clock() -> FakeClock:
+    return FakeClock()

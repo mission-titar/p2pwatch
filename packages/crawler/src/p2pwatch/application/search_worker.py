@@ -133,6 +133,7 @@ class WorkerDeps:
     wake_hub: WakeHub
     backoff: "BackoffRegistry"
     telemetry: Telemetry
+    clock: Clock
 
 
 class SearchWorker:
@@ -193,6 +194,7 @@ class SearchWorker:
                 engine=self._deps.engine,
                 wake_hub=self._deps.wake_hub,
                 telemetry=self._deps.telemetry,
+                clock=self._deps.clock,
                 client_name=self._client_name,
                 channel=channel,
             ):

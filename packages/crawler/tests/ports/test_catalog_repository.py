@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from datetime import UTC, datetime
 
 from catalog_matching.engine import DecisionRecord, Explanation, MatchDecision
 from p2pwatch.domain.file_key import FileKey, Network
@@ -11,24 +12,25 @@ from p2pwatch.ports.catalog_repository import (
 )
 
 _KEY = FileKey(Network.ED2K, "31d6cfe0d16ae931b73c59d7e0c089c0")
+_T0 = datetime(2026, 6, 12, tzinfo=UTC)
 
 
 class _StubRepository:
     """Minimal structural implementation: satisfies CatalogRepository WITHOUT importing it."""
 
     def __init__(self) -> None:
-        self.observations: list[FileObservation] = []
-        self.decisions: list[tuple[FileKey, MatchDecision]] = []
-        self.retractions: list[tuple[FileKey, str]] = []
+        self.observations: list[tuple[FileObservation, datetime]] = []
+        self.decisions: list[tuple[FileKey, MatchDecision, datetime]] = []
+        self.retractions: list[tuple[FileKey, str, datetime]] = []
 
-    def record_observation(self, observation: FileObservation) -> None:
-        self.observations.append(observation)
+    def record_observation(self, observation: FileObservation, observed_at: datetime) -> None:
+        self.observations.append((observation, observed_at))
 
-    def record_decision(self, file: FileKey, decision: MatchDecision) -> None:
-        self.decisions.append((file, decision))
+    def record_decision(self, file: FileKey, decision: MatchDecision, decided_at: datetime) -> None:
+        self.decisions.append((file, decision, decided_at))
 
-    def record_retraction(self, file: FileKey, target_id: str) -> None:
-        self.retractions.append((file, target_id))
+    def record_retraction(self, file: FileKey, target_id: str, decided_at: datetime) -> None:
+        self.retractions.append((file, target_id, decided_at))
 
     def latest_decisions(self, file: FileKey) -> dict[str, DecisionRecord]:
         return {}
@@ -80,9 +82,9 @@ def test_protocol_is_satisfied_structurally() -> None:
             target_id="062A", rules_fired=("exact",), tokens_matched=(), coverage_values=()
         ),
     )
-    repository.record_observation(observation)
-    repository.record_decision(_KEY, decision)
-    repository.record_retraction(_KEY, "062A")
+    repository.record_observation(observation, _T0)
+    repository.record_decision(_KEY, decision, _T0)
+    repository.record_retraction(_KEY, "062A", _T0)
     assert repository.latest_decisions(_KEY) == {}
     assert repository.download_candidates() == ()
     assert repository.latest_observation(_KEY) is None
@@ -98,6 +100,6 @@ def test_protocol_is_satisfied_structurally() -> None:
             bitrate_kbps=None,
         ),
     )
-    assert stub.observations == [observation]
-    assert stub.decisions == [(_KEY, decision)]
-    assert stub.retractions == [(_KEY, "062A")]
+    assert stub.observations == [(observation, _T0)]
+    assert stub.decisions == [(_KEY, decision, _T0)]
+    assert stub.retractions == [(_KEY, "062A", _T0)]

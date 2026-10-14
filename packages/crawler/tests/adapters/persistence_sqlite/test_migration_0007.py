@@ -1,6 +1,7 @@
 """Catalog 0007 stores observations as variants plus timestamps (stage 1, D4 and D7)."""
 
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -10,7 +11,6 @@ from p2pwatch.adapters.persistence_sqlite.catalog_repository import SqliteCatalo
 from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.persistence_sqlite.variants import iso_to_micros
 from tests.adapters.persistence_sqlite.older_catalog import forcing_secure_delete, open_catalog_at
-from tests.application.fakes import FakeClock
 
 _A, _B = "a" * 32, "b" * 32
 _T1 = "2026-06-11T12:00:00.000001+00:00"
@@ -126,7 +126,9 @@ def test_a_mapped_result_reuses_the_variant_0007_migrated_from_its_old_row(
     (observation,), _ = map_search_results([result], "keroro")
     connection = open_catalog(path)
     try:
-        SqliteCatalogRepository(connection, "n1", clock=FakeClock()).record_observation(observation)
+        SqliteCatalogRepository(connection, "n1").record_observation(
+            observation, datetime(2026, 6, 12, tzinfo=UTC)
+        )
         assert connection.execute("SELECT count(*) FROM observation_variants").fetchone()[0] == 1
         assert connection.execute("SELECT count(*) FROM observations").fetchone()[0] == 2
     finally:

@@ -2,14 +2,15 @@
 
 SYNCHRONOUS Protocol (spec §3: a local write is sub-millisecond; if plan C wants to
 isolate itself, it will wrap it in ``asyncio.to_thread`` without touching this layer).
-The port imports ONLY the domain. Stubs fit on ONE line (the ``def`` runs at class
-creation: covered). The adapter stamps ``observed_at``/``decided_at``/``node_id`` — that
-is why ``record_decision`` receives the file key ALONGSIDE the decision (``MatchDecision`` does
-not carry the content key, by principle: a domain without persistence columns).
+The port imports ONLY the domain. Each stub's ``...`` ends its ``def`` (which runs at class
+creation: covered). The use-case gives each write its instant (``observed_at``/``decided_at``),
+the adapter stamps ``node_id``: ``record_decision`` receives the file key and the instant ALONGSIDE
+the decision (``MatchDecision`` carries neither: a domain without persistence columns).
 """
 
 from collections.abc import Iterator
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol
 
 from catalog_matching.engine import DecisionRecord, MatchDecision
@@ -75,11 +76,13 @@ class CatalogRepository(Protocol):
     file: the append-only table has no delete, so exclusion is an appended row.
     """
 
-    def record_observation(self, observation: FileObservation) -> None: ...
+    def record_observation(self, observation: FileObservation, observed_at: datetime) -> None: ...
 
-    def record_decision(self, file: FileKey, decision: MatchDecision) -> None: ...
+    def record_decision(
+        self, file: FileKey, decision: MatchDecision, decided_at: datetime
+    ) -> None: ...
 
-    def record_retraction(self, file: FileKey, target_id: str) -> None: ...
+    def record_retraction(self, file: FileKey, target_id: str, decided_at: datetime) -> None: ...
 
     def latest_decisions(self, file: FileKey) -> dict[str, DecisionRecord]: ...
 

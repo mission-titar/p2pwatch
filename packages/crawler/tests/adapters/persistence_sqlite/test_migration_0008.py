@@ -2,6 +2,7 @@
 
 import sqlite3
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,6 @@ from p2pwatch.adapters.persistence_sqlite.variants import content_hash
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
 from tests.adapters.persistence_sqlite.older_catalog import forcing_secure_delete, open_catalog_at
-from tests.application.fakes import FakeClock
 
 _A, _B = "a" * 32, "b" * 32
 _ID_A, _ID_B = FileKey(Network.ED2K, _A).file_id, FileKey(Network.ED2K, _B).file_id
@@ -127,7 +127,9 @@ def test_a_new_sighting_reuses_the_variant_0008_rekeyed(tmp_path: Path) -> None:
         keyword="keroro",
     )
     try:
-        SqliteCatalogRepository(migrated, "n1", clock=FakeClock()).record_observation(observation)
+        SqliteCatalogRepository(migrated, "n1").record_observation(
+            observation, datetime(2026, 6, 12, tzinfo=UTC)
+        )
         assert migrated.execute("SELECT count(*) FROM observation_variants").fetchone()[0] == 3
         assert migrated.execute("SELECT count(*) FROM observations").fetchone()[0] == 5
     finally:
