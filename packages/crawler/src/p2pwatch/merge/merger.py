@@ -45,34 +45,6 @@ _COPY_FILES = (
 )
 
 
-def _copy_journal(table: str, columns: Sequence[str]) -> str:
-    """SQL for one journal copy: explicit columns (without ``id``) + ``IS`` dedup.
-
-    The natural key = ALL journal columns except ``id``. Two dedup levels,
-    both at the "full natural key" granularity (§4.2):
-
-    - ``SELECT DISTINCT`` collapses the **source-internal** duplicates in a single pass
-      (``WHERE NOT EXISTS`` would not see them: at SELECT time, ``main`` is still
-      empty for this source, so two internal twin rows would both pass). ``DISTINCT``
-      treats ``NULL`` as equal to ``NULL`` (consistent with ``IS``) and NEVER
-      collapses two legitimately distinct rows (they differ on ≥ 1 column).
-      This is the "at-least-once" duplicate normalization of a single catalog (§1/§8).
-    - ``WHERE NOT EXISTS`` (``IS`` comparisons, NULL-safe) dedups against the **destination**
-      (cross-source and re-merge). Re-merge ⇒ 0 insertions.
-    """
-    projection = ", ".join(columns)
-    not_exists = "\n      AND ".join(f"d.{column} IS s.{column}" for column in columns)
-    return (
-        f"INSERT INTO main.{table} ({projection})\n"
-        f"SELECT DISTINCT {projection}\n"
-        f"FROM {_SRC}.{table} AS s\n"
-        f"WHERE NOT EXISTS (\n"
-        f"    SELECT 1 FROM main.{table} AS d\n"
-        f"    WHERE {not_exists}\n"
-        f")"
-    )
-
-
 _VARIANT_COLUMNS = (
     "file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_meta, keyword, node_id,"
     " content_hash"
@@ -91,10 +63,21 @@ JOIN {_SRC}.observation_variants AS s ON s.variant_id = o.variant_id
 JOIN main.observation_variants AS d ON d.content_hash = s.content_hash
 """
 
-_COPY_MATCH_DECISIONS = _copy_journal(
-    "match_decisions",
-    ("file_id", "target_id", "rule_name", "tier", "decided_at", "node_id"),
+# DISTINCT drops the source's own twins, which NOT EXISTS against the destination cannot see.
+_COPY_MATCH_DECISIONS = f"""
+INSERT INTO main.match_decisions (file_id, target_id, rule_name, tier, decided_at, node_id)
+SELECT DISTINCT file_id, target_id, rule_name, tier, decided_at, node_id
+FROM {_SRC}.match_decisions AS s
+WHERE NOT EXISTS (
+    SELECT 1 FROM main.match_decisions AS d
+    WHERE d.file_id IS s.file_id
+      AND d.target_id IS s.target_id
+      AND d.rule_name IS s.rule_name
+      AND d.tier IS s.tier
+      AND d.decided_at IS s.decided_at
+      AND d.node_id IS s.node_id
 )
+"""
 
 _COPY_SOURCES = (
     f"INSERT OR IGNORE INTO main.sources (source_id, network, native_id) "
