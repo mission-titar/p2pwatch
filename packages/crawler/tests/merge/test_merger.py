@@ -187,6 +187,45 @@ def test_t4_journal_distinct_observed_at_keeps_both(tmp_path: Path) -> None:
     assert count(out, "observations") == 2
 
 
+def _decided(decided_at: str) -> dict[str, list[dict[str, object]]]:
+    """A catalog of one file and one decision on it, made at ``decided_at``."""
+    return {
+        "files": [{"ed2k_hash": HASH_A, "size_bytes": 100}],
+        "match_decisions": [
+            {
+                "ed2k_hash": HASH_A,
+                "target_id": "062A",
+                "rule_name": "r",
+                "tier": "download",
+                "decided_at": decided_at,
+                "node_id": "node",
+            }
+        ],
+    }
+
+
+def test_twin_decisions_in_one_source_merge_as_one(tmp_path: Path) -> None:
+    twins = _decided(_T1)
+    twins["match_decisions"] *= 2
+    src = make_catalog(tmp_path / "a.db", twins)
+    out = tmp_path / "out.db"
+
+    merge_catalogs(out, [src])
+
+    assert count(src, "match_decisions") == 2
+    assert count(out, "match_decisions") == 1
+
+
+def test_a_decision_differing_only_by_its_decided_at_is_kept(tmp_path: Path) -> None:
+    src_a = make_catalog(tmp_path / "a.db", _decided(_T1))
+    src_b = make_catalog(tmp_path / "b.db", _decided(_T2))
+    out = tmp_path / "out.db"
+
+    merge_catalogs(out, [src_a, src_b])
+
+    assert count(out, "match_decisions") == 2
+
+
 def test_t5_variant_ids_are_reassigned(tmp_path: Path) -> None:
     # Each source has a DISTINCT variant that (by autoincrement) carries variant_id=1.
     src_a = make_catalog(
