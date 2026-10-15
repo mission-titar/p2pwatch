@@ -82,9 +82,12 @@ def test_build_app_computes_policy_fingerprint_from_matcher_and_targets_bytes(
 
 
 def test_build_app_applies_log_level_when_observability_configured(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
 ) -> None:
     """build_crawler_app's observability is not None branch calls setLevel."""
+    root = logging.getLogger()
+    root_level = root.level
+    request.addfinalizer(lambda: root.setLevel(root_level))  # later tests keep their own level
     monkeypatch.setenv("AMULE_API_PASSWORD", "s3cr3t")
     config = _write_config(tmp_path, body=_UNIFIED_CONFIG_WITH_OBS)
     app = entry.build_crawler_app(_args(config))
