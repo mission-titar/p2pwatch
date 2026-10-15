@@ -2,17 +2,17 @@
 
 Folds the assertions of the deleted webui ``test_webui_db.py`` (RO-refuses-writes,
 ``temp_store``, ``row_factory`` dict access, reads rows) plus the provider's
-per-thread reuse, thread affinity, and ``quiesce()`` seam.
+per-thread reuse and thread affinity.
 """
 
 import sqlite3
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 
 from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
-from p2pwatch.adapters.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.persistence_sqlite.reader import (
     ReaderProvider,
     ThreadLocalConnection,
@@ -74,8 +74,22 @@ def test_open_reader_sorts_through_temporary_files(tmp_path: Path) -> None:
         reader.close()
 
 
+def test_open_reader_refuses_use_from_another_thread(tmp_path: Path) -> None:
+    """A reader belongs to the thread that opened it: a query from another thread raises."""
+    path = tmp_path / "catalog.db"
+    _seed(path)
+    reader = open_reader(path)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        query = executor.submit(reader.execute, "SELECT 1")
+    try:
+        with pytest.raises(sqlite3.ProgrammingError, match="same thread"):
+            query.result()
+    finally:
+        reader.close()
+
+
 # ---------------------------------------------------------------------------
-# ReaderProvider (reused per-thread connection + quiesce seam)
+# ReaderProvider (reused per-thread connection)
 # ---------------------------------------------------------------------------
 
 
@@ -100,12 +114,11 @@ def test_provider_reuses_the_same_connection_within_one_thread(tmp_path: Path) -
     path = tmp_path / "catalog.db"
     _seed(path)
     provider = ReaderProvider(path)
+    first = provider.connection()
     try:
-        first = provider.connection()
-        second = provider.connection()
-        assert first is second
+        assert provider.connection() is first
     finally:
-        provider.quiesce()
+        first.close()
 
 
 def test_provider_gives_a_distinct_connection_per_thread(tmp_path: Path) -> None:
@@ -116,7 +129,9 @@ def test_provider_gives_a_distinct_connection_per_thread(tmp_path: Path) -> None
     connections: dict[str, sqlite3.Connection] = {}
 
     def worker(name: str) -> None:
-        connections[name] = provider.connection()
+        connection = provider.connection()
+        connections[name] = connection
+        connection.close()  # only its own thread may close it
 
     first = threading.Thread(target=worker, args=("first",))
     second = threading.Thread(target=worker, args=("second",))
@@ -124,11 +139,8 @@ def test_provider_gives_a_distinct_connection_per_thread(tmp_path: Path) -> None
     second.start()
     first.join()
     second.join()
-    try:
-        assert id(connections["first"]) != id(connections["second"])
-        assert connections["first"] is not connections["second"]
-    finally:
-        provider.quiesce()
+    assert id(connections["first"]) != id(connections["second"])
+    assert connections["first"] is not connections["second"]
 
 
 def test_reused_connection_sees_data_committed_after_first_handout(tmp_path: Path) -> None:
@@ -138,8 +150,8 @@ def test_reused_connection_sees_data_committed_after_first_handout(tmp_path: Pat
     _seed(path)  # one row so far
     provider = ReaderProvider(path)
     writer = open_catalog(path)
+    reader = provider.connection()
     try:
-        reader = provider.connection()
         assert reader.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 1
         insert_file(writer, _HASH_B, 20)
         reused = provider.connection()
@@ -147,48 +159,7 @@ def test_reused_connection_sees_data_committed_after_first_handout(tmp_path: Pat
         assert reused.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 2
     finally:
         writer.close()
-        provider.quiesce()
+        reader.close()
 
 
-def test_quiesce_closes_connections_and_blocks_new_ones(tmp_path: Path) -> None:
-    """``quiesce()`` closes handed-out connections (using one raises ``ProgrammingError``) AND
-    makes a subsequent ``connection()`` raise ``PersistenceError``."""
-    path = tmp_path / "catalog.db"
-    _seed(path)
-    provider = ReaderProvider(path)
-    reader = provider.connection()
-    provider.quiesce()
-    with pytest.raises(sqlite3.ProgrammingError):
-        reader.execute("SELECT 1")
-    with pytest.raises(PersistenceError, match="quiesced"):
-        provider.connection()
-
-
-def test_quiesce_closes_a_connection_opened_on_another_thread(tmp_path: Path) -> None:
-    """The whole point of ``check_same_thread=False``: ``quiesce()`` on the main thread closes
-    a connection created on a worker thread."""
-    path = tmp_path / "catalog.db"
-    _seed(path)
-    provider = ReaderProvider(path)
-    worker_connection: dict[str, sqlite3.Connection] = {}
-
-    def worker() -> None:
-        worker_connection["it"] = provider.connection()
-
-    thread = threading.Thread(target=worker)
-    thread.start()
-    thread.join()
-
-    provider.quiesce()  # main thread closes the worker's connection
-    with pytest.raises(sqlite3.ProgrammingError):
-        worker_connection["it"].execute("SELECT 1")
-
-
-def test_quiesce_is_idempotent(tmp_path: Path) -> None:
-    """A second ``quiesce()`` (registry already drained) does not raise."""
-    path = tmp_path / "catalog.db"
-    _seed(path)
-    provider = ReaderProvider(path)
-    provider.connection()
-    provider.quiesce()
-    provider.quiesce()  # must not raise
+# must not raise
