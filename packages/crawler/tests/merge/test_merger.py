@@ -303,6 +303,19 @@ def test_t17_single_source_merge(tmp_path: Path) -> None:
         assert rows_without_id(out, table) == rows_without_id(src, table)
 
 
+def test_a_source_that_is_the_output_is_skipped_and_says_so(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    out = make_catalog(tmp_path / "a.db", _full_catalog("a", node_id="node-a"))
+    src = make_catalog(tmp_path / "b.db", _full_catalog("b", node_id="node-b"))
+    caplog.set_level("INFO", logger="p2pwatch.merge.merger")
+
+    merge_catalogs(out, [out, src], output_is_source_catalog=True)
+
+    merger_messages = [r.getMessage() for r in caplog.records if r.name == "p2pwatch.merge.merger"]
+    assert merger_messages == [f"{out} skipped: it is the output", f"{src} merged"]
+
+
 def test_rejects_source_with_older_schema_version(tmp_path: Path) -> None:
     # A source stamped to an OLDER schema (e.g. a 0001/0002-era DB) is refused BEFORE any
     # row is copied: the merge never migrates a source in place, so an off-version schema

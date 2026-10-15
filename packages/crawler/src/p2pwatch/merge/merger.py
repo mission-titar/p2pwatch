@@ -24,6 +24,7 @@ The SQL lives in **Python constants** (consistent with ``catalog_repository.py``
 new ``.sql`` for sqlfluff to lint). We NEVER write to the source (only SELECTs).
 """
 
+import logging
 import sqlite3
 from collections.abc import Sequence
 from contextlib import suppress
@@ -32,6 +33,8 @@ from pathlib import Path
 from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.persistence_sqlite.errors import PersistenceError
 from p2pwatch.merge.errors import MergeError, SchemaVersionMismatchError
+
+_logger = logging.getLogger("p2pwatch.merge.merger")
 
 # Attach alias of the current source (one at a time → we stay at 1 attached DB
 # whatever N, well under the SQLITE_MAX_ATTACHED cap of 10, spec §8).
@@ -144,8 +147,11 @@ def merge_catalogs(
         expected_version = int(connection.execute("PRAGMA user_version").fetchone()[0])
         output_resolved = Path(output).resolve()
         for source_catalog in source_catalogs:
-            if not (output_is_source_catalog and Path(source_catalog).resolve() == output_resolved):
+            if output_is_source_catalog and Path(source_catalog).resolve() == output_resolved:
+                _logger.info("%s skipped: it is the output", source_catalog)
+            else:
                 _merge_catalog(connection, source_catalog, expected_version)
+                _logger.info("%s merged", source_catalog)
     finally:
         connection.close()
 
