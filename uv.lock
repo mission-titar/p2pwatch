@@ -12,6 +12,7 @@ members = [
     "catalog-matching",
     "p2pwatch",
     "p2pwatch-amule",
+    "template-checks",
     "vex-checks",
 ]
 
@@ -28,6 +29,7 @@ dev = [
     { name = "pytest-cov", specifier = ">=5" },
     { name = "ruff", specifier = ">=0.16.9" },
     { name = "sqlfluff", specifier = ">=4.3.0" },
+    { name = "template-checks", editable = "packages/template_checks" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20260906" },
     { name = "vex-checks", editable = "packages/vex_checks" },
     { name = "zensical", specifier = "==0.0.66" },
@@ -1165,6 +1167,10 @@ sdist = { url = "https://files.pythonhosted.org/packages/f4/8a/14c15ae154895cc13
 wheels = [
     { url = "https://files.pythonhosted.org/packages/02/be/5d2d47b1fb58943194fb59dcf222f7c4e35122ec0ffe8c36e18b5d728f0b/tblib-3.2.2-py3-none-any.whl", hash = "sha256:26bdccf339bcce6a88b2b5432c988b266ebbe63a4e593f6b578b1d2e723d2b76", size = 12893, upload-time = "2025-11-12T12:21:14.407Z" },
 ]
+
+[[package]]
+name = "template-checks"
+source = { editable = "packages/template_checks" }
 
 [[package]]
 name = "tomli"

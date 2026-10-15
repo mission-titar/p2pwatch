@@ -1,4 +1,4 @@
-"""Guard "logic-free Jinja templates" — token-match approach.
+"""Guard "logic-free Jinja templates": token-match approach.
 
 Rule: a template may contain only passive constructs.
 
@@ -23,7 +23,7 @@ Regexes used
    (detects ``{% if``, ``{%- if``, ``{% set``, etc.)
 
 2. Illegal expression: in ``{{ … }}``, presence of one of the chars ``+ - * / % = ! < > | (``
-   (we don't distinguish `!=` from a lone `!` — sufficient, no legitimate `!` in Jinja).
+   (we don't distinguish `!=` from a lone `!`: sufficient, no legitimate `!` in Jinja).
    Regex: ``r"\\{\\{[^}]*[+\\-*/%=!<>|(][^}]*\\}\\}"``
 """
 
@@ -70,7 +70,7 @@ def find_logic_violations(directory: Path) -> list[str]:
 
 
 def main() -> None:
-    """CLI entry point: ``python -m p2pwatch.webui._dev.check_templates <directory>``."""
+    """CLI entry point: ``python -m template_checks.check_templates <directory>``."""
     if len(sys.argv) < 2:
         sys.exit("usage: check_templates <dir>")
     directory = Path(sys.argv[1])
