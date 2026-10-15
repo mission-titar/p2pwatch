@@ -4,6 +4,9 @@ dynamic = ["version"]
 requires-python = ">=3.13"
 dependencies = []
 
+[dependency-groups]
+dev = ["pytest>=9.1.1", "pytest-cov>=5"]
+
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
@@ -32,3 +35,9 @@ testpaths = ["tests"]
 [tool.coverage.run]
 branch = true
 source = ["template_checks"]
+
+[tool.deptry]
+# Replaces the default list, whose `tests` pattern silently drops the tests root.
+exclude = ["\\.venv"]
+# A pytest plugin, loaded through its entry point and never imported.
+per_rule_ignores = { DEP002 = ["pytest-cov"] }

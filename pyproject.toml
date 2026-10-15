@@ -2,24 +2,12 @@
 members = ["packages/*"]
 
 [tool.uv.sources]
-p2pwatch = { workspace = true }
-p2pwatch-amule = { workspace = true }
 catalog-matching = { workspace = true }
-vex-checks = { workspace = true }
-template-checks = { workspace = true }
-amule-bump = { workspace = true }
 
+# The workspace's tools only: `uv sync` installs every member and its own `dev` group.
 [dependency-groups]
 dev = [
-  "p2pwatch",
-  "p2pwatch-amule",
-  "catalog-matching",
-  "vex-checks",
-  "template-checks",
-  "amule-bump",
-  "pytest>=9.1.1",
-  "pytest-cov>=5",
-  "pytest-asyncio>=1.2",
+  "deptry>=0.25.1",
   "mypy>=2.3.1",
   "ruff>=0.16.9",
   "sqlfluff>=4.3.0",
@@ -114,9 +102,28 @@ format-fix     = { cmd = "ruff format .", help = "Apply ruff formatting" }
 sql-fix        = { cmd = "sqlfluff fix packages/crawler/src", help = "Auto-fix the SQLite migrations" }
 docs-build     = { cmd = "zensical build --clean --strict", help = "Build the documentation site (fails on broken links)" }
 docs-serve     = { cmd = "zensical serve", help = "Preview the documentation site locally" }
-lint-all       = { help = "Run every static check (no tests)", sequence = ["lint", "format-check", "type-check", "sql-lint", "template-check"] }
+lint-all       = { help = "Run every static check (no tests)", sequence = ["lint", "format-check", "dependency-check", "type-check", "sql-lint", "template-check"] }
 fix            = { help = "Auto-fix everything mechanical (ruff lint + format + sqlfluff)", sequence = ["lint-fix", "format-fix", "sql-fix"], ignore_fail = "return_non_zero" }
 check          = { help = "The full gate: every static check + all unit tests", sequence = ["lint-all", "test"] }
+
+# deptry has no notion of test code: `src` alone against the runtime dependencies (DEP004 on a
+# test-only import), then `src` and `tests` against them plus the `dev` group.
+[tool.poe.tasks.dependency-check]
+help = "Check each package's declared dependencies against its imports (deptry)"
+sequence = [
+  { cmd = "deptry src", cwd = "packages/matching" },
+  { cmd = "deptry --non-dev-dependency-groups dev src tests", cwd = "packages/matching" },
+  { cmd = "deptry src", cwd = "packages/crawler" },
+  { cmd = "deptry --non-dev-dependency-groups dev src tests", cwd = "packages/crawler" },
+  { cmd = "deptry src", cwd = "packages/amule" },
+  { cmd = "deptry --non-dev-dependency-groups dev src tests", cwd = "packages/amule" },
+  { cmd = "deptry src", cwd = "packages/vex_checks" },
+  { cmd = "deptry --non-dev-dependency-groups dev src tests", cwd = "packages/vex_checks" },
+  { cmd = "deptry src", cwd = "packages/template_checks" },
+  { cmd = "deptry --non-dev-dependency-groups dev src tests", cwd = "packages/template_checks" },
+  { cmd = "deptry src", cwd = "packages/amule_bump" },
+  { cmd = "deptry --non-dev-dependency-groups dev src tests", cwd = "packages/amule_bump" },
+]
 
 # `test` runs each package's suite in its own process (cwd) so per-package coverage
 # stays isolated: a single root pytest run would mix coverage and break --cov-fail-under=100.

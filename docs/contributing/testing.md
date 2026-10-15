@@ -304,7 +304,8 @@ Déjà en CI :
 
 - `.github/workflows/validate.yml` est le **gate** réutilisable, appelé par `pr.yml` (sur les pull
   requests) et par `release.yml` (sur un push de tag). Ses jobs :
-  - `lint` : `uv run poe lint-all` (ruff, format, mypy, sqlfluff, vérification des templates) ;
+  - `lint` : `uv run poe lint-all` (ruff, format, dépendances déclarées par deptry, mypy, sqlfluff,
+    vérification des templates) ;
   - `test` : `uv run poe test` (les 6 suites unitaires par paquet, 100 % de branches chacune) ;
   - `build-and-verify` : un job **par architecture sur son runner natif** (`amd64` sur
     `ubuntu-latest`, `arm64` sur `ubuntu-24.04-arm`). Chacun construit les **deux images**, le cœur
