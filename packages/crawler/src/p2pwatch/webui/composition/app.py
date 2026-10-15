@@ -926,7 +926,7 @@ def build_app(
                 explanation_rules_fired = explanation.rules_fired
                 explanation_tokens_matched = explanation.tokens_matched
                 explanation_coverage_values = tuple(
-                    TokenCoverage(token_name=token_name, coverage=f"{coverage:.2f}")
+                    TokenCoverage(token_name=token_name, value_display=f"{coverage:.2f}")
                     for token_name, coverage in explanation.coverage_values
                 )
                 explanation_vetoes_fired = explanation.vetoes_fired
