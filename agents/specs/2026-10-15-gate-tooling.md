@@ -209,6 +209,8 @@ Estimates from the probes (2026-10-15), not a diff: read them as plus or minus 3
   operator, 2026-10-13). **Block 90 passes 20 files** under the same exemption: most of its files are empty
   `__init__.py`. (Corrected 2026-10-15, after the spec review: the deletions left the dead-code check's block,
   now 70 and 80, and the rewiring left the moves' block, now 90 and 110; block 60 grew with the port change.)
+  (Corrected 2026-10-15, at block 10's pull request: block 10 passes 500 lines too, 544, since five renamed
+  files fall below git's 50 % rename similarity and count as deleted and added; 235 with `-M20%`.)
 - **Each block updates the documents its change contradicts**: `AGENTS.md` (the package list and count, the
   gate's sub-tasks, the tooling split, the layout of tests), `docs/contributing/testing.md`, `docs/operate.md`
   (L9), and the packages' own `AGENTS.md`.
