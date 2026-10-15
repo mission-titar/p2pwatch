@@ -171,7 +171,8 @@ four.
   reads instead of every deleted line. Why: decisions are independent between modules, so a package is a
   coherent unit; each proof costs one cold run of the package, which blocks under 500 lines (10 to 20)
   would multiply without making the review more useful.
-- **D16. The poe tasks**: `dead-code-check` (D6), `dependency-check` (D8), `unit-coverage-check` (D1),
+- **D16. The poe tasks**: `dead-code-check` (D6), `dependency-check` (D8), `unit-coverage-check` (D1)
+  (Corrected 2026-10-15, at lot 1's block 160: `_unit-coverage-check`, private, run only by `test`),
   `unique-coverage-check` (D3), `template-check` (unchanged, D9), `code-pattern-check` (D17, added
   2026-10-15) and `mutation-check` (D13, outside `check`). Why: the existing `<subject>-check` form; no abbreviation outside the glossary (`deps`); that a
   task is not part of the gate is said by its absence from `check`, not by breaking the name's form.

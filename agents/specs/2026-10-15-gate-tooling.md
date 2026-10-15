@@ -187,7 +187,9 @@ servers (U-D11).
   echoes the expanded 1 KB list into every gate log and `verbosity = -1` hides the step's line altogether.)
   (Corrected 2026-10-15, at block 130: `unit-coverage-check` is a sequence over the packages, each step in its
   package's directory, which `test` runs once every package's pytest has passed; 1.4 s for the seven packages, the
-  measure included.)
+  measure included.) (Corrected 2026-10-15, at block 160: it is private, `_unit-coverage-check`, which poe refuses
+  to run alone, so it never reads a stale or partial `.coverage`; the operator's choice after the holistic
+  review, block 135's guard against data without per-test contexts kept.)
 - **L12. deptry runs twice per package** with `[tool.deptry]` in each package: `exclude = ["\\.venv"]` (it
   replaces the default list, whose `tests` pattern silently drops the tests root; a one-line comment says so),
   `per_rule_ignores = { DEP002 = ["pytest-cov"] }` (plus `pytest-asyncio` for the crawler: entry-point plugins,
