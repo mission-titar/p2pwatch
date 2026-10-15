@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=9.1.1", "pytest-cov>=5", "pytest-asyncio>=1.2"]
+dev = ["pytest>=9.1.1", "pytest-cov>=5", "pytest-asyncio>=1.2", "p2pwatch-testing"]
 
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
@@ -47,20 +47,20 @@ git_describe_command = [
 packages = ["src/p2pwatch"]
 
 [tool.pytest.ini_options]
-addopts = '--cov=p2pwatch --cov-report=term-missing --cov-fail-under=100 --strict-markers -m "not api_integration and not orchestration_integration and not download_integration and not compose_integration"'
+addopts = '--cov=p2pwatch --cov=p2pwatch_testing --cov-report=term-missing --cov-fail-under=100 --strict-markers -m "not api_integration and not orchestration_integration and not download_integration and not compose_integration"'
 testpaths = ["tests"]
 markers = [
     "api_integration: amuleapi adapter against a real daemon provided by the caller (P2PWATCH_TEST_API_HOST, see docs/contributing/testing.md); deselected by default, dedicated run: cd packages/crawler && uv run pytest -m api_integration --no-cov",
     "orchestration_integration: real crawl loop against a real amuled provided by the caller (P2PWATCH_TEST_API_HOST, see docs/contributing/testing.md); deselected by default, dedicated run: cd packages/crawler && uv run pytest -m orchestration_integration --no-cov",
     "download_integration: start plus downloads read against a real amuled provided by the caller (P2PWATCH_TEST_API_HOST, see docs/contributing/testing.md); deselected by default, dedicated run: cd packages/crawler && uv run pytest -m download_integration --no-cov",
-    "compose_integration: smoke e2e de la stack docker compose assemblée (sans VPN) — Docker+compose requis ; déselectionné par défaut ; run dédié : cd packages/crawler && uv run pytest -m compose_integration --no-cov",
+    "compose_integration: e2e smoke of the assembled docker compose stack (no VPN), Docker and compose required; deselected by default, dedicated run: cd packages/crawler && uv run pytest -m compose_integration --no-cov",
 ]
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"
 
 [tool.coverage.run]
 branch = true
-source = ["p2pwatch"]
+source = ["p2pwatch", "p2pwatch_testing"]
 
 [tool.coverage.report]
 show_missing = true

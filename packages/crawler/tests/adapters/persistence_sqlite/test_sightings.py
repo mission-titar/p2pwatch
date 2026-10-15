@@ -13,7 +13,7 @@ from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.persistence_sqlite.variants import iso_to_micros
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import Sighting
-from tests.catalog_rows import insert_file, insert_observation
+from p2pwatch_testing.catalog_rows import insert_file, insert_observation
 
 _A, _B, _C = "a" * 32, "b" * 32, "c" * 32
 _TIE = "2026-06-01T10:00:00.000000+00:00"

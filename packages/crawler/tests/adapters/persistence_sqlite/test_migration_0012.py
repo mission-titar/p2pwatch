@@ -6,12 +6,12 @@ from importlib import resources
 from pathlib import Path
 
 from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
-from tests.adapters.persistence_sqlite.older_catalog import (
+from p2pwatch_testing.adapters.persistence_sqlite.older_catalog import (
     insert_v11_observation,
     insert_v11_source_point,
     open_catalog_at,
 )
-from tests.catalog_rows import insert_decision, insert_file, insert_source
+from p2pwatch_testing.catalog_rows import insert_decision, insert_file, insert_source
 
 _A, _USER = "a" * 32, "1f2e" * 8
 _RENAMED = {

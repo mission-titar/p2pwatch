@@ -37,8 +37,8 @@ from p2pwatch.ports.download_client import (
 )
 from p2pwatch.ports.repository_errors import RepositoryError
 from p2pwatch.ports.source_repository import EarlierPoints, RecordedReading, SourceRepository
-from tests.application.fakes import FakeTime, RecordingTelemetry, TickingWallClock
-from tests.catalog_rows import insert_file
+from p2pwatch_testing.application.fakes import FakeTime, RecordingTelemetry, TickingWallClock
+from p2pwatch_testing.catalog_rows import insert_file
 
 _A = "a" * 32
 _B = "b" * 32

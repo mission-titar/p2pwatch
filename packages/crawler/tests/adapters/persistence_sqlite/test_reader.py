@@ -18,7 +18,7 @@ from p2pwatch.adapters.persistence_sqlite.reader import (
     ThreadLocalConnection,
     open_reader,
 )
-from tests.catalog_rows import insert_file
+from p2pwatch_testing.catalog_rows import insert_file
 
 _HASH_A = "a" * 32
 _HASH_B = "b" * 32

@@ -12,7 +12,7 @@ from p2pwatch.ports.catalog_repository import DownloadCandidate
 from p2pwatch.ports.clock import MonotonicInstant
 
 # Reuse the fakes from test_run_download_cycle (imported explicitly).
-from tests.application.fakes import FakeTime, RecordingTelemetry
+from p2pwatch_testing.application.fakes import FakeTime, RecordingTelemetry
 from tests.application.test_run_download_cycle import (
     _TARGETS,
     FakeCatalogReads,

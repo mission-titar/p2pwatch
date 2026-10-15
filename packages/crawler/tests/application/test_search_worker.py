@@ -25,7 +25,7 @@ from p2pwatch.domain.observability.events import (
 )
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.ports.backoff_state_repository import BackoffKey, BackoffState
-from tests.application.fakes import (
+from p2pwatch_testing.application.fakes import (
     FakeMuleClient,
     FakeRng,
     FakeTime,
@@ -34,7 +34,7 @@ from tests.application.fakes import (
     make_search_failed,
     make_unreachable,
 )
-from tests.catalog_rows import count_observations
+from p2pwatch_testing.catalog_rows import count_observations
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _DL_NAME = "Keroro N°062A Les demoiselles cambrioleuses.avi"

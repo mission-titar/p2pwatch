@@ -3,6 +3,8 @@ members = ["packages/*"]
 
 [tool.uv.sources]
 catalog-matching = { workspace = true }
+p2pwatch = { workspace = true }
+p2pwatch-testing = { workspace = true }
 
 # The workspace's tools only: `uv sync` installs every member and its own `dev` group.
 [dependency-groups]
@@ -24,6 +26,7 @@ line-length = 100
 extend-exclude = ["agents/**/*.md"]
 src = [
   "packages/crawler/src",
+  "packages/crawler_testing/src",
   "packages/amule/src",
   "packages/matching/src",
   "packages/vex_checks/src",
@@ -54,6 +57,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "TID251"]
 "packages/crawler/src/p2pwatch/adapters/wall_clock_system.py" = ["TID251"]
 "packages/crawler/src/p2pwatch/adapters/monotonic_clock_asyncio.py" = ["TID251"]
 "**/tests/**" = ["TID251"]
+"packages/crawler_testing/**" = ["TID251"]
 "packages/amule/**" = ["TID251"]
 "vulture_whitelist.py" = ["B018", "F821"]
 
@@ -109,6 +113,7 @@ sequence = [
   { cmd = "deptry --non-dev-dependency-groups dev src tests", cwd = "packages/matching" },
   { cmd = "deptry src", cwd = "packages/crawler" },
   { cmd = "deptry --non-dev-dependency-groups dev src tests", cwd = "packages/crawler" },
+  { cmd = "deptry src", cwd = "packages/crawler_testing" },
   { cmd = "deptry src", cwd = "packages/amule" },
   { cmd = "deptry --non-dev-dependency-groups dev src tests", cwd = "packages/amule" },
   { cmd = "deptry src", cwd = "packages/vex_checks" },
@@ -125,6 +130,7 @@ help = "Type-check each package with mypy (strict, src + tests)"
 sequence = [
   { cmd = "mypy src tests", cwd = "packages/matching" },
   { cmd = "mypy src tests", cwd = "packages/crawler" },
+  { cmd = "mypy src", cwd = "packages/crawler_testing" },
   { cmd = "mypy src tests", cwd = "packages/amule" },
   { cmd = "mypy src tests", cwd = "packages/vex_checks" },
   { cmd = "mypy src tests", cwd = "packages/template_checks" },

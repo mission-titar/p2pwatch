@@ -40,7 +40,10 @@ Le projet a **deux niveaux** :
    > La tâche `test` reste **par paquet** : elle lance `pytest` avec `cwd = packages/<pkg>` pour
    > chacun des 6 paquets, dans des processus séparés, afin de garder la coverage isolée. Un simple
    > `uv run pytest` depuis la racine du dépôt n'est **pas** le gate (la racine n'a pas de config
-   > pytest, et un `conftest.py` racine neutralise la collecte, donnant `exit 5`).
+   > pytest, et un `conftest.py` racine neutralise la collecte, donnant `exit 5`). Le septième
+   > paquet, `p2pwatch_testing` (les doublures et utilitaires partagés des tests du crawler), n'a
+   > pas de suite : celle du crawler mesure sa couverture (`--cov=p2pwatch_testing`), si bien
+   > qu'une ligne ou une branche qu'aucun test n'y exécute fait échouer le gate.
 
    L'`addopts` de chaque paquet **désélectionne** tous les markers d'intégration
    (`-m "not api_integration and not …"`), si bien que le gate ne les lance jamais, et ils sont exclus

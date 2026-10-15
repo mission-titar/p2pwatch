@@ -16,9 +16,9 @@ from p2pwatch.adapters.mule_api.client import AmuleApiClient
 from p2pwatch.ports.client_errors import SearchFailedError
 from p2pwatch.ports.clock import MonotonicInstant
 from p2pwatch.ports.search_client import SearchAnswer
-from tests.adapters.mule_api.api_fakes import PASSWORD, FakeAmuleApi, error
-from tests.application.fakes import FakeTime
-from tests.virtual_time import MONOTONIC_EPOCH, LoopMonotonicClock, run_virtual
+from p2pwatch_testing.adapters.mule_api.api_fakes import PASSWORD, FakeAmuleApi, error
+from p2pwatch_testing.application.fakes import FakeTime
+from p2pwatch_testing.virtual_time import MONOTONIC_EPOCH, LoopMonotonicClock, run_virtual
 
 _HOUR = 3600.0
 _BUDGET = 120.0

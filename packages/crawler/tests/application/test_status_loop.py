@@ -20,7 +20,7 @@ from p2pwatch.ports.client_status import (
     StatusClient,
     StatusReading,
 )
-from tests.application.fakes import FakeTime, make_unreachable
+from p2pwatch_testing.application.fakes import FakeTime, make_unreachable
 
 type _Reading = ClientStatus | ClientError
 

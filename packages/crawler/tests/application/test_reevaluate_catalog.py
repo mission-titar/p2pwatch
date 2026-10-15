@@ -22,8 +22,13 @@ from p2pwatch.application.run_download_cycle import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.retraction import RETRACTED_TIER
-from tests.application.fakes import FakeTime, FakeWallClock, RecordingTelemetry, RecordingWakeHub
-from tests.catalog_rows import decision_tiers
+from p2pwatch_testing.application.fakes import (
+    FakeTime,
+    FakeWallClock,
+    RecordingTelemetry,
+    RecordingWakeHub,
+)
+from p2pwatch_testing.catalog_rows import decision_tiers
 
 _HASH_DL = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _HASH_CAT = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

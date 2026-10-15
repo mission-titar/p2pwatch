@@ -35,7 +35,7 @@ from p2pwatch.webui.domain.views import (
     SourcePeriodView,
     SourceRow,
 )
-from tests.catalog_rows import (
+from p2pwatch_testing.catalog_rows import (
     SEEN_AT,
     file_id,
     insert_decision,

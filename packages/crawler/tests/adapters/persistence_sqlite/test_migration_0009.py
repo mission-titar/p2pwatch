@@ -3,8 +3,8 @@
 import sqlite3
 from pathlib import Path
 
-from tests.adapters.persistence_sqlite.older_catalog import open_catalog_at
-from tests.catalog_rows import insert_file
+from p2pwatch_testing.adapters.persistence_sqlite.older_catalog import open_catalog_at
+from p2pwatch_testing.catalog_rows import insert_file
 
 _HASH = "a" * 32
 

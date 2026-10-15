@@ -4,7 +4,7 @@ from datetime import timedelta
 
 from p2pwatch.adapters.monotonic_clock_asyncio import AsyncioMonotonicClock
 from p2pwatch.ports.clock import MonotonicInstant
-from tests.virtual_time import run_virtual
+from p2pwatch_testing.virtual_time import run_virtual
 
 
 def test_now_reads_the_monotonic_clock_outside_any_event_loop() -> None:

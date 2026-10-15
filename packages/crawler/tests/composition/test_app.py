@@ -57,15 +57,20 @@ from p2pwatch.ports.client_status import ClientStatus
 from p2pwatch.ports.clock import MonotonicClock, MonotonicInstant
 from p2pwatch.ports.download_client import DownloadRequest, DownloadStatus
 from p2pwatch.ports.search_client import SearchAnswer
-from tests.adapters.mule_api.api_fakes import PASSWORD, FakeAmuleApi
-from tests.application.fakes import (
+from p2pwatch_testing.adapters.mule_api.api_fakes import PASSWORD, FakeAmuleApi
+from p2pwatch_testing.application.fakes import (
     FakeMonotonicClock,
     FakeMuleClient,
     FakeTime,
     RecordingWakeHub,
 )
-from tests.catalog_rows import insert_file, observation_node_ids
-from tests.virtual_time import MONOTONIC_EPOCH, LoopMonotonicClock, LoopWallClock, run_virtual
+from p2pwatch_testing.catalog_rows import insert_file, observation_node_ids
+from p2pwatch_testing.virtual_time import (
+    MONOTONIC_EPOCH,
+    LoopMonotonicClock,
+    LoopWallClock,
+    run_virtual,
+)
 
 _TARGETS = (
     TargetSegment(

@@ -20,14 +20,14 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability.events import DecisionChange, DecisionsRecorded
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.retraction import RETRACTED_TIER
-from tests.application.fakes import (
+from p2pwatch_testing.application.fakes import (
     FakeTime,
     FakeWallClock,
     RecordingTelemetry,
     RecordingWakeHub,
     TickingWallClock,
 )
-from tests.catalog_rows import insert_file
+from p2pwatch_testing.catalog_rows import insert_file
 
 _HASH_DL = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _HASH_CAT = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

@@ -16,7 +16,7 @@ from p2pwatch.adapters.persistence_sqlite.source_repository import SqliteSourceR
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceKey, SourceReading, SourceRole
 from p2pwatch.ports.source_repository import RecordedReading
-from tests.catalog_rows import insert_file
+from p2pwatch_testing.catalog_rows import insert_file
 
 _FILE, _OTHER_FILE = FileKey(Network.ED2K, "a" * 32), FileKey(Network.ED2K, "b" * 32)
 _KEY, _OTHER_KEY = SourceKey(Network.ED2K, "1f2e" * 8), SourceKey(Network.ED2K, "c" * 32)

@@ -9,7 +9,7 @@ import sqlite3
 from importlib import resources
 from pathlib import Path
 
-from tests.adapters.persistence_sqlite.older_catalog import open_local_at
+from p2pwatch_testing.adapters.persistence_sqlite.older_catalog import open_local_at
 
 _LOCAL_MIGRATIONS = resources.files("p2pwatch.adapters.persistence_sqlite") / "migrations/local"
 _QUEUED_AT = "2026-09-01T00:00:00.000000+00:00"
