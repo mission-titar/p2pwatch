@@ -39,5 +39,6 @@ source = ["template_checks"]
 [tool.deptry]
 # Replaces the default list, whose `tests` pattern silently drops the tests root.
 exclude = ["\\.venv"]
+known_first_party = ["tests"]
 # A pytest plugin, loaded through its entry point and never imported.
 per_rule_ignores = { DEP002 = ["pytest-cov"] }
