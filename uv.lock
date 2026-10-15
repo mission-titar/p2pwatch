@@ -450,6 +450,9 @@ wheels = [
 [[package]]
 name = "coverage-checks"
 source = { editable = "packages/coverage_checks" }
+dependencies = [
+    { name = "coverage" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -458,6 +461,7 @@ dev = [
 ]
 
 [package.metadata]
+requires-dist = [{ name = "coverage", specifier = ">=7.16" }]
 
 [package.metadata.requires-dev]
 dev = [

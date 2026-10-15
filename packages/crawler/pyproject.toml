@@ -47,7 +47,7 @@ git_describe_command = [
 packages = ["src/p2pwatch"]
 
 [tool.pytest.ini_options]
-addopts = '--cov=p2pwatch --cov=p2pwatch_testing --cov-report=term-missing --cov-fail-under=100 --strict-markers -m "not api_integration and not orchestration_integration and not download_integration and not compose_integration"'
+addopts = '--cov=p2pwatch --cov=p2pwatch_testing --cov-report=term-missing --cov-fail-under=100 --cov-context=test --strict-markers -m "not api_integration and not orchestration_integration and not download_integration and not compose_integration"'
 testpaths = ["tests"]
 markers = [
     "api_integration: amuleapi adapter against a real daemon provided by the caller (P2PWATCH_TEST_API_HOST, see docs/contributing/testing.md); deselected by default, dedicated run: cd packages/crawler && uv run pytest -m api_integration --no-cov",

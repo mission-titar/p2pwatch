@@ -160,7 +160,7 @@ sequence = [
 ]
 
 [tool.poe.tasks.unit-coverage-check]
-help = "Check each package's test files mirror its src, each testing the module it is named after"
+help = "Check each module is covered by its own tests, the test files mirroring src (after its suite)"
 sequence = [
   { cmd = "python -m coverage_checks.unit_coverage", cwd = "packages/matching" },
   { cmd = "python -m coverage_checks.unit_coverage", cwd = "packages/crawler" },
