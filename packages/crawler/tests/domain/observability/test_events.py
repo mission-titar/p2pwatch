@@ -23,8 +23,5 @@ def test_event_is_frozen() -> None:
         filename="x.avi",
         target_titles=(TargetTitle("062A", "t"),),
     )
-    # Pass the attribute via a variable to avoid ruff B010 while still
-    # triggering FrozenInstanceError at runtime (frozen=True).
-    attr = "filename"
     with pytest.raises(dataclasses.FrozenInstanceError):
-        setattr(event, attr, "y.avi")
+        event.filename = "y.avi"  # type: ignore[misc]
