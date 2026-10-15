@@ -29,3 +29,12 @@ An agent adds an entry only after the operator has agreed to it.
 
 - **The webui's read side**: one observation type and its own read ports, so no persistence shape reaches its domain;
   drops the dead `{% else %}` at `sources.html:26`. Section 7 of `agents/specs/2026-10-13-descriptive-names.md`.
+
+- **Mutation testing in the gate**: mutmut run cold on a pull request's impact set, from the per-test coverage, so
+  a test that stops detecting a fault fails the gate. D13 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`.
+
+- **The logic-free template guard on Jinja's syntax tree**, not on the text, so the fallbacks and filtered loops it
+  misses today move into the views. Section 7 of `agents/specs/2026-10-15-gate-tooling.md`.
+
+- **Contract tests for the fakes**: one suite per port, run against the fake and the real adapter, so a fake cannot
+  drift from what it stands for. Section 7 of `agents/specs/2026-10-15-gate-tooling.md`.
