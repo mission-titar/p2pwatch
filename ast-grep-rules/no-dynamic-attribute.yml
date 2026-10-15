@@ -1,0 +1,13 @@
+id: no-dynamic-attribute
+language: python
+severity: error
+message: Read and write attributes by their name in the code, so that mypy, vulture and the language server see them.
+note: "An exception carries `# ast-grep-ignore: no-dynamic-attribute` and its reason."
+# Any reference, an alias too, but an attribute's name: `monkeypatch.setattr` passes, ruff sees `builtins.getattr`.
+rule:
+  kind: identifier
+  regex: ^(getattr|setattr|hasattr|delattr)$
+  not:
+    inside:
+      kind: attribute
+      field: attribute
