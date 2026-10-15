@@ -34,11 +34,11 @@ Le projet a **deux niveaux** :
 
    ```bash
    uv run poe check     # le gate complet : lint-all + test (ce que lancent pre-push et la CI)
-   uv run poe test      # les 5 suites unitaires seules, chacune dans son processus
+   uv run poe test      # les 6 suites unitaires seules, chacune dans son processus
    ```
 
    > La tâche `test` reste **par paquet** : elle lance `pytest` avec `cwd = packages/<pkg>` pour
-   > chacun des 5 paquets, dans des processus séparés, afin de garder la coverage isolée. Un simple
+   > chacun des 6 paquets, dans des processus séparés, afin de garder la coverage isolée. Un simple
    > `uv run pytest` depuis la racine du dépôt n'est **pas** le gate (la racine n'a pas de config
    > pytest, et un `conftest.py` racine neutralise la collecte, donnant `exit 5`).
 
@@ -305,7 +305,7 @@ Déjà en CI :
 - `.github/workflows/validate.yml` est le **gate** réutilisable, appelé par `pr.yml` (sur les pull
   requests) et par `release.yml` (sur un push de tag). Ses jobs :
   - `lint` : `uv run poe lint-all` (ruff, format, mypy, sqlfluff, vérification des templates) ;
-  - `test` : `uv run poe test` (les 5 suites unitaires par paquet, 100 % de branches chacune) ;
+  - `test` : `uv run poe test` (les 6 suites unitaires par paquet, 100 % de branches chacune) ;
   - `build-and-verify` : un job **par architecture sur son runner natif** (`amd64` sur
     `ubuntu-latest`, `arm64` sur `ubuntu-24.04-arm`). Chacun construit les **deux images**, le cœur
     et `p2pwatch-amule` (caches `crawler-<arch>` et `amule-<arch>`). Sur l'image d'aMule, il vérifie

@@ -29,8 +29,8 @@ WORKDIR /app
 
 # Deps layer: install straight from uv.lock, independent of the sources. --frozen skips lock
 # revalidation, so it needs only uv.lock + the root pyproject.toml, not each member's
-# pyproject.toml (the vex_checks and amule_bump tooling packages are never installed). The --locked
-# sync below, after COPY . /app, revalidates the lock against every workspace member.
+# pyproject.toml (the dev/CI tooling packages are never installed). The --locked sync below,
+# after COPY . /app, revalidates the lock against every workspace member.
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
