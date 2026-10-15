@@ -13,7 +13,7 @@ from typing import Any
 import httpx
 
 from p2pwatch.ports.clock import MonotonicClock, MonotonicInstant
-from tests.application.fakes import FakeTime
+from p2pwatch_testing.application.fakes import FakeTime
 
 PASSWORD = "s3cret"
 TOKEN = "eyJhbGciOi.fake.token"
@@ -37,7 +37,7 @@ def error(status: int, code: str, message: str = "nope", **headers: str) -> http
 
 
 class FakeAmuleApi:
-    """Routes the handful of endpoints the adapter uses; everything else is a 404."""
+    """Routes the handful of endpoints the adapter uses; any other route raises ``KeyError``."""
 
     def __init__(
         self,
@@ -93,12 +93,7 @@ class FakeAmuleApi:
             return override(request)
         path = _SEARCH_ROUTE.sub("/api/v1/search/{id}/", route[1])
         path = _CLIENTS_ROUTE.sub("/api/v1/downloads/{hash}/clients", path)
-        handler = _ROUTES.get((request.method, _CLIENT_ROUTE.sub("/api/v1/clients/{ecid}", path)))
-        if handler is None:
-            return error(404, "not_found", f"no route {route}")
-        unauthenticated = route[1] in ("/api/v1/auth/login", "/api/v1/health")
-        if not unauthenticated and request.headers.get("Authorization") != f"Bearer {TOKEN}":
-            return error(401, "unauthorized", "missing or stale token")
+        handler = _ROUTES[(request.method, _CLIENT_ROUTE.sub("/api/v1/clients/{ecid}", path))]
         return handler(self, request)
 
     # --- routes ---------------------------------------------------------------------------
@@ -108,10 +103,9 @@ class FakeAmuleApi:
         if body.get("password") != self.password:
             return error(401, "invalid_credentials", "no role matched")
         self.logins += 1
-        payload: dict[str, Any] = {"role": "admin", "expires_at": 0, "session_id": "s"}
-        if request.url.params.get("include_token") == "true":
-            payload["token"] = TOKEN
-        return httpx.Response(200, json=payload)
+        return httpx.Response(
+            200, json={"role": "admin", "expires_at": 0, "session_id": "s", "token": TOKEN}
+        )
 
     def _logout(self, request: httpx.Request) -> httpx.Response:
         self.logouts += 1
@@ -176,8 +170,6 @@ class FakeAmuleApi:
         assert match is not None
         ecid = int(match.group(1))
         rows = [row for listed in self.clients.values() for row in listed if row["ecid"] == ecid]
-        if not rows:
-            return error(404, "not_found", "no client with that ECID in the current snapshot")
         client = {key: value for key, value in rows[0].items() if key not in _FILE_RELATION_KEYS}
         return httpx.Response(200, json={**client, **self.details.get(ecid, {})})
 

@@ -10,7 +10,10 @@ from p2pwatch.adapters.mule_api.mapping import map_search_results
 from p2pwatch.adapters.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.persistence_sqlite.variants import iso_to_micros
-from tests.adapters.persistence_sqlite.older_catalog import forcing_secure_delete, open_catalog_at
+from p2pwatch_testing.adapters.persistence_sqlite.older_catalog import (
+    forcing_secure_delete,
+    open_catalog_at,
+)
 
 _A, _B = "a" * 32, "b" * 32
 _T1 = "2026-06-11T12:00:00.000001+00:00"

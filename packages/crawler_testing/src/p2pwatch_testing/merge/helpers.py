@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
-from tests.catalog_rows import (
+from p2pwatch_testing.catalog_rows import (
     insert_decision,
     insert_file,
     insert_observation,
@@ -55,24 +55,21 @@ def hash_for(letter: str) -> str:
     return letter * 32
 
 
-def make_catalog(
-    path: Path, content: Mapping[str, Sequence[Mapping[str, Any]]] | None = None
-) -> Path:
+def make_catalog(path: Path, content: Mapping[str, Sequence[Mapping[str, Any]]]) -> Path:
     """Create a real ``catalog.db`` at ``path`` and insert ``content`` (per table, FK order).
 
-    ``content`` maps a table name → rows, each holding its ``tests.catalog_rows`` builder's
-    arguments. Returns ``path`` for chaining.
+    ``content`` maps a table name → rows, each holding its ``catalog_rows`` builder's arguments.
+    Returns ``path`` for chaining.
     """
     connection = open_catalog(path)
     try:
-        if content is not None:
-            for row in content.get("files", ()):
-                insert_file(connection, **row)
-            for row in content.get("observations", ()):
-                insert_observation(connection, **row)
-            for row in content.get("match_decisions", ()):
-                insert_decision(connection, **row)
-            _insert_source_points(connection, content.get("source_observations", ()))
+        for row in content.get("files", ()):
+            insert_file(connection, **row)
+        for row in content.get("observations", ()):
+            insert_observation(connection, **row)
+        for row in content.get("match_decisions", ()):
+            insert_decision(connection, **row)
+        _insert_source_points(connection, content.get("source_observations", ()))
     finally:
         connection.close()
     return path

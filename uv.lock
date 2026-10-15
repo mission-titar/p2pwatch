@@ -12,6 +12,7 @@ members = [
     "catalog-matching",
     "p2pwatch",
     "p2pwatch-amule",
+    "p2pwatch-testing",
     "template-checks",
     "vex-checks",
 ]
@@ -788,6 +789,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "p2pwatch-testing" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
@@ -807,6 +809,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "p2pwatch-testing", editable = "packages/crawler_testing" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-asyncio", specifier = ">=1.2" },
     { name = "pytest-cov", specifier = ">=5" },
@@ -828,6 +831,22 @@ dev = [
 dev = [
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-cov", specifier = ">=5" },
+]
+
+[[package]]
+name = "p2pwatch-testing"
+source = { editable = "packages/crawler_testing" }
+dependencies = [
+    { name = "httpx" },
+    { name = "p2pwatch" },
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28" },
+    { name = "p2pwatch", editable = "packages/crawler" },
+    { name = "pytest", specifier = ">=9.1.1" },
 ]
 
 [[package]]

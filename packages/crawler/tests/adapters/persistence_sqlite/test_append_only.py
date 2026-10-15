@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
-from tests.catalog_rows import (
+from p2pwatch_testing.catalog_rows import (
     insert_decision,
     insert_file,
     insert_observation,

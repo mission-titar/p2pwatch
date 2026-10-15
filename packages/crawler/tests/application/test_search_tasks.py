@@ -31,8 +31,13 @@ from p2pwatch.ports.backoff_state_repository import BackoffKey, BackoffState
 from p2pwatch.ports.client_errors import SearchFailedError
 from p2pwatch.ports.repository_errors import RepositoryError
 from p2pwatch.ports.search_client import SearchAnswer
-from tests.application.fakes import FakeRng, RecordingTelemetry, RecordingWakeHub, make_unreachable
-from tests.virtual_time import EPOCH, LoopMonotonicClock, LoopWallClock, run_virtual
+from p2pwatch_testing.application.fakes import (
+    FakeRng,
+    RecordingTelemetry,
+    RecordingWakeHub,
+    make_unreachable,
+)
+from p2pwatch_testing.virtual_time import EPOCH, LoopMonotonicClock, LoopWallClock, run_virtual
 
 _HOUR = 3600.0
 _POLICY = BackoffPolicy(

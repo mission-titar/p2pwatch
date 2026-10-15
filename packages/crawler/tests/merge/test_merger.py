@@ -13,8 +13,7 @@ from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.merge.errors import MergeError, SchemaVersionMismatchError
 from p2pwatch.merge.merger import merge_catalogs
-
-from .helpers import (
+from p2pwatch_testing.merge.helpers import (
     HASH_A,
     HASH_B,
     count,

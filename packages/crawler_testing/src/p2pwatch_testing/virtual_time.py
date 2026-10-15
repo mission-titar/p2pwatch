@@ -15,18 +15,16 @@ MONOTONIC_EPOCH = MonotonicInstant(0)
 
 
 class _VirtualSelector(selectors.DefaultSelector):
-    """Never blocks: the wait the loop asks for advances the virtual time instead."""
+    """Never blocks nor polls: the wait the loop asks for advances the virtual time instead."""
 
     def __init__(self) -> None:
         super().__init__()
         self.time = 0.0
 
     def select(self, timeout: float | None = None) -> list[tuple[selectors.SelectorKey, int]]:
-        events = super().select(0)
-        if not events:
-            assert timeout is not None, "every task waits and no timer is set: a deadlock"
-            self.time += timeout
-        return events
+        assert timeout is not None, "every task waits and no timer is set: a deadlock"
+        self.time += timeout
+        return []
 
 
 class _VirtualLoop(asyncio.SelectorEventLoop):

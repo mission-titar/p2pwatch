@@ -4,7 +4,7 @@ from datetime import timedelta
 
 import pytest
 
-from tests.application.fakes import FakeTime
+from p2pwatch_testing.application.fakes import FakeTime
 
 
 def test_a_wall_clock_step_leaves_the_monotonic_clock() -> None:

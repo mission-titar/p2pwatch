@@ -12,7 +12,10 @@ from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.persistence_sqlite.variants import content_hash
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
-from tests.adapters.persistence_sqlite.older_catalog import forcing_secure_delete, open_catalog_at
+from p2pwatch_testing.adapters.persistence_sqlite.older_catalog import (
+    forcing_secure_delete,
+    open_catalog_at,
+)
 
 _A, _B = "a" * 32, "b" * 32
 _ID_A, _ID_B = FileKey(Network.ED2K, _A).file_id, FileKey(Network.ED2K, _B).file_id

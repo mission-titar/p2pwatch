@@ -10,8 +10,7 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.merge.__main__ import main
-
-from .helpers import HASH_A, HASH_B, count, make_catalog
+from p2pwatch_testing.merge.helpers import HASH_A, HASH_B, count, make_catalog
 
 
 def _seed(path: Path, letter: str) -> Path:

@@ -24,8 +24,8 @@ from p2pwatch.ports.clock import MonotonicClock, MonotonicInstant
 from p2pwatch.webui.adapters.sql_console import ConsoleOutcome, run_query
 from p2pwatch.webui.composition.app import build_app
 from p2pwatch.webui.domain.views import ConsoleResult, ConsoleRow, DbOption
-from tests.application.fakes import FakeMonotonicClock, FakeTime
-from tests.catalog_rows import insert_file
+from p2pwatch_testing.application.fakes import FakeMonotonicClock, FakeTime
+from p2pwatch_testing.catalog_rows import insert_file
 
 _HASH_A = "a" * 32
 # A few hundredths of a second of real time, past a 5 s budget on a _TickingMonotonicClock.

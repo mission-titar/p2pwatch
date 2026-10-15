@@ -1,0 +1,31 @@
+[project]
+name = "p2pwatch-testing"
+dynamic = ["version"]
+description = "The crawler's shared test support: fakes, catalog rows, a virtual event loop"
+requires-python = ">=3.13"
+dependencies = ["p2pwatch", "pytest>=9.1.1", "httpx>=0.28"]
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+# Test support, never shipped in a prod image: versioned from the shared root git tag like every
+# member (see the crawler pyproject for the rationale).
+[tool.hatch.version]
+source = "vcs"
+tag-pattern = '^v(?P<version>\d+\.\d+\.\d+)$'
+fallback-version = "0.0.0"
+
+[tool.hatch.version.raw-options]
+search_parent_directories = true
+git_describe_command = [
+    "git", "describe", "--dirty", "--tags", "--long",
+    "--match", "v[0-9]*.[0-9]*.[0-9]*", "--exclude", "*-*",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/p2pwatch_testing"]
+
+[tool.deptry]
+# Replaces the default list, whose `tests` pattern silently drops a tests root.
+exclude = ["\\.venv"]

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.adapters.persistence_sqlite.older_catalog import open_local_at
+from p2pwatch_testing.adapters.persistence_sqlite.older_catalog import open_local_at
 
 _INSERT = "INSERT INTO backoff_states VALUES (?, ?, ?, ?, ?)"
 
