@@ -30,7 +30,7 @@ git_describe_command = [
 packages = ["src/vex_checks"]
 
 [tool.pytest.ini_options]
-addopts = "--cov=vex_checks --cov-branch --cov-report=term-missing --cov-fail-under=100"
+addopts = "--cov=vex_checks --cov-branch --cov-report=term-missing --cov-fail-under=100 --cov-context=test"
 testpaths = ["tests"]
 
 [tool.coverage.run]

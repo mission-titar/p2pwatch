@@ -2,7 +2,7 @@
 name = "coverage-checks"
 dynamic = ["version"]
 requires-python = ">=3.13"
-dependencies = []
+dependencies = ["coverage>=7.16"]
 
 [dependency-groups]
 dev = ["pytest>=9.1.1", "pytest-cov>=5"]
@@ -29,7 +29,7 @@ git_describe_command = [
 packages = ["src/coverage_checks"]
 
 [tool.pytest.ini_options]
-addopts = "--cov=coverage_checks --cov-branch --cov-report=term-missing --cov-fail-under=100"
+addopts = "--cov=coverage_checks --cov-branch --cov-report=term-missing --cov-fail-under=100 --cov-context=test"
 testpaths = ["tests"]
 
 [tool.coverage.run]
