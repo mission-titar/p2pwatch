@@ -4,7 +4,8 @@
   (`.reviews/gate-tooling-spec.md`: 1 critical, 5 major, 19 minor; all corrected, the metric's content (L9) by
   the operator's choice, but the last minor, lots 2 and 3's measurements, which their specs re-run).
 - Tier: Spec (the operator, 2026-10-14). Operator surfaces: one new metric, `p2pwatch_search_results_skipped`
-  (L9); the webui's file page shows the coverage values of a decision (L8).
+  (L9); the webui's file page shows the coverage values of a decision (L8). (Corrected 2026-10-15, at block
+  120: and the `merge` CLI logs each source catalog, merged or skipped, L5.)
 - Origin: lot 1 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md` (D12), whose decisions D1, D2 and
   D6 to D10, D16 and D17 this lot carries out. That umbrella spec is cited as "U-D<n>" below.
 - Evidence: the code on `main` at `307de0b`; three probes run on scratch copies on 2026-10-15 (`layout-probe`,
@@ -97,7 +98,14 @@ servers (U-D11).
 
   Each gets a direct test; `adapters/mule_api/test_errors.py` also receives 3 hierarchy tests from
   `ports/test_client_errors.py`. Why: each gap is a case reached only from a higher-level test, not a group of
-  code living in the wrong file.
+  code living in the wrong file. (Corrected 2026-10-15, at block 120: re-measured with per-test contexts,
+  `search_worker.py`'s statement is `SearchWorker.channels`, not `run_task`. `merger.py` is also short of the
+  3 statements of `_copy_journal`, which only the import runs (the probe counted import-time code as own, L3
+  does not): `_COPY_MATCH_DECISIONS` becomes a literal SQL like its six neighbours and `_copy_journal` goes.
+  Its `--into` skip had no observable effect: the merge now logs each source, merged or skipped, and the test
+  reads that line. The 5 tests of `test_client.py` whose subject was the error mapping move into
+  `adapters/mule_api/test_errors.py` as direct calls. Two tests pin the dedup of `_COPY_MATCH_DECISIONS`, which
+  no test checked. All four the operator's choice.)
 - **L6. The crawler's shared test support becomes a workspace package, `p2pwatch_testing`** (directory
   `packages/crawler_testing`, dist `p2pwatch-testing`), never shipped and imported only by the crawler's tests: `tests/application/fakes.py`,
   `tests/adapters/mule_api/api_fakes.py`, `tests/virtual_time.py`, `tests/catalog_rows.py`,
