@@ -7,17 +7,12 @@ from jinja2 import Environment, nodes
 
 
 def find_read_names(directory: Path) -> frozenset[str]:
-    """Every `x.name` and `x["name"]` a template under *directory* reads."""
+    """Every `x.name` a template under *directory* reads."""
     environment = Environment()
     read_names: set[str] = set()
     for template_path in sorted(directory.rglob("*.html")):
         template = environment.parse(template_path.read_text(encoding="utf-8"))
         read_names.update(node.attr for node in template.find_all(nodes.Getattr))
-        read_names.update(
-            node.arg.value
-            for node in template.find_all(nodes.Getitem)
-            if isinstance(node.arg, nodes.Const) and isinstance(node.arg.value, str)
-        )
     return frozenset(read_names)
 
 
