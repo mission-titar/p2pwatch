@@ -90,8 +90,8 @@ travail. Pour aller du symptôme à la cause, voyez
 
 Le compteur `p2pwatch_search_results_skipped` (exposé en `p2pwatch_search_results_skipped_total`),
 étiqueté `client` et `channel` comme `p2pwatch_searches`, compte les résultats de recherche
-qu'amuleapi renvoie mais que le crawler ne sait pas lire : sans hash, sans taille exploitable, ou
-qui ne sont pas un objet. Un même résultat revu à chaque recherche compte à chaque fois. Il reste à
+qu'amuleapi renvoie mais que le crawler ne sait pas lire : sans hash, sans taille exploitable, sans
+aucun nom, ou qui ne sont pas un objet. Un même résultat revu à chaque recherche compte à chaque fois. Il reste à
 zéro en temps normal. S'il monte, les réponses d'amuleapi ont changé de forme, et ces résultats ne
 sont pas catalogués.
 
