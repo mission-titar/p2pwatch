@@ -199,6 +199,18 @@ def test_a_loaded_backoff_keeps_its_attempts() -> None:
     assert registry.record_failure(_KAD) == timedelta(seconds=8)  # the third attempt
 
 
+def test_a_worker_declares_the_channels_of_its_client(
+    catalog: SqliteCatalogRepository, engine: MatchingEngine
+) -> None:
+    fake_time = FakeTime()
+    client = FakeMuleClient()
+    client.channels = ("kad",)
+    worker = SearchWorker(
+        "amule-1", client, _deps(catalog, engine, _registry(fake_time), fake_time)
+    )
+    assert worker.channels == ("kad",)
+
+
 @pytest.mark.parametrize(
     ("failed", "ready_in_seconds"),
     [((), 0), ((_CLIENT,), 2), ((_KAD,), 2), ((_ED2K,), 0)],
