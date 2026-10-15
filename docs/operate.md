@@ -154,6 +154,10 @@ docker compose exec p2pwatch python -m p2pwatch.merge \
   --into /data/catalog-b.db /data/catalog-b.db
 ```
 
+Le journal de la fusion nomme chaque catalogue source, suivi de `merged`, ou de
+`skipped: it is the output` pour celui que désigne `--into` : il n'est jamais fusionné en lui-même,
+et sa mise à niveau a lieu à son ouverture.
+
 Pour valider en profondeur (suites d'intégration, smoke, CI), voyez
 [Lancer les tests](contributing/testing.md).
 
