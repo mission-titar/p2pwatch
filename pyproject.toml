@@ -15,6 +15,7 @@ dev = [
   "poethepoet>=0.48.0",
   "zensical==0.0.66",
   "ast-grep-cli>=0.50.0",
+  "vulture>=2.16",
 ]
 
 [tool.ruff]
@@ -60,6 +61,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "TID251"]
 "packages/crawler/src/p2pwatch/adapters/monotonic_clock_asyncio.py" = ["TID251"]
 "**/tests/**" = ["TID251"]
 "packages/amule/**" = ["TID251"]
+"vulture_whitelist.py" = ["B018", "F821"]
 
 [tool.mypy]
 python_version = "3.13"
@@ -97,6 +99,8 @@ type-check     = { cmd = "mypy", help = "Type-check with mypy (strict, src + tes
 sql-lint       = { cmd = "sqlfluff lint packages/crawler/src", help = "Lint the embedded SQLite migrations" }
 code-pattern-check = { cmd = "ast-grep scan", help = "Ban dynamic attribute access (ast-grep, sgconfig.yml)" }
 template-check = { cmd = "python -m template_checks.check_templates packages/crawler/src/p2pwatch/webui/adapters/templates", help = "Assert webui templates carry no logic" }
+_template-read-names = { cmd = "python -m template_checks.read_names packages/crawler/src/p2pwatch/webui/adapters/templates" }
+dead-code-check = { shell = 'vulture --ignore-names "$TEMPLATE_READ_NAMES"', uses = { TEMPLATE_READ_NAMES = "_template-read-names" }, help = "Find code no production path reaches (vulture on src, template reads ignored)" }
 vex-source-claims  = { cmd = "python -m vex_checks.check_source_claims", help = "Assert our source never reaches code the not_in_execute_path VEX claims exempt" }
 vex-claim-coverage = { cmd = "python -m vex_checks.check_claim_coverage", help = "Assert every VEX not_affected claim maps to exactly one registry premise, and back" }
 lint-fix       = { cmd = "ruff check --fix .", help = "Auto-fix ruff lint violations" }
@@ -104,9 +108,22 @@ format-fix     = { cmd = "ruff format .", help = "Apply ruff formatting" }
 sql-fix        = { cmd = "sqlfluff fix packages/crawler/src", help = "Auto-fix the SQLite migrations" }
 docs-build     = { cmd = "zensical build --clean --strict", help = "Build the documentation site (fails on broken links)" }
 docs-serve     = { cmd = "zensical serve", help = "Preview the documentation site locally" }
-lint-all       = { help = "Run every static check (no tests)", sequence = ["lint", "format-check", "dependency-check", "code-pattern-check", "type-check", "sql-lint", "template-check"] }
+lint-all       = { help = "Run every static check (no tests)", sequence = ["lint", "format-check", "dependency-check", "code-pattern-check", "dead-code-check", "type-check", "sql-lint", "template-check"] }
 fix            = { help = "Auto-fix everything mechanical (ruff lint + format + sqlfluff)", sequence = ["lint-fix", "format-fix", "sql-fix"], ignore_fail = "return_non_zero" }
 check          = { help = "The full gate: every static check + all unit tests", sequence = ["lint-all", "test"] }
+
+# Every `src`, no tests (code only tests reach is dead), in one run: a package's API serves another.
+[tool.vulture]
+paths = [
+  "packages/crawler/src",
+  "packages/amule/src",
+  "packages/matching/src",
+  "packages/vex_checks/src",
+  "packages/template_checks/src",
+  "packages/amule_bump/src",
+  "vulture_whitelist.py",
+]
+min_confidence = 60
 
 # deptry has no notion of test code: `src` alone against the runtime dependencies (DEP004 on a
 # test-only import), then `src` and `tests` against them plus the `dev` group.

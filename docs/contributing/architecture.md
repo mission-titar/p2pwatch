@@ -109,7 +109,7 @@ flowchart RL
 | `p2pwatch_amule` | `p2pwatch-amule` | **Le conteneur d'aMule**, bibliothèque standard seule : son one-shot de démarrage (`p2pwatch_amule.boot`) et le port-sync (`p2pwatch_amule.port_sync`, §9). |
 | `catalog_matching` | `catalog-matching` | **Moteur de matching** (bibliothèque partagée) : politique déclarative fichier vers épisode. Importé par le crawler et par la webui. |
 | `vex_checks` | `vex-checks` | **Outillage dev/CI** : garde honnêtes nos affirmations OpenVEX. Jamais livré dans une image de prod. |
-| `template_checks` | `template-checks` | **Outillage dev/CI**, bibliothèque standard seule : vérifie que les templates de la webui ne portent aucune logique (`poe template-check`). Jamais livré dans une image de prod. |
+| `template_checks` | `template-checks` | **Outillage dev/CI** : vérifie que les templates de la webui ne portent aucune logique (`poe template-check`), et liste les noms qu'ils lisent, que `poe dead-code-check` ne doit pas signaler. Jamais livré dans une image de prod. |
 | `amule_bump` | `amule-bump` | **Outillage CI** : monte l'épingle d'aMule et rédige la PR ([Mettre à jour aMule](amule-bump.md)). Jamais livré dans une image de prod. |
 
 **Frontières strictes** (invariants) : `catalog_matching` est pur et n'importe jamais `p2pwatch` ;
