@@ -54,11 +54,6 @@ select = ["E", "F", "I", "UP", "B", "SIM", "TID251"]
 "time.clock_gettime".msg = "Inject the WallClock or the MonotonicClock port."
 "time.clock_gettime_ns".msg = "Inject the WallClock or the MonotonicClock port."
 "asyncio.sleep".msg = "Sleep through the MonotonicClock port."
-# The written-out forms of the builtins `code-pattern-check` bans, which only ruff resolves.
-"builtins.getattr".msg = "Read the attribute by its name in the code."
-"builtins.setattr".msg = "Write the attribute by its name in the code."
-"builtins.hasattr".msg = "Name the attribute in the code; its type says whether it exists."
-"builtins.delattr".msg = "Name the attribute in the code."
 
 [tool.ruff.lint.per-file-ignores]
 "packages/crawler/src/p2pwatch/adapters/wall_clock_system.py" = ["TID251"]
