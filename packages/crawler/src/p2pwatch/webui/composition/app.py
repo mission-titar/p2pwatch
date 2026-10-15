@@ -656,7 +656,7 @@ def build_app(
     # Centralized read-only connection management (spec §7): one reused, thread-affine
     # connection per DB per thread: warm page cache, no per-request cold open. Handlers
     # obtain a connection via ``provider.connection()`` and NEVER close it (the point is
-    # reuse); ``quiesce()`` is the seam livrable 3's maintenance swap will use.
+    # reuse).
     catalog_reader = ReaderProvider(catalog_db_path)
     local_reader = ReaderProvider(local_db_path)
 
