@@ -92,7 +92,7 @@ async def test_unchanged_row_is_evaluated_but_not_written(
 ) -> None:
     catalog.record_observation(_obs(_HASH_CAT, _CAT_NAME), wall_clock.now())
     candidate = _obs(_HASH_CAT, _CAT_NAME).to_candidate()
-    decisions = engine.evaluate(candidate)
+    decisions = engine.evaluate_file((candidate,))
     assert decisions  # non-empty
     # pre-seed the "already correct" verdict
     catalog.record_decision(FileKey(Network.ED2K, _HASH_CAT), decisions[0], wall_clock.now())
