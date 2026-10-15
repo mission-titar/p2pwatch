@@ -32,7 +32,7 @@ from catalog_matching.interpolation import (
     InterpolationError,
     interpolate,
 )
-from catalog_matching.matchers import ATTR_NAMES
+from catalog_matching.matchers import READERS_BY_ATTR
 from catalog_matching.models import LOST, TARGET_STATUSES, TargetSegment
 
 _CONDITION_KEYS = ("all", "any", "not")
@@ -217,9 +217,9 @@ def _parse_token_def(token_name: str, raw: Any, fragments: dict[str, str]) -> To
                 f"attr_between {attr!r} was renamed {_RENAMED_ATTRS[attr]!r}, "
                 "rename it in matcher.yml"
             )
-        if attr not in ATTR_NAMES:
+        if attr not in READERS_BY_ATTR:
             raise MatchingConfigError(
-                f"unknown attr_between: {attr!r} (expected one of {sorted(ATTR_NAMES)})"
+                f"unknown attr_between: {attr!r} (expected one of {sorted(READERS_BY_ATTR)})"
             )
         min_bound = _optional_float(mapping, "min")
         max_bound = _optional_float(mapping, "max")
