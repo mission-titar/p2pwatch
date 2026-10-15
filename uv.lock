@@ -1270,6 +1270,9 @@ wheels = [
 [[package]]
 name = "template-checks"
 source = { editable = "packages/template_checks" }
+dependencies = [
+    { name = "jinja2" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -1278,6 +1281,7 @@ dev = [
 ]
 
 [package.metadata]
+requires-dist = [{ name = "jinja2", specifier = ">=3.1" }]
 
 [package.metadata.requires-dev]
 dev = [
