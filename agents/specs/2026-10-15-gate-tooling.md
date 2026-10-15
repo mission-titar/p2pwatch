@@ -174,7 +174,8 @@ servers (U-D11).
   | `type-check` | per package, `mypy src tests` (L1) | `lint-all`, unchanged place | 8.5 s cold |
 
   vulture runs once over every package's `src` but `p2pwatch_testing`'s (L6), with a root `vulture_whitelist.py`
-  (the four library hooks, each with its reason; ruff's per-file ignores `B018` and `F821` for it), because one
+  (the four library hooks, each with its reason (Corrected 2026-10-15, at block 150: three, the webui middleware's
+  `dispatch` now passed by name); ruff's per-file ignores `B018` and `F821` for it), because one
   package's API is kept alive by another: on `matching/src` alone it reports 15 findings instead of 3
   (`build_ed2k_link`, every `Explanation` field). Why: U-D16's names; inside `lint-all` and `test`, so the
   pre-push hook and CI, which call those, need no change. (Corrected 2026-10-15, at block 80:
@@ -226,7 +227,8 @@ Estimates from the probes (2026-10-15), not a diff: read them as plus or minus 3
 | 120 | `test/unit-gaps` | L5, and the `sqlite3.connect` test fixed so that per-test contexts can be recorded | 200, 8 |
 | 130 | `test/unit-coverage-check` | L2's mapping enforced and L4: `coverage_checks` (`packages/coverage_checks`), `unit-coverage-check` in `test` mapping each test file to its module or its listing, the `tests_without_unit` lists, `own tests` in the glossary (Corrected 2026-10-15, at block 130: split, see below) | 424, 14 |
 | 135 | `test/unit-coverage-measure` | U-D1, L3: the per-test contexts, each module's measure by its own tests in `unit-coverage-check` | 420, 15 |
-| 140 | `docs/gate-tooling-wrap` | the closing block (Wrap): the handoff, `BACKLOG.md` reconciled | |
+| 140 | `docs/gate-tooling-wrap` | the closing block (Wrap): the handoff, `BACKLOG.md` reconciled (Corrected 2026-10-15, at block 140: split; 140 keeps the documentation fixes and `BACKLOG.md`, see below) | |
+| 150 | `refactor/holistic-fixes` | (Corrected 2026-10-15, at block 140: the closing block's top) the holistic review's code fixes, the spec's notes, the handoff | |
 
 - **Blocks 10, 100 and 110 pass 20 files** under the one-line exemption: mechanical renames and moves (the
   operator, 2026-10-13). **Block 90 passes 20 files** under the same exemption: most of its files are empty
@@ -243,6 +245,9 @@ Estimates from the probes (2026-10-15), not a diff: read them as plus or minus 3
   (Corrected 2026-10-15, at block 130: block 130 passed both bounds whole, 812 lines and 20 files, and is not
   mechanical, so it split: 130 keeps the mapping and the lists, 135 takes L3's measure, and becomes the last block
   before the closing one.)
+  (Corrected 2026-10-15, at block 140: the closing block passed the files bound whole, 20 files and 129 lines
+  before `BACKLOG.md`, and is not mechanical, so it split: 140 keeps the holistic review's documentation fixes
+  and `BACKLOG.md`, 150 takes its code fixes, the spec's notes and the handoff, which names every exit.)
 - **Each block updates the documents its change contradicts**: `AGENTS.md` (the package list and count, the
   gate's sub-tasks, the tooling split, the layout of tests), `docs/contributing/testing.md`, `docs/operate.md`
   (L9), and the packages' own `AGENTS.md`.
@@ -266,6 +271,8 @@ Estimates from the probes (2026-10-15), not a diff: read them as plus or minus 3
   `main`.
 - (Corrected 2026-10-15, at block 130: block 130: `unit-coverage-check` checks that each test file maps to a
   module or is listed, and measures nothing, which block 135 adds.)
+- (Corrected 2026-10-15, at block 140: block 140: `vulture_whitelist.py`'s header calls it a rare exit while
+  `_.dispatch` stays, which block 150 deletes with the middleware subclass.)
 
 ### Surfaces whose consumer arrives in a later block
 
@@ -326,6 +333,10 @@ Each criterion names what would prove it wrong.
 - **mypy is slower**: 8.5 s cold instead of 3.4 s (L1).
 - **ast-grep sees names, not bindings**: a local function or variable named like one of the four builtins would
   be reported too; none exists today.
+- (Corrected 2026-10-15, at block 150, the holistic review's finding 5:) **the measure credits a body the process
+  runs once to the first test that runs it** (a cached function, lazy module state, a session fixture), so its
+  module's own tests would pass or fail on test order; none exists today, and `AGENTS.md`'s Gotchas say how to
+  avoid one.
 
 ## 7. Adjacent backlog items
 

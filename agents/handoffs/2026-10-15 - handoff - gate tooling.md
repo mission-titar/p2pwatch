@@ -1,7 +1,7 @@
 # Handoff: gate tooling, lot 1 of the gate tooling, Serena and test quality umbrella
 
-Drafted by block 135 from the lot's block reports (#230 to #243, and block 135's own) and the lead's lot notes,
-for the closing block 140 to correct.
+Drafted by block 135 from the lot's block reports (#230 to #243, and block 135's own) and the lead's lot notes;
+corrected by block 150, the top of the closing block's split, which adds the holistic review and its exits.
 
 ## State
 
@@ -12,7 +12,7 @@ on the webui's file page, and the `merge` CLI's log line per source catalog. Spe
 lots 2 and 3's measurements, which their own specs re-run. The lot carries out lot 1 of the umbrella spec
 `agents/specs/2026-10-14-gate-tooling-and-test-quality.md` (U-D1, U-D2, U-D6 to U-D10, U-D16, U-D17).
 
-Fourteen blocks, one stack cut from `main` at `307de0b`:
+Sixteen blocks, one stack cut from `main` at `307de0b`:
 
 | Block | PR | Branch |
 |---|---|---|
@@ -29,10 +29,13 @@ Fourteen blocks, one stack cut from `main` at `307de0b`:
 | 110 | #241 | `test/mirrored-layout` |
 | 120 | #242 | `test/unit-gaps` |
 | 130 | #243 | `test/unit-coverage-check` |
-| 135 | (to fill) | `test/unit-coverage-measure` |
+| 135 | #244 | `test/unit-coverage-measure` |
+| 140 | opened with 150 | `docs/gate-tooling-wrap` |
+| 150 | the stack's top | `refactor/holistic-fixes` |
 
-The closing block 140 (`docs/gate-tooling-wrap`) holds the holistic review's fixes, `BACKLOG.md` and this
-handoff. Block 135 was inserted when block 130 passed both size bounds (Decisions below).
+The closing block split when it passed the files bound: 140 (`docs/gate-tooling-wrap`) holds the holistic
+review's documentation fixes and `BACKLOG.md`; 150 (`refactor/holistic-fixes`), on top, its code fixes, the
+spec's notes and this handoff. Block 135 was inserted when block 130 passed both size bounds (Decisions below).
 
 Nothing of the stack is merged. `git tag -l 'v*'` still ends at `v4.1.0`. Neither database's schema changes:
 no migration in the lot.
@@ -46,8 +49,8 @@ Once merged, `uv run poe check` holds these checks besides ruff, mypy, sqlfluff 
 
 The workspace grows to eight members: `vex_checks` (renamed from `vex_guards`), `template_checks`,
 `coverage_checks` and `p2pwatch_testing` are never shipped. Test counts at the tip: matching 350, crawler 1400
-(14 deselected), amule 133, vex_checks 73, template_checks 35, coverage_checks 34, amule_bump 54. On `main`
-they were 349, 1415, 133, 73 and 54.
+(14 deselected), amule 133, vex_checks 73, template_checks 32 (35 before block 150), coverage_checks 34,
+amule_bump 54. On `main` they were 349, 1415, 133, 73 and 54.
 
 ## What was built
 
@@ -137,6 +140,9 @@ The operator's answers, from the block reports and the lead's notes:
   not need its exemption (17 files).
 - Block 130 passed both bounds whole (812 lines, 20 files) and is not mechanical, so the lead split it, the
   workflow's default: 130 keeps the mapping (426 lines, 14 files), 135 the measure (427 lines, 15 files).
+- The closing block passed the files bound whole (20 files, 129 lines, before `BACKLOG.md`), so the lead split
+  it the same way: 140 the documentation fixes and `BACKLOG.md` (3 files, 8 lines before `BACKLOG.md`), 150
+  the code fixes, the spec's notes and this handoff, on top.
 
 Each block's other departures, the ones a reviewer may weigh:
 
@@ -164,6 +170,12 @@ Each block's other departures, the ones a reviewer may weigh:
     pytest rather than interleaved.
   - The summary counts the modules that have own tests.
 - Block 135: a data file without per-test branch coverage exits with a message rather than a traceback.
+- Block 140: the rule's example is generic (`BaseHTTPMiddleware(dispatch=...)`), since the webui's middleware
+  is still a subclass at 140's tip; `docs/operate.md` also says a rise means the answers "ont peut-être
+  changé de forme".
+- Block 150: `matching_modules` for the review's `extended_modules`, `labels` for `items`, the harness's
+  `module_paths` and the test parameter `listed_path`, so one name keeps one concept; the virtual loop's poll
+  comes back as an `assert`, which refuses ready I/O rather than delivering it.
 
 ## Class 1 fixes
 
@@ -179,7 +191,7 @@ Each block's other departures, the ones a reviewer may weigh:
   level.
 - Block 130: root `[tool.ruff]` gains `target-version = "py313"`; without it ruff assumed 3.10 at the virtual
   root and sorted `tomllib` as third-party. With it, ruff reports nothing else on the tree.
-- Block 135: none.
+- Blocks 135, 140 and 150: none.
 
 ## Spec corrections
 
@@ -210,14 +222,16 @@ unit coverage measure, vulture's findings), in the specs commit of block 10.
 
 ## Wrap counts
 
-Counted with `gh run list --branch <b>` on each stack branch, 2026-10-15, before block 135's run.
+Counted with `gh run list --branch <b>` on each stack branch, 2026-10-15, after block 135's run and before
+the closing blocks' push.
 
 - **Fix-backs**: 2, both by the lead. Block 10's spec note (`720cc18`) and block 110's rewording
-  (`fcfbe0a`).
+  (`fcfbe0a`). Blocks 140 and 150: none at writing.
 - **Cascaded rebases**: 0.
-- **Runs**: one green run at the first pushed head for #231, #233 to #240, #242 and #243. Two runs each, the
-  first cancelled by the next push, then green, for #230 (`d37858a` cancelled, `720cc18` green) and #241
-  (`ad1cbb9` cancelled, `fcfbe0a` green). Runs re-triggered: 2, against 14 blocks.
+- **Runs**: 16 on the 14 blocks before the closing one. One green run at the first pushed head for #231,
+  #233 to #240 and #242 to #244. Two runs each, the first cancelled by the next push, then green, for #230
+  (`d37858a` cancelled, `720cc18` green) and #241 (`ad1cbb9` cancelled, `fcfbe0a` green). Runs
+  re-triggered: 2, against 16 blocks with the two closing ones.
 - **Bodies the operator called unreadable**: none known at writing.
 
 ### Where the block reports and the lead's notes differ
@@ -227,16 +241,52 @@ Counted with `gh run list --branch <b>` on each stack branch, 2026-10-15, before
 - Block 110: the lead's notes count "1 extra run, 1 superseded run cancelled"; `gh run list` shows two runs
   in all, `ad1cbb9` cancelled and `fcfbe0a` green, so the extra run and the cancelled one are the same. The
   block report names `df05a09` and `fcfbe0a` as its green tips; `df05a09` never ran in CI.
+- The lead's notes count 15 blocks and 17 runs, 15 green, before block 140; `gh run list` shows 14 blocks (10
+  to 135) and 16 runs, 14 green and 2 cancelled.
 
 ## Holistic review
 
-To be run once block 135's pull request is open, over `origin/main...origin/test/unit-coverage-measure`, and
-written up here by the closing block with each finding's exit.
+`holistic-review`, over `origin/main...origin/test/unit-coverage-measure` at `89e06a5`, report
+`.reviews/gate-tooling-holistic.md` (gitignored): 0 critical, 2 major, 14 minor. Every decision and every
+`(Corrected ...)` of the spec is implemented as written. Each finding, in the report's order, and its exit:
+
+1. Major, `AGENTS.md`'s rule "No code only tests reach" made the whitelist the routine path. Fixed in 140:
+   the rule and the whitelist's header say what the operator said after block 80, dead code is deleted and
+   the whitelist is a rare exit once no rewrite can show the call.
+2. Major, `_.dispatch` hid every unused `dispatch` of the seven scanned trees. Fixed in 150: the security
+   headers are a function passed to `BaseHTTPMiddleware(dispatch=...)`, and the entry goes. Without the
+   entry, the subclass gave `app.py:518: unused method 'dispatch'`; the rewrite passes with none.
+3. Minor, block 100 deleted the fakes' strictness checks as lines the suite never runs. Fixed in 150: the
+   bearer check, the login's `include_token` and the virtual loop's poll are `assert`s (Pitfalls).
+4. Minor, `test_unit_coverage.py` set modules on a namespace through `__dict__`. Fixed in 150:
+   a `dict[str, ModuleType]`. Its second half, the rule's blind forms (`__dict__`, `vars()`,
+   `operator.attrgetter`, `__getattribute__`/`__setattr__`): waits for the operator.
+5. Minor, the measure credits a body the process runs once to its first caller. Accepted limit, in
+   `AGENTS.md`'s Gotchas (140) and the spec's section 6 (150); no instance exists.
+6. Minor, `unit-coverage-check` run alone reads a stale or partial `.coverage`: waits for the operator.
+7. Minor, `read_names`' unrequested `nodes.Getitem` branch. Fixed in 150: deleted with its three cases; the
+   name list is identical, 100 names.
+8. Minor, `test_app_console.py` imported three private helpers of another test module. Fixed in 150:
+   `TickingMonotonicClock` joins `p2pwatch_testing.application.fakes`; each file keeps its own hash and
+   runaway query.
+9. Minor, names against the Naming rules in `coverage_checks`. Fixed in 150: `listed_path`, `coverage_data`,
+   `labels`, and `matching_modules` rather than the review's `extended_modules`.
+10. Minor, `_TOOLING_PACKAGES` held test support, and `TokenCoverage.coverage` reused the webui's word for a
+    target's coverage. Fixed in 150: `_UNSHIPPED_PACKAGES`, `value_display`.
+11. Minor, a dangling `# must not raise` closed `test_reader.py`. Fixed in 150.
+12. Minor, four checks of block 130 were shown failing only at collection. Fixed in evidence (150): each
+    broken in turn fails its own tests and no other (3, 2, 1 and 2 of 34), quoted in block 150's report.
+13. Minor, `docs/operate.md` stated the skipped counter stays at zero, which no node measured. Fixed in 140: it
+    "devrait rester à zéro", and a rise means the answers "ont peut-être changé de forme".
+14. Minor, this handoff said no block but 60 ran the integration suites. Fixed in 150, under "Validated by CI
+    only".
+15. Minor, matching's `[project] description` was French. Fixed in 150.
+16. Minor, `BACKLOG.md` keeps no pointer to lots 2 and 3: waits for the operator.
 
 ## Pitfalls
 
 - **A new workspace member needs, beyond its `pyproject.toml`**:
-  - its name in `vex_checks`' `_TOOLING_PACKAGES`, a denylist whose test catches it;
+  - its name in `vex_checks`' `_UNSHIPPED_PACKAGES` if no image ships it, a denylist whose test catches it;
   - its own `dev` group, `[tool.deptry]` and two `dependency-check` entries (deptry's second pass only warns
     without a `dev` group);
   - its `type-check` entry;
@@ -263,6 +313,13 @@ written up here by the closing block with each finding's exit.
     and an empty list means no filter.
   - A test patching `sqlite3.connect` for the process broke coverage's own writes (block 120).
   - They cost about 9 % of the crawler's run: 19.2 s to 21.0 s, measured at block 135.
+  - A body the process runs once (a cached function, lazy module state, a session fixture) is credited to
+    the first test that runs it, so its module's own tests would depend on test order (block 150).
+- **A support-code guard that should never fire is an `assert`, not an `if`**: coverage.py counts no branch
+  in an `assert`, so `p2pwatch_testing`'s 100 % keeps it, where block 100 deleted the `if`s. Without them, a
+  client that dropped its bearer or forgot `include_token` failed one adapter test; with them, 57 and 73.
+- **coverage.py counts no branch in a generator's `if`**: `read_names`' subscript filter stayed at 100 % with
+  its three cases deleted, so no check could flag it (block 150).
 - **coverage.py's JSON regions** file a one-line `def` (a `Protocol` stub) under the function, so L3's
   top-level rule walks the syntax tree itself. Block 120's throwaway `ast.walk` counted a nested `def` line as
   top-level, and a test now pins that case. A second `Coverage` started inside a pytest-cov run stacks over
@@ -277,6 +334,8 @@ written up here by the closing block with each finding's exit.
   - pyright started before a new member's install reports `reportMissingImports` and empty references until
     its `pyright-langserver` processes are killed, after which Serena restarts it: done after blocks 100 and
     130. `pkill -f pyright-langserver` from a shell also matches that shell's own command line; kill by pid.
+  - `rename_symbol` on `TokenCoverage.coverage` left the template's read, which the file page test's
+    `StrictUndefined` failed on (block 150).
 - **Same-named test files** now exist across directories (`test_main.py`, `test_errors.py`): a test module is
   `tests.<path>`, never a bare name.
 
@@ -284,15 +343,16 @@ written up here by the closing block with each finding's exit.
 
 - `packages/crawler/src/p2pwatch/domain/download/policy.py` "Guard order" and other prose uses of "guard",
   other concepts than the renamed one (block 10).
-- `test_app_console.py` imports three helpers from `tests.webui.adapters.test_sql_console`, one definition
-  kept (block 110).
+- `FakeAmuleApi`'s 404 for an unknown client ecid was not restored with the guards: `rows[0]` raises
+  `IndexError`, already loud (block 150).
 - The local branch `wip/unit-coverage-full` was deleted at block 135, which holds all of it.
 
 ## Validated by CI only
 
-- The compose smoke and arm64, every block. Block 60 ran `api_integration`, `download_integration` and
-  `orchestration_integration` locally against `ghcr.io/mission-titar/p2pwatch-amule:main` (6 passed); no
-  other block report records a run of them.
+- The compose smoke, and `api_integration`, `download_integration` and `orchestration_integration` against
+  the images just built, on amd64 and arm64, at every block (`build-and-verify` in
+  `.github/workflows/validate.yml`). Block 60 also ran the three suites locally against
+  `ghcr.io/mission-titar/p2pwatch-amule:main` (6 passed).
 - Criterion 4, the images' installed packages, was checked locally by blocks 30, 100 and 135.
   - Block 135: `docker build --target python` of both Dockerfiles on `git archive` copies of `307de0b`
     (`main`) and `209940f` (block 135's code), the venv's `*.dist-info` listed. Crawler: 23 and 23. amule: 1
@@ -310,13 +370,16 @@ written up here by the closing block with each finding's exit.
 - The same-thread reader against the deployed node (block 70).
 - The merge log on a real catalog; block 120 ran the CLI on scratch catalogs.
 
+## Backlog
+
+No entry of `BACKLOG.md` ships with this lot. The three block 10 added (mutation testing in the gate, the
+template guard on Jinja's syntax tree, the fakes' contract tests) stay open. Entries for lots 2 and 3: wait for
+the operator (finding 16).
+
 ## Next
 
-- The closing block 140: the holistic review and its fixes, `BACKLOG.md` reconciled (no entry of this lot
-  ships one; the three entries added by block 10 stay), `AGENTS.md`'s rule "No code only tests reach"
-  sharpened as the operator said after block 80, and this draft corrected.
-- The operator reviews the stack, #230 to block 140's pull request; the lead rebases it onto `main` (still
-  at `307de0b` on 2026-10-15) and the operator merges.
+- The operator reviews the stack, #230 to the closing block's pull request; the lead rebases it onto `main`
+  (still at `307de0b` on 2026-10-15) and the operator merges.
 - The lot changes the crawler image (the metric, the file page, the merge log, `_dev` gone), so Wrap (f)
   applies. The next release still waits for the copy before a migration that rewrites rows (`BACKLOG.md`).
 - Then lot 2 of the umbrella spec (Serena and the language servers, U-D11), whose bench this lot's pitfalls
