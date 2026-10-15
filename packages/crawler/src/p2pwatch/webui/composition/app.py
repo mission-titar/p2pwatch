@@ -17,13 +17,12 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoes
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware import Middleware
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
-from starlette.types import ASGIApp
 
 from catalog_matching.config import MatcherConfig
 from catalog_matching.ed2k_link import build_ed2k_link
@@ -500,7 +499,7 @@ def _search_bar(*, search_text: str | None, kept_params: dict[str, str]) -> Sear
     return SearchBar(query=search_text or "", hidden=hidden)
 
 
-class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
+async def _add_security_headers(request: Request, call_next: RequestResponseEndpoint) -> Response:
     """Defense-in-depth security headers (webui-security#3).
 
     The webui has no built-in auth and binds 0.0.0.0 in-container, so exposure is governed by
@@ -511,16 +510,11 @@ class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
     ``Referrer-Policy: no-referrer`` avoids leaking the eD2k hash to any third-party asset
     (paranoia consistent with the project's spirit).
     """
-
-    def __init__(self, app: ASGIApp) -> None:
-        super().__init__(app)
-
-    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
-        response = await call_next(request)
-        response.headers.setdefault("Content-Security-Policy", "default-src 'self'")
-        response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("Referrer-Policy", "no-referrer")
-        return response
+    response = await call_next(request)
+    response.headers.setdefault("Content-Security-Policy", "default-src 'self'")
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    return response
 
 
 # Human status messages shown after a control POST (via the PRG ``?done=<code>`` param). The
@@ -1149,5 +1143,5 @@ def build_app(
             Route("/console.csv", handle_console_csv, methods=["POST"]),
             Mount("/static", StaticFiles(directory=static_dir)),
         ],
-        middleware=[Middleware(_SecurityHeadersMiddleware)],
+        middleware=[Middleware(BaseHTTPMiddleware, dispatch=_add_security_headers)],
     )
