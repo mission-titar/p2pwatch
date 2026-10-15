@@ -1,5 +1,4 @@
 from amule_bump.body import (
-    GITHUB_BODY_MAX_CHARACTERS,
     TRUNCATION_NOTICE,
     build_pull_request_body,
     changelog_section,
@@ -11,6 +10,7 @@ from amule_bump.body import (
 from amule_bump.dockerfile import Pin
 from fakes import FakeRepo
 
+GITHUB_BODY_MAX_CHARACTERS = 65536
 OLD = Pin("3.0.1", "02db0d7faecfc377694ff6242bc23346185990ed")
 NEW = Pin("3.1.0", "909d304d993ee07df6c6f6acf501a6d791d53666")
 
