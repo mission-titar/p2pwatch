@@ -55,7 +55,7 @@
   <p>Coverage values:</p>
   <ul>
     {% for token in file.explanation_coverage_values %}
-    <li>{{ token.token_name }}: {{ token.coverage }}</li>
+    <li>{{ token.token_name }}: {{ token.value_display }}</li>
     {% endfor %}
   </ul>
   <p>Vetoes fired:</p>

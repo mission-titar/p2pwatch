@@ -502,7 +502,7 @@ class TokenCoverage:
     """One coverage token of an explanation and its best value over the file's names."""
 
     token_name: str
-    coverage: str  # two decimals, on the scale of the policy's min_coverage
+    value_display: str  # two decimals, on the scale of the policy's min_coverage
 
 
 @dataclass(frozen=True)
