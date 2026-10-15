@@ -50,7 +50,8 @@ Once merged, `uv run poe check` holds these checks besides ruff, mypy, sqlfluff 
   dunders, `operator.attrgetter` or `methodcaller`, nor the `builtins` module);
 - `dead-code-check` (vulture over every `src`, with the names the templates read);
 - per-package mypy over `src` and `tests`;
-- `unit-coverage-check`: each module covered by its own tests, the test files mirroring `src`.
+- `_unit-coverage-check`, private, run only by `test`: each module covered by its own tests, the test files
+  mirroring `src`.
 
 The workspace grows to eight members: `vex_checks` (renamed from `vex_guards`), `template_checks`,
 `coverage_checks` and `p2pwatch_testing` are never shipped. Test counts at the tip: matching 350, crawler 1400
@@ -149,7 +150,9 @@ The operator's answers, from the block reports and the lead's notes:
   it the same way: 140 the documentation fixes and `BACKLOG.md` (3 files, 8 lines before `BACKLOG.md`), 150
   the code fixes (18 files, 121 lines). 150 had no room for the operator's answers, so the lead added 160 on
   top for them and the final notes.
-- Block 160, the holistic review's finding 4: the rule refuses the blind forms too ("a").
+- Block 160, the holistic review's finding 4: the rule refuses the blind forms too ("a"); finding 6: the
+  task becomes private, run only by `test`, the data guard kept ("c"). The operator did not object to the
+  `__slots__` rewrite.
 
 Each block's other departures, the ones a reviewer may weigh:
 
@@ -274,7 +277,11 @@ the closing blocks' push.
    `test_crawler_control_loop.py`, gave way to `LoopCrawlerControl.__slots__`.
 5. Minor, the measure credits a body the process runs once to its first caller. Accepted limit, in
    `AGENTS.md`'s Gotchas (140) and the spec's section 6 (150); no instance exists.
-6. Minor, `unit-coverage-check` run alone reads a stale or partial `.coverage`: waits for the operator.
+6. Minor, `unit-coverage-check` run alone reads a stale or partial `.coverage`. The operator's choice "c":
+   fixed in 160, the task is private, `_unit-coverage-check`. `poe _unit-coverage-check` gives "Tasks
+   prefixed with `_` cannot be executed directly" (exit 1); `poe test` still runs it in all seven packages,
+   and an orphan test file seeded in amule_bump fails it ("Sequence aborted after failed subtask
+   '_unit-coverage-check'"). Block 135's guard against data without per-test contexts stays.
 7. Minor, `read_names`' unrequested `nodes.Getitem` branch. Fixed in 150: deleted with its three cases; the
    name list is identical, 100 names.
 8. Minor, `test_app_console.py` imported three private helpers of another test module. Fixed in 150:
@@ -302,7 +309,7 @@ the closing blocks' push.
     without a `dev` group);
   - its `type-check` entry;
   - its `src` in ruff's `src` and in `[tool.vulture] paths` (but `p2pwatch_testing`);
-  - its `pytest` entry in `test` and its `unit-coverage-check` entry;
+  - its `pytest` entry in `test` and its `_unit-coverage-check` entry;
   - `--cov-context=test` in its `addopts`;
   - `uv lock`.
 - **Install proofs**: a host `uv sync --no-editable` reuses a member's cached wheel until its
