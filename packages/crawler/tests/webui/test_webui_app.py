@@ -1920,6 +1920,63 @@ async def test_file_detail_whole_episode_shows_both_targets(
     assert "072B" in resp.text
 
 
+@pytest.fixture
+def app_title_coverage(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
+    """One file whose name covers two of its target's three title words, decided on that."""
+    with sqlite3.connect(catalog_db) as conn:
+        insert_file(conn, TEST_HASH, 100_000_000)
+        insert_observation(conn, TEST_HASH, "keroro_duel_giroro_vf.avi")
+        insert_decision(conn, TEST_HASH, "072B", "notify", rule_name="title_review")
+    matcher_config = parse_matcher_config(
+        {
+            "tokens": {
+                "keroro": {"keyword": "keroro"},
+                "title_hit": {"coverage": "title", "min_coverage": 0.6},
+            },
+            "rules": [
+                {
+                    "name": "title_review",
+                    "tier": "notify",
+                    "scope": "segment",
+                    "all": ["keroro", "title_hit"],
+                }
+            ],
+        }
+    )
+
+    import p2pwatch.webui
+
+    webui_dir = Path(p2pwatch.webui.__file__).parent / "adapters"
+    app = build_app(
+        catalog_db_path=catalog_db,
+        local_db_path=local_db,
+        matcher_config=matcher_config,
+        target_segments=_targets_ab(),
+        templates_dir=webui_dir / "templates",
+        static_dir=webui_dir / "static",
+        control=_RecordingControl(),
+        status_readings=_NO_STATUS,
+        amule_url=_AMULE_URL,
+        wall_clock=_WALL_CLOCK,
+        monotonic_clock=_MONOTONIC_CLOCK,
+        source_period_gap=_GAP,
+    )
+    return app, TEST_HASH
+
+
+@pytest.mark.asyncio
+async def test_file_detail_shows_each_coverage_value_to_two_decimals(
+    app_title_coverage: tuple[Starlette, str],
+) -> None:
+    app, hash_ = app_title_coverage
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(_detail_url(hash_))
+    assert resp.status_code == 200
+    assert "<li>title_hit</li>" in resp.text  # fired: 0.67 reaches min_coverage
+    assert "Coverage values:" in resp.text
+    assert "<li>title_hit: 0.67</li>" in resp.text  # "duel" and "giroro" of "Duel Contre Giroro"
+
+
 # ---------------------------------------------------------------------------
 # Dashboard controls and client status (stage 2 D20): each POST dispatches one intent and
 # redirects (PRG) to the dashboard, whose ?done banner maps a known code to a message.

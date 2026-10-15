@@ -52,6 +52,12 @@
     <li>{{ token }}</li>
     {% endfor %}
   </ul>
+  <p>Coverage values:</p>
+  <ul>
+    {% for token in file.explanation_coverage_values %}
+    <li>{{ token.token_name }}: {{ token.coverage }}</li>
+    {% endfor %}
+  </ul>
   <p>Vetoes fired:</p>
   <ul>
     {% for veto in file.explanation_vetoes_fired %}

@@ -99,6 +99,7 @@ from p2pwatch.webui.domain.views import (
     TargetCoverageRow,
     TierFacet,
     TimelineRow,
+    TokenCoverage,
 )
 
 # A detail page's path segment: a file_id or a source_id as 32 lowercase hex (stage 1 and 4 D13).
@@ -912,6 +913,7 @@ def build_app(
         explanation_target_id: str | None = None
         explanation_rules_fired: tuple[str, ...] = ()
         explanation_tokens_matched: tuple[str, ...] = ()
+        explanation_coverage_values: tuple[TokenCoverage, ...] = ()
         explanation_vetoes_fired: tuple[str, ...] = ()
         explanation_notes: tuple[str, ...] = ()
 
@@ -929,6 +931,10 @@ def build_app(
                 explanation_target_id = explanation.target_id
                 explanation_rules_fired = explanation.rules_fired
                 explanation_tokens_matched = explanation.tokens_matched
+                explanation_coverage_values = tuple(
+                    TokenCoverage(token_name=token_name, coverage=f"{coverage:.2f}")
+                    for token_name, coverage in explanation.coverage_values
+                )
                 explanation_vetoes_fired = explanation.vetoes_fired
                 explanation_notes = ("Evaluated against the current configuration",)
 
@@ -946,6 +952,7 @@ def build_app(
             explanation_target_id=explanation_target_id,
             explanation_rules_fired=explanation_rules_fired,
             explanation_tokens_matched=explanation_tokens_matched,
+            explanation_coverage_values=explanation_coverage_values,
             explanation_vetoes_fired=explanation_vetoes_fired,
             explanation_notes=explanation_notes,
         )
