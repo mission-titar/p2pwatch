@@ -184,10 +184,6 @@ class MatchingEngine:
             return None
         return _explain(self._config, resolved, self._matchable_candidates(candidates))
 
-    def evaluate(self, candidate: FileCandidate) -> list[MatchDecision]:
-        """All decisions for ``candidate`` (spec §4); ``[]`` = file discarded."""
-        return self.evaluate_file((candidate,))
-
     def evaluate_file(self, candidates: Iterable[FileCandidate]) -> list[MatchDecision]:
         """All decisions for ONE file, one candidate per filename; ``[]`` = discard.
 

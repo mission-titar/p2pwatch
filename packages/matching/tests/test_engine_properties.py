@@ -102,11 +102,11 @@ def test_property_decision_invariant_under_target_reordering() -> None:
     reference_engine = MatchingEngine(config, base_targets)
     for filename in _FILENAMES:
         candidate = FileCandidate(filename=filename)
-        expected = reference_engine.evaluate(candidate)
+        expected = reference_engine.evaluate_file((candidate,))
         for _ in range(20):  # 20 seeded permutations per file (deterministic)
             shuffled = base_targets[:]
             rng.shuffle(shuffled)
-            got = MatchingEngine(config, shuffled).evaluate(candidate)
+            got = MatchingEngine(config, shuffled).evaluate_file((candidate,))
             assert got == expected, f"decision depends on target order for {filename!r}"
 
 
@@ -136,9 +136,9 @@ def test_property_higher_priority_rule_never_lowers_tier() -> None:
     engine_boosted = MatchingEngine(config_boosted, targets)
     for filename in _FILENAMES:
         candidate = FileCandidate(filename=filename)
-        base_tier = _max_tier(engine_base.evaluate(candidate))
+        base_tier = _max_tier(engine_base.evaluate_file((candidate,)))
         if base_tier is None:
             continue  # a discarded file may stay discarded
-        boosted_tier = _max_tier(engine_boosted.evaluate(candidate))
+        boosted_tier = _max_tier(engine_boosted.evaluate_file((candidate,)))
         assert boosted_tier is not None, f"{filename!r}: decided without boost, discarded with it?!"
         assert boosted_tier >= base_tier, f"{filename!r}: a higher-priority rule LOWERED the tier"

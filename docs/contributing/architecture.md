@@ -228,9 +228,10 @@ sequenceDiagram
   A-->>W: SearchAnswer (observations, skipped results)
   loop each observation
     W->>C: record_observation()
-    W->>E: evaluate(candidate)
-    E-->>W: MatchDecision | None
-    alt decision
+    W->>C: known_filenames(file)
+    W->>E: evaluate_file(candidates)
+    E-->>W: list[MatchDecision]
+    loop each changed decision
       W->>C: record_decision(target_id, tier, rule)
       W-)D: wake (if download tier)
     end

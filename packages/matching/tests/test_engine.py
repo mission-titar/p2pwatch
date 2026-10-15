@@ -144,7 +144,7 @@ def _canonical_engine() -> MatchingEngine:
 
 
 def test_evaluate_real_62a_is_download_via_first_rule_on_62a() -> None:
-    decisions = _canonical_engine().evaluate(FileCandidate(filename=_REAL_62A_FILENAME))
+    decisions = _canonical_engine().evaluate_file((FileCandidate(filename=_REAL_62A_FILENAME),))
     assert len(decisions) == 1
     assert decisions[0].tier == "download"
     assert decisions[0].rule_name == "id_segment_exact"
@@ -152,13 +152,17 @@ def test_evaluate_real_62a_is_download_via_first_rule_on_62a() -> None:
 
 
 def test_evaluate_discards_non_keroro_file() -> None:
-    decisions = _canonical_engine().evaluate(FileCandidate(filename="Naruto épisode 062 VF.avi"))
+    decisions = _canonical_engine().evaluate_file(
+        (FileCandidate(filename="Naruto épisode 062 VF.avi"),)
+    )
     assert decisions == []
 
 
 def test_evaluate_returns_empty_list_not_none_for_discard() -> None:
     # The discard sentinel is now [] (a list), never None (spec §4).
-    decisions = _canonical_engine().evaluate(FileCandidate(filename="totally unrelated.txt"))
+    decisions = _canonical_engine().evaluate_file(
+        (FileCandidate(filename="totally unrelated.txt"),)
+    )
     assert decisions == []
     assert isinstance(decisions, list)
 
@@ -166,7 +170,7 @@ def test_evaluate_returns_empty_list_not_none_for_discard() -> None:
 def test_evaluate_highest_tier_comes_from_a_different_target() -> None:
     # "keroro N°062B.avi": 62A -> catalog (keroro_large, not attributable); 62B -> download
     # (id_segment_exact). Only 62B is attributable -> the sole emitted decision is 62B.
-    decisions = _canonical_engine().evaluate(FileCandidate(filename="keroro N°062B.avi"))
+    decisions = _canonical_engine().evaluate_file((FileCandidate(filename="keroro N°062B.avi"),))
     assert len(decisions) == 1
     assert decisions[0].tier == "download"
     assert decisions[0].rule_name == "id_segment_exact"
@@ -176,7 +180,7 @@ def test_evaluate_highest_tier_comes_from_a_different_target() -> None:
 def test_evaluate_notify_tier_via_title_review() -> None:
     # Close title, NO source marker -> title_review (notify, segment-level) on 062A only.
     candidate = FileCandidate(filename="KERORO Les demoiselles cambrioleuses.avi")
-    decisions = _canonical_engine().evaluate(candidate)
+    decisions = _canonical_engine().evaluate_file((candidate,))
     assert len(decisions) == 1
     assert decisions[0].tier == "notify"
     assert decisions[0].rule_name == "title_review"
@@ -186,7 +190,9 @@ def test_evaluate_notify_tier_via_title_review() -> None:
 def test_evaluate_tiebreak_same_tier_lowest_target_id_wins() -> None:
     # "Keroro" filler only -> 62A and 62B BOTH give keroro_large (catalog, not attributable)
     # -> single-winner fallback -> tie-break by target_id: 062A < 062B.
-    decisions = _canonical_engine().evaluate(FileCandidate(filename="Keroro rediffusion.mkv"))
+    decisions = _canonical_engine().evaluate_file(
+        (FileCandidate(filename="Keroro rediffusion.mkv"),)
+    )
     assert len(decisions) == 1
     assert decisions[0].tier == "catalog"
     assert decisions[0].rule_name == "keroro_large"
@@ -238,7 +244,7 @@ def test_evaluate_tiebreak_same_tier_lowest_rule_index_wins_over_target_id() -> 
     # by_segment / by_title are NOT attributable rule names -> single-winner fallback.
     # Index 0 (by_segment on 099Z) prevails over index 1 (by_title on 001A), DESPITE
     # 001A < 099Z: the rule index breaks the tie BEFORE the target_id.
-    decisions = engine.evaluate(candidate)
+    decisions = engine.evaluate_file((candidate,))
     assert len(decisions) == 1
     assert decisions[0].rule_name == "by_segment"
     assert decisions[0].target_id == "099Z"
@@ -247,19 +253,19 @@ def test_evaluate_tiebreak_same_tier_lowest_rule_index_wins_over_target_id() -> 
 def test_evaluate_rejects_filename_over_max_length() -> None:
     config = parse_matcher_config(_CANONICAL_RAW)
     engine = MatchingEngine(config, (_TARGET_62A,), max_filename_length=16)
-    assert engine.evaluate(FileCandidate(filename="Keroro N°062A.avi")) == []
+    assert engine.evaluate_file((FileCandidate(filename="Keroro N°062A.avi"),)) == []
 
 
 def test_evaluate_accepts_filename_at_or_below_max_length() -> None:
     config = parse_matcher_config(_CANONICAL_RAW)
     engine = MatchingEngine(config, (_TARGET_62A,), max_filename_length=4096)
-    decisions = engine.evaluate(FileCandidate(filename="Keroro N°062A.avi"))
+    decisions = engine.evaluate_file((FileCandidate(filename="Keroro N°062A.avi"),))
     assert len(decisions) == 1
     assert decisions[0].tier == "download"
 
 
 def test_engine_resolves_each_target_once_at_construction() -> None:
-    # Pre-resolution happens at construction: evaluate does not rebuild a tree.
+    # Pre-resolution happens at construction: evaluate_file does not rebuild a tree.
     config = parse_matcher_config(_CANONICAL_RAW)
     engine = MatchingEngine(config, (_TARGET_62A, _TARGET_62B))
     assert len(engine._resolved) == 2
@@ -267,7 +273,9 @@ def test_engine_resolves_each_target_once_at_construction() -> None:
 
 
 def test_evaluate_explanation_lists_coverage_value_even_below_threshold() -> None:
-    decisions = _canonical_engine().evaluate(FileCandidate(filename="keroro rediffusion.mkv"))
+    decisions = _canonical_engine().evaluate_file(
+        (FileCandidate(filename="keroro rediffusion.mkv"),)
+    )
     assert len(decisions) == 1
     coverage_names = [name for name, _ in decisions[0].explanation.coverage_values]
     assert "title_hit" in coverage_names
@@ -275,7 +283,7 @@ def test_evaluate_explanation_lists_coverage_value_even_below_threshold() -> Non
 
 
 def test_explanation_on_real_62a_lists_fired_rules_tokens_and_coverage() -> None:
-    decisions = _canonical_engine().evaluate(FileCandidate(filename=_REAL_62A_FILENAME))
+    decisions = _canonical_engine().evaluate_file((FileCandidate(filename=_REAL_62A_FILENAME),))
     assert len(decisions) == 1
     explanation = decisions[0].explanation
     assert explanation.target_id == "062A"
@@ -312,7 +320,7 @@ def test_explanation_single_rule_fired_and_no_coverage_token() -> None:
         ],
     }
     engine = MatchingEngine(parse_matcher_config(raw), (_TARGET_62A,))
-    decisions = engine.evaluate(FileCandidate(filename="N°062A.avi"))
+    decisions = engine.evaluate_file((FileCandidate(filename="N°062A.avi"),))
     assert len(decisions) == 1
     assert decisions[0].explanation.rules_fired == ("only",)
     assert decisions[0].explanation.coverage_values == ()
@@ -342,7 +350,7 @@ def _triples(decisions: list[MatchDecision]) -> list[tuple[str, str, str]]:
 
 def test_evaluate_bare_number_fans_out_to_both_segments() -> None:
     # §11 clean bare number: no segment-level signal -> both segments emitted (rule 2).
-    decisions = _fanout_engine().evaluate(FileCandidate(filename="Keroro 62.avi"))
+    decisions = _fanout_engine().evaluate_file((FileCandidate(filename="Keroro 62.avi"),))
     assert _triples(decisions) == [
         ("062A", "notify", "numero_nu"),
         ("062B", "notify", "numero_nu"),
@@ -351,17 +359,19 @@ def test_evaluate_bare_number_fans_out_to_both_segments() -> None:
 
 def test_evaluate_title_a_plus_bare_number_pins_segment_a_only() -> None:
     # §11 title A + bare number: the segment-level title cuts the fan-out (rule 1) -> A only.
-    decisions = _fanout_engine().evaluate(
-        FileCandidate(filename="Keroro 62 Les demoiselles cambrioleuses.avi")
+    decisions = _fanout_engine().evaluate_file(
+        (FileCandidate(filename="Keroro 62 Les demoiselles cambrioleuses.avi"),)
     )
     assert _triples(decisions) == [("062A", "notify", "title_review")]
 
 
 def test_evaluate_both_segment_titles_emit_both_segments() -> None:
     # §11 both titles present: each title pins its own segment (rule 1) -> both emitted.
-    decisions = _fanout_engine().evaluate(
-        FileCandidate(
-            filename="Keroro Les demoiselles cambrioleuses Le grand combat sous-marin.avi"
+    decisions = _fanout_engine().evaluate_file(
+        (
+            FileCandidate(
+                filename="Keroro Les demoiselles cambrioleuses Le grand combat sous-marin.avi"
+            ),
         )
     )
     assert _triples(decisions) == [
@@ -372,7 +382,7 @@ def test_evaluate_both_segment_titles_emit_both_segments() -> None:
 
 def test_evaluate_bare_number_with_source_marker_fans_out_to_download() -> None:
     # §3 row 3: bare number + source marker -> both segments in download (no tier cap).
-    decisions = _fanout_engine().evaluate(FileCandidate(filename="Keroro 62 teletoon.avi"))
+    decisions = _fanout_engine().evaluate_file((FileCandidate(filename="Keroro 62 teletoon.avi"),))
     assert _triples(decisions) == [
         ("062A", "download", "numero_nu_confirmed"),
         ("062B", "download", "numero_nu_confirmed"),
@@ -381,7 +391,7 @@ def test_evaluate_bare_number_with_source_marker_fans_out_to_download() -> None:
 
 def test_evaluate_mono_episode_bare_number_emits_single_segment() -> None:
     # §11 mono episode: a single-segment episode fans out to exactly one segment.
-    decisions = _fanout_engine().evaluate(FileCandidate(filename="Keroro 94.avi"))
+    decisions = _fanout_engine().evaluate_file((FileCandidate(filename="Keroro 94.avi"),))
     assert _triples(decisions) == [("094A", "notify", "numero_nu")]
 
 
@@ -390,13 +400,13 @@ def test_evaluate_out_of_range_bare_number_is_evicted() -> None:
     # { not: episode_number } guard vetoes it (Approach 1 eviction) -> discarded, no catalog
     # fallback. Seasonal SxE / NNxNN forms without a letter are NOT bare numbers and still
     # fall back to catalog (see the golden corpus).
-    decisions = _fanout_engine().evaluate(FileCandidate(filename="Keroro 130.avi"))
+    decisions = _fanout_engine().evaluate_file((FileCandidate(filename="Keroro 130.avi"),))
     assert decisions == []
 
 
 def test_evaluate_lettered_segment_pins_that_segment_only() -> None:
     # §3 row 4: a lettered number (N°062A) is segment-level -> only that segment (rule 1).
-    decisions = _fanout_engine().evaluate(FileCandidate(filename="Keroro N°062A.avi"))
+    decisions = _fanout_engine().evaluate_file((FileCandidate(filename="Keroro N°062A.avi"),))
     assert _triples(decisions) == [("062A", "download", "id_segment_exact")]
 
 
@@ -483,7 +493,7 @@ _SCOPE_RAW: dict[str, object] = {
 
 def _scope_triples(filename: str) -> list[tuple[str, str, str]]:
     engine = MatchingEngine(parse_matcher_config(_SCOPE_RAW), (_TARGET_62A, _TARGET_62B))
-    return _triples(engine.evaluate(FileCandidate(filename=filename)))
+    return _triples(engine.evaluate_file((FileCandidate(filename=filename),)))
 
 
 def test_episode_scope_fans_out_to_every_segment() -> None:
