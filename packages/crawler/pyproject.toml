@@ -67,6 +67,29 @@ show_missing = true
 fail_under = 100
 exclude_also = ["if TYPE_CHECKING:"]
 
+# Test files that test no module of `src`, each with what it tests (unit-coverage-check).
+[tool.coverage_checks.tests_without_unit]
+"tests/adapters/persistence_sqlite/test_append_only.py" = "the catalog's append-only triggers, in SQL"
+"tests/adapters/persistence_sqlite/test_local_migration_0006.py" = "a SQL migration of local.db"
+"tests/adapters/persistence_sqlite/test_local_migration_0007.py" = "a SQL migration of local.db"
+"tests/adapters/persistence_sqlite/test_local_migration_0008.py" = "a SQL migration of local.db"
+"tests/adapters/persistence_sqlite/test_local_migration_0009.py" = "a SQL migration of local.db"
+"tests/adapters/persistence_sqlite/test_local_migration_0010.py" = "a SQL migration of local.db"
+"tests/adapters/persistence_sqlite/test_local_migration_0011.py" = "a SQL migration of local.db"
+"tests/adapters/persistence_sqlite/test_migration_0002.py" = "a SQL migration of catalog.db"
+"tests/adapters/persistence_sqlite/test_migration_0006.py" = "a SQL migration of catalog.db"
+"tests/adapters/persistence_sqlite/test_migration_0007.py" = "a SQL migration of catalog.db"
+"tests/adapters/persistence_sqlite/test_migration_0008.py" = "a SQL migration of catalog.db"
+"tests/adapters/persistence_sqlite/test_migration_0009.py" = "a SQL migration of catalog.db"
+"tests/adapters/persistence_sqlite/test_migration_0010.py" = "a SQL migration of catalog.db"
+"tests/adapters/persistence_sqlite/test_migration_0011.py" = "a SQL migration of catalog.db"
+"tests/adapters/persistence_sqlite/test_migration_0012.py" = "a SQL migration of catalog.db"
+"tests/adapters/persistence_sqlite/test_migration_drop_verification.py" = "SQL migrations of both databases"
+"tests/adapters/persistence_sqlite/test_migration_last_seen_at.py" = "a SQL migration of local.db"
+"tests/application/test_fakes.py" = "p2pwatch_testing's fakes"
+"tests/composition/test_prod_targets.py" = "deploy/targets.yml"
+"tests/integration/" = "a real daemon or the compose stack: integration suites, deselected by marker"
+
 [tool.sqlfluff.core]
 dialect = "sqlite"
 max_line_length = 100

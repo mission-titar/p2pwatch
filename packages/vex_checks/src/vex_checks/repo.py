@@ -20,7 +20,13 @@ def display_path(path: Path) -> str:
         return str(path)
 
 
-_TOOLING_PACKAGES = {"vex_checks", "template_checks", "amule_bump", "crawler_testing"}
+_TOOLING_PACKAGES = {
+    "vex_checks",
+    "template_checks",
+    "coverage_checks",
+    "amule_bump",
+    "crawler_testing",
+}
 
 
 def source_dirs() -> list[Path]:
