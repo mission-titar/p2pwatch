@@ -222,6 +222,9 @@ Estimates from the probes (2026-10-15), not a diff: read them as plus or minus 3
   (Corrected 2026-10-15, at block 60: block 60 passes 20 files too, 21, under the same exemption: 6 of its
   test files only take `SearchClient.search`'s new return type, the integration suite's fake among them, a 10th
   implementation beside L9's 9.)
+  (Corrected 2026-10-15, at block 110: block 110 passes 500 lines too, 608, 491 of them the SQL console's
+  three-way split of verbatim test bodies, since moving lines into another file counts them once deleted and
+  once added.)
 - **Each block updates the documents its change contradicts**: `AGENTS.md` (the package list and count, the
   gate's sub-tasks, the tooling split, the layout of tests), `docs/contributing/testing.md`, `docs/operate.md`
   (L9), and the packages' own `AGENTS.md`.
