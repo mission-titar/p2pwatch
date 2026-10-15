@@ -37,8 +37,8 @@ def main() -> None:
     """CLI entry point: prints each problem and a summary, exits 1 on any problem."""
     coverage = Coverage()
     coverage.load()
-    data = coverage.get_data()
-    if not data.has_arcs() or not data.measured_contexts() - {""}:
+    coverage_data = coverage.get_data()
+    if not coverage_data.has_arcs() or not coverage_data.measured_contexts() - {""}:
         sys.exit(
             f"no per-test branch coverage in {coverage.get_option('run:data_file')}: run this"
             " package's pytest first, with branch coverage and --cov-context=test"
@@ -95,12 +95,12 @@ def _find_shortfall(
         if branch[0] in body_lines or branch not in every_test.run_branches
     )
     unrun = [
-        f"{kind} {', '.join(items)}"
-        for kind, items in (
+        f"{kind} {', '.join(labels)}"
+        for kind, labels in (
             ("statements", [str(statement) for statement in statements]),
             ("branches", [f"{start}->{end if end > 0 else 'exit'}" for start, end in branches]),
         )
-        if items
+        if labels
     ]
     if not unrun:
         return None
