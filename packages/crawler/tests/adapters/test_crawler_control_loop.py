@@ -73,14 +73,13 @@ def test_restart_sets_only_the_shutdown_event() -> None:
 
 def test_control_holds_no_db_connection_and_only_events_plus_loop() -> None:
     """Structural read-only guarantee (spec §4): the control's only effect is scheduling event
-    mutations on the loop. It holds NO DB connection / cannot write. We assert its instance
-    state is exactly the loop + the two events (nothing repo/connection/cursor-shaped)."""
+    mutations on the loop. It holds NO DB connection / cannot write: its slots, the only state
+    it can hold, are exactly the loop + the two events."""
     loop = _ImmediateLoop()
     control, resumed, shutdown = _control_with(loop)
-    held = set(vars(control).values())
-    assert held == {loop, resumed, shutdown}
-    for value in vars(control).values():
-        assert isinstance(value, (asyncio.Event, _ImmediateLoop))
+    assert LoopCrawlerControl.__slots__ == ("_loop", "_resumed", "_shutdown")
+    held: tuple[object, ...] = (control._loop, control._resumed, control._shutdown)
+    assert held == (loop, resumed, shutdown)
 
 
 def test_mutation_is_deferred_to_the_loop_thread_via_call_soon_threadsafe() -> None:
