@@ -4,31 +4,20 @@ The tests seed a real ``catalog.db`` via the writer (``open_catalog``) so ``open
 real ``mode=ro`` file to open, exactly like the ``test_reader.py`` persistence tests.
 """
 
-from datetime import timedelta
 from pathlib import Path
 
 from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.ports.clock import MonotonicInstant
 from p2pwatch.webui.adapters.sql_console import ConsoleOutcome, run_query
-from p2pwatch_testing.application.fakes import FakeMonotonicClock, FakeTime
+from p2pwatch_testing.application.fakes import FakeTime, TickingMonotonicClock
 from p2pwatch_testing.catalog_rows import insert_file
 
 _HASH_A = "a" * 32
-# A few hundredths of a second of real time, past a 5 s budget on a _TickingMonotonicClock.
+# A few hundredths of a second of real time, past a 5 s budget on a TickingMonotonicClock.
 _PAST_BUDGET_SQL = (
     "WITH RECURSIVE r(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM r WHERE i < 100000)"
     " SELECT count(*) FROM r"
 )
-
-
-class _TickingMonotonicClock(FakeMonotonicClock):
-    """Each ``now()`` a second after the previous one: a query's every check sees time pass."""
-
-    def now(self) -> MonotonicInstant:
-        moment = super().now()
-        self._fake_time.advance(timedelta(seconds=1))
-        return moment
 
 
 def _seed_catalog(path: Path) -> None:
@@ -55,7 +44,7 @@ def test_run_query_select_returns_columns_and_rows(tmp_path: Path) -> None:
         sql="SELECT native_id, size_bytes FROM files",
         row_cap=1000,
         timeout_seconds=5.0,
-        monotonic_clock=_TickingMonotonicClock(FakeTime()),
+        monotonic_clock=TickingMonotonicClock(FakeTime()),
     )
     assert outcome.error is None
     assert outcome.columns == ("native_id", "size_bytes")
@@ -153,7 +142,7 @@ def test_run_query_runaway_is_aborted_by_timeout(tmp_path: Path) -> None:
         sql=_PAST_BUDGET_SQL,
         row_cap=1000,
         timeout_seconds=5.0,
-        monotonic_clock=_TickingMonotonicClock(FakeTime()),
+        monotonic_clock=TickingMonotonicClock(FakeTime()),
     )
     assert outcome.error is not None
     assert "time limit" in outcome.error

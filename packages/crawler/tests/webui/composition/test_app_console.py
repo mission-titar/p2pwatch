@@ -15,12 +15,14 @@ from catalog_matching.validation import parse_matcher_config, parse_targets
 from p2pwatch.application.status_loop import StatusBoard
 from p2pwatch.ports.clock import MonotonicClock
 from p2pwatch.webui.composition.app import build_app
-from p2pwatch_testing.application.fakes import FakeTime
+from p2pwatch_testing.application.fakes import FakeTime, TickingMonotonicClock
 from p2pwatch_testing.catalog_rows import insert_file
-from tests.webui.adapters.test_sql_console import (
-    _HASH_A,
-    _PAST_BUDGET_SQL,
-    _TickingMonotonicClock,
+
+_HASH_A = "a" * 32
+# A few hundredths of a second of real time, past a 5 s budget on a TickingMonotonicClock.
+_PAST_BUDGET_SQL = (
+    "WITH RECURSIVE r(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM r WHERE i < 100000)"
+    " SELECT count(*) FROM r"
 )
 
 # ---------------------------------------------------------------------------
@@ -232,7 +234,7 @@ async def test_post_console_query_error_shows_error_banner(console_app: Starlett
 async def test_post_console_measures_its_budget_on_the_apps_monotonic_clock(
     catalog_db: Path, local_db: Path
 ) -> None:
-    app = _build(catalog_db, local_db, _TickingMonotonicClock(FakeTime()))
+    app = _build(catalog_db, local_db, TickingMonotonicClock(FakeTime()))
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post("/console", data={"sql": _PAST_BUDGET_SQL, "db": "catalog"})
     assert resp.status_code == 200
