@@ -1,6 +1,7 @@
 import pytest
 
 from catalog_matching.matchers import (
+    READERS_BY_ATTR,
     AttrBetweenMatcher,
     CoverageMatcher,
     KeywordMatcher,
@@ -112,6 +113,17 @@ def test_coverage_partial_fraction_below_min_does_not_match() -> None:
     candidate = FileCandidate(filename="demoiselles autre.avi")
     assert matcher.coverage(candidate) == 0.5
     assert matcher.matches(candidate) is False
+
+
+def test_each_attr_reads_its_candidate_field() -> None:
+    candidate = FileCandidate(
+        filename="x.avi", size_mib=1.0, duration_seconds=2.0, bitrate_kbps=3.0
+    )
+    assert {attr: read(candidate) for attr, read in READERS_BY_ATTR.items()} == {
+        "size_mib": 1.0,
+        "duration_seconds": 2.0,
+        "bitrate_kbps": 3.0,
+    }
 
 
 def test_attr_between_unknown_attr_raises() -> None:

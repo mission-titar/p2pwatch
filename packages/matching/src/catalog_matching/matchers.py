@@ -1,6 +1,7 @@
 """Leaf matchers of the matching engine (cf. spec §8.2)."""
 
 import re
+from collections.abc import Callable, Mapping
 
 from rapidfuzz import fuzz
 
@@ -102,9 +103,12 @@ class CoverageMatcher:
         return self.coverage(candidate) >= self._min_coverage
 
 
-# Closed enum of FileCandidate numeric attributes usable by attr_between
-# (cf. spec §8.2). Any other name -> error.
-ATTR_NAMES: frozenset[str] = frozenset({"size_mib", "duration_seconds", "bitrate_kbps"})
+# The closed set of FileCandidate numeric attributes attr_between reads (cf. spec §8.2).
+READERS_BY_ATTR: Mapping[str, Callable[[FileCandidate], float | None]] = {
+    "size_mib": lambda candidate: candidate.size_mib,
+    "duration_seconds": lambda candidate: candidate.duration_seconds,
+    "bitrate_kbps": lambda candidate: candidate.bitrate_kbps,
+}
 
 
 class AttrBetweenMatcher:
@@ -119,14 +123,16 @@ class AttrBetweenMatcher:
         min_bound: float | None = None,
         max_bound: float | None = None,
     ) -> None:
-        if attr not in ATTR_NAMES:
-            raise ValueError(f"unknown attribute: {attr!r} (expected one of {sorted(ATTR_NAMES)})")
-        self._attr = attr
+        if attr not in READERS_BY_ATTR:
+            raise ValueError(
+                f"unknown attribute: {attr!r} (expected one of {sorted(READERS_BY_ATTR)})"
+            )
+        self._read_attr = READERS_BY_ATTR[attr]
         self._min_bound = min_bound
         self._max_bound = max_bound
 
     def matches(self, candidate: FileCandidate) -> bool:
-        value: float | None = getattr(candidate, self._attr)
+        value = self._read_attr(candidate)
         return (
             value is not None
             and (self._min_bound is None or value >= self._min_bound)
