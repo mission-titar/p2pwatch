@@ -326,17 +326,17 @@ def test_open_closes_the_connection_on_a_non_persistence_error(
     # FileNotFoundError is neither sqlite3.Error nor PersistenceError: it must
     # propagate AS IS, but the connection must not leak (unconditional close).
     captured: list[sqlite3.Connection] = []
-    real_connect = sqlite3.connect
+    real_configure = connection_module._configure
 
-    def capturing_connect(database: str | Path, *, autocommit: bool) -> sqlite3.Connection:
-        connection = real_connect(database, autocommit=autocommit)
+    # Captured through `_configure`: patching `sqlite3.connect` breaks coverage's per-test contexts.
+    def capturing_configure(connection: sqlite3.Connection) -> None:
         captured.append(connection)
-        return connection
+        real_configure(connection)
 
     def exploding_load_scripts(directory: object) -> tuple[Migration, ...]:
         raise FileNotFoundError("repertoire de migrations disparu")
 
-    monkeypatch.setattr(sqlite3, "connect", capturing_connect)
+    monkeypatch.setattr(connection_module, "_configure", capturing_configure)
     monkeypatch.setattr(connection_module, "_load_scripts", exploding_load_scripts)
     with pytest.raises(FileNotFoundError):
         open_catalog(tmp_path / "catalog.db")
