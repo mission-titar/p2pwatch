@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from catalog_matching.config import TIER_RANK, TIERS, MatcherConfig
+from catalog_matching.config import MatcherConfig
 from catalog_matching.engine import (
     Explanation,
     MatchDecision,
@@ -14,21 +14,6 @@ from catalog_matching.engine import (
 from catalog_matching.models import FileCandidate, TargetSegment
 from catalog_matching.resolver import MatcherResolver, ResolvedTarget
 from catalog_matching.validation import parse_matcher_config
-
-
-def test_tier_rank_orders_download_above_notify_above_catalog() -> None:
-    assert TIER_RANK["download"] > TIER_RANK["notify"]
-    assert TIER_RANK["notify"] > TIER_RANK["catalog"]
-
-
-def test_tier_rank_catalog_is_lowest() -> None:
-    assert TIER_RANK["catalog"] < TIER_RANK["download"]
-    assert TIER_RANK["catalog"] < TIER_RANK["notify"]
-
-
-def test_tier_rank_covers_exactly_the_valid_tiers() -> None:
-    # Consistency: every licit tier (TIERS) has a rank, and no orphan rank.
-    assert set(TIER_RANK) == TIERS
 
 
 def test_explanation_is_frozen_and_holds_fields() -> None:

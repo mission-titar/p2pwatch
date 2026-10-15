@@ -4,6 +4,8 @@ import pytest
 
 from catalog_matching.config import (
     SCOPES,
+    TIER_RANK,
+    TIERS,
     AllDef,
     AnyDef,
     AttrBetweenDef,
@@ -99,6 +101,21 @@ def test_matcher_config_is_frozen() -> None:
 
 def test_scopes_is_the_closed_segment_episode_unattributed_set() -> None:
     assert frozenset({"segment", "episode", "unattributed"}) == SCOPES
+
+
+def test_tier_rank_orders_download_above_notify_above_catalog() -> None:
+    assert TIER_RANK["download"] > TIER_RANK["notify"]
+    assert TIER_RANK["notify"] > TIER_RANK["catalog"]
+
+
+def test_tier_rank_catalog_is_lowest() -> None:
+    assert TIER_RANK["catalog"] < TIER_RANK["download"]
+    assert TIER_RANK["catalog"] < TIER_RANK["notify"]
+
+
+def test_tier_rank_covers_exactly_the_valid_tiers() -> None:
+    # Consistency: every licit tier (TIERS) has a rank, and no orphan rank.
+    assert set(TIER_RANK) == TIERS
 
 
 def test_matcher_config_has_no_vetoes_by_default() -> None:

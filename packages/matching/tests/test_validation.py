@@ -12,7 +12,6 @@ from catalog_matching.config import (
     RegexDef,
     TokenRef,
 )
-from catalog_matching.models import FOUND, TARGET_STATUSES
 from catalog_matching.validation import (
     CycleError,
     DepthExceededError,
@@ -430,11 +429,6 @@ def test_parse_targets_default_status_is_lost() -> None:
         }
     )
     assert targets[0].status == "lost"
-
-
-def test_target_statuses_is_the_closed_lost_found_set() -> None:
-    assert frozenset({"lost", "found"}) == TARGET_STATUSES
-    assert FOUND in TARGET_STATUSES
 
 
 @pytest.mark.parametrize("status", ["complete", "partial", ""])
