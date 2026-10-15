@@ -141,11 +141,14 @@ servers (U-D11).
   catalog_matching/matchers.py`: each name the policy's `attr_between` accepts maps to a function reading its
   `FileCandidate` field, so mypy and vulture see every read. `reader.py`'s `getattr` on a `threading.local`
   becomes a typed `threading.local` subclass; the three uses in tests (two `hasattr` asserting a field's absence,
-  one `setattr` in a loop) are rewritten. The ast-grep rule matches any reference to the four names, an alias
-  (`f = getattr`) included, except as an attribute name (`obj.getattr`); ruff's `banned-api` bans the written-out
-  forms (`builtins.getattr` and the three others), which only it sees. Why: U-D17, and `FileCandidate.size_mib`
-  looked dead to vulture only because of the `getattr` (the operator, 2026-10-15); a rule on calls alone lets
-  `builtins.getattr(...)` and an alias through.
+  one `setattr` through a variable (Corrected 2026-10-15, at block 40: not in a loop)) are rewritten. The ast-grep
+  rule matches any reference to the four names, an alias (`f = getattr`) included, except as an attribute name
+  (`obj.getattr`); it also refuses `__builtins__` and any import of the `builtins` module, so the written-out forms
+  (`builtins.getattr`, through an aliased module too) cannot be reached (Corrected 2026-10-15, at block 40: ruff's
+  `banned-api` was to ban the written-out forms, but `TID251` is ignored in every `tests/` tree and in
+  `packages/amule/`, where they passed both tools; one tool instead of two, the operator's choice). Why: U-D17,
+  and `FileCandidate.size_mib` looked dead to vulture only because of the `getattr` (the operator, 2026-10-15); a
+  rule on calls alone lets `builtins.getattr(...)` and an alias through.
 - **L11. The tasks.**
 
   | Task | Command | In | Time |
@@ -194,7 +197,7 @@ Estimates from the probes (2026-10-15), not a diff: read them as plus or minus 3
 | 10 | `refactor/vex-checks` | U-D10: `vex_guards` to `vex_checks` and the whole `guard` family to `premise`; the umbrella spec, this spec and the three `BACKLOG.md` entries of section 7 | 330, 35 |
 | 20 | `refactor/template-checks` | U-D9's `template_checks` (`packages/template_checks`) with `check_templates` moved unchanged from `webui/_dev`, which goes; `template-check` rewired | 200, 12 |
 | 30 | `chore/dependency-check` | L12, L13: the `dev` groups, the root group trimmed, deptry and `dependency-check`, the Dockerfile comments | 150, 13 |
-| 40 | `refactor/no-dynamic-attribute` | U-D17 and L10: ast-grep, `code-pattern-check`, the `banned-api` entries, the accessor table, the typed `threading.local`, the three tests | 160, 10 |
+| 40 | `refactor/no-dynamic-attribute` | U-D17 and L10: ast-grep, `code-pattern-check`, the `builtins` import ban (Corrected 2026-10-15, at block 40: in place of the `banned-api` entries, L10), the accessor table, the typed `threading.local`, the three tests | 160, 10 |
 | 50 | `feat/coverage-values-shown` | L8 | 80, 5 |
 | 60 | `feat/skipped-results-metric` | L9, the `SearchClient.search` port change included | 300, 18 |
 | 70 | `refactor/test-only-code` | L7: the deletions and moves | 200, 15 |
@@ -245,7 +248,9 @@ Each criterion names what would prove it wrong.
      matching's `dev` group gives `DEP003 'yaml'` on `tests/test_engine.py`, `import pytest` in a `src` gives
      `DEP004`; each exits non-zero.
    - `code-pattern-check`: a `getattr(x, name)` in a `src` and in a test exits non-zero; a method named
-     `obj.getattr(...)` passes; the same call under `# ast-grep-ignore: no-dynamic-attribute` passes.
+     `obj.getattr(...)` passes; the same call under `# ast-grep-ignore: no-dynamic-attribute` passes. (Corrected
+     2026-10-15, at block 40: each import form of `builtins`, and `__builtins__`, in a test and in amule's `src`,
+     exits non-zero too.)
    - `dead-code-check`: an unused function in a `src` exits non-zero; the same in a test passes; removing one
      template's read of a view field reports that field.
    - `unit-coverage-check`: a branch of `domain/search/backoff.py` covered only from another module's test exits
