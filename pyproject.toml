@@ -147,7 +147,7 @@ sequence = [
 # `test` runs each package's suite in its own process (cwd) so per-package coverage
 # stays isolated: a single root pytest run would mix coverage and break --cov-fail-under=100.
 [tool.poe.tasks.test]
-help = "Run every package's unit suite (per-package 100% branch coverage), then unit-coverage-check"
+help = "Run every package's unit suite (per-package 100% branch coverage), then each module's by its own tests"
 sequence = [
   { cmd = "pytest", cwd = "packages/matching" },
   { cmd = "pytest", cwd = "packages/crawler" },
@@ -156,11 +156,12 @@ sequence = [
   { cmd = "pytest", cwd = "packages/template_checks" },
   { cmd = "pytest", cwd = "packages/coverage_checks" },
   { cmd = "pytest", cwd = "packages/amule_bump" },
-  "unit-coverage-check",
+  "_unit-coverage-check",
 ]
 
-[tool.poe.tasks.unit-coverage-check]
-help = "Check each module is covered by its own tests, the test files mirroring src (after its suite)"
+# Private: poe runs it only inside `test`, so it never reads a stale or partial `.coverage`.
+[tool.poe.tasks._unit-coverage-check]
+help = "Check each module is covered by its own tests, the test files mirroring src"
 sequence = [
   { cmd = "python -m coverage_checks.unit_coverage", cwd = "packages/matching" },
   { cmd = "python -m coverage_checks.unit_coverage", cwd = "packages/crawler" },

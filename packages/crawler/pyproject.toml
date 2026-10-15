@@ -67,7 +67,7 @@ show_missing = true
 fail_under = 100
 exclude_also = ["if TYPE_CHECKING:"]
 
-# Test files that test no module of `src`, each with what it tests (unit-coverage-check).
+# Test files that test no module of `src`, each with what it tests (_unit-coverage-check).
 [tool.coverage_checks.tests_without_unit]
 "tests/adapters/persistence_sqlite/test_append_only.py" = "the catalog's append-only triggers, in SQL"
 "tests/adapters/persistence_sqlite/test_local_migration_0006.py" = "a SQL migration of local.db"
