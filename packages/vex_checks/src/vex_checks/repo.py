@@ -20,7 +20,7 @@ def display_path(path: Path) -> str:
         return str(path)
 
 
-_TOOLING_PACKAGES = {
+_UNSHIPPED_PACKAGES = {
     "vex_checks",
     "template_checks",
     "coverage_checks",
@@ -31,7 +31,7 @@ _TOOLING_PACKAGES = {
 
 def source_dirs() -> list[Path]:
     packages = (_ROOT / "packages").glob("*/src")
-    return sorted(d for d in packages if d.parent.name not in _TOOLING_PACKAGES)
+    return sorted(d for d in packages if d.parent.name not in _UNSHIPPED_PACKAGES)
 
 
 def vex_files() -> dict[str, Path]:
