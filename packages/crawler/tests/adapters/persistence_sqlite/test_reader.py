@@ -13,7 +13,11 @@ import pytest
 
 from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.persistence_sqlite.errors import PersistenceError
-from p2pwatch.adapters.persistence_sqlite.reader import ReaderProvider, open_reader
+from p2pwatch.adapters.persistence_sqlite.reader import (
+    ReaderProvider,
+    ThreadLocalConnection,
+    open_reader,
+)
 from tests.catalog_rows import insert_file
 
 _HASH_A = "a" * 32
@@ -73,6 +77,22 @@ def test_open_reader_sorts_through_temporary_files(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # ReaderProvider (reused per-thread connection + quiesce seam)
 # ---------------------------------------------------------------------------
+
+
+def test_thread_local_connection_is_none_in_a_thread_that_never_set_it() -> None:
+    """A connection set by one thread is never seen by another, which starts from ``None``."""
+    local = ThreadLocalConnection()
+    connection = sqlite3.connect(":memory:")
+    local.connection = connection
+    seen_by_worker: list[sqlite3.Connection | None] = []
+    worker = threading.Thread(target=lambda: seen_by_worker.append(local.connection))
+    worker.start()
+    worker.join()
+    try:
+        assert seen_by_worker == [None]
+        assert local.connection is connection
+    finally:
+        connection.close()
 
 
 def test_provider_reuses_the_same_connection_within_one_thread(tmp_path: Path) -> None:
