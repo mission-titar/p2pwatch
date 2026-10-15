@@ -22,6 +22,8 @@ dev = [
 
 [tool.ruff]
 line-length = 100
+# The members' requires-python: a virtual workspace's root has none for ruff to read.
+target-version = "py313"
 # Specs, plans and handoffs are records: ruff 0.16 would reformat their Python snippets.
 extend-exclude = ["agents/**/*.md"]
 src = [
