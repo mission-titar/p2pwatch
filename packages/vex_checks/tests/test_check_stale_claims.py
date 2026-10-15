@@ -4,7 +4,7 @@ from typing import cast
 
 import pytest
 
-from vex_guards import check_stale_claims
+from vex_checks import check_stale_claims
 
 
 class _FakeGrypeRunner:

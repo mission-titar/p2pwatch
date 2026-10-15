@@ -3,15 +3,15 @@ from pathlib import Path
 
 import pytest
 
-from vex_guards import repo
-from vex_guards.descriptors import (
+from vex_checks import repo
+from vex_checks.descriptors import (
     ModuleNotImported,
     ProgramNeverInvoked,
-    SourceGuard,
-    is_source_guard,
+    SourcePremise,
+    is_source_premise,
 )
-from vex_guards.registry import GUARDS
-from vex_guards.source_scan import _imported_modules, evaluate_source_guards
+from vex_checks.registry import PREMISES
+from vex_checks.source_scan import _imported_modules, evaluate_source_premises
 
 
 def _src_dir(tmp_path: Path, files: dict[str, str]) -> Path:
@@ -38,8 +38,8 @@ IMPORT_FAILS = [
 @pytest.mark.parametrize("code", IMPORT_FAILS)
 def test_module_not_imported_flags_each_import_form(tmp_path: Path, code: str) -> None:
     src = _src_dir(tmp_path, {"mod.py": code})
-    guards: dict[str, SourceGuard] = {"CVE-X": ModuleNotImported("tarfile")}
-    assert [v.advisory_id for v in evaluate_source_guards(guards, [src])] == ["CVE-X"]
+    premises: dict[str, SourcePremise] = {"CVE-X": ModuleNotImported("tarfile")}
+    assert [v.advisory_id for v in evaluate_source_premises(premises, [src])] == ["CVE-X"]
 
 
 # None of these register "tarfile": an unrelated import, a bare string mention,
@@ -57,20 +57,20 @@ IMPORT_PASSES = [
 @pytest.mark.parametrize("code", IMPORT_PASSES)
 def test_module_not_imported_passes(tmp_path: Path, code: str) -> None:
     src = _src_dir(tmp_path, {"mod.py": code})
-    guards: dict[str, SourceGuard] = {"CVE-X": ModuleNotImported("tarfile")}
-    assert evaluate_source_guards(guards, [src]) == []
+    premises: dict[str, SourcePremise] = {"CVE-X": ModuleNotImported("tarfile")}
+    assert evaluate_source_premises(premises, [src]) == []
 
 
 def test_subprocess_denies_flags_program(tmp_path: Path) -> None:
     src = _src_dir(tmp_path, {"mod.py": 'subprocess.run(["ffmpeg", "-i", path])'})
-    guards: dict[str, SourceGuard] = {"CVE-F": ProgramNeverInvoked("ffmpeg")}
-    assert [v.advisory_id for v in evaluate_source_guards(guards, [src])] == ["CVE-F"]
+    premises: dict[str, SourcePremise] = {"CVE-F": ProgramNeverInvoked("ffmpeg")}
+    assert [v.advisory_id for v in evaluate_source_premises(premises, [src])] == ["CVE-F"]
 
 
 def test_subprocess_denies_passes_on_other_program(tmp_path: Path) -> None:
     src = _src_dir(tmp_path, {"mod.py": 'subprocess.run(["ffprobe", path])'})
-    guards: dict[str, SourceGuard] = {"CVE-F": ProgramNeverInvoked("ffmpeg")}
-    assert evaluate_source_guards(guards, [src]) == []
+    premises: dict[str, SourcePremise] = {"CVE-F": ProgramNeverInvoked("ffmpeg")}
+    assert evaluate_source_premises(premises, [src]) == []
 
 
 def test_imported_modules_detects_and_ignores_dynamic_import_forms() -> None:
@@ -86,5 +86,7 @@ def test_imported_modules_detects_and_ignores_dynamic_import_forms() -> None:
 
 
 def test_real_source_tree_has_no_source_claim_violations() -> None:
-    guards: dict[str, SourceGuard] = {cve: g for cve, g in GUARDS.items() if is_source_guard(g)}
-    assert evaluate_source_guards(guards, repo.source_dirs()) == []
+    premises: dict[str, SourcePremise] = {
+        cve: g for cve, g in PREMISES.items() if is_source_premise(g)
+    }
+    assert evaluate_source_premises(premises, repo.source_dirs()) == []

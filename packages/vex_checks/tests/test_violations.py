@@ -2,7 +2,7 @@ import dataclasses
 
 import pytest
 
-from vex_guards.violations import Violation
+from vex_checks.violations import Violation
 
 
 def test_violation_carries_cve_message_and_location() -> None:

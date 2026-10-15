@@ -108,11 +108,11 @@ flowchart RL
 | `p2pwatch` | `p2pwatch` | **Crawler** : pilote `amuled` par amuleapi, fait tourner les boucles de recherche et de téléchargement, la persistance, l'observabilité. Contient le sous-paquet webui in-process `p2pwatch.webui` (visualiseur de catalogue en lecture seule). |
 | `p2pwatch_amule` | `p2pwatch-amule` | **Le conteneur d'aMule**, bibliothèque standard seule : son one-shot de démarrage (`p2pwatch_amule.boot`) et le port-sync (`p2pwatch_amule.port_sync`, §9). |
 | `catalog_matching` | `catalog-matching` | **Moteur de matching** (bibliothèque partagée) : politique déclarative fichier vers épisode. Importé par le crawler et par la webui. |
-| `vex_guards` | `vex-guards` | **Outillage dev/CI** : garde honnêtes nos affirmations OpenVEX. Jamais livré dans une image de prod. |
+| `vex_checks` | `vex-checks` | **Outillage dev/CI** : garde honnêtes nos affirmations OpenVEX. Jamais livré dans une image de prod. |
 | `amule_bump` | `amule-bump` | **Outillage CI** : monte l'épingle d'aMule et rédige la PR ([Mettre à jour aMule](amule-bump.md)). Jamais livré dans une image de prod. |
 
 **Frontières strictes** (invariants) : `catalog_matching` est pur et n'importe jamais `p2pwatch` ;
-`p2pwatch_amule` et `p2pwatch` ne s'importent jamais l'un l'autre ; `vex_guards` et `amule_bump`
+`p2pwatch_amule` et `p2pwatch` ne s'importent jamais l'un l'autre ; `vex_checks` et `amule_bump`
 ne sont jamais importés par du code livré.
 
 ## 3. Deux modes d'exécution, une seule topologie
@@ -634,7 +634,7 @@ démon sont
 - **Le crawler PROD ne lit jamais les octets et ne touche jamais au répertoire de sortie** ; la
   complétion est un signal positif.
 - **Frontières de paquets** : `catalog_matching` n'importe jamais `p2pwatch` ; `p2pwatch_amule` et
-  `p2pwatch` ne s'importent jamais ; `vex_guards` et `amule_bump` ne sont jamais importés par du
+  `p2pwatch` ne s'importent jamais ; `vex_checks` et `amule_bump` ne sont jamais importés par du
   code livré.
 - **Deux modes d'exécution** pilotés par la config (téléchargement / catalogue seul), une seule
   topologie compose par variante.

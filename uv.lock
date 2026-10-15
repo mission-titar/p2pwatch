@@ -12,7 +12,7 @@ members = [
     "catalog-matching",
     "p2pwatch",
     "p2pwatch-amule",
-    "vex-guards",
+    "vex-checks",
 ]
 
 [manifest.dependency-groups]
@@ -29,7 +29,7 @@ dev = [
     { name = "ruff", specifier = ">=0.16.9" },
     { name = "sqlfluff", specifier = ">=4.3.0" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20260906" },
-    { name = "vex-guards", editable = "packages/vex_guards" },
+    { name = "vex-checks", editable = "packages/vex_checks" },
     { name = "zensical", specifier = "==0.0.66" },
 ]
 
@@ -1264,8 +1264,8 @@ wheels = [
 ]
 
 [[package]]
-name = "vex-guards"
-source = { editable = "packages/vex_guards" }
+name = "vex-checks"
+source = { editable = "packages/vex_checks" }
 dependencies = [
     { name = "packaging" },
 ]

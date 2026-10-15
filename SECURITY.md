@@ -124,7 +124,7 @@ signed.
 ### Keeping the VEX claims honest: the four consistency checks
 
 A `not_affected` claim is a promise about how the image is built and run. Over time source
-and base images drift, so four checks (the `vex_guards` package) assert those promises still
+and base images drift, so four checks (the `vex_checks` package) assert those promises still
 hold. They run as a non-blocking PR job (only `validate / gate` is required to merge) and, for
 the three that catch a genuinely false claim, as hard-fail steps in the release before anything
 is signed or attested:
@@ -133,8 +133,9 @@ is signed or attested:
   reaching code a `vulnerable_code_not_in_execute_path` claim says we never execute, for
   example importing `imaplib` or `poplib`.
 - **`check_claim_coverage`** (PR job, release hard-fail): reads every VEX file, and fails if a
-  VEX `not_affected` claim has no guard in the registry, a guard has no claim, or a justification does not match its
-  guard family. It keeps the VEX and the guard registry in bijection.
+  VEX `not_affected` claim has no premise in the registry, a premise has no claim, or a
+  justification does not match its premise family. It keeps the VEX and the premise registry in
+  bijection.
 - **`check_image_claims`** (daily Grype scan as SARIF, release hard-fail): fails if the built
   image's SBOM contradicts an image-scoped claim, for example a dpkg package that should be
   absent is present, or a dpkg package or hand-declared component is below the minimum version

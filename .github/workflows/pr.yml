@@ -37,5 +37,5 @@ jobs:
           save-cache: 'false'  # validate.yml's lint job is the x86 cache writer; restore only
       - name: VEX source claims hold
         run: uv run poe vex-source-claims
-      - name: Every VEX claim is guarded
+      - name: Every VEX claim rests on a premise
         run: uv run poe vex-claim-coverage

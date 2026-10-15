@@ -1,4 +1,4 @@
-from vex_guards.violations import Violation
+from vex_checks.violations import Violation
 
 
 def build_sarif(rule_id: str, violations: list[Violation], vex_relpath: str) -> dict[str, object]:

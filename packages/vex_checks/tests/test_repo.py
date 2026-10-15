@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from vex_guards import repo
+from vex_checks import repo
 
 
 def test_repo_root_contains_the_packages_dir() -> None:

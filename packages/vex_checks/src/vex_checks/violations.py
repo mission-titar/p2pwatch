@@ -1,4 +1,4 @@
-"""The record a guard emits when its premise is falsified."""
+"""The record a check emits when a premise is falsified."""
 
 from dataclasses import dataclass
 

@@ -14,11 +14,11 @@ import json
 import sys
 from pathlib import Path
 
-from vex_guards import repo
-from vex_guards.grype import GrypeRunner, SubprocessGrypeRunner
-from vex_guards.sarif import build_sarif
-from vex_guards.vex_io import load_claims
-from vex_guards.violations import Violation
+from vex_checks import repo
+from vex_checks.grype import GrypeRunner, SubprocessGrypeRunner
+from vex_checks.sarif import build_sarif
+from vex_checks.vex_io import load_claims
+from vex_checks.violations import Violation
 
 _RULE_ID = "stale-vex-entry"
 
