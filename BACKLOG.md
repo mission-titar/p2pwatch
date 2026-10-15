@@ -30,6 +30,12 @@ An agent adds an entry only after the operator has agreed to it.
 - **The webui's read side**: one observation type and its own read ports, so no persistence shape reaches its domain;
   drops the dead `{% else %}` at `sources.html:26`. Section 7 of `agents/specs/2026-10-13-descriptive-names.md`.
 
+- **Serena and the language servers** (lot 2 of the gate tooling umbrella): bench the Python language servers, then adapt
+  the code only for the blind spots the chosen one keeps. D11 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`, lot order in D12.
+
+- **Test quality** (lot 3 of the gate tooling umbrella): every unit test keeps unique coverage of its unit, the others are
+  pruned, mutmut proving no detected mutant is lost. D3 to D5 and D13 to D15 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`, lot order in D12.
+
 - **Mutation testing in the gate**: mutmut run cold on a pull request's impact set, from the per-test coverage, so
   a test that stops detecting a fault fails the gate. D13 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`.
 
