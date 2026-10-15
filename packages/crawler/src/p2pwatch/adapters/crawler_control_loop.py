@@ -24,6 +24,9 @@ class LoopCrawlerControl:
     running, clear = paused), and ``shutdown`` is the graceful-shutdown signal.
     """
 
+    # The only state it can hold: no DB connection can slip in (spec §4).
+    __slots__ = ("_loop", "_resumed", "_shutdown")
+
     def __init__(
         self,
         *,
