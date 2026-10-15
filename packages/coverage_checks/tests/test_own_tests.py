@@ -83,11 +83,11 @@ def test_a_listed_test_file_that_tests_a_module_fails() -> None:
     assert own_tests.test_files_by_module == {Path("src/pkg/b.py"): ()}
 
 
-@pytest.mark.parametrize("entry", ["tests/test_gone.py", "tests/gone/"])
-def test_an_entry_listing_no_test_file_fails(entry: str) -> None:
+@pytest.mark.parametrize("listed_path", ["tests/test_gone.py", "tests/gone/"])
+def test_an_entry_listing_no_test_file_fails(listed_path: str) -> None:
     _touch("src/pkg/b.py", "tests/test_b.py")
-    assert find_own_tests({entry: "its file was deleted"}).problems == (
-        f"{entry}: listed in tests_without_unit, but names no test file",
+    assert find_own_tests({listed_path: "its file was deleted"}).problems == (
+        f"{listed_path}: listed in tests_without_unit, but names no test file",
     )
 
 
