@@ -1,3 +1,4 @@
+import dataclasses
 import re
 from datetime import timedelta
 from typing import Any
@@ -657,8 +658,8 @@ def test_webui_host_and_port_are_silently_ignored() -> None:
     raw = _minimal_raw() | {"webui": {"enabled": True, "host": "1.2.3.4", "port": 9999}}
     cfg = parse_crawler_config(raw, _env())
     assert cfg.webui == WebuiConfig(enabled=True)
-    assert not hasattr(cfg.webui, "host")  # the type no longer carries a bind
-    assert not hasattr(cfg.webui, "port")
+    # the type no longer carries a bind
+    assert {field.name for field in dataclasses.fields(WebuiConfig)}.isdisjoint({"host", "port"})
 
 
 def test_webui_enabled_defaults_true_when_key_absent_in_section() -> None:
