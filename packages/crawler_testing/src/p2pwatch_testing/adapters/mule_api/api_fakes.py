@@ -94,6 +94,10 @@ class FakeAmuleApi:
         path = _SEARCH_ROUTE.sub("/api/v1/search/{id}/", route[1])
         path = _CLIENTS_ROUTE.sub("/api/v1/downloads/{hash}/clients", path)
         handler = _ROUTES[(request.method, _CLIENT_ROUTE.sub("/api/v1/clients/{ecid}", path))]
+        unauthenticated = route[1] in ("/api/v1/auth/login", "/api/v1/health")
+        assert unauthenticated or request.headers.get("Authorization") == f"Bearer {TOKEN}", (
+            f"{route}: missing or stale bearer token"
+        )
         return handler(self, request)
 
     # --- routes ---------------------------------------------------------------------------
@@ -102,6 +106,7 @@ class FakeAmuleApi:
         body = json.loads(request.content)
         if body.get("password") != self.password:
             return error(401, "invalid_credentials", "no role matched")
+        assert request.url.params.get("include_token") == "true", "login without include_token"
         self.logins += 1
         return httpx.Response(
             200, json={"role": "admin", "expires_at": 0, "session_id": "s", "token": TOKEN}
