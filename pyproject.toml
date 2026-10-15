@@ -10,12 +10,12 @@ p2pwatch-testing = { workspace = true }
 [dependency-groups]
 dev = [
   "deptry>=0.25.1",
-  "mypy>=2.3.1",
-  "ruff>=0.16.9",
-  "sqlfluff>=4.3.0",
+  "mypy>=2.4.0",
+  "ruff>=0.16.10",
+  "sqlfluff>=4.4.0",
   "types-pyyaml>=6.0.12.20260906",
   "poethepoet>=0.48.0",
-  "zensical==0.0.66",
+  "zensical==0.0.69",
   "ast-grep-cli>=0.50.0",
   "vulture>=2.16",
 ]
