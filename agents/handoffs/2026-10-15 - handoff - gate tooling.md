@@ -150,6 +150,7 @@ The operator's answers, from the block reports and the lead's notes:
   it the same way: 140 the documentation fixes and `BACKLOG.md` (3 files, 8 lines before `BACKLOG.md`), 150
   the code fixes (18 files, 121 lines). 150 had no room for the operator's answers, so the lead added 160 on
   top for them and the final notes.
+- Block 140, the holistic review's finding 16: an entry for each of lots 2 and 3 in `BACKLOG.md` ("ok").
 - Block 160, the holistic review's finding 4: the rule refuses the blind forms too ("a"); finding 6: the
   task becomes private, run only by `test`, the data guard kept ("c"). The operator did not object to the
   `__slots__` rewrite.
@@ -299,7 +300,8 @@ the closing blocks' push.
 14. Minor, this handoff said no block but 60 ran the integration suites. Fixed in 150, under "Validated by CI
     only".
 15. Minor, matching's `[project] description` was French. Fixed in 150.
-16. Minor, `BACKLOG.md` keeps no pointer to lots 2 and 3: waits for the operator.
+16. Minor, `BACKLOG.md` keeps no pointer to lots 2 and 3. The operator's agreement ("ok"): fixed in 140, an
+    entry for each, pointing at its decisions in the umbrella spec.
 
 ## Pitfalls
 
@@ -395,8 +397,9 @@ the closing blocks' push.
 ## Backlog
 
 No entry of `BACKLOG.md` ships with this lot. The three block 10 added (mutation testing in the gate, the
-template guard on Jinja's syntax tree, the fakes' contract tests) stay open. Entries for lots 2 and 3: wait for
-the operator (finding 16).
+template guard on Jinja's syntax tree, the fakes' contract tests) stay open. Block 140 adds two with the
+operator's agreement: Serena and the language servers (lot 2) and test quality (lot 3); the mutation testing
+entry stays apart, lot 3 using mutmut as a tool, not a gate.
 
 ## Next
 
