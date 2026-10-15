@@ -111,7 +111,7 @@ flowchart RL
 | `p2pwatch_testing` | `p2pwatch-testing` | **Support de test du crawler** : ses doublures (fakes), ses lignes de catalogue, sa boucle d'événements à temps virtuel. Importé par les seuls tests du crawler, qui en mesurent la couverture. Jamais livré dans une image de prod. |
 | `vex_checks` | `vex-checks` | **Outillage dev/CI** : garde honnêtes nos affirmations OpenVEX. Jamais livré dans une image de prod. |
 | `template_checks` | `template-checks` | **Outillage dev/CI** : vérifie que les templates de la webui ne portent aucune logique (`poe template-check`), et liste les noms qu'ils lisent, que `poe dead-code-check` ne doit pas signaler. Jamais livré dans une image de prod. |
-| `coverage_checks` | `coverage-checks` | **Outillage dev/CI** : vérifie que les fichiers de test de chaque paquet reflètent son `src`, chacun testant le module dont il porte le nom (`poe unit-coverage-check`). Jamais livré dans une image de prod. |
+| `coverage_checks` | `coverage-checks` | **Outillage dev/CI** : vérifie que chaque module est couvert par ses propres tests, les fichiers de test qui portent son nom dans le miroir de `src` (`poe unit-coverage-check`). Jamais livré dans une image de prod. |
 | `amule_bump` | `amule-bump` | **Outillage CI** : monte l'épingle d'aMule et rédige la PR ([Mettre à jour aMule](amule-bump.md)). Jamais livré dans une image de prod. |
 
 **Frontières strictes** (invariants) : `catalog_matching` est pur et n'importe jamais `p2pwatch` ;
