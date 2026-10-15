@@ -1,4 +1,4 @@
-from catalog_matching.models import FileCandidate, TargetSegment
+from catalog_matching.models import FOUND, TARGET_STATUSES, FileCandidate, TargetSegment
 
 
 def test_file_candidate_defaults() -> None:
@@ -46,3 +46,8 @@ def test_target_segment_full_fields() -> None:
     )
     assert target.target_id == "005B"
     assert target.status == "found"
+
+
+def test_target_statuses_is_the_closed_lost_found_set() -> None:
+    assert frozenset({"lost", "found"}) == TARGET_STATUSES
+    assert FOUND in TARGET_STATUSES
