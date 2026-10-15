@@ -94,17 +94,16 @@ _WAITING_STATUSES = {
 
 def map_search_results(results: object, keyword: str) -> tuple[tuple[FileObservation, ...], int]:
     """The ``results[]`` of a search → ``(observations, skipped_result_count)``, counting the
-    results discarded whole; an entry without a name is dropped uncounted."""
+    results that yield no observation; a nameless entry beside a named one is not counted."""
     observations: list[FileObservation] = []
     skipped_result_count = 0
     if not isinstance(results, list):
         return (), 0  # unexpected envelope: tolerated, ignored (not a result set)
     for result in results:
         mapped = _map_result(result, keyword)
-        if mapped is None:
+        if not mapped:
             skipped_result_count += 1
-        else:
-            observations.extend(mapped)
+        observations.extend(mapped)
     return tuple(observations), skipped_result_count
 
 
@@ -258,14 +257,14 @@ def _channel(channel: str, channel_json: dict[str, Any], connectable: bool | Non
     return ChannelStatus(channel, connected, connectable if connected else None)
 
 
-def _map_result(result: object, keyword: str) -> list[FileObservation] | None:
-    """One result row → one observation PER FILENAME; ``None`` when the row is discarded."""
+def _map_result(result: object, keyword: str) -> list[FileObservation]:
+    """One result row → one observation PER FILENAME; none when the row is unusable."""
     if not isinstance(result, dict):
-        return None
+        return []
     native_id = _hash_hex(result.get("hash"))
     size_bytes = result.get("size_bytes")
     if native_id is None or not isinstance(size_bytes, int) or isinstance(size_bytes, bool):
-        return None
+        return []
     media = _as_dict(result.get("media"))
     raw_meta = _raw_meta(result, media)
     codec, file_type = _string(media.get("codec")), _string(result.get("file_type"))

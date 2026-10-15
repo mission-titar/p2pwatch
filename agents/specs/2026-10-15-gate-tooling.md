@@ -132,7 +132,9 @@ servers (U-D11).
   usable size, not an object) travels with the search's result to the use case that emits `SearchExecuted`,
   which carries it; the policy adds it to the counter. An alternate name without a name is dropped as today and
   counts nothing: the mapper's current count mixes both, and a drift of the protocol shows as discarded results
-  (the operator, 2026-10-15). This changes a port: `SearchClient.search` (`ports/search_client.py`) returns the observations and the
+  (the operator, 2026-10-15). (Corrected 2026-10-15, at block 60: a result that yields no observation counts
+  too, one without any usable name included, the operator's choice; else a drift renaming `name` would drop
+  every result uncounted. An entry without a name beside a named one still counts nothing.) This changes a port: `SearchClient.search` (`ports/search_client.py`) returns the observations and the
   skipped count instead of the observations alone, for its 9 implementations (the client and test fakes) and
   33 call sites. `AmuleApiClient.skipped_results`, a counter held by the adapter, goes. `docs/operate.md` lists
   the metric. Why: the operator's choice (2026-10-15); it is the only signal of a drift in amuleapi's answers, which

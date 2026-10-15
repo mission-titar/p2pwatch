@@ -197,6 +197,15 @@ def test_a_nameless_parent_does_not_lose_its_alternates() -> None:
     assert skipped == 0
 
 
+def test_a_result_without_any_usable_name_is_skipped_and_counted() -> None:
+    observations, skipped = map_search_results(
+        [_result(name="", alternate_names=[{"name": 7}])], "keroro"
+    )
+
+    assert observations == ()
+    assert skipped == 1
+
+
 def test_a_malformed_alternate_names_list_is_ignored() -> None:
     observations, skipped = map_search_results([_result(alternate_names="nope")], "keroro")
 

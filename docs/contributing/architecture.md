@@ -245,8 +245,9 @@ sequenceDiagram
   `null` sur la plupart des résultats globaux et Kad. Rien n'ouvre jamais le fichier pour en savoir
   plus. Un fichier annoncé sous plusieurs noms arrive **replié** en un seul résultat ; le mapper le
   redéplie en une observation par nom, comme l'EC en produisait une par entrée. Un résultat sans
-  hash, sans taille exploitable ou qui n'est pas un objet est écarté et compté : la `SearchAnswer`
-  porte ce compte jusqu'à `SearchExecuted`, qui l'ajoute à `p2pwatch_search_results_skipped`.
+  hash, sans taille exploitable, sans aucun nom ou qui n'est pas un objet est écarté et compté : la
+  `SearchAnswer` porte ce compte jusqu'à `SearchExecuted`, qui l'ajoute à
+  `p2pwatch_search_results_skipped`.
 - `search()` rend la main quand amuled signale la fin de la recherche, au plus tard 120 s
   (le budget, constante du cœur) après son départ réseau. Attendre est l'affaire de l'adaptateur.
 - Dans l'adaptateur, une recherche **Kad** est élargie à chaque tour de sondage à partir du deuxième
