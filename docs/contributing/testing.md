@@ -45,13 +45,15 @@ Le projet a **deux niveaux** :
    > pas de suite : celle du crawler mesure sa couverture (`--cov=p2pwatch_testing`), si bien
    > qu'une ligne ou une branche qu'aucun test n'y exécute fait échouer le gate.
 
-   Après les suites, `test` lance `unit-coverage-check` : dans chaque paquet, chaque module doit
+   Après les suites, `test` lance `_unit-coverage-check` : dans chaque paquet, chaque module doit
    être couvert, instructions et branches, par **ses propres tests**, les fichiers qui portent son
    nom dans le répertoire miroir du sien (`tests/a/test_b.py` et `tests/a/test_b_<aspect>.py` pour
    `src/<pkg>/a/b.py`). Ce qu'un test d'un autre module exécute au passage ne compte pas, à une
    exception près : ce qu'exécute l'import du module (le code hors de toute fonction) compte, quel
    que soit le test qui l'a importé. La vérification lit les contextes par test que chaque suite
-   enregistre (`--cov-context=test`). Un fichier de test qui ne teste aucun module la fait échouer,
+   enregistre (`--cov-context=test`). C'est une tâche privée, que poe refuse de lancer seule : elle
+   ne tourne que dans `test`, juste après les suites, et ne lit donc jamais un `.coverage` périmé ou
+   partiel. Un fichier de test qui ne teste aucun module la fait échouer,
    sauf si son paquet le liste, avec ce qu'il teste, sous
    `[tool.coverage_checks] tests_without_unit` : les tests des migrations SQL, ceux des données de
    `deploy/`, les suites d'intégration.
@@ -321,7 +323,7 @@ Déjà en CI :
   - `lint` : `uv run poe lint-all` (ruff, format, dépendances déclarées par deptry, accès
     dynamiques aux attributs refusés par ast-grep, code mort par vulture, mypy, sqlfluff,
     vérification des templates) ;
-  - `test` : `uv run poe test` (les 7 suites unitaires par paquet, 100 % de branches chacune, puis `unit-coverage-check`) ;
+  - `test` : `uv run poe test` (les 7 suites unitaires par paquet, 100 % de branches chacune, puis `_unit-coverage-check`) ;
   - `build-and-verify` : un job **par architecture sur son runner natif** (`amd64` sur
     `ubuntu-latest`, `arm64` sur `ubuntu-24.04-arm`). Chacun construit les **deux images**, le cœur
     et `p2pwatch-amule` (caches `crawler-<arch>` et `amule-<arch>`). Sur l'image d'aMule, il vérifie
