@@ -85,6 +85,9 @@ servers (U-D11).
   is `deploy/` data), `test_fakes.py` (its subject is `p2pwatch_testing`, L6), and `tests/integration/` (excluded
   by marker anyway). Why: the operator's choice
   (2026-10-15) of a convention enforced both ways; without it a misnamed test file silently stops counting.
+  (Corrected 2026-10-15, at block 130: an entry is a path from the package's directory, and one ending in `/`
+  lists every test file under it, which is how `tests/integration/` is listed; an entry naming no test file, or a
+  listed test file that maps to a module, fails the check too.)
 - **L5. The gaps are closed by direct tests, no module split.** After the moves, five crawler modules are short
   of their own tests (the probe's measure, L3):
 
@@ -177,6 +180,9 @@ servers (U-D11).
   pre-push hook and CI, which call those, need no change. (Corrected 2026-10-15, at block 80:
   `dead-code-check` is a `shell` task, `vulture --ignore-names "$TEMPLATE_READ_NAMES"`, since a `cmd` task
   echoes the expanded 1 KB list into every gate log and `verbosity = -1` hides the step's line altogether.)
+  (Corrected 2026-10-15, at block 130: `unit-coverage-check` is a sequence over the packages, each step in its
+  package's directory, which `test` runs once every package's pytest has passed; 1.4 s for the seven packages, the
+  measure included.)
 - **L12. deptry runs twice per package** with `[tool.deptry]` in each package: `exclude = ["\\.venv"]` (it
   replaces the default list, whose `tests` pattern silently drops the tests root; a one-line comment says so),
   `per_rule_ignores = { DEP002 = ["pytest-cov"] }` (plus `pytest-asyncio` for the crawler: entry-point plugins,
@@ -218,7 +224,8 @@ Estimates from the probes (2026-10-15), not a diff: read them as plus or minus 3
 | 100 | `test/testing-package` | L6: `p2pwatch_testing`, the six modules moved, the crawler's test imports, the dead support code | 400, 40 |
 | 110 | `test/mirrored-layout` | L2: the 25 moves and 5 splits | 250, 35 |
 | 120 | `test/unit-gaps` | L5, and the `sqlite3.connect` test fixed so that per-test contexts can be recorded | 200, 8 |
-| 130 | `test/unit-coverage-check` | U-D1, L3, L4: `coverage_checks` (`packages/coverage_checks`), the per-test contexts, `unit-coverage-check` in `test`, the `tests_without_unit` lists, `own tests` in the glossary | 400, 14 |
+| 130 | `test/unit-coverage-check` | L2's mapping enforced and L4: `coverage_checks` (`packages/coverage_checks`), `unit-coverage-check` in `test` mapping each test file to its module or its listing, the `tests_without_unit` lists, `own tests` in the glossary (Corrected 2026-10-15, at block 130: split, see below) | 424, 14 |
+| 135 | `test/unit-coverage-measure` | U-D1, L3: the per-test contexts, each module's measure by its own tests in `unit-coverage-check` | 420, 15 |
 | 140 | `docs/gate-tooling-wrap` | the closing block (Wrap): the handoff, `BACKLOG.md` reconciled | |
 
 - **Blocks 10, 100 and 110 pass 20 files** under the one-line exemption: mechanical renames and moves (the
@@ -233,6 +240,9 @@ Estimates from the probes (2026-10-15), not a diff: read them as plus or minus 3
   (Corrected 2026-10-15, at block 110: block 110 passes 500 lines too, 608, under the operator's 2026-10-13
   rule, applied by the lead: 491 of them are the SQL console's three-way split of verbatim test bodies, since
   moving lines into another file counts them once deleted and once added.)
+  (Corrected 2026-10-15, at block 130: block 130 passed both bounds whole, 812 lines and 20 files, and is not
+  mechanical, so it split: 130 keeps the mapping and the lists, 135 takes L3's measure, and becomes the last block
+  before the closing one.)
 - **Each block updates the documents its change contradicts**: `AGENTS.md` (the package list and count, the
   gate's sub-tasks, the tooling split, the layout of tests), `docs/contributing/testing.md`, `docs/operate.md`
   (L9), and the packages' own `AGENTS.md`.
@@ -245,13 +255,17 @@ Estimates from the probes (2026-10-15), not a diff: read them as plus or minus 3
   deleted test is moved first.
 - The test packages and mypy per package (90) precede the support package (100), which needs its own
   `type-check` entry, and the moves (110), which create same-named test files.
-- The gaps (120) close before the check (130) enters the gate, so each block is green alone.
+- The gaps (120) close before the check (130) enters the gate, so each block is green alone. (Corrected
+  2026-10-15, at block 130: the mapping (130) precedes the measure (135), which reads each module's own tests from
+  it.)
 
 ### Transient states inside the stack
 
 - Blocks 20 to 70: `template_checks` exists without `read_names`, which block 80 adds.
 - Blocks 30 to 90: the crawler's support modules are still under `tests/`, outside every coverage measure, as on
   `main`.
+- (Corrected 2026-10-15, at block 130: block 130: `unit-coverage-check` checks that each test file maps to a
+  module or is listed, and measures nothing, which block 135 adds.)
 
 ### Surfaces whose consumer arrives in a later block
 
@@ -273,19 +287,22 @@ Each criterion names what would prove it wrong.
      template's read of a view field reports that field.
    - `unit-coverage-check`: a branch of `domain/search/backoff.py` covered only from another module's test exits
      non-zero naming the module; a test file `tests/domain/test_nothing.py` exits non-zero as an orphan; listing
-     it under `tests_without_unit` passes.
+     it under `tests_without_unit` passes. (Corrected 2026-10-15, at block 130: the orphan and its listing in
+     block 130, the branch in block 135.)
    - `type-check` (block 90): a seeded untyped `def` in one package's `tests` exits non-zero with
      `[no-untyped-def]`, and so does one in `p2pwatch_testing` (block 100).
 2. **The layout holds**: every `tests/` directory but data directories has an `__init__.py`; no test module
    imports `fakes` bare; `unit-coverage-check`'s output on the tree counts N test files mapped to a module and M
    entries of `tests_without_unit`, and N + M equals
    `git ls-files 'packages/*/tests/*' | grep -c '/test_[^/]*\.py$'` minus the files under `tests/integration/`.
+   (Corrected 2026-10-15, at block 130: `tests/integration/` is one directory entry of the crawler's list (L4), so
+   the output counts M listed test files, its 4 included, and N + M equals that count with nothing subtracted.)
 3. **No dynamic attribute access**: `ast-grep scan` lists 5 findings on `main` (`matchers.py:129`,
    `reader.py:66`, `test_events.py:30`, `test_crawler_config.py:660` and `:661`) and none after block 40.
 4. **The images are unchanged**: CI's image builds and compose smoke pass on amd64 and arm64; the report of the
    last block before the closing one lists the installed packages of each image on `main` and at the top of the
    stack, which match (blocks 20, 100 and 130 add workspace members, block 100 one the crawler's `dev` group
-   declares).
+   declares). (Corrected 2026-10-15, at block 130: block 135 is now that last block, and lists them.)
 5. **The rename is complete** (block 10): `git grep -n -e vex_guards -e vex-guards -- ':!agents'` prints nothing
    (on `main`, 32 files); `git grep -n -i guard -- packages/vex_checks SECURITY.md .github` prints nothing; the
    block report quotes `grype-scan.yml`'s two commands (`check_image_claims`, `check_stale_claims`) and
