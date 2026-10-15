@@ -171,7 +171,8 @@ servers (U-D11).
   root `dev` group keeps deptry, mypy, poethepoet, ruff, sqlfluff, types-pyyaml (mypy's input), zensical, plus
   this lot's vulture and ast-grep-cli; pytest, pytest-cov, pytest-asyncio and the members leave it. Root
   `[tool.uv.sources]` ends the lot with three entries: `catalog-matching` (the crawler's runtime dependency),
-  and, from block 80, `p2pwatch` and `p2pwatch-testing` (the crawler's `dev` group depends on
+  and, from block 100 (Corrected 2026-10-15, at block 30: not 80, a number left from before the blocks were
+  renumbered), `p2pwatch` and `p2pwatch-testing` (the crawler's `dev` group depends on
   `p2pwatch-testing`, which depends on `p2pwatch`: without both entries `uv lock` refuses the cycle). Why: deptry
   has no notion of test code (DEP004 fires on any scanned file importing a dev-only package, DEP002 never checks
   dev dependencies, from its source), so the first pass checks `src` against runtime dependencies and the second
