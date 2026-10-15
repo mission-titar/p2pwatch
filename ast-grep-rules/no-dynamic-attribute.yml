@@ -1,17 +1,20 @@
 id: no-dynamic-attribute
 language: python
 severity: error
-message: Name attributes in the code, never through getattr, setattr, hasattr, delattr or the builtins module, so that mypy, vulture and the language server see them.
+message: Name attributes in the code, never through getattr, setattr, hasattr, delattr, vars, __dict__, the attribute dunders, operator's attrgetter and methodcaller, or the builtins module, so that mypy, vulture and the language server see them.
 note: "An exception carries `# ast-grep-ignore: no-dynamic-attribute` and its reason."
 rule:
   any:
     # Any reference but an attribute's name (`monkeypatch.setattr` passes), an alias and `__builtins__` included.
     - kind: identifier
-      regex: ^(getattr|setattr|hasattr|delattr|__builtins__)$
+      regex: ^(getattr|setattr|hasattr|delattr|vars|__builtins__)$
       not:
         inside:
           kind: attribute
           field: attribute
+    # Any reference, an attribute's or a method's name included (`obj.__dict__`, `operator.attrgetter`).
+    - kind: identifier
+      regex: ^(attrgetter|methodcaller|__dict__|__getattribute__|__setattr__|__delattr__)$
     # Any import of the builtins module, which would reach them written out (`builtins.getattr`).
     - kind: import_statement
       has:
