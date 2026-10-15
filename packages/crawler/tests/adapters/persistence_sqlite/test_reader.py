@@ -160,6 +160,3 @@ def test_reused_connection_sees_data_committed_after_first_handout(tmp_path: Pat
     finally:
         writer.close()
         reader.close()
-
-
-# must not raise
