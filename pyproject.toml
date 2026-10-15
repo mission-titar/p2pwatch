@@ -24,17 +24,11 @@ line-length = 100
 extend-exclude = ["agents/**/*.md"]
 src = [
   "packages/crawler/src",
-  "packages/crawler/tests",
   "packages/amule/src",
-  "packages/amule/tests",
   "packages/matching/src",
-  "packages/matching/tests",
   "packages/vex_checks/src",
-  "packages/vex_checks/tests",
   "packages/template_checks/src",
-  "packages/template_checks/tests",
   "packages/amule_bump/src",
-  "packages/amule_bump/tests",
 ]
 
 [tool.ruff.lint]
@@ -66,24 +60,6 @@ select = ["E", "F", "I", "UP", "B", "SIM", "TID251"]
 [tool.mypy]
 python_version = "3.13"
 strict = true
-# Module-name resolution across the workspace: `packages/crawler/tests/` has an `__init__.py`
-# (so does `tests/webui/`), making it the `tests` package. The other packages' test dirs have
-# none, so their test files are flat modules whose basenames must stay unique (hence
-# `test_matcher_config` rather than `test_config` in matching).
-files = [
-  "packages/crawler/src",
-  "packages/crawler/tests",
-  "packages/amule/src",
-  "packages/amule/tests",
-  "packages/matching/src",
-  "packages/matching/tests",
-  "packages/vex_checks/src",
-  "packages/vex_checks/tests",
-  "packages/template_checks/src",
-  "packages/template_checks/tests",
-  "packages/amule_bump/src",
-  "packages/amule_bump/tests",
-]
 
 # For editors' and Serena's language server, not the gate: without the venv, no import resolves.
 [tool.pyright]
@@ -95,7 +71,6 @@ venv = ".venv"
 [tool.poe.tasks]
 lint           = { cmd = "ruff check .", help = "Lint Python with ruff" }
 format-check   = { cmd = "ruff format --check .", help = "Check Python formatting with ruff" }
-type-check     = { cmd = "mypy", help = "Type-check with mypy (strict, src + tests)" }
 sql-lint       = { cmd = "sqlfluff lint packages/crawler/src", help = "Lint the embedded SQLite migrations" }
 code-pattern-check = { cmd = "ast-grep scan", help = "Ban dynamic attribute access (ast-grep, sgconfig.yml)" }
 template-check = { cmd = "python -m template_checks.check_templates packages/crawler/src/p2pwatch/webui/adapters/templates", help = "Assert webui templates carry no logic" }
@@ -142,6 +117,18 @@ sequence = [
   { cmd = "deptry --non-dev-dependency-groups dev src tests", cwd = "packages/template_checks" },
   { cmd = "deptry src", cwd = "packages/amule_bump" },
   { cmd = "deptry --non-dev-dependency-groups dev src tests", cwd = "packages/amule_bump" },
+]
+
+# One mypy run per package, since every package's tests are a package named `tests`.
+[tool.poe.tasks.type-check]
+help = "Type-check each package with mypy (strict, src + tests)"
+sequence = [
+  { cmd = "mypy src tests", cwd = "packages/matching" },
+  { cmd = "mypy src tests", cwd = "packages/crawler" },
+  { cmd = "mypy src tests", cwd = "packages/amule" },
+  { cmd = "mypy src tests", cwd = "packages/vex_checks" },
+  { cmd = "mypy src tests", cwd = "packages/template_checks" },
+  { cmd = "mypy src tests", cwd = "packages/amule_bump" },
 ]
 
 # `test` runs each package's suite in its own process (cwd) so per-package coverage

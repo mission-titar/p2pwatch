@@ -2,7 +2,7 @@ import pytest
 
 from amule_bump import BumpError
 from amule_bump.release import is_newer, latest_release_tag, peeled_commit
-from fakes import FakeRepo
+from tests.fakes import FakeRepo
 
 TAG_OBJECT = "6ccbfdf785390c25c8b01652684f5b06fb18e034"
 COMMIT = "909d304d993ee07df6c6f6acf501a6d791d53666"

@@ -6,7 +6,7 @@ import pytest
 
 from amule_bump import __main__ as cli
 from amule_bump.__main__ import main
-from fakes import FakeRepo
+from tests.fakes import FakeRepo
 
 OLD_COMMIT = "02db0d7faecfc377694ff6242bc23346185990ed"
 NEW_COMMIT = "909d304d993ee07df6c6f6acf501a6d791d53666"
