@@ -64,6 +64,7 @@ class MetricName(StrEnum):
     """Metric names. Counters WITHOUT ``_total`` (added by prometheus_client at exposition)."""
 
     SEARCHES = "p2pwatch_searches"
+    SEARCH_RESULTS_SKIPPED = "p2pwatch_search_results_skipped"
     OBSERVATIONS = "p2pwatch_observations"
     SEARCH_FAILURES = "p2pwatch_search_failures"
     CLIENT_UNREACHABLE = "p2pwatch_client_unreachable"
@@ -238,7 +239,16 @@ def describe(event: Event) -> Report:
             return Report(
                 Severity.DEBUG,
                 f"search {event.channel}: {event.observation_count} observation(s)",
-                (MetricInstruction(MetricName.SEARCHES, "inc", _search_labels(event)),),
+                (
+                    MetricInstruction(MetricName.SEARCHES, "inc", _search_labels(event)),
+                    # Even by 0: the series exists from the first search, before any drift.
+                    MetricInstruction(
+                        MetricName.SEARCH_RESULTS_SKIPPED,
+                        "inc",
+                        _search_labels(event),
+                        float(event.skipped_result_count),
+                    ),
+                ),
             )
         case ClientUnreachable():
             return Report(

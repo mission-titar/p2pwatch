@@ -388,19 +388,19 @@ async def test_a_task_is_one_search_given_the_cores_budget(
 
 
 @pytest.mark.asyncio
-async def test_successful_search_emits_search_executed_with_network_and_count(
+async def test_successful_search_emits_search_executed_with_network_and_counts(
     catalog: SqliteCatalogRepository, engine: MatchingEngine
 ) -> None:
     # A successful ed2k search emits SearchExecuted FIRST, labelled with its client,
     # before the per-observation events (ObservationRecorded/DecisionsRecorded).
     fake_time = FakeTime()
     telemetry = RecordingTelemetry()
-    client = FakeMuleClient(results=[(_obs(),)])
+    client = FakeMuleClient(results=[(_obs(),)], skipped_result_count=2)
     deps = _deps(catalog, engine, _registry(fake_time), fake_time, telemetry=telemetry)
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
     assert telemetry.events[0] == SearchExecuted(
-        client_name="amule-1", channel="ed2k", observation_count=1
+        client_name="amule-1", channel="ed2k", observation_count=1, skipped_result_count=2
     )
     kinds = [type(e).__name__ for e in telemetry.events]
     assert kinds == ["SearchExecuted", "ObservationRecorded", "DecisionsRecorded"]

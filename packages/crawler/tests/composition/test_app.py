@@ -56,6 +56,7 @@ from p2pwatch.ports.client_errors import ClientUnreachableError
 from p2pwatch.ports.client_status import ClientStatus
 from p2pwatch.ports.clock import MonotonicClock, MonotonicInstant
 from p2pwatch.ports.download_client import DownloadRequest, DownloadStatus
+from p2pwatch.ports.search_client import SearchAnswer
 from tests.adapters.mule_api.api_fakes import PASSWORD, FakeAmuleApi
 from tests.application.fakes import (
     FakeMonotonicClock,
@@ -359,11 +360,9 @@ async def test_second_signal_forces_exit(tmp_path: Path, matcher_config: Matcher
 class _BlockingClient(FakeMuleClient):
     """Client whose ``search`` BLOCKS: the loop stays in flight → cancellation hits it."""
 
-    async def search(
-        self, keyword: str, channel: str, budget_seconds: float
-    ) -> tuple[FileObservation, ...]:
+    async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
         await asyncio.Event().wait()  # never resolves: blocks until cancellation
-        return ()
+        return SearchAnswer((), 0)
 
 
 @pytest.mark.asyncio
@@ -510,16 +509,14 @@ class _KadNeverEndsClient(FakeMuleClient):
         super().__init__()
         self._app_holder = app_holder
 
-    async def search(
-        self, keyword: str, channel: str, budget_seconds: float
-    ) -> tuple[FileObservation, ...]:
+    async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
         if channel == "kad":
             await asyncio.Event().wait()
-        results = await super().search(keyword, channel, budget_seconds)
+        answer = await super().search(keyword, channel, budget_seconds)
         app = self._app_holder["app"]
         if self.searches.count(("keroro", "ed2k")) == 3 and not app._shutdown.is_set():
             app._on_signal()
-        return results
+        return answer
 
 
 @pytest.mark.asyncio
@@ -600,9 +597,7 @@ class _StampedSearchClient(FakeMuleClient):
         self._monotonic_clock = monotonic_clock
         self.searched_at: list[MonotonicInstant] = []
 
-    async def search(
-        self, keyword: str, channel: str, budget_seconds: float
-    ) -> tuple[FileObservation, ...]:
+    async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
         if not self.searched_at:
             self._app_holder["app"]._on_signal()
         self.searched_at.append(self._monotonic_clock.now())
@@ -1527,9 +1522,7 @@ class _ShutdownOnSearchClient(FakeMuleClient):
         super().__init__()
         self._app_holder = app_holder
 
-    async def search(
-        self, keyword: str, channel: str, budget_seconds: float
-    ) -> tuple[FileObservation, ...]:
+    async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
         if not self.searches:
             self._app_holder["app"]._on_signal()
         return await super().search(keyword, channel, budget_seconds)

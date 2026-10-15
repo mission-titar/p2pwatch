@@ -30,11 +30,16 @@ _062A = (ev.TargetTitle("062A", "Les demoiselles cambrioleuses"),)
 
 CASES: list[tuple[ev.Event, Report]] = [
     (
-        ev.SearchExecuted(client_name="amuled", channel="ed2k", observation_count=7),
+        ev.SearchExecuted(
+            client_name="amuled", channel="ed2k", observation_count=7, skipped_result_count=2
+        ),
         Report(
             Severity.DEBUG,
             "search ed2k: 7 observation(s)",
-            (MetricInstruction(MetricName.SEARCHES, "inc", _AMULED_ED2K),),
+            (
+                MetricInstruction(MetricName.SEARCHES, "inc", _AMULED_ED2K),
+                MetricInstruction(MetricName.SEARCH_RESULTS_SKIPPED, "inc", _AMULED_ED2K, 2.0),
+            ),
         ),
     ),
     (

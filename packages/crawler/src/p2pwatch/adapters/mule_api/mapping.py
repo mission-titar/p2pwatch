@@ -93,16 +93,19 @@ _WAITING_STATUSES = {
 
 
 def map_search_results(results: object, keyword: str) -> tuple[tuple[FileObservation, ...], int]:
-    """The ``results[]`` of a search → ``(observations, skipped_count)``."""
+    """The ``results[]`` of a search → ``(observations, skipped_result_count)``, counting the
+    results discarded whole; an entry without a name is dropped uncounted."""
     observations: list[FileObservation] = []
-    skipped = 0
+    skipped_result_count = 0
     if not isinstance(results, list):
         return (), 0  # unexpected envelope: tolerated, ignored (not a result set)
     for result in results:
-        mapped, result_skipped = _map_result(result, keyword)
-        observations.extend(mapped)
-        skipped += result_skipped
-    return tuple(observations), skipped
+        mapped = _map_result(result, keyword)
+        if mapped is None:
+            skipped_result_count += 1
+        else:
+            observations.extend(mapped)
+    return tuple(observations), skipped_result_count
 
 
 def map_download_status(row: object) -> DownloadStatus | None:
@@ -255,26 +258,24 @@ def _channel(channel: str, channel_json: dict[str, Any], connectable: bool | Non
     return ChannelStatus(channel, connected, connectable if connected else None)
 
 
-def _map_result(result: object, keyword: str) -> tuple[list[FileObservation], int]:
-    """One result row → one observation PER FILENAME, plus the skipped count."""
+def _map_result(result: object, keyword: str) -> list[FileObservation] | None:
+    """One result row → one observation PER FILENAME; ``None`` when the row is discarded."""
     if not isinstance(result, dict):
-        return [], 1
+        return None
     native_id = _hash_hex(result.get("hash"))
     size_bytes = result.get("size_bytes")
     if native_id is None or not isinstance(size_bytes, int) or isinstance(size_bytes, bool):
-        return [], 1
+        return None
     media = _as_dict(result.get("media"))
     raw_meta = _raw_meta(result, media)
     codec, file_type = _string(media.get("codec")), _string(result.get("file_type"))
     alternates = result.get("alternate_names")
     entries: list[object] = [result, *(alternates if isinstance(alternates, list) else [])]
     observations: list[FileObservation] = []
-    skipped = 0
     for entry in entries:
         fields = _as_dict(entry)
         name = _string(fields.get("name"))
         if name is None:
-            skipped += 1
             continue
         total, complete = _source_counts(fields.get("sources"))
         observations.append(
@@ -289,7 +290,7 @@ def _map_result(result: object, keyword: str) -> tuple[list[FileObservation], in
                 raw_meta=fold_raw_meta(raw_meta, codec, file_type, complete),
             )
         )
-    return observations, skipped
+    return observations
 
 
 def _raw_meta(result: dict[str, Any], media: dict[str, Any]) -> tuple[tuple[str, str], ...]:

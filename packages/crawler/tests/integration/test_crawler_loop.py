@@ -26,9 +26,9 @@ from p2pwatch.adapters.rng_random import SeededRng
 from p2pwatch.adapters.wake_hub_asyncio import AsyncioWakeHub
 from p2pwatch.adapters.wall_clock_system import SystemWallClock
 from p2pwatch.composition.app import CrawlerApp
-from p2pwatch.domain.observation import FileObservation
 from p2pwatch.ports.client_status import ClientStatus
 from p2pwatch.ports.clock import MonotonicClock
+from p2pwatch.ports.search_client import SearchAnswer
 from tests.integration.conftest import ApiEndpoint
 
 pytestmark = pytest.mark.orchestration_integration
@@ -64,15 +64,13 @@ class _ShutdownAfterFirstSearchClient:
     async def close(self) -> None:
         await self._inner.close()  # type: ignore[attr-defined]
 
-    async def search(
-        self, keyword: str, channel: str, budget_seconds: float
-    ) -> tuple[FileObservation, ...]:
+    async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
         app = self._app_holder["app"]
         if channel in self.returned and not app._shutdown.is_set():
             app._on_signal()
-        results = await self._inner.search(keyword, channel, budget_seconds)  # type: ignore[attr-defined]
+        answer = await self._inner.search(keyword, channel, budget_seconds)  # type: ignore[attr-defined]
         self.returned.add(channel)
-        return results  # type: ignore[no-any-return]
+        return answer  # type: ignore[no-any-return]
 
     async def status(self) -> ClientStatus:
         return await self._inner.status()  # type: ignore[attr-defined,no-any-return]

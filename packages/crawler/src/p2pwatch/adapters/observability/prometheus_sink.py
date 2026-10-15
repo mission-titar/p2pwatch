@@ -12,6 +12,11 @@ from p2pwatch.domain.observability.policy import MetricInstruction, MetricName
 # (name, doc, labels) of the counters.
 _COUNTERS: tuple[tuple[MetricName, str, tuple[str, ...]], ...] = (
     (MetricName.SEARCHES, "Searches performed", ("client", "channel")),
+    (
+        MetricName.SEARCH_RESULTS_SKIPPED,
+        "Search results the client could not read",
+        ("client", "channel"),
+    ),
     (MetricName.OBSERVATIONS, "Observations recorded", ("client", "channel")),
     (MetricName.SEARCH_FAILURES, "Failed searches", ("client", "channel")),
     (MetricName.CLIENT_UNREACHABLE, "Client unreachable", ("client",)),

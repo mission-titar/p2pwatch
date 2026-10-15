@@ -18,6 +18,7 @@ class SearchExecuted:
     client_name: str
     channel: str
     observation_count: int
+    skipped_result_count: int  # results the client could not read: a drift of its protocol
 
 
 @dataclass(frozen=True)

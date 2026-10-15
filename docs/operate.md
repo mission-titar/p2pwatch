@@ -88,6 +88,13 @@ démarré par `amuled` plutôt que par s6, il écrit dans `ed2k/amule/amuleapi.l
 travail. Pour aller du symptôme à la cause, voyez
 [Diagnostics avancés](troubleshooting.md).
 
+Le compteur `p2pwatch_search_results_skipped` (exposé en `p2pwatch_search_results_skipped_total`),
+étiqueté `client` et `channel` comme `p2pwatch_searches`, compte les résultats de recherche
+qu'amuleapi renvoie mais que le crawler ne sait pas lire : sans hash, sans taille exploitable, ou
+qui ne sont pas un objet. Un même résultat revu à chaque recherche compte à chaque fois. Il reste à
+zéro en temps normal. S'il monte, les réponses d'amuleapi ont changé de forme, et ces résultats ne
+sont pas catalogués.
+
 ### Planification disque
 
 Des ordres de grandeur, à ajuster selon votre trafic eMule réel et le nombre de cibles :
