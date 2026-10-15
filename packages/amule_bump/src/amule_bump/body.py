@@ -5,7 +5,6 @@ import textwrap
 from amule_bump.dockerfile import Pin
 from amule_bump.github import UPSTREAM, Repo
 
-GITHUB_BODY_MAX_CHARACTERS = 65536
 CHANGELOG_MAX_CHARACTERS = 20_000
 DIFF_MAX_CHARACTERS = 18_000
 WATCHED_FILES = ("cmake/options.cmake", "docs/api/REFERENCE.md")
