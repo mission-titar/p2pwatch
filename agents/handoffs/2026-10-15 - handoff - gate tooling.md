@@ -1,7 +1,8 @@
 # Handoff: gate tooling, lot 1 of the gate tooling, Serena and test quality umbrella
 
 Drafted by block 135 from the lot's block reports (#230 to #243, and block 135's own) and the lead's lot notes;
-corrected by block 150, the top of the closing block's split, which adds the holistic review and its exits.
+corrected by blocks 150 and 160, the top of the closing block's split, which add the holistic review and its
+exits.
 
 ## State
 
@@ -12,7 +13,7 @@ on the webui's file page, and the `merge` CLI's log line per source catalog. Spe
 lots 2 and 3's measurements, which their own specs re-run. The lot carries out lot 1 of the umbrella spec
 `agents/specs/2026-10-14-gate-tooling-and-test-quality.md` (U-D1, U-D2, U-D6 to U-D10, U-D16, U-D17).
 
-Sixteen blocks, one stack cut from `main` at `307de0b`:
+Seventeen blocks, one stack cut from `main` at `307de0b`:
 
 | Block | PR | Branch |
 |---|---|---|
@@ -31,18 +32,22 @@ Sixteen blocks, one stack cut from `main` at `307de0b`:
 | 130 | #243 | `test/unit-coverage-check` |
 | 135 | #244 | `test/unit-coverage-measure` |
 | 140 | opened with 150 | `docs/gate-tooling-wrap` |
-| 150 | the stack's top | `refactor/holistic-fixes` |
+| 150 | opened with 140 | `refactor/holistic-fixes` |
+| 160 | the stack's top | `chore/check-blind-spots` |
 
 The closing block split when it passed the files bound: 140 (`docs/gate-tooling-wrap`) holds the holistic
-review's documentation fixes and `BACKLOG.md`; 150 (`refactor/holistic-fixes`), on top, its code fixes, the
-spec's notes and this handoff. Block 135 was inserted when block 130 passed both size bounds (Decisions below).
+review's documentation fixes and `BACKLOG.md`; 150 (`refactor/holistic-fixes`) its code fixes; 160
+(`chore/check-blind-spots`), on top, the operator's answers on the rule and on `unit-coverage-check`, and the
+final notes of the spec and this handoff. Block 135 was inserted when block 130 passed both size bounds
+(Decisions below).
 
 Nothing of the stack is merged. `git tag -l 'v*'` still ends at `v4.1.0`. Neither database's schema changes:
 no migration in the lot.
 
 Once merged, `uv run poe check` holds these checks besides ruff, mypy, sqlfluff and the template check:
 - `dependency-check` (deptry, twice per package);
-- `code-pattern-check` (ast-grep: no `getattr`, `setattr`, `hasattr`, `delattr`, nor the `builtins` module);
+- `code-pattern-check` (ast-grep: no `getattr`, `setattr`, `hasattr`, `delattr`, `vars`, `__dict__`, attribute
+  dunders, `operator.attrgetter` or `methodcaller`, nor the `builtins` module);
 - `dead-code-check` (vulture over every `src`, with the names the templates read);
 - per-package mypy over `src` and `tests`;
 - `unit-coverage-check`: each module covered by its own tests, the test files mirroring `src`.
@@ -142,7 +147,9 @@ The operator's answers, from the block reports and the lead's notes:
   workflow's default: 130 keeps the mapping (426 lines, 14 files), 135 the measure (427 lines, 15 files).
 - The closing block passed the files bound whole (20 files, 129 lines, before `BACKLOG.md`), so the lead split
   it the same way: 140 the documentation fixes and `BACKLOG.md` (3 files, 8 lines before `BACKLOG.md`), 150
-  the code fixes, the spec's notes and this handoff, on top.
+  the code fixes (18 files, 121 lines). 150 had no room for the operator's answers, so the lead added 160 on
+  top for them and the final notes.
+- Block 160, the holistic review's finding 4: the rule refuses the blind forms too ("a").
 
 Each block's other departures, the ones a reviewer may weigh:
 
@@ -176,6 +183,8 @@ Each block's other departures, the ones a reviewer may weigh:
 - Block 150: `matching_modules` for the review's `extended_modules`, `labels` for `items`, the harness's
   `module_paths` and the test parameter `listed_path`, so one name keeps one concept; the virtual loop's poll
   comes back as an `assert`, which refuses ready I/O rather than delivering it.
+- Block 160: the `vars()` test's rewrite gave `LoopCrawlerControl` a `__slots__`, so the guarantee it checked
+  (no DB connection held) is Python's own; the test reads the three slots.
 
 ## Class 1 fixes
 
@@ -191,7 +200,7 @@ Each block's other departures, the ones a reviewer may weigh:
   level.
 - Block 130: root `[tool.ruff]` gains `target-version = "py313"`; without it ruff assumed 3.10 at the virtual
   root and sorted `tomllib` as third-party. With it, ruff reports nothing else on the tree.
-- Blocks 135, 140 and 150: none.
+- Blocks 135, 140, 150 and 160: none.
 
 ## Spec corrections
 
@@ -226,12 +235,12 @@ Counted with `gh run list --branch <b>` on each stack branch, 2026-10-15, after 
 the closing blocks' push.
 
 - **Fix-backs**: 2, both by the lead. Block 10's spec note (`720cc18`) and block 110's rewording
-  (`fcfbe0a`). Blocks 140 and 150: none at writing.
+  (`fcfbe0a`). Blocks 140, 150 and 160: none at writing.
 - **Cascaded rebases**: 0.
 - **Runs**: 16 on the 14 blocks before the closing one. One green run at the first pushed head for #231,
   #233 to #240 and #242 to #244. Two runs each, the first cancelled by the next push, then green, for #230
   (`d37858a` cancelled, `720cc18` green) and #241 (`ad1cbb9` cancelled, `fcfbe0a` green). Runs
-  re-triggered: 2, against 16 blocks with the two closing ones.
+  re-triggered: 2, against 17 blocks with the three closing ones.
 - **Bodies the operator called unreadable**: none known at writing.
 
 ### Where the block reports and the lead's notes differ
@@ -259,8 +268,10 @@ the closing blocks' push.
 3. Minor, block 100 deleted the fakes' strictness checks as lines the suite never runs. Fixed in 150: the
    bearer check, the login's `include_token` and the virtual loop's poll are `assert`s (Pitfalls).
 4. Minor, `test_unit_coverage.py` set modules on a namespace through `__dict__`. Fixed in 150:
-   a `dict[str, ModuleType]`. Its second half, the rule's blind forms (`__dict__`, `vars()`,
-   `operator.attrgetter`, `__getattribute__`/`__setattr__`): waits for the operator.
+   a `dict[str, ModuleType]`. Its second half, the rule's blind forms, the operator's choice "a": fixed in
+   160, the rule refuses `vars` and `__dict__`, `__getattribute__`, `__setattr__`, `__delattr__`,
+   `operator.attrgetter` and `operator.methodcaller`; the one use, `vars()` in
+   `test_crawler_control_loop.py`, gave way to `LoopCrawlerControl.__slots__`.
 5. Minor, the measure credits a body the process runs once to its first caller. Accepted limit, in
    `AGENTS.md`'s Gotchas (140) and the spec's section 6 (150); no instance exists.
 6. Minor, `unit-coverage-check` run alone reads a stale or partial `.coverage`: waits for the operator.
@@ -301,7 +312,11 @@ the closing blocks' push.
   run from the workspace's venv, never `uvx`. Seeding a `pyproject.toml` needs `uv run --no-sync`, or uv
   relocks.
 - **ast-grep** fails only on `severity: error`; a YAML `note:` holding `: ` must be quoted; it skips
-  gitignored and hidden paths; it sees names, not bindings.
+  gitignored and hidden paths; it sees names, not bindings. An attribute's name is an `identifier` in the
+  `attribute` field of an `attribute` node, which is how the rule lets `monkeypatch.setattr` pass and still
+  refuses `obj.__dict__` (block 160).
+- **A wildcard pathspec matches the whole path**: `git grep ... -- 'packages/*/tests'` matches no file under
+  `tests`, and silently counted 0 uses of `vars(` where there were 2; use `packages/` (block 160).
 - **vulture**: a CLI `--ignore-names` replaces `[tool.vulture] ignore_names`, hence the whitelist file; a bare
   `vulture` reports the 27 view fields, `uv run poe dead-code-check` is the command.
 - **mypy per package**: a `py.typed` package's errors show only in its own run; without the marker, an
