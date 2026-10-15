@@ -1,4 +1,4 @@
-"""Repo-relative paths the guard checks read: source trees and VEX files.
+"""Repo-relative paths the checks read: source trees and VEX files.
 
 Everything is derived from the repo root (four parents up from this module), so
 the checks stay correct no matter the working directory the gate runs from.
@@ -20,7 +20,7 @@ def display_path(path: Path) -> str:
         return str(path)
 
 
-_TOOLING_PACKAGES = {"vex_guards", "amule_bump"}
+_TOOLING_PACKAGES = {"vex_checks", "amule_bump"}
 
 
 def source_dirs() -> list[Path]:

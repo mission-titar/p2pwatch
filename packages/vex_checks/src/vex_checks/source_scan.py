@@ -1,7 +1,7 @@
 """The source-family scanner: proves our own code never reaches the paths a
 ``vulnerable_code_not_in_execute_path`` VEX claim declares exempt.
 
-Each source guard is a falsifiable premise about our shipped Python (a module is
+Each source premise is a falsifiable fact about our shipped Python (a module is
 never imported, an external program is never invoked). The scanner reads only our
 own tree: it parses every ``.py`` under the shipped source dirs once, emitting a
 ``Violation`` the moment a premise is contradicted.
@@ -12,9 +12,9 @@ import re
 from pathlib import Path
 from typing import assert_never
 
-from vex_guards import repo
-from vex_guards.descriptors import ModuleNotImported, ProgramNeverInvoked, SourceGuard
-from vex_guards.violations import Violation
+from vex_checks import repo
+from vex_checks.descriptors import ModuleNotImported, ProgramNeverInvoked, SourcePremise
+from vex_checks.violations import Violation
 
 
 def _top_level(dotted: str) -> str:
@@ -105,17 +105,19 @@ def _word_violation(
     return None
 
 
-def evaluate_source_guards(guards: dict[str, SourceGuard], src_dirs: list[Path]) -> list[Violation]:
+def evaluate_source_premises(
+    premises: dict[str, SourcePremise], src_dirs: list[Path]
+) -> list[Violation]:
     parsed = _parse_sources(src_dirs)
     violations: list[Violation] = []
-    for advisory_id, guard in guards.items():
-        match guard:
+    for advisory_id, premise in premises.items():
+        match premise:
             case ModuleNotImported(module=module):
                 found = _module_violation(advisory_id, module, parsed)
             case ProgramNeverInvoked(program=program):
                 found = _word_violation(advisory_id, program, parsed)
             case _:  # pragma: no cover
-                assert_never(guard)
+                assert_never(premise)
         if found is not None:
             violations.append(found)
     return violations

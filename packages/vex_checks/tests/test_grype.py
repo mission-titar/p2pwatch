@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from vex_guards.grype import GrypeRunner, parse_grype_json
+from vex_checks.grype import GrypeRunner, parse_grype_json
 
 
 def test_parse_grype_json_collects_unique_ids() -> None:

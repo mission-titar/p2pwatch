@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from vex_guards import check_source_claims
+from vex_checks import check_source_claims
 
 
 def test_main_returns_zero_on_the_real_repo() -> None:

@@ -4,19 +4,19 @@ from typing import cast
 
 import pytest
 
-from vex_guards import check_image_claims, registry
-from vex_guards.descriptors import (
+from vex_checks import check_image_claims, registry
+from vex_checks.descriptors import (
     DeclaredMinVersion,
     DpkgMinVersion,
     DpkgPackageAbsent,
-    Guard,
     ModuleNotImported,
+    Premise,
 )
-from vex_guards.repo import repo_root
+from vex_checks.repo import repo_root
 
-# Tests inject their own guards, keyed on CVEs the real crawler VEX does claim: the document
+# Tests inject their own premises, keyed on CVEs the real crawler VEX does claim: the document
 # stays a genuine fixture (and lives under the repo, taking the in-repo repo.display_path
-# branch) while the guards stay under test control.
+# branch) while the premises stay under test control.
 _CRAWLER_VEX = repo_root() / "security" / "crawler.vex.openvex.json"
 _CRAWLER_VEX_RELPATH = "security/crawler.vex.openvex.json"
 _AMULE_VEX = repo_root() / "security" / "amule.vex.openvex.json"
@@ -24,9 +24,9 @@ _AMULE_VEX = repo_root() / "security" / "amule.vex.openvex.json"
 _CLAIMED_IMAGE_CVE = "CVE-2025-15367"
 _CLAIMED_SOURCE_CVE = "CVE-2025-15366"
 
-# Three guards, one per branch of main's filter: an image guard whose CVE is claimed (kept),
-# a source guard whose CVE is claimed (scoped out), an image guard nothing claims (skipped).
-_GUARDS: dict[str, Guard] = {
+# Three premises, one per branch of main's filter: an image premise whose CVE is claimed (kept),
+# a source premise whose CVE is claimed (scoped out), an image premise nothing claims (skipped).
+_PREMISES: dict[str, Premise] = {
     _CLAIMED_IMAGE_CVE: DpkgPackageAbsent("nghttp2"),
     _CLAIMED_SOURCE_CVE: ModuleNotImported("imaplib"),
     "CVE-UNCLAIMED": DpkgMinVersion("curl", "99.0"),
@@ -35,8 +35,8 @@ _GUARDS: dict[str, Guard] = {
 
 
 @pytest.fixture(autouse=True)
-def _guards(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(check_image_claims, "GUARDS", _GUARDS)
+def _premises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(check_image_claims, "PREMISES", _PREMISES)
 
 
 def _write_sbom(tmp_path: Path, artifacts: list[dict[str, str]]) -> Path:
@@ -46,12 +46,12 @@ def _write_sbom(tmp_path: Path, artifacts: list[dict[str, str]]) -> Path:
 
 
 def _violating_sbom(tmp_path: Path) -> Path:
-    # nghttp2 present contradicts the PackageAbsent("nghttp2") guard.
+    # nghttp2 present contradicts the PackageAbsent("nghttp2") premise.
     return _write_sbom(tmp_path, [{"type": "deb", "name": "nghttp2", "version": "1.64.0-1"}])
 
 
 def _clean_sbom(tmp_path: Path) -> Path:
-    # curl below the unclaimed guard's minimum: skipped, since nothing claims that CVE.
+    # curl below the unclaimed premise's minimum: skipped, since nothing claims that CVE.
     return _write_sbom(
         tmp_path,
         [
@@ -119,7 +119,7 @@ def test_the_real_amule_claims_fail_on_an_amule_older_than_the_fix(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(check_image_claims, "GUARDS", registry.GUARDS)
+    monkeypatch.setattr(check_image_claims, "PREMISES", registry.PREMISES)
     sbom = _write_sbom(
         tmp_path,
         [
@@ -156,7 +156,7 @@ def test_a_vex_with_no_image_claim_lets_any_sbom_pass(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    # Scoping: a document claiming only a source-family CVE filters every image guard
+    # Scoping: a document claiming only a source-family CVE filters every image premise
     # out, so even a package-laden SBOM yields no violation.
     vex = _write_vex(tmp_path, _CLAIMED_SOURCE_CVE, "vulnerable_code_not_in_execute_path")
     sbom = _violating_sbom(tmp_path)

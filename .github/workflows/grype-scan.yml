@@ -26,7 +26,7 @@ jobs:
       IMAGE: ${{ matrix.image }}
       VEX: security/${{ matrix.package }}.vex.openvex.json
     steps:
-      - name: Check out the repository (for the vex_guards consistency checks)
+      - name: Check out the repository (for the vex_checks consistency checks)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up uv and sync the dev environment
@@ -51,7 +51,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # The main scan's SBOM and VEX come from the image's own signed attestations (the repo
-      # checkout above serves only the vex_guards consistency checks below). verify-attestation
+      # checkout above serves only the vex_checks consistency checks below). verify-attestation
       # (not merely fetch) proves the SBOM and VEX were produced by OUR release.yml for THIS
       # image digest. jq decodes the DSSE payload and extracts the raw predicate.
       #   - Syft-JSON SBOM (type https://syft.dev/bom): scanned instead of CycloneDX because
@@ -72,11 +72,11 @@ jobs:
           verify "https://syft.dev/bom" > /tmp/sbom.syft.json
           verify openvex                > /tmp/vex.openvex.json
 
-      # The two vex_guards image checks run in SARIF mode against the versioned VEX: they always
+      # The two vex_checks image checks run in SARIF mode against the versioned VEX: they always
       # exit 0, so a drift surfaces in Code scanning rather than failing this daily job.
       - name: Check image-family VEX claims against the SBOM
         run: >
-          uv run python -m vex_guards.check_image_claims
+          uv run python -m vex_checks.check_image_claims
           --sbom /tmp/sbom.syft.json
           --vex "$VEX"
           --format sarif --output /tmp/image-claims.sarif
@@ -90,7 +90,7 @@ jobs:
 
       - name: Check for stale VEX entries no longer reported by Grype
         run: >
-          uv run python -m vex_guards.check_stale_claims
+          uv run python -m vex_checks.check_stale_claims
           --sbom /tmp/sbom.syft.json
           --vex "$VEX"
           --format sarif --output /tmp/stale.sarif

@@ -1,5 +1,5 @@
 [project]
-name = "vex-guards"
+name = "vex-checks"
 dynamic = ["version"]
 requires-python = ">=3.13"
 dependencies = ["packaging>=26.3"]
@@ -24,12 +24,12 @@ git_describe_command = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/vex_guards"]
+packages = ["src/vex_checks"]
 
 [tool.pytest.ini_options]
-addopts = "--cov=vex_guards --cov-branch --cov-report=term-missing --cov-fail-under=100"
+addopts = "--cov=vex_checks --cov-branch --cov-report=term-missing --cov-fail-under=100"
 testpaths = ["tests"]
 
 [tool.coverage.run]
 branch = true
-source = ["vex_guards"]
+source = ["vex_checks"]

@@ -5,13 +5,13 @@ from typing import assert_never
 
 from packaging.version import Version
 
-from vex_guards.descriptors import (
+from vex_checks.descriptors import (
     DeclaredMinVersion,
     DpkgMinVersion,
     DpkgPackageAbsent,
-    ImageGuard,
+    ImagePremise,
 )
-from vex_guards.violations import Violation
+from vex_checks.violations import Violation
 
 
 @dataclass(frozen=True)
@@ -24,7 +24,7 @@ def load_dpkg_packages(path: Path) -> list[DpkgPackage]:
     """The dpkg packages of a Syft JSON SBOM, in document order.
 
     Syft types those "deb". aMule (declared by hand, see ``load_declared_components``)
-    and our Python wheels do not come from dpkg, so a dpkg guard ignores them.
+    and our Python wheels do not come from dpkg, so no dpkg premise is checked against them.
     """
     doc = json.loads(path.read_text())
     return [
@@ -66,8 +66,8 @@ def _upstream(version: str) -> str:
     return upstream or without_epoch
 
 
-def evaluate_image_guards(
-    guards: dict[str, ImageGuard],
+def evaluate_image_premises(
+    premises: dict[str, ImagePremise],
     packages: list[DpkgPackage],
     declared_components: list[DeclaredComponent],
 ) -> list[Violation]:
@@ -75,8 +75,8 @@ def evaluate_image_guards(
     for pkg in packages:
         by_name.setdefault(pkg.name, []).append(pkg)
     violations: list[Violation] = []
-    for advisory_id, guard in guards.items():
-        match guard:
+    for advisory_id, premise in premises.items():
+        match premise:
             case DpkgPackageAbsent(package):
                 if package in by_name:
                     violations.append(
@@ -104,5 +104,5 @@ def evaluate_image_guards(
                             )
                         )
             case _:  # pragma: no cover
-                assert_never(guard)
+                assert_never(premise)
     return violations

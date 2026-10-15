@@ -1,7 +1,7 @@
 from typing import cast
 
-from vex_guards.sarif import build_sarif
-from vex_guards.violations import Violation
+from vex_checks.sarif import build_sarif
+from vex_checks.violations import Violation
 
 _RULE_ID = "vex-consistency-tarfile"
 _VEX_RELPATH = "security/crawler.vex.openvex.json"

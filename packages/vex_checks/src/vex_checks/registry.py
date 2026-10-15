@@ -1,13 +1,13 @@
-"""The authoritative advisory to guard mapping.
+"""The authoritative advisory to premise mapping.
 
 Every OpenVEX ``not_affected`` claim we publish is anchored here to exactly one
-guard descriptor. The keys are advisory identifiers (CVE or GHSA); the values are
+premise descriptor. The keys are advisory identifiers (CVE or GHSA); the values are
 the falsifiable premise each claim rests on.
 """
 
-from vex_guards.descriptors import DeclaredMinVersion, Guard, ModuleNotImported
+from vex_checks.descriptors import DeclaredMinVersion, ModuleNotImported, Premise
 
-GUARDS: dict[str, Guard] = {
+PREMISES: dict[str, Premise] = {
     "CVE-2006-2691": DeclaredMinVersion("amule", "2.1.2"),
     "CVE-2006-2692": DeclaredMinVersion("amule", "2.1.2"),
     "CVE-2025-15366": ModuleNotImported("imaplib"),

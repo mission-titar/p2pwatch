@@ -1,6 +1,6 @@
 """CLI gate: assert every image-family VEX claim holds against a built image's SBOM.
 
-Each image guard asserts a fact about the packages shipped in the image (a
+Each image premise asserts a fact about the packages shipped in the image (a
 package is absent, or a dpkg or hand-declared one meets a minimum version).
 Given a Syft SBOM and the VEX document authored for that image, this checks the
 image-family claims only: source-family claims are scoped out. In ``fail`` mode a
@@ -15,12 +15,12 @@ import json
 import sys
 from pathlib import Path
 
-from vex_guards import repo
-from vex_guards.descriptors import ImageGuard, is_image_guard
-from vex_guards.registry import GUARDS
-from vex_guards.sarif import build_sarif
-from vex_guards.sbom import evaluate_image_guards, load_declared_components, load_dpkg_packages
-from vex_guards.vex_io import load_claims
+from vex_checks import repo
+from vex_checks.descriptors import ImagePremise, is_image_premise
+from vex_checks.registry import PREMISES
+from vex_checks.sarif import build_sarif
+from vex_checks.sbom import evaluate_image_premises, load_declared_components, load_dpkg_packages
+from vex_checks.vex_io import load_claims
 
 _RULE_ID = "unsatisfied-image-claim"
 
@@ -36,17 +36,17 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--output is required with --format sarif")
 
     claims = load_claims(Path(args.vex))
-    # Iterate GUARDS so the value binds the narrowed loop variable: is_image_guard
-    # is a TypeGuard, so ``guard`` types as ImageGuard here with no cast/ignore.
-    guards: dict[str, ImageGuard] = {
-        advisory_id: guard
-        for advisory_id, guard in GUARDS.items()
-        if advisory_id in claims and is_image_guard(guard)
+    # Iterate PREMISES so the value binds the narrowed loop variable: is_image_premise
+    # is a TypeIs, so ``premise`` types as ImagePremise here with no cast/ignore.
+    premises: dict[str, ImagePremise] = {
+        advisory_id: premise
+        for advisory_id, premise in PREMISES.items()
+        if advisory_id in claims and is_image_premise(premise)
     }
     vex_relpath = repo.display_path(Path(args.vex))
     sbom = Path(args.sbom)
-    unlocated = evaluate_image_guards(
-        guards, load_dpkg_packages(sbom), load_declared_components(sbom)
+    unlocated = evaluate_image_premises(
+        premises, load_dpkg_packages(sbom), load_declared_components(sbom)
     )
     violations = [dataclasses.replace(violation, location=vex_relpath) for violation in unlocated]
 

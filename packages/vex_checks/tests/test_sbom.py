@@ -1,16 +1,16 @@
 import json
 from pathlib import Path
 
-from vex_guards.descriptors import (
+from vex_checks.descriptors import (
     DeclaredMinVersion,
     DpkgMinVersion,
     DpkgPackageAbsent,
-    ImageGuard,
+    ImagePremise,
 )
-from vex_guards.sbom import (
+from vex_checks.sbom import (
     DeclaredComponent,
     DpkgPackage,
-    evaluate_image_guards,
+    evaluate_image_premises,
     load_declared_components,
     load_dpkg_packages,
 )
@@ -41,30 +41,30 @@ def test_load_dpkg_packages_keeps_only_deb_artifacts(tmp_path: Path) -> None:
 
 
 def test_package_absent_passes_when_only_sibling_package_present() -> None:
-    guards: dict[str, ImageGuard] = {"CVE-2024-0001": DpkgPackageAbsent("libcurl4")}
+    premises: dict[str, ImagePremise] = {"CVE-2024-0001": DpkgPackageAbsent("libcurl4")}
     packages = [DpkgPackage("libcurl4t64", "8.14.1-2")]
-    assert evaluate_image_guards(guards, packages, []) == []
+    assert evaluate_image_premises(premises, packages, []) == []
 
 
 def test_package_absent_fails_when_package_present() -> None:
-    guards: dict[str, ImageGuard] = {"CVE-2024-0001": DpkgPackageAbsent("libcurl4")}
+    premises: dict[str, ImagePremise] = {"CVE-2024-0001": DpkgPackageAbsent("libcurl4")}
     packages = [DpkgPackage("libcurl4", "8.14.1-2")]
-    violations = evaluate_image_guards(guards, packages, [])
+    violations = evaluate_image_premises(premises, packages, [])
     assert len(violations) == 1
     assert violations[0].advisory_id == "CVE-2024-0001"
     assert "libcurl4" in violations[0].message
 
 
 def test_package_min_version_passes_at_or_above_minimum() -> None:
-    guards: dict[str, ImageGuard] = {"CVE-2016-1405": DpkgMinVersion("curl", "8.0")}
+    premises: dict[str, ImagePremise] = {"CVE-2016-1405": DpkgMinVersion("curl", "8.0")}
     packages = [DpkgPackage("curl", "8.14.1-2")]
-    assert evaluate_image_guards(guards, packages, []) == []
+    assert evaluate_image_premises(premises, packages, []) == []
 
 
 def test_package_min_version_fails_below_minimum() -> None:
-    guards: dict[str, ImageGuard] = {"CVE-2016-1405": DpkgMinVersion("curl", "8.0")}
+    premises: dict[str, ImagePremise] = {"CVE-2016-1405": DpkgMinVersion("curl", "8.0")}
     packages = [DpkgPackage("curl", "7.88.1-10+deb12u5")]
-    violations = evaluate_image_guards(guards, packages, [])
+    violations = evaluate_image_premises(premises, packages, [])
     assert len(violations) == 1
     assert violations[0].advisory_id == "CVE-2016-1405"
     assert "curl" in violations[0].message
@@ -72,20 +72,20 @@ def test_package_min_version_fails_below_minimum() -> None:
 
 def test_package_min_version_compares_the_upstream_part_of_a_debian_version() -> None:
     # Only the upstream part compares; whole, "1:8.14.1-2" is not a valid version.
-    guards: dict[str, ImageGuard] = {"CVE-2016-1405": DpkgMinVersion("curl", "8.14")}
-    assert evaluate_image_guards(guards, [DpkgPackage("curl", "1:8.14.1-2")], []) == []
+    premises: dict[str, ImagePremise] = {"CVE-2016-1405": DpkgMinVersion("curl", "8.14")}
+    assert evaluate_image_premises(premises, [DpkgPackage("curl", "1:8.14.1-2")], []) == []
 
 
 def test_package_min_version_handles_a_version_with_no_revision() -> None:
     # A native Debian package carries no "-revision" at all: the whole string is upstream.
-    guards: dict[str, ImageGuard] = {"CVE-2016-1405": DpkgMinVersion("curl", "8.0")}
-    assert evaluate_image_guards(guards, [DpkgPackage("curl", "8.14.1")], []) == []
+    premises: dict[str, ImagePremise] = {"CVE-2016-1405": DpkgMinVersion("curl", "8.0")}
+    assert evaluate_image_premises(premises, [DpkgPackage("curl", "8.14.1")], []) == []
 
 
 def test_package_min_version_passes_vacuously_when_package_absent() -> None:
-    guards: dict[str, ImageGuard] = {"CVE-2016-1405": DpkgMinVersion("curl", "8.0")}
+    premises: dict[str, ImagePremise] = {"CVE-2016-1405": DpkgMinVersion("curl", "8.0")}
     packages = [DpkgPackage("libcurl4t64", "8.14.1-2")]
-    assert evaluate_image_guards(guards, packages, []) == []
+    assert evaluate_image_premises(premises, packages, []) == []
 
 
 def test_load_declared_components_keeps_only_generic_purl_artifacts(tmp_path: Path) -> None:
@@ -112,13 +112,13 @@ def test_load_declared_components_keeps_only_generic_purl_artifacts(tmp_path: Pa
 
 
 def test_declared_min_version_passes_at_or_above_minimum() -> None:
-    guards: dict[str, ImageGuard] = {"CVE-2006-2691": DeclaredMinVersion("amule", "2.1.2")}
-    assert evaluate_image_guards(guards, [], [DeclaredComponent("amule", "2.1.2")]) == []
+    premises: dict[str, ImagePremise] = {"CVE-2006-2691": DeclaredMinVersion("amule", "2.1.2")}
+    assert evaluate_image_premises(premises, [], [DeclaredComponent("amule", "2.1.2")]) == []
 
 
 def test_declared_min_version_fails_below_minimum() -> None:
-    guards: dict[str, ImageGuard] = {"CVE-2006-2691": DeclaredMinVersion("amule", "2.1.2")}
-    violations = evaluate_image_guards(guards, [], [DeclaredComponent("amule", "2.1.1")])
+    premises: dict[str, ImagePremise] = {"CVE-2006-2691": DeclaredMinVersion("amule", "2.1.2")}
+    violations = evaluate_image_premises(premises, [], [DeclaredComponent("amule", "2.1.1")])
     assert len(violations) == 1
     assert violations[0].advisory_id == "CVE-2006-2691"
     assert violations[0].message == "declared amule 2.1.1 is below 2.1.2"
@@ -126,10 +126,10 @@ def test_declared_min_version_fails_below_minimum() -> None:
 
 def test_declared_min_version_ignores_a_dpkg_package_of_the_same_name() -> None:
     # Namespaces stay apart: an old deb named "amule" is not the declared component.
-    guards: dict[str, ImageGuard] = {"CVE-2006-2691": DeclaredMinVersion("amule", "2.1.2")}
-    assert evaluate_image_guards(guards, [DpkgPackage("amule", "2.1.1-1")], []) == []
+    premises: dict[str, ImagePremise] = {"CVE-2006-2691": DeclaredMinVersion("amule", "2.1.2")}
+    assert evaluate_image_premises(premises, [DpkgPackage("amule", "2.1.1-1")], []) == []
 
 
 def test_declared_min_version_passes_vacuously_when_component_absent() -> None:
-    guards: dict[str, ImageGuard] = {"CVE-2006-2691": DeclaredMinVersion("amule", "2.1.2")}
-    assert evaluate_image_guards(guards, [], [DeclaredComponent("other", "1.0")]) == []
+    premises: dict[str, ImagePremise] = {"CVE-2006-2691": DeclaredMinVersion("amule", "2.1.2")}
+    assert evaluate_image_premises(premises, [], [DeclaredComponent("other", "1.0")]) == []

@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from vex_guards import repo
-from vex_guards.vex_io import all_claims, load_claims
+from vex_checks import repo
+from vex_checks.vex_io import all_claims, load_claims
 
 
 def _write(tmp_path: Path, statements: list[dict[str, object]]) -> Path:
