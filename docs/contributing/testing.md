@@ -34,16 +34,24 @@ Le projet a **deux niveaux** :
 
    ```bash
    uv run poe check     # le gate complet : lint-all + test (ce que lancent pre-push et la CI)
-   uv run poe test      # les 6 suites unitaires seules, chacune dans son processus
+   uv run poe test      # les 7 suites unitaires seules, chacune dans son processus
    ```
 
    > La tâche `test` reste **par paquet** : elle lance `pytest` avec `cwd = packages/<pkg>` pour
-   > chacun des 6 paquets, dans des processus séparés, afin de garder la coverage isolée. Un simple
+   > chacun des 7 paquets, dans des processus séparés, afin de garder la coverage isolée. Un simple
    > `uv run pytest` depuis la racine du dépôt n'est **pas** le gate (la racine n'a pas de config
-   > pytest, et un `conftest.py` racine neutralise la collecte, donnant `exit 5`). Le septième
+   > pytest, et un `conftest.py` racine neutralise la collecte, donnant `exit 5`). Le huitième
    > paquet, `p2pwatch_testing` (les doublures et utilitaires partagés des tests du crawler), n'a
    > pas de suite : celle du crawler mesure sa couverture (`--cov=p2pwatch_testing`), si bien
    > qu'une ligne ou une branche qu'aucun test n'y exécute fait échouer le gate.
+
+   Après les suites, `test` lance `unit-coverage-check` : dans chaque paquet, chaque fichier de
+   test doit tester le module dont il porte le nom, dans le répertoire miroir du sien
+   (`tests/a/test_b.py` et `tests/a/test_b_<aspect>.py` pour `src/<pkg>/a/b.py`) : ce sont **ses
+   propres tests**. Un fichier de test qui ne teste aucun module fait échouer la vérification,
+   sauf si son paquet le liste, avec ce qu'il teste, sous
+   `[tool.coverage_checks] tests_without_unit` : les tests des migrations SQL, ceux des données de
+   `deploy/`, les suites d'intégration.
 
    L'`addopts` de chaque paquet **désélectionne** tous les markers d'intégration
    (`-m "not api_integration and not …"`), si bien que le gate ne les lance jamais, et ils sont exclus
@@ -310,7 +318,7 @@ Déjà en CI :
   - `lint` : `uv run poe lint-all` (ruff, format, dépendances déclarées par deptry, accès
     dynamiques aux attributs refusés par ast-grep, code mort par vulture, mypy, sqlfluff,
     vérification des templates) ;
-  - `test` : `uv run poe test` (les 6 suites unitaires par paquet, 100 % de branches chacune) ;
+  - `test` : `uv run poe test` (les 7 suites unitaires par paquet, 100 % de branches chacune, puis `unit-coverage-check`) ;
   - `build-and-verify` : un job **par architecture sur son runner natif** (`amd64` sur
     `ubuntu-latest`, `arm64` sur `ubuntu-24.04-arm`). Chacun construit les **deux images**, le cœur
     et `p2pwatch-amule` (caches `crawler-<arch>` et `amule-<arch>`). Sur l'image d'aMule, il vérifie
