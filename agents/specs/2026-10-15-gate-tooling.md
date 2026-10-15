@@ -161,7 +161,11 @@ servers (U-D11).
   `banned-api` was to ban the written-out forms, but `TID251` is ignored in every `tests/` tree and in
   `packages/amule/`, where they passed both tools; one tool instead of two, the operator's choice). Why: U-D17,
   and `FileCandidate.size_mib` looked dead to vulture only because of the `getattr` (the operator, 2026-10-15); a
-  rule on calls alone lets `builtins.getattr(...)` and an alias through.
+  rule on calls alone lets `builtins.getattr(...)` and an alias through. (Corrected 2026-10-15, at block 160: the
+  rule also refuses `vars`, like the four, and `__dict__`, `__getattribute__`, `__setattr__`, `__delattr__`,
+  `operator.attrgetter` and `operator.methodcaller` even as an attribute's or a method's name, the operator's
+  choice after the holistic review; the one use, `vars()` in `test_crawler_control_loop.py`, gave way to
+  `LoopCrawlerControl.__slots__`.)
 - **L11. The tasks.**
 
   | Task | Command | In | Time |
@@ -229,6 +233,7 @@ Estimates from the probes (2026-10-15), not a diff: read them as plus or minus 3
 | 135 | `test/unit-coverage-measure` | U-D1, L3: the per-test contexts, each module's measure by its own tests in `unit-coverage-check` | 420, 15 |
 | 140 | `docs/gate-tooling-wrap` | the closing block (Wrap): the handoff, `BACKLOG.md` reconciled (Corrected 2026-10-15, at block 140: split; 140 keeps the documentation fixes and `BACKLOG.md`, see below) | |
 | 150 | `refactor/holistic-fixes` | (Corrected 2026-10-15, at block 140: the closing block's top) the holistic review's code fixes, the spec's notes, the handoff | |
+| 160 | `chore/check-blind-spots` | (Corrected 2026-10-15, at block 160: the closing block's top) the operator's answers to the holistic review's findings 4 and 6, their `AGENTS.md` lines, the spec's and the handoff's final notes | |
 
 - **Blocks 10, 100 and 110 pass 20 files** under the one-line exemption: mechanical renames and moves (the
   operator, 2026-10-13). **Block 90 passes 20 files** under the same exemption: most of its files are empty
@@ -248,6 +253,8 @@ Estimates from the probes (2026-10-15), not a diff: read them as plus or minus 3
   (Corrected 2026-10-15, at block 140: the closing block passed the files bound whole, 20 files and 129 lines
   before `BACKLOG.md`, and is not mechanical, so it split: 140 keeps the holistic review's documentation fixes
   and `BACKLOG.md`, 150 takes its code fixes, the spec's notes and the handoff, which names every exit.)
+  (Corrected 2026-10-15, at block 160: 150, at 18 files, could not take the operator's answers on the rule and on
+  `unit-coverage-check`, so block 160 holds them, on top, with the final notes of the spec and the handoff.)
 - **Each block updates the documents its change contradicts**: `AGENTS.md` (the package list and count, the
   gate's sub-tasks, the tooling split, the layout of tests), `docs/contributing/testing.md`, `docs/operate.md`
   (L9), and the packages' own `AGENTS.md`.
@@ -289,7 +296,8 @@ Each criterion names what would prove it wrong.
    - `code-pattern-check`: a `getattr(x, name)` in a `src` and in a test exits non-zero; a method named
      `obj.getattr(...)` passes; the same call under `# ast-grep-ignore: no-dynamic-attribute` passes. (Corrected
      2026-10-15, at block 40: each import form of `builtins`, and `__builtins__`, in a test and in amule's `src`,
-     exits non-zero too.)
+     exits non-zero too.) (Corrected 2026-10-15, at block 160: and each form block 160 adds, while `import
+     operator` and `obj.vars` pass.)
    - `dead-code-check`: an unused function in a `src` exits non-zero; the same in a test passes; removing one
      template's read of a view field reports that field.
    - `unit-coverage-check`: a branch of `domain/search/backoff.py` covered only from another module's test exits
