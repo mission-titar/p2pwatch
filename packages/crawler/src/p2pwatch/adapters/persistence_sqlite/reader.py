@@ -44,6 +44,13 @@ def open_reader(path: Path | str) -> sqlite3.Connection:
     return connection
 
 
+class ThreadLocalConnection(threading.local):
+    """The calling thread's connection: ``None`` in each thread until that thread sets it."""
+
+    def __init__(self) -> None:
+        self.connection: sqlite3.Connection | None = None
+
+
 class ReaderProvider:
     """A reused, thread-affine read-only connection source with a ``quiesce()`` seam.
 
@@ -54,7 +61,7 @@ class ReaderProvider:
 
     def __init__(self, path: Path | str) -> None:
         self._path = path
-        self._local = threading.local()
+        self._local = ThreadLocalConnection()
         self._lock = threading.Lock()
         self._connections: list[sqlite3.Connection] = []
         self._quiesced = False
@@ -63,7 +70,7 @@ class ReaderProvider:
         """Return the calling thread's connection, opening + registering it on first use."""
         if self._quiesced:
             raise PersistenceError("reader is quiesced")
-        existing: sqlite3.Connection | None = getattr(self._local, "connection", None)
+        existing = self._local.connection
         if existing is not None:
             return existing
         connection = open_reader(self._path)
