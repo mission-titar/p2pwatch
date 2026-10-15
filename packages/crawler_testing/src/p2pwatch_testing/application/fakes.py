@@ -3,6 +3,7 @@
 ``FakeMuleClient``: results SCRIPTED per ``search`` call, injectable failures
 (``ClientUnreachableError``/``SearchFailedError``) at ``connect``/``search``.
 ``FakeTime``: one timeline read through a wall and a monotonic clock.
+``TickingMonotonicClock``: each read a second after the previous one.
 ``FakeRng``: FIXED jitter (determinism).
 ``RecordingWakeHub``: captures woken subjects. The repos are the REAL SQLite repos
 (spec §8: "real repos on tmp_path"): no fakes here.
@@ -68,6 +69,15 @@ class FakeMonotonicClock:
         self._fake_time.sleeps.append(duration)
         self._fake_time.advance(duration)
         await asyncio.sleep(0)  # yield control without a real wait
+
+
+class TickingMonotonicClock(FakeMonotonicClock):
+    """Each ``now()`` a second after the previous one: a query's every check sees time pass."""
+
+    def now(self) -> MonotonicInstant:
+        moment = super().now()
+        self._fake_time.advance(timedelta(seconds=1))
+        return moment
 
 
 class FakeRng:
