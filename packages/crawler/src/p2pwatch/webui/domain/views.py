@@ -498,6 +498,14 @@ class SourceFileRow:
 
 
 @dataclass(frozen=True)
+class TokenCoverage:
+    """One coverage token of an explanation and its best value over the file's names."""
+
+    token_name: str
+    coverage: str  # two decimals, on the scale of the policy's min_coverage
+
+
+@dataclass(frozen=True)
 class FileDetailDisplay:
     """Full view of a file: all fields precomputed for the template.
 
@@ -519,5 +527,6 @@ class FileDetailDisplay:
     explanation_target_id: str | None
     explanation_rules_fired: tuple[str, ...]
     explanation_tokens_matched: tuple[str, ...]
+    explanation_coverage_values: tuple[TokenCoverage, ...]
     explanation_vetoes_fired: tuple[str, ...]
     explanation_notes: tuple[str, ...]  # 0 or 1 element: the text note itself
