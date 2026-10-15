@@ -45,6 +45,10 @@ show_missing = true
 fail_under = 100
 exclude_also = ["if TYPE_CHECKING:"]
 
+# Test files that test no module of `src`, each with what it tests (unit-coverage-check).
+[tool.coverage_checks.tests_without_unit]
+"tests/test_golden_corpus.py" = "deploy/matcher.yml, against the golden corpus"
+
 [tool.deptry]
 # Replaces the default list, whose `tests` pattern silently drops the tests root.
 exclude = ["\\.venv"]

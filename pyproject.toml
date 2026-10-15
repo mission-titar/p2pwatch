@@ -33,6 +33,7 @@ src = [
   "packages/matching/src",
   "packages/vex_checks/src",
   "packages/template_checks/src",
+  "packages/coverage_checks/src",
   "packages/amule_bump/src",
 ]
 
@@ -101,6 +102,7 @@ paths = [
   "packages/matching/src",
   "packages/vex_checks/src",
   "packages/template_checks/src",
+  "packages/coverage_checks/src",
   "packages/amule_bump/src",
   "vulture_whitelist.py",
 ]
@@ -122,6 +124,8 @@ sequence = [
   { cmd = "deptry --non-dev-dependency-groups dev src tests", cwd = "packages/vex_checks" },
   { cmd = "deptry src", cwd = "packages/template_checks" },
   { cmd = "deptry --non-dev-dependency-groups dev src tests", cwd = "packages/template_checks" },
+  { cmd = "deptry src", cwd = "packages/coverage_checks" },
+  { cmd = "deptry --non-dev-dependency-groups dev src tests", cwd = "packages/coverage_checks" },
   { cmd = "deptry src", cwd = "packages/amule_bump" },
   { cmd = "deptry --non-dev-dependency-groups dev src tests", cwd = "packages/amule_bump" },
 ]
@@ -136,18 +140,33 @@ sequence = [
   { cmd = "mypy src tests", cwd = "packages/amule" },
   { cmd = "mypy src tests", cwd = "packages/vex_checks" },
   { cmd = "mypy src tests", cwd = "packages/template_checks" },
+  { cmd = "mypy src tests", cwd = "packages/coverage_checks" },
   { cmd = "mypy src tests", cwd = "packages/amule_bump" },
 ]
 
 # `test` runs each package's suite in its own process (cwd) so per-package coverage
 # stays isolated: a single root pytest run would mix coverage and break --cov-fail-under=100.
 [tool.poe.tasks.test]
-help = "Run every package's unit suite (per-package 100% branch coverage)"
+help = "Run every package's unit suite (per-package 100% branch coverage), then unit-coverage-check"
 sequence = [
   { cmd = "pytest", cwd = "packages/matching" },
   { cmd = "pytest", cwd = "packages/crawler" },
   { cmd = "pytest", cwd = "packages/amule" },
   { cmd = "pytest", cwd = "packages/vex_checks" },
   { cmd = "pytest", cwd = "packages/template_checks" },
+  { cmd = "pytest", cwd = "packages/coverage_checks" },
   { cmd = "pytest", cwd = "packages/amule_bump" },
+  "unit-coverage-check",
+]
+
+[tool.poe.tasks.unit-coverage-check]
+help = "Check each package's test files mirror its src, each testing the module it is named after"
+sequence = [
+  { cmd = "python -m coverage_checks.unit_coverage", cwd = "packages/matching" },
+  { cmd = "python -m coverage_checks.unit_coverage", cwd = "packages/crawler" },
+  { cmd = "python -m coverage_checks.unit_coverage", cwd = "packages/amule" },
+  { cmd = "python -m coverage_checks.unit_coverage", cwd = "packages/vex_checks" },
+  { cmd = "python -m coverage_checks.unit_coverage", cwd = "packages/template_checks" },
+  { cmd = "python -m coverage_checks.unit_coverage", cwd = "packages/coverage_checks" },
+  { cmd = "python -m coverage_checks.unit_coverage", cwd = "packages/amule_bump" },
 ]
