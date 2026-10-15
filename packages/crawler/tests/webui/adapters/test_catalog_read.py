@@ -568,6 +568,18 @@ def test_name_detail_lists_its_hashes_and_its_periods_without_one(catalog_db: Pa
     )
 
 
+def test_source_detail_of_a_source_never_recorded_is_none(catalog_db: Path) -> None:
+    _seed_pages(catalog_db)
+    reader = CatalogReader(open_reader(catalog_db))
+    assert reader.source_detail(source_id("0" * 32), page=1, window=_WINDOW) is None
+
+
+def test_name_detail_of_a_name_never_recorded_is_none(catalog_db: Path) -> None:
+    _seed_pages(catalog_db)
+    reader = CatalogReader(open_reader(catalog_db))
+    assert reader.name_detail("nobody", page=1, window=_WINDOW) is None
+
+
 def test_the_pages_periods_are_read_in_the_window_only(catalog_db: Path) -> None:
     _seed_pages(catalog_db)
     reader = CatalogReader(open_reader(catalog_db))
