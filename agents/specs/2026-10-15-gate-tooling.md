@@ -166,7 +166,9 @@ servers (U-D11).
   (the four library hooks, each with its reason; ruff's per-file ignores `B018` and `F821` for it), because one
   package's API is kept alive by another: on `matching/src` alone it reports 15 findings instead of 3
   (`build_ed2k_link`, every `Explanation` field). Why: U-D16's names; inside `lint-all` and `test`, so the
-  pre-push hook and CI, which call those, need no change.
+  pre-push hook and CI, which call those, need no change. (Corrected 2026-10-15, at block 80:
+  `dead-code-check` is a `shell` task, `vulture --ignore-names "$TEMPLATE_READ_NAMES"`, since a `cmd` task
+  echoes the expanded 1 KB list into every gate log and `verbosity = -1` hides the step's line altogether.)
 - **L12. deptry runs twice per package** with `[tool.deptry]` in each package: `exclude = ["\\.venv"]` (it
   replaces the default list, whose `tests` pattern silently drops the tests root; a one-line comment says so),
   `per_rule_ignores = { DEP002 = ["pytest-cov"] }` (plus `pytest-asyncio` for the crawler: entry-point plugins,
@@ -287,7 +289,9 @@ Each criterion names what would prove it wrong.
 ## 6. Risks and accepted limits
 
 - **vulture is name-based**: the 97 names templates read hide any other definition with the same name, and a
-  stale whitelist entry is never reported.
+  stale whitelist entry is never reported. (Corrected 2026-10-15, at block 80: 100 names, block 50's
+  coverage values adding `coverage`, `explanation_coverage_values` and `token_name`; they hide no finding
+  outside `webui/domain/views.py`.)
 - **The template guard keeps its regular expressions** in this lot (section 7).
 - **`p2pwatch_testing` is held to coverage, not to correctness**: a fake that differs from its adapter passes
   (section 7).
