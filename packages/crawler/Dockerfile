@@ -15,6 +15,7 @@ ARG VERSION=0.0.0
 ENV SETUPTOOLS_SCM_PRETEND_VERSION=${VERSION} \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
+    # Without it, --package p2pwatch also installs its dev group, the test dependencies.
     UV_NO_DEV=1 \
     UV_PYTHON=/usr/bin/python3 \
     UV_PYTHON_DOWNLOADS=0
