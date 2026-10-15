@@ -4,7 +4,7 @@ import importlib.util
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from textwrap import dedent
-from types import SimpleNamespace
+from types import ModuleType
 
 import pytest
 from coverage import Coverage
@@ -26,7 +26,7 @@ def run():
     return 1
 """
 
-type Call = Callable[[SimpleNamespace], object]
+type Call = Callable[[Mapping[str, ModuleType]], object]
 
 
 @pytest.fixture(autouse=True)
@@ -41,22 +41,22 @@ def _write(files_by_path: Mapping[str, str]) -> None:
         Path(path).write_text(dedent(text))
 
 
-def _measure(modules: Sequence[str], calls_by_context: Mapping[str, Call]) -> None:
-    """Import *modules*, then run each call under its context, as pytest-cov's per-test contexts.
+def _measure(module_paths: Sequence[str], calls_by_context: Mapping[str, Call]) -> None:
+    """Import the modules, then run each call under its context, as pytest-cov's per-test contexts.
 
-    A call reads each module by its name: `lambda pkg: pkg.sizes.is_short(3)`."""
+    A call reads each module by its name: `lambda modules: modules["sizes"].is_short(3)`."""
     coverage = Coverage(branch=True, config_file=False, source=["src"])
     coverage.start()
     try:
-        pkg = SimpleNamespace()
-        for module in modules:
-            spec = importlib.util.spec_from_file_location(Path(module).stem, module)
+        modules_by_name: dict[str, ModuleType] = {}
+        for module_path in module_paths:
+            spec = importlib.util.spec_from_file_location(Path(module_path).stem, module_path)
             assert spec is not None and spec.loader is not None
-            pkg.__dict__[spec.name] = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(pkg.__dict__[spec.name])
+            modules_by_name[spec.name] = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(modules_by_name[spec.name])
         for context, call in calls_by_context.items():
             coverage.switch_context(context)
-            call(pkg)
+            call(modules_by_name)
     finally:
         coverage.stop()
     coverage.save()
@@ -75,8 +75,8 @@ def test_a_module_its_own_tests_run_whole_passes(
     _measure(
         ["src/pkg/sizes.py"],
         {
-            "tests/test_sizes.py::test_short|run": lambda pkg: pkg.sizes.is_short(3),
-            "tests/test_sizes.py::test_long|run": lambda pkg: pkg.sizes.is_short(30),
+            "tests/test_sizes.py::test_short|run": lambda modules: modules["sizes"].is_short(3),
+            "tests/test_sizes.py::test_long|run": lambda modules: modules["sizes"].is_short(30),
         },
     )
     main()
@@ -94,9 +94,9 @@ def test_what_only_another_module_s_test_runs_fails_naming_the_module(
     _measure(
         ["src/pkg/sizes.py", "src/pkg/other.py"],
         {
-            "tests/test_sizes.py::test_short|run": lambda pkg: pkg.sizes.is_short(3),
-            "tests/test_other.py::test_run|run": lambda pkg: pkg.other.run(),
-            "tests/test_other.py::test_long|setup": lambda pkg: pkg.sizes.is_short(30),
+            "tests/test_sizes.py::test_short|run": lambda modules: modules["sizes"].is_short(3),
+            "tests/test_other.py::test_run|run": lambda modules: modules["other"].run(),
+            "tests/test_other.py::test_long|setup": lambda modules: modules["sizes"].is_short(30),
         },
     )
     assert _main_exit_code() == 1
@@ -115,9 +115,9 @@ def test_a_function_of_a_module_without_own_tests_is_short(
     _measure(
         ["src/pkg/sizes.py", "src/pkg/other.py"],
         {
-            "tests/test_other.py::test_short|run": lambda pkg: pkg.sizes.is_short(3),
-            "tests/test_other.py::test_long|run": lambda pkg: pkg.sizes.is_short(30),
-            "tests/test_other.py::test_run|run": lambda pkg: pkg.other.run(),
+            "tests/test_other.py::test_short|run": lambda modules: modules["sizes"].is_short(3),
+            "tests/test_other.py::test_long|run": lambda modules: modules["sizes"].is_short(30),
+            "tests/test_other.py::test_run|run": lambda modules: modules["other"].run(),
         },
     )
     assert _main_exit_code() == 1
@@ -142,7 +142,7 @@ def test_what_import_runs_needs_no_own_test(capsys: pytest.CaptureFixture[str]) 
     _write({"src/pkg/ports.py": ports, "src/pkg/other.py": OTHER, "tests/test_other.py": ""})
     _measure(
         ["src/pkg/ports.py", "src/pkg/other.py"],
-        {"tests/test_other.py::test_run|run": lambda pkg: pkg.other.run()},
+        {"tests/test_other.py::test_run|run": lambda modules: modules["other"].run()},
     )
     main()
     assert "0 of 2 modules short of their own tests" in capsys.readouterr().out
@@ -164,7 +164,7 @@ def test_a_top_level_statement_no_test_runs_is_short(capsys: pytest.CaptureFixtu
     _write({"src/pkg/widths.py": widths, "tests/test_widths.py": ""})
     _measure(
         ["src/pkg/widths.py"],
-        {"tests/test_widths.py::test_width|run": lambda pkg: pkg.widths.width()},
+        {"tests/test_widths.py::test_width|run": lambda modules: modules["widths"].width()},
     )
     assert _main_exit_code() == 1
     assert capsys.readouterr().out.startswith(
@@ -181,7 +181,7 @@ def test_a_branch_to_the_function_s_exit_reads_exit(capsys: pytest.CaptureFixtur
     _write({"src/pkg/names.py": names, "tests/test_names.py": ""})
     _measure(
         ["src/pkg/names.py"],
-        {"tests/test_names.py::test_record|run": lambda pkg: pkg.names.record([], "a")},
+        {"tests/test_names.py::test_record|run": lambda modules: modules["names"].record([], "a")},
     )
     assert _main_exit_code() == 1
     assert capsys.readouterr().out.startswith(
@@ -193,7 +193,8 @@ def test_a_test_file_mapping_to_no_module_fails(capsys: pytest.CaptureFixture[st
     _write({"src/pkg/other.py": OTHER, "tests/test_other.py": ""})
     _write({"tests/domain/test_nothing.py": ""})
     _measure(
-        ["src/pkg/other.py"], {"tests/test_other.py::test_run|run": lambda pkg: pkg.other.run()}
+        ["src/pkg/other.py"],
+        {"tests/test_other.py::test_run|run": lambda modules: modules["other"].run()},
     )
     assert _main_exit_code() == 1
     assert capsys.readouterr().out.startswith("tests/domain/test_nothing.py: tests no module")
@@ -209,7 +210,8 @@ def test_a_test_file_listed_in_the_package_s_pyproject_passes(
     _write({"pyproject.toml": listing, "src/pkg/other.py": OTHER, "tests/test_other.py": ""})
     _write({"tests/test_migration_0002.py": ""})
     _measure(
-        ["src/pkg/other.py"], {"tests/test_other.py::test_run|run": lambda pkg: pkg.other.run()}
+        ["src/pkg/other.py"],
+        {"tests/test_other.py::test_run|run": lambda modules: modules["other"].run()},
     )
     main()
     assert capsys.readouterr().out == (
