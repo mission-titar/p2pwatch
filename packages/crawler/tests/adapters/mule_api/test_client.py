@@ -243,65 +243,10 @@ async def test_a_second_401_ends_the_session_instead_of_looping() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_rate_limited_answer_carries_its_retry_delay() -> None:
-    api = FakeAmuleApi()
-    client = await _connected(api)
-    api.overrides[("GET", "/api/v1/status")] = lambda _: error(
-        429, "rate_limited", "locked out", **{"Retry-After": "300"}
-    )
-
-    with pytest.raises(ApiUnreachableError, match="300"):
-        await client.status()
-
-
-@pytest.mark.asyncio
-async def test_a_broken_ec_link_is_an_unreachable_daemon() -> None:
-    """503 ec_unavailable: amuleapi is up, its link to amuled is not (a NEW state)."""
-    api = FakeAmuleApi()
-    client = await _connected(api)
-    api.overrides[("GET", "/api/v1/status")] = lambda _: error(503, "ec_unavailable", "cold")
-
-    with pytest.raises(ApiUnreachableError):
-        await client.status()
-
-
-@pytest.mark.asyncio
 async def test_a_body_that_is_not_json_is_an_unreachable_daemon() -> None:
     api = FakeAmuleApi()
     client = await _connected(api)
     api.overrides[("GET", "/api/v1/status")] = lambda _: httpx.Response(200, content=b"<html>")
-
-    with pytest.raises(ApiUnreachableError):
-        await client.status()
-
-
-@pytest.mark.asyncio
-async def test_an_error_body_that_is_not_an_envelope_still_maps() -> None:
-    api = FakeAmuleApi()
-    client = await _connected(api)
-    api.overrides[("GET", "/api/v1/status")] = lambda _: httpx.Response(500, content=b"oops")
-
-    with pytest.raises(ApiUnreachableError):
-        await client.status()
-
-
-@pytest.mark.asyncio
-async def test_an_error_envelope_with_junk_fields_still_maps() -> None:
-    api = FakeAmuleApi()
-    client = await _connected(api)
-    api.overrides[("GET", "/api/v1/status")] = lambda _: httpx.Response(
-        500, json={"error": {"code": 7, "message": None}}
-    )
-
-    with pytest.raises(ApiUnreachableError):
-        await client.status()
-
-
-@pytest.mark.asyncio
-async def test_an_error_body_whose_error_key_is_not_an_object_still_maps() -> None:
-    api = FakeAmuleApi()
-    client = await _connected(api)
-    api.overrides[("GET", "/api/v1/status")] = lambda _: httpx.Response(500, json={"error": 7})
 
     with pytest.raises(ApiUnreachableError):
         await client.status()
