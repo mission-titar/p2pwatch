@@ -35,11 +35,11 @@ from p2pwatch.adapters.mule_api.mapping import (
     offering_source_ecid,
 )
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.source import SourceReading
 from p2pwatch.ports.client_status import ClientStatus
 from p2pwatch.ports.clock import MonotonicClock, MonotonicInstant
 from p2pwatch.ports.download_client import DownloadRequest, DownloadStatus
+from p2pwatch.ports.search_client import SearchAnswer
 
 # Rows asked for per list request. Every list route caps at 100 when `limit` is omitted, which
 # would silently truncate the shared-file sweep completion detection depends on (§7.5).
@@ -64,9 +64,6 @@ _logger = logging.getLogger("p2pwatch.adapters.mule_api.client")
 
 
 class AmuleApiClient:
-    """``skipped_results`` counts discard EVENTS, not unique results: the readout is
-    cumulative, so one unusable result re-seen every cycle counts every time."""
-
     channels: tuple[str, ...] = tuple(_SEARCH_TYPES)
 
     def __init__(
@@ -91,7 +88,6 @@ class AmuleApiClient:
         self._ed2k_next_start: MonotonicInstant | None = None  # no ed2k start yet
         self._kad_next_start: dict[str, MonotonicInstant] = {}
         self._keywords_without_kad_word: set[str] = set()
-        self.skipped_results = 0
 
     async def connect(self) -> None:
         """Opens the session and logs in. IDEMPOTENT, and serialized: callers arriving during a
@@ -123,16 +119,14 @@ class AmuleApiClient:
             await _send(http, "POST", "/auth/logout")
         await http.aclose()
 
-    async def search(
-        self, keyword: str, channel: str, budget_seconds: float
-    ) -> tuple[FileObservation, ...]:
+    async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
         """Waits for the network's next allowed start, then polls until amuled reports the search
         finished or ``budget_seconds`` after its start. Never stops nor frees it: amuled does."""
         search_type = _SEARCH_TYPES[channel]
         if search_type == "kad":
             search_id = await self._start_kad(keyword, budget_seconds)
             if search_id is None:
-                return ()
+                return SearchAnswer((), 0)
             await self._await_end(search_id, budget_seconds, widen=True)
         else:
             async with self._ed2k_lock:
@@ -142,9 +136,8 @@ class AmuleApiClient:
                 search_id = await self._post_search(keyword, search_type)
                 await self._await_end(search_id, budget_seconds, widen=False)
         rows = await self._collect(f"/search/{search_id}/results", "results")
-        observations, skipped = map_search_results(rows, keyword)
-        self.skipped_results += skipped
-        return observations
+        observations, skipped_result_count = map_search_results(rows, keyword)
+        return SearchAnswer(observations, skipped_result_count)
 
     async def _start_kad(self, keyword: str, budget_seconds: float) -> int | None:
         """Starts in the Kad word's next free slot, reserved before sleeping; ``None`` without a

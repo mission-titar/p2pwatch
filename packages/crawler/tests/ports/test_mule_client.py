@@ -1,8 +1,8 @@
 import pytest
 
-from p2pwatch.domain.observation import FileObservation
 from p2pwatch.ports.client_status import ClientStatus
 from p2pwatch.ports.mule_client import MuleClient
+from p2pwatch.ports.search_client import SearchAnswer
 
 
 class _StubClient:
@@ -16,10 +16,8 @@ class _StubClient:
     async def close(self) -> None:
         return None
 
-    async def search(
-        self, keyword: str, channel: str, budget_seconds: float
-    ) -> tuple[FileObservation, ...]:
-        return ()
+    async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
+        return SearchAnswer((), 0)
 
     async def status(self) -> ClientStatus:
         return ClientStatus(version=None, channels=())
@@ -31,6 +29,6 @@ async def test_stub_client_satisfies_mule_client_protocol() -> None:
     client: MuleClient = _StubClient()
     await client.connect()
     assert client.channels == ("ed2k", "kad")
-    assert await client.search("keroro", "ed2k", 120.0) == ()
+    assert await client.search("keroro", "ed2k", 120.0) == SearchAnswer((), 0)
     assert await client.status() == ClientStatus(version=None, channels=())
     await client.close()

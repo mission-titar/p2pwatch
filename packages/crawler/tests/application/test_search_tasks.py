@@ -27,10 +27,10 @@ from p2pwatch.application.search_worker import (
     SearchWorker,
     WorkerDeps,
 )
-from p2pwatch.domain.observation import FileObservation
 from p2pwatch.ports.backoff_state_repository import BackoffKey, BackoffState
 from p2pwatch.ports.client_errors import SearchFailedError
 from p2pwatch.ports.repository_errors import RepositoryError
+from p2pwatch.ports.search_client import SearchAnswer
 from tests.application.fakes import FakeRng, RecordingTelemetry, RecordingWakeHub, make_unreachable
 from tests.virtual_time import EPOCH, LoopMonotonicClock, LoopWallClock, run_virtual
 
@@ -65,14 +65,12 @@ class _TimedClient:
 
     async def close(self) -> None: ...
 
-    async def search(
-        self, keyword: str, channel: str, budget_seconds: float
-    ) -> tuple[FileObservation, ...]:
+    async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
         self.searches.append((asyncio.get_running_loop().time(), keyword, channel))
         if self._search_failures:
             raise self._search_failures.pop(0)
         await asyncio.sleep(self._durations[channel])
-        return ()
+        return SearchAnswer((), 0)
 
 
 class _SavesRecorded(SqliteBackoffStateRepository):
@@ -224,13 +222,11 @@ class _NeverSuspends:
 
     async def close(self) -> None: ...
 
-    async def search(
-        self, keyword: str, channel: str, budget_seconds: float
-    ) -> tuple[FileObservation, ...]:
+    async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
         self.calls += 1
         assert self.ticks > self._ticks_seen, "the loop is starved"
         self._ticks_seen = self.ticks
-        return ()
+        return SearchAnswer((), 0)
 
 
 def test_a_search_that_never_suspends_does_not_starve_the_loop(tasks: _Tasks) -> None:

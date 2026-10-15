@@ -12,7 +12,6 @@ from p2pwatch.domain.observability.events import (
     SearchExecuted,
     SearchFailed,
 )
-from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.persisted_wait import remaining_wait
 from p2pwatch.domain.search.backoff import backoff_delay
 from p2pwatch.ports.backoff_state_repository import BackoffKey, BackoffState
@@ -20,7 +19,7 @@ from p2pwatch.ports.catalog_repository import CatalogRepository
 from p2pwatch.ports.client_errors import ClientUnreachableError, SearchFailedError
 from p2pwatch.ports.clock import MonotonicClock, MonotonicInstant, WallClock
 from p2pwatch.ports.rng import Rng
-from p2pwatch.ports.search_client import SearchClient
+from p2pwatch.ports.search_client import SearchAnswer, SearchClient
 from p2pwatch.ports.telemetry import Telemetry
 from p2pwatch.ports.wake_hub import WakeHub
 
@@ -179,16 +178,16 @@ class SearchWorker:
         _logger.info("client %s connected", self._client_name)
         return True
 
-    async def _record_observations(
-        self, channel: str, observations: tuple[FileObservation, ...]
-    ) -> int:
+    async def _record_observations(self, channel: str, answer: SearchAnswer) -> int:
         """Per-obs pipeline; returns the number of CHANGED verdicts (logging). A
         ``RepositoryError`` per obs is ABSORBED inside ``record_observation`` (spec §7)."""
         await self._deps.telemetry.emit(
-            SearchExecuted(self._client_name, channel, len(observations))
+            SearchExecuted(
+                self._client_name, channel, len(answer.observations), answer.skipped_result_count
+            )
         )
         changed = 0
-        for observation in observations:
+        for observation in answer.observations:
             if await record_observation(
                 observation,
                 catalog=self._deps.catalog,
@@ -208,7 +207,7 @@ class SearchWorker:
         if not await self._ensure_connected():
             return
         try:
-            results = await self._client.search(task.keyword, task.channel, SEARCH_BUDGET_SECONDS)
+            answer = await self._client.search(task.keyword, task.channel, SEARCH_BUDGET_SECONDS)
         except SearchFailedError as error:
             delay = self._deps.backoff.record_failure(channel_backoff_key)
             _logger.warning(
@@ -231,7 +230,7 @@ class SearchWorker:
             )
             await self._deps.telemetry.emit(ClientUnreachable(self._client_name))
             return
-        changed = await self._record_observations(task.channel, results)
+        changed = await self._record_observations(task.channel, answer)
         self._deps.backoff.reset(channel_backoff_key)
         # connect() proves nothing: it may not log in
         self._deps.backoff.reset(self._client_backoff_key)

@@ -176,7 +176,7 @@ def test_a_result_that_is_not_an_object_is_skipped_and_counted() -> None:
     assert skipped == 1
 
 
-def test_an_unusable_name_costs_only_its_own_observation() -> None:
+def test_an_unusable_name_costs_only_its_own_observation_and_is_not_counted() -> None:
     alternates = [{"name": 7}, "nonsense", {"name": "sgt-frog-095.avi"}]
     observations, skipped = map_search_results([_result(alternate_names=alternates)], "keroro")
 
@@ -184,7 +184,7 @@ def test_an_unusable_name_costs_only_its_own_observation() -> None:
         "Keroro.095.avi",
         "sgt-frog-095.avi",
     ]
-    assert skipped == 2
+    assert skipped == 0
 
 
 def test_a_nameless_parent_does_not_lose_its_alternates() -> None:
@@ -194,7 +194,7 @@ def test_a_nameless_parent_does_not_lose_its_alternates() -> None:
     )
 
     assert [observation.filename for observation in observations] == ["sgt-frog-095.avi"]
-    assert skipped == 1
+    assert skipped == 0
 
 
 def test_a_malformed_alternate_names_list_is_ignored() -> None:

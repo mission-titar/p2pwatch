@@ -69,12 +69,12 @@ async def test_real_search(amuled: ApiEndpoint) -> None:
     await client.connect()
     try:
         try:
-            results = await client.search("keroro", "ed2k", 30.0)
+            answer = await client.search("keroro", "ed2k", 30.0)
         except ApiRejectedError as exc:
             # The daemon refused the search cleanly (no eD2k server reachable from the
             # container): the request/response cycle IS validated, with its own message.
             assert str(exc)
             return
-        assert isinstance(results, tuple)  # possibly empty: the call is what counts
+        assert isinstance(answer.observations, tuple)  # possibly empty: the call is what counts
     finally:
         await client.close()

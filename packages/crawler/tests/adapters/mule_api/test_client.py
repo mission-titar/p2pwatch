@@ -331,17 +331,17 @@ def test_the_client_declares_the_channels_it_searches() -> None:
 
 
 @pytest.mark.asyncio
-async def test_search_returns_the_results_with_their_keyword_and_counts_what_it_drops() -> None:
+async def test_search_answers_the_results_with_their_keyword_and_counts_what_it_drops() -> None:
     rows = [_result(f"Keroro.{index:04d}.avi") | {"hash": f"{index:032x}"} for index in range(501)]
     api = FakeAmuleApi(results=[*rows, {"hash": "nope"}])
     client = await _connected(api)
 
-    observations = await client.search("keroro", "ed2k", 120)
+    answer = await client.search("keroro", "ed2k", 120)
     await client.close()
 
-    assert len(observations) == 501
-    assert {observation.keyword for observation in observations} == {"keroro"}
-    assert client.skipped_results == 1
+    assert len(answer.observations) == 501
+    assert {observation.keyword for observation in answer.observations} == {"keroro"}
+    assert answer.skipped_result_count == 1
 
 
 @pytest.mark.asyncio
@@ -360,11 +360,11 @@ async def test_search_stops_waiting_at_its_budget_and_returns_what_it_holds() ->
     api = FakeAmuleApi(progress={"state": "running"}, results=[_result()])
     client = await _connected(api)
 
-    observations = await client.search("keroro", "ed2k", 12)
+    answer = await client.search("keroro", "ed2k", 12)
     await client.close()
 
     assert _progress_polls(api) == [0, 5, 10, 12]
-    assert len(observations) == 1
+    assert len(answer.observations) == 1
 
 
 @pytest.mark.asyncio
@@ -411,10 +411,10 @@ async def test_a_failed_widening_leaves_the_search_standing() -> None:
     api.overrides[("POST", "/api/v1/search/42/more")] = lambda _: error(400, "bad_request")
     client = await _connected(api)
 
-    observations = await client.search("keroro", "kad", 120)
+    answer = await client.search("keroro", "kad", 120)
     await client.close()
 
-    assert len(observations) == 1
+    assert len(answer.observations) == 1
     assert len(_paths(api, "/api/v1/search/42/more")) == 1
 
 

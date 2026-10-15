@@ -3,7 +3,7 @@
 from prometheus_client import CollectorRegistry
 
 from p2pwatch.adapters.observability.prometheus_sink import PrometheusSink
-from p2pwatch.domain.observability.events import SourceFirstUseful
+from p2pwatch.domain.observability.events import SearchExecuted, SourceFirstUseful
 from p2pwatch.domain.observability.policy import MetricInstruction, MetricName, describe
 from tests.domain.observability.test_policy import CASES
 
@@ -81,14 +81,31 @@ def test_the_search_and_channel_metrics_are_labelled_by_client_and_channel() -> 
     registry = CollectorRegistry()
     sink = PrometheusSink(registry)
     labels = (("client", "amuled"), ("channel", "kad"))
-    counters = (MetricName.SEARCHES, MetricName.OBSERVATIONS, MetricName.SEARCH_FAILURES)
+    counters = (
+        MetricName.SEARCHES,
+        MetricName.SEARCH_RESULTS_SKIPPED,
+        MetricName.OBSERVATIONS,
+        MetricName.SEARCH_FAILURES,
+    )
     gauges = (MetricName.CHANNEL_CONNECTED, MetricName.CHANNEL_CONNECTABLE)
     for name in counters:
         sink.apply(MetricInstruction(name, "inc", labels))
     for name in gauges:
         sink.apply(MetricInstruction(name, "set", labels, 1.0))
     samples = [f"{name}_total" for name in counters] + [name.value for name in gauges]
-    assert [registry.get_sample_value(sample, dict(labels)) for sample in samples] == [1.0] * 5
+    assert [registry.get_sample_value(sample, dict(labels)) for sample in samples] == [1.0] * 6
+
+
+def test_a_search_adds_its_skipped_results_under_its_client_and_channel() -> None:
+    registry = CollectorRegistry()
+    sink = PrometheusSink(registry)
+    for channel, skipped_result_count in (("ed2k", 1), ("kad", 0)):
+        event = SearchExecuted("amuled", channel, 3, skipped_result_count)
+        for instruction in describe(event).metrics:
+            sink.apply(instruction)
+    sample = "p2pwatch_search_results_skipped_total"
+    assert registry.get_sample_value(sample, {"client": "amuled", "channel": "ed2k"}) == 1.0
+    assert registry.get_sample_value(sample, {"client": "amuled", "channel": "kad"}) == 0.0
 
 
 def test_exposed_names() -> None:
@@ -97,6 +114,7 @@ def test_exposed_names() -> None:
     PrometheusSink(registry)
     assert {m.name for m in registry.collect()} == {
         "p2pwatch_searches",
+        "p2pwatch_search_results_skipped",
         "p2pwatch_observations",
         "p2pwatch_search_failures",
         "p2pwatch_client_unreachable",

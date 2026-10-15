@@ -15,6 +15,7 @@ import pytest
 from p2pwatch.adapters.mule_api.client import AmuleApiClient
 from p2pwatch.ports.client_errors import SearchFailedError
 from p2pwatch.ports.clock import MonotonicInstant
+from p2pwatch.ports.search_client import SearchAnswer
 from tests.adapters.mule_api.api_fakes import PASSWORD, FakeAmuleApi, error
 from tests.application.fakes import FakeTime
 from tests.virtual_time import MONOTONIC_EPOCH, LoopMonotonicClock, run_virtual
@@ -229,7 +230,7 @@ def test_a_keyword_without_a_kad_target_neither_spins_nor_searches(keyword: str)
         client = await _connected(api)
         loop = asyncio.get_running_loop()
         while loop.time() < _HOUR and len(returned_at) <= 60:  # bounded, should it spin
-            assert await client.search(keyword, "kad", _BUDGET) == ()
+            assert await client.search(keyword, "kad", _BUDGET) == SearchAnswer((), 0)
             returned_at.append(loop.time())
             await asyncio.sleep(0)
 
