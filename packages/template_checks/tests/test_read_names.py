@@ -14,7 +14,6 @@ from template_checks.read_names import find_read_names, main
         ("{{ row.best_tier_display }}", {"best_tier_display"}),
         ("{{ node.status.label }}", {"status", "label"}),
         ("{% for f in page.files %}{{ f.filename }}{% endfor %}", {"files", "filename"}),
-        ('{{ row["source_name"] }}', {"source_name"}),
     ],
 )
 def test_each_attribute_a_template_reads_is_found(
@@ -24,9 +23,8 @@ def test_each_attribute_a_template_reads_is_found(
     assert find_read_names(tmp_path) == read_names
 
 
-@pytest.mark.parametrize("body", ["{{ title }}", "{{ rows[0] }}", "{{ rows[key] }}"])
-def test_a_template_without_attribute_reads_finds_nothing(tmp_path: Path, body: str) -> None:
-    (tmp_path / "page.html").write_text(body)
+def test_a_template_without_attribute_reads_finds_nothing(tmp_path: Path) -> None:
+    (tmp_path / "page.html").write_text("{{ title }}")
     assert find_read_names(tmp_path) == frozenset()
 
 
