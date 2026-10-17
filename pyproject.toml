@@ -68,10 +68,14 @@ select = ["E", "F", "I", "UP", "B", "SIM", "TID251"]
 python_version = "3.13"
 strict = true
 
-# For editors' and Serena's language server, not the gate: without the venv, no import resolves.
+# For editors, not the gate: without the venv, no import resolves.
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
+
+# For Serena's language server, not the gate: Serena hands pyrefly its own interpreter.
+[tool.pyrefly]
+python-interpreter-path = "./.venv/bin/python"
 
 # Task runner (poethepoet). The gate lives here as the single source of truth; the
 # pre-push hook and CI both call these tasks. `uv run poe` lists them with their help.
