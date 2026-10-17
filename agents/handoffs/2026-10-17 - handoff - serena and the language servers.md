@@ -24,8 +24,8 @@ Nothing of the stack is merged. Nothing the images ship changes, so Wrap (f) pro
 - **The bench and the first spec draft came from an outside agent** (deepseek). The lead had four agents
   fact-check them against the codebase, Serena's installed source and ty's upstream issues, and the renames
   re-measured. The re-measurements are the bench's section 11, which first established what D1 and D3 rest on:
-  the one-way nominal edge, the load-bearing interpreter path, the default mode's partial first rename and the
-  `tests.*` import gap.
+  the one-way nominal edge, the load-bearing interpreter path and the default mode's partial first rename (the
+  overlap and the `tests.*` import gap, measured then too, were recorded there by block 20).
 - **The spec review**, `.reviews/serena-language-servers-spec.md` (gitignored), over the draft that still
   converted the ports to ABCs in blocks 20 to 80: 0 critical, 3 major, 14 minor. Every finding was closed in
   the spec, or, for those that concern the conversion, moved to its section "For the architecture lot".
@@ -88,6 +88,14 @@ Waived by the operator for this lot of one block (2026-10-17). No findings to ex
 - Block 10: `.gitignore` had no final newline; its new Serena lines carry a one-line French comment like their
   neighbours. Block 20: none.
 
+## Class 2 questions
+
+- Block 20: the spec (its claims, its section "For the architecture lot") and AGENTS.md's second Serena Gotcha
+  cite bench 11 for the two-ports overlap and the `tests.*` import gap, which bench 11 did not record. The
+  operator chose to record both ("reco ok"): bench 11 gains them, the overlap from the review's raw answers, the
+  import gap re-measured on a clone (pyrefly's `missing-import`, then the stale override's failing test). The
+  spec and AGENTS.md are unchanged, their citations now hold.
+
 ## Pitfalls
 
 - **A running Serena never re-reads `.serena/project.yml`.** The claude-code context exposes neither
@@ -112,8 +120,8 @@ push.
 
 - **Fix-backs**: 0. The Acceptance 3 correction (`bed3c51`) landed before #248 opened.
 - **Cascaded rebases**: 0.
-- **Runs**: 1 on the one block before the closing one, at #248's first pushed head `568a3dc`, none
-  re-triggered.
+- **Runs**: 1 on the one block before the closing one, at #248's first pushed head `568a3dc`, green (arm64
+  included), none re-triggered.
 - **Bodies called unreadable**: none at writing; the operator has not reviewed the stack yet.
 
 ## Next

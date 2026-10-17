@@ -1355,3 +1355,37 @@ comment`); the form both accept is two comments, `# type: ignore[arg-type]  # ty
 A `ty:` code naming the wrong rule keeps the error and adds the warning. `--disallow-incomplete-defs` has no ty
 rule either (section 7's row 2 already groups it). `--strict-equality` is covered inside `if` conditions by
 `redundant-condition-strict`, opt-in, and not in a value position (`return number == text`), which is ty#576.
+
+**Two ports declaring the same method** (2026-10-17, pyrefly 1.4.0 in `lazy-blocking` mode and pyright 1.1.414,
+the same client, `run_overlap.py` and `overlap_repo.sh` beside it, raw answers in `out/overlap-*.txt`). On a
+fixture of three variants, `A(ABC)` declaring an abstract `m`, `Impl` implementing it and `use(a: A, b: B, i:
+Impl)` calling all three:
+
+| Variant | pyrefly from `A.m` | pyrefly from `B.m` | pyrefly from `Impl.m` | pyright, any |
+|---|---|---|---|---|
+| v1, siblings `A(ABC)` and `B(ABC)`, `Impl(A, B)` | 4 sites, never `B.m` | 4 sites, never `A.m` | 2 | 2 |
+| v2, `B(A)` redeclaring `m`, `Impl(B)` | 6, `B.m` included | 4, never `A.m` | 2 | 2 |
+| v3, `B(A)` not redeclaring `m`, `Impl(B)` | 5, the `b.m()` call included | (no `B.m`) | 2 | 2 or 3 |
+
+On the repository clone (`repo_ovl`, from the ABC clone above), `download_candidates` renamed and applied, then
+`mypy` over the crawler's 222 files:
+
+- **Two sibling ABCs** (`DownloadCatalogReader(ABC)` in `run_download_cycle.py`, `CatalogRepository(ABC)`, the
+  adapter inheriting both): from the reader, pyrefly 12 sites in 4 files, never the repository port; from the
+  repository port, 11 sites in 4 files, never the reader. Either way `mypy` fails, `Cannot instantiate abstract
+  class "SqliteCatalogRepository" with abstract attribute "download_candidates"`, 8 errors in 8 files. pyright:
+  3 sites from the reader, 1 from the repository port, `mypy` failing with 85 and 10 errors.
+- **`CatalogRepository(DownloadCatalogReader)`**, the reader moved to `ports/catalog_repository.py` and its three
+  reads no longer redeclared: pyrefly renames 14 sites in 6 files from the reader or from a call typed
+  `CatalogRepository`, and `mypy` is clean. pyright: 3 sites from the reader, 2 from the call, `mypy` failing
+  with 87 and 2 errors.
+
+**pyrefly does not resolve one test module importing another** (2026-10-17, a `git clone --no-hardlinks` at
+`1c28d20` with its own `uv sync --dev`, `[tool.pyrefly]` as D3 writes it). `uvx --from pyrefly==1.4.0 pyrefly
+check packages/crawler/tests/application/test_run_download_cycle_loop.py` reports `missing-import` for
+`tests.application.test_run_download_cycle` at line 16: the inferred import root is the
+repository's, and no `packages/<pkg>` is one. The consequence, on `repo_ovl`'s second variant: the 14 sites
+above leave out `_ShutdownDuringCycleCatalog.download_candidates` (`test_run_download_cycle_loop.py:124`),
+which overrides `FakeCatalogReads`' through that import. `mypy` stays clean, the stale override being an extra
+method, and only the test that needed it fails: `test_loop_breaks_when_shutdown_is_set_during_the_cycle`, a
+`TimeoutError`, `1 failed, 5 passed`.
