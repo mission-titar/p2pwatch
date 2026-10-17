@@ -220,9 +220,11 @@ Both fail identically on the shapes no server handles, so those are D5's Gotchas
    `rename_symbol` of `SqliteBackoffStateRepository/save_backoff_states` in
    `adapters/persistence_sqlite/backoff_state_repository.py`, counted with `git diff --stat`, then reverted with
    `git restore .` and `git status --porcelain` empty again; the same before the switch, under pyright. Expected:
-   under pyrefly the diff holds `tests/application/test_search_tasks.py`, where `_SavesRecorded` overrides the
-   method and calls it through `super()`. Falsifier: that file is absent from the pyrefly diff. Not measured before
-   this lot on this symbol; bench 5.1 predicts that pyright leaves the override.
+   under pyrefly the diff renames the `def` of `_SavesRecorded.save_backoff_states` in
+   `tests/application/test_search_tasks.py`, which overrides the method and calls it through `super()`; pyright
+   leaves that `def` (block 10's pre-lot measure: 4 files, 9 sites, the `super()` call only). Falsifier: that `def`
+   is not renamed in the pyrefly diff. (Corrected 2026-10-17: the file alone cannot fail, pyright reaches it
+   through the super() call)
 4. **The gate is green at every block.** `uv run poe check` at each block's tip. Falsifier: a red run.
 5. **No operator-facing surface changes, and no code.** Between `main` and the lot's top branch, `git diff --stat`
    lists no file under `packages/`, `deploy/` or the migrations, and `uv.lock` gains no package name. Falsifier:
