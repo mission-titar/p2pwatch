@@ -1,7 +1,7 @@
 # Handoff: Serena and the language servers, lot 2 of the gate tooling, Serena and test quality umbrella
 
-Drafted by block 10 from its own report, for the closing block 20 to correct (holistic review or its waiver,
-`BACKLOG.md`, the Wrap counts).
+Drafted by block 10 from its own report, corrected by the closing block 20 (`BACKLOG.md`, the Wrap counts, the
+review before Act).
 
 ## State
 
@@ -12,12 +12,27 @@ measurements are in `agents/reference/2026-10-16-python-language-server-bench.md
 
 Two blocks, one stack cut from `main` at `fd9d681`:
 
-| Block | Branch |
-|---|---|
-| 10 | `chore/serena-pyrefly` |
-| 20 | `docs/serena-lot-wrap` |
+| Block | Pull request | Branch |
+|---|---|---|
+| 10 | #248 | `chore/serena-pyrefly` |
+| 20 | opened with this handoff | `docs/serena-lot-wrap` |
 
 Nothing of the stack is merged. Nothing the images ship changes, so Wrap (f) proposes no release.
+
+## Before Act
+
+- **The bench and the first spec draft came from an outside agent** (deepseek). The lead had four agents
+  fact-check them against the codebase, Serena's installed source and ty's upstream issues, and the renames
+  re-measured. The re-measurements are the bench's section 11, which first established what D1 and D3 rest on:
+  the one-way nominal edge, the load-bearing interpreter path, the default mode's partial first rename and the
+  `tests.*` import gap.
+- **The spec review**, `.reviews/serena-language-servers-spec.md` (gitignored), over the draft that still
+  converted the ports to ABCs in blocks 20 to 80: 0 critical, 3 major, 14 minor. Every finding was closed in
+  the spec, or, for those that concern the conversion, moved to its section "For the architecture lot".
+- **The operator deferred the ABC conversion** to a lot of its own, the review having shown it is architecture
+  work (overlapping ports, ports outside `ports/`, the composition's factories). The lot shrank to one block.
+- **The branch `python-language-server`** holds that pre-Act history (the bench, its re-measurements, the spec's
+  successive drafts up to `85ae2df`) and was not deleted.
 
 ## What was built
 
@@ -30,8 +45,8 @@ Nothing of the stack is merged. Nothing the images ship changes, so Wrap (f) pro
   `[tool.pyright]`'s comment no longer names Serena.
 - **AGENTS.md's Gotchas gain "Serena and its language server, pyrefly"** (D5): a port method renamed from the
   port and each implementer, the `tests.*` import gap, what no server renames, and the trust caveat.
-- **`BACKLOG.md` gains two entries** (D6): adopt ty once it reaches parity, and the ports and composition
-  architecture lot.
+- **`BACKLOG.md`** gains two entries in block 10 (D6): adopt ty once it reaches parity, and the ports and
+  composition architecture lot. Block 20 deletes the lot's own entry, "Serena and the language servers".
 
 ## Live verifications (block 10, 2026-10-17)
 
@@ -52,16 +67,26 @@ Nothing of the stack is merged. Nothing the images ship changes, so Wrap (f) pro
   - Under both, the port (`ports/backoff_state_repository.py`), its double in
     `tests/ports/test_backoff_state_repository.py` and the use case's call in `application/search_tasks.py` are
     left: the structural edge of the first Gotcha.
-- **Acceptance 4**: `uv run poe check` exit 0 at `9ac3d03`.
+- **Acceptance 4**: `uv run poe check` exit 0 at `9ac3d03` and again at block 10's tip `568a3dc`; block 20's in
+  its pull request's report.
 - **Acceptance 5** at block 10's tip: `git diff --name-only main...HEAD` lists `.gitignore`,
-  `.serena/project.yml`, `AGENTS.md`, `BACKLOG.md`, `pyproject.toml` and the spec and bench report; `uv lock`
-  printed "Resolved 64 packages" and left `uv.lock` untouched.
+  `.serena/project.yml`, `AGENTS.md`, `BACKLOG.md`, `pyproject.toml`, the spec, the bench report and this
+  handoff; `uv lock` printed "Resolved 64 packages" and left `uv.lock` untouched.
+
+## Holistic review
+
+Waived by the operator for this lot of one block (2026-10-17). No findings to exit.
 
 ## Spec corrections
 
 - **Acceptance 3's falsifier** (block 10, `bed3c51`, at the lead's request): "the file is absent from the
   pyrefly diff" could not fail, since pyright reaches `test_search_tasks.py` through the `super()` call. The
   expected observable and the falsifier are now the override's `def` line, marked `(Corrected 2026-10-17: ...)`.
+
+## Class 1 fixes
+
+- Block 10: `.gitignore` had no final newline; its new Serena lines carry a one-line French comment like their
+  neighbours. Block 20: none.
 
 ## Pitfalls
 
@@ -82,11 +107,17 @@ Nothing of the stack is merged. Nothing the images ship changes, so Wrap (f) pro
 
 ## Wrap counts
 
-For block 20 to fill: fix-backs, cascaded rebases, runs re-triggered, bodies called unreadable.
+Counted with `gh run list --branch chore/serena-pyrefly` and `gh pr checks 248`, 2026-10-17, before block 20's
+push.
+
+- **Fix-backs**: 0. The Acceptance 3 correction (`bed3c51`) landed before #248 opened.
+- **Cascaded rebases**: 0.
+- **Runs**: 1 on the one block before the closing one, at #248's first pushed head `568a3dc`, none
+  re-triggered.
+- **Bodies called unreadable**: none at writing; the operator has not reviewed the stack yet.
 
 ## Next
 
-- Block 20: the operator decides on the holistic review's waiver (the spec names this lot one of
-  one block), `BACKLOG.md` loses the lot's own entry, this handoff is corrected.
+- The operator reviews #248 and block 20's pull request, then merges the stack.
 - Then lot 3 of the umbrella (test quality), which renames and deletes many symbols and so meets the new
   Gotchas first.

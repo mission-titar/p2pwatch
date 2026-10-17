@@ -30,9 +30,6 @@ An agent adds an entry only after the operator has agreed to it.
 - **The webui's read side**: one observation type and its own read ports, so no persistence shape reaches its domain;
   drops the dead `{% else %}` at `sources.html:26`. Section 7 of `agents/specs/2026-10-13-descriptive-names.md`.
 
-- **Serena and the language servers** (lot 2 of the gate tooling umbrella): bench the Python language servers, then adapt
-  the code only for the blind spots the chosen one keeps. D11 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`, lot order in D12.
-
 - **Adopt ty**, first as the gate's type checker in mypy's place, then as Serena's language server, once it reaches
   parity. Section "ty: the parity conditions" of `agents/specs/2026-10-17-serena-and-the-language-servers.md`.
 
