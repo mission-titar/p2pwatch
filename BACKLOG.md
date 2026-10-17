@@ -33,6 +33,12 @@ An agent adds an entry only after the operator has agreed to it.
 - **Serena and the language servers** (lot 2 of the gate tooling umbrella): bench the Python language servers, then adapt
   the code only for the blind spots the chosen one keeps. D11 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`, lot order in D12.
 
+- **Adopt ty**, first as the gate's type checker in mypy's place, then as Serena's language server, once it reaches
+  parity. Section "ty: the parity conditions" of `agents/specs/2026-10-17-serena-and-the-language-servers.md`.
+
+- **The ports and the composition's architecture**: ports as ABCs their implementers inherit, so a rename reaches them,
+  and the composition wired without injected factories. Section "For the architecture lot" of `agents/specs/2026-10-17-serena-and-the-language-servers.md`.
+
 - **Test quality** (lot 3 of the gate tooling umbrella): every unit test keeps unique coverage of its unit, the others are
   pruned, mutmut proving no detected mutant is lost. D3 to D5 and D13 to D15 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`, lot order in D12.
 
