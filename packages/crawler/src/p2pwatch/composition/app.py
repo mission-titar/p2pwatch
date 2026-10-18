@@ -20,13 +20,12 @@ import sqlite3
 import sys
 from collections.abc import Callable, Coroutine, Sequence
 from contextlib import AsyncExitStack
-from datetime import timedelta
 from functools import partial
 from importlib.metadata import version
 from pathlib import Path
 from typing import Protocol
 
-from prometheus_client import CollectorRegistry, start_http_server
+from prometheus_client import CollectorRegistry
 
 import p2pwatch.webui
 from catalog_matching.config import MatcherConfig
@@ -44,7 +43,7 @@ from p2pwatch.adapters.driving.process.posix_process import PosixProcess
 from p2pwatch.adapters.mule_api.client import AmuleApiClient
 from p2pwatch.adapters.observability.apprise_notifier import AppriseNotifier
 from p2pwatch.adapters.observability.dispatcher import ObservabilityDispatcher
-from p2pwatch.adapters.observability.prometheus_sink import PrometheusSink
+from p2pwatch.adapters.observability.prometheus_sink import PrometheusSink, start_metrics_server
 from p2pwatch.adapters.persistence_sqlite.backoff_state_repository import (
     SqliteBackoffStateRepository,
 )
@@ -104,23 +103,9 @@ def default_download_client_factory(
     )
 
 
-MetricsServer = Callable[[int, CollectorRegistry], None]
-
-
-def default_metrics_server(port: int, registry: CollectorRegistry) -> None:
-    """Starts the /metrics HTTP server (daemon thread). Wrapper to fix the argument order."""
-    start_http_server(port, registry=registry)  # pragma: no cover
-
-
 def _print_progress(message: str) -> None:
     """Human shutdown line on stderr (spec §6: observable progress, outside logging)."""
     print(message, file=sys.stderr, flush=True)
-
-
-def _time_between_source_reads(download: DownloadConfig) -> timedelta:
-    """The time between reads the carried role's max age assumes: the interval plus a poll (source
-    points spec, D3), since the step runs on the first round past its interval."""
-    return download.sources_interval + timedelta(seconds=download.poll_interval_seconds)
 
 
 def _backoff_policy(config: CrawlerConfig) -> BackoffPolicy:
@@ -161,7 +146,6 @@ class CrawlerApp:
         amule_api_address: tuple[str, int],
         client_factory: MuleClientFactory = default_mule_client_factory,
         download_client_factory: DownloadClientFactory = default_download_client_factory,
-        metrics_server: MetricsServer = default_metrics_server,
     ) -> None:
         self._crawler_config = crawler_config
         self._targets = tuple(targets)
@@ -178,7 +162,6 @@ class CrawlerApp:
         )
         self._client_factory = client_factory
         self._download_client_factory = download_client_factory
-        self._metrics_server = metrics_server
         self._shutdown = asyncio.Event()
         # The pause gate (phase P6a), armed (set = un-paused) so the crawler starts running. The
         # webui mutates it thread-safely via ``LoopCrawlerControl`` (spec §10).
@@ -221,7 +204,7 @@ class CrawlerApp:
             targets=self._targets,
             disk=ShutilDiskSpace(download_config.output_dir),
             min_free_bytes=download_config.min_free_bytes,
-            lost_after=timedelta(seconds=download_config.lost_after_seconds),
+            lost_after=download_config.lost_after,
             poll_interval_seconds=download_config.poll_interval_seconds,
             reappeared_after=download_config.reappeared_after,
             sources_interval=download_config.sources_interval,
@@ -286,25 +269,17 @@ class CrawlerApp:
                 self._wall_clock.now()
             )
             observability = self._crawler_config.observability
-            notifications = observability.notifications if observability is not None else ()
             registry = CollectorRegistry()
             notifier = AppriseNotifier(
-                tuple((t.url, t.audience, t.node_prefix) for t in notifications),
+                tuple((t.url, t.audience, t.node_prefix) for t in observability.notifications),
                 node_id=node_id,
             )
             telemetry = ObservabilityDispatcher(
                 metrics=PrometheusSink(registry),
                 notifier=notifier,
-                notification_timeout_seconds=(
-                    observability.notification_timeout_seconds if observability is not None else 5.0
-                ),
+                notification_timeout_seconds=observability.notification_timeout_seconds,
             )
-            if (
-                observability is not None
-                and observability.metrics is not None
-                and observability.metrics.enabled
-            ):
-                self._metrics_server(observability.metrics.port, registry)
+            stack.callback(start_metrics_server(registry, observability.metrics_port))
             catalog_repo = SqliteCatalogRepository(catalog_conn, node_id)
             backoff_states = SqliteBackoffStateRepository(local_conn)
             engine = MatchingEngine(self._matcher_config, self._targets)
@@ -387,7 +362,7 @@ class CrawlerApp:
                     stack=stack,
                     catalog_repo=catalog_repo,
                     source_repo=SqliteSourceRepository(
-                        catalog_conn, node_id, _time_between_source_reads(download_config)
+                        catalog_conn, node_id, download_config.time_between_source_reads
                     ),
                     local_conn=local_conn,
                     telemetry=telemetry,

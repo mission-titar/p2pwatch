@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from prometheus_client import CollectorRegistry
 from starlette.applications import Starlette
 
 from catalog_matching.config import MatcherConfig
@@ -21,8 +20,6 @@ from p2pwatch.adapters.config.crawler_config import (
     BackoffConfig,
     CrawlerConfig,
     DownloadConfig,
-    MetricsConfig,
-    ObservabilityConfig,
     SearchConfig,
     WebuiConfig,
 )
@@ -109,7 +106,6 @@ def _crawler_config(
     *,
     keywords: tuple[str, ...] = ("keroro", "titar"),
     node_id: str | None = None,
-    observability: ObservabilityConfig | None = None,
     download: DownloadConfig | None = None,
     webui: WebuiConfig = _WEBUI_OFF,
 ) -> CrawlerConfig:
@@ -123,7 +119,6 @@ def _crawler_config(
         catalog_db_path=str(tmp_path / "catalog.db"),
         local_db_path=str(tmp_path / "local.db"),
         node_id=node_id,
-        observability=observability,
         download=download,
         webui=webui,
     )
@@ -133,7 +128,7 @@ def _download_config(tmp_path: Path) -> DownloadConfig:
     return DownloadConfig(
         poll_interval_seconds=30.0,
         min_free_bytes=1_000_000_000,
-        lost_after_seconds=86_400.0,
+        lost_after=timedelta(hours=24),
         output_dir=str(tmp_path),
         reappeared_after=timedelta(hours=12),
         sources_interval=timedelta(minutes=5),
@@ -152,16 +147,9 @@ def _make_app(
     factory: object,
     node_id: str | None = None,
     shutdown_deadline: float = 30.0,
-    observability: ObservabilityConfig | None = None,
-    metrics_server: object | None = None,
 ) -> CrawlerApp:
-    extra: dict[str, object] = {}
-    if metrics_server is not None:
-        extra["metrics_server"] = metrics_server
     return CrawlerApp(
-        crawler_config=_crawler_config(
-            tmp_path, shutdown_deadline, node_id=node_id, observability=observability
-        ),
+        crawler_config=_crawler_config(tmp_path, shutdown_deadline, node_id=node_id),
         targets=_TARGETS,
         matcher_config=matcher_config,
         wall_clock=FakeTime().wall,
@@ -172,7 +160,6 @@ def _make_app(
         webui_address=_WEBUI_ADDRESS,
         amule_api_address=_AMULE_API_ADDRESS,
         client_factory=factory,  # type: ignore[arg-type]
-        **extra,  # type: ignore[arg-type]
     )
 
 
@@ -209,16 +196,7 @@ async def test_app_runs_then_shuts_down_cleanly(
         created.append(client)
         return client
 
-    # observability non-None → covers the `obs is not None` branch of the notification timeout
-    # (the dispatcher is built with the configured timeout, not the default 5.0).
-    app = _make_app(
-        tmp_path,
-        matcher_config,
-        factory=factory,
-        observability=ObservabilityConfig(
-            log_level="INFO", metrics=None, notification_timeout_seconds=5.0, notifications=()
-        ),
-    )
+    app = _make_app(tmp_path, matcher_config, factory=factory)
     app_holder["app"] = app
     await asyncio.wait_for(app.run(), timeout=5.0)
     assert created and created[0].close_calls == 1  # client closed AFTER the unwind
@@ -245,32 +223,6 @@ async def test_run_logs_the_package_version_at_startup(
     with caplog.at_level(logging.INFO, logger="p2pwatch.composition.app"):
         await asyncio.wait_for(app.run(), timeout=5.0)
     assert any(r.getMessage() == f"p2pwatch version {version('p2pwatch')}" for r in caplog.records)
-
-
-@pytest.mark.asyncio
-async def test_the_status_loop_reads_the_search_client_under_its_endpoint_name(
-    tmp_path: Path, matcher_config: MatcherConfig
-) -> None:
-    registries: list[CollectorRegistry] = []
-    app_holder: dict[str, CrawlerApp] = {}
-    app = _make_app(
-        tmp_path,
-        matcher_config,
-        factory=lambda endpoint, monotonic_clock: _ShutdownOnStatusClient(app_holder),
-        observability=ObservabilityConfig(
-            log_level="INFO",
-            metrics=MetricsConfig(enabled=True, port=9123),
-            notification_timeout_seconds=5.0,
-            notifications=(),
-        ),
-        metrics_server=lambda port, registry: registries.append(registry),
-    )
-    app_holder["app"] = app
-    await asyncio.wait_for(app.run(), timeout=5.0)
-    gauge = registries[0].get_sample_value(
-        "p2pwatch_channel_connected", {"client": "amuled", "channel": "kad"}
-    )
-    assert gauge == 1.0
 
 
 class _UnreachableAtStartupClient(_ShutdownOnStatusClient):
@@ -1144,98 +1096,13 @@ async def test_full_mode_shutdown_leaves_no_task_leaked(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_metrics_server_started_when_enabled(
-    tmp_path: Path, matcher_config: MatcherConfig
-) -> None:
-    """/metrics server started when metrics.enabled=True."""
-    started: list[int] = []
-    holder: dict[str, CrawlerApp] = {}
-
-    def factory(
-        endpoint: AmuleEndpoint, monotonic_clock: MonotonicClock
-    ) -> _ShutdownOnStatusClient:
-        return _ShutdownOnStatusClient(holder)
-
-    def metrics_server(port: int, registry: object) -> None:
-        started.append(port)
-
-    app = _make_app(
-        tmp_path,
-        matcher_config,
-        factory=factory,
-        observability=ObservabilityConfig(
-            log_level="INFO",
-            metrics=MetricsConfig(enabled=True, port=9123),
-            notification_timeout_seconds=5.0,
-            notifications=(),
-        ),
-        metrics_server=metrics_server,
-    )
-    holder["app"] = app
-    await asyncio.wait_for(app.run(), timeout=5.0)
-    assert started == [9123]  # server started because metrics.enabled=True
+# server started because metrics.enabled=True
 
 
-@pytest.mark.asyncio
-async def test_metrics_server_not_started_when_disabled(
-    tmp_path: Path, matcher_config: MatcherConfig
-) -> None:
-    """/metrics server NOT started when metrics.enabled=False."""
-    started: list[int] = []
-    holder: dict[str, CrawlerApp] = {}
-
-    def factory(
-        endpoint: AmuleEndpoint, monotonic_clock: MonotonicClock
-    ) -> _ShutdownOnStatusClient:
-        return _ShutdownOnStatusClient(holder)
-
-    def metrics_server(port: int, registry: object) -> None:
-        started.append(port)
-
-    app = _make_app(
-        tmp_path,
-        matcher_config,
-        factory=factory,
-        observability=ObservabilityConfig(
-            log_level="INFO",
-            metrics=MetricsConfig(enabled=False, port=9123),
-            notification_timeout_seconds=5.0,
-            notifications=(),
-        ),
-        metrics_server=metrics_server,
-    )
-    holder["app"] = app
-    await asyncio.wait_for(app.run(), timeout=5.0)
-    assert started == []  # metrics.enabled=False → no server
+# metrics.enabled=False → no server
 
 
-@pytest.mark.asyncio
-async def test_metrics_server_not_started_when_observability_absent(
-    tmp_path: Path, matcher_config: MatcherConfig
-) -> None:
-    """/metrics server NOT started when observability=None (obs is None)."""
-    started: list[int] = []
-    holder: dict[str, CrawlerApp] = {}
-
-    def factory(
-        endpoint: AmuleEndpoint, monotonic_clock: MonotonicClock
-    ) -> _ShutdownOnStatusClient:
-        return _ShutdownOnStatusClient(holder)
-
-    def metrics_server(port: int, registry: object) -> None:
-        started.append(port)
-
-    app = _make_app(
-        tmp_path,
-        matcher_config,
-        factory=factory,
-        observability=None,
-        metrics_server=metrics_server,
-    )
-    holder["app"] = app
-    await asyncio.wait_for(app.run(), timeout=5.0)
-    assert started == []  # obs=None → no server
+# obs=None → no server
 
 
 @pytest.mark.asyncio

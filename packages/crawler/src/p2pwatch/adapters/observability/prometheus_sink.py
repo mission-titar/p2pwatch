@@ -5,7 +5,9 @@ the global registry) → testable on a throwaway registry, no shared state. Two 
 (counters/gauges) indexed by ``MetricName`` → ``apply`` routes on ``kind``. GOTCHA: counters
 are named WITHOUT ``_total`` (added by the lib at exposition time)."""
 
-from prometheus_client import CollectorRegistry, Counter, Gauge
+from collections.abc import Callable
+
+from prometheus_client import CollectorRegistry, Counter, Gauge, start_http_server
 
 from p2pwatch.domain.observability.policy import MetricInstruction, MetricName
 
@@ -55,3 +57,18 @@ class PrometheusSink:
             (gauge.labels(**labels) if labels else gauge).set(instruction.value)
         else:
             self._gauges[instruction.name].remove_by_labels(labels)
+
+
+def start_metrics_server(registry: CollectorRegistry, port: int | None) -> Callable[[], None]:
+    """Serves ``registry`` on ``/metrics`` from a daemon thread, or nothing when ``port`` is
+    ``None``; returns what stops it."""
+    if port is None:
+        return lambda: None
+    server, thread = start_http_server(port, registry=registry)
+
+    def stop() -> None:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+    return stop

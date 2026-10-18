@@ -16,11 +16,18 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
+from catalog_matching.config import MatcherConfig
+from catalog_matching.models import TargetSegment
+from catalog_matching.validation import MatchingConfigError, parse_matcher_config, parse_targets
 from p2pwatch.adapters.config.errors import ConfigError as ConfigError  # explicit re-export
 from p2pwatch.adapters.config.interpolation import interpolate
+from p2pwatch.adapters.config.yaml_loader import YamlLoadError, load_yaml
+from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.observability.policy import Audience
+from p2pwatch.domain.policy_fingerprint import policy_fingerprint
 
 
 @dataclass(frozen=True)
@@ -76,10 +83,16 @@ class DownloadConfig:
 
     poll_interval_seconds: float
     min_free_bytes: int
-    lost_after_seconds: float
+    lost_after: timedelta
     output_dir: str
     reappeared_after: timedelta
     sources_interval: timedelta
+
+    @property
+    def time_between_source_reads(self) -> timedelta:
+        """The time between reads the carried role's max age assumes: the interval plus a poll
+        (source points spec, D3), since the step runs on the first round past its interval."""
+        return self.sources_interval + timedelta(seconds=self.poll_interval_seconds)
 
 
 # 3 x (300 + 30): the carried role's max age at the shipped intervals (source points spec, D6).
@@ -145,6 +158,19 @@ class ObservabilityConfig:
     notification_timeout_seconds: float
     notifications: tuple[NotificationTarget, ...]
 
+    @property
+    def metrics_port(self) -> int | None:
+        """The port the metrics server listens on, ``None`` when it is off."""
+        if self.metrics is None or not self.metrics.enabled:
+            return None
+        return self.metrics.port
+
+
+# An absent section: INFO, no metrics server, no notification.
+_DEFAULT_OBSERVABILITY = ObservabilityConfig(
+    log_level="INFO", metrics=None, notification_timeout_seconds=5.0, notifications=()
+)
+
 
 @dataclass(frozen=True)
 class CrawlerConfig:
@@ -165,7 +191,7 @@ class CrawlerConfig:
     catalog_db_path: str
     local_db_path: str
     node_id: str | None
-    observability: ObservabilityConfig | None = None
+    observability: ObservabilityConfig = _DEFAULT_OBSERVABILITY
     download: DownloadConfig | None = None
     webui: WebuiConfig = _DEFAULT_WEBUI
 
@@ -289,7 +315,7 @@ def _string(section: dict[str, Any], key: str, error_label: str, env: Mapping[st
 
 
 def _parse_observability(section: dict[str, Any], env: Mapping[str, str]) -> ObservabilityConfig:
-    log_level = section.get("log_level", "INFO")
+    log_level = section.get("log_level", _DEFAULT_OBSERVABILITY.log_level)
     if not isinstance(log_level, str) or log_level not in _LOG_LEVELS:
         raise ConfigError(
             f"observability.log_level: one of {sorted(_LOG_LEVELS)} expected, got {log_level!r}"
@@ -301,7 +327,12 @@ def _parse_observability(section: dict[str, Any], env: Mapping[str, str]) -> Obs
             enabled=_bool(metrics_raw, "enabled", "observability.metrics"),
             port=_positive_int(metrics_raw, "port", "observability.metrics"),
         )
-    timeout = _seconds(section, "notification_timeout_seconds", "observability", 5.0)
+    timeout = _seconds(
+        section,
+        "notification_timeout_seconds",
+        "observability",
+        _DEFAULT_OBSERVABILITY.notification_timeout_seconds,
+    )
     notifications: list[NotificationTarget] = []
     for index, entry in enumerate(section.get("notifications", [])):
         error_label = f"observability.notifications[{index}]"
@@ -357,12 +388,14 @@ def _parse_download(document: dict[str, Any]) -> DownloadConfig | None:
         min_free_bytes=_positive_int_default(
             section, "min_free_bytes", "download", _DEFAULT_MIN_FREE_BYTES
         ),
-        lost_after_seconds=_seconds(
-            section,
-            "lost_after_seconds",
-            "download",
-            _DEFAULT_LOST_AFTER_SECONDS,
-            at_most=_THIRTY_DAYS_SECONDS,
+        lost_after=timedelta(
+            seconds=_seconds(
+                section,
+                "lost_after_seconds",
+                "download",
+                _DEFAULT_LOST_AFTER_SECONDS,
+                at_most=_THIRTY_DAYS_SECONDS,
+            )
         ),
         output_dir=output_dir,
         reappeared_after=timedelta(
@@ -451,7 +484,7 @@ def parse_crawler_config(document: dict[str, Any], env: Mapping[str, str]) -> Cr
     node_id_raw = document.get("node_id")
     if node_id_raw is not None and (not isinstance(node_id_raw, str) or not node_id_raw):
         raise ConfigError(f"node_id: non-empty string or absent expected, got {node_id_raw!r}")
-    observability: ObservabilityConfig | None = None
+    observability = _DEFAULT_OBSERVABILITY
     if "observability" in document:
         observability = _parse_observability(
             _require_mapping(document["observability"], "section 'observability'"), env
@@ -466,4 +499,37 @@ def parse_crawler_config(document: dict[str, Any], env: Mapping[str, str]) -> Cr
         observability=observability,
         download=_parse_download(document),
         webui=_parse_webui(document, env),
+    )
+
+
+@dataclass(frozen=True)
+class LoadedConfig:
+    """The three config files, parsed, and the fingerprint of the two that make the policy."""
+
+    crawler_config: CrawlerConfig
+    targets: tuple[TargetSegment, ...]
+    matcher_config: MatcherConfig
+    policy_fingerprint: str
+
+
+def load_config(
+    config_path: Path, targets_path: Path, matcher_path: Path, env: Mapping[str, str]
+) -> LoadedConfig:
+    """Loads ``crawler.yml``, ``targets.yml`` and ``matcher.yml``; any of them invalid raises
+    ``InvalidConfigError``.
+
+    The fingerprint (spec §7.1) hashes the two policy files' RAW bytes, not their parse, so a
+    comment-only edit still triggers one harmless re-evaluation at the next start.
+    """
+    try:
+        crawler_config = parse_crawler_config(load_yaml(config_path), env)
+        targets = parse_targets(load_yaml(targets_path))
+        matcher_config = parse_matcher_config(load_yaml(matcher_path))
+    except (YamlLoadError, ConfigError, MatchingConfigError) as error:
+        raise InvalidConfigError(str(error)) from error
+    return LoadedConfig(
+        crawler_config=crawler_config,
+        targets=targets,
+        matcher_config=matcher_config,
+        policy_fingerprint=policy_fingerprint(matcher_path.read_bytes(), targets_path.read_bytes()),
     )

@@ -7,6 +7,7 @@ import pytest
 from p2pwatch.adapters.config.crawler_config import AmuleEndpoint
 from p2pwatch.composition import __main__ as entry
 from p2pwatch.composition.app import CrawlerApp
+from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.policy_fingerprint import policy_fingerprint
 
 _CONFIG = Path(__file__).resolve().parents[4] / "deploy"
@@ -63,7 +64,6 @@ def _argv(config: Path) -> list[str]:
 
 
 def test_build_app_assembles_a_crawler_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # Config WITHOUT observability section → covers build_crawler_app's `observability is None`.
     monkeypatch.setenv("AMULE_API_PASSWORD", "s3cr3t")
     app = entry.build_crawler_app(_args(_write_config(tmp_path)))
     assert isinstance(app, CrawlerApp)
@@ -116,14 +116,11 @@ def test_main_returns_zero_on_clean_run(monkeypatch: pytest.MonkeyPatch) -> None
 def test_main_renders_runtime_config_error_from_run_as_clean_message(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # The full-mode gate raises a ``ConfigError`` AT RUNTIME (verifier health-check KO) from
-    # ``app.run()``, not from ``build_crawler_app``. ``main`` must render it with the SAME clean
-    # message + exit code 1 (and not a bare traceback).
-    from p2pwatch.adapters.config.crawler_config import ConfigError
-
+    # An ``InvalidConfigError`` raised from ``app.run()``, not from ``build_crawler_app``, is
+    # rendered with the SAME clean message + exit code 1 (and not a bare traceback).
     def fake_run(coro: object) -> None:
         coro.close()  # type: ignore[attr-defined]  # close the coroutine without running it
-        raise ConfigError("verifier unreachable at startup (health-check failed)")
+        raise InvalidConfigError("refused at runtime")
 
     monkeypatch.setattr("p2pwatch.composition.__main__.asyncio.run", fake_run)
     monkeypatch.setattr(entry, "build_crawler_app", lambda args: _SpyApp())

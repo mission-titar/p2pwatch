@@ -5,6 +5,7 @@ import json
 import logging
 import re
 import signal
+import socket
 import threading
 from datetime import timedelta
 from pathlib import Path
@@ -19,6 +20,8 @@ from p2pwatch.adapters.config.crawler_config import (
     BackoffConfig,
     CrawlerConfig,
     DownloadConfig,
+    MetricsConfig,
+    ObservabilityConfig,
     SearchConfig,
     WebuiConfig,
 )
@@ -69,9 +72,11 @@ def _crawler_config(
     *,
     keywords: tuple[str, ...],
     node_id: str | None = None,
+    metrics_port: int | None = None,
     download: DownloadConfig | None = None,
     webui: WebuiConfig = _WEBUI_OFF,
 ) -> CrawlerConfig:
+    metrics = None if metrics_port is None else MetricsConfig(enabled=True, port=metrics_port)
     return CrawlerConfig(
         search=SearchConfig(
             keywords=keywords,
@@ -82,9 +87,19 @@ def _crawler_config(
         catalog_db_path=str(tmp_path / "catalog.db"),
         local_db_path=str(tmp_path / "local.db"),
         node_id=node_id,
+        observability=ObservabilityConfig(
+            log_level="INFO", metrics=metrics, notification_timeout_seconds=5.0, notifications=()
+        ),
         download=download,
         webui=webui,
     )
+
+
+def _free_port() -> int:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port: int = probe.getsockname()[1]
+        return port
 
 
 def _app(
@@ -132,21 +147,23 @@ def _searches_read(api: FakeAmuleApi) -> int:
 
 
 @pytest.mark.asyncio
-async def test_full_mode_catalogues_queues_serves_the_webui_and_stops_on_restart(
+async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stops_on_restart(
     tmp_path: Path, matcher_config: MatcherConfig, caplog: pytest.LogCaptureFixture
 ) -> None:
     download = DownloadConfig(
         poll_interval_seconds=30.0,
         min_free_bytes=1,
-        lost_after_seconds=86_400.0,
+        lost_after=timedelta(hours=24),
         output_dir=str(tmp_path),
         reappeared_after=timedelta(hours=12),
         sources_interval=timedelta(minutes=5),
     )
+    metrics_port = _free_port()
     crawler_config = _crawler_config(
         tmp_path,
         keywords=("keroro",),
         node_id="wired-node",
+        metrics_port=metrics_port,
         download=download,
         webui=WebuiConfig(enabled=True),
     )
@@ -159,6 +176,7 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_stops_on_restart
         )
         host, port = _webui_bound_address(caplog.messages)
         async with httpx.AsyncClient() as http:
+            metrics = await http.get(f"http://127.0.0.1:{metrics_port}/metrics")
             restart = await http.post(f"http://{host}:{port}/controls/restart")
         await asyncio.wait_for(run, _WAIT_SECONDS)
 
@@ -168,6 +186,7 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_stops_on_restart
     assert observation_node_ids(catalog) == {"wired-node"}
     catalog.close()
     assert (host, port != 8080) == ("127.0.0.1", True)
+    assert "p2pwatch_observations_total{" in metrics.text
     assert restart.status_code == 303
     assert not any(thread.name == "webui" for thread in threading.enumerate())
 
