@@ -58,7 +58,6 @@ def sync_listen_port_once(
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     port_sync_settings = settings.load(os.environ)
     # A port-sync stopped between a -d and its -u left amuled down: bring it back first.
     _signal_amuled("-u")
@@ -90,7 +89,3 @@ def _write_listen_port(port: int) -> None:
         handle.write(with_listen_port(conf, port))
     os.replace(temporary_path, AMULE_CONF_PATH)
     _logger.info("amule.conf now sets Port and UDPPort to %d", port)
-
-
-if __name__ == "__main__":  # pragma: no cover
-    main()

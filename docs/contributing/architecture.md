@@ -73,7 +73,7 @@ Conséquences de cette forme, chacune porteuse ailleurs dans ce document :
 - **Les conteneurs démarrent sans ordre** (pas de `depends_on` entre eux), donc le crawler frappe
   couramment à la porte avant qu'`amuled` n'ait démarré `amuleapi` ; « démon injoignable au
   démarrage » est toléré et absorbé par le backoff.
-- **Le PID 1 d'`ed2k` est root** (son one-shot `p2pwatch_amule.adapters.driving.boot` crée
+- **Le PID 1 d'`ed2k` est root** (son one-shot `python -m p2pwatch_amule boot` crée
   l'utilisateur `amule` depuis `PUID`/`PGID` et prend les bind mounts), puis chaque service abandonne
   ses privilèges avec `setpriv`. Le cœur n'a ni point d'entrée ni root : `user:` dans `compose.yml` suffit à ce que
   `data/` reste à l'opérateur. Les deux gardent `no-new-privileges`, `pids_limit` et `mem_limit`,
@@ -106,7 +106,7 @@ flowchart RL
 | Paquet | Dist | Rôle |
 |---|---|---|
 | `p2pwatch` | `p2pwatch` | **Crawler** : pilote `amuled` par amuleapi, fait tourner les boucles de recherche et de téléchargement, la persistance, l'observabilité. Contient le sous-paquet webui in-process `p2pwatch.adapters.driving.webui` (visualiseur de catalogue en lecture seule). |
-| `p2pwatch_amule` | `p2pwatch-amule` | **Le conteneur d'aMule**, bibliothèque standard seule : son one-shot de démarrage (`p2pwatch_amule.adapters.driving.boot`) et le port-sync (`p2pwatch_amule.adapters.driving.port_sync`, §9). |
+| `p2pwatch_amule` | `p2pwatch-amule` | **Le conteneur d'aMule**, bibliothèque standard seule : son one-shot de démarrage (`python -m p2pwatch_amule boot`) et le port-sync (`python -m p2pwatch_amule port-sync`, §9). |
 | `catalog_matching` | `catalog-matching` | **Moteur de matching** (bibliothèque partagée) : politique déclarative fichier vers épisode. Importé par le crawler et par la webui. |
 | `p2pwatch_testing` | `p2pwatch-testing` | **Support de test du crawler** : ses doublures (fakes), ses lignes de catalogue, sa boucle d'événements à temps virtuel. Importé par les seuls tests du crawler, qui en mesurent la couverture. Jamais livré dans une image de prod. |
 | `vex_checks` | `vex-checks` | **Outillage dev/CI** : garde honnêtes nos affirmations OpenVEX. Jamais livré dans une image de prod. |
@@ -576,7 +576,7 @@ l'historique.
 
 Derrière un VPN, le port entrant change ; sans High-ID, la connectabilité (et donc la couverture) se
 dégrade. Le port-sync appartient au client : c'est un service s6 du conteneur `ed2k`
-(`python -m p2pwatch_amule.adapters.driving.port_sync`, sous l'utilisateur `amule`), et le cœur
+(`python -m p2pwatch_amule port-sync`, sous l'utilisateur `amule`), et le cœur
 n'en sait rien.
 Toutes les `PORT_SYNC_POLL_SECONDS` (60 s par défaut), il compare le **port forwardé** de gluetun
 au `[eMule] Port` d'`amule.conf`. S'ils diffèrent, et si le dernier redémarrage date de plus de
