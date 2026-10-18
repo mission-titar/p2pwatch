@@ -1,12 +1,19 @@
 """The command line: one subcommand per driving port, its refusals turned into exit codes."""
 
 import logging
+from collections.abc import Sequence
 from pathlib import PurePath
 
 import pytest
 
 from p2pwatch.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from p2pwatch.domain.invalid_config import InvalidConfigError
+from p2pwatch.ports.driving.catalog_merger import (
+    CatalogMerger,
+    ListedSourceCatalog,
+    MergeError,
+    NewCatalog,
+)
 from p2pwatch.ports.driving.config_validator import ConfigValidator
 from p2pwatch.ports.driving.crawler_runner import CrawlerRunner
 
@@ -49,12 +56,30 @@ class _FakeConfigValidator(ConfigValidator):
             raise self._refusal
 
 
+class _FakeCatalogMerger(CatalogMerger):
+    """Records each merge, and raises ``refusal`` when given one."""
+
+    def __init__(self, refusal: MergeError | None = None) -> None:
+        self.merges: list[tuple[list[PurePath], NewCatalog | ListedSourceCatalog]] = []
+        self._refusal = refusal
+
+    def merge_catalogs(
+        self, source_catalogs: Sequence[PurePath], destination: NewCatalog | ListedSourceCatalog
+    ) -> None:
+        self.merges.append((list(source_catalogs), destination))
+        if self._refusal is not None:
+            raise self._refusal
+
+
 def _command_line(
-    crawler_runner: CrawlerRunner | None = None, config_validator: ConfigValidator | None = None
+    crawler_runner: CrawlerRunner | None = None,
+    config_validator: ConfigValidator | None = None,
+    catalog_merger: CatalogMerger | None = None,
 ) -> ArgparseCommandLine:
     return ArgparseCommandLine(
         crawler_runner=crawler_runner or _FakeCrawlerRunner(),
         config_validator=config_validator or _FakeConfigValidator(),
+        catalog_merger=catalog_merger or _FakeCatalogMerger(),
     )
 
 
@@ -145,22 +170,93 @@ def test_the_help_lists_the_subcommands_and_names_no_observer_mode(
 
     help_text = capsys.readouterr().out
     assert exit_info.value.code == 0
-    assert "{crawl,validate-config}" in help_text
+    assert "{crawl,validate-config,merge}" in help_text
     assert "observer" not in help_text  # the config says ``download.enabled``
 
 
-@pytest.mark.parametrize("subcommand", ["crawl", "validate-config"])
+@pytest.mark.parametrize(
+    "argv", [["crawl"], ["validate-config"], ["merge", "--output", "out.db", "a.db"]]
+)
 def test_every_subcommand_logs_at_info_with_its_logger_name(
-    subcommand: str, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+    argv: list[str], monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
 ) -> None:
     root = logging.getLogger()
     root_level = root.level
     request.addfinalizer(lambda: root.setLevel(root_level))
     monkeypatch.setattr(root, "handlers", [])  # pytest's own, which basicConfig would keep
 
-    _command_line().run([subcommand])
+    _command_line().run(argv)
 
     [handler] = root.handlers
     assert handler.formatter is not None
     assert handler.formatter._fmt == "%(asctime)s %(levelname)s %(name)s %(message)s"
     assert root.level == logging.INFO
+
+
+_A = PurePath("a.db")
+_B = PurePath("b.db")
+
+
+@pytest.mark.parametrize(
+    ("options", "destination"),
+    [
+        (["--output", "out.db"], NewCatalog(PurePath("out.db"), force=False)),
+        (["-o", "out.db", "--force"], NewCatalog(PurePath("out.db"), force=True)),
+        (["--into", "a.db"], ListedSourceCatalog(_A)),
+    ],
+)
+def test_merge_merges_the_catalogs_given_into_the_destination_given(
+    options: list[str], destination: NewCatalog | ListedSourceCatalog
+) -> None:
+    catalog_merger = _FakeCatalogMerger()
+
+    assert (
+        _command_line(catalog_merger=catalog_merger).run(["merge", *options, "a.db", "b.db"]) == 0
+    )
+
+    assert catalog_merger.merges == [([_A, _B], destination)]
+
+
+def test_merge_refuses_force_with_into(capsys: pytest.CaptureFixture[str]) -> None:
+    catalog_merger = _FakeCatalogMerger()
+
+    argv = ["merge", "--into", "a.db", "--force", "a.db", "b.db"]
+    assert _command_line(catalog_merger=catalog_merger).run(argv) == 2
+
+    assert capsys.readouterr().err == "Merge failed: --force makes no sense with --into\n"
+    assert catalog_merger.merges == []
+
+
+@pytest.mark.parametrize(
+    "options", [["--output", "out.db", "--into", "a.db"], []], ids=["both", "neither"]
+)
+def test_merge_takes_exactly_one_destination(options: list[str]) -> None:
+    catalog_merger = _FakeCatalogMerger()
+
+    with pytest.raises(SystemExit) as exit_info:
+        _command_line(catalog_merger=catalog_merger).run(["merge", *options, "a.db"])
+
+    assert exit_info.value.code == 2
+    assert catalog_merger.merges == []
+
+
+def test_merge_reports_a_refused_merge(capsys: pytest.CaptureFixture[str]) -> None:
+    catalog_merger = _FakeCatalogMerger(MergeError("source catalog not found: b.db"))
+
+    argv = ["merge", "--output", "out.db", "a.db", "b.db"]
+    assert _command_line(catalog_merger=catalog_merger).run(argv) == 2
+
+    assert capsys.readouterr().err == "Merge failed: source catalog not found: b.db\n"
+
+
+def test_merge_help_names_the_catalogs_and_keeps_them_append_only(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # A bare "source" is a peer sharing a file everywhere else in p2pwatch.
+    with pytest.raises(SystemExit):
+        _command_line().run(["merge", "--help"])
+
+    help_text = " ".join(capsys.readouterr().out.split())
+    assert "CATALOG [CATALOG ...]" in help_text
+    assert "one of the listed source catalogs" in help_text
+    assert "append-only preserved" in help_text
