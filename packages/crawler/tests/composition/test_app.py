@@ -191,7 +191,7 @@ class _ShutdownOnStatusClient(FakeMuleClient):
     async def status(self) -> ClientStatus:
         if not self._fired:
             self._fired = True
-            self._app_holder["app"]._on_signal()  # simulate a SIGINT once the loops run
+            self._app_holder["app"]._shutdown.set()  # request the shutdown once the loops run
         return await super().status()
 
 
@@ -353,16 +353,6 @@ async def test_node_id_override_is_used(tmp_path: Path, matcher_config: MatcherC
     assert node_ids == {"forced-node"}
 
 
-@pytest.mark.asyncio
-async def test_second_signal_forces_exit(tmp_path: Path, matcher_config: MatcherConfig) -> None:
-    app = _make_app(
-        tmp_path, matcher_config, factory=lambda endpoint, monotonic_clock: FakeMuleClient()
-    )
-    app._on_signal()  # 1st signal: shutdown request
-    with pytest.raises(SystemExit):
-        app._on_signal()  # 2nd signal: escalation → SystemExit
-
-
 class _BlockingClient(FakeMuleClient):
     """Client whose ``search`` BLOCKS: the loop stays in flight → cancellation hits it."""
 
@@ -372,10 +362,10 @@ class _BlockingClient(FakeMuleClient):
 
 
 @pytest.mark.asyncio
-async def test_signal_cancels_an_in_flight_search(
+async def test_a_requested_shutdown_cancels_an_in_flight_search(
     tmp_path: Path, matcher_config: MatcherConfig
 ) -> None:
-    # A task is BLOCKED in search; an external SIGINT cancels the TaskGroup →
+    # A task is BLOCKED in search; a requested shutdown cancels the loops →
     # covers the cancellation path (clean unwind + "Workers stopped" line).
     app = _make_app(
         tmp_path, matcher_config, factory=lambda endpoint, monotonic_clock: _BlockingClient()
@@ -383,7 +373,7 @@ async def test_signal_cancels_an_in_flight_search(
     run_task = asyncio.create_task(app.run())
     for _ in range(20):  # let the tasks start and block in search
         await asyncio.sleep(0)
-    app._on_signal()
+    app._shutdown.set()
     await asyncio.wait_for(run_task, timeout=5.0)
 
 
@@ -407,7 +397,7 @@ async def test_normal_run_outlives_shutdown_deadline_without_a_signal(
     # Regression (spec §6, DECISION 6): the shutdown bound covers ONLY the shutdown phase. A
     # normal run WITHOUT a signal must run indefinitely - so it must outlive FAR beyond
     # ``shutdown_deadline_seconds`` of REAL time. Before the fix, ``asyncio.timeout`` wrapped
-    # all of ``_supervise`` (including the UNBOUNDED wait on the signal) on the REAL clock → the
+    # all of the supervision (including the UNBOUNDED wait on the signal) on the REAL clock → the
     # run raised ``TimeoutError`` ~deadline after startup, with no shutdown requested. Here the
     # deadline is tiny (0.2 s) and we let 0.4 s of real time pass: the run must
     # STILL be running, without having raised. Then we request the shutdown → it ends CLEANLY.
@@ -420,7 +410,7 @@ async def test_normal_run_outlives_shutdown_deadline_without_a_signal(
     run_task = asyncio.create_task(app.run())
     await asyncio.sleep(0.4)  # REAL time > deadline: if the bound wrapped the run, it would raise
     assert not run_task.done(), "the normal run (no signal) must NOT finish or raise"
-    app._on_signal()  # shutdown requested → the bound arms, the clean shutdown is bounded
+    app._shutdown.set()  # shutdown requested → the bound arms, the clean shutdown is bounded
     await asyncio.wait_for(run_task, timeout=5.0)  # ends without TimeoutError
     assert run_task.exception() is None
 
@@ -521,7 +511,7 @@ class _KadNeverEndsClient(FakeMuleClient):
         answer = await super().search(keyword, channel, budget_seconds)
         app = self._app_holder["app"]
         if self.searches.count(("keroro", "ed2k")) == 3 and not app._shutdown.is_set():
-            app._on_signal()
+            app._shutdown.set()
         return answer
 
 
@@ -579,7 +569,7 @@ def test_an_hour_of_the_running_app_keeps_to_the_networks_rules(
                 monotonic_clock=monotonic_clock,
             ),
         )
-        asyncio.get_running_loop().call_later(_HOUR, app._on_signal)
+        asyncio.get_running_loop().call_later(_HOUR, app._shutdown.set)
         await app.run()
 
     run_virtual(main())
@@ -607,7 +597,7 @@ class _StampedSearchClient(FakeMuleClient):
 
     async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
         if not self.searched_at:
-            self._app_holder["app"]._on_signal()
+            self._app_holder["app"]._shutdown.set()
         self.searched_at.append(self._monotonic_clock.now())
         return await super().search(keyword, channel, budget_seconds)
 
@@ -772,7 +762,7 @@ class _ShutdownOnQueueDownloadClient(FakeDownloadClient):
 
     async def downloads(self) -> tuple[DownloadStatus, ...]:
         result = await super().downloads()
-        self._app_holder["app"]._on_signal()  # shutdown AFTER the 1st download cycle
+        self._app_holder["app"]._shutdown.set()  # shutdown AFTER the 1st download cycle
         return result
 
 
@@ -868,7 +858,7 @@ class _ShutdownOnSourcesDownloadClient(FakeDownloadClient):
         return (DownloadStatus(self._file, 0, 100, False, None, None),)
 
     async def sources(self, file: FileKey) -> tuple[SourceReading, ...]:
-        self._app_holder["app"]._on_signal()
+        self._app_holder["app"]._shutdown.set()
         source = SourceKey(Network.ED2K, "1f" * 16)
         return (SourceReading(source, "peer", None, SourceRole.QUEUED, None, None, (), 0),)
 
@@ -981,7 +971,7 @@ async def test_full_mode_reads_sources_at_their_interval_and_spaces_them_by_a_po
 
     async def loop(deps: DownloadLoopDeps) -> None:
         loops.append(deps)
-        holder["app"]._on_signal()
+        holder["app"]._shutdown.set()
 
     monkeypatch.setattr(composition_app, "SqliteSourceRepository", source_repository)
     monkeypatch.setattr(composition_app, "download_loop", loop)
@@ -1047,9 +1037,9 @@ class _BlockingPollMonotonicClock(FakeMonotonicClock):
 
     Models the IN-CYCLE sleep of the download loop (``_sleep_or_wake``, 30 s poll): it stays
     BLOCKED in its ``sleep``, so the loop CANNOT re-test ``self._shutdown`` on its own; only
-    an explicit CANCELLATION by ``_supervise`` gets it out. A BARRIER: as soon as the download
+    an explicit CANCELLATION by ``supervise_loops`` gets it out. A BARRIER: as soon as the download
     poll has entered a long sleep, we ARM ``self._shutdown`` - the shutdown is thus requested
-    while it is blocked. If ``_supervise`` did NOT cancel it, the ``TaskGroup`` would wait
+    while it is blocked. If ``supervise_loops`` did NOT cancel it, the ``TaskGroup`` would wait
     forever and the armed ``shutdown_deadline`` would fire a ``TimeoutError`` (force-exit): the
     test would
     fail fail-closed. The SHORT sleeps yield immediately (determinism, no real time)."""
@@ -1077,7 +1067,7 @@ class _BlockingPollMonotonicClock(FakeMonotonicClock):
 async def test_full_mode_shutdown_cancels_the_download_loop_promptly(
     tmp_path: Path, matcher_config: MatcherConfig
 ) -> None:
-    # REGRESSION (holistic review): at shutdown, ``_supervise`` must EXPLICITLY cancel the
+    # REGRESSION (holistic review): at shutdown, ``supervise_loops`` must EXPLICITLY cancel the
     # download loop (sibling task of the search ``loop_task``). Without this, it stays
     # blocked in its in-cycle sleep (``_sleep_or_wake`` does NOT watch ``self._shutdown``),
     # the ``TaskGroup`` waits on its poll (30 s), the ``shutdown_deadline`` fires a
@@ -1116,14 +1106,14 @@ async def test_full_mode_shutdown_leaves_no_task_leaked(
 ) -> None:
     # T12 - shutdown INVARIANT "no task leak". The ``TaskGroup`` guarantees BY
     # CONSTRUCTION that on exit from ``run()`` neither loop (search/download) survives: its
-    # ``__aexit__`` waits for ALL its tasks to finish, and ``_supervise``
+    # ``__aexit__`` waits for ALL its tasks to finish, and ``supervise_loops``
     # cancels them ALL explicitly at shutdown. This test LOCKS the invariant: it would fail if
     # a future regression detached a loop from the ``TaskGroup`` (``asyncio.create_task`` outside
     # the group) or forgot to cancel a sibling task - a ``pending`` task would then survive
     # ``run()``. We prove it by DIFFERENCE: the tasks born DURING ``run()`` (full = both
     # loops blocked in their sleep, shutdown armed once blocked) must ALL be
     # finished once ``run()`` has returned. The ``_BlockingPollMonotonicClock`` forces the worst
-    # case: the loops can only exit VIA the explicit cancellation by ``_supervise``.
+    # case: the loops can only exit VIA the explicit cancellation by ``supervise_loops``.
     holder: dict[str, CrawlerApp] = {}
     monotonic_clock = _BlockingPollMonotonicClock(holder)
     app = CrawlerApp(
@@ -1431,7 +1421,7 @@ class _ShutdownOnSearchClient(FakeMuleClient):
 
     async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
         if not self.searches:
-            self._app_holder["app"]._on_signal()
+            self._app_holder["app"]._shutdown.set()
         return await super().search(keyword, channel, budget_seconds)
 
 

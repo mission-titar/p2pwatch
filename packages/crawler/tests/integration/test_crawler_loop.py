@@ -67,7 +67,7 @@ class _ShutdownAfterFirstSearchClient:
     async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
         app = self._app_holder["app"]
         if channel in self.returned and not app._shutdown.is_set():
-            app._on_signal()
+            app._shutdown.set()
         answer = await self._inner.search(keyword, channel, budget_seconds)  # type: ignore[attr-defined]
         self.returned.add(channel)
         return answer  # type: ignore[no-any-return]

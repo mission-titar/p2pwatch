@@ -9,22 +9,19 @@ COMPOSITION layer (the only one allowed to import adapters AND application). Bui
   session the status loop shares.
 
 Loops: the search tasks (``SearchTaskRunner``), the status loop, and the download loop when
-configured.
-OBSERVABLE & BOUNDED shutdown (spec §6): ``loop.add_signal_handler`` (NOT ``KeyboardInterrupt``,
-which would preempt a sync function mid-write); 1st ^C → human line on stderr +
-cancellation of the ``TaskGroup``; 2nd ^C → immediate ``SystemExit``; long-lived resources
-are closed by the ``AsyncExitStack`` AFTER the full unwind of the ``TaskGroup`` (no worker
-can write anymore), all within a bounded delay (``shutdown_deadline_seconds``).
+configured, run by ``supervise_loops`` until ``PosixProcess`` or the webui requests the shutdown.
+OBSERVABLE & BOUNDED shutdown (spec §6): long-lived resources are closed AFTER the full unwind of
+the loops (no worker can write anymore), all within ``shutdown_deadline_seconds``.
 """
 
 import asyncio
 import logging
-import signal
 import sqlite3
 import sys
-from collections.abc import Callable, Sequence
-from contextlib import AsyncExitStack, suppress
+from collections.abc import Callable, Coroutine, Sequence
+from contextlib import AsyncExitStack
 from datetime import timedelta
+from functools import partial
 from importlib.metadata import version
 from pathlib import Path
 from typing import Protocol
@@ -43,6 +40,7 @@ from p2pwatch.adapters.config.crawler_config import (
 )
 from p2pwatch.adapters.crawler_control_loop import LoopCrawlerControl
 from p2pwatch.adapters.disk_space_shutil import ShutilDiskSpace
+from p2pwatch.adapters.driving.process.posix_process import PosixProcess
 from p2pwatch.adapters.mule_api.client import AmuleApiClient
 from p2pwatch.adapters.observability.apprise_notifier import AppriseNotifier
 from p2pwatch.adapters.observability.dispatcher import ObservabilityDispatcher
@@ -71,8 +69,8 @@ from p2pwatch.application.search_worker import (
     WorkerDeps,
 )
 from p2pwatch.application.status_loop import StatusBoard, StatusLoopDeps, status_loop
+from p2pwatch.application.supervise_loops import supervise_loops
 from p2pwatch.domain.observability.events import CrawlerStarted
-from p2pwatch.ports.backoff_state_repository import BackoffStateRepository
 from p2pwatch.ports.client_errors import ClientUnreachableError
 from p2pwatch.ports.clock import MonotonicClock, WallClock
 from p2pwatch.ports.crawler_control import CrawlerControl
@@ -186,20 +184,6 @@ class CrawlerApp:
         # webui mutates it thread-safely via ``LoopCrawlerControl`` (spec §10).
         self._resumed = asyncio.Event()
         self._resumed.set()
-        self._signal_count = 0
-
-    def _on_signal(self) -> None:
-        """Loop handler (never preempts a sync function, spec §6)."""
-        self._signal_count += 1
-        if self._signal_count == 1:
-            _print_progress(
-                "Shutdown requested: finishing in-flight searches, clean close… "
-                "(Ctrl-C again to force)"
-            )
-            self._shutdown.set()
-        else:
-            _print_progress("Forced shutdown.")
-            raise SystemExit(1)
 
     async def _build_download_deps(
         self,
@@ -248,79 +232,15 @@ class CrawlerApp:
             shutdown=self._shutdown,
         )
 
-    async def _supervise(
-        self,
-        *,
-        shutdown_timeout: asyncio.Timeout,
-        workers: Sequence[SearchWorker],
-        backoff_states: BackoffStateRepository,
-        backoff: BackoffRegistry,
-        status_deps: StatusLoopDeps,
-        download_deps: DownloadLoopDeps | None,
+    async def _start_webui(
+        self, stack: AsyncExitStack, status_board: StatusBoard, control: CrawlerControl
     ) -> None:
-        """Launch the loops, wait for shutdown (UNBOUNDED), ARM the bound, cancel ALL and unwind.
-
-        Waiting on the shutdown signal is FREE (``shutdown_timeout`` enters here DISARMED -
-        deadline ``None`` - so the crawler runs until stopped, over an unbounded
-        span). AS SOON AS shutdown is requested, we ARM the bound (``reschedule`` to ``now +
-        shutdown_deadline_seconds``) BEFORE cancelling: thus the ``TaskGroup`` unwind (the ``await``
-        of the cancelled tasks on exit of the ``async with``) THEN the LIFO stack close
-        (in ``run``) are both bounded - the app CANNOT appear stuck at shutdown.
-        Cancellation lands at the next network ``await`` (never mid DB write, sync repos,
-        spec §6).
-        PROMPT SHUTDOWN OF ALL LOOPS: each sibling task must be cancelled EXPLICITLY -
-        cancelling the search tasks does NOT cancel the status/download loops, which are
-        their siblings in the ``TaskGroup``. Without this, shutdown would wait on each loop's
-        in-cycle sleep (``_sleep_or_wake`` of the download watches ONLY poll/wake, not
-        ``self._shutdown``), and the ``shutdown_deadline`` armed
-        above would fire a ``TimeoutError`` FIRST - a routine Ctrl-C would then force the
-        exit instead of a clean shutdown. So we cancel the ENTIRE set of created tasks.
-        EMPIRICAL VERIFICATION: cancelling the children of a ``TaskGroup`` (the group itself
-        not being cancelled) does NOT propagate a ``CancelledError`` on exit of the ``async with``
-        - the unwind is CLEAN. So we print the progress AFTER the block, without ``except*``
-        (which would be dead code). A real worker exception, however, would propagate as an
-        ``ExceptionGroup`` - we don't mask it.
-        """
-        async with asyncio.TaskGroup() as group:
-            tasks = [
-                group.create_task(
-                    SearchTaskRunner(
-                        workers=workers,
-                        keywords=self._crawler_config.search.keywords,
-                        resumed=self._resumed,
-                        backoff=backoff,
-                        backoff_states=backoff_states,
-                        monotonic_clock=self._monotonic_clock,
-                    ).run()
-                ),
-                group.create_task(status_loop(status_deps)),
-            ]
-            if download_deps is not None:
-                tasks.append(group.create_task(download_loop(download_deps)))
-            await self._shutdown.wait()  # UNBOUNDED (the bound is disarmed while running)
-            shutdown_timeout.reschedule(
-                asyncio.get_running_loop().time() + self._crawler_config.shutdown_deadline_seconds
-            )
-            for task in tasks:
-                task.cancel()
-        _print_progress("Workers stopped.")
-
-    async def _start_webui(self, stack: AsyncExitStack, status_board: StatusBoard) -> None:
         """Start the read-only webui on its OWN thread + loop (spec §5), sharing only IMMUTABLE
         state with the crawler (the parsed matcher/targets, the DB paths). It reads through its
         OWN ``ReaderProvider`` (inside ``build_webui_app``); nothing here touches the crawler's
         event loop nor its writer connections. Its stop is registered on ``stack`` so it runs
-        during the normal LIFO unwind at shutdown, AFTER ``_supervise`` returns."""
+        during the normal LIFO unwind at shutdown, AFTER the loops are stopped."""
         webui_pkg_dir = Path(p2pwatch.webui.__file__).parent
-        # Runtime-control channel (phase P6a): bound to the crawler's OWN loop + events, so the
-        # webui thread hands off intents thread-safely (spec §10). ``_start_webui`` runs within
-        # ``run()``'s loop, so ``get_running_loop()`` is the crawler loop. The webui receives the
-        # PORT (``CrawlerControl``); this concrete adapter holds no DB connection.
-        control: CrawlerControl = LoopCrawlerControl(
-            loop=asyncio.get_running_loop(),
-            resumed=self._resumed,
-            shutdown=self._shutdown,
-        )
         app = build_webui_app(
             catalog_db_path=Path(self._crawler_config.catalog_db_path),
             local_db_path=Path(self._crawler_config.local_db_path),
@@ -340,28 +260,22 @@ class CrawlerApp:
         await server_thread.start()
 
     async def run(self) -> None:
-        """Async entry point: opens the resources, installs the signals, loops (§6).
+        """Async entry point: opens the resources under ``PosixProcess``, runs the loops (§6).
 
-        Ownership (spec §6): the ``AsyncExitStack`` owns the long-lived resources (daemon clients +
-        2 connections). The shutdown bound is an ``asyncio.timeout`` ENTERED DISARMED (deadline
-        ``None``): the steady-state run (waiting on the signal, searches) is UNBOUNDED - otherwise
-        the crawler would die after ``shutdown_deadline_seconds`` of normal operation. ONLY the
-        SHUTDOWN PHASE is bounded: ``_supervise`` ARMS the bound (``reschedule``) as soon as
-        shutdown is requested, so the ``TaskGroup`` unwind THEN the LIFO stack close below fall
-        under the deadline - the app CANNOT appear stuck at shutdown. An overrun raises
-        ``TimeoutError`` (forced exit); the ``finally`` then attempts a best-effort close
-        (suppress) so as not to re-block indefinitely. The bound NEVER arms without a requested
-        shutdown → a ``TimeoutError`` can only hit a close that drags.
+        Only the shutdown is bounded: an overrun raises ``TimeoutError``, and ``PosixProcess``
+        then closes what is left.
         """
         # Startup version line (spec 2026-07-10-git-driven-versioning): the number baked into the
         # installed wheel by the build (setuptools-scm / SETUPTOOLS_SCM_PRETEND_VERSION), so an
         # operator can correlate a running node to a release.
         _logger.info("p2pwatch version %s", version("p2pwatch"))
         loop = asyncio.get_running_loop()
-        loop.add_signal_handler(signal.SIGINT, self._on_signal)
-        loop.add_signal_handler(signal.SIGTERM, self._on_signal)
-        stack = AsyncExitStack()
-        try:
+        # Runtime-control channel (phase P6a): bound to the crawler's OWN loop + events, so the
+        # webui thread hands off intents thread-safely (spec §10); it holds no DB connection.
+        control: CrawlerControl = LoopCrawlerControl(
+            loop=loop, resumed=self._resumed, shutdown=self._shutdown
+        )
+        async with PosixProcess(control) as stack:
             catalog_conn = open_catalog(self._crawler_config.catalog_db_path)
             stack.callback(catalog_conn.close)
             local_conn = open_local(self._crawler_config.local_db_path)
@@ -402,7 +316,7 @@ class CrawlerApp:
             # graceful stop is on ``stack`` → runs at the normal shutdown unwind (after DB conns
             # are pushed, so it stops the thread before those close during LIFO teardown).
             if self._crawler_config.webui.enabled:
-                await self._start_webui(stack, board)
+                await self._start_webui(stack, board, control)
             # SHARED backoff registry: built ONCE, RELOADED from backoff_states
             # (backoff survives restart, spec §3/§7), injected into ALL workers
             # + passed to the search tasks that persist it. Single writer on the event loop.
@@ -449,10 +363,21 @@ class CrawlerApp:
                 self._shutdown,
                 board,
             )
+            search_tasks = SearchTaskRunner(
+                workers=workers,
+                keywords=self._crawler_config.search.keywords,
+                resumed=self._resumed,
+                backoff=backoff,
+                backoff_states=backoff_states,
+                monotonic_clock=self._monotonic_clock,
+            )
+            loops: list[Callable[[], Coroutine[object, object, None]]] = [
+                search_tasks.run,
+                partial(status_loop, status_deps),
+            ]
 
             _logger.info("crawler started: node_id=%s", node_id)
 
-            download_deps: DownloadLoopDeps | None = None
             # Download enabled ⟺ the ``download`` section is present (``enabled: true``); the
             # unified parser then guarantees the wiring is complete (endpoint).
             download_config = self._crawler_config.download
@@ -467,6 +392,7 @@ class CrawlerApp:
                     local_conn=local_conn,
                     telemetry=telemetry,
                 )
+                loops.append(partial(download_loop, download_deps))
                 _logger.info("download enabled: download loop armed")
 
             await telemetry.emit(CrawlerStarted(download_enabled=download_config is not None))
@@ -497,26 +423,17 @@ class CrawlerApp:
                     summary.rows_written,
                 )
 
-            # Bound ENTERED DISARMED (None): the steady state is unbounded; ``_supervise`` arms it
-            # (reschedule) as soon as shutdown is requested → only the shutdown phase + the aclose
-            # below are bounded. (Verified empirically: timeout(None) does not fire; reschedule
-            # from inside arms; a slow op after arming raises TimeoutError, a fast one does not.)
+            # Entered disarmed: the steady state is unbounded, and ``supervise_loops`` arms it as
+            # soon as the shutdown is requested, so the unwind and the close below are bounded.
             async with asyncio.timeout(None) as shutdown_timeout:
-                await self._supervise(
-                    shutdown_timeout=shutdown_timeout,
-                    workers=workers,
-                    backoff_states=backoff_states,
-                    backoff=backoff,
-                    status_deps=status_deps,
-                    download_deps=download_deps,
+                await supervise_loops(
+                    loops,
+                    shutdown=self._shutdown,
+                    arm_shutdown_bound=lambda: shutdown_timeout.reschedule(
+                        loop.time() + self._crawler_config.shutdown_deadline_seconds
+                    ),
                 )
+                _print_progress("Workers stopped.")
                 _print_progress(f"{len(workers)} amuled session(s) closing…")
                 await stack.aclose()
                 _print_progress("Databases closed: exiting.")
-        finally:
-            # Best-effort if the bounded shutdown failed (TimeoutError) or if setup raised:
-            # close what remains WITHOUT ever re-blocking (suppress any failure/cancellation).
-            with suppress(BaseException):
-                await stack.aclose()
-            loop.remove_signal_handler(signal.SIGINT)
-            loop.remove_signal_handler(signal.SIGTERM)
