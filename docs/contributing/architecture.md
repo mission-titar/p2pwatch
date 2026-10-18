@@ -413,7 +413,7 @@ flowchart LR
 
 - **`catalog.db`** (version de schéma 12) : la connaissance accumulée, **append-only**, chaque table
   (triggers `BEFORE UPDATE/DELETE -> ABORT`), pour que N nœuds fusionnent en un seul catalogue
-  (`python -m p2pwatch.merge`). Les insertions sont **idempotentes** (`INSERT OR IGNORE` /
+  (`python -m p2pwatch merge`). Les insertions sont **idempotentes** (`INSERT OR IGNORE` /
   `ON CONFLICT DO NOTHING`), donc sans danger en cas de redémarrage en pleine écriture.
 - **`local.db`** (version de schéma 11) : l'état d'exécution du nœud (identité, suivi des
   téléchargements et de leur progression, backoff des recherches, empreinte de la politique

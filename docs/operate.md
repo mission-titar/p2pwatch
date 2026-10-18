@@ -140,7 +140,7 @@ l'une a été restaurée d'une sauvegarde ou remplacée par un catalogue fusionn
 Le cycle de partage est décrit sur la [page d'accueil](index.md#partage).
 
 ```bash
-docker compose exec p2pwatch python -m p2pwatch.merge \
+docker compose exec p2pwatch python -m p2pwatch merge \
   --output /data/catalog-merged.db /data/catalog.db /data/catalog-b.db
 ```
 
@@ -150,7 +150,7 @@ catalogue source. Migrez-le d'abord en le fusionnant dans lui-même, qui l'ouvre
 sur place, de préférence sur une copie, puisqu'une version plus ancienne ne pourra plus le lire :
 
 ```bash
-docker compose exec p2pwatch python -m p2pwatch.merge \
+docker compose exec p2pwatch python -m p2pwatch merge \
   --into /data/catalog-b.db /data/catalog-b.db
 ```
 

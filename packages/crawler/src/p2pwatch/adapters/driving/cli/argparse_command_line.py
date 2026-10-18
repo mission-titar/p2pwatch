@@ -8,6 +8,12 @@ from collections.abc import Sequence
 from pathlib import PurePath
 
 from p2pwatch.domain.invalid_config import InvalidConfigError
+from p2pwatch.ports.driving.catalog_merger import (
+    CatalogMerger,
+    ListedSourceCatalog,
+    MergeError,
+    NewCatalog,
+)
 from p2pwatch.ports.driving.config_validator import ConfigValidator
 from p2pwatch.ports.driving.crawler_runner import CrawlerRunner
 
@@ -20,12 +26,46 @@ def _add_config_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--matcher", type=PurePath, default=PurePath("deploy/matcher.yml"))
 
 
-class ArgparseCommandLine:
-    """``crawl`` and ``validate-config``, each over its driving port."""
+def _add_merge_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "source_catalogs",
+        metavar="CATALOG",
+        nargs="+",
+        type=PurePath,
+        help="1..N catalog.db files to merge (≥ 1).",
+    )
+    destination = parser.add_mutually_exclusive_group(required=True)
+    destination.add_argument(
+        "--output",
+        "-o",
+        type=PurePath,
+        help="FRESH output file (refused if it exists, unless --force).",
+    )
+    destination.add_argument(
+        "--into",
+        type=PurePath,
+        help="Destination = one of the listed source catalogs (merged into it).",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Allow an existing --output (idempotent append, never truncate).",
+    )
 
-    def __init__(self, *, crawler_runner: CrawlerRunner, config_validator: ConfigValidator) -> None:
+
+class ArgparseCommandLine:
+    """``crawl``, ``validate-config`` and ``merge``, each over its driving port."""
+
+    def __init__(
+        self,
+        *,
+        crawler_runner: CrawlerRunner,
+        config_validator: ConfigValidator,
+        catalog_merger: CatalogMerger,
+    ) -> None:
         self._crawler_runner = crawler_runner
         self._config_validator = config_validator
+        self._catalog_merger = catalog_merger
 
     def run(self, argv: Sequence[str] | None = None) -> int:
         """Runs the subcommand ``argv`` names (``sys.argv`` if ``None``), returns its exit code."""
@@ -40,10 +80,19 @@ class ArgparseCommandLine:
                 "validate-config", help="load and check the config, start nothing"
             )
         )
+        _add_merge_options(
+            subparsers.add_parser(
+                "merge",
+                help="merge catalogs into one",
+                description="Merge N catalog.db into one (idempotent, append-only preserved).",
+            )
+        )
         args = parser.parse_args(argv)
         if args.command == "crawl":
             return self._crawl(args)
-        return self._validate_config(args)
+        if args.command == "validate-config":
+            return self._validate_config(args)
+        return self._merge(args)
 
     def _crawl(self, args: argparse.Namespace) -> int:
         try:
@@ -74,4 +123,20 @@ class ArgparseCommandLine:
             print(f"Invalid config: {error}", file=sys.stderr, flush=True)
             return 1
         print("Config valid", flush=True)
+        return 0
+
+    def _merge(self, args: argparse.Namespace) -> int:
+        destination: NewCatalog | ListedSourceCatalog
+        if args.into is None:
+            destination = NewCatalog(args.output, force=args.force)
+        elif args.force:
+            print("Merge failed: --force makes no sense with --into", file=sys.stderr, flush=True)
+            return 2
+        else:
+            destination = ListedSourceCatalog(args.into)
+        try:
+            self._catalog_merger.merge_catalogs(args.source_catalogs, destination)
+        except MergeError as error:
+            print(f"Merge failed: {error}", file=sys.stderr, flush=True)
+            return 2
         return 0

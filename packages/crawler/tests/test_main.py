@@ -1,10 +1,11 @@
-"""``python -m p2pwatch``: the command line wired to the real config adapter and composition."""
+"""``python -m p2pwatch``: the command line wired to the real adapters and composition."""
 
 from pathlib import Path
 
 import pytest
 
 from p2pwatch.__main__ import main
+from p2pwatch_testing.merge.helpers import HASH_A, HASH_B, count, make_catalog
 
 _DEPLOY = Path(__file__).resolve().parents[3] / "deploy"
 
@@ -46,3 +47,15 @@ def test_validate_config_refuses_a_broken_matcher(
     assert main(argv) == 1
 
     assert capsys.readouterr().err.startswith("Invalid config: ")
+
+
+def test_merge_of_two_catalogs_into_a_new_one_holds_both(tmp_path: Path) -> None:
+    catalogs = [
+        make_catalog(tmp_path / f"{letter}.db", {"files": [{"ed2k_hash": ed2k, "size_bytes": 100}]})
+        for letter, ed2k in (("a", HASH_A), ("b", HASH_B))
+    ]
+    merged = tmp_path / "merged.db"
+
+    assert main(["merge", "--output", str(merged), *map(str, catalogs)]) == 0
+
+    assert count(merged, "files") == 2
