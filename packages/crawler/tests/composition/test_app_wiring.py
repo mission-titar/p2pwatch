@@ -8,6 +8,7 @@ import signal
 import socket
 import threading
 from datetime import timedelta
+from importlib.metadata import version
 from pathlib import Path
 
 import httpx
@@ -17,6 +18,7 @@ from catalog_matching.config import MatcherConfig
 from catalog_matching.models import TargetSegment
 from catalog_matching.validation import parse_matcher_config
 from p2pwatch.adapters.config.crawler_config import (
+    AMULE_CLIENT_NAME,
     BackoffConfig,
     CrawlerConfig,
     DownloadConfig,
@@ -27,11 +29,15 @@ from p2pwatch.adapters.config.crawler_config import (
 )
 from p2pwatch.adapters.config.yaml_loader import load_yaml
 from p2pwatch.adapters.monotonic_clock_asyncio import AsyncioMonotonicClock
-from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
+from p2pwatch.adapters.persistence_sqlite.backoff_state_repository import (
+    SqliteBackoffStateRepository,
+)
+from p2pwatch.adapters.persistence_sqlite.connection import open_catalog, open_local
 from p2pwatch.adapters.rng_random import SeededRng
 from p2pwatch.adapters.wake_hub_asyncio import AsyncioWakeHub
 from p2pwatch.adapters.wall_clock_system import SystemWallClock
 from p2pwatch.composition.app import CrawlerApp
+from p2pwatch.ports.backoff_state_repository import BackoffKey, BackoffState
 from p2pwatch_testing.adapters.mule_api.api_fakes import (
     PASSWORD,
     FakeAmuleApi,
@@ -75,6 +81,7 @@ def _crawler_config(
     metrics_port: int | None = None,
     download: DownloadConfig | None = None,
     webui: WebuiConfig = _WEBUI_OFF,
+    shutdown_deadline_seconds: float = _WAIT_SECONDS,
 ) -> CrawlerConfig:
     metrics = None if metrics_port is None else MetricsConfig(enabled=True, port=metrics_port)
     return CrawlerConfig(
@@ -82,7 +89,7 @@ def _crawler_config(
             keywords=keywords,
             backoff=BackoffConfig(base_seconds=2.0, cap_seconds=60.0, factor=2.0, jitter_ratio=0.0),
         ),
-        shutdown_deadline_seconds=_WAIT_SECONDS,
+        shutdown_deadline_seconds=shutdown_deadline_seconds,
         amule_api_password=PASSWORD,
         catalog_db_path=str(tmp_path / "catalog.db"),
         local_db_path=str(tmp_path / "local.db"),
@@ -136,6 +143,12 @@ def _search_types(api: FakeAmuleApi) -> list[str]:
     ]
 
 
+def _send_sigterm(default_handler: object) -> None:
+    """Only once the run handles SIGTERM: a missing handler then fails instead of killing pytest."""
+    assert signal.getsignal(signal.SIGTERM) is not default_handler
+    signal.raise_signal(signal.SIGTERM)
+
+
 def _searches_read(api: FakeAmuleApi) -> int:
     """How many searches had their result rows read, past the zero-row progress reads."""
     paths = {
@@ -180,7 +193,10 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
             restart = await http.post(f"http://{host}:{port}/controls/restart")
         await asyncio.wait_for(run, _WAIT_SECONDS)
 
-    assert api.logins > 0
+    assert f"p2pwatch version {version('p2pwatch')}" in caplog.messages
+    assert "catalogue re-evaluated: 0 files, 0 rows written" in caplog.messages
+    assert "🟢 node online (download on)" in caplog.messages
+    assert api.logins == 2  # one session searches and reads the status, the other downloads
     assert len(api.added_links) == 1 and _HASH in api.added_links[0].lower()
     catalog = open_catalog(tmp_path / "catalog.db")
     assert observation_node_ids(catalog) == {"wired-node"}
@@ -193,7 +209,7 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
 
 @pytest.mark.asyncio
 async def test_observer_mode_starts_one_ed2k_search_of_two_keywords_until_a_sigterm(
-    tmp_path: Path, matcher_config: MatcherConfig
+    tmp_path: Path, matcher_config: MatcherConfig, caplog: pytest.LogCaptureFixture
 ) -> None:
     # Both keywords' ed2k searches share one client, which spaces their starts by a minute: two
     # clients would start both at once and break the network's pacing.
@@ -201,14 +217,77 @@ async def test_observer_mode_starts_one_ed2k_search_of_two_keywords_until_a_sigt
     api = FakeAmuleApi()
     default_sigterm = signal.getsignal(signal.SIGTERM)
 
-    with FakeAmuleApiServer(api) as server:
+    with FakeAmuleApiServer(api) as server, caplog.at_level(logging.INFO):
         run = asyncio.create_task(_app(crawler_config, matcher_config, server).run())
         # The first ed2k search and both Kad ones, each read to its end.
         assert await asyncio.to_thread(
             server.wait_for, lambda seen: _searches_read(seen) >= 3, _WAIT_SECONDS
         )
-        assert signal.getsignal(signal.SIGTERM) is not default_sigterm
-        signal.raise_signal(signal.SIGTERM)
+        _send_sigterm(default_sigterm)
         await asyncio.wait_for(run, _WAIT_SECONDS)
 
     assert _search_types(api).count("global") == 1
+    assert "🟢 node online (download off)" in caplog.messages
+    assert api.logins == 1  # no download session
+    assert not any(map(_WEBUI_SERVING.match, caplog.messages))
+
+
+@pytest.mark.asyncio
+async def test_the_shutdown_deadline_cuts_a_logout_amuled_never_answers(
+    tmp_path: Path, matcher_config: MatcherConfig
+) -> None:
+    crawler_config = _crawler_config(tmp_path, keywords=("keroro",), shutdown_deadline_seconds=0.2)
+    api = FakeAmuleApi()
+    released = threading.Event()
+
+    def stalled_logout(request: httpx.Request) -> httpx.Response:
+        released.wait(_WAIT_SECONDS)
+        return httpx.Response(204)
+
+    api.overrides[("POST", "/api/v1/auth/logout")] = stalled_logout
+    default_sigterm = signal.getsignal(signal.SIGTERM)
+    loop = asyncio.get_running_loop()
+
+    with FakeAmuleApiServer(api) as server:
+        run = asyncio.create_task(_app(crawler_config, matcher_config, server).run())
+        assert await asyncio.to_thread(
+            server.wait_for, lambda seen: _searches_read(seen) >= 1, _WAIT_SECONDS
+        )
+        _send_sigterm(default_sigterm)
+        stopped_at = loop.time()
+        await asyncio.wait({run}, timeout=2 * _WAIT_SECONDS)
+        elapsed = loop.time() - stopped_at
+        released.set()
+
+    # Unbounded, the close would wait out the client's own 10 s timeout, then return.
+    assert isinstance(run.exception(), TimeoutError)
+    assert elapsed < _WAIT_SECONDS / 2
+
+
+@pytest.mark.asyncio
+async def test_a_backoff_the_previous_run_saved_holds_the_ed2k_search(
+    tmp_path: Path, matcher_config: MatcherConfig
+) -> None:
+    local = open_local(tmp_path / "local.db")
+    SqliteBackoffStateRepository(local).save_backoff_states(
+        {
+            BackoffKey(AMULE_CLIENT_NAME, "ed2k"): BackoffState(
+                1, SystemWallClock().now(), timedelta(hours=1)
+            )
+        }
+    )
+    local.close()
+    crawler_config = _crawler_config(tmp_path, keywords=("keroro",))
+    api = FakeAmuleApi()
+    default_sigterm = signal.getsignal(signal.SIGTERM)
+
+    with FakeAmuleApiServer(api) as server:
+        run = asyncio.create_task(_app(crawler_config, matcher_config, server).run())
+        # Unheld, the ed2k start goes out with Kad's, well before Kad's search is read to its end.
+        assert await asyncio.to_thread(
+            server.wait_for, lambda seen: _searches_read(seen) >= 1, _WAIT_SECONDS
+        )
+        _send_sigterm(default_sigterm)
+        await asyncio.wait_for(run, _WAIT_SECONDS)
+
+    assert _search_types(api) == ["kad"]

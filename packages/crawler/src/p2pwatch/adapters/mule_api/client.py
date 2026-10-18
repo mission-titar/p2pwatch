@@ -1,5 +1,5 @@
-"""Drives ``amuled`` over amuleapi, satisfying ``MuleClient``, ``DownloadClient`` and
-``SourceClient``.
+"""Drives ``amuled`` over amuleapi, satisfying ``SearchClient``, ``StatusClient``,
+``DownloadClient`` and ``SourceClient``.
 
 ``search()`` waits for its own search and paces its starts by the networks' rules. Beyond pacing,
 no retry but the single re-login a ``401`` mandates and Kad's "already on search list": the

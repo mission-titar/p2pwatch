@@ -52,17 +52,6 @@ class SearchConfig:
     backoff: BackoffConfig
 
 
-@dataclass(frozen=True)
-class AmuleEndpoint:
-    """An ``amuled`` daemon reachable through ``amuleapi``. ``client_name`` is the client's label
-    (logging, the backoff's key)."""
-
-    client_name: str
-    host: str
-    port: int
-    password: str
-
-
 AMULE_CLIENT_NAME = "amuled"
 
 

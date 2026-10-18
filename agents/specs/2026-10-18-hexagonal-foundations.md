@@ -234,7 +234,7 @@ them anyway.
 
 ## Acceptance
 
-1. **No factory is left** (lot 1a, block 60): `git grep -nE 'client_factory|webui_server_factory|metrics_server|\bMuleClient\b|FakeMuleClient|DownloadSourceClient|\bWebuiServer\b' -- packages/` prints nothing. On `main` it prints the composition, `ports/mule_client.py`, the client's docstring, the fakes and the tests.
+1. **No factory is left** (lot 1a, block 60): `git grep -nE 'client_factory|webui_server_factory|\bmetrics_server\b|\bMuleClient\b|FakeMuleClient|DownloadSourceClient|\bWebuiServer\b' -- packages/` prints nothing. (Corrected 2026-10-18: `metrics_server` takes `\b`, since block 50's `start_metrics_server` is not the seam.) On `main` it prints the composition, `ports/mule_client.py`, the client's docstring, the fakes and the tests.
 2. **The composition holds no logic** (lot 1a, block 60): `CrawlerApp` has no `try`, no `except`, no
    `suppress`, no conditional expression, no `and`/`or`, and no `if` but the two kept. On `main` it has four `try`
    and six `if`.

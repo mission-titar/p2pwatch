@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.config.crawler_config import AmuleEndpoint
 from p2pwatch.composition import __main__ as entry
 from p2pwatch.composition.app import CrawlerApp
 from p2pwatch.domain.invalid_config import InvalidConfigError
@@ -67,7 +66,7 @@ def test_build_app_assembles_a_crawler_app(tmp_path: Path, monkeypatch: pytest.M
     monkeypatch.setenv("AMULE_API_PASSWORD", "s3cr3t")
     app = entry.build_crawler_app(_args(_write_config(tmp_path)))
     assert isinstance(app, CrawlerApp)
-    assert app._amule_endpoint == AmuleEndpoint("amuled", "ed2k", 4711, "s3cr3t")
+    assert app._amule_api_address == ("ed2k", 4711)
 
 
 def test_build_app_computes_policy_fingerprint_from_matcher_and_targets_bytes(

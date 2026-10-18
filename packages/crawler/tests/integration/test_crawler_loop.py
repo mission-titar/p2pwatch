@@ -2,11 +2,14 @@
 
 Dedicated run: uv run pytest -m orchestration_integration --no-cov
 Validates that a real ``CrawlerApp`` (real ``AmuleApiClient`` + real SQLite DBs) runs
-ONE full search task against the provided ``amuled`` then stops CLEANLY. The results may be
-empty (no guaranteed eD2k network access): it is the LOOP (startup, search, cataloging,
-bounded shutdown) that is validated, not the richness of the results.
+ONE full search task against the provided ``amuled`` then stops CLEANLY on a SIGTERM. The
+results may be empty (no guaranteed eD2k network access): it is the LOOP (startup, search,
+cataloging, bounded shutdown) that is validated, not the richness of the results.
 """
 
+import asyncio
+import logging
+import signal
 from pathlib import Path
 
 import pytest
@@ -14,7 +17,6 @@ import pytest
 from catalog_matching.models import TargetSegment
 from catalog_matching.validation import parse_matcher_config
 from p2pwatch.adapters.config.crawler_config import (
-    AmuleEndpoint,
     BackoffConfig,
     CrawlerConfig,
     SearchConfig,
@@ -26,9 +28,6 @@ from p2pwatch.adapters.rng_random import SeededRng
 from p2pwatch.adapters.wake_hub_asyncio import AsyncioWakeHub
 from p2pwatch.adapters.wall_clock_system import SystemWallClock
 from p2pwatch.composition.app import CrawlerApp
-from p2pwatch.ports.client_status import ClientStatus
-from p2pwatch.ports.clock import MonotonicClock
-from p2pwatch.ports.search_client import SearchAnswer
 from tests.integration.conftest import ApiEndpoint
 
 pytestmark = pytest.mark.orchestration_integration
@@ -43,51 +42,29 @@ _TARGETS = (
         title="Les demoiselles cambrioleuses",
     ),
 )
+_SEARCH_WORKER_LOGGER = "p2pwatch.application.search_worker"
 
 
-class _ShutdownAfterFirstSearchClient:
-    """Wraps a real client and shuts down when a channel's task comes back for its next search.
+class _SearchRecordedHandler(logging.Handler):
+    """Sets ``recorded`` on the line a search logs once it returned and was recorded.
 
     A refused search does not count: a daemon off eD2k refuses every ed2k search at once, and
-    only a search that returned, then was recorded, proves a whole task iteration ran."""
+    logs a warning instead."""
 
-    def __init__(self, inner: object, app_holder: dict[str, CrawlerApp]) -> None:
-        self._inner = inner
-        self._app_holder = app_holder
-        self.returned: set[str] = set()
+    def __init__(self) -> None:
+        super().__init__()
+        self.recorded = asyncio.Event()
 
-    channels: tuple[str, ...] = ("ed2k", "kad")
-
-    async def connect(self) -> None:
-        await self._inner.connect()  # type: ignore[attr-defined]
-
-    async def open(self) -> None:
-        await self._inner.open()  # type: ignore[attr-defined]
-
-    async def close(self) -> None:
-        await self._inner.close()  # type: ignore[attr-defined]
-
-    async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
-        app = self._app_holder["app"]
-        if channel in self.returned and not app._shutdown.is_set():
-            app._shutdown.set()
-        answer = await self._inner.search(keyword, channel, budget_seconds)  # type: ignore[attr-defined]
-        self.returned.add(channel)
-        return answer  # type: ignore[no-any-return]
-
-    async def status(self) -> ClientStatus:
-        return await self._inner.status()  # type: ignore[attr-defined,no-any-return]
+    def emit(self, record: logging.LogRecord) -> None:
+        if "verdict(s) changed" in record.getMessage():
+            self.recorded.set()
 
 
 @pytest.mark.asyncio
 async def test_real_loop_runs_one_search_and_stops(amuled: ApiEndpoint, tmp_path: Path) -> None:
-    import asyncio
-
-    from p2pwatch.adapters.mule_api.client import AmuleApiClient
-
     matcher_config = parse_matcher_config(load_yaml(_MATCHER))
     crawler_config = CrawlerConfig(
-        # One keyword: a Kad search lasts 45 s at most, so a task comes back within a minute.
+        # One keyword: a Kad search lasts 45 s at most, so one returns within a minute.
         search=SearchConfig(
             keywords=("titar",),
             backoff=BackoffConfig(base_seconds=2.0, cap_seconds=60.0, factor=2.0, jitter_ratio=0.3),
@@ -99,22 +76,6 @@ async def test_real_loop_runs_one_search_and_stops(amuled: ApiEndpoint, tmp_path
         node_id=None,
         webui=WebuiConfig(enabled=False),
     )
-    app_holder: dict[str, CrawlerApp] = {}
-    clients: list[_ShutdownAfterFirstSearchClient] = []
-
-    def factory(
-        endpoint: AmuleEndpoint, monotonic_clock: MonotonicClock
-    ) -> _ShutdownAfterFirstSearchClient:
-        inner = AmuleApiClient(
-            endpoint.host,
-            endpoint.port,
-            endpoint.password,
-            timeout_seconds=30.0,
-            monotonic_clock=monotonic_clock,
-        )
-        clients.append(_ShutdownAfterFirstSearchClient(inner, app_holder))
-        return clients[-1]
-
     app = CrawlerApp(
         crawler_config=crawler_config,
         targets=_TARGETS,
@@ -126,11 +87,22 @@ async def test_real_loop_runs_one_search_and_stops(amuled: ApiEndpoint, tmp_path
         policy_fingerprint="test-policy-fingerprint",
         webui_address=("127.0.0.1", 0),
         amule_api_address=(amuled.host, amuled.port),
-        client_factory=factory,
     )
-    app_holder["app"] = app
-    await asyncio.wait_for(app.run(), timeout=180.0)
+    handler = _SearchRecordedHandler()
+    search_worker_logger = logging.getLogger(_SEARCH_WORKER_LOGGER)
+    search_worker_logger.addHandler(handler)
+    level = search_worker_logger.level
+    search_worker_logger.setLevel(logging.INFO)
+    default_sigterm = signal.getsignal(signal.SIGTERM)
+    try:
+        run = asyncio.create_task(app.run())
+        # Without this wait, the test passed before any search even returned.
+        await asyncio.wait_for(handler.recorded.wait(), timeout=150.0)
+        assert signal.getsignal(signal.SIGTERM) is not default_sigterm
+        signal.raise_signal(signal.SIGTERM)
+        await asyncio.wait_for(run, timeout=30.0)
+    finally:
+        search_worker_logger.setLevel(level)
+        search_worker_logger.removeHandler(handler)
     assert (tmp_path / "catalog.db").exists()
     assert (tmp_path / "local.db").exists()
-    # Without this, the test passed before any search even returned.
-    assert clients[0].returned
