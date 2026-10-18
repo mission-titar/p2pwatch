@@ -51,6 +51,8 @@ from p2pwatch_testing.catalog_rows import (
     source_id,
 )
 
+pytestmark = pytest.mark.usefixtures("close_test_connections")
+
 # ---------------------------------------------------------------------------
 # Parsed-config helpers (since P4a build_app takes already-parsed config)
 # ---------------------------------------------------------------------------

@@ -14,6 +14,8 @@ from starlette.routing import Route
 
 from p2pwatch.webui.composition.uvicorn_server_thread import UvicornServerThread
 
+pytestmark = pytest.mark.usefixtures("close_test_connections")
+
 _LOGGER = "p2pwatch.webui.composition.uvicorn_server_thread"
 
 

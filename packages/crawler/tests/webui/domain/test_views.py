@@ -1,4 +1,8 @@
+import pytest
+
 from p2pwatch.webui.domain.views import ConsoleResult, ConsoleRow, DbOption
+
+pytestmark = pytest.mark.usefixtures("close_test_connections")
 
 
 def test_console_row_holds_cells() -> None:

@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
 
+import pytest
+
 from p2pwatch.webui.domain.format import (
     average_rate,
     human_size,
@@ -10,6 +12,8 @@ from p2pwatch.webui.domain.format import (
     short_timestamp,
     utc_timestamp,
 )
+
+pytestmark = pytest.mark.usefixtures("close_test_connections")
 
 # Tuesday 2026-10-13 20:00:00 UTC, in microseconds since the Unix epoch.
 TUESDAY_8PM = 1_791_921_600_000_000
