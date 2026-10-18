@@ -443,7 +443,7 @@ _INCOMING_DIR = "/downloads/incoming"
 _SEEDED_TARGET = "062A"
 _SEEDED_SIZE = 65536
 
-# Read from the core, at the address fixed in code (AMULE_API_HOST).
+# Read from the core, at the address fixed in code (`_AMULE_API_ADDRESS`).
 _API_HOST, _API_PORT = _AMULE, 4711
 
 _SHARED_HASHES = f"""

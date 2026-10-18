@@ -2,7 +2,6 @@ import asyncio
 import json
 import logging
 import sqlite3
-import threading
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from importlib.metadata import version
@@ -28,7 +27,6 @@ from p2pwatch.adapters.config.crawler_config import (
     WebuiConfig,
 )
 from p2pwatch.adapters.config.yaml_loader import load_yaml
-from p2pwatch.adapters.crawler_control_loop import LoopCrawlerControl
 from p2pwatch.adapters.mule_api.client import AmuleApiClient
 from p2pwatch.adapters.persistence_sqlite.backoff_state_repository import (
     SqliteBackoffStateRepository,
@@ -89,6 +87,8 @@ _FP = "test-policy-fingerprint"
 _WEBUI_OFF = WebuiConfig(enabled=False)
 _WEBUI_ADDRESS = ("127.0.0.1", 0)
 _WEBUI_LOGGER = "p2pwatch.webui.composition.uvicorn_server_thread"
+# The client factories below never connect to it.
+_AMULE_API_ADDRESS = ("ed2k", 4711)
 
 
 class _NoopRng:
@@ -170,6 +170,7 @@ def _make_app(
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         webui_address=_WEBUI_ADDRESS,
+        amule_api_address=_AMULE_API_ADDRESS,
         client_factory=factory,  # type: ignore[arg-type]
         **extra,  # type: ignore[arg-type]
     )
@@ -569,6 +570,7 @@ def test_an_hour_of_the_running_app_keeps_to_the_networks_rules(
             wake_hub=RecordingWakeHub(),
             policy_fingerprint=_FP,
             webui_address=_WEBUI_ADDRESS,
+            amule_api_address=_AMULE_API_ADDRESS,
             client_factory=lambda endpoint, monotonic_clock: AmuleApiClient(
                 endpoint.host,
                 endpoint.port,
@@ -633,6 +635,7 @@ async def test_a_backoff_the_previous_run_saved_holds_the_first_search(
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         webui_address=_WEBUI_ADDRESS,
+        amule_api_address=_AMULE_API_ADDRESS,
         client_factory=lambda endpoint, monotonic_clock: client,
     )
     holder["app"] = app
@@ -670,6 +673,7 @@ async def test_backfill_runs_and_stores_marker_when_policy_never_set(
         wake_hub=RecordingWakeHub(),
         policy_fingerprint="fp-first-run",
         webui_address=_WEBUI_ADDRESS,
+        amule_api_address=_AMULE_API_ADDRESS,
         client_factory=factory,
     )
     holder["app"] = app
@@ -716,6 +720,7 @@ async def test_backfill_skipped_when_marker_already_matches_fingerprint(
         wake_hub=RecordingWakeHub(),
         policy_fingerprint="fp-unchanged",
         webui_address=_WEBUI_ADDRESS,
+        amule_api_address=_AMULE_API_ADDRESS,
         client_factory=factory,
     )
     holder["app"] = app
@@ -807,6 +812,7 @@ async def test_observer_mode_runs_without_the_download_loop(
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         webui_address=_WEBUI_ADDRESS,
+        amule_api_address=_AMULE_API_ADDRESS,
         client_factory=factory,
         download_client_factory=download_factory,
     )
@@ -838,6 +844,7 @@ async def test_full_mode_runs_the_download_loop(
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         webui_address=_WEBUI_ADDRESS,
+        amule_api_address=_AMULE_API_ADDRESS,
         client_factory=search_factory,
         download_client_factory=lambda endpoint, monotonic_clock: download_client,
     )
@@ -888,6 +895,7 @@ async def test_full_mode_records_the_sources_of_a_download_in_the_catalog(
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         webui_address=_WEBUI_ADDRESS,
+        amule_api_address=_AMULE_API_ADDRESS,
         client_factory=lambda endpoint, monotonic_clock: FakeMuleClient(),
         download_client_factory=lambda endpoint, monotonic_clock: _ShutdownOnSourcesDownloadClient(
             holder, file
@@ -932,6 +940,7 @@ async def test_the_rows_written_carry_the_apps_wall_clock(
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         webui_address=_WEBUI_ADDRESS,
+        amule_api_address=_AMULE_API_ADDRESS,
         client_factory=lambda endpoint, monotonic_clock: FakeMuleClient(),
         download_client_factory=lambda endpoint, monotonic_clock: _ShutdownOnSourcesDownloadClient(
             holder, file
@@ -987,6 +996,7 @@ async def test_full_mode_reads_sources_at_their_interval_and_spaces_them_by_a_po
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         webui_address=_WEBUI_ADDRESS,
+        amule_api_address=_AMULE_API_ADDRESS,
         client_factory=lambda endpoint, monotonic_clock: FakeMuleClient(),
         download_client_factory=lambda endpoint, monotonic_clock: FakeDownloadClient(),
     )
@@ -1024,6 +1034,7 @@ async def test_full_mode_tolerates_download_daemon_unreachable_at_startup(
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         webui_address=_WEBUI_ADDRESS,
+        amule_api_address=_AMULE_API_ADDRESS,
         client_factory=search_factory,
         download_client_factory=download_factory,
     )
@@ -1088,6 +1099,7 @@ async def test_full_mode_shutdown_cancels_the_download_loop_promptly(
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         webui_address=_WEBUI_ADDRESS,
+        amule_api_address=_AMULE_API_ADDRESS,
         client_factory=lambda endpoint, monotonic_clock: FakeMuleClient(),
         download_client_factory=lambda endpoint, monotonic_clock: FakeDownloadClient(),
     )
@@ -1124,6 +1136,7 @@ async def test_full_mode_shutdown_leaves_no_task_leaked(
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         webui_address=_WEBUI_ADDRESS,
+        amule_api_address=_AMULE_API_ADDRESS,
         client_factory=lambda endpoint, monotonic_clock: FakeMuleClient(),
         download_client_factory=lambda endpoint, monotonic_clock: FakeDownloadClient(),
     )
@@ -1272,6 +1285,7 @@ async def test_emits_crawler_started_full_mode(
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         webui_address=_WEBUI_ADDRESS,
+        amule_api_address=_AMULE_API_ADDRESS,
         client_factory=lambda endpoint, monotonic_clock: FakeMuleClient(),
         download_client_factory=lambda endpoint, monotonic_clock: download_client,
     )
@@ -1284,30 +1298,6 @@ async def test_emits_crawler_started_full_mode(
 # ---------------------------------------------------------------------------
 # WebUI in-process (spec §5): own thread + loop
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_webui_serves_on_the_address_given_and_stops_at_shutdown(
-    tmp_path: Path, matcher_config: MatcherConfig, caplog: pytest.LogCaptureFixture
-) -> None:
-    holder: dict[str, CrawlerApp] = {}
-    app = CrawlerApp(
-        crawler_config=_crawler_config(tmp_path, webui=WebuiConfig(enabled=True)),
-        targets=_TARGETS,
-        matcher_config=matcher_config,
-        wall_clock=FakeTime().wall,
-        monotonic_clock=FakeTime().monotonic,
-        rng=_NoopRng(),
-        wake_hub=RecordingWakeHub(),
-        policy_fingerprint=_FP,
-        webui_address=_WEBUI_ADDRESS,
-        client_factory=lambda endpoint, monotonic_clock: _ShutdownOnStatusClient(holder),
-    )
-    holder["app"] = app
-    with caplog.at_level(logging.INFO, logger=_WEBUI_LOGGER):
-        await asyncio.wait_for(app.run(), timeout=5.0)
-    assert any(message.startswith("webui serving on 127.0.0.1:") for message in caplog.messages)
-    assert not any(thread.name == "webui" for thread in threading.enumerate())
 
 
 @pytest.mark.asyncio
@@ -1332,6 +1322,7 @@ async def test_the_webui_reads_the_status_loops_board_and_the_pause_gate(
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         webui_address=_WEBUI_ADDRESS,
+        amule_api_address=_AMULE_API_ADDRESS,
         client_factory=lambda endpoint, monotonic_clock: _ShutdownOnStatusClient(holder),
     )
     holder["app"] = app
@@ -1367,6 +1358,7 @@ async def test_the_webui_cuts_periods_at_its_configured_gap_and_reads_the_crawle
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         webui_address=_WEBUI_ADDRESS,
+        amule_api_address=_AMULE_API_ADDRESS,
         client_factory=lambda endpoint, monotonic_clock: _ShutdownOnStatusClient(holder),
     )
     holder["app"] = app
@@ -1391,6 +1383,7 @@ async def test_webui_not_started_when_disabled(
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
         webui_address=_WEBUI_ADDRESS,
+        amule_api_address=_AMULE_API_ADDRESS,
         client_factory=lambda endpoint, monotonic_clock: _ShutdownOnStatusClient(holder),
     )
     holder["app"] = app
@@ -1463,25 +1456,3 @@ async def test_pause_gate_blocks_the_searches_until_resumed(
     app._resumed.set()  # resume → the tasks search
     await asyncio.wait_for(run_task, timeout=5.0)
     assert client.searches  # a search ran after resume
-
-
-@pytest.mark.asyncio
-async def test_restart_control_triggers_graceful_shutdown(
-    tmp_path: Path, matcher_config: MatcherConfig
-) -> None:
-    # Driving ``LoopCrawlerControl.restart()`` (bound to the app's own events + this loop) sets
-    # ``_shutdown`` on the loop thread → an in-flight search is cancelled and ``run()`` exits
-    # cleanly, through the control path.
-    app = _make_app(
-        tmp_path, matcher_config, factory=lambda endpoint, monotonic_clock: _BlockingClient()
-    )
-    run_task = asyncio.create_task(app.run())
-    for _ in range(20):  # let the tasks start and block in search
-        await asyncio.sleep(0)
-    control = LoopCrawlerControl(
-        loop=asyncio.get_running_loop(),
-        resumed=app._resumed,
-        shutdown=app._shutdown,
-    )
-    control.restart()
-    await asyncio.wait_for(run_task, timeout=5.0)

@@ -6,7 +6,6 @@ from typing import Any
 import pytest
 
 from p2pwatch.adapters.config.crawler_config import (
-    AmuleEndpoint,
     BackoffConfig,
     ConfigError,
     CrawlerConfig,
@@ -264,13 +263,6 @@ def test_node_id_override_is_kept() -> None:
     assert parse_crawler_config(raw, _env()).node_id == "fixed-node"
 
 
-def test_endpoint_is_derived_from_code_constants_and_the_password() -> None:
-    config = parse_crawler_config(_minimal_raw(), _env())
-    assert config.amule_endpoint == AmuleEndpoint(
-        client_name="amuled", host="ed2k", port=4711, password="secret"
-    )
-
-
 def test_missing_amule_api_password_is_fatal() -> None:
     raw = _minimal_raw()
     del raw["amule_api_password"]
@@ -300,8 +292,7 @@ def test_leftover_pool_keys_are_ignored() -> None:
     raw = _minimal_raw() | {
         "amules": [{"name": "amule-1", "host": "amuled", "port": 4712, "password": "x"}],
     }
-    config = parse_crawler_config(raw, _env())
-    assert config.amule_endpoint.host == "ed2k"
+    assert parse_crawler_config(raw, _env()).amule_api_password == "secret"
 
 
 def test_missing_db_path_is_fatal() -> None:
@@ -327,7 +318,6 @@ def test_password_interpolated_from_env() -> None:
     raw = _minimal_raw() | {"amule_api_password": "${AMULE_API_PASSWORD}"}
     cfg = parse_crawler_config(raw, {"AMULE_API_PASSWORD": "s3cr3t"})
     assert cfg.amule_api_password == "s3cr3t"
-    assert cfg.amule_endpoint.password == "s3cr3t"
 
 
 def test_missing_env_var_raises() -> None:

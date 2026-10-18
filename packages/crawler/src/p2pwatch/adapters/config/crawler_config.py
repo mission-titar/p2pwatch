@@ -56,9 +56,6 @@ class AmuleEndpoint:
     password: str
 
 
-# aMule's service in the direct variant, a network alias of its VPN sidecar in the vpn one.
-AMULE_API_HOST = "ed2k"
-AMULE_API_PORT = 4711
 AMULE_CLIENT_NAME = "amuled"
 
 
@@ -171,19 +168,6 @@ class CrawlerConfig:
     observability: ObservabilityConfig | None = None
     download: DownloadConfig | None = None
     webui: WebuiConfig = _DEFAULT_WEBUI
-
-    @property
-    def amule_endpoint(self) -> AmuleEndpoint:
-        """The single daemon's amuleapi endpoint: code constants + the configured password.
-
-        ONE derivation point for both sessions (search, download).
-        """
-        return AmuleEndpoint(
-            client_name=AMULE_CLIENT_NAME,
-            host=AMULE_API_HOST,
-            port=AMULE_API_PORT,
-            password=self.amule_api_password,
-        )
 
 
 def _require_mapping(value: Any, error_label: str) -> dict[str, Any]:

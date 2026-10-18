@@ -36,6 +36,8 @@ from p2pwatch.domain.policy_fingerprint import policy_fingerprint
 # 0.0.0.0: Docker cannot route a published port to the container's loopback. 8080, not 80: an
 # unprivileged process cannot bind a port below 1024 under ``cap_drop: ALL``.
 _WEBUI_ADDRESS = ("0.0.0.0", 8080)
+# aMule's service in the direct variant, a network alias of its VPN sidecar in the vpn one.
+_AMULE_API_ADDRESS = ("ed2k", 4711)
 
 
 def _add_config_options(parser: argparse.ArgumentParser) -> None:
@@ -88,6 +90,7 @@ def build_crawler_app(args: argparse.Namespace) -> CrawlerApp:
         wake_hub=AsyncioWakeHub(),
         policy_fingerprint=fingerprint,
         webui_address=_WEBUI_ADDRESS,
+        amule_api_address=_AMULE_API_ADDRESS,
     )
 
 
