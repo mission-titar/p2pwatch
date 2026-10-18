@@ -21,7 +21,8 @@
 ## Two lots
 
 The work is two lots, each with its own stack and holistic review: **lot 1a** (the composition and the command
-line, 10 blocks) and **lot 1b** (the moves, the entry points and the check, 9 blocks). One stack of 19 pull
+line, 10 blocks) and **lot 1b** (the moves, the entry points and the check, 14 blocks once re-measured; Corrected
+2026-10-19: 9 before). One stack of 19 pull
 requests would be too long to review in one sitting.
 
 ## Lot 1a: the composition and the command line
@@ -173,22 +174,30 @@ that removes it.
 | Today | Goes to | Temporary exception, removed by |
 |---|---|---|
 | `ports/*.py` | `ports/driven/`; `crawler_control.py` to `ports/driving/` | the webui imports driven ports: lot 2 |
-| `adapters/**` | `adapters/driven/` | |
-| `webui/` (pages, views, templates) | `adapters/driving/webui/` | the readers import the views: lot 2 |
-| the webui's three SQLite readers | `adapters/driven/persistence_sqlite/` | |
+| `adapters/**` but `adapters/driving/` (Corrected 2026-10-19: lot 1a's driving adapters stay) | `adapters/driven/` | |
+| `webui/` (pages, views, templates, `format.py`, `interval.py`) (Corrected 2026-10-19: the last two named) | `adapters/driving/webui/` | the readers import the views, the Starlette module builds the readers: lot 2 |
+| `webui/domain/coverage.py` and `CoverageStatus` (Corrected 2026-10-19: row added) | `domain/coverage.py`: a business rule, which may not import the views it would leave behind | |
+| the webui's three SQLite readers | `adapters/driven/persistence_sqlite/`, each its own tach module, since one module would form a cycle with the webui (Corrected 2026-10-19) | |
 | `webui/adapters/matching_read.py` | `application/` | the webui imports it directly: lot 2 |
 | `webui/composition/uvicorn_server_thread.py` (Corrected 2026-10-18: row added) | `adapters/driving/webui/` | |
 | `catalog_matching/*` | `catalog_matching/domain/` | |
-| `p2pwatch_amule` | `boot/conf.py` to `domain/`, the rest to `adapters/` | adapters importing adapters: lot 3 |
-| `vex_checks` | descriptors, registry and violations to `domain/`, the rest to `adapters/` | about 10: lot 3 |
+| `p2pwatch_amule` | `boot/conf.py` to `domain/`; `boot`, `port_sync` and `settings` to `adapters/driving/`, `gluetun` to `adapters/driven/` (Corrected 2026-10-19: sides named) | three, adapters importing adapters: lot 3 |
+| `vex_checks` | descriptors, registry and violations to `domain/`; the four `check_*` to `adapters/driving/`, `repo`, `vex_io`, `grype`, `sbom`, `sarif` and `source_scan` to `adapters/driven/` (Corrected 2026-10-19: sides named) | 13: lot 3 |
 | `template_checks` | `adapters/driving/` | |
-| `coverage_checks` | `function_bodies` to `domain/`, the rest to `adapters/` | one: lot 3 |
-| `amule_bump` | `dockerfile`, `body` and `BumpError` to `domain/`, `release` to `application/`; `github.py` split into a port, a constant in the domain and an HTTP adapter | lot 3 |
+| `coverage_checks` | `function_bodies` to `domain/`, `unit_coverage` to `adapters/driving/`, `own_tests` to `adapters/driven/` (Corrected 2026-10-19: sides named) | one: lot 3 |
+| `amule_bump` | `dockerfile` and `BumpError` to `domain/`, `release` and `body` to `application/` (Corrected 2026-10-19: `body` calls the `Repo` port, and tach refuses the domain importing a port); `github.py` split into a port, a constant in the domain and an HTTP adapter; the bump logic of `__main__.py` to `adapters/driving/bump.py`, moved with `git mv` so git pairs the rename | three: lot 3 |
+| the webui's fixtures (Corrected 2026-10-19: row added) | `p2pwatch_testing/adapters/persistence_sqlite/migrated_databases.py` | |
 | `p2pwatch_testing` | unchanged, only its imports are updated | |
 | `p2pwatch_testing/merge/helpers.py` (Corrected 2026-10-18: row added) | `p2pwatch_testing/adapters/persistence_sqlite/`, beside `older_catalog.py` | |
 
 The webui's shared test fixtures move to `p2pwatch_testing`, and each moved test module asks for them explicitly,
 so they wrap exactly the tests they wrap today.
+
+`ports/client_status.py` moves to `ports/driven/` whole, though lot 2 makes its `StatusReadings` a driving port:
+that class moves again then. (Corrected 2026-10-19: line added.)
+
+A move block that moves an entry point (`boot`, `port_sync`, the tooling's) rewrites its callers to the new module
+path, and the entry-point block that follows rewrites them to the subcommand. (Corrected 2026-10-19: line added.)
 
 ### Every package is run through a subcommand
 
@@ -201,8 +210,11 @@ so they wrap exactly the tests they wrap today.
 | `coverage_checks` | `unit-coverage` |
 | `amule_bump` | `bump` |
 
-Each package parses its commands in its own `adapters/driving/cli.py`, and its root `__main__.py` only hands over
-to it. The Docker entrypoint, the s6 script, the workflows and the poe tasks follow.
+Each package parses its commands in its own `adapters/driving/cli/argparse_command_line.py`, as `p2pwatch` does,
+and its root `__main__.py` only hands over to it. (Corrected 2026-10-19: the name follows lot 1a's and the adapter
+naming rule, not `cli.py`.) The command line owns every option, as `p2pwatch`'s does, and calls the module it runs
+with typed arguments. (Corrected 2026-10-19: line added.) The Docker entrypoint, the s6 script, the workflows and
+the poe tasks follow.
 
 ### The check
 
@@ -219,24 +231,34 @@ template paths, test-config keys, `parents[N]` paths, `prog=` strings, the Docke
 scripts, the workflows' commands, and module paths in `docs/`.
 
 Logger names follow their module, so an operator filtering logs on a module's name sees it change. Lot 2 replaces
-them anyway.
+them anyway. Port-sync's logger, `p2pwatch_amule.port_sync`, is its only output: its new name goes in
+`docs/migration-4x.md`. (Corrected 2026-10-19: line added.)
 
 ### Blocks
 
 | # | Branch | Holds | Lines, files |
 |---|---|---|---|
-| 10 | `refactor/matching-domain-ring` | `catalog_matching` into `domain/` | 115, 65 |
-| 20 | `refactor/crawler-ports-adapters-rings` | the crawler's ports and adapters | 450, 180 |
-| 30 | `refactor/webui-rings` | the webui, its fixtures, its template paths | 300, 45 |
-| 40 | `refactor/amule-rings` | `p2pwatch_amule` | 60, 15 |
-| 50 | `feat/amule-entry-points` | its subcommands, the entrypoint and s6 scripts | 250, 10 |
-| 60 | `refactor/tooling-rings` | the four tooling packages, `github.py` split | 200, 45 |
-| 70 | `feat/tooling-entry-points` | their subcommands, the workflows, poe | 450, 19 |
-| 80 | `feat/architecture-gate` | tach, ast-grep, `AGENTS.md`'s architecture rules | 450, 15 |
+(Corrected 2026-10-19: re-measured on a dry run of the whole lot on `013252c`; blocks 30, 60, 70 and 80 split.)
+
+| # | Branch | Holds | Lines, files |
+|---|---|---|---|
+| 10 | `refactor/matching-domain-ring` | `catalog_matching` into `domain/` | 123, 64 |
+| 20 | `refactor/crawler-ports-adapters-rings` | the crawler's ports and adapters | 350, 186 |
+| 25 | `test/webui-fixtures-shared` | the webui's fixtures to `p2pwatch_testing`, each test module asking for them, in place | 43, 14 |
+| 30 | `refactor/webui-rings` | the webui's moves, its template paths | 154, 51 |
+| 40 | `refactor/amule-rings` | `p2pwatch_amule` | 26, 24 |
+| 50 | `feat/amule-entry-points` | its subcommands, the entrypoint and s6 scripts | 116, 16 |
+| 55 | `refactor/amule-bump-repo-port` | `github.py` split, `BumpError` out of `__init__.py`, in place | 42, 14 |
+| 60 | `refactor/tooling-rings` | the four tooling packages' moves | 114, 80 |
+| 70 | `feat/vex-checks-entry-points` | `vex_checks`' subcommands, its workflows and poe lines | 200, 11 |
+| 73 | `feat/template-coverage-entry-points` | `template_checks`' and `coverage_checks`' subcommands, their poe lines | 264, 14 |
+| 77 | `feat/amule-bump-entry-point` | `amule_bump`'s subcommand, its workflow and doc | 133, 7 |
+| 80 | `feat/architecture-gate` | tach over the `p2pwatch` hexagon, `architecture-check` in the gate | 340, 2 |
+| 85 | `feat/architecture-gate-all-hexagons` | tach over the five other hexagons, ast-grep, `AGENTS.md`'s architecture rules | 430, 13 |
 | 90 | `docs/hexagonal-rings-wrap` | closing block: backlog, handoff | |
 
-- Blocks 10 to 40 and 60 pass 20 files: they are mechanical moves (`git mv` plus an import rewrite), which take the
-  size exemption.
+- Blocks 10, 20, 30, 40 and 60 pass 20 files: they are mechanical moves (`git mv` plus an import rewrite), which
+  take the size exemption.
 - Each package's moves come before its subcommands, so the new command-line adapter is born in its ring.
 
 ## Acceptance
@@ -318,6 +340,11 @@ Taken on `main` at `07f57c1` on 2026-10-18 and recounted by the spec review. Re-
   between adapters only warns, but a core module importing an adapter fails even when declared temporary.
 - Under the placement above, before `amule_bump`'s split, three core modules would import an adapter: `body`,
   `release` and `dockerfile`.
+- Lot 1b re-measured on `013252c` on 2026-10-19, by a dry run of every block in a throwaway worktree
+  (`.reviews/lot1b-measure.md`): 32 temporary exceptions (`p2pwatch` 12, `vex_checks` 13, `p2pwatch_amule` 3,
+  `amule_bump` 3, `coverage_checks` 1), no core module importing an adapter, no hexagon importing another;
+  `uv run poe check` green at the top. Blocks 70, 77 and 85 add about 60, 30 and 30 lines to the dry run's, for the
+  command line owning every option and `AGENTS.md`'s full rules.
 
 ## Appendix: notes for the teammates
 
@@ -354,7 +381,8 @@ Details the body leaves out, each settled during the Discuss or the review.
   top-level `tests/conftest.py`; the `sqlite3.connect` patch stops being autouse, and each moved test module it
   wrapped requests it with `pytestmark = pytest.mark.usefixtures(...)`. The three destinations:
   `tests/adapters/driven/persistence_sqlite/`, `tests/adapters/driving/webui/`, `tests/application/`.
-- **tach**: one module per port file and per adapter; the source roots exclude `packages/crawler_testing/src`;
+- **tach**: one module per port file and per adapter, the three webui readers and `webui.views` included
+  (Corrected 2026-10-19); the source roots exclude `packages/crawler_testing/src`;
   the root `__main__.py` modules are in the composition layer; every temporary exception is a dependency declared
   `deprecated = true` with a comment naming the lot that removes it, never a `# tach-ignore`.
 - **ast-grep's lists**, per core ring, from the imports the ring holds after the moves: `asyncio` by name
