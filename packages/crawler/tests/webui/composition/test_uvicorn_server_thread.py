@@ -80,3 +80,20 @@ async def test_a_server_that_does_not_start_in_time_degrades_the_webui(
     await server_thread.stop()
     assert caplog.messages == ["webui degraded: uvicorn did not start within 0.05 s"]
     assert _webui_threads() == []
+
+
+@pytest.mark.asyncio
+async def test_a_failing_lifespan_degrades_the_webui_without_raising(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    @asynccontextmanager
+    async def failing_startup(app: Starlette) -> AsyncIterator[None]:
+        raise RuntimeError("startup refused")
+        yield
+
+    server_thread = UvicornServerThread(Starlette(lifespan=failing_startup), ("127.0.0.1", 0))
+    with caplog.at_level(logging.INFO, logger=_LOGGER):
+        await server_thread.start()
+    await server_thread.stop()
+    assert caplog.messages == ["webui degraded: the crawler carries on without HTTP"]
+    assert _webui_threads() == []

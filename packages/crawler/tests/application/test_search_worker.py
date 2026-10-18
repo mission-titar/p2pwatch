@@ -26,8 +26,8 @@ from p2pwatch.domain.observability.events import (
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.ports.backoff_state_repository import BackoffKey, BackoffState
 from p2pwatch_testing.application.fakes import (
-    FakeAmuleApiClient,
     FakeRng,
+    FakeSearchClient,
     FakeTime,
     RecordingTelemetry,
     RecordingWakeHub,
@@ -203,7 +203,7 @@ def test_a_worker_declares_the_channels_of_its_client(
     catalog: SqliteCatalogRepository, engine: MatchingEngine
 ) -> None:
     fake_time = FakeTime()
-    client = FakeAmuleApiClient()
+    client = FakeSearchClient()
     client.channels = ("kad",)
     worker = SearchWorker(
         "amule-1", client, _deps(catalog, engine, _registry(fake_time), fake_time)
@@ -226,7 +226,7 @@ def test_a_worker_is_ready_for_a_channel_when_neither_it_nor_the_channel_is_back
     for key in failed:
         registry.record_failure(key)
     worker = SearchWorker(
-        "amule-1", FakeAmuleApiClient(), _deps(catalog, engine, registry, fake_time)
+        "amule-1", FakeSearchClient(), _deps(catalog, engine, registry, fake_time)
     )
     assert worker.time_until_ready("kad") == timedelta(seconds=ready_in_seconds)
     fake_time.advance(timedelta(seconds=3.0))
@@ -242,7 +242,7 @@ def test_a_worker_waits_for_the_later_of_its_two_backoffs(
     fake_time.advance(timedelta(seconds=1.0))
     registry.record_failure(_CLIENT)
     worker = SearchWorker(
-        "amule-1", FakeAmuleApiClient(), _deps(catalog, engine, registry, fake_time)
+        "amule-1", FakeSearchClient(), _deps(catalog, engine, registry, fake_time)
     )
     assert worker.time_until_ready("kad") == timedelta(seconds=2)
     fake_time.advance(timedelta(seconds=1.5))
@@ -260,7 +260,7 @@ async def test_successful_task_records_observation(
     engine: MatchingEngine,
 ) -> None:
     fake_time = FakeTime()
-    client = FakeAmuleApiClient(results=[(_obs(),)])
+    client = FakeSearchClient(results=[(_obs(),)])
     worker = SearchWorker(
         "amule-1", client, _deps(catalog, engine, _registry(fake_time), fake_time)
     )
@@ -287,7 +287,7 @@ async def test_multiple_observations_some_unchanged_are_all_processed(
     )
     # Two observations in the same readout: the 1st is discarded (False → loop back), the 2nd
     # changes a verdict. Covers the "if False → next observation" edge.
-    client = FakeAmuleApiClient(results=[(discarded, _obs())])
+    client = FakeSearchClient(results=[(discarded, _obs())])
     worker = SearchWorker(
         "amule-1", client, _deps(catalog, engine, _registry(fake_time), fake_time)
     )
@@ -302,7 +302,7 @@ async def test_connect_failure_arms_instance_backoff_and_skips_the_item(
 ) -> None:
     fake_time = FakeTime()
     registry = _registry(fake_time)
-    client = FakeAmuleApiClient(connect_failures=[make_unreachable()])
+    client = FakeSearchClient(connect_failures=[make_unreachable()])
     worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
     assert client.searches == []  # item dropped, never searched
@@ -316,7 +316,7 @@ async def test_backoff_expires_and_item_runs_again(
     fake_time = FakeTime()
     registry = _registry(fake_time)
     registry.record_failure(_KAD)  # 2.0s
-    client = FakeAmuleApiClient(results=[(_obs(),)])
+    client = FakeSearchClient(results=[(_obs(),)])
     worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
     fake_time.advance(timedelta(seconds=3.0))  # the channel is no longer in backoff
     await worker.run_task(SearchTask(keyword="k", channel="kad"))
@@ -328,7 +328,7 @@ async def test_already_connected_does_not_reconnect(
     catalog: SqliteCatalogRepository, engine: MatchingEngine
 ) -> None:
     fake_time = FakeTime()
-    client = FakeAmuleApiClient(results=[(), ()])
+    client = FakeSearchClient(results=[(), ()])
     worker = SearchWorker(
         "amule-1", client, _deps(catalog, engine, _registry(fake_time), fake_time)
     )
@@ -343,7 +343,7 @@ async def test_search_failure_arms_channel_backoff(
 ) -> None:
     fake_time = FakeTime()
     registry = _registry(fake_time)
-    client = FakeAmuleApiClient(search_failures=[make_search_failed()])
+    client = FakeSearchClient(search_failures=[make_search_failed()])
     worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
     assert registry.is_in_backoff(_ED2K) is True  # channel in backoff
@@ -357,7 +357,7 @@ async def test_transport_failure_marks_instance_down(
     fake_time = FakeTime()
     registry = _registry(fake_time)
     # search raises a transport failure (dead stream) → client down + client backoff.
-    client = FakeAmuleApiClient(search_failures=[make_unreachable()], results=[(_obs(),)])
+    client = FakeSearchClient(search_failures=[make_unreachable()], results=[(_obs(),)])
     worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
     await worker.run_task(SearchTask(keyword="k1", channel="ed2k"))
     assert registry.is_in_backoff(_CLIENT) is True
@@ -374,7 +374,7 @@ async def test_the_client_backoff_grows_until_a_search_succeeds(
     # The adapter's connect() succeeds without touching the network: only a search proves reach.
     fake_time = FakeTime()
     registry = _registry(fake_time)
-    client = FakeAmuleApiClient(search_failures=[make_unreachable()] * 4, results=[(_obs(),)])
+    client = FakeSearchClient(search_failures=[make_unreachable()] * 4, results=[(_obs(),)])
     worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
     delays = []
     for _ in range(4):
@@ -391,7 +391,7 @@ async def test_a_task_is_one_search_given_the_cores_budget(
     catalog: SqliteCatalogRepository, engine: MatchingEngine
 ) -> None:
     fake_time = FakeTime()
-    client = FakeAmuleApiClient(results=[(_obs(),)])
+    client = FakeSearchClient(results=[(_obs(),)])
     worker = SearchWorker(
         "amule-1", client, _deps(catalog, engine, _registry(fake_time), fake_time)
     )
@@ -411,7 +411,7 @@ async def test_successful_search_emits_search_executed_with_network_and_counts(
     # before the per-observation events (ObservationRecorded/DecisionsRecorded).
     fake_time = FakeTime()
     telemetry = RecordingTelemetry()
-    client = FakeAmuleApiClient(results=[(_obs(),)], skipped_result_count=2)
+    client = FakeSearchClient(results=[(_obs(),)], skipped_result_count=2)
     deps = _deps(catalog, engine, _registry(fake_time), fake_time, telemetry=telemetry)
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
@@ -431,7 +431,7 @@ async def test_search_failure_emits_search_failed(
     # SearchFailed(client, network).
     fake_time = FakeTime()
     telemetry = RecordingTelemetry()
-    client = FakeAmuleApiClient(search_failures=[make_search_failed()])
+    client = FakeSearchClient(search_failures=[make_search_failed()])
     deps = _deps(catalog, engine, _registry(fake_time), fake_time, telemetry=telemetry)
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
@@ -445,7 +445,7 @@ async def test_connect_failure_emits_instance_unreachable(
     # A connection failure (unreachable daemon) emits ClientUnreachable.
     fake_time = FakeTime()
     telemetry = RecordingTelemetry()
-    client = FakeAmuleApiClient(connect_failures=[make_unreachable()])
+    client = FakeSearchClient(connect_failures=[make_unreachable()])
     deps = _deps(catalog, engine, _registry(fake_time), fake_time, telemetry=telemetry)
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
@@ -459,7 +459,7 @@ async def test_transport_failure_during_search_emits_instance_unreachable(
     # A transport failure during search (dead stream) emits ClientUnreachable.
     fake_time = FakeTime()
     telemetry = RecordingTelemetry()
-    client = FakeAmuleApiClient(search_failures=[make_unreachable()], results=[(_obs(),)])
+    client = FakeSearchClient(search_failures=[make_unreachable()], results=[(_obs(),)])
     deps = _deps(catalog, engine, _registry(fake_time), fake_time, telemetry=telemetry)
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))

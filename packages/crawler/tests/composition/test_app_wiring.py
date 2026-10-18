@@ -49,6 +49,7 @@ _RESULT = {
     "size_bytes": 367_001_600,
     "sources": {"total": 3},
 }
+_LOGIN = ("POST", "/api/v1/auth/login")
 _WEBUI_SERVING = re.compile(r"^webui serving on (.+):(\d+) \(own thread\)$")
 # Far beyond what the fake takes to see each step: only a broken assembly ever reaches it.
 _WAIT_SECONDS = 10.0
@@ -129,6 +130,25 @@ def _searches_read(api: FakeAmuleApi) -> int:
         if request.url.path.endswith("/results") and request.url.params.get("limit") != "0"
     }
     return len(paths)
+
+
+def _has_logged_out(api: FakeAmuleApi) -> bool:
+    return any(request.url.path == "/api/v1/auth/logout" for request in api.requests)
+
+
+def _has_read_the_status(api: FakeAmuleApi) -> bool:
+    return any(request.url.path == "/api/v1/status" for request in api.requests)
+
+
+async def _crawl_until_a_search_is_read(config_path: Path, targets_path: Path) -> None:
+    default_sigterm = signal.getsignal(signal.SIGTERM)
+    with FakeAmuleApiServer(FakeAmuleApi()) as server:
+        run = _crawl(server, config_path, targets_path)
+        assert await asyncio.to_thread(
+            server.wait_for, lambda seen: _searches_read(seen) >= 1, _WAIT_SECONDS
+        )
+        _send_sigterm(default_sigterm)
+        await asyncio.wait_for(run, _WAIT_SECONDS)
 
 
 @pytest.mark.asyncio
@@ -219,10 +239,13 @@ async def test_observer_mode_crawls_its_config_files_with_one_ed2k_search_until_
 
 
 @pytest.mark.asyncio
-async def test_the_shutdown_deadline_cuts_a_logout_amuled_never_answers(
+async def test_the_shutdown_deadline_spares_the_run_then_cuts_a_logout_amuled_never_answers(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    config_path = _write(tmp_path / "crawler.yml", _config(tmp_path, shutdown_deadline_seconds=0.2))
+    deadline_seconds = 0.2
+    config_path = _write(
+        tmp_path / "crawler.yml", _config(tmp_path, shutdown_deadline_seconds=deadline_seconds)
+    )
     api = FakeAmuleApi()
     released = threading.Event()
 
@@ -239,12 +262,16 @@ async def test_the_shutdown_deadline_cuts_a_logout_amuled_never_answers(
         assert await asyncio.to_thread(
             server.wait_for, lambda seen: _searches_read(seen) >= 1, _WAIT_SECONDS
         )
+        # Only time shows an absence: armed from the start, the deadline would have ended the run.
+        await asyncio.sleep(2 * deadline_seconds)
+        logged_out_before_the_stop = _has_logged_out(api)
         _send_sigterm(default_sigterm)
         stopped_at = loop.time()
         await asyncio.wait({run}, timeout=2 * _WAIT_SECONDS)
         elapsed = loop.time() - stopped_at
         released.set()
 
+    assert not logged_out_before_the_stop
     # Unbounded, the close would wait out the client's own 10 s timeout, then return.
     assert isinstance(run.exception(), TimeoutError)
     assert elapsed < _WAIT_SECONDS / 2
@@ -277,3 +304,68 @@ async def test_a_backoff_the_previous_run_saved_holds_the_ed2k_search(
         await asyncio.wait_for(run, _WAIT_SECONDS)
 
     assert _search_types(api) == ["kad"]
+
+
+@pytest.mark.asyncio
+async def test_a_pause_from_the_webui_holds_the_searches_until_its_resume(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    config_path = _write(tmp_path / "crawler.yml", _config(tmp_path, webui={"enabled": True}))
+    api = FakeAmuleApi()
+    login_arrived = threading.Event()
+    paused = threading.Event()
+
+    def login_once_paused(request: httpx.Request) -> httpx.Response:
+        # Held until the test has paused, so the loops start paused; then answered as usual.
+        login_arrived.set()
+        paused.wait(_WAIT_SECONDS)
+        del api.overrides[_LOGIN]
+        return api.handle(request)
+
+    api.overrides[_LOGIN] = login_once_paused
+
+    with FakeAmuleApiServer(api) as server, caplog.at_level(logging.INFO):
+        run = _crawl(server, config_path)
+        assert await asyncio.to_thread(login_arrived.wait, _WAIT_SECONDS)
+        host, port = _webui_bound_address(caplog.messages)
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as webui:
+            await webui.post("/controls/pause")
+            paused.set()
+            # The status loop reads on while paused; only time shows that no search starts.
+            assert await asyncio.to_thread(server.wait_for, _has_read_the_status, _WAIT_SECONDS)
+            await asyncio.sleep(0.5)
+            searches_while_paused = _search_types(api)
+            await webui.post("/controls/resume")
+            assert await asyncio.to_thread(
+                server.wait_for, lambda seen: _searches_read(seen) >= 1, _WAIT_SECONDS
+            )
+            await webui.post("/controls/restart")
+        await asyncio.wait_for(run, _WAIT_SECONDS)
+
+    assert searches_while_paused == []
+
+
+@pytest.mark.asyncio
+async def test_a_restart_re_evaluates_the_catalogue_only_once_a_policy_file_changed(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    config_path = _write(tmp_path / "crawler.yml", _config(tmp_path))
+    targets_path = tmp_path / "targets.yml"
+    targets_path.write_text(_TARGET_062A, encoding="utf-8")
+
+    with caplog.at_level(logging.INFO):
+        await _crawl_until_a_search_is_read(config_path, targets_path)
+        await _crawl_until_a_search_is_read(config_path, targets_path)
+        targets_path.write_text(f"{_TARGET_062A}# edited\n", encoding="utf-8")
+        await _crawl_until_a_search_is_read(config_path, targets_path)
+
+    reevaluations = [
+        message
+        for message in caplog.messages
+        if message.startswith(("catalogue re-evaluated", "policy unchanged"))
+    ]
+    assert reevaluations == [
+        "catalogue re-evaluated: 0 files, 0 rows written",
+        "policy unchanged: catalogue re-evaluation skipped",
+        "catalogue re-evaluated: 0 files, 0 rows written",
+    ]

@@ -112,6 +112,12 @@ a function does.
 - **No abbreviation but the glossary's**, units and protocol names (`kbps`, `tcp`, `md4`, `ed2k`) aside.
 - **Comments, docstrings and log messages use the code's words.**
 - **The most telling word wins over the most widespread one**: an existing name is not a reason to keep it.
+- **A port is named after the one who does its action**: `CatalogMerger`, "the one who merges catalogs". New
+  ports are ABCs.
+- **A use case is named after its operation**: `ValidateConfig`, `MergeCatalogs`.
+- **An adapter is named by its technology and what it adapts**: `PosixProcess`, `UvicornServerThread`,
+  `YamlConfigChecker`, `SqliteCatalogCopier`.
+- **A test double is `Fake` and what it replaces**: `FakeAmuleApiServer`, `FakeSearchClient`.
 
 | Word | Means | Never |
 |---|---|---|
@@ -140,6 +146,11 @@ a function does.
 | `monotonic clock` | `MonotonicClock`, its `MonotonicInstant`s: every interval and deadline kept in memory | a stamp, anything persisted |
 | `persisted wait` | a wait that survives a restart: its start on the wall clock and its duration, clamped by `remaining_wait` when the node meets it again | a deadline persisted alone |
 | `own tests` | a module's own tests: the test files named after it, in the directory mirroring its own (`tests/a/test_b*.py` for `src/<pkg>/a/b.py`) | a test that runs the module in passing |
+| `ring` | one of a hexagon's concentric parts, read from the path: `domain`, `ports`, `application`, `adapters`, `composition` | `layer` |
+| `hexagon` | one application, its core and its adapters, which never imports another hexagon; `p2pwatch` is one | a package |
+| `driving` | the side that calls the core: a driving port is what a use case offers, a driving adapter calls it (the command line, the webui) | `primary`, `inbound` |
+| `driven` | the side the core calls: a driven port is what the core needs, a driven adapter implements it (SQLite, amuleapi) | `secondary`, `outbound` |
+| `use case` | an `application/` operation behind a driving port: `ValidateConfig` | `service`, `interactor` |
 | `micros` | an integer of microseconds: an instant counts from the epoch | a bare `_at` on an `int` |
 | `id`, `db`, `sql`, `url`, `api`, `json`, `ecid`, `mib`, `iso`, `min`, `max`, `conf` | the abbreviations allowed (`conf`: aMule's `amule.conf`) | |
 

@@ -11,6 +11,9 @@ from prometheus_client import CollectorRegistry, Counter, Gauge, start_http_serv
 
 from p2pwatch.domain.observability.policy import MetricInstruction, MetricName
 
+# The stop runs on the event loop, where no shutdown deadline can cut a blocking call.
+_JOIN_TIMEOUT_SECONDS = 1.0
+
 # (name, doc, labels) of the counters.
 _COUNTERS: tuple[tuple[MetricName, str, tuple[str, ...]], ...] = (
     (MetricName.SEARCHES, "Searches performed", ("client", "channel")),
@@ -69,6 +72,6 @@ def start_metrics_server(registry: CollectorRegistry, port: int | None) -> Calla
     def stop() -> None:
         server.shutdown()
         server.server_close()
-        thread.join()
+        thread.join(_JOIN_TIMEOUT_SECONDS)
 
     return stop
