@@ -44,7 +44,6 @@ from p2pwatch.application.run_download_cycle import DownloadLoopDeps
 from p2pwatch.composition import app as composition_app
 from p2pwatch.composition.app import (
     CrawlerApp,
-    WebuiServer,
     default_download_client_factory,
     default_mule_client_factory,
 )
@@ -86,10 +85,10 @@ _DL_NAME = "Keroro N°062A Les demoiselles cambrioleuses.avi"
 # Arbitrary policy fingerprint for tests that do not exercise the re-evaluation gate itself
 # (Task 6 tests below construct their OWN fingerprint to drive the "ran"/"skipped" branches).
 _FP = "test-policy-fingerprint"
-# Existing app tests do not exercise the webui: keep it OFF by default so run() never builds a
-# real uvicorn server. The webui-specific tests below opt in with an enabled config + a fake
-# server factory (no real HTTP).
+# Off by default; the webui tests below turn it on, served on a free loopback port.
 _WEBUI_OFF = WebuiConfig(enabled=False)
+_WEBUI_ADDRESS = ("127.0.0.1", 0)
+_WEBUI_LOGGER = "p2pwatch.webui.composition.uvicorn_server_thread"
 
 
 class _NoopRng:
@@ -170,6 +169,7 @@ def _make_app(
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
+        webui_address=_WEBUI_ADDRESS,
         client_factory=factory,  # type: ignore[arg-type]
         **extra,  # type: ignore[arg-type]
     )
@@ -568,6 +568,7 @@ def test_an_hour_of_the_running_app_keeps_to_the_networks_rules(
             rng=_NoopRng(),
             wake_hub=RecordingWakeHub(),
             policy_fingerprint=_FP,
+            webui_address=_WEBUI_ADDRESS,
             client_factory=lambda endpoint, monotonic_clock: AmuleApiClient(
                 endpoint.host,
                 endpoint.port,
@@ -631,6 +632,7 @@ async def test_a_backoff_the_previous_run_saved_holds_the_first_search(
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
+        webui_address=_WEBUI_ADDRESS,
         client_factory=lambda endpoint, monotonic_clock: client,
     )
     holder["app"] = app
@@ -667,6 +669,7 @@ async def test_backfill_runs_and_stores_marker_when_policy_never_set(
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
         policy_fingerprint="fp-first-run",
+        webui_address=_WEBUI_ADDRESS,
         client_factory=factory,
     )
     holder["app"] = app
@@ -712,6 +715,7 @@ async def test_backfill_skipped_when_marker_already_matches_fingerprint(
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
         policy_fingerprint="fp-unchanged",
+        webui_address=_WEBUI_ADDRESS,
         client_factory=factory,
     )
     holder["app"] = app
@@ -802,6 +806,7 @@ async def test_observer_mode_runs_without_the_download_loop(
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
+        webui_address=_WEBUI_ADDRESS,
         client_factory=factory,
         download_client_factory=download_factory,
     )
@@ -832,6 +837,7 @@ async def test_full_mode_runs_the_download_loop(
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
+        webui_address=_WEBUI_ADDRESS,
         client_factory=search_factory,
         download_client_factory=lambda endpoint, monotonic_clock: download_client,
     )
@@ -881,6 +887,7 @@ async def test_full_mode_records_the_sources_of_a_download_in_the_catalog(
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
+        webui_address=_WEBUI_ADDRESS,
         client_factory=lambda endpoint, monotonic_clock: FakeMuleClient(),
         download_client_factory=lambda endpoint, monotonic_clock: _ShutdownOnSourcesDownloadClient(
             holder, file
@@ -924,6 +931,7 @@ async def test_the_rows_written_carry_the_apps_wall_clock(
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
+        webui_address=_WEBUI_ADDRESS,
         client_factory=lambda endpoint, monotonic_clock: FakeMuleClient(),
         download_client_factory=lambda endpoint, monotonic_clock: _ShutdownOnSourcesDownloadClient(
             holder, file
@@ -978,6 +986,7 @@ async def test_full_mode_reads_sources_at_their_interval_and_spaces_them_by_a_po
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
+        webui_address=_WEBUI_ADDRESS,
         client_factory=lambda endpoint, monotonic_clock: FakeMuleClient(),
         download_client_factory=lambda endpoint, monotonic_clock: FakeDownloadClient(),
     )
@@ -1014,6 +1023,7 @@ async def test_full_mode_tolerates_download_daemon_unreachable_at_startup(
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
+        webui_address=_WEBUI_ADDRESS,
         client_factory=search_factory,
         download_client_factory=download_factory,
     )
@@ -1077,6 +1087,7 @@ async def test_full_mode_shutdown_cancels_the_download_loop_promptly(
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
+        webui_address=_WEBUI_ADDRESS,
         client_factory=lambda endpoint, monotonic_clock: FakeMuleClient(),
         download_client_factory=lambda endpoint, monotonic_clock: FakeDownloadClient(),
     )
@@ -1112,6 +1123,7 @@ async def test_full_mode_shutdown_leaves_no_task_leaked(
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
+        webui_address=_WEBUI_ADDRESS,
         client_factory=lambda endpoint, monotonic_clock: FakeMuleClient(),
         download_client_factory=lambda endpoint, monotonic_clock: FakeDownloadClient(),
     )
@@ -1259,6 +1271,7 @@ async def test_emits_crawler_started_full_mode(
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
+        webui_address=_WEBUI_ADDRESS,
         client_factory=lambda endpoint, monotonic_clock: FakeMuleClient(),
         download_client_factory=lambda endpoint, monotonic_clock: download_client,
     )
@@ -1269,58 +1282,15 @@ async def test_emits_crawler_started_full_mode(
 
 
 # ---------------------------------------------------------------------------
-# WebUI in-process (spec §5/§17.1): own thread + loop, degrade on crash
+# WebUI in-process (spec §5): own thread + loop
 # ---------------------------------------------------------------------------
 
 
-class _FakeWebuiServer:
-    """Fake uvicorn-shaped server: ``serve()`` awaits on its OWN loop until ``should_exit`` is
-    set (from the main thread by ``_stop_webui``), then returns - mirroring the real graceful
-    stop. Records that it started and that it returned, so the test can prove start + stop."""
-
-    def __init__(self) -> None:
-        self.should_exit = False
-        self.served = threading.Event()
-        self.stopped = threading.Event()
-
-    async def serve(self) -> None:
-        self.served.set()
-        while not self.should_exit:
-            await asyncio.sleep(0.01)
-        self.stopped.set()
-
-
-class _CrashingWebuiServer:
-    """Fake server whose ``serve()`` raises immediately: models a webui-thread crash. The
-    crawler must DEGRADE (log loudly, keep running), not propagate (spec §17.1)."""
-
-    def __init__(self) -> None:
-        self.should_exit = False
-
-    async def serve(self) -> None:
-        raise RuntimeError("webui boom")
-
-
 @pytest.mark.asyncio
-async def test_webui_starts_on_own_thread_and_stops_at_shutdown(
+async def test_webui_serves_on_the_address_given_and_stops_at_shutdown(
     tmp_path: Path, matcher_config: MatcherConfig, caplog: pytest.LogCaptureFixture
 ) -> None:
-    # webui.enabled → run() builds the ASGI app, calls the factory with (app,), and serves it on
-    # a daemon thread bound to the FIXED 0.0.0.0:8080. At shutdown, _stop_webui sets should_exit
-    # + joins the thread.
     holder: dict[str, CrawlerApp] = {}
-    server = _FakeWebuiServer()
-    captured: dict[str, object] = {}
-
-    def fake_factory(app: Starlette) -> _FakeWebuiServer:
-        captured["app"] = app
-        return server
-
-    def factory(
-        endpoint: AmuleEndpoint, monotonic_clock: MonotonicClock
-    ) -> _ShutdownOnStatusClient:
-        return _ShutdownOnStatusClient(holder)
-
     app = CrawlerApp(
         crawler_config=_crawler_config(tmp_path, webui=WebuiConfig(enabled=True)),
         targets=_TARGETS,
@@ -1330,19 +1300,14 @@ async def test_webui_starts_on_own_thread_and_stops_at_shutdown(
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
-        client_factory=factory,
-        webui_server_factory=fake_factory,
+        webui_address=_WEBUI_ADDRESS,
+        client_factory=lambda endpoint, monotonic_clock: _ShutdownOnStatusClient(holder),
     )
     holder["app"] = app
-    with caplog.at_level(logging.INFO, logger="p2pwatch.composition.app"):
+    with caplog.at_level(logging.INFO, logger=_WEBUI_LOGGER):
         await asyncio.wait_for(app.run(), timeout=5.0)
-    assert isinstance(captured["app"], Starlette)  # the built webui ASGI app was passed
-    assert any(  # the log reports the FIXED in-container bind
-        "webui serving on 0.0.0.0:8080" in r.getMessage() for r in caplog.records
-    )
-    assert server.served.is_set()  # serve() ran on the webui thread
-    assert server.should_exit is True  # _stop_webui asked it to exit at shutdown
-    assert server.stopped.is_set()  # serve() returned → the thread joined cleanly
+    assert any(message.startswith("webui serving on 127.0.0.1:") for message in caplog.messages)
+    assert not any(thread.name == "webui" for thread in threading.enumerate())
 
 
 @pytest.mark.asyncio
@@ -1366,8 +1331,8 @@ async def test_the_webui_reads_the_status_loops_board_and_the_pause_gate(
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
+        webui_address=_WEBUI_ADDRESS,
         client_factory=lambda endpoint, monotonic_clock: _ShutdownOnStatusClient(holder),
-        webui_server_factory=lambda webui: _FakeWebuiServer(),
     )
     holder["app"] = app
     await asyncio.wait_for(app.run(), timeout=5.0)
@@ -1401,8 +1366,8 @@ async def test_the_webui_cuts_periods_at_its_configured_gap_and_reads_the_crawle
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
+        webui_address=_WEBUI_ADDRESS,
         client_factory=lambda endpoint, monotonic_clock: _ShutdownOnStatusClient(holder),
-        webui_server_factory=lambda webui: _FakeWebuiServer(),
     )
     holder["app"] = app
     await asyncio.wait_for(app.run(), timeout=5.0)
@@ -1413,20 +1378,9 @@ async def test_the_webui_cuts_periods_at_its_configured_gap_and_reads_the_crawle
 
 @pytest.mark.asyncio
 async def test_webui_not_started_when_disabled(
-    tmp_path: Path, matcher_config: MatcherConfig
+    tmp_path: Path, matcher_config: MatcherConfig, caplog: pytest.LogCaptureFixture
 ) -> None:
-    # webui.enabled=False → the factory is NEVER called and no thread is started. We prove it
-    # with a factory that would fail the test if invoked.
     holder: dict[str, CrawlerApp] = {}
-
-    def boom_factory(app: Starlette) -> WebuiServer:
-        raise AssertionError("the webui factory must not be called when disabled")
-
-    def factory(
-        endpoint: AmuleEndpoint, monotonic_clock: MonotonicClock
-    ) -> _ShutdownOnStatusClient:
-        return _ShutdownOnStatusClient(holder)
-
     app = CrawlerApp(
         crawler_config=_crawler_config(tmp_path, webui=WebuiConfig(enabled=False)),
         targets=_TARGETS,
@@ -1436,58 +1390,13 @@ async def test_webui_not_started_when_disabled(
         rng=_NoopRng(),
         wake_hub=RecordingWakeHub(),
         policy_fingerprint=_FP,
-        client_factory=factory,
-        webui_server_factory=boom_factory,
+        webui_address=_WEBUI_ADDRESS,
+        client_factory=lambda endpoint, monotonic_clock: _ShutdownOnStatusClient(holder),
     )
     holder["app"] = app
-    await asyncio.wait_for(app.run(), timeout=5.0)  # does not raise (factory never called)
-    assert not any(t.name == "webui" for t in threading.enumerate())  # no webui thread left
-
-
-@pytest.mark.asyncio
-async def test_webui_crash_degrades_and_crawler_shuts_down_cleanly(
-    tmp_path: Path, matcher_config: MatcherConfig, caplog: pytest.LogCaptureFixture
-) -> None:
-    # A webui-thread crash (serve() raises) must NOT propagate out of run(): the crawler logs
-    # loudly and keeps crawling to a clean shutdown (DECISION spec §17.1: degrade).
-    holder: dict[str, CrawlerApp] = {}
-    server = _CrashingWebuiServer()
-
-    def crash_factory(app: Starlette) -> _CrashingWebuiServer:
-        return server
-
-    def factory(
-        endpoint: AmuleEndpoint, monotonic_clock: MonotonicClock
-    ) -> _ShutdownOnStatusClient:
-        return _ShutdownOnStatusClient(holder)
-
-    app = CrawlerApp(
-        crawler_config=_crawler_config(tmp_path, webui=WebuiConfig(enabled=True)),
-        targets=_TARGETS,
-        matcher_config=matcher_config,
-        wall_clock=FakeTime().wall,
-        monotonic_clock=FakeTime().monotonic,
-        rng=_NoopRng(),
-        wake_hub=RecordingWakeHub(),
-        policy_fingerprint=_FP,
-        client_factory=factory,
-        webui_server_factory=crash_factory,
-    )
-    holder["app"] = app
-    with caplog.at_level(logging.ERROR, logger="p2pwatch.composition.app"):
-        await asyncio.wait_for(app.run(), timeout=5.0)  # crash does NOT propagate
-    assert any("webui thread crashed" in r.getMessage() for r in caplog.records)
-
-
-def test_default_webui_server_factory_builds_a_uvicorn_server() -> None:
-    import uvicorn
-
-    from p2pwatch.composition.app import default_webui_server_factory
-
-    server = default_webui_server_factory(Starlette())
-    assert isinstance(server, uvicorn.Server)
-    assert server.config.host == "0.0.0.0"  # FIXED in-container bind
-    assert server.config.port == 8080
+    with caplog.at_level(logging.INFO, logger=_WEBUI_LOGGER):
+        await asyncio.wait_for(app.run(), timeout=5.0)
+    assert not any(record.name == _WEBUI_LOGGER for record in caplog.records)
 
 
 # ---------------------------------------------------------------------------

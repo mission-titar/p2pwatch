@@ -94,8 +94,6 @@ async def test_real_loop_runs_one_search_and_stops(amuled: ApiEndpoint, tmp_path
         catalog_db_path=str(tmp_path / "catalog.db"),
         local_db_path=str(tmp_path / "local.db"),
         node_id=None,
-        # The webui binds a FIXED 0.0.0.0:8080; off here so the test never collides with
-        # whatever already listens there on the developer's machine.
         webui=WebuiConfig(enabled=False),
     )
     app_holder: dict[str, CrawlerApp] = {}
@@ -124,6 +122,7 @@ async def test_real_loop_runs_one_search_and_stops(amuled: ApiEndpoint, tmp_path
         rng=SeededRng(),
         wake_hub=AsyncioWakeHub(),
         policy_fingerprint="test-policy-fingerprint",
+        webui_address=("127.0.0.1", 0),
         client_factory=factory,
     )
     app_holder["app"] = app

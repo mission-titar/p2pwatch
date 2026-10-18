@@ -33,6 +33,10 @@ from p2pwatch.adapters.wall_clock_system import SystemWallClock
 from p2pwatch.composition.app import CrawlerApp
 from p2pwatch.domain.policy_fingerprint import policy_fingerprint
 
+# 0.0.0.0: Docker cannot route a published port to the container's loopback. 8080, not 80: an
+# unprivileged process cannot bind a port below 1024 under ``cap_drop: ALL``.
+_WEBUI_ADDRESS = ("0.0.0.0", 8080)
+
 
 def _add_config_options(parser: argparse.ArgumentParser) -> None:
     """The config paths (same options, same defaults) for both run AND validate-config."""
@@ -83,6 +87,7 @@ def build_crawler_app(args: argparse.Namespace) -> CrawlerApp:
         rng=SeededRng(),
         wake_hub=AsyncioWakeHub(),
         policy_fingerprint=fingerprint,
+        webui_address=_WEBUI_ADDRESS,
     )
 
 

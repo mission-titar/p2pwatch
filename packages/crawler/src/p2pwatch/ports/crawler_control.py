@@ -1,7 +1,7 @@
 """``CrawlerControl`` port: the webui to crawler-loop control channel (spec §10, phase P6a).
 
-The webui runs on its OWN thread with its OWN event loop (``composition/app.py`` starts it via
-``_start_webui``/``_serve_webui``), while the crawler drives its asyncio loop on the MAIN
+The webui runs on its OWN thread with its OWN event loop (``composition/app.py`` starts it in
+a ``UvicornServerThread``), while the crawler drives its asyncio loop on the MAIN
 thread. A webui request handler that wants to influence the running crawler cannot touch the
 crawler's ``asyncio.Event``s directly: ``Event.set()``/``.clear()`` may have to wake waiters
 registered on the crawler loop, and those events are affine to that loop. So this port is the
