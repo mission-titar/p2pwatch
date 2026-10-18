@@ -19,9 +19,13 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
-from catalog_matching.config import MatcherConfig
-from catalog_matching.models import TargetSegment
-from catalog_matching.validation import MatchingConfigError, parse_matcher_config, parse_targets
+from catalog_matching.domain.config import MatcherConfig
+from catalog_matching.domain.models import TargetSegment
+from catalog_matching.domain.validation import (
+    MatchingConfigError,
+    parse_matcher_config,
+    parse_targets,
+)
 from p2pwatch.adapters.config.errors import ConfigError as ConfigError  # explicit re-export
 from p2pwatch.adapters.config.interpolation import interpolate
 from p2pwatch.adapters.config.yaml_loader import YamlLoadError, load_yaml

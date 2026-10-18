@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from catalog_matching.engine import MatchingEngine
-from catalog_matching.validation import parse_matcher_config, parse_targets
+from catalog_matching.domain.engine import MatchingEngine
+from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 from p2pwatch.adapters.config.yaml_loader import load_yaml
 from p2pwatch.adapters.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.persistence_sqlite.connection import open_catalog

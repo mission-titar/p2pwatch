@@ -26,7 +26,7 @@ from pathlib import Path, PurePath
 from prometheus_client import CollectorRegistry
 
 import p2pwatch.webui
-from catalog_matching.engine import MatchingEngine
+from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.adapters.config.crawler_config import (
     AMULE_CLIENT_NAME,
     CrawlerConfig,

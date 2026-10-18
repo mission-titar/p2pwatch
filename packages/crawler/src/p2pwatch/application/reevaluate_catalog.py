@@ -15,7 +15,7 @@ not abort the whole sweep (spec §7, same discipline as ``record_observation``).
 import logging
 from dataclasses import dataclass
 
-from catalog_matching.engine import MatchingEngine
+from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.application.decisions import rejudge_file
 from p2pwatch.domain.observation import candidate_from_fields
 from p2pwatch.ports.catalog_repository import CatalogRepository

@@ -2,8 +2,8 @@ import re
 
 import pytest
 
-from catalog_matching.interpolation import InterpolationError, interpolate
-from catalog_matching.models import TargetSegment
+from catalog_matching.domain.interpolation import InterpolationError, interpolate
+from catalog_matching.domain.models import TargetSegment
 
 
 def _target() -> TargetSegment:

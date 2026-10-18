@@ -12,11 +12,11 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import NamedTuple
 
-from catalog_matching.combinators import Matcher
-from catalog_matching.config import TIER_RANK, MatcherConfig
-from catalog_matching.matchers import CoverageMatcher
-from catalog_matching.models import FileCandidate, TargetSegment
-from catalog_matching.resolver import MatcherResolver, ResolvedTarget
+from catalog_matching.domain.combinators import Matcher
+from catalog_matching.domain.config import TIER_RANK, MatcherConfig
+from catalog_matching.domain.matchers import CoverageMatcher
+from catalog_matching.domain.models import FileCandidate, TargetSegment
+from catalog_matching.domain.resolver import MatcherResolver, ResolvedTarget
 
 
 @dataclass(frozen=True)

@@ -26,7 +26,7 @@ from collections.abc import Iterator
 from contextlib import suppress
 from datetime import datetime
 
-from catalog_matching.engine import DecisionRecord, MatchDecision
+from catalog_matching.domain.engine import DecisionRecord, MatchDecision
 from p2pwatch.adapters.persistence_sqlite import sightings
 from p2pwatch.adapters.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.persistence_sqlite.errors import PersistenceError, wrap_sqlite_errors

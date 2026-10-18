@@ -1,6 +1,6 @@
 # Architecture: the matching engine
 
-The core is one layered, declarative matching engine under `src/catalog_matching/`. **The matcher/rule policy is 100% in YAML config; the code is a minimal fixed engine.**
+The core is one layered, declarative matching engine under `src/catalog_matching/domain/`. **The matcher/rule policy is 100% in YAML config; the code is a minimal fixed engine.**
 
 ```
 load_yaml(path)                         # adapters/config/yaml_loader.py: the ONLY I/O

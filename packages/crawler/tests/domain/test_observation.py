@@ -2,7 +2,7 @@ import dataclasses
 
 import pytest
 
-from catalog_matching.models import FileCandidate
+from catalog_matching.domain.models import FileCandidate
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation, candidate_from_fields, fold_raw_meta
 

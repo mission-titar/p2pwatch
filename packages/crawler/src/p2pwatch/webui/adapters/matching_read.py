@@ -19,9 +19,9 @@ path builds the ``FileCandidate`` directly.
 from collections.abc import Iterable
 from dataclasses import replace
 
-from catalog_matching.config import MatcherConfig
-from catalog_matching.engine import Explanation, MatchingEngine
-from catalog_matching.models import FileCandidate, TargetSegment
+from catalog_matching.domain.config import MatcherConfig
+from catalog_matching.domain.engine import Explanation, MatchingEngine
+from catalog_matching.domain.models import FileCandidate, TargetSegment
 from p2pwatch.domain.observation import candidate_from_fields
 
 

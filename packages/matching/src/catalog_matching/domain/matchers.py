@@ -5,8 +5,8 @@ from collections.abc import Callable, Mapping
 
 from rapidfuzz import fuzz
 
-from catalog_matching.models import FileCandidate
-from catalog_matching.normalization import fold, split_words
+from catalog_matching.domain.models import FileCandidate
+from catalog_matching.domain.normalization import fold, split_words
 
 
 class KeywordMatcher:

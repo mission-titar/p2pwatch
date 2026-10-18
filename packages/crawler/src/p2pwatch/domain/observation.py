@@ -5,7 +5,7 @@
 
 from dataclasses import dataclass
 
-from catalog_matching.models import FileCandidate
+from catalog_matching.domain.models import FileCandidate
 from p2pwatch.domain.file_key import FileKey
 
 RawMeta = tuple[tuple[str, str | int | None], ...]

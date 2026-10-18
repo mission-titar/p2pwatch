@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from catalog_matching.engine import Explanation, MatchDecision
+from catalog_matching.domain.engine import Explanation, MatchDecision
 from p2pwatch.adapters.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
 from p2pwatch.domain.file_key import FileKey, Network

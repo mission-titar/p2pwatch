@@ -1,4 +1,4 @@
-from catalog_matching.config import TIERS
+from catalog_matching.domain.config import TIERS
 from p2pwatch.domain.retraction import RETRACTED_TIER
 
 

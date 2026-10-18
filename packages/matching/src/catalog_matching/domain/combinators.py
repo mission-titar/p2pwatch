@@ -6,7 +6,7 @@ expose the same ``matches(candidate) -> bool`` interface.
 
 from typing import Protocol
 
-from catalog_matching.models import FileCandidate
+from catalog_matching.domain.models import FileCandidate
 
 
 class Matcher(Protocol):

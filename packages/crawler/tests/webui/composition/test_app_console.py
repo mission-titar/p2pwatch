@@ -9,9 +9,9 @@ import yaml
 from httpx import ASGITransport, AsyncClient
 from starlette.applications import Starlette
 
-from catalog_matching.config import MatcherConfig
-from catalog_matching.models import TargetSegment
-from catalog_matching.validation import parse_matcher_config, parse_targets
+from catalog_matching.domain.config import MatcherConfig
+from catalog_matching.domain.models import TargetSegment
+from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 from p2pwatch.application.status_loop import StatusBoard
 from p2pwatch.ports.clock import MonotonicClock
 from p2pwatch.webui.composition.app import build_app

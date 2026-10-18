@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 from datetime import UTC, datetime
 
-from catalog_matching.engine import DecisionRecord, Explanation, MatchDecision
+from catalog_matching.domain.engine import DecisionRecord, Explanation, MatchDecision
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.ports.catalog_repository import (

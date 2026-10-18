@@ -2,7 +2,7 @@ import dataclasses
 
 import pytest
 
-from catalog_matching.config import (
+from catalog_matching.domain.config import (
     SCOPES,
     TIER_RANK,
     TIERS,

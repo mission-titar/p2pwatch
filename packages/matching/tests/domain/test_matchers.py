@@ -1,13 +1,13 @@
 import pytest
 
-from catalog_matching.matchers import (
+from catalog_matching.domain.matchers import (
     READERS_BY_ATTR,
     AttrBetweenMatcher,
     CoverageMatcher,
     KeywordMatcher,
     RegexMatcher,
 )
-from catalog_matching.models import FileCandidate
+from catalog_matching.domain.models import FileCandidate
 
 
 def test_keyword_single_word_present() -> None:

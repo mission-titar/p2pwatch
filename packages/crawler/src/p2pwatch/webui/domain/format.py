@@ -1,7 +1,7 @@
 """Pure formatting for display (webui spec §4/§7). No I/O.
 
 NB: building the eD2k link (with percent-encoding of the name) lives in
-``catalog_matching.ed2k_link`` — a package shared by crawler+webui — to prevent
+``catalog_matching.domain.ed2k_link`` (a package shared by crawler+webui) to prevent
 webui/crawler divergence on the canonical format (webui-security#0 regression: the
 webui interpolated the raw filename, a hostile ``|`` broke the link framing)."""
 

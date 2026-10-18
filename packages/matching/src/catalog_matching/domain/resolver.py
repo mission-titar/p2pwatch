@@ -11,13 +11,13 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import assert_never
 
-from catalog_matching.combinators import (
+from catalog_matching.domain.combinators import (
     AllMatcher,
     AnyMatcher,
     Matcher,
     NotMatcher,
 )
-from catalog_matching.config import (
+from catalog_matching.domain.config import (
     AllDef,
     AnyDef,
     AttrBetweenDef,
@@ -31,14 +31,14 @@ from catalog_matching.config import (
     TokenDef,
     TokenRef,
 )
-from catalog_matching.interpolation import interpolate
-from catalog_matching.matchers import (
+from catalog_matching.domain.interpolation import interpolate
+from catalog_matching.domain.matchers import (
     AttrBetweenMatcher,
     CoverageMatcher,
     KeywordMatcher,
     RegexMatcher,
 )
-from catalog_matching.models import TargetSegment
+from catalog_matching.domain.models import TargetSegment
 
 # Config keyword designating the target's title as the coverage reference (§8.5).
 _TITLE_KEYWORD = "title"

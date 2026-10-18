@@ -24,9 +24,9 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 
-from catalog_matching.config import MatcherConfig
-from catalog_matching.ed2k_link import build_ed2k_link
-from catalog_matching.models import TargetSegment
+from catalog_matching.domain.config import MatcherConfig
+from catalog_matching.domain.ed2k_link import build_ed2k_link
+from catalog_matching.domain.models import TargetSegment
 from p2pwatch.adapters.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.observation import Sighting

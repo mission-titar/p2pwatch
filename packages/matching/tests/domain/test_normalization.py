@@ -1,6 +1,6 @@
 import pytest
 
-from catalog_matching.normalization import fold, normalize, split_words
+from catalog_matching.domain.normalization import fold, normalize, split_words
 
 
 @pytest.mark.parametrize(

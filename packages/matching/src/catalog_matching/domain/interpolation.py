@@ -2,7 +2,7 @@
 
 import re
 
-from catalog_matching.models import TargetSegment
+from catalog_matching.domain.models import TargetSegment
 
 # Detects ONLY identifier placeholders ``{name}``; a regex quantifier like
 # ``{2,4}`` or ``{3}`` is not an identifier and is left untouched.
