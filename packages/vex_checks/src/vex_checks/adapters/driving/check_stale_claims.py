@@ -4,18 +4,16 @@ A ``not_affected`` claim asserts a fact about a live vulnerability. Once Grype
 stops reporting that vulnerability for the image, the claim has outlived its
 subject and should be pruned. Given a Syft SBOM (scanned by Grype) and the VEX
 document authored for that image, this lists every claimed advisory that Grype no
-longer reports. In ``fail`` mode a stale entry prints a GitHub ``::error::``
-annotation and exits non-zero; in ``sarif`` mode the same entries are written to
-``--output`` as a SARIF report (always exit zero).
+longer reports. A stale entry prints a GitHub ``::error::`` annotation and exits
+non-zero, unless a SARIF output is given: the same entries are then written there as
+a SARIF report (always exit zero).
 """
 
-import argparse
 import json
-import sys
 from pathlib import Path
 
 from vex_checks.adapters.driven import repo
-from vex_checks.adapters.driven.grype import GrypeRunner, SubprocessGrypeRunner
+from vex_checks.adapters.driven.grype import GrypeRunner
 from vex_checks.adapters.driven.sarif import build_sarif
 from vex_checks.adapters.driven.vex_io import load_claims
 from vex_checks.domain.violations import Violation
@@ -23,33 +21,19 @@ from vex_checks.domain.violations import Violation
 _RULE_ID = "stale-vex-entry"
 
 
-def main(argv: list[str] | None = None, runner: GrypeRunner | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--sbom", required=True, help="Syft JSON SBOM of the built image")
-    parser.add_argument("--vex", required=True, help="OpenVEX document authored for the image")
-    parser.add_argument("--format", choices=("fail", "sarif"), default="fail")
-    parser.add_argument("--output", help="SARIF output path (required by --format sarif)")
-    args = parser.parse_args(argv)
-    if args.format == "sarif" and args.output is None:
-        parser.error("--output is required with --format sarif")
-
-    runner = runner or SubprocessGrypeRunner()
-    reported = runner.run(Path(args.sbom))
-    vex_relpath = repo.display_path(Path(args.vex))
+def main(sbom: Path, vex: Path, sarif_output: Path | None, *, runner: GrypeRunner) -> int:
+    reported = runner.run(sbom)
+    vex_relpath = repo.display_path(vex)
     stale = [
         Violation(advisory_id, "no longer reported by Grype", vex_relpath)
-        for advisory_id in load_claims(Path(args.vex))
+        for advisory_id in load_claims(vex)
         if advisory_id not in reported
     ]
 
-    if args.format == "sarif":
-        Path(args.output).write_text(json.dumps(build_sarif(_RULE_ID, stale, vex_relpath)))
+    if sarif_output is not None:
+        sarif_output.write_text(json.dumps(build_sarif(_RULE_ID, stale, vex_relpath)))
         return 0
 
     for violation in stale:
         print(f"::error::{violation.advisory_id}: {violation.message} ({violation.location})")
     return 1 if stale else 0
-
-
-if __name__ == "__main__":  # pragma: no cover
-    sys.exit(main())

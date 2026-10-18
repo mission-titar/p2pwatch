@@ -5,8 +5,6 @@ claim, and each claim's justification must match its premise's family. Any breac
 prints a GitHub ``::error::`` annotation and exits non-zero.
 """
 
-import sys
-
 from vex_checks.adapters.driven.repo import vex_files
 from vex_checks.adapters.driven.vex_io import all_claims
 from vex_checks.domain.descriptors import JUSTIFICATION_BY_FAMILY, family
@@ -30,7 +28,3 @@ def main() -> int:
     for problem in problems:
         print(f"::error::{problem}")
     return 1 if problems else 0
-
-
-if __name__ == "__main__":  # pragma: no cover
-    sys.exit(main())

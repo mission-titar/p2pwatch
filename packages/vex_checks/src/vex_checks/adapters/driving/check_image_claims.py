@@ -3,16 +3,13 @@
 Each image premise asserts a fact about the packages shipped in the image (a
 package is absent, or a dpkg or hand-declared one meets a minimum version).
 Given a Syft SBOM and the VEX document authored for that image, this checks the
-image-family claims only: source-family claims are scoped out. In ``fail`` mode a
-breach prints a GitHub ``::error::`` annotation and exits non-zero; in ``sarif``
-mode the same breaches are written to ``--output`` as a SARIF report (always exit
-zero).
+image-family claims only: source-family claims are scoped out. A breach prints a
+GitHub ``::error::`` annotation and exits non-zero, unless a SARIF output is given:
+the same breaches are then written there as a SARIF report (always exit zero).
 """
 
-import argparse
 import dataclasses
 import json
-import sys
 from pathlib import Path
 
 from vex_checks.adapters.driven import repo
@@ -29,17 +26,8 @@ from vex_checks.domain.registry import PREMISES
 _RULE_ID = "unsatisfied-image-claim"
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--sbom", required=True, help="Syft JSON SBOM of the built image")
-    parser.add_argument("--vex", required=True, help="OpenVEX document authored for the image")
-    parser.add_argument("--format", choices=("fail", "sarif"), default="fail")
-    parser.add_argument("--output", help="SARIF output path (required by --format sarif)")
-    args = parser.parse_args(argv)
-    if args.format == "sarif" and args.output is None:
-        parser.error("--output is required with --format sarif")
-
-    claims = load_claims(Path(args.vex))
+def main(sbom: Path, vex: Path, sarif_output: Path | None) -> int:
+    claims = load_claims(vex)
     # Iterate PREMISES so the value binds the narrowed loop variable: is_image_premise
     # is a TypeIs, so ``premise`` types as ImagePremise here with no cast/ignore.
     premises: dict[str, ImagePremise] = {
@@ -47,21 +35,16 @@ def main(argv: list[str] | None = None) -> int:
         for advisory_id, premise in PREMISES.items()
         if advisory_id in claims and is_image_premise(premise)
     }
-    vex_relpath = repo.display_path(Path(args.vex))
-    sbom = Path(args.sbom)
+    vex_relpath = repo.display_path(vex)
     unlocated = evaluate_image_premises(
         premises, load_dpkg_packages(sbom), load_declared_components(sbom)
     )
     violations = [dataclasses.replace(violation, location=vex_relpath) for violation in unlocated]
 
-    if args.format == "sarif":
-        Path(args.output).write_text(json.dumps(build_sarif(_RULE_ID, violations, vex_relpath)))
+    if sarif_output is not None:
+        sarif_output.write_text(json.dumps(build_sarif(_RULE_ID, violations, vex_relpath)))
         return 0
 
     for violation in violations:
         print(f"::error::{violation.advisory_id}: {violation.message} ({violation.location})")
     return 1 if violations else 0
-
-
-if __name__ == "__main__":  # pragma: no cover
-    sys.exit(main())

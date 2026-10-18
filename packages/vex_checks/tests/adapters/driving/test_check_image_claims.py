@@ -83,7 +83,7 @@ def test_fail_mode_flags_a_present_package_and_prints_the_cve(
 ) -> None:
     sbom = _violating_sbom(tmp_path)
 
-    rc = check_image_claims.main(["--sbom", str(sbom), "--vex", str(_CRAWLER_VEX)])
+    rc = check_image_claims.main(sbom, _CRAWLER_VEX, None)
 
     assert rc == 1
     out = capsys.readouterr().out
@@ -109,7 +109,7 @@ def test_fail_mode_flags_a_declared_component_below_its_minimum(
         ],
     )
 
-    rc = check_image_claims.main(["--sbom", str(sbom), "--vex", str(vex)])
+    rc = check_image_claims.main(sbom, vex, None)
 
     assert rc == 1
     assert "::error::CVE-2006-2691: declared amule 2.1.1 is below 2.1.2" in capsys.readouterr().out
@@ -133,7 +133,7 @@ def test_the_real_amule_claims_fail_on_an_amule_older_than_the_fix(
         ],
     )
 
-    rc = check_image_claims.main(["--sbom", str(sbom), "--vex", str(_AMULE_VEX)])
+    rc = check_image_claims.main(sbom, _AMULE_VEX, None)
 
     assert rc == 1
     out = capsys.readouterr().out
@@ -147,7 +147,7 @@ def test_fail_mode_returns_zero_on_a_clean_sbom(
 ) -> None:
     sbom = _clean_sbom(tmp_path)
 
-    rc = check_image_claims.main(["--sbom", str(sbom), "--vex", str(_CRAWLER_VEX)])
+    rc = check_image_claims.main(sbom, _CRAWLER_VEX, None)
 
     assert rc == 0
     assert capsys.readouterr().out == ""
@@ -162,7 +162,7 @@ def test_a_vex_with_no_image_claim_lets_any_sbom_pass(
     vex = _write_vex(tmp_path, _CLAIMED_SOURCE_CVE, "vulnerable_code_not_in_execute_path")
     sbom = _violating_sbom(tmp_path)
 
-    rc = check_image_claims.main(["--sbom", str(sbom), "--vex", str(vex)])
+    rc = check_image_claims.main(sbom, vex, None)
 
     assert rc == 0
     assert capsys.readouterr().out == ""
@@ -177,7 +177,7 @@ def test_fail_mode_renders_an_out_of_repo_vex_path_verbatim(
     vex = _write_vex(tmp_path, _CLAIMED_IMAGE_CVE, "vulnerable_code_not_present")
     sbom = _violating_sbom(tmp_path)
 
-    rc = check_image_claims.main(["--sbom", str(sbom), "--vex", str(vex)])
+    rc = check_image_claims.main(sbom, vex, None)
 
     assert rc == 1
     out = capsys.readouterr().out
@@ -189,18 +189,7 @@ def test_sarif_mode_with_violation_writes_matching_results(tmp_path: Path) -> No
     sbom = _violating_sbom(tmp_path)
     output = tmp_path / "out.sarif"
 
-    rc = check_image_claims.main(
-        [
-            "--sbom",
-            str(sbom),
-            "--vex",
-            str(_CRAWLER_VEX),
-            "--format",
-            "sarif",
-            "--output",
-            str(output),
-        ]
-    )
+    rc = check_image_claims.main(sbom, _CRAWLER_VEX, output)
 
     assert rc == 0
     doc = json.loads(output.read_text())
@@ -221,39 +210,11 @@ def test_sarif_mode_with_violation_writes_matching_results(tmp_path: Path) -> No
     assert artifact["uri"] == _CRAWLER_VEX_RELPATH
 
 
-def test_sarif_mode_without_output_errors_cleanly(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    # --output is required with --format sarif; its absence must be an argparse
-    # usage error (exit 2), not a TypeError from Path(None).
-    sbom = _clean_sbom(tmp_path)
-
-    with pytest.raises(SystemExit) as exc:
-        check_image_claims.main(
-            ["--sbom", str(sbom), "--vex", str(_CRAWLER_VEX), "--format", "sarif"]
-        )
-
-    assert exc.value.code == 2
-    assert "--output" in capsys.readouterr().err
-
-
 def test_sarif_mode_on_a_clean_sbom_writes_empty_results(tmp_path: Path) -> None:
     sbom = _clean_sbom(tmp_path)
     output = tmp_path / "out.sarif"
 
-    rc = check_image_claims.main(
-        [
-            "--sbom",
-            str(sbom),
-            "--vex",
-            str(_CRAWLER_VEX),
-            "--format",
-            "sarif",
-            "--output",
-            str(output),
-        ]
-    )
+    rc = check_image_claims.main(sbom, _CRAWLER_VEX, output)
 
     assert rc == 0
     doc = json.loads(output.read_text())

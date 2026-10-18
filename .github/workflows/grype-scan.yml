@@ -76,7 +76,7 @@ jobs:
       # exit 0, so a drift surfaces in Code scanning rather than failing this daily job.
       - name: Check image-family VEX claims against the SBOM
         run: >
-          uv run python -m vex_checks.adapters.driving.check_image_claims
+          uv run python -m vex_checks image-claims
           --sbom /tmp/sbom.syft.json
           --vex "$VEX"
           --format sarif --output /tmp/image-claims.sarif
@@ -90,7 +90,7 @@ jobs:
 
       - name: Check for stale VEX entries no longer reported by Grype
         run: >
-          uv run python -m vex_checks.adapters.driving.check_stale_claims
+          uv run python -m vex_checks stale-claims
           --sbom /tmp/sbom.syft.json
           --vex "$VEX"
           --format sarif --output /tmp/stale.sarif
