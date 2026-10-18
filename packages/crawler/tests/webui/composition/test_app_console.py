@@ -18,6 +18,8 @@ from p2pwatch.webui.composition.app import build_app
 from p2pwatch_testing.application.fakes import FakeTime, TickingMonotonicClock
 from p2pwatch_testing.catalog_rows import insert_file
 
+pytestmark = pytest.mark.usefixtures("close_test_connections")
+
 _HASH_A = "a" * 32
 # A few hundredths of a second of real time, past a 5 s budget on a TickingMonotonicClock.
 _PAST_BUDGET_SQL = (

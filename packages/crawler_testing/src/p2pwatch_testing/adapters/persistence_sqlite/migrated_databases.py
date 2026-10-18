@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for the webui: a migrated catalog.db and local.db."""
+"""Pytest fixtures: a migrated catalog.db and local.db, and a closer of a test's connections."""
 
 import sqlite3
 import threading
@@ -9,10 +9,6 @@ from typing import Any
 import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
-
-# ---------------------------------------------------------------------------
-# Fixtures pytest
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -31,15 +27,15 @@ def local_db(tmp_path: Path) -> Path:
     return path
 
 
-@pytest.fixture(autouse=True)
-def _close_test_connections(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+@pytest.fixture
+def close_test_connections(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Close every SQLite connection a test opens on its own thread.
 
-    The suite pervasively uses ``with sqlite3.connect(...) as conn`` (seeds/fixtures) and
+    The webui's tests use ``with sqlite3.connect(...) as conn`` (seeds/fixtures) and
     ``CatalogReader(open_reader(db))`` (readers) without closing. ``sqlite3.Connection.__exit__``
     only ends the transaction, it does NOT close, so each connection lingers until GC and
     surfaces as ``ResourceWarning: unclosed database``. This wraps ``sqlite3.connect`` for the
-    duration of each test, tracks every connection it hands out on the test's thread
+    duration of the test, tracks every connection it hands out on the test's thread
     (``open_reader`` opens through it too), and closes them at teardown. The app's
     ``ReaderProvider`` connections are among them, since the app runs on the test's event loop;
     the provider deliberately REUSES them across requests (never closing per request), so this

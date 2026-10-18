@@ -4,8 +4,12 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from p2pwatch.webui.adapters.local_read import LocalReader
 from p2pwatch.webui.domain.views import BackoffRow, DownloadRow, NodeState
+
+pytestmark = pytest.mark.usefixtures("close_test_connections")
 
 _STARTED_AT_MICROS = 1_781_258_400_000_000  # 2026-06-12T10:00:00Z
 

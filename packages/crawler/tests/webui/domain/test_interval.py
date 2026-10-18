@@ -6,6 +6,8 @@ import pytest
 
 from p2pwatch.webui.domain.interval import Interval, parse_instant, requested_interval
 
+pytestmark = pytest.mark.usefixtures("close_test_connections")
+
 _NOW = datetime(2026, 10, 14, 20, 0, tzinfo=UTC)
 _DAY = timedelta(days=1)
 

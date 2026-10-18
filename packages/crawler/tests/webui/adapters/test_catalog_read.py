@@ -47,6 +47,8 @@ from p2pwatch_testing.catalog_rows import (
     source_id,
 )
 
+pytestmark = pytest.mark.usefixtures("close_test_connections")
+
 # Selects the CTE under test on its own: SQLite drops the CTEs a query does not reference, so
 # the resulting plan is exactly how ``latest_sighting`` is resolved.
 LATEST_SIGHTING_PROBE = "SELECT file_id, filename, source_count, last_seen FROM latest_sighting"
