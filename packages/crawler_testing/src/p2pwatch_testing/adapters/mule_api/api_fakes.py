@@ -194,6 +194,7 @@ class FakeAmuleApiServer:
         self._socket = socket.create_server(("127.0.0.1", 0))
         self.host, self.port = self._socket.getsockname()[:2]
         self.failures: list[Exception] = []
+        self._served = threading.Condition()
         config = uvicorn.Config(
             self._serve_http, interface="asgi3", lifespan="off", log_config=None, access_log=False
         )
@@ -210,6 +211,11 @@ class FakeAmuleApiServer:
         self._socket.close()
         if self.failures:
             raise self.failures[0]
+
+    def wait_for(self, predicate: Callable[[FakeAmuleApi], bool], timeout_seconds: float) -> bool:
+        """Blocks until ``predicate`` holds after a request, as ``Condition.wait_for`` does."""
+        with self._served:
+            return self._served.wait_for(lambda: predicate(self.api), timeout_seconds)
 
     async def _serve_http(
         self,
@@ -230,11 +236,13 @@ class FakeAmuleApiServer:
             headers=scope["headers"],
             content=body,
         )
-        try:
-            response = self.api.handle(request)
-        except Exception as failure:
-            self.failures.append(failure)
-            response = httpx.Response(500)
+        with self._served:
+            try:
+                response = self.api.handle(request)
+            except Exception as failure:
+                self.failures.append(failure)
+                response = httpx.Response(500)
+            self._served.notify_all()
         await send(
             {
                 "type": "http.response.start",

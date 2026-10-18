@@ -36,6 +36,7 @@ from catalog_matching.config import MatcherConfig
 from catalog_matching.engine import MatchingEngine
 from catalog_matching.models import TargetSegment
 from p2pwatch.adapters.config.crawler_config import (
+    AMULE_CLIENT_NAME,
     AmuleEndpoint,
     CrawlerConfig,
     DownloadConfig,
@@ -159,6 +160,7 @@ class CrawlerApp:
         wake_hub: WakeHub,
         policy_fingerprint: str,
         webui_address: tuple[str, int],
+        amule_api_address: tuple[str, int],
         client_factory: MuleClientFactory = default_mule_client_factory,
         download_client_factory: DownloadClientFactory = default_download_client_factory,
         metrics_server: MetricsServer = default_metrics_server,
@@ -172,6 +174,10 @@ class CrawlerApp:
         self._wake_hub = wake_hub
         self._policy_fingerprint = policy_fingerprint
         self._webui_address = webui_address
+        host, port = amule_api_address
+        self._amule_endpoint = AmuleEndpoint(
+            AMULE_CLIENT_NAME, host, port, crawler_config.amule_api_password
+        )
         self._client_factory = client_factory
         self._download_client_factory = download_client_factory
         self._metrics_server = metrics_server
@@ -213,9 +219,7 @@ class CrawlerApp:
         the daemon, connected tolerating ``ClientUnreachableError`` (a daemon not yet listening
         at startup does not kill the crawler; the loop's backoff governs).
         """
-        download_client = self._download_client_factory(
-            self._crawler_config.amule_endpoint, self._monotonic_clock
-        )
+        download_client = self._download_client_factory(self._amule_endpoint, self._monotonic_clock)
         stack.push_async_callback(download_client.close)
         try:
             await download_client.connect()
@@ -390,7 +394,7 @@ class CrawlerApp:
             catalog_repo = SqliteCatalogRepository(catalog_conn, node_id)
             backoff_states = SqliteBackoffStateRepository(local_conn)
             engine = MatchingEngine(self._matcher_config, self._targets)
-            endpoint = self._crawler_config.amule_endpoint
+            endpoint = self._amule_endpoint
             board = StatusBoard((endpoint.client_name,), self._monotonic_clock)
             # In-process webui (spec §5): own thread + loop, started EARLY (before the daemon client
             # + startup re-evaluation) so it is up promptly and stays isolated from the crawler's
