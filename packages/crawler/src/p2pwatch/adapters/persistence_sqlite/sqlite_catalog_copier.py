@@ -1,4 +1,4 @@
-"""``merge_catalogs``: idempotent merge of N ``catalog.db`` into a single output.
+"""``CatalogCopier`` over SQLite: idempotent copy of N ``catalog.db`` into a single output.
 
 Mechanism (merge spec §3/§4): the output is created/opened via ``open_catalog`` (the catalog
 migrations, NO duplicated DDL). For each source: we ``ATTACH`` it (outside a transaction),
@@ -28,13 +28,13 @@ import logging
 import sqlite3
 from collections.abc import Sequence
 from contextlib import suppress
-from pathlib import Path
+from pathlib import Path, PurePath
 
 from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.persistence_sqlite.errors import PersistenceError
-from p2pwatch.merge.errors import MergeError, SchemaVersionMismatchError
+from p2pwatch.ports.driven.catalog_copier import CatalogCopier, CatalogCopyError
 
-_logger = logging.getLogger("p2pwatch.merge.merger")
+_logger = logging.getLogger("p2pwatch.adapters.persistence_sqlite.sqlite_catalog_copier")
 
 # Attach alias of the current source (one at a time → we stay at 1 attached DB
 # whatever N, well under the SQLITE_MAX_ATTACHED cap of 10, spec §8).
@@ -117,47 +117,60 @@ _COPY_STATEMENTS = (
 )
 
 
-def merge_catalogs(
-    output: Path, source_catalogs: Sequence[Path], *, output_is_source_catalog: bool = False
+class SqliteCatalogCopier(CatalogCopier):
+    """Copies through ``ATTACH``, one source and one transaction at a time."""
+
+    def copy_catalogs(
+        self,
+        destination: PurePath,
+        source_catalogs: Sequence[PurePath],
+        *,
+        destination_is_source: bool,
+    ) -> None:
+        _copy_catalogs(Path(destination), source_catalogs, destination_is_source)
+
+
+def _copy_catalogs(
+    destination: Path, source_catalogs: Sequence[PurePath], destination_is_source: bool
 ) -> None:
-    """Merges ``source_catalogs`` into ``output``, idempotent.
+    """Copies ``source_catalogs`` into ``destination``, idempotent.
 
-    ``output`` is opened via ``open_catalog``: a new file gets the schema + the triggers, an
-    existing older catalog is first migrated in place, and the merge APPENDS (never a truncate).
+    ``destination`` is opened via ``open_catalog``: a new file gets the schema + the triggers, an
+    existing older catalog is first migrated in place, and the copy APPENDS (never a truncate).
 
-    ``output_is_source_catalog`` (``--into`` mode): the output is itself one of the
+    ``destination_is_source`` (``--into`` mode): the destination is itself one of the
     ``source_catalogs``; we do not re-attach to ourselves (idempotence guarantees we duplicate
-    nothing there), so we skip the source catalog whose path resolves to ``output``.
+    nothing there), so we skip the source catalog whose path resolves to ``destination``.
 
     Any ``sqlite3.Error`` (corrupt source, incompatible schema, FK…), and ``open_catalog``'s
-    ``PersistenceError`` on the output, is wrapped in ``MergeError``; ``ROLLBACK`` is best-effort.
+    ``PersistenceError`` on the destination, is wrapped in ``CatalogCopyError``; ``ROLLBACK`` is
+    best-effort.
 
     Before copying a source we check its ``PRAGMA user_version`` equals the current schema
-    version (the one ``open_catalog`` just stamped on ``output``) and refuse any mismatch
-    with a ``SchemaVersionMismatchError`` (a ``MergeError`` subtype). We never migrate a
-    source in place, so an off-version schema could silently mis-copy.
+    version (the one ``open_catalog`` just stamped on ``destination``) and refuse any mismatch.
+    We never migrate a source in place, so an off-version schema could silently mis-copy.
     """
     try:
-        connection = open_catalog(output)
+        connection = open_catalog(destination)
     except PersistenceError as error:
-        raise MergeError(f"cannot open output {output}: {error}") from error
+        raise CatalogCopyError(f"cannot open output {destination}: {error}") from error
     try:
         # The current schema version = whatever open_catalog stamped on the output; we read
         # it back rather than hardcode it, so this tracks the migration set automatically.
         expected_version = int(connection.execute("PRAGMA user_version").fetchone()[0])
-        output_resolved = Path(output).resolve()
+        destination_resolved = destination.resolve()
         for source_catalog in source_catalogs:
-            if output_is_source_catalog and Path(source_catalog).resolve() == output_resolved:
+            if destination_is_source and Path(source_catalog).resolve() == destination_resolved:
                 _logger.info("%s skipped: it is the output", source_catalog)
             else:
-                _merge_catalog(connection, source_catalog, expected_version)
+                _copy_catalog(connection, source_catalog, expected_version)
                 _logger.info("%s merged", source_catalog)
     finally:
         connection.close()
 
 
-def _merge_catalog(
-    connection: sqlite3.Connection, source_catalog: Path, expected_version: int
+def _copy_catalog(
+    connection: sqlite3.Connection, source_catalog: PurePath, expected_version: int
 ) -> None:
     """Attaches ``source_catalog``, copies its tables in ONE transaction, detaches.
 
@@ -166,18 +179,18 @@ def _merge_catalog(
     whose schema version differs from ``expected_version`` (nothing is written yet; the
     ``finally`` still detaches). The copy is wrapped by ``BEGIN``/``COMMIT``; an error
     triggers a best-effort ``ROLLBACK`` then a best-effort ``DETACH``, and propagates as
-    ``MergeError``: the output keeps no partial copy of this source.
+    ``CatalogCopyError``: the output keeps no partial copy of this source.
     """
     try:
         # RESOLVED path (consistent with the --into skip that compares ``Path.resolve()``):
         # avoids a self-attach if the same DB is passed under two path forms.
         connection.execute(f"ATTACH DATABASE ? AS {_SRC}", (str(Path(source_catalog).resolve()),))
     except sqlite3.Error as error:
-        raise MergeError(f"cannot attach source catalog {source_catalog}: {error}") from error
+        raise CatalogCopyError(f"cannot attach source catalog {source_catalog}: {error}") from error
     try:
         source_version = int(connection.execute(f"PRAGMA {_SRC}.user_version").fetchone()[0])
         if source_version != expected_version:
-            raise SchemaVersionMismatchError(
+            raise CatalogCopyError(
                 f"source catalog {source_catalog} has schema version {source_version}, "
                 f"expected {expected_version} (the current schema); merge refuses an "
                 "out-of-version catalog (it never migrates a source catalog in place)"
@@ -190,7 +203,7 @@ def _merge_catalog(
         except sqlite3.Error as error:
             with suppress(sqlite3.Error):
                 connection.execute("ROLLBACK")
-            raise MergeError(f"copy of {source_catalog} failed: {error}") from error
+            raise CatalogCopyError(f"copy of {source_catalog} failed: {error}") from error
     finally:
         with suppress(sqlite3.Error):
             connection.execute(f"DETACH DATABASE {_SRC}")

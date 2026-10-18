@@ -88,7 +88,7 @@ def test_t10_into_must_be_a_listed_source(
     code = main(["--into", str(other), str(src_a), str(src_b)])
 
     assert code == 2
-    assert f"--into must name a listed source catalog: {other}" in capsys.readouterr().err
+    assert f"destination must be one of the source catalogs: {other}" in capsys.readouterr().err
 
 
 def test_t11_output_and_into_mutually_exclusive(tmp_path: Path) -> None:
@@ -137,7 +137,7 @@ def test_t13_missing_source_file_errors_before_output_created(
 def test_cli_logs_the_output_once_done(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     src = _seed(tmp_path / "a.db", "a")
     out = tmp_path / "out.db"
-    caplog.set_level("INFO", logger="p2pwatch.merge")
+    caplog.set_level("INFO", logger="p2pwatch.application.merge_catalogs")
 
     assert main(["--output", str(out), str(src)]) == 0
 

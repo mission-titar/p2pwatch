@@ -6,13 +6,8 @@ invoked as ``python -m p2pwatch.merge``). ``main(argv) -> int`` returns an exit 
 traceback); argparse itself returns ``2`` for a parsing error (mutually
 exclusive/required group). No environment variable (repo doctrine, spec §6).
 
-Safe-by-default (zero accidental loss, spec §6):
-- ``--output`` new → created + merged; ``--output`` existing → refused UNLESS ``--force`` (append
-  idempotent, never a truncate).
-- ``--into <catalog>`` → dest = one of the source catalogs, which MUST be listed; the others are
-  merged into it. Mutually exclusive with ``--output``; exactly one of the two is required.
-- ``--force`` only makes sense with ``--output`` (rejected with ``--into``).
-- a missing source catalog → ``MergeError`` BEFORE creating/opening the output (fail-fast).
+Its safety rules are the use case ``MergeCatalogs``'s; this command line keeps one, no
+``--force`` with ``--into``.
 """
 
 import argparse
@@ -20,10 +15,10 @@ import logging
 import sys
 from pathlib import Path
 
-from p2pwatch.merge.errors import MergeError
-from p2pwatch.merge.merger import merge_catalogs
-
-_LOGGER = logging.getLogger("p2pwatch.merge")
+from p2pwatch.adapters.pathlib_catalog_finder import PathlibCatalogFinder
+from p2pwatch.adapters.persistence_sqlite.sqlite_catalog_copier import SqliteCatalogCopier
+from p2pwatch.application.merge_catalogs import MergeCatalogs
+from p2pwatch.ports.driving.catalog_merger import ListedSourceCatalog, MergeError, NewCatalog
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
@@ -58,45 +53,25 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _resolve_destination(args: argparse.Namespace) -> tuple[Path, bool]:
-    """Validates the safe-by-default rules and returns ``(output, output_is_source_catalog)``.
-
-    Raises ``MergeError`` (clear message) BEFORE any opening/creation of the output:
-    missing source catalogs, ``--force`` with ``--into``, existing ``--output`` without
-    ``--force``, ``--into`` not listed in the source catalogs.
-    """
-    for source_catalog in args.source_catalogs:
-        if not source_catalog.exists():
-            raise MergeError(f"source catalog not found: {source_catalog}")
-
-    if args.into is not None:
-        if args.force:
-            raise MergeError("--force makes no sense with --into")
-        resolved_catalogs = {source_catalog.resolve() for source_catalog in args.source_catalogs}
-        if args.into.resolve() not in resolved_catalogs:
-            raise MergeError(f"--into must name a listed source catalog: {args.into}")
-        return args.into, True
-
-    # --output mode (the required group guarantees we have one OR the other; here it's --output).
-    if args.output.exists() and not args.force:
-        raise MergeError(f"output already exists: {args.output} (use --force to merge into it)")
-    return args.output, False
+def _destination(args: argparse.Namespace) -> NewCatalog | ListedSourceCatalog:
+    """The destination the arguments name; ``--force`` with ``--into`` raises ``MergeError``."""
+    if args.into is None:
+        return NewCatalog(args.output, force=args.force)
+    if args.force:
+        raise MergeError("--force makes no sense with --into")
+    return ListedSourceCatalog(args.into)
 
 
 def main(argv: list[str] | None = None) -> int:
     """CLI entry. ``0`` = OK, ``2`` = usage/merge error (clear message on stderr)."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     args = _parse_args(sys.argv[1:] if argv is None else argv)
+    catalog_merger = MergeCatalogs(PathlibCatalogFinder(), SqliteCatalogCopier())
     try:
-        output, output_is_source_catalog = _resolve_destination(args)
-        _LOGGER.info("merge → %s (%d source catalog(s))", output, len(args.source_catalogs))
-        merge_catalogs(
-            output, args.source_catalogs, output_is_source_catalog=output_is_source_catalog
-        )
+        catalog_merger.merge_catalogs(args.source_catalogs, _destination(args))
     except MergeError as error:
         print(f"Merge failed: {error}", file=sys.stderr, flush=True)
         return 2
-    _LOGGER.info("merge done: %s", output)
     return 0
 
 

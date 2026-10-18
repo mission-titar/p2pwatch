@@ -1,0 +1,23 @@
+"""``CatalogCopier``: copies the rows of catalogs into another, idempotent."""
+
+from abc import ABC, abstractmethod
+from collections.abc import Sequence
+from pathlib import PurePath
+
+
+class CatalogCopyError(Exception):
+    """A catalog that cannot be opened or copied: the source being copied leaves no row."""
+
+
+class CatalogCopier(ABC):
+    """Copies every row a destination lacks, never writing to a source."""
+
+    @abstractmethod
+    def copy_catalogs(
+        self,
+        destination: PurePath,
+        source_catalogs: Sequence[PurePath],
+        *,
+        destination_is_source: bool,
+    ) -> None:
+        """Copies each source but ``destination`` itself; raises ``CatalogCopyError``."""
