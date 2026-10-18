@@ -1,4 +1,4 @@
-"""Entry point `python -m p2pwatch_amule.port_sync`: run as amule by its s6 service.
+"""Entry point of port-sync: run as amule by its s6 service.
 
 Each round puts gluetun's forwarded port in amule.conf, restarting amuled through s6 around it.
 """
@@ -9,13 +9,13 @@ import os
 import subprocess
 import time
 
-from p2pwatch_amule.boot.conf import AMULE_CONF_PATH, tcp_listen_port, with_listen_port
-from p2pwatch_amule.port_sync import settings
-from p2pwatch_amule.port_sync.gluetun import forwarded_port
+from p2pwatch_amule.adapters.driven.gluetun import forwarded_port
+from p2pwatch_amule.adapters.driving import settings
+from p2pwatch_amule.domain.conf import AMULE_CONF_PATH, tcp_listen_port, with_listen_port
 
 AMULED_SERVICE_DIR = "/etc/services.d/amuled"
 
-_logger = logging.getLogger("p2pwatch_amule.port_sync")
+_logger = logging.getLogger("p2pwatch_amule.adapters.driving.port_sync")
 
 
 def sync_listen_port_once(

@@ -1,4 +1,4 @@
-"""Entry point `python -m p2pwatch_amule.boot`: run once by the entrypoint, as root.
+"""Entry point of the boot step: run once by the entrypoint, as root.
 
 Before any change, exits naming the first variable missing or invalid, port-sync's included.
 """
@@ -13,14 +13,14 @@ import sys
 import unicodedata
 from collections.abc import Callable
 
-from p2pwatch_amule.boot.conf import (
+from p2pwatch_amule.adapters.driving import settings
+from p2pwatch_amule.domain.conf import (
     AMULE_CONF_PATH,
     CONFIG_DIR,
     INCOMING_DIR,
     TEMP_DIR,
     reconcile_conf,
 )
-from p2pwatch_amule.port_sync import settings
 
 HOME_DIR = "/home/amule"
 PORT_SYNC_DOWN_FILE = "/etc/services.d/port-sync/down"

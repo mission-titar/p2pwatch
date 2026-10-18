@@ -4,7 +4,7 @@ import re
 
 import pytest
 
-from p2pwatch_amule.port_sync.settings import Settings, enabled, load
+from p2pwatch_amule.adapters.driving.settings import Settings, enabled, load
 
 
 @pytest.mark.parametrize("value", ["enabled", "yes", "on", "true", "On", "YES", "True"])

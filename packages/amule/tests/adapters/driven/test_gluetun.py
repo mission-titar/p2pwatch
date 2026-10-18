@@ -9,7 +9,7 @@ from collections.abc import Callable
 
 import pytest
 
-from p2pwatch_amule.port_sync.gluetun import forwarded_port
+from p2pwatch_amule.adapters.driven.gluetun import forwarded_port
 
 Urlopen = Callable[..., io.BytesIO]
 

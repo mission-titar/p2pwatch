@@ -12,8 +12,8 @@ from typing import Any
 
 import pytest
 
-from p2pwatch_amule.boot import __main__ as entry
-from p2pwatch_amule.boot.conf import reconcile_conf
+from p2pwatch_amule.adapters.driving import boot as entry
+from p2pwatch_amule.domain.conf import reconcile_conf
 
 DIGEST = hashlib.md5(b"hunter2").hexdigest()
 ENV = {
