@@ -27,14 +27,17 @@ An agent adds an entry only after the operator has agreed to it.
 - **Every stamp an integer of microseconds since the epoch**, as the catalog's points already are: the ISO-8601 TEXT
   stamps left in both databases converted; the catalog's waits for the copy before a migration that rewrites rows. D12 of `agents/specs/2026-10-14-monotonic-clock.md`.
 
-- **The webui's read side**: one observation type and its own read ports, so no persistence shape reaches its domain;
-  drops the dead `{% else %}` at `sources.html:26`. Section 7 of `agents/specs/2026-10-13-descriptive-names.md`.
+- **Hexagonal architecture**: rings read from the paths, ports as ABCs, six hexagons that never import one another,
+  enforced by tach and ast-grep. Umbrella spec: `agents/specs/2026-10-18-hexagonal-architecture.md`, lots in D18.
+  - **Lot 1, foundations**: the composition wired without factories and tested in integration, every package moved
+    to the ring paths and explicit subcommands, then the gate with its deprecated edges. D11 to D18.
+  - **Lot 2, the `p2pwatch` hexagon**: the self-reconnecting session, the logging port, the webui's read side and `merge`
+    behind use cases, the ports as ABCs split into roles. Inherits the two sections D20 of the umbrella spec names.
+  - **Lot 3, the other five hexagons**: their I/O behind ports, their tests off `monkeypatch`, and the documentation
+    left over. D18 of the umbrella spec.
 
 - **Adopt ty**, first as the gate's type checker in mypy's place, then as Serena's language server, once it reaches
   parity. Section "ty: the parity conditions" of `agents/specs/2026-10-17-serena-and-the-language-servers.md`.
-
-- **The ports and the composition's architecture**: ports as ABCs their implementers inherit, so a rename reaches them,
-  and the composition wired without injected factories. Section "For the architecture lot" of `agents/specs/2026-10-17-serena-and-the-language-servers.md`.
 
 - **Test quality** (lot 3 of the gate tooling umbrella): every unit test keeps unique coverage of its unit, the others are
   pruned, mutmut proving no detected mutant is lost. D3 to D5 and D13 to D15 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`, lot order in D12.
