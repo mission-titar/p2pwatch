@@ -244,7 +244,7 @@ sequenceDiagram
   end
 ```
 
-- Un résultat devient une `FileObservation` via `adapters/mule_api/mapping.py` (capture
+- Un résultat devient une `FileObservation` via `adapters/driven/mule_api/mapping.py` (capture
   exhaustive : l'identité du fichier, une `FileKey` dont le hash MD4 est l'identifiant natif sur le
   réseau `ed2k`, le nom, la taille, le nombre de sources, plus chaque clé non mappée).
   **La durée, le débit et le codec arrivent maintenant avec le résultat**, quand le serveur qui
@@ -457,7 +457,7 @@ perdues, et chaque backoff repart de sa base.
 
 ### 8.1 Écrire une migration
 
-Au démarrage, le runner (`adapters/persistence_sqlite/connection.py`) applique dans l'ordre chaque
+Au démarrage, le runner (`adapters/driven/persistence_sqlite/connection.py`) applique dans l'ordre chaque
 script `NNNN_*.sql` de `migrations/catalog/` ou `migrations/local/` dont le numéro dépasse le
 `PRAGMA user_version` de la base, puis y inscrit ce numéro. Une base plus récente que le code est
 refusée. Les règles d'écriture :
@@ -666,9 +666,9 @@ démon sont
 | Cas d'usage | `application/search_tasks.py`, `status_loop.py`, `run_download_cycle.py` |
 | Recherche (pure) | `domain/search/` (`keywords`, `backoff`) |
 | Matching | `packages/matching/src/catalog_matching/` (moteur + politique `deploy/matcher.yml`) |
-| Frontière amuleapi | `adapters/mule_api/` (client / mapping / erreurs) ; ports `ports/mule_client.py`, `ports/download_client.py`, `ports/source_client.py` |
-| Persistance | `adapters/persistence_sqlite/` (migrations `.sql`, repos) |
-| Observabilité | `domain/observability/`, `adapters/observability/` |
+| Frontière amuleapi | `adapters/driven/mule_api/` (client / mapping / erreurs) ; ports `ports/driven/search_client.py`, `download_client.py`, `source_client.py` |
+| Persistance | `adapters/driven/persistence_sqlite/` (migrations `.sql`, repos) |
+| Observabilité | `domain/observability/`, `adapters/driven/observability/` |
 | WebUI | `webui/` (in-process, thread dédié) |
 | Conteneur d'aMule | `packages/amule/src/p2pwatch_amule/` (`boot/` le one-shot, `port_sync/`) ; image `packages/amule/Dockerfile`, services s6 sous `packages/amule/docker/services.d/` |
 | Déploiement | `deploy/compose.yml` (le cœur et un `include:`), `deploy/ed2k/` (`service`, `direct` et `vpn.compose.yml`) |

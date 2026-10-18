@@ -44,21 +44,21 @@ from p2pwatch.domain.observability.events import (
 )
 from p2pwatch.domain.persisted_wait import remaining_wait
 from p2pwatch.domain.source import SourceKey, SourceUsefulness
-from p2pwatch.ports.catalog_repository import DownloadCandidate, ObservedFile
-from p2pwatch.ports.client_errors import ClientUnreachableError, DownloadRejectedError
-from p2pwatch.ports.clock import MonotonicClock, MonotonicInstant, WallClock
-from p2pwatch.ports.disk_space import DiskSpace
-from p2pwatch.ports.download_client import (
+from p2pwatch.ports.driven.catalog_repository import DownloadCandidate, ObservedFile
+from p2pwatch.ports.driven.client_errors import ClientUnreachableError, DownloadRejectedError
+from p2pwatch.ports.driven.clock import MonotonicClock, MonotonicInstant, WallClock
+from p2pwatch.ports.driven.disk_space import DiskSpace
+from p2pwatch.ports.driven.download_client import (
     DownloadClient,
     DownloadRequest,
     DownloadStatus,
     FailureReason,
 )
-from p2pwatch.ports.repository_errors import RepositoryError
-from p2pwatch.ports.source_client import SourceClient
-from p2pwatch.ports.source_repository import RecordedReading, SourceRepository
-from p2pwatch.ports.telemetry import Telemetry
-from p2pwatch.ports.wake_hub import WakeHub
+from p2pwatch.ports.driven.repository_errors import RepositoryError
+from p2pwatch.ports.driven.source_client import SourceClient
+from p2pwatch.ports.driven.source_repository import RecordedReading, SourceRepository
+from p2pwatch.ports.driven.telemetry import Telemetry
+from p2pwatch.ports.driven.wake_hub import WakeHub
 
 _logger = logging.getLogger("p2pwatch.application.run_download_cycle")
 

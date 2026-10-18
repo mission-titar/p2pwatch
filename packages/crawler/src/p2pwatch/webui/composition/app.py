@@ -27,13 +27,13 @@ from starlette.templating import Jinja2Templates
 from catalog_matching.domain.config import MatcherConfig
 from catalog_matching.domain.ed2k_link import build_ed2k_link
 from catalog_matching.domain.models import TargetSegment
-from p2pwatch.adapters.persistence_sqlite.reader import ReaderProvider
+from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.observation import Sighting
 from p2pwatch.domain.source import SourceKey
-from p2pwatch.ports.client_status import StatusReadings
-from p2pwatch.ports.clock import MonotonicClock, WallClock
-from p2pwatch.ports.crawler_control import CrawlerControl
+from p2pwatch.ports.driven.client_status import StatusReadings
+from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
+from p2pwatch.ports.driving.crawler_control import CrawlerControl
 from p2pwatch.webui.adapters.catalog_read import (
     DEFAULT_DIR,
     DEFAULT_SORT,

@@ -18,11 +18,11 @@ from dataclasses import dataclass
 from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.application.decisions import rejudge_file
 from p2pwatch.domain.observation import candidate_from_fields
-from p2pwatch.ports.catalog_repository import CatalogRepository
-from p2pwatch.ports.clock import WallClock
-from p2pwatch.ports.repository_errors import RepositoryError
-from p2pwatch.ports.telemetry import Telemetry
-from p2pwatch.ports.wake_hub import WakeHub
+from p2pwatch.ports.driven.catalog_repository import CatalogRepository
+from p2pwatch.ports.driven.clock import WallClock
+from p2pwatch.ports.driven.repository_errors import RepositoryError
+from p2pwatch.ports.driven.telemetry import Telemetry
+from p2pwatch.ports.driven.wake_hub import WakeHub
 
 _logger = logging.getLogger("p2pwatch.application.reevaluate_catalog")
 

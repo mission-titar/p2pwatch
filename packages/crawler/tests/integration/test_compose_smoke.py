@@ -452,8 +452,8 @@ _API_HOST, _API_PORT = _AMULE, 4711
 
 _SHARED_HASHES = f"""
 import asyncio, json
-from p2pwatch.adapters.monotonic_clock_asyncio import AsyncioMonotonicClock
-from p2pwatch.adapters.mule_api.client import AmuleApiClient
+from p2pwatch.adapters.driven.monotonic_clock_asyncio import AsyncioMonotonicClock
+from p2pwatch.adapters.driven.mule_api.client import AmuleApiClient
 
 async def main() -> None:
     client = AmuleApiClient(

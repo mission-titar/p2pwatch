@@ -3,7 +3,7 @@
 The core is one layered, declarative matching engine under `src/catalog_matching/domain/`. **The matcher/rule policy is 100% in YAML config; the code is a minimal fixed engine.**
 
 ```
-load_yaml(path)                         # adapters/config/yaml_loader.py: the ONLY I/O
+load_yaml(path)                         # adapters/driven/config/yaml_loader.py: the ONLY I/O
   → parse_matcher_config / parse_targets   # validation.py: schema + fail-fast graph validation:
   →                                        #   DAG/named-cycle, depth bound (32), regex compile-check,
   →                                        #   unique target_id, closed tier/attr enums → MatchingConfigError

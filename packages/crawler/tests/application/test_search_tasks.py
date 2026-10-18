@@ -15,11 +15,11 @@ from typing import Any
 import pytest
 
 from catalog_matching.domain.engine import MatchingEngine
-from p2pwatch.adapters.persistence_sqlite.backoff_state_repository import (
+from p2pwatch.adapters.driven.persistence_sqlite.backoff_state_repository import (
     SqliteBackoffStateRepository,
 )
-from p2pwatch.adapters.persistence_sqlite.catalog_repository import SqliteCatalogRepository
-from p2pwatch.adapters.persistence_sqlite.connection import open_local
+from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
+from p2pwatch.adapters.driven.persistence_sqlite.connection import open_local
 from p2pwatch.application.search_tasks import SearchTaskRunner
 from p2pwatch.application.search_worker import (
     BackoffPolicy,
@@ -27,10 +27,10 @@ from p2pwatch.application.search_worker import (
     SearchWorker,
     WorkerDeps,
 )
-from p2pwatch.ports.backoff_state_repository import BackoffKey, BackoffState
-from p2pwatch.ports.client_errors import SearchFailedError
-from p2pwatch.ports.repository_errors import RepositoryError
-from p2pwatch.ports.search_client import SearchAnswer
+from p2pwatch.ports.driven.backoff_state_repository import BackoffKey, BackoffState
+from p2pwatch.ports.driven.client_errors import SearchFailedError
+from p2pwatch.ports.driven.repository_errors import RepositoryError
+from p2pwatch.ports.driven.search_client import SearchAnswer
 from p2pwatch_testing.application.fakes import (
     FakeRng,
     RecordingTelemetry,

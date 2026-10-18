@@ -1,7 +1,7 @@
 """The node's id: the one ``crawler.yml`` configures, else the one ``local.db`` holds."""
 
-from p2pwatch.ports.clock import WallClock
-from p2pwatch.ports.local_state_repository import LocalStateRepository
+from p2pwatch.ports.driven.clock import WallClock
+from p2pwatch.ports.driven.local_state_repository import LocalStateRepository
 
 
 def resolve_node_id(

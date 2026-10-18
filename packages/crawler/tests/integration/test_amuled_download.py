@@ -8,11 +8,11 @@ from the ephemeral container): it is the start -> list -> status cycle that is v
 
 import pytest
 
-from p2pwatch.adapters.monotonic_clock_asyncio import AsyncioMonotonicClock
-from p2pwatch.adapters.mule_api.client import AmuleApiClient
-from p2pwatch.adapters.mule_api.errors import ApiRejectedError
+from p2pwatch.adapters.driven.monotonic_clock_asyncio import AsyncioMonotonicClock
+from p2pwatch.adapters.driven.mule_api.client import AmuleApiClient
+from p2pwatch.adapters.driven.mule_api.errors import ApiRejectedError
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.ports.download_client import DownloadRequest
+from p2pwatch.ports.driven.download_client import DownloadRequest
 from tests.integration.conftest import ApiEndpoint
 
 pytestmark = pytest.mark.download_integration

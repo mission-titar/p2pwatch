@@ -6,7 +6,7 @@ import pytest
 
 from p2pwatch.application.source_alerts import FirstUseful, Reappeared, source_alert
 from p2pwatch.domain.source import SourceRole
-from p2pwatch.ports.source_repository import EarlierPoints
+from p2pwatch.ports.driven.source_repository import EarlierPoints
 
 _ROUND = datetime(2026, 10, 13, 20, 0, tzinfo=UTC)
 _AFTER = timedelta(hours=12)

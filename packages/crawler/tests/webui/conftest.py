@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from p2pwatch.adapters.persistence_sqlite.connection import open_catalog, open_local
+from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
 
 # ---------------------------------------------------------------------------
 # Fixtures pytest

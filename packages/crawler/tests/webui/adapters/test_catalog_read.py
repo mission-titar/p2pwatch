@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from catalog_matching.domain.config import TIER_RANK
-from p2pwatch.adapters.persistence_sqlite.reader import open_reader
-from p2pwatch.adapters.persistence_sqlite.variants import iso_to_micros
+from p2pwatch.adapters.driven.persistence_sqlite.reader import open_reader
+from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch.webui.adapters.catalog_read import (

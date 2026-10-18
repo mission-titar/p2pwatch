@@ -5,7 +5,7 @@ import signal
 import sys
 from contextlib import AsyncExitStack, suppress
 
-from p2pwatch.ports.crawler_control import CrawlerControl
+from p2pwatch.ports.driving.crawler_control import CrawlerControl
 
 _SIGNALS = (signal.SIGINT, signal.SIGTERM)
 

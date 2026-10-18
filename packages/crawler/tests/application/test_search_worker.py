@@ -5,9 +5,9 @@ from datetime import timedelta
 import pytest
 
 from catalog_matching.domain.engine import MatchingEngine
-from p2pwatch.adapters.persistence_sqlite.catalog_repository import SqliteCatalogRepository
-from p2pwatch.adapters.persistence_sqlite.connection import utc_iso
-from p2pwatch.adapters.persistence_sqlite.variants import iso_to_micros
+from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
+from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
+from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
 from p2pwatch.application.search_worker import (
     SEARCH_BUDGET_SECONDS,
     BackoffPolicy,
@@ -24,7 +24,7 @@ from p2pwatch.domain.observability.events import (
     SearchFailed,
 )
 from p2pwatch.domain.observation import FileObservation
-from p2pwatch.ports.backoff_state_repository import BackoffKey, BackoffState
+from p2pwatch.ports.driven.backoff_state_repository import BackoffKey, BackoffState
 from p2pwatch_testing.application.fakes import (
     FakeRng,
     FakeSearchClient,

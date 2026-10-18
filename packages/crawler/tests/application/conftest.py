@@ -8,9 +8,9 @@ import pytest
 
 from catalog_matching.domain.engine import MatchingEngine
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
-from p2pwatch.adapters.config.yaml_loader import load_yaml
-from p2pwatch.adapters.persistence_sqlite.catalog_repository import SqliteCatalogRepository
-from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
+from p2pwatch.adapters.driven.config.yaml_loader import load_yaml
+from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
+from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch_testing.application.fakes import FakeTime, FakeWallClock
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]

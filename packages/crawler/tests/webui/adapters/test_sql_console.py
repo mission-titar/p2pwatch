@@ -6,7 +6,7 @@ real ``mode=ro`` file to open, exactly like the ``test_reader.py`` persistence t
 
 from pathlib import Path
 
-from p2pwatch.adapters.persistence_sqlite.connection import open_catalog
+from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.webui.adapters.sql_console import ConsoleOutcome, run_query
 from p2pwatch_testing.application.fakes import FakeTime, TickingMonotonicClock

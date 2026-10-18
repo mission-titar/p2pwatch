@@ -3,10 +3,10 @@
 import os
 from collections.abc import Sequence
 
-from p2pwatch.adapters.config.yaml_config_checker import YamlConfigChecker
+from p2pwatch.adapters.driven.config.yaml_config_checker import YamlConfigChecker
+from p2pwatch.adapters.driven.pathlib_catalog_finder import PathlibCatalogFinder
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier import SqliteCatalogCopier
 from p2pwatch.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
-from p2pwatch.adapters.pathlib_catalog_finder import PathlibCatalogFinder
-from p2pwatch.adapters.persistence_sqlite.sqlite_catalog_copier import SqliteCatalogCopier
 from p2pwatch.application.merge_catalogs import MergeCatalogs
 from p2pwatch.application.validate_config import ValidateConfig
 from p2pwatch.composition.app import CrawlerApp
