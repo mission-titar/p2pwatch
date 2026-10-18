@@ -46,7 +46,7 @@ class LoopCrawlerControl:
         """Set the run gate: the crawler searches again."""
         self._loop.call_soon_threadsafe(self._resumed.set)
 
-    def restart(self) -> None:
+    def request_shutdown(self) -> None:
         """Request the crawler's graceful shutdown (the container restarts it)."""
         self._loop.call_soon_threadsafe(self._shutdown.set)
 

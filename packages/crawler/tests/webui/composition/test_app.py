@@ -114,8 +114,8 @@ class _RecordingControl:
     def resume(self) -> None:
         self.calls.append("resume")
 
-    def restart(self) -> None:
-        self.calls.append("restart")
+    def request_shutdown(self) -> None:
+        self.calls.append("request_shutdown")
 
 
 def _targets() -> tuple[TargetSegment, ...]:
@@ -2084,17 +2084,22 @@ async def test_there_is_no_force_cycle_control(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("action", "done"), [("pause", "paused"), ("resume", "resumed"), ("restart", "restarted")]
+    ("action", "call", "done"),
+    [
+        ("pause", "pause", "paused"),
+        ("resume", "resume", "resumed"),
+        ("restart", "request_shutdown", "restarted"),
+    ],
 )
 async def test_each_control_dispatches_and_redirects_to_the_dashboard(
-    controls_app: tuple[Starlette, _RecordingControl], action: str, done: str
+    controls_app: tuple[Starlette, _RecordingControl], action: str, call: str, done: str
 ) -> None:
     app, control = controls_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(f"/controls/{action}")
     assert resp.status_code == 303
     assert resp.headers["location"] == f"/?done={done}"
-    assert control.calls == [action]
+    assert control.calls == [call]
 
 
 @pytest.mark.parametrize(
@@ -2120,7 +2125,7 @@ async def test_each_control_followed_lands_on_its_dashboard_banner(
         resp = await client.post(f"/controls/{action}")
     assert resp.status_code == 200
     assert f'<p class="control-banner" role="status">{banner}</p>' in resp.text
-    assert control.calls == [action]
+    assert len(control.calls) == 1
 
 
 _CHANNELS = (ChannelStatus("ed2k", True, False), ChannelStatus("x", False, None))
