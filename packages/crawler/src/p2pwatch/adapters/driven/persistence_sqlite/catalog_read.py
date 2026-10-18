@@ -32,9 +32,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sightings import (
     latest_sighting,
     sightings,
 )
-from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.source import SourceKey, SourceRole
-from p2pwatch.webui.domain.views import (
+from p2pwatch.adapters.driving.webui.views import (
     DecisionView,
     FileDecision,
     FileDetail,
@@ -46,6 +44,8 @@ from p2pwatch.webui.domain.views import (
     SourcePeriodView,
     SourceRow,
 )
+from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.source import SourceKey, SourceRole
 
 # ---------------------------------------------------------------------------
 # Constants

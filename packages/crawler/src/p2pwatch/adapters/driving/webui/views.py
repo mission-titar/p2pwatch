@@ -8,14 +8,6 @@ from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.observation import Sighting
 from p2pwatch.domain.source import SourceKey, SourceRole
 
-
-@dataclass(frozen=True)
-class CoverageStatus:
-    status: str  # "found" | "partial" | "none"
-    best_tier: str | None  # "download" | "notify" | "catalog" | None
-    file_count: int
-
-
 # ---------------------------------------------------------------------------
 # Top nav (shared by every page via a context processor)
 # ---------------------------------------------------------------------------
@@ -280,7 +272,7 @@ class FileRowDisplay:
     - no decisions at all → ``decisions_display`` is empty and ``tier_display`` is the
       literal ``"·"``.
     - per decision, ``DecisionCell.target``/``.title`` resolve via
-      ``composition.app._resolve_target_display``: ``tier == "catalog"`` → ``"unidentified"``
+      ``app._resolve_target_display``: ``tier == "catalog"`` → ``"unidentified"``
       / ``"·"`` (the ``keroro_large`` catch-all, the only catalog-tier rule); otherwise the
       target is looked up in the current catalogue: found → the canonical id joined with its
       seasonal locator (e.g. ``"062A / S02E11A"``) + the episode title; not found (a

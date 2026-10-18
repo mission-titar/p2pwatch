@@ -27,14 +27,7 @@ from starlette.templating import Jinja2Templates
 from catalog_matching.domain.config import MatcherConfig
 from catalog_matching.domain.ed2k_link import build_ed2k_link
 from catalog_matching.domain.models import TargetSegment
-from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
-from p2pwatch.domain.file_key import Network
-from p2pwatch.domain.observation import Sighting
-from p2pwatch.domain.source import SourceKey
-from p2pwatch.ports.driven.client_status import StatusReadings
-from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
-from p2pwatch.ports.driving.crawler_control import CrawlerControl
-from p2pwatch.webui.adapters.catalog_read import (
+from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
     DEFAULT_DIR,
     DEFAULT_SORT,
     PAGE_SIZE,
@@ -42,16 +35,15 @@ from p2pwatch.webui.adapters.catalog_read import (
     SORT_DIRECTIONS,
     CatalogReader,
 )
-from p2pwatch.webui.adapters.local_read import LocalReader
-from p2pwatch.webui.adapters.matching_read import MatchingExplainer
-from p2pwatch.webui.adapters.sql_console import (
+from p2pwatch.adapters.driven.persistence_sqlite.local_read import LocalReader
+from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
+from p2pwatch.adapters.driven.persistence_sqlite.sql_console import (
     ROW_CAP,
     TIMEOUT_SECONDS,
     ConsoleOutcome,
     run_query,
 )
-from p2pwatch.webui.domain.coverage import coverage_of
-from p2pwatch.webui.domain.format import (
+from p2pwatch.adapters.driving.webui.format import (
     average_rate,
     human_size,
     input_timestamp,
@@ -61,13 +53,13 @@ from p2pwatch.webui.domain.format import (
     short_timestamp,
     utc_timestamp,
 )
-from p2pwatch.webui.domain.interval import (
+from p2pwatch.adapters.driving.webui.interval import (
     INTERVAL_PRESETS,
     Interval,
     interval_ending,
     requested_interval,
 )
-from p2pwatch.webui.domain.views import (
+from p2pwatch.adapters.driving.webui.views import (
     BackoffEntry,
     ChannelLine,
     ClientLine,
@@ -100,6 +92,14 @@ from p2pwatch.webui.domain.views import (
     TimelineRow,
     TokenCoverage,
 )
+from p2pwatch.application.matching_read import MatchingExplainer
+from p2pwatch.domain.coverage import coverage_of
+from p2pwatch.domain.file_key import Network
+from p2pwatch.domain.observation import Sighting
+from p2pwatch.domain.source import SourceKey
+from p2pwatch.ports.driven.client_status import StatusReadings
+from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
+from p2pwatch.ports.driving.crawler_control import CrawlerControl
 
 # A detail page's path segment: a file_id or a source_id as 32 lowercase hex (stage 1 and 4 D13).
 _HEX_ID = re.compile(r"[0-9a-f]{32}")
@@ -155,7 +155,7 @@ def _resolve_target_display(
     """Per-decision ``(target, title)`` pairs for a file row, in the row's
     decision order (by target_id). Empty when the file has no current decision. The
     ``catalog → "unidentified"`` mask is applied per decision (``keroro_large`` is the only
-    catalog-tier rule; cf. ``domain.views.FileRowDisplay``)."""
+    catalog-tier rule; cf. ``views.FileRowDisplay``)."""
     resolved: list[tuple[str, str]] = []
     for dec in row.decisions:
         if dec.tier == "catalog":

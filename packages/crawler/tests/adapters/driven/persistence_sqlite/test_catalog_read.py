@@ -8,11 +8,7 @@ from pathlib import Path
 import pytest
 
 from catalog_matching.domain.config import TIER_RANK
-from p2pwatch.adapters.driven.persistence_sqlite.reader import open_reader
-from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
-from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.source import SourceKey, SourceRole
-from p2pwatch.webui.adapters.catalog_read import (
+from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
     _JOIN_DECISIONS,
     _JOIN_LATEST_SIGHTING,
     _SQL_COUNT_FILES_BASE,
@@ -26,7 +22,9 @@ from p2pwatch.webui.adapters.catalog_read import (
     CatalogReader,
     _tier_rank_case,
 )
-from p2pwatch.webui.domain.views import (
+from p2pwatch.adapters.driven.persistence_sqlite.reader import open_reader
+from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
+from p2pwatch.adapters.driving.webui.views import (
     FileRow,
     NameDetail,
     PeriodWindow,
@@ -35,6 +33,8 @@ from p2pwatch.webui.domain.views import (
     SourcePeriodView,
     SourceRow,
 )
+from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch_testing.catalog_rows import (
     SEEN_AT,
     file_id,

@@ -6,9 +6,16 @@ table: a 4th tier or a rename would have silently skewed the coverage.
 """
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from catalog_matching.domain.config import TIER_RANK
-from p2pwatch.webui.domain.views import CoverageStatus
+
+
+@dataclass(frozen=True)
+class CoverageStatus:
+    status: str  # "found" | "partial" | "none"
+    best_tier: str | None  # "download" | "notify" | "catalog" | None
+    file_count: int
 
 
 def coverage_of(decisions: Sequence[tuple[bytes, str]]) -> CoverageStatus:
@@ -18,7 +25,7 @@ def coverage_of(decisions: Sequence[tuple[bytes, str]]) -> CoverageStatus:
     token resolves to the smallest ``target_id`` (``001A``) via the engine tie-break, so counting
     them would make one episode look partially recovered while the catalog has identified nothing.
     They do NOT count as coverage of an episode (same ``tier == "catalog"`` criterion the ``/files``
-    "unidentified" mask uses in ``composition.app._resolve_target_display``).
+    "unidentified" mask uses in ``adapters.driving.webui.app._resolve_target_display``).
     """
     identified = [d for d in decisions if d[1] != "catalog"]
     if not identified:

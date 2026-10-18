@@ -12,11 +12,11 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 
-from p2pwatch.webui.composition.uvicorn_server_thread import UvicornServerThread
+from p2pwatch.adapters.driving.webui.uvicorn_server_thread import UvicornServerThread
 
 pytestmark = pytest.mark.usefixtures("close_test_connections")
 
-_LOGGER = "p2pwatch.webui.composition.uvicorn_server_thread"
+_LOGGER = "p2pwatch.adapters.driving.webui.uvicorn_server_thread"
 
 
 async def _ok(request: Request) -> PlainTextResponse:

@@ -105,7 +105,7 @@ flowchart RL
 
 | Paquet | Dist | Rôle |
 |---|---|---|
-| `p2pwatch` | `p2pwatch` | **Crawler** : pilote `amuled` par amuleapi, fait tourner les boucles de recherche et de téléchargement, la persistance, l'observabilité. Contient le sous-paquet webui in-process `p2pwatch.webui` (visualiseur de catalogue en lecture seule). |
+| `p2pwatch` | `p2pwatch` | **Crawler** : pilote `amuled` par amuleapi, fait tourner les boucles de recherche et de téléchargement, la persistance, l'observabilité. Contient le sous-paquet webui in-process `p2pwatch.adapters.driving.webui` (visualiseur de catalogue en lecture seule). |
 | `p2pwatch_amule` | `p2pwatch-amule` | **Le conteneur d'aMule**, bibliothèque standard seule : son one-shot de démarrage (`p2pwatch_amule.boot`) et le port-sync (`p2pwatch_amule.port_sync`, §9). |
 | `catalog_matching` | `catalog-matching` | **Moteur de matching** (bibliothèque partagée) : politique déclarative fichier vers épisode. Importé par le crawler et par la webui. |
 | `p2pwatch_testing` | `p2pwatch-testing` | **Support de test du crawler** : ses doublures (fakes), ses lignes de catalogue, sa boucle d'événements à temps virtuel. Importé par les seuls tests du crawler, qui en mesurent la couverture. Jamais livré dans une image de prod. |
@@ -669,7 +669,7 @@ démon sont
 | Frontière amuleapi | `adapters/driven/mule_api/` (client / mapping / erreurs) ; ports `ports/driven/search_client.py`, `download_client.py`, `source_client.py` |
 | Persistance | `adapters/driven/persistence_sqlite/` (migrations `.sql`, repos) |
 | Observabilité | `domain/observability/`, `adapters/driven/observability/` |
-| WebUI | `webui/` (in-process, thread dédié) |
+| WebUI | `adapters/driving/webui/` (in-process, thread dédié) |
 | Conteneur d'aMule | `packages/amule/src/p2pwatch_amule/` (`boot/` le one-shot, `port_sync/`) ; image `packages/amule/Dockerfile`, services s6 sous `packages/amule/docker/services.d/` |
 | Déploiement | `deploy/compose.yml` (le cœur et un `include:`), `deploy/ed2k/` (`service`, `direct` et `vpn.compose.yml`) |
 
