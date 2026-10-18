@@ -61,6 +61,9 @@ class _ShutdownAfterFirstSearchClient:
     async def connect(self) -> None:
         await self._inner.connect()  # type: ignore[attr-defined]
 
+    async def open(self) -> None:
+        await self._inner.open()  # type: ignore[attr-defined]
+
     async def close(self) -> None:
         await self._inner.close()  # type: ignore[attr-defined]
 

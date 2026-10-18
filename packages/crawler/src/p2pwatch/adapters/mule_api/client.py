@@ -109,6 +109,15 @@ class AmuleApiClient:
                 raise
             self._http = http
 
+    async def open(self) -> None:
+        """``connect`` at startup, tolerating an amuled not listening yet: both containers start
+        together, so the crawler routinely knocks first, and its loops retry. A refused password
+        still raises."""
+        try:
+            await self.connect()
+        except ApiUnreachableError as error:
+            _logger.warning("amuled unreachable at startup (%s): tolerated, the loops retry", error)
+
     async def close(self) -> None:
         """Revokes the token, then closes the session. Bypasses the 401 rule on purpose: a
         rejected logout means the session is already gone, so re-logging in to end it is waste."""

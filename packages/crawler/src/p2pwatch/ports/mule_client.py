@@ -10,4 +10,6 @@ from p2pwatch.ports.search_client import SearchClient
 
 
 class MuleClient(SearchClient, StatusClient, Protocol):
-    """The search, and the status."""
+    """The search, and the status; ``open`` connects, tolerating a daemon not listening yet."""
+
+    async def open(self) -> None: ...
