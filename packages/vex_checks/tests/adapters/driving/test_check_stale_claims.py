@@ -41,10 +41,7 @@ def test_fail_mode_flags_a_stale_claim_and_prints_the_cve(
     vex = _write_vex(tmp_path, ["CVE-A", "CVE-B"])
     runner = _FakeGrypeRunner({"CVE-A"})
 
-    rc = check_stale_claims.main(
-        ["--sbom", str(tmp_path / "sbom.json"), "--vex", str(vex)],
-        runner=runner,
-    )
+    rc = check_stale_claims.main(tmp_path / "sbom.json", vex, None, runner=runner)
 
     assert rc == 1
     out = capsys.readouterr().out
@@ -59,10 +56,7 @@ def test_fail_mode_returns_zero_when_every_claim_is_still_reported(
     vex = _write_vex(tmp_path, ["CVE-A", "CVE-B"])
     runner = _FakeGrypeRunner({"CVE-A", "CVE-B"})
 
-    rc = check_stale_claims.main(
-        ["--sbom", str(tmp_path / "sbom.json"), "--vex", str(vex)],
-        runner=runner,
-    )
+    rc = check_stale_claims.main(tmp_path / "sbom.json", vex, None, runner=runner)
 
     assert rc == 0
     assert capsys.readouterr().out == ""
@@ -73,19 +67,7 @@ def test_sarif_mode_with_a_stale_claim_writes_matching_results(tmp_path: Path) -
     runner = _FakeGrypeRunner({"CVE-A"})
     output = tmp_path / "out.sarif"
 
-    rc = check_stale_claims.main(
-        [
-            "--sbom",
-            str(tmp_path / "sbom.json"),
-            "--vex",
-            str(vex),
-            "--format",
-            "sarif",
-            "--output",
-            str(output),
-        ],
-        runner=runner,
-    )
+    rc = check_stale_claims.main(tmp_path / "sbom.json", vex, output, runner=runner)
 
     assert rc == 0
     doc = json.loads(output.read_text())
@@ -104,69 +86,9 @@ def test_sarif_mode_with_no_stale_claim_writes_empty_results(tmp_path: Path) -> 
     runner = _FakeGrypeRunner({"CVE-A", "CVE-B"})
     output = tmp_path / "out.sarif"
 
-    rc = check_stale_claims.main(
-        [
-            "--sbom",
-            str(tmp_path / "sbom.json"),
-            "--vex",
-            str(vex),
-            "--format",
-            "sarif",
-            "--output",
-            str(output),
-        ],
-        runner=runner,
-    )
+    rc = check_stale_claims.main(tmp_path / "sbom.json", vex, output, runner=runner)
 
     assert rc == 0
     doc = json.loads(output.read_text())
     runs = cast(list[dict[str, object]], doc["runs"])
     assert runs[0]["results"] == []
-
-
-def test_sarif_mode_without_output_errors_cleanly(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    # --output is required with --format sarif; its absence must be an argparse
-    # usage error (exit 2), not a TypeError from Path(None). The gate runs before
-    # Grype, so a stub runner is enough (it is never reached).
-    vex = _write_vex(tmp_path, ["CVE-A"])
-    runner = _FakeGrypeRunner({"CVE-A"})
-
-    with pytest.raises(SystemExit) as exc:
-        check_stale_claims.main(
-            ["--sbom", str(tmp_path / "sbom.json"), "--vex", str(vex), "--format", "sarif"],
-            runner=runner,
-        )
-
-    assert exc.value.code == 2
-    assert "--output" in capsys.readouterr().err
-
-
-def test_runner_defaults_to_subprocess_grype_runner_when_none(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    # The ``runner is None`` branch: main must construct SubprocessGrypeRunner()
-    # itself. We swap that class for a stub reporting nothing (so the sole claim
-    # is stale) and confirm main used it, without ever invoking real Grype.
-    class _StubSubprocessGrypeRunner:
-        def run(self, sbom_path: Path) -> set[str]:
-            return set()
-
-    monkeypatch.setattr(
-        check_stale_claims,
-        "SubprocessGrypeRunner",
-        _StubSubprocessGrypeRunner,
-    )
-    vex = _write_vex(tmp_path, ["CVE-A"])
-
-    rc = check_stale_claims.main(
-        ["--sbom", str(tmp_path / "sbom.json"), "--vex", str(vex)],
-        runner=None,
-    )
-
-    assert rc == 1
-    assert "::error::CVE-A: no longer reported by Grype" in capsys.readouterr().out

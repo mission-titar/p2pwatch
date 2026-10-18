@@ -87,8 +87,8 @@ code-pattern-check = { cmd = "ast-grep scan", help = "Ban dynamic attribute acce
 template-check = { cmd = "python -m template_checks.adapters.driving.check_templates packages/crawler/src/p2pwatch/adapters/driving/webui/templates", help = "Assert webui templates carry no logic" }
 _template-read-names = { cmd = "python -m template_checks.adapters.driving.read_names packages/crawler/src/p2pwatch/adapters/driving/webui/templates" }
 dead-code-check = { shell = 'vulture --ignore-names "$TEMPLATE_READ_NAMES"', uses = { TEMPLATE_READ_NAMES = "_template-read-names" }, help = "Find code no production path reaches (vulture on src, template reads ignored)" }
-vex-source-claims  = { cmd = "python -m vex_checks.adapters.driving.check_source_claims", help = "Assert our source never reaches code the not_in_execute_path VEX claims exempt" }
-vex-claim-coverage = { cmd = "python -m vex_checks.adapters.driving.check_claim_coverage", help = "Assert every VEX not_affected claim maps to exactly one registry premise, and back" }
+vex-source-claims  = { cmd = "python -m vex_checks source-claims", help = "Assert our source never reaches code the not_in_execute_path VEX claims exempt" }
+vex-claim-coverage = { cmd = "python -m vex_checks claim-coverage", help = "Assert every VEX not_affected claim maps to exactly one registry premise, and back" }
 lint-fix       = { cmd = "ruff check --fix .", help = "Auto-fix ruff lint violations" }
 format-fix     = { cmd = "ruff format .", help = "Apply ruff formatting" }
 sql-fix        = { cmd = "sqlfluff fix packages/crawler/src", help = "Auto-fix the SQLite migrations" }

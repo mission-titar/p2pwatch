@@ -124,29 +124,30 @@ signed.
 ### Keeping the VEX claims honest: the four consistency checks
 
 A `not_affected` claim is a promise about how the image is built and run. Over time source
-and base images drift, so four checks (the `vex_checks` package) assert those promises still
-hold. They run as a non-blocking PR job (only `validate / gate` is required to merge) and, for
+and base images drift, so four checks (`python -m vex_checks`, one subcommand each) assert
+those promises still hold. They run as a non-blocking PR job (only `validate / gate` is
+required to merge) and, for
 the three that catch a genuinely false claim, as hard-fail steps in the release before anything
 is signed or attested:
 
-- **`check_source_claims`** (PR job, release hard-fail): fails if our own source starts
+- **`source-claims`** (PR job, release hard-fail): fails if our own source starts
   reaching code a `vulnerable_code_not_in_execute_path` claim says we never execute, for
   example importing `imaplib` or `poplib`.
-- **`check_claim_coverage`** (PR job, release hard-fail): reads every VEX file, and fails if a
+- **`claim-coverage`** (PR job, release hard-fail): reads every VEX file, and fails if a
   VEX `not_affected` claim has no premise in the registry, a premise has no claim, or a
   justification does not match its premise family. It keeps the VEX and the premise registry in
   bijection.
-- **`check_image_claims`** (daily Grype scan as SARIF, release hard-fail): fails if the built
+- **`image-claims`** (daily Grype scan as SARIF, release hard-fail): fails if the built
   image's SBOM contradicts an image-scoped claim, for example a dpkg package that should be
   absent is present, or a dpkg package or hand-declared component is below the minimum version
   a claim relies on. The aMule claims rest on the version declared in the aMule image's SBOM
   (`pkg:generic/amule`).
-- **`check_stale_claims`** (daily Grype scan as SARIF, non-blocking): flags VEX entries Grype no
+- **`stale-claims`** (daily Grype scan as SARIF, non-blocking): flags VEX entries Grype no
   longer reports for the image, so obsolete suppressions get pruned. Staleness never blocks a
   release: a suppressed CVE that Grype stops reporting has been fixed upstream, which does not
   make the image less safe, so it is surfaced for cleanup rather than gated.
 
-In the daily scan `check_image_claims` and `check_stale_claims` run in SARIF mode: drift surfaces
+In the daily scan `image-claims` and `stale-claims` run in SARIF mode: drift surfaces
 in Code scanning without failing the workflow. In the release the first three hard-fail, so a
 false source, coverage, or image claim stops the image from being tagged, signed, or attested;
 staleness is left to the daily scan.
