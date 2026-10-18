@@ -103,7 +103,10 @@ ports:
 | `CatalogMerger.merge_catalogs(...)` | the use case `MergeCatalogs` | `CatalogFinder` (does this catalog exist?) and `CatalogCopier` (copy the rows) |
 
 - **`crawl` is implemented by the composition**, because what it builds depends on the config the command line
-  just read. It is the only port not implemented by a use case.
+  just read. It is the only port not implemented by a use case. (Corrected 2026-10-18: by `CrawlerApp` itself,
+  whose constructor takes the two addresses and the environment, and whose `crawl` loads the config and wires
+  everything, the system clocks, the RNG and the wake hub included; block 80's `CrawlerAssembly` is merged into it,
+  the operator's choice at the holistic review.)
 - **`merge`'s safety rules move into `MergeCatalogs`**: the sources must exist, a new output must not, `--into`
   must name one of the sources. They are the tool's "no accidental loss" policy, not argument syntax.
 - **An invalid config is one error type in the domain**, `InvalidConfigError`. The command line may not import an

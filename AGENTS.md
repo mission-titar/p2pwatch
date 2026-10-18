@@ -23,7 +23,7 @@ The live state, history, and recommended next step are deliberately **not** in t
 
 ### Where the code lives
 
-The crawler is Clean/Hexagonal: `domain/` pure, `application/` async use-cases, `adapters/` I/O, `composition/` wiring (`CrawlerApp`, `CrawlerAssembly`), the command line in `adapters/driving/cli/` (`python -m p2pwatch crawl`, `validate-config`). Paths below are under `packages/crawler/src/p2pwatch/` (**c:**) unless noted.
+The crawler is Clean/Hexagonal: `domain/` pure, `application/` async use-cases, `adapters/` I/O, `composition/` wiring (`CrawlerApp`), the command line in `adapters/driving/cli/` (`python -m p2pwatch crawl`, `validate-config`, `merge`). Paths below are under `packages/crawler/src/p2pwatch/` (**c:**) unless noted.
 
 | Subsystem | Location | Role |
 |---|---|---|

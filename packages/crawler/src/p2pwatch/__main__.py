@@ -9,7 +9,7 @@ from p2pwatch.adapters.pathlib_catalog_finder import PathlibCatalogFinder
 from p2pwatch.adapters.persistence_sqlite.sqlite_catalog_copier import SqliteCatalogCopier
 from p2pwatch.application.merge_catalogs import MergeCatalogs
 from p2pwatch.application.validate_config import ValidateConfig
-from p2pwatch.composition.app import CrawlerAssembly
+from p2pwatch.composition.app import CrawlerApp
 
 # 0.0.0.0: Docker cannot route a published port to the container's loopback. 8080, not 80: an
 # unprivileged process cannot bind a port below 1024 under ``cap_drop: ALL``.
@@ -21,7 +21,7 @@ _AMULE_API_ADDRESS = ("ed2k", 4711)
 def main(argv: Sequence[str] | None = None) -> int:
     """Runs the subcommand ``argv`` names (``sys.argv`` when ``None``), returns its exit code."""
     command_line = ArgparseCommandLine(
-        crawler_runner=CrawlerAssembly(
+        crawler_runner=CrawlerApp(
             webui_address=_WEBUI_ADDRESS, amule_api_address=_AMULE_API_ADDRESS, env=os.environ
         ),
         config_validator=ValidateConfig(YamlConfigChecker(os.environ)),
