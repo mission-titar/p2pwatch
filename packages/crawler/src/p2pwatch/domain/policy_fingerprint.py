@@ -1,7 +1,7 @@
 """Policy fingerprint: gate for the startup catalogue re-evaluation (spec §7.1).
 
-PURE domain: ``hashlib.sha256`` over bytes GIVEN by the caller — no file I/O here (the
-caller, ``composition/__main__.py``, reads ``matcher.yml``/``targets.yml`` and passes
+PURE domain: ``hashlib.sha256`` over bytes GIVEN by the caller, no file I/O here (the
+caller, the config adapter's ``load_config``, reads ``matcher.yml``/``targets.yml`` and passes
 their raw bytes). Both files feed ``MatchingEngine`` (a target/title edit changes
 decisions too), so the fingerprint spans both, in a fixed order.
 """

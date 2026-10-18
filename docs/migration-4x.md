@@ -138,6 +138,9 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
   `target_id` et `dir` devient `direction`. Les anciens sont ignorés : mettez à jour vos favoris.
   Après un redémarrage depuis le tableau de bord, l'adresse se termine par `?done=restarted` au lieu
   de `?done=restart`.
+- **Le crawler se lance par sa sous-commande**, `python -m p2pwatch crawl`, que l'image lance
+  d'elle-même. Sans sous-commande, `python -m p2pwatch --config …` sort en erreur (code 2) :
+  adaptez le `command:` que vous auriez donné au service `p2pwatch`.
 - **La documentation** est désormais sur <https://mission-titar.github.io/p2pwatch/>.
 
 ## Retour arrière

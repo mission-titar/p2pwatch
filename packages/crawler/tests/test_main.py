@@ -1,9 +1,48 @@
-from p2pwatch.composition import __main__ as entry
+"""``python -m p2pwatch``: the command line wired to the real config adapter and composition."""
+
+from pathlib import Path
+
+import pytest
+
+from p2pwatch.__main__ import main
+
+_DEPLOY = Path(__file__).resolve().parents[3] / "deploy"
 
 
-def test_package_main_shim_reexports_main() -> None:
-    # `python -m p2pwatch` runs the PACKAGE's __main__: it must expose the SAME
-    # `main` function as composition.__main__ (otherwise DoD §9.4 is not met).
-    from p2pwatch import __main__ as package_entry
+def _paths_argv(*, config: Path, matcher: Path = _DEPLOY / "matcher.yml") -> list[str]:
+    targets = _DEPLOY / "targets.yml"
+    return ["--config", str(config), "--targets", str(targets), "--matcher", str(matcher)]
 
-    assert package_entry.main is entry.main
+
+def test_crawl_exits_one_on_a_broken_config(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    broken = tmp_path / "crawler.yml"
+    broken.write_text("catalog_db_path: c\nlocal_db_path: l\n", encoding="utf-8")
+
+    assert main(["crawl", *_paths_argv(config=broken)]) == 1
+
+    assert capsys.readouterr().err.startswith("Invalid config, refusing to start: ")
+
+
+def test_validate_config_accepts_the_shipped_config(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("AMULE_API_PASSWORD", "s3cr3t")
+
+    assert main(["validate-config", *_paths_argv(config=_DEPLOY / "crawler.yml")]) == 0
+
+    assert capsys.readouterr().out == "Config valid\n"
+
+
+def test_validate_config_refuses_a_broken_matcher(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("AMULE_API_PASSWORD", "s3cr3t")
+    broken_matcher = tmp_path / "matcher.yml"
+    broken_matcher.write_text("tokens: {}\nrules: {}\n", encoding="utf-8")
+
+    argv = ["validate-config", *_paths_argv(config=_DEPLOY / "crawler.yml", matcher=broken_matcher)]
+    assert main(argv) == 1
+
+    assert capsys.readouterr().err.startswith("Invalid config: ")

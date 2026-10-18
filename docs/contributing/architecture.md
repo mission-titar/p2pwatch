@@ -170,8 +170,10 @@ flowchart TB
   que quoi que ce soit n'atteigne le domaine.
 - **`application/`** orchestre les cas d'usage asynchrones en parlant à des **ports** (protocoles).
 - **`adapters/`** portent toutes les I/O et satisfont les ports structurellement.
-- **`composition/`** (`CrawlerApp`, `python -m p2pwatch`) charge la config, la valide *fail-fast*,
-  câble les adapters concrets et supervise les boucles.
+- **`composition/`** (`CrawlerApp`, `CrawlerAssembly`) câble les adapters concrets sur la config
+  que l'adapter de config a chargée et validée *fail-fast*.
+- **`python -m p2pwatch`** construit les ports `crawl` et `validate-config` et les passe à la ligne
+  de commande, `adapters/driving/cli/`, qui lit la sous-commande et rend son code de sortie.
 
 ## 5. Les tâches de recherche
 
@@ -658,7 +660,8 @@ démon sont
 
 | Sous-système | Emplacement (sous `packages/crawler/src/p2pwatch/` sauf mention) |
 |---|---|
-| Boucles et câblage | `composition/app.py` (`CrawlerApp`), `python -m p2pwatch` |
+| Boucles et câblage | `composition/app.py` (`CrawlerApp`, `CrawlerAssembly`) |
+| Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`) |
 | Cas d'usage | `application/search_tasks.py`, `status_loop.py`, `run_download_cycle.py` |
 | Recherche (pure) | `domain/search/` (`keywords`, `backoff`) |
 | Matching | `packages/matching/src/catalog_matching/` (moteur + politique `deploy/matcher.yml`) |
