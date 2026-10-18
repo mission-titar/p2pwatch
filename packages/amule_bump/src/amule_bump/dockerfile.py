@@ -1,7 +1,7 @@
 import re
 from dataclasses import dataclass
 
-from amule_bump import BumpError
+from amule_bump.domain.bump_error import BumpError
 
 
 @dataclass(frozen=True)

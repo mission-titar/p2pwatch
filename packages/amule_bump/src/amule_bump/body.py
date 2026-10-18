@@ -3,7 +3,8 @@ import re
 import textwrap
 
 from amule_bump.dockerfile import Pin
-from amule_bump.github import UPSTREAM, Repo
+from amule_bump.domain.upstream import UPSTREAM
+from amule_bump.ports.driven.repo_reader import RepoReader
 
 CHANGELOG_MAX_CHARACTERS = 20_000
 DIFF_MAX_CHARACTERS = 18_000
@@ -21,17 +22,20 @@ CHECKLIST = """## Checklist
 """
 
 
-def build_pull_request_body(repo: Repo, old: Pin, new: Pin) -> str:
+def build_pull_request_body(repo_reader: RepoReader, old: Pin, new: Pin) -> str:
     upstream = f"https://github.com/{UPSTREAM}"
     parts = [
         f"Bumps aMule from {old.version} to [{new.version}]({upstream}/releases/tag/{new.version})"
         f" (commit `{new.commit}`). Full upstream diff:"
         f" {upstream}/compare/{old.version}...{new.version}",
         "## Changelog",
-        _changelog_part(repo, new),
+        _changelog_part(repo_reader, new),
     ]
     for path in WATCHED_FILES:
-        parts += [f"## `{path}` ({old.version} to {new.version})", _diff_part(repo, old, new, path)]
+        parts += [
+            f"## `{path}` ({old.version} to {new.version})",
+            _diff_part(repo_reader, old, new, path),
+        ]
     parts.append(CHECKLIST.format(version=new.version))
     return "\n\n".join(parts)
 
@@ -47,9 +51,9 @@ def changelog_section(changelog: str, version: str) -> str:
     return "".join(kept).strip()
 
 
-def tag_diff(repo: Repo, old: Pin, new: Pin, path: str) -> str:
-    before = repo.file(old.version, path).splitlines()
-    after = repo.file(new.version, path).splitlines()
+def tag_diff(repo_reader: RepoReader, old: Pin, new: Pin, path: str) -> str:
+    before = repo_reader.file(old.version, path).splitlines()
+    after = repo_reader.file(new.version, path).splitlines()
     labels = (f"{old.version}/{path}", f"{new.version}/{path}")
     diff = difflib.unified_diff(before, after, *labels, lineterm="")
     return "".join(f"{line}\n" for line in diff)
@@ -77,15 +81,15 @@ def fenced(text: str, language: str) -> str:
     return f"{fence}{language}\n{text.removesuffix('\n')}\n{fence}"
 
 
-def _changelog_part(repo: Repo, new: Pin) -> str:
-    section = changelog_section(repo.file(new.version, "docs/CHANGELOG.md"), new.version)
+def _changelog_part(repo_reader: RepoReader, new: Pin) -> str:
+    section = changelog_section(repo_reader.file(new.version, "docs/CHANGELOG.md"), new.version)
     if not section:
         return f"No `## Version {new.version}` section in upstream's docs/CHANGELOG.md."
     return fenced(clip(wrap(section), CHANGELOG_MAX_CHARACTERS), "text")
 
 
-def _diff_part(repo: Repo, old: Pin, new: Pin, path: str) -> str:
-    diff = tag_diff(repo, old, new, path)
+def _diff_part(repo_reader: RepoReader, old: Pin, new: Pin, path: str) -> str:
+    diff = tag_diff(repo_reader, old, new, path)
     if not diff:
         return "No change between the two tags."
     return fenced(clip(diff, DIFF_MAX_CHARACTERS), "diff")

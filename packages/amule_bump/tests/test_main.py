@@ -6,15 +6,15 @@ import pytest
 
 from amule_bump import __main__ as cli
 from amule_bump.__main__ import main
-from tests.fakes import FakeRepo
+from tests.fakes import FakeRepoReader
 
 OLD_COMMIT = "02db0d7faecfc377694ff6242bc23346185990ed"
 NEW_COMMIT = "909d304d993ee07df6c6f6acf501a6d791d53666"
 DOCKERFILE = f"FROM debian\nARG AMULE_VERSION=3.0.1\nARG AMULE_COMMIT={OLD_COMMIT}\n"
 
 
-def upstream(latest: str) -> FakeRepo:
-    return FakeRepo(
+def upstream(latest: str) -> FakeRepoReader:
+    return FakeRepoReader(
         json={
             "releases/latest": {"tag_name": latest},
             f"git/ref/tags/{latest}": {"object": {"type": "commit", "sha": NEW_COMMIT}},
@@ -30,10 +30,12 @@ def dockerfile(tmp_path: Path) -> Path:
     return path
 
 
-def run(dockerfile: Path, repo: FakeRepo, *flags: str, env: dict[str, str] | None = None) -> int:
+def run(
+    dockerfile: Path, repo_reader: FakeRepoReader, *flags: str, env: dict[str, str] | None = None
+) -> int:
     body = dockerfile.parent / "body.md"
     argv = ["--dockerfile", str(dockerfile), "--body-file", str(body), *flags]
-    return main(argv, repo, env or {})
+    return main(argv, repo_reader, env or {})
 
 
 def test_same_version_is_nothing_to_do(
@@ -110,24 +112,24 @@ def test_a_missing_dockerfile_fails_with_a_clear_message(
 def test_an_http_failure_fails_with_a_clear_message(
     dockerfile: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    class DownRepo(FakeRepo):
+    class DownRepoReader(FakeRepoReader):
         def json(self, path: str) -> object:
             raise HTTPError(path, 503, "Service Unavailable", Message(), None)
 
-    assert run(dockerfile, DownRepo()) == 1
+    assert run(dockerfile, DownRepoReader()) == 1
     assert capsys.readouterr().err == "error: HTTP Error 503: Service Unavailable\n"
 
 
-def test_the_default_repo_is_upstream_authenticated_by_gh_token(
+def test_the_default_repo_reader_reads_upstream_authenticated_by_gh_token(
     dockerfile: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     opened: list[tuple[str, str | None]] = []
 
-    def fake_repo(name: str, token: str | None) -> FakeRepo:
+    def fake_repo_reader(name: str, token: str | None) -> FakeRepoReader:
         opened.append((name, token))
         return upstream("3.0.1")
 
-    monkeypatch.setattr(cli, "GitHubRepo", fake_repo)
+    monkeypatch.setattr(cli, "GitHubRepoReader", fake_repo_reader)
     argv = ["--dockerfile", str(dockerfile)]
     assert main(argv, env={"GH_TOKEN": "secret"}) == 0
     assert opened == [("amule-org/amule", "secret")]

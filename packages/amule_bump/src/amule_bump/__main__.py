@@ -10,20 +10,24 @@ import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 
-from amule_bump import BumpError
 from amule_bump.body import build_pull_request_body
 from amule_bump.dockerfile import Pin, read_pin, rewrite_pin
-from amule_bump.github import UPSTREAM, GitHubRepo, Repo
+from amule_bump.domain.bump_error import BumpError
+from amule_bump.domain.upstream import UPSTREAM
+from amule_bump.github import GitHubRepoReader
+from amule_bump.ports.driven.repo_reader import RepoReader
 from amule_bump.release import is_newer, latest_release_tag, peeled_commit
 
 
 def main(
-    argv: list[str] | None = None, repo: Repo | None = None, env: Mapping[str, str] = os.environ
+    argv: list[str] | None = None,
+    repo_reader: RepoReader | None = None,
+    env: Mapping[str, str] = os.environ,
 ) -> int:
     args = _parse_args(argv)
-    repo = repo or GitHubRepo(UPSTREAM, env.get("GH_TOKEN"))
+    repo_reader = repo_reader or GitHubRepoReader(UPSTREAM, env.get("GH_TOKEN"))
     try:
-        return _bump(args, repo, env)
+        return _bump(args, repo_reader, env)
     except (BumpError, OSError) as error:  # OSError covers urllib errors and a missing file
         print(f"error: {error}", file=sys.stderr)
         return 1
@@ -41,10 +45,10 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _bump(args: argparse.Namespace, repo: Repo, env: Mapping[str, str]) -> int:
+def _bump(args: argparse.Namespace, repo_reader: RepoReader, env: Mapping[str, str]) -> int:
     dockerfile_text = args.dockerfile.read_text()
     old = read_pin(dockerfile_text)
-    latest = latest_release_tag(repo)
+    latest = latest_release_tag(repo_reader)
     if latest == old.version:
         print(f"aMule {old.version} is the latest release: nothing to do")
         return 0
@@ -55,8 +59,8 @@ def _bump(args: argparse.Namespace, repo: Repo, env: Mapping[str, str]) -> int:
         )
         return 0
 
-    new = Pin(latest, peeled_commit(repo, latest))
-    body = build_pull_request_body(repo, old, new)
+    new = Pin(latest, peeled_commit(repo_reader, latest))
+    body = build_pull_request_body(repo_reader, old, new)
     if args.dry_run:
         print(new.arg_lines())
         print(f"--- PR body ({len(body)} characters) ---")

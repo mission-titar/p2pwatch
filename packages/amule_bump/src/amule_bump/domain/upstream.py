@@ -1,0 +1,1 @@
+UPSTREAM = "amule-org/amule"

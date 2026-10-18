@@ -1,7 +1,7 @@
 import pytest
 
-from amule_bump import BumpError
 from amule_bump.dockerfile import Pin, read_pin, rewrite_pin
+from amule_bump.domain.bump_error import BumpError
 
 DOCKERFILE = """FROM debian AS build
 ARG AMULE_VERSION=3.0.1

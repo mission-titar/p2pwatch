@@ -1,7 +1,9 @@
 from typing import Any
 
+from amule_bump.ports.driven.repo_reader import RepoReader
 
-class FakeRepo:
+
+class FakeRepoReader(RepoReader):
     """An upstream repo served from dicts: API paths to JSON, and (tag, path) to file text."""
 
     def __init__(
