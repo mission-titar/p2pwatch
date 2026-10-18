@@ -4,7 +4,7 @@ COMPOSITION layer (the only one allowed to import adapters AND application). Bui
 - ONE ``SqliteCatalogRepository`` + ONE ``SqliteLocalStateRepository`` +
   ``SqliteBackoffStateRepository`` (single writer, invariant §11), connections opened
   via ``open_catalog``/``open_local`` (migrations checked at startup, fail-fast §14).
-- the ``MatchingEngine`` (once), the ``node_id`` (config override or the one from local.db),
+- the ``MatchingEngine`` (once), the ``node_id`` (``resolve_node_id``),
 - ONE ``MuleClient`` + ``SearchWorker`` on the one amuled the core drives, whose
   session the status loop shares.
 
@@ -56,6 +56,7 @@ from p2pwatch.adapters.persistence_sqlite.local_state_repository import (
 from p2pwatch.adapters.persistence_sqlite.source_repository import SqliteSourceRepository
 from p2pwatch.application.reevaluate_catalog import reevaluate_catalog
 from p2pwatch.application.reevaluate_if_policy_changed import reevaluate_if_policy_changed
+from p2pwatch.application.resolve_node_id import resolve_node_id
 from p2pwatch.application.run_download_cycle import (
     DownloadLoopDeps,
     download_loop,
@@ -70,7 +71,6 @@ from p2pwatch.application.search_worker import (
 from p2pwatch.application.status_loop import StatusBoard, StatusLoopDeps, status_loop
 from p2pwatch.application.supervise_loops import supervise_loops
 from p2pwatch.domain.observability.events import CrawlerStarted
-from p2pwatch.ports.client_errors import ClientUnreachableError
 from p2pwatch.ports.clock import MonotonicClock, WallClock
 from p2pwatch.ports.crawler_control import CrawlerControl
 from p2pwatch.ports.download_client import DownloadClient
@@ -87,6 +87,8 @@ _logger = logging.getLogger("p2pwatch.composition.app")
 
 class DownloadSourceClient(DownloadClient, SourceClient, Protocol):
     """The download loop's one session: it downloads, and reads its downloads' sources."""
+
+    async def open(self) -> None: ...
 
 
 # Client factories, injectable in test; they pace on the composition's monotonic clock.
@@ -182,19 +184,11 @@ class CrawlerApp:
 
         SHARED single repos (``catalog_repo`` and ``source_repo`` already built on the catalog
         connection; a ``SqliteDownloadRepository`` on the SAME ``local_conn`` - single writer
-        on the event loop, no race). Its own session to
-        the daemon, connected tolerating ``ClientUnreachableError`` (a daemon not yet listening
-        at startup does not kill the crawler; the loop's backoff governs).
+        on the event loop, no race), and its own session to the daemon.
         """
         download_client = self._download_client_factory(self._amule_endpoint, self._monotonic_clock)
         stack.push_async_callback(download_client.close)
-        try:
-            await download_client.connect()
-        except ClientUnreachableError as error:
-            _logger.warning(
-                "download daemon unreachable at startup (%s): tolerated, retry by the loop",
-                error,
-            )
+        await download_client.open()
         return DownloadLoopDeps(
             download_client=download_client,
             source_client=download_client,
@@ -265,9 +259,7 @@ class CrawlerApp:
             stack.callback(local_conn.close)
 
             local_repo = SqliteLocalStateRepository(local_conn)
-            node_id = self._crawler_config.node_id or local_repo.get_or_create_node_id(
-                self._wall_clock.now()
-            )
+            node_id = resolve_node_id(self._crawler_config.node_id, local_repo, self._wall_clock)
             observability = self._crawler_config.observability
             registry = CollectorRegistry()
             notifier = AppriseNotifier(
@@ -313,20 +305,7 @@ class CrawlerApp:
 
             client = self._client_factory(endpoint, self._monotonic_clock)
             stack.push_async_callback(client.close)
-            # CONNECT at setup. A daemon not yet listening must NOT bring
-            # the crawler down, and that is the NORMAL case, not the exception: the core and the
-            # aMule container start together, and amuled starts amuleapi itself, so the crawler
-            # routinely knocks first. We TOLERATE the
-            # ClientUnreachableError and CONTINUE - the worker's reconnection backoff governs the
-            # retries. connect() is idempotent → the worker's later _ensure_connected() stays a
-            # no-op. We do NOT catch broader: ApiAuthError (wrong password) is NOT a
-            # ClientUnreachableError → it keeps propagating (fail-fast config, spec §14).
-            try:
-                await client.connect()
-            except ClientUnreachableError as error:
-                _logger.warning(
-                    "amuled unreachable at startup (%s): tolerated, the searches back off", error
-                )
+            await client.open()
             workers = [SearchWorker(endpoint.client_name, client, deps)]
             # The status loop shares the search session (one session per container's amuled).
             status_deps = StatusLoopDeps(
@@ -378,7 +357,7 @@ class CrawlerApp:
             # harmless extra pass, which then writes nothing before the marker updates).
             # Runs to completion BEFORE the loops so tier actions (download wake, notify)
             # fire for the very first search, not a search later.
-            summary = await reevaluate_if_policy_changed(
+            await reevaluate_if_policy_changed(
                 fingerprint=self._policy_fingerprint,
                 local_repo=local_repo,
                 reevaluate=lambda: reevaluate_catalog(
@@ -389,14 +368,6 @@ class CrawlerApp:
                     wall_clock=self._wall_clock,
                 ),
             )
-            if summary is None:
-                _logger.info("policy unchanged: catalogue re-evaluation skipped")
-            else:
-                _logger.info(
-                    "catalogue re-evaluated: %d files, %d rows written",
-                    summary.files_evaluated,
-                    summary.rows_written,
-                )
 
             # Entered disarmed: the steady state is unbounded, and ``supervise_loops`` arms it as
             # soon as the shutdown is requested, so the unwind and the close below are bounded.

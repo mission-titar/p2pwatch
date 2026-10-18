@@ -160,6 +160,9 @@ class FakeMuleClient:
         if self._connect_failures:
             raise self._connect_failures.pop(0)
 
+    async def open(self) -> None:
+        await self.connect()
+
     async def close(self) -> None:
         self.close_calls += 1
 

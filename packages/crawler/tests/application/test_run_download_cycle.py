@@ -103,6 +103,9 @@ class FakeDownloadClient:
             raise self._connect_failures.pop(0)
         self._disconnected = False
 
+    async def open(self) -> None:
+        await self.connect()
+
     async def close(self) -> None:
         return None
 

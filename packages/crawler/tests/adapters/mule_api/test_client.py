@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 from typing import cast
 
 import httpx
@@ -206,6 +207,47 @@ async def test_connect_after_close_logs_in_again() -> None:
     await client.close()
 
     assert api.logins == 2
+
+
+@pytest.mark.asyncio
+async def test_open_logs_in() -> None:
+    api = FakeAmuleApi()
+    client = _client(api)
+
+    await client.open()
+
+    assert api.logins == 1
+
+
+@pytest.mark.asyncio
+async def test_open_tolerates_a_daemon_not_listening_yet(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    api = FakeAmuleApi()
+    api.overrides[("POST", "/api/v1/auth/login")] = refuse
+    client = _client(api)
+
+    with caplog.at_level(logging.WARNING, logger="p2pwatch.adapters.mule_api.client"):
+        await client.open()
+
+    assert [record.getMessage() for record in caplog.records] == [
+        "amuled unreachable at startup (POST /auth/login: connection refused): tolerated, "
+        "the loops retry"
+    ]
+    del api.overrides[("POST", "/api/v1/auth/login")]
+    await client.connect()  # the session opens once the daemon listens
+    assert api.logins == 1
+
+
+@pytest.mark.asyncio
+async def test_open_lets_a_refused_password_through() -> None:
+    client = _client(FakeAmuleApi(), password="wrong")
+
+    with pytest.raises(ApiAuthError):
+        await client.open()
 
 
 @pytest.mark.asyncio

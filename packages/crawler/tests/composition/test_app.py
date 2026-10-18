@@ -46,7 +46,6 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.source import SourceKey, SourceReading, SourceRole
 from p2pwatch.ports.backoff_state_repository import BackoffKey, BackoffState
-from p2pwatch.ports.client_errors import ClientUnreachableError
 from p2pwatch.ports.client_status import ClientStatus
 from p2pwatch.ports.clock import MonotonicClock, MonotonicInstant
 from p2pwatch.ports.download_client import DownloadRequest, DownloadStatus
@@ -225,57 +224,7 @@ async def test_run_logs_the_package_version_at_startup(
     assert any(r.getMessage() == f"p2pwatch version {version('p2pwatch')}" for r in caplog.records)
 
 
-class _UnreachableAtStartupClient(_ShutdownOnStatusClient):
-    """Client whose 1st ``connect`` (at setup) raises ``ClientUnreachableError``.
-
-    Models a daemon down at startup: the composition root must CATCH, log, and
-    CONTINUE (the worker's backoff will govern reconnections). Also triggers the shutdown on the
-    1st status read to bound the run."""
-
-    def __init__(self, app_holder: dict[str, CrawlerApp]) -> None:
-        super().__init__(app_holder, results=None)
-        self._connect_seen = 0
-
-    async def connect(self) -> None:
-        self._connect_seen += 1
-        self.connect_calls += 1
-        if self._connect_seen == 1:
-            raise ClientUnreachableError("daemon unreachable at startup")
-
-
-@pytest.mark.asyncio
-async def test_unreachable_client_at_startup_does_not_crash_the_run(
-    tmp_path: Path, matcher_config: MatcherConfig, caplog: pytest.LogCaptureFixture
-) -> None:
-    # A client unreachable at setup (connect raises ClientUnreachableError) must NOT bring down
-    # run(): the composition root catches, warns, and CONTINUES. The core and the aMule
-    # container start together, so reaching amuleapi before it listens is the normal cold
-    # start. The loops run anyway (the status read → the shutdown fires).
-    created: list[_UnreachableAtStartupClient] = []
-    app_holder: dict[str, CrawlerApp] = {}
-
-    def factory(
-        endpoint: AmuleEndpoint, monotonic_clock: MonotonicClock
-    ) -> _UnreachableAtStartupClient:
-        client = _UnreachableAtStartupClient(app_holder)
-        created.append(client)
-        return client
-
-    app = _make_app(tmp_path, matcher_config, factory=factory)
-    app_holder["app"] = app
-    with caplog.at_level(logging.WARNING, logger="p2pwatch.composition.app"):
-        await asyncio.wait_for(app.run(), timeout=5.0)  # does NOT raise (down client tolerated)
-    # The tolerance warning comes from the COMPOSITION ROOT (not the worker): it is the
-    # `except ClientUnreachableError` branch of the client setup.
-    startup_warnings = [
-        record
-        for record in caplog.records
-        if record.name == "p2pwatch.composition.app" and record.levelno == logging.WARNING
-    ]
-    assert startup_warnings, "the composition root must log the startup tolerance"
-    assert "amuled unreachable at startup" in startup_warnings[0].getMessage()
-    assert created and created[0].connect_calls >= 1  # connect attempted at setup (then retried)
-    assert created[0]._fired  # the status loop read the client → the loops did start
+# the status loop read the client → the loops did start
 
 
 @pytest.mark.asyncio
@@ -619,7 +568,7 @@ async def test_backfill_runs_and_stores_marker_when_policy_never_set(
         client_factory=factory,
     )
     holder["app"] = app
-    with caplog.at_level(logging.INFO, logger="p2pwatch.composition.app"):
+    with caplog.at_level(logging.INFO, logger="p2pwatch.application.reevaluate_if_policy_changed"):
         await asyncio.wait_for(app.run(), timeout=5.0)
     assert any(
         r.getMessage() == "catalogue re-evaluated: 0 files, 0 rows written" for r in caplog.records
@@ -666,7 +615,7 @@ async def test_backfill_skipped_when_marker_already_matches_fingerprint(
         client_factory=factory,
     )
     holder["app"] = app
-    with caplog.at_level(logging.INFO, logger="p2pwatch.composition.app"):
+    with caplog.at_level(logging.INFO, logger="p2pwatch.application.reevaluate_if_policy_changed"):
         await asyncio.wait_for(app.run(), timeout=5.0)
     assert any(
         r.getMessage() == "policy unchanged: catalogue re-evaluation skipped"
@@ -716,13 +665,6 @@ class _ShutdownOnQueueDownloadClient(FakeDownloadClient):
         result = await super().downloads()
         self._app_holder["app"]._shutdown.set()  # shutdown AFTER the 1st download cycle
         return result
-
-
-class _UnreachableDownloadClient(FakeDownloadClient):
-    """Download client whose ``connect`` raises ``ClientUnreachableError`` (daemon down at boot)."""
-
-    async def connect(self) -> None:
-        raise ClientUnreachableError("download daemon down")
 
 
 @pytest.mark.asyncio
@@ -948,40 +890,7 @@ async def test_full_mode_reads_sources_at_their_interval_and_spaces_them_by_a_po
     assert [deps.sources_interval for deps in loops] == [timedelta(seconds=120)]
 
 
-@pytest.mark.asyncio
-async def test_full_mode_tolerates_download_daemon_unreachable_at_startup(
-    tmp_path: Path, matcher_config: MatcherConfig
-) -> None:
-    # the download daemon unreachable at startup is TOLERATED (handoff / DV8): we do NOT
-    # fail, the loop is armed anyway (its backoff governs the retries).
-    holder: dict[str, CrawlerApp] = {}
-
-    def search_factory(
-        endpoint: AmuleEndpoint, monotonic_clock: MonotonicClock
-    ) -> _ShutdownOnStatusClient:
-        return _ShutdownOnStatusClient(holder)
-
-    def download_factory(
-        endpoint: AmuleEndpoint, monotonic_clock: MonotonicClock
-    ) -> _UnreachableDownloadClient:
-        return _UnreachableDownloadClient()
-
-    app = CrawlerApp(
-        crawler_config=_full_crawler_config(tmp_path),
-        targets=_TARGETS,
-        matcher_config=matcher_config,
-        wall_clock=FakeTime().wall,
-        monotonic_clock=FakeTime().monotonic,
-        rng=_NoopRng(),
-        wake_hub=RecordingWakeHub(),
-        policy_fingerprint=_FP,
-        webui_address=_WEBUI_ADDRESS,
-        amule_api_address=_AMULE_API_ADDRESS,
-        client_factory=search_factory,
-        download_client_factory=download_factory,
-    )
-    holder["app"] = app
-    await asyncio.wait_for(app.run(), timeout=5.0)  # does not raise: connect tolerated
+# does not raise: connect tolerated
 
 
 class _BlockingPollMonotonicClock(FakeMonotonicClock):
