@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Literal, Protocol
 
-from catalog_matching.models import TargetSegment
+from catalog_matching.domain.models import TargetSegment
 from p2pwatch.application.edge_state import EdgeState
 from p2pwatch.application.source_alerts import FirstUseful, source_alert
 from p2pwatch.domain.download.policy import DownloadVerdict, decide_download

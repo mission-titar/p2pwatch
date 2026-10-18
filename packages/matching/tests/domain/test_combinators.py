@@ -1,11 +1,11 @@
-from catalog_matching.combinators import (
+from catalog_matching.domain.combinators import (
     AllMatcher,
     AnyMatcher,
     Matcher,
     NotMatcher,
 )
-from catalog_matching.matchers import KeywordMatcher
-from catalog_matching.models import FileCandidate
+from catalog_matching.domain.matchers import KeywordMatcher
+from catalog_matching.domain.models import FileCandidate
 
 
 class _Const:

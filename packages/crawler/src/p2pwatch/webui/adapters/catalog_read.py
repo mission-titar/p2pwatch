@@ -24,7 +24,7 @@ All SQL lives in module constants, parameterized (no value interpolation).
 
 import sqlite3
 
-from catalog_matching.config import TIER_RANK
+from catalog_matching.domain.config import TIER_RANK
 from p2pwatch.adapters.persistence_sqlite.sightings import (
     LATEST_SIGHTING_CTE,
     best_filename_and_size,

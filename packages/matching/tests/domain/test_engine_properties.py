@@ -1,9 +1,9 @@
 import random
 
-from catalog_matching.config import TIER_RANK
-from catalog_matching.engine import MatchDecision, MatchingEngine
-from catalog_matching.models import FileCandidate, TargetSegment
-from catalog_matching.validation import parse_matcher_config
+from catalog_matching.domain.config import TIER_RANK
+from catalog_matching.domain.engine import MatchDecision, MatchingEngine
+from catalog_matching.domain.models import FileCandidate, TargetSegment
+from catalog_matching.domain.validation import parse_matcher_config
 
 # CONSTANT seed: every run is identical (zero flakiness, cf. spec §16).
 _SEED = 20260610

@@ -1,7 +1,7 @@
-from catalog_matching.matchers import AttrBetweenMatcher, CoverageMatcher, RegexMatcher
-from catalog_matching.models import FileCandidate, TargetSegment
-from catalog_matching.resolver import MatcherResolver
-from catalog_matching.validation import parse_matcher_config
+from catalog_matching.domain.matchers import AttrBetweenMatcher, CoverageMatcher, RegexMatcher
+from catalog_matching.domain.models import FileCandidate, TargetSegment
+from catalog_matching.domain.resolver import MatcherResolver
+from catalog_matching.domain.validation import parse_matcher_config
 
 _TARGET = TargetSegment(
     season=2,

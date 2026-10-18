@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from catalog_matching.engine import DecisionRecord, MatchDecision
+from catalog_matching.domain.engine import DecisionRecord, MatchDecision
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.observation import FileObservation
 

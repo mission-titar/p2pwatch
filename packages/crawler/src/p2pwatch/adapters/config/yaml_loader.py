@@ -2,7 +2,7 @@
 
 The ONLY module in the project that imports ``yaml`` and touches the filesystem for
 config. Does NOT validate the substance (schema/graph/RE2): that's the domain's job
-(``catalog_matching.validation``). Minimal guardrail: the root must be a mapping.
+(``catalog_matching.domain.validation``). Minimal guardrail: the root must be a mapping.
 """
 
 from pathlib import Path

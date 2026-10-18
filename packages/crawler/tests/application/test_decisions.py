@@ -10,7 +10,12 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from catalog_matching.engine import DecisionRecord, Explanation, MatchDecision, MatchingEngine
+from catalog_matching.domain.engine import (
+    DecisionRecord,
+    Explanation,
+    MatchDecision,
+    MatchingEngine,
+)
 from p2pwatch.adapters.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.persistence_sqlite.connection import utc_iso
 from p2pwatch.application.decisions import rejudge_file

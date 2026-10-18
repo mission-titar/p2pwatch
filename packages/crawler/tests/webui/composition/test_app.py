@@ -15,9 +15,9 @@ from jinja2 import Environment, FileSystemLoader, UndefinedError, meta
 from starlette.applications import Starlette
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from catalog_matching.config import MatcherConfig
-from catalog_matching.models import TargetSegment
-from catalog_matching.validation import parse_matcher_config, parse_targets
+from catalog_matching.domain.config import MatcherConfig
+from catalog_matching.domain.models import TargetSegment
+from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceKey
 from p2pwatch.ports.client_status import ChannelStatus, ClientStatus, StatusReading

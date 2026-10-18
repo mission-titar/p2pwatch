@@ -19,7 +19,7 @@ VISIBLE (``error``-level log, so a persistent failure gets noticed).
 
 import logging
 
-from catalog_matching.engine import MatchingEngine
+from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.application.decisions import rejudge_file
 from p2pwatch.domain.observability.events import ObservationRecorded
 from p2pwatch.domain.observation import FileObservation

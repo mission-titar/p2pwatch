@@ -17,8 +17,8 @@ counts as one). The rows written are emitted once, as one ``DecisionsRecorded`` 
 
 from dataclasses import replace
 
-from catalog_matching.engine import MatchingEngine, to_record
-from catalog_matching.models import FileCandidate
+from catalog_matching.domain.engine import MatchingEngine, to_record
+from catalog_matching.domain.models import FileCandidate
 from p2pwatch.application.run_download_cycle import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.observability.events import DecisionChange, DecisionsRecorded

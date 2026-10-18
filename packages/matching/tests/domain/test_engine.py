@@ -4,16 +4,16 @@ from pathlib import Path
 import pytest
 import yaml
 
-from catalog_matching.config import MatcherConfig
-from catalog_matching.engine import (
+from catalog_matching.domain.config import MatcherConfig
+from catalog_matching.domain.engine import (
     Explanation,
     MatchDecision,
     MatchingEngine,
     _first_matching_rule,
 )
-from catalog_matching.models import FileCandidate, TargetSegment
-from catalog_matching.resolver import MatcherResolver, ResolvedTarget
-from catalog_matching.validation import parse_matcher_config
+from catalog_matching.domain.models import FileCandidate, TargetSegment
+from catalog_matching.domain.resolver import MatcherResolver, ResolvedTarget
+from catalog_matching.domain.validation import parse_matcher_config
 
 
 def test_explanation_is_frozen_and_holds_fields() -> None:
@@ -105,7 +105,7 @@ def test_first_matching_rule_returns_none_when_no_rule_true() -> None:
 # --- Canonical config §8.3 (reused by several tests) ---
 # Single source of truth: the deployment matcher config (operator-editable), not an inline
 # copy. So these tests validate the policy actually shipped. Cf. test_golden_corpus.
-_CANONICAL_MATCHER = Path(__file__).resolve().parents[3] / "deploy" / "matcher.yml"
+_CANONICAL_MATCHER = Path(__file__).resolve().parents[4] / "deploy" / "matcher.yml"
 _CANONICAL_RAW: dict[str, object] = yaml.safe_load(_CANONICAL_MATCHER.read_text(encoding="utf-8"))
 
 _TARGET_62B = TargetSegment(

@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from catalog_matching.validation import parse_matcher_config, parse_targets
+from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 from p2pwatch.adapters.config.crawler_config import (
     BackoffConfig,
     ConfigError,

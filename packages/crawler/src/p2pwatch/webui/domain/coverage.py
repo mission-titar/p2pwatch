@@ -1,13 +1,13 @@
 """Pure derivation of a target's coverage status (webui spec §5). No I/O.
 
-The tier order comes from ``catalog_matching.config.TIER_RANK`` (source of truth shared
+The tier order comes from ``catalog_matching.domain.config.TIER_RANK`` (source of truth shared
 with the matching engine). Without this sharing, the webui reinvented its own divergent
 table: a 4th tier or a rename would have silently skewed the coverage.
 """
 
 from collections.abc import Sequence
 
-from catalog_matching.config import TIER_RANK
+from catalog_matching.domain.config import TIER_RANK
 from p2pwatch.webui.domain.views import CoverageStatus
 
 

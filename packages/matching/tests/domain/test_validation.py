@@ -2,7 +2,7 @@ import re
 
 import pytest
 
-from catalog_matching.config import (
+from catalog_matching.domain.config import (
     AllDef,
     AnyDef,
     AttrBetweenDef,
@@ -12,7 +12,7 @@ from catalog_matching.config import (
     RegexDef,
     TokenRef,
 )
-from catalog_matching.validation import (
+from catalog_matching.domain.validation import (
     CycleError,
     DepthExceededError,
     MatchingConfigError,

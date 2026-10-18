@@ -1,4 +1,4 @@
-from catalog_matching.models import FOUND, TARGET_STATUSES, FileCandidate, TargetSegment
+from catalog_matching.domain.models import FOUND, TARGET_STATUSES, FileCandidate, TargetSegment
 
 
 def test_file_candidate_defaults() -> None:

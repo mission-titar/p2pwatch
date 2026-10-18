@@ -4,11 +4,11 @@ from typing import Any
 import pytest
 import yaml
 
-from catalog_matching.config import RegexDef
-from catalog_matching.engine import MatchingEngine
-from catalog_matching.matchers import RegexMatcher
-from catalog_matching.models import FileCandidate
-from catalog_matching.validation import parse_matcher_config, parse_targets
+from catalog_matching.domain.config import RegexDef
+from catalog_matching.domain.engine import MatchingEngine
+from catalog_matching.domain.matchers import RegexMatcher
+from catalog_matching.domain.models import FileCandidate
+from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 
 _FIXTURES = Path(__file__).resolve().parent / "fixtures"
 # The matcher policy has a single source of truth: the deployment config (operator-

@@ -1,4 +1,4 @@
-from catalog_matching.engine import (
+from catalog_matching.domain.engine import (
     DecisionRecord,
     Explanation,
     MatchDecision,

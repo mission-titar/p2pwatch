@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass
 from datetime import timedelta
 
-from catalog_matching.engine import MatchingEngine
+from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.application.record_observations import record_observation
 from p2pwatch.domain.observability.events import (
     ClientUnreachable,

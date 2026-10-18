@@ -16,7 +16,7 @@ from typing import Any
 
 import httpx
 
-from catalog_matching.ed2k_link import build_ed2k_link
+from catalog_matching.domain.ed2k_link import build_ed2k_link
 from p2pwatch.adapters.mule_api.errors import (
     ApiAuthError,
     ApiKadExhaustedError,

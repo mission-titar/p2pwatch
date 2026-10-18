@@ -6,7 +6,7 @@ from typing import Literal
 
 import pytest
 
-from catalog_matching.models import TargetSegment
+from catalog_matching.domain.models import TargetSegment
 from p2pwatch.adapters.persistence_sqlite.connection import open_catalog, open_local
 from p2pwatch.adapters.persistence_sqlite.download_repository import SqliteDownloadRepository
 from p2pwatch.adapters.persistence_sqlite.source_repository import SqliteSourceRepository

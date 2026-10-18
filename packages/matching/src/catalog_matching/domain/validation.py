@@ -9,7 +9,7 @@ validation (DAG/depth) and the regex compile-check are added in Task 6.
 import re
 from typing import Any
 
-from catalog_matching.config import (
+from catalog_matching.domain.config import (
     SCOPES,
     TIERS,
     AllDef,
@@ -26,14 +26,14 @@ from catalog_matching.config import (
     TokenDef,
     TokenRef,
 )
-from catalog_matching.interpolation import (
+from catalog_matching.domain.interpolation import (
     PLACEHOLDER,
     TARGET_PLACEHOLDERS,
     InterpolationError,
     interpolate,
 )
-from catalog_matching.matchers import READERS_BY_ATTR
-from catalog_matching.models import LOST, TARGET_STATUSES, TargetSegment
+from catalog_matching.domain.matchers import READERS_BY_ATTR
+from catalog_matching.domain.models import LOST, TARGET_STATUSES, TargetSegment
 
 _CONDITION_KEYS = ("all", "any", "not")
 # 4.x names, refused at load with their 5.0 name (``{segment}`` too, in _check_regexes_compile).

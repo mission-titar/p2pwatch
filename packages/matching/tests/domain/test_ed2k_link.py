@@ -1,4 +1,4 @@
-from catalog_matching.ed2k_link import build_ed2k_link
+from catalog_matching.domain.ed2k_link import build_ed2k_link
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 

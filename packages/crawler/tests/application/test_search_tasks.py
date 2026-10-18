@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from catalog_matching.engine import MatchingEngine
+from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.adapters.persistence_sqlite.backoff_state_repository import (
     SqliteBackoffStateRepository,
 )

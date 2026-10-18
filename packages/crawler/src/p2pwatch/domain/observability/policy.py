@@ -15,8 +15,8 @@ from dataclasses import dataclass, replace
 from enum import Enum, StrEnum, auto
 from typing import Literal, assert_never
 
-from catalog_matching.config import TIER_RANK
-from catalog_matching.ed2k_link import build_ed2k_link
+from catalog_matching.domain.config import TIER_RANK
+from catalog_matching.domain.ed2k_link import build_ed2k_link
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.observability.events import (
     ChannelDegraded,
