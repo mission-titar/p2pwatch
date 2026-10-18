@@ -10,9 +10,9 @@ from typing import Any
 
 import pytest
 
-from p2pwatch_amule.boot.conf import tcp_listen_port, with_listen_port
-from p2pwatch_amule.port_sync import __main__ as port_sync
-from p2pwatch_amule.port_sync.settings import Settings
+from p2pwatch_amule.adapters.driving import port_sync
+from p2pwatch_amule.adapters.driving.settings import Settings
+from p2pwatch_amule.domain.conf import tcp_listen_port, with_listen_port
 
 DOWN = ["s6-svc", "-wD", "-T", "60000", "-d", "/etc/services.d/amuled"]
 UP = ["s6-svc", "-u", "/etc/services.d/amuled"]

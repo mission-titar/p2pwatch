@@ -15,7 +15,7 @@ CHECKLIST = """## Checklist
 - [ ] Read the changelog: anything that changes the daemon's defaults or the network behaviour?
 - [ ] `options.cmake` diff: a new switch to set explicitly in the Dockerfile's CMake options?
 - [ ] `REFERENCE.md` diff: does the `mule_api` adapter need a change (with its tests first)?
-- [ ] `p2pwatch_amule.boot`: does a default we override or rely on change?
+- [ ] `p2pwatch_amule.domain.conf`: does a default we override or rely on change?
 - [ ] CI green on amd64 and arm64.
 - [ ] Merge, then tag a release (`vX.Y.Z - aMule {version}`): the image only changes on a tag.
 """
