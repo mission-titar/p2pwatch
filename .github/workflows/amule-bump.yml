@@ -37,7 +37,7 @@ jobs:
         id: bump
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
-        run: uv run python -m amule_bump
+        run: uv run python -m amule_bump.adapters.driving.bump
 
       # An existing branch is rebuilt from main and force-pushed only if it differs; an open PR
       # is updated in place, and a closed one does not stop a new PR from opening.

@@ -160,7 +160,7 @@ jobs:
 
       - name: Gate that image-family VEX claims hold against the SBOM
         run: >
-          uv run python -m vex_checks.check_image_claims
+          uv run python -m vex_checks.adapters.driving.check_image_claims
           --sbom /tmp/sbom.syft.json
           --vex "$VEX"
           --format fail
