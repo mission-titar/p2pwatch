@@ -1,20 +1,12 @@
 import json
-from typing import Any, Protocol
+from typing import Any
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-UPSTREAM = "amule-org/amule"
+from amule_bump.ports.driven.repo_reader import RepoReader
 
 
-class Repo(Protocol):
-    """Read access to one GitHub repository: its REST API and its files at a ref."""
-
-    def json(self, path: str) -> Any: ...
-
-    def file(self, ref: str, path: str) -> str: ...
-
-
-class GitHubRepo:
+class GitHubRepoReader(RepoReader):
     def __init__(self, full_name: str, token: str | None) -> None:
         self._full_name = full_name
         self._token = token
