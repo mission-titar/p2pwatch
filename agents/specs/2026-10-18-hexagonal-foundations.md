@@ -145,6 +145,8 @@ breaks, written in `docs/migration-4x.md`; the Dockerfile and the docs follow.
 
 - Block 60 passes 500 lines because it deletes the rest of `test_app.py`, about 1,300 lines; a deletion reads at
   a glance.
+- Block 80 passes 500 lines because it deletes the old entry point and its 300-line test file; a deletion reads
+  at a glance. (Corrected 2026-10-18: measured at 859 lines, 439 of them the two deleted files.)
 - In blocks 20 to 50, the wiring tests and what is left of `test_app.py` live side by side.
 - In block 50, the client types gain `open()` for one block, until block 60 deletes them.
 
