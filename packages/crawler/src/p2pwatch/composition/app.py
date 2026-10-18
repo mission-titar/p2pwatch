@@ -18,11 +18,11 @@ import asyncio
 import logging
 import sqlite3
 import sys
-from collections.abc import Callable, Coroutine, Sequence
+from collections.abc import Callable, Coroutine, Mapping, Sequence
 from contextlib import AsyncExitStack
 from functools import partial
 from importlib.metadata import version
-from pathlib import Path
+from pathlib import Path, PurePath
 
 from prometheus_client import CollectorRegistry
 
@@ -34,10 +34,12 @@ from p2pwatch.adapters.config.crawler_config import (
     AMULE_CLIENT_NAME,
     CrawlerConfig,
     DownloadConfig,
+    load_config,
 )
 from p2pwatch.adapters.crawler_control_loop import LoopCrawlerControl
 from p2pwatch.adapters.disk_space_shutil import ShutilDiskSpace
 from p2pwatch.adapters.driving.process.posix_process import PosixProcess
+from p2pwatch.adapters.monotonic_clock_asyncio import AsyncioMonotonicClock
 from p2pwatch.adapters.mule_api.client import AmuleApiClient
 from p2pwatch.adapters.observability.apprise_notifier import AppriseNotifier
 from p2pwatch.adapters.observability.dispatcher import ObservabilityDispatcher
@@ -52,6 +54,9 @@ from p2pwatch.adapters.persistence_sqlite.local_state_repository import (
     SqliteLocalStateRepository,
 )
 from p2pwatch.adapters.persistence_sqlite.source_repository import SqliteSourceRepository
+from p2pwatch.adapters.rng_random import SeededRng
+from p2pwatch.adapters.wake_hub_asyncio import AsyncioWakeHub
+from p2pwatch.adapters.wall_clock_system import SystemWallClock
 from p2pwatch.application.reevaluate_catalog import reevaluate_catalog
 from p2pwatch.application.reevaluate_if_policy_changed import reevaluate_if_policy_changed
 from p2pwatch.application.resolve_node_id import resolve_node_id
@@ -71,6 +76,7 @@ from p2pwatch.application.supervise_loops import supervise_loops
 from p2pwatch.domain.observability.events import CrawlerStarted
 from p2pwatch.ports.clock import MonotonicClock, WallClock
 from p2pwatch.ports.crawler_control import CrawlerControl
+from p2pwatch.ports.driving.crawler_runner import CrawlerRunner
 from p2pwatch.ports.rng import Rng
 from p2pwatch.ports.telemetry import Telemetry
 from p2pwatch.ports.wake_hub import WakeHub
@@ -351,3 +357,37 @@ class CrawlerApp:
                 _print_progress(f"{len(workers)} amuled session(s) closing…")
                 await stack.aclose()
                 _print_progress("Databases closed: exiting.")
+
+
+class CrawlerAssembly(CrawlerRunner):
+    """Loads the config, then runs the ``CrawlerApp`` it describes on the system's clocks."""
+
+    def __init__(
+        self,
+        *,
+        webui_address: tuple[str, int],
+        amule_api_address: tuple[str, int],
+        env: Mapping[str, str],
+    ) -> None:
+        self._webui_address = webui_address
+        self._amule_api_address = amule_api_address
+        self._env = env
+
+    async def crawl(
+        self, *, config_path: PurePath, targets_path: PurePath, matcher_path: PurePath
+    ) -> None:
+        config = load_config(Path(config_path), Path(targets_path), Path(matcher_path), self._env)
+        logging.getLogger().setLevel(config.crawler_config.observability.log_level)
+        crawler_app = CrawlerApp(
+            crawler_config=config.crawler_config,
+            targets=config.targets,
+            matcher_config=config.matcher_config,
+            wall_clock=SystemWallClock(),
+            monotonic_clock=AsyncioMonotonicClock(),
+            rng=SeededRng(),
+            wake_hub=AsyncioWakeHub(),
+            policy_fingerprint=config.policy_fingerprint,
+            webui_address=self._webui_address,
+            amule_api_address=self._amule_api_address,
+        )
+        await crawler_app.run()

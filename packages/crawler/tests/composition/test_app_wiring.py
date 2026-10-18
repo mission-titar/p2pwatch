@@ -36,7 +36,7 @@ from p2pwatch.adapters.persistence_sqlite.connection import open_catalog, open_l
 from p2pwatch.adapters.rng_random import SeededRng
 from p2pwatch.adapters.wake_hub_asyncio import AsyncioWakeHub
 from p2pwatch.adapters.wall_clock_system import SystemWallClock
-from p2pwatch.composition.app import CrawlerApp
+from p2pwatch.composition.app import CrawlerApp, CrawlerAssembly
 from p2pwatch.ports.backoff_state_repository import BackoffKey, BackoffState
 from p2pwatch_testing.adapters.mule_api.api_fakes import (
     PASSWORD,
@@ -54,7 +54,8 @@ _TARGETS = (
         title="Les demoiselles cambrioleuses",
     ),
 )
-_MATCHER = Path(__file__).resolve().parents[4] / "deploy" / "matcher.yml"
+_DEPLOY = Path(__file__).resolve().parents[4] / "deploy"
+_MATCHER = _DEPLOY / "matcher.yml"
 _HASH = "0123456789abcdef0123456789abcdef"
 _RESULT = {
     "hash": _HASH,
@@ -64,6 +65,19 @@ _RESULT = {
 }
 _WEBUI_OFF = WebuiConfig(enabled=False)
 _WEBUI_SERVING = re.compile(r"^webui serving on (.+):(\d+) \(own thread\)$")
+_OBSERVER_CONFIG = """\
+shutdown_deadline_seconds: 10.0
+search:
+  keywords: [keroro, titar]
+  backoff: {{base_seconds: 2.0, cap_seconds: 60.0, factor: 2.0, jitter_ratio: 0.0}}
+amule_api_password: ${{AMULE_API_PASSWORD}}
+catalog_db_path: {data}/catalog.db
+local_db_path: {data}/local.db
+observability:
+  log_level: DEBUG
+webui:
+  enabled: false
+"""
 # Far beyond what the fake takes to see each step: only a broken assembly ever reaches it.
 _WAIT_SECONDS = 10.0
 
@@ -208,25 +222,37 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
 
 
 @pytest.mark.asyncio
-async def test_observer_mode_starts_one_ed2k_search_of_two_keywords_until_a_sigterm(
-    tmp_path: Path, matcher_config: MatcherConfig, caplog: pytest.LogCaptureFixture
+async def test_observer_mode_crawls_its_config_files_with_one_ed2k_search_until_a_sigterm(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     # Both keywords' ed2k searches share one client, which spaces their starts by a minute: two
     # clients would start both at once and break the network's pacing.
-    crawler_config = _crawler_config(tmp_path, keywords=("keroro", "titar"))
+    config_path = tmp_path / "crawler.yml"
+    config_path.write_text(_OBSERVER_CONFIG.format(data=tmp_path), encoding="utf-8")
     api = FakeAmuleApi()
     default_sigterm = signal.getsignal(signal.SIGTERM)
 
     with FakeAmuleApiServer(api) as server, caplog.at_level(logging.INFO):
-        run = asyncio.create_task(_app(crawler_config, matcher_config, server).run())
+        crawler_assembly = CrawlerAssembly(
+            webui_address=("127.0.0.1", 0),
+            amule_api_address=(server.host, server.port),
+            env={"AMULE_API_PASSWORD": PASSWORD},
+        )
+        run = asyncio.create_task(
+            crawler_assembly.crawl(
+                config_path=config_path, targets_path=_DEPLOY / "targets.yml", matcher_path=_MATCHER
+            )
+        )
         # The first ed2k search and both Kad ones, each read to its end.
         assert await asyncio.to_thread(
             server.wait_for, lambda seen: _searches_read(seen) >= 3, _WAIT_SECONDS
         )
         _send_sigterm(default_sigterm)
         await asyncio.wait_for(run, _WAIT_SECONDS)
+        root_level = logging.getLogger().level  # the config's, until caplog restores its own
 
     assert _search_types(api).count("global") == 1
+    assert root_level == logging.DEBUG
     assert "🟢 node online (download off)" in caplog.messages
     assert api.logins == 1  # no download session
     assert not any(map(_WEBUI_SERVING.match, caplog.messages))

@@ -56,7 +56,7 @@ COPY --from=python /app/.venv /app/.venv
 
 ENV PATH="/app/.venv/bin:$PATH"
 WORKDIR /app
-CMD ["python", "-m", "p2pwatch", \
+CMD ["python", "-m", "p2pwatch", "crawl", \
      "--config", "/app/config/crawler.yml", \
      "--targets", "/app/config/targets.yml", \
      "--matcher", "/app/config/matcher.yml"]
