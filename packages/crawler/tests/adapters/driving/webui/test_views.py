@@ -1,6 +1,6 @@
 import pytest
 
-from p2pwatch.webui.domain.views import ConsoleResult, ConsoleRow, DbOption
+from p2pwatch.adapters.driving.webui.views import ConsoleResult, ConsoleRow, DbOption
 
 pytestmark = pytest.mark.usefixtures("close_test_connections")
 

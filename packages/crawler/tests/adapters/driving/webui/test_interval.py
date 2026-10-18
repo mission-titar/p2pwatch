@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from p2pwatch.webui.domain.interval import Interval, parse_instant, requested_interval
+from p2pwatch.adapters.driving.webui.interval import Interval, parse_instant, requested_interval
 
 pytestmark = pytest.mark.usefixtures("close_test_connections")
 

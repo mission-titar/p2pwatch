@@ -109,11 +109,11 @@ def test_is_archive_rejects_comic_book_formats(filename: str) -> None:
     assert _is_archive_matcher().matches(FileCandidate(filename=filename)) is False
 
 
-# --- single-catalog-rule invariant (cross-package: relied on by p2pwatch.webui) ---------
-# p2pwatch.webui.domain.views.FileRowDisplay documents that ANY decision with tier=="catalog"
-# is displayed as "unidentified" (DecisionCell.target) / "·" (DecisionCell.title), and it
-# relies on the prod policy having exactly ONE catalog-tier rule, the target-agnostic catch-all
-# (keroro_large). If a second catalog-tier rule were ever added, the webui would silently
+# --- single-catalog-rule invariant (cross-package: relied on by p2pwatch's webui) -------
+# p2pwatch.adapters.driving.webui.views.FileRowDisplay documents that ANY decision with
+# tier=="catalog" is displayed as "unidentified" (DecisionCell.target) / "·" (DecisionCell.title),
+# and it relies on the prod policy having exactly ONE catalog-tier rule, the target-agnostic
+# catch-all (keroro_large). If a second catalog-tier rule were ever added, the webui would silently
 # mislabel a real, identified episode as "unidentified" instead of showing its title. This
 # test guards that invariant directly against the shipped policy so a future editor gets a
 # loud failure instead of a silent webui regression.

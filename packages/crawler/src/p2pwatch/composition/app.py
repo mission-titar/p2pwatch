@@ -25,7 +25,7 @@ from pathlib import Path, PurePath
 
 from prometheus_client import CollectorRegistry
 
-import p2pwatch.webui
+import p2pwatch.adapters.driving.webui
 from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.adapters.driven.config.crawler_config import (
     AMULE_CLIENT_NAME,
@@ -57,6 +57,8 @@ from p2pwatch.adapters.driven.rng_random import SeededRng
 from p2pwatch.adapters.driven.wake_hub_asyncio import AsyncioWakeHub
 from p2pwatch.adapters.driven.wall_clock_system import SystemWallClock
 from p2pwatch.adapters.driving.process.posix_process import PosixProcess
+from p2pwatch.adapters.driving.webui.app import build_app as build_webui_app
+from p2pwatch.adapters.driving.webui.uvicorn_server_thread import UvicornServerThread
 from p2pwatch.application.reevaluate_catalog import reevaluate_catalog
 from p2pwatch.application.reevaluate_if_policy_changed import reevaluate_if_policy_changed
 from p2pwatch.application.resolve_node_id import resolve_node_id
@@ -77,8 +79,6 @@ from p2pwatch.domain.observability.events import CrawlerStarted
 from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
 from p2pwatch.ports.driving.crawler_control import CrawlerControl
 from p2pwatch.ports.driving.crawler_runner import CrawlerRunner
-from p2pwatch.webui.composition.app import build_app as build_webui_app
-from p2pwatch.webui.composition.uvicorn_server_thread import UvicornServerThread
 
 _logger = logging.getLogger("p2pwatch.composition.app")
 
@@ -138,14 +138,14 @@ class CrawlerApp(CrawlerRunner):
         event loop nor its writer connections. Its stop is registered on ``stack`` so it runs
         during the normal LIFO unwind at shutdown, AFTER the loops are stopped."""
         crawler_config = config.crawler_config
-        webui_pkg_dir = Path(p2pwatch.webui.__file__).parent
+        webui_pkg_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent
         app = build_webui_app(
             catalog_db_path=Path(crawler_config.catalog_db_path),
             local_db_path=Path(crawler_config.local_db_path),
             matcher_config=config.matcher_config,
             target_segments=config.targets,
-            templates_dir=webui_pkg_dir / "adapters" / "templates",
-            static_dir=webui_pkg_dir / "adapters" / "static",
+            templates_dir=webui_pkg_dir / "templates",
+            static_dir=webui_pkg_dir / "static",
             control=control,
             status_readings=status_board,
             amule_url=crawler_config.webui.amule_url,

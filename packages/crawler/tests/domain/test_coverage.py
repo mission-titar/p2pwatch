@@ -1,6 +1,6 @@
 import pytest
 
-from p2pwatch.webui.domain.coverage import coverage_of
+from p2pwatch.domain.coverage import coverage_of
 
 pytestmark = pytest.mark.usefixtures("close_test_connections")
 

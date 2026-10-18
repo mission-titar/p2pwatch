@@ -10,7 +10,7 @@ All SQL lives in module constants, parameterized (no value interpolation).
 import sqlite3
 from datetime import UTC, datetime, timedelta
 
-from p2pwatch.webui.domain.views import BackoffRow, DownloadRow, NodeState
+from p2pwatch.adapters.driving.webui.views import BackoffRow, DownloadRow, NodeState
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 

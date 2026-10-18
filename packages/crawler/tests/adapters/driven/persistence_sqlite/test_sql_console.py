@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
+from p2pwatch.adapters.driven.persistence_sqlite.sql_console import ConsoleOutcome, run_query
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.webui.adapters.sql_console import ConsoleOutcome, run_query
 from p2pwatch_testing.application.fakes import FakeTime, TickingMonotonicClock
 from p2pwatch_testing.catalog_rows import insert_file
 

@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.webui.adapters.local_read import LocalReader
-from p2pwatch.webui.domain.views import BackoffRow, DownloadRow, NodeState
+from p2pwatch.adapters.driven.persistence_sqlite.local_read import LocalReader
+from p2pwatch.adapters.driving.webui.views import BackoffRow, DownloadRow, NodeState
 
 pytestmark = pytest.mark.usefixtures("close_test_connections")
 

@@ -8,7 +8,7 @@ import threading
 import uvicorn
 from starlette.applications import Starlette
 
-_logger = logging.getLogger("p2pwatch.webui.composition.uvicorn_server_thread")
+_logger = logging.getLogger("p2pwatch.adapters.driving.webui.uvicorn_server_thread")
 
 _START_TIMEOUT_SECONDS = 5.0
 # uvicorn polls ``should_exit`` every 0.1 s, so the join normally returns well within its bound.
