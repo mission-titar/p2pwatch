@@ -19,19 +19,13 @@ import os
 import sys
 from pathlib import Path
 
-from catalog_matching.validation import (
-    MatchingConfigError,
-    parse_matcher_config,
-    parse_targets,
-)
-from p2pwatch.adapters.config.crawler_config import ConfigError, parse_crawler_config
-from p2pwatch.adapters.config.yaml_loader import YamlLoadError, load_yaml
+from p2pwatch.adapters.config.crawler_config import load_config
 from p2pwatch.adapters.monotonic_clock_asyncio import AsyncioMonotonicClock
 from p2pwatch.adapters.rng_random import SeededRng
 from p2pwatch.adapters.wake_hub_asyncio import AsyncioWakeHub
 from p2pwatch.adapters.wall_clock_system import SystemWallClock
 from p2pwatch.composition.app import CrawlerApp
-from p2pwatch.domain.policy_fingerprint import policy_fingerprint
+from p2pwatch.domain.invalid_config import InvalidConfigError
 
 # 0.0.0.0: Docker cannot route a published port to the container's loopback. 8080, not 80: an
 # unprivileged process cannot bind a port below 1024 under ``cap_drop: ALL``.
@@ -63,52 +57,35 @@ def _parse_validate_args(argv: list[str]) -> argparse.Namespace:
 
 
 def build_crawler_app(args: argparse.Namespace) -> CrawlerApp:
-    """Loads + validates all config (fail-fast §5/§14) and assembles the ``CrawlerApp``.
-
-    The unified crawler config is interpolated from ``os.environ`` (``${NAME}`` → secrets/URLs).
-    Any error (``YamlLoadError``/``ConfigError``/``MatchingConfigError``) propagates as-is:
-    ``main`` catches it, logs clearly, and refuses to start (spec §14).
-
-    The policy fingerprint (spec §7.1) is computed here, once, from the RAW bytes of
-    ``matcher.yml``/``targets.yml`` (both feed ``MatchingEngine``): a source-level fingerprint,
-    not derived from the parsed config, so a comment/whitespace-only edit still triggers one
-    harmless re-evaluation pass at the next start.
-    """
-    crawler_config = parse_crawler_config(load_yaml(args.config), os.environ)
-    if crawler_config.observability is not None:
-        logging.getLogger().setLevel(crawler_config.observability.log_level)
-    targets = parse_targets(load_yaml(args.targets))
-    matcher_config = parse_matcher_config(load_yaml(args.matcher))
-    fingerprint = policy_fingerprint(args.matcher.read_bytes(), args.targets.read_bytes())
+    """Loads + validates all config (fail-fast §5/§14), interpolated from ``os.environ``, and
+    assembles the ``CrawlerApp``; an ``InvalidConfigError`` propagates to ``main``."""
+    config = load_config(args.config, args.targets, args.matcher, os.environ)
+    logging.getLogger().setLevel(config.crawler_config.observability.log_level)
     return CrawlerApp(
-        crawler_config=crawler_config,
-        targets=targets,
-        matcher_config=matcher_config,
+        crawler_config=config.crawler_config,
+        targets=config.targets,
+        matcher_config=config.matcher_config,
         wall_clock=SystemWallClock(),
         monotonic_clock=AsyncioMonotonicClock(),
         rng=SeededRng(),
         wake_hub=AsyncioWakeHub(),
-        policy_fingerprint=fingerprint,
+        policy_fingerprint=config.policy_fingerprint,
         webui_address=_WEBUI_ADDRESS,
         amule_api_address=_AMULE_API_ADDRESS,
     )
 
 
 def validate_config(argv: list[str]) -> int:
-    """Loads + validates the config via the EXISTING parsers: a PURE check, starts NOTHING.
+    """Loads + validates the config as the run does: a PURE check, starts NOTHING.
 
-    Strictly reuses ``load_yaml`` + ``parse_{crawler_config,targets,matcher_config}`` (no new
-    validation logic). Since the config is interpolated from ``os.environ``, the INTENDED side
-    effect is that we ALSO validate the presence of the env variables referenced by the
-    ACTIVE sections. Any error (``YamlLoadError``/``ConfigError``/``MatchingConfigError``) →
-    clear message on stderr + code 1, like the run's refusal to start.
+    Since the config is interpolated from ``os.environ``, the INTENDED side effect is that we
+    ALSO validate the presence of the env variables referenced by the ACTIVE sections. An
+    ``InvalidConfigError`` → clear message on stderr + code 1, like the run's refusal to start.
     """
     args = _parse_validate_args(argv)
     try:
-        parse_crawler_config(load_yaml(args.config), os.environ)
-        parse_targets(load_yaml(args.targets))
-        parse_matcher_config(load_yaml(args.matcher))
-    except (YamlLoadError, ConfigError, MatchingConfigError) as error:
+        load_config(args.config, args.targets, args.matcher, os.environ)
+    except InvalidConfigError as error:
         print(f"Invalid config: {error}", file=sys.stderr, flush=True)
         return 1
     print("Config valid", flush=True)
@@ -118,7 +95,7 @@ def validate_config(argv: list[str]) -> int:
 def main(argv: list[str] | None = None) -> int:
     """CLI entry. Returns an exit code (0 = clean shutdown, 1 = invalid config).
 
-    The ``try`` ALSO covers ``asyncio.run(app.run())``: a ``ConfigError`` raised at RUNTIME by
+    The ``try`` ALSO covers ``asyncio.run(app.run())``: an ``InvalidConfigError`` raised by
     ``run`` is a refusal to start just like a build-time invalid config, so we render it with the
     SAME clean message + non-zero exit code (instead of a bare traceback). The resources are
     already closed cleanly by ``run`` (LIFO stack) before the raise.
@@ -139,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         app = build_crawler_app(args)
         asyncio.run(app.run())
-    except (YamlLoadError, ConfigError, MatchingConfigError) as error:
+    except InvalidConfigError as error:
         print(f"Invalid config, refusing to start: {error}", file=sys.stderr, flush=True)
         return 1
     except TimeoutError:

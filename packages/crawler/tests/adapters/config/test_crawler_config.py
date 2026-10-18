@@ -1,23 +1,32 @@
 import dataclasses
 import re
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
 import pytest
 
+from catalog_matching.validation import parse_matcher_config, parse_targets
 from p2pwatch.adapters.config.crawler_config import (
     BackoffConfig,
     ConfigError,
     CrawlerConfig,
     DownloadConfig,
+    LoadedConfig,
     MetricsConfig,
     NotificationTarget,
     ObservabilityConfig,
     SearchConfig,
     WebuiConfig,
+    load_config,
     parse_crawler_config,
 )
+from p2pwatch.adapters.config.yaml_loader import load_yaml
+from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.observability.policy import Audience
+from p2pwatch.domain.policy_fingerprint import policy_fingerprint
+
+_DEPLOY = Path(__file__).resolve().parents[5] / "deploy"
 
 
 def _minimal_raw() -> dict[str, Any]:
@@ -84,7 +93,6 @@ def test_parses_a_valid_config() -> None:
         catalog_db_path="/data/catalog.db",
         local_db_path="/data/local.db",
         node_id=None,
-        observability=None,
         download=None,
     )
 
@@ -375,11 +383,19 @@ def test_download_enabled_true_full_is_download_mode() -> None:
     assert cfg.download == DownloadConfig(
         poll_interval_seconds=30.0,
         min_free_bytes=1_000_000_000,
-        lost_after_seconds=3600.0,
+        lost_after=timedelta(hours=1),
         output_dir="/data/out",
         reappeared_after=timedelta(seconds=5400),
         sources_interval=timedelta(seconds=120),
     )
+
+
+def test_the_sources_are_read_a_poll_after_their_interval() -> None:
+    # The step runs on the first round past its interval (source points spec, D3).
+    raw = _minimal_raw() | {"download": _full_download_section()}
+    cfg = parse_crawler_config(raw, _env())
+    assert cfg.download is not None
+    assert cfg.download.time_between_source_reads == timedelta(seconds=150)
 
 
 def test_download_sources_interval_defaults_to_five_minutes() -> None:
@@ -428,7 +444,7 @@ def test_download_space_and_ttl_knobs_have_defaults() -> None:
     cfg = parse_crawler_config(raw, _env())
     assert cfg.download is not None
     assert cfg.download.min_free_bytes == 10_737_418_240  # 10 GiB
-    assert cfg.download.lost_after_seconds == 86_400.0  # 24 h
+    assert cfg.download.lost_after == timedelta(hours=24)
     assert cfg.download.output_dir == "/downloads"  # what deploy/compose.yml mounts
 
 
@@ -496,8 +512,27 @@ def test_search_keywords_rejects_non_string_entry() -> None:
 # ----------------------------------------------------------- observability
 
 
-def test_observability_absent_defaults_to_none() -> None:
-    assert parse_crawler_config(_minimal_raw(), _env()).observability is None
+def test_an_absent_observability_logs_at_info_with_no_metrics_and_no_notification() -> None:
+    assert parse_crawler_config(_minimal_raw(), _env()).observability == ObservabilityConfig(
+        log_level="INFO", metrics=None, notification_timeout_seconds=5.0, notifications=()
+    )
+
+
+@pytest.mark.parametrize(
+    ("metrics", "port"),
+    [
+        (MetricsConfig(enabled=True, port=9100), 9100),
+        (MetricsConfig(enabled=False, port=9100), None),
+        (None, None),
+    ],
+)
+def test_the_metrics_port_is_the_configured_one_only_when_enabled(
+    metrics: MetricsConfig | None, port: int | None
+) -> None:
+    observability = ObservabilityConfig(
+        log_level="INFO", metrics=metrics, notification_timeout_seconds=5.0, notifications=()
+    )
+    assert observability.metrics_port == port
 
 
 def test_observability_parsed() -> None:
@@ -715,3 +750,57 @@ def test_webui_amule_url_empty_is_fatal() -> None:
     raw = _minimal_raw() | {"webui": {"amule_url": ""}}
     with pytest.raises(ConfigError, match="non-empty string"):
         parse_crawler_config(raw, _env())
+
+
+# ------------------------------------------------------------- the three files
+
+
+def _write_crawler_config(tmp_path: Path) -> Path:
+    path = tmp_path / "crawler.yml"
+    path.write_text(
+        "shutdown_deadline_seconds: 10.0\n"
+        "search:\n"
+        "  keywords: [keroro]\n"
+        "  backoff: {base_seconds: 2.0, cap_seconds: 300.0, factor: 2.0, jitter_ratio: 0.3}\n"
+        "amule_api_password: ${AMULE_API_PASSWORD}\n"
+        "catalog_db_path: /data/catalog.db\n"
+        "local_db_path: /data/local.db\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_the_three_files_load_with_the_fingerprint_of_the_policy(tmp_path: Path) -> None:
+    config_path = _write_crawler_config(tmp_path)
+    targets_path, matcher_path = _DEPLOY / "targets.yml", _DEPLOY / "matcher.yml"
+
+    loaded = load_config(config_path, targets_path, matcher_path, _env())
+
+    assert loaded == LoadedConfig(
+        crawler_config=parse_crawler_config(load_yaml(config_path), _env()),
+        targets=parse_targets(load_yaml(targets_path)),
+        matcher_config=parse_matcher_config(load_yaml(matcher_path)),
+        policy_fingerprint=policy_fingerprint(matcher_path.read_bytes(), targets_path.read_bytes()),
+    )
+
+
+@pytest.mark.parametrize(
+    ("broken_file", "text"),
+    [
+        ("crawler.yml", "search: [unclosed\n"),  # a YAML that does not load
+        ("crawler.yml", "catalog_db_path: c\n"),  # a key that does not parse
+        ("targets.yml", "episodes: nope\n"),  # the matching's own error
+        ("matcher.yml", "tokens: {}\nrules: {}\n"),
+    ],
+)
+def test_an_invalid_file_is_an_invalid_config(tmp_path: Path, broken_file: str, text: str) -> None:
+    paths = {
+        "crawler.yml": _write_crawler_config(tmp_path),
+        "targets.yml": _DEPLOY / "targets.yml",
+        "matcher.yml": _DEPLOY / "matcher.yml",
+    }
+    paths[broken_file] = tmp_path / f"broken-{broken_file}"
+    paths[broken_file].write_text(text, encoding="utf-8")
+
+    with pytest.raises(InvalidConfigError):
+        load_config(paths["crawler.yml"], paths["targets.yml"], paths["matcher.yml"], _env())

@@ -1,8 +1,13 @@
 """Prometheus sink: inc/set/remove on a throwaway CollectorRegistry (get_sample_value)."""
 
+import socket
+import threading
+
+import httpx
+import pytest
 from prometheus_client import CollectorRegistry
 
-from p2pwatch.adapters.observability.prometheus_sink import PrometheusSink
+from p2pwatch.adapters.observability.prometheus_sink import PrometheusSink, start_metrics_server
 from p2pwatch.domain.observability.events import SearchExecuted, SourceFirstUseful
 from p2pwatch.domain.observability.policy import MetricInstruction, MetricName, describe
 from tests.domain.observability.test_policy import CASES
@@ -137,3 +142,35 @@ def test_a_first_useful_alert_counts_under_its_network_and_kind() -> None:
         sink.apply(instruction)
     labels = {"network": "ed2k", "kind": "first_useful"}
     assert registry.get_sample_value("p2pwatch_source_alerts_total", labels) == 1.0
+
+
+def _free_port() -> int:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port: int = probe.getsockname()[1]
+        return port
+
+
+def test_the_metrics_server_serves_the_registry_on_its_port_until_stopped() -> None:
+    registry = CollectorRegistry()
+    PrometheusSink(registry).apply(MetricInstruction(MetricName.DOWNLOADS_COMPLETED, "inc"))
+    port = _free_port()
+
+    stop = start_metrics_server(registry, port)
+    try:
+        page = httpx.get(f"http://127.0.0.1:{port}/metrics").text
+    finally:
+        stop()
+
+    assert "p2pwatch_downloads_completed_total 1.0" in page
+    with pytest.raises(httpx.ConnectError):
+        httpx.get(f"http://127.0.0.1:{port}/metrics")
+
+
+def test_no_metrics_server_without_a_port() -> None:
+    threads = threading.enumerate()
+
+    stop = start_metrics_server(CollectorRegistry(), None)
+    stop()
+
+    assert threading.enumerate() == threads
