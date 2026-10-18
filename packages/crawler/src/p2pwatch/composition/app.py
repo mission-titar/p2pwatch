@@ -5,7 +5,7 @@ COMPOSITION layer (the only one allowed to import adapters AND application). Bui
   ``SqliteBackoffStateRepository`` (single writer, invariant §11), connections opened
   via ``open_catalog``/``open_local`` (migrations checked at startup, fail-fast §14).
 - the ``MatchingEngine`` (once), the ``node_id`` (``resolve_node_id``),
-- ONE ``MuleClient`` + ``SearchWorker`` on the one amuled the core drives, whose
+- ONE ``AmuleApiClient`` + ``SearchWorker`` on the one amuled the core drives, whose
   session the status loop shares.
 
 Loops: the search tasks (``SearchTaskRunner``), the status loop, and the download loop when
@@ -23,7 +23,6 @@ from contextlib import AsyncExitStack
 from functools import partial
 from importlib.metadata import version
 from pathlib import Path
-from typing import Protocol
 
 from prometheus_client import CollectorRegistry
 
@@ -33,7 +32,6 @@ from catalog_matching.engine import MatchingEngine
 from catalog_matching.models import TargetSegment
 from p2pwatch.adapters.config.crawler_config import (
     AMULE_CLIENT_NAME,
-    AmuleEndpoint,
     CrawlerConfig,
     DownloadConfig,
 )
@@ -73,36 +71,13 @@ from p2pwatch.application.supervise_loops import supervise_loops
 from p2pwatch.domain.observability.events import CrawlerStarted
 from p2pwatch.ports.clock import MonotonicClock, WallClock
 from p2pwatch.ports.crawler_control import CrawlerControl
-from p2pwatch.ports.download_client import DownloadClient
-from p2pwatch.ports.mule_client import MuleClient
 from p2pwatch.ports.rng import Rng
-from p2pwatch.ports.source_client import SourceClient
 from p2pwatch.ports.telemetry import Telemetry
 from p2pwatch.ports.wake_hub import WakeHub
 from p2pwatch.webui.composition.app import build_app as build_webui_app
 from p2pwatch.webui.composition.uvicorn_server_thread import UvicornServerThread
 
 _logger = logging.getLogger("p2pwatch.composition.app")
-
-
-class DownloadSourceClient(DownloadClient, SourceClient, Protocol):
-    """The download loop's one session: it downloads, and reads its downloads' sources."""
-
-    async def open(self) -> None: ...
-
-
-# Client factories, injectable in test; they pace on the composition's monotonic clock.
-MuleClientFactory = Callable[[AmuleEndpoint, MonotonicClock], MuleClient]
-DownloadClientFactory = Callable[[AmuleEndpoint, MonotonicClock], DownloadSourceClient]
-
-
-def default_download_client_factory(
-    endpoint: AmuleEndpoint, monotonic_clock: MonotonicClock
-) -> DownloadSourceClient:
-    """An ``AmuleApiClient`` dedicated to download: its own session."""
-    return AmuleApiClient(
-        endpoint.host, endpoint.port, endpoint.password, monotonic_clock=monotonic_clock
-    )
 
 
 def _print_progress(message: str) -> None:
@@ -118,15 +93,6 @@ def _backoff_policy(config: CrawlerConfig) -> BackoffPolicy:
         cap_seconds=backoff.cap_seconds,
         factor=backoff.factor,
         jitter_ratio=backoff.jitter_ratio,
-    )
-
-
-def default_mule_client_factory(
-    endpoint: AmuleEndpoint, monotonic_clock: MonotonicClock
-) -> MuleClient:
-    """A real ``AmuleApiClient`` on the given endpoint (default factory, substituted in test)."""
-    return AmuleApiClient(
-        endpoint.host, endpoint.port, endpoint.password, monotonic_clock=monotonic_clock
     )
 
 
@@ -146,8 +112,6 @@ class CrawlerApp:
         policy_fingerprint: str,
         webui_address: tuple[str, int],
         amule_api_address: tuple[str, int],
-        client_factory: MuleClientFactory = default_mule_client_factory,
-        download_client_factory: DownloadClientFactory = default_download_client_factory,
     ) -> None:
         self._crawler_config = crawler_config
         self._targets = tuple(targets)
@@ -158,17 +122,22 @@ class CrawlerApp:
         self._wake_hub = wake_hub
         self._policy_fingerprint = policy_fingerprint
         self._webui_address = webui_address
-        host, port = amule_api_address
-        self._amule_endpoint = AmuleEndpoint(
-            AMULE_CLIENT_NAME, host, port, crawler_config.amule_api_password
-        )
-        self._client_factory = client_factory
-        self._download_client_factory = download_client_factory
+        self._amule_api_address = amule_api_address
         self._shutdown = asyncio.Event()
         # The pause gate (phase P6a), armed (set = un-paused) so the crawler starts running. The
         # webui mutates it thread-safely via ``LoopCrawlerControl`` (spec §10).
         self._resumed = asyncio.Event()
         self._resumed.set()
+
+    def _amule_api_client(self) -> AmuleApiClient:
+        """A session of its own on amuled, paced on the composition's monotonic clock."""
+        host, port = self._amule_api_address
+        return AmuleApiClient(
+            host,
+            port,
+            self._crawler_config.amule_api_password,
+            monotonic_clock=self._monotonic_clock,
+        )
 
     async def _build_download_deps(
         self,
@@ -186,7 +155,7 @@ class CrawlerApp:
         connection; a ``SqliteDownloadRepository`` on the SAME ``local_conn`` - single writer
         on the event loop, no race), and its own session to the daemon.
         """
-        download_client = self._download_client_factory(self._amule_endpoint, self._monotonic_clock)
+        download_client = self._amule_api_client()
         stack.push_async_callback(download_client.close)
         await download_client.open()
         return DownloadLoopDeps(
@@ -275,8 +244,7 @@ class CrawlerApp:
             catalog_repo = SqliteCatalogRepository(catalog_conn, node_id)
             backoff_states = SqliteBackoffStateRepository(local_conn)
             engine = MatchingEngine(self._matcher_config, self._targets)
-            endpoint = self._amule_endpoint
-            board = StatusBoard((endpoint.client_name,), self._monotonic_clock)
+            board = StatusBoard((AMULE_CLIENT_NAME,), self._monotonic_clock)
             # In-process webui (spec §5): own thread + loop, started EARLY (before the daemon client
             # + startup re-evaluation) so it is up promptly and stays isolated from the crawler's
             # synchronous work. Gated by ``webui.enabled``; a crash degrades (spec §17.1). Its
@@ -303,13 +271,13 @@ class CrawlerApp:
                 wall_clock=self._wall_clock,
             )
 
-            client = self._client_factory(endpoint, self._monotonic_clock)
+            client = self._amule_api_client()
             stack.push_async_callback(client.close)
             await client.open()
-            workers = [SearchWorker(endpoint.client_name, client, deps)]
+            workers = [SearchWorker(AMULE_CLIENT_NAME, client, deps)]
             # The status loop shares the search session (one session per container's amuled).
             status_deps = StatusLoopDeps(
-                endpoint.client_name,
+                AMULE_CLIENT_NAME,
                 client,
                 self._wall_clock,
                 self._monotonic_clock,

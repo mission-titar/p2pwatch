@@ -1,6 +1,6 @@
 """Deterministic fakes for the application-layer tests (spec §8).
 
-``FakeMuleClient``: results SCRIPTED per ``search`` call, injectable failures
+``FakeAmuleApiClient``: results SCRIPTED per ``search`` call, injectable failures
 (``ClientUnreachableError``/``SearchFailedError``) at ``connect``/``search``.
 ``FakeTime``: one timeline read through a wall and a monotonic clock.
 ``TickingMonotonicClock``: each read a second after the previous one.
@@ -15,7 +15,6 @@ from datetime import UTC, datetime, timedelta
 from p2pwatch.domain.observability.events import Event
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.ports.client_errors import ClientUnreachableError, SearchFailedError
-from p2pwatch.ports.client_status import ChannelStatus, ClientStatus
 from p2pwatch.ports.clock import MonotonicInstant
 from p2pwatch.ports.search_client import SearchAnswer
 
@@ -126,14 +125,13 @@ class RecordingWakeHub:
         event.clear()
 
 
-class FakeMuleClient:
-    """Scripted client (satisfies MuleClient structurally, spec §8).
+class FakeAmuleApiClient:
+    """Scripted client (satisfies SearchClient structurally, spec §8).
 
     ``results``: list of observation tuples, one per ``search`` call (exhausted → empty
     tuple). ``connect_failures``: exceptions to raise on the first N ``connect`` calls (then
     success). ``search_failures``: exceptions to raise on the first N ``search`` calls (then
-    success). Every channel reads on its network and connectable. Every answer reports
-    ``skipped_result_count`` skipped results.
+    success). Every answer reports ``skipped_result_count`` skipped results.
     """
 
     channels: tuple[str, ...] = ("ed2k", "kad")
@@ -151,7 +149,6 @@ class FakeMuleClient:
         self._connect_failures = list(connect_failures or [])
         self._search_failures = list(search_failures or [])
         self.connect_calls = 0
-        self.close_calls = 0
         self.searches: list[tuple[str, str]] = []
         self.budgets: list[float] = []
 
@@ -160,11 +157,7 @@ class FakeMuleClient:
         if self._connect_failures:
             raise self._connect_failures.pop(0)
 
-    async def open(self) -> None:
-        await self.connect()
-
-    async def close(self) -> None:
-        self.close_calls += 1
+    async def close(self) -> None: ...
 
     async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
         self.searches.append((keyword, channel))
@@ -173,9 +166,6 @@ class FakeMuleClient:
             raise self._search_failures.pop(0)
         observations = self._results.pop(0) if self._results else ()
         return SearchAnswer(observations, self._skipped_result_count)
-
-    async def status(self) -> ClientStatus:
-        return ClientStatus("3.0.1", tuple(ChannelStatus(c, True, True) for c in self.channels))
 
 
 def make_unreachable(message: str = "down") -> ClientUnreachableError:
