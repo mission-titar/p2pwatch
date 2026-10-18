@@ -1,0 +1,82 @@
+import asyncio
+import logging
+import socket
+import threading
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
+import httpx
+import pytest
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import PlainTextResponse
+from starlette.routing import Route
+
+from p2pwatch.webui.composition.uvicorn_server_thread import UvicornServerThread
+
+_LOGGER = "p2pwatch.webui.composition.uvicorn_server_thread"
+
+
+async def _ok(request: Request) -> PlainTextResponse:
+    return PlainTextResponse("ok")
+
+
+def _webui_threads() -> list[threading.Thread]:
+    return [thread for thread in threading.enumerate() if thread.name == "webui"]
+
+
+@pytest.mark.asyncio
+async def test_start_serves_the_app_on_the_port_bound_and_stop_ends_the_thread(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    server_thread = UvicornServerThread(Starlette(routes=[Route("/", _ok)]), ("127.0.0.1", 0))
+    with caplog.at_level(logging.INFO, logger=_LOGGER):
+        await server_thread.start()
+    host, port = server_thread.bound_address
+    try:
+        async with httpx.AsyncClient() as http:
+            response = await http.get(f"http://{host}:{port}/")
+    finally:
+        await server_thread.stop()
+    assert (host, response.text) == ("127.0.0.1", "ok")
+    assert port != 0
+    assert f"webui serving on 127.0.0.1:{port} (own thread)" in caplog.messages
+    assert _webui_threads() == []
+
+
+@pytest.mark.asyncio
+async def test_a_port_already_bound_degrades_the_webui_without_raising(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with socket.socket() as holder:
+        holder.bind(("127.0.0.1", 0))
+        holder.listen()
+        server_thread = UvicornServerThread(Starlette(), holder.getsockname())
+        with caplog.at_level(logging.INFO, logger=_LOGGER):
+            await server_thread.start()
+        await server_thread.stop()
+    assert caplog.messages == ["webui degraded: the crawler carries on without HTTP"]
+    assert "address already in use" in caplog.text
+    assert _webui_threads() == []
+
+
+@pytest.mark.asyncio
+async def test_a_server_that_does_not_start_in_time_degrades_the_webui(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    released = threading.Event()
+
+    @asynccontextmanager
+    async def held_startup(app: Starlette) -> AsyncIterator[None]:
+        await asyncio.to_thread(released.wait)
+        yield
+
+    server_thread = UvicornServerThread(
+        Starlette(lifespan=held_startup), ("127.0.0.1", 0), start_timeout_seconds=0.05
+    )
+    with caplog.at_level(logging.INFO, logger=_LOGGER):
+        await server_thread.start()
+    released.set()
+    await server_thread.stop()
+    assert caplog.messages == ["webui degraded: uvicorn did not start within 0.05 s"]
+    assert _webui_threads() == []

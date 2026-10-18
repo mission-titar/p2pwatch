@@ -22,7 +22,6 @@ import logging
 import signal
 import sqlite3
 import sys
-import threading
 from collections.abc import Callable, Sequence
 from contextlib import AsyncExitStack, suppress
 from datetime import timedelta
@@ -30,9 +29,7 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Protocol
 
-import uvicorn
 from prometheus_client import CollectorRegistry, start_http_server
-from starlette.applications import Starlette
 
 import p2pwatch.webui
 from catalog_matching.config import MatcherConfig
@@ -85,6 +82,7 @@ from p2pwatch.ports.source_client import SourceClient
 from p2pwatch.ports.telemetry import Telemetry
 from p2pwatch.ports.wake_hub import WakeHub
 from p2pwatch.webui.composition.app import build_app as build_webui_app
+from p2pwatch.webui.composition.uvicorn_server_thread import UvicornServerThread
 
 _logger = logging.getLogger("p2pwatch.composition.app")
 
@@ -113,44 +111,6 @@ MetricsServer = Callable[[int, CollectorRegistry], None]
 def default_metrics_server(port: int, registry: CollectorRegistry) -> None:
     """Starts the /metrics HTTP server (daemon thread). Wrapper to fix the argument order."""
     start_http_server(port, registry=registry)  # pragma: no cover
-
-
-class WebuiServer(Protocol):
-    """The ``uvicorn.Server`` shape the crawler drives from the main thread: a ``serve()``
-    coroutine (run on the webui thread's OWN loop) and a settable ``should_exit`` flag that
-    the serve loop polls - set it True to ask for a graceful return (thread-safe by design)."""
-
-    should_exit: bool
-
-    async def serve(self) -> None: ...  # one line (branch-coverage gotcha, see CLAUDE.md)
-
-
-# Injectable webui-server factory (fake in test): (built ASGI app) → uvicorn-shaped server. The
-# default builds a real ``uvicorn.Server``; unit tests inject a fake (no real HTTP).
-WebuiServerFactory = Callable[[Starlette], WebuiServer]
-
-# FIXED in-container webui bind. WHY 0.0.0.0: Docker cannot route a published port to the
-# container's internal loopback, so a 127.0.0.1 bind would be unreachable from outside; the
-# container's network namespace IS the isolation boundary and exposure is governed by compose
-# (published port + networks), not by an app-level bind address. WHY 8080 not 80: port 80 is
-# privileged and needs CAP_NET_BIND_SERVICE, which collides with the ``cap_drop: ALL`` + non-root
-# hardening floor (an unprivileged process cannot bind it).
-_WEBUI_BIND_HOST = "0.0.0.0"
-_WEBUI_BIND_PORT = 8080
-
-# Bound on the webui-thread join at shutdown. Set ``should_exit`` then join: uvicorn's serve
-# loop polls ``should_exit`` (~0.1 s) and returns with no active connections, so the join
-# normally returns well within the bound. The join runs via ``asyncio.to_thread`` (see
-# ``_stop_webui``) so the crawler's armed shutdown ``asyncio.timeout`` can still cancel it.
-_WEBUI_JOIN_TIMEOUT_SECONDS = 5.0
-
-
-def default_webui_server_factory(app: Starlette) -> uvicorn.Server:
-    """A real ``uvicorn.Server`` bound to the fixed 0.0.0.0:8080 serving the webui ASGI ``app``
-    (own thread + loop). Constructing it opens no socket (that happens in ``serve()``)."""
-    return uvicorn.Server(
-        uvicorn.Config(app, host=_WEBUI_BIND_HOST, port=_WEBUI_BIND_PORT, log_level="info")
-    )
 
 
 def _print_progress(message: str) -> None:
@@ -198,10 +158,10 @@ class CrawlerApp:
         rng: Rng,
         wake_hub: WakeHub,
         policy_fingerprint: str,
+        webui_address: tuple[str, int],
         client_factory: MuleClientFactory = default_mule_client_factory,
         download_client_factory: DownloadClientFactory = default_download_client_factory,
         metrics_server: MetricsServer = default_metrics_server,
-        webui_server_factory: WebuiServerFactory = default_webui_server_factory,
     ) -> None:
         self._crawler_config = crawler_config
         self._targets = tuple(targets)
@@ -211,10 +171,10 @@ class CrawlerApp:
         self._rng = rng
         self._wake_hub = wake_hub
         self._policy_fingerprint = policy_fingerprint
+        self._webui_address = webui_address
         self._client_factory = client_factory
         self._download_client_factory = download_client_factory
         self._metrics_server = metrics_server
-        self._webui_server_factory = webui_server_factory
         self._shutdown = asyncio.Event()
         # The pause gate (phase P6a), armed (set = un-paused) so the crawler starts running. The
         # webui mutates it thread-safely via ``LoopCrawlerControl`` (spec §10).
@@ -341,13 +301,12 @@ class CrawlerApp:
                 task.cancel()
         _print_progress("Workers stopped.")
 
-    def _start_webui(self, stack: AsyncExitStack, status_board: StatusBoard) -> None:
+    async def _start_webui(self, stack: AsyncExitStack, status_board: StatusBoard) -> None:
         """Start the read-only webui on its OWN thread + loop (spec §5), sharing only IMMUTABLE
         state with the crawler (the parsed matcher/targets, the DB paths). It reads through its
         OWN ``ReaderProvider`` (inside ``build_webui_app``); nothing here touches the crawler's
-        event loop nor its writer connections. The thread is a daemon (never blocks process
-        exit); its graceful stop is registered on ``stack`` so it runs during the normal LIFO
-        unwind at shutdown, AFTER ``_supervise`` returns (see ``_stop_webui``)."""
+        event loop nor its writer connections. Its stop is registered on ``stack`` so it runs
+        during the normal LIFO unwind at shutdown, AFTER ``_supervise`` returns."""
         webui_pkg_dir = Path(p2pwatch.webui.__file__).parent
         # Runtime-control channel (phase P6a): bound to the crawler's OWN loop + events, so the
         # webui thread hands off intents thread-safely (spec §10). ``_start_webui`` runs within
@@ -372,31 +331,9 @@ class CrawlerApp:
             monotonic_clock=self._monotonic_clock,
             source_period_gap=self._crawler_config.webui.source_period_gap,
         )
-        server = self._webui_server_factory(app)
-        thread = threading.Thread(
-            target=self._serve_webui, args=(server,), name="webui", daemon=True
-        )
-        thread.start()
-        stack.push_async_callback(self._stop_webui, server, thread)
-        _logger.info("webui serving on %s:%d (own thread)", _WEBUI_BIND_HOST, _WEBUI_BIND_PORT)
-
-    def _serve_webui(self, server: WebuiServer) -> None:
-        """Webui thread body: run the server on a FRESH loop in THIS thread. A crash DEGRADES
-        (spec §17.1): log loudly and return - a webui failure must NOT stop the crawler. We catch
-        ``Exception`` only (a ``KeyboardInterrupt``/``SystemExit`` still propagates), never
-        ``BaseException``."""
-        try:
-            asyncio.run(server.serve())
-        except Exception:
-            _logger.exception("webui thread crashed: crawler continues (degraded, no HTTP)")
-
-    async def _stop_webui(self, server: WebuiServer, thread: threading.Thread) -> None:
-        """Graceful webui stop (runs during the LIFO stack unwind at shutdown): ask the serve
-        loop to exit (``should_exit`` is polled by ``serve()``), then join the thread OFF the
-        event loop via ``asyncio.to_thread`` so the crawler's armed shutdown ``asyncio.timeout``
-        stays able to cancel it (the thread is a daemon, so a truly-hung webui dies at exit)."""
-        server.should_exit = True
-        await asyncio.to_thread(thread.join, _WEBUI_JOIN_TIMEOUT_SECONDS)
+        server_thread = UvicornServerThread(app, self._webui_address)
+        stack.push_async_callback(server_thread.stop)
+        await server_thread.start()
 
     async def run(self) -> None:
         """Async entry point: opens the resources, installs the signals, loops (§6).
@@ -461,7 +398,7 @@ class CrawlerApp:
             # graceful stop is on ``stack`` → runs at the normal shutdown unwind (after DB conns
             # are pushed, so it stops the thread before those close during LIFO teardown).
             if self._crawler_config.webui.enabled:
-                self._start_webui(stack, board)
+                await self._start_webui(stack, board)
             # SHARED backoff registry: built ONCE, RELOADED from backoff_states
             # (backoff survives restart, spec §3/§7), injected into ALL workers
             # + passed to the search tasks that persist it. Single writer on the event loop.
