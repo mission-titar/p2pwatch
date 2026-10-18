@@ -19,7 +19,7 @@ Le reste du dépôt nomme cette épingle au lieu d'écrire un numéro.
 Le workflow `.github/workflows/amule-bump.yml` tourne chaque lundi (et à la demande, depuis
 l'onglet **Actions**), en deux étapes.
 
-`uv run python -m amule_bump` (le paquet d'outillage `packages/amule_bump/`) fait la logique :
+`uv run python -m amule_bump.adapters.driving.bump` (le paquet d'outillage `packages/amule_bump/`) fait la logique :
 
 1. lit `AMULE_VERSION` et demande à GitHub la dernière release stable d'`amule-org/amule` ; même
    version, ou plus ancienne : il s'arrête ;
@@ -73,7 +73,7 @@ d'installation d'une **App GitHub**, limité à ce dépôt et de courte durée.
 ## La liste de vérifications
 
 La PR la porte, en anglais, à cocher avant de fusionner (source :
-`packages/amule_bump/src/amule_bump/body.py`) :
+`packages/amule_bump/src/amule_bump/application/body.py`) :
 
 - [ ] Read the changelog: anything that changes the daemon's defaults or the network behaviour?
 - [ ] `options.cmake` diff: a new switch to set explicitly in the Dockerfile's CMake options?
@@ -92,7 +92,7 @@ Sans l'App, ou pour une autre version que la dernière release, travaillez sur u
 **Vers la dernière release**, le module réécrit lui-même les deux `ARG` du Dockerfile :
 
 ```bash
-uv run python -m amule_bump
+uv run python -m amule_bump.adapters.driving.bump
 ```
 
 Ajoutez `--dry-run` pour seulement afficher les deux lignes et la description de PR qu'il
