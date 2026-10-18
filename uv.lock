@@ -863,6 +863,7 @@ dependencies = [
     { name = "httpx" },
     { name = "p2pwatch" },
     { name = "pytest" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
@@ -870,6 +871,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28" },
     { name = "p2pwatch", editable = "packages/crawler" },
     { name = "pytest", specifier = ">=9.1.1" },
+    { name = "uvicorn", specifier = ">=0.30" },
 ]
 
 [[package]]

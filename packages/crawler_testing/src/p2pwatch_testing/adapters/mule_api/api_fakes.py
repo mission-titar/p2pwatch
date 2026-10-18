@@ -1,4 +1,5 @@
-"""A fake amuleapi served through ``httpx.MockTransport``, so the tests drive the real stack.
+"""A fake amuleapi served through ``httpx.MockTransport`` or on a loopback socket, so the tests
+drive the real stack.
 
 Its list routes default ``limit`` to 100 like the real ones, which is what makes a client that
 forgets to ask for more fail here instead of on a node with a hundred shared files.
@@ -6,11 +7,14 @@ forgets to ask for more fail here instead of on a node with a hundred shared fil
 
 import json
 import re
-from collections.abc import Callable
+import socket
+import threading
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
-from typing import Any
+from typing import Any, Self
 
 import httpx
+import uvicorn
 
 from p2pwatch.ports.clock import MonotonicClock, MonotonicInstant
 from p2pwatch_testing.application.fakes import FakeTime
@@ -177,6 +181,68 @@ class FakeAmuleApi:
         rows = [row for listed in self.clients.values() for row in listed if row["ecid"] == ecid]
         client = {key: value for key, value in rows[0].items() if key not in _FILE_RELATION_KEYS}
         return httpx.Response(200, json={**client, **self.details.get(ecid, {})})
+
+
+class FakeAmuleApiServer:
+    """``FakeAmuleApi`` served over HTTP on a loopback port, by uvicorn in a thread of its own.
+
+    A request the fake refuses answers 500, and the first refusal is raised again on exit."""
+
+    def __init__(self, api: FakeAmuleApi) -> None:
+        self.api = api
+        # Listening before uvicorn starts: a client connecting early waits in the backlog.
+        self._socket = socket.create_server(("127.0.0.1", 0))
+        self.host, self.port = self._socket.getsockname()[:2]
+        self.failures: list[Exception] = []
+        config = uvicorn.Config(
+            self._serve_http, interface="asgi3", lifespan="off", log_config=None, access_log=False
+        )
+        self._server = uvicorn.Server(config)
+        self._thread = threading.Thread(target=self._server.run, args=([self._socket],))
+
+    def __enter__(self) -> Self:
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self._server.should_exit = True
+        self._thread.join()
+        self._socket.close()
+        if self.failures:
+            raise self.failures[0]
+
+    async def _serve_http(
+        self,
+        scope: dict[str, Any],
+        receive: Callable[[], Awaitable[dict[str, Any]]],
+        send: Callable[[dict[str, Any]], Awaitable[None]],
+    ) -> None:
+        body = b""
+        more_body = True
+        while more_body:
+            message = await receive()
+            body += message.get("body", b"")
+            more_body = message.get("more_body", False)
+        query = scope["query_string"].decode()
+        request = httpx.Request(
+            scope["method"],
+            f"http://{self.host}:{self.port}{scope['path']}?{query}",
+            headers=scope["headers"],
+            content=body,
+        )
+        try:
+            response = self.api.handle(request)
+        except Exception as failure:
+            self.failures.append(failure)
+            response = httpx.Response(500)
+        await send(
+            {
+                "type": "http.response.start",
+                "status": response.status_code,
+                "headers": response.headers.raw,
+            }
+        )
+        await send({"type": "http.response.body", "body": response.content})
 
 
 def _search_id(request: httpx.Request) -> int:

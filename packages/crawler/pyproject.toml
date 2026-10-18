@@ -69,6 +69,7 @@ exclude_also = ["if TYPE_CHECKING:"]
 
 # Test files that test no module of `src`, each with what it tests (_unit-coverage-check).
 [tool.coverage_checks.tests_without_unit]
+"tests/adapters/mule_api/test_api_fakes.py" = "p2pwatch_testing's amuleapi fake on a loopback socket"
 "tests/adapters/persistence_sqlite/test_append_only.py" = "the catalog's append-only triggers, in SQL"
 "tests/adapters/persistence_sqlite/test_local_migration_0006.py" = "a SQL migration of local.db"
 "tests/adapters/persistence_sqlite/test_local_migration_0007.py" = "a SQL migration of local.db"
