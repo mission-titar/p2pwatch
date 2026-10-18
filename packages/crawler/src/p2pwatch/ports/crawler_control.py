@@ -9,10 +9,10 @@ seam: each method is a synchronous, non-blocking, fire-and-forget "intent accept
 webui makes; the concrete adapter (``adapters/crawler_control_loop.py``) forwards the mutation
 onto the crawler loop thread via ``loop.call_soon_threadsafe``.
 
-Methods (all called from the webui thread, all return immediately):
+Methods (all return immediately; ``PosixProcess`` also calls ``request_shutdown`` on a signal):
 - ``pause`` clears the run gate: searches in flight finish, then the crawler idles.
 - ``resume`` sets the run gate: the crawler searches again.
-- ``restart`` requests the crawler's graceful shutdown (the container's ``restart:
+- ``request_shutdown`` requests the crawler's graceful shutdown (the container's ``restart:
   unless-stopped`` brings it back).
 - ``is_paused`` reads the run gate, for the dashboard.
 
@@ -32,6 +32,6 @@ class CrawlerControl(Protocol):
 
     def resume(self) -> None: ...
 
-    def restart(self) -> None: ...
+    def request_shutdown(self) -> None: ...
 
     def is_paused(self) -> bool: ...

@@ -39,7 +39,7 @@ class _StubControl:
     def resume(self) -> None:  # pragma: no cover
         pass
 
-    def restart(self) -> None:  # pragma: no cover
+    def request_shutdown(self) -> None:  # pragma: no cover
         pass
 
     def is_paused(self) -> bool:

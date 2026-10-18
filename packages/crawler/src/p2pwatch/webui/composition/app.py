@@ -1025,7 +1025,7 @@ def build_app(
         return RedirectResponse("/?done=resumed", status_code=303)
 
     async def handle_restart(request: Request) -> Response:
-        control.restart()
+        control.request_shutdown()
         return RedirectResponse("/?done=restarted", status_code=303)
 
     # ------------------------------------------------------------------
