@@ -507,7 +507,7 @@ def load_config(
     """Loads ``crawler.yml``, ``targets.yml`` and ``matcher.yml``; any of them invalid raises
     ``InvalidConfigError``.
 
-    The fingerprint (spec §7.1) hashes the two policy files' RAW bytes, not their parse, so a
+    The fingerprint hashes the two policy files' RAW bytes, not their parse, so a
     comment-only edit still triggers one harmless re-evaluation at the next start.
     """
     try:

@@ -207,6 +207,10 @@ def _wait_for(
 _WEBUI_HEALTH = (
     "import urllib.request;print(urllib.request.urlopen('http://localhost:8080/health').status)"
 )
+# From the aMule container: a webui bound to the core's loopback only fails it.
+_WEBUI_HEALTH_FROM_ED2K = (
+    f"import urllib.request;print(urllib.request.urlopen('http://{_CORE}:8080/health').status)"
+)
 
 # amuleapi is supervised by amuled, not by s6, so s6-svstat says nothing about it. Read from the
 # core, by the service name the core itself uses, its /health proves the wiring.
@@ -294,10 +298,10 @@ def test_the_two_containers_work_together(project_files: tuple[Path, ...]) -> No
         state = partial(_ps_field, service, "State", project_files)
         _wait_for(f"{service} state", state, "running", project_files)
     # The core serves the read-only webui in-process, on a bind fixed at 0.0.0.0:8080 in code.
-    # Polled from inside the container, so no host port is needed.
+    # Polled from the other container, so no host port is needed.
     _wait_for(
-        "webui /health",
-        lambda: _exec(_CORE, "python", "-c", _WEBUI_HEALTH, files=project_files),
+        "webui /health from ed2k",
+        lambda: _exec(_AMULE, "python3", "-c", _WEBUI_HEALTH_FROM_ED2K, files=project_files),
         "200",
         project_files,
     )

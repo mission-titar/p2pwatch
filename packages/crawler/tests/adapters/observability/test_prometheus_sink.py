@@ -7,6 +7,7 @@ import httpx
 import pytest
 from prometheus_client import CollectorRegistry
 
+from p2pwatch.adapters.observability import prometheus_sink
 from p2pwatch.adapters.observability.prometheus_sink import PrometheusSink, start_metrics_server
 from p2pwatch.domain.observability.events import SearchExecuted, SourceFirstUseful
 from p2pwatch.domain.observability.policy import MetricInstruction, MetricName, describe
@@ -174,3 +175,29 @@ def test_no_metrics_server_without_a_port() -> None:
     stop()
 
     assert threading.enumerate() == threads
+
+
+class _ShutDownServer:
+    def shutdown(self) -> None: ...
+
+    def server_close(self) -> None: ...
+
+
+def test_the_stop_gives_up_on_a_server_thread_that_does_not_end(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    released = threading.Event()
+    stuck = threading.Thread(target=released.wait, daemon=True)
+    stuck.start()
+    monkeypatch.setattr(
+        prometheus_sink, "start_http_server", lambda port, registry: (_ShutDownServer(), stuck)
+    )
+    stop = start_metrics_server(CollectorRegistry(), 9090)
+
+    stopping = threading.Thread(target=stop)
+    stopping.start()
+    stopping.join(timeout=5.0)
+    stopped = not stopping.is_alive()
+    released.set()
+
+    assert stopped

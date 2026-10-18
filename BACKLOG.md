@@ -29,8 +29,6 @@ An agent adds an entry only after the operator has agreed to it.
 
 - **Hexagonal architecture**: rings read from the paths, ports as ABCs, six hexagons that never import one another,
   enforced by tach and ast-grep. Umbrella spec: `agents/specs/2026-10-18-hexagonal-architecture.md`, lots in D18.
-  - **Lot 1a, the composition and the command line**: the composition only wires, tested against a loopback amuleapi
-    fake, and the command line an adapter over three ports. `agents/specs/2026-10-18-hexagonal-foundations.md`.
   - **Lot 1b, the rings, the entry points and the check**: every package moved to the ring paths and explicit
     subcommands, then tach and ast-grep with their deprecated edges. `agents/specs/2026-10-18-hexagonal-foundations.md`.
   - **Lot 2, the `p2pwatch` hexagon**: the self-reconnecting session, the logging port, the webui's read side behind

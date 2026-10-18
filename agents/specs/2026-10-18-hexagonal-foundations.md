@@ -37,7 +37,7 @@ tested on its own:
 | running the loops until the stop, then cancelling them all | `supervise_loops`, in `application/` |
 | the webui's thread: start, failure, stop | `UvicornServerThread`, in the webui's HTTP adapter |
 | tolerating an unreachable amuled at startup | `AmuleApiClient.open()` |
-| metrics server on or off | the Prometheus adapter |
+| metrics server on or off | the Prometheus adapter (Corrected 2026-10-18: which also returns the server's stop, registered on the stack; its thread's join is bounded, since no shutdown deadline cuts a blocking call on the event loop) |
 | values derived from the config (intervals, defaults, policy fingerprint) | the config adapter |
 | the configured `node_id` overriding the stored one | `resolve_node_id`, in `application/` |
 | the re-evaluation's two log lines | `reevaluate_if_policy_changed` |
@@ -126,7 +126,7 @@ breaks, written in `docs/migration-4x.md`; the Dockerfile and the docs follow.
 - **An adapter is named by its technology and what it adapts**: `PosixProcess`, `UvicornServerThread`,
   `YamlConfigChecker`, `PathlibCatalogFinder`, `SqliteCatalogCopier`.
 - **A test double is `Fake` and what it replaces**: `FakeAmuleApiServer`; `FakeMuleClient` becomes
-  `FakeAmuleApiClient`.
+  `FakeAmuleApiClient`. (Corrected 2026-10-18: `FakeSearchClient`, since it replaces the search port only.)
 - **The new ports are ABCs**, so lot 2 has nothing to convert.
 
 `AGENTS.md` gains these rules and the words `ring`, `hexagon`, `driving`, `driven` and `use case`.
@@ -177,6 +177,7 @@ that removes it.
 | `webui/` (pages, views, templates) | `adapters/driving/webui/` | the readers import the views: lot 2 |
 | the webui's three SQLite readers | `adapters/driven/persistence_sqlite/` | |
 | `webui/adapters/matching_read.py` | `application/` | the webui imports it directly: lot 2 |
+| `webui/composition/uvicorn_server_thread.py` (Corrected 2026-10-18: row added) | `adapters/driving/webui/` | |
 | `catalog_matching/*` | `catalog_matching/domain/` | |
 | `p2pwatch_amule` | `boot/conf.py` to `domain/`, the rest to `adapters/` | adapters importing adapters: lot 3 |
 | `vex_checks` | descriptors, registry and violations to `domain/`, the rest to `adapters/` | about 10: lot 3 |
@@ -184,6 +185,7 @@ that removes it.
 | `coverage_checks` | `function_bodies` to `domain/`, the rest to `adapters/` | one: lot 3 |
 | `amule_bump` | `dockerfile`, `body` and `BumpError` to `domain/`, `release` to `application/`; `github.py` split into a port, a constant in the domain and an HTTP adapter | lot 3 |
 | `p2pwatch_testing` | unchanged, only its imports are updated | |
+| `p2pwatch_testing/merge/helpers.py` (Corrected 2026-10-18: row added) | `p2pwatch_testing/adapters/persistence_sqlite/`, beside `older_catalog.py` | |
 
 The webui's shared test fixtures move to `p2pwatch_testing`, and each moved test module asks for them explicitly,
 so they wrap exactly the tests they wrap today.

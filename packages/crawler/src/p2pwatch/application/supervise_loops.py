@@ -1,4 +1,4 @@
-"""Runs the crawler's loops until the shutdown is requested, then cancels them all (spec §6)."""
+"""Runs the crawler's loops until the shutdown is requested, then cancels them all."""
 
 import asyncio
 from collections.abc import Callable, Coroutine, Sequence

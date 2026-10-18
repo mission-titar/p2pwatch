@@ -1,6 +1,6 @@
 """Deterministic fakes for the application-layer tests (spec §8).
 
-``FakeAmuleApiClient``: results SCRIPTED per ``search`` call, injectable failures
+``FakeSearchClient``: results SCRIPTED per ``search`` call, injectable failures
 (``ClientUnreachableError``/``SearchFailedError``) at ``connect``/``search``.
 ``FakeTime``: one timeline read through a wall and a monotonic clock.
 ``TickingMonotonicClock``: each read a second after the previous one.
@@ -125,7 +125,7 @@ class RecordingWakeHub:
         event.clear()
 
 
-class FakeAmuleApiClient:
+class FakeSearchClient:
     """Scripted client (satisfies SearchClient structurally, spec §8).
 
     ``results``: list of observation tuples, one per ``search`` call (exhausted → empty

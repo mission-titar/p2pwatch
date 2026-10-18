@@ -1,7 +1,7 @@
 # Handoff: hexagonal composition, lot 1a of the hexagonal architecture umbrella
 
-Drafted by block 95 from the lot's block reports (#252 to #261, and blocks 90 and 95), for the closing block 100
-to correct: the holistic review's findings and their exits, `BACKLOG.md`, the Wrap counts.
+Drafted by block 95 from the lot's block reports (#252 to #263), corrected by the closing blocks 98 and 100:
+the holistic review's findings and their exits, `BACKLOG.md`, the Wrap counts.
 
 ## State
 
@@ -10,7 +10,7 @@ after its review (`.reviews/hexagonal-foundations-spec.md`, gitignored: 1 critic
 answered). The lot carries out the first half of lot 1 of the umbrella spec
 `agents/specs/2026-10-18-hexagonal-architecture.md`, which block 10 corrected where lot 1 departs from it.
 
-Twelve blocks, one stack cut from `main` at `07f57c1`:
+Thirteen blocks, one stack cut from `main` at `07f57c1`:
 
 | Block | Pull request | Branch |
 |---|---|---|
@@ -23,9 +23,10 @@ Twelve blocks, one stack cut from `main` at `07f57c1`:
 | 60 | #259 | `refactor/composition-only-wires` |
 | 70 | #260 | `feat/validate-config-use-case` |
 | 80 | #261 | `feat/cli-subcommands` |
-| 90 | opened with this handoff's block | `feat/merge-use-case` |
-| 95 | opened with this handoff | `feat/cli-merge` |
-| 100 | the closing block | `docs/hexagonal-composition-wrap` |
+| 90 | #262 | `feat/merge-use-case` |
+| 95 | #263 | `feat/cli-merge` |
+| 98 | closing, first half | `refactor/crawler-app-loads-config` |
+| 100 | closing, second half | `docs/hexagonal-composition-wrap` |
 
 Nothing of the stack is merged. The lot changes what the core image runs (its `CMD`, its commands, some log
 lines), so Wrap (f) proposes a release, but not before the backlog's "A copy before a migration that rewrites
@@ -58,12 +59,11 @@ rows" ships (spec, section "Backlog").
 - **No more factories** (block 60): the two client factories, `MuleClient`, `DownloadSourceClient`,
   `AmuleEndpoint` and `tests/composition/test_app.py` (28 tests) are deleted. `CrawlerApp` builds both amuleapi
   sessions in place. Two new wiring tests: the shutdown deadline cuts a logout the fake stalls, and a saved
-  backoff holds the first search. `FakeMuleClient` becomes `FakeAmuleApiClient`. Acceptances 1 and 2 hold: no
+  backoff holds the first search. `FakeMuleClient` becomes `FakeAmuleApiClient` (`FakeSearchClient` since block 100). Acceptances 1 and 2 hold: no
   factory is left, and `CrawlerApp`'s only `if`s are the webui and download choices.
 - **`ValidateConfig`** (block 70): the driving port `ConfigValidator` and the driven port `ConfigChecker`, the
   latter implemented by `YamlConfigChecker`. Both ports are ABCs, born in `ports/driving/` and `ports/driven/`.
-- **The command line, an adapter** (block 80): `ArgparseCommandLine` in `adapters/driving/cli/`. The driving port
-  `CrawlerRunner` is implemented by `CrawlerAssembly`, a composition class beside `CrawlerApp`. The root
+- **The command line, an adapter** (block 80): `ArgparseCommandLine` in `adapters/driving/cli/`. The root
   `p2pwatch/__main__.py` holds `0.0.0.0:8080`, `ed2k:4711` and `os.environ`. `python -m p2pwatch crawl` is
   required, and the image's `CMD` runs it. Wiring tests 3 and 4 are in `tests/test_main.py`.
 - **`MergeCatalogs`** (block 90): the driving port `CatalogMerger`, which owns `NewCatalog(path, force)`,
@@ -74,6 +74,14 @@ rows" ships (spec, section "Backlog").
   are the use case's. The command line keeps one rule: no `--force` with `--into`.
 - **The `merge` subcommand** (block 95): `python -m p2pwatch merge` over `CatalogMerger`, and `p2pwatch.merge`
   deleted. Wiring test 5 merges two catalogs into a new one through the root `__main__`.
+- **`CrawlerApp` is the `CrawlerRunner`** (block 98): block 80's `CrawlerAssembly` merged into it, at the
+  operator's choice. Its constructor takes the two addresses and the environment; its `crawl` loads the three
+  files and wires everything, the system clocks, the RNG and the wake hub included. Every wiring test and the
+  orchestration integration test build it from YAML files.
+- **The holistic review's fixes** (block 100): three wiring tests (the deadline spares the run, the webui's pause
+  holds the searches, a restart re-evaluates only once a policy file changed), the compose smoke probing the
+  webui from the aMule container, the metrics thread's join bounded, `FakeSearchClient`, and `AGENTS.md`'s naming
+  rules and five glossary words (`ring`, `hexagon`, `driving`, `driven`, `use case`).
 
 ## What an operator sees change
 
@@ -84,8 +92,11 @@ rows" ships (spec, section "Backlog").
   - `--into must name a listed source catalog: X` becomes `destination must be one of the source catalogs: X`;
   - `output already exists: X (use --force to merge into it)` becomes
     `destination already exists: X (force the merge to append to it)`.
-- **Messages:**
+- **Messages**, summed up in one bullet of `docs/migration-4x.md` (block 100):
   - "webui thread crashed" becomes "webui degraded: the crawler carries on without HTTP" (block 20);
+  - a webui that has not bound within 5 s logs "webui degraded: uvicorn did not start within 5.0 s" (block 20);
+  - "webui serving on" is logged after the bind, with the address bound, and no longer when the bind fails
+    (block 20);
   - the two startup warnings for an unreachable amuled become one line per session (block 55):
     `amuled unreachable at startup (POST /auth/login: connection refused): tolerated, the loops retry`.
 - **Logger names:**
@@ -96,7 +107,8 @@ rows" ships (spec, section "Backlog").
   - the merge's lines: `p2pwatch.application.merge_catalogs` (was `p2pwatch.merge`) and
     `p2pwatch.adapters.persistence_sqlite.sqlite_catalog_copier` (was `p2pwatch.merge.merger`) (block 90).
 - **The metrics server is closed at shutdown** with the other resources (block 50). Its `shutdown()` waits up to
-  0.5 s, within the shutdown deadline.
+  0.5 s, and the join of its thread gives up after 1 s (block 100), since no shutdown deadline cuts a blocking
+  call on the event loop.
 
 ## Acceptance
 
@@ -120,11 +132,13 @@ rows" ships (spec, section "Backlog").
    Checked at blocks 80 and 95. The other packages' subcommands are lot 1b's.
 7. Lot 1b's.
 8. The gate is green at every block's tip; each run below was green.
-   - CI ran its builds on amd64 and arm64 (`build-and-verify`) at blocks 60 (run `39150755593`) and 80 (run
-     `39152064074`).
+   - CI ran `build-and-verify` on amd64 and arm64 in every run of #252 to #263, blocks 60 (run `39150755593`),
+     80 (`39152064074`), 90 (`39153395792`) and 95 (`39153401989`) included.
    - The orchestration integration suite passed locally at blocks 30 to 60 against
      `ghcr.io/mission-titar/p2pwatch-amule:main` on port 4719, since port 4711 was taken on that host.
-   - Blocks 90 and 95: their pull requests' runs.
+   - Block 98: the orchestration integration suite passed locally against `p2pwatch-amule:main` on port 4719.
+   - Block 100: the smoke's two-container test passed locally against the branch's core image, and failed against
+     one bound to `127.0.0.1` (`webui /health from ed2k: expected '200'`, `Connection refused`).
 9. Blocks 80 and 95: the `git diff -M100%` command prints nothing.
 
 ## Departures from the spec
@@ -137,9 +151,10 @@ rows" ships (spec, section "Backlog").
 - **Two blocks took the size exemption**, each stated under the spec's block table:
   - block 60: 1,552 lines, 1,441 of them deletions;
   - block 80: 859 lines, 439 of them the two deleted files, marked `(Corrected 2026-10-18: ...)`.
-- **`CrawlerRunner` is implemented by `CrawlerAssembly`**, not by `CrawlerApp` (block 80), since `CrawlerApp`
-  takes the config already loaded. The root log level is set by `CrawlerAssembly`, not by the command line,
-  which never sees the config.
+- **The root log level is set by `CrawlerApp.crawl`**, not by the command line, which never sees the config
+  (block 80; block 98 kept it there when it merged `CrawlerAssembly` into `CrawlerApp`).
+- **The closing block was split** (block 100 measured 629 lines and 18 files): 98 holds the merge of the two
+  classes (439, 6), 100 the other findings (192, 14).
 - **`UvicornServerThread` lives in `webui/composition/`** beside the Starlette app (block 20); lot 1b moves it with
   the webui. Its `start()` is a coroutine that waits through `asyncio.to_thread`.
 - **New ports were born in `ports/driving/` and `ports/driven/`** (blocks 70, 80, 90), and `PosixProcess` in
@@ -156,6 +171,12 @@ rows" ships (spec, section "Backlog").
 - Acceptance 1's pattern takes `\bmetrics_server\b`, since block 50's `start_metrics_server` is not the seam
   (block 60, at the lead's request).
 - Block 80's size: "measured at 859 lines, 439 of them the two deleted files" (block 80, `4aa1008`).
+- `crawl` is implemented by `CrawlerApp` itself, `CrawlerAssembly` merged into it (block 98).
+- `FakeAmuleApiClient` becomes `FakeSearchClient` (block 100).
+- The Prometheus adapter returns the metrics server's stop, its join bounded (block 100).
+- Lot 1b's move table gains two rows: `webui/composition/uvicorn_server_thread.py` to
+  `adapters/driving/webui/`, and `p2pwatch_testing/merge/helpers.py` to
+  `p2pwatch_testing/adapters/persistence_sqlite/` (block 100).
 
 ## Tests pruned or moved
 
@@ -179,7 +200,8 @@ rows" ships (spec, section "Backlog").
 - Block 40: `vulture_whitelist.py` pointed `should_exit` at `composition/app.py`.
 - Block 60: `AmuleApiClient`'s docstring named the deleted `MuleClient`.
 - Block 80: `policy_fingerprint`'s docstring named `composition/__main__.py` as its caller, and lost its em-dash.
-- Blocks 10, 30, 50, 55, 70, 90, 95: none.
+- Block 98: the composition's comment citing the deleted endpoint (holistic finding 13).
+- Blocks 10, 30, 50, 55, 70, 90, 95, 100: none.
 
 ## Class 2 questions
 
@@ -213,6 +235,18 @@ rows" ships (spec, section "Backlog").
   file whole. Pass both paths, or measure the block as a whole (block 90).
 - **Port 4711 may be taken on the host** by another container; the integration runs used a throwaway daemon on
   4719.
+- **`asyncio.timeout()` takes a delay, `reschedule()` an instant**: the review's mutation,
+  `asyncio.timeout(loop.time() + deadline)`, armed the bound days ahead and could not fail any test. The real
+  break is `asyncio.timeout(deadline)`, which the pre-block wiring tests pass (8 of 8) and block 100's fails.
+- **A stop that cuts a `POST /search` in flight hands the fake an empty body**, which it refuses
+  (`JSONDecodeError`) and raises on exit: a wiring test stops once a search is read to its end, not once one
+  starts.
+- **`crawl` sets the root logger's level from the config**, so every test that runs it holds
+  `caplog.at_level`, which restores the level on exit.
+- **A wiring test pauses before the loops start by holding the startup login** in a fake override, which then
+  removes itself and answers through `handle`. The webui is already up then, since it starts before the login.
+- **uvicorn 0.54.0 ends a failing lifespan with `sys.exit(3)`**, which the thread body already catches: its
+  `startup` either sets `started` or exits, so no third outcome exists to log (finding 10).
 
 ## Not validated
 
@@ -224,26 +258,55 @@ rows" ships (spec, section "Backlog").
   - `python -m p2pwatch merge` (the smoke runs no merge).
 - The orchestration integration test's new SIGTERM stop, seen failing against a break: a missed trigger costs its
   150 s wait.
-- The observer wiring test's trigger is ordering in theory, not a guarantee: a second ed2k start sent at the same
-  time as the first would arrive well before it.
+- Locally at block 100, the smoke's tests but the two-container one, left to CI; the orchestration integration
+  suite, whose code is block 98's, where it passed.
 
 ## Holistic review
 
-To run at the head of Wrap, over `git diff origin/main...origin/feat/cli-merge`. Its findings and their exits go
-here (closing block).
+By `lot1a-holistic` over `git diff origin/main...origin/feat/cli-merge` (`.reviews/hexagonal-composition-holistic.md`,
+gitignored): 0 critical, 2 major, 15 minor. Every finding was fixed in the lot but 10 and 11.
+
+1. MAJOR, the shutdown bound never tested disarmed in the steady state: fixed (block 100). The deadline wiring
+   test waits twice its 0.2 s deadline, then asserts amuled saw no logout before the SIGTERM; it fails
+   (`assert not True`) against `asyncio.timeout(deadline)`. The review's own mutation was inert (Pitfalls).
+2. MAJOR, the spec's naming rules missing from `AGENTS.md`: fixed (block 100), the rules in Naming and the five
+   words in the glossary.
+3. The pause gate and the policy fingerprint untested (operator: two wiring tests): fixed (block 100). The pause
+   test fails against a search runner given its own set event (`assert ['global', 'kad'] == []`), the
+   fingerprint test against a constant fingerprint (`At index 2 diff: 'policy unchanged: ...'`).
+4. The webui's `0.0.0.0` checked nowhere: fixed (block 100), the smoke probes `http://p2pwatch:8080/health` from
+   the aMule container.
+5. The wiring test 2 bullet under "Not validated": fixed, deleted: the second ed2k start waits out a 60 s spacing
+   the test never reaches, and `api.logins == 1` catches one client per search whatever the order.
+6. The handoff's missing log lines and `migration-4x.md`: fixed (block 100), both lines above and one bullet in
+   `docs/migration-4x.md`.
+7. `merge` missing from `AGENTS.md` and `docs/contributing/architecture.md`: fixed (block 98).
+8. `CrawlerAssembly` against `CrawlerApp` (operator: merge the two classes): fixed (block 98).
+9. `FakeAmuleApiClient`: fixed (block 100), renamed `FakeSearchClient`, the spec's line corrected.
+10. uvicorn's third outcome: refused, it does not exist at uvicorn 0.54.0 (Pitfalls). Block 100 adds the test
+    the review asked for, a failing lifespan, which logs "webui degraded" without raising and fails against a
+    thread body catching `Exception` only.
+11. `start_timeout_seconds`: kept, a deliberate timing parameter, so the timeout test waits 0.05 s instead of 5 s.
+12. The metrics server's unbounded stop: fixed (block 100), its join bounded to 1 s, a spec correction.
+13. The stale "(endpoint)" comment: fixed (block 98).
+14. `FakeDownloadClient.open`: fixed (block 100), deleted.
+15. `p2pwatch_testing/merge/helpers.py`: a row in lot 1b's move table (block 100).
+16. Comments citing a bare "spec §": fixed (block 100), the four the review named.
+17. `UvicornServerThread` outside an adapter ring: a row in lot 1b's move table (block 100).
 
 ## Wrap counts
 
-Provisional, from `gh run list --branch <branch>` on 2026-10-18 before blocks 90 and 95 were pushed.
+From `gh run list --branch <branch>`, `gh pr checks` and `git rev-parse origin/<branch>` on 2026-10-18, before
+blocks 98 and 100 were pushed.
 
-- **Runs**: one per pull request from #252 to #261, each at its first pushed head and green, none re-triggered.
+- **Runs**: one per pull request from #252 to #263, eleven, each at its branch's current head, attempt 1, green.
+  None re-triggered.
 - **Fix-backs**: none reached a pushed branch. Block 80's spec correction (`4aa1008`) landed before #261's run.
-- **Cascaded rebases**: none.
+- **Cascaded rebases**: none: no pushed head moved.
+- **Splits**: three, 50/55, 90/95 and the closing block's 98/100. **Exemptions**: two, blocks 60 and 80.
 - **Bodies called unreadable**: none at writing; the operator has not reviewed the stack yet.
 
 ## Next
 
-- The holistic review, then the closing block 100: its findings, `BACKLOG.md` (the "Lot 1a" item deleted, lot 2
-  without `merge`), this handoff corrected.
 - The operator reviews and merges the stack. A release waits for "A copy before a migration that rewrites rows".
 - Then lot 1b, from the same spec: the rings, the entry points and the check.

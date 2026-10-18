@@ -144,6 +144,9 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
 - **La fusion des catalogues se lance par `python -m p2pwatch merge`**, au lieu de
   `python -m p2pwatch.merge`, qui n'existe plus. Ses options ne changent pas ; deux refus sont
   reformulés : `destination already exists` et `destination must be one of the source catalogs`.
+- **Quelques lignes de journal et noms de loggers changent**, ceux des modules déplacés ou
+  renommés : filtrez sur le message plutôt que sur le logger. Un catalogue web qui ne démarre pas
+  le dit désormais par `webui degraded`.
 - **La documentation** est désormais sur <https://mission-titar.github.io/p2pwatch/>.
 
 ## Retour arrière
