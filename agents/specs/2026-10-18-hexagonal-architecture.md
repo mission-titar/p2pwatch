@@ -67,8 +67,10 @@ it relies on.
 - **Logging in the core**: 27 `_logger` calls in 5 modules of `application/`, each holding a
   `logging.getLogger(...)` global.
 - **The composition's tests**: `tests/composition/test_app.py` (1,578 lines) drives `composition/app.py`
-  (581) through injected factories (`_client_factory`, `_download_client_factory`, `WebuiServer`);
-  `test_main.py` (303) monkeypatches `composition/__main__.py`, and 16 of its 19 tests cover the command
+  (581) through injected factories (`_client_factory`, `_download_client_factory`, `WebuiServer`)
+  (Corrected 2026-10-18: through more seams than these three, `metrics_server`, three `monkeypatch.setattr`
+  targets and three private methods among them, and `tests/integration/test_crawler_loop.py` uses
+  `client_factory` too); `test_main.py` (303) monkeypatches `composition/__main__.py`, and 16 of its 19 tests cover the command
   line's own logic (exit codes, `validate-config`'s rejections and defaults, the bare invocation).
 - **The amuleapi endpoint** is a code constant, `ed2k:4711` (`adapters/config/crawler_config.py:60-61`).
 - **The webui's readers build its response models**: `webui/adapters/catalog_read.py` imports 10 types of
@@ -127,7 +129,8 @@ it relies on.
   `layers_explicit_depends_on` and `exact`, and isolates each hexagon with `visibility`. Why: the same rule
   on both sides; one module per port file is what lets "exactly the ports it uses" be written.
 - **D7. Every use case has a driving port**, and every read goes through a use case, even a pure
-  delegation. Why: one rule with no exception to judge, and a driving adapter's test receives a typed fake
+  delegation (Corrected 2026-10-18: one driving port, `CrawlerRunner`, is implemented by the composition, since
+  what it builds depends on the config the command line just read; lot 1a's spec). Why: one rule with no exception to judge, and a driving adapter's test receives a typed fake
   of its use case; the operator accepts the delegating functions and the rename in two places this costs.
 - **D8. Each boundary owns its data types.** A domain concept crosses any boundary as itself: `FileKey`,
   `SourceKey`, and the one observation into which section 7 of `agents/specs/2026-10-13-descriptive-names.md`
@@ -160,7 +163,10 @@ it relies on.
   `test_main.py`'s 16 command-line tests moving with it; `__main__.py` only delegates. `coverage_checks`
   learns that the composition ring is covered by the gate-run integration tests instead of its own unit
   tests, and the package's 100% branch coverage still measures it, so a composition line no wiring test runs
-  fails the gate. `AGENTS.md`'s coverage rule says so. Why: wiring is a concern between units, its unit tests
+  fails the gate. `AGENTS.md`'s coverage rule says so. (Corrected 2026-10-18: the logic the composition holds
+  today moves out to units with their own tests, and `coverage_checks` needs no change, since the wiring
+  tests live in `tests/composition/test_app_wiring.py` and `tests/test_main.py`, which it already counts as
+  the composition's own tests; lot 1a's spec.) Why: wiring is a concern between units, its unit tests
   drive fakes through seams that exist only for them, mypy already refuses a wrong adapter, and rewriting
   1,578 lines of tests for a composition the other decisions reshape would be lost work; parsing and exit
   codes are logic, not wiring.
@@ -170,12 +176,13 @@ it relies on.
   empty search). A fact a type or a unit test can carry moves there. Where a test runs is decided only by
   the resource it needs: one that needs none runs in the gate, like lot 1's wiring tests against an
   amuleapi fake served on a loopback socket (new, about 80 lines in `p2pwatch_testing`; today's fake is an
-  `httpx.MockTransport`). Why: the unit tests' doubles are our beliefs about the outside; the integration
+  `httpx.MockTransport`) (Corrected 2026-10-18: about 45 lines). Why: the unit tests' doubles are our beliefs about the outside; the integration
   test checks the belief, not the logic.
 - **D13. The webui bind and the amuleapi endpoint are value parameters of the composition root**, not
   factories: `__main__` passes the production values (`0.0.0.0:8080`, `ed2k:4711`), a test passes
   `127.0.0.1:0` and its loopback fake. A failed bind surfaces: the composition watches uvicorn's start and
-  logs the webui degraded when it does not start, `SystemExit` included; the wiring test asserts a request
+  logs the webui degraded when it does not start, `SystemExit` included (Corrected 2026-10-18: the webui's
+  HTTP adapter watches it, in `UvicornServerThread`, not the composition); the wiring test asserts a request
   answered on the port the server bound. `AGENTS.md`'s bind invariant becomes "fixed in `__main__`". Why:
   the gate checks the wiring without an operator-facing key, and the silent collision measured today is a
   latent defect, fixed rather than tested around.
@@ -183,7 +190,9 @@ it relies on.
   explicit subcommand, even when a package has only one: `python -m p2pwatch crawl` (the image's `CMD`),
   `validate-config` and `merge`; `python -m p2pwatch_amule boot` and `port-sync`; `python -m vex_checks`
   with the two checks the workflows run and the two poe runs; `template_checks`' two and `coverage_checks`'
-  entry points, which poe calls; `python -m amule_bump bump`. The bare `python -m p2pwatch --config ...` and
+  entry points, which poe calls; `python -m amule_bump bump`. (Corrected 2026-10-18: four packages gain a
+  root `__main__.py`, `p2pwatch_amule`, `vex_checks`, `template_checks` and `coverage_checks`;
+  `coverage_checks` has a single entry point, `unit-coverage`; `py.typed` stays at the root beside them.) The bare `python -m p2pwatch --config ...` and
   `python -m p2pwatch.merge` are refused: two v5 breaks, recorded in `docs/migration-4x.md`, and
   `docs/operate.md` and `docs/troubleshooting.md` follow. Why: one form, and adding a command never renames
   an existing one; the node is a compose stack, so commands are rarely typed.
@@ -197,7 +206,10 @@ it relies on.
   line length, fail once unused, and still refuse a new edge; `root_module = "forbid"` makes a module a lot
   forgets to declare fail instead of going unchecked.
 - **D16. Moves are `git mv` plus a scripted import rewrite**, mypy and pytest verifying them; each file
-  goes to the ring of its largest part, and only the smaller parts are extracted afterwards. Strings no
+  goes to the ring of its largest part, and only the smaller parts are extracted afterwards (Corrected
+  2026-10-18: a module that does I/O goes to an adapter even if most of it is logic, and where a placement
+  would have the core import an adapter, the imported piece moves into the core at once; lot 1b's section
+  "Where each module goes"). Strings no
   checker sees are rewritten by hand and listed in each move block: logger names spelling module paths,
   paths in `pyproject.toml`, `parents[N]`, fixture paths named as strings, `CMD`, `entrypoint.sh`, the s6 run
   scripts, the workflows' `python -m` lines, and the module paths in `docs/` (`docs/operate.md`,
@@ -211,9 +223,10 @@ it relies on.
   in code no declared module owns, so rules written before the moves would check nothing, and the moves add
   no code to protect.
 - **D18. Three lots, in this order, each with its spec and stack**:
-  1. **Foundations**: `coverage_checks` learns the composition ring; the loopback amuleapi fake and the
-     wiring tests, then the composition loses its factories; every package moves to D2's paths and D14's
-     entry points; the gate (D15, D17). About 8 blocks, mostly mechanical.
+  1. **Foundations**: `coverage_checks` learns the composition ring (Corrected 2026-10-18: it needs no
+     change, D11); the loopback amuleapi fake and the wiring tests, then the composition loses its
+     factories; every package moves to D2's paths and D14's entry points; the gate (D15, D17). About 8
+     blocks, mostly mechanical.
   2. **The `p2pwatch` hexagon**: the session (D10) and the logging port (D9); the webui's read side and
      `merge` (D7, D8, with section 7 of the descriptive-names spec); then the ports as ABCs and their role
      split (D4, D5). About 10 blocks, mostly new code. The conversion comes last because converting first
@@ -221,6 +234,10 @@ it relies on.
      side rebuilds.
   3. **The five other hexagons** (their I/O behind ports, each package's tests off `monkeypatch`), and
      the documentation left over. About 8 blocks; the least certain estimate.
+
+  (Corrected 2026-10-18: `merge` moves to a use case in lot 1 instead of lot 2, and lot 1 becomes two lots,
+  each with its stack and holistic review: 1a, the composition and the command line, and 1b, the moves, the
+  entry points and the gate; `agents/specs/2026-10-18-hexagonal-foundations.md`.)
 
   Why: one stack of 26 pull requests means rebase cascades and a review no one does in one sitting (D12
   of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`); a lot measured on the tree its
