@@ -10,33 +10,19 @@ import threading
 from datetime import timedelta
 from importlib.metadata import version
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
+import yaml
 
-from catalog_matching.config import MatcherConfig
-from catalog_matching.models import TargetSegment
-from catalog_matching.validation import parse_matcher_config
-from p2pwatch.adapters.config.crawler_config import (
-    AMULE_CLIENT_NAME,
-    BackoffConfig,
-    CrawlerConfig,
-    DownloadConfig,
-    MetricsConfig,
-    ObservabilityConfig,
-    SearchConfig,
-    WebuiConfig,
-)
-from p2pwatch.adapters.config.yaml_loader import load_yaml
-from p2pwatch.adapters.monotonic_clock_asyncio import AsyncioMonotonicClock
+from p2pwatch.adapters.config.crawler_config import AMULE_CLIENT_NAME
 from p2pwatch.adapters.persistence_sqlite.backoff_state_repository import (
     SqliteBackoffStateRepository,
 )
 from p2pwatch.adapters.persistence_sqlite.connection import open_catalog, open_local
-from p2pwatch.adapters.rng_random import SeededRng
-from p2pwatch.adapters.wake_hub_asyncio import AsyncioWakeHub
 from p2pwatch.adapters.wall_clock_system import SystemWallClock
-from p2pwatch.composition.app import CrawlerApp, CrawlerAssembly
+from p2pwatch.composition.app import CrawlerApp
 from p2pwatch.ports.backoff_state_repository import BackoffKey, BackoffState
 from p2pwatch_testing.adapters.mule_api.api_fakes import (
     PASSWORD,
@@ -45,17 +31,17 @@ from p2pwatch_testing.adapters.mule_api.api_fakes import (
 )
 from p2pwatch_testing.catalog_rows import observation_node_ids
 
-_TARGETS = (
-    TargetSegment(
-        season=2,
-        seasonal_number=11,
-        absolute_number=62,
-        letter="A",
-        title="Les demoiselles cambrioleuses",
-    ),
-)
 _DEPLOY = Path(__file__).resolve().parents[4] / "deploy"
 _MATCHER = _DEPLOY / "matcher.yml"
+_SHIPPED_TARGETS = _DEPLOY / "targets.yml"
+_TARGET_062A = """\
+episodes:
+  - season: 2
+    seasonal_number: 11
+    absolute_number: 62
+    segments:
+      - { letter: A, title: "Les demoiselles cambrioleuses" }
+"""
 _HASH = "0123456789abcdef0123456789abcdef"
 _RESULT = {
     "hash": _HASH,
@@ -63,56 +49,47 @@ _RESULT = {
     "size_bytes": 367_001_600,
     "sources": {"total": 3},
 }
-_WEBUI_OFF = WebuiConfig(enabled=False)
 _WEBUI_SERVING = re.compile(r"^webui serving on (.+):(\d+) \(own thread\)$")
-_OBSERVER_CONFIG = """\
-shutdown_deadline_seconds: 10.0
-search:
-  keywords: [keroro, titar]
-  backoff: {{base_seconds: 2.0, cap_seconds: 60.0, factor: 2.0, jitter_ratio: 0.0}}
-amule_api_password: ${{AMULE_API_PASSWORD}}
-catalog_db_path: {data}/catalog.db
-local_db_path: {data}/local.db
-observability:
-  log_level: DEBUG
-webui:
-  enabled: false
-"""
 # Far beyond what the fake takes to see each step: only a broken assembly ever reaches it.
 _WAIT_SECONDS = 10.0
 
 
-@pytest.fixture
-def matcher_config() -> MatcherConfig:
-    return parse_matcher_config(load_yaml(_MATCHER))
+def _config(tmp_path: Path, **sections: object) -> dict[str, Any]:
+    """An observer's ``crawler.yml``, one ed2k keyword, ``sections`` replacing its own."""
+    return {
+        "shutdown_deadline_seconds": _WAIT_SECONDS,
+        "search": {
+            "keywords": ["keroro"],
+            "backoff": {
+                "base_seconds": 2.0,
+                "cap_seconds": 60.0,
+                "factor": 2.0,
+                "jitter_ratio": 0.0,
+            },
+        },
+        "amule_api_password": "${AMULE_API_PASSWORD}",
+        "catalog_db_path": str(tmp_path / "catalog.db"),
+        "local_db_path": str(tmp_path / "local.db"),
+        "observability": {"log_level": "INFO"},
+        "webui": {"enabled": False},
+    } | sections
 
 
-def _crawler_config(
-    tmp_path: Path,
-    *,
-    keywords: tuple[str, ...],
-    node_id: str | None = None,
-    metrics_port: int | None = None,
-    download: DownloadConfig | None = None,
-    webui: WebuiConfig = _WEBUI_OFF,
-    shutdown_deadline_seconds: float = _WAIT_SECONDS,
-) -> CrawlerConfig:
-    metrics = None if metrics_port is None else MetricsConfig(enabled=True, port=metrics_port)
-    return CrawlerConfig(
-        search=SearchConfig(
-            keywords=keywords,
-            backoff=BackoffConfig(base_seconds=2.0, cap_seconds=60.0, factor=2.0, jitter_ratio=0.0),
-        ),
-        shutdown_deadline_seconds=shutdown_deadline_seconds,
-        amule_api_password=PASSWORD,
-        catalog_db_path=str(tmp_path / "catalog.db"),
-        local_db_path=str(tmp_path / "local.db"),
-        node_id=node_id,
-        observability=ObservabilityConfig(
-            log_level="INFO", metrics=metrics, notification_timeout_seconds=5.0, notifications=()
-        ),
-        download=download,
-        webui=webui,
+def _write(path: Path, config: dict[str, Any]) -> Path:
+    path.write_text(yaml.safe_dump(config, allow_unicode=True), encoding="utf-8")
+    return path
+
+
+def _crawl(
+    server: FakeAmuleApiServer, config_path: Path, targets_path: Path = _SHIPPED_TARGETS
+) -> asyncio.Task[None]:
+    crawler_app = CrawlerApp(
+        webui_address=("127.0.0.1", 0),
+        amule_api_address=(server.host, server.port),
+        env={"AMULE_API_PASSWORD": PASSWORD},
+    )
+    return asyncio.create_task(
+        crawler_app.crawl(config_path=config_path, targets_path=targets_path, matcher_path=_MATCHER)
     )
 
 
@@ -121,25 +98,6 @@ def _free_port() -> int:
         probe.bind(("127.0.0.1", 0))
         port: int = probe.getsockname()[1]
         return port
-
-
-def _app(
-    crawler_config: CrawlerConfig,
-    matcher_config: MatcherConfig,
-    server: FakeAmuleApiServer,
-) -> CrawlerApp:
-    return CrawlerApp(
-        crawler_config=crawler_config,
-        targets=_TARGETS,
-        matcher_config=matcher_config,
-        wall_clock=SystemWallClock(),
-        monotonic_clock=AsyncioMonotonicClock(),
-        rng=SeededRng(),
-        wake_hub=AsyncioWakeHub(),
-        policy_fingerprint="wiring-policy-fingerprint",
-        webui_address=("127.0.0.1", 0),
-        amule_api_address=(server.host, server.port),
-    )
 
 
 def _webui_bound_address(messages: list[str]) -> tuple[str, int]:
@@ -175,29 +133,34 @@ def _searches_read(api: FakeAmuleApi) -> int:
 
 @pytest.mark.asyncio
 async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stops_on_restart(
-    tmp_path: Path, matcher_config: MatcherConfig, caplog: pytest.LogCaptureFixture
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    download = DownloadConfig(
-        poll_interval_seconds=30.0,
-        min_free_bytes=1,
-        lost_after=timedelta(hours=24),
-        output_dir=str(tmp_path),
-        reappeared_after=timedelta(hours=12),
-        sources_interval=timedelta(minutes=5),
-    )
     metrics_port = _free_port()
-    crawler_config = _crawler_config(
-        tmp_path,
-        keywords=("keroro",),
-        node_id="wired-node",
-        metrics_port=metrics_port,
-        download=download,
-        webui=WebuiConfig(enabled=True),
+    download = {
+        "enabled": True,
+        "poll_interval_seconds": 30.0,
+        "min_free_bytes": 1,
+        "lost_after_seconds": 86400,
+        "output_dir": str(tmp_path),
+        "reappeared_after_seconds": 43200,
+        "sources_interval_seconds": 300,
+    }
+    config_path = _write(
+        tmp_path / "crawler.yml",
+        _config(
+            tmp_path,
+            node_id="wired-node",
+            observability={"log_level": "INFO", "metrics": {"enabled": True, "port": metrics_port}},
+            download=download,
+            webui={"enabled": True},
+        ),
     )
+    targets_path = tmp_path / "targets.yml"
+    targets_path.write_text(_TARGET_062A, encoding="utf-8")
     api = FakeAmuleApi(results=[_RESULT])
 
     with FakeAmuleApiServer(api) as server, caplog.at_level(logging.INFO):
-        run = asyncio.create_task(_app(crawler_config, matcher_config, server).run())
+        run = _crawl(server, config_path, targets_path)
         assert await asyncio.to_thread(
             server.wait_for, lambda seen: bool(seen.added_links), _WAIT_SECONDS
         )
@@ -227,22 +190,19 @@ async def test_observer_mode_crawls_its_config_files_with_one_ed2k_search_until_
 ) -> None:
     # Both keywords' ed2k searches share one client, which spaces their starts by a minute: two
     # clients would start both at once and break the network's pacing.
-    config_path = tmp_path / "crawler.yml"
-    config_path.write_text(_OBSERVER_CONFIG.format(data=tmp_path), encoding="utf-8")
+    config_path = _write(
+        tmp_path / "crawler.yml",
+        _config(
+            tmp_path,
+            search=_config(tmp_path)["search"] | {"keywords": ["keroro", "titar"]},
+            observability={"log_level": "DEBUG"},
+        ),
+    )
     api = FakeAmuleApi()
     default_sigterm = signal.getsignal(signal.SIGTERM)
 
     with FakeAmuleApiServer(api) as server, caplog.at_level(logging.INFO):
-        crawler_assembly = CrawlerAssembly(
-            webui_address=("127.0.0.1", 0),
-            amule_api_address=(server.host, server.port),
-            env={"AMULE_API_PASSWORD": PASSWORD},
-        )
-        run = asyncio.create_task(
-            crawler_assembly.crawl(
-                config_path=config_path, targets_path=_DEPLOY / "targets.yml", matcher_path=_MATCHER
-            )
-        )
+        run = _crawl(server, config_path)
         # The first ed2k search and both Kad ones, each read to its end.
         assert await asyncio.to_thread(
             server.wait_for, lambda seen: _searches_read(seen) >= 3, _WAIT_SECONDS
@@ -260,9 +220,9 @@ async def test_observer_mode_crawls_its_config_files_with_one_ed2k_search_until_
 
 @pytest.mark.asyncio
 async def test_the_shutdown_deadline_cuts_a_logout_amuled_never_answers(
-    tmp_path: Path, matcher_config: MatcherConfig
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    crawler_config = _crawler_config(tmp_path, keywords=("keroro",), shutdown_deadline_seconds=0.2)
+    config_path = _write(tmp_path / "crawler.yml", _config(tmp_path, shutdown_deadline_seconds=0.2))
     api = FakeAmuleApi()
     released = threading.Event()
 
@@ -274,8 +234,8 @@ async def test_the_shutdown_deadline_cuts_a_logout_amuled_never_answers(
     default_sigterm = signal.getsignal(signal.SIGTERM)
     loop = asyncio.get_running_loop()
 
-    with FakeAmuleApiServer(api) as server:
-        run = asyncio.create_task(_app(crawler_config, matcher_config, server).run())
+    with FakeAmuleApiServer(api) as server, caplog.at_level(logging.INFO):
+        run = _crawl(server, config_path)
         assert await asyncio.to_thread(
             server.wait_for, lambda seen: _searches_read(seen) >= 1, _WAIT_SECONDS
         )
@@ -292,7 +252,7 @@ async def test_the_shutdown_deadline_cuts_a_logout_amuled_never_answers(
 
 @pytest.mark.asyncio
 async def test_a_backoff_the_previous_run_saved_holds_the_ed2k_search(
-    tmp_path: Path, matcher_config: MatcherConfig
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     local = open_local(tmp_path / "local.db")
     SqliteBackoffStateRepository(local).save_backoff_states(
@@ -303,12 +263,12 @@ async def test_a_backoff_the_previous_run_saved_holds_the_ed2k_search(
         }
     )
     local.close()
-    crawler_config = _crawler_config(tmp_path, keywords=("keroro",))
+    config_path = _write(tmp_path / "crawler.yml", _config(tmp_path))
     api = FakeAmuleApi()
     default_sigterm = signal.getsignal(signal.SIGTERM)
 
-    with FakeAmuleApiServer(api) as server:
-        run = asyncio.create_task(_app(crawler_config, matcher_config, server).run())
+    with FakeAmuleApiServer(api) as server, caplog.at_level(logging.INFO):
+        run = _crawl(server, config_path)
         # Unheld, the ed2k start goes out with Kad's, well before Kad's search is read to its end.
         assert await asyncio.to_thread(
             server.wait_for, lambda seen: _searches_read(seen) >= 1, _WAIT_SECONDS

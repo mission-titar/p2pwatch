@@ -1,4 +1,4 @@
-"""Composition root: assembles the clients + UNIQUE repos + engine + loop (spec §4/§6).
+"""Composition root: loads the config, then assembles the clients + UNIQUE repos + engine + loop.
 
 COMPOSITION layer (the only one allowed to import adapters AND application). Builds:
 - ONE ``SqliteCatalogRepository`` + ONE ``SqliteLocalStateRepository`` +
@@ -16,9 +16,8 @@ the loops (no worker can write anymore), all within ``shutdown_deadline_seconds`
 
 import asyncio
 import logging
-import sqlite3
 import sys
-from collections.abc import Callable, Coroutine, Mapping, Sequence
+from collections.abc import Callable, Coroutine, Mapping
 from contextlib import AsyncExitStack
 from functools import partial
 from importlib.metadata import version
@@ -27,13 +26,11 @@ from pathlib import Path, PurePath
 from prometheus_client import CollectorRegistry
 
 import p2pwatch.webui
-from catalog_matching.config import MatcherConfig
 from catalog_matching.engine import MatchingEngine
-from catalog_matching.models import TargetSegment
 from p2pwatch.adapters.config.crawler_config import (
     AMULE_CLIENT_NAME,
     CrawlerConfig,
-    DownloadConfig,
+    LoadedConfig,
     load_config,
 )
 from p2pwatch.adapters.crawler_control_loop import LoopCrawlerControl
@@ -77,9 +74,6 @@ from p2pwatch.domain.observability.events import CrawlerStarted
 from p2pwatch.ports.clock import MonotonicClock, WallClock
 from p2pwatch.ports.crawler_control import CrawlerControl
 from p2pwatch.ports.driving.crawler_runner import CrawlerRunner
-from p2pwatch.ports.rng import Rng
-from p2pwatch.ports.telemetry import Telemetry
-from p2pwatch.ports.wake_hub import WakeHub
 from p2pwatch.webui.composition.app import build_app as build_webui_app
 from p2pwatch.webui.composition.uvicorn_server_thread import UvicornServerThread
 
@@ -102,140 +96,100 @@ def _backoff_policy(config: CrawlerConfig) -> BackoffPolicy:
     )
 
 
-class CrawlerApp:
-    """Assembles and runs the crawler (composition root, spec §4/§6)."""
+class CrawlerApp(CrawlerRunner):
+    """Loads the config, then assembles and runs the crawler it describes (composition root)."""
 
     def __init__(
         self,
         *,
-        crawler_config: CrawlerConfig,
-        targets: Sequence[TargetSegment],
-        matcher_config: MatcherConfig,
-        wall_clock: WallClock,
-        monotonic_clock: MonotonicClock,
-        rng: Rng,
-        wake_hub: WakeHub,
-        policy_fingerprint: str,
         webui_address: tuple[str, int],
         amule_api_address: tuple[str, int],
+        env: Mapping[str, str],
     ) -> None:
-        self._crawler_config = crawler_config
-        self._targets = tuple(targets)
-        self._matcher_config = matcher_config
-        self._wall_clock = wall_clock
-        self._monotonic_clock = monotonic_clock
-        self._rng = rng
-        self._wake_hub = wake_hub
-        self._policy_fingerprint = policy_fingerprint
         self._webui_address = webui_address
         self._amule_api_address = amule_api_address
-        self._shutdown = asyncio.Event()
-        # The pause gate (phase P6a), armed (set = un-paused) so the crawler starts running. The
-        # webui mutates it thread-safely via ``LoopCrawlerControl`` (spec §10).
-        self._resumed = asyncio.Event()
-        self._resumed.set()
+        self._env = env
 
-    def _amule_api_client(self) -> AmuleApiClient:
+    def _amule_api_client(
+        self, crawler_config: CrawlerConfig, monotonic_clock: MonotonicClock
+    ) -> AmuleApiClient:
         """A session of its own on amuled, paced on the composition's monotonic clock."""
         host, port = self._amule_api_address
         return AmuleApiClient(
-            host,
-            port,
-            self._crawler_config.amule_api_password,
-            monotonic_clock=self._monotonic_clock,
-        )
-
-    async def _build_download_deps(
-        self,
-        *,
-        download_config: DownloadConfig,
-        stack: AsyncExitStack,
-        catalog_repo: SqliteCatalogRepository,
-        source_repo: SqliteSourceRepository,
-        local_conn: sqlite3.Connection,
-        telemetry: Telemetry,
-    ) -> DownloadLoopDeps:
-        """Assemble the download loop deps (download mode, spec §7).
-
-        SHARED single repos (``catalog_repo`` and ``source_repo`` already built on the catalog
-        connection; a ``SqliteDownloadRepository`` on the SAME ``local_conn`` - single writer
-        on the event loop, no race), and its own session to the daemon.
-        """
-        download_client = self._amule_api_client()
-        stack.push_async_callback(download_client.close)
-        await download_client.open()
-        return DownloadLoopDeps(
-            download_client=download_client,
-            source_client=download_client,
-            downloads=SqliteDownloadRepository(local_conn),
-            sources=source_repo,
-            catalog=catalog_repo,
-            targets=self._targets,
-            disk=ShutilDiskSpace(download_config.output_dir),
-            min_free_bytes=download_config.min_free_bytes,
-            lost_after=download_config.lost_after,
-            poll_interval_seconds=download_config.poll_interval_seconds,
-            reappeared_after=download_config.reappeared_after,
-            sources_interval=download_config.sources_interval,
-            wall_clock=self._wall_clock,
-            monotonic_clock=self._monotonic_clock,
-            telemetry=telemetry,
-            wake_hub=self._wake_hub,
-            shutdown=self._shutdown,
+            host, port, crawler_config.amule_api_password, monotonic_clock=monotonic_clock
         )
 
     async def _start_webui(
-        self, stack: AsyncExitStack, status_board: StatusBoard, control: CrawlerControl
+        self,
+        *,
+        config: LoadedConfig,
+        stack: AsyncExitStack,
+        status_board: StatusBoard,
+        control: CrawlerControl,
+        wall_clock: WallClock,
+        monotonic_clock: MonotonicClock,
     ) -> None:
         """Start the read-only webui on its OWN thread + loop (spec §5), sharing only IMMUTABLE
         state with the crawler (the parsed matcher/targets, the DB paths). It reads through its
         OWN ``ReaderProvider`` (inside ``build_webui_app``); nothing here touches the crawler's
         event loop nor its writer connections. Its stop is registered on ``stack`` so it runs
         during the normal LIFO unwind at shutdown, AFTER the loops are stopped."""
+        crawler_config = config.crawler_config
         webui_pkg_dir = Path(p2pwatch.webui.__file__).parent
         app = build_webui_app(
-            catalog_db_path=Path(self._crawler_config.catalog_db_path),
-            local_db_path=Path(self._crawler_config.local_db_path),
-            matcher_config=self._matcher_config,
-            target_segments=self._targets,
+            catalog_db_path=Path(crawler_config.catalog_db_path),
+            local_db_path=Path(crawler_config.local_db_path),
+            matcher_config=config.matcher_config,
+            target_segments=config.targets,
             templates_dir=webui_pkg_dir / "adapters" / "templates",
             static_dir=webui_pkg_dir / "adapters" / "static",
             control=control,
             status_readings=status_board,
-            amule_url=self._crawler_config.webui.amule_url,
-            wall_clock=self._wall_clock,
-            monotonic_clock=self._monotonic_clock,
-            source_period_gap=self._crawler_config.webui.source_period_gap,
+            amule_url=crawler_config.webui.amule_url,
+            wall_clock=wall_clock,
+            monotonic_clock=monotonic_clock,
+            source_period_gap=crawler_config.webui.source_period_gap,
         )
         server_thread = UvicornServerThread(app, self._webui_address)
         stack.push_async_callback(server_thread.stop)
         await server_thread.start()
 
-    async def run(self) -> None:
-        """Async entry point: opens the resources under ``PosixProcess``, runs the loops (§6).
+    async def crawl(
+        self, *, config_path: PurePath, targets_path: PurePath, matcher_path: PurePath
+    ) -> None:
+        """Opens the resources under ``PosixProcess``, runs the loops until the shutdown (§6).
 
         Only the shutdown is bounded: an overrun raises ``TimeoutError``, and ``PosixProcess``
         then closes what is left.
         """
+        config = load_config(Path(config_path), Path(targets_path), Path(matcher_path), self._env)
+        crawler_config = config.crawler_config
+        logging.getLogger().setLevel(crawler_config.observability.log_level)
         # Startup version line (spec 2026-07-10-git-driven-versioning): the number baked into the
         # installed wheel by the build (setuptools-scm / SETUPTOOLS_SCM_PRETEND_VERSION), so an
         # operator can correlate a running node to a release.
         _logger.info("p2pwatch version %s", version("p2pwatch"))
+        wall_clock = SystemWallClock()
+        monotonic_clock = AsyncioMonotonicClock()
+        wake_hub = AsyncioWakeHub()
+        shutdown = asyncio.Event()
+        # The pause gate (phase P6a), armed (set = un-paused) so the crawler starts running. The
+        # webui mutates it thread-safely via ``LoopCrawlerControl`` (spec §10).
+        resumed = asyncio.Event()
+        resumed.set()
         loop = asyncio.get_running_loop()
         # Runtime-control channel (phase P6a): bound to the crawler's OWN loop + events, so the
         # webui thread hands off intents thread-safely (spec §10); it holds no DB connection.
-        control: CrawlerControl = LoopCrawlerControl(
-            loop=loop, resumed=self._resumed, shutdown=self._shutdown
-        )
+        control: CrawlerControl = LoopCrawlerControl(loop=loop, resumed=resumed, shutdown=shutdown)
         async with PosixProcess(control) as stack:
-            catalog_conn = open_catalog(self._crawler_config.catalog_db_path)
+            catalog_conn = open_catalog(crawler_config.catalog_db_path)
             stack.callback(catalog_conn.close)
-            local_conn = open_local(self._crawler_config.local_db_path)
+            local_conn = open_local(crawler_config.local_db_path)
             stack.callback(local_conn.close)
 
             local_repo = SqliteLocalStateRepository(local_conn)
-            node_id = resolve_node_id(self._crawler_config.node_id, local_repo, self._wall_clock)
-            observability = self._crawler_config.observability
+            node_id = resolve_node_id(crawler_config.node_id, local_repo, wall_clock)
+            observability = crawler_config.observability
             registry = CollectorRegistry()
             notifier = AppriseNotifier(
                 tuple((t.url, t.audience, t.node_prefix) for t in observability.notifications),
@@ -249,55 +203,53 @@ class CrawlerApp:
             stack.callback(start_metrics_server(registry, observability.metrics_port))
             catalog_repo = SqliteCatalogRepository(catalog_conn, node_id)
             backoff_states = SqliteBackoffStateRepository(local_conn)
-            engine = MatchingEngine(self._matcher_config, self._targets)
-            board = StatusBoard((AMULE_CLIENT_NAME,), self._monotonic_clock)
+            engine = MatchingEngine(config.matcher_config, config.targets)
+            board = StatusBoard((AMULE_CLIENT_NAME,), monotonic_clock)
             # In-process webui (spec §5): own thread + loop, started EARLY (before the daemon client
             # + startup re-evaluation) so it is up promptly and stays isolated from the crawler's
             # synchronous work. Gated by ``webui.enabled``; a crash degrades (spec §17.1). Its
             # graceful stop is on ``stack`` → runs at the normal shutdown unwind (after DB conns
             # are pushed, so it stops the thread before those close during LIFO teardown).
-            if self._crawler_config.webui.enabled:
-                await self._start_webui(stack, board, control)
+            if crawler_config.webui.enabled:
+                await self._start_webui(
+                    config=config,
+                    stack=stack,
+                    status_board=board,
+                    control=control,
+                    wall_clock=wall_clock,
+                    monotonic_clock=monotonic_clock,
+                )
             # SHARED backoff registry: built ONCE, RELOADED from backoff_states
             # (backoff survives restart, spec §3/§7), injected into ALL workers
             # + passed to the search tasks that persist it. Single writer on the event loop.
             backoff = BackoffRegistry(
-                _backoff_policy(self._crawler_config),
-                self._wall_clock,
-                self._monotonic_clock,
-                self._rng,
+                _backoff_policy(crawler_config), wall_clock, monotonic_clock, SeededRng()
             )
             backoff.load_from(backoff_states.load_backoff_states())
             deps = WorkerDeps(
                 catalog=catalog_repo,
                 engine=engine,
-                wake_hub=self._wake_hub,
+                wake_hub=wake_hub,
                 backoff=backoff,
                 telemetry=telemetry,
-                wall_clock=self._wall_clock,
+                wall_clock=wall_clock,
             )
 
-            client = self._amule_api_client()
+            client = self._amule_api_client(crawler_config, monotonic_clock)
             stack.push_async_callback(client.close)
             await client.open()
             workers = [SearchWorker(AMULE_CLIENT_NAME, client, deps)]
             # The status loop shares the search session (one session per container's amuled).
             status_deps = StatusLoopDeps(
-                AMULE_CLIENT_NAME,
-                client,
-                self._wall_clock,
-                self._monotonic_clock,
-                telemetry,
-                self._shutdown,
-                board,
+                AMULE_CLIENT_NAME, client, wall_clock, monotonic_clock, telemetry, shutdown, board
             )
             search_tasks = SearchTaskRunner(
                 workers=workers,
-                keywords=self._crawler_config.search.keywords,
-                resumed=self._resumed,
+                keywords=crawler_config.search.keywords,
+                resumed=resumed,
                 backoff=backoff,
                 backoff_states=backoff_states,
-                monotonic_clock=self._monotonic_clock,
+                monotonic_clock=monotonic_clock,
             )
             loops: list[Callable[[], Coroutine[object, object, None]]] = [
                 search_tasks.run,
@@ -306,19 +258,34 @@ class CrawlerApp:
 
             _logger.info("crawler started: node_id=%s", node_id)
 
-            # Download enabled ⟺ the ``download`` section is present (``enabled: true``); the
-            # unified parser then guarantees the wiring is complete (endpoint).
-            download_config = self._crawler_config.download
+            # Download enabled ⟺ the ``download`` section is present (``enabled: true``). Its loop
+            # shares the catalog's repos and ``local_conn`` (one writer, on the event loop), and
+            # has its own session to the daemon.
+            download_config = crawler_config.download
             if download_config is not None:
-                download_deps = await self._build_download_deps(
-                    download_config=download_config,
-                    stack=stack,
-                    catalog_repo=catalog_repo,
-                    source_repo=SqliteSourceRepository(
+                download_client = self._amule_api_client(crawler_config, monotonic_clock)
+                stack.push_async_callback(download_client.close)
+                await download_client.open()
+                download_deps = DownloadLoopDeps(
+                    download_client=download_client,
+                    source_client=download_client,
+                    downloads=SqliteDownloadRepository(local_conn),
+                    sources=SqliteSourceRepository(
                         catalog_conn, node_id, download_config.time_between_source_reads
                     ),
-                    local_conn=local_conn,
+                    catalog=catalog_repo,
+                    targets=config.targets,
+                    disk=ShutilDiskSpace(download_config.output_dir),
+                    min_free_bytes=download_config.min_free_bytes,
+                    lost_after=download_config.lost_after,
+                    poll_interval_seconds=download_config.poll_interval_seconds,
+                    reappeared_after=download_config.reappeared_after,
+                    sources_interval=download_config.sources_interval,
+                    wall_clock=wall_clock,
+                    monotonic_clock=monotonic_clock,
                     telemetry=telemetry,
+                    wake_hub=wake_hub,
+                    shutdown=shutdown,
                 )
                 loops.append(partial(download_loop, download_deps))
                 _logger.info("download enabled: download loop armed")
@@ -332,14 +299,14 @@ class CrawlerApp:
             # Runs to completion BEFORE the loops so tier actions (download wake, notify)
             # fire for the very first search, not a search later.
             await reevaluate_if_policy_changed(
-                fingerprint=self._policy_fingerprint,
+                fingerprint=config.policy_fingerprint,
                 local_repo=local_repo,
                 reevaluate=lambda: reevaluate_catalog(
                     catalog=catalog_repo,
                     engine=engine,
-                    wake_hub=self._wake_hub,
+                    wake_hub=wake_hub,
                     telemetry=telemetry,
-                    wall_clock=self._wall_clock,
+                    wall_clock=wall_clock,
                 ),
             )
 
@@ -348,46 +315,12 @@ class CrawlerApp:
             async with asyncio.timeout(None) as shutdown_timeout:
                 await supervise_loops(
                     loops,
-                    shutdown=self._shutdown,
+                    shutdown=shutdown,
                     arm_shutdown_bound=lambda: shutdown_timeout.reschedule(
-                        loop.time() + self._crawler_config.shutdown_deadline_seconds
+                        loop.time() + crawler_config.shutdown_deadline_seconds
                     ),
                 )
                 _print_progress("Workers stopped.")
                 _print_progress(f"{len(workers)} amuled session(s) closing…")
                 await stack.aclose()
                 _print_progress("Databases closed: exiting.")
-
-
-class CrawlerAssembly(CrawlerRunner):
-    """Loads the config, then runs the ``CrawlerApp`` it describes on the system's clocks."""
-
-    def __init__(
-        self,
-        *,
-        webui_address: tuple[str, int],
-        amule_api_address: tuple[str, int],
-        env: Mapping[str, str],
-    ) -> None:
-        self._webui_address = webui_address
-        self._amule_api_address = amule_api_address
-        self._env = env
-
-    async def crawl(
-        self, *, config_path: PurePath, targets_path: PurePath, matcher_path: PurePath
-    ) -> None:
-        config = load_config(Path(config_path), Path(targets_path), Path(matcher_path), self._env)
-        logging.getLogger().setLevel(config.crawler_config.observability.log_level)
-        crawler_app = CrawlerApp(
-            crawler_config=config.crawler_config,
-            targets=config.targets,
-            matcher_config=config.matcher_config,
-            wall_clock=SystemWallClock(),
-            monotonic_clock=AsyncioMonotonicClock(),
-            rng=SeededRng(),
-            wake_hub=AsyncioWakeHub(),
-            policy_fingerprint=config.policy_fingerprint,
-            webui_address=self._webui_address,
-            amule_api_address=self._amule_api_address,
-        )
-        await crawler_app.run()
