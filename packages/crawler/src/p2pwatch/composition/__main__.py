@@ -20,10 +20,12 @@ import sys
 from pathlib import Path
 
 from p2pwatch.adapters.config.crawler_config import load_config
+from p2pwatch.adapters.config.yaml_config_checker import YamlConfigChecker
 from p2pwatch.adapters.monotonic_clock_asyncio import AsyncioMonotonicClock
 from p2pwatch.adapters.rng_random import SeededRng
 from p2pwatch.adapters.wake_hub_asyncio import AsyncioWakeHub
 from p2pwatch.adapters.wall_clock_system import SystemWallClock
+from p2pwatch.application.validate_config import ValidateConfig
 from p2pwatch.composition.app import CrawlerApp
 from p2pwatch.domain.invalid_config import InvalidConfigError
 
@@ -83,8 +85,11 @@ def validate_config(argv: list[str]) -> int:
     ``InvalidConfigError`` → clear message on stderr + code 1, like the run's refusal to start.
     """
     args = _parse_validate_args(argv)
+    config_validator = ValidateConfig(YamlConfigChecker(os.environ))
     try:
-        load_config(args.config, args.targets, args.matcher, os.environ)
+        config_validator.validate_config(
+            config_path=args.config, targets_path=args.targets, matcher_path=args.matcher
+        )
     except InvalidConfigError as error:
         print(f"Invalid config: {error}", file=sys.stderr, flush=True)
         return 1
