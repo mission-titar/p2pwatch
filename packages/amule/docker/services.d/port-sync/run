@@ -10,4 +10,4 @@ done
 s6-svperms -G amule -E amule /etc/services.d/amuled
 
 exec setpriv --reuid amule --regid amule --init-groups \
-	env HOME=/home/amule python -m p2pwatch_amule.adapters.driving.port_sync
+	env HOME=/home/amule python -m p2pwatch_amule port-sync

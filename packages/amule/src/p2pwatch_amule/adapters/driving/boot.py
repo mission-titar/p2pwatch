@@ -110,7 +110,3 @@ def main() -> None:
         pathlib.Path(PORT_SYNC_DOWN_FILE).unlink(missing_ok=True)
     else:
         pathlib.Path(PORT_SYNC_DOWN_FILE).touch()
-
-
-if __name__ == "__main__":  # pragma: no cover
-    main()
