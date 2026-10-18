@@ -27,33 +27,36 @@ from prometheus_client import CollectorRegistry
 
 import p2pwatch.webui
 from catalog_matching.domain.engine import MatchingEngine
-from p2pwatch.adapters.config.crawler_config import (
+from p2pwatch.adapters.driven.config.crawler_config import (
     AMULE_CLIENT_NAME,
     CrawlerConfig,
     LoadedConfig,
     load_config,
 )
-from p2pwatch.adapters.crawler_control_loop import LoopCrawlerControl
-from p2pwatch.adapters.disk_space_shutil import ShutilDiskSpace
-from p2pwatch.adapters.driving.process.posix_process import PosixProcess
-from p2pwatch.adapters.monotonic_clock_asyncio import AsyncioMonotonicClock
-from p2pwatch.adapters.mule_api.client import AmuleApiClient
-from p2pwatch.adapters.observability.apprise_notifier import AppriseNotifier
-from p2pwatch.adapters.observability.dispatcher import ObservabilityDispatcher
-from p2pwatch.adapters.observability.prometheus_sink import PrometheusSink, start_metrics_server
-from p2pwatch.adapters.persistence_sqlite.backoff_state_repository import (
+from p2pwatch.adapters.driven.crawler_control_loop import LoopCrawlerControl
+from p2pwatch.adapters.driven.disk_space_shutil import ShutilDiskSpace
+from p2pwatch.adapters.driven.monotonic_clock_asyncio import AsyncioMonotonicClock
+from p2pwatch.adapters.driven.mule_api.client import AmuleApiClient
+from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
+from p2pwatch.adapters.driven.observability.dispatcher import ObservabilityDispatcher
+from p2pwatch.adapters.driven.observability.prometheus_sink import (
+    PrometheusSink,
+    start_metrics_server,
+)
+from p2pwatch.adapters.driven.persistence_sqlite.backoff_state_repository import (
     SqliteBackoffStateRepository,
 )
-from p2pwatch.adapters.persistence_sqlite.catalog_repository import SqliteCatalogRepository
-from p2pwatch.adapters.persistence_sqlite.connection import open_catalog, open_local
-from p2pwatch.adapters.persistence_sqlite.download_repository import SqliteDownloadRepository
-from p2pwatch.adapters.persistence_sqlite.local_state_repository import (
+from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
+from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
+from p2pwatch.adapters.driven.persistence_sqlite.download_repository import SqliteDownloadRepository
+from p2pwatch.adapters.driven.persistence_sqlite.local_state_repository import (
     SqliteLocalStateRepository,
 )
-from p2pwatch.adapters.persistence_sqlite.source_repository import SqliteSourceRepository
-from p2pwatch.adapters.rng_random import SeededRng
-from p2pwatch.adapters.wake_hub_asyncio import AsyncioWakeHub
-from p2pwatch.adapters.wall_clock_system import SystemWallClock
+from p2pwatch.adapters.driven.persistence_sqlite.source_repository import SqliteSourceRepository
+from p2pwatch.adapters.driven.rng_random import SeededRng
+from p2pwatch.adapters.driven.wake_hub_asyncio import AsyncioWakeHub
+from p2pwatch.adapters.driven.wall_clock_system import SystemWallClock
+from p2pwatch.adapters.driving.process.posix_process import PosixProcess
 from p2pwatch.application.reevaluate_catalog import reevaluate_catalog
 from p2pwatch.application.reevaluate_if_policy_changed import reevaluate_if_policy_changed
 from p2pwatch.application.resolve_node_id import resolve_node_id
@@ -71,8 +74,8 @@ from p2pwatch.application.search_worker import (
 from p2pwatch.application.status_loop import StatusBoard, StatusLoopDeps, status_loop
 from p2pwatch.application.supervise_loops import supervise_loops
 from p2pwatch.domain.observability.events import CrawlerStarted
-from p2pwatch.ports.clock import MonotonicClock, WallClock
-from p2pwatch.ports.crawler_control import CrawlerControl
+from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
+from p2pwatch.ports.driving.crawler_control import CrawlerControl
 from p2pwatch.ports.driving.crawler_runner import CrawlerRunner
 from p2pwatch.webui.composition.app import build_app as build_webui_app
 from p2pwatch.webui.composition.uvicorn_server_thread import UvicornServerThread

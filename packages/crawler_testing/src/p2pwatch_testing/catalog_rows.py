@@ -3,7 +3,7 @@
 import hashlib
 import sqlite3
 
-from p2pwatch.adapters.persistence_sqlite.variants import content_hash, iso_to_micros
+from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash, iso_to_micros
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceKey
 

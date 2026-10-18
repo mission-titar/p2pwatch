@@ -16,8 +16,8 @@ from catalog_matching.domain.engine import (
     MatchDecision,
     MatchingEngine,
 )
-from p2pwatch.adapters.persistence_sqlite.catalog_repository import SqliteCatalogRepository
-from p2pwatch.adapters.persistence_sqlite.connection import utc_iso
+from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
+from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.application.decisions import rejudge_file
 from p2pwatch.application.record_observations import record_observation
 from p2pwatch.application.run_download_cycle import DOWNLOAD_WAKE_SUBJECT

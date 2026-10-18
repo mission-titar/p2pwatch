@@ -6,15 +6,15 @@ from datetime import timedelta
 
 import pytest
 
-from p2pwatch.adapters.mule_api.errors import ApiAuthError, ApiRejectedError
+from p2pwatch.adapters.driven.mule_api.errors import ApiAuthError, ApiRejectedError
 from p2pwatch.application.status_loop import (
     StatusBoard,
     StatusLoopDeps,
     status_loop,
 )
 from p2pwatch.domain.observability import events as ev
-from p2pwatch.ports.client_errors import ClientError
-from p2pwatch.ports.client_status import (
+from p2pwatch.ports.driven.client_errors import ClientError
+from p2pwatch.ports.driven.client_status import (
     ChannelStatus,
     ClientStatus,
     StatusClient,

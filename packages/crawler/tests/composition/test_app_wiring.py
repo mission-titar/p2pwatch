@@ -16,14 +16,14 @@ import httpx
 import pytest
 import yaml
 
-from p2pwatch.adapters.config.crawler_config import AMULE_CLIENT_NAME
-from p2pwatch.adapters.persistence_sqlite.backoff_state_repository import (
+from p2pwatch.adapters.driven.config.crawler_config import AMULE_CLIENT_NAME
+from p2pwatch.adapters.driven.persistence_sqlite.backoff_state_repository import (
     SqliteBackoffStateRepository,
 )
-from p2pwatch.adapters.persistence_sqlite.connection import open_catalog, open_local
-from p2pwatch.adapters.wall_clock_system import SystemWallClock
+from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
+from p2pwatch.adapters.driven.wall_clock_system import SystemWallClock
 from p2pwatch.composition.app import CrawlerApp
-from p2pwatch.ports.backoff_state_repository import BackoffKey, BackoffState
+from p2pwatch.ports.driven.backoff_state_repository import BackoffKey, BackoffState
 from p2pwatch_testing.adapters.mule_api.api_fakes import (
     PASSWORD,
     FakeAmuleApi,

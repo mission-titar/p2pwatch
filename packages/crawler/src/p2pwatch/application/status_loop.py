@@ -21,10 +21,10 @@ from p2pwatch.domain.observability.events import (
     ClientUnreachableLasting,
     Event,
 )
-from p2pwatch.ports.client_errors import ClientAuthError, ClientError
-from p2pwatch.ports.client_status import StatusClient, StatusReading
-from p2pwatch.ports.clock import MonotonicClock, MonotonicInstant, WallClock
-from p2pwatch.ports.telemetry import Telemetry
+from p2pwatch.ports.driven.client_errors import ClientAuthError, ClientError
+from p2pwatch.ports.driven.client_status import StatusClient, StatusReading
+from p2pwatch.ports.driven.clock import MonotonicClock, MonotonicInstant, WallClock
+from p2pwatch.ports.driven.telemetry import Telemetry
 
 STATUS_PERIOD = timedelta(minutes=1)
 CHANNEL_ALERT_AFTER = timedelta(minutes=5)

@@ -11,9 +11,9 @@ from datetime import timedelta
 
 from p2pwatch.application.search_worker import BackoffRegistry, SearchTask, SearchWorker
 from p2pwatch.domain.search.keywords import dedupe_keywords
-from p2pwatch.ports.backoff_state_repository import BackoffStateRepository
-from p2pwatch.ports.clock import MonotonicClock
-from p2pwatch.ports.repository_errors import RepositoryError
+from p2pwatch.ports.driven.backoff_state_repository import BackoffStateRepository
+from p2pwatch.ports.driven.clock import MonotonicClock
+from p2pwatch.ports.driven.repository_errors import RepositoryError
 
 _logger = logging.getLogger("p2pwatch.application.search_tasks")
 

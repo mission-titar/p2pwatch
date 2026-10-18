@@ -14,9 +14,9 @@ from datetime import UTC, datetime, timedelta
 
 from p2pwatch.domain.observability.events import Event
 from p2pwatch.domain.observation import FileObservation
-from p2pwatch.ports.client_errors import ClientUnreachableError, SearchFailedError
-from p2pwatch.ports.clock import MonotonicInstant
-from p2pwatch.ports.search_client import SearchAnswer
+from p2pwatch.ports.driven.client_errors import ClientUnreachableError, SearchFailedError
+from p2pwatch.ports.driven.clock import MonotonicInstant
+from p2pwatch.ports.driven.search_client import SearchAnswer
 
 
 class FakeTime:

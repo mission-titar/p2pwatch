@@ -14,14 +14,14 @@ from p2pwatch.domain.observability.events import (
 )
 from p2pwatch.domain.persisted_wait import remaining_wait
 from p2pwatch.domain.search.backoff import backoff_delay
-from p2pwatch.ports.backoff_state_repository import BackoffKey, BackoffState
-from p2pwatch.ports.catalog_repository import CatalogRepository
-from p2pwatch.ports.client_errors import ClientUnreachableError, SearchFailedError
-from p2pwatch.ports.clock import MonotonicClock, MonotonicInstant, WallClock
-from p2pwatch.ports.rng import Rng
-from p2pwatch.ports.search_client import SearchAnswer, SearchClient
-from p2pwatch.ports.telemetry import Telemetry
-from p2pwatch.ports.wake_hub import WakeHub
+from p2pwatch.ports.driven.backoff_state_repository import BackoffKey, BackoffState
+from p2pwatch.ports.driven.catalog_repository import CatalogRepository
+from p2pwatch.ports.driven.client_errors import ClientUnreachableError, SearchFailedError
+from p2pwatch.ports.driven.clock import MonotonicClock, MonotonicInstant, WallClock
+from p2pwatch.ports.driven.rng import Rng
+from p2pwatch.ports.driven.search_client import SearchAnswer, SearchClient
+from p2pwatch.ports.driven.telemetry import Telemetry
+from p2pwatch.ports.driven.wake_hub import WakeHub
 
 _logger = logging.getLogger("p2pwatch.application.search_worker")
 

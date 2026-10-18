@@ -7,9 +7,9 @@ from typing import Literal
 import pytest
 
 from catalog_matching.domain.models import TargetSegment
-from p2pwatch.adapters.persistence_sqlite.connection import open_catalog, open_local
-from p2pwatch.adapters.persistence_sqlite.download_repository import SqliteDownloadRepository
-from p2pwatch.adapters.persistence_sqlite.source_repository import SqliteSourceRepository
+from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
+from p2pwatch.adapters.driven.persistence_sqlite.download_repository import SqliteDownloadRepository
+from p2pwatch.adapters.driven.persistence_sqlite.source_repository import SqliteSourceRepository
 from p2pwatch.application.run_download_cycle import (
     DownloadDeps,
     DownloadRepository,
@@ -27,16 +27,16 @@ from p2pwatch.domain.observability.events import (
     TargetTitle,
 )
 from p2pwatch.domain.source import SourceKey, SourceReading, SourceRole
-from p2pwatch.ports.catalog_repository import DownloadCandidate, ObservedFile
-from p2pwatch.ports.client_errors import ClientUnreachableError, DownloadRejectedError
-from p2pwatch.ports.download_client import (
+from p2pwatch.ports.driven.catalog_repository import DownloadCandidate, ObservedFile
+from p2pwatch.ports.driven.client_errors import ClientUnreachableError, DownloadRejectedError
+from p2pwatch.ports.driven.download_client import (
     DownloadRequest,
     DownloadStatus,
     FailureReason,
     WaitingReason,
 )
-from p2pwatch.ports.repository_errors import RepositoryError
-from p2pwatch.ports.source_repository import EarlierPoints, RecordedReading, SourceRepository
+from p2pwatch.ports.driven.repository_errors import RepositoryError
+from p2pwatch.ports.driven.source_repository import EarlierPoints, RecordedReading, SourceRepository
 from p2pwatch_testing.application.fakes import FakeTime, RecordingTelemetry, TickingWallClock
 from p2pwatch_testing.catalog_rows import insert_file
 

@@ -16,7 +16,7 @@ from typing import Any, Self
 import httpx
 import uvicorn
 
-from p2pwatch.ports.clock import MonotonicClock, MonotonicInstant
+from p2pwatch.ports.driven.clock import MonotonicClock, MonotonicInstant
 from p2pwatch_testing.application.fakes import FakeTime
 
 PASSWORD = "s3cret"

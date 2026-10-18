@@ -13,7 +13,7 @@ import logging
 from collections.abc import Awaitable, Callable
 
 from p2pwatch.application.reevaluate_catalog import ReevaluationSummary
-from p2pwatch.ports.local_state_repository import LocalStateRepository
+from p2pwatch.ports.driven.local_state_repository import LocalStateRepository
 
 _logger = logging.getLogger("p2pwatch.application.reevaluate_if_policy_changed")
 

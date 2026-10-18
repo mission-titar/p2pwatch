@@ -20,7 +20,7 @@ from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceKey
-from p2pwatch.ports.client_status import ChannelStatus, ClientStatus, StatusReading
+from p2pwatch.ports.driven.client_status import ChannelStatus, ClientStatus, StatusReading
 from p2pwatch.webui.adapters.catalog_read import PAGE_SIZE
 from p2pwatch.webui.composition.app import (
     _normalize_direction,

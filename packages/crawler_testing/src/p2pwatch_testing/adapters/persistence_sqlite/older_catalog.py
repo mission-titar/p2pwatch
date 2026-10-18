@@ -5,12 +5,15 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.persistence_sqlite import connection as connection_module
-from p2pwatch.adapters.persistence_sqlite.variants import content_hash, register_sql_functions
+from p2pwatch.adapters.driven.persistence_sqlite import connection as connection_module
+from p2pwatch.adapters.driven.persistence_sqlite.variants import (
+    content_hash,
+    register_sql_functions,
+)
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceKey
 
-_MIGRATIONS = resources.files("p2pwatch.adapters.persistence_sqlite") / "migrations"
+_MIGRATIONS = resources.files("p2pwatch.adapters.driven.persistence_sqlite") / "migrations"
 
 
 def open_catalog_at(path: Path, version: int) -> sqlite3.Connection:

@@ -41,8 +41,8 @@ from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
 
-from p2pwatch.adapters.persistence_sqlite.reader import open_reader
-from p2pwatch.ports.clock import MonotonicClock
+from p2pwatch.adapters.driven.persistence_sqlite.reader import open_reader
+from p2pwatch.ports.driven.clock import MonotonicClock
 
 # Hardcoded safety limits (spec §11). ``ROW_CAP`` / ``TIMEOUT_SECONDS`` are PUBLIC: the module's
 # contract, consumed by the webui handler (call bounds + the truncation message). They could later

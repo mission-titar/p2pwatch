@@ -5,7 +5,7 @@ import signal
 
 import pytest
 
-from p2pwatch.adapters.crawler_control_loop import LoopCrawlerControl
+from p2pwatch.adapters.driven.crawler_control_loop import LoopCrawlerControl
 from p2pwatch.adapters.driving.process.posix_process import PosixProcess
 
 _REQUESTED = (
