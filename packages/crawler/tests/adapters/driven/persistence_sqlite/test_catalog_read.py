@@ -10,7 +10,7 @@ import pytest
 from catalog_matching.domain.config import TIER_RANK
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
     _JOIN_DECISIONS,
-    _JOIN_LATEST_SIGHTING,
+    _JOIN_LATEST_OBSERVATION,
     _SQL_COUNT_FILES_BASE,
     _SQL_CTES,
     _SQL_LIST_FILES_BASE,
@@ -50,8 +50,10 @@ from p2pwatch_testing.catalog_rows import (
 pytestmark = pytest.mark.usefixtures("close_test_connections")
 
 # Selects the CTE under test on its own: SQLite drops the CTEs a query does not reference, so
-# the resulting plan is exactly how ``latest_sighting`` is resolved.
-LATEST_SIGHTING_PROBE = "SELECT file_id, filename, source_count, last_seen FROM latest_sighting"
+# the resulting plan is exactly how ``latest_observation`` is resolved.
+LATEST_OBSERVATION_PROBE = (
+    "SELECT file_id, filename, source_count, observed_at FROM latest_observation"
+)
 # Every instant a test writes, from the epoch to the year 3000.
 _ALL_TIME = PeriodWindow(since=0, until=32_503_680_000_000_000, gap=0)
 
@@ -262,12 +264,12 @@ def test_file_detail_carries_observations_and_decisions(catalog_db: Path) -> Non
     assert detail.size_bytes == 100
     assert len(detail.decisions) == 1
     assert detail.decisions[0].target_id == "062A"
-    assert [s.filename for s in detail.sightings] == ["keroro_062.avi"]
-    assert detail.latest == detail.sightings[0]
+    assert [o.reported_file.filename for o in detail.observations] == ["keroro_062.avi"]
+    assert detail.latest == detail.observations[0]
     assert detail.known_filenames == ("keroro_062.avi",)
 
 
-def test_file_detail_reads_its_timeline_in_the_window_and_its_latest_sighting_in_any(
+def test_file_detail_reads_its_timeline_in_the_window_and_its_latest_observation_in_any(
     catalog_db: Path,
 ) -> None:
     _seed(catalog_db)
@@ -277,8 +279,9 @@ def test_file_detail_reads_its_timeline_in_the_window_and_its_latest_sighting_in
     window = PeriodWindow(since=since, until=iso_to_micros(SEEN_AT), gap=0)
     detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("a" * 32), window)
     assert detail is not None
-    assert [s.filename for s in detail.sightings] == ["older.avi"]
-    assert detail.latest is not None and detail.latest.filename == "keroro_062.avi"
+    assert [o.reported_file.filename for o in detail.observations] == ["older.avi"]
+    assert detail.latest is not None
+    assert detail.latest.reported_file.filename == "keroro_062.avi"
 
 
 def test_file_detail_unknown_file_id_is_none(catalog_db: Path) -> None:
@@ -656,18 +659,18 @@ def test_coverage_tie_break_on_id(catalog_db: Path) -> None:
 
 
 def test_file_detail_observations_include_media_fields_none(catalog_db: Path) -> None:
-    """A sighting's duration_seconds and bitrate_kbps are None when the observation has none."""
+    """An observation's duration_seconds and bitrate_kbps are None when the network gave none."""
     _seed(catalog_db)
     detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("a" * 32), _ALL_TIME)
     assert detail is not None
-    assert len(detail.sightings) == 1
-    obs = detail.sightings[0]
+    assert len(detail.observations) == 1
+    obs = detail.observations[0].reported_file
     assert obs.duration_seconds is None
     assert obs.bitrate_kbps is None
 
 
 def test_file_detail_observations_include_media_fields_present(catalog_db: Path) -> None:
-    """A sighting's duration_seconds and bitrate_kbps are filled when present."""
+    """An observation's duration_seconds and bitrate_kbps are filled when present."""
     h = "d" * 32
     with sqlite3.connect(catalog_db) as conn:
         insert_file(conn, h, 150)
@@ -682,8 +685,8 @@ def test_file_detail_observations_include_media_fields_present(catalog_db: Path)
         )
     detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id(h), _ALL_TIME)
     assert detail is not None
-    assert len(detail.sightings) == 1
-    obs = detail.sightings[0]
+    assert len(detail.observations) == 1
+    obs = detail.observations[0].reported_file
     assert obs.duration_seconds == 1320
     assert obs.bitrate_kbps == 192
 
@@ -1106,11 +1109,11 @@ def test_list_files_observation_tie_break_on_the_newest_variant(catalog_db: Path
     assert rows[0].filename == "second.avi"
 
 
-def test_file_detail_of_a_file_never_seen_has_no_sighting(catalog_db: Path) -> None:
+def test_file_detail_of_a_file_never_seen_has_no_observation(catalog_db: Path) -> None:
     h = _seed_file_without_observation(catalog_db)
     detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id(h), _ALL_TIME)
     assert detail is not None
-    assert (detail.sightings, detail.latest, detail.known_filenames) == ((), None, ())
+    assert (detail.observations, detail.latest, detail.known_filenames) == ((), None, ())
 
 
 # ---------------------------------------------------------------------------
@@ -1121,17 +1124,17 @@ def test_file_detail_of_a_file_never_seen_has_no_sighting(catalog_db: Path) -> N
 @pytest.mark.parametrize(
     ("label", "sql"),
     [
-        ("latest_sighting alone", _SQL_CTES + LATEST_SIGHTING_PROBE),
-        ("list_files", _SQL_LIST_FILES_BASE + "ORDER BY obs.last_seen DESC LIMIT 50"),
-        ("count_files", _SQL_COUNT_FILES_BASE + _JOIN_LATEST_SIGHTING + _JOIN_DECISIONS),
-        ("tier_counts", _SQL_TIER_COUNTS_BASE + _JOIN_LATEST_SIGHTING + "GROUP BY ld.tier"),
+        ("latest_observation alone", _SQL_CTES + LATEST_OBSERVATION_PROBE),
+        ("list_files", _SQL_LIST_FILES_BASE + "ORDER BY obs.observed_at DESC LIMIT 50"),
+        ("count_files", _SQL_COUNT_FILES_BASE + _JOIN_LATEST_OBSERVATION + _JOIN_DECISIONS),
+        ("tier_counts", _SQL_TIER_COUNTS_BASE + _JOIN_LATEST_OBSERVATION + "GROUP BY ld.tier"),
     ],
-    ids=["latest_sighting alone", "list_files", "count_files", "tier_counts"],
+    ids=["latest_observation alone", "list_files", "count_files", "tier_counts"],
 )
 def test_latest_obs_seeks_per_file_instead_of_scanning_observations(
     catalog_db: Path, label: str, sql: str
 ) -> None:
-    """Every /files query reading the latest sighting SEEKS each variant's observations by
+    """Every /files query reading the latest observation SEEKS each variant's observations by
     primary key, never walks ``observations`` (11.6M rows on the node). Asserts the PLAN, not a
     duration, so it stays deterministic; each real query is checked, not the CTE alone."""
     plan = [str(row[3]) for row in open_reader(catalog_db).execute("EXPLAIN QUERY PLAN " + sql)]
@@ -1153,7 +1156,7 @@ _COUNTERS: dict[str, Callable[[CatalogReader, str | None], object]] = {
 def test_counters_read_observations_only_for_a_name_filter(
     catalog_db: Path, counter: str, query: str | None
 ) -> None:
-    """The default /files page counts without a per-file latest sighting (D18)."""
+    """The default /files page counts without a per-file latest observation (D18)."""
     connection = open_reader(catalog_db)
     tables: set[str] = set()
 

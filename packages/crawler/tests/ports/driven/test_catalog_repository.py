@@ -4,15 +4,16 @@ from datetime import UTC, datetime
 from catalog_matching.domain.engine import DecisionRecord, Explanation, MatchDecision
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation, ReportedFile
-from p2pwatch.ports.driven.catalog_repository import (
-    CatalogRepository,
-    DownloadCandidate,
-    ObservedFile,
-    ReevalRow,
-)
+from p2pwatch.ports.driven.catalog_repository import CatalogRepository, DownloadCandidate
 
 _KEY = FileKey(Network.ED2K, "31d6cfe0d16ae931b73c59d7e0c089c0")
 _T0 = datetime(2026, 6, 12, tzinfo=UTC)
+_OBSERVATION = FileObservation(
+    ReportedFile(
+        file=_KEY, filename="Keroro 062A.avi", size_bytes=100, source_count=1, keyword="keroro"
+    ),
+    _T0,
+)
 
 
 class _StubRepository:
@@ -38,10 +39,10 @@ class _StubRepository:
     def download_candidates(self) -> tuple[DownloadCandidate, ...]:
         return ()
 
-    def latest_observation(self, file: FileKey) -> ObservedFile | None:
+    def latest_observation(self, file: FileKey) -> FileObservation | None:
         return None
 
-    def best_observation(self, file: FileKey) -> ObservedFile | None:
+    def best_observation(self, file: FileKey) -> FileObservation | None:
         return None
 
     def known_filenames(self, file: FileKey) -> tuple[str, ...]:
@@ -50,30 +51,13 @@ class _StubRepository:
     def count_files(self) -> int:
         return 1
 
-    def iter_reevaluation_rows(self) -> Iterator[ReevalRow]:
-        return iter(
-            (
-                ReevalRow(
-                    file=_KEY,
-                    filename="Keroro 062A.avi",
-                    size_bytes=100,
-                    duration_seconds=None,
-                    bitrate_kbps=None,
-                ),
-            )
-        )
+    def iter_reevaluation_rows(self) -> Iterator[FileObservation]:
+        return iter((_OBSERVATION,))
 
 
 def test_protocol_is_satisfied_structurally() -> None:
     stub = _StubRepository()
     repository: CatalogRepository = stub  # mypy proves the structural satisfaction
-    reported_file = ReportedFile(
-        file=_KEY,
-        filename="Keroro 062A.avi",
-        size_bytes=100,
-        source_count=1,
-        keyword="keroro",
-    )
     decision = MatchDecision(
         target_id="062A",
         rule_name="exact",
@@ -82,7 +66,7 @@ def test_protocol_is_satisfied_structurally() -> None:
             target_id="062A", rules_fired=("exact",), tokens_matched=(), coverage_values=()
         ),
     )
-    repository.record_observation(FileObservation(reported_file, _T0))
+    repository.record_observation(_OBSERVATION)
     repository.record_decision(_KEY, decision, _T0)
     repository.record_retraction(_KEY, "062A", _T0)
     assert repository.latest_decisions(_KEY) == {}
@@ -91,15 +75,7 @@ def test_protocol_is_satisfied_structurally() -> None:
     assert repository.best_observation(_KEY) is None
     assert repository.known_filenames(_KEY) == ()
     assert repository.count_files() == 1
-    assert tuple(repository.iter_reevaluation_rows()) == (
-        ReevalRow(
-            file=_KEY,
-            filename=reported_file.filename,
-            size_bytes=reported_file.size_bytes,
-            duration_seconds=None,
-            bitrate_kbps=None,
-        ),
-    )
-    assert stub.observations == [FileObservation(reported_file, _T0)]
+    assert tuple(repository.iter_reevaluation_rows()) == (_OBSERVATION,)
+    assert stub.observations == [_OBSERVATION]
     assert stub.decisions == [(_KEY, decision, _T0)]
     assert stub.retractions == [(_KEY, "062A", _T0)]

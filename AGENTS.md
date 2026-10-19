@@ -139,7 +139,7 @@ a function does.
 | `filename` | a file's name, a string: `latest_filename`, `best_filename`, `known_filenames` | `name`, `file_name` |
 | `source` | a peer sharing a file, `SourceKey`; `source_name` its advertised name | a bare `name` beside a filename |
 | `reported file` | `ReportedFile`, what the network reports of a file, with no instant: the mapper builds it, a `SearchAnswer` carries it | `observation` |
-| `observation` | `FileObservation`, a reported file and its `observed_at`, the instant the crawler learned of it, stamped right before the write | a reported file |
+| `observation` | `FileObservation`, a reported file and its `observed_at`, the instant the crawler learned of it, stamped right before the write; every catalog read returns it whole | a reported file, `sighting` |
 | `candidate` | a `FileCandidate`, one name of a file and its metadata, the matcher's input; a `DownloadCandidate` is a file with a download-tier decision | `names` |
 | `target` | an episode segment to recover: `target_id`, `TargetSegment`, its `letter` | `segment` for the letter; Kad's keyword target, which is a `kad_word` |
 | `tier` | a decision's strength: `catalog`, `notify`, `download` | `before`, `after` |

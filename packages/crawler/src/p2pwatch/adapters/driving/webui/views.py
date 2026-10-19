@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from p2pwatch.domain.file_key import FileKey
-from p2pwatch.domain.observation import Sighting
+from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.source import SourceKey, SourceRole
 
 # ---------------------------------------------------------------------------
@@ -126,8 +126,8 @@ class FileDetail:
 
     file: FileKey
     size_bytes: int
-    sightings: tuple[Sighting, ...]  # oldest first
-    latest: Sighting | None  # the latest observation
+    observations: tuple[FileObservation, ...]  # oldest first
+    latest: FileObservation | None  # the latest observation
     decisions: tuple[DecisionView, ...]  # current decisions, latest per target, 0..N
     known_filenames: tuple[str, ...]  # every distinct name, sorted
 
@@ -511,10 +511,10 @@ class FileDetailDisplay:
     network: str
     native_id: str
     size_bytes: int
-    timeline: tuple[TimelineRow, ...]  # one row per sighting, oldest first
+    timeline: tuple[TimelineRow, ...]  # one row per observation, oldest first
     source_history: tuple[SourceHistoryRow, ...]  # one row per source period, newest first
     decisions: tuple[DecisionView, ...]  # 0..N elements: for template iteration
-    ed2k_link: str  # precomputed from the latest sighting
+    ed2k_link: str  # precomputed from the latest observation
     # Explanation fields (None if no explanation available)
     explanation_target_id: str | None
     explanation_rules_fired: tuple[str, ...]

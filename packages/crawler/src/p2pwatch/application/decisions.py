@@ -23,7 +23,7 @@ from p2pwatch.application.run_download_cycle import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.observability.events import DecisionChange, DecisionsRecorded
 from p2pwatch.domain.retraction import RETRACTED_TIER
-from p2pwatch.ports.driven.catalog_repository import CatalogRepository, ObservedFile
+from p2pwatch.ports.driven.catalog_repository import CatalogRepository
 from p2pwatch.ports.driven.clock import WallClock
 from p2pwatch.ports.driven.telemetry import Telemetry
 from p2pwatch.ports.driven.wake_hub import WakeHub
@@ -77,8 +77,10 @@ async def rejudge_file(
         changes.append(change(target_id, RETRACTED_TIER))
     if changes:
         # No filename left means only retractions were written, which are never notified.
-        best = catalog.best_observation(file) or ObservedFile(base_candidate.filename, 0)
-        await telemetry.emit(
-            DecisionsRecorded(file, best.filename, best.size_bytes, tuple(changes))
-        )
+        best = catalog.best_observation(file)
+        if best is None:
+            filename, size_bytes = base_candidate.filename, 0
+        else:
+            filename, size_bytes = best.reported_file.filename, best.reported_file.size_bytes
+        await telemetry.emit(DecisionsRecorded(file, filename, size_bytes, tuple(changes)))
     return len(changes)

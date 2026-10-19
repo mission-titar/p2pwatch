@@ -27,14 +27,14 @@ from contextlib import suppress
 from datetime import datetime
 
 from catalog_matching.domain.engine import DecisionRecord, MatchDecision
-from p2pwatch.adapters.driven.persistence_sqlite import sightings
+from p2pwatch.adapters.driven.persistence_sqlite import observation_read
 from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError, wrap_sqlite_errors
 from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash, iso_to_micros
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.retraction import RETRACTED_TIER
-from p2pwatch.ports.driven.catalog_repository import DownloadCandidate, ObservedFile, ReevalRow
+from p2pwatch.ports.driven.catalog_repository import DownloadCandidate
 
 _CANONICAL_HASH_RE = re.compile(r"[0-9a-f]{32}\Z")
 
@@ -211,24 +211,20 @@ class SqliteCatalogRepository:
             for row in rows
         )
 
-    def latest_observation(self, file: FileKey) -> ObservedFile | None:
-        """Filename and size of the latest sighting (the ed2k link), or ``None`` (read)."""
+    def latest_observation(self, file: FileKey) -> FileObservation | None:
+        """The file's latest observation, or ``None`` (read)."""
         with wrap_sqlite_errors():
-            latest = sightings.latest_sighting(self._connection, file)
-        if latest is None:
-            return None
-        return ObservedFile(filename=latest.filename, size_bytes=latest.size_bytes)
+            return observation_read.latest_observation(self._connection, file)
 
-    def best_observation(self, file: FileKey) -> ObservedFile | None:
-        """The clean filename (most sources, then latest) and size, or ``None`` (read)."""
+    def best_observation(self, file: FileKey) -> FileObservation | None:
+        """The observation of the clean filename (most sources, then latest), or ``None``."""
         with wrap_sqlite_errors():
-            best = sightings.best_filename_and_size(self._connection, file)
-        return None if best is None else ObservedFile(filename=best[0], size_bytes=best[1])
+            return observation_read.best_observation(self._connection, file)
 
     def known_filenames(self, file: FileKey) -> tuple[str, ...]:
         """Every distinct filename this file was observed under, sorted (read)."""
         with wrap_sqlite_errors():
-            return sightings.known_filenames(self._connection, file)
+            return observation_read.known_filenames(self._connection, file)
 
     def count_files(self) -> int:
         """Number of catalogued files, the re-evaluation progress total (read)."""
@@ -236,14 +232,7 @@ class SqliteCatalogRepository:
             row = self._connection.execute(_COUNT_FILES).fetchone()
         return int(row[0])
 
-    def iter_reevaluation_rows(self) -> Iterator[ReevalRow]:
-        """Every seen file's latest sighting, streamed (spec re-evaluation §6)."""
+    def iter_reevaluation_rows(self) -> Iterator[FileObservation]:
+        """Every seen file's latest observation, streamed (spec re-evaluation §6)."""
         with wrap_sqlite_errors():
-            for latest in sightings.iter_latest_sightings(self._connection):
-                yield ReevalRow(
-                    file=latest.file,
-                    filename=latest.filename,
-                    size_bytes=latest.size_bytes,
-                    duration_seconds=latest.duration_seconds,
-                    bitrate_kbps=latest.bitrate_kbps,
-                )
+            yield from observation_read.iter_latest_observations(self._connection)

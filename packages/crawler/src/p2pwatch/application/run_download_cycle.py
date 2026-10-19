@@ -39,9 +39,10 @@ from p2pwatch.domain.observability.events import (
     SourceReappeared,
     TargetTitle,
 )
+from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.persisted_wait import remaining_wait
 from p2pwatch.domain.source import SourceKey, SourceUsefulness
-from p2pwatch.ports.driven.catalog_repository import DownloadCandidate, ObservedFile
+from p2pwatch.ports.driven.catalog_repository import DownloadCandidate
 from p2pwatch.ports.driven.client_errors import ClientUnreachableError, DownloadRejectedError
 from p2pwatch.ports.driven.clock import MonotonicClock, MonotonicInstant, WallClock
 from p2pwatch.ports.driven.disk_space import DiskSpace
@@ -109,9 +110,9 @@ class DownloadCatalogReader(Protocol):
 
     def download_candidates(self) -> tuple[DownloadCandidate, ...]: ...
 
-    def latest_observation(self, file: FileKey) -> ObservedFile | None: ...
+    def latest_observation(self, file: FileKey) -> FileObservation | None: ...
 
-    def best_observation(self, file: FileKey) -> ObservedFile | None: ...
+    def best_observation(self, file: FileKey) -> FileObservation | None: ...
 
 
 @dataclass
@@ -206,7 +207,7 @@ def _target_titles(deps: DownloadDeps, file: FileKey) -> tuple[TargetTitle, ...]
 def _best_filename(deps: DownloadDeps, file: FileKey) -> str:
     """The clean filename; the native id names a file whose observations are gone."""
     best = deps.catalog.best_observation(file)
-    return file.native_id if best is None else best.filename
+    return file.native_id if best is None else best.reported_file.filename
 
 
 async def _record_completion(
@@ -318,13 +319,14 @@ async def _queue_new_candidates(deps: DownloadDeps, outstanding_bytes: int) -> N
                 candidate.file.native_id,
             )
             continue
+        size_bytes = observation.reported_file.size_bytes
         verdict = decide_download(
             tier="download",
             target_status=_target_status(deps.targets, candidate.target_id),
             already_tracked=False,
             free_bytes=free_bytes,
             outstanding_bytes=outstanding_bytes,
-            size_bytes=observation.size_bytes,
+            size_bytes=size_bytes,
             min_free_bytes=deps.min_free_bytes,
         )
         if verdict is not DownloadVerdict.DOWNLOAD:
@@ -335,11 +337,11 @@ async def _queue_new_candidates(deps: DownloadDeps, outstanding_bytes: int) -> N
         # record_queued ONLY here (sync DB write); _start_unlisted sends it (network I/O): the
         # write precedes the network, and a start that raises leaves it 'queued' for next round.
         if deps.downloads.record_queued(
-            candidate.file, candidate.target_id, observation.size_bytes, deps.wall_clock.now()
+            candidate.file, candidate.target_id, size_bytes, deps.wall_clock.now()
         ):
             deadline = deps.monotonic_clock.now() + deps.lost_after
             deps.loss_deadline_by_file[candidate.file] = deadline
-        outstanding_bytes += observation.size_bytes  # the client does not list it yet
+        outstanding_bytes += size_bytes  # the client does not list it yet
         deps.logger.info("candidate file=%s queued for download", candidate.file.native_id)
         await deps.telemetry.emit(DownloadQueued(target_id=candidate.target_id))
 
@@ -359,9 +361,10 @@ async def _start_unlisted(deps: DownloadDeps, listed_files: frozenset[FileKey]) 
         observation = deps.catalog.latest_observation(file)
         if observation is None:
             continue
+        reported_file = observation.reported_file
         try:
             await deps.download_client.start(
-                DownloadRequest(file, observation.filename, observation.size_bytes)
+                DownloadRequest(file, reported_file.filename, reported_file.size_bytes)
             )
         except DownloadRejectedError as error:
             deps.downloads.set_state(file, DownloadState.FAILED, FailureReason.REJECTED)

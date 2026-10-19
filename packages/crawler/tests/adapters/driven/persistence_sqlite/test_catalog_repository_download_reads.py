@@ -10,7 +10,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import Sqlit
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation, ReportedFile
-from p2pwatch.ports.driven.catalog_repository import DownloadCandidate, ObservedFile
+from p2pwatch.ports.driven.catalog_repository import DownloadCandidate
 
 _A = FileKey(Network.ED2K, "a" * 32)
 _B = FileKey(Network.ED2K, "b" * 32)
@@ -123,36 +123,33 @@ def test_download_decisions_isolates_per_target_within_one_hash(
     assert repository.download_candidates() == (DownloadCandidate(file=_A, target_id="062A"),)
 
 
-def test_last_observation_returns_filename_and_size(
+def test_last_observation_returns_the_observation_whole(
     repository: SqliteCatalogRepository,
 ) -> None:
-    repository.record_observation(
-        FileObservation(_reported_file(_A, name="Keroro 062A.avi", size=4242), _T0)
-    )
-    assert repository.latest_observation(_A) == ObservedFile(
-        filename="Keroro 062A.avi", size_bytes=4242
-    )
+    observation = FileObservation(_reported_file(_A, name="Keroro 062A.avi", size=4242), _T0)
+    repository.record_observation(observation)
+    assert repository.latest_observation(_A) == observation
 
 
 def test_last_observation_returns_the_most_recent(
     repository: SqliteCatalogRepository,
 ) -> None:
     repository.record_observation(FileObservation(_reported_file(_A, name="old.avi", size=1), _T0))
-    repository.record_observation(FileObservation(_reported_file(_A, name="new.avi", size=2), _T1))
-    assert repository.latest_observation(_A) == ObservedFile(filename="new.avi", size_bytes=2)
+    newest = FileObservation(_reported_file(_A, name="new.avi", size=2), _T1)
+    repository.record_observation(newest)
+    assert repository.latest_observation(_A) == newest
 
 
 def test_last_observation_unknown_hash_is_none(repository: SqliteCatalogRepository) -> None:
     assert repository.latest_observation(_A) is None
 
 
-def test_best_observation_is_the_clean_name_and_its_size(
+def test_best_observation_is_the_observation_of_the_clean_name(
     repository: SqliteCatalogRepository,
 ) -> None:
-    repository.record_observation(
-        FileObservation(_reported_file(_A, name="clean.avi", size=7), _T0)
-    )
-    assert repository.best_observation(_A) == ObservedFile(filename="clean.avi", size_bytes=7)
+    observation = FileObservation(_reported_file(_A, name="clean.avi", size=7), _T0)
+    repository.record_observation(observation)
+    assert repository.best_observation(_A) == observation
     assert repository.best_observation(_B) is None
 
 

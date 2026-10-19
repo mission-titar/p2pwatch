@@ -15,7 +15,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash, i
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation, ReportedFile, fold_raw_meta
 from p2pwatch.domain.retraction import RETRACTED_TIER
-from p2pwatch.ports.driven.catalog_repository import CatalogRepository, ReevalRow
+from p2pwatch.ports.driven.catalog_repository import CatalogRepository
 from p2pwatch_testing.catalog_rows import count_observations, insert_file
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
@@ -316,42 +316,24 @@ def test_iter_reevaluation_rows_returns_the_latest_observation_per_hash(
 ) -> None:
     # _HASH gets TWO observations a minute apart: only the LATEST must come back.
     # _HASH_B gets a single observation with media metadata present.
+    newest = FileObservation(
+        _reported_file(filename="new.avi", size_bytes=200), _T0 + timedelta(minutes=1)
+    )
+    other = FileObservation(
+        dataclasses.replace(
+            _reported_file(
+                filename="other.avi", size_bytes=300, duration_seconds=1234, bitrate_kbps=1500
+            ),
+            file=FileKey(Network.ED2K, _HASH_B),
+        ),
+        _T0,
+    )
     repository.record_observation(
         FileObservation(_reported_file(filename="old.avi", size_bytes=100), _T0)
     )
-    repository.record_observation(
-        FileObservation(
-            _reported_file(filename="new.avi", size_bytes=200), _T0 + timedelta(minutes=1)
-        )
-    )
-    repository.record_observation(
-        FileObservation(
-            dataclasses.replace(
-                _reported_file(
-                    filename="other.avi", size_bytes=300, duration_seconds=1234, bitrate_kbps=1500
-                ),
-                file=FileKey(Network.ED2K, _HASH_B),
-            ),
-            _T0,
-        )
-    )
-    rows = list(repository.iter_reevaluation_rows())
-    assert rows == [
-        ReevalRow(
-            file=_KEY,
-            filename="new.avi",
-            size_bytes=200,
-            duration_seconds=None,
-            bitrate_kbps=None,
-        ),
-        ReevalRow(
-            file=FileKey(Network.ED2K, _HASH_B),
-            filename="other.avi",
-            size_bytes=300,
-            duration_seconds=1234,
-            bitrate_kbps=1500,
-        ),
-    ]
+    repository.record_observation(newest)
+    repository.record_observation(other)
+    assert list(repository.iter_reevaluation_rows()) == [newest, other]
 
 
 def test_iter_reevaluation_rows_is_empty_with_an_empty_catalogue(
@@ -366,7 +348,10 @@ def test_iter_reevaluation_rows_breaks_an_observed_at_tie_on_the_highest_variant
     # Both rows share observed_at, so the newer variant (higher variant_id) wins.
     repository.record_observation(FileObservation(_reported_file(filename="first.avi"), _T0))
     repository.record_observation(FileObservation(_reported_file(filename="second.avi"), _T0))
-    assert [row.filename for row in repository.iter_reevaluation_rows()] == ["second.avi"]
+    filenames = [
+        observation.reported_file.filename for observation in repository.iter_reevaluation_rows()
+    ]
+    assert filenames == ["second.avi"]
 
 
 def test_count_files_counts_catalogued_hashes_not_observations(

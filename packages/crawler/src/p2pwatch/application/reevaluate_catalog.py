@@ -2,7 +2,7 @@
 
 APPLICATION layer. Iterates every catalogued hash's LATEST observation
 (``catalog.iter_reevaluation_rows()``), rebuilds a :class:`FileCandidate` via
-``candidate_from_fields`` (the single conversion, spec re-evaluation §6), and delegates to
+``ReportedFile.to_candidate`` (the single conversion, spec re-evaluation §6), and delegates to
 the shared ``rejudge_file`` helper (``decisions.py``, which judges the hash on
 all its known filenames) so retraction + notify/download wakes happen identically to the live
 per-observation path (spec §4). Only the counting + per-row error absorption are specific
@@ -16,7 +16,6 @@ from dataclasses import dataclass
 
 from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.application.decisions import rejudge_file
-from p2pwatch.domain.observation import candidate_from_fields
 from p2pwatch.ports.driven.catalog_repository import CatalogRepository
 from p2pwatch.ports.driven.clock import WallClock
 from p2pwatch.ports.driven.logger import Logger
@@ -58,15 +57,13 @@ async def reevaluate_catalog(
     total = catalog.count_files()
     files_evaluated = 0
     rows_written = 0
-    for row in catalog.iter_reevaluation_rows():
+    for observation in catalog.iter_reevaluation_rows():
         files_evaluated += 1
-        candidate = candidate_from_fields(
-            row.filename, row.size_bytes, row.duration_seconds, row.bitrate_kbps
-        )
+        reported_file = observation.reported_file
         try:
             rows_written += await rejudge_file(
-                row.file,
-                candidate,
+                reported_file.file,
+                reported_file.to_candidate(),
                 catalog=catalog,
                 engine=engine,
                 wake_hub=wake_hub,
@@ -76,8 +73,8 @@ async def reevaluate_catalog(
         except RepositoryError as error:
             logger.error(
                 "persistence failed on file=%s:%s (%s): re-evaluation skipped, sweep continues",
-                row.file.network,
-                row.file.native_id,
+                reported_file.file.network,
+                reported_file.file.native_id,
                 error,
             )
         if files_evaluated % _PROGRESS_EVERY == 0:
