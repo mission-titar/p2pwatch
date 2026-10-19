@@ -19,11 +19,7 @@ from catalog_matching.domain.config import MatcherConfig
 from catalog_matching.domain.engine import DecisionRecord
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
-from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
-    PAGE_SIZE,
-    SqliteCatalogFileReader,
-)
-from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
+from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import PAGE_SIZE
 from p2pwatch.adapters.driving.webui.app import (
     _normalize_direction,
     _normalize_sort,
@@ -35,7 +31,6 @@ from p2pwatch.adapters.driving.webui.app import (
     build_app,
 )
 from p2pwatch.adapters.driving.webui.views import DecisionCell, HiddenInput
-from p2pwatch.application.list_files import ListFiles
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.coverage import TargetCoverage
 from p2pwatch.domain.download.states import DownloadState
@@ -114,15 +109,12 @@ _DEFAULT_CALL = ListFilesCall(
 _NO_DB = Path("/nonexistent/p2pwatch.db")
 
 
-def _file_lister(catalog_db: Path) -> ListFiles:
-    return ListFiles(SqliteCatalogFileReader(ReaderProvider(catalog_db)))
-
-
 def _app_on_fakes(
     *,
     crawl_summary: CrawlSummary = _CRAWL_SUMMARY,
     node_state: NodeState = _NODE_STATE,
     file_lister: FakeFileLister = _NO_FILE_LISTER,
+    target_segments: tuple[TargetSegment, ...] | None = None,
     controls: FakeCrawlControls = _NO_CONTROLS,
     amule_url: str = _AMULE_URL,
 ) -> Starlette:
@@ -133,7 +125,7 @@ def _app_on_fakes(
         catalog_db_path=_NO_DB,
         local_db_path=_NO_DB,
         matcher_config=_matcher(),
-        target_segments=_targets(),
+        target_segments=_targets() if target_segments is None else target_segments,
         templates_dir=webui_dir / "templates",
         static_dir=webui_dir / "static",
         crawl_pauser=controls,
@@ -167,12 +159,14 @@ def _one_file(*decisions: DecisionRecord) -> FileListing:
 async def _files_page(
     url: str,
     file_listing: FileListing | None = None,
+    target_segments: tuple[TargetSegment, ...] | None = None,
 ) -> tuple[str, ListFilesCall]:
     """The page rendered from ``file_listing`` (one catalog-tier file by default), and its call."""
     if file_listing is None:
         file_listing = _one_file(_decision("062A", "catalog"))
     file_lister = FakeFileLister(file_listing)
-    text = await _page(_app_on_fakes(file_lister=file_lister), url)
+    app = _app_on_fakes(file_lister=file_lister, target_segments=target_segments)
+    text = await _page(app, url)
     (call,) = file_lister.calls
     return text, call
 
@@ -265,7 +259,7 @@ def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
-        file_lister=_file_lister(catalog_db),
+        file_lister=_NO_FILE_LISTER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -308,7 +302,7 @@ def app_no_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
-        file_lister=_file_lister(catalog_db),
+        file_lister=_NO_FILE_LISTER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -363,7 +357,7 @@ def app_retracted_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette,
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
-        file_lister=_file_lister(catalog_db),
+        file_lister=_NO_FILE_LISTER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -399,7 +393,7 @@ def app_no_observations(catalog_db: Path, local_db: Path) -> tuple[Starlette, st
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
-        file_lister=_file_lister(catalog_db),
+        file_lister=_NO_FILE_LISTER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -443,95 +437,7 @@ def app_unknown_target(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
-        file_lister=_file_lister(catalog_db),
-        amule_url=_AMULE_URL,
-        wall_clock=_WALL_CLOCK,
-        monotonic_clock=_MONOTONIC_CLOCK,
-        source_period_gap=_GAP,
-    )
-    return app, TEST_HASH
-
-
-@pytest.fixture
-def app_download_tier_known_target(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
-    """A non-catalog decision (tier=download) on a target_id resolvable in the current
-    targets.yaml. Task 3 resolution rule: the "resolvable id" case."""
-    with sqlite3.connect(catalog_db) as conn:
-        insert_file(conn, TEST_HASH, 100_000_000)
-        insert_observation(
-            conn,
-            TEST_HASH,
-            "keroro_s2e62a_vf.avi",
-            size_bytes=100_000_000,
-            source_count=5,
-        )
-        insert_decision(conn, TEST_HASH, "062A", "download", rule_name="high_confidence")
-
-    matcher_config = _matcher()
-    targets = _targets()
-
-    import p2pwatch.adapters.driving.webui
-
-    templates_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "templates"
-    static_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "static"
-
-    app = build_app(
-        catalog_db_path=catalog_db,
-        local_db_path=local_db,
-        matcher_config=matcher_config,
-        target_segments=targets,
-        templates_dir=templates_dir,
-        static_dir=static_dir,
-        crawl_pauser=_NO_CONTROLS,
-        crawl_resumer=_NO_CONTROLS,
-        shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_SUMMARIZER,
-        node_describer=_DESCRIBER,
-        file_lister=_file_lister(catalog_db),
-        amule_url=_AMULE_URL,
-        wall_clock=_WALL_CLOCK,
-        monotonic_clock=_MONOTONIC_CLOCK,
-        source_period_gap=_GAP,
-    )
-    return app, TEST_HASH
-
-
-@pytest.fixture
-def app_download_tier_unknown_target(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
-    """A non-catalog decision (tier=download) on a target_id NOT in the current
-    targets.yaml. Task 3 resolution rule: the "unknown id" case."""
-    with sqlite3.connect(catalog_db) as conn:
-        insert_file(conn, TEST_HASH, 100_000_000)
-        insert_observation(
-            conn,
-            TEST_HASH,
-            "keroro_s9e999z_vf.avi",
-            size_bytes=100_000_000,
-            source_count=5,
-        )
-        insert_decision(conn, TEST_HASH, "999Z", "download", rule_name="high_confidence")
-
-    matcher_config = _matcher()
-    targets = _targets()
-
-    import p2pwatch.adapters.driving.webui
-
-    templates_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "templates"
-    static_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "static"
-
-    app = build_app(
-        catalog_db_path=catalog_db,
-        local_db_path=local_db,
-        matcher_config=matcher_config,
-        target_segments=targets,
-        templates_dir=templates_dir,
-        static_dir=static_dir,
-        crawl_pauser=_NO_CONTROLS,
-        crawl_resumer=_NO_CONTROLS,
-        shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_SUMMARIZER,
-        node_describer=_DESCRIBER,
-        file_lister=_file_lister(catalog_db),
+        file_lister=_NO_FILE_LISTER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -729,7 +635,7 @@ def app_vetoed_alias(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
-        file_lister=_file_lister(catalog_db),
+        file_lister=_NO_FILE_LISTER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1266,7 +1172,7 @@ def app_with_media_obs(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
-        file_lister=_file_lister(catalog_db),
+        file_lister=_NO_FILE_LISTER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1327,7 +1233,7 @@ async def test_a_template_reading_what_its_context_lacks_raises(
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
-        file_lister=_file_lister(catalog_db),
+        file_lister=_NO_FILE_LISTER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1426,7 +1332,7 @@ def app_with_hostile_filename(catalog_db: Path, local_db: Path) -> tuple[Starlet
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
-        file_lister=_file_lister(catalog_db),
+        file_lister=_NO_FILE_LISTER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1609,129 +1515,88 @@ def test_to_display_rows_shows_a_file_never_seen_with_unknown_sources() -> None:
 
 
 @pytest.mark.asyncio
-async def test_files_catalog_tier_shows_unidentified(
-    populated_app: tuple[Starlette, str],
-) -> None:
-    """populated_app's decision is tier=catalog → the /files list must show "unidentified",
-    not the resolved id/title."""
-    app, hash_ = populated_app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files")
-    assert resp.status_code == 200
-    assert hash_[:8] in resp.text
+async def test_files_catalog_tier_shows_unidentified() -> None:
+    """A tier=catalog decision → the /files list must show "unidentified", not the resolved
+    id/title."""
+    text, _ = await _files_page("/files", _one_file(_decision("062A", "catalog")))
+    assert TEST_HASH[:8] in text
     # Scoped to the table cell (not the static tier legend, which also mentions the word).
-    assert '<div class="cell-line">unidentified</div>' in resp.text
-    assert "La Grenouille Cosmique" not in resp.text
+    assert '<div class="cell-line">unidentified</div>' in text
+    assert "La Grenouille Cosmique" not in text
 
 
 @pytest.mark.asyncio
-async def test_files_resolvable_target_shows_seasonal_locator_and_title(
-    app_download_tier_known_target: tuple[Starlette, str],
-) -> None:
-    app, _ = app_download_tier_known_target
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files")
-    assert resp.status_code == 200
-    assert "062A / S02E11A" in resp.text
-    assert "La Grenouille Cosmique" in resp.text
+async def test_files_resolvable_target_shows_seasonal_locator_and_title() -> None:
+    text, _ = await _files_page("/files", _one_file(_decision("062A", "download")))
+    assert "062A / S02E11A" in text
+    assert "La Grenouille Cosmique" in text
 
 
 @pytest.mark.asyncio
-async def test_files_table_is_scroll_wrapped_and_name_has_full_title(
-    app_download_tier_known_target: tuple[Starlette, str],
-) -> None:
+async def test_files_table_is_scroll_wrapped_and_name_has_full_title() -> None:
     """The table is wrapped for horizontal scroll on narrow desktop widths, and the (possibly
     truncated) filename keeps its full text in a title= tooltip."""
-    app, _ = app_download_tier_known_target
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files")
-    assert resp.status_code == 200
-    assert '<div class="files-scroll">' in resp.text
-    assert 'class="cell-name" title="keroro_s2e62a_vf.avi"' in resp.text
+    text, _ = await _files_page("/files")
+    assert '<div class="files-scroll">' in text
+    assert 'class="cell-name" title="f.avi"' in text
 
 
 @pytest.mark.asyncio
-async def test_files_unknown_target_shows_raw_id_and_dash_title(
-    app_download_tier_unknown_target: tuple[Starlette, str],
-) -> None:
-    app, _ = app_download_tier_unknown_target
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files")
-    assert resp.status_code == 200
-    assert "999Z" in resp.text
+async def test_files_unknown_target_shows_raw_id_and_dash_title() -> None:
+    text, _ = await _files_page("/files", _one_file(_decision("999Z", "download")))
+    assert "999Z" in text
     # The static tier legend also mentions the word "unidentified": scope to the cell.
-    assert '<div class="cell-line">unidentified</div>' not in resp.text
-    assert "La Grenouille Cosmique" not in resp.text
+    assert '<div class="cell-line">unidentified</div>' not in text
+    assert "La Grenouille Cosmique" not in text
 
 
 @pytest.mark.asyncio
-async def test_files_no_decision_shows_dashes(
-    app_no_decision: tuple[Starlette, str],
-) -> None:
+async def test_files_no_decision_shows_dashes() -> None:
     """No decision at all → target and title both render as "·" cells, never an
-    "unidentified" cell value. The row is only visible with show_unmatched (the
-    matched-only default hides it, cf. test_files_default_hides_unmatched)."""
-    app, hash_ = app_no_decision
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files?show_unmatched=1")
-    assert resp.status_code == 200
-    assert hash_[:8] in resp.text
+    "unidentified" cell value."""
+    text, _ = await _files_page("/files?show_unmatched=1", _one_file())
+    assert TEST_HASH[:8] in text
     # The Target header tooltip also mentions "unidentified": scope to the cell so we
     # assert on the row value, not the static legend text.
-    assert '<div class="cell-line">unidentified</div>' not in resp.text
-    assert "La Grenouille Cosmique" not in resp.text
+    assert '<div class="cell-line">unidentified</div>' not in text
+    assert "La Grenouille Cosmique" not in text
 
 
 @pytest.mark.asyncio
-async def test_files_tier_header_has_tooltip_and_no_legacy_legend(
-    populated_app: tuple[Starlette, str],
-) -> None:
+async def test_files_tier_header_has_tooltip_and_no_legacy_legend() -> None:
     """The tier meanings now live in a "?" header tooltip on the Tier column, replacing the
     old free-standing <p class="tier-legend"> block."""
-    app, _ = populated_app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files")
-    assert resp.status_code == 200
+    text, _ = await _files_page("/files")
     # The legacy legend block is gone.
-    assert 'class="tier-legend"' not in resp.text
-    assert "Tier legend" not in resp.text
+    assert 'class="tier-legend"' not in text
+    assert "Tier legend" not in text
     # A focusable "?" trigger describes a tooltip that enumerates the three tiers.
-    assert 'aria-describedby="tip-tier"' in resp.text
-    assert 'id="tip-tier"' in resp.text
-    assert 'role="tooltip"' in resp.text
-    assert "automatically queued for download" in resp.text
-    assert "flagged for manual review" in resp.text
+    assert 'aria-describedby="tip-tier"' in text
+    assert 'id="tip-tier"' in text
+    assert 'role="tooltip"' in text
+    assert "automatically queued for download" in text
+    assert "flagged for manual review" in text
 
 
 @pytest.mark.asyncio
-async def test_files_nonobvious_columns_have_header_tooltips(
-    populated_app: tuple[Starlette, str],
-) -> None:
+async def test_files_nonobvious_columns_have_header_tooltips() -> None:
     """The other non-obvious columns (Target, Sources) also carry a "?" header tooltip
     explaining their values."""
-    app, _ = populated_app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files")
-    assert resp.status_code == 200
-    assert 'id="tip-target"' in resp.text
-    assert 'id="tip-sources"' in resp.text
+    text, _ = await _files_page("/files")
+    assert 'id="tip-target"' in text
+    assert 'id="tip-sources"' in text
     # A distinctive phrase from each of the two tooltips.
-    assert "the episode this file is matched to" in resp.text  # target
-    assert "peers" in resp.text  # sources
+    assert "the episode this file is matched to" in text  # target
+    assert "peers" in text  # sources
 
 
 @pytest.mark.asyncio
-async def test_target_page_resolves_title_via_segment_mapping(
-    app_download_tier_known_target: tuple[Starlette, str],
-) -> None:
+async def test_target_page_resolves_title_via_segment_mapping() -> None:
     """/targets/{id} shares _to_display_rows with /files: confirm handle_target ALSO
     threads the segment_by_id mapping (both call sites, per the brief)."""
-    app, _ = app_download_tier_known_target
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/targets/062A")
-    assert resp.status_code == 200
-    assert "062A / S02E11A" in resp.text
-    assert "La Grenouille Cosmique" in resp.text
+    text, _ = await _files_page("/targets/062A", _one_file(_decision("062A", "download")))
+    assert "062A / S02E11A" in text
+    assert "La Grenouille Cosmique" in text
 
 
 # ---------------------------------------------------------------------------
@@ -1791,7 +1656,7 @@ def app_whole_episode(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
-        file_lister=_file_lister(catalog_db),
+        file_lister=_NO_FILE_LISTER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1801,22 +1666,18 @@ def app_whole_episode(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]
 
 
 @pytest.mark.asyncio
-async def test_files_whole_episode_renders_one_row_with_aggregated_targets(
-    app_whole_episode: tuple[Starlette, str],
-) -> None:
-    app, hash_ = app_whole_episode
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files")
-    assert resp.status_code == 200
-    assert hash_[:8] in resp.text
-    assert '<div class="cell-line">072A / S03E06A</div>' in resp.text
-    assert '<div class="cell-line">072B / S03E06B</div>' in resp.text
-    assert '<div class="cell-line cell-title" title="Le Defi">Le Defi</div>' in resp.text
+async def test_files_whole_episode_renders_one_row_with_aggregated_targets() -> None:
+    listing = _one_file(_decision("072A", "download"), _decision("072B", "download"))
+    text, _ = await _files_page("/files", listing, _targets_ab())
+    assert text.count(TEST_HASH[:8]) == 1
+    assert '<div class="cell-line">072A / S03E06A</div>' in text
+    assert '<div class="cell-line">072B / S03E06B</div>' in text
+    assert '<div class="cell-line cell-title" title="Le Defi">Le Defi</div>' in text
     assert (
         '<div class="cell-line cell-title" title="Duel Contre Giroro">Duel Contre Giroro</div>'
-        in resp.text
+        in text
     )
-    assert "<td>download</td>" in resp.text
+    assert "<td>download</td>" in text
 
 
 @pytest.mark.asyncio
@@ -1870,7 +1731,7 @@ def app_title_coverage(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
-        file_lister=_file_lister(catalog_db),
+        file_lister=_NO_FILE_LISTER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -2129,25 +1990,18 @@ async def test_files_sort_by_size_renders_the_rows_in_the_order_listed() -> None
 
 
 @pytest.mark.asyncio
-async def test_files_renders_sortable_header_link(populated_app: tuple[Starlette, str]) -> None:
-    app, _ = populated_app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files")
+async def test_files_renders_sortable_header_link() -> None:
+    text, _ = await _files_page("/files")
     # the Name header is a sort link with a data-sort attribute (default state -> not active)
-    assert 'href="/files?sort=name&amp;direction=asc"' in resp.text
-    assert 'data-sort="desc"' in resp.text  # last_seen is the active default column
+    assert 'href="/files?sort=name&amp;direction=asc"' in text
+    assert 'data-sort="desc"' in text  # last_seen is the active default column
 
 
 @pytest.mark.asyncio
-async def test_target_page_headers_are_plain_text(
-    app_download_tier_known_target: tuple[Starlette, str],
-) -> None:
-    app, _ = app_download_tier_known_target
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/targets/062A")
-    assert resp.status_code == 200
+async def test_target_page_headers_are_plain_text() -> None:
+    text, _ = await _files_page("/targets/062A")
     # no sort links on a target page (headers tuple is empty -> the {% else %} plain label renders)
-    assert "?sort=" not in resp.text
+    assert "?sort=" not in text
 
 
 @pytest.mark.asyncio
@@ -2229,18 +2083,14 @@ async def test_files_renders_search_prefill_and_facet() -> None:
 
 
 @pytest.mark.asyncio
-async def test_files_filter_bar_wraps_facets_then_search(
-    populated_app: tuple[Starlette, str],
-) -> None:
+async def test_files_filter_bar_wraps_facets_then_search() -> None:
     """The facet chips and the search form share one .filter-bar row, chips first.
 
     The order is the layout contract: the row is a flex line and the form is pushed right by
     `margin-left: auto`, which only lands the form on the right if it is the LAST child.
     """
-    app, _ = populated_app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files")
-    row = re.search(r'<div class="filter-bar">(.*?)</div>', resp.text, re.DOTALL)
+    text, _ = await _files_page("/files")
+    row = re.search(r'<div class="filter-bar">(.*?)</div>', text, re.DOTALL)
     assert row is not None  # the wrapper is a div now, no longer the form itself
     inner = row.group(1)
     facet_at = inner.find('<nav class="tier-facet"')
@@ -2252,16 +2102,12 @@ async def test_files_filter_bar_wraps_facets_then_search(
 
 
 @pytest.mark.asyncio
-async def test_target_page_has_no_filter_bar(
-    app_download_tier_known_target: tuple[Starlette, str],
-) -> None:
-    app, _ = app_download_tier_known_target
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/targets/062A")
-    assert 'name="search"' not in resp.text  # no search form on a target page
-    assert "tier-facet" not in resp.text  # no facet on a target page
-    assert "filter-bar" not in resp.text  # the wrapper itself renders nothing either
-    assert "files-search" not in resp.text
+async def test_target_page_has_no_filter_bar() -> None:
+    text, _ = await _files_page("/targets/062A")
+    assert 'name="search"' not in text  # no search form on a target page
+    assert "tier-facet" not in text  # no facet on a target page
+    assert "filter-bar" not in text  # the wrapper itself renders nothing either
+    assert "files-search" not in text
 
 
 # ---------------------------------------------------------------------------
@@ -2349,16 +2195,11 @@ async def test_nav_pages_render_no_page_title(
 
 
 @pytest.mark.asyncio
-async def test_target_page_renders_its_own_heading(
-    app_download_tier_known_target: tuple[Starlette, str],
-) -> None:
+async def test_target_page_renders_its_own_heading() -> None:
     """/targets/{id} reuses files.html but is NOT a nav destination, so nothing else would name
     it: it passes its own heading in the ``headings`` tuple (files.html itself renders none)."""
-    app, _ = app_download_tier_known_target
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/targets/062A")
-    assert resp.status_code == 200
-    assert "<h1>Files for target 062A</h1>" in resp.text
+    text, _ = await _files_page("/targets/062A")
+    assert "<h1>Files for target 062A</h1>" in text
 
 
 # ---------------------------------------------------------------------------
