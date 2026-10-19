@@ -5,12 +5,12 @@ LATEST match decision **per target** (ROW_NUMBER window PARTITION BY ``(file_id,
 so a whole-episode file contributes to every target it matches. The legacy ``target_id=''``
 sentinel and per-target ``retracted`` rows are excluded.
 
+``SqliteCatalogFileReader`` reads the files page's ``(matched, total)`` counts and its tier facet.
+
 ``CatalogReader`` exposes these reads:
 
 - ``list_files()``: filtered paginated explorer (files ⨝ latest observation ⨝
   latest decision, optional filters + LIMIT/OFFSET).
-- ``count_files()``: ``(matched, total)`` counts over the same filtered source, for the
-  /files summary line.
 - ``file_detail()``: the timeline of observations in a window, the latest one, known names + current
   decisions for a given ``file_id``; ``None`` if the file is unknown.
 - ``source_periods()``: a file's source history in a window, one period per row, newest first.
@@ -23,6 +23,7 @@ All SQL lives in module constants, parameterized (no value interpolation).
 """
 
 import sqlite3
+from collections.abc import Mapping
 
 from catalog_matching.domain.config import TIER_RANK
 from p2pwatch.adapters.driven.persistence_sqlite.observation_read import (
@@ -47,6 +48,7 @@ from p2pwatch.adapters.driving.webui.views import (
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceKey, SourceRole
+from p2pwatch.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.ports.driven.coverage_reader import CoverageReader
 
 # ---------------------------------------------------------------------------
@@ -184,7 +186,8 @@ FROM files AS f
 # Counter for the /files summary: file-based totals over the same source + filters (the
 # matched-only clause is deliberately absent). ``matched`` = files with at least one current
 # decision (``dec.target_ids`` is non-NULL). COUNT(DISTINCT …) keeps both counts file-based
-# and yields 0 (not NULL) on an empty catalogue. count_files() appends the joins.
+# and yields 0 (not NULL) on an empty catalogue. read_matched_and_total_file_counts() appends
+# the joins.
 _SQL_COUNT_FILES_BASE = (
     _SQL_CTES
     + """\
@@ -388,35 +391,35 @@ _WHERE_NAME_HASHLESS = "WHERE v.name = :key AND v.source_id IS NULL\n"
 
 
 def _filter_clauses(
-    target: str | None,
+    target_id: str | None,
     tier: str | None,
-    query: str | None,
+    search_text: str | None,
 ) -> tuple[list[str], list[str]]:
     """Shared WHERE clauses + params for the explorer list and its counter.
 
-    ``target``/``tier`` match a file if ANY of its current decisions matches (EXISTS over the
+    ``target_id``/``tier`` match a file if ANY of its current decisions matches (EXISTS over the
     ``latest_dec`` CTE), so a whole-episode file appears under each of its targets. The
-    ``target`` clause additionally excludes ``catalog``-tier rows (they are pinned to ``001A``),
+    ``target_id`` clause additionally excludes ``catalog``-tier rows (they are pinned to ``001A``),
     consistent with ``coverage_of``. The matched-only clause and LIMIT/OFFSET are list-specific
     and are NOT built here.
     """
     clauses: list[str] = []
     params: list[str] = []
-    if target is not None:
+    if target_id is not None:
         clauses.append(
             "EXISTS (SELECT 1 FROM latest_dec AS fdt"
             " WHERE fdt.file_id = f.file_id AND fdt.target_id = ? AND fdt.tier != 'catalog')"
         )
-        params.append(target)
+        params.append(target_id)
     if tier is not None:
         clauses.append(
             "EXISTS (SELECT 1 FROM latest_dec AS fdt"
             " WHERE fdt.file_id = f.file_id AND fdt.tier = ?)"
         )
         params.append(tier)
-    if query is not None:
+    if search_text is not None:
         clauses.append("obs.filename LIKE ?")
-        params.append(f"%{query}%")
+        params.append(f"%{search_text}%")
     return clauses, params
 
 
@@ -444,9 +447,9 @@ def _period_view(row: sqlite3.Row) -> SourcePeriodView:
     )
 
 
-def _latest_observation_join(query: str | None) -> str:
+def _latest_observation_join(search_text: str | None) -> str:
     """The counters' join to the latest observation, which only the name filter reads."""
-    return "" if query is None else _JOIN_LATEST_OBSERVATION
+    return "" if search_text is None else _JOIN_LATEST_OBSERVATION
 
 
 def _split_concat(concat: str | None) -> list[str]:
@@ -471,6 +474,46 @@ class SqliteCoverageReader(CoverageReader):
 # ---------------------------------------------------------------------------
 # CatalogReader
 # ---------------------------------------------------------------------------
+
+
+class SqliteCatalogFileReader(CatalogFileReader):
+    """Reads through the calling thread's read-only connection."""
+
+    def __init__(self, reader_provider: ReaderProvider) -> None:
+        self._reader_provider = reader_provider
+
+    def read_matched_and_total_file_counts(
+        self,
+        *,
+        target_id: str | None,
+        tier: str | None,
+        search_text: str | None,
+    ) -> tuple[int, int]:
+        """Not narrowed by the files page's ``matched_only``."""
+        clauses, params = _filter_clauses(target_id, tier, search_text)
+        sql = _SQL_COUNT_FILES_BASE + _latest_observation_join(search_text) + _JOIN_DECISIONS
+        if clauses:
+            sql += "WHERE " + " AND ".join(clauses) + "\n"
+        row = self._reader_provider.connection().execute(sql, params).fetchone()
+        matched: int = row["matched"]
+        total: int = row["total"]
+        return (matched, total)
+
+    def read_file_count_by_tier(
+        self,
+        *,
+        target_id: str | None,
+        search_text: str | None,
+    ) -> Mapping[str, int]:
+        """Never a tier filter: each facet shows the count its choice would give; a multi-tier
+        file counts under each of its tiers."""
+        clauses, params = _filter_clauses(target_id, None, search_text)
+        sql = _SQL_TIER_COUNTS_BASE + _latest_observation_join(search_text)
+        if clauses:
+            sql += "WHERE " + " AND ".join(clauses) + "\n"
+        sql += "GROUP BY ld.tier\n"
+        rows = self._reader_provider.connection().execute(sql, params).fetchall()
+        return {row["tier"]: row["n"] for row in rows}
 
 
 class CatalogReader:
@@ -554,47 +597,6 @@ class CatalogReader:
                 )
             )
         return result
-
-    def count_files(
-        self,
-        *,
-        target: str | None,
-        tier: str | None,
-        query: str | None,
-    ) -> tuple[int, int]:
-        """Return ``(matched, total)`` file counts in the current filter scope.
-
-        ``total`` = files matching the ``target/tier/query`` filters (the
-        matched-only clause is deliberately NOT applied); ``matched`` = of those, how many
-        have a match decision. Feeds the /files summary line.
-        """
-        clauses, params = _filter_clauses(target, tier, query)
-        sql = _SQL_COUNT_FILES_BASE + _latest_observation_join(query) + _JOIN_DECISIONS
-        if clauses:
-            sql += "WHERE " + " AND ".join(clauses) + "\n"
-        row = self._conn.execute(sql, params).fetchone()
-        matched: int = row["matched"]
-        total: int = row["total"]
-        return (matched, total)
-
-    def tier_counts(
-        self,
-        *,
-        target: str | None,
-        query: str | None,
-    ) -> dict[str, int]:
-        """Return ``{tier: file_count}`` for the tier facet, applying the ``target``/``query``
-        filters but NEVER a tier filter (facet-lite: each option shows the count you
-        would get by choosing it). A file counts under every tier it currently holds a decision
-        in (a multi-tier file appears in two facets). ``{}`` on an empty/undecided catalogue.
-        """
-        clauses, params = _filter_clauses(target, None, query)
-        sql = _SQL_TIER_COUNTS_BASE + _latest_observation_join(query)
-        if clauses:
-            sql += "WHERE " + " AND ".join(clauses) + "\n"
-        sql += "GROUP BY ld.tier\n"
-        rows = self._conn.execute(sql, params).fetchall()
-        return {row["tier"]: row["n"] for row in rows}
 
     # ------------------------------------------------------------------
     # Detail
