@@ -47,7 +47,10 @@ from p2pwatch.adapters.driven.observability.prometheus_sink import (
 from p2pwatch.adapters.driven.persistence_sqlite.backoff_state_repository import (
     SqliteBackoffStateRepository,
 )
-from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import SqliteCoverageReader
+from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
+    SqliteCatalogFileReader,
+    SqliteCoverageReader,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
 from p2pwatch.adapters.driven.persistence_sqlite.download_repository import SqliteDownloadRepository
@@ -66,6 +69,7 @@ from p2pwatch.adapters.driving.process.posix_process import PosixProcess
 from p2pwatch.adapters.driving.webui.app import build_app as build_webui_app
 from p2pwatch.adapters.driving.webui.uvicorn_server_thread import UvicornServerThread
 from p2pwatch.application.describe_node import DescribeNode
+from p2pwatch.application.list_files import ListFiles
 from p2pwatch.application.pause_crawl import PauseCrawl
 from p2pwatch.application.reevaluate_catalog import reevaluate_catalog
 from p2pwatch.application.request_shutdown import RequestShutdown
@@ -169,6 +173,9 @@ class CrawlerApp(CrawlerRunner):
                 monotonic_clock=monotonic_clock,
             ),
             node_describer=DescribeNode(node_state_reader),
+            file_lister=ListFiles(
+                SqliteCatalogFileReader(ReaderProvider(crawler_config.catalog_db_path))
+            ),
             amule_url=crawler_config.webui.amule_url,
             wall_clock=wall_clock,
             monotonic_clock=monotonic_clock,

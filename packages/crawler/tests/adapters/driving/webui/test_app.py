@@ -19,7 +19,11 @@ from catalog_matching.domain.config import MatcherConfig
 from catalog_matching.domain.engine import DecisionRecord
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
-from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import PAGE_SIZE
+from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
+    PAGE_SIZE,
+    SqliteCatalogFileReader,
+)
+from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driving.webui.app import (
     _normalize_direction,
     _normalize_sort,
@@ -31,7 +35,8 @@ from p2pwatch.adapters.driving.webui.app import (
     build_app,
 )
 from p2pwatch.adapters.driving.webui.views import DecisionCell, HiddenInput
-from p2pwatch.domain.catalog_entry import CatalogEntry
+from p2pwatch.application.list_files import ListFiles
+from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.coverage import TargetCoverage
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import FileKey, Network
@@ -95,6 +100,10 @@ _DESCRIBER = FakeNodeDescriber(NodeDescription(_NODE_STATE))
 _NO_DB = Path("/nonexistent/p2pwatch.db")
 
 
+def _file_lister(catalog_db: Path) -> ListFiles:
+    return ListFiles(SqliteCatalogFileReader(ReaderProvider(catalog_db)))
+
+
 def _app_on_fakes(
     *,
     crawl_summary: CrawlSummary = _CRAWL_SUMMARY,
@@ -117,6 +126,7 @@ def _app_on_fakes(
         shutdown_requester=controls,
         crawl_summarizer=FakeCrawlSummarizer(crawl_summary),
         node_describer=FakeNodeDescriber(NodeDescription(node_state)),
+        file_lister=_file_lister(_NO_DB),
         amule_url=amule_url,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -219,6 +229,7 @@ def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
+        file_lister=_file_lister(catalog_db),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -261,6 +272,7 @@ def app_no_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
+        file_lister=_file_lister(catalog_db),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -315,6 +327,7 @@ def app_retracted_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette,
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
+        file_lister=_file_lister(catalog_db),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -350,6 +363,7 @@ def app_no_observations(catalog_db: Path, local_db: Path) -> tuple[Starlette, st
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
+        file_lister=_file_lister(catalog_db),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -393,6 +407,7 @@ def app_unknown_target(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
+        file_lister=_file_lister(catalog_db),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -436,6 +451,7 @@ def app_download_tier_known_target(catalog_db: Path, local_db: Path) -> tuple[St
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
+        file_lister=_file_lister(catalog_db),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -479,6 +495,7 @@ def app_download_tier_unknown_target(catalog_db: Path, local_db: Path) -> tuple[
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
+        file_lister=_file_lister(catalog_db),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -729,6 +746,7 @@ def app_vetoed_alias(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
+        file_lister=_file_lister(catalog_db),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1279,6 +1297,7 @@ def app_with_media_obs(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
+        file_lister=_file_lister(catalog_db),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1339,6 +1358,7 @@ async def test_a_template_reading_what_its_context_lacks_raises(
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
+        file_lister=_file_lister(catalog_db),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1437,6 +1457,7 @@ def app_with_hostile_filename(catalog_db: Path, local_db: Path) -> tuple[Starlet
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
+        file_lister=_file_lister(catalog_db),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1514,6 +1535,7 @@ async def test_files_page_shows_pagination_navigation(catalog_db: Path, local_db
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
+        file_lister=_file_lister(catalog_db),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1833,6 +1855,7 @@ def app_whole_episode(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
+        file_lister=_file_lister(catalog_db),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1925,6 +1948,7 @@ def app_title_coverage(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
+        file_lister=_file_lister(catalog_db),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -2129,16 +2153,16 @@ async def test_dashboard_shows_a_client_not_read_yet() -> None:
 
 
 def test_normalize_sort_valid_unknown_missing() -> None:
-    assert _normalize_sort("size") == "size"
-    assert _normalize_sort("bogus") == "last_seen"
-    assert _normalize_sort("size; drop table files") == "last_seen"
-    assert _normalize_sort(None) == "last_seen"
+    assert _normalize_sort("size") is CatalogEntrySort.SIZE
+    assert _normalize_sort("bogus") is CatalogEntrySort.LAST_SEEN
+    assert _normalize_sort("size; drop table files") is CatalogEntrySort.LAST_SEEN
+    assert _normalize_sort(None) is CatalogEntrySort.LAST_SEEN
 
 
 def test_normalize_dir_valid_unknown_missing() -> None:
-    assert _normalize_direction("asc") == "asc"
-    assert _normalize_direction("bogus") == "desc"
-    assert _normalize_direction(None) == "desc"
+    assert _normalize_direction("asc") is SortDirection.ASC
+    assert _normalize_direction("bogus") is SortDirection.DESC
+    assert _normalize_direction(None) is SortDirection.DESC
 
 
 def test_sort_headers_default_state_no_filters() -> None:
@@ -2195,6 +2219,7 @@ def sortable_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, list[str]
         shutdown_requester=_NO_CONTROLS,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
+        file_lister=_file_lister(catalog_db),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
