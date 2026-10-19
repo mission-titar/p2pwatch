@@ -17,3 +17,6 @@ invalid:
   - from pathlib import Path
   - from pathlib import PurePath, Path
   - from pathlib import PurePath as P
+  - import asyncio as aio
+  - import uuid as u
+  - import io as i

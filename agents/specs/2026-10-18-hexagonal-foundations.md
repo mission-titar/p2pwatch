@@ -222,7 +222,10 @@ the poe tasks follow.
   not import each other, that the six hexagons stay apart, and that no module escapes its declaration.
   (Corrected 2026-10-19: `tach check` never sees an import across distributions, so `visibility` would check
   nothing; `tach check-external`, run after it, keeps the hexagons apart against each package's declared
-  dependencies.)
+  dependencies.) (Corrected 2026-10-19: `check-external` refuses only an undeclared import, as deptry already
+  did, so a test, `packages/crawler/tests/test_workspace_dependencies.py`, holds the workspace's internal
+  dependencies to exactly `p2pwatch` on `catalog-matching` and on `p2pwatch-testing` (`dev`), and
+  `p2pwatch-testing` on `p2pwatch`; the operator's choice at the holistic review.)
 - **ast-grep** checks that the core imports only from a short list per ring (the pure standard library it uses
   today, a few `asyncio` and `uuid` names, `PurePath`). `logging` stays allowed in `application/` until lot 2.
 - The ban on `Protocol` waits for lots 2 and 3, which remove the last ones.
@@ -239,8 +242,6 @@ them anyway. Port-sync's logger, `p2pwatch_amule.port_sync`, is its only output:
 
 ### Blocks
 
-| # | Branch | Holds | Lines, files |
-|---|---|---|---|
 (Corrected 2026-10-19: re-measured on a dry run of the whole lot on `013252c`; blocks 30, 60, 70 and 80 split.)
 
 | # | Branch | Holds | Lines, files |
@@ -280,7 +281,8 @@ them anyway. Port-sync's logger, `p2pwatch_amule.port_sync`, is its only output:
 6. **The commands**: `python -m p2pwatch --config deploy/crawler.yml` exits 2 with a usage line,
    `python -m p2pwatch.merge` finds no module, `python -m p2pwatch validate-config` prints "Config valid" (with
    `AMULE_API_PASSWORD` set), and every package's `--help` lists its subcommands.
-7. **The check refuses what it should** (lot 1b, block 80): `architecture-check` passes, then fails on a domain
+7. **The check refuses what it should** (lot 1b, block 80; Corrected 2026-10-19: its cross-hexagon and ast-grep
+   parts in block 85): `architecture-check` passes, then fails on a domain
    module importing `application/`, on an adapter importing another adapter, on `p2pwatch_amule` importing
    `p2pwatch`, and on an undeclared new module. ast-grep fails on `import sqlite3` in the domain and passes on
    `import dataclasses`.
@@ -345,7 +347,7 @@ Taken on `main` at `07f57c1` on 2026-10-18 and recounted by the spec review. Re-
   `release` and `dockerfile`.
 - Lot 1b re-measured on `013252c` on 2026-10-19, by a dry run of every block in a throwaway worktree
   (`.reviews/lot1b-measure.md`): 32 temporary exceptions (`p2pwatch` 12, `vex_checks` 13, `p2pwatch_amule` 3,
-  `amule_bump` 3, `coverage_checks` 1), no core module importing an adapter, no hexagon importing another;
+  `amule_bump` 3, `coverage_checks` 1) (Corrected 2026-10-19: 31, `amule_bump` 2, since block 77), no core module importing an adapter, no hexagon importing another;
   `uv run poe check` green at the top. Blocks 70, 77 and 85 add about 60, 30 and 30 lines to the dry run's, for the
   command line owning every option and `AGENTS.md`'s full rules.
 
@@ -393,7 +395,10 @@ Details the body leaves out, each settled during the Discuss or the review.
   (`uuid5`, `NAMESPACE_URL`), `pathlib` by `PurePath`, plus `configparser` and `io` for `p2pwatch_amule`,
   `difflib` and `textwrap` for `amule_bump`, `ast` for `coverage_checks`. (Corrected 2026-10-19: one list per ring,
   these included, since a rule's files cannot be scoped by hexagon without copying its list; `io` by name,
-  `StringIO`, as `asyncio` and `uuid` are.)
+  `StringIO`, as `asyncio` and `uuid` are.) (Corrected 2026-10-19: that reason holds for a list, not for one
+  module: `configparser`, whose parsers read files, is refused in every domain but `p2pwatch_amule`'s by a
+  second rule that ignores it; the pure modules stay shared. The core's I/O builtins (`open`, `print`,
+  `input`, `__import__`, `exec`, `eval`) are refused by a third.)
 - **The strings to rewrite by hand**, beyond the logger names: the `importlib.resources` package strings (6
   files), the monkeypatch dotted targets (5), the template paths anchored on `p2pwatch.webui`, the 17
   `tests_without_unit` keys, `vex_checks/repo.py`'s `parents[4]`, the comment of `deploy/matcher.yml:59`.

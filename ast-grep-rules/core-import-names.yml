@@ -12,6 +12,9 @@ rule:
     - pattern: io.$IO
     - kind: import_from_statement
       has: { field: module_name, regex: ^(asyncio|uuid|io)$ }
+    - kind: aliased_import
+      has: { field: name, regex: ^(asyncio|uuid|io)$ }
+      inside: { kind: import_statement }
     - kind: dotted_name
       matches: imported-module
       regex: ^pathlib$

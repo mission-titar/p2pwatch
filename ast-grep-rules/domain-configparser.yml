@@ -1,0 +1,10 @@
+id: domain-configparser
+language: python
+severity: error
+message: Only `p2pwatch_amule`'s domain imports `configparser`, whose parsers can also read files.
+note: "Parse a string with `read_string`; reading the file is an adapter's."
+files: ["packages/*/src/*/domain/**/*.py"]
+ignores: ["packages/amule/src/p2pwatch_amule/domain/**"]
+rule:
+  matches: imported-module
+  regex: ^configparser$

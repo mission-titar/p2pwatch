@@ -1,0 +1,13 @@
+id: core-builtins
+valid:
+  - await client.open()
+  - self.print(line)
+  - pattern = re.compile("x")
+  - handle = opener
+invalid:
+  - open("/etc/passwd")
+  - print("x")
+  - answer = input()
+  - os = __import__("os")
+  - exec("import os")
+  - eval("1")
