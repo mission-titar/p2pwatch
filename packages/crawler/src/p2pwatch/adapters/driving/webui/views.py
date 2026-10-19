@@ -64,35 +64,6 @@ class ClientLine:
 
 
 # ---------------------------------------------------------------------------
-# File explorer
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class FileDecision:
-    """One current decision on a file: the latest match decision for a given
-    ``(file, target_id)``, already filtered to exclude retractions and the legacy
-    ``target_id == ""`` sentinel (webui spec §9). A whole-episode file carries two (``072A``
-    and ``072B``); an unidentified file carries one (``tier == "catalog"``); a file with no
-    current match carries none."""
-
-    target_id: str
-    tier: str
-
-
-@dataclass(frozen=True)
-class FileRow:
-    """Summary view of a file for the explorer (paginated list)."""
-
-    file: FileKey
-    size_bytes: int
-    filename: str  # latest observed name
-    source_count: int | None  # latest observation's count; None for a file never seen
-    last_seen: str  # observed_at of the latest observation (ISO-8601 UTC)
-    decisions: tuple[FileDecision, ...]  # current decisions, latest per target, 0..N
-
-
-# ---------------------------------------------------------------------------
 # File detail
 # ---------------------------------------------------------------------------
 
@@ -252,7 +223,7 @@ class DecisionCell:
 class FileRowDisplay:
     """Row of the paginated file list: all fields precomputed (webui spec W-D8, Task 3/9).
 
-    A file usually carries 0, 1, or 2 current decisions (``FileRow.decisions``, already
+    A file usually carries 0, 1, or 2 current decisions (``CatalogEntry.decisions``, already
     excluding retractions and the legacy ``target_id == ""`` sentinel: those never reach
     this layer). Each current decision becomes one ``DecisionCell`` in ``decisions_display``:
 

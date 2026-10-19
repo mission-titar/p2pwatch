@@ -5,12 +5,12 @@ LATEST match decision **per target** (ROW_NUMBER window PARTITION BY ``(file_id,
 so a whole-episode file contributes to every target it matches. The legacy ``target_id=''``
 sentinel and per-target ``retracted`` rows are excluded.
 
-``SqliteCatalogFileReader`` reads the files page's ``(matched, total)`` counts and its tier facet.
+``SqliteCatalogFileReader`` reads the files page: its entries (files ⨝ latest observation ⨝
+current decisions, optional filters + LIMIT/OFFSET), their ``(matched, total)`` counts and their
+tier facet.
 
 ``CatalogReader`` exposes these reads:
 
-- ``list_files()``: filtered paginated explorer (files ⨝ latest observation ⨝
-  latest decision, optional filters + LIMIT/OFFSET).
 - ``file_detail()``: the timeline of observations in a window, the latest one, known names + current
   decisions for a given ``file_id``; ``None`` if the file is unknown.
 - ``source_periods()``: a file's source history in a window, one period per row, newest first.
@@ -26,19 +26,19 @@ import sqlite3
 from collections.abc import Mapping
 
 from catalog_matching.domain.config import TIER_RANK
+from catalog_matching.domain.engine import DecisionRecord
 from p2pwatch.adapters.driven.persistence_sqlite.observation_read import (
     LATEST_OBSERVATION_CTE,
     best_observation,
     known_filenames,
     latest_observation,
+    observation_from_row,
     observations_between,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driving.webui.views import (
     DecisionView,
-    FileDecision,
     FileDetail,
-    FileRow,
     NameDetail,
     PeriodWindow,
     SourceDetail,
@@ -46,6 +46,7 @@ from p2pwatch.adapters.driving.webui.views import (
     SourcePeriodView,
     SourceRow,
 )
+from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch.ports.driven.catalog_file_reader import CatalogFileReader
@@ -58,19 +59,17 @@ from p2pwatch.ports.driven.coverage_reader import CoverageReader
 PAGE_SIZE = 50
 _PAGE_SIZE = PAGE_SIZE  # historical alias (internal); the public value is used by the handler
 
-# Sort allowlist (webui spec §3.1): a query-param key maps to a FIXED ORDER BY expression; no
-# param value is ever interpolated into SQL. ``tier`` sorts by the file's strongest tier rank
+# Sort allowlist (webui spec §3.1): a sort maps to a FIXED ORDER BY expression; no param value is
+# ever interpolated into SQL. ``tier`` sorts by the file's strongest tier rank
 # (``dec.best_tier_rank``, MAX of the TIER_RANK CASE). Direction maps through a fixed set too.
-SORT_COLUMNS: dict[str, str] = {
-    "name": "obs.filename",
-    "size": "f.size_bytes",
-    "sources": "obs.source_count",
-    "last_seen": "obs.observed_at",
-    "tier": "dec.best_tier_rank",
+SORT_COLUMNS: dict[CatalogEntrySort, str] = {
+    CatalogEntrySort.NAME: "obs.filename",
+    CatalogEntrySort.SIZE: "f.size_bytes",
+    CatalogEntrySort.SOURCES: "obs.source_count",
+    CatalogEntrySort.LAST_SEEN: "obs.observed_at",
+    CatalogEntrySort.TIER: "dec.best_tier_rank",
 }
-SORT_DIRECTIONS: dict[str, str] = {"asc": "ASC", "desc": "DESC"}
-DEFAULT_SORT = "last_seen"
-DEFAULT_DIR = "desc"
+SORT_DIRECTIONS: dict[SortDirection, str] = {SortDirection.ASC: "ASC", SortDirection.DESC: "DESC"}
 
 
 def _tier_rank_case(column: str) -> str:
@@ -121,15 +120,16 @@ ORDER BY ld.target_id, ld.file_id
 #
 # ``latest_dec`` keeps the latest decision per (file_id, target_id), dropping the legacy
 # ``target_id == ''`` sentinel and any target whose latest row is a ``retracted`` marker;
-# ``dec_agg`` folds those to ONE row per file, target_ids/tiers ``char(31)``-joined and both
-# ordered by target_id so the two lists stay index-aligned (spec §9, rendering A).
+# ``dec_agg`` folds those to ONE row per file, target_ids/rule_names/tiers ``char(31)``-joined
+# and all ordered by target_id so the lists stay index-aligned (spec §9, rendering A).
 _SQL_CTES = f"""\
 WITH latest_dec AS (
-    SELECT file_id, target_id, tier
+    SELECT file_id, target_id, rule_name, tier
     FROM (
         SELECT
             md.file_id,
             md.target_id,
+            md.rule_name,
             md.tier,
             ROW_NUMBER() OVER (
                 PARTITION BY md.file_id, md.target_id
@@ -145,6 +145,7 @@ dec_agg AS (
     SELECT
         ld.file_id,
         group_concat(ld.target_id, char(31) ORDER BY ld.target_id) AS target_ids,
+        group_concat(ld.rule_name, char(31) ORDER BY ld.target_id) AS rule_names,
         group_concat(ld.tier, char(31) ORDER BY ld.target_id) AS tiers,
         MAX({_TIER_RANK_CASE}) AS best_tier_rank
     FROM latest_dec AS ld
@@ -158,24 +159,25 @@ dec_agg AS (
 _JOIN_LATEST_OBSERVATION = "LEFT JOIN latest_observation AS obs ON obs.file_id = f.file_id\n"
 _JOIN_DECISIONS = "LEFT JOIN dec_agg AS dec ON dec.file_id = f.file_id\n"
 
-# Integer microseconds back to ``utc_iso``'s fixed-width text, the explorer's last seen.
-_ISO = (
-    "strftime('%Y-%m-%dT%H:%M:%S', {0} / 1000000, 'unixepoch')"
-    " || printf('.%06d+00:00', {0} % 1000000)"
-)
-
-# Explorer: files + latest joins, driven by files. Optional filters added in list_files().
+# Explorer: files + latest joins, driven by files; read_catalog_entries() adds the filters.
+# The latest observation's columns first, in the order ``observation_from_row`` maps them.
 _SQL_LIST_FILES_BASE = (
     _SQL_CTES
-    + f"""\
+    + """\
 SELECT
-    f.network,
-    f.native_id,
-    f.size_bytes,
-    obs.filename AS filename,
-    obs.source_count AS source_count,
-    {_ISO.format("obs.observed_at")} AS last_seen,
+    obs.network,
+    obs.native_id,
+    obs.filename,
+    obs.size_bytes,
+    obs.source_count,
+    obs.keyword,
+    obs.duration_seconds,
+    obs.bitrate_kbps,
+    obs.raw_meta,
+    obs.observed_at,
+    f.size_bytes AS file_size_bytes,
     dec.target_ids,
+    dec.rule_names,
     dec.tiers
 FROM files AS f
 """
@@ -515,49 +517,25 @@ class SqliteCatalogFileReader(CatalogFileReader):
         rows = self._reader_provider.connection().execute(sql, params).fetchall()
         return {row["tier"]: row["n"] for row in rows}
 
-
-class CatalogReader:
-    """Read-only access to the catalog via a SQLite connection (see ``reader.open_reader``)."""
-
-    def __init__(self, connection: sqlite3.Connection) -> None:
-        self._conn = connection
-
     # ------------------------------------------------------------------
     # Filtered paginated explorer
     # ------------------------------------------------------------------
 
-    def list_files(
+    def read_catalog_entries(
         self,
         *,
-        target: str | None,
+        target_id: str | None,
         tier: str | None,
-        query: str | None,
-        page: int,
-        matched_only: bool = False,
-        sort: str = DEFAULT_SORT,
-        direction: str = DEFAULT_DIR,
-    ) -> list[FileRow]:
-        """Return a page of ``FileRow`` (size ``_PAGE_SIZE``) with optional filters.
-
-        Filters:
-        - ``target`` : keep a file if ANY of its current decisions matches this target_id.
-        - ``tier``   : keep a file if ANY of its current decisions has this tier.
-        - ``query``  : substring (LIKE ``%query%``) of the latest name.
-        - ``matched_only``: when true, keep only files with at least one current decision
-          (retractions and the legacy ``target_id == ''`` sentinel never produce one).
-          Default false = whole catalogue.
-        - ``page``   : page number (1-based).
-
-        Sort:
-        - ``sort``     : one of the ``SORT_COLUMNS`` allowlist keys
-          (``name``/``size``/``sources``/``last_seen``/``tier``); an unknown key falls back to
-          ``DEFAULT_SORT`` (``last_seen``). ``tier`` sorts by the file's strongest tier rank.
-        - ``direction``: ``asc`` or ``desc``; an unknown value falls back to ``DEFAULT_DIR``
-          (``desc``). SQLite sorts NULLs first in ASC, so a NULL ``filename``/``observed_at``
-          (a file with no observation) clusters predictably. The ``file_id`` tiebreak keeps
-          paging stable.
-        """
-        clauses, str_params = _filter_clauses(target, tier, query)
+        search_text: str | None,
+        matched_only: bool,
+        sort: CatalogEntrySort,
+        direction: SortDirection,
+        limit: int,
+        offset: int,
+    ) -> tuple[CatalogEntry, ...]:
+        """``tier`` sorts on the strongest tier; a file never seen sorts first in ASC (NULLs
+        first), and the ``file_id`` tiebreak keeps paging stable."""
+        clauses, str_params = _filter_clauses(target_id, tier, search_text)
         if matched_only:
             # A file is matched iff it has at least one current (non-retracted) decision;
             # ``dec.target_ids`` is NULL for a file with none.
@@ -567,36 +545,39 @@ class CatalogReader:
         sql = _SQL_LIST_FILES_BASE
         if clauses:
             sql += "WHERE " + " AND ".join(clauses) + "\n"
-        # ORDER BY from the allowlist (spec §3.1): unknown sort/direction fall back to the
-        # default; the file_id tiebreak keeps paging stable. Both operands come from fixed
-        # maps, never from the raw param, so the f-string is injection-safe.
-        column_expr = SORT_COLUMNS.get(sort, SORT_COLUMNS[DEFAULT_SORT])
-        dir_sql = SORT_DIRECTIONS.get(direction, SORT_DIRECTIONS[DEFAULT_DIR])
-        sql += f"ORDER BY {column_expr} {dir_sql}, f.file_id\n"
+        # ORDER BY from the allowlist (spec §3.1): both operands come from fixed maps, never
+        # from a raw param, so the f-string is injection-safe.
+        sql += f"ORDER BY {SORT_COLUMNS[sort]} {SORT_DIRECTIONS[direction]}, f.file_id\n"
         sql += "LIMIT ? OFFSET ?\n"
-        params.append(_PAGE_SIZE)
-        params.append((page - 1) * _PAGE_SIZE)
+        params.append(limit)
+        params.append(offset)
 
-        rows = self._conn.execute(sql, params).fetchall()
-        result: list[FileRow] = []
-        for row in rows:
-            target_ids = _split_concat(row["target_ids"])
-            tiers = _split_concat(row["tiers"])
-            decisions = tuple(
-                FileDecision(target_id=t, tier=ti) for t, ti in zip(target_ids, tiers, strict=True)
+        rows = self._reader_provider.connection().execute(sql, params).fetchall()
+        return tuple(
+            CatalogEntry(
+                file=FileKey(Network(row["network"]), row["native_id"]),
+                size_bytes=row["file_size_bytes"],
+                # A file with no observation LEFT JOINs to NULLs.
+                latest_observation=None if row["filename"] is None else observation_from_row(row),
+                decisions=tuple(
+                    DecisionRecord(target_id=t, rule_name=r, tier=ti)
+                    for t, r, ti in zip(
+                        _split_concat(row["target_ids"]),
+                        _split_concat(row["rule_names"]),
+                        _split_concat(row["tiers"]),
+                        strict=True,
+                    )
+                ),
             )
-            result.append(
-                FileRow(
-                    file=FileKey(Network(row["network"]), row["native_id"]),
-                    size_bytes=row["size_bytes"],
-                    # A file with no observation LEFT JOINs to NULLs; an unknown count stays None.
-                    filename=row["filename"] or "",
-                    source_count=row["source_count"],
-                    last_seen=row["last_seen"] or "",
-                    decisions=decisions,
-                )
-            )
-        return result
+            for row in rows
+        )
+
+
+class CatalogReader:
+    """Read-only access to the catalog via a SQLite connection (see ``reader.open_reader``)."""
+
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self._conn = connection
 
     # ------------------------------------------------------------------
     # Detail

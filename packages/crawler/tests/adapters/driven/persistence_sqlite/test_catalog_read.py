@@ -1,13 +1,15 @@
-"""TDD tests for CatalogReader: coverage, filtered explorer, detail (spec W-D6 / §6)."""
+"""TDD tests for the catalog's readers: coverage, filtered explorer, detail (spec W-D6 / §6)."""
 
 import re
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from catalog_matching.domain.config import TIER_RANK
+from catalog_matching.domain.engine import DecisionRecord
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
     _JOIN_DECISIONS,
     _JOIN_LATEST_OBSERVATION,
@@ -15,8 +17,6 @@ from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
     _SQL_CTES,
     _SQL_LIST_FILES_BASE,
     _SQL_TIER_COUNTS_BASE,
-    DEFAULT_DIR,
-    DEFAULT_SORT,
     PAGE_SIZE,
     SORT_COLUMNS,
     CatalogReader,
@@ -27,7 +27,6 @@ from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider, open_reader
 from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
 from p2pwatch.adapters.driving.webui.views import (
-    FileRow,
     NameDetail,
     PeriodWindow,
     SourceDetail,
@@ -35,7 +34,9 @@ from p2pwatch.adapters.driving.webui.views import (
     SourcePeriodView,
     SourceRow,
 )
+from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch_testing.catalog_rows import (
     SEEN_AT,
@@ -58,6 +59,30 @@ LATEST_OBSERVATION_PROBE = (
 )
 # Every instant a test writes, from the epoch to the year 3000.
 _ALL_TIME = PeriodWindow(since=0, until=32_503_680_000_000_000, gap=0)
+_LIMIT = 50
+
+
+def _entries(
+    catalog_db: Path,
+    *,
+    target_id: str | None = None,
+    tier: str | None = None,
+    search_text: str | None = None,
+    matched_only: bool = False,
+    sort: CatalogEntrySort = CatalogEntrySort.LAST_SEEN,
+    direction: SortDirection = SortDirection.DESC,
+    offset: int = 0,
+) -> tuple[CatalogEntry, ...]:
+    return SqliteCatalogFileReader(ReaderProvider(catalog_db)).read_catalog_entries(
+        target_id=target_id,
+        tier=tier,
+        search_text=search_text,
+        matched_only=matched_only,
+        sort=sort,
+        direction=direction,
+        limit=_LIMIT,
+        offset=offset,
+    )
 
 
 def _counts(
@@ -76,6 +101,11 @@ def _tier_counts(catalog_db: Path, *, search_text: str | None = None) -> Mapping
     return SqliteCatalogFileReader(ReaderProvider(catalog_db)).read_file_count_by_tier(
         target_id=None, search_text=search_text
     )
+
+
+def _latest_filename(entry: CatalogEntry) -> str | None:
+    observation = entry.latest_observation
+    return None if observation is None else observation.reported_file.filename
 
 
 # ---------------------------------------------------------------------------
@@ -188,47 +218,49 @@ def test_target_coverage_ignores_legacy_empty_target_sentinel(catalog_db: Path) 
 
 def test_list_files_no_filter_returns_all(catalog_db: Path) -> None:
     _seed(catalog_db)
-    reader = CatalogReader(open_reader(catalog_db))
-    rows = reader.list_files(target=None, tier=None, query=None, page=1)
-    assert len(rows) == 1
-    assert rows[0].file == FileKey(Network.ED2K, "a" * 32)
-    assert rows[0].filename == "keroro_062.avi"
-    assert rows[0].source_count == 5
+    rows = _entries(catalog_db)
+    assert rows == (
+        CatalogEntry(
+            file=FileKey(Network.ED2K, "a" * 32),
+            size_bytes=100,
+            latest_observation=FileObservation(
+                ReportedFile(
+                    FileKey(Network.ED2K, "a" * 32), "keroro_062.avi", 100, 5, keyword="keroro"
+                ),
+                observed_at=datetime(2026, 6, 22, 10, tzinfo=UTC),
+            ),
+            decisions=(DecisionRecord("062A", "id_segment_exact", "download"),),
+        ),
+    )
 
 
 def test_list_files_filter_by_target(catalog_db: Path) -> None:
     _seed(catalog_db)
-    reader = CatalogReader(open_reader(catalog_db))
-    hit = reader.list_files(target="062A", tier=None, query=None, page=1)
-    miss = reader.list_files(target="001A", tier=None, query=None, page=1)
+    hit = _entries(catalog_db, target_id="062A")
+    miss = _entries(catalog_db, target_id="001A")
     assert len(hit) == 1
-    assert miss == []
+    assert miss == ()
 
 
 def test_list_files_filter_by_tier(catalog_db: Path) -> None:
     _seed(catalog_db)
-    reader = CatalogReader(open_reader(catalog_db))
-    hit = reader.list_files(target=None, tier="download", query=None, page=1)
-    miss = reader.list_files(target=None, tier="notify", query=None, page=1)
+    hit = _entries(catalog_db, tier="download")
+    miss = _entries(catalog_db, tier="notify")
     assert len(hit) == 1
-    assert miss == []
+    assert miss == ()
 
 
 def test_list_files_filter_by_query(catalog_db: Path) -> None:
     _seed(catalog_db)
-    reader = CatalogReader(open_reader(catalog_db))
-    hit = reader.list_files(target=None, tier=None, query="keroro", page=1)
-    miss = reader.list_files(target=None, tier=None, query="unknown", page=1)
+    hit = _entries(catalog_db, search_text="keroro")
+    miss = _entries(catalog_db, search_text="unknown")
     assert len(hit) == 1
-    assert miss == []
+    assert miss == ()
 
 
-def test_list_files_page_two_is_empty(catalog_db: Path) -> None:
-    """Page 2 is empty when fewer than PAGE_SIZE results."""
+def test_list_files_reads_none_past_the_offset(catalog_db: Path) -> None:
     _seed(catalog_db)
-    reader = CatalogReader(open_reader(catalog_db))
-    rows = reader.list_files(target=None, tier=None, query=None, page=2)
-    assert rows == []
+    assert _entries(catalog_db, offset=1) == ()
 
 
 # ---------------------------------------------------------------------------
@@ -238,30 +270,24 @@ def test_list_files_page_two_is_empty(catalog_db: Path) -> None:
 
 def test_list_files_whole_episode_is_one_row_with_two_decisions(catalog_db: Path) -> None:
     _seed_whole_episode(catalog_db)
-    rows = CatalogReader(open_reader(catalog_db)).list_files(
-        target=None, tier=None, query=None, page=1
-    )
+    rows = _entries(catalog_db)
     assert len(rows) == 1
-    assert [(d.target_id, d.tier) for d in rows[0].decisions] == [
-        ("072A", "download"),
-        ("072B", "download"),
-    ]
+    assert rows[0].decisions == (
+        DecisionRecord("072A", "numero_nu_confirmed", "download"),
+        DecisionRecord("072B", "numero_nu_confirmed", "download"),
+    )
 
 
 def test_list_files_filter_by_one_target_returns_whole_episode(catalog_db: Path) -> None:
     _seed_whole_episode(catalog_db)
-    rows = CatalogReader(open_reader(catalog_db)).list_files(
-        target="072B", tier=None, query=None, page=1
-    )
+    rows = _entries(catalog_db, target_id="072B")
     assert len(rows) == 1
     assert [d.target_id for d in rows[0].decisions] == ["072A", "072B"]
 
 
 def test_list_files_unmatched_file_has_empty_decisions(catalog_db: Path) -> None:
     _seed_unmatched(catalog_db)
-    [row] = CatalogReader(open_reader(catalog_db)).list_files(
-        target=None, tier=None, query=None, page=1
-    )
+    [row] = _entries(catalog_db)
     assert row.decisions == ()
 
 
@@ -623,23 +649,22 @@ def test_the_pages_periods_are_read_in_the_window_only(catalog_db: Path) -> None
 
 def test_list_files_combined_target_and_tier_filters(catalog_db: Path) -> None:
     _seed(catalog_db)
-    reader = CatalogReader(open_reader(catalog_db))
-    hit = reader.list_files(target="062A", tier="download", query=None, page=1)
-    miss = reader.list_files(target="062A", tier="notify", query=None, page=1)
+    hit = _entries(catalog_db, target_id="062A", tier="download")
+    miss = _entries(catalog_db, target_id="062A", tier="notify")
     assert len(hit) == 1
-    assert miss == []
+    assert miss == ()
 
 
-@pytest.mark.parametrize("page", [1, 2])
-def test_list_files_pagination(catalog_db: Path, page: int) -> None:
-    """Verify pagination doesn't crash (page 1 = results, page 2 = empty)."""
-    _seed(catalog_db)
-    reader = CatalogReader(open_reader(catalog_db))
-    rows = reader.list_files(target=None, tier=None, query=None, page=page)
-    if page == 1:
-        assert len(rows) == 1
-    else:
-        assert rows == []
+def test_list_files_reads_at_most_its_limit_from_its_offset(catalog_db: Path) -> None:
+    with sqlite3.connect(catalog_db) as conn:
+        for n in range(_LIMIT + 2):
+            insert_file(conn, f"{n:032x}", size_bytes=n)
+    first = _entries(catalog_db, sort=CatalogEntrySort.SIZE, direction=SortDirection.ASC)
+    second = _entries(
+        catalog_db, sort=CatalogEntrySort.SIZE, direction=SortDirection.ASC, offset=_LIMIT
+    )
+    assert [entry.size_bytes for entry in first] == list(range(_LIMIT))
+    assert [entry.size_bytes for entry in second] == [_LIMIT, _LIMIT + 1]
 
 
 # ---------------------------------------------------------------------------
@@ -754,8 +779,7 @@ def _seed_unmatched(db: Path) -> None:
 def test_list_files_matched_only_excludes_unmatched(catalog_db: Path) -> None:
     _seed(catalog_db)
     _seed_unmatched(catalog_db)
-    reader = CatalogReader(open_reader(catalog_db))
-    rows = reader.list_files(target=None, tier=None, query=None, page=1, matched_only=True)
+    rows = _entries(catalog_db, matched_only=True)
     hashes = {r.file.native_id for r in rows}
     assert hashes == {"a" * 32}  # only the matched file
 
@@ -765,8 +789,7 @@ def test_list_files_matched_only_excludes_retracted(catalog_db: Path) -> None:
     ``target_id`` column is non-NULL (the crawler's sentinel is an empty string, not NULL)."""
     _seed(catalog_db)
     _seed_retracted(catalog_db)
-    reader = CatalogReader(open_reader(catalog_db))
-    rows = reader.list_files(target=None, tier=None, query=None, page=1, matched_only=True)
+    rows = _entries(catalog_db, matched_only=True)
     hashes = {r.file.native_id for r in rows}
     assert hashes == {"a" * 32}  # the retracted file ("c"*32) is excluded
 
@@ -774,8 +797,7 @@ def test_list_files_matched_only_excludes_retracted(catalog_db: Path) -> None:
 def test_list_files_default_includes_unmatched(catalog_db: Path) -> None:
     _seed(catalog_db)
     _seed_unmatched(catalog_db)
-    reader = CatalogReader(open_reader(catalog_db))
-    rows = reader.list_files(target=None, tier=None, query=None, page=1)
+    rows = _entries(catalog_db)
     hashes = {r.file.native_id for r in rows}
     assert hashes == {"a" * 32, "b" * 32}  # default matched_only=False → both
 
@@ -800,10 +822,9 @@ def test_list_files_shows_latest_observation(catalog_db: Path) -> None:
             size_bytes=300,
             source_count=2,
         )
-    reader = CatalogReader(open_reader(catalog_db))
-    rows = reader.list_files(target=None, tier=None, query=None, page=1)
+    rows = _entries(catalog_db)
     assert len(rows) == 1
-    assert rows[0].filename == "new_name.avi"
+    assert _latest_filename(rows[0]) == "new_name.avi"
 
 
 # ---------------------------------------------------------------------------
@@ -870,9 +891,8 @@ def _seed_catalog_tier_on_001a(db: Path) -> None:
 def test_target_scope_excludes_catalog_tier(catalog_db: Path) -> None:
     """A catalog-tier decision pinned to 001A must NOT surface under target='001A'."""
     _seed_catalog_tier_on_001a(catalog_db)
-    reader = CatalogReader(open_reader(catalog_db))
-    rows = reader.list_files(target="001A", tier=None, query=None, page=1)
-    assert rows == []
+    rows = _entries(catalog_db, target_id="001A")
+    assert rows == ()
     matched, _total = _counts(catalog_db, target_id="001A")
     assert matched == 0
 
@@ -880,8 +900,7 @@ def test_target_scope_excludes_catalog_tier(catalog_db: Path) -> None:
 def test_target_scope_keeps_non_catalog_tier(catalog_db: Path) -> None:
     """A non-catalog (download) decision on 062A is still returned under target='062A'."""
     _seed(catalog_db)  # existing helper: a 'download' decision on 062A
-    reader = CatalogReader(open_reader(catalog_db))
-    rows = reader.list_files(target="062A", tier=None, query=None, page=1)
+    rows = _entries(catalog_db, target_id="062A")
     assert len(rows) == 1
 
 
@@ -916,7 +935,7 @@ def _seed_sortable(db: Path) -> None:
             insert_decision(conn, h, tid, tier, decided_at="2026-01-04T10:00:00.000000+00:00")
 
 
-def _hashes(rows: list[FileRow]) -> list[str]:
+def _hashes(rows: tuple[CatalogEntry, ...]) -> list[str]:
     return [r.file.native_id for r in rows]
 
 
@@ -939,50 +958,8 @@ def test_list_files_sort_orders(
     catalog_db: Path, sort: str, direction: str, expected: list[str]
 ) -> None:
     _seed_sortable(catalog_db)
-    reader = CatalogReader(open_reader(catalog_db))
-    rows = reader.list_files(
-        target=None, tier=None, query=None, page=1, sort=sort, direction=direction
-    )
+    rows = _entries(catalog_db, sort=CatalogEntrySort(sort), direction=SortDirection(direction))
     assert _hashes(rows) == [c * 32 for c in expected]
-
-
-def test_list_files_unknown_sort_falls_back_to_default(catalog_db: Path) -> None:
-    _seed_sortable(catalog_db)
-    reader = CatalogReader(open_reader(catalog_db))
-    rows = reader.list_files(
-        target=None, tier=None, query=None, page=1, sort="bogus", direction="desc"
-    )
-    # default sort is last_seen desc
-    assert _hashes(rows) == [c * 32 for c in ["c", "b", "a"]]
-
-
-def test_list_files_unknown_direction_falls_back_to_default(catalog_db: Path) -> None:
-    _seed_sortable(catalog_db)
-    reader = CatalogReader(open_reader(catalog_db))
-    rows = reader.list_files(
-        target=None, tier=None, query=None, page=1, sort="size", direction="bogus"
-    )
-    # default direction is desc -> size desc -> 300, 200, 100
-    assert _hashes(rows) == [c * 32 for c in ["a", "c", "b"]]
-
-
-def test_list_files_sort_injection_is_rejected_not_interpolated(catalog_db: Path) -> None:
-    _seed_sortable(catalog_db)
-    reader = CatalogReader(open_reader(catalog_db))
-    rows = reader.list_files(
-        target=None,
-        tier=None,
-        query=None,
-        page=1,
-        sort="size; drop table files",
-        direction="desc",
-    )
-    # falls back to the default last_seen desc [c,b,a], NOT size desc [a,c,b]: the value was
-    # dropped by the allowlist, not interpolated (a raw interpolation would also raise, since
-    # sqlite3 refuses a multi-statement execute). The table still exists too.
-    assert _hashes(rows) == [c * 32 for c in ["c", "b", "a"]]
-    with sqlite3.connect(catalog_db) as conn:
-        assert conn.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 3
 
 
 def test_list_files_sort_tiebreak_is_file_id(catalog_db: Path) -> None:
@@ -991,10 +968,7 @@ def test_list_files_sort_tiebreak_is_file_id(catalog_db: Path) -> None:
         for h in ("a" * 32, "e" * 32):  # inserted a-first on purpose
             insert_file(conn, h)
             insert_observation(conn, h, "same.avi", observed_at="2026-01-01T10:00:00.000000+00:00")
-    reader = CatalogReader(open_reader(catalog_db))
-    rows = reader.list_files(
-        target=None, tier=None, query=None, page=1, sort="size", direction="asc"
-    )
+    rows = _entries(catalog_db, sort=CatalogEntrySort.SIZE, direction=SortDirection.ASC)
     assert _hashes(rows) == ["e" * 32, "a" * 32]  # e's file_id sorts first
 
 
@@ -1006,12 +980,8 @@ def test_tier_rank_case_matches_tier_rank() -> None:
         assert f"WHEN '{tier}' THEN {rank}" in sql
 
 
-def test_sort_allowlist_contract_matches_produced_interface() -> None:
-    """Pin the produced sort interface (consumed by the /files handler in a later task): the
-    fixed allowlist keys and the two defaults. Guards a silent rename that would break paging."""
-    assert set(SORT_COLUMNS) == {"name", "size", "sources", "last_seen", "tier"}
-    assert DEFAULT_SORT in SORT_COLUMNS
-    assert (DEFAULT_SORT, DEFAULT_DIR) == ("last_seen", "desc")
+def test_every_sort_has_its_column() -> None:
+    assert set(SORT_COLUMNS) == set(CatalogEntrySort)
 
 
 # ---------------------------------------------------------------------------
@@ -1069,7 +1039,7 @@ def _seed_file_without_observation(db: Path) -> str:
 
 
 def test_list_files_lists_file_with_no_observation(catalog_db: Path) -> None:
-    """A file with no observation is still listed, with an empty filename/last_seen.
+    """A file with no observation is still listed, with none.
 
     This is THE case where the two shapes of ``latest_obs`` differ internally: the seek form
     yields a row of NULLs for such a file, the older window form yielded no row at all. Both
@@ -1077,21 +1047,9 @@ def test_list_files_lists_file_with_no_observation(catalog_db: Path) -> None:
     this pins that the difference stays absorbed.
     """
     h = _seed_file_without_observation(catalog_db)
-    rows = CatalogReader(open_reader(catalog_db)).list_files(
-        target=None, tier=None, query=None, page=1
-    )
+    rows = _entries(catalog_db)
     assert [row.file.native_id for row in rows] == [h]
-    assert rows[0].filename == ""
-    assert rows[0].last_seen == ""
-
-
-def test_list_files_file_with_no_observation_has_unknown_sources(catalog_db: Path) -> None:
-    """Unknown, not 0: no observation means no count was ever read (the display says so)."""
-    _seed_file_without_observation(catalog_db)
-    rows = CatalogReader(open_reader(catalog_db)).list_files(
-        target=None, tier=None, query=None, page=1
-    )
-    assert rows[0].source_count is None
+    assert rows[0].latest_observation is None
 
 
 def test_count_files_counts_file_with_no_observation(catalog_db: Path) -> None:
@@ -1104,10 +1062,8 @@ def test_count_files_counts_file_with_no_observation(catalog_db: Path) -> None:
 def test_list_files_query_filter_excludes_file_with_no_observation(catalog_db: Path) -> None:
     """No observation means no filename to match: ``NULL LIKE ?`` is NULL, so the row drops."""
     _seed_file_without_observation(catalog_db)
-    rows = CatalogReader(open_reader(catalog_db)).list_files(
-        target=None, tier=None, query="keroro", page=1
-    )
-    assert rows == []
+    rows = _entries(catalog_db, search_text="keroro")
+    assert rows == ()
 
 
 def test_list_files_observation_tie_break_on_the_newest_variant(catalog_db: Path) -> None:
@@ -1117,10 +1073,8 @@ def test_list_files_observation_tie_break_on_the_newest_variant(catalog_db: Path
         insert_file(conn, h)
         for name in ("first.avi", "second.avi"):  # same instant, ascending variant ids
             insert_observation(conn, h, name, observed_at="2026-07-03T10:00:00.000000+00:00")
-    rows = CatalogReader(open_reader(catalog_db)).list_files(
-        target=None, tier=None, query=None, page=1
-    )
-    assert rows[0].filename == "second.avi"
+    rows = _entries(catalog_db)
+    assert _latest_filename(rows[0]) == "second.avi"
 
 
 def test_file_detail_of_a_file_never_seen_has_no_observation(catalog_db: Path) -> None:

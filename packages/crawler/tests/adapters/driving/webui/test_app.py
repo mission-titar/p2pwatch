@@ -16,6 +16,7 @@ from starlette.applications import Starlette
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from catalog_matching.domain.config import MatcherConfig
+from catalog_matching.domain.engine import DecisionRecord
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import PAGE_SIZE
@@ -29,16 +30,13 @@ from p2pwatch.adapters.driving.webui.app import (
     _to_display_rows,
     build_app,
 )
-from p2pwatch.adapters.driving.webui.views import (
-    DecisionCell,
-    FileDecision,
-    FileRow,
-    HiddenInput,
-)
+from p2pwatch.adapters.driving.webui.views import DecisionCell, HiddenInput
+from p2pwatch.domain.catalog_entry import CatalogEntry
 from p2pwatch.domain.coverage import TargetCoverage
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
+from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from p2pwatch.domain.source import SourceKey
 from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus, StatusReading
@@ -526,7 +524,7 @@ async def test_dashboard_shows_a_target_without_a_best_tier_as_a_dot() -> None:
 
 
 @pytest.mark.asyncio
-async def test_files_returns_200_with_file_row(
+async def test_files_returns_200_with_catalog_entry(
     populated_app: tuple[Starlette, str],
 ) -> None:
     """/files → 200 + contains the inserted file's hash."""
@@ -1569,55 +1567,62 @@ _SEGMENT_BY_ID = {_SEGMENT_062A.target_id: _SEGMENT_062A}
 _SEGMENTS_AB = {s.target_id: s for s in (_SEGMENT_062A, _SEGMENT_062B)}
 
 
-def _file_row(*, decisions: tuple[FileDecision, ...]) -> FileRow:
-    return FileRow(
-        file=FileKey(Network.ED2K, TEST_HASH),
+def _catalog_entry(
+    *,
+    decisions: tuple[DecisionRecord, ...],
+    observed_at: datetime = datetime(2024, 1, 1, tzinfo=UTC),
+) -> CatalogEntry:
+    reported_file = ReportedFile(FileKey(Network.ED2K, TEST_HASH), "f.avi", 1024, 1, "keroro")
+    return CatalogEntry(
+        file=reported_file.file,
         size_bytes=1024,
-        filename="f.avi",
-        source_count=1,
-        last_seen="2024-01-01T00:00:00",
+        latest_observation=FileObservation(reported_file, observed_at),
         decisions=decisions,
     )
 
 
+def _decision(target_id: str, tier: str) -> DecisionRecord:
+    return DecisionRecord(target_id, "rule", tier)
+
+
 def test_resolve_target_display_empty_decisions_is_empty_list() -> None:
-    assert _resolve_target_display(_file_row(decisions=()), _SEGMENT_BY_ID) == []
+    assert _resolve_target_display(_catalog_entry(decisions=()), _SEGMENT_BY_ID) == []
 
 
 def test_resolve_target_display_catalog_decision_is_unidentified() -> None:
-    row = _file_row(decisions=(FileDecision(target_id="062A", tier="catalog"),))
-    assert _resolve_target_display(row, _SEGMENT_BY_ID) == [("unidentified", "·")]
+    entry = _catalog_entry(decisions=(_decision(target_id="062A", tier="catalog"),))
+    assert _resolve_target_display(entry, _SEGMENT_BY_ID) == [("unidentified", "·")]
 
 
 def test_resolve_target_display_resolvable_id_joins_seasonal_locator_and_title() -> None:
-    row = _file_row(decisions=(FileDecision(target_id="062A", tier="download"),))
-    assert _resolve_target_display(row, _SEGMENT_BY_ID) == [
+    entry = _catalog_entry(decisions=(_decision(target_id="062A", tier="download"),))
+    assert _resolve_target_display(entry, _SEGMENT_BY_ID) == [
         ("062A / S02E11A", "La Grenouille Cosmique")
     ]
 
 
 def test_resolve_target_display_unknown_id_falls_back_to_raw_id() -> None:
-    row = _file_row(decisions=(FileDecision(target_id="999Z", tier="download"),))
-    assert _resolve_target_display(row, _SEGMENT_BY_ID) == [("999Z", "·")]
+    entry = _catalog_entry(decisions=(_decision(target_id="999Z", tier="download"),))
+    assert _resolve_target_display(entry, _SEGMENT_BY_ID) == [("999Z", "·")]
 
 
 def test_resolve_target_display_two_segments_returns_a_pair_each() -> None:
-    row = _file_row(decisions=(FileDecision("062A", "download"), FileDecision("062B", "download")))
-    assert _resolve_target_display(row, _SEGMENTS_AB) == [
+    entry = _catalog_entry(decisions=(_decision("062A", "download"), _decision("062B", "download")))
+    assert _resolve_target_display(entry, _SEGMENTS_AB) == [
         ("062A / S02E11A", "La Grenouille Cosmique"),
         ("062B / S02E11B", "Duel Contre Giroro"),
     ]
 
 
 def test_to_display_rows_empty_decisions_all_dashes() -> None:
-    [display] = _to_display_rows([_file_row(decisions=())], _SEGMENTS_AB)
+    [display] = _to_display_rows([_catalog_entry(decisions=())], _SEGMENTS_AB)
     assert display.decisions_display == ()
     assert display.tier_display == "·"
 
 
 def test_to_display_rows_two_segments_aggregate_cells_shared_tier() -> None:
-    row = _file_row(decisions=(FileDecision("062A", "download"), FileDecision("062B", "download")))
-    [display] = _to_display_rows([row], _SEGMENTS_AB)
+    entry = _catalog_entry(decisions=(_decision("062A", "download"), _decision("062B", "download")))
+    [display] = _to_display_rows([entry], _SEGMENTS_AB)
     assert display.decisions_display == (
         DecisionCell(target="062A / S02E11A", title="La Grenouille Cosmique"),
         DecisionCell(target="062B / S02E11B", title="Duel Contre Giroro"),
@@ -1626,21 +1631,16 @@ def test_to_display_rows_two_segments_aggregate_cells_shared_tier() -> None:
 
 
 def test_to_display_rows_two_segments_differing_tiers_lists_per_target() -> None:
-    row = _file_row(decisions=(FileDecision("062A", "download"), FileDecision("062B", "notify")))
-    [display] = _to_display_rows([row], _SEGMENTS_AB)
+    entry = _catalog_entry(decisions=(_decision("062A", "download"), _decision("062B", "notify")))
+    [display] = _to_display_rows([entry], _SEGMENTS_AB)
     assert display.tier_display == "062A: download · 062B: notify"
 
 
 def test_to_display_rows_computes_size_and_last_seen_display() -> None:
-    row = FileRow(
-        file=FileKey(Network.ED2K, TEST_HASH),
-        size_bytes=1024,
-        filename="f.avi",
-        source_count=1,
-        last_seen="2026-07-03T23:45:24.104990+00:00",
-        decisions=(),
+    entry = _catalog_entry(
+        decisions=(), observed_at=datetime(2026, 7, 3, 23, 45, 24, 104990, tzinfo=UTC)
     )
-    [display] = _to_display_rows([row], _SEGMENTS_AB)
+    [display] = _to_display_rows([entry], _SEGMENTS_AB)
     assert display.size_display == "1 KB"
     assert display.last_seen_display == "2026-07-03 23:45Z"
 
@@ -2131,6 +2131,7 @@ async def test_dashboard_shows_a_client_not_read_yet() -> None:
 def test_normalize_sort_valid_unknown_missing() -> None:
     assert _normalize_sort("size") == "size"
     assert _normalize_sort("bogus") == "last_seen"
+    assert _normalize_sort("size; drop table files") == "last_seen"
     assert _normalize_sort(None) == "last_seen"
 
 

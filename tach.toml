@@ -357,7 +357,7 @@ depends_on = []
 [[modules]]
 path = "p2pwatch.ports.driven.catalog_file_reader"
 layer = "ports"
-depends_on = []
+depends_on = ["p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.ports.driven.catalog_finder"
