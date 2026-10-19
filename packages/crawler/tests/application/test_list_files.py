@@ -6,6 +6,7 @@ from typing import Any
 from catalog_matching.domain.engine import DecisionRecord
 from p2pwatch.application.list_files import PAGE_SIZE, ListFiles
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
+from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.ports.driving.file_lister import FileListing
@@ -36,6 +37,9 @@ class _FakeCatalogFileReader(CatalogFileReader):
     def read_file_count_by_tier(self, **arguments: Any) -> Mapping[str, int]:
         self.calls.append(("read_file_count_by_tier", arguments))
         return {"download": 3}
+
+    def read_file_history(self, file_id: bytes, **arguments: Any) -> FileHistory | None:
+        raise AssertionError("ListFiles reads no file history")
 
 
 def _list_files(reader: CatalogFileReader, *, page: int = 1) -> FileListing:

@@ -544,6 +544,7 @@ async def test_file_detail_with_decision_returns_200(
     assert resp.status_code == 200
     assert "ed2k://" in resp.text
     assert "062A" in resp.text
+    assert "<dd>2026-06-22T10:00:00.000000+00:00</dd>" in resp.text  # decided at, as stored
     assert "AICH" not in resp.text
 
 

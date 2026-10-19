@@ -7,14 +7,13 @@ sentinel and per-target ``retracted`` rows are excluded.
 
 ``SqliteCatalogFileReader`` reads the files page: its entries (files ⨝ latest observation ⨝
 current decisions, optional filters + LIMIT/OFFSET), their ``(matched, total)`` counts and their
-tier facet.
+tier facet; and a file's history: its observations in an interval, its latest one, its known names
+and its current decisions, ``None`` if the file is unknown.
 
 ``SqliteSourceReader`` reads a file's sharing periods in a window, newest first.
 
 ``CatalogReader`` exposes these reads:
 
-- ``file_detail()``: the timeline of observations in a window, the latest one, known names + current
-  decisions for a given ``file_id``; ``None`` if the file is unknown.
 - ``list_sources()`` / ``count_sources()``: the sources with a user hash, last seen first, and
   how many match the search.
 - ``source_detail()`` / ``name_detail()``: the page of a source and the page of a name; ``None``
@@ -39,14 +38,13 @@ from p2pwatch.adapters.driven.persistence_sqlite.observation_read import (
 )
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driving.webui.views import (
-    DecisionView,
-    FileDetail,
     NameDetail,
     SourceDetail,
     SourceFilePeriod,
     SourceRow,
 )
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
+from p2pwatch.domain.file_history import DatedDecision, FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
@@ -240,7 +238,7 @@ AND tier != 'retracted'
 ORDER BY target_id
 """
 
-# Basic lookup on files (for file_detail).
+# Basic lookup on files (for read_file_history).
 _SQL_FILE = """\
 SELECT network, native_id, size_bytes
 FROM files
@@ -607,47 +605,43 @@ class SqliteCatalogFileReader(CatalogFileReader):
             for row in rows
         )
 
+    def read_file_history(
+        self, file_id: bytes, *, since: datetime, until: datetime
+    ) -> FileHistory | None:
+        connection = self._reader_provider.connection()
+        file_row = connection.execute(_SQL_FILE, (file_id,)).fetchone()
+        if file_row is None:
+            return None
+
+        file = FileKey(Network(file_row["network"]), file_row["native_id"])
+        dec_rows = connection.execute(_SQL_FILE_DECISIONS, (file_id,)).fetchall()
+
+        decisions = tuple(
+            DatedDecision(
+                DecisionRecord(
+                    target_id=row["target_id"], rule_name=row["rule_name"], tier=row["tier"]
+                ),
+                decided_at=datetime.fromisoformat(row["decided_at"]),
+                node_id=row["node_id"],
+            )
+            for row in dec_rows
+        )
+
+        return FileHistory(
+            file=file,
+            size_bytes=file_row["size_bytes"],
+            observations=observations_between(connection, file, _micros(since), _micros(until)),
+            latest_observation=latest_observation(connection, file),
+            decisions=decisions,
+            known_filenames=known_filenames(connection, file),
+        )
+
 
 class CatalogReader:
     """Read-only access to the catalog via a SQLite connection (see ``reader.open_reader``)."""
 
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._conn = connection
-
-    # ------------------------------------------------------------------
-    # Detail
-    # ------------------------------------------------------------------
-
-    def file_detail(self, file_id: bytes, window: PeriodWindow) -> FileDetail | None:
-        """Return the full detail of a file, its timeline in ``window``, or ``None`` if unknown."""
-        file_row = self._conn.execute(_SQL_FILE, (file_id,)).fetchone()
-        if file_row is None:
-            return None
-
-        file = FileKey(Network(file_row["network"]), file_row["native_id"])
-        dec_rows = self._conn.execute(_SQL_FILE_DECISIONS, (file_id,)).fetchall()
-
-        decisions = tuple(
-            DecisionView(
-                target_id=row["target_id"],
-                rule_name=row["rule_name"],
-                tier=row["tier"],
-                decided_at=row["decided_at"],
-                node_id=row["node_id"],
-            )
-            for row in dec_rows
-        )
-
-        return FileDetail(
-            file=file,
-            size_bytes=file_row["size_bytes"],
-            observations=observations_between(
-                self._conn, file, _micros(window.since), _micros(window.until)
-            ),
-            latest=latest_observation(self._conn, file),
-            decisions=decisions,
-            known_filenames=known_filenames(self._conn, file),
-        )
 
     # ------------------------------------------------------------------
     # Sources
