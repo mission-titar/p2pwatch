@@ -1,7 +1,6 @@
 """One client's searches: a task's search, its observations recorded, and the backoff a failure
 earns, per client when unreachable and per channel when refused (stage 2, D4 and D7)."""
 
-import logging
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -18,12 +17,11 @@ from p2pwatch.ports.driven.backoff_state_repository import BackoffKey, BackoffSt
 from p2pwatch.ports.driven.catalog_repository import CatalogRepository
 from p2pwatch.ports.driven.client_errors import ClientUnreachableError, SearchFailedError
 from p2pwatch.ports.driven.clock import MonotonicClock, MonotonicInstant, WallClock
+from p2pwatch.ports.driven.logger import Logger
 from p2pwatch.ports.driven.rng import Rng
 from p2pwatch.ports.driven.search_client import SearchAnswer, SearchClient
 from p2pwatch.ports.driven.telemetry import Telemetry
 from p2pwatch.ports.driven.wake_hub import WakeHub
-
-_logger = logging.getLogger("p2pwatch.application.search_worker")
 
 # A ceiling, not a duration: above Kad's 45 s and an ed2k sweep, it guards a search never ending.
 SEARCH_BUDGET_SECONDS = 120.0
@@ -133,6 +131,8 @@ class WorkerDeps:
     backoff: "BackoffRegistry"
     telemetry: Telemetry
     wall_clock: WallClock
+    logger: Logger
+    observation_logger: Logger  # record_observation's
 
 
 class SearchWorker:
@@ -166,7 +166,7 @@ class SearchWorker:
             await self._client.connect()
         except ClientUnreachableError as error:
             delay = self._deps.backoff.record_failure(self._client_backoff_key)
-            _logger.warning(
+            self._deps.logger.warning(
                 "client %s unreachable (%s): reconnect backoff %.1fs",
                 self._client_name,
                 error,
@@ -175,7 +175,7 @@ class SearchWorker:
             await self._deps.telemetry.emit(ClientUnreachable(self._client_name))
             return False
         self._connected = True
-        _logger.info("client %s connected", self._client_name)
+        self._deps.logger.info("client %s connected", self._client_name)
         return True
 
     async def _record_observations(self, channel: str, answer: SearchAnswer) -> int:
@@ -197,6 +197,7 @@ class SearchWorker:
                 wall_clock=self._deps.wall_clock,
                 client_name=self._client_name,
                 channel=channel,
+                logger=self._deps.observation_logger,
             ):
                 changed += 1
         return changed
@@ -210,7 +211,7 @@ class SearchWorker:
             answer = await self._client.search(task.keyword, task.channel, SEARCH_BUDGET_SECONDS)
         except SearchFailedError as error:
             delay = self._deps.backoff.record_failure(channel_backoff_key)
-            _logger.warning(
+            self._deps.logger.warning(
                 "client %s channel %s failed (%s): backoff %.1fs",
                 self._client_name,
                 task.channel,
@@ -222,7 +223,7 @@ class SearchWorker:
         except ClientUnreachableError as error:
             self._connected = False
             delay = self._deps.backoff.record_failure(self._client_backoff_key)
-            _logger.warning(
+            self._deps.logger.warning(
                 "client %s unreachable (%s), client down, backoff %.1fs",
                 self._client_name,
                 error,
@@ -234,7 +235,7 @@ class SearchWorker:
         self._deps.backoff.reset(channel_backoff_key)
         # connect() proves nothing: it may not log in
         self._deps.backoff.reset(self._client_backoff_key)
-        _logger.info(
+        self._deps.logger.info(
             "client %s: '%s'/%s → %d verdict(s) changed",
             self._client_name,
             task.keyword,

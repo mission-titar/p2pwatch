@@ -37,7 +37,13 @@ from p2pwatch.ports.driven.download_client import (
 )
 from p2pwatch.ports.driven.repository_errors import RepositoryError
 from p2pwatch.ports.driven.source_repository import EarlierPoints, RecordedReading, SourceRepository
-from p2pwatch_testing.application.fakes import FakeTime, RecordingTelemetry, TickingWallClock
+from p2pwatch_testing.application.fakes import (
+    FakeLogger,
+    FakeTime,
+    LoggedLine,
+    RecordingTelemetry,
+    TickingWallClock,
+)
 from p2pwatch_testing.catalog_rows import insert_file
 
 _A = "a" * 32
@@ -340,6 +346,7 @@ def _deps(
     sources: SourceRepository | None = None,
     fake_time: FakeTime | None = None,
     sources_interval: timedelta = timedelta(seconds=30),
+    logger: FakeLogger | None = None,
 ) -> DownloadDeps:
     fake_time = fake_time or FakeTime()
     return DownloadDeps(
@@ -358,6 +365,7 @@ def _deps(
         wall_clock=fake_time.wall,
         monotonic_clock=fake_time.monotonic,
         telemetry=telemetry or RecordingTelemetry(),
+        logger=logger or FakeLogger(),
     )
 
 
@@ -1249,10 +1257,9 @@ async def test_marks_seen_every_listed_download_completed_ones_included() -> Non
 
 
 @pytest.mark.asyncio
-async def test_a_download_amuled_no_longer_knows_becomes_failed(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
+async def test_a_download_amuled_no_longer_knows_becomes_failed() -> None:
     client, fake_time = FakeDownloadClient(listed=[(_status(_A),), ()]), FakeTime()
+    logger = FakeLogger()
     downloads = FakeDownloadRepo()
     downloads.record_queued(_key(_A), "062A", 1, fake_time.wall.now())
     catalog = FakeCatalogReads(observations={_A: ObservedFile(filename="a", size_bytes=1)})
@@ -1262,6 +1269,7 @@ async def test_a_download_amuled_no_longer_knows_becomes_failed(
         catalog=catalog,
         lost_after=timedelta(hours=1),
         fake_time=fake_time,
+        logger=logger,
     )
     await run_download_cycle(deps)
     fake_time.advance(timedelta(hours=1))
@@ -1270,7 +1278,9 @@ async def test_a_download_amuled_no_longer_knows_becomes_failed(
     assert downloads.failures[_A] is FailureReason.LOST
     assert deps.loss_deadline_by_file == {}
     assert client.started == []  # failed by the TTL: never started again
-    assert f"file={_A} unseen by the client for 3600.0s: marked failed" in caplog.messages
+    assert LoggedLine("warning", f"file={_A} unseen by the client for 3600.0s: marked failed") in (
+        logger.lines
+    )
 
 
 @pytest.mark.asyncio

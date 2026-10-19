@@ -191,7 +191,15 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
         await asyncio.wait_for(run, _WAIT_SECONDS)
 
     assert f"p2pwatch version {version('p2pwatch')}" in caplog.messages
-    assert "catalogue re-evaluated: 0 files, 0 rows written" in caplog.messages
+    named_messages = [(record.name, record.getMessage()) for record in caplog.records]
+    assert (  # each use case logs under its module's name, which an operator's filters read
+        "p2pwatch.application.reevaluate_if_policy_changed",
+        "catalogue re-evaluated: 0 files, 0 rows written",
+    ) in named_messages
+    assert (
+        "p2pwatch.application.run_download_cycle",
+        f"candidate file={_HASH} queued for download",
+    ) in named_messages
     assert "🟢 node online (download on)" in caplog.messages
     assert api.logins == 2  # one session searches and reads the status, the other downloads
     assert len(api.added_links) == 1 and _HASH in api.added_links[0].lower()

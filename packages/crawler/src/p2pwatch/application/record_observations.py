@@ -17,19 +17,16 @@ single corrupt/failed obs does not bring down the whole sweep, but the failure s
 VISIBLE (``error``-level log, so a persistent failure gets noticed).
 """
 
-import logging
-
 from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.application.decisions import rejudge_file
 from p2pwatch.domain.observability.events import ObservationRecorded
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.ports.driven.catalog_repository import CatalogRepository
 from p2pwatch.ports.driven.clock import WallClock
+from p2pwatch.ports.driven.logger import Logger
 from p2pwatch.ports.driven.repository_errors import RepositoryError
 from p2pwatch.ports.driven.telemetry import Telemetry
 from p2pwatch.ports.driven.wake_hub import WakeHub
-
-_logger = logging.getLogger("p2pwatch.application.record_observations")
 
 
 async def record_observation(
@@ -42,6 +39,7 @@ async def record_observation(
     wall_clock: WallClock,
     client_name: str,
     channel: str,
+    logger: Logger,
 ) -> int:
     """Process ONE observation (spec §7). Returns the number of rows written (0..N).
 
@@ -60,7 +58,7 @@ async def record_observation(
             wall_clock=wall_clock,
         )
     except RepositoryError as error:
-        _logger.error(
+        logger.error(
             "persistence failed on file=%s:%s (%s): observation skipped, cycle continues",
             observation.file.network,
             observation.file.native_id,

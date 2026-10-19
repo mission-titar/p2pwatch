@@ -5,7 +5,6 @@ The backoff is saved after a search whenever it differs from what was last saved
 """
 
 import asyncio
-import logging
 from collections.abc import Sequence
 from datetime import timedelta
 
@@ -13,9 +12,8 @@ from p2pwatch.application.search_worker import BackoffRegistry, SearchTask, Sear
 from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.ports.driven.backoff_state_repository import BackoffStateRepository
 from p2pwatch.ports.driven.clock import MonotonicClock
+from p2pwatch.ports.driven.logger import Logger
 from p2pwatch.ports.driven.repository_errors import RepositoryError
-
-_logger = logging.getLogger("p2pwatch.application.search_tasks")
 
 
 class SearchTaskRunner:
@@ -30,6 +28,7 @@ class SearchTaskRunner:
         backoff: BackoffRegistry,
         backoff_states: BackoffStateRepository,
         monotonic_clock: MonotonicClock,
+        logger: Logger,
     ) -> None:
         self._workers = workers
         self._keywords = keywords
@@ -37,6 +36,7 @@ class SearchTaskRunner:
         self._backoff = backoff
         self._backoff_states = backoff_states
         self._monotonic_clock = monotonic_clock
+        self._logger = logger
         self._saved = backoff.snapshot()
 
     async def run(self) -> None:
@@ -67,6 +67,6 @@ class SearchTaskRunner:
         try:
             self._backoff_states.save_backoff_states(current)
         except RepositoryError as error:
-            _logger.error("backoff not saved (%s): retried after the next search", error)
+            self._logger.error("backoff not saved (%s): retried after the next search", error)
             return
         self._saved = current

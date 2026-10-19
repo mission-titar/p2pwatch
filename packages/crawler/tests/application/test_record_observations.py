@@ -14,8 +14,10 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability.events import ObservationRecorded
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch_testing.application.fakes import (
+    FakeLogger,
     FakeTime,
     FakeWallClock,
+    LoggedLine,
     RecordingTelemetry,
     RecordingWakeHub,
 )
@@ -58,6 +60,7 @@ async def test_observation_is_always_recorded_even_when_discarded(
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
+        logger=FakeLogger(),
     )
     assert changed == 0
     assert count_observations(catalog_connection) == 1
@@ -81,6 +84,7 @@ async def test_the_observation_carries_the_clocks_instant(
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
+        logger=FakeLogger(),
     )
     observed_at = catalog_connection.execute("SELECT observed_at FROM observations").fetchone()
     assert observed_at == (iso_to_micros(utc_iso(wall_clock.now())),)
@@ -104,6 +108,7 @@ async def test_new_verdict_is_persisted_and_nudged(
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
+        logger=FakeLogger(),
     )
     assert changed == 1
     assert catalog_connection.execute("SELECT tier FROM match_decisions").fetchone() == (
@@ -133,6 +138,7 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
             wall_clock=wall_clock,
             client_name="amuled",
             channel="ed2k",
+            logger=FakeLogger(),
         )
         == 1
     )
@@ -148,6 +154,7 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
             wall_clock=wall_clock,
             client_name="amuled",
             channel="ed2k",
+            logger=FakeLogger(),
         )
         == 0
     )
@@ -175,6 +182,7 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
+        logger=FakeLogger(),
     )
     # 2nd view of the SAME hash, DOWNLOAD name → verdict changes → re-append + wake.
     changed = await record_observation(
@@ -186,6 +194,7 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
+        logger=FakeLogger(),
     )
     assert changed == 1
     tiers = [
@@ -204,7 +213,6 @@ async def test_persistence_error_is_absorbed_and_cycle_continues(
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     # TEST trigger: makes the observation INSERT fail → RepositoryError absorbed.
     catalog_connection.execute(
@@ -213,6 +221,7 @@ async def test_persistence_error_is_absorbed_and_cycle_continues(
     )
     telemetry = RecordingTelemetry()
     wake_hub = RecordingWakeHub()
+    logger = FakeLogger()
     changed = await record_observation(
         _obs(_HASH_DL, _DL_NAME),
         catalog=catalog,
@@ -222,10 +231,17 @@ async def test_persistence_error_is_absorbed_and_cycle_continues(
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
+        logger=logger,
     )
     assert changed == 0  # absorbed, the cycle continues
     assert wake_hub.woken_subjects == []
-    assert f"file=ed2k:{_HASH_DL} " in caplog.text  # key=value, like the download side's hash=
+    assert logger.lines == [  # file= as key=value, like the download side's
+        LoggedLine(
+            "error",
+            f"persistence failed on file=ed2k:{_HASH_DL} (injected failure):"
+            " observation skipped, cycle continues",
+        )
+    ]
 
 
 @pytest.mark.asyncio
@@ -248,6 +264,7 @@ async def test_signal_consumer_awaits_the_nudge(
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
+        logger=FakeLogger(),
     )
     await asyncio.wait_for(waiter, timeout=1.0)
     assert waiter.done()
@@ -271,6 +288,7 @@ async def test_download_tier_verdict_also_nudges_the_download_subject(
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
+        logger=FakeLogger(),
     )
     assert changed == 1
     assert wake_hub.woken_subjects == [DOWNLOAD_WAKE_SUBJECT]
@@ -294,6 +312,7 @@ async def test_non_download_tier_verdict_does_not_nudge_the_download_subject(
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
+        logger=FakeLogger(),
     )
     assert changed == 1
     assert wake_hub.woken_subjects == []
@@ -315,6 +334,7 @@ async def test_emits_observation_then_decision_on_change(
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
+        logger=FakeLogger(),
     )
     kinds = [type(e).__name__ for e in telemetry.events]
     assert kinds == ["ObservationRecorded", "DecisionsRecorded"]
@@ -336,6 +356,7 @@ async def test_emits_only_observation_when_discarded(
         wall_clock=wall_clock,
         client_name="amuled",
         channel="kad",
+        logger=FakeLogger(),
     )
     assert [type(e).__name__ for e in telemetry.events] == ["ObservationRecorded"]
 
@@ -358,6 +379,7 @@ async def test_multi_segment_observation_records_two_rows(
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
+        logger=FakeLogger(),
     )
     assert changed == 2
     assert catalog_connection.execute(

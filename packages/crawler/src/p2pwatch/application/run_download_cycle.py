@@ -20,7 +20,6 @@ abandoned.
 """
 
 import asyncio
-import logging
 from collections.abc import Iterable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -54,13 +53,12 @@ from p2pwatch.ports.driven.download_client import (
     DownloadStatus,
     FailureReason,
 )
+from p2pwatch.ports.driven.logger import Logger
 from p2pwatch.ports.driven.repository_errors import RepositoryError
 from p2pwatch.ports.driven.source_client import SourceClient
 from p2pwatch.ports.driven.source_repository import RecordedReading, SourceRepository
 from p2pwatch.ports.driven.telemetry import Telemetry
 from p2pwatch.ports.driven.wake_hub import WakeHub
-
-_logger = logging.getLogger("p2pwatch.application.run_download_cycle")
 
 # Conventional subject of the download wake (DECISION D13). D-download subscribes to THIS
 # subject; the producer side (the pipeline) calls wake("download").
@@ -144,6 +142,7 @@ class DownloadDeps:
     wall_clock: WallClock
     monotonic_clock: MonotonicClock
     telemetry: Telemetry
+    logger: Logger
     disk_low_edge: EdgeState = field(default_factory=EdgeState, kw_only=True)  # low-disk warning
     # The sources step's last start.
     sources_read_at: MonotonicInstant | None = field(default=None, kw_only=True)
@@ -230,7 +229,7 @@ async def _record_completion(
             _target_titles(deps, file) or (TargetTitle("unknown", ""),),
         )
     )
-    _logger.info("file=%s completed", file.native_id)
+    deps.logger.info("file=%s completed", file.native_id)
 
 
 async def _handle_completions(
@@ -253,7 +252,7 @@ async def _handle_completions(
         try:
             await _record_completion(deps, file, states)
         except RepositoryError as error:
-            _logger.error(
+            deps.logger.error(
                 "completion file=%s repo failure (%s): file skipped, continues",
                 file.native_id,
                 error,
@@ -290,7 +289,7 @@ def _fail_lost(deps: DownloadDeps, listed_files: frozenset[FileKey]) -> None:
     for file in [file for file, deadline in deadlines.items() if deadline <= monotonic_now]:
         deps.downloads.set_state(file, DownloadState.FAILED, FailureReason.LOST)
         del deadlines[file]
-        _logger.warning(
+        deps.logger.warning(
             "file=%s unseen by the client for %ss: marked failed",
             file.native_id,
             deps.lost_after.total_seconds(),
@@ -316,7 +315,7 @@ async def _queue_new_candidates(deps: DownloadDeps, outstanding_bytes: int) -> N
             continue
         observation = deps.catalog.latest_observation(candidate.file)
         if observation is None:
-            _logger.warning(
+            deps.logger.warning(
                 "candidate file=%s without observation: link impossible, skipped",
                 candidate.file.native_id,
             )
@@ -331,7 +330,7 @@ async def _queue_new_candidates(deps: DownloadDeps, outstanding_bytes: int) -> N
             min_free_bytes=deps.min_free_bytes,
         )
         if verdict is not DownloadVerdict.DOWNLOAD:
-            _logger.info(
+            deps.logger.info(
                 "candidate file=%s → %s (skipped/deferred)", candidate.file.native_id, verdict.value
             )
             continue
@@ -343,7 +342,7 @@ async def _queue_new_candidates(deps: DownloadDeps, outstanding_bytes: int) -> N
             deadline = deps.monotonic_clock.now() + deps.lost_after
             deps.loss_deadline_by_file[candidate.file] = deadline
         outstanding_bytes += observation.size_bytes  # the client does not list it yet
-        _logger.info("candidate file=%s queued for download", candidate.file.native_id)
+        deps.logger.info("candidate file=%s queued for download", candidate.file.native_id)
         await deps.telemetry.emit(DownloadQueued(target_id=candidate.target_id))
 
 
@@ -368,7 +367,7 @@ async def _start_unlisted(deps: DownloadDeps, listed_files: frozenset[FileKey]) 
             )
         except DownloadRejectedError as error:
             deps.downloads.set_state(file, DownloadState.FAILED, FailureReason.REJECTED)
-            _logger.warning(
+            deps.logger.warning(
                 "start rejected by the client for file=%s (%s): marked failed",
                 file.native_id,
                 error,
@@ -440,7 +439,7 @@ async def _record_sources(deps: DownloadDeps, listed_statuses: tuple[DownloadSta
             recorded = deps.sources.record_readings(status.file, readings, read_at)
             await _alert_sources(deps, status.file, recorded, round_)
         except RepositoryError as error:
-            _logger.error(
+            deps.logger.error(
                 "sources file=%s repo failure (%s): file skipped, continues",
                 status.file.native_id,
                 error,
@@ -483,7 +482,7 @@ async def run_download_cycle(deps: DownloadDeps) -> None:
         await deps.download_client.connect()
         listed_statuses = await deps.download_client.downloads()
     except _UNAVAILABLE as error:
-        _logger.warning("download daemon unreachable (%s): iteration skipped, retry", error)
+        deps.logger.warning("download daemon unreachable (%s): iteration skipped, retry", error)
         return
     listed_files = frozenset(status.file for status in listed_statuses)
     # Clamped at 0: a nascent download (total not known yet) must not invent free space.
@@ -496,7 +495,9 @@ async def run_download_cycle(deps: DownloadDeps) -> None:
         states = deps.downloads.tracked_states()
         await _reconcile_states(deps, states, listed_statuses)
     except RepositoryError as error:
-        _logger.error("download reconciliation repo failure (%s): step skipped, continues", error)
+        deps.logger.error(
+            "download reconciliation repo failure (%s): step skipped, continues", error
+        )
     # Step 2 - COMPLETIONS: we RE-READ ``tracked_states`` FRESHLY (logic-download#2). Without it,
     # a failure in step 1 left ``states`` frozen/empty → every completed file → ``states.get is
     # None`` → ignored → NO completion recorded the entire cycle. The re-read is also better
@@ -508,37 +509,37 @@ async def run_download_cycle(deps: DownloadDeps) -> None:
         fresh_states = deps.downloads.tracked_states()
         await _handle_completions(deps, fresh_states, listed_statuses)
     except RepositoryError as error:
-        _logger.error("download completions repo failure (%s): step skipped, continues", error)
+        deps.logger.error("download completions repo failure (%s): step skipped, continues", error)
     # Step 2b - PRESENCE + LOSS: ``last_seen_at`` is for the next start; loss is measured here.
     try:
         deps.downloads.mark_seen(listed_statuses, deps.wall_clock.now())
         _fail_lost(deps, listed_files)
     except RepositoryError as error:
-        _logger.error("download presence repo failure (%s): step skipped, continues", error)
+        deps.logger.error("download presence repo failure (%s): step skipped, continues", error)
     try:
         await _queue_new_candidates(deps, outstanding_bytes)
     except RepositoryError as error:
-        _logger.error("download candidates repo failure (%s): step skipped, continues", error)
+        deps.logger.error("download candidates repo failure (%s): step skipped, continues", error)
     except OSError as error:
         # A missing or unreadable output mount: refuse to admit anything rather than take down
         # the crawler, which also catalogues. Conservative, loud, and retried next cycle.
-        _logger.error("output directory unmeasurable (%s): no candidate admitted, retry", error)
+        deps.logger.error("output directory unmeasurable (%s): no candidate admitted, retry", error)
     # Step 4 - START: client I/O → ClientUnreachableError = dead daemon = ABORT. Re-reads
     # ``tracked_states`` FRESHLY, so it runs even if step 3 partially failed.
     try:
         await _start_unlisted(deps, listed_files)
     except ClientUnreachableError as error:
-        _logger.warning("download daemon unreachable (%s): iteration skipped, retry", error)
+        deps.logger.warning("download daemon unreachable (%s): iteration skipped, retry", error)
         return
     except RepositoryError as error:
-        _logger.error("download start repo failure (%s): step skipped, retry", error)
+        deps.logger.error("download start repo failure (%s): step skipped, retry", error)
     # Step 5 - SOURCES: last, since it only observes; its failure must not skip a start (D8).
     try:
         await _record_sources(deps, listed_statuses)
     except _UNAVAILABLE as error:
-        _logger.warning("download daemon unreachable (%s): sources skipped, retry", error)
+        deps.logger.warning("download daemon unreachable (%s): sources skipped, retry", error)
     except RepositoryError as error:
-        _logger.error("download sources repo failure (%s): step skipped, retry", error)
+        deps.logger.error("download sources repo failure (%s): step skipped, retry", error)
 
 
 async def _sleep_or_wake(deps: DownloadLoopDeps) -> None:

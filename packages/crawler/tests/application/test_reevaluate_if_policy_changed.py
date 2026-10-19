@@ -6,20 +6,15 @@ the rest are unused stubs) + a plain async callable standing in for ``reevaluate
 SQLite/engine needed: the gate is pure orchestration over the port + the injected callable.
 """
 
-import logging
 from datetime import datetime
 
 import pytest
 
 from p2pwatch.application.reevaluate_catalog import ReevaluationSummary
 from p2pwatch.application.reevaluate_if_policy_changed import reevaluate_if_policy_changed
+from p2pwatch_testing.application.fakes import FakeLogger, LoggedLine
 
 _SUMMARY = ReevaluationSummary(files_evaluated=3, rows_written=1)
-_LOGGER = "p2pwatch.application.reevaluate_if_policy_changed"
-
-
-def _messages(caplog: pytest.LogCaptureFixture) -> list[str]:
-    return [record.getMessage() for record in caplog.records if record.name == _LOGGER]
 
 
 class FakeLocalRepo:
@@ -41,8 +36,9 @@ class FakeLocalRepo:
 
 
 @pytest.mark.asyncio
-async def test_marker_matches_fingerprint_skips_backfill(caplog: pytest.LogCaptureFixture) -> None:
+async def test_marker_matches_fingerprint_skips_backfill() -> None:
     local_repo = FakeLocalRepo(stored_policy="abc")
+    logger = FakeLogger()
     calls = 0
 
     async def reevaluate() -> ReevaluationSummary:
@@ -50,20 +46,18 @@ async def test_marker_matches_fingerprint_skips_backfill(caplog: pytest.LogCaptu
         calls += 1
         return _SUMMARY
 
-    with caplog.at_level(logging.INFO, logger=_LOGGER):
-        await reevaluate_if_policy_changed(
-            fingerprint="abc", local_repo=local_repo, reevaluate=reevaluate
-        )
-    assert _messages(caplog) == ["policy unchanged: catalogue re-evaluation skipped"]
+    await reevaluate_if_policy_changed(
+        fingerprint="abc", local_repo=local_repo, reevaluate=reevaluate, logger=logger
+    )
+    assert logger.lines == [LoggedLine("info", "policy unchanged: catalogue re-evaluation skipped")]
     assert calls == 0
     assert local_repo.set_calls == []
 
 
 @pytest.mark.asyncio
-async def test_marker_absent_runs_backfill_then_stores_fingerprint(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
+async def test_marker_absent_runs_backfill_then_stores_fingerprint() -> None:
     local_repo = FakeLocalRepo(stored_policy=None)
+    logger = FakeLogger()
     calls = 0
 
     async def reevaluate() -> ReevaluationSummary:
@@ -71,11 +65,10 @@ async def test_marker_absent_runs_backfill_then_stores_fingerprint(
         calls += 1
         return _SUMMARY
 
-    with caplog.at_level(logging.INFO, logger=_LOGGER):
-        await reevaluate_if_policy_changed(
-            fingerprint="abc", local_repo=local_repo, reevaluate=reevaluate
-        )
-    assert _messages(caplog) == ["catalogue re-evaluated: 3 files, 1 rows written"]
+    await reevaluate_if_policy_changed(
+        fingerprint="abc", local_repo=local_repo, reevaluate=reevaluate, logger=logger
+    )
+    assert logger.lines == [LoggedLine("info", "catalogue re-evaluated: 3 files, 1 rows written")]
     assert calls == 1
     assert local_repo.set_calls == ["abc"]
 
@@ -91,7 +84,10 @@ async def test_marker_differs_from_fingerprint_runs_backfill() -> None:
         return _SUMMARY
 
     await reevaluate_if_policy_changed(
-        fingerprint="new-fingerprint", local_repo=local_repo, reevaluate=reevaluate
+        fingerprint="new-fingerprint",
+        local_repo=local_repo,
+        reevaluate=reevaluate,
+        logger=FakeLogger(),
     )
     assert calls == 1
     assert local_repo.set_calls == ["new-fingerprint"]
@@ -106,6 +102,6 @@ async def test_run_backfill_raising_propagates_and_marker_not_set() -> None:
 
     with pytest.raises(RuntimeError, match="re-evaluation exploded"):
         await reevaluate_if_policy_changed(
-            fingerprint="abc", local_repo=local_repo, reevaluate=boom
+            fingerprint="abc", local_repo=local_repo, reevaluate=boom, logger=FakeLogger()
         )
     assert local_repo.set_calls == []

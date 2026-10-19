@@ -9,13 +9,11 @@ successfully. If it raises, the exception propagates here UNCHANGED and the mark
 untouched: the next start sees the same (or no) fingerprint and retries the full pass.
 """
 
-import logging
 from collections.abc import Awaitable, Callable
 
 from p2pwatch.application.reevaluate_catalog import ReevaluationSummary
 from p2pwatch.ports.driven.local_state_repository import LocalStateRepository
-
-_logger = logging.getLogger("p2pwatch.application.reevaluate_if_policy_changed")
+from p2pwatch.ports.driven.logger import Logger
 
 
 async def reevaluate_if_policy_changed(
@@ -23,15 +21,16 @@ async def reevaluate_if_policy_changed(
     fingerprint: str,
     local_repo: LocalStateRepository,
     reevaluate: Callable[[], Awaitable[ReevaluationSummary]],
+    logger: Logger,
 ) -> None:
     """Re-evaluates iff the stored policy fingerprint differs from ``fingerprint``, then stores
     it; logs either outcome."""
     if local_repo.reevaluated_policy_fingerprint() == fingerprint:
-        _logger.info("policy unchanged: catalogue re-evaluation skipped")
+        logger.info("policy unchanged: catalogue re-evaluation skipped")
         return
     summary = await reevaluate()
     local_repo.set_reevaluated_policy_fingerprint(fingerprint)
-    _logger.info(
+    logger.info(
         "catalogue re-evaluated: %d files, %d rows written",
         summary.files_evaluated,
         summary.rows_written,

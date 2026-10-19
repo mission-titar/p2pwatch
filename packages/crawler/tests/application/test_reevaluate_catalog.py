@@ -7,7 +7,6 @@ repos on tmp_path"); only ``wake_hub``/``telemetry``/``wall_clock`` are fakes (`
 re-evaluation iterates).
 """
 
-import logging
 import sqlite3
 from datetime import timedelta
 
@@ -28,8 +27,10 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.retraction import RETRACTED_TIER
 from p2pwatch_testing.application.fakes import (
+    FakeLogger,
     FakeTime,
     FakeWallClock,
+    LoggedLine,
     RecordingTelemetry,
     RecordingWakeHub,
 )
@@ -82,6 +83,7 @@ async def test_two_changed_rows_are_all_evaluated_and_written(
         wake_hub=wake_hub,
         telemetry=telemetry,
         wall_clock=wall_clock,
+        logger=FakeLogger(),
     )
     assert summary == ReevaluationSummary(files_evaluated=2, rows_written=2)
     tiers = dict(decision_tiers(catalog_connection))
@@ -114,6 +116,7 @@ async def test_unchanged_row_is_evaluated_but_not_written(
         wake_hub=wake_hub,
         telemetry=telemetry,
         wall_clock=wall_clock,
+        logger=FakeLogger(),
     )
     assert summary == ReevaluationSummary(files_evaluated=1, rows_written=0)
     assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 1
@@ -127,10 +130,10 @@ async def test_repository_error_on_one_row_is_absorbed_and_sweep_continues(
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     catalog.record_observation(_obs(_HASH_DL, _DL_NAME), wall_clock.now())
     catalog.record_observation(_obs(_HASH_CAT, _CAT_NAME), wall_clock.now())
+    logger = FakeLogger()
     # TEST trigger: makes the match_decisions INSERT fail for ONE hash only -> that row's
     # helper call raises RepositoryError, the other row must still be processed.
     catalog_connection.execute(
@@ -146,11 +149,18 @@ async def test_repository_error_on_one_row_is_absorbed_and_sweep_continues(
         wake_hub=wake_hub,
         telemetry=telemetry,
         wall_clock=wall_clock,
+        logger=logger,
     )
     assert summary == ReevaluationSummary(files_evaluated=2, rows_written=1)
     assert decision_tiers(catalog_connection) == [(_HASH_CAT, "catalog")]
     assert catalog.latest_decisions(FileKey(Network.ED2K, _HASH_DL)) == {}
-    assert f"file=ed2k:{_HASH_DL} " in caplog.text
+    assert logger.lines == [
+        LoggedLine(
+            "error",
+            f"persistence failed on file=ed2k:{_HASH_DL} (injected failure):"
+            " re-evaluation skipped, sweep continues",
+        )
+    ]
 
 
 @pytest.mark.asyncio
@@ -165,6 +175,7 @@ async def test_empty_catalogue_yields_zero_summary(
         wake_hub=wake_hub,
         telemetry=telemetry,
         wall_clock=wall_clock,
+        logger=FakeLogger(),
     )
     assert summary == ReevaluationSummary(files_evaluated=0, rows_written=0)
     assert telemetry.events == []
@@ -193,6 +204,7 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
         wake_hub=wake_hub,
         telemetry=telemetry,
         wall_clock=wall_clock,
+        logger=FakeLogger(),
     )
     assert summary == ReevaluationSummary(
         files_evaluated=1, rows_written=3
@@ -223,6 +235,7 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
         wake_hub=wake_hub,
         telemetry=telemetry,
         wall_clock=wall_clock,
+        logger=FakeLogger(),
     )
     assert summary == ReevaluationSummary(
         files_evaluated=1, rows_written=2
@@ -252,6 +265,7 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
         wake_hub=RecordingWakeHub(),
         telemetry=RecordingTelemetry(),
         wall_clock=wall_clock,
+        logger=FakeLogger(),
     )
     assert summary == ReevaluationSummary(files_evaluated=1, rows_written=1)
     assert catalog.latest_decisions(FileKey(Network.ED2K, _HASH_DL)) == {
@@ -265,22 +279,22 @@ async def test_progress_is_logged_at_each_multiple_of_the_cadence_only(
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
     monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     monkeypatch.setattr(reevaluate_module, "_PROGRESS_EVERY", 2)
+    logger = FakeLogger()
     catalog.record_observation(_obs(_HASH_DL, _DL_NAME), wall_clock.now())
     catalog.record_observation(_obs(_HASH_CAT, _CAT_NAME), wall_clock.now())
     catalog.record_observation(_obs(_HASH_MULTI, "random.txt"), wall_clock.now())
-    with caplog.at_level(logging.INFO, logger="p2pwatch.application.reevaluate_catalog"):
-        await reevaluate_catalog(
-            catalog=catalog,
-            engine=engine,
-            wake_hub=RecordingWakeHub(),
-            telemetry=RecordingTelemetry(),
-            wall_clock=wall_clock,
-        )
-    assert [record.getMessage() for record in caplog.records] == [
-        "catalogue re-evaluation: 2/3 files, 2 rows written"
+    await reevaluate_catalog(
+        catalog=catalog,
+        engine=engine,
+        wake_hub=RecordingWakeHub(),
+        telemetry=RecordingTelemetry(),
+        wall_clock=wall_clock,
+        logger=logger,
+    )
+    assert logger.lines == [
+        LoggedLine("info", "catalogue re-evaluation: 2/3 files, 2 rows written")
     ]
 
 

@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from p2pwatch.adapters.driven.config.yaml_config_checker import YamlConfigChecker
 from p2pwatch.adapters.driven.pathlib_catalog_finder import PathlibCatalogFinder
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier import SqliteCatalogCopier
+from p2pwatch.adapters.driven.stdlib_logger import StdlibLogger
 from p2pwatch.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from p2pwatch.application.merge_catalogs import MergeCatalogs
 from p2pwatch.application.validate_config import ValidateConfig
@@ -25,7 +26,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             webui_address=_WEBUI_ADDRESS, amule_api_address=_AMULE_API_ADDRESS, env=os.environ
         ),
         config_validator=ValidateConfig(YamlConfigChecker(os.environ)),
-        catalog_merger=MergeCatalogs(PathlibCatalogFinder(), SqliteCatalogCopier()),
+        catalog_merger=MergeCatalogs(
+            PathlibCatalogFinder(),
+            SqliteCatalogCopier(),
+            StdlibLogger("p2pwatch.application.merge_catalogs"),
+        ),
     )
     return command_line.run(argv)
 

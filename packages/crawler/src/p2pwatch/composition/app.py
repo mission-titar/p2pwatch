@@ -54,6 +54,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.local_state_repository import (
 )
 from p2pwatch.adapters.driven.persistence_sqlite.source_repository import SqliteSourceRepository
 from p2pwatch.adapters.driven.rng_random import SeededRng
+from p2pwatch.adapters.driven.stdlib_logger import StdlibLogger
 from p2pwatch.adapters.driven.wake_hub_asyncio import AsyncioWakeHub
 from p2pwatch.adapters.driven.wall_clock_system import SystemWallClock
 from p2pwatch.adapters.driving.process.posix_process import PosixProcess
@@ -236,6 +237,8 @@ class CrawlerApp(CrawlerRunner):
                 backoff=backoff,
                 telemetry=telemetry,
                 wall_clock=wall_clock,
+                logger=StdlibLogger("p2pwatch.application.search_worker"),
+                observation_logger=StdlibLogger("p2pwatch.application.record_observations"),
             )
 
             client = self._amule_api_client(crawler_config, monotonic_clock)
@@ -253,6 +256,7 @@ class CrawlerApp(CrawlerRunner):
                 backoff=backoff,
                 backoff_states=backoff_states,
                 monotonic_clock=monotonic_clock,
+                logger=StdlibLogger("p2pwatch.application.search_tasks"),
             )
             loops: list[Callable[[], Coroutine[object, object, None]]] = [
                 search_tasks.run,
@@ -287,6 +291,7 @@ class CrawlerApp(CrawlerRunner):
                     wall_clock=wall_clock,
                     monotonic_clock=monotonic_clock,
                     telemetry=telemetry,
+                    logger=StdlibLogger("p2pwatch.application.run_download_cycle"),
                     wake_hub=wake_hub,
                     shutdown=shutdown,
                 )
@@ -310,7 +315,9 @@ class CrawlerApp(CrawlerRunner):
                     wake_hub=wake_hub,
                     telemetry=telemetry,
                     wall_clock=wall_clock,
+                    logger=StdlibLogger("p2pwatch.application.reevaluate_catalog"),
                 ),
+                logger=StdlibLogger("p2pwatch.application.reevaluate_if_policy_changed"),
             )
 
             # Entered disarmed: the steady state is unbounded, and ``supervise_loops`` arms it as

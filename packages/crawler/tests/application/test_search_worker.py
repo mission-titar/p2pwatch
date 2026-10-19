@@ -26,9 +26,11 @@ from p2pwatch.domain.observability.events import (
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.ports.driven.backoff_state_repository import BackoffKey, BackoffState
 from p2pwatch_testing.application.fakes import (
+    FakeLogger,
     FakeRng,
     FakeSearchClient,
     FakeTime,
+    LoggedLine,
     RecordingTelemetry,
     RecordingWakeHub,
     make_search_failed,
@@ -72,6 +74,8 @@ def _deps(
     fake_time: FakeTime,
     *,
     telemetry: RecordingTelemetry | None = None,
+    logger: FakeLogger | None = None,
+    observation_logger: FakeLogger | None = None,
 ) -> WorkerDeps:
     return WorkerDeps(
         catalog=catalog,
@@ -80,6 +84,8 @@ def _deps(
         backoff=backoff,
         telemetry=telemetry or RecordingTelemetry(),
         wall_clock=fake_time.wall,
+        logger=logger or FakeLogger(),
+        observation_logger=observation_logger or FakeLogger(),
     )
 
 
@@ -464,3 +470,34 @@ async def test_transport_failure_during_search_emits_instance_unreachable(
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
     assert telemetry.events == [ClientUnreachable("amule-1")]
+
+
+@pytest.mark.asyncio
+async def test_a_search_logs_on_the_worker_logger_and_a_failed_observation_on_its_own(
+    catalog: SqliteCatalogRepository,
+    catalog_connection: sqlite3.Connection,
+    engine: MatchingEngine,
+) -> None:
+    catalog_connection.execute(
+        "CREATE TRIGGER boom BEFORE INSERT ON observations"
+        " BEGIN SELECT RAISE(ABORT, 'injected failure'); END"
+    )
+    fake_time = FakeTime()
+    logger, observation_logger = FakeLogger(), FakeLogger()
+    client = FakeSearchClient(results=[(_obs(),)])
+    deps = _deps(
+        catalog,
+        engine,
+        _registry(fake_time),
+        fake_time,
+        logger=logger,
+        observation_logger=observation_logger,
+    )
+
+    await SearchWorker("amule-1", client, deps).run_task(SearchTask("keroro", "ed2k"))
+
+    assert logger.lines == [
+        LoggedLine("info", "client amule-1 connected"),
+        LoggedLine("info", "client amule-1: 'keroro'/ed2k → 0 verdict(s) changed"),
+    ]
+    assert [line.level for line in observation_logger.lines] == ["error"]

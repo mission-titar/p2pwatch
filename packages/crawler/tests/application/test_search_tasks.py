@@ -4,7 +4,6 @@ The tasks share one simulated time, so these tests run on the virtual-time loop.
 """
 
 import asyncio
-import logging
 import sqlite3
 from collections.abc import Coroutine, Iterator
 from contextlib import suppress
@@ -32,7 +31,9 @@ from p2pwatch.ports.driven.client_errors import SearchFailedError
 from p2pwatch.ports.driven.repository_errors import RepositoryError
 from p2pwatch.ports.driven.search_client import SearchAnswer
 from p2pwatch_testing.application.fakes import (
+    FakeLogger,
     FakeRng,
+    LoggedLine,
     RecordingTelemetry,
     RecordingWakeHub,
     make_unreachable,
@@ -103,6 +104,7 @@ class _Tasks:
         self.state = state
         self.resumed = asyncio.Event()
         self.resumed.set()
+        self.logger = FakeLogger()
 
     def searching(self, client: Any, keywords: list[str]) -> Coroutine[Any, Any, None]:
         return SearchTaskRunner(
@@ -112,6 +114,7 @@ class _Tasks:
             backoff=self.deps.backoff,
             backoff_states=self.state,
             monotonic_clock=LoopMonotonicClock(),
+            logger=self.logger,
         ).run()
 
     def run_for(
@@ -140,6 +143,8 @@ def tasks(
         backoff=backoff,
         telemetry=telemetry,
         wall_clock=wall_clock,
+        logger=FakeLogger(),
+        observation_logger=FakeLogger(),
     )
     yield _Tasks(deps, _SavesRecorded(connection))
     connection.close()
@@ -199,15 +204,14 @@ def test_the_backoff_is_saved_at_each_change(tasks: _Tasks) -> None:
     assert tasks.state.load_backoff_states() == {}
 
 
-def test_a_failed_save_is_logged_and_retried_after_the_next_search(
-    tasks: _Tasks, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_a_failed_save_is_logged_and_retried_after_the_next_search(tasks: _Tasks) -> None:
     tasks.state.failures = 1
     refused: list[Exception] = [SearchFailedError("refused"), SearchFailedError("refused")]
     client = _TimedClient({"kad": 30.0}, search_failures=refused)
-    with caplog.at_level(logging.ERROR, logger="p2pwatch.application.search_tasks"):
-        tasks.run_for(100.0, client, ["keroro"])
-    assert "database is locked" in caplog.text
+    tasks.run_for(100.0, client, ["keroro"])
+    assert tasks.logger.lines == [
+        LoggedLine("error", "backoff not saved (database is locked): retried after the next search")
+    ]
     second_failure = BackoffState(2, EPOCH + timedelta(seconds=60), timedelta(seconds=120))
     assert tasks.state.saved == [{BackoffKey("amuled", "kad"): second_failure}]
 
