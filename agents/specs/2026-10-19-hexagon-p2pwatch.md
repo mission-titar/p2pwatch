@@ -354,7 +354,8 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
 | 55 | `refactor/observation-reads` | every read returns `FileObservation` whole; `Sighting`, `ObservedFile`, `ReevalRow` deleted (Corrected 2026-10-19: split from block 50, measured at about 32 files; it moves behaviour, so no exemption) | 300, 18 |
 | 60 | `refactor/node-id-catalog-and-source-points` | the `node_id` through the catalog's three writes and the source points' write and two reads | 550, 22 |
 | 70 | `refactor/node-id-notifications` | the `node_id` through `emit` and `notify`; Apprise's groups per `node_id` | 400, 16 |
-| 80 | `feat/run-crawler` | `RunCrawler`; `NodeIdReader`, `NodeIdWriter`, `NodeIdGenerator`; the loops launched with the `node_id`; the composition only builds | 450, 15 |
+| 75 | `refactor/node-id-ports` | `NodeIdReader`, `NodeIdWriter`, `NodeIdGenerator`; `resolve_node_id` on them (Corrected 2026-10-19: split from block 80, measured at 507 lines; it moves behaviour, so no exemption) | 235, 13 |
+| 80 | `feat/run-crawler` | `RunCrawler`; the loops launched with the `node_id`; the composition only builds | 285, 8 |
 | 90 | `feat/crawler-control-use-cases` | `PauseCrawl`, `ResumeCrawl`, `RequestShutdown`; `AsyncioRunState` and its two ports | 350, 14 |
 | 100 | `refactor/in-memory-status-board` | `InMemoryStatusBoard` and its two ports; the freshness rule into the domain | 300, 10 |
 | 110 | `feat/crawl-summary` | `CoverageReader`, `NodeStateReader`; `SummarizeCrawl`, `DescribeNode`; their routes, then their route tests on fakes | 450, 16 |
