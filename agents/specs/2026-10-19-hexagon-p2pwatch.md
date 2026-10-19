@@ -393,9 +393,11 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
    wiring test with download enabled asserts one `POST /auth/login` on `FakeAmuleApiServer` (on `main` it asserts
    `api.logins == 2`, `test_app_wiring.py:196`); a client test sees a call after a tolerated unreachable `open()`
    log in and succeed, and a call after `close()` raise.
-4. **The composition runs nothing** (block 80):
-   `grep -nE "resolve_node_id|reevaluate_if_policy_changed|supervise_loops|\.emit\(" composition/app.py` prints
-   nothing (on `main`: 10 lines, 3 imports, 2 docstring lines, 5 uses).
+4. **The composition runs nothing** (block 80): for each pattern of `resolve_node_id($$$)`,
+   `reevaluate_if_policy_changed($$$)`, `supervise_loops($$$)` and `$X.emit($$$)`,
+   `uv run ast-grep run --lang python -p '<pattern>' packages/crawler/src/p2pwatch/composition/app.py` prints
+   nothing (at block 75's tip: one call each). (Corrected 2026-10-19: was a `grep` on the names, which also
+   matched the logger name the composition hands `RunCrawler`; the check is on the calls.)
 5. **No `node_id` in an adapter's state** (block 70): `grep -rn "self\._node_id" adapters` prints nothing but
    `AppriseNotifier`'s groups keyed by it (on `main`: 13 lines in the three adapters).
 6. **Each operation declared once** (block 190): the appendix's `awk` prints only `now` (on `main`:
