@@ -128,10 +128,11 @@ class AmuleApiClient:
             _logger.warning("amuled unreachable at startup (%s): tolerated, the loops retry", error)
 
     async def close(self) -> None:
-        """Revokes the token, then closes the session for good. Bypasses the 401 rule on purpose:
-        a rejected logout means the session is already gone, so re-logging in to end it is waste."""
-        self._closed = True
-        http, self._http = self._http, None
+        """Revokes the token, then closes the session for good, after any login in flight.
+        Bypasses the 401 rule: a rejected logout means the session is already gone."""
+        async with self._login_lock:
+            self._closed = True
+            http, self._http = self._http, None
         if http is None:
             return
         with suppress(ApiUnreachableError):
