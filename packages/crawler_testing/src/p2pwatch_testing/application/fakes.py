@@ -15,7 +15,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from p2pwatch.domain.observability.events import Event
-from p2pwatch.domain.observation import FileObservation
+from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.ports.driven.client_errors import ClientUnreachableError, SearchFailedError
 from p2pwatch.ports.driven.clock import MonotonicInstant
 from p2pwatch.ports.driven.logger import Logger
@@ -157,7 +157,7 @@ class RecordingWakeHub:
 class FakeSearchClient:
     """Scripted client (satisfies SearchClient structurally, spec §8).
 
-    ``results``: list of observation tuples, one per ``search`` call (exhausted → empty
+    ``results``: list of reported file tuples, one per ``search`` call (exhausted → empty
     tuple). ``search_failures``: exceptions to raise on the first N ``search`` calls (then
     success). Every answer reports ``skipped_result_count`` skipped results.
     """
@@ -167,7 +167,7 @@ class FakeSearchClient:
     def __init__(
         self,
         *,
-        results: list[tuple[FileObservation, ...]] | None = None,
+        results: list[tuple[ReportedFile, ...]] | None = None,
         search_failures: list[Exception] | None = None,
         skipped_result_count: int = 0,
     ) -> None:
@@ -182,8 +182,8 @@ class FakeSearchClient:
         self.budgets.append(budget_seconds)
         if self._search_failures:
             raise self._search_failures.pop(0)
-        observations = self._results.pop(0) if self._results else ()
-        return SearchAnswer(observations, self._skipped_result_count)
+        reported_files = self._results.pop(0) if self._results else ()
+        return SearchAnswer(reported_files, self._skipped_result_count)
 
 
 def make_unreachable(message: str = "down") -> ClientUnreachableError:

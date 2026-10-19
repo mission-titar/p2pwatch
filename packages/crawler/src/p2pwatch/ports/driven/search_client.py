@@ -6,14 +6,14 @@ Protocol stubs stay on ONE line: a body on a second one is an uncovered branch.
 from dataclasses import dataclass
 from typing import Protocol
 
-from p2pwatch.domain.observation import FileObservation
+from p2pwatch.domain.observation import ReportedFile
 
 
 @dataclass(frozen=True)
 class SearchAnswer:
     """What one search found, and how many of its results the client could not read."""
 
-    observations: tuple[FileObservation, ...]
+    reported_files: tuple[ReportedFile, ...]
     skipped_result_count: int
 
 

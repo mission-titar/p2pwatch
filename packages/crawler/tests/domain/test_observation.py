@@ -4,13 +4,13 @@ import pytest
 
 from catalog_matching.domain.models import FileCandidate
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.observation import FileObservation, candidate_from_fields, fold_raw_meta
+from p2pwatch.domain.observation import ReportedFile, candidate_from_fields, fold_raw_meta
 
 _KEY = FileKey(Network.ED2K, "31d6cfe0d16ae931b73c59d7e0c089c0")
 
 
-def _full_observation() -> FileObservation:
-    return FileObservation(
+def _full_reported_file() -> ReportedFile:
+    return ReportedFile(
         file=_KEY,
         filename="Keroro 062A.avi",
         size_bytes=3 * 1024 * 1024,
@@ -23,33 +23,37 @@ def _full_observation() -> FileObservation:
 
 
 def test_file_observation_is_frozen_and_holds_fields() -> None:
-    observation = _full_observation()
-    assert observation.file == _KEY
-    assert observation.filename == "Keroro 062A.avi"
-    assert observation.size_bytes == 3 * 1024 * 1024
-    assert observation.source_count == 5
-    assert observation.keyword == "keroro"
-    assert observation.raw_meta == (("0x0308", "0"), ("codec", None), ("complete_source_count", 2))
+    reported_file = _full_reported_file()
+    assert reported_file.file == _KEY
+    assert reported_file.filename == "Keroro 062A.avi"
+    assert reported_file.size_bytes == 3 * 1024 * 1024
+    assert reported_file.source_count == 5
+    assert reported_file.keyword == "keroro"
+    assert reported_file.raw_meta == (
+        ("0x0308", "0"),
+        ("codec", None),
+        ("complete_source_count", 2),
+    )
     with pytest.raises(dataclasses.FrozenInstanceError):
-        observation.filename = "autre"  # type: ignore[misc]
+        reported_file.filename = "autre"  # type: ignore[misc]
 
 
 def test_media_fields_and_raw_meta_default_to_absent() -> None:
-    observation = FileObservation(
+    reported_file = ReportedFile(
         file=_KEY,
         filename="Keroro 062A.avi",
         size_bytes=100,
         source_count=0,
         keyword="keroro",
     )
-    assert observation.duration_seconds is None
-    assert observation.bitrate_kbps is None
-    assert observation.raw_meta == ()
+    assert reported_file.duration_seconds is None
+    assert reported_file.bitrate_kbps is None
+    assert reported_file.raw_meta == ()
 
 
 def test_to_candidate_converts_units_with_media_metadata() -> None:
     # exactly 3 MiB -> size_mib == 3.0 (DECISION 8: 1 MiB = 1024*1024 bytes).
-    candidate = _full_observation().to_candidate()
+    candidate = _full_reported_file().to_candidate()
     assert candidate == FileCandidate(
         filename="Keroro 062A.avi",
         size_mib=3.0,
@@ -59,14 +63,14 @@ def test_to_candidate_converts_units_with_media_metadata() -> None:
 
 
 def test_to_candidate_maps_absent_media_metadata_to_none() -> None:
-    observation = FileObservation(
+    reported_file = ReportedFile(
         file=_KEY,
         filename="Keroro 062A.avi",
         size_bytes=524288,  # 0.5 MiB
         source_count=1,
         keyword="keroro",
     )
-    candidate = observation.to_candidate()
+    candidate = reported_file.to_candidate()
     assert candidate == FileCandidate(
         filename="Keroro 062A.avi",
         size_mib=0.5,

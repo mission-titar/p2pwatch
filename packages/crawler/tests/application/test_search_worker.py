@@ -23,7 +23,7 @@ from p2pwatch.domain.observability.events import (
     SearchExecuted,
     SearchFailed,
 )
-from p2pwatch.domain.observation import FileObservation
+from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.ports.driven.backoff_state_repository import BackoffKey, BackoffState
 from p2pwatch_testing.application.fakes import (
     FakeLogger,
@@ -53,8 +53,8 @@ _POLICY = BackoffPolicy(
 )
 
 
-def _obs() -> FileObservation:
-    return FileObservation(
+def _reported_file() -> ReportedFile:
+    return ReportedFile(
         file=FileKey(Network.ED2K, _HASH),
         filename=_DL_NAME,
         size_bytes=234_000_000,
@@ -266,7 +266,7 @@ async def test_successful_task_records_observation(
     engine: MatchingEngine,
 ) -> None:
     fake_time = FakeTime()
-    client = FakeSearchClient(results=[(_obs(),)])
+    client = FakeSearchClient(results=[(_reported_file(),)])
     worker = SearchWorker(
         "amule-1", client, _deps(catalog, engine, _registry(fake_time), fake_time)
     )
@@ -284,7 +284,7 @@ async def test_multiple_observations_some_unchanged_are_all_processed(
     engine: MatchingEngine,
 ) -> None:
     fake_time = FakeTime()
-    discarded = FileObservation(
+    discarded = ReportedFile(
         file=FileKey(Network.ED2K, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
         filename="random.txt",  # discarded by the engine → record_observation returns False
         size_bytes=10,
@@ -293,7 +293,7 @@ async def test_multiple_observations_some_unchanged_are_all_processed(
     )
     # Two observations in the same readout: the 1st is discarded (False → loop back), the 2nd
     # changes a verdict. Covers the "if False → next observation" edge.
-    client = FakeSearchClient(results=[(discarded, _obs())])
+    client = FakeSearchClient(results=[(discarded, _reported_file())])
     worker = SearchWorker(
         "amule-1", client, _deps(catalog, engine, _registry(fake_time), fake_time)
     )
@@ -309,7 +309,7 @@ async def test_backoff_expires_and_item_runs_again(
     fake_time = FakeTime()
     registry = _registry(fake_time)
     registry.record_failure(_KAD)  # 2.0s
-    client = FakeSearchClient(results=[(_obs(),)])
+    client = FakeSearchClient(results=[(_reported_file(),)])
     worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
     fake_time.advance(timedelta(seconds=3.0))  # the channel is no longer in backoff
     await worker.run_task(SearchTask(keyword="k", channel="kad"))
@@ -336,7 +336,7 @@ async def test_transport_failure_marks_instance_down(
     fake_time = FakeTime()
     registry = _registry(fake_time)
     # search raises a transport failure (dead stream) → client down + client backoff.
-    client = FakeSearchClient(search_failures=[make_unreachable()], results=[(_obs(),)])
+    client = FakeSearchClient(search_failures=[make_unreachable()], results=[(_reported_file(),)])
     worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
     await worker.run_task(SearchTask(keyword="k1", channel="ed2k"))
     assert registry.is_in_backoff(_CLIENT) is True
@@ -351,7 +351,9 @@ async def test_the_client_backoff_grows_until_a_search_succeeds(
 ) -> None:
     fake_time = FakeTime()
     registry = _registry(fake_time)
-    client = FakeSearchClient(search_failures=[make_unreachable()] * 4, results=[(_obs(),)])
+    client = FakeSearchClient(
+        search_failures=[make_unreachable()] * 4, results=[(_reported_file(),)]
+    )
     worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
     delays = []
     for _ in range(4):
@@ -368,7 +370,7 @@ async def test_a_task_is_one_search_given_the_cores_budget(
     catalog: SqliteCatalogRepository, engine: MatchingEngine
 ) -> None:
     fake_time = FakeTime()
-    client = FakeSearchClient(results=[(_obs(),)])
+    client = FakeSearchClient(results=[(_reported_file(),)])
     worker = SearchWorker(
         "amule-1", client, _deps(catalog, engine, _registry(fake_time), fake_time)
     )
@@ -388,7 +390,7 @@ async def test_successful_search_emits_search_executed_with_network_and_counts(
     # before the per-observation events (ObservationRecorded/DecisionsRecorded).
     fake_time = FakeTime()
     telemetry = RecordingTelemetry()
-    client = FakeSearchClient(results=[(_obs(),)], skipped_result_count=2)
+    client = FakeSearchClient(results=[(_reported_file(),)], skipped_result_count=2)
     deps = _deps(catalog, engine, _registry(fake_time), fake_time, telemetry=telemetry)
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
@@ -422,7 +424,7 @@ async def test_transport_failure_during_search_emits_instance_unreachable(
     # A transport failure during search (dead stream) emits ClientUnreachable.
     fake_time = FakeTime()
     telemetry = RecordingTelemetry()
-    client = FakeSearchClient(search_failures=[make_unreachable()], results=[(_obs(),)])
+    client = FakeSearchClient(search_failures=[make_unreachable()], results=[(_reported_file(),)])
     deps = _deps(catalog, engine, _registry(fake_time), fake_time, telemetry=telemetry)
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
@@ -441,7 +443,7 @@ async def test_a_search_logs_on_the_worker_logger_and_a_failed_observation_on_it
     )
     fake_time = FakeTime()
     logger, observation_logger = FakeLogger(), FakeLogger()
-    client = FakeSearchClient(results=[(_obs(),)])
+    client = FakeSearchClient(results=[(_reported_file(),)])
     deps = _deps(
         catalog,
         engine,

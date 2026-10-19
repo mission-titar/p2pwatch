@@ -22,7 +22,7 @@ def candidate_from_fields(
 ) -> FileCandidate:
     """Bridge to the matching engine: unit conversions (bytes -> MiB, int -> float).
 
-    Single source of the conversion (spec re-evaluation §6): both ``FileObservation.
+    Single source of the conversion (spec re-evaluation §6): both ``ReportedFile.
     to_candidate`` (live path) and the re-evaluation (``ReevalRow`` ->
     candidate) call this.
     """
@@ -53,8 +53,8 @@ def fold_raw_meta(
 
 
 @dataclass(frozen=True)
-class FileObservation:
-    """A file observed during a search, whose result names no source; ``keyword`` is its provenance.
+class ReportedFile:
+    """A file a search reported, whose result names no source; ``keyword`` is its provenance.
     Media fields are ``None`` when the network did not report them (self-declared, unreliable)."""
 
     file: FileKey

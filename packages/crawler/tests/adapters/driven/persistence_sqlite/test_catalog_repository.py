@@ -13,7 +13,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash, iso_to_micros
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.observation import FileObservation, fold_raw_meta
+from p2pwatch.domain.observation import ReportedFile, fold_raw_meta
 from p2pwatch.domain.retraction import RETRACTED_TIER
 from p2pwatch.ports.driven.catalog_repository import CatalogRepository, ReevalRow
 from p2pwatch_testing.catalog_rows import count_observations, insert_file
@@ -26,15 +26,15 @@ _T0 = datetime(2026, 6, 11, 12, 0, 0, tzinfo=UTC)
 _T0_ISO = "2026-06-11T12:00:00.000000+00:00"
 
 
-def _observation(
+def _reported_file(
     *,
     filename: str = "Keroro 062A.avi",
     size_bytes: int = 234567890,
     duration_seconds: int | None = None,
     bitrate_kbps: int | None = None,
-) -> FileObservation:
+) -> ReportedFile:
     # raw_meta with a DUPLICATE, wire order, non-ASCII and the fold's native types.
-    return FileObservation(
+    return ReportedFile(
         file=_KEY,
         filename=filename,
         size_bytes=size_bytes,
@@ -63,7 +63,7 @@ def repository(connection: sqlite3.Connection) -> SqliteCatalogRepository:
 def test_record_observation_round_trip(
     repository: SqliteCatalogRepository, connection: sqlite3.Connection
 ) -> None:
-    repository.record_observation(_observation(), _T0)
+    repository.record_observation(_reported_file(), _T0)
     file_row = connection.execute("SELECT * FROM files").fetchone()
     assert file_row == (_KEY.file_id, "ed2k", _HASH, 234567890)
     variant = (
@@ -89,7 +89,7 @@ def test_record_observation_round_trip(
 def test_raw_meta_preserves_order_duplicates_and_non_ascii(
     repository: SqliteCatalogRepository, connection: sqlite3.Connection
 ) -> None:
-    repository.record_observation(_observation(), _T0)
+    repository.record_observation(_reported_file(), _T0)
     stored = connection.execute("SELECT raw_meta FROM observation_variants").fetchone()[0]
     assert "mystère" in stored  # ensure_ascii=False: the accent is stored AS IS
     assert json.loads(stored)[:3] == [["0x0308", "0"], ["0x0308", "0"], ["0x0999", "mystère"]]
@@ -98,9 +98,9 @@ def test_raw_meta_preserves_order_duplicates_and_non_ascii(
 def test_record_observation_twice_first_seen_wins_in_files(
     repository: SqliteCatalogRepository, connection: sqlite3.Connection
 ) -> None:
-    repository.record_observation(_observation(), _T0)
+    repository.record_observation(_reported_file(), _T0)
     # Same hash, DIFFERENT size and name (hostile input, deviation 1 spec §5).
-    repository.record_observation(_observation(filename="leurre.avi", size_bytes=999), _T0)
+    repository.record_observation(_reported_file(filename="leurre.avi", size_bytes=999), _T0)
     assert connection.execute("SELECT size_bytes FROM files").fetchall() == [(234567890,)]
     observed_sizes = connection.execute(
         "SELECT size_bytes FROM observation_variants ORDER BY variant_id"
@@ -111,8 +111,8 @@ def test_record_observation_twice_first_seen_wins_in_files(
 def test_a_variant_seen_again_is_stored_once_with_both_timestamps(
     repository: SqliteCatalogRepository, connection: sqlite3.Connection
 ) -> None:
-    repository.record_observation(_observation(), _T0)
-    repository.record_observation(_observation(), _T0 + timedelta(minutes=1))
+    repository.record_observation(_reported_file(), _T0)
+    repository.record_observation(_reported_file(), _T0 + timedelta(minutes=1))
     assert connection.execute("SELECT count(*) FROM observation_variants").fetchone()[0] == 1
     assert count_observations(connection) == 2
 
@@ -120,15 +120,15 @@ def test_a_variant_seen_again_is_stored_once_with_both_timestamps(
 def test_an_observation_equal_in_every_column_is_stored_once(
     repository: SqliteCatalogRepository, connection: sqlite3.Connection
 ) -> None:
-    repository.record_observation(_observation(), _T0)
-    repository.record_observation(_observation(), _T0)
+    repository.record_observation(_reported_file(), _T0)
+    repository.record_observation(_reported_file(), _T0)
     assert count_observations(connection) == 1
 
 
 def test_record_observation_with_media_metadata(
     repository: SqliteCatalogRepository, connection: sqlite3.Connection
 ) -> None:
-    repository.record_observation(_observation(duration_seconds=1474, bitrate_kbps=1200), _T0)
+    repository.record_observation(_reported_file(duration_seconds=1474, bitrate_kbps=1200), _T0)
     row = connection.execute(
         "SELECT duration_seconds, bitrate_kbps FROM observation_variants"
     ).fetchone()
@@ -145,13 +145,13 @@ def test_record_observation_is_one_transaction(
         " BEGIN SELECT RAISE(ABORT, 'injected failure'); END"
     )
     with pytest.raises(PersistenceError, match="injected failure"):
-        repository.record_observation(dataclasses.replace(_observation(), source_count=404), _T0)
+        repository.record_observation(dataclasses.replace(_reported_file(), source_count=404), _T0)
     # ATOMICITY: the file and its variant were rolled back with the transaction.
     assert connection.execute("SELECT count(*) FROM files").fetchone()[0] == 0
     assert connection.execute("SELECT count(*) FROM observation_variants").fetchone()[0] == 0
     # The repository stays USABLE: rollback done, connection out of transaction.
     assert not connection.in_transaction
-    repository.record_observation(_observation(), _T0)
+    repository.record_observation(_reported_file(), _T0)
     assert count_observations(connection) == 1
 
 
@@ -162,7 +162,7 @@ def test_record_observation_rejects_non_canonical_hash(
     # behavior): without Python validation BEFORE the transaction, a non-canonical hash
     # would only survive thanks to the foreign_keys pragma (opaque diagnostic), and a connection
     # without that pragma would commit an ORPHAN observation.
-    upper = dataclasses.replace(_observation(), file=FileKey(Network.ED2K, _HASH.upper()))
+    upper = dataclasses.replace(_reported_file(), file=FileKey(Network.ED2K, _HASH.upper()))
     with pytest.raises(PersistenceError, match="non-canonical eD2k hash"):
         repository.record_observation(upper, _T0)
     assert connection.execute("SELECT count(*) FROM files").fetchone()[0] == 0
@@ -177,9 +177,9 @@ def test_rollback_on_non_sqlite_error_keeps_connection_usable(
     # would stay in_transaction=True and every later call would fail permanently
     # ("cannot start a transaction within a transaction").
     with pytest.raises(UnicodeEncodeError):
-        repository.record_observation(_observation(filename="a\ud800"), _T0)
+        repository.record_observation(_reported_file(filename="a\ud800"), _T0)
     assert not connection.in_transaction
-    repository.record_observation(_observation(), _T0)
+    repository.record_observation(_reported_file(), _T0)
     assert count_observations(connection) == 1
 
 
@@ -192,7 +192,7 @@ def test_outer_transaction_survives_record_observation_failure(
     connection.execute("BEGIN")
     insert_file(connection, _HASH, 1)
     with pytest.raises(PersistenceError, match="cannot start a transaction within a transaction"):
-        repository.record_observation(_observation(), _T0)
+        repository.record_observation(_reported_file(), _T0)
     assert connection.in_transaction  # the outer transaction is INTACT
     assert connection.execute("SELECT count(*) FROM files").fetchone()[0] == 1
     connection.execute("ROLLBACK")
@@ -216,7 +216,7 @@ def _decision() -> MatchDecision:
 def test_record_decision_round_trip(
     repository: SqliteCatalogRepository, connection: sqlite3.Connection
 ) -> None:
-    repository.record_observation(_observation(), _T0)
+    repository.record_observation(_reported_file(), _T0)
     repository.record_decision(_KEY, _decision(), _T0)
     row = connection.execute(
         "SELECT file_id, target_id, rule_name, tier, decided_at, node_id FROM match_decisions"
@@ -227,7 +227,7 @@ def test_record_decision_round_trip(
 def test_explanation_is_never_persisted(
     repository: SqliteCatalogRepository, connection: sqlite3.Connection
 ) -> None:
-    repository.record_observation(_observation(), _T0)
+    repository.record_observation(_reported_file(), _T0)
     repository.record_decision(_KEY, _decision(), _T0)
     columns = {
         row[1] for row in connection.execute("PRAGMA table_info(match_decisions)").fetchall()
@@ -257,13 +257,13 @@ def test_repository_satisfies_the_port_structurally(
     repository: SqliteCatalogRepository,
 ) -> None:
     port: CatalogRepository = repository  # mypy proves structural satisfaction
-    port.record_observation(_observation(), _T0)
+    port.record_observation(_reported_file(), _T0)
 
 
 def test_record_retraction_round_trip(
     repository: SqliteCatalogRepository, connection: sqlite3.Connection
 ) -> None:
-    repository.record_observation(_observation(), _T0)
+    repository.record_observation(_reported_file(), _T0)
     repository.record_retraction(_KEY, "062A", _T0)
     row = connection.execute(
         "SELECT file_id, target_id, rule_name, tier, decided_at, node_id FROM match_decisions"
@@ -293,7 +293,7 @@ def test_record_retraction_for_unknown_file_raises_persistence_error(
 def test_record_retraction_row_is_append_only(
     repository: SqliteCatalogRepository, connection: sqlite3.Connection
 ) -> None:
-    repository.record_observation(_observation(), _T0)
+    repository.record_observation(_reported_file(), _T0)
     repository.record_retraction(_KEY, "062A", _T0)
     with pytest.raises(sqlite3.IntegrityError, match="match_decisions is append-only"):
         connection.execute("UPDATE match_decisions SET tier = 'catalog'")
@@ -310,13 +310,13 @@ def test_iter_reevaluation_rows_returns_the_latest_observation_per_hash(
 ) -> None:
     # _HASH gets TWO observations a minute apart: only the LATEST must come back.
     # _HASH_B gets a single observation with media metadata present.
-    repository.record_observation(_observation(filename="old.avi", size_bytes=100), _T0)
+    repository.record_observation(_reported_file(filename="old.avi", size_bytes=100), _T0)
     repository.record_observation(
-        _observation(filename="new.avi", size_bytes=200), _T0 + timedelta(minutes=1)
+        _reported_file(filename="new.avi", size_bytes=200), _T0 + timedelta(minutes=1)
     )
     repository.record_observation(
         dataclasses.replace(
-            _observation(
+            _reported_file(
                 filename="other.avi", size_bytes=300, duration_seconds=1234, bitrate_kbps=1500
             ),
             file=FileKey(Network.ED2K, _HASH_B),
@@ -352,8 +352,8 @@ def test_iter_reevaluation_rows_breaks_an_observed_at_tie_on_the_highest_variant
     repository: SqliteCatalogRepository,
 ) -> None:
     # Both rows share observed_at, so the newer variant (higher variant_id) wins.
-    repository.record_observation(_observation(filename="first.avi"), _T0)
-    repository.record_observation(_observation(filename="second.avi"), _T0)
+    repository.record_observation(_reported_file(filename="first.avi"), _T0)
+    repository.record_observation(_reported_file(filename="second.avi"), _T0)
     assert [row.filename for row in repository.iter_reevaluation_rows()] == ["second.avi"]
 
 
@@ -361,10 +361,10 @@ def test_count_files_counts_catalogued_hashes_not_observations(
     repository: SqliteCatalogRepository,
 ) -> None:
     assert repository.count_files() == 0
-    repository.record_observation(_observation(), _T0)
-    repository.record_observation(_observation(), _T0)
+    repository.record_observation(_reported_file(), _T0)
+    repository.record_observation(_reported_file(), _T0)
     repository.record_observation(
-        dataclasses.replace(_observation(), file=FileKey(Network.ED2K, _HASH_B)), _T0
+        dataclasses.replace(_reported_file(), file=FileKey(Network.ED2K, _HASH_B)), _T0
     )
     assert repository.count_files() == 2
 

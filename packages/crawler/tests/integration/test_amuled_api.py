@@ -73,6 +73,6 @@ async def test_real_search(amuled: ApiEndpoint) -> None:
             # container): the request/response cycle IS validated, with its own message.
             assert str(exc)
             return
-        assert isinstance(answer.observations, tuple)  # possibly empty: the call is what counts
+        assert isinstance(answer.reported_files, tuple)  # possibly empty: the call is what counts
     finally:
         await client.close()

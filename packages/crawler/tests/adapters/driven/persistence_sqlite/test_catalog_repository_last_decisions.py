@@ -9,7 +9,7 @@ from catalog_matching.domain.engine import DecisionRecord, Explanation, MatchDec
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.observation import FileObservation
+from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.retraction import RETRACTED_TIER
 
 _A = FileKey(Network.ED2K, "a" * 32)
@@ -18,8 +18,8 @@ _T0 = datetime(2026, 6, 12, tzinfo=UTC)
 _T1 = _T0 + timedelta(minutes=1)
 
 
-def _obs(file: FileKey) -> FileObservation:
-    return FileObservation(
+def _reported_file(file: FileKey) -> ReportedFile:
+    return ReportedFile(
         file=file,
         filename="Keroro.avi",
         size_bytes=100,
@@ -54,14 +54,14 @@ def repository(connection: sqlite3.Connection) -> SqliteCatalogRepository:
 def test_last_decisions_is_empty_when_never_decided(
     repository: SqliteCatalogRepository,
 ) -> None:
-    repository.record_observation(_obs(_A), _T0)
+    repository.record_observation(_reported_file(_A), _T0)
     assert repository.latest_decisions(_A) == {}
 
 
 def test_last_decisions_returns_the_latest_record_per_target(
     repository: SqliteCatalogRepository,
 ) -> None:
-    repository.record_observation(_obs(_A), _T0)
+    repository.record_observation(_reported_file(_A), _T0)
     repository.record_decision(_A, _decision("keroro_large", "catalog", "062A"), _T0)
     repository.record_decision(_A, _decision("id_segment_exact", "download", "062A"), _T1)  # newer
     repository.record_decision(_A, _decision("numero_nu", "notify", "062B"), _T0)
@@ -74,7 +74,7 @@ def test_last_decisions_returns_the_latest_record_per_target(
 def test_last_decisions_includes_a_target_whose_latest_tier_is_retracted(
     repository: SqliteCatalogRepository,
 ) -> None:
-    repository.record_observation(_obs(_A), _T0)
+    repository.record_observation(_reported_file(_A), _T0)
     repository.record_decision(_A, _decision("id_segment_exact", "download", "062A"), _T0)
     repository.record_decision(_A, _decision("", RETRACTED_TIER, "062A"), _T1)
     assert repository.latest_decisions(_A) == {
@@ -85,7 +85,7 @@ def test_last_decisions_includes_a_target_whose_latest_tier_is_retracted(
 def test_last_decisions_excludes_the_legacy_empty_sentinel(
     repository: SqliteCatalogRepository,
 ) -> None:
-    repository.record_observation(_obs(_A), _T0)
+    repository.record_observation(_reported_file(_A), _T0)
     repository.record_decision(_A, _decision("numero_nu", "notify", "062A"), _T0)
     repository.record_decision(_A, _decision("", RETRACTED_TIER, ""), _T1)  # legacy target_id=""
     assert repository.latest_decisions(_A) == {

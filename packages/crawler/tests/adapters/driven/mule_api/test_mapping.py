@@ -16,7 +16,7 @@ from p2pwatch.adapters.driven.mule_api.mapping import (
     offering_source_ecid,
 )
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.observation import FileObservation
+from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.source import SourceKey, SourceReading, SourceRole
 from p2pwatch.ports.driven.client_status import ChannelStatus, ClientStatus
 from p2pwatch.ports.driven.download_client import DownloadStatus, FailureReason, WaitingReason
@@ -45,26 +45,26 @@ def _result(**overrides: Any) -> dict[str, Any]:
     return row
 
 
-def _meta(observation: FileObservation) -> dict[str, object]:
-    return dict(observation.raw_meta)
+def _meta(reported_file: ReportedFile) -> dict[str, object]:
+    return dict(reported_file.raw_meta)
 
 
 def test_maps_a_result_to_an_observation() -> None:
-    observations, skipped = map_search_results([_result()], "keroro")
+    reported_files, skipped = map_search_results([_result()], "keroro")
 
     assert skipped == 0
-    (observation,) = observations
-    assert observation.file == _KEY
-    assert observation.filename == "Keroro.095.avi"
-    assert observation.size_bytes == 3825205248
-    assert observation.source_count == 217
-    assert observation.keyword == "keroro"
+    (reported_file,) = reported_files
+    assert reported_file.file == _KEY
+    assert reported_file.filename == "Keroro.095.avi"
+    assert reported_file.size_bytes == 3825205248
+    assert reported_file.source_count == 217
+    assert reported_file.keyword == "keroro"
 
 
 def test_the_ed2k_only_fields_are_folded_last_into_raw_meta() -> None:
-    (observation,), _ = map_search_results([_result(media={"codec": "H.264"})], "keroro")
+    (reported_file,), _ = map_search_results([_result(media={"codec": "H.264"})], "keroro")
 
-    assert observation.raw_meta[-3:] == (
+    assert reported_file.raw_meta[-3:] == (
         ("codec", "H.264"),
         ("file_type", "video"),
         ("complete_source_count", 142),
@@ -72,9 +72,9 @@ def test_the_ed2k_only_fields_are_folded_last_into_raw_meta() -> None:
 
 
 def test_an_uppercase_hash_is_folded_to_lowercase() -> None:
-    (observation,), _ = map_search_results([_result(hash=_HASH.upper())], "keroro")
+    (reported_file,), _ = map_search_results([_result(hash=_HASH.upper())], "keroro")
 
-    assert observation.file == _KEY
+    assert reported_file.file == _KEY
 
 
 def test_media_fills_the_columns_that_ec_never_could() -> None:
@@ -86,34 +86,34 @@ def test_media_fills_the_columns_that_ec_never_could() -> None:
         "album": "",
         "title": "Keroro",
     }
-    (observation,), _ = map_search_results([_result(media=media)], "keroro")
+    (reported_file,), _ = map_search_results([_result(media=media)], "keroro")
 
-    assert observation.duration_seconds == 1440
-    assert observation.bitrate_kbps == 1500
-    assert _meta(observation)["codec"] == "H.264"
+    assert reported_file.duration_seconds == 1440
+    assert reported_file.bitrate_kbps == 1500
+    assert _meta(reported_file)["codec"] == "H.264"
     # artist/album/title have no column: they survive in raw_meta (spec §4.2).
-    assert ("media.title", "Keroro") in observation.raw_meta
+    assert ("media.title", "Keroro") in reported_file.raw_meta
 
 
 def test_a_null_media_leaves_the_media_columns_empty() -> None:
-    (observation,), _ = map_search_results([_result()], "keroro")
+    (reported_file,), _ = map_search_results([_result()], "keroro")
 
-    assert observation.duration_seconds is None
-    assert observation.bitrate_kbps is None
-    assert _meta(observation)["codec"] is None
+    assert reported_file.duration_seconds is None
+    assert reported_file.bitrate_kbps is None
+    assert _meta(reported_file)["codec"] is None
 
 
 def test_a_malformed_media_object_is_tolerated() -> None:
-    (observation,), _ = map_search_results([_result(media={"codec": 7})], "keroro")
+    (reported_file,), _ = map_search_results([_result(media={"codec": 7})], "keroro")
 
-    assert _meta(observation)["codec"] is None
-    assert observation.duration_seconds is None
+    assert _meta(reported_file)["codec"] is None
+    assert reported_file.duration_seconds is None
 
 
 def test_unmapped_keys_land_in_raw_meta() -> None:
-    (observation,), _ = map_search_results([_result(rating=3)], "keroro")
+    (reported_file,), _ = map_search_results([_result(rating=3)], "keroro")
 
-    raw = _meta(observation)
+    raw = _meta(reported_file)
     assert raw["rating"] == "3"
     assert raw["status"] == "new"
     assert raw["already_downloaded"] == "false"
@@ -129,19 +129,19 @@ def test_every_alternate_name_becomes_its_own_observation() -> None:
         {"ecid": 621, "name": "[Keroro].095.avi", "sources": {"total": 40, "complete": 22}},
         {"ecid": 622, "name": "sgt-frog-095.avi", "sources": {"total": 10, "complete": 3}},
     ]
-    observations, skipped = map_search_results([_result(alternate_names=alternates)], "keroro")
+    reported_files, skipped = map_search_results([_result(alternate_names=alternates)], "keroro")
 
     assert skipped == 0
-    assert [observation.filename for observation in observations] == [
+    assert [reported_file.filename for reported_file in reported_files] == [
         "Keroro.095.avi",
         "[Keroro].095.avi",
         "sgt-frog-095.avi",
     ]
     # The hash and the size come from the parent, the source counts from each entry.
-    assert {observation.file for observation in observations} == {_KEY}
-    assert {observation.size_bytes for observation in observations} == {3825205248}
-    assert [observation.source_count for observation in observations] == [217, 40, 10]
-    assert [_meta(observation)["complete_source_count"] for observation in observations] == [
+    assert {reported_file.file for reported_file in reported_files} == {_KEY}
+    assert {reported_file.size_bytes for reported_file in reported_files} == {3825205248}
+    assert [reported_file.source_count for reported_file in reported_files] == [217, 40, 10]
+    assert [_meta(reported_file)["complete_source_count"] for reported_file in reported_files] == [
         142,
         22,
         3,
@@ -150,37 +150,37 @@ def test_every_alternate_name_becomes_its_own_observation() -> None:
 
 def test_an_alternate_never_carries_the_volatile_ecid() -> None:
     alternate = {"ecid": 621, "name": "[Keroro].095.avi", "sources": {"total": 40}}
-    observations, _ = map_search_results([_result(alternate_names=[alternate])], "keroro")
+    reported_files, _ = map_search_results([_result(alternate_names=[alternate])], "keroro")
 
-    assert all("621" not in str(value) for _, value in observations[1].raw_meta)
+    assert all("621" not in str(value) for _, value in reported_files[1].raw_meta)
 
 
 def test_a_result_without_a_usable_hash_is_skipped_and_counted() -> None:
-    observations, skipped = map_search_results([_result(hash="not-a-hash")], "keroro")
+    reported_files, skipped = map_search_results([_result(hash="not-a-hash")], "keroro")
 
-    assert observations == ()
+    assert reported_files == ()
     assert skipped == 1
 
 
 def test_a_result_without_a_usable_size_is_skipped_and_counted() -> None:
-    observations, skipped = map_search_results([_result(size_bytes=True)], "keroro")
+    reported_files, skipped = map_search_results([_result(size_bytes=True)], "keroro")
 
-    assert observations == ()
+    assert reported_files == ()
     assert skipped == 1
 
 
 def test_a_result_that_is_not_an_object_is_skipped_and_counted() -> None:
-    observations, skipped = map_search_results(["nonsense"], "keroro")
+    reported_files, skipped = map_search_results(["nonsense"], "keroro")
 
-    assert observations == ()
+    assert reported_files == ()
     assert skipped == 1
 
 
 def test_an_unusable_name_costs_only_its_own_observation_and_is_not_counted() -> None:
     alternates = [{"name": 7}, "nonsense", {"name": "sgt-frog-095.avi"}]
-    observations, skipped = map_search_results([_result(alternate_names=alternates)], "keroro")
+    reported_files, skipped = map_search_results([_result(alternate_names=alternates)], "keroro")
 
-    assert [observation.filename for observation in observations] == [
+    assert [reported_file.filename for reported_file in reported_files] == [
         "Keroro.095.avi",
         "sgt-frog-095.avi",
     ]
@@ -189,47 +189,47 @@ def test_an_unusable_name_costs_only_its_own_observation_and_is_not_counted() ->
 
 def test_a_nameless_parent_does_not_lose_its_alternates() -> None:
     alternates = [{"name": "sgt-frog-095.avi"}]
-    observations, skipped = map_search_results(
+    reported_files, skipped = map_search_results(
         [_result(name="", alternate_names=alternates)], "keroro"
     )
 
-    assert [observation.filename for observation in observations] == ["sgt-frog-095.avi"]
+    assert [reported_file.filename for reported_file in reported_files] == ["sgt-frog-095.avi"]
     assert skipped == 0
 
 
 def test_a_result_without_any_usable_name_is_skipped_and_counted() -> None:
-    observations, skipped = map_search_results(
+    reported_files, skipped = map_search_results(
         [_result(name="", alternate_names=[{"name": 7}])], "keroro"
     )
 
-    assert observations == ()
+    assert reported_files == ()
     assert skipped == 1
 
 
 def test_a_malformed_alternate_names_list_is_ignored() -> None:
-    observations, skipped = map_search_results([_result(alternate_names="nope")], "keroro")
+    reported_files, skipped = map_search_results([_result(alternate_names="nope")], "keroro")
 
-    assert len(observations) == 1
+    assert len(reported_files) == 1
     assert skipped == 0
 
 
 def test_missing_source_counts_read_as_zero() -> None:
-    (observation,), _ = map_search_results([_result(sources="nope")], "keroro")
+    (reported_file,), _ = map_search_results([_result(sources="nope")], "keroro")
 
-    assert observation.source_count == 0
-    assert _meta(observation)["complete_source_count"] == 0
+    assert reported_file.source_count == 0
+    assert _meta(reported_file)["complete_source_count"] == 0
 
 
 def test_a_non_integer_source_count_reads_as_zero() -> None:
-    (observation,), _ = map_search_results([_result(sources={"total": "many"})], "keroro")
+    (reported_file,), _ = map_search_results([_result(sources={"total": "many"})], "keroro")
 
-    assert observation.source_count == 0
+    assert reported_file.source_count == 0
 
 
 def test_a_non_string_file_type_is_dropped() -> None:
-    (observation,), _ = map_search_results([_result(file_type=7)], "keroro")
+    (reported_file,), _ = map_search_results([_result(file_type=7)], "keroro")
 
-    assert _meta(observation)["file_type"] is None
+    assert _meta(reported_file)["file_type"] is None
 
 
 def test_a_results_payload_that_is_not_a_list_yields_nothing() -> None:

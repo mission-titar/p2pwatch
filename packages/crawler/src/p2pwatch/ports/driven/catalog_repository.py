@@ -15,7 +15,7 @@ from typing import Protocol
 
 from catalog_matching.domain.engine import DecisionRecord, MatchDecision
 from p2pwatch.domain.file_key import FileKey
-from p2pwatch.domain.observation import FileObservation
+from p2pwatch.domain.observation import ReportedFile
 
 
 @dataclass(frozen=True)
@@ -24,7 +24,7 @@ class ObservedFile:
 
     The download loop (spec §5) reads the LATEST observation of a hash to rebuild its ed2k
     link (``build_ed2k_link(filename, size_bytes, hash)``). We return only the two required
-    fields — not the whole ``FileObservation`` (the rest is useless for download).
+    fields, not the whole ``ReportedFile`` (the rest is useless for download).
     """
 
     filename: str
@@ -76,7 +76,7 @@ class CatalogRepository(Protocol):
     file: the append-only table has no delete, so exclusion is an appended row.
     """
 
-    def record_observation(self, observation: FileObservation, observed_at: datetime) -> None: ...
+    def record_observation(self, reported_file: ReportedFile, observed_at: datetime) -> None: ...
 
     def record_decision(
         self, file: FileKey, decision: MatchDecision, decided_at: datetime

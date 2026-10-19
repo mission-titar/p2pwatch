@@ -162,13 +162,13 @@ class SearchWorker:
         ``RepositoryError`` per obs is ABSORBED inside ``record_observation`` (spec §7)."""
         await self._deps.telemetry.emit(
             SearchExecuted(
-                self._client_name, channel, len(answer.observations), answer.skipped_result_count
+                self._client_name, channel, len(answer.reported_files), answer.skipped_result_count
             )
         )
         changed = 0
-        for observation in answer.observations:
+        for reported_file in answer.reported_files:
             if await record_observation(
-                observation,
+                reported_file,
                 catalog=self._deps.catalog,
                 engine=self._deps.engine,
                 wake_hub=self._deps.wake_hub,

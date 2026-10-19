@@ -1,4 +1,4 @@
-"""``SqliteCatalogRepository``: ``FileObservation``/``MatchDecision`` → durable rows.
+"""``SqliteCatalogRepository``: ``ReportedFile``/``MatchDecision`` → durable rows.
 
 The adapter stores what the domain ignores (data-model spec §3): ``observed_at``/``decided_at``,
 given by the use-case at each write, and ``node_id``, given at the constructor.
@@ -32,7 +32,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError, wrap_sqlite_errors
 from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash, iso_to_micros
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.observation import FileObservation
+from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.retraction import RETRACTED_TIER
 from p2pwatch.ports.driven.catalog_repository import DownloadCandidate, ObservedFile, ReevalRow
 
@@ -103,19 +103,19 @@ class SqliteCatalogRepository:
         self._connection = connection
         self._node_id = node_id
 
-    def record_observation(self, observation: FileObservation, observed_at: datetime) -> None:
+    def record_observation(self, reported_file: ReportedFile, observed_at: datetime) -> None:
         """ONE transaction: file (first sight wins), its variant, the stamped observation."""
-        file = observation.file
+        file = reported_file.file
         if not _CANONICAL_HASH_RE.fullmatch(file.native_id):
             raise PersistenceError(f"non-canonical eD2k hash: {file.native_id!r}")
         variant = (
             file.file_id,
-            observation.filename,
-            observation.size_bytes,
-            observation.duration_seconds,
-            observation.bitrate_kbps,
-            json.dumps(observation.raw_meta, ensure_ascii=False),
-            observation.keyword,
+            reported_file.filename,
+            reported_file.size_bytes,
+            reported_file.duration_seconds,
+            reported_file.bitrate_kbps,
+            json.dumps(reported_file.raw_meta, ensure_ascii=False),
+            reported_file.keyword,
             self._node_id,
         )
         variant_content_hash = content_hash(*variant)
@@ -125,12 +125,12 @@ class SqliteCatalogRepository:
             try:
                 self._connection.execute(
                     _INSERT_FILE,
-                    (file.file_id, file.network, file.native_id, observation.size_bytes),
+                    (file.file_id, file.network, file.native_id, reported_file.size_bytes),
                 )
                 self._connection.execute(_INSERT_VARIANT, (*variant, variant_content_hash))
                 self._connection.execute(
                     _INSERT_OBSERVATION,
-                    (observed_at_micros, observation.source_count, variant_content_hash),
+                    (observed_at_micros, reported_file.source_count, variant_content_hash),
                 )
                 self._connection.execute("COMMIT")
             except BaseException:
