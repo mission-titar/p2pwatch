@@ -367,7 +367,10 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
 | 125 | `feat/list-files` | `ListFiles` behind `FileLister`, the files and target routes on it (Corrected 2026-10-19: `FileListing` holds `CatalogEntry`s, no `ListedFile`, which would wrap one with nothing added) | 280, 9 |
 | 130 | `test/list-files-routes-on-fakes` | `FakeFileLister`; the files and target routes' decoding tests on it (Corrected 2026-10-19: split from 135, measured at 605 lines; it moves assertions, so no exemption) | 354, 4 |
 | 135 | `test/files-rendering-on-fakes` | the files table's rendering tests on the fake; the fixtures no test needs deleted | 255, 1 |
-| 140 | `feat/describe-file` | `SourceReader` with `read_sharing_periods` (Corrected 2026-10-19: was `read_source_periods`, the reader table's name wins); `interval.py` to `domain/`; `DescribeFile`; its route and route tests | 450, 14 |
+| 140 | `refactor/sharing-period` | `PeriodWindow` and `SharingPeriod` in the domain, `SourcePeriodView` replaced; `SourceReader.read_sharing_periods` (Corrected 2026-10-19: block 140 split in 140, 143, 145 and 147, counted at 21 files and about 1,400 lines before any code; it moves behaviour, so no exemption) | 350, 8 |
+| 143 | `refactor/file-history` | `FileHistory`, `DatedDecision` in the domain; `CatalogFileReader.read_file_history`; `FileDetail`, `DecisionView` deleted | 300, 8 |
+| 145 | `feat/describe-file` | `interval.py` to `domain/`; `DescribeFile` behind `FileDescriber`; its route on it | 400, 12 |
+| 147 | `test/describe-file-routes-on-fakes` | the file page's route tests on a fake `FileDescriber` | 550, 3 |
 | 150 | `feat/list-sources` | `SourceReader`'s list reads; `ListSources`; its route and route tests | 450, 12 |
 | 160 | `feat/describe-source` | `DescribeSource`, `DescribeSourceName`; their routes and route tests; the dead `{% else %}` | 450, 12 |
 | 170 | `feat/console-query` | `SqlExecutor`, `RunConsoleQuery`; `displays.py`; the last webui exceptions in `tach.toml` | 400, 12 |
