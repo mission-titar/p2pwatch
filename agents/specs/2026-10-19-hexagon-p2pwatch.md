@@ -350,7 +350,8 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
 | 30 | `refactor/amuleapi-session` | `_call` opens the session; closed stays closed; the re-login serialized | 111, 7 |
 | 35 | `refactor/one-amuleapi-session` | `connect`/`close` off the ports; one session per node (Corrected 2026-10-19: split from block 30, measured at 24 files; this half moves behaviour, so no exemption) | 265, 19 |
 | 40 | `refactor/reported-file` | `FileObservation` renamed `ReportedFile`, with its variables | 200, 19 |
-| 50 | `refactor/one-observation` | `FileObservation` with `observed_at`; `Sighting`, `ObservedFile`, `ReevalRow` deleted | 400, 16 |
+| 50 | `refactor/one-observation` | `FileObservation` with `observed_at`, born with the write | 179, 14 |
+| 55 | `refactor/observation-reads` | every read returns `FileObservation` whole; `Sighting`, `ObservedFile`, `ReevalRow` deleted (Corrected 2026-10-19: split from block 50, measured at about 32 files; it moves behaviour, so no exemption) | 300, 18 |
 | 60 | `refactor/node-id-catalog-and-source-points` | the `node_id` through the catalog's three writes and the source points' write and two reads | 550, 22 |
 | 70 | `refactor/node-id-notifications` | the `node_id` through `emit` and `notify`; Apprise's groups per `node_id` | 400, 16 |
 | 80 | `feat/run-crawler` | `RunCrawler`; `NodeIdReader`, `NodeIdWriter`, `NodeIdGenerator`; the loops launched with the `node_id`; the composition only builds | 450, 15 |
