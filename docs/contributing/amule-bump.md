@@ -19,7 +19,7 @@ Le reste du dépôt nomme cette épingle au lieu d'écrire un numéro.
 Le workflow `.github/workflows/amule-bump.yml` tourne chaque lundi (et à la demande, depuis
 l'onglet **Actions**), en deux étapes.
 
-`uv run python -m amule_bump.adapters.driving.bump` (le paquet d'outillage `packages/amule_bump/`) fait la logique :
+`uv run python -m amule_bump bump` (le paquet d'outillage `packages/amule_bump/`) fait la logique :
 
 1. lit `AMULE_VERSION` et demande à GitHub la dernière release stable d'`amule-org/amule` ; même
    version, ou plus ancienne : il s'arrête ;
@@ -92,7 +92,7 @@ Sans l'App, ou pour une autre version que la dernière release, travaillez sur u
 **Vers la dernière release**, le module réécrit lui-même les deux `ARG` du Dockerfile :
 
 ```bash
-uv run python -m amule_bump.adapters.driving.bump
+uv run python -m amule_bump bump
 ```
 
 Ajoutez `--dry-run` pour seulement afficher les deux lignes et la description de PR qu'il

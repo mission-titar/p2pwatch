@@ -4,7 +4,6 @@ from urllib.error import HTTPError
 
 import pytest
 
-from amule_bump.adapters.driving import bump
 from amule_bump.adapters.driving.bump import main
 from tests.fakes import FakeRepoReader
 
@@ -31,11 +30,16 @@ def dockerfile(tmp_path: Path) -> Path:
 
 
 def run(
-    dockerfile: Path, repo_reader: FakeRepoReader, *flags: str, env: dict[str, str] | None = None
+    dockerfile: Path,
+    repo_reader: FakeRepoReader,
+    *,
+    dry_run: bool = False,
+    github_output: str | None = None,
 ) -> int:
-    body = dockerfile.parent / "body.md"
-    argv = ["--dockerfile", str(dockerfile), "--body-file", str(body), *flags]
-    return main(argv, repo_reader, env or {})
+    body_file = dockerfile.parent / "body.md"
+    return main(
+        dockerfile, body_file, dry_run, repo_reader=repo_reader, github_output=github_output
+    )
 
 
 def test_same_version_is_nothing_to_do(
@@ -44,7 +48,7 @@ def test_same_version_is_nothing_to_do(
     pinned = dockerfile.read_text().replace("3.0.1", "3.1.0")
     dockerfile.write_text(pinned)
     output = dockerfile.parent / "output"
-    assert run(dockerfile, upstream("3.1.0"), env={"GITHUB_OUTPUT": str(output)}) == 0
+    assert run(dockerfile, upstream("3.1.0"), github_output=str(output)) == 0
     assert capsys.readouterr().out == "aMule 3.1.0 is the latest release: nothing to do\n"
     assert dockerfile.read_text() == pinned
     assert not (dockerfile.parent / "body.md").exists()
@@ -74,7 +78,7 @@ def test_a_new_release_rewrites_the_pin_and_writes_the_body(dockerfile: Path) ->
 def test_a_new_release_is_announced_to_the_workflow(dockerfile: Path) -> None:
     output = dockerfile.parent / "output"
     output.write_text("earlier=kept\n")
-    run(dockerfile, upstream("3.1.0"), env={"GITHUB_OUTPUT": str(output)})
+    run(dockerfile, upstream("3.1.0"), github_output=str(output))
     body = dockerfile.parent / "body.md"
     assert output.read_text() == f"earlier=kept\nversion=3.1.0\nbody-path={body}\n"
 
@@ -83,7 +87,7 @@ def test_dry_run_prints_the_new_pin_and_body_and_writes_nothing(
     dockerfile: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     output = dockerfile.parent / "output"
-    assert run(dockerfile, upstream("3.1.0"), "--dry-run", env={"GITHUB_OUTPUT": str(output)}) == 0
+    assert run(dockerfile, upstream("3.1.0"), dry_run=True, github_output=str(output)) == 0
     printed = capsys.readouterr().out
     assert printed.startswith(
         f"ARG AMULE_VERSION=3.1.0\nARG AMULE_COMMIT={NEW_COMMIT}\n--- PR body ("
@@ -118,29 +122,3 @@ def test_an_http_failure_fails_with_a_clear_message(
 
     assert run(dockerfile, DownRepoReader()) == 1
     assert capsys.readouterr().err == "error: HTTP Error 503: Service Unavailable\n"
-
-
-def test_the_default_repo_reader_reads_upstream_authenticated_by_gh_token(
-    dockerfile: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    opened: list[tuple[str, str | None]] = []
-
-    def fake_repo_reader(name: str, token: str | None) -> FakeRepoReader:
-        opened.append((name, token))
-        return upstream("3.0.1")
-
-    monkeypatch.setattr(bump, "GitHubRepoReader", fake_repo_reader)
-    argv = ["--dockerfile", str(dockerfile)]
-    assert main(argv, env={"GH_TOKEN": "secret"}) == 0
-    assert opened == [("amule-org/amule", "secret")]
-
-
-def test_without_dockerfile_flag_it_bumps_the_amule_image(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    pinned = tmp_path / "packages/amule/Dockerfile"
-    pinned.parent.mkdir(parents=True)
-    pinned.write_text(DOCKERFILE)
-    monkeypatch.chdir(tmp_path)
-    assert main(["--body-file", str(tmp_path / "body.md")], upstream("3.1.0"), {}) == 0
-    assert "ARG AMULE_VERSION=3.1.0" in pinned.read_text()
