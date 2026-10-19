@@ -1,16 +1,15 @@
 """``SqliteLocalStateRepository``: node identity + reevaluated policy fingerprint (spec §4/§6).
 
-``get_or_create_node_id`` (spec §3): UUID generated on the first call, persisted in ``node_runtime``
-with ``created_at``, stable thereafter (scheduler seed §6 MVP + observation tag).
+The node id lives in ``node_runtime`` with its ``created_at``, recorded once (spec §3).
 """
 
 import sqlite3
-import uuid
 from contextlib import suppress
 from datetime import datetime
 
 from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
+from p2pwatch.ports.driven.node_id import NodeIdReader, NodeIdWriter
 
 _SELECT_NODE_ID = "SELECT value FROM node_runtime WHERE key = 'node_id'"
 
@@ -28,19 +27,21 @@ ON CONFLICT (id) DO UPDATE SET policy_fingerprint = excluded.policy_fingerprint
 """
 
 
-class SqliteLocalStateRepository:
-    """SQLite implementation of the ``LocalStateRepository`` port (STRUCTURAL satisfaction)."""
+class SqliteLocalStateRepository(NodeIdReader, NodeIdWriter):
+    """SQLite implementation of the node id's ports and of ``LocalStateRepository`` (structural)."""
 
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
 
-    def get_or_create_node_id(self, created_at: datetime) -> str:
-        """UUID created (and persisted with ``created_at``) on the first call, stable after."""
+    def read_node_id(self) -> str | None:
+        """The stored node id, ``None`` before one is recorded."""
         with wrap_sqlite_errors():
             row = self._connection.execute(_SELECT_NODE_ID).fetchone()
-            if row is not None:
-                return str(row[0])
-            node_id = str(uuid.uuid4())
+        return str(row[0]) if row is not None else None
+
+    def record_node_id(self, node_id: str, created_at: datetime) -> None:
+        """Persists ``node_id`` with ``created_at``, both rows or neither."""
+        with wrap_sqlite_errors():
             # Formatted BEFORE the BEGIN (same hygiene as the catalog repo): a naive
             # instant must not raise in the middle of a transaction.
             created_at_iso = utc_iso(created_at)
@@ -55,7 +56,6 @@ class SqliteLocalStateRepository:
                 with suppress(sqlite3.Error):
                     self._connection.execute("ROLLBACK")
                 raise
-        return node_id
 
     def reevaluated_policy_fingerprint(self) -> str | None:
         """The stored policy fingerprint, or ``None`` if no re-evaluation ever ran (spec §7.1)."""

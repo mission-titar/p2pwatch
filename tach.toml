@@ -174,6 +174,7 @@ depends_on = [
   "p2pwatch.ports.driven.catalog_copier",
   "p2pwatch.ports.driven.catalog_repository",
   "p2pwatch.ports.driven.download_client",
+  "p2pwatch.ports.driven.node_id",
   "p2pwatch.ports.driven.repository_errors",
   "p2pwatch.ports.driven.source_repository",
 ]
@@ -215,6 +216,11 @@ depends_on = []
 path = "p2pwatch.adapters.driven.stdlib_logger"
 layer = "adapters"
 depends_on = ["p2pwatch.ports.driven.logger"]
+
+[[modules]]
+path = "p2pwatch.adapters.driven.uuid4_node_id_generator"
+layer = "adapters"
+depends_on = ["p2pwatch.ports.driven.node_id"]
 
 [[modules]]
 path = "p2pwatch.adapters.driven.wake_hub_asyncio"
@@ -283,6 +289,7 @@ depends_on = [
   "p2pwatch.ports.driven.download_client",
   "p2pwatch.ports.driven.local_state_repository",
   "p2pwatch.ports.driven.logger",
+  "p2pwatch.ports.driven.node_id",
   "p2pwatch.ports.driven.repository_errors",
   "p2pwatch.ports.driven.rng",
   "p2pwatch.ports.driven.search_client",
@@ -307,6 +314,7 @@ depends_on = [
   "p2pwatch.adapters.driven.persistence_sqlite",
   "p2pwatch.adapters.driven.rng_random",
   "p2pwatch.adapters.driven.stdlib_logger",
+  "p2pwatch.adapters.driven.uuid4_node_id_generator",
   "p2pwatch.adapters.driven.wake_hub_asyncio",
   "p2pwatch.adapters.driven.wall_clock_system",
   "p2pwatch.adapters.driving.process",
@@ -380,6 +388,11 @@ depends_on = []
 
 [[modules]]
 path = "p2pwatch.ports.driven.logger"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driven.node_id"
 layer = "ports"
 depends_on = []
 

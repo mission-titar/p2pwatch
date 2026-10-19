@@ -1,7 +1,6 @@
 import sqlite3
-import uuid
 from collections.abc import Iterator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -14,7 +13,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.local_state_repository import (
 from p2pwatch.ports.driven.local_state_repository import LocalStateRepository
 
 _START = datetime(2026, 6, 11, 12, 0, 0, tzinfo=UTC)
-_NODE_ID_QUERY = "SELECT value FROM node_runtime WHERE key = 'node_id'"
+_NODE_ID = "0c9d6b5e-2f4a-4e1b-9a7d-3c2b1a0f9e8d"
 
 
 @pytest.fixture
@@ -32,34 +31,48 @@ def repository(connection: sqlite3.Connection) -> SqliteLocalStateRepository:
 # --- node_id (spec §3) ---------------------------------------------------------------
 
 
-def test_node_id_is_created_on_first_call_and_stable(
-    repository: SqliteLocalStateRepository, connection: sqlite3.Connection
+def test_no_node_id_is_read_before_one_is_recorded(
+    repository: SqliteLocalStateRepository,
 ) -> None:
-    created = repository.get_or_create_node_id(_START)
-    assert uuid.UUID(created)  # a REAL UUID, verifiable
-    later = _START + timedelta(days=1)
-    assert repository.get_or_create_node_id(later) == created  # stable on the second call
-    fresh = SqliteLocalStateRepository(connection)  # and any future instance
-    assert fresh.get_or_create_node_id(later) == created
+    assert repository.read_node_id() is None
 
 
-def test_node_id_persists_created_at_alongside(
+def test_a_recorded_node_id_is_read_back_by_any_later_instance(
     repository: SqliteLocalStateRepository, connection: sqlite3.Connection
 ) -> None:
-    repository.get_or_create_node_id(_START)
-    repository.get_or_create_node_id(_START + timedelta(days=1))
+    repository.record_node_id(_NODE_ID, _START)
+
+    assert repository.read_node_id() == _NODE_ID
+    assert SqliteLocalStateRepository(connection).read_node_id() == _NODE_ID
+
+
+def test_a_recorded_node_id_keeps_its_created_at_alongside(
+    repository: SqliteLocalStateRepository, connection: sqlite3.Connection
+) -> None:
+    repository.record_node_id(_NODE_ID, _START)
+
     row = connection.execute("SELECT value FROM node_runtime WHERE key = 'created_at'").fetchone()
     assert row == ("2026-06-11T12:00:00.000000+00:00",)
 
 
-def test_node_id_creation_failure_is_wrapped_and_rolled_back(
+def test_a_second_node_id_is_refused_and_the_first_kept(
+    repository: SqliteLocalStateRepository,
+) -> None:
+    repository.record_node_id(_NODE_ID, _START)
+
+    with pytest.raises(PersistenceError, match="UNIQUE"):
+        repository.record_node_id("another-node", _START)
+    assert repository.read_node_id() == _NODE_ID
+
+
+def test_a_failed_record_is_rolled_back_whole(
     repository: SqliteLocalStateRepository, connection: sqlite3.Connection
 ) -> None:
     # 'created_at' pre-existing -> the two-row INSERT violates the PK -> full rollback.
     connection.execute("INSERT INTO node_runtime (key, value) VALUES ('created_at', 'already')")
     with pytest.raises(PersistenceError, match="UNIQUE"):
-        repository.get_or_create_node_id(_START)
-    assert connection.execute(_NODE_ID_QUERY).fetchone() is None
+        repository.record_node_id(_NODE_ID, _START)
+    assert repository.read_node_id() is None
 
 
 def test_a_naive_created_at_does_not_wedge_the_connection(
@@ -69,10 +82,11 @@ def test_a_naive_created_at_does_not_wedge_the_connection(
     # NEVER leave the connection in_transaction (otherwise every subsequent call dies with
     # "cannot start a transaction within a transaction", a misleading diagnostic).
     with pytest.raises(ValueError, match="aware"):
-        repository.get_or_create_node_id(datetime(2026, 6, 11, 12))
+        repository.record_node_id(_NODE_ID, datetime(2026, 6, 11, 12))
     assert connection.in_transaction is False  # healthy connection, no zombie transaction
-    assert connection.execute(_NODE_ID_QUERY).fetchone() is None  # nothing half-written
-    assert uuid.UUID(repository.get_or_create_node_id(_START))  # the connection stays usable
+    assert repository.read_node_id() is None  # nothing half-written
+    repository.record_node_id(_NODE_ID, _START)  # the connection stays usable
+    assert repository.read_node_id() == _NODE_ID
 
 
 # --- port satisfaction ------------------------------------------------------------------

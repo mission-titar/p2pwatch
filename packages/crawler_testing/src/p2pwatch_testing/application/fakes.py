@@ -5,6 +5,7 @@
 ``FakeTime``: one timeline read through a wall and a monotonic clock.
 ``TickingMonotonicClock``: each read a second after the previous one.
 ``FakeRng``: FIXED jitter (determinism). ``FakeLogger``: keeps each line it is given.
+``FakeNodeIdStore`` and ``FakeNodeIdGenerator``: the node id's stored and new values.
 ``RecordingWakeHub``: captures woken subjects. The repos are the REAL SQLite repos
 (spec §8: "real repos on tmp_path"): no fakes here.
 """
@@ -19,6 +20,7 @@ from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.ports.driven.client_errors import ClientUnreachableError, SearchFailedError
 from p2pwatch.ports.driven.clock import MonotonicInstant
 from p2pwatch.ports.driven.logger import Logger
+from p2pwatch.ports.driven.node_id import NodeIdGenerator, NodeIdReader, NodeIdWriter
 from p2pwatch.ports.driven.search_client import SearchAnswer
 
 
@@ -125,6 +127,33 @@ class FakeLogger(Logger):
 
 def _formatted(message: str, args: tuple[object, ...]) -> str:
     return message % args if args else message
+
+
+class FakeNodeIdStore(NodeIdReader, NodeIdWriter):
+    """``local.db``'s node id: counts its reads, keeps each id recorded with its instant."""
+
+    def __init__(self, *, stored_node_id: str | None) -> None:
+        self._stored_node_id = stored_node_id
+        self.reads = 0
+        self.recorded: list[tuple[str, datetime]] = []
+
+    def read_node_id(self) -> str | None:
+        self.reads += 1
+        return self._stored_node_id
+
+    def record_node_id(self, node_id: str, created_at: datetime) -> None:
+        self.recorded.append((node_id, created_at))
+        self._stored_node_id = node_id
+
+
+class FakeNodeIdGenerator(NodeIdGenerator):
+    """Draws the one id it is given."""
+
+    def __init__(self, node_id: str) -> None:
+        self._node_id = node_id
+
+    def new_node_id(self) -> str:
+        return self._node_id
 
 
 class RecordingTelemetry:

@@ -1,12 +1,9 @@
 """Tests for the startup re-evaluation gate ``reevaluate_if_policy_changed`` (spec §7.1, Task 6).
 
-A fake local-state repo (full ``LocalStateRepository`` structural satisfaction: only
-``reevaluated_policy_fingerprint``/``set_reevaluated_policy_fingerprint`` are exercised here,
-the rest are unused stubs) + a plain async callable standing in for ``reevaluate_catalog``. No real
-SQLite/engine needed: the gate is pure orchestration over the port + the injected callable.
+A fake local-state repo (``LocalStateRepository``'s two fingerprint methods) + a plain async
+callable standing in for ``reevaluate_catalog``. No real SQLite/engine needed: the gate is pure
+orchestration over the port + the injected callable.
 """
-
-from datetime import datetime
 
 import pytest
 
@@ -18,14 +15,11 @@ _SUMMARY = ReevaluationSummary(files_evaluated=3, rows_written=1)
 
 
 class FakeLocalRepo:
-    """Full ``LocalStateRepository`` stub: only the fingerprint methods matter here."""
+    """``LocalStateRepository`` stub: keeps the fingerprint it is given."""
 
     def __init__(self, *, stored_policy: str | None) -> None:
         self._stored_policy = stored_policy
         self.set_calls: list[str] = []
-
-    def get_or_create_node_id(self, created_at: datetime) -> str:
-        return "node"
 
     def reevaluated_policy_fingerprint(self) -> str | None:
         return self._stored_policy
