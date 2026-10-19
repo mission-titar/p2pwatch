@@ -14,7 +14,7 @@ def parse_grype_json(text: str) -> set[str]:
 
 
 class SubprocessGrypeRunner:
-    def run(self, sbom_path: Path) -> set[str]:  # pragma: no cover - integration only
+    def run(self, sbom_path: Path) -> set[str]:
         completed = subprocess.run(
             ["grype", f"sbom:{sbom_path}", "-o", "json"],
             stdin=subprocess.DEVNULL,

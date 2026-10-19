@@ -74,10 +74,10 @@ Conséquences de cette forme, chacune porteuse ailleurs dans ce document :
   couramment à la porte avant qu'`amuled` n'ait démarré `amuleapi` ; « démon injoignable au
   démarrage » est toléré et absorbé par le backoff.
 - **Le PID 1 d'`ed2k` est root** (son one-shot `python -m p2pwatch_amule boot` crée
-  l'utilisateur `amule` depuis `PUID`/`PGID` et prend les bind mounts), puis chaque service abandonne
-  ses privilèges avec `setpriv`. Le cœur n'a ni point d'entrée ni root : `user:` dans `compose.yml` suffit à ce que
-  `data/` reste à l'opérateur. Les deux gardent `no-new-privileges`, `pids_limit` et `mem_limit`,
-  sans `read_only:` ni `cap_drop: ALL`.
+  l'utilisateur `amule` depuis `PUID`/`PGID` et prend les bind mounts), puis chaque service
+  abandonne ses privilèges avec `setpriv`. Le cœur n'a ni point d'entrée ni root : `user:` dans
+  `compose.yml` suffit à ce que `data/` reste à l'opérateur. Les deux gardent `no-new-privileges`,
+  `pids_limit` et `mem_limit`, sans `read_only:` ni `cap_drop: ALL`.
 - **Docker relance le cœur après toute sortie** (`restart: unless-stopped`), donc une config
   invalide se voit comme une boucle `Restarting`. Une sortie propre (le contrôle de redémarrage de
   la webui) ramène le crawler seul, et `amuled` garde ses sessions eD2k et Kad.
@@ -160,7 +160,7 @@ flowchart TB
   comp --> appl
   appl --> dom
   appl --> ports
-  dom --> ports
+  ports --> dom
   comp -->|injects| adp
   adp -.->|implement| ports
 ```
@@ -576,8 +576,7 @@ l'historique.
 
 Derrière un VPN, le port entrant change ; sans High-ID, la connectabilité (et donc la couverture) se
 dégrade. Le port-sync appartient au client : c'est un service s6 du conteneur `ed2k`
-(`python -m p2pwatch_amule port-sync`, sous l'utilisateur `amule`), et le cœur
-n'en sait rien.
+(`python -m p2pwatch_amule port-sync`, sous l'utilisateur `amule`), et le cœur n'en sait rien.
 Toutes les `PORT_SYNC_POLL_SECONDS` (60 s par défaut), il compare le **port forwardé** de gluetun
 au `[eMule] Port` d'`amule.conf`. S'ils diffèrent, et si le dernier redémarrage date de plus de
 `PORT_SYNC_RESTART_MIN_SECONDS` (300 s) :
