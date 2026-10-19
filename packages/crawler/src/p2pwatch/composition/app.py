@@ -35,6 +35,7 @@ from p2pwatch.adapters.driven.config.crawler_config import (
     load_config,
 )
 from p2pwatch.adapters.driven.disk_space_shutil import ShutilDiskSpace
+from p2pwatch.adapters.driven.in_memory_status_board import InMemoryStatusBoard
 from p2pwatch.adapters.driven.monotonic_clock_asyncio import AsyncioMonotonicClock
 from p2pwatch.adapters.driven.mule_api.client import AmuleApiClient
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
@@ -77,7 +78,7 @@ from p2pwatch.application.search_worker import (
     SearchWorker,
     WorkerDeps,
 )
-from p2pwatch.application.status_loop import StatusBoard, StatusLoopDeps, status_loop
+from p2pwatch.application.status_loop import StatusLoopDeps, status_loop
 from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
 from p2pwatch.ports.driving.crawler_runner import CrawlerRunner
 
@@ -128,7 +129,7 @@ class CrawlerApp(CrawlerRunner):
         *,
         config: LoadedConfig,
         stack: AsyncExitStack,
-        status_board: StatusBoard,
+        status_board: InMemoryStatusBoard,
         run_state: AsyncioRunState,
         shutdown_requester: RequestShutdown,
         wall_clock: WallClock,
@@ -152,7 +153,7 @@ class CrawlerApp(CrawlerRunner):
             crawl_resumer=ResumeCrawl(run_state),
             shutdown_requester=shutdown_requester,
             run_state_reader=run_state,
-            status_readings=status_board,
+            client_status_reader=status_board,
             amule_url=crawler_config.webui.amule_url,
             wall_clock=wall_clock,
             monotonic_clock=monotonic_clock,
@@ -209,7 +210,7 @@ class CrawlerApp(CrawlerRunner):
             catalog_repo = SqliteCatalogRepository(catalog_conn)
             backoff_states = SqliteBackoffStateRepository(local_conn)
             engine = MatchingEngine(config.matcher_config, config.targets)
-            board = StatusBoard((AMULE_CLIENT_NAME,), monotonic_clock)
+            board = InMemoryStatusBoard((AMULE_CLIENT_NAME,))
             # In-process webui (spec §5): own thread + loop, started EARLY (before the daemon client
             # + startup re-evaluation) so it is up promptly and stays isolated from the crawler's
             # synchronous work. Gated by ``webui.enabled``; a crash degrades (spec §17.1). Its

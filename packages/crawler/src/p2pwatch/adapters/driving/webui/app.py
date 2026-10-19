@@ -97,7 +97,8 @@ from p2pwatch.domain.coverage import coverage_of
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.source import SourceKey
-from p2pwatch.ports.driven.client_status import StatusReadings
+from p2pwatch.domain.status_reading import is_reading_fresh
+from p2pwatch.ports.driven.client_status import ClientStatusReader
 from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
 from p2pwatch.ports.driven.run_state import RunStateReader
 from p2pwatch.ports.driving.crawl_pauser import CrawlPauser
@@ -537,16 +538,20 @@ _CONTROL_MESSAGES: dict[str, str] = {
 _YES_NO: dict[bool | None, str] = {True: "yes", False: "no", None: "unknown"}
 
 
-def _client_lines(status_readings: StatusReadings) -> tuple[ClientLine, ...]:
-    """Each client's last reading, its values shown only while current (stage 2 D20)."""
+def _client_lines(
+    client_status_reader: ClientStatusReader, monotonic_clock: MonotonicClock
+) -> tuple[ClientLine, ...]:
+    """Each client's last reading, its values shown only while fresh (stage 2 D20)."""
     lines = []
-    for client_name, reading in status_readings.readings().items():
-        if reading is None:
+    published_readings = client_status_reader.read_readings()
+    now = monotonic_clock.now()
+    for client_name, published in published_readings.items():
+        if published is None:
             lines.append(ClientLine(client_name, "No reading yet.", "unknown", "unknown", ()))
             continue
-        read_at = short_timestamp(reading.read_at.isoformat())
-        client_status = reading.status
-        if not status_readings.is_current(client_name):
+        read_at = short_timestamp(published.reading.read_at.isoformat())
+        client_status = published.reading.status
+        if not is_reading_fresh(now - published.published_at):
             text = f"Out of date: last reading at {read_at}."
             lines.append(ClientLine(client_name, text, "unknown", "unknown", ()))
         elif client_status is None:
@@ -621,7 +626,7 @@ def build_app(
     crawl_resumer: CrawlResumer,
     shutdown_requester: ShutdownRequester,
     run_state_reader: RunStateReader,
-    status_readings: StatusReadings,
+    client_status_reader: ClientStatusReader,
     amule_url: str,
     wall_clock: WallClock,
     monotonic_clock: MonotonicClock,
@@ -635,7 +640,7 @@ def build_app(
     keeps the explainer's config from drifting from the persisted decisions (spec §8).
 
     Each control POST calls its use case, which returns at once; the webui itself holds no write
-    connection (spec §4/§10). ``status_readings`` holds the status loops' last readings.
+    connection (spec §4/§10). ``client_status_reader`` reads the status loops' last readings.
 
     ``amule_url`` is the base the nav's aMule entry points at (design §9); the caller reads it
     from ``webui.amule_url``. ``source_period_gap`` is the longest gap within a source period, from
@@ -703,7 +708,7 @@ def build_app(
             {
                 "coverage_rows": coverage_rows,
                 "node_state": node_state,
-                "clients": _client_lines(status_readings),
+                "clients": _client_lines(client_status_reader, monotonic_clock),
                 "crawl_state": "paused" if run_state_reader.is_paused() else "running",
                 # 0-or-1-element tuple the template iterates with {% for %} (no {% if %}, W-D8).
                 "messages": (message,) if message is not None else (),

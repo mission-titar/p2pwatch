@@ -123,6 +123,14 @@ layer = "adapters"
 depends_on = ["p2pwatch.ports.driven.run_state"]
 
 [[modules]]
+path = "p2pwatch.adapters.driven.in_memory_status_board"
+layer = "adapters"
+depends_on = [
+  "p2pwatch.ports.driven.client_status",
+  "p2pwatch.ports.driven.clock",
+]
+
+[[modules]]
 path = "p2pwatch.adapters.driven.config"
 layer = "adapters"
 depends_on = [
@@ -264,8 +272,9 @@ depends_on = [
   { path = "p2pwatch.adapters.driving.webui.views", deprecated = true },
   # The webui calls MatchingExplainer past any port: lot 2 gives it a driving port.
   { path = "p2pwatch.application", deprecated = true },
-  # The webui reads the clocks and the client status directly: lot 2 gives it driving ports.
+  # The dashboard reads the client status itself: lot 2's SummarizeCrawl (block 110) reads it instead.
   { path = "p2pwatch.ports.driven.client_status", deprecated = true },
+  # The webui reads the clocks directly: lot 2 gives it driving ports.
   { path = "p2pwatch.ports.driven.clock", deprecated = true },
   # The dashboard reads the run state itself: lot 2's SummarizeCrawl (block 110) reads it instead.
   { path = "p2pwatch.ports.driven.run_state", deprecated = true },
@@ -316,6 +325,7 @@ depends_on = [
   "p2pwatch.adapters.driven.asyncio_run_state",
   "p2pwatch.adapters.driven.config",
   "p2pwatch.adapters.driven.disk_space_shutil",
+  "p2pwatch.adapters.driven.in_memory_status_board",
   "p2pwatch.adapters.driven.monotonic_clock_asyncio",
   "p2pwatch.adapters.driven.mule_api",
   "p2pwatch.adapters.driven.observability",
@@ -365,7 +375,7 @@ depends_on = []
 [[modules]]
 path = "p2pwatch.ports.driven.client_status"
 layer = "ports"
-depends_on = []
+depends_on = ["p2pwatch.ports.driven.clock"]
 
 [[modules]]
 path = "p2pwatch.ports.driven.clock"

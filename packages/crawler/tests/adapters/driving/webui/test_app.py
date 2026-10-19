@@ -2,7 +2,6 @@
 
 import re
 import sqlite3
-from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -37,8 +36,18 @@ from p2pwatch.adapters.driving.webui.views import (
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceKey
-from p2pwatch.ports.driven.client_status import ChannelStatus, ClientStatus, StatusReading
-from p2pwatch_testing.application.fakes import FakeCrawlControls, FakeRunState, FakeTime
+from p2pwatch.ports.driven.client_status import (
+    ChannelStatus,
+    ClientStatus,
+    PublishedReading,
+    StatusReading,
+)
+from p2pwatch_testing.application.fakes import (
+    FakeClientStatusReader,
+    FakeCrawlControls,
+    FakeRunState,
+    FakeTime,
+)
 from p2pwatch_testing.catalog_rows import (
     SEEN_AT,
     file_id,
@@ -66,21 +75,7 @@ _MONOTONIC_CLOCK = _FAKE_TIME.monotonic
 _GAP = timedelta(seconds=90)
 
 
-class _Readings:
-    """The status board as the webui reads it: fixed readings, all current or all out of date."""
-
-    def __init__(self, readings: dict[str, StatusReading | None], *, current: bool = True) -> None:
-        self._readings = readings
-        self._current = current
-
-    def readings(self) -> Mapping[str, StatusReading | None]:
-        return self._readings
-
-    def is_current(self, client_name: str) -> bool:
-        return self._current
-
-
-_NO_STATUS = _Readings({})
+_NO_STATUS = FakeClientStatusReader({})
 # The read-path fixtures never call the controls, and read the crawl as running.
 _NO_CONTROLS = FakeCrawlControls()
 _RUNNING = FakeRunState()
@@ -180,7 +175,7 @@ def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
-        status_readings=_NO_STATUS,
+        client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -229,7 +224,7 @@ def app_no_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
-        status_readings=_NO_STATUS,
+        client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -290,7 +285,7 @@ def app_retracted_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette,
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
-        status_readings=_NO_STATUS,
+        client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -332,7 +327,7 @@ def app_no_observations(catalog_db: Path, local_db: Path) -> tuple[Starlette, st
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
-        status_readings=_NO_STATUS,
+        client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -382,7 +377,7 @@ def app_unknown_target(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
-        status_readings=_NO_STATUS,
+        client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -432,7 +427,7 @@ def app_download_tier_known_target(catalog_db: Path, local_db: Path) -> tuple[St
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
-        status_readings=_NO_STATUS,
+        client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -482,7 +477,7 @@ def app_download_tier_unknown_target(catalog_db: Path, local_db: Path) -> tuple[
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
-        status_readings=_NO_STATUS,
+        client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -746,7 +741,7 @@ def app_vetoed_alias(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
-        status_readings=_NO_STATUS,
+        client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1317,7 +1312,7 @@ def app_with_media_obs(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
-        status_readings=_NO_STATUS,
+        client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1377,7 +1372,7 @@ async def test_a_template_reading_what_its_context_lacks_raises(
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
-        status_readings=_NO_STATUS,
+        client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1481,7 +1476,7 @@ def app_with_hostile_filename(catalog_db: Path, local_db: Path) -> tuple[Starlet
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
-        status_readings=_NO_STATUS,
+        client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1564,7 +1559,7 @@ async def test_files_page_shows_pagination_navigation(catalog_db: Path, local_db
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
-        status_readings=_NO_STATUS,
+        client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1888,7 +1883,7 @@ def app_whole_episode(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
-        status_readings=_NO_STATUS,
+        client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1980,7 +1975,7 @@ def app_title_coverage(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
-        status_readings=_NO_STATUS,
+        client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -2012,7 +2007,7 @@ def _dashboard_app(
     catalog_db: Path,
     local_db: Path,
     controls: FakeCrawlControls,
-    status: _Readings,
+    status: FakeClientStatusReader,
     run_state: FakeRunState = _RUNNING,
 ) -> Starlette:
     import p2pwatch.adapters.driving.webui
@@ -2029,7 +2024,7 @@ def _dashboard_app(
         crawl_resumer=controls,
         shutdown_requester=controls,
         run_state_reader=run_state,
-        status_readings=status,
+        client_status_reader=status,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -2159,12 +2154,15 @@ async def test_each_control_followed_lands_on_its_dashboard_banner(
 
 
 _CHANNELS = (ChannelStatus("ed2k", True, False), ChannelStatus("x", False, None))
+_FRESH = timedelta(0)
 
 
 async def _clients_section(
-    catalog_db: Path, local_db: Path, reading: StatusReading | None, *, current: bool = True
+    catalog_db: Path, local_db: Path, reading: StatusReading | None, *, age: timedelta = _FRESH
 ) -> str:
-    status = _Readings({"amuled": reading}, current=current)
+    published_at = _MONOTONIC_CLOCK.now() - age
+    published = None if reading is None else PublishedReading(reading, published_at)
+    status = FakeClientStatusReader({"amuled": published})
     text = await _dashboard(_dashboard_app(catalog_db, local_db, FakeCrawlControls(), status))
     return text[text.index("<h2>Clients</h2>") : text.index("<h2>Crawl</h2>")]
 
@@ -2208,7 +2206,10 @@ async def test_dashboard_never_shows_an_old_reading_as_current(
     catalog_db: Path, local_db: Path
 ) -> None:
     section = await _clients_section(
-        catalog_db, local_db, _read_now(ClientStatus("2.3.3", _CHANNELS)), current=False
+        catalog_db,
+        local_db,
+        _read_now(ClientStatus("2.3.3", _CHANNELS)),
+        age=timedelta(minutes=2, microseconds=1),
     )
     assert "<dd>Out of date: last reading at 2026-06-12 00:00Z.</dd>" in section
     assert "2.3.3" not in section
@@ -2295,7 +2296,7 @@ def sortable_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, list[str]
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
-        status_readings=_NO_STATUS,
+        client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -2524,7 +2525,7 @@ async def test_nav_amule_link_uses_the_configured_base(catalog_db: Path, local_d
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
-        status_readings=_NO_STATUS,
+        client_status_reader=_NO_STATUS,
         amule_url="https://mule.example.org/amule",
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
