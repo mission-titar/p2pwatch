@@ -4,18 +4,21 @@
 (``ClientUnreachableError``/``SearchFailedError``) at ``connect``/``search``.
 ``FakeTime``: one timeline read through a wall and a monotonic clock.
 ``TickingMonotonicClock``: each read a second after the previous one.
-``FakeRng``: FIXED jitter (determinism).
+``FakeRng``: FIXED jitter (determinism). ``FakeLogger``: keeps each line it is given.
 ``RecordingWakeHub``: captures woken subjects. The repos are the REAL SQLite repos
 (spec §8: "real repos on tmp_path"): no fakes here.
 """
 
 import asyncio
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from p2pwatch.domain.observability.events import Event
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.ports.driven.client_errors import ClientUnreachableError, SearchFailedError
 from p2pwatch.ports.driven.clock import MonotonicInstant
+from p2pwatch.ports.driven.logger import Logger
 from p2pwatch.ports.driven.search_client import SearchAnswer
 
 
@@ -96,6 +99,32 @@ class FakeRng:
         if span <= 0:
             return 0.0
         return self._jitter_value
+
+
+@dataclass(frozen=True)
+class LoggedLine:
+    level: Literal["info", "warning", "error"]
+    message: str
+
+
+class FakeLogger(Logger):
+    """Keeps each line, its arguments formatted in as ``logging`` does."""
+
+    def __init__(self) -> None:
+        self.lines: list[LoggedLine] = []
+
+    def info(self, message: str, *args: object) -> None:
+        self.lines.append(LoggedLine("info", _formatted(message, args)))
+
+    def warning(self, message: str, *args: object) -> None:
+        self.lines.append(LoggedLine("warning", _formatted(message, args)))
+
+    def error(self, message: str, *args: object) -> None:
+        self.lines.append(LoggedLine("error", _formatted(message, args)))
+
+
+def _formatted(message: str, args: tuple[object, ...]) -> str:
+    return message % args if args else message
 
 
 class RecordingTelemetry:

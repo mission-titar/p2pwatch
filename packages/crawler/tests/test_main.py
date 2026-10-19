@@ -1,5 +1,6 @@
 """``python -m p2pwatch``: the command line wired to the real adapters and composition."""
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -49,13 +50,18 @@ def test_validate_config_refuses_a_broken_matcher(
     assert capsys.readouterr().err.startswith("Invalid config: ")
 
 
-def test_merge_of_two_catalogs_into_a_new_one_holds_both(tmp_path: Path) -> None:
+def test_merge_of_two_catalogs_into_a_new_one_holds_both(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     catalogs = [
         make_catalog(tmp_path / f"{letter}.db", {"files": [{"ed2k_hash": ed2k, "size_bytes": 100}]})
         for letter, ed2k in (("a", HASH_A), ("b", HASH_B))
     ]
     merged = tmp_path / "merged.db"
 
-    assert main(["merge", "--output", str(merged), *map(str, catalogs)]) == 0
+    with caplog.at_level(logging.INFO):
+        assert main(["merge", "--output", str(merged), *map(str, catalogs)]) == 0
 
     assert count(merged, "files") == 2
+    done = next(record for record in caplog.records if record.getMessage().startswith("merge done"))
+    assert done.name == "p2pwatch.application.merge_catalogs"  # an operator's filters keep it

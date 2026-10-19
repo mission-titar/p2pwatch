@@ -12,7 +12,6 @@ A per-row ``RepositoryError`` is logged (error level) and absorbed here: one bad
 not abort the whole sweep (spec §7, same discipline as ``record_observation``).
 """
 
-import logging
 from dataclasses import dataclass
 
 from catalog_matching.domain.engine import MatchingEngine
@@ -20,11 +19,10 @@ from p2pwatch.application.decisions import rejudge_file
 from p2pwatch.domain.observation import candidate_from_fields
 from p2pwatch.ports.driven.catalog_repository import CatalogRepository
 from p2pwatch.ports.driven.clock import WallClock
+from p2pwatch.ports.driven.logger import Logger
 from p2pwatch.ports.driven.repository_errors import RepositoryError
 from p2pwatch.ports.driven.telemetry import Telemetry
 from p2pwatch.ports.driven.wake_hub import WakeHub
-
-_logger = logging.getLogger("p2pwatch.application.reevaluate_catalog")
 
 # One INFO progress line per this many files, so a long sweep visibly advances.
 _PROGRESS_EVERY = 200
@@ -50,6 +48,7 @@ async def reevaluate_catalog(
     wake_hub: WakeHub,
     telemetry: Telemetry,
     wall_clock: WallClock,
+    logger: Logger,
 ) -> ReevaluationSummary:
     """Re-evaluate every catalogued hash's latest observation against ``engine``.
 
@@ -75,14 +74,14 @@ async def reevaluate_catalog(
                 wall_clock=wall_clock,
             )
         except RepositoryError as error:
-            _logger.error(
+            logger.error(
                 "persistence failed on file=%s:%s (%s): re-evaluation skipped, sweep continues",
                 row.file.network,
                 row.file.native_id,
                 error,
             )
         if files_evaluated % _PROGRESS_EVERY == 0:
-            _logger.info(
+            logger.info(
                 "catalogue re-evaluation: %d/%d files, %d rows written",
                 files_evaluated,
                 total,

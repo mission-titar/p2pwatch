@@ -1,10 +1,10 @@
 id: application-imports
 valid:
   - import asyncio
-  - import logging
   - from contextlib import suppress
   - from amule_bump.ports.driven.repo_reader import RepoReader
 invalid:
   - import shutil
   - from random import Random
   - import time
+  - import logging

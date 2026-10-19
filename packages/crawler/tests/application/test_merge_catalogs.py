@@ -9,6 +9,7 @@ from p2pwatch.application.merge_catalogs import MergeCatalogs
 from p2pwatch.ports.driven.catalog_copier import CatalogCopier, CatalogCopyError
 from p2pwatch.ports.driven.catalog_finder import CatalogFinder
 from p2pwatch.ports.driving.catalog_merger import ListedSourceCatalog, MergeError, NewCatalog
+from p2pwatch_testing.application.fakes import FakeLogger, LoggedLine
 
 _A = PurePath("a.db")
 _B = PurePath("b.db")
@@ -54,7 +55,7 @@ def _sources_found() -> _FakeCatalogFinder:
 def test_a_new_catalog_receives_every_source() -> None:
     catalog_copier = _FakeCatalogCopier()
 
-    MergeCatalogs(_sources_found(), catalog_copier).merge_catalogs(
+    MergeCatalogs(_sources_found(), catalog_copier, FakeLogger()).merge_catalogs(
         [_A, _B], NewCatalog(_OUT, force=False)
     )
 
@@ -66,7 +67,7 @@ def test_a_missing_source_is_refused_before_anything_is_copied() -> None:
     missing = PurePath("missing.db")
 
     with pytest.raises(MergeError, match=f"^source catalog not found: {missing}$"):
-        MergeCatalogs(_sources_found(), catalog_copier).merge_catalogs(
+        MergeCatalogs(_sources_found(), catalog_copier, FakeLogger()).merge_catalogs(
             [_A, missing], NewCatalog(_OUT, force=False)
         )
 
@@ -78,7 +79,7 @@ def test_a_new_catalog_that_exists_is_refused_unless_forced() -> None:
     catalog_copier = _FakeCatalogCopier()
 
     with pytest.raises(MergeError, match=f"^destination already exists: {_OUT} "):
-        MergeCatalogs(catalog_finder, catalog_copier).merge_catalogs(
+        MergeCatalogs(catalog_finder, catalog_copier, FakeLogger()).merge_catalogs(
             [_A], NewCatalog(_OUT, force=False)
         )
 
@@ -88,9 +89,9 @@ def test_a_new_catalog_that_exists_is_refused_unless_forced() -> None:
 def test_a_forced_merge_appends_to_the_existing_catalog() -> None:
     catalog_copier = _FakeCatalogCopier()
 
-    MergeCatalogs(_FakeCatalogFinder({_A: _A, _OUT: _OUT}), catalog_copier).merge_catalogs(
-        [_A], NewCatalog(_OUT, force=True)
-    )
+    MergeCatalogs(
+        _FakeCatalogFinder({_A: _A, _OUT: _OUT}), catalog_copier, FakeLogger()
+    ).merge_catalogs([_A], NewCatalog(_OUT, force=True))
 
     assert catalog_copier.copies == [(_OUT, [_A], False)]
 
@@ -102,7 +103,7 @@ def test_a_listed_source_receives_the_others_under_any_spelling() -> None:
     )
     catalog_copier = _FakeCatalogCopier()
 
-    MergeCatalogs(catalog_finder, catalog_copier).merge_catalogs(
+    MergeCatalogs(catalog_finder, catalog_copier, FakeLogger()).merge_catalogs(
         [_A, _B], ListedSourceCatalog(spelled_otherwise)
     )
 
@@ -117,7 +118,7 @@ def test_a_destination_that_is_not_a_listed_source_is_refused() -> None:
     with pytest.raises(
         MergeError, match=f"^destination must be one of the source catalogs: {other}$"
     ):
-        MergeCatalogs(catalog_finder, catalog_copier).merge_catalogs(
+        MergeCatalogs(catalog_finder, catalog_copier, FakeLogger()).merge_catalogs(
             [_A, _B], ListedSourceCatalog(other)
         )
 
@@ -128,20 +129,21 @@ def test_a_failed_copy_is_a_merge_error_chained_to_it() -> None:
     copy_error = CatalogCopyError("copy of b.db failed: no such table")
 
     with pytest.raises(MergeError, match="^copy of b.db failed: no such table$") as raised:
-        MergeCatalogs(_sources_found(), _FakeCatalogCopier(copy_error)).merge_catalogs(
-            [_A, _B], NewCatalog(_OUT, force=False)
-        )
+        MergeCatalogs(
+            _sources_found(), _FakeCatalogCopier(copy_error), FakeLogger()
+        ).merge_catalogs([_A, _B], NewCatalog(_OUT, force=False))
 
     assert raised.value.__cause__ is copy_error
 
 
-def test_the_merge_logs_its_destination_before_and_after_the_copy(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    caplog.set_level("INFO", logger="p2pwatch.application.merge_catalogs")
+def test_the_merge_logs_its_destination_before_and_after_the_copy() -> None:
+    logger = FakeLogger()
 
-    MergeCatalogs(_sources_found(), _FakeCatalogCopier()).merge_catalogs(
+    MergeCatalogs(_sources_found(), _FakeCatalogCopier(), logger).merge_catalogs(
         [_A, _B], NewCatalog(_OUT, force=False)
     )
 
-    assert caplog.messages == [f"merge → {_OUT} (2 source catalog(s))", f"merge done: {_OUT}"]
+    assert logger.lines == [
+        LoggedLine("info", f"merge → {_OUT} (2 source catalog(s))"),
+        LoggedLine("info", f"merge done: {_OUT}"),
+    ]

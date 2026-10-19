@@ -111,6 +111,7 @@ depends_on = [
   "p2pwatch.adapters.driven.config",
   "p2pwatch.adapters.driven.pathlib_catalog_finder",
   "p2pwatch.adapters.driven.persistence_sqlite",
+  "p2pwatch.adapters.driven.stdlib_logger",
   "p2pwatch.adapters.driving.cli",
   "p2pwatch.application",
   "p2pwatch.composition",
@@ -211,6 +212,11 @@ layer = "adapters"
 depends_on = []
 
 [[modules]]
+path = "p2pwatch.adapters.driven.stdlib_logger"
+layer = "adapters"
+depends_on = ["p2pwatch.ports.driven.logger"]
+
+[[modules]]
 path = "p2pwatch.adapters.driven.wake_hub_asyncio"
 layer = "adapters"
 depends_on = []
@@ -276,6 +282,7 @@ depends_on = [
   "p2pwatch.ports.driven.disk_space",
   "p2pwatch.ports.driven.download_client",
   "p2pwatch.ports.driven.local_state_repository",
+  "p2pwatch.ports.driven.logger",
   "p2pwatch.ports.driven.repository_errors",
   "p2pwatch.ports.driven.rng",
   "p2pwatch.ports.driven.search_client",
@@ -299,6 +306,7 @@ depends_on = [
   "p2pwatch.adapters.driven.observability",
   "p2pwatch.adapters.driven.persistence_sqlite",
   "p2pwatch.adapters.driven.rng_random",
+  "p2pwatch.adapters.driven.stdlib_logger",
   "p2pwatch.adapters.driven.wake_hub_asyncio",
   "p2pwatch.adapters.driven.wall_clock_system",
   "p2pwatch.adapters.driving.process",
@@ -367,6 +375,11 @@ depends_on = ["p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.ports.driven.local_state_repository"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driven.logger"
 layer = "ports"
 depends_on = []
 

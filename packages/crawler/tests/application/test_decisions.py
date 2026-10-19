@@ -26,6 +26,7 @@ from p2pwatch.domain.observability.events import DecisionChange, DecisionsRecord
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.retraction import RETRACTED_TIER
 from p2pwatch_testing.application.fakes import (
+    FakeLogger,
     FakeTime,
     FakeWallClock,
     RecordingTelemetry,
@@ -300,6 +301,7 @@ async def test_a_second_name_that_matches_nothing_does_not_retract_the_first(
             wall_clock=wall_clock,
             client_name="amuled",
             channel="ed2k",
+            logger=FakeLogger(),
         )
         for name in (_DL_NAME, _DISCARD_NAME, _DL_NAME, _DISCARD_NAME)
     ]
