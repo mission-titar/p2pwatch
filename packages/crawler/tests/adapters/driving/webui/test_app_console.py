@@ -12,17 +12,15 @@ from starlette.applications import Starlette
 from catalog_matching.domain.config import MatcherConfig
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
-from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import SqliteCoverageReader
-from p2pwatch.adapters.driven.persistence_sqlite.local_read import SqliteNodeStateReader
-from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driving.webui.app import build_app
-from p2pwatch.application.describe_node import DescribeNode
-from p2pwatch.application.summarize_crawl import SummarizeCrawl
+from p2pwatch.domain.node_state import NodeState
 from p2pwatch.ports.driven.clock import MonotonicClock
+from p2pwatch.ports.driving.crawl_summarizer import CrawlSummary
+from p2pwatch.ports.driving.node_describer import NodeDescription
 from p2pwatch_testing.application.fakes import (
-    FakeClientStatusReader,
     FakeCrawlControls,
-    FakeRunState,
+    FakeCrawlSummarizer,
+    FakeNodeDescriber,
     FakeTime,
     TickingMonotonicClock,
 )
@@ -84,7 +82,7 @@ def _build(catalog_db: Path, local_db: Path, monotonic_clock: MonotonicClock) ->
     templates_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "templates"
     static_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "static"
     controls = FakeCrawlControls()  # the console routes never call them
-    node_state_reader = SqliteNodeStateReader(ReaderProvider(local_db))
+    node_state = NodeState(node_id=None, created_at=None, downloads=(), backoff_state_by_key={})
     return build_app(
         catalog_db_path=catalog_db,
         local_db_path=local_db,
@@ -95,15 +93,8 @@ def _build(catalog_db: Path, local_db: Path, monotonic_clock: MonotonicClock) ->
         crawl_pauser=controls,
         crawl_resumer=controls,
         shutdown_requester=controls,
-        crawl_summarizer=SummarizeCrawl(
-            target_ids=(),
-            coverage_reader=SqliteCoverageReader(ReaderProvider(catalog_db)),
-            node_state_reader=node_state_reader,
-            run_state_reader=FakeRunState(),
-            client_status_reader=FakeClientStatusReader({}),
-            monotonic_clock=monotonic_clock,
-        ),
-        node_describer=DescribeNode(node_state_reader),
+        crawl_summarizer=FakeCrawlSummarizer(CrawlSummary((), False, node_state, ())),
+        node_describer=FakeNodeDescriber(NodeDescription(node_state)),
         amule_url="http://localhost:4711",
         wall_clock=FakeTime().wall,
         monotonic_clock=monotonic_clock,
