@@ -1,0 +1,11 @@
+id: ports-imports
+language: python
+severity: error
+message: A port imports only the pure standard library on this list and its own hexagon.
+note: "A module that needs I/O goes behind a port; a new pure module is a new line here."
+files: ["packages/*/src/*/ports/**/*.py"]
+ignores: ["packages/crawler_testing/**"]
+rule:
+  matches: imported-module
+  not:
+    regex: ^(abc|collections\.abc|dataclasses|datetime|enum|pathlib|typing|(amule_bump|catalog_matching|coverage_checks|p2pwatch|p2pwatch_amule|template_checks|vex_checks)(\.\w+)*)$

@@ -84,8 +84,9 @@ python-interpreter-path = "./.venv/bin/python"
 lint           = { cmd = "ruff check .", help = "Lint Python with ruff" }
 format-check   = { cmd = "ruff format --check .", help = "Check Python formatting with ruff" }
 sql-lint       = { cmd = "sqlfluff lint packages/crawler/src", help = "Lint the embedded SQLite migrations" }
-code-pattern-check = { cmd = "ast-grep scan", help = "Ban dynamic attribute access (ast-grep, sgconfig.yml)" }
-architecture-check = { cmd = "tach check", help = "Check the imports between rings and adapters (tach, tach.toml)" }
+# The rule tests check each case's verdict, without snapshots of the messages.
+code-pattern-check = { help = "Ban dynamic attribute access and the core's other imports (ast-grep, sgconfig.yml), rules tested first", sequence = [{ cmd = "ast-grep test --skip-snapshot-tests" }, { cmd = "ast-grep scan" }] }
+architecture-check = { help = "Check the imports between rings, adapters and hexagons (tach, tach.toml)", sequence = [{ cmd = "tach check" }, { cmd = "tach check-external" }] }
 template-check = { cmd = "python -m template_checks logic-free packages/crawler/src/p2pwatch/adapters/driving/webui/templates", help = "Assert webui templates carry no logic" }
 _template-read-names = { cmd = "python -m template_checks read-names packages/crawler/src/p2pwatch/adapters/driving/webui/templates" }
 dead-code-check = { shell = 'vulture --ignore-names "$TEMPLATE_READ_NAMES"', uses = { TEMPLATE_READ_NAMES = "_template-read-names" }, help = "Find code no production path reaches (vulture on src, template reads ignored)" }

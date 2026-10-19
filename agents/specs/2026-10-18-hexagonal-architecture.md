@@ -126,7 +126,7 @@ it relies on.
   consumes driven ports. `CrawlerControl` and `StatusReadings` become driving ports implemented by use
   cases, over driven ports that `LoopCrawlerControl` and the status board implement; the webui's HTTP module
   stops importing the clock ports. tach states it with one module per port file, `depends_on`,
-  `layers_explicit_depends_on` and `exact`, and isolates each hexagon with `visibility`. Why: the same rule
+  `layers_explicit_depends_on` and `exact`, and isolates each hexagon with `visibility` (Corrected 2026-10-19: with `tach check-external`, D15). Why: the same rule
   on both sides; one module per port file is what lets "exactly the ports it uses" be written.
 - **D7. Every use case has a driving port**, and every read goes through a use case, even a pure
   delegation (Corrected 2026-10-18: one driving port, `CrawlerRunner`, is implemented by the composition, since
@@ -199,7 +199,8 @@ it relies on.
 - **D15. tach enforces the boundaries, ast-grep the allowlists and the `Protocol` ban.** tach runs in
   `lint-all` with `layers`, `layers_explicit_depends_on`, `exact`, `forbid_circular_dependencies`,
   `visibility` and `root_module = "forbid"`, the root `__main__.py` modules declared in the composition
-  layer. An exception is a dependency declared `deprecated = true` in `tach.toml`, beside a comment naming
+  layer. (Corrected 2026-10-19: `tach check-external` in place of `visibility`, which no import
+  across distributions reaches; lot 1b's spec, section "The check".) An exception is a dependency declared `deprecated = true` in `tach.toml`, beside a comment naming
   its reason and the lot that removes it; no `# tach-ignore` is written. Why tach rather than import-linter:
   the operator's choice, after the trial proved it refuses the three violation shapes and its gap
   (third-party imports) is covered by D9. Why deprecated edges: they live in one file, survive ruff and

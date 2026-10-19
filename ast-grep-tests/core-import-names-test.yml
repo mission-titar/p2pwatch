@@ -1,0 +1,19 @@
+id: core-import-names
+valid:
+  - "async with asyncio.TaskGroup() as group: pass"
+  - await asyncio.sleep(0)
+  - _NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "https://example.org")
+  - out = io.StringIO()
+  - from pathlib import PurePath
+  - self.io.read()
+invalid:
+  - await asyncio.to_thread(work)
+  - asyncio.get_running_loop()
+  - token = uuid.uuid4()
+  - io.open("conf")
+  - from asyncio import Event
+  - from uuid import uuid5
+  - import pathlib
+  - from pathlib import Path
+  - from pathlib import PurePath, Path
+  - from pathlib import PurePath as P
