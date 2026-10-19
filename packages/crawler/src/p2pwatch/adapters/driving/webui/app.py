@@ -99,7 +99,10 @@ from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.source import SourceKey
 from p2pwatch.ports.driven.client_status import StatusReadings
 from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
-from p2pwatch.ports.driving.crawler_control import CrawlerControl
+from p2pwatch.ports.driven.run_state import RunStateReader
+from p2pwatch.ports.driving.crawl_pauser import CrawlPauser
+from p2pwatch.ports.driving.crawl_resumer import CrawlResumer
+from p2pwatch.ports.driving.shutdown_requester import ShutdownRequester
 
 # A detail page's path segment: a file_id or a source_id as 32 lowercase hex (stage 1 and 4 D13).
 _HEX_ID = re.compile(r"[0-9a-f]{32}")
@@ -614,7 +617,10 @@ def build_app(
     target_segments: tuple[TargetSegment, ...],
     templates_dir: Path,
     static_dir: Path,
-    control: CrawlerControl,
+    crawl_pauser: CrawlPauser,
+    crawl_resumer: CrawlResumer,
+    shutdown_requester: ShutdownRequester,
+    run_state_reader: RunStateReader,
     status_readings: StatusReadings,
     amule_url: str,
     wall_clock: WallClock,
@@ -628,10 +634,8 @@ def build_app(
     ``matcher.yml`` / ``targets.yml`` itself. Passing the crawler's own parsed matcher is what
     keeps the explainer's config from drifting from the persisted decisions (spec §8).
 
-    ``control`` is the runtime-control PORT (``CrawlerControl``): the webui depends on the port,
-    never on the concrete adapter (composition wires ``AsyncioRunState``). Every control POST
-    dispatches a thread-safe, fire-and-forget intent to the crawler loop; the webui itself holds
-    no write connection (spec §4/§10). ``status_readings`` holds the status loops' last readings.
+    Each control POST calls its use case, which returns at once; the webui itself holds no write
+    connection (spec §4/§10). ``status_readings`` holds the status loops' last readings.
 
     ``amule_url`` is the base the nav's aMule entry points at (design §9); the caller reads it
     from ``webui.amule_url``. ``source_period_gap`` is the longest gap within a source period, from
@@ -700,7 +704,7 @@ def build_app(
                 "coverage_rows": coverage_rows,
                 "node_state": node_state,
                 "clients": _client_lines(status_readings),
-                "crawl_state": "paused" if control.is_paused() else "running",
+                "crawl_state": "paused" if run_state_reader.is_paused() else "running",
                 # 0-or-1-element tuple the template iterates with {% for %} (no {% if %}, W-D8).
                 "messages": (message,) if message is not None else (),
             },
@@ -1011,22 +1015,21 @@ def build_app(
         )
 
     # ------------------------------------------------------------------
-    # Runtime controls (phase P6a): POST intents dispatched to the crawler loop via
-    # ``control`` (a ``CrawlerControl`` port). Each POST is fire-and-forget then redirects
+    # Runtime controls (phase P6a): each POST calls its use case, then redirects
     # (PRG) to ``/?done=<code>``, where the dashboard shows a 0-or-1 message banner.
     # NO CSRF token: consistent with the no-auth, network-trust-boundary posture (spec §12).
     # ------------------------------------------------------------------
 
     async def handle_pause(request: Request) -> Response:
-        control.pause()
+        crawl_pauser.pause_crawl()
         return RedirectResponse("/?done=paused", status_code=303)
 
     async def handle_resume(request: Request) -> Response:
-        control.resume()
+        crawl_resumer.resume_crawl()
         return RedirectResponse("/?done=resumed", status_code=303)
 
     async def handle_restart(request: Request) -> Response:
-        control.request_shutdown()
+        shutdown_requester.request_shutdown()
         return RedirectResponse("/?done=restarted", status_code=303)
 
     # ------------------------------------------------------------------

@@ -15,7 +15,12 @@ from catalog_matching.domain.validation import parse_matcher_config, parse_targe
 from p2pwatch.adapters.driving.webui.app import build_app
 from p2pwatch.application.status_loop import StatusBoard
 from p2pwatch.ports.driven.clock import MonotonicClock
-from p2pwatch_testing.application.fakes import FakeTime, TickingMonotonicClock
+from p2pwatch_testing.application.fakes import (
+    FakeCrawlControls,
+    FakeRunState,
+    FakeTime,
+    TickingMonotonicClock,
+)
 from p2pwatch_testing.catalog_rows import insert_file
 
 pytestmark = pytest.mark.usefixtures("close_test_connections")
@@ -30,22 +35,6 @@ _PAST_BUDGET_SQL = (
 # ---------------------------------------------------------------------------
 # Route fixtures
 # ---------------------------------------------------------------------------
-
-
-class _StubControl:
-    """No-op ``CrawlerControl`` (the console routes never touch it)."""
-
-    def pause(self) -> None:  # pragma: no cover - never called by console routes
-        pass
-
-    def resume(self) -> None:  # pragma: no cover
-        pass
-
-    def request_shutdown(self) -> None:  # pragma: no cover
-        pass
-
-    def is_paused(self) -> bool:
-        return False
 
 
 def _targets() -> tuple[TargetSegment, ...]:
@@ -89,6 +78,7 @@ def _build(catalog_db: Path, local_db: Path, monotonic_clock: MonotonicClock) ->
 
     templates_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "templates"
     static_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "static"
+    controls = FakeCrawlControls()  # the console routes never call them
     return build_app(
         catalog_db_path=catalog_db,
         local_db_path=local_db,
@@ -96,7 +86,10 @@ def _build(catalog_db: Path, local_db: Path, monotonic_clock: MonotonicClock) ->
         target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
-        control=_StubControl(),
+        crawl_pauser=controls,
+        crawl_resumer=controls,
+        shutdown_requester=controls,
+        run_state_reader=FakeRunState(),
         status_readings=StatusBoard((), FakeTime().monotonic),
         amule_url="http://localhost:4711",
         wall_clock=FakeTime().wall,

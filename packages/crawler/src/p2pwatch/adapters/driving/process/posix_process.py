@@ -5,7 +5,7 @@ import signal
 import sys
 from contextlib import AsyncExitStack, suppress
 
-from p2pwatch.ports.driving.crawler_control import CrawlerControl
+from p2pwatch.ports.driving.shutdown_requester import ShutdownRequester
 
 _SIGNALS = (signal.SIGINT, signal.SIGTERM)
 
@@ -21,8 +21,8 @@ class PosixProcess:
     Entered, it gives the stack of the resources it holds, and closes them on exit.
     """
 
-    def __init__(self, control: CrawlerControl) -> None:
-        self._control = control
+    def __init__(self, shutdown_requester: ShutdownRequester) -> None:
+        self._shutdown_requester = shutdown_requester
         self._resources = AsyncExitStack()
         self._signal_count = 0
 
@@ -48,7 +48,7 @@ class PosixProcess:
                 "Shutdown requested: finishing in-flight searches, clean close… "
                 "(Ctrl-C again to force)"
             )
-            self._control.request_shutdown()
+            self._shutdown_requester.request_shutdown()
         else:
             _print_progress("Forced shutdown.")
             raise SystemExit(1)
