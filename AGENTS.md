@@ -146,6 +146,7 @@ a function does.
 | `candidate` | a `FileCandidate`, one name of a file and its metadata, the matcher's input; a `DownloadCandidate` is a file with a download-tier decision | `names` |
 | `target` | an episode segment to recover: `target_id`, `TargetSegment`, its `letter` | `segment` for the letter; Kad's keyword target, which is a `kad_word` |
 | `tier` | a decision's strength: `catalog`, `notify`, `download` | `before`, `after` |
+| `coverage` | `TargetCoverage`, how far a target is recovered: its status, its best tier and its file count, catalog-tier decisions left out | `progress` |
 | `token` | a named matcher of the policy (`tokens:`) | a word of a text |
 | `word` | a piece of normalized text | `token` |
 | `reevaluation` | re-judging every file when the policy changed | `backfill` |

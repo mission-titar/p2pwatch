@@ -33,7 +33,7 @@ class NavItem:
 
 
 @dataclass(frozen=True)
-class TargetCoverageRow:
+class TargetCoverageDisplay:
     """Dashboard row: a target's coverage."""
 
     target_id: str

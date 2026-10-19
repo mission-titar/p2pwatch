@@ -47,6 +47,7 @@ from p2pwatch.adapters.driven.observability.prometheus_sink import (
 from p2pwatch.adapters.driven.persistence_sqlite.backoff_state_repository import (
     SqliteBackoffStateRepository,
 )
+from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import SqliteCoverageReader
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
 from p2pwatch.adapters.driven.persistence_sqlite.download_repository import SqliteDownloadRepository
@@ -82,6 +83,7 @@ from p2pwatch.application.search_worker import (
     WorkerDeps,
 )
 from p2pwatch.application.status_loop import StatusLoopDeps, status_loop
+from p2pwatch.application.summarize_crawl import SummarizeCrawl
 from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
 from p2pwatch.ports.driving.crawler_runner import CrawlerRunner
 
@@ -156,10 +158,17 @@ class CrawlerApp(CrawlerRunner):
             crawl_pauser=PauseCrawl(run_state),
             crawl_resumer=ResumeCrawl(run_state),
             shutdown_requester=shutdown_requester,
-            run_state_reader=run_state,
+            crawl_summarizer=SummarizeCrawl(
+                target_ids=tuple(target.target_id for target in config.targets),
+                coverage_reader=SqliteCoverageReader(
+                    ReaderProvider(crawler_config.catalog_db_path)
+                ),
+                node_state_reader=node_state_reader,
+                run_state_reader=run_state,
+                client_status_reader=status_board,
+                monotonic_clock=monotonic_clock,
+            ),
             node_describer=DescribeNode(node_state_reader),
-            node_state_reader=node_state_reader,
-            client_status_reader=status_board,
             amule_url=crawler_config.webui.amule_url,
             wall_clock=wall_clock,
             monotonic_clock=monotonic_clock,

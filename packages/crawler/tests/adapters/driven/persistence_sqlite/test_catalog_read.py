@@ -2,7 +2,7 @@
 
 import re
 import sqlite3
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 import pytest
@@ -20,9 +20,10 @@ from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
     PAGE_SIZE,
     SORT_COLUMNS,
     CatalogReader,
+    SqliteCoverageReader,
     _tier_rank_case,
 )
-from p2pwatch.adapters.driven.persistence_sqlite.reader import open_reader
+from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider, open_reader
 from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
 from p2pwatch.adapters.driving.webui.views import (
     FileRow,
@@ -108,35 +109,36 @@ def _seed_whole_episode(db: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _read_target_coverage(catalog_db: Path) -> Mapping[str, tuple[str, ...]]:
+    return SqliteCoverageReader(ReaderProvider(catalog_db)).read_target_coverage()
+
+
 def test_target_coverage_groups_by_target(catalog_db: Path) -> None:
     _seed(catalog_db)
-    reader = CatalogReader(open_reader(catalog_db))
-    coverage = reader.target_coverage()
-    assert coverage["062A"] == [(file_id("a" * 32), "download")]
+    coverage = _read_target_coverage(catalog_db)
+    assert coverage["062A"] == ("download",)
 
 
 def test_target_coverage_empty_db_returns_empty(catalog_db: Path) -> None:
-    reader = CatalogReader(open_reader(catalog_db))
-    coverage = reader.target_coverage()
+    coverage = _read_target_coverage(catalog_db)
     assert coverage == {}
 
 
 def test_target_coverage_multiple_files_same_target(catalog_db: Path) -> None:
-    """Two files matching the same target_id → list of length 2."""
+    """Two files matching the same target_id → two tiers."""
     with sqlite3.connect(catalog_db) as conn:
         for suffix in ("a", "b"):
             insert_file(conn, suffix * 32)
             insert_decision(conn, suffix * 32, "062A", "download")
-    reader = CatalogReader(open_reader(catalog_db))
-    coverage = reader.target_coverage()
+    coverage = _read_target_coverage(catalog_db)
     assert len(coverage["062A"]) == 2
 
 
 def test_target_coverage_whole_episode_contributes_to_both_targets(catalog_db: Path) -> None:
     _seed_whole_episode(catalog_db)
-    coverage = CatalogReader(open_reader(catalog_db)).target_coverage()
-    assert coverage["072A"] == [(file_id("a" * 32), "download")]
-    assert coverage["072B"] == [(file_id("a" * 32), "download")]
+    coverage = _read_target_coverage(catalog_db)
+    assert coverage["072A"] == ("download",)
+    assert coverage["072B"] == ("download",)
 
 
 def test_target_coverage_ignores_legacy_empty_target_sentinel(catalog_db: Path) -> None:
@@ -154,8 +156,8 @@ def test_target_coverage_ignores_legacy_empty_target_sentinel(catalog_db: Path) 
         insert_decision(
             conn, h, "", "retracted", rule_name="", decided_at="2026-07-05T11:00:00.000000+00:00"
         )
-    coverage = CatalogReader(open_reader(catalog_db)).target_coverage()
-    assert coverage["090A"] == [(file_id(h), "download")]
+    coverage = _read_target_coverage(catalog_db)
+    assert coverage["090A"] == ("download",)
     assert "" not in coverage
 
 
@@ -628,22 +630,22 @@ def test_list_files_pagination(catalog_db: Path, page: int) -> None:
 
 
 def test_target_coverage_uses_latest_decision_per_hash(catalog_db: Path) -> None:
-    """Same hash with two decisions (T1 < T2) → target_coverage returns T2's tier."""
+    """Same hash with two decisions (T1 < T2) → the coverage reads T2's tier."""
     h = "a" * 32
     with sqlite3.connect(catalog_db) as conn:
         insert_file(conn, h)
         insert_decision(conn, h, "062A", "catalog")
         insert_decision(conn, h, "062A", "download", decided_at="2026-06-22T11:00:00.000000+00:00")
-    coverage = CatalogReader(open_reader(catalog_db)).target_coverage()
-    assert coverage["062A"] == [(file_id(h), "download")]
+    coverage = _read_target_coverage(catalog_db)
+    assert coverage["062A"] == ("download",)
 
 
 def test_target_coverage_omits_retracted(catalog_db: Path) -> None:
     """A file whose latest decision is a retraction contributes to NO target's coverage."""
     _seed(catalog_db)
     _seed_retracted(catalog_db)
-    coverage = CatalogReader(open_reader(catalog_db)).target_coverage()
-    assert coverage["062A"] == [(file_id("a" * 32), "download")]
+    coverage = _read_target_coverage(catalog_db)
+    assert coverage["062A"] == ("download",)
     assert "063A" not in coverage  # the retracted file's earlier (now stale) target
 
 
@@ -654,8 +656,8 @@ def test_coverage_tie_break_on_id(catalog_db: Path) -> None:
         insert_file(conn, h, 200)
         insert_decision(conn, h, "062A", "catalog")
         insert_decision(conn, h, "062A", "download")
-    coverage = CatalogReader(open_reader(catalog_db)).target_coverage()
-    assert coverage["062A"] == [(file_id(h), "download")]
+    coverage = _read_target_coverage(catalog_db)
+    assert coverage["062A"] == ("download",)
 
 
 def test_file_detail_observations_include_media_fields_none(catalog_db: Path) -> None:
