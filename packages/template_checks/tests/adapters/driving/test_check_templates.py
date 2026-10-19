@@ -1,11 +1,10 @@
 """Tests for the logic-free Jinja2 template guard (token-match)."""
 
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
-from template_checks.adapters.driving.check_templates import find_logic_violations
+from template_checks.adapters.driving.check_templates import find_logic_violations, main
 
 
 def test_clean_template_has_no_violation(tmp_path: Path) -> None:
@@ -90,45 +89,18 @@ def test_empty_directory_has_no_violation(tmp_path: Path) -> None:
     assert find_logic_violations(tmp_path) == []
 
 
-def test_main_exits_0_when_no_violations(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """main() exits with code 0 when there is no violation."""
+def test_main_returns_0_when_no_violations(tmp_path: Path) -> None:
+    """main() returns 0 when there is no violation."""
     (tmp_path / "clean.html").write_text(
         "{% extends 'base.html' %}{% block content %}{% endblock %}"
     )
-    with (
-        patch("sys.argv", ["check_templates", str(tmp_path)]),
-        pytest.raises(SystemExit) as exc_info,
-    ):
-        from template_checks.adapters.driving.check_templates import main
-
-        main()
-    assert exc_info.value.code == 0
+    assert main(tmp_path) == 0
 
 
-def test_main_exits_1_when_violations(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """main() exits with code 1 and prints the violations when there are any."""
+def test_main_returns_1_and_prints_the_violations(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """main() returns 1 and prints the violations when there are any."""
     (tmp_path / "bad.html").write_text("{% if x %}oops{% endif %}")
-    with (
-        patch("sys.argv", ["check_templates", str(tmp_path)]),
-        pytest.raises(SystemExit) as exc_info,
-    ):
-        from template_checks.adapters.driving.check_templates import main
-
-        main()
-    assert exc_info.value.code == 1
-    out = capsys.readouterr().out
-    assert "bad.html" in out
-
-
-def test_main_exits_with_usage_when_no_arg(capsys: pytest.CaptureFixture[str]) -> None:
-    """main() with no argument prints a usage message and exits with a non-0 code."""
-    with (
-        patch("sys.argv", ["check_templates"]),
-        pytest.raises(SystemExit) as exc_info,
-    ):
-        from template_checks.adapters.driving.check_templates import main
-
-        main()
-    assert exc_info.value.code != 0
+    assert main(tmp_path) == 1
+    assert "bad.html" in capsys.readouterr().out

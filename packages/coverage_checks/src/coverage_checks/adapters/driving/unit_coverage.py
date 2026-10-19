@@ -33,16 +33,18 @@ class _Execution:
 _NOTHING_RUN = _Execution(frozenset(), frozenset(), frozenset(), frozenset())
 
 
-def main() -> None:
-    """CLI entry point: prints each problem and a summary, exits 1 on any problem."""
+def main() -> int:
+    """Prints each problem and a summary, returns 1 on any problem."""
     coverage = Coverage()
     coverage.load()
     coverage_data = coverage.get_data()
     if not coverage_data.has_arcs() or not coverage_data.measured_contexts() - {""}:
-        sys.exit(
+        print(
             f"no per-test branch coverage in {coverage.get_option('run:data_file')}: run this"
-            " package's pytest first, with branch coverage and --cov-context=test"
+            " package's pytest first, with branch coverage and --cov-context=test",
+            file=sys.stderr,
         )
+        return 1
     own_tests = find_own_tests(_read_tests_without_unit())
     with tempfile.TemporaryDirectory() as report_dir:
         report = Path(report_dir) / "coverage.json"
@@ -62,8 +64,7 @@ def main() -> None:
         f" listed without a unit; {len(shortfalls)} of {module_count} modules short of their"
         " own tests"
     )
-    if problems:
-        sys.exit(1)
+    return 1 if problems else 0
 
 
 def _read_tests_without_unit() -> dict[str, object]:
@@ -123,7 +124,3 @@ def _read_execution(
         ),
         run_branches=frozenset((start, end) for start, end in measured["executed_branches"]),
     )
-
-
-if __name__ == "__main__":
-    main()  # pragma: no cover
