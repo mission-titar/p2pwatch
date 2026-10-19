@@ -18,6 +18,7 @@ dev = [
   "zensical==0.0.66",
   "ast-grep-cli>=0.50.0",
   "vulture>=2.16",
+  "tach==0.35.3",
 ]
 
 [tool.ruff]
@@ -84,6 +85,7 @@ lint           = { cmd = "ruff check .", help = "Lint Python with ruff" }
 format-check   = { cmd = "ruff format --check .", help = "Check Python formatting with ruff" }
 sql-lint       = { cmd = "sqlfluff lint packages/crawler/src", help = "Lint the embedded SQLite migrations" }
 code-pattern-check = { cmd = "ast-grep scan", help = "Ban dynamic attribute access (ast-grep, sgconfig.yml)" }
+architecture-check = { cmd = "tach check", help = "Check the imports between rings and adapters (tach, tach.toml)" }
 template-check = { cmd = "python -m template_checks logic-free packages/crawler/src/p2pwatch/adapters/driving/webui/templates", help = "Assert webui templates carry no logic" }
 _template-read-names = { cmd = "python -m template_checks read-names packages/crawler/src/p2pwatch/adapters/driving/webui/templates" }
 dead-code-check = { shell = 'vulture --ignore-names "$TEMPLATE_READ_NAMES"', uses = { TEMPLATE_READ_NAMES = "_template-read-names" }, help = "Find code no production path reaches (vulture on src, template reads ignored)" }
@@ -94,7 +96,7 @@ format-fix     = { cmd = "ruff format .", help = "Apply ruff formatting" }
 sql-fix        = { cmd = "sqlfluff fix packages/crawler/src", help = "Auto-fix the SQLite migrations" }
 docs-build     = { cmd = "zensical build --clean --strict", help = "Build the documentation site (fails on broken links)" }
 docs-serve     = { cmd = "zensical serve", help = "Preview the documentation site locally" }
-lint-all       = { help = "Run every static check (no tests)", sequence = ["lint", "format-check", "dependency-check", "code-pattern-check", "dead-code-check", "type-check", "sql-lint", "template-check"] }
+lint-all       = { help = "Run every static check (no tests)", sequence = ["lint", "format-check", "dependency-check", "code-pattern-check", "architecture-check", "dead-code-check", "type-check", "sql-lint", "template-check"] }
 fix            = { help = "Auto-fix everything mechanical (ruff lint + format + sqlfluff)", sequence = ["lint-fix", "format-fix", "sql-fix"], ignore_fail = "return_non_zero" }
 check          = { help = "The full gate: every static check + all unit tests", sequence = ["lint-all", "test"] }
 

@@ -1,0 +1,336 @@
+# The rings: agents/specs/2026-10-18-hexagonal-architecture.md (D1, D6, D15).
+# A deprecated edge is a temporary exception; the comment above names why and the lot removing it.
+source_roots = ["packages/crawler/src", "packages/matching/src"]
+exclude = ["**/__pycache__"]
+exact = true
+forbid_circular_dependencies = true
+ignore_type_checking_imports = false
+layers_explicit_depends_on = true
+root_module = "forbid"
+layers = ["composition", "adapters", "application", "ports", "domain"]
+
+[[modules]]
+path = "catalog_matching.domain"
+layer = "domain"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.__main__"
+layer = "composition"
+depends_on = [
+  "p2pwatch.adapters.driven.config",
+  "p2pwatch.adapters.driven.pathlib_catalog_finder",
+  "p2pwatch.adapters.driven.persistence_sqlite",
+  "p2pwatch.adapters.driving.cli",
+  "p2pwatch.application",
+  "p2pwatch.composition",
+]
+
+[[modules]]
+path = "p2pwatch.adapters.driven.config"
+layer = "adapters"
+depends_on = [
+  "p2pwatch.domain",
+  "p2pwatch.ports.driven.config_checker",
+]
+
+[[modules]]
+path = "p2pwatch.adapters.driven.crawler_control_loop"
+layer = "adapters"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.adapters.driven.disk_space_shutil"
+layer = "adapters"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.adapters.driven.monotonic_clock_asyncio"
+layer = "adapters"
+depends_on = ["p2pwatch.ports.driven.clock"]
+
+[[modules]]
+path = "p2pwatch.adapters.driven.mule_api"
+layer = "adapters"
+depends_on = [
+  "p2pwatch.domain",
+  "p2pwatch.ports.driven.client_errors",
+  "p2pwatch.ports.driven.client_status",
+  "p2pwatch.ports.driven.clock",
+  "p2pwatch.ports.driven.download_client",
+  "p2pwatch.ports.driven.search_client",
+]
+
+[[modules]]
+path = "p2pwatch.adapters.driven.observability"
+layer = "adapters"
+depends_on = [
+  "p2pwatch.domain",
+  "p2pwatch.ports.driven.telemetry",
+]
+
+[[modules]]
+path = "p2pwatch.adapters.driven.pathlib_catalog_finder"
+layer = "adapters"
+depends_on = ["p2pwatch.ports.driven.catalog_finder"]
+
+[[modules]]
+path = "p2pwatch.adapters.driven.persistence_sqlite"
+layer = "adapters"
+depends_on = [
+  "p2pwatch.domain",
+  "p2pwatch.ports.driven.backoff_state_repository",
+  "p2pwatch.ports.driven.catalog_copier",
+  "p2pwatch.ports.driven.catalog_repository",
+  "p2pwatch.ports.driven.download_client",
+  "p2pwatch.ports.driven.repository_errors",
+  "p2pwatch.ports.driven.source_repository",
+]
+
+[[modules]]
+path = "p2pwatch.adapters.driven.persistence_sqlite.catalog_read"
+layer = "adapters"
+depends_on = [
+  "p2pwatch.domain",
+  # Its own adapter, a module apart to break the cycle with the webui: lot 2 folds it back.
+  { path = "p2pwatch.adapters.driven.persistence_sqlite", deprecated = true },
+  # The reader builds the webui's views: lot 2 gives the read ports their own types.
+  { path = "p2pwatch.adapters.driving.webui.views", deprecated = true },
+]
+
+[[modules]]
+path = "p2pwatch.adapters.driven.persistence_sqlite.local_read"
+layer = "adapters"
+depends_on = [
+  # The reader builds the webui's views: lot 2 gives the read ports their own types.
+  { path = "p2pwatch.adapters.driving.webui.views", deprecated = true },
+]
+
+[[modules]]
+path = "p2pwatch.adapters.driven.persistence_sqlite.sql_console"
+layer = "adapters"
+depends_on = [
+  "p2pwatch.ports.driven.clock",
+  # Its own adapter, a module apart to break the cycle with the webui: lot 2 folds it back.
+  { path = "p2pwatch.adapters.driven.persistence_sqlite", deprecated = true },
+]
+
+[[modules]]
+path = "p2pwatch.adapters.driven.rng_random"
+layer = "adapters"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.adapters.driven.wake_hub_asyncio"
+layer = "adapters"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.adapters.driven.wall_clock_system"
+layer = "adapters"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.adapters.driving.cli"
+layer = "adapters"
+depends_on = [
+  "p2pwatch.domain",
+  "p2pwatch.ports.driving.catalog_merger",
+  "p2pwatch.ports.driving.config_validator",
+  "p2pwatch.ports.driving.crawler_runner",
+]
+
+[[modules]]
+path = "p2pwatch.adapters.driving.process"
+layer = "adapters"
+depends_on = ["p2pwatch.ports.driving.crawler_control"]
+
+[[modules]]
+path = "p2pwatch.adapters.driving.webui"
+layer = "adapters"
+depends_on = [
+  "p2pwatch.domain",
+  "p2pwatch.ports.driving.crawler_control",
+  # The webui builds and calls the readers itself: lot 2 puts use cases between them.
+  { path = "p2pwatch.adapters.driven.persistence_sqlite", deprecated = true },
+  { path = "p2pwatch.adapters.driven.persistence_sqlite.catalog_read", deprecated = true },
+  { path = "p2pwatch.adapters.driven.persistence_sqlite.local_read", deprecated = true },
+  { path = "p2pwatch.adapters.driven.persistence_sqlite.sql_console", deprecated = true },
+  # Its own views, a module apart to break the readers' cycle: lot 2 folds it back.
+  { path = "p2pwatch.adapters.driving.webui.views", deprecated = true },
+  # The webui calls MatchingExplainer past any port: lot 2 gives it a driving port.
+  { path = "p2pwatch.application", deprecated = true },
+  # The webui reads the clocks and the client status directly: lot 2 gives it driving ports.
+  { path = "p2pwatch.ports.driven.client_status", deprecated = true },
+  { path = "p2pwatch.ports.driven.clock", deprecated = true },
+]
+
+[[modules]]
+path = "p2pwatch.adapters.driving.webui.views"
+layer = "adapters"
+depends_on = ["p2pwatch.domain"]
+
+[[modules]]
+path = "p2pwatch.application"
+layer = "application"
+depends_on = [
+  "p2pwatch.domain",
+  "p2pwatch.ports.driven.backoff_state_repository",
+  "p2pwatch.ports.driven.catalog_copier",
+  "p2pwatch.ports.driven.catalog_finder",
+  "p2pwatch.ports.driven.catalog_repository",
+  "p2pwatch.ports.driven.client_errors",
+  "p2pwatch.ports.driven.client_status",
+  "p2pwatch.ports.driven.clock",
+  "p2pwatch.ports.driven.config_checker",
+  "p2pwatch.ports.driven.disk_space",
+  "p2pwatch.ports.driven.download_client",
+  "p2pwatch.ports.driven.local_state_repository",
+  "p2pwatch.ports.driven.repository_errors",
+  "p2pwatch.ports.driven.rng",
+  "p2pwatch.ports.driven.search_client",
+  "p2pwatch.ports.driven.source_client",
+  "p2pwatch.ports.driven.source_repository",
+  "p2pwatch.ports.driven.telemetry",
+  "p2pwatch.ports.driven.wake_hub",
+  "p2pwatch.ports.driving.catalog_merger",
+  "p2pwatch.ports.driving.config_validator",
+]
+
+[[modules]]
+path = "p2pwatch.composition"
+layer = "composition"
+depends_on = [
+  "p2pwatch.adapters.driven.config",
+  "p2pwatch.adapters.driven.crawler_control_loop",
+  "p2pwatch.adapters.driven.disk_space_shutil",
+  "p2pwatch.adapters.driven.monotonic_clock_asyncio",
+  "p2pwatch.adapters.driven.mule_api",
+  "p2pwatch.adapters.driven.observability",
+  "p2pwatch.adapters.driven.persistence_sqlite",
+  "p2pwatch.adapters.driven.rng_random",
+  "p2pwatch.adapters.driven.wake_hub_asyncio",
+  "p2pwatch.adapters.driven.wall_clock_system",
+  "p2pwatch.adapters.driving.process",
+  "p2pwatch.adapters.driving.webui",
+  "p2pwatch.application",
+  "p2pwatch.domain",
+  "p2pwatch.ports.driven.clock",
+  "p2pwatch.ports.driving.crawler_control",
+  "p2pwatch.ports.driving.crawler_runner",
+]
+
+[[modules]]
+path = "p2pwatch.domain"
+layer = "domain"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driven.backoff_state_repository"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driven.catalog_copier"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driven.catalog_finder"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driven.catalog_repository"
+layer = "ports"
+depends_on = ["p2pwatch.domain"]
+
+[[modules]]
+path = "p2pwatch.ports.driven.client_errors"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driven.client_status"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driven.clock"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driven.config_checker"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driven.disk_space"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driven.download_client"
+layer = "ports"
+depends_on = ["p2pwatch.domain"]
+
+[[modules]]
+path = "p2pwatch.ports.driven.local_state_repository"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driven.repository_errors"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driven.rng"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driven.search_client"
+layer = "ports"
+depends_on = ["p2pwatch.domain"]
+
+[[modules]]
+path = "p2pwatch.ports.driven.source_client"
+layer = "ports"
+depends_on = ["p2pwatch.domain"]
+
+[[modules]]
+path = "p2pwatch.ports.driven.source_repository"
+layer = "ports"
+depends_on = ["p2pwatch.domain"]
+
+[[modules]]
+path = "p2pwatch.ports.driven.telemetry"
+layer = "ports"
+depends_on = ["p2pwatch.domain"]
+
+[[modules]]
+path = "p2pwatch.ports.driven.wake_hub"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driving.catalog_merger"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driving.config_validator"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driving.crawler_control"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driving.crawler_runner"
+layer = "ports"
+depends_on = []
