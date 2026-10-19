@@ -333,7 +333,7 @@ moving from the composition to `RunCrawler`) go in `docs/migration-4x.md`.
 | 10 | the `Writer`/`Reader` and capability conventions, the `Logger` port; "`logging` stays in `application/`'s list until lot 2 gives it a port" |
 | 50 | the glossary: `reported file`, `observation` |
 | 80 | the use case rule's root exception (`RunCrawler`) |
-| 90 | the glossary: `run state` |
+| 85 | the glossary: `run state` |
 | 100 | the invariant on the adapters holding a `MonotonicClock` (the board no longer does) |
 | 110 to 170 | the webui row of "Where the code lives"; the glossary: the new domain concepts, `display`, the response models |
 | 190 | `PrometheusSink` in the boundary discipline invariant; the glossary's `wake` line (`Waker`); the Gotchas that assume `Protocol` ports: the one-line stub idiom becomes the `@abstractmethod` one, the Serena rename "from the port, then from each implementer" |
@@ -356,7 +356,8 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
 | 70 | `refactor/node-id-notifications` | the `node_id` through `emit` and `notify`; Apprise's groups per `node_id` | 400, 16 |
 | 75 | `refactor/node-id-ports` | `NodeIdReader`, `NodeIdWriter`, `NodeIdGenerator`; `resolve_node_id` on them (Corrected 2026-10-19: split from block 80, measured at 507 lines; it moves behaviour, so no exemption) | 235, 13 |
 | 80 | `feat/run-crawler` | `RunCrawler`; the loops launched with the `node_id`; the composition only builds | 285, 8 |
-| 90 | `feat/crawler-control-use-cases` | `PauseCrawl`, `ResumeCrawl`, `RequestShutdown`; `AsyncioRunState` and its two ports | 350, 14 |
+| 85 | `refactor/asyncio-run-state` | `RunStateWriter`, `RunStateReader`; `AsyncioRunState` inheriting both (Corrected 2026-10-19: split from block 90, counted at 21 files before any code; it moves behaviour, so no exemption) | 150, 7 |
+| 90 | `feat/crawler-control-use-cases` | `PauseCrawl`, `ResumeCrawl`, `RequestShutdown`; the webui and `PosixProcess` on them; `CrawlerControl` deleted | 330, 15 |
 | 100 | `refactor/in-memory-status-board` | `InMemoryStatusBoard` and its two ports; the freshness rule into the domain | 300, 10 |
 | 110 | `feat/crawl-summary` | `CoverageReader`, `NodeStateReader`; `SummarizeCrawl`, `DescribeNode`; their routes, then their route tests on fakes | 450, 16 |
 | 120 | `feat/list-files` | `CatalogFileReader`; `ListFiles`, the files and target routes on it | 450, 12 |
