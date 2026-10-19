@@ -27,13 +27,13 @@ from prometheus_client import CollectorRegistry
 
 import p2pwatch.adapters.driving.webui
 from catalog_matching.domain.engine import MatchingEngine
+from p2pwatch.adapters.driven.asyncio_run_state import AsyncioRunState
 from p2pwatch.adapters.driven.config.crawler_config import (
     AMULE_CLIENT_NAME,
     CrawlerConfig,
     LoadedConfig,
     load_config,
 )
-from p2pwatch.adapters.driven.crawler_control_loop import LoopCrawlerControl
 from p2pwatch.adapters.driven.disk_space_shutil import ShutilDiskSpace
 from p2pwatch.adapters.driven.monotonic_clock_asyncio import AsyncioMonotonicClock
 from p2pwatch.adapters.driven.mule_api.client import AmuleApiClient
@@ -175,15 +175,13 @@ class CrawlerApp(CrawlerRunner):
         monotonic_clock = AsyncioMonotonicClock()
         wake_hub = AsyncioWakeHub()
         shutdown = asyncio.Event()
-        # The pause gate (phase P6a), armed (set = un-paused) so the crawler starts running. The
-        # webui mutates it thread-safely via ``LoopCrawlerControl`` (spec §10).
+        # The pause gate, armed (set = un-paused) so the crawler starts running.
         resumed = asyncio.Event()
         resumed.set()
         loop = asyncio.get_running_loop()
-        # Runtime-control channel (phase P6a): bound to the crawler's OWN loop + events, so the
-        # webui thread hands off intents thread-safely (spec §10); it holds no DB connection.
-        control: CrawlerControl = LoopCrawlerControl(loop=loop, resumed=resumed, shutdown=shutdown)
-        async with PosixProcess(control) as stack:
+        # On the crawler's OWN loop + events, so the webui thread changes it thread-safely.
+        run_state = AsyncioRunState(loop=loop, resumed=resumed, shutdown=shutdown)
+        async with PosixProcess(run_state) as stack:
             catalog_conn = open_catalog(crawler_config.catalog_db_path)
             stack.callback(catalog_conn.close)
             local_conn = open_local(crawler_config.local_db_path)
@@ -215,7 +213,7 @@ class CrawlerApp(CrawlerRunner):
                     config=config,
                     stack=stack,
                     status_board=board,
-                    control=control,
+                    control=run_state,
                     wall_clock=wall_clock,
                     monotonic_clock=monotonic_clock,
                 )

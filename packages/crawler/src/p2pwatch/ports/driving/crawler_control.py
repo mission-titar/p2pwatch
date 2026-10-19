@@ -6,7 +6,7 @@ thread. A webui request handler that wants to influence the running crawler cann
 crawler's ``asyncio.Event``s directly: ``Event.set()``/``.clear()`` may have to wake waiters
 registered on the crawler loop, and those events are affine to that loop. So this port is the
 seam: each method is a synchronous, non-blocking, fire-and-forget "intent accepted" call the
-webui makes; the concrete adapter (``adapters/driven/crawler_control_loop.py``) forwards the
+webui makes; the concrete adapter (``adapters/driven/asyncio_run_state.py``) forwards the
 mutation onto the crawler loop thread via ``loop.call_soon_threadsafe``.
 
 Methods (all return immediately; ``PosixProcess`` also calls ``request_shutdown`` on a signal):

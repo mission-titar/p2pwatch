@@ -148,6 +148,7 @@ a function does.
 | `reevaluation` | re-judging every file when the policy changed | `backfill` |
 | `tracked` | a download with a row in `downloads`, whatever its state | `downloaded`, `active` |
 | `wake` | `WakeHub` wakes the loops waiting on a subject | `signal`, `nudge` |
+| `run state` | whether the crawler searches or idles, and whether its shutdown was requested: `RunStateWriter` changes it, `RunStateReader` reads it | `control` |
 | `first useful`, `reappeared` | a source's two alerts | `new`, `useful again` |
 | `audience` | who a notification is for: `community`, `operations` | `tag` (apprise's keyword aside), `channel` |
 | `error_label` | the label a parser prints in its errors | `what`, `label`, `field` |

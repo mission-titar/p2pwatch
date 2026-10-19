@@ -118,17 +118,17 @@ depends_on = [
 ]
 
 [[modules]]
+path = "p2pwatch.adapters.driven.asyncio_run_state"
+layer = "adapters"
+depends_on = ["p2pwatch.ports.driven.run_state"]
+
+[[modules]]
 path = "p2pwatch.adapters.driven.config"
 layer = "adapters"
 depends_on = [
   "p2pwatch.domain",
   "p2pwatch.ports.driven.config_checker",
 ]
-
-[[modules]]
-path = "p2pwatch.adapters.driven.crawler_control_loop"
-layer = "adapters"
-depends_on = []
 
 [[modules]]
 path = "p2pwatch.adapters.driven.disk_space_shutil"
@@ -305,8 +305,8 @@ depends_on = [
 path = "p2pwatch.composition"
 layer = "composition"
 depends_on = [
+  "p2pwatch.adapters.driven.asyncio_run_state",
   "p2pwatch.adapters.driven.config",
-  "p2pwatch.adapters.driven.crawler_control_loop",
   "p2pwatch.adapters.driven.disk_space_shutil",
   "p2pwatch.adapters.driven.monotonic_clock_asyncio",
   "p2pwatch.adapters.driven.mule_api",
@@ -402,6 +402,11 @@ depends_on = []
 
 [[modules]]
 path = "p2pwatch.ports.driven.rng"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driven.run_state"
 layer = "ports"
 depends_on = []
 
