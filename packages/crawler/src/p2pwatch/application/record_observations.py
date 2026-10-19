@@ -40,13 +40,14 @@ async def record_observation(
     client_name: str,
     channel: str,
     logger: Logger,
+    node_id: str,
 ) -> int:
     """Process ONE observation (spec §7). Returns the number of rows written (0..N).
 
     Emits ``ObservationRecorded`` (always) and one ``DecisionsRecorded`` when a row was written.
     A ``RepositoryError`` is absorbed (log + ``0``), the cycle continues (spec §7)."""
     try:
-        catalog.record_observation(FileObservation(reported_file, wall_clock.now()))
+        catalog.record_observation(FileObservation(reported_file, wall_clock.now()), node_id)
         await telemetry.emit(ObservationRecorded(client_name, channel))
         return await rejudge_file(
             reported_file.file,
@@ -56,6 +57,7 @@ async def record_observation(
             wake_hub=wake_hub,
             telemetry=telemetry,
             wall_clock=wall_clock,
+            node_id=node_id,
         )
     except RepositoryError as error:
         logger.error(

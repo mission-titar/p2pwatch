@@ -157,7 +157,7 @@ class SearchWorker:
             backoff.time_until_retry(BackoffKey(self._client_name, channel)),
         )
 
-    async def _record_observations(self, channel: str, answer: SearchAnswer) -> int:
+    async def _record_observations(self, channel: str, answer: SearchAnswer, node_id: str) -> int:
         """Per-obs pipeline; returns the number of CHANGED verdicts (logging). A
         ``RepositoryError`` per obs is ABSORBED inside ``record_observation`` (spec §7)."""
         await self._deps.telemetry.emit(
@@ -177,11 +177,12 @@ class SearchWorker:
                 client_name=self._client_name,
                 channel=channel,
                 logger=self._deps.observation_logger,
+                node_id=node_id,
             ):
                 changed += 1
         return changed
 
-    async def run_task(self, task: SearchTask) -> None:
+    async def run_task(self, task: SearchTask, node_id: str) -> None:
         """One search, run once ``time_until_ready`` is zero. Never raises: backs off and logs."""
         channel_backoff_key = BackoffKey(self._client_name, task.channel)
         try:
@@ -207,7 +208,7 @@ class SearchWorker:
             )
             await self._deps.telemetry.emit(ClientUnreachable(self._client_name))
             return
-        changed = await self._record_observations(task.channel, answer)
+        changed = await self._record_observations(task.channel, answer, node_id)
         self._deps.backoff.reset(channel_backoff_key)
         self._deps.backoff.reset(self._client_backoff_key)
         self._deps.logger.info(

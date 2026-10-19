@@ -38,6 +38,7 @@ async def rejudge_file(
     wake_hub: WakeHub,
     telemetry: Telemetry,
     wall_clock: WallClock,
+    node_id: str,
 ) -> int:
     """Judge the file on all its known filenames for every target, then record what changed
     (``base_candidate`` gives the fields other than the filename).
@@ -66,14 +67,14 @@ async def rejudge_file(
         fresh_ids.add(decision.target_id)
         if persisted.get(decision.target_id) == to_record(decision):
             continue
-        catalog.record_decision(file, decision, wall_clock.now())
+        catalog.record_decision(file, decision, wall_clock.now(), node_id)
         changes.append(change(decision.target_id, decision.tier))
         if decision.tier == "download":
             wake_hub.wake(DOWNLOAD_WAKE_SUBJECT)
     for target_id in sorted(persisted):
         if persisted[target_id].tier == RETRACTED_TIER or target_id in fresh_ids:
             continue
-        catalog.record_retraction(file, target_id, wall_clock.now())
+        catalog.record_retraction(file, target_id, wall_clock.now(), node_id)
         changes.append(change(target_id, RETRACTED_TIER))
     if changes:
         # No filename left means only retractions were written, which are never notified.

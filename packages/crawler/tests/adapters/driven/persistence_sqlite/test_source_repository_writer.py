@@ -55,7 +55,7 @@ def catalog(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 @pytest.fixture
 def repository(catalog: sqlite3.Connection) -> SqliteSourceRepository:
-    return SqliteSourceRepository(catalog, "n1", _POLL)
+    return SqliteSourceRepository(catalog, _POLL)
 
 
 def _record(
@@ -64,7 +64,7 @@ def _record(
     """Records each reading alone, ``step`` apart from ``_T0``; every reading recorded."""
     recorded: list[RecordedReading] = []
     for index, reading in enumerate(readings):
-        recorded += repository.record_readings(_FILE, [reading], _T0 + index * step)
+        recorded += repository.record_readings(_FILE, [reading], _T0 + index * step, "n1")
     return recorded
 
 
@@ -153,7 +153,7 @@ def test_a_reading_with_neither_identity_nor_name_writes_nothing(
     repository: SqliteSourceRepository, catalog: sqlite3.Connection
 ) -> None:
     reading = dataclasses.replace(_reading(key=None), source_name=None)
-    assert repository.record_readings(_FILE, [reading], _T0) == ()
+    assert repository.record_readings(_FILE, [reading], _T0, "n1") == ()
     assert (_variants(catalog), _points(catalog)) == (0, [])
 
 
@@ -162,22 +162,22 @@ def test_the_same_read_written_twice_leaves_the_points_unchanged(
 ) -> None:
     _record(repository, _reading(counter=5), _reading(None, counter=5))
     points = _points(catalog)
-    again = repository.record_readings(_FILE, [_reading(None, counter=5)], _T0 + _POLL)
+    again = repository.record_readings(_FILE, [_reading(None, counter=5)], _T0 + _POLL, "n1")
     assert again == (RecordedReading(_KEY, "AnimuseeFMR", _Q),)
     assert _points(catalog) == points
 
 
 def test_a_negative_counter_is_refused_not_dropped(repository: SqliteSourceRepository) -> None:
     with pytest.raises(PersistenceError, match="CHECK constraint failed") as raised:
-        repository.record_readings(_FILE, [_reading(counter=-1)], _T0)
+        repository.record_readings(_FILE, [_reading(counter=-1)], _T0, "n1")
     assert isinstance(raised.value.__cause__, sqlite3.IntegrityError)
 
 
 def test_a_clock_stepped_back_writes_its_point_and_carries_only_from_an_earlier_one(
     repository: SqliteSourceRepository, catalog: sqlite3.Connection
 ) -> None:
-    repository.record_readings(_FILE, [_reading(_NN)], _T0 + _POLL)
-    assert repository.record_readings(_FILE, [_reading(None)], _T0)[0].role is _UN
+    repository.record_readings(_FILE, [_reading(_NN)], _T0 + _POLL, "n1")
+    assert repository.record_readings(_FILE, [_reading(None)], _T0, "n1")[0].role is _UN
     assert _points(catalog) == [("undetermined", _T0_US, 0), ("nothing_new", _seconds(30), 0)]
 
 
@@ -186,7 +186,7 @@ def test_a_reading_without_identity_carries_only_from_its_name_without_identity(
 ) -> None:
     other = dataclasses.replace(_reading(None, key=None), source_name="Teammate")
     recorded = _record(repository, _reading(_NN), _reading(_S, key=None), _reading(None, key=None))
-    recorded += repository.record_readings(_FILE, [other], _T0 + 3 * _POLL)
+    recorded += repository.record_readings(_FILE, [other], _T0 + 3 * _POLL, "n1")
     assert [(r.source, r.role) for r in recorded] == [
         (_KEY, _NN),
         (None, _S),
@@ -199,18 +199,20 @@ def test_a_reading_without_identity_carries_only_from_its_name_without_identity(
 def test_a_source_on_another_file_or_another_node_carries_nothing(
     repository: SqliteSourceRepository, catalog: sqlite3.Connection
 ) -> None:
-    repository.record_readings(_OTHER_FILE, [_reading(_S)], _T0)
-    SqliteSourceRepository(catalog, "n2", _POLL).record_readings(_FILE, [_reading(_NN)], _T0)
-    assert repository.record_readings(_FILE, [_reading(None)], _T0 + _POLL)[0].role is _UN
+    repository.record_readings(_OTHER_FILE, [_reading(_S)], _T0, "n1")
+    repository.record_readings(_FILE, [_reading(_NN)], _T0, "n2")
+    assert repository.record_readings(_FILE, [_reading(None)], _T0 + _POLL, "n1")[0].role is _UN
 
 
 def test_another_nodes_identical_reading_is_its_own_variant(
     repository: SqliteSourceRepository, catalog: sqlite3.Connection
 ) -> None:
-    SqliteSourceRepository(catalog, "n2", _POLL).record_readings(_FILE, [_reading()], _T0)
-    repository.record_readings(_FILE, [_reading()], _T0)
+    repository.record_readings(_FILE, [_reading()], _T0, "n2")
+    repository.record_readings(_FILE, [_reading()], _T0, "n1")
     assert _variants(catalog) == 2
     assert len(_points(catalog)) == 2
+    node_ids = catalog.execute("SELECT node_id FROM source_variants ORDER BY variant_id")
+    assert node_ids.fetchall() == [("n2",), ("n1",)]
 
 
 def test_the_variant_and_the_source_are_written_as_d2_states(
@@ -222,7 +224,7 @@ def test_the_variant_and_the_source_are_written_as_d2_states(
         connectable=True,
         raw_meta=(("source_origin", "kad"), ("protocol_extensions", ("a", "b"))),
     )
-    repository.record_readings(_FILE, [reading], _T0)
+    repository.record_readings(_FILE, [reading], _T0, "n1")
     raw_meta = '{"protocol_extensions": ["a", "b"], "source_origin": "kad"}'
     columns: list[object] = [_FILE.file_id.hex(), _KEY.source_id.hex(), "AnimuseeFMR"]
     columns += ["emule 0.50a", "queued", "176.103.48.36:4184", True, raw_meta, "n1"]
@@ -254,7 +256,7 @@ def test_a_contact_point_that_is_not_the_files_networks_writes_nothing(
 ) -> None:
     bad = dataclasses.replace(_reading(key=_OTHER_KEY), contact_point="server.example:4184")
     with pytest.raises(PersistenceError, match="server.example:4184"):
-        repository.record_readings(_FILE, [_reading(), bad], _T0)
+        repository.record_readings(_FILE, [_reading(), bad], _T0, "n1")
     assert _points(catalog) == []
 
 
@@ -263,6 +265,6 @@ def test_a_failed_write_rolls_back_the_whole_call(
 ) -> None:
     unknown = FileKey(Network.ED2K, "d" * 32)
     with pytest.raises(PersistenceError, match="FOREIGN KEY"):
-        repository.record_readings(unknown, [_reading()], _T0)
+        repository.record_readings(unknown, [_reading()], _T0, "n1")
     assert catalog.execute("SELECT COUNT(*) FROM sources").fetchone() == (0,)
     assert not catalog.in_transaction

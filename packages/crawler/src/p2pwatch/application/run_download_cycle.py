@@ -386,7 +386,11 @@ class _AlertRound:
 
 
 async def _alert_sources(
-    deps: DownloadDeps, file: FileKey, recorded: tuple[RecordedReading, ...], round_: _AlertRound
+    deps: DownloadDeps,
+    file: FileKey,
+    recorded: tuple[RecordedReading, ...],
+    round_: _AlertRound,
+    node_id: str,
 ) -> None:
     """Emits D5's alerts for the useful readings of a committed write, once per source per round."""
     for reading in recorded:
@@ -397,10 +401,10 @@ async def _alert_sources(
             continue  # one event per source per round
         if round_.alerts_allowed is None:
             # The same answer at any point of the round: "before" excludes the round's writes.
-            round_.alerts_allowed = deps.sources.has_points_before(round_.started_at)
+            round_.alerts_allowed = deps.sources.has_points_before(round_.started_at, node_id)
         if not round_.alerts_allowed:
             return  # the node's first recording round is a baseline, not news
-        earlier_points = deps.sources.earlier_points(source, round_.started_at)
+        earlier_points = deps.sources.earlier_points(source, round_.started_at, node_id)
         alert = source_alert(reading.role, earlier_points, round_.started_at, deps.reappeared_after)
         round_.decided.add(source)
         if alert is None:
@@ -417,7 +421,9 @@ async def _alert_sources(
         await deps.telemetry.emit(event)
 
 
-async def _record_sources(deps: DownloadDeps, listed_statuses: tuple[DownloadStatus, ...]) -> None:
+async def _record_sources(
+    deps: DownloadDeps, listed_statuses: tuple[DownloadStatus, ...], node_id: str
+) -> None:
     """Records the sources of each of our downloads the client lists, completed ones aside, then
     alerts on them (stage 4, D8; source points, D5). A repo failure skips that download's; a
     client failure propagates.
@@ -437,8 +443,8 @@ async def _record_sources(deps: DownloadDeps, listed_statuses: tuple[DownloadSta
         read_at = deps.wall_clock.now()
         readings = await deps.source_client.sources(status.file)
         try:
-            recorded = deps.sources.record_readings(status.file, readings, read_at)
-            await _alert_sources(deps, status.file, recorded, round_)
+            recorded = deps.sources.record_readings(status.file, readings, read_at, node_id)
+            await _alert_sources(deps, status.file, recorded, round_, node_id)
         except RepositoryError as error:
             deps.logger.error(
                 "sources file=%s repo failure (%s): file skipped, continues",
@@ -447,7 +453,7 @@ async def _record_sources(deps: DownloadDeps, listed_statuses: tuple[DownloadSta
             )
 
 
-async def run_download_cycle(deps: DownloadDeps) -> None:
+async def run_download_cycle(deps: DownloadDeps, node_id: str) -> None:
     """ONE iteration of the download loop (spec §5). Never raises: tolerates/absorbs.
 
     Two distinct error DOCTRINES (item I2 - anti-starvation):
@@ -530,7 +536,7 @@ async def run_download_cycle(deps: DownloadDeps) -> None:
         deps.logger.error("download start repo failure (%s): step skipped, retry", error)
     # Step 5 - SOURCES: last, since it only observes; its failure must not skip a start (D8).
     try:
-        await _record_sources(deps, listed_statuses)
+        await _record_sources(deps, listed_statuses, node_id)
     except _UNAVAILABLE as error:
         deps.logger.warning("download daemon unreachable (%s): sources skipped, retry", error)
     except RepositoryError as error:
@@ -557,14 +563,14 @@ async def _sleep_or_wake(deps: DownloadLoopDeps) -> None:
                     await task
 
 
-async def download_loop(deps: DownloadLoopDeps) -> None:
+async def download_loop(deps: DownloadLoopDeps, node_id: str) -> None:
     """Repeats ``run_download_cycle`` then waits (poll/wake) until shutdown (DECISION D12).
 
     Wired by ``CrawlerApp`` into the ``TaskGroup``; cancellation (shutdown) lands
     at the next ``await`` (a poll or the sleep/wake wait), never mid DB write.
     """
     while not deps.shutdown.is_set():
-        await run_download_cycle(deps)
+        await run_download_cycle(deps, node_id)
         if deps.shutdown.is_set():
             break
         await _sleep_or_wake(deps)

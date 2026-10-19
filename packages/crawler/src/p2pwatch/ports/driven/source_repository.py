@@ -1,6 +1,7 @@
 """``SourceRepository`` port: our downloads' sources as points (source points spec, D4, D5).
 
-SYNCHRONOUS, like ``CatalogRepository``. Every point read or written is this node's.
+SYNCHRONOUS, like ``CatalogRepository``. Every point read or written is the ``node_id``'s the call
+gives.
 """
 
 from collections.abc import Sequence
@@ -34,9 +35,11 @@ class SourceRepository(Protocol):
     only the points observed before ``before``."""
 
     def record_readings(
-        self, file: FileKey, readings: Sequence[SourceReading], read_at: datetime
+        self, file: FileKey, readings: Sequence[SourceReading], read_at: datetime, node_id: str
     ) -> tuple[RecordedReading, ...]: ...
 
-    def earlier_points(self, source: SourceKey, before: datetime) -> EarlierPoints: ...
+    def earlier_points(
+        self, source: SourceKey, before: datetime, node_id: str
+    ) -> EarlierPoints: ...
 
-    def has_points_before(self, before: datetime) -> bool: ...
+    def has_points_before(self, before: datetime, node_id: str) -> bool: ...

@@ -18,7 +18,6 @@ _REPO_ROOT = Path(__file__).resolve().parents[4]
 # corpus (matching fixture, distinct from the full prod catalog).
 _MATCHER = _REPO_ROOT / "deploy" / "matcher.yml"
 _FIXTURES = _REPO_ROOT / "packages" / "matching" / "tests" / "fixtures"
-_NODE = "11111111-2222-3333-4444-555555555555"
 
 
 @pytest.fixture
@@ -38,7 +37,7 @@ def catalog_connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 @pytest.fixture
 def catalog(catalog_connection: sqlite3.Connection) -> SqliteCatalogRepository:
-    return SqliteCatalogRepository(catalog_connection, _NODE)
+    return SqliteCatalogRepository(catalog_connection)
 
 
 @pytest.fixture

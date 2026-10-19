@@ -39,23 +39,25 @@ class SearchTaskRunner:
         self._logger = logger
         self._saved = backoff.snapshot()
 
-    async def run(self) -> None:
-        """Runs every task until cancelled."""
+    async def run(self, node_id: str) -> None:
+        """Runs every task until cancelled, recording what they find under ``node_id``."""
         texts = [keyword.text for keyword in dedupe_keywords(self._keywords)]
         async with asyncio.TaskGroup() as group:
             for worker in self._workers:
                 for channel in worker.channels:
                     for text in texts:
-                        group.create_task(self._search_forever(worker, SearchTask(text, channel)))
+                        group.create_task(
+                            self._search_forever(worker, SearchTask(text, channel), node_id)
+                        )
 
-    async def _search_forever(self, worker: SearchWorker, task: SearchTask) -> None:
+    async def _search_forever(self, worker: SearchWorker, task: SearchTask, node_id: str) -> None:
         while True:
             await self._resumed.wait()
             wait = worker.time_until_ready(task.channel)
             if wait > timedelta(0):
                 await self._monotonic_clock.sleep(wait)
                 continue
-            await worker.run_task(task)
+            await worker.run_task(task, node_id)
             self._save()
             # A yield that reads no clock: a search that never suspends must not starve the loop.
             await asyncio.sleep(0)  # noqa: TID251

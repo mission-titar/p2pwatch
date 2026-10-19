@@ -130,6 +130,14 @@ def observation_node_ids(conn: sqlite3.Connection) -> set[str]:
     return {row[0] for row in conn.execute("SELECT node_id FROM observation_variants")}
 
 
+def decision_node_ids(conn: sqlite3.Connection) -> set[str]:
+    return {row[0] for row in conn.execute("SELECT node_id FROM match_decisions")}
+
+
+def source_variant_node_ids(conn: sqlite3.Connection) -> set[str]:
+    return {row[0] for row in conn.execute("SELECT node_id FROM source_variants")}
+
+
 def decision_tiers(conn: sqlite3.Connection) -> list[tuple[str, str]]:
     """``(ed2k_hash, tier)`` of every decision, oldest first."""
     rows = conn.execute(

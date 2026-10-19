@@ -205,7 +205,7 @@ class CrawlerApp(CrawlerRunner):
                 notification_timeout_seconds=observability.notification_timeout_seconds,
             )
             stack.callback(start_metrics_server(registry, observability.metrics_port))
-            catalog_repo = SqliteCatalogRepository(catalog_conn, node_id)
+            catalog_repo = SqliteCatalogRepository(catalog_conn)
             backoff_states = SqliteBackoffStateRepository(local_conn)
             engine = MatchingEngine(config.matcher_config, config.targets)
             board = StatusBoard((AMULE_CLIENT_NAME,), monotonic_clock)
@@ -259,7 +259,7 @@ class CrawlerApp(CrawlerRunner):
                 logger=StdlibLogger("p2pwatch.application.search_tasks"),
             )
             loops: list[Callable[[], Coroutine[object, object, None]]] = [
-                search_tasks.run,
+                partial(search_tasks.run, node_id),
                 partial(status_loop, status_deps),
             ]
 
@@ -275,7 +275,7 @@ class CrawlerApp(CrawlerRunner):
                     source_client=client,
                     downloads=SqliteDownloadRepository(local_conn),
                     sources=SqliteSourceRepository(
-                        catalog_conn, node_id, download_config.time_between_source_reads
+                        catalog_conn, download_config.time_between_source_reads
                     ),
                     catalog=catalog_repo,
                     targets=config.targets,
@@ -292,7 +292,7 @@ class CrawlerApp(CrawlerRunner):
                     wake_hub=wake_hub,
                     shutdown=shutdown,
                 )
-                loops.append(partial(download_loop, download_deps))
+                loops.append(partial(download_loop, download_deps, node_id))
                 _logger.info("download enabled: download loop armed")
 
             await telemetry.emit(CrawlerStarted(download_enabled=download_config is not None))
@@ -313,6 +313,7 @@ class CrawlerApp(CrawlerRunner):
                     telemetry=telemetry,
                     wall_clock=wall_clock,
                     logger=StdlibLogger("p2pwatch.application.reevaluate_catalog"),
+                    node_id=node_id,
                 ),
                 logger=StdlibLogger("p2pwatch.application.reevaluate_if_policy_changed"),
             )

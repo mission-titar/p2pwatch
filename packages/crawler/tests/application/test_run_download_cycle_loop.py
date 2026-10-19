@@ -19,6 +19,8 @@ from p2pwatch_testing.application.download_fakes import (
 )
 from p2pwatch_testing.application.fakes import FakeLogger, FakeTime, RecordingTelemetry
 
+_NODE = "n1"
+
 
 class RecordingWakeHub:
     """Wake hub that records + wakes (the test IS the producer)."""
@@ -73,7 +75,7 @@ async def test_loop_stops_when_shutdown_is_set_before_start() -> None:
     shutdown = asyncio.Event()
     shutdown.set()
     deps = _loop_deps(wake_hub=RecordingWakeHub(), shutdown=shutdown)
-    await asyncio.wait_for(download_loop(deps), timeout=1.0)  # runs no cycle
+    await asyncio.wait_for(download_loop(deps, _NODE), timeout=1.0)  # runs no cycle
 
 
 @pytest.mark.asyncio
@@ -91,7 +93,7 @@ async def test_loop_runs_a_cycle_then_sleeps_then_stops() -> None:
         wake_hub.wake(DOWNLOAD_WAKE_SUBJECT)
 
     await asyncio.gather(
-        asyncio.wait_for(download_loop(deps), timeout=2.0), stop_after_first_sleep()
+        asyncio.wait_for(download_loop(deps, _NODE), timeout=2.0), stop_after_first_sleep()
     )
     assert fake_time.sleeps[0] == timedelta(seconds=30)  # one poll interval
 
@@ -108,7 +110,9 @@ async def test_nudge_wakes_the_loop_before_poll_expires() -> None:
         shutdown.set()
         wake_hub.wake(DOWNLOAD_WAKE_SUBJECT)  # wakes the wait before the 999 s poll
 
-    await asyncio.gather(asyncio.wait_for(download_loop(deps), timeout=2.0), wake_then_stop())
+    await asyncio.gather(
+        asyncio.wait_for(download_loop(deps, _NODE), timeout=2.0), wake_then_stop()
+    )
     assert DOWNLOAD_WAKE_SUBJECT in wake_hub.waited
 
 
@@ -132,7 +136,7 @@ async def test_loop_breaks_when_shutdown_is_set_during_the_cycle() -> None:
     fake_time = FakeTime()
     deps = _loop_deps(wake_hub=RecordingWakeHub(), shutdown=shutdown, fake_time=fake_time)
     deps.catalog = _ShutdownDuringCycleCatalog(shutdown)
-    await asyncio.wait_for(download_loop(deps), timeout=1.0)
+    await asyncio.wait_for(download_loop(deps, _NODE), timeout=1.0)
     assert fake_time.sleeps == []  # break before any sleep/wake
 
 
@@ -166,7 +170,9 @@ async def test_nudge_wins_and_cancels_the_pending_sleep() -> None:
         shutdown.set()
         wake_hub.wake(DOWNLOAD_WAKE_SUBJECT)
 
-    await asyncio.gather(asyncio.wait_for(download_loop(deps), timeout=2.0), stop_when_waited())
+    await asyncio.gather(
+        asyncio.wait_for(download_loop(deps, _NODE), timeout=2.0), stop_when_waited()
+    )
     assert DOWNLOAD_WAKE_SUBJECT in wake_hub.waited
 
 
@@ -180,7 +186,7 @@ async def test_loop_cancelled_mid_wait_propagates_cleanly() -> None:
     wake_hub = RecordingWakeHub()
     deps = _loop_deps(wake_hub=wake_hub, shutdown=shutdown)
     deps.monotonic_clock = _BlockingMonotonicClock()
-    task = asyncio.ensure_future(download_loop(deps))
+    task = asyncio.ensure_future(download_loop(deps, _NODE))
     # wait until the loop is parked in _sleep_or_wake (wake_task has called wait())
     while DOWNLOAD_WAKE_SUBJECT not in wake_hub.waited:
         await asyncio.sleep(0)

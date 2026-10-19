@@ -48,6 +48,7 @@ async def reevaluate_catalog(
     telemetry: Telemetry,
     wall_clock: WallClock,
     logger: Logger,
+    node_id: str,
 ) -> ReevaluationSummary:
     """Re-evaluate every catalogued hash's latest observation against ``engine``.
 
@@ -69,6 +70,7 @@ async def reevaluate_catalog(
                 wake_hub=wake_hub,
                 telemetry=telemetry,
                 wall_clock=wall_clock,
+                node_id=node_id,
             )
         except RepositoryError as error:
             logger.error(
