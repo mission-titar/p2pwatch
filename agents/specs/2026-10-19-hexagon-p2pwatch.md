@@ -373,6 +373,8 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
   roles, a `Protocol` base for an ABC), so they take the size exemption. (Corrected 2026-10-19: block 20 takes
   it too, measured at 540 lines: a move counts its lines once deleted and once added, and moves no behaviour.)
   (Corrected 2026-10-19: block 40 takes it too, measured at 23 files and 270 lines: a pure rename.)
+  (Corrected 2026-10-19: block 70 takes it too, measured at 20 files and 227 lines: the `node_id`
+  threaded to the call sites of `emit` and `notify`.)
 - 19 blocks before the closing one, more than the 12 to 15 Discuss first estimated: `RunCrawler`, the `node_id`
   through the calls, the route tests on fakes and the local.db splits each added some. Lot 1b's 17 blocks went with
   no fix-back and no cascaded rebase.
