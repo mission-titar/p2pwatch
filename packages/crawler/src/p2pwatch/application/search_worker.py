@@ -143,7 +143,6 @@ class SearchWorker:
         self._client_backoff_key = BackoffKey(client_name, None)
         self._client = client
         self._deps = deps
-        self._connected = False
 
     @property
     def channels(self) -> tuple[str, ...]:
@@ -157,26 +156,6 @@ class SearchWorker:
             backoff.time_until_retry(self._client_backoff_key),
             backoff.time_until_retry(BackoffKey(self._client_name, channel)),
         )
-
-    async def _ensure_connected(self) -> bool:
-        """Connects the client if needed. Returns ``False`` if the client stays down."""
-        if self._connected:
-            return True
-        try:
-            await self._client.connect()
-        except ClientUnreachableError as error:
-            delay = self._deps.backoff.record_failure(self._client_backoff_key)
-            self._deps.logger.warning(
-                "client %s unreachable (%s): reconnect backoff %.1fs",
-                self._client_name,
-                error,
-                delay.total_seconds(),
-            )
-            await self._deps.telemetry.emit(ClientUnreachable(self._client_name))
-            return False
-        self._connected = True
-        self._deps.logger.info("client %s connected", self._client_name)
-        return True
 
     async def _record_observations(self, channel: str, answer: SearchAnswer) -> int:
         """Per-obs pipeline; returns the number of CHANGED verdicts (logging). A
@@ -205,8 +184,6 @@ class SearchWorker:
     async def run_task(self, task: SearchTask) -> None:
         """One search, run once ``time_until_ready`` is zero. Never raises: backs off and logs."""
         channel_backoff_key = BackoffKey(self._client_name, task.channel)
-        if not await self._ensure_connected():
-            return
         try:
             answer = await self._client.search(task.keyword, task.channel, SEARCH_BUDGET_SECONDS)
         except SearchFailedError as error:
@@ -221,7 +198,6 @@ class SearchWorker:
             await self._deps.telemetry.emit(SearchFailed(self._client_name, task.channel))
             return
         except ClientUnreachableError as error:
-            self._connected = False
             delay = self._deps.backoff.record_failure(self._client_backoff_key)
             self._deps.logger.warning(
                 "client %s unreachable (%s), client down, backoff %.1fs",
@@ -233,7 +209,6 @@ class SearchWorker:
             return
         changed = await self._record_observations(task.channel, answer)
         self._deps.backoff.reset(channel_backoff_key)
-        # connect() proves nothing: it may not log in
         self._deps.backoff.reset(self._client_backoff_key)
         self._deps.logger.info(
             "client %s: '%s'/%s → %d verdict(s) changed",

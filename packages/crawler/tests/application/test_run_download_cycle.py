@@ -375,47 +375,6 @@ async def test_every_byte_received_is_not_a_completion() -> None:
     assert downloads.states[_A] is DownloadState.DOWNLOADING  # NOT flipped to COMPLETED
 
 
-@pytest.mark.asyncio
-async def test_cycle_reconnects_a_dead_transport_before_any_io() -> None:
-    # Field 2026-09-04: the port-sync restarted amuled, the EC stream died, and the loop then
-    # logged "EC client not connected (call connect() first)" every 30 s for 7 days without ever
-    # reconnecting: an iteration that aborts at step 1 never reaches the queue/candidate steps,
-    # so a node silently stops downloading. ``connect()`` is idempotent (no-op when the stream is
-    # live), so re-establishing it at the top of the cycle costs nothing.
-    client = FakeDownloadClient(disconnected=True)
-    downloads = FakeDownloadRepo()
-    catalog = FakeCatalogReads(
-        candidates=(_candidate(_A, "062A"),),
-        observations={_A: ObservedFile(filename="Keroro.avi", size_bytes=100)},
-    )
-    deps = _deps(
-        client=client,
-        downloads=downloads,
-        catalog=catalog,
-    )
-    await run_download_cycle(deps)
-    assert client.connect_calls == 1
-    assert downloads.states[_A] is DownloadState.QUEUED  # the cycle did its work
-    assert len(client.started) == 1
-
-
-@pytest.mark.asyncio
-async def test_reconnect_failure_skips_the_iteration_without_raising() -> None:
-    client = FakeDownloadClient(
-        disconnected=True, connect_failures=[ClientUnreachableError("daemon still down")]
-    )
-    downloads = FakeDownloadRepo()
-    deps = _deps(
-        client=client,
-        downloads=downloads,
-        catalog=FakeCatalogReads(candidates=(_candidate(_A, "062A"),)),
-    )
-    await run_download_cycle(deps)  # does not raise
-    assert client.connect_calls == 1  # the reconnect was ATTEMPTED
-    assert client.started == []
-    assert downloads.states == {}
-
-
 # amuleapi refuses a read with ``amuled_rejected``, a DownloadRejectedError: on a read, the
 # daemon is unavailable, not a download refused.
 _UNAVAILABLE = [ClientUnreachableError("daemon down"), DownloadRejectedError("amuled_rejected")]

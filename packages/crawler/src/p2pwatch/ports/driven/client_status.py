@@ -23,8 +23,6 @@ class ClientStatus:
 
 
 class StatusClient(Protocol):
-    async def connect(self) -> None: ...
-
     async def status(self) -> ClientStatus: ...
 
 

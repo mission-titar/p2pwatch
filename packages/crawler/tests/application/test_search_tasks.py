@@ -56,20 +56,12 @@ class _TimedClient:
         self,
         durations: dict[str, float],
         *,
-        connect_failures: list[Exception] | None = None,
         search_failures: list[Exception] | None = None,
     ) -> None:
         self.channels = tuple(durations)
         self._durations = durations
-        self._connect_failures = connect_failures or []
         self._search_failures = search_failures or []
         self.searches: list[tuple[float, str, str]] = []
-
-    async def connect(self) -> None:
-        if self._connect_failures:
-            raise self._connect_failures.pop(0)
-
-    async def close(self) -> None: ...
 
     async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
         self.searches.append((asyncio.get_running_loop().time(), keyword, channel))
@@ -191,10 +183,10 @@ def test_a_failed_channel_sleeps_until_its_backoff_ends(tasks: _Tasks) -> None:
 
 
 def test_an_unreachable_client_sleeps_until_its_backoff_ends(tasks: _Tasks) -> None:
-    client = _TimedClient({"ed2k": 30.0, "kad": 30.0}, connect_failures=[make_unreachable()])
+    client = _TimedClient({"ed2k": 30.0, "kad": 30.0}, search_failures=[make_unreachable()])
     tasks.run_for(100.0, client, ["keroro"])
-    # The first connect fails; the other channel's task meets the backoff it set.
-    assert [start for start, *_ in client.searches] == [60.0, 60.0, 90.0, 90.0]
+    # The first search fails; the other channel's task meets the backoff it set.
+    assert [start for start, *_ in client.searches] == [0.0, 60.0, 60.0, 90.0, 90.0]
 
 
 def test_the_backoff_is_saved_at_each_change(tasks: _Tasks) -> None:
@@ -226,10 +218,6 @@ class _NeverSuspends:
         self.calls = 0
         self.ticks = 0  # advanced by a concurrent coroutine
         self._ticks_seen = -1
-
-    async def connect(self) -> None: ...
-
-    async def close(self) -> None: ...
 
     async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
         self.calls += 1

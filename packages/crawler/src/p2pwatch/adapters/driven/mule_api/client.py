@@ -114,10 +114,6 @@ class AmuleApiClient:
             self._http = http
             return http
 
-    async def connect(self) -> None:
-        """Opens the session now rather than on the first call. IDEMPOTENT."""
-        await self._connect()
-
     async def open(self) -> None:
         """Logs in at startup, tolerating an amuled not listening yet: both containers start
         together, so the crawler routinely knocks first, and the next call logs in. A refused

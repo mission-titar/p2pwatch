@@ -1,8 +1,8 @@
 """The download loop: reconcile → completions → new candidates → sources → sleep/wake (spec §5).
 
-One serial task on the sole download session. ``run_download_cycle`` runs ONE iteration;
+One serial task. ``run_download_cycle`` runs ONE iteration;
 ``download_loop`` repeats it until shutdown, waiting ``poll_interval`` or the download wake.
-Four things in it are not obvious:
+Three things in it are not obvious:
 
 - **A completion is the client's own signal, never the bytes** (2026-09-02: 065B was stamped
   complete at 20.1 %). ``DownloadStatus.completed`` carries it.
@@ -11,8 +11,6 @@ Four things in it are not obvious:
   step fails nothing.
 - **A download the client does not list is started again**, once per round, until it is listed
   or the TTL fails it: a client may forget its transfers on restart.
-- **Step 0 re-connects every iteration.** It is idempotent and nearly free, and it is what makes
-  "the client reconnects next round" true (2026-09-04 to 09-11: 7 days of a dead loop).
 
 Errors: ``ClientUnreachableError``, a refused read and ``OSError`` on the disk measurement skip
 the iteration, ``RepositoryError`` is logged and the cycle continues. A stalled download is never
@@ -472,14 +470,8 @@ async def run_download_cycle(deps: DownloadDeps) -> None:
     unavailability is handled by the next cycle's retry + the warning log. Intentional
     asymmetry.
     """
-    # Step 0 - CONNECT + SNAPSHOT: client I/O → unreachable or refused = dead daemon = ABORT.
-    # ``connect()`` is IDEMPOTENT (the adapter no-ops when its transport is live) and is the ONLY
-    # thing that re-arms a stream the adapter discarded after a failed read. SKIPPING IT WEDGES
-    # THE LOOP: the port-sync restarts the client on every VPN renegotiation, and nothing else
-    # in this loop ever reconnects (field, 2026-09-04: 7 days of "client not connected").
-    # Same guard as ``SearchWorker._ensure_connected``.
+    # Step 0 - SNAPSHOT: client I/O → unreachable or refused = dead daemon = ABORT.
     try:
-        await deps.download_client.connect()
         listed_statuses = await deps.download_client.downloads()
     except _UNAVAILABLE as error:
         deps.logger.warning("download daemon unreachable (%s): iteration skipped, retry", error)

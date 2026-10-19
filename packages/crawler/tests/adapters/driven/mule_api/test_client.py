@@ -105,16 +105,6 @@ async def test_calls_share_one_login() -> None:
     assert api.logins == 1
 
 
-@pytest.mark.asyncio
-async def test_connect_is_idempotent() -> None:
-    api = FakeAmuleApi()
-    client = await _connected(api)
-    await client.connect()
-    await client.close()
-
-    assert api.logins == 1
-
-
 def _yielding_client(api: FakeAmuleApi) -> AmuleApiClient:
     """A client whose every request suspends like a real one, letting the other callers in."""
 

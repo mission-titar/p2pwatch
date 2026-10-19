@@ -201,7 +201,7 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
         f"candidate file={_HASH} queued for download",
     ) in named_messages
     assert "🟢 node online (download on)" in caplog.messages
-    assert api.logins == 2  # one session searches and reads the status, the other downloads
+    assert api.logins == 1  # one session per node: it searches, reads the status and downloads
     assert len(api.added_links) == 1 and _HASH in api.added_links[0].lower()
     catalog = open_catalog(tmp_path / "catalog.db")
     assert observation_node_ids(catalog) == {"wired-node"}
@@ -242,7 +242,7 @@ async def test_observer_mode_crawls_its_config_files_with_one_ed2k_search_until_
     assert _search_types(api).count("global") == 1
     assert root_level == logging.DEBUG
     assert "🟢 node online (download off)" in caplog.messages
-    assert api.logins == 1  # no download session
+    assert api.logins == 1
     assert not any(map(_WEBUI_SERVING.match, caplog.messages))
 
 
