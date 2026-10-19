@@ -1667,6 +1667,16 @@ def test_to_display_rows_computes_size_and_last_seen_display() -> None:
     assert display.last_seen_display == "2026-07-03 23:45Z"
 
 
+def test_to_display_rows_shows_a_file_never_seen_with_unknown_sources() -> None:
+    entry = replace(_catalog_entry(decisions=()), latest_observation=None)
+    [display] = _to_display_rows([entry], _SEGMENTS_AB)
+    assert (display.filename, display.sources_display, display.last_seen_display) == (
+        "",
+        "unknown",
+        "",
+    )
+
+
 # ---------------------------------------------------------------------------
 # HTTP-level tests · the resolution rule end-to-end through both routes
 # ---------------------------------------------------------------------------
