@@ -359,7 +359,9 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
 | 85 | `refactor/asyncio-run-state` | `RunStateWriter`, `RunStateReader`; `AsyncioRunState` inheriting both (Corrected 2026-10-19: split from block 90, counted at 21 files before any code; it moves behaviour, so no exemption) | 150, 7 |
 | 90 | `feat/crawler-control-use-cases` | `PauseCrawl`, `ResumeCrawl`, `RequestShutdown`; the webui and `PosixProcess` on them; `CrawlerControl` deleted | 330, 15 |
 | 100 | `refactor/in-memory-status-board` | `InMemoryStatusBoard` and its two ports; the freshness rule into the domain | 300, 10 |
-| 110 | `feat/crawl-summary` | `CoverageReader`, `NodeStateReader`; `SummarizeCrawl`, `DescribeNode`; their routes, then their route tests on fakes | 450, 16 |
+| 110 | `feat/describe-node` | `NodeState`, `TrackedDownload`, the backoff types into the domain; `NodeStateReader`; `DescribeNode`, `/node` on it (Corrected 2026-10-19: block 110 split in 110, 115 and 117, counted at about 25 files before any code; it moves behaviour, so no exemption) | 400, 17 |
+| 115 | `feat/crawl-summary` | `TargetCoverage`, `CoverageReader`; `SummarizeCrawl`, `/` on it; the dashboard's deprecated edges removed | 450, 16 |
+| 117 | `test/crawl-summary-routes-on-fakes` | the `/` and `/node` route tests on fakes of `CrawlSummarizer` and `NodeDescriber` | 400, 5 |
 | 120 | `feat/list-files` | `CatalogFileReader`; `ListFiles`, the files and target routes on it | 450, 12 |
 | 130 | `test/list-files-routes-on-fakes` | the files and target route tests on a fake `FileLister` | 450, 6 |
 | 140 | `feat/describe-file` | `SourceReader` with `read_sharing_periods` (Corrected 2026-10-19: was `read_source_periods`, the reader table's name wins); `interval.py` to `domain/`; `DescribeFile`; its route and route tests | 450, 14 |
