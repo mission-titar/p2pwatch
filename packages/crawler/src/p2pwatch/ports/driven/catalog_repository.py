@@ -20,40 +20,11 @@ from p2pwatch.domain.observation import FileObservation
 
 
 @dataclass(frozen=True)
-class ObservedFile:
-    """Minimal READ shape of an observation: name + size (to build an ed2k link).
-
-    The download loop (spec §5) reads the LATEST observation of a hash to rebuild its ed2k
-    link (``build_ed2k_link(filename, size_bytes, hash)``). We return only the two required
-    fields, not the whole ``ReportedFile`` (the rest is useless for download).
-    """
-
-    filename: str
-    size_bytes: int
-
-
-@dataclass(frozen=True)
 class DownloadCandidate:
     """A file whose latest verdict for ``target_id`` is tier=download, for the download loop."""
 
     file: FileKey
     target_id: str
-
-
-@dataclass(frozen=True)
-class ReevalRow:
-    """One file's latest observation, enough to rebuild a :class:`FileCandidate`.
-
-    Read by the re-evaluation (spec re-evaluation §6): each row feeds
-    ``domain.observation.candidate_from_fields`` to re-run the matching engine against
-    the whole catalogue, one row per catalogued file.
-    """
-
-    file: FileKey
-    filename: str
-    size_bytes: int
-    duration_seconds: int | None
-    bitrate_kbps: int | None
 
 
 class CatalogRepository(Protocol):
@@ -64,12 +35,11 @@ class CatalogRepository(Protocol):
     ``retracted``; excluding the legacy ``target_id=""`` sentinel), for multi-target matching.
     ``download_candidates`` (spec download §5) returns the :class:`DownloadCandidate` whose
     LATEST verdict is tier=download (to be replayed by the download loop).
-    ``latest_observation`` returns the most recent :class:`ObservedFile` of a file (filename
-    and size for the ed2k link), or ``None``. ``best_observation`` returns the file's clean
-    filename (the most sourced, then the latest) with its size, or ``None``.
-    ``iter_reevaluation_rows`` streams every file's latest observation as a :class:`ReevalRow`
-    (spec re-evaluation §6), for the startup re-evaluation to rebuild a candidate per file;
-    ``count_files`` is its progress total.
+    Every read of an observation returns a :class:`FileObservation` whole, or ``None``:
+    ``latest_observation`` the most recent of a file, ``best_observation`` the one of its clean
+    filename (the most sourced, then the latest). ``iter_reevaluation_rows`` streams every file's
+    latest observation (spec re-evaluation §6), for the startup re-evaluation to rebuild a
+    candidate per file; ``count_files`` is its progress total.
     ``known_filenames`` returns every distinct filename of a file, sorted.
     These reads are harmless (no write).
     ``record_retraction`` (spec §7) appends a per-target ``match_decisions`` row
@@ -89,12 +59,12 @@ class CatalogRepository(Protocol):
 
     def download_candidates(self) -> tuple[DownloadCandidate, ...]: ...
 
-    def latest_observation(self, file: FileKey) -> ObservedFile | None: ...
+    def latest_observation(self, file: FileKey) -> FileObservation | None: ...
 
-    def best_observation(self, file: FileKey) -> ObservedFile | None: ...
+    def best_observation(self, file: FileKey) -> FileObservation | None: ...
 
     def known_filenames(self, file: FileKey) -> tuple[str, ...]: ...
 
     def count_files(self) -> int: ...
 
-    def iter_reevaluation_rows(self) -> Iterator[ReevalRow]: ...
+    def iter_reevaluation_rows(self) -> Iterator[FileObservation]: ...

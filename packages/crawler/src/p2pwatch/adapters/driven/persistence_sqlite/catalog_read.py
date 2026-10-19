@@ -11,7 +11,7 @@
   latest decision, optional filters + LIMIT/OFFSET).
 - ``count_files()``: ``(matched, total)`` counts over the same filtered source, for the
   /files summary line.
-- ``file_detail()``: the timeline of sightings in a window, the latest one, known names + current
+- ``file_detail()``: the timeline of observations in a window, the latest one, known names + current
   decisions for a given ``file_id``; ``None`` if the file is unknown.
 - ``source_periods()``: a file's source history in a window, one period per row, newest first.
 - ``list_sources()`` / ``count_sources()``: the sources with a user hash, last seen first, and
@@ -25,12 +25,12 @@ All SQL lives in module constants, parameterized (no value interpolation).
 import sqlite3
 
 from catalog_matching.domain.config import TIER_RANK
-from p2pwatch.adapters.driven.persistence_sqlite.sightings import (
-    LATEST_SIGHTING_CTE,
-    best_filename_and_size,
+from p2pwatch.adapters.driven.persistence_sqlite.observation_read import (
+    LATEST_OBSERVATION_CTE,
+    best_observation,
     known_filenames,
-    latest_sighting,
-    sightings,
+    latest_observation,
+    observations_between,
 )
 from p2pwatch.adapters.driving.webui.views import (
     DecisionView,
@@ -61,7 +61,7 @@ SORT_COLUMNS: dict[str, str] = {
     "name": "obs.filename",
     "size": "f.size_bytes",
     "sources": "obs.source_count",
-    "last_seen": "obs.last_seen",
+    "last_seen": "obs.observed_at",
     "tier": "dec.best_tier_rank",
 }
 SORT_DIRECTIONS: dict[str, str] = {"asc": "ASC", "desc": "DESC"}
@@ -110,9 +110,9 @@ ORDER BY ld.target_id, ld.file_id
 # The "latest per group" CTEs shared by the explorer list + counter, each folding an
 # append-only table to its current rows (latest wins, tie-break on id).
 #
-# ``latest_sighting`` (from ``sightings``) seeks each file's newest observation by key instead of
-# numbering the whole table with a window (11.6M rows on the node). It holds one row per
-# catalogued file, all NULL for a file never seen; every consumer LEFT JOINs it onto ``files``,
+# ``latest_observation`` (from ``observation_read``) seeks each file's newest observation by key
+# instead of numbering the whole table with a window (11.6M rows on the node). It holds one row
+# per catalogued file, all NULL for a file never seen; every consumer LEFT JOINs it onto ``files``,
 # the counters only for a name filter, since the default page needs no name.
 #
 # ``latest_dec`` keeps the latest decision per (file_id, target_id), dropping the legacy
@@ -146,30 +146,36 @@ dec_agg AS (
     FROM latest_dec AS ld
     GROUP BY ld.file_id
 ),
-{LATEST_SIGHTING_CTE}
+{LATEST_OBSERVATION_CTE}
 """
 
 # The shared source, files ⨝ latest observation ⨝ current decisions (aggregated), all pre-folded
 # by the CTEs above, so it is a plain star-join driven by ``files``.
-_JOIN_LATEST_SIGHTING = "LEFT JOIN latest_sighting AS obs ON obs.file_id = f.file_id\n"
+_JOIN_LATEST_OBSERVATION = "LEFT JOIN latest_observation AS obs ON obs.file_id = f.file_id\n"
 _JOIN_DECISIONS = "LEFT JOIN dec_agg AS dec ON dec.file_id = f.file_id\n"
+
+# Integer microseconds back to ``utc_iso``'s fixed-width text, the explorer's last seen.
+_ISO = (
+    "strftime('%Y-%m-%dT%H:%M:%S', {0} / 1000000, 'unixepoch')"
+    " || printf('.%06d+00:00', {0} % 1000000)"
+)
 
 # Explorer: files + latest joins, driven by files. Optional filters added in list_files().
 _SQL_LIST_FILES_BASE = (
     _SQL_CTES
-    + """\
+    + f"""\
 SELECT
     f.network,
     f.native_id,
     f.size_bytes,
     obs.filename AS filename,
     obs.source_count AS source_count,
-    obs.last_seen AS last_seen,
+    {_ISO.format("obs.observed_at")} AS last_seen,
     dec.target_ids,
     dec.tiers
 FROM files AS f
 """
-    + _JOIN_LATEST_SIGHTING
+    + _JOIN_LATEST_OBSERVATION
     + _JOIN_DECISIONS
 )
 
@@ -436,9 +442,9 @@ def _period_view(row: sqlite3.Row) -> SourcePeriodView:
     )
 
 
-def _latest_sighting_join(query: str | None) -> str:
-    """The counters' join to the latest sighting, which only the name filter reads."""
-    return "" if query is None else _JOIN_LATEST_SIGHTING
+def _latest_observation_join(query: str | None) -> str:
+    """The counters' join to the latest observation, which only the name filter reads."""
+    return "" if query is None else _JOIN_LATEST_OBSERVATION
 
 
 def _split_concat(concat: str | None) -> list[str]:
@@ -567,7 +573,7 @@ class CatalogReader:
         have a match decision. Feeds the /files summary line.
         """
         clauses, params = _filter_clauses(target, tier, query)
-        sql = _SQL_COUNT_FILES_BASE + _latest_sighting_join(query) + _JOIN_DECISIONS
+        sql = _SQL_COUNT_FILES_BASE + _latest_observation_join(query) + _JOIN_DECISIONS
         if clauses:
             sql += "WHERE " + " AND ".join(clauses) + "\n"
         row = self._conn.execute(sql, params).fetchone()
@@ -587,7 +593,7 @@ class CatalogReader:
         in (a multi-tier file appears in two facets). ``{}`` on an empty/undecided catalogue.
         """
         clauses, params = _filter_clauses(target, None, query)
-        sql = _SQL_TIER_COUNTS_BASE + _latest_sighting_join(query)
+        sql = _SQL_TIER_COUNTS_BASE + _latest_observation_join(query)
         if clauses:
             sql += "WHERE " + " AND ".join(clauses) + "\n"
         sql += "GROUP BY ld.tier\n"
@@ -621,8 +627,8 @@ class CatalogReader:
         return FileDetail(
             file=file,
             size_bytes=file_row["size_bytes"],
-            sightings=sightings(self._conn, file, window.since, window.until),
-            latest=latest_sighting(self._conn, file),
+            observations=observations_between(self._conn, file, window.since, window.until),
+            latest=latest_observation(self._conn, file),
             decisions=decisions,
             known_filenames=known_filenames(self._conn, file),
         )
@@ -722,5 +728,5 @@ class CatalogReader:
         )
 
     def _file_name(self, file: FileKey) -> str | None:
-        named = best_filename_and_size(self._conn, file)
-        return None if named is None else named[0]
+        best = best_observation(self._conn, file)
+        return None if best is None else best.reported_file.filename

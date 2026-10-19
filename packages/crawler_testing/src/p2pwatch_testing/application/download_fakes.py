@@ -6,8 +6,9 @@ from typing import Literal
 
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.source import SourceKey, SourceReading
-from p2pwatch.ports.driven.catalog_repository import DownloadCandidate, ObservedFile
+from p2pwatch.ports.driven.catalog_repository import DownloadCandidate
 from p2pwatch.ports.driven.download_client import (
     DownloadRequest,
     DownloadStatus,
@@ -212,8 +213,8 @@ class FakeCatalogReads:
         self,
         *,
         candidates: tuple[DownloadCandidate, ...] = (),
-        observations: dict[str, ObservedFile] | None = None,
-        best: dict[str, ObservedFile] | None = None,
+        observations: dict[str, FileObservation] | None = None,
+        best: dict[str, FileObservation] | None = None,
     ) -> None:
         self._candidates = candidates
         self._observations = observations or {}
@@ -222,10 +223,10 @@ class FakeCatalogReads:
     def download_candidates(self) -> tuple[DownloadCandidate, ...]:
         return self._candidates
 
-    def latest_observation(self, file: FileKey) -> ObservedFile | None:
+    def latest_observation(self, file: FileKey) -> FileObservation | None:
         return self._observations.get(file.native_id)
 
-    def best_observation(self, file: FileKey) -> ObservedFile | None:
+    def best_observation(self, file: FileKey) -> FileObservation | None:
         return self._best.get(file.native_id)
 
 

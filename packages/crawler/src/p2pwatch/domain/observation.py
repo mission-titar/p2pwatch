@@ -23,9 +23,8 @@ def candidate_from_fields(
 ) -> FileCandidate:
     """Bridge to the matching engine: unit conversions (bytes -> MiB, int -> float).
 
-    Single source of the conversion (spec re-evaluation §6): both ``ReportedFile.
-    to_candidate`` (live path) and the re-evaluation (``ReevalRow`` ->
-    candidate) call this.
+    Single source of the conversion (spec re-evaluation §6): ``ReportedFile.to_candidate`` (the
+    live path and the re-evaluation) and the matching explainer call this.
     """
     duration = float(duration_seconds) if duration_seconds is not None else None
     bitrate = float(bitrate_kbps) if bitrate_kbps is not None else None
@@ -80,17 +79,3 @@ class FileObservation:
 
     reported_file: ReportedFile
     observed_at: datetime
-
-
-@dataclass(frozen=True)
-class Sighting:
-    """A file seen once: one observation."""
-
-    file: FileKey
-    filename: str
-    observed_at: str
-    source_count: int
-    size_bytes: int
-    duration_seconds: int | None
-    bitrate_kbps: int | None
-    keyword: str

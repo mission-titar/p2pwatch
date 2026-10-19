@@ -95,7 +95,7 @@ from p2pwatch.adapters.driving.webui.views import (
 from p2pwatch.application.matching_read import MatchingExplainer
 from p2pwatch.domain.coverage import coverage_of
 from p2pwatch.domain.file_key import Network
-from p2pwatch.domain.observation import Sighting
+from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.source import SourceKey
 from p2pwatch.ports.driven.client_status import StatusReadings
 from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
@@ -207,14 +207,15 @@ def _to_display_rows(
     return rows
 
 
-def _timeline_row(sighting: Sighting) -> TimelineRow:
-    """A sighting as one timeline line."""
+def _timeline_row(observation: FileObservation) -> TimelineRow:
+    """An observation as one timeline line, its instant as ``utc_iso`` writes it."""
+    reported_file = observation.reported_file
     return TimelineRow(
-        name=sighting.filename,
-        size_bytes=sighting.size_bytes,
-        sources=str(sighting.source_count),
-        keyword=sighting.keyword,
-        observed_at=sighting.observed_at,
+        name=reported_file.filename,
+        size_bytes=reported_file.size_bytes,
+        sources=str(reported_file.source_count),
+        keyword=reported_file.keyword,
+        observed_at=observation.observed_at.isoformat(timespec="microseconds"),
     )
 
 
@@ -892,7 +893,7 @@ def build_app(
         if detail is None:
             return templates.TemplateResponse(request, "404.html", {}, status_code=404)
 
-        latest = detail.latest
+        latest = None if detail.latest is None else detail.latest.reported_file
         ed2k_link = ""
         if latest is not None:
             match detail.file.network:
@@ -936,7 +937,7 @@ def build_app(
             network=detail.file.network,
             native_id=detail.file.native_id,
             size_bytes=detail.size_bytes,
-            timeline=tuple(_timeline_row(sighting) for sighting in detail.sightings),
+            timeline=tuple(_timeline_row(observation) for observation in detail.observations),
             source_history=tuple(
                 _source_history_row(period)
                 for period in catalog.source_periods(detail.file.file_id, window)
