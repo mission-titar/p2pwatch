@@ -55,6 +55,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.local_state_repository import (
 from p2pwatch.adapters.driven.persistence_sqlite.source_repository import SqliteSourceRepository
 from p2pwatch.adapters.driven.rng_random import SeededRng
 from p2pwatch.adapters.driven.stdlib_logger import StdlibLogger
+from p2pwatch.adapters.driven.uuid4_node_id_generator import Uuid4NodeIdGenerator
 from p2pwatch.adapters.driven.wake_hub_asyncio import AsyncioWakeHub
 from p2pwatch.adapters.driven.wall_clock_system import SystemWallClock
 from p2pwatch.adapters.driving.process.posix_process import PosixProcess
@@ -192,7 +193,13 @@ class CrawlerApp(CrawlerRunner):
             stack.callback(local_conn.close)
 
             local_repo = SqliteLocalStateRepository(local_conn)
-            node_id = resolve_node_id(crawler_config.node_id, local_repo, wall_clock)
+            node_id = resolve_node_id(
+                crawler_config.node_id,
+                node_id_reader=local_repo,
+                node_id_writer=local_repo,
+                node_id_generator=Uuid4NodeIdGenerator(),
+                wall_clock=wall_clock,
+            )
             observability = crawler_config.observability
             registry = CollectorRegistry()
             notifier = AppriseNotifier(

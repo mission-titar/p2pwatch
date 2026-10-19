@@ -1,13 +1,23 @@
 """The node's id: the one ``crawler.yml`` configures, else the one ``local.db`` holds."""
 
 from p2pwatch.ports.driven.clock import WallClock
-from p2pwatch.ports.driven.local_state_repository import LocalStateRepository
+from p2pwatch.ports.driven.node_id import NodeIdGenerator, NodeIdReader, NodeIdWriter
 
 
 def resolve_node_id(
-    configured_node_id: str | None, local_state: LocalStateRepository, wall_clock: WallClock
+    configured_node_id: str | None,
+    *,
+    node_id_reader: NodeIdReader,
+    node_id_writer: NodeIdWriter,
+    node_id_generator: NodeIdGenerator,
+    wall_clock: WallClock,
 ) -> str:
-    """The configured ``node_id`` when there is one, else the stored one, created on first use."""
+    """The configured ``node_id`` if any, else the stored one, else a new one, recorded."""
     if configured_node_id is not None:
         return configured_node_id
-    return local_state.get_or_create_node_id(wall_clock.now())
+    stored_node_id = node_id_reader.read_node_id()
+    if stored_node_id is not None:
+        return stored_node_id
+    node_id = node_id_generator.new_node_id()
+    node_id_writer.record_node_id(node_id, wall_clock.now())
+    return node_id
