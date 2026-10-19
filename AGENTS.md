@@ -149,6 +149,7 @@ a function does.
 | `coverage` | `TargetCoverage`, how far a target is recovered: its status, its best tier and its file count, catalog-tier decisions left out | `progress` |
 | `file history` | `FileHistory`, a file as its page shows it: its observations over an interval, its latest one, its known filenames, its current decisions | `file detail` |
 | `dated decision` | `DatedDecision`, a `DecisionRecord` with its `decided_at` and its `node_id`, apart since the anti-redundancy compares a record's three fields | `decision view` |
+| `interval` | `Interval`, the stretch of wall-clock time a page reads, at most 7 days, resolved from the ends a request asks for | `range`, `period` |
 | `sharing period` | `SharingPeriod`, one source's consecutive readings on one file by one node: its first and last reading, the bytes received; a page reads them in a `PeriodWindow` | `source range` |
 | `catalog entry` | `CatalogEntry`, a file as a listing shows it: its size, its latest observation, its current decisions | `file row` |
 | `search text` | `search_text`, the text a listed name must contain | `query`, which is SQL's |

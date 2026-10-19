@@ -1,10 +1,13 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from p2pwatch.adapters.driving.webui.format import (
     average_rate,
     human_size,
     input_timestamp,
     micros_timestamp,
+    parse_instant,
     seasonal_locator,
     short_hash,
     short_timestamp,
@@ -150,3 +153,27 @@ def test_an_interval_end_shows_in_the_webui_format_and_in_a_datetime_local_input
     at = datetime(2026, 10, 13, 20, 0, 30, 999_999, tzinfo=UTC)
     assert utc_timestamp(at) == "2026-10-13 20:00:30Z"
     assert input_timestamp(at) == "2026-10-13T20:00:30"
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "2026-10-06 12:00:00Z",
+        "2026-10-06T12:00",
+        "2026-10-06T12:00:00.999999",
+        "2026-10-06T14:00:00+02:00",
+        " 2026-10-06 12:00:00Z ",
+    ],
+    ids=["webui-format", "datetime-local", "fraction", "offset", "spaces"],
+)
+def test_an_instant_is_read_as_utc_to_the_second(raw: str) -> None:
+    assert parse_instant(raw) == datetime(2026, 10, 6, 12, 0, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [None, "", "yesterday", "1969-12-31T23:59:59Z", "0001-01-01T00:00:00+01:00"],
+    ids=["absent", "empty", "malformed", "before-the-epoch", "overflowing"],
+)
+def test_an_instant_absent_malformed_or_before_the_epoch_is_none(raw: str | None) -> None:
+    assert parse_instant(raw) is None

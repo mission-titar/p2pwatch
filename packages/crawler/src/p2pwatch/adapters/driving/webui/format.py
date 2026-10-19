@@ -92,6 +92,17 @@ def utc_timestamp(at: datetime) -> str:
     return f"{at:%Y-%m-%d %H:%M:%S}Z"
 
 
+def parse_instant(raw: str | None) -> datetime | None:
+    """An ISO 8601 instant to the second, read as UTC without an offset; ``None`` when absent,
+    malformed or before the epoch, so that no step back overflows ``datetime``."""
+    try:
+        parsed = datetime.fromisoformat((raw or "").strip())
+        instant = parsed.replace(tzinfo=parsed.tzinfo or UTC).astimezone(UTC)
+    except (ValueError, OverflowError):
+        return None
+    return instant.replace(microsecond=0) if instant >= _EPOCH else None
+
+
 def input_timestamp(at: datetime) -> str:
     """A UTC instant as a ``datetime-local`` input's value, to the second."""
     return f"{at:%Y-%m-%dT%H:%M:%S}"

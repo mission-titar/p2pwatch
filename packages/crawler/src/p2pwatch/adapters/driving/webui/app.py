@@ -45,16 +45,11 @@ from p2pwatch.adapters.driving.webui.format import (
     human_size,
     input_timestamp,
     micros_timestamp,
+    parse_instant,
     seasonal_locator,
     short_hash,
     short_timestamp,
     utc_timestamp,
-)
-from p2pwatch.adapters.driving.webui.interval import (
-    INTERVAL_PRESETS,
-    Interval,
-    interval_ending,
-    requested_interval,
 )
 from p2pwatch.adapters.driving.webui.views import (
     BackoffEntry,
@@ -92,6 +87,12 @@ from p2pwatch.adapters.driving.webui.views import (
 from p2pwatch.application.matching_read import MatchingExplainer
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_key import Network
+from p2pwatch.domain.interval import (
+    MAX_INTERVAL_SPAN,
+    Interval,
+    interval_ending,
+    requested_interval,
+)
 from p2pwatch.domain.node_state import NodeState
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
@@ -107,6 +108,12 @@ from p2pwatch.ports.driving.shutdown_requester import ShutdownRequester
 # A detail page's path segment: a file_id or a source_id as 32 lowercase hex (stage 1 and 4 D13).
 _HEX_ID = re.compile(r"[0-9a-f]{32}")
 
+_INTERVAL_PRESETS: tuple[tuple[str, timedelta], ...] = (
+    ("Last hour", timedelta(hours=1)),
+    ("Last 6 hours", timedelta(hours=6)),
+    ("Last 24 hours", timedelta(hours=24)),
+    ("Last 7 days", MAX_INTERVAL_SPAN),
+)
 _CLAMPED_NOTICE = (
     "The interval requested is longer than 7 days: showing the 7 days ending at its end."
 )
@@ -256,6 +263,12 @@ def _source_history_row(period: SharingPeriod) -> SourceHistoryRow:
     )
 
 
+def _requested_ends(request: Request) -> tuple[datetime | None, datetime | None]:
+    """The interval's ends the query asks for, ``None`` where absent or malformed."""
+    query_params = request.query_params
+    return parse_instant(query_params.get("from")), parse_instant(query_params.get("to"))
+
+
 def _interval_params(request: Request) -> dict[str, str]:
     """The request's own ``from`` and ``to``, which a page's list links keep."""
     query_params = request.query_params
@@ -282,7 +295,8 @@ def _interval_selector(
         shown=f"{utc_timestamp(interval.since)} to {utc_timestamp(interval.until)}",
         notices=(_CLAMPED_NOTICE,) if interval.clamped else (),
         presets=tuple(
-            IntervalLink(label, url(interval_ending(now, span))) for label, span in INTERVAL_PRESETS
+            IntervalLink(label, url(interval_ending(now, span)))
+            for label, span in _INTERVAL_PRESETS
         ),
         from_value=input_timestamp(interval.since),
         to_value=input_timestamp(interval.until),
@@ -704,8 +718,7 @@ def build_app(
     def _now_and_interval(request: Request) -> tuple[datetime, Interval]:
         """The second the request is read at, and the interval it asks for."""
         now = wall_clock.now().replace(microsecond=0)
-        query_params = request.query_params
-        return now, requested_interval(query_params.get("from"), query_params.get("to"), now)
+        return now, requested_interval(*_requested_ends(request), now)
 
     # Full segment by target_id (Task 3: seasonal locator + title resolution on /files)
     _segment_by_id = {seg.target_id: seg for seg in target_segments}
