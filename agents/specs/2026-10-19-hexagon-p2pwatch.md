@@ -400,9 +400,10 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
    matched the logger name the composition hands `RunCrawler`; the check is on the calls.)
 5. **No `node_id` in an adapter's state** (block 70): `grep -rn "self\._node_id" adapters` prints nothing but
    `AppriseNotifier`'s groups keyed by it (on `main`: 13 lines in the three adapters).
-6. **Each operation declared once** (block 190): the appendix's `awk` prints only `now` (on `main`:
+6. **Each operation declared once** (block 190): the appendix's ast-grep command prints only `now` (on `main`:
    `best_observation`, `close`, `connect`, `download_candidates`, `latest_observation`, `now`). `now` stays twice by
-   design: `WallClock.now` and `MonotonicClock.now` are two operations (D5).
+   design: `WallClock.now` and `MonotonicClock.now` are two operations (D5). (Corrected 2026-10-19: was an `awk`
+   on the text of the classes; the ast-grep rule reads the syntax tree, and prints the same list on `main`.)
 7. **No exception left for lot 2** (block 170): `uv run tach check 2>&1 | grep -c '^\[WARN\] packages/crawler/'`
    prints 0 (on `main`: 66), and `tach.toml` names lot 2 nowhere.
 8. **The route tests use fakes** (block 170):
@@ -476,8 +477,9 @@ Re-run before acting on one.
 - `connect`: called in `search_worker.py:166`, `status_loop.py:113`, `run_download_cycle.py:483`; `close` on no
   port; `_call` raises when `_http is None` (`adapters/driven/mule_api/client.py:286-287`); a second client at
   `composition/app.py:269`.
-- Operations declared twice, run from `packages/crawler/src/p2pwatch`:
-  `awk 'FNR==1{p=0} /^class /{p = ($0 ~ /\((.*Protocol.*|.*ABC.*)\)/)} p && /^    (async )?def /{l=$0; sub(/^    (async )?def /,"",l); sub(/\(.*/,"",l); print l}' ports/driven/*.py ports/driving/*.py application/run_download_cycle.py | sort | uniq -d`
+- Operations declared twice, run from `packages/crawler/src/p2pwatch` (the methods of every class whose bases name
+  `Protocol` or `ABC`):
+  `uv run ast-grep scan --json=stream --inline-rules '{id: op, language: python, rule: {kind: function_definition, has: {field: name, pattern: $NAME}, inside: {kind: class_definition, stopBy: end, has: {field: superclasses, regex: "\\b(Protocol|ABC)\\b"}}}}' ports application | python3 -c "import json,sys; [print(json.loads(l)['metaVariables']['single']['NAME']['text']) for l in sys.stdin]" | sort | uniq -d`
   prints `best_observation`, `close`, `connect`, `download_candidates`, `latest_observation`, `now`.
 - Webui: `webui/app.py` 1,147 lines, 15 routes, readers built per request at 9 sites; `views.py` 524 lines, 39
   classes, 13 of them the readers' types; `catalog_read.py` 726 lines; 12 `deprecated = true` edges naming lot 2
