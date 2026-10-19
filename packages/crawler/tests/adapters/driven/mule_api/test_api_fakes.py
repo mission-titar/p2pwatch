@@ -21,7 +21,7 @@ async def test_the_real_client_logs_in_and_out_over_the_socket() -> None:
         client = AmuleApiClient(
             server.host, server.port, PASSWORD, monotonic_clock=api.monotonic_clock
         )
-        await client.connect()
+        await client.open()
         await client.close()
 
     assert (server.host, server.port != 0) == ("127.0.0.1", True)

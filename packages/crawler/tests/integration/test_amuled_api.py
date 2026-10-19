@@ -23,7 +23,7 @@ async def test_real_login_succeeds(amuled: ApiEndpoint) -> None:
         timeout_seconds=30.0,
         monotonic_clock=AsyncioMonotonicClock(),
     )
-    await client.connect()  # the admin password written by --set-admin-pass is accepted
+    await client.status()  # its login accepts the admin password written by --set-admin-pass
     await client.close()
 
 
@@ -37,7 +37,7 @@ async def test_real_login_fails_with_wrong_password(amuled: ApiEndpoint) -> None
         monotonic_clock=AsyncioMonotonicClock(),
     )
     with pytest.raises(ApiAuthError):
-        await client.connect()
+        await client.status()
 
 
 @pytest.mark.asyncio
@@ -49,7 +49,6 @@ async def test_real_status(amuled: ApiEndpoint) -> None:
         timeout_seconds=30.0,
         monotonic_clock=AsyncioMonotonicClock(),
     )
-    await client.connect()
     try:
         status = await client.status()
         assert [channel.channel for channel in status.channels] == ["ed2k", "kad"]
@@ -66,7 +65,6 @@ async def test_real_search(amuled: ApiEndpoint) -> None:
         timeout_seconds=30.0,
         monotonic_clock=AsyncioMonotonicClock(),
     )
-    await client.connect()
     try:
         try:
             answer = await client.search("keroro", "ed2k", 30.0)

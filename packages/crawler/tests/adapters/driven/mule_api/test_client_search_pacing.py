@@ -40,7 +40,7 @@ async def _connected(api: FakeAmuleApi) -> AmuleApiClient:
         transport=api.transport(),
         monotonic_clock=api.monotonic_clock,
     )
-    await client.connect()
+    await client.open()
     return client
 
 

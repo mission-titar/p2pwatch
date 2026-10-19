@@ -43,7 +43,7 @@ def _client(api: FakeAmuleApi, *, password: str = PASSWORD) -> AmuleApiClient:
 
 async def _connected(api: FakeAmuleApi) -> AmuleApiClient:
     client = _client(api)
-    await client.connect()
+    await client.open()
     return client
 
 
@@ -79,9 +79,9 @@ def _result(name: str = "Keroro.095.avi") -> dict[str, object]:
 
 
 @pytest.mark.asyncio
-async def test_connect_logs_in_and_arms_the_bearer() -> None:
+async def test_a_first_call_logs_in_and_arms_the_bearer() -> None:
     api = FakeAmuleApi()
-    client = await _connected(api)
+    client = _client(api)
     try:
         await client.status()
     finally:
@@ -95,6 +95,17 @@ async def test_connect_logs_in_and_arms_the_bearer() -> None:
 
 
 @pytest.mark.asyncio
+async def test_calls_share_one_login() -> None:
+    api = FakeAmuleApi()
+    client = await _connected(api)
+    await client.status()
+    await client.status()
+    await client.close()
+
+    assert api.logins == 1
+
+
+@pytest.mark.asyncio
 async def test_connect_is_idempotent() -> None:
     api = FakeAmuleApi()
     client = await _connected(api)
@@ -104,31 +115,36 @@ async def test_connect_is_idempotent() -> None:
     assert api.logins == 1
 
 
-@pytest.mark.asyncio
-async def test_concurrent_connects_log_in_once() -> None:
-    api = FakeAmuleApi()
+def _yielding_client(api: FakeAmuleApi) -> AmuleApiClient:
+    """A client whose every request suspends like a real one, letting the other callers in."""
 
     async def round_trip(request: httpx.Request) -> httpx.Response:
-        await asyncio.sleep(0)  # suspends like a real request, letting the other callers in
+        await asyncio.sleep(0)
         return api.handle(request)
 
     transport = httpx.MockTransport(round_trip)
-    client = AmuleApiClient(
+    return AmuleApiClient(
         "amuled.test", 4711, PASSWORD, transport=transport, monotonic_clock=api.monotonic_clock
     )
-    await asyncio.gather(*(client.connect() for _ in range(5)))
+
+
+@pytest.mark.asyncio
+async def test_concurrent_first_calls_log_in_once() -> None:
+    api = FakeAmuleApi()
+    client = _yielding_client(api)
+    await asyncio.gather(*(client.status() for _ in range(5)))
     await client.close()
 
     assert api.logins == 1  # one session: no AsyncClient opened for nothing
 
 
 @pytest.mark.asyncio
-async def test_connect_refuses_an_empty_password_without_asking() -> None:
+async def test_an_empty_password_is_refused_without_asking() -> None:
     api = FakeAmuleApi()
     client = _client(api, password="")
 
     with pytest.raises(ApiAuthError):
-        await client.connect()
+        await client.status()
     assert api.requests == []
 
 
@@ -138,7 +154,7 @@ async def test_a_wrong_password_is_a_config_error_not_a_loop_case() -> None:
     client = _client(api, password="wrong")
 
     with pytest.raises(ApiAuthError):
-        await client.connect()
+        await client.status()
 
 
 @pytest.mark.asyncio
@@ -150,7 +166,7 @@ async def test_a_login_reply_without_a_token_is_a_config_error() -> None:
     client = _client(api)
 
     with pytest.raises(ApiAuthError):
-        await client.connect()
+        await client.status()
 
 
 @pytest.mark.asyncio
@@ -162,7 +178,7 @@ async def test_login_disabled_is_a_daemon_that_is_not_ready() -> None:
     client = _client(api)
 
     with pytest.raises(ApiUnreachableError):
-        await client.connect()
+        await client.status()
 
 
 @pytest.mark.asyncio
@@ -173,14 +189,6 @@ async def test_a_dead_transport_is_an_unreachable_daemon() -> None:
     api = FakeAmuleApi()
     api.overrides[("POST", "/api/v1/auth/login")] = refuse
     client = _client(api)
-
-    with pytest.raises(ApiUnreachableError):
-        await client.connect()
-
-
-@pytest.mark.asyncio
-async def test_an_operation_before_connect_is_unreachable() -> None:
-    client = _client(FakeAmuleApi())
 
     with pytest.raises(ApiUnreachableError):
         await client.status()
@@ -199,14 +207,14 @@ async def test_close_logs_out_once_and_tolerates_a_failure() -> None:
 
 
 @pytest.mark.asyncio
-async def test_connect_after_close_logs_in_again() -> None:
+async def test_a_call_after_close_raises_instead_of_logging_in_again() -> None:
     api = FakeAmuleApi()
     client = await _connected(api)
     await client.close()
-    await client.connect()
-    await client.close()
 
-    assert api.logins == 2
+    with pytest.raises(ApiUnreachableError, match="closed"):
+        await client.status()
+    assert api.logins == 1  # nothing would revoke a session opened past the shutdown
 
 
 @pytest.mark.asyncio
@@ -220,7 +228,7 @@ async def test_open_logs_in() -> None:
 
 
 @pytest.mark.asyncio
-async def test_open_tolerates_a_daemon_not_listening_yet(
+async def test_a_call_after_a_tolerated_unreachable_open_logs_in_and_succeeds(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     def refuse(request: httpx.Request) -> httpx.Response:
@@ -238,7 +246,7 @@ async def test_open_tolerates_a_daemon_not_listening_yet(
         "the loops retry"
     ]
     del api.overrides[("POST", "/api/v1/auth/login")]
-    await client.connect()  # the session opens once the daemon listens
+    await client.status()  # the session opens once the daemon listens
     assert api.logins == 1
 
 
@@ -282,6 +290,27 @@ async def test_a_second_401_ends_the_session_instead_of_looping() -> None:
     # One re-login, one retry, then it stops: the limiter locks an IP out after 30 rejects.
     assert api.logins == 2
     assert [request.url.path for request in api.requests].count("/api/v1/status") == 2
+
+
+@pytest.mark.asyncio
+async def test_calls_rejected_together_renew_the_token_once() -> None:
+    """A daemon restart rejects every call in flight: one login renews them all."""
+    api = FakeAmuleApi()
+    client = _yielding_client(api)
+    await client.open()
+    rejected = {"count": 0}
+
+    def stale_twice(request: httpx.Request) -> httpx.Response:
+        rejected["count"] += 1
+        if rejected["count"] <= 2:
+            return error(401, "unauthorized", "amuleapi restarted")
+        return httpx.Response(200, json=api.status)
+
+    api.overrides[("GET", "/api/v1/status")] = stale_twice
+    await asyncio.gather(client.status(), client.status())
+    await client.close()
+
+    assert api.logins == 2  # the first session's, then one renewal for both calls
 
 
 @pytest.mark.asyncio
@@ -574,9 +603,12 @@ async def test_start_refuses_a_file_of_another_network_without_asking() -> None:
 @pytest.mark.asyncio
 async def test_start_queues_the_files_ed2k_link() -> None:
     api = FakeAmuleApi()
-    client: DownloadClient = await _connected(api)
+    client = await _connected(api)
+    download_client: DownloadClient = client
 
-    await client.start(DownloadRequest(file=_KEY, filename="Keroro 095.avi", size_bytes=10))
+    await download_client.start(
+        DownloadRequest(file=_KEY, filename="Keroro 095.avi", size_bytes=10)
+    )
     await client.close()
 
     assert api.added_links == [f"ed2k://|file|Keroro%20095.avi|10|{_HASH}|/"]

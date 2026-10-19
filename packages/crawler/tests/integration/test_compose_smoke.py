@@ -459,7 +459,6 @@ async def main() -> None:
     client = AmuleApiClient(
         {_API_HOST!r}, {_API_PORT}, {_API_PASSWORD!r}, monotonic_clock=AsyncioMonotonicClock()
     )
-    await client.connect()
     completed = [d.file.native_id for d in await client.downloads() if d.completed]
     print(json.dumps(sorted(completed)))
     await client.close()

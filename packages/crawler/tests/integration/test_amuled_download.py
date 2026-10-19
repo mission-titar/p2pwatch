@@ -33,7 +33,6 @@ async def test_start_then_appears_in_downloads(amuled: ApiEndpoint) -> None:
         timeout_seconds=30.0,
         monotonic_clock=AsyncioMonotonicClock(),
     )
-    await client.connect()
     try:
         file = FileKey(Network.ED2K, _HASH)
         try:
