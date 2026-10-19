@@ -1,15 +1,15 @@
-"""Composition root: loads the config, then assembles the clients + UNIQUE repos + engine + loop.
+"""Composition root: loads the config, assembles the crawler it describes, then runs it.
 
 COMPOSITION layer (the only one allowed to import adapters AND application). Builds:
 - ONE ``SqliteCatalogRepository`` + ONE ``SqliteLocalStateRepository`` +
   ``SqliteBackoffStateRepository`` (single writer, invariant §11), connections opened
   via ``open_catalog``/``open_local`` (migrations checked at startup, fail-fast §14).
-- the ``MatchingEngine`` (once), the ``node_id`` (``resolve_node_id``),
+- the ``MatchingEngine`` (once),
 - ONE ``AmuleApiClient`` + ``SearchWorker`` on the one amuled the core drives, whose
   session the status and download loops share.
 
 Loops: the search tasks (``SearchTaskRunner``), the status loop, and the download loop when
-configured, run by ``supervise_loops`` until ``PosixProcess`` or the webui requests the shutdown.
+configured, which ``RunCrawler`` runs until ``PosixProcess`` or the webui requests the shutdown.
 OBSERVABLE & BOUNDED shutdown (spec §6): long-lived resources are closed AFTER the full unwind of
 the loops (no worker can write anymore), all within ``shutdown_deadline_seconds``.
 """
@@ -62,8 +62,7 @@ from p2pwatch.adapters.driving.process.posix_process import PosixProcess
 from p2pwatch.adapters.driving.webui.app import build_app as build_webui_app
 from p2pwatch.adapters.driving.webui.uvicorn_server_thread import UvicornServerThread
 from p2pwatch.application.reevaluate_catalog import reevaluate_catalog
-from p2pwatch.application.reevaluate_if_policy_changed import reevaluate_if_policy_changed
-from p2pwatch.application.resolve_node_id import resolve_node_id
+from p2pwatch.application.run_crawler import RunCrawler
 from p2pwatch.application.run_download_cycle import (
     DownloadLoopDeps,
     download_loop,
@@ -76,8 +75,6 @@ from p2pwatch.application.search_worker import (
     WorkerDeps,
 )
 from p2pwatch.application.status_loop import StatusBoard, StatusLoopDeps, status_loop
-from p2pwatch.application.supervise_loops import supervise_loops
-from p2pwatch.domain.observability.events import CrawlerStarted
 from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
 from p2pwatch.ports.driving.crawler_control import CrawlerControl
 from p2pwatch.ports.driving.crawler_runner import CrawlerRunner
@@ -162,7 +159,7 @@ class CrawlerApp(CrawlerRunner):
     async def crawl(
         self, *, config_path: PurePath, targets_path: PurePath, matcher_path: PurePath
     ) -> None:
-        """Opens the resources under ``PosixProcess``, runs the loops until the shutdown (§6).
+        """Opens the resources under ``PosixProcess``, runs ``RunCrawler`` until the shutdown (§6).
 
         Only the shutdown is bounded: an overrun raises ``TimeoutError``, and ``PosixProcess``
         then closes what is left.
@@ -193,13 +190,6 @@ class CrawlerApp(CrawlerRunner):
             stack.callback(local_conn.close)
 
             local_repo = SqliteLocalStateRepository(local_conn)
-            node_id = resolve_node_id(
-                crawler_config.node_id,
-                node_id_reader=local_repo,
-                node_id_writer=local_repo,
-                node_id_generator=Uuid4NodeIdGenerator(),
-                wall_clock=wall_clock,
-            )
             observability = crawler_config.observability
             registry = CollectorRegistry()
             notifier = AppriseNotifier(
@@ -264,12 +254,10 @@ class CrawlerApp(CrawlerRunner):
                 monotonic_clock=monotonic_clock,
                 logger=StdlibLogger("p2pwatch.application.search_tasks"),
             )
-            loops: list[Callable[[], Coroutine[object, object, None]]] = [
-                partial(search_tasks.run, node_id),
-                partial(status_loop, status_deps, node_id),
+            loops: list[Callable[[str], Coroutine[object, object, None]]] = [
+                search_tasks.run,
+                partial(status_loop, status_deps),
             ]
-
-            _logger.info("crawler started: node_id=%s", node_id)
 
             # Download enabled ⟺ the ``download`` section is present (``enabled: true``). Its loop
             # shares the catalog's repos and ``local_conn`` (one writer, on the event loop), and
@@ -298,23 +286,18 @@ class CrawlerApp(CrawlerRunner):
                     wake_hub=wake_hub,
                     shutdown=shutdown,
                 )
-                loops.append(partial(download_loop, download_deps, node_id))
-                _logger.info("download enabled: download loop armed")
+                loops.append(partial(download_loop, download_deps))
 
-            await telemetry.emit(
-                CrawlerStarted(download_enabled=download_config is not None), node_id
-            )
-
-            # Startup re-evaluation (spec §7/§7.1): re-evaluate the WHOLE catalogue against the
-            # current matcher, gated by a policy fingerprint stored in local.db (a
-            # comment/whitespace-only edit to matcher.yml/targets.yml still triggers one
-            # harmless extra pass, which then writes nothing before the marker updates).
-            # Runs to completion BEFORE the loops so tier actions (download wake, notify)
-            # fire for the very first search, not a search later.
-            await reevaluate_if_policy_changed(
-                fingerprint=config.policy_fingerprint,
-                local_repo=local_repo,
-                reevaluate=lambda: reevaluate_catalog(
+            run_crawler = RunCrawler(
+                configured_node_id=crawler_config.node_id,
+                node_id_reader=local_repo,
+                node_id_writer=local_repo,
+                node_id_generator=Uuid4NodeIdGenerator(),
+                wall_clock=wall_clock,
+                telemetry=telemetry,
+                policy_fingerprint=config.policy_fingerprint,
+                local_state=local_repo,
+                reevaluate=lambda node_id: reevaluate_catalog(
                     catalog=catalog_repo,
                     engine=engine,
                     wake_hub=wake_hub,
@@ -323,15 +306,18 @@ class CrawlerApp(CrawlerRunner):
                     logger=StdlibLogger("p2pwatch.application.reevaluate_catalog"),
                     node_id=node_id,
                 ),
-                logger=StdlibLogger("p2pwatch.application.reevaluate_if_policy_changed"),
+                loops=loops,
+                download_enabled=download_config is not None,
+                shutdown=shutdown,
+                logger=StdlibLogger("p2pwatch.application.run_crawler"),
+                reevaluation_gate_logger=StdlibLogger(
+                    "p2pwatch.application.reevaluate_if_policy_changed"
+                ),
             )
-
-            # Entered disarmed: the steady state is unbounded, and ``supervise_loops`` arms it as
-            # soon as the shutdown is requested, so the unwind and the close below are bounded.
+            # Entered disarmed: the steady state is unbounded, and the run arms it as soon as the
+            # shutdown is requested, so the unwind and the close below are bounded.
             async with asyncio.timeout(None) as shutdown_timeout:
-                await supervise_loops(
-                    loops,
-                    shutdown=shutdown,
+                await run_crawler.run(
                     arm_shutdown_bound=lambda: shutdown_timeout.reschedule(
                         loop.time() + crawler_config.shutdown_deadline_seconds
                     ),
