@@ -3,7 +3,7 @@
 import re
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -22,21 +22,20 @@ from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
     CatalogReader,
     SqliteCatalogFileReader,
     SqliteCoverageReader,
+    SqliteSourceReader,
     _tier_rank_case,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider, open_reader
-from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
 from p2pwatch.adapters.driving.webui.views import (
     NameDetail,
-    PeriodWindow,
     SourceDetail,
     SourceFilePeriod,
-    SourcePeriodView,
     SourceRow,
 )
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation, ReportedFile
+from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch_testing.catalog_rows import (
     SEEN_AT,
@@ -57,8 +56,9 @@ pytestmark = pytest.mark.usefixtures("close_test_connections")
 LATEST_OBSERVATION_PROBE = (
     "SELECT file_id, filename, source_count, observed_at FROM latest_observation"
 )
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 # Every instant a test writes, from the epoch to the year 3000.
-_ALL_TIME = PeriodWindow(since=0, until=32_503_680_000_000_000, gap=0)
+_ALL_TIME = PeriodWindow(since=_EPOCH, until=datetime(3000, 1, 1, tzinfo=UTC), gap=timedelta(0))
 _LIMIT = 50
 
 
@@ -324,8 +324,8 @@ def test_file_detail_reads_its_timeline_in_the_window_and_its_latest_observation
     _seed(catalog_db)
     with sqlite3.connect(catalog_db) as conn:
         insert_observation(conn, "a" * 32, "older.avi", observed_at="2026-06-21T10:00:00+00:00")
-    since = iso_to_micros("2026-06-01T00:00:00+00:00")
-    window = PeriodWindow(since=since, until=iso_to_micros(SEEN_AT), gap=0)
+    since = datetime(2026, 6, 1, tzinfo=UTC)
+    window = PeriodWindow(since=since, until=datetime.fromisoformat(SEEN_AT), gap=timedelta(0))
     detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("a" * 32), window)
     assert detail is not None
     assert [o.reported_file.filename for o in detail.observations] == ["older.avi"]
@@ -378,7 +378,17 @@ def test_file_detail_whole_episode_lists_both_decisions(catalog_db: Path) -> Non
 
 _USER = "1f2e" * 8
 _S = 1_000_000  # a second in microseconds
-_WINDOW = PeriodWindow(since=0, until=100_000 * _S, gap=90 * _S)
+
+
+def _at(micros: int) -> datetime:
+    return _EPOCH + timedelta(microseconds=micros)
+
+
+def _micros(at: datetime) -> int:
+    return (at - _EPOCH) // timedelta(microseconds=1)
+
+
+_WINDOW = PeriodWindow(since=_EPOCH, until=_at(100_000 * _S), gap=timedelta(seconds=90))
 
 # (role, observed_at, session_received_bytes) of one source's points on file a, a variant per role.
 _Points = Sequence[tuple[str, int, int]]
@@ -396,9 +406,13 @@ def _seed_points(db: Path, points: _Points) -> None:
 
 
 def _periods(db: Path, window: PeriodWindow = _WINDOW) -> list[tuple[str, int, int, int]]:
-    """``(role, first_seen_at, last_seen_at, received_bytes)`` of file a's periods."""
-    periods = CatalogReader(open_reader(db)).source_periods(file_id("a" * 32), window)
-    return [(p.role.value, p.first_seen_at, p.last_seen_at, p.received_bytes) for p in periods]
+    """``(role, first_seen_at, last_seen_at, received_bytes)`` of file a's periods, in micros."""
+    reader = SqliteSourceReader(ReaderProvider(db))
+    periods = reader.read_sharing_periods(FileKey(Network.ED2K, "a" * 32), window)
+    return [
+        (p.role.value, _micros(p.first_seen_at), _micros(p.last_seen_at), p.received_bytes)
+        for p in periods
+    ]
 
 
 @pytest.mark.parametrize(
@@ -456,11 +470,11 @@ def test_a_sending_period_never_counts_the_bytes_of_a_standby_one_between(
 
 def test_only_the_windows_points_are_read(catalog_db: Path) -> None:
     _seed_points(catalog_db, [("queued", at * _S, 0) for at in (0, 30, 60, 90)])
-    window = PeriodWindow(since=30 * _S, until=90 * _S, gap=90 * _S)
+    window = PeriodWindow(since=_at(30 * _S), until=_at(90 * _S), gap=_WINDOW.gap)
     assert _periods(catalog_db, window) == [("queued", 30 * _S, 60 * _S, 0)]
 
 
-def test_source_periods_join_each_identity_on_each_node_newest_first(catalog_db: Path) -> None:
+def test_sharing_periods_join_each_identity_on_each_node_newest_first(catalog_db: Path) -> None:
     with sqlite3.connect(catalog_db) as conn:
         insert_file(conn, "a" * 32)
         insert_file(conn, "b" * 32)
@@ -475,26 +489,33 @@ def test_source_periods_join_each_identity_on_each_node_newest_first(catalog_db:
             insert_source_point(conn, variant, at * _S)
         insert_source_point(conn, hashless, 45 * _S)
         insert_source_point(conn, insert_source_variant(conn, "b" * 32, _USER), 200 * _S)
-    periods = CatalogReader(open_reader(catalog_db)).source_periods(file_id("a" * 32), _WINDOW)
-    key = SourceKey(Network.ED2K, _USER)
-    queued_period = SourcePeriodView(
-        key, "AnimuseeFMR", SourceRole.QUEUED, "198.51.100.7:4661", False, 0, 60 * _S, 0, "n1"
-    )
+    a = FileKey(Network.ED2K, "a" * 32)
+    periods = SqliteSourceReader(ReaderProvider(catalog_db)).read_sharing_periods(a, _WINDOW)
+    key, queued_role = SourceKey(Network.ED2K, _USER), SourceRole.QUEUED
+    at_30, at_45 = _at(30 * _S), _at(45 * _S)
     assert periods == (
-        SourcePeriodView(
-            None, "Teammate", SourceRole.QUEUED, None, None, 45 * _S, 45 * _S, 0, "n1"
+        SharingPeriod(a, None, "Teammate", queued_role, None, None, at_45, at_45, 0, "n1"),
+        SharingPeriod(a, None, None, queued_role, None, True, at_30, at_30, 0, "n1"),
+        SharingPeriod(a, key, "AnimuseeFMR", queued_role, None, None, at_30, at_30, 0, "n2"),
+        SharingPeriod(
+            a,
+            key,
+            "AnimuseeFMR",
+            queued_role,
+            "198.51.100.7:4661",
+            False,
+            _at(0),
+            _at(60 * _S),
+            0,
+            "n1",
         ),
-        SourcePeriodView(None, None, SourceRole.QUEUED, None, True, 30 * _S, 30 * _S, 0, "n1"),
-        SourcePeriodView(
-            key, "AnimuseeFMR", SourceRole.QUEUED, None, None, 30 * _S, 30 * _S, 0, "n2"
-        ),
-        queued_period,
     )
 
 
-def test_source_periods_of_a_file_never_read_is_empty(catalog_db: Path) -> None:
+def test_sharing_periods_of_a_file_never_read_are_empty(catalog_db: Path) -> None:
     _seed(catalog_db)
-    assert CatalogReader(open_reader(catalog_db)).source_periods(file_id("a" * 32), _WINDOW) == ()
+    reader = SqliteSourceReader(ReaderProvider(catalog_db))
+    assert reader.read_sharing_periods(FileKey(Network.ED2K, "a" * 32), _WINDOW) == ()
 
 
 # ---------------------------------------------------------------------------
@@ -581,8 +602,12 @@ def _seed_pages(db: Path) -> None:
         insert_source_point(conn, hashless, 95)
 
 
-def _period(source: SourceKey | None, name: str | None, first: int, last: int) -> SourcePeriodView:
-    return SourcePeriodView(source, name, SourceRole.QUEUED, None, None, first, last, 0, "n1")
+def _period(
+    file: FileKey, source: SourceKey | None, source_name: str | None, first: int, last: int
+) -> SharingPeriod:
+    return SharingPeriod(
+        file, source, source_name, SourceRole.QUEUED, None, None, _at(first), _at(last), 0, "n1"
+    )
 
 
 def test_source_detail_lists_its_names_and_its_periods_over_every_file(catalog_db: Path) -> None:
@@ -594,14 +619,14 @@ def test_source_detail_lists_its_names_and_its_periods_over_every_file(catalog_d
         FileKey(Network.ED2K, "a" * 32),
         FileKey(Network.ED2K, "b" * 32),
     )
-    sending = SourcePeriodView(key, None, SourceRole.SENDING, None, None, 50, 60, 0, "n1")
+    sending = SharingPeriod(b, key, None, SourceRole.SENDING, None, None, _at(50), _at(60), 0, "n1")
     assert detail == SourceDetail(
         source=key,
         names=(SourceRow(key, "AnimuseeFMR", 40, 1), SourceRow(key, "Shinobu", 20, 1)),
         periods=(
-            SourceFilePeriod(b, None, sending),
-            SourceFilePeriod(b, None, _period(key, "AnimuseeFMR", 30, 40)),
-            SourceFilePeriod(a, "keroro_062a.avi", _period(key, "Shinobu", 10, 20)),
+            SourceFilePeriod(None, sending),
+            SourceFilePeriod(None, _period(b, key, "AnimuseeFMR", 30, 40)),
+            SourceFilePeriod("keroro_062a.avi", _period(a, key, "Shinobu", 10, 20)),
         ),
     )
 
@@ -612,13 +637,14 @@ def test_name_detail_lists_its_hashes_and_its_periods_without_one(catalog_db: Pa
         "AnimuseeFMR", page=1, window=_WINDOW
     )
     user, other = SourceKey(Network.ED2K, _USER), SourceKey(Network.ED2K, _OTHER)
-    hashless = SourcePeriodView(
-        None, "AnimuseeFMR", SourceRole.STANDBY, None, None, 95, 95, 0, "n1"
+    b = FileKey(Network.ED2K, "b" * 32)
+    hashless = SharingPeriod(
+        b, None, "AnimuseeFMR", SourceRole.STANDBY, None, None, _at(95), _at(95), 0, "n1"
     )
     assert detail == NameDetail(
         name="AnimuseeFMR",
         sources=(SourceRow(user, "AnimuseeFMR", 40, 1), SourceRow(other, "AnimuseeFMR", 5, 1)),
-        periods=(SourceFilePeriod(FileKey(Network.ED2K, "b" * 32), None, hashless),),
+        periods=(SourceFilePeriod(None, hashless),),
     )
 
 
@@ -637,12 +663,16 @@ def test_name_detail_of_a_name_never_recorded_is_none(catalog_db: Path) -> None:
 def test_the_pages_periods_are_read_in_the_window_only(catalog_db: Path) -> None:
     _seed_pages(catalog_db)
     reader = CatalogReader(open_reader(catalog_db))
-    window = PeriodWindow(since=55, until=1_000, gap=_WINDOW.gap)
+    window = PeriodWindow(since=_at(55), until=_at(1_000), gap=_WINDOW.gap)
     source = reader.source_detail(source_id(_USER), page=1, window=window)
     name = reader.name_detail("AnimuseeFMR", page=1, window=window)
     assert source is not None and name is not None
-    assert [(p.period.first_seen_at, p.period.last_seen_at) for p in source.periods] == [(60, 60)]
-    assert [(p.period.first_seen_at, p.period.last_seen_at) for p in name.periods] == [(95, 95)]
+    assert [(p.period.first_seen_at, p.period.last_seen_at) for p in source.periods] == [
+        (_at(60), _at(60))
+    ]
+    assert [(p.period.first_seen_at, p.period.last_seen_at) for p in name.periods] == [
+        (_at(95), _at(95))
+    ]
 
 
 # ---------------------------------------------------------------------------

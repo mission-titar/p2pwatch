@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from p2pwatch.adapters.driving.webui.format import (
     average_rate,
@@ -13,6 +13,7 @@ from p2pwatch.adapters.driving.webui.format import (
 
 # Tuesday 2026-10-13 20:00:00 UTC, in microseconds since the Unix epoch.
 TUESDAY_8PM = 1_791_921_600_000_000
+_TUESDAY_8PM = datetime(2026, 10, 13, 20, tzinfo=UTC)
 
 
 def test_short_hash_truncates_with_ellipsis() -> None:
@@ -124,7 +125,7 @@ def test_seasonal_id_uppercases_letter() -> None:
 
 
 # ---------------------------------------------------------------------------
-# micros_timestamp and average_rate: a source range's ends and rate (stage 4 spec, D12)
+# micros_timestamp and average_rate: a source's last reading, a sharing period's rate (D12)
 # ---------------------------------------------------------------------------
 
 
@@ -133,15 +134,16 @@ def test_micros_timestamp_keeps_the_seconds_of_a_range_end() -> None:
 
 
 def test_average_rate_is_the_bytes_over_the_range_length() -> None:
-    assert average_rate(10 * 1024 * 1024, TUESDAY_8PM, TUESDAY_8PM + 10_240_000_000) == "1 KB/s"
+    ten_240_seconds_later = _TUESDAY_8PM + timedelta(seconds=10_240)
+    assert average_rate(10 * 1024 * 1024, _TUESDAY_8PM, ten_240_seconds_later) == "1 KB/s"
 
 
 def test_average_rate_of_a_range_without_bytes_is_empty() -> None:
-    assert average_rate(0, TUESDAY_8PM, TUESDAY_8PM + 30_000_000) == ""
+    assert average_rate(0, _TUESDAY_8PM, _TUESDAY_8PM + timedelta(seconds=30)) == ""
 
 
 def test_average_rate_of_a_single_read_is_empty() -> None:
-    assert average_rate(1024, TUESDAY_8PM, TUESDAY_8PM) == ""
+    assert average_rate(1024, _TUESDAY_8PM, _TUESDAY_8PM) == ""
 
 
 def test_an_interval_end_shows_in_the_webui_format_and_in_a_datetime_local_input() -> None:

@@ -8,7 +8,7 @@ import csv
 import io
 import re
 from collections.abc import Callable, Iterable, Mapping
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, assert_never
 from urllib.parse import parse_qs, urlencode
@@ -27,7 +27,11 @@ from starlette.templating import Jinja2Templates
 from catalog_matching.domain.config import MatcherConfig
 from catalog_matching.domain.ed2k_link import build_ed2k_link
 from catalog_matching.domain.models import TargetSegment
-from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import PAGE_SIZE, CatalogReader
+from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
+    PAGE_SIZE,
+    CatalogReader,
+    SqliteSourceReader,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driven.persistence_sqlite.sql_console import (
     ROW_CAP,
@@ -69,7 +73,6 @@ from p2pwatch.adapters.driving.webui.views import (
     NavItem,
     NodeStateDisplay,
     PageNav,
-    PeriodWindow,
     SearchBar,
     SortHeader,
     SortHeaders,
@@ -77,7 +80,6 @@ from p2pwatch.adapters.driving.webui.views import (
     SourceFileRow,
     SourceHistoryRow,
     SourceListRow,
-    SourcePeriodView,
     SourceRow,
     TargetCoverageDisplay,
     TierFacet,
@@ -90,6 +92,7 @@ from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDi
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.node_state import NodeState
 from p2pwatch.domain.observation import FileObservation
+from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey
 from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
 from p2pwatch.ports.driving.crawl_pauser import CrawlPauser
@@ -105,9 +108,6 @@ _HEX_ID = re.compile(r"[0-9a-f]{32}")
 _CLAMPED_NOTICE = (
     "The interval requested is longer than 7 days: showing the 7 days ending at its end."
 )
-_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
-_MICROSECOND = timedelta(microseconds=1)
-
 # The top-nav destinations, in render order: (path, label). The single source of truth for what
 # base.html renders; every page reaches all of them.
 _NAV_DESTINATIONS: tuple[tuple[str, str], ...] = (
@@ -234,32 +234,23 @@ def _source_link(source: SourceKey | None) -> tuple[str, ...]:
     return () if source is None else (f"/sources/{source.source_id.hex()}",)
 
 
-def _source_history_row(period: SourcePeriodView) -> SourceHistoryRow:
-    """A source period as one line; its name links to the name page, its hash to the source
+def _source_history_row(period: SharingPeriod) -> SourceHistoryRow:
+    """A sharing period as one line; its name links to the name page, its hash to the source
     page."""
-    name, source = period.name, period.source
+    source_name, source = period.source_name, period.source
     return SourceHistoryRow(
-        name="unknown" if name is None else name,
-        name_link=_name_link(name),
+        name="unknown" if source_name is None else source_name,
+        name_link=_name_link(source_name),
         short_hash="unknown" if source is None else short_hash(source.native_id),
         source_link=_source_link(source),
         role=period.role,
         contact_point=period.contact_point or "unknown",
         connectable=_YES_NO[period.connectable],
-        first_seen=micros_timestamp(period.first_seen_at),
-        last_seen=micros_timestamp(period.last_seen_at),
+        first_seen=utc_timestamp(period.first_seen_at),
+        last_seen=utc_timestamp(period.last_seen_at),
         received=human_size(period.received_bytes) if period.received_bytes else "",
         rate=average_rate(period.received_bytes, period.first_seen_at, period.last_seen_at),
         node=period.node_id,
-    )
-
-
-def _period_window(interval: Interval, gap: timedelta) -> PeriodWindow:
-    """The interval in microseconds, with the gap that cuts a period."""
-    return PeriodWindow(
-        since=(interval.since - _EPOCH) // _MICROSECOND,
-        until=(interval.until - _EPOCH) // _MICROSECOND,
-        gap=gap // _MICROSECOND,
     )
 
 
@@ -312,9 +303,10 @@ def _source_list_row(source: SourceRow) -> SourceListRow:
 
 def _source_file_row(item: SourceFilePeriod) -> SourceFileRow:
     """A period of a source's or a name's page, with the file it was read on."""
+    file = item.period.file
     return SourceFileRow(
-        file=item.file_name or short_hash(item.file.native_id),
-        file_link=f"/files/{item.file.file_id.hex()}",
+        file=item.file_name or short_hash(file.native_id),
+        file_link=f"/files/{file.file_id.hex()}",
         history=_source_history_row(item.period),
     )
 
@@ -704,6 +696,7 @@ def build_app(
     # obtain a connection via ``provider.connection()`` and NEVER close it (the point is
     # reuse).
     catalog_reader = ReaderProvider(catalog_db_path)
+    source_reader = SqliteSourceReader(catalog_reader)
 
     def _now_and_interval(request: Request) -> tuple[datetime, Interval]:
         """The second the request is read at, and the interval it asks for."""
@@ -867,7 +860,7 @@ def build_app(
         source_id_hex: str = request.path_params["source_id"]
         page = _page_number(request.query_params.get("page"))
         now, interval = _now_and_interval(request)
-        window = _period_window(interval, source_period_gap)
+        window = PeriodWindow(interval.since, interval.until, source_period_gap)
         catalog = CatalogReader(catalog_reader.connection())
         detail = (
             catalog.source_detail(bytes.fromhex(source_id_hex), page=page, window=window)
@@ -895,7 +888,7 @@ def build_app(
         source_name = request.query_params.get("source_name")
         page = _page_number(request.query_params.get("page"))
         now, interval = _now_and_interval(request)
-        window = _period_window(interval, source_period_gap)
+        window = PeriodWindow(interval.since, interval.until, source_period_gap)
         catalog = CatalogReader(catalog_reader.connection())
         detail = (
             None
@@ -928,7 +921,7 @@ def build_app(
         file_id_hex: str = request.path_params["file_id"]
 
         now, interval = _now_and_interval(request)
-        window = _period_window(interval, source_period_gap)
+        window = PeriodWindow(interval.since, interval.until, source_period_gap)
         catalog = CatalogReader(catalog_reader.connection())
         detail = (
             catalog.file_detail(bytes.fromhex(file_id_hex), window)
@@ -986,7 +979,7 @@ def build_app(
             timeline=tuple(_timeline_row(observation) for observation in detail.observations),
             source_history=tuple(
                 _source_history_row(period)
-                for period in catalog.source_periods(detail.file.file_id, window)
+                for period in source_reader.read_sharing_periods(detail.file, window)
             ),
             decisions=detail.decisions,
             ed2k_link=ed2k_link,

@@ -9,11 +9,12 @@ sentinel and per-target ``retracted`` rows are excluded.
 current decisions, optional filters + LIMIT/OFFSET), their ``(matched, total)`` counts and their
 tier facet.
 
+``SqliteSourceReader`` reads a file's sharing periods in a window, newest first.
+
 ``CatalogReader`` exposes these reads:
 
 - ``file_detail()``: the timeline of observations in a window, the latest one, known names + current
   decisions for a given ``file_id``; ``None`` if the file is unknown.
-- ``source_periods()``: a file's source history in a window, one period per row, newest first.
 - ``list_sources()`` / ``count_sources()``: the sources with a user hash, last seen first, and
   how many match the search.
 - ``source_detail()`` / ``name_detail()``: the page of a source and the page of a name; ``None``
@@ -24,6 +25,7 @@ All SQL lives in module constants, parameterized (no value interpolation).
 
 import sqlite3
 from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
 
 from catalog_matching.domain.config import TIER_RANK
 from catalog_matching.domain.engine import DecisionRecord
@@ -40,23 +42,25 @@ from p2pwatch.adapters.driving.webui.views import (
     DecisionView,
     FileDetail,
     NameDetail,
-    PeriodWindow,
     SourceDetail,
     SourceFilePeriod,
-    SourcePeriodView,
     SourceRow,
 )
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.ports.driven.coverage_reader import CoverageReader
+from p2pwatch.ports.driven.source_reader import SourceReader
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
 PAGE_SIZE = 50
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+_MICROSECOND = timedelta(microseconds=1)
 
 # Sort allowlist (webui spec §3.1): a sort maps to a FIXED ORDER BY expression; no param value is
 # ever interpolated into SQL. ``tier`` sorts by the file's strongest tier rank
@@ -431,21 +435,38 @@ def _sources_search(query: str | None) -> tuple[str, list[str]]:
     return _SQL_SOURCES_SEARCH, [f"{query}%", f"%{query}%"]
 
 
-def _period_view(row: sqlite3.Row) -> SourcePeriodView:
+def _micros(moment: datetime) -> int:
+    return (moment - _EPOCH) // _MICROSECOND
+
+
+def _sharing_period(row: sqlite3.Row) -> SharingPeriod:
     """A row of ``_SQL_PERIODS`` as a period; only a sending one received its growth (D6)."""
     network, connectable = row["network"], row["connectable"]
     role = SourceRole(row["role"])
-    return SourcePeriodView(
+    return SharingPeriod(
+        file=FileKey(Network(row["file_network"]), row["file_native_id"]),
         source=None if network is None else SourceKey(Network(network), row["native_id"]),
-        name=row["name"],
+        source_name=row["name"],
         role=role,
         contact_point=row["contact_point"],
         connectable=None if connectable is None else bool(connectable),
-        first_seen_at=row["first_seen_at"],
-        last_seen_at=row["last_seen_at"],
+        first_seen_at=_EPOCH + row["first_seen_at"] * _MICROSECOND,
+        last_seen_at=_EPOCH + row["last_seen_at"] * _MICROSECOND,
         received_bytes=row["growth"] if role is SourceRole.SENDING else 0,
         node_id=row["node_id"],
     )
+
+
+def _period_rows(
+    connection: sqlite3.Connection, where: str, key: bytes | str, window: PeriodWindow
+) -> list[sqlite3.Row]:
+    params = {
+        "key": key,
+        "since": _micros(window.since),
+        "until": _micros(window.until),
+        "gap": window.gap // _MICROSECOND,
+    }
+    return connection.execute(_SQL_PERIODS + where + _SQL_PERIODS_END, params).fetchall()
 
 
 def _latest_observation_join(search_text: str | None) -> str:
@@ -470,6 +491,21 @@ class SqliteCoverageReader(CoverageReader):
         for row in self._reader_provider.connection().execute(_SQL_COVERAGE):
             tiers_by_target.setdefault(row["target_id"], []).append(row["tier"])
         return {target_id: tuple(tiers) for target_id, tiers in tiers_by_target.items()}
+
+
+class SqliteSourceReader(SourceReader):
+    """Reads through the calling thread's read-only connection."""
+
+    def __init__(self, reader_provider: ReaderProvider) -> None:
+        self._reader_provider = reader_provider
+
+    def read_sharing_periods(
+        self, file: FileKey, window: PeriodWindow
+    ) -> tuple[SharingPeriod, ...]:
+        connection = self._reader_provider.connection()
+        return tuple(
+            map(_sharing_period, _period_rows(connection, _WHERE_FILE, file.file_id, window))
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -605,15 +641,13 @@ class CatalogReader:
         return FileDetail(
             file=file,
             size_bytes=file_row["size_bytes"],
-            observations=observations_between(self._conn, file, window.since, window.until),
+            observations=observations_between(
+                self._conn, file, _micros(window.since), _micros(window.until)
+            ),
             latest=latest_observation(self._conn, file),
             decisions=decisions,
             known_filenames=known_filenames(self._conn, file),
         )
-
-    def source_periods(self, file_id: bytes, window: PeriodWindow) -> tuple[SourcePeriodView, ...]:
-        """The file's source periods in ``window``, newest first; empty for a file never read."""
-        return tuple(map(_period_view, self._periods(_WHERE_FILE, file_id, window)))
 
     # ------------------------------------------------------------------
     # Sources
@@ -685,24 +719,13 @@ class CatalogReader:
             for row in rows
         )
 
-    def _periods(self, where: str, key: bytes | str, window: PeriodWindow) -> list[sqlite3.Row]:
-        params = {
-            "key": key,
-            "since": window.since,
-            "until": window.until,
-            "gap": window.gap,
-        }
-        return self._conn.execute(_SQL_PERIODS + where + _SQL_PERIODS_END, params).fetchall()
-
     def _file_periods(
         self, where: str, key: bytes | str, window: PeriodWindow
     ) -> tuple[SourceFilePeriod, ...]:
-        rows = self._periods(where, key, window)
-        files = [FileKey(Network(row["file_network"]), row["file_native_id"]) for row in rows]
-        names = {file: self._file_name(file) for file in set(files)}
+        periods = tuple(map(_sharing_period, _period_rows(self._conn, where, key, window)))
+        names = {file: self._file_name(file) for file in {period.file for period in periods}}
         return tuple(
-            SourceFilePeriod(file=file, file_name=names[file], period=_period_view(row))
-            for file, row in zip(files, rows, strict=True)
+            SourceFilePeriod(file_name=names[period.file], period=period) for period in periods
         )
 
     def _file_name(self, file: FileKey) -> str | None:
