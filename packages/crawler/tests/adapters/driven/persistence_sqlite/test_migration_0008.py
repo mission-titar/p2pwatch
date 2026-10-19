@@ -130,8 +130,8 @@ def test_a_new_sighting_reuses_the_variant_0008_rekeyed(tmp_path: Path) -> None:
         keyword="keroro",
     )
     try:
-        SqliteCatalogRepository(migrated, "n1").record_observation(
-            FileObservation(reported_file, datetime(2026, 6, 12, tzinfo=UTC))
+        SqliteCatalogRepository(migrated).record_observation(
+            FileObservation(reported_file, datetime(2026, 6, 12, tzinfo=UTC)), "n1"
         )
         assert migrated.execute("SELECT count(*) FROM observation_variants").fetchone()[0] == 3
         assert migrated.execute("SELECT count(*) FROM observations").fetchone()[0] == 5

@@ -3,10 +3,10 @@
 SYNCHRONOUS Protocol (spec §3: a local write is sub-millisecond; if plan C wants to
 isolate itself, it will wrap it in ``asyncio.to_thread`` without touching this layer).
 The port imports ONLY the domain. Each stub's ``...`` ends its ``def`` (which runs at class
-creation: covered). The use-case gives each write its instant, the adapter stamps ``node_id``: a
-:class:`FileObservation` carries its ``observed_at``, ``record_decision`` receives the file key and
-the instant ALONGSIDE the decision (``MatchDecision`` carries neither: a domain without persistence
-columns).
+creation: covered). The use-case gives each write its instant and its ``node_id``: a
+:class:`FileObservation` carries its ``observed_at``, ``record_decision`` receives the file key, the
+instant and the ``node_id`` ALONGSIDE the decision (``MatchDecision`` carries none: a domain without
+persistence columns).
 """
 
 from collections.abc import Iterator
@@ -47,13 +47,15 @@ class CatalogRepository(Protocol):
     file: the append-only table has no delete, so exclusion is an appended row.
     """
 
-    def record_observation(self, observation: FileObservation) -> None: ...
+    def record_observation(self, observation: FileObservation, node_id: str) -> None: ...
 
     def record_decision(
-        self, file: FileKey, decision: MatchDecision, decided_at: datetime
+        self, file: FileKey, decision: MatchDecision, decided_at: datetime, node_id: str
     ) -> None: ...
 
-    def record_retraction(self, file: FileKey, target_id: str, decided_at: datetime) -> None: ...
+    def record_retraction(
+        self, file: FileKey, target_id: str, decided_at: datetime, node_id: str
+    ) -> None: ...
 
     def latest_decisions(self, file: FileKey) -> dict[str, DecisionRecord]: ...
 

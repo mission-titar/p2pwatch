@@ -1,4 +1,4 @@
-"""``SqliteSourceRepository``: this node's source points in the catalog (source points, D4, D5)."""
+"""``SqliteSourceRepository``: each node's source points in the catalog (source points, D4, D5)."""
 
 import hashlib
 import json
@@ -92,15 +92,12 @@ class SqliteSourceRepository:
 
     ``time_between_reads`` is what the carried role's max age assumes (D3)."""
 
-    def __init__(
-        self, connection: sqlite3.Connection, node_id: str, time_between_reads: timedelta
-    ) -> None:
+    def __init__(self, connection: sqlite3.Connection, time_between_reads: timedelta) -> None:
         self._connection = connection
-        self._node_id = node_id
         self._carried_role_max_age_micros = carried_role_max_age(time_between_reads) // _MICROSECOND
 
     def record_readings(
-        self, file: FileKey, readings: Sequence[SourceReading], read_at: datetime
+        self, file: FileKey, readings: Sequence[SourceReading], read_at: datetime, node_id: str
     ) -> tuple[RecordedReading, ...]:
         """ONE transaction; each reading kept, with its role, a carried one included."""
         for reading in readings:
@@ -115,7 +112,7 @@ class SqliteSourceRepository:
                 for reading in readings:
                     if reading.source is None and reading.source_name is None:
                         continue  # nothing could tell it from the next one (D4)
-                    role = self._record(file, reading, read_at_micros)
+                    role = self._record(file, reading, read_at_micros, node_id)
                     recorded.append(RecordedReading(reading.source, reading.source_name, role))
                 self._connection.execute("COMMIT")
             except BaseException:
@@ -124,12 +121,14 @@ class SqliteSourceRepository:
                 raise
         return tuple(recorded)
 
-    def _record(self, file: FileKey, reading: SourceReading, read_at_micros: int) -> SourceRole:
+    def _record(
+        self, file: FileKey, reading: SourceReading, read_at_micros: int, node_id: str
+    ) -> SourceRole:
         """Writes the reading's variant and point; its role, a carried one included."""
         role = reading.role
         if role is None:
-            role = carried_role(self._latest_point_role(file, reading, read_at_micros))
-        variant = _variant_columns(file, reading, role, self._node_id)
+            role = carried_role(self._latest_point_role(file, reading, read_at_micros, node_id))
+        variant = _variant_columns(file, reading, role, node_id)
         variant_content_hash = _content_hash(variant)
         if reading.source is not None:
             source = reading.source
@@ -143,7 +142,7 @@ class SqliteSourceRepository:
         return role
 
     def _latest_point_role(
-        self, file: FileKey, reading: SourceReading, read_at_micros: int
+        self, file: FileKey, reading: SourceReading, read_at_micros: int, node_id: str
     ) -> SourceRole | None:
         """The role of the latest point, unless aMule recreated the client since (its session's
         received bytes dropped)."""
@@ -153,7 +152,7 @@ class SqliteSourceRepository:
                 "file_id": file.file_id,
                 "source_id": None if reading.source is None else reading.source.source_id,
                 "source_name": reading.source_name,
-                "node_id": self._node_id,
+                "node_id": node_id,
                 "since": read_at_micros - self._carried_role_max_age_micros,
                 "read_at": read_at_micros,
             },
@@ -162,11 +161,11 @@ class SqliteSourceRepository:
             return None
         return SourceRole(row[0])
 
-    def earlier_points(self, source: SourceKey, before: datetime) -> EarlierPoints:
+    def earlier_points(self, source: SourceKey, before: datetime, node_id: str) -> EarlierPoints:
         """Whether a useful point exists, and the latest useful or not-useful one."""
         with wrap_sqlite_errors():
             rows = self._connection.execute(
-                _EARLIER_POINTS, (_micros(before), source.source_id, self._node_id)
+                _EARLIER_POINTS, (_micros(before), source.source_id, node_id)
             ).fetchall()
         seen = [
             (SourceRole(role).usefulness, latest) for role, latest in rows if latest is not None
@@ -179,11 +178,11 @@ class SqliteSourceRepository:
             latest_known_at=_EPOCH + max(known) * _MICROSECOND if known else None,
         )
 
-    def has_points_before(self, before: datetime) -> bool:
-        """Whether this node has a point observed before ``before``."""
+    def has_points_before(self, before: datetime, node_id: str) -> bool:
+        """Whether ``node_id`` has a point observed before ``before``."""
         with wrap_sqlite_errors():
             row = self._connection.execute(
-                _HAS_POINTS_BEFORE, (self._node_id, _micros(before))
+                _HAS_POINTS_BEFORE, (node_id, _micros(before))
             ).fetchone()
         return bool(row[0])
 

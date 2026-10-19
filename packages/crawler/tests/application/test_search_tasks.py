@@ -26,6 +26,8 @@ from p2pwatch.application.search_worker import (
     SearchWorker,
     WorkerDeps,
 )
+from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.ports.driven.backoff_state_repository import BackoffKey, BackoffState
 from p2pwatch.ports.driven.client_errors import SearchFailedError
 from p2pwatch.ports.driven.repository_errors import RepositoryError
@@ -38,8 +40,10 @@ from p2pwatch_testing.application.fakes import (
     RecordingWakeHub,
     make_unreachable,
 )
+from p2pwatch_testing.catalog_rows import observation_node_ids
 from p2pwatch_testing.virtual_time import EPOCH, LoopMonotonicClock, LoopWallClock, run_virtual
 
+_NODE = "n1"
 _HOUR = 3600.0
 _POLICY = BackoffPolicy(
     base_seconds=60.0,
@@ -57,10 +61,12 @@ class _TimedClient:
         durations: dict[str, float],
         *,
         search_failures: list[Exception] | None = None,
+        reported_files: tuple[ReportedFile, ...] = (),
     ) -> None:
         self.channels = tuple(durations)
         self._durations = durations
         self._search_failures = search_failures or []
+        self._reported_files = reported_files
         self.searches: list[tuple[float, str, str]] = []
 
     async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
@@ -68,7 +74,7 @@ class _TimedClient:
         if self._search_failures:
             raise self._search_failures.pop(0)
         await asyncio.sleep(self._durations[channel])
-        return SearchAnswer((), 0)
+        return SearchAnswer(self._reported_files, 0)
 
 
 class _SavesRecorded(SqliteBackoffStateRepository):
@@ -107,7 +113,7 @@ class _Tasks:
             backoff_states=self.state,
             monotonic_clock=LoopMonotonicClock(),
             logger=self.logger,
-        ).run()
+        ).run(_NODE)
 
     def run_for(
         self, seconds: float, client: Any, keywords: list[str], *beside: Coroutine[Any, Any, None]
@@ -152,6 +158,14 @@ def test_each_channel_and_keyword_searches_in_its_own_task(tasks: _Tasks) -> Non
         for keyword in ("keroro", "titar")
         for channel in ("x", "y")
     )
+
+
+def test_a_task_records_its_observations_under_the_node_id_the_tasks_run_with(
+    tasks: _Tasks, catalog_connection: sqlite3.Connection
+) -> None:
+    reported_file = ReportedFile(FileKey(Network.ED2K, "a" * 32), "keroro.avi", 1, 1, "keroro")
+    tasks.run_for(40.0, _TimedClient({"x": 30.0}, reported_files=(reported_file,)), ["keroro"])
+    assert observation_node_ids(catalog_connection) == {_NODE}
 
 
 def test_channels_do_not_wait_for_each_other(tasks: _Tasks) -> None:

@@ -21,15 +21,24 @@ from p2pwatch.adapters.driven.persistence_sqlite.backoff_state_repository import
     SqliteBackoffStateRepository,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
+from p2pwatch.adapters.driven.persistence_sqlite.download_repository import (
+    SqliteDownloadRepository,
+)
 from p2pwatch.adapters.driven.wall_clock_system import SystemWallClock
 from p2pwatch.composition.app import CrawlerApp
+from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.ports.driven.backoff_state_repository import BackoffKey, BackoffState
 from p2pwatch_testing.adapters.mule_api.api_fakes import (
     PASSWORD,
     FakeAmuleApi,
     FakeAmuleApiServer,
 )
-from p2pwatch_testing.catalog_rows import observation_node_ids
+from p2pwatch_testing.catalog_rows import (
+    decision_node_ids,
+    insert_file,
+    observation_node_ids,
+    source_variant_node_ids,
+)
 
 _DEPLOY = Path(__file__).resolve().parents[4] / "deploy"
 _MATCHER = _DEPLOY / "matcher.yml"
@@ -205,11 +214,60 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
     assert len(api.added_links) == 1 and _HASH in api.added_links[0].lower()
     catalog = open_catalog(tmp_path / "catalog.db")
     assert observation_node_ids(catalog) == {"wired-node"}
+    assert decision_node_ids(catalog) == {"wired-node"}
     catalog.close()
     assert (host, port != 8080) == ("127.0.0.1", True)
     assert "p2pwatch_observations_total{" in metrics.text
     assert restart.status_code == 303
     assert not any(thread.name == "webui" for thread in threading.enumerate())
+
+
+def _has_read_the_sources_then_listed_again(api: FakeAmuleApi) -> bool:
+    """The next cycle's listing: the cycle that read the sources has written them."""
+    paths = [request.url.path for request in api.requests]
+    sources = f"/api/v1/downloads/{_HASH}/clients"
+    return sources in paths and "/api/v1/downloads" in paths[paths.index(sources) :]
+
+
+@pytest.mark.asyncio
+async def test_the_download_loop_records_a_tracked_downloads_sources_under_the_nodes_id(
+    tmp_path: Path,
+) -> None:
+    catalog = open_catalog(tmp_path / "catalog.db")
+    insert_file(catalog, _HASH)
+    catalog.close()
+    local = open_local(tmp_path / "local.db")
+    SqliteDownloadRepository(local).record_queued(
+        FileKey(Network.ED2K, _HASH), "062A", 10, SystemWallClock().now()
+    )
+    local.close()
+    download = {
+        "enabled": True,
+        "poll_interval_seconds": 0.05,
+        "min_free_bytes": 1,
+        "lost_after_seconds": 86400,
+        "output_dir": str(tmp_path),
+        "reappeared_after_seconds": 43200,
+    }
+    config_path = _write(
+        tmp_path / "crawler.yml", _config(tmp_path, node_id="wired-node", download=download)
+    )
+    listed = {"hash": _HASH, "size_bytes": 10, "completed_bytes": 4, "status": "downloading"}
+    source = {"ecid": 1, "name": "peer", "user_hash": "1f" * 16, "role": "downloading_from"}
+    api = FakeAmuleApi(downloads=[listed], clients={_HASH: [source]})
+    default_sigterm = signal.getsignal(signal.SIGTERM)
+
+    with FakeAmuleApiServer(api) as server:
+        run = _crawl(server, config_path)
+        assert await asyncio.to_thread(
+            server.wait_for, _has_read_the_sources_then_listed_again, _WAIT_SECONDS
+        )
+        _send_sigterm(default_sigterm)
+        await asyncio.wait_for(run, _WAIT_SECONDS)
+
+    catalog = open_catalog(tmp_path / "catalog.db")
+    assert source_variant_node_ids(catalog) == {"wired-node"}
+    catalog.close()
 
 
 @pytest.mark.asyncio

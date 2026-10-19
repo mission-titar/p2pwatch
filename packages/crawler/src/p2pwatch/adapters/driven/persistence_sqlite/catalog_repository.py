@@ -99,11 +99,10 @@ _COUNT_FILES = "SELECT COUNT(*) FROM files"
 class SqliteCatalogRepository:
     """SQLite implementation of the ``CatalogRepository`` port (STRUCTURAL satisfaction)."""
 
-    def __init__(self, connection: sqlite3.Connection, node_id: str) -> None:
+    def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
-        self._node_id = node_id
 
-    def record_observation(self, observation: FileObservation) -> None:
+    def record_observation(self, observation: FileObservation, node_id: str) -> None:
         """ONE transaction: file (first sight wins), its variant, the stamped observation."""
         reported_file = observation.reported_file
         file = reported_file.file
@@ -117,7 +116,7 @@ class SqliteCatalogRepository:
             reported_file.bitrate_kbps,
             json.dumps(reported_file.raw_meta, ensure_ascii=False),
             reported_file.keyword,
-            self._node_id,
+            node_id,
         )
         variant_content_hash = content_hash(*variant)
         observed_at_micros = iso_to_micros(utc_iso(observation.observed_at))
@@ -139,7 +138,9 @@ class SqliteCatalogRepository:
                     self._connection.execute("ROLLBACK")
                 raise
 
-    def record_decision(self, file: FileKey, decision: MatchDecision, decided_at: datetime) -> None:
+    def record_decision(
+        self, file: FileKey, decision: MatchDecision, decided_at: datetime, node_id: str
+    ) -> None:
         """INSERT alone (autocommit); unknown file → FK violated → ``PersistenceError``.
 
         Only the 3 columns of ``MatchDecision`` are persisted (engine spec);
@@ -156,11 +157,13 @@ class SqliteCatalogRepository:
                     decision.rule_name,
                     decision.tier,
                     utc_iso(decided_at),
-                    self._node_id,
+                    node_id,
                 ),
             )
 
-    def record_retraction(self, file: FileKey, target_id: str, decided_at: datetime) -> None:
+    def record_retraction(
+        self, file: FileKey, target_id: str, decided_at: datetime, node_id: str
+    ) -> None:
         """Appends a per-target ``retracted`` decision (spec §7).
 
         Mirrors ``record_decision`` (same canonical-hash guard, same autocommit ``INSERT``): a
@@ -180,7 +183,7 @@ class SqliteCatalogRepository:
                     "",
                     RETRACTED_TIER,
                     utc_iso(decided_at),
-                    self._node_id,
+                    node_id,
                 ),
             )
 

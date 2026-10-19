@@ -36,8 +36,13 @@ from p2pwatch_testing.application.fakes import (
     make_search_failed,
     make_unreachable,
 )
-from p2pwatch_testing.catalog_rows import count_observations
+from p2pwatch_testing.catalog_rows import (
+    count_observations,
+    decision_node_ids,
+    observation_node_ids,
+)
 
+_NODE = "n1"
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _DL_NAME = "Keroro N°062A Les demoiselles cambrioleuses.avi"
 _CLIENT = BackoffKey("amule-1", None)
@@ -270,11 +275,13 @@ async def test_successful_task_records_observation(
     worker = SearchWorker(
         "amule-1", client, _deps(catalog, engine, _registry(fake_time), fake_time)
     )
-    await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
+    await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"), _NODE)
     assert client.searches == [("keroro", "ed2k")]
     assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 1
     observed_at = catalog_connection.execute("SELECT observed_at FROM observations").fetchone()
     assert observed_at == (iso_to_micros(utc_iso(fake_time.wall.now())),)
+    assert observation_node_ids(catalog_connection) == decision_node_ids(catalog_connection)
+    assert decision_node_ids(catalog_connection) == {_NODE}
 
 
 @pytest.mark.asyncio
@@ -297,7 +304,7 @@ async def test_multiple_observations_some_unchanged_are_all_processed(
     worker = SearchWorker(
         "amule-1", client, _deps(catalog, engine, _registry(fake_time), fake_time)
     )
-    await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
+    await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"), _NODE)
     assert count_observations(catalog_connection) == 2
     assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 1
 
@@ -312,7 +319,7 @@ async def test_backoff_expires_and_item_runs_again(
     client = FakeSearchClient(results=[(_reported_file(),)])
     worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
     fake_time.advance(timedelta(seconds=3.0))  # the channel is no longer in backoff
-    await worker.run_task(SearchTask(keyword="k", channel="kad"))
+    await worker.run_task(SearchTask(keyword="k", channel="kad"), _NODE)
     assert client.searches == [("k", "kad")]
 
 
@@ -324,7 +331,7 @@ async def test_search_failure_arms_channel_backoff(
     registry = _registry(fake_time)
     client = FakeSearchClient(search_failures=[make_search_failed()])
     worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
-    await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
+    await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"), _NODE)
     assert registry.is_in_backoff(_ED2K) is True  # channel in backoff
     assert registry.is_in_backoff(_CLIENT) is False  # but not the whole client
 
@@ -338,10 +345,10 @@ async def test_transport_failure_marks_instance_down(
     # search raises a transport failure (dead stream) → client down + client backoff.
     client = FakeSearchClient(search_failures=[make_unreachable()], results=[(_reported_file(),)])
     worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
-    await worker.run_task(SearchTask(keyword="k1", channel="ed2k"))
+    await worker.run_task(SearchTask(keyword="k1", channel="ed2k"), _NODE)
     assert registry.is_in_backoff(_CLIENT) is True
     fake_time.advance(timedelta(seconds=3.0))
-    await worker.run_task(SearchTask(keyword="k2", channel="ed2k"))
+    await worker.run_task(SearchTask(keyword="k2", channel="ed2k"), _NODE)
     assert client.searches == [("k1", "ed2k"), ("k2", "ed2k")]  # searched again once it expires
 
 
@@ -357,11 +364,11 @@ async def test_the_client_backoff_grows_until_a_search_succeeds(
     worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
     delays = []
     for _ in range(4):
-        await worker.run_task(SearchTask(keyword="k", channel="ed2k"))
+        await worker.run_task(SearchTask(keyword="k", channel="ed2k"), _NODE)
         delays.append(registry.time_until_retry(_CLIENT))
         fake_time.advance(registry.time_until_retry(_CLIENT))
     assert delays == [timedelta(seconds=seconds) for seconds in (2, 4, 8, 16)]
-    await worker.run_task(SearchTask(keyword="k", channel="ed2k"))
+    await worker.run_task(SearchTask(keyword="k", channel="ed2k"), _NODE)
     assert _CLIENT not in registry.snapshot()
 
 
@@ -374,7 +381,7 @@ async def test_a_task_is_one_search_given_the_cores_budget(
     worker = SearchWorker(
         "amule-1", client, _deps(catalog, engine, _registry(fake_time), fake_time)
     )
-    await worker.run_task(SearchTask(keyword="keroro", channel="kad"))
+    await worker.run_task(SearchTask(keyword="keroro", channel="kad"), _NODE)
     assert client.searches == [("keroro", "kad")]
     assert client.budgets == [SEARCH_BUDGET_SECONDS] == [120.0]
 
@@ -393,7 +400,7 @@ async def test_successful_search_emits_search_executed_with_network_and_counts(
     client = FakeSearchClient(results=[(_reported_file(),)], skipped_result_count=2)
     deps = _deps(catalog, engine, _registry(fake_time), fake_time, telemetry=telemetry)
     worker = SearchWorker("amule-1", client, deps)
-    await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
+    await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"), _NODE)
     assert telemetry.events[0] == SearchExecuted(
         client_name="amule-1", channel="ed2k", observation_count=1, skipped_result_count=2
     )
@@ -413,7 +420,7 @@ async def test_search_failure_emits_search_failed(
     client = FakeSearchClient(search_failures=[make_search_failed()])
     deps = _deps(catalog, engine, _registry(fake_time), fake_time, telemetry=telemetry)
     worker = SearchWorker("amule-1", client, deps)
-    await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
+    await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"), _NODE)
     assert telemetry.events == [SearchFailed(client_name="amule-1", channel="ed2k")]
 
 
@@ -427,7 +434,7 @@ async def test_transport_failure_during_search_emits_instance_unreachable(
     client = FakeSearchClient(search_failures=[make_unreachable()], results=[(_reported_file(),)])
     deps = _deps(catalog, engine, _registry(fake_time), fake_time, telemetry=telemetry)
     worker = SearchWorker("amule-1", client, deps)
-    await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
+    await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"), _NODE)
     assert telemetry.events == [ClientUnreachable("amule-1")]
 
 
@@ -453,7 +460,7 @@ async def test_a_search_logs_on_the_worker_logger_and_a_failed_observation_on_it
         observation_logger=observation_logger,
     )
 
-    await SearchWorker("amule-1", client, deps).run_task(SearchTask("keroro", "ed2k"))
+    await SearchWorker("amule-1", client, deps).run_task(SearchTask("keroro", "ed2k"), _NODE)
 
     assert logger.lines == [
         LoggedLine("info", "client amule-1: 'keroro'/ed2k → 0 verdict(s) changed"),

@@ -24,13 +24,17 @@ class _StubRepository:
         self.decisions: list[tuple[FileKey, MatchDecision, datetime]] = []
         self.retractions: list[tuple[FileKey, str, datetime]] = []
 
-    def record_observation(self, observation: FileObservation) -> None:
+    def record_observation(self, observation: FileObservation, node_id: str) -> None:
         self.observations.append(observation)
 
-    def record_decision(self, file: FileKey, decision: MatchDecision, decided_at: datetime) -> None:
+    def record_decision(
+        self, file: FileKey, decision: MatchDecision, decided_at: datetime, node_id: str
+    ) -> None:
         self.decisions.append((file, decision, decided_at))
 
-    def record_retraction(self, file: FileKey, target_id: str, decided_at: datetime) -> None:
+    def record_retraction(
+        self, file: FileKey, target_id: str, decided_at: datetime, node_id: str
+    ) -> None:
         self.retractions.append((file, target_id, decided_at))
 
     def latest_decisions(self, file: FileKey) -> dict[str, DecisionRecord]:
@@ -66,9 +70,9 @@ def test_protocol_is_satisfied_structurally() -> None:
             target_id="062A", rules_fired=("exact",), tokens_matched=(), coverage_values=()
         ),
     )
-    repository.record_observation(_OBSERVATION)
-    repository.record_decision(_KEY, decision, _T0)
-    repository.record_retraction(_KEY, "062A", _T0)
+    repository.record_observation(_OBSERVATION, "n1")
+    repository.record_decision(_KEY, decision, _T0, "n1")
+    repository.record_retraction(_KEY, "062A", _T0, "n1")
     assert repository.latest_decisions(_KEY) == {}
     assert repository.download_candidates() == ()
     assert repository.latest_observation(_KEY) is None

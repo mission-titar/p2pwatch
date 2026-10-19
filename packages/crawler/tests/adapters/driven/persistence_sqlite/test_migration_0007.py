@@ -130,8 +130,8 @@ def test_a_mapped_result_reuses_the_variant_0007_migrated_from_its_old_row(
     (reported_file,), _ = map_search_results([result], "keroro")
     connection = open_catalog(path)
     try:
-        SqliteCatalogRepository(connection, "n1").record_observation(
-            FileObservation(reported_file, datetime(2026, 6, 12, tzinfo=UTC))
+        SqliteCatalogRepository(connection).record_observation(
+            FileObservation(reported_file, datetime(2026, 6, 12, tzinfo=UTC)), "n1"
         )
         assert connection.execute("SELECT count(*) FROM observation_variants").fetchone()[0] == 1
         assert connection.execute("SELECT count(*) FROM observations").fetchone()[0] == 2

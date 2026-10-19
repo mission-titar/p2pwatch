@@ -52,8 +52,9 @@ from p2pwatch_testing.application.fakes import (
     RecordingTelemetry,
     TickingWallClock,
 )
-from p2pwatch_testing.catalog_rows import insert_file
+from p2pwatch_testing.catalog_rows import insert_file, source_variant_node_ids
 
+_NODE = "n1"
 _A = "a" * 32
 _B = "b" * 32
 _C = "c" * 32
@@ -152,7 +153,7 @@ async def test_new_candidate_is_queued_and_link_added() -> None:
         downloads=downloads,
         catalog=catalog,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert downloads.states[_A] is DownloadState.QUEUED
     assert client.started == [DownloadRequest(_key(_A), "Keroro.avi", 100)]
 
@@ -171,7 +172,7 @@ async def test_already_downloaded_candidate_is_deduped() -> None:
         downloads=downloads,
         catalog=catalog,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert client.started == []  # dedup: no new link
 
 
@@ -206,7 +207,7 @@ async def test_two_segment_candidates_same_hash_dedup_to_one_download() -> None:
         telemetry=telemetry,
         targets=targets,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert list(downloads.states) == [_A]
     assert downloads.states[_A] is DownloadState.QUEUED
     assert _started(client) == [_A]
@@ -233,7 +234,7 @@ async def test_complete_target_candidate_is_skipped() -> None:
         downloads=downloads,
         catalog=catalog,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert client.started == []
     assert _B not in downloads.states
 
@@ -253,7 +254,7 @@ async def test_a_candidate_that_would_break_the_disk_floor_defers() -> None:
         free=1_000,
         min_free=600,  # 1000 - 500 < 600 → defers
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert client.started == []
     assert _A not in downloads.states
 
@@ -270,7 +271,7 @@ async def test_outstanding_queue_bytes_are_charged_against_the_floor() -> None:
         observations={_A: _observation(_A, "x", 200)},
     )
     deps = _deps(client=client, downloads=downloads, catalog=catalog, free=1_000, min_free=0)
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert client.started == []
     assert _A not in downloads.states
 
@@ -287,7 +288,7 @@ async def test_a_nascent_queue_entry_commits_nothing() -> None:
         observations={_A: _observation(_A, "x", 200)},
     )
     deps = _deps(client=client, downloads=downloads, catalog=catalog, free=1_000, min_free=800)
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert downloads.states[_A] is DownloadState.QUEUED
 
 
@@ -303,7 +304,7 @@ async def test_candidate_without_observation_is_skipped() -> None:
         downloads=downloads,
         catalog=catalog,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert client.started == []
 
 
@@ -317,7 +318,7 @@ async def test_monitor_marks_in_progress_when_not_complete() -> None:
         downloads=downloads,
         catalog=FakeCatalogReads(),
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert downloads.states[_A] is DownloadState.DOWNLOADING
 
 
@@ -338,7 +339,7 @@ async def test_monitor_does_not_regress_a_completed_queue_entry() -> None:
     repo = _NoSetStateRepo()
     repo.states[_A] = DownloadState.COMPLETED
     deps = _deps(client=client, downloads=repo, catalog=FakeCatalogReads())
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert repo.states[_A] is DownloadState.COMPLETED  # unchanged
 
 
@@ -351,7 +352,7 @@ async def test_monitor_resurrects_a_failed_download_back_in_the_queue() -> None:
     downloads.states[_A] = DownloadState.FAILED
     downloads.failures[_A] = FailureReason.LOST
     deps = _deps(client=client, downloads=downloads, catalog=FakeCatalogReads())
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert downloads.states[_A] is DownloadState.DOWNLOADING
     assert downloads.failures[_A] is None
 
@@ -366,7 +367,7 @@ async def test_monitor_ignores_unknown_queue_entries() -> None:
         downloads=downloads,
         catalog=FakeCatalogReads(),
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert _B not in downloads.states
 
 
@@ -378,7 +379,7 @@ async def test_every_byte_received_is_not_a_completion() -> None:
     downloads = FakeDownloadRepo()
     downloads.states[_A] = DownloadState.DOWNLOADING
     deps = _deps(client=client, downloads=downloads, catalog=FakeCatalogReads())
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert downloads.states[_A] is DownloadState.DOWNLOADING  # NOT flipped to COMPLETED
 
 
@@ -397,7 +398,7 @@ async def test_unreachable_client_is_tolerated_and_iteration_skipped(failure: Ex
         downloads=downloads,
         catalog=FakeCatalogReads(candidates=(_candidate(_A, "062A"),)),
     )
-    await run_download_cycle(deps)  # does not raise
+    await run_download_cycle(deps, _NODE)  # does not raise
     assert client.started == []  # iteration skipped (no candidates processed)
 
 
@@ -414,7 +415,7 @@ async def test_repository_error_is_absorbed() -> None:
         downloads=downloads,
         catalog=catalog,
     )
-    await run_download_cycle(deps)  # does not raise (RepositoryError absorbed)
+    await run_download_cycle(deps, _NODE)  # does not raise (RepositoryError absorbed)
 
 
 @pytest.mark.asyncio
@@ -439,7 +440,7 @@ async def test_monitor_repo_error_still_promotes_completions_in_same_cycle() -> 
         downloads=downloads,
         catalog=FakeCatalogReads(),
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     # _A's completion is recorded despite the failure of _reconcile_states on _B
     assert downloads.states[_A] is DownloadState.COMPLETED
 
@@ -457,7 +458,7 @@ async def test_active_states_repo_failure_is_absorbed_at_step_2() -> None:
         downloads=downloads,
         catalog=FakeCatalogReads(),
     )
-    await run_download_cycle(deps)  # does not raise (both RepositoryError are absorbed)
+    await run_download_cycle(deps, _NODE)  # does not raise (both RepositoryError are absorbed)
 
 
 @pytest.mark.asyncio
@@ -484,7 +485,7 @@ async def test_one_hash_repo_failure_does_not_starve_other_completions() -> None
         downloads=downloads,
         catalog=FakeCatalogReads(),
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert downloads.states[_B] is DownloadState.COMPLETED  # despite the failure on _A
 
 
@@ -509,7 +510,7 @@ async def test_intra_cycle_floor_accounts_for_links_added_this_cycle() -> None:
         free=1000,
         min_free=0,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert len(client.started) == 1  # only one fit above the floor
 
 
@@ -528,7 +529,7 @@ async def test_candidate_for_unknown_target_is_treated_as_complete() -> None:
         downloads=downloads,
         catalog=catalog,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert client.started == []
     assert _A not in downloads.states
 
@@ -557,7 +558,7 @@ async def test_monitor_no_op_when_state_already_matches() -> None:
         downloads=repo,
         catalog=FakeCatalogReads(),
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert repo.states[_A] is DownloadState.DOWNLOADING
 
 
@@ -574,7 +575,7 @@ async def test_queued_download_without_observation_emits_no_link() -> None:
         downloads=downloads,
         catalog=FakeCatalogReads(observations={}),  # no observation
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert client.started == []
 
 
@@ -593,7 +594,7 @@ async def test_start_unreachable_keeps_queued_and_is_tolerated() -> None:
         downloads=downloads,
         catalog=catalog,
     )
-    await run_download_cycle(deps)  # does not raise
+    await run_download_cycle(deps, _NODE)  # does not raise
     assert downloads.states[_A] is DownloadState.QUEUED  # stays queued → caught up
     assert client.started == []
 
@@ -613,7 +614,7 @@ async def test_start_rejected_marks_failed_and_does_not_crash() -> None:
         downloads=downloads,
         catalog=catalog,
     )
-    await run_download_cycle(deps)  # does not raise (application failure tolerated per hash)
+    await run_download_cycle(deps, _NODE)  # does not raise (application failure tolerated per hash)
     assert downloads.states[_A] is DownloadState.FAILED  # link rejected → marked failed
     assert downloads.failures[_A] is FailureReason.REJECTED
     assert client.started == []
@@ -637,7 +638,7 @@ async def test_start_rejected_for_one_file_does_not_block_the_next() -> None:
         downloads=downloads,
         catalog=catalog,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert downloads.states[_A] is DownloadState.FAILED  # rejected
     assert downloads.states[_B] is DownloadState.QUEUED  # accepted (link emitted)
     assert _B in _started(client)
@@ -661,7 +662,7 @@ async def test_completion_and_new_candidate_in_the_same_cycle() -> None:
         downloads=downloads,
         catalog=catalog,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert downloads.states[_A] is DownloadState.COMPLETED  # shared and out of the queue
     assert downloads.states[_B] is DownloadState.QUEUED  # new → enqueued
     assert _B in _started(client)  # + link emitted
@@ -682,7 +683,7 @@ async def test_emits_download_queued() -> None:
         catalog=catalog,
         telemetry=telemetry,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert any(type(e).__name__ == "DownloadQueued" for e in telemetry.events)
 
 
@@ -699,7 +700,7 @@ async def test_emits_download_completed() -> None:
         catalog=FakeCatalogReads(),
         telemetry=telemetry,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     completed = [e for e in telemetry.events if isinstance(e, DownloadCompleted)]
     # No observation, no decision left: the hash names the file, the queued row its target.
     assert completed == [DownloadCompleted(_key(_A), _A, (TargetTitle("062A", "t"),))]
@@ -731,7 +732,7 @@ async def test_a_completion_names_the_clean_file_and_every_download_target_of_th
         telemetry=telemetry,
         targets=targets,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     completed = [e for e in telemetry.events if isinstance(e, DownloadCompleted)]
     assert completed == [
         DownloadCompleted(
@@ -764,7 +765,7 @@ async def test_completion_repo_failure_does_not_starve_new_candidates() -> None:
         downloads=downloads,
         catalog=catalog,
     )
-    await run_download_cycle(deps)  # does not raise
+    await run_download_cycle(deps, _NODE)  # does not raise
     # Observable effect of step 3: _B enqueued AND its link emitted despite the step-2 failure.
     assert downloads.states[_B] is DownloadState.QUEUED
     assert _B in _started(client)
@@ -790,7 +791,7 @@ async def test_candidate_repo_failure_does_not_starve_completions() -> None:
         downloads=downloads,
         catalog=catalog,
     )
-    await run_download_cycle(deps)  # does not raise
+    await run_download_cycle(deps, _NODE)  # does not raise
     # Observable effect of step 2: _A completed despite the step-3 failure.
     assert downloads.states[_A] is DownloadState.COMPLETED
     # _B was NOT enqueued (record_queued raised) → no link emitted for it.
@@ -816,7 +817,7 @@ async def test_monitor_unreachable_aborts_subsequent_steps() -> None:
         downloads=downloads,
         catalog=catalog,
     )
-    await run_download_cycle(deps)  # does not raise (tolerated) but EVERYTHING is skipped
+    await run_download_cycle(deps, _NODE)  # does not raise (tolerated) but EVERYTHING is skipped
     assert downloads.states[_A] is DownloadState.COMPLETED  # unchanged
     assert _B not in downloads.states  # step 3 NOT executed
     assert client.started == []
@@ -847,7 +848,7 @@ async def test_monitor_repo_failure_is_isolated_and_does_not_starve_candidates()
         downloads=downloads,
         catalog=catalog,
     )
-    await run_download_cycle(deps)  # does not raise
+    await run_download_cycle(deps, _NODE)  # does not raise
     # Step 3 ran despite the step-1 failure: _B enqueued + link emitted.
     assert downloads.states[_B] is DownloadState.QUEUED
     assert _B in _started(client)
@@ -881,7 +882,7 @@ async def test_start_repo_failure_is_tolerated_and_does_not_raise() -> None:
         downloads=downloads,
         catalog=catalog,
     )
-    await run_download_cycle(deps)  # does NOT raise (step-4 RepositoryError tolerated)
+    await run_download_cycle(deps, _NODE)  # does NOT raise (step-4 RepositoryError tolerated)
 
 
 # ---------------------------------------------------------------------------
@@ -899,7 +900,7 @@ async def test_shared_file_for_tracked_hash_is_completed() -> None:
         downloads=downloads,
         catalog=FakeCatalogReads(),
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert downloads.states[_A] is DownloadState.COMPLETED
 
 
@@ -912,7 +913,7 @@ async def test_shared_file_for_untracked_hash_is_ignored() -> None:
         downloads=downloads,
         catalog=FakeCatalogReads(),
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert _A not in downloads.states
 
 
@@ -934,7 +935,7 @@ async def test_already_completed_shared_hash_is_not_recompleted() -> None:
         catalog=FakeCatalogReads(),
         telemetry=telemetry,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert not any(isinstance(e, DownloadCompleted) for e in telemetry.events)
 
 
@@ -952,7 +953,7 @@ async def test_failed_shared_hash_is_resurrected_and_notified() -> None:
         catalog=FakeCatalogReads(),
         telemetry=telemetry,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert downloads.states[_A] is DownloadState.COMPLETED
     assert any(isinstance(event, DownloadCompleted) for event in telemetry.events)
 
@@ -967,7 +968,7 @@ async def test_monitor_moves_queued_to_downloading_not_completed() -> None:
         downloads=downloads,
         catalog=FakeCatalogReads(),
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert downloads.states[_A] is DownloadState.DOWNLOADING  # NOT completed (bytes ignored)
 
 
@@ -981,7 +982,7 @@ async def test_marks_seen_every_listed_download_completed_ones_included() -> Non
     downloads.states[_A] = DownloadState.DOWNLOADING
     downloads.states[_B] = DownloadState.COMPLETED
     deps = _deps(client=client, downloads=downloads, catalog=FakeCatalogReads())
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert downloads.seen == [{_A, _B}]
 
 
@@ -1000,9 +1001,9 @@ async def test_a_download_amuled_no_longer_knows_becomes_failed() -> None:
         fake_time=fake_time,
         logger=logger,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     fake_time.advance(timedelta(hours=1))
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert downloads.states[_A] is DownloadState.FAILED
     assert downloads.failures[_A] is FailureReason.LOST
     assert deps.loss_deadline_by_file == {}
@@ -1025,7 +1026,7 @@ async def test_each_download_write_carries_the_instant_read_right_before_it() ->
     )
     deps = _deps(client=client, downloads=downloads, catalog=catalog)
     deps.wall_clock = wall_clock
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     minute = timedelta(minutes=1)
     assert downloads.completed_at == {_A: start + minute}
     assert downloads.seen_at == [start + 2 * minute]
@@ -1042,7 +1043,7 @@ async def test_a_download_the_client_forgot_is_started_once_per_round_until_list
     deps = _deps(client=client, downloads=downloads, catalog=catalog)
     rounds = []
     for _ in range(4):
-        await run_download_cycle(deps)
+        await run_download_cycle(deps, _NODE)
         rounds.append(len(client.started))
     assert rounds == [1, 2, 2, 3]
     assert client.started[0] == DownloadRequest(_key(_A), "a.avi", 9)
@@ -1058,7 +1059,7 @@ async def test_a_failed_or_completed_download_the_client_forgot_is_not_started()
     catalog = FakeCatalogReads(
         observations={_A: _observation(_A, "x", 1), _B: _observation(_B, "x", 1)}
     )
-    await run_download_cycle(_deps(client=client, downloads=downloads, catalog=catalog))
+    await run_download_cycle(_deps(client=client, downloads=downloads, catalog=catalog), _NODE)
     assert client.started == []
 
 
@@ -1071,7 +1072,7 @@ async def test_presence_repo_failure_is_absorbed_and_candidates_still_run() -> N
         observations={_A: _observation(_A, "x", 100)},
     )
     deps = _deps(client=client, downloads=downloads, catalog=catalog)
-    await run_download_cycle(deps)  # does not raise
+    await run_download_cycle(deps, _NODE)  # does not raise
     assert downloads.states[_A] is DownloadState.QUEUED
 
 
@@ -1092,7 +1093,7 @@ async def test_an_unmeasurable_output_directory_admits_nothing_and_does_not_rais
     telemetry = RecordingTelemetry()
     deps = _deps(client=client, downloads=downloads, catalog=catalog, telemetry=telemetry)
     deps.disk = _BrokenDisk()
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert client.started == []
     assert _A not in downloads.states
     assert not [e for e in telemetry.events if isinstance(e, FreeSpaceSampled | DiskSpaceLow)]
@@ -1108,7 +1109,7 @@ async def test_each_cycle_reports_the_measured_free_space() -> None:
         free=4_242,
         telemetry=telemetry,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert FreeSpaceSampled(free_bytes=4_242) in telemetry.events
 
 
@@ -1128,7 +1129,7 @@ async def test_low_disk_warns_once_per_crossing_and_rearms_at_the_floor() -> Non
     for free in (500, 400, 600, 599):  # cross down, stay low, back AT the floor, cross again
         disk.free = free
         before = len(telemetry.events)
-        await run_download_cycle(deps)
+        await run_download_cycle(deps, _NODE)
         warnings_per_cycle.append(
             sum(isinstance(e, DiskSpaceLow) for e in telemetry.events[before:])
         )
@@ -1147,7 +1148,7 @@ async def test_a_failure_the_client_reports_stays_failed_round_after_round() -> 
     deps = _deps(client=client, downloads=downloads, catalog=FakeCatalogReads())
     rounds = []
     for _ in range(3):
-        await run_download_cycle(deps)
+        await run_download_cycle(deps, _NODE)
         rounds.append((downloads.states[_A], downloads.failures.get(_A)))
     assert rounds == [(DownloadState.FAILED, FailureReason.ERROR)] * 3
     assert client.started == []
@@ -1171,7 +1172,7 @@ async def test_waiting_for_sources_is_not_failing_for_a_simulated_year(tmp_path:
     )
     for _ in range(12):
         fake_time.advance(timedelta(days=30))
-        await run_download_cycle(deps)
+        await run_download_cycle(deps, _NODE)
     row = connection.execute("SELECT state, waiting_reason, failure_reason FROM downloads")
     assert row.fetchall() == [("downloading", "no_source", None)]
     connection.close()
@@ -1197,9 +1198,9 @@ async def test_a_wall_clock_step_forward_fails_no_download_absent_from_one_poll(
         lost_after=timedelta(days=1),
         fake_time=fake_time,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     fake_time.step_wall(timedelta(days=2))
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert real_downloads.tracked_states() == {_key(_A): DownloadState.DOWNLOADING}
 
 
@@ -1217,12 +1218,12 @@ async def test_a_last_seen_at_in_the_future_waits_lost_after_no_more(
         lost_after=timedelta(days=1),
         fake_time=fake_time,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     fake_time.advance(timedelta(days=1) - timedelta(seconds=1))
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert real_downloads.tracked_states() == {_key(_A): DownloadState.QUEUED}
     fake_time.advance(timedelta(seconds=1))
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert real_downloads.tracked_states() == {_key(_A): DownloadState.FAILED}
 
 
@@ -1239,7 +1240,7 @@ async def test_a_download_last_seen_two_days_ago_fails_at_the_first_cycle(
         lost_after=timedelta(days=1),
         fake_time=fake_time,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert real_downloads.tracked_states() == {_key(_A): DownloadState.FAILED}
 
 
@@ -1258,12 +1259,12 @@ async def test_a_download_the_node_queued_is_lost_after_lost_after_of_monotonic_
         lost_after=timedelta(days=1),
         fake_time=fake_time,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     fake_time.step_wall(timedelta(days=2))
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert real_downloads.tracked_states() == {_key(_A): DownloadState.QUEUED}
     fake_time.advance(timedelta(days=1))
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert real_downloads.tracked_states() == {_key(_A): DownloadState.FAILED}
 
 
@@ -1289,9 +1290,9 @@ async def test_a_duplicate_queuing_keeps_the_deadline_its_last_seen_at_leaves() 
         lost_after=timedelta(days=1),
         fake_time=fake_time,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     fake_time.advance(timedelta(hours=1))
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert downloads.states[_A] is DownloadState.FAILED
 
 
@@ -1306,10 +1307,10 @@ async def test_a_row_the_operator_deleted_leaves_the_loss_deadlines() -> None:
         catalog=FakeCatalogReads(),
         fake_time=fake_time,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert deps.loss_deadline_by_file == {_key(_A): fake_time.monotonic.now() + timedelta(days=1)}
     del downloads.states[_A]  # for a manual retry
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert deps.loss_deadline_by_file == {}
 
 
@@ -1339,7 +1340,7 @@ async def test_the_sources_of_each_tracked_download_the_client_lists_are_recorde
         sources=sources,
         fake_time=fake_time,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert client.source_reads == [_A, _B]
     assert sources.recorded == [
         (_A, readings[_A], start),
@@ -1353,7 +1354,9 @@ async def test_a_download_the_client_reports_completed_is_not_read() -> None:
     downloads = FakeDownloadRepo()
     downloads.states[_A] = DownloadState.DOWNLOADING
     downloads.states[_B] = DownloadState.DOWNLOADING
-    await run_download_cycle(_deps(client=client, downloads=downloads, catalog=FakeCatalogReads()))
+    await run_download_cycle(
+        _deps(client=client, downloads=downloads, catalog=FakeCatalogReads()), _NODE
+    )
     assert client.source_reads == [_B]
 
 
@@ -1371,7 +1374,7 @@ async def test_a_daemon_unavailable_while_reading_sources_ends_the_round_after_t
     catalog = FakeCatalogReads(observations={_C: _observation(_C, "c.avi", 1)})
     sources = FakeSourceRepo()
     await run_download_cycle(
-        _deps(client=client, downloads=downloads, catalog=catalog, sources=sources)
+        _deps(client=client, downloads=downloads, catalog=catalog, sources=sources), _NODE
     )  # does not raise
     assert _started(client) == [_C]
     assert client.source_reads == [_A]
@@ -1386,7 +1389,8 @@ async def test_a_repo_failure_on_one_download_skips_its_sources_only() -> None:
     downloads.states[_B] = DownloadState.DOWNLOADING
     sources = FakeSourceRepo(fail_for={_A})
     await run_download_cycle(
-        _deps(client=client, downloads=downloads, catalog=FakeCatalogReads(), sources=sources)
+        _deps(client=client, downloads=downloads, catalog=FakeCatalogReads(), sources=sources),
+        _NODE,
     )
     assert [file for file, *_ in sources.recorded] == [_B]
 
@@ -1396,7 +1400,7 @@ async def test_a_repo_failure_reading_the_tracked_downloads_reads_no_source() ->
     client = FakeDownloadClient(listed=[(_status(_A),)])
     downloads = FakeDownloadRepo(fail_active_states=True)
     await run_download_cycle(
-        _deps(client=client, downloads=downloads, catalog=FakeCatalogReads())
+        _deps(client=client, downloads=downloads, catalog=FakeCatalogReads()), _NODE
     )  # does not raise
     assert client.source_reads == []
 
@@ -1410,7 +1414,7 @@ async def test_a_daemon_unreachable_at_the_start_reads_no_source() -> None:
     downloads.states[_A] = DownloadState.DOWNLOADING
     downloads.states[_C] = DownloadState.QUEUED
     catalog = FakeCatalogReads(observations={_C: _observation(_C, "c.avi", 1)})
-    await run_download_cycle(_deps(client=client, downloads=downloads, catalog=catalog))
+    await run_download_cycle(_deps(client=client, downloads=downloads, catalog=catalog), _NODE)
     assert client.source_reads == []
 
 
@@ -1430,7 +1434,7 @@ async def test_sources_are_read_once_per_interval_however_often_the_cycle_runs()
         sources_interval=timedelta(seconds=300),
     )
     for _ in range(11):
-        await run_download_cycle(deps)
+        await run_download_cycle(deps, _NODE)
         fake_time.advance(timedelta(seconds=30))
     assert [read_at for _, _, read_at in sources.recorded] == [
         start,
@@ -1452,12 +1456,12 @@ async def test_a_sources_read_the_daemon_failed_waits_for_the_next_interval() ->
         fake_time=fake_time,
         sources_interval=timedelta(seconds=300),
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     fake_time.advance(timedelta(seconds=30))
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert client.source_reads == [_A]
     fake_time.advance(timedelta(seconds=270))
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert client.source_reads == [_A, _A]
 
 
@@ -1472,10 +1476,10 @@ async def test_a_wall_clock_step_back_delays_no_sources_read() -> None:
         fake_time=fake_time,
         sources_interval=timedelta(seconds=300),
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     fake_time.step_wall(timedelta(hours=-1))
     fake_time.advance(timedelta(seconds=300))
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert client.source_reads == [_A, _A]
 
 
@@ -1507,7 +1511,7 @@ async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
         sources=sources,
         telemetry=telemetry,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     alerts = [e for e in telemetry.events if isinstance(e, SourceFirstUseful | SourceReappeared)]
     assert alerts == [
         SourceFirstUseful(
@@ -1544,8 +1548,9 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
         telemetry=telemetry,
         fake_time=fake_time,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert sources.asked == [(_OTHER_PEER, start), (_PEER, start)]
+    assert sources.node_ids == {_NODE}  # the round writes and reads the cycle's node's points
     alerts = [e for e in telemetry.events if isinstance(e, SourceFirstUseful | SourceReappeared)]
     assert alerts == [
         SourceReappeared(_PEER, "AnimuseeFMR", _key(_B), _B, (TargetTitle("063A", "t2"),), 46800.0)
@@ -1564,7 +1569,7 @@ async def test_a_reading_without_a_source_id_raises_nothing() -> None:
         sources=sources,
         telemetry=telemetry,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert sources.asked == []
     assert not any(isinstance(e, SourceFirstUseful | SourceReappeared) for e in telemetry.events)
 
@@ -1587,7 +1592,7 @@ async def test_a_round_without_a_useful_reading_with_a_source_id_never_asks_for_
     deps = _deps(
         client=client, downloads=_tracking(_A), catalog=FakeCatalogReads(), sources=sources
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert sources.baselines == []
 
 
@@ -1611,7 +1616,7 @@ async def test_the_baseline_is_asked_once_per_round_against_its_start() -> None:
         sources=sources,
         fake_time=fake_time,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert sources.baselines == [start]
 
 
@@ -1628,7 +1633,7 @@ async def test_a_repo_failure_asking_the_baseline_skips_that_downloads_alerts_on
         sources=sources,
         telemetry=telemetry,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert [file for file, *_ in sources.recorded] == [_A, _B]
     assert len(sources.baselines) == 2
     alerts = [e for e in telemetry.events if isinstance(e, SourceFirstUseful | SourceReappeared)]
@@ -1656,17 +1661,18 @@ async def test_the_first_recording_round_is_a_baseline(
         client=client,
         downloads=_tracking(_A, _B),
         catalog=FakeCatalogReads(),
-        sources=SqliteSourceRepository(catalog, "n1", timedelta(seconds=30)),
+        sources=SqliteSourceRepository(catalog, timedelta(seconds=30)),
         telemetry=telemetry,
         fake_time=fake_time,
     )
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     alerts = [e for e in telemetry.events if isinstance(e, SourceFirstUseful | SourceReappeared)]
     assert alerts == []
+    assert source_variant_node_ids(catalog) == {_NODE}
     fake_time.advance(timedelta(seconds=30))
     third = SourceKey(Network.ED2K, "d" * 32)
     readings[_A] = (_peer(_PEER), _peer(third))
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     alerts = [e for e in telemetry.events if isinstance(e, SourceFirstUseful | SourceReappeared)]
     assert alerts == [SourceFirstUseful(third, "peer", _key(_A), _A, ())]
     catalog.close()
@@ -1691,7 +1697,7 @@ def _real_deps(
     fake_time: FakeTime,
 ) -> DownloadDeps:
     """``_A`` tracked, its sources written to a real catalog."""
-    sources = SqliteSourceRepository(catalog, "n1", timedelta(seconds=30))
+    sources = SqliteSourceRepository(catalog, timedelta(seconds=30))
     return _deps(
         client=client,
         downloads=_tracking(_A),
@@ -1715,11 +1721,11 @@ async def test_a_source_useful_at_three_consecutive_reads_is_new_once(
     fake_time, telemetry = FakeTime(), RecordingTelemetry()
     client = FakeDownloadClient(listed=[(_status(_A),)] * 4, readings=readings, fake_time=fake_time)
     deps = _real_deps(real_catalog, client, telemetry, fake_time)
-    await run_download_cycle(deps)  # the node's first round, a baseline
+    await run_download_cycle(deps, _NODE)  # the node's first round, a baseline
     readings[_A] = (_peer(_OTHER_PEER), _peer(_PEER))
     for _ in range(3):
         fake_time.advance(timedelta(seconds=30))
-        await run_download_cycle(deps)
+        await run_download_cycle(deps, _NODE)
     assert _alerts(telemetry) == [SourceFirstUseful(_PEER, "peer", _key(_A), _A, ())]
 
 
@@ -1733,12 +1739,12 @@ async def test_a_source_back_after_13_hours_through_an_undetermined_read_reappea
     client = FakeDownloadClient(listed=[(_status(_A),)] * 3, readings=readings, fake_time=fake_time)
     deps = _real_deps(real_catalog, client, telemetry, fake_time)
     last_useful = fake_time.wall.now()
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     fake_time.advance(timedelta(hours=13))
     readings[_A] = (_peer(_PEER, SourceRole.UNDETERMINED),)
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     fake_time.advance(timedelta(seconds=30))
     readings[_A] = (_peer(_PEER),)
     absent = (fake_time.wall.now() - last_useful).total_seconds()
-    await run_download_cycle(deps)
+    await run_download_cycle(deps, _NODE)
     assert _alerts(telemetry) == [SourceReappeared(_PEER, "peer", _key(_A), _A, (), absent)]

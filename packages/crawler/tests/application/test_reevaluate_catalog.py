@@ -34,8 +34,9 @@ from p2pwatch_testing.application.fakes import (
     RecordingTelemetry,
     RecordingWakeHub,
 )
-from p2pwatch_testing.catalog_rows import decision_tiers
+from p2pwatch_testing.catalog_rows import decision_node_ids, decision_tiers
 
+_NODE = "n1"
 _HASH_DL = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _HASH_CAT = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 _HASH_MULTI = "dddddddddddddddddddddddddddddddd"
@@ -74,10 +75,10 @@ async def test_two_changed_rows_are_all_evaluated_and_written(
 ) -> None:
     # Never decided: both will change.
     catalog.record_observation(
-        FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now())
+        FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now()), _NODE
     )
     catalog.record_observation(
-        FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now())
+        FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now()), _NODE
     )
     telemetry = RecordingTelemetry()
     wake_hub = RecordingWakeHub()
@@ -88,10 +89,12 @@ async def test_two_changed_rows_are_all_evaluated_and_written(
         telemetry=telemetry,
         wall_clock=wall_clock,
         logger=FakeLogger(),
+        node_id=_NODE,
     )
     assert summary == ReevaluationSummary(files_evaluated=2, rows_written=2)
     tiers = dict(decision_tiers(catalog_connection))
     assert tiers == {_HASH_DL: "download", _HASH_CAT: "catalog"}
+    assert decision_node_ids(catalog_connection) == {_NODE}
     decided_at = catalog_connection.execute("SELECT DISTINCT decided_at FROM match_decisions")
     assert decided_at.fetchall() == [(utc_iso(wall_clock.now()),)]
     assert len(telemetry.events) == 2
@@ -107,13 +110,13 @@ async def test_unchanged_row_is_evaluated_but_not_written(
     wall_clock: FakeWallClock,
 ) -> None:
     catalog.record_observation(
-        FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now())
+        FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now()), _NODE
     )
     candidate = _reported_file(_HASH_CAT, _CAT_NAME).to_candidate()
     decisions = engine.evaluate_file((candidate,))
     assert decisions  # non-empty
     # pre-seed the "already correct" verdict
-    catalog.record_decision(FileKey(Network.ED2K, _HASH_CAT), decisions[0], wall_clock.now())
+    catalog.record_decision(FileKey(Network.ED2K, _HASH_CAT), decisions[0], wall_clock.now(), _NODE)
     telemetry = RecordingTelemetry()
     wake_hub = RecordingWakeHub()
     summary = await reevaluate_catalog(
@@ -123,6 +126,7 @@ async def test_unchanged_row_is_evaluated_but_not_written(
         telemetry=telemetry,
         wall_clock=wall_clock,
         logger=FakeLogger(),
+        node_id=_NODE,
     )
     assert summary == ReevaluationSummary(files_evaluated=1, rows_written=0)
     assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 1
@@ -138,10 +142,10 @@ async def test_repository_error_on_one_row_is_absorbed_and_sweep_continues(
     wall_clock: FakeWallClock,
 ) -> None:
     catalog.record_observation(
-        FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now())
+        FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now()), _NODE
     )
     catalog.record_observation(
-        FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now())
+        FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now()), _NODE
     )
     logger = FakeLogger()
     # TEST trigger: makes the match_decisions INSERT fail for ONE hash only -> that row's
@@ -160,6 +164,7 @@ async def test_repository_error_on_one_row_is_absorbed_and_sweep_continues(
         telemetry=telemetry,
         wall_clock=wall_clock,
         logger=logger,
+        node_id=_NODE,
     )
     assert summary == ReevaluationSummary(files_evaluated=2, rows_written=1)
     assert decision_tiers(catalog_connection) == [(_HASH_CAT, "catalog")]
@@ -186,6 +191,7 @@ async def test_empty_catalogue_yields_zero_summary(
         telemetry=telemetry,
         wall_clock=wall_clock,
         logger=FakeLogger(),
+        node_id=_NODE,
     )
     assert summary == ReevaluationSummary(files_evaluated=0, rows_written=0)
     assert telemetry.events == []
@@ -202,12 +208,13 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
     # §10: an old "unidentified" row under an arbitrary target_id (001A/catalog) is retracted
     # by the set-diff when the file becomes identified (062A + 062B) on the re-evaluation pass.
     catalog.record_observation(
-        FileObservation(_reported_file(_HASH_MULTI, _MULTI_NAME), wall_clock.now())
+        FileObservation(_reported_file(_HASH_MULTI, _MULTI_NAME), wall_clock.now()), _NODE
     )
     catalog.record_decision(
         FileKey(Network.ED2K, _HASH_MULTI),
         _legacy_row("001A", "keroro_large", "catalog"),
         wall_clock.now(),
+        _NODE,
     )
     telemetry, wake_hub = RecordingTelemetry(), RecordingWakeHub()
     summary = await reevaluate_catalog(
@@ -217,6 +224,7 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
         telemetry=telemetry,
         wall_clock=wall_clock,
         logger=FakeLogger(),
+        node_id=_NODE,
     )
     assert summary == ReevaluationSummary(
         files_evaluated=1, rows_written=3
@@ -237,10 +245,13 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
 ) -> None:
     # §10: the old whole-file retraction sentinel (target_id="") is invisible to the set-diff.
     catalog.record_observation(
-        FileObservation(_reported_file(_HASH_MULTI, _MULTI_NAME), wall_clock.now())
+        FileObservation(_reported_file(_HASH_MULTI, _MULTI_NAME), wall_clock.now()), _NODE
     )
     catalog.record_decision(
-        FileKey(Network.ED2K, _HASH_MULTI), _legacy_row("", "", RETRACTED_TIER), wall_clock.now()
+        FileKey(Network.ED2K, _HASH_MULTI),
+        _legacy_row("", "", RETRACTED_TIER),
+        wall_clock.now(),
+        _NODE,
     )
     telemetry, wake_hub = RecordingTelemetry(), RecordingWakeHub()
     summary = await reevaluate_catalog(
@@ -250,6 +261,7 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
         telemetry=telemetry,
         wall_clock=wall_clock,
         logger=FakeLogger(),
+        node_id=_NODE,
     )
     assert summary == ReevaluationSummary(
         files_evaluated=1, rows_written=2
@@ -271,11 +283,11 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
     wall_clock: FakeWallClock,
 ) -> None:
     catalog.record_observation(
-        FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now())
+        FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now()), _NODE
     )
     fake_time.advance(timedelta(minutes=1))  # the latest name matches nothing
     catalog.record_observation(
-        FileObservation(_reported_file(_HASH_DL, "random.txt"), wall_clock.now())
+        FileObservation(_reported_file(_HASH_DL, "random.txt"), wall_clock.now()), _NODE
     )
     summary = await reevaluate_catalog(
         catalog=catalog,
@@ -284,6 +296,7 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
         telemetry=RecordingTelemetry(),
         wall_clock=wall_clock,
         logger=FakeLogger(),
+        node_id=_NODE,
     )
     assert summary == ReevaluationSummary(files_evaluated=1, rows_written=1)
     assert catalog.latest_decisions(FileKey(Network.ED2K, _HASH_DL)) == {
@@ -301,13 +314,13 @@ async def test_progress_is_logged_at_each_multiple_of_the_cadence_only(
     monkeypatch.setattr(reevaluate_module, "_PROGRESS_EVERY", 2)
     logger = FakeLogger()
     catalog.record_observation(
-        FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now())
+        FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now()), _NODE
     )
     catalog.record_observation(
-        FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now())
+        FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now()), _NODE
     )
     catalog.record_observation(
-        FileObservation(_reported_file(_HASH_MULTI, "random.txt"), wall_clock.now())
+        FileObservation(_reported_file(_HASH_MULTI, "random.txt"), wall_clock.now()), _NODE
     )
     await reevaluate_catalog(
         catalog=catalog,
@@ -316,6 +329,7 @@ async def test_progress_is_logged_at_each_multiple_of_the_cadence_only(
         telemetry=RecordingTelemetry(),
         wall_clock=wall_clock,
         logger=logger,
+        node_id=_NODE,
     )
     assert logger.lines == [
         LoggedLine("info", "catalogue re-evaluation: 2/3 files, 2 rows written")
