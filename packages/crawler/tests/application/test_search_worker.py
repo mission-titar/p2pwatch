@@ -407,6 +407,7 @@ async def test_successful_search_emits_search_executed_with_network_and_counts(
     kinds = [type(e).__name__ for e in telemetry.events]
     assert kinds == ["SearchExecuted", "ObservationRecorded", "DecisionsRecorded"]
     assert telemetry.events[1] == ObservationRecorded(client_name="amule-1", channel="ed2k")
+    assert telemetry.node_ids == {_NODE}
 
 
 @pytest.mark.asyncio
@@ -422,6 +423,7 @@ async def test_search_failure_emits_search_failed(
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"), _NODE)
     assert telemetry.events == [SearchFailed(client_name="amule-1", channel="ed2k")]
+    assert telemetry.node_ids == {_NODE}
 
 
 @pytest.mark.asyncio
@@ -436,6 +438,7 @@ async def test_transport_failure_during_search_emits_instance_unreachable(
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"), _NODE)
     assert telemetry.events == [ClientUnreachable("amule-1")]
+    assert telemetry.node_ids == {_NODE}
 
 
 @pytest.mark.asyncio

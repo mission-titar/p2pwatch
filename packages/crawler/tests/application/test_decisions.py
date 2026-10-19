@@ -126,6 +126,7 @@ async def test_new_decision_is_recorded_emitted_and_nudged(
     assert telemetry.events == [
         _event(_HASH_DL, _DL_NAME, DecisionChange("062A", _TITLE_A, None, "download"))
     ]
+    assert telemetry.node_ids == {_NODE}
     assert wake_hub.woken_subjects == [DOWNLOAD_WAKE_SUBJECT]
 
 

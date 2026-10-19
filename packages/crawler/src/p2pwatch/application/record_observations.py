@@ -48,7 +48,7 @@ async def record_observation(
     A ``RepositoryError`` is absorbed (log + ``0``), the cycle continues (spec §7)."""
     try:
         catalog.record_observation(FileObservation(reported_file, wall_clock.now()), node_id)
-        await telemetry.emit(ObservationRecorded(client_name, channel))
+        await telemetry.emit(ObservationRecorded(client_name, channel), node_id)
         return await rejudge_file(
             reported_file.file,
             reported_file.to_candidate(),

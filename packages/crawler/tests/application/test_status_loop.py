@@ -33,6 +33,7 @@ _ALERTS = (
 _UP = (True, True)
 _LOW_ID = (True, False)  # on the network, not connectable
 _DOWN = make_unreachable()
+_NODE = "titar-node-1"
 
 
 def _status(**channels: tuple[bool, bool | None]) -> ClientStatus:
@@ -82,10 +83,12 @@ class _TimedTelemetry:
         self._fake_time = fake_time
         self._start = fake_time.monotonic.now()
         self.events: list[tuple[float, ev.Event]] = []
+        self.node_ids: set[str] = set()  # every call's
 
-    async def emit(self, event: ev.Event) -> None:
+    async def emit(self, event: ev.Event, node_id: str) -> None:
         elapsed = self._fake_time.monotonic.now() - self._start
         self.events.append((elapsed.total_seconds(), event))
+        self.node_ids.add(node_id)
 
 
 def _deps(
@@ -106,9 +109,22 @@ async def _run(*readings: _Reading, client: str = "amuled") -> list[tuple[float,
     telemetry = _TimedTelemetry(fake_time)
     scripted = _ScriptedClient(list(readings), shutdown)
     await asyncio.wait_for(
-        status_loop(_deps(client, scripted, fake_time, telemetry, shutdown)), timeout=1.0
+        status_loop(_deps(client, scripted, fake_time, telemetry, shutdown), _NODE), timeout=1.0
     )
     return telemetry.events
+
+
+@pytest.mark.asyncio
+async def test_every_event_is_emitted_under_the_node_id_the_loop_runs_with() -> None:
+    fake_time, shutdown = FakeTime(), asyncio.Event()
+    telemetry = _TimedTelemetry(fake_time)
+    readings: list[_Reading] = [_DOWN, _DOWN, _DOWN, _status(ed2k=_UP)]
+    client = _ScriptedClient(readings, shutdown)
+    await asyncio.wait_for(
+        status_loop(_deps("amuled", client, fake_time, telemetry, shutdown), _NODE), timeout=1.0
+    )
+    assert any(isinstance(event, _ALERTS) for _, event in telemetry.events)
+    assert telemetry.node_ids == {_NODE}
 
 
 async def _alerts(*readings: _Reading) -> list[tuple[float, ev.Event]]:
@@ -227,7 +243,7 @@ async def test_each_reading_is_published_with_its_time(
     client = _ScriptedClient([_status(kad=_UP), reading], shutdown)
     deps = _deps("amuled", client, fake_time, _TimedTelemetry(fake_time), shutdown)
     assert deps.board.readings() == {"amuled": None}
-    await asyncio.wait_for(status_loop(deps), timeout=1.0)
+    await asyncio.wait_for(status_loop(deps, _NODE), timeout=1.0)
     read_at = fake_time.wall.now() - timedelta(seconds=60)  # the loop slept one period after it
     assert deps.board.readings() == {"amuled": StatusReading(read_at, published)}
 
@@ -239,7 +255,8 @@ async def test_a_wall_clock_step_forward_raises_no_alert_before_its_delay() -> N
     telemetry = _TimedTelemetry(fake_time)
     client = _SteppedClient([_status(ed2k=_LOW_ID)] * 5, shutdown, fake_time)
     await asyncio.wait_for(
-        status_loop(_deps("amuled", client, fake_time, telemetry, shutdown)), timeout=1.0
+        status_loop(_deps("amuled", client, fake_time, telemetry, shutdown), _NODE),
+        timeout=1.0,
     )
     assert [e for _, e in telemetry.events if isinstance(e, _ALERTS)] == []
 

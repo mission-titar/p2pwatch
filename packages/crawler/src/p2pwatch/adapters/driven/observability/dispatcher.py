@@ -35,7 +35,7 @@ class ObservabilityDispatcher:
         self._notifier = notifier
         self._notification_timeout_seconds = notification_timeout_seconds
 
-    async def emit(self, event: Event) -> None:
+    async def emit(self, event: Event, node_id: str) -> None:
         report = describe(event)
         _logger.log(_LEVELS[report.severity], report.message)
         for instruction in report.metrics:
@@ -48,6 +48,7 @@ class ObservabilityDispatcher:
                         report.notification_title,
                         report.notification_body or report.message,
                         report.severity,
+                        node_id,
                     ),
                     timeout=self._notification_timeout_seconds,
                 )

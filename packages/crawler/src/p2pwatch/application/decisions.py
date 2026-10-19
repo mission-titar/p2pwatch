@@ -83,5 +83,5 @@ async def rejudge_file(
             filename, size_bytes = base_candidate.filename, 0
         else:
             filename, size_bytes = best.reported_file.filename, best.reported_file.size_bytes
-        await telemetry.emit(DecisionsRecorded(file, filename, size_bytes, tuple(changes)))
+        await telemetry.emit(DecisionsRecorded(file, filename, size_bytes, tuple(changes)), node_id)
     return len(changes)
