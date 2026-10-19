@@ -369,7 +369,8 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
 | 135 | `test/files-rendering-on-fakes` | the files table's rendering tests on the fake; the fixtures no test needs deleted | 255, 1 |
 | 140 | `refactor/sharing-period` | `PeriodWindow` and `SharingPeriod` in the domain, `SourcePeriodView` replaced; `SourceReader.read_sharing_periods` (Corrected 2026-10-19: block 140 split in 140, 143, 145 and 147, counted at 21 files and about 1,400 lines before any code; it moves behaviour, so no exemption) | 350, 8 |
 | 143 | `refactor/file-history` | `FileHistory`, `DatedDecision` in the domain; `CatalogFileReader.read_file_history`; `FileDetail`, `DecisionView` deleted | 300, 8 |
-| 145 | `feat/describe-file` | `interval.py` to `domain/`; `DescribeFile` behind `FileDescriber`; its route on it | 400, 12 |
+| 145 | `refactor/domain-interval` | `interval.py` to `domain/` (Corrected 2026-10-19: split from 146, measured at 676 lines, the move counted twice; it moves behaviour, so no exemption) | 283, 8 |
+| 146 | `feat/describe-file` | `DescribeFile` behind `FileDescriber`; its route on it | 393, 8 |
 | 147 | `test/describe-file-routes-on-fakes` | the file page's route tests on a fake `FileDescriber` | 550, 3 |
 | 150 | `feat/list-sources` | `SourceReader`'s list reads; `ListSources`; its route and route tests | 450, 12 |
 | 160 | `feat/describe-source` | `DescribeSource`, `DescribeSourceName`; their routes and route tests; the dead `{% else %}` | 450, 12 |
