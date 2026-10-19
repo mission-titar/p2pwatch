@@ -1,4 +1,4 @@
-"""Capped exponential backoff, PURE math (spec orchestration §3/§4; spec MVP §6/§14).
+"""Capped exponential backoff, PURE math, and the wait it persists (spec orchestration §3/§4).
 
 PURE domain: no I/O, no global ``random``, no clock. ``backoff_delay`` computes the
 NOMINAL delay (exponential bounded by ``cap``); the JITTER is applied by the caller (it
@@ -6,6 +6,27 @@ needs the ``Rng`` port / a draw): separating the deterministic computation from 
 keeps this module trivially testable and the jitter replayable. Used by
 ``application/search_worker.py`` for the PER (client, channel) backoff (spec §3).
 """
+
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+
+
+@dataclass(frozen=True)
+class BackoffKey:
+    """What a backoff holds back: one channel of a client, or the whole client (``None``)."""
+
+    client_name: str
+    channel: str | None
+
+
+@dataclass(frozen=True)
+class BackoffState:
+    """A persisted wait: ``attempts`` consecutive failures, the latest of which started a wait of
+    ``delay`` at ``started_at`` on the wall clock."""
+
+    attempts: int
+    started_at: datetime
+    delay: timedelta
 
 
 def backoff_delay(attempt: int, *, base: float, cap: float, factor: float) -> float:

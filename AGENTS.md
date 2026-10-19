@@ -122,6 +122,9 @@ a function does.
 - **A port to an outside system or a service keeps a capability name**: `DownloadClient`, `MonotonicClock`,
   `Logger`. A later consumer that needs part of it splits it then.
 - **A use case is named after its operation**: `ValidateConfig`, `MergeCatalogs`.
+- **A driving port returns its response model, named from its use case's verb** and defined in the port's file
+  (`DescribeNode` returns a `NodeDescription`); a driven read port returns domain types only. The webui renders a
+  response model through `<Thing>Display` view models.
 - **An adapter is named by its technology and what it adapts**: `PosixProcess`, `UvicornServerThread`,
   `YamlConfigChecker`, `SqliteCatalogCopier`.
 - **A test double is `Fake` and what it replaces**: `FakeAmuleApiServer`, `FakeSearchClient`.
@@ -146,7 +149,9 @@ a function does.
 | `token` | a named matcher of the policy (`tokens:`) | a word of a text |
 | `word` | a piece of normalized text | `token` |
 | `reevaluation` | re-judging every file when the policy changed | `backfill` |
-| `tracked` | a download with a row in `downloads`, whatever its state | `downloaded`, `active` |
+| `tracked` | a download with a row in `downloads`, whatever its state: `TrackedDownload` | `downloaded`, `active` |
+| `node state` | `NodeState`, what a node holds of its own: its identity, its tracked downloads, its search backoffs | `node info` |
+| `display` | a `<Thing>Display`, the view model a webui template renders, its values already text | `view` |
 | `wake` | `WakeHub` wakes the loops waiting on a subject | `signal`, `nudge` |
 | `run state` | whether the crawler searches or idles, and whether its shutdown was requested: `RunStateWriter` changes it, `RunStateReader` reads it | `control` |
 | `first useful`, `reappeared` | a source's two alerts | `new`, `useful again` |

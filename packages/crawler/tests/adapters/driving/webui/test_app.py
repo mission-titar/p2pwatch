@@ -18,6 +18,8 @@ from catalog_matching.domain.config import MatcherConfig
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import PAGE_SIZE
+from p2pwatch.adapters.driven.persistence_sqlite.local_read import SqliteNodeStateReader
+from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driving.webui.app import (
     _normalize_direction,
     _normalize_sort,
@@ -34,6 +36,7 @@ from p2pwatch.adapters.driving.webui.views import (
     FileRow,
     HiddenInput,
 )
+from p2pwatch.application.describe_node import DescribeNode
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceKey
 from p2pwatch.ports.driven.client_status import (
@@ -73,12 +76,17 @@ _FAKE_TIME = FakeTime(datetime(2026, 10, 14, 20, 0, tzinfo=UTC))
 _WALL_CLOCK = _FAKE_TIME.wall
 _MONOTONIC_CLOCK = _FAKE_TIME.monotonic
 _GAP = timedelta(seconds=90)
+_CREATED_AT = "2024-01-01T00:00:00.000000+00:00"  # as local.db stores an instant
 
 
 _NO_STATUS = FakeClientStatusReader({})
 # The read-path fixtures never call the controls, and read the crawl as running.
 _NO_CONTROLS = FakeCrawlControls()
 _RUNNING = FakeRunState()
+
+
+def _node_state_reader(local_db: Path) -> SqliteNodeStateReader:
+    return SqliteNodeStateReader(ReaderProvider(local_db))
 
 
 def _detail_url(ed2k_hash: str) -> str:
@@ -151,9 +159,7 @@ def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
 
     with sqlite3.connect(local_db) as conn:
         conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-test-001"))
-        conn.execute(
-            "INSERT INTO node_runtime VALUES (?, ?)", ("created_at", "2024-01-01T00:00:00")
-        )
+        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
         conn.commit()
 
     matcher_config = _matcher()
@@ -175,6 +181,8 @@ def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
+        node_describer=DescribeNode(_node_state_reader(local_db)),
+        node_state_reader=_node_state_reader(local_db),
         client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -200,9 +208,7 @@ def app_no_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
 
     with sqlite3.connect(local_db) as conn:
         conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-no-dec"))
-        conn.execute(
-            "INSERT INTO node_runtime VALUES (?, ?)", ("created_at", "2024-01-01T00:00:00")
-        )
+        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
         conn.commit()
 
     matcher_config = _matcher()
@@ -224,6 +230,8 @@ def app_no_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
+        node_describer=DescribeNode(_node_state_reader(local_db)),
+        node_state_reader=_node_state_reader(local_db),
         client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -261,9 +269,7 @@ def app_retracted_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette,
 
     with sqlite3.connect(local_db) as conn:
         conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-retracted"))
-        conn.execute(
-            "INSERT INTO node_runtime VALUES (?, ?)", ("created_at", "2024-01-01T00:00:00")
-        )
+        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
         conn.commit()
 
     matcher_config = _matcher()
@@ -285,6 +291,8 @@ def app_retracted_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette,
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
+        node_describer=DescribeNode(_node_state_reader(local_db)),
+        node_state_reader=_node_state_reader(local_db),
         client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -303,9 +311,7 @@ def app_no_observations(catalog_db: Path, local_db: Path) -> tuple[Starlette, st
 
     with sqlite3.connect(local_db) as conn:
         conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-no-obs"))
-        conn.execute(
-            "INSERT INTO node_runtime VALUES (?, ?)", ("created_at", "2024-01-01T00:00:00")
-        )
+        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
         conn.commit()
 
     matcher_config = _matcher()
@@ -327,6 +333,8 @@ def app_no_observations(catalog_db: Path, local_db: Path) -> tuple[Starlette, st
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
+        node_describer=DescribeNode(_node_state_reader(local_db)),
+        node_state_reader=_node_state_reader(local_db),
         client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -353,9 +361,7 @@ def app_unknown_target(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
 
     with sqlite3.connect(local_db) as conn:
         conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-unk"))
-        conn.execute(
-            "INSERT INTO node_runtime VALUES (?, ?)", ("created_at", "2024-01-01T00:00:00")
-        )
+        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
         conn.commit()
 
     matcher_config = _matcher()
@@ -377,6 +383,8 @@ def app_unknown_target(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
+        node_describer=DescribeNode(_node_state_reader(local_db)),
+        node_state_reader=_node_state_reader(local_db),
         client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -403,9 +411,7 @@ def app_download_tier_known_target(catalog_db: Path, local_db: Path) -> tuple[St
 
     with sqlite3.connect(local_db) as conn:
         conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-dl"))
-        conn.execute(
-            "INSERT INTO node_runtime VALUES (?, ?)", ("created_at", "2024-01-01T00:00:00")
-        )
+        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
         conn.commit()
 
     matcher_config = _matcher()
@@ -427,6 +433,8 @@ def app_download_tier_known_target(catalog_db: Path, local_db: Path) -> tuple[St
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
+        node_describer=DescribeNode(_node_state_reader(local_db)),
+        node_state_reader=_node_state_reader(local_db),
         client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -453,9 +461,7 @@ def app_download_tier_unknown_target(catalog_db: Path, local_db: Path) -> tuple[
 
     with sqlite3.connect(local_db) as conn:
         conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-dl-unk"))
-        conn.execute(
-            "INSERT INTO node_runtime VALUES (?, ?)", ("created_at", "2024-01-01T00:00:00")
-        )
+        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
         conn.commit()
 
     matcher_config = _matcher()
@@ -477,6 +483,8 @@ def app_download_tier_unknown_target(catalog_db: Path, local_db: Path) -> tuple[
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
+        node_describer=DescribeNode(_node_state_reader(local_db)),
+        node_state_reader=_node_state_reader(local_db),
         client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -704,9 +712,7 @@ def app_vetoed_alias(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         insert_decision(conn, TEST_HASH, "062A", "catalog", rule_name="catalog")
     with sqlite3.connect(local_db) as conn:
         conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-veto"))
-        conn.execute(
-            "INSERT INTO node_runtime VALUES (?, ?)", ("created_at", "2024-01-01T00:00:00")
-        )
+        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
         conn.commit()
     matcher_config = parse_matcher_config(
         {
@@ -741,6 +747,8 @@ def app_vetoed_alias(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
+        node_describer=DescribeNode(_node_state_reader(local_db)),
+        node_state_reader=_node_state_reader(local_db),
         client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -1241,7 +1249,7 @@ async def test_node_page_names_a_download_by_its_native_id(
     with sqlite3.connect(local_db) as conn:
         conn.execute(
             "INSERT INTO downloads (file_id, network, native_id, target_id, state, queued_at)"
-            " VALUES (?, 'ed2k', ?, '062A', 'downloading', '2026-10-10')",
+            " VALUES (?, 'ed2k', ?, '062A', 'downloading', '2026-10-10T00:00:00.000000+00:00')",
             (file_id(hash_), hash_),
         )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -1258,13 +1266,13 @@ async def test_node_page_shows_a_downloads_lifecycle(
         conn.execute(
             "INSERT INTO downloads (file_id, network, native_id, target_id, state, queued_at,"
             " last_progress_at, waiting_reason, failure_reason) VALUES"
-            " (?, 'ed2k', ?, '062A', 'failed', '2026-10-10', '2026-10-11', 'local_processing',"
-            " 'error')",
+            " (?, 'ed2k', ?, '062A', 'failed', '2026-10-10T00:00:00.000000+00:00',"
+            " '2026-10-11T00:00:00.000000+00:00', 'local_processing', 'error')",
             (file_id(hash_), hash_),
         )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/node")
-    assert "<td>2026-10-11</td>" in resp.text
+    assert "<td>2026-10-11T00:00:00.000000+00:00</td>" in resp.text
     assert "<td>local_processing</td>" in resp.text
     assert "<td>error</td>" in resp.text
     assert "None" not in resp.text  # an unknown value shows blank
@@ -1288,9 +1296,7 @@ def app_with_media_obs(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
 
     with sqlite3.connect(local_db) as conn:
         conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-media"))
-        conn.execute(
-            "INSERT INTO node_runtime VALUES (?, ?)", ("created_at", "2024-01-01T00:00:00")
-        )
+        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
         conn.commit()
 
     matcher_config = _matcher()
@@ -1312,6 +1318,8 @@ def app_with_media_obs(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
+        node_describer=DescribeNode(_node_state_reader(local_db)),
+        node_state_reader=_node_state_reader(local_db),
         client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -1372,6 +1380,8 @@ async def test_a_template_reading_what_its_context_lacks_raises(
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
+        node_describer=DescribeNode(_node_state_reader(local_db)),
+        node_state_reader=_node_state_reader(local_db),
         client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -1455,9 +1465,7 @@ def app_with_hostile_filename(catalog_db: Path, local_db: Path) -> tuple[Starlet
         insert_observation(conn, TEST_HASH, hostile, size_bytes=100_000_000)
     with sqlite3.connect(local_db) as conn:
         conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-hostile"))
-        conn.execute(
-            "INSERT INTO node_runtime VALUES (?, ?)", ("created_at", "2024-01-01T00:00:00")
-        )
+        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
         conn.commit()
     matcher_config = _matcher()
     targets = _targets()
@@ -1476,6 +1484,8 @@ def app_with_hostile_filename(catalog_db: Path, local_db: Path) -> tuple[Starlet
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
+        node_describer=DescribeNode(_node_state_reader(local_db)),
+        node_state_reader=_node_state_reader(local_db),
         client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -1538,9 +1548,7 @@ async def test_files_page_shows_pagination_navigation(catalog_db: Path, local_db
             insert_decision(conn, ed2k, "062A", "catalog", rule_name="catalog")
     with sqlite3.connect(local_db) as conn:
         conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-paged"))
-        conn.execute(
-            "INSERT INTO node_runtime VALUES (?, ?)", ("created_at", "2024-01-01T00:00:00")
-        )
+        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
         conn.commit()
     matcher_config = _matcher()
     targets = _targets()
@@ -1559,6 +1567,8 @@ async def test_files_page_shows_pagination_navigation(catalog_db: Path, local_db
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
+        node_describer=DescribeNode(_node_state_reader(local_db)),
+        node_state_reader=_node_state_reader(local_db),
         client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -1860,9 +1870,7 @@ def app_whole_episode(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]
 
     with sqlite3.connect(local_db) as conn:
         conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-whole"))
-        conn.execute(
-            "INSERT INTO node_runtime VALUES (?, ?)", ("created_at", "2024-01-01T00:00:00")
-        )
+        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
         conn.commit()
 
     matcher_config = _matcher()
@@ -1883,6 +1891,8 @@ def app_whole_episode(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
+        node_describer=DescribeNode(_node_state_reader(local_db)),
+        node_state_reader=_node_state_reader(local_db),
         client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -1975,6 +1985,8 @@ def app_title_coverage(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
+        node_describer=DescribeNode(_node_state_reader(local_db)),
+        node_state_reader=_node_state_reader(local_db),
         client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -2024,6 +2036,8 @@ def _dashboard_app(
         crawl_resumer=controls,
         shutdown_requester=controls,
         run_state_reader=run_state,
+        node_describer=DescribeNode(_node_state_reader(local_db)),
+        node_state_reader=_node_state_reader(local_db),
         client_status_reader=status,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -2296,6 +2310,8 @@ def sortable_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, list[str]
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
+        node_describer=DescribeNode(_node_state_reader(local_db)),
+        node_state_reader=_node_state_reader(local_db),
         client_status_reader=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -2525,6 +2541,8 @@ async def test_nav_amule_link_uses_the_configured_base(catalog_db: Path, local_d
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
         run_state_reader=_RUNNING,
+        node_describer=DescribeNode(_node_state_reader(local_db)),
+        node_state_reader=_node_state_reader(local_db),
         client_status_reader=_NO_STATUS,
         amule_url="https://mule.example.org/amule",
         wall_clock=_WALL_CLOCK,

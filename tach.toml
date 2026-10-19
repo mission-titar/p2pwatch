@@ -183,6 +183,7 @@ depends_on = [
   "p2pwatch.ports.driven.catalog_repository",
   "p2pwatch.ports.driven.download_client",
   "p2pwatch.ports.driven.node_id",
+  "p2pwatch.ports.driven.node_state_reader",
   "p2pwatch.ports.driven.repository_errors",
   "p2pwatch.ports.driven.source_repository",
 ]
@@ -194,14 +195,6 @@ depends_on = [
   "p2pwatch.domain",
   # Its own adapter, a module apart to break the cycle with the webui: lot 2 folds it back.
   { path = "p2pwatch.adapters.driven.persistence_sqlite", deprecated = true },
-  # The reader builds the webui's views: lot 2 gives the read ports their own types.
-  { path = "p2pwatch.adapters.driving.webui.views", deprecated = true },
-]
-
-[[modules]]
-path = "p2pwatch.adapters.driven.persistence_sqlite.local_read"
-layer = "adapters"
-depends_on = [
   # The reader builds the webui's views: lot 2 gives the read ports their own types.
   { path = "p2pwatch.adapters.driving.webui.views", deprecated = true },
 ]
@@ -262,21 +255,23 @@ depends_on = [
   "p2pwatch.domain",
   "p2pwatch.ports.driving.crawl_pauser",
   "p2pwatch.ports.driving.crawl_resumer",
+  "p2pwatch.ports.driving.node_describer",
   "p2pwatch.ports.driving.shutdown_requester",
   # The webui builds and calls the readers itself: lot 2 puts use cases between them.
   { path = "p2pwatch.adapters.driven.persistence_sqlite", deprecated = true },
   { path = "p2pwatch.adapters.driven.persistence_sqlite.catalog_read", deprecated = true },
-  { path = "p2pwatch.adapters.driven.persistence_sqlite.local_read", deprecated = true },
   { path = "p2pwatch.adapters.driven.persistence_sqlite.sql_console", deprecated = true },
   # Its own views, a module apart to break the readers' cycle: lot 2 folds it back.
   { path = "p2pwatch.adapters.driving.webui.views", deprecated = true },
   # The webui calls MatchingExplainer past any port: lot 2 gives it a driving port.
   { path = "p2pwatch.application", deprecated = true },
-  # The dashboard reads the client status itself: lot 2's SummarizeCrawl (block 110) reads it instead.
+  # The dashboard reads the client status itself: lot 2's SummarizeCrawl (block 115) reads it instead.
   { path = "p2pwatch.ports.driven.client_status", deprecated = true },
   # The webui reads the clocks directly: lot 2 gives it driving ports.
   { path = "p2pwatch.ports.driven.clock", deprecated = true },
-  # The dashboard reads the run state itself: lot 2's SummarizeCrawl (block 110) reads it instead.
+  # The dashboard reads the node state itself: lot 2's SummarizeCrawl (block 115) reads it instead.
+  { path = "p2pwatch.ports.driven.node_state_reader", deprecated = true },
+  # The dashboard reads the run state itself: lot 2's SummarizeCrawl (block 115) reads it instead.
   { path = "p2pwatch.ports.driven.run_state", deprecated = true },
 ]
 
@@ -303,6 +298,7 @@ depends_on = [
   "p2pwatch.ports.driven.local_state_repository",
   "p2pwatch.ports.driven.logger",
   "p2pwatch.ports.driven.node_id",
+  "p2pwatch.ports.driven.node_state_reader",
   "p2pwatch.ports.driven.repository_errors",
   "p2pwatch.ports.driven.rng",
   "p2pwatch.ports.driven.run_state",
@@ -315,6 +311,7 @@ depends_on = [
   "p2pwatch.ports.driving.config_validator",
   "p2pwatch.ports.driving.crawl_pauser",
   "p2pwatch.ports.driving.crawl_resumer",
+  "p2pwatch.ports.driving.node_describer",
   "p2pwatch.ports.driving.shutdown_requester",
 ]
 
@@ -350,7 +347,7 @@ depends_on = []
 [[modules]]
 path = "p2pwatch.ports.driven.backoff_state_repository"
 layer = "ports"
-depends_on = []
+depends_on = ["p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.ports.driven.catalog_copier"
@@ -411,6 +408,11 @@ depends_on = []
 path = "p2pwatch.ports.driven.node_id"
 layer = "ports"
 depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driven.node_state_reader"
+layer = "ports"
+depends_on = ["p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.ports.driven.repository_errors"
@@ -476,6 +478,11 @@ depends_on = []
 path = "p2pwatch.ports.driving.crawler_runner"
 layer = "ports"
 depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driving.node_describer"
+layer = "ports"
+depends_on = ["p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.ports.driving.shutdown_requester"

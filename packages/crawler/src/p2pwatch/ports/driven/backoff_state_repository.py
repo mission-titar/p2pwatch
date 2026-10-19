@@ -1,27 +1,11 @@
 """``BackoffStateRepository`` port: the search backoff, which survives a restart, in ``local.db``
 (never merged). Synchronous, as ``LocalStateRepository``: a write takes under a millisecond."""
 
-from dataclasses import dataclass
-from datetime import datetime, timedelta
 from typing import Protocol
 
-
-@dataclass(frozen=True)
-class BackoffKey:
-    """What a backoff holds back: one channel of a client, or the whole client (``None``)."""
-
-    client_name: str
-    channel: str | None
-
-
-@dataclass(frozen=True)
-class BackoffState:
-    """A persisted wait: ``attempts`` consecutive failures, the latest of which started a wait of
-    ``delay`` at ``started_at`` on the wall clock."""
-
-    attempts: int
-    started_at: datetime
-    delay: timedelta
+# Imported from here too until block 180 moves their importers to the domain.
+from p2pwatch.domain.search.backoff import BackoffKey as BackoffKey
+from p2pwatch.domain.search.backoff import BackoffState as BackoffState
 
 
 class BackoffStateRepository(Protocol):
