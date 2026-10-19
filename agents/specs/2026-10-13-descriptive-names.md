@@ -304,7 +304,10 @@ misleading name in itself.*
   types; a reader returns `<Thing>Record` or `<Thing>DetailRecord`, a template receives `<Thing>Display` or
   `<Thing>DetailDisplay`, in `records.py` and `displays.py` (*`Summary` and `Detail` alone read as ready to
   render, which is what `Display` marks*). It inherits the names this lot leaves there: `query` and `dir` in
-  `catalog_read.py`, `_PAGE_SIZE`, `_ISO`, and the audit's record and display names.
+  `catalog_read.py`, `_PAGE_SIZE`, `_ISO`, and the audit's record and display names. (Corrected 2026-10-19: two
+  observation types, `ReportedFile` and `FileObservation`, not one; no `Record` types and no `records.py`: a
+  read port returns domain types, and the concepts it lacks join the domain; the webui's read-only connection
+  already exists; lot 2's spec, `2026-10-19-hexagon-p2pwatch.md`.)
 
 ## Appendix: inventory per block, for the teammates
 

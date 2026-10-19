@@ -122,7 +122,8 @@ breaks, written in `docs/migration-4x.md`; the Dockerfile and the docs follow.
 
 - **A port is named after the one who does its action**: `CatalogMerger`, "the one who merges catalogs".
   Existing ports that break the rule (`CrawlerControl`, `StatusReadings`, `DiskSpace`, `Telemetry`, `Rng`,
-  `WakeHub`) are renamed by lot 2, which rewrites them all.
+  `WakeHub`) are renamed by lot 2, which rewrites them all. (Corrected 2026-10-19: `CrawlerControl` and
+  `StatusReadings` are deleted rather than renamed; lot 2's spec, `2026-10-19-hexagon-p2pwatch.md`.)
 - **A use case is named after its operation**: `ValidateConfig`, `MergeCatalogs`.
 - **An adapter is named by its technology and what it adapts**: `PosixProcess`, `UvicornServerThread`,
   `YamlConfigChecker`, `PathlibCatalogFinder`, `SqliteCatalogCopier`.
