@@ -365,7 +365,8 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
 | 120 | `refactor/catalog-file-counts` | `CatalogFileReader` with its two counts; `/files` reads them under the existing deprecated edge (Corrected 2026-10-19: block 120 split in 120, 123 and 125, measured at 877 lines; it moves behaviour, so no exemption) | 187, 6 |
 | 123 | `refactor/catalog-entry` | `CatalogEntry` in the domain; `read_catalog_entries`; `FileRow`, `FileDecision`, `_ISO` deleted | 498, 10 |
 | 125 | `feat/list-files` | `ListFiles` behind `FileLister`, the files and target routes on it (Corrected 2026-10-19: `FileListing` holds `CatalogEntry`s, no `ListedFile`, which would wrap one with nothing added) | 280, 9 |
-| 130 | `test/list-files-routes-on-fakes` | the files and target route tests on a fake `FileLister` | 450, 6 |
+| 130 | `test/list-files-routes-on-fakes` | `FakeFileLister`; the files and target routes' decoding tests on it (Corrected 2026-10-19: split from 135, measured at 605 lines; it moves assertions, so no exemption) | 354, 4 |
+| 135 | `test/files-rendering-on-fakes` | the files table's rendering tests on the fake; the fixtures no test needs deleted | 255, 1 |
 | 140 | `feat/describe-file` | `SourceReader` with `read_sharing_periods` (Corrected 2026-10-19: was `read_source_periods`, the reader table's name wins); `interval.py` to `domain/`; `DescribeFile`; its route and route tests | 450, 14 |
 | 150 | `feat/list-sources` | `SourceReader`'s list reads; `ListSources`; its route and route tests | 450, 12 |
 | 160 | `feat/describe-source` | `DescribeSource`, `DescribeSourceName`; their routes and route tests; the dead `{% else %}` | 450, 12 |
