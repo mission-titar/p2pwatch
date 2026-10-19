@@ -1,0 +1,9 @@
+id: ports-imports
+valid:
+  - from abc import ABC, abstractmethod
+  - from pathlib import PurePath
+  - from p2pwatch.domain.file_key import FileKey
+invalid:
+  - import logging
+  - from asyncio import Event
+  - import subprocess

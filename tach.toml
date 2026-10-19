@@ -1,6 +1,15 @@
 # The rings: agents/specs/2026-10-18-hexagonal-architecture.md (D1, D6, D15).
 # A deprecated edge is a temporary exception; the comment above names why and the lot removing it.
-source_roots = ["packages/crawler/src", "packages/matching/src"]
+# tach check never sees an import across distributions: check-external holds them to each pyproject.
+source_roots = [
+  "packages/amule/src",
+  "packages/amule_bump/src",
+  "packages/coverage_checks/src",
+  "packages/crawler/src",
+  "packages/matching/src",
+  "packages/template_checks/src",
+  "packages/vex_checks/src",
+]
 exclude = ["**/__pycache__"]
 exact = true
 forbid_circular_dependencies = true
@@ -10,7 +19,88 @@ root_module = "forbid"
 layers = ["composition", "adapters", "application", "ports", "domain"]
 
 [[modules]]
+path = "amule_bump.__main__"
+layer = "composition"
+depends_on = [
+  "amule_bump.adapters.driven.github_repo_reader",
+  "amule_bump.adapters.driving.bump",
+  "amule_bump.adapters.driving.cli",
+  "amule_bump.domain",
+]
+
+[[modules]]
+path = "amule_bump.adapters.driven.github_repo_reader"
+layer = "adapters"
+depends_on = ["amule_bump.ports.driven.repo_reader"]
+
+[[modules]]
+path = "amule_bump.adapters.driving.bump"
+layer = "adapters"
+depends_on = [
+  "amule_bump.domain",
+  # The bump calls the use cases past any driving port: lot 3 gives it one.
+  { path = "amule_bump.application", deprecated = true },
+  # The bump hands the use cases their driven port: lot 3's driving port takes it over.
+  { path = "amule_bump.ports.driven.repo_reader", deprecated = true },
+]
+
+[[modules]]
+path = "amule_bump.adapters.driving.cli"
+layer = "adapters"
+depends_on = []
+
+[[modules]]
+path = "amule_bump.application"
+layer = "application"
+depends_on = [
+  "amule_bump.domain",
+  "amule_bump.ports.driven.repo_reader",
+]
+
+[[modules]]
+path = "amule_bump.domain"
+layer = "domain"
+depends_on = []
+
+[[modules]]
+path = "amule_bump.ports.driven.repo_reader"
+layer = "ports"
+depends_on = []
+
+[[modules]]
 path = "catalog_matching.domain"
+layer = "domain"
+depends_on = []
+
+[[modules]]
+path = "coverage_checks.__main__"
+layer = "composition"
+depends_on = [
+  "coverage_checks.adapters.driving.cli",
+  "coverage_checks.adapters.driving.unit_coverage",
+]
+
+[[modules]]
+path = "coverage_checks.adapters.driven.own_tests"
+layer = "adapters"
+depends_on = []
+
+[[modules]]
+path = "coverage_checks.adapters.driving.cli"
+layer = "adapters"
+depends_on = []
+
+[[modules]]
+path = "coverage_checks.adapters.driving.unit_coverage"
+layer = "adapters"
+depends_on = [
+  "coverage_checks.domain",
+  # The check finds the own tests through their adapter: lot 3 gives it a driven port.
+  { path = "coverage_checks.adapters.driven.own_tests", deprecated = true },
+]
+
+[[modules]]
+path = "coverage_checks.domain"
 layer = "domain"
 depends_on = []
 
@@ -333,4 +423,177 @@ depends_on = []
 [[modules]]
 path = "p2pwatch.ports.driving.crawler_runner"
 layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch_amule.__main__"
+layer = "composition"
+depends_on = [
+  "p2pwatch_amule.adapters.driving.boot",
+  "p2pwatch_amule.adapters.driving.cli",
+  "p2pwatch_amule.adapters.driving.port_sync",
+]
+
+[[modules]]
+path = "p2pwatch_amule.adapters.driven.gluetun"
+layer = "adapters"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch_amule.adapters.driving.boot"
+layer = "adapters"
+depends_on = [
+  "p2pwatch_amule.domain",
+  # Both entry points read port-sync's settings adapter: lot 3 puts a port between them.
+  { path = "p2pwatch_amule.adapters.driving.settings", deprecated = true },
+]
+
+[[modules]]
+path = "p2pwatch_amule.adapters.driving.cli"
+layer = "adapters"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch_amule.adapters.driving.port_sync"
+layer = "adapters"
+depends_on = [
+  "p2pwatch_amule.domain",
+  # Port-sync asks gluetun through its adapter, past any port: lot 3 gives it a driven port.
+  { path = "p2pwatch_amule.adapters.driven.gluetun", deprecated = true },
+  # Both entry points read port-sync's settings adapter: lot 3 puts a port between them.
+  { path = "p2pwatch_amule.adapters.driving.settings", deprecated = true },
+]
+
+[[modules]]
+path = "p2pwatch_amule.adapters.driving.settings"
+layer = "adapters"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch_amule.domain"
+layer = "domain"
+depends_on = []
+
+[[modules]]
+path = "template_checks.__main__"
+layer = "composition"
+depends_on = [
+  "template_checks.adapters.driving.check_templates",
+  "template_checks.adapters.driving.cli",
+  "template_checks.adapters.driving.read_names",
+]
+
+[[modules]]
+path = "template_checks.adapters.driving.check_templates"
+layer = "adapters"
+depends_on = []
+
+[[modules]]
+path = "template_checks.adapters.driving.cli"
+layer = "adapters"
+depends_on = []
+
+[[modules]]
+path = "template_checks.adapters.driving.read_names"
+layer = "adapters"
+depends_on = []
+
+[[modules]]
+path = "vex_checks.__main__"
+layer = "composition"
+depends_on = [
+  "vex_checks.adapters.driven.grype",
+  "vex_checks.adapters.driving.check_claim_coverage",
+  "vex_checks.adapters.driving.check_image_claims",
+  "vex_checks.adapters.driving.check_source_claims",
+  "vex_checks.adapters.driving.check_stale_claims",
+  "vex_checks.adapters.driving.cli",
+]
+
+[[modules]]
+path = "vex_checks.adapters.driven.grype"
+layer = "adapters"
+depends_on = []
+
+[[modules]]
+path = "vex_checks.adapters.driven.repo"
+layer = "adapters"
+depends_on = []
+
+[[modules]]
+path = "vex_checks.adapters.driven.sarif"
+layer = "adapters"
+depends_on = ["vex_checks.domain"]
+
+[[modules]]
+path = "vex_checks.adapters.driven.sbom"
+layer = "adapters"
+depends_on = ["vex_checks.domain"]
+
+[[modules]]
+path = "vex_checks.adapters.driven.source_scan"
+layer = "adapters"
+depends_on = [
+  "vex_checks.domain",
+  # The scanner reads the repo's paths through another adapter: lot 3 gives them a driven port.
+  { path = "vex_checks.adapters.driven.repo", deprecated = true },
+]
+
+[[modules]]
+path = "vex_checks.adapters.driven.vex_io"
+layer = "adapters"
+depends_on = []
+
+[[modules]]
+path = "vex_checks.adapters.driving.check_claim_coverage"
+layer = "adapters"
+depends_on = [
+  "vex_checks.domain",
+  # The check calls its I/O adapters directly: lot 3 gives them driven ports.
+  { path = "vex_checks.adapters.driven.repo", deprecated = true },
+  { path = "vex_checks.adapters.driven.vex_io", deprecated = true },
+]
+
+[[modules]]
+path = "vex_checks.adapters.driving.check_image_claims"
+layer = "adapters"
+depends_on = [
+  "vex_checks.domain",
+  # The check calls its I/O adapters directly: lot 3 gives them driven ports.
+  { path = "vex_checks.adapters.driven.repo", deprecated = true },
+  { path = "vex_checks.adapters.driven.sarif", deprecated = true },
+  { path = "vex_checks.adapters.driven.sbom", deprecated = true },
+  { path = "vex_checks.adapters.driven.vex_io", deprecated = true },
+]
+
+[[modules]]
+path = "vex_checks.adapters.driving.check_source_claims"
+layer = "adapters"
+depends_on = [
+  "vex_checks.domain",
+  # The check calls its I/O adapters directly: lot 3 gives them driven ports.
+  { path = "vex_checks.adapters.driven.repo", deprecated = true },
+  { path = "vex_checks.adapters.driven.source_scan", deprecated = true },
+]
+
+[[modules]]
+path = "vex_checks.adapters.driving.check_stale_claims"
+layer = "adapters"
+depends_on = [
+  "vex_checks.domain",
+  # The check calls its I/O adapters directly: lot 3 gives them driven ports.
+  { path = "vex_checks.adapters.driven.grype", deprecated = true },
+  { path = "vex_checks.adapters.driven.repo", deprecated = true },
+  { path = "vex_checks.adapters.driven.sarif", deprecated = true },
+  { path = "vex_checks.adapters.driven.vex_io", deprecated = true },
+]
+
+[[modules]]
+path = "vex_checks.adapters.driving.cli"
+layer = "adapters"
+depends_on = []
+
+[[modules]]
+path = "vex_checks.domain"
+layer = "domain"
 depends_on = []

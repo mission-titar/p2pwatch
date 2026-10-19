@@ -1,0 +1,9 @@
+id: imported-module
+language: python
+# The module an import names: `import a.b`, `import a.b as c` and `from a.b import c`, never a relative one.
+rule:
+  kind: dotted_name
+  any:
+    - inside: { kind: import_statement }
+    - inside: { kind: aliased_import, inside: { kind: import_statement } }
+    - inside: { kind: import_from_statement, field: module_name }

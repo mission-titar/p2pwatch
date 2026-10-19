@@ -220,6 +220,9 @@ the poe tasks follow.
 
 - **tach** (0.35.3), run in the gate as `architecture-check`, checks that imports point inward, that adapters do
   not import each other, that the six hexagons stay apart, and that no module escapes its declaration.
+  (Corrected 2026-10-19: `tach check` never sees an import across distributions, so `visibility` would check
+  nothing; `tach check-external`, run after it, keeps the hexagons apart against each package's declared
+  dependencies.)
 - **ast-grep** checks that the core imports only from a short list per ring (the pure standard library it uses
   today, a few `asyncio` and `uuid` names, `PurePath`). `logging` stays allowed in `application/` until lot 2.
 - The ban on `Protocol` waits for lots 2 and 3, which remove the last ones.
@@ -388,7 +391,9 @@ Details the body leaves out, each settled during the Discuss or the review.
 - **ast-grep's lists**, per core ring, from the imports the ring holds after the moves: `asyncio` by name
   (`Event`, `TaskGroup`, `wait`, `FIRST_COMPLETED`, `ensure_future`, `CancelledError`, `sleep`), `uuid` by name
   (`uuid5`, `NAMESPACE_URL`), `pathlib` by `PurePath`, plus `configparser` and `io` for `p2pwatch_amule`,
-  `difflib` and `textwrap` for `amule_bump`, `ast` for `coverage_checks`.
+  `difflib` and `textwrap` for `amule_bump`, `ast` for `coverage_checks`. (Corrected 2026-10-19: one list per ring,
+  these included, since a rule's files cannot be scoped by hexagon without copying its list; `io` by name,
+  `StringIO`, as `asyncio` and `uuid` are.)
 - **The strings to rewrite by hand**, beyond the logger names: the `importlib.resources` package strings (6
   files), the monkeypatch dotted targets (5), the template paths anchored on `p2pwatch.webui`, the 17
   `tests_without_unit` keys, `vex_checks/repo.py`'s `parents[4]`, the comment of `deploy/matcher.yml:59`.

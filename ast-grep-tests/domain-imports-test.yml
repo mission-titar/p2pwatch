@@ -1,0 +1,16 @@
+id: domain-imports
+valid:
+  - import dataclasses
+  - import dataclasses, re
+  - from collections.abc import Iterable
+  - from p2pwatch.domain.file_key import FileKey
+  - from .file_key import FileKey
+  - import urllib.parse as parse
+invalid:
+  - import dataclasses, sqlite3
+  - import sqlite3
+  - import os.path
+  - from pathlib import PurePath
+  - import json as decoder
+  - from collections import abc
+  - from p2pwatch_testing.virtual_time import VirtualTime

@@ -1,0 +1,27 @@
+id: core-import-names
+language: python
+severity: error
+message: The core reaches asyncio, uuid and io by the names on this list only, and pathlib by `PurePath`, since each also holds I/O or entropy.
+note: "Write `import asyncio` then `asyncio.Event`, so that every name it reaches is checked."
+files: ["packages/*/src/*/domain/**/*.py", "packages/*/src/*/ports/**/*.py", "packages/*/src/*/application/**/*.py"]
+ignores: ["packages/crawler_testing/**"]
+rule:
+  any:
+    - pattern: asyncio.$ASYNCIO
+    - pattern: uuid.$UUID
+    - pattern: io.$IO
+    - kind: import_from_statement
+      has: { field: module_name, regex: ^(asyncio|uuid|io)$ }
+    - kind: dotted_name
+      matches: imported-module
+      regex: ^pathlib$
+      inside: { kind: import_statement, stopBy: end }
+    - kind: dotted_name
+      not: { regex: ^(pathlib|PurePath)$ }
+      inside: { kind: import_from_statement, has: { field: module_name, regex: ^pathlib$ } }
+    - kind: aliased_import
+      inside: { kind: import_from_statement, has: { field: module_name, regex: ^pathlib$ } }
+constraints:
+  ASYNCIO: { not: { regex: ^(CancelledError|Event|FIRST_COMPLETED|TaskGroup|ensure_future|sleep|wait)$ } }
+  UUID: { not: { regex: ^(NAMESPACE_URL|uuid5)$ } }
+  IO: { not: { regex: ^StringIO$ } }
