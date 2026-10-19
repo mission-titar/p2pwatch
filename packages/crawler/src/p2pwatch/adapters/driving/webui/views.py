@@ -2,7 +2,6 @@
 these fields. No template-side logic."""
 
 from dataclasses import dataclass
-from datetime import datetime
 
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.observation import FileObservation
@@ -200,28 +199,17 @@ class NameDetail:
 
 
 @dataclass(frozen=True)
-class DownloadRow:
-    """An active or completed download (downloads table)."""
+class TrackedDownloadDisplay:
+    """One line of /node's downloads, its instants as local.db stores them."""
 
     native_id: str
     target_id: str
     state: str
     queued_at: str
     completed_at: str | None
-    size_bytes: int
     last_progress_at: str | None
     waiting_reason: str | None
     failure_reason: str | None
-
-
-@dataclass(frozen=True)
-class BackoffRow:
-    """A client, or one of its channels, held back by the search backoff (backoff_states)."""
-
-    client_name: str
-    channel: str | None  # None for the whole client
-    attempts: int
-    retry_at: datetime  # its started_at plus its delay
 
 
 @dataclass(frozen=True)
@@ -235,13 +223,12 @@ class BackoffEntry:
 
 
 @dataclass(frozen=True)
-class NodeState:
-    """Full node state: downloads, backoff, identity."""
+class NodeStateDisplay:
+    """The node's identity and downloads, as the dashboard and /node show them."""
 
-    downloads: tuple[DownloadRow, ...]
-    backoff_rows: tuple[BackoffRow, ...]
-    node_id: str | None  # None if absent from node_runtime
-    created_at: str | None  # None if absent from node_runtime
+    node_id: str | None
+    created_at: str | None
+    downloads: tuple[TrackedDownloadDisplay, ...]
 
 
 # ---------------------------------------------------------------------------

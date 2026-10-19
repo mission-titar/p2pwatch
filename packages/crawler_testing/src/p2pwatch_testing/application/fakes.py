@@ -7,7 +7,7 @@
 ``FakeRng``: FIXED jitter (determinism). ``FakeLogger``: keeps each line it is given.
 ``FakeNodeIdStore`` and ``FakeNodeIdGenerator``: the node id's stored and new values.
 ``FakeRunState``: keeps each change; ``FakeCrawlControls``: each control the webui calls.
-``FakeClientStatusReader``: reads the readings it is given.
+``FakeClientStatusReader``: reads the readings it is given; ``FakeNodeStateReader``, the state.
 ``RecordingWakeHub``: captures woken subjects. The repos are the REAL SQLite repos
 (spec §8: "real repos on tmp_path"): no fakes here.
 """
@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
+from p2pwatch.domain.node_state import NodeState
 from p2pwatch.domain.observability.events import Event
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.ports.driven.client_errors import ClientUnreachableError, SearchFailedError
@@ -25,6 +26,7 @@ from p2pwatch.ports.driven.client_status import ClientStatusReader, PublishedRea
 from p2pwatch.ports.driven.clock import MonotonicInstant
 from p2pwatch.ports.driven.logger import Logger
 from p2pwatch.ports.driven.node_id import NodeIdGenerator, NodeIdReader, NodeIdWriter
+from p2pwatch.ports.driven.node_state_reader import NodeStateReader
 from p2pwatch.ports.driven.run_state import RunStateReader, RunStateWriter
 from p2pwatch.ports.driven.search_client import SearchAnswer
 from p2pwatch.ports.driving.crawl_pauser import CrawlPauser
@@ -208,6 +210,16 @@ class FakeClientStatusReader(ClientStatusReader):
 
     def read_readings(self) -> Mapping[str, PublishedReading | None]:
         return self._published_readings
+
+
+class FakeNodeStateReader(NodeStateReader):
+    """Reads the state it is given."""
+
+    def __init__(self, node_state: NodeState) -> None:
+        self._node_state = node_state
+
+    def read_node_state(self) -> NodeState:
+        return self._node_state
 
 
 class RecordingTelemetry:

@@ -35,7 +35,6 @@ from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
     SORT_DIRECTIONS,
     CatalogReader,
 )
-from p2pwatch.adapters.driven.persistence_sqlite.local_read import LocalReader
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driven.persistence_sqlite.sql_console import (
     ROW_CAP,
@@ -76,6 +75,7 @@ from p2pwatch.adapters.driving.webui.views import (
     IntervalLink,
     IntervalSelector,
     NavItem,
+    NodeStateDisplay,
     PageNav,
     PeriodWindow,
     SearchBar,
@@ -91,18 +91,22 @@ from p2pwatch.adapters.driving.webui.views import (
     TierFacet,
     TimelineRow,
     TokenCoverage,
+    TrackedDownloadDisplay,
 )
 from p2pwatch.application.matching_read import MatchingExplainer
 from p2pwatch.domain.coverage import coverage_of
 from p2pwatch.domain.file_key import Network
+from p2pwatch.domain.node_state import NodeState
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.source import SourceKey
 from p2pwatch.domain.status_reading import is_reading_fresh
 from p2pwatch.ports.driven.client_status import ClientStatusReader
 from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
+from p2pwatch.ports.driven.node_state_reader import NodeStateReader
 from p2pwatch.ports.driven.run_state import RunStateReader
 from p2pwatch.ports.driving.crawl_pauser import CrawlPauser
 from p2pwatch.ports.driving.crawl_resumer import CrawlResumer
+from p2pwatch.ports.driving.node_describer import NodeDescriber
 from p2pwatch.ports.driving.shutdown_requester import ShutdownRequester
 
 # A detail page's path segment: a file_id or a source_id as 32 lowercase hex (stage 1 and 4 D13).
@@ -566,6 +570,46 @@ def _client_lines(
     return tuple(lines)
 
 
+def _stored_instant(moment: datetime | None) -> str | None:
+    """An instant as local.db stores it, ``None`` kept."""
+    return None if moment is None else moment.isoformat(timespec="microseconds")
+
+
+def _node_state_display(node_state: NodeState) -> NodeStateDisplay:
+    return NodeStateDisplay(
+        node_id=node_state.node_id,
+        created_at=_stored_instant(node_state.created_at),
+        downloads=tuple(
+            TrackedDownloadDisplay(
+                native_id=download.file.native_id,
+                target_id=download.target_id,
+                state=download.state.value,
+                queued_at=download.queued_at.isoformat(timespec="microseconds"),
+                completed_at=_stored_instant(download.completed_at),
+                last_progress_at=_stored_instant(download.last_progress_at),
+                waiting_reason=download.waiting_reason,
+                failure_reason=download.failure_reason,
+            )
+            for download in node_state.downloads
+        ),
+    )
+
+
+def _backoff_entries(node_state: NodeState) -> tuple[BackoffEntry, ...]:
+    """Each backoff and its planned retry: its start plus its delay."""
+    return tuple(
+        BackoffEntry(
+            client_name=backoff_key.client_name,
+            channel="whole client" if backoff_key.channel is None else backoff_key.channel,
+            attempts=backoff_state.attempts,
+            retry_at_display=(backoff_state.started_at + backoff_state.delay).isoformat(
+                timespec="microseconds"
+            ),
+        )
+        for backoff_key, backoff_state in node_state.backoff_state_by_key.items()
+    )
+
+
 # SQL console (spec §11). The two selectable databases, in display order: value (allowlist key)
 # + human label. Neither holds a peer's address (a source is a pseudonymous id at most), so
 # read-only exposure of either is fine.
@@ -626,6 +670,8 @@ def build_app(
     crawl_resumer: CrawlResumer,
     shutdown_requester: ShutdownRequester,
     run_state_reader: RunStateReader,
+    node_describer: NodeDescriber,
+    node_state_reader: NodeStateReader,
     client_status_reader: ClientStatusReader,
     amule_url: str,
     wall_clock: WallClock,
@@ -640,7 +686,8 @@ def build_app(
     keeps the explainer's config from drifting from the persisted decisions (spec §8).
 
     Each control POST calls its use case, which returns at once; the webui itself holds no write
-    connection (spec §4/§10). ``client_status_reader`` reads the status loops' last readings.
+    connection (spec §4/§10). ``client_status_reader`` reads the status loops' last readings;
+    ``node_describer`` serves /node, and the dashboard reads ``node_state_reader`` itself.
 
     ``amule_url`` is the base the nav's aMule entry points at (design §9); the caller reads it
     from ``webui.amule_url``. ``source_period_gap`` is the longest gap within a source period, from
@@ -662,7 +709,6 @@ def build_app(
     # obtain a connection via ``provider.connection()`` and NEVER close it (the point is
     # reuse).
     catalog_reader = ReaderProvider(catalog_db_path)
-    local_reader = ReaderProvider(local_db_path)
 
     def _now_and_interval(request: Request) -> tuple[datetime, Interval]:
         """The second the request is read at, and the interval it asks for."""
@@ -683,8 +729,7 @@ def build_app(
     async def handle_dashboard(request: Request) -> Response:
         catalog = CatalogReader(catalog_reader.connection())
         coverage_data = catalog.target_coverage()
-        local = LocalReader(local_reader.connection())
-        node_state = local.node_state()
+        node_state = node_state_reader.read_node_state()
 
         coverage_rows = []
         for seg in target_segments:
@@ -707,7 +752,7 @@ def build_app(
             "dashboard.html",
             {
                 "coverage_rows": coverage_rows,
-                "node_state": node_state,
+                "node_state": _node_state_display(node_state),
                 "clients": _client_lines(client_status_reader, monotonic_clock),
                 "crawl_state": "paused" if run_state_reader.is_paused() else "running",
                 # 0-or-1-element tuple the template iterates with {% for %} (no {% if %}, W-D8).
@@ -1000,23 +1045,14 @@ def build_app(
         )
 
     async def handle_node(request: Request) -> Response:
-        local = LocalReader(local_reader.connection())
-        node_state = local.node_state()
-
-        backoff_entries = tuple(
-            BackoffEntry(
-                client_name=row.client_name,
-                channel=row.channel if row.channel is not None else "whole client",
-                attempts=row.attempts,
-                retry_at_display=row.retry_at.isoformat(timespec="microseconds"),
-            )
-            for row in node_state.backoff_rows
-        )
-
+        node_state = node_describer.describe_node().node_state
         return templates.TemplateResponse(
             request,
             "node.html",
-            {"node_state": node_state, "backoff_entries": backoff_entries},
+            {
+                "node_state": _node_state_display(node_state),
+                "backoff_entries": _backoff_entries(node_state),
+            },
         )
 
     # ------------------------------------------------------------------

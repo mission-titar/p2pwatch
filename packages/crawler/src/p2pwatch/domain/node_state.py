@@ -1,0 +1,33 @@
+"""What a node holds of its own: its identity, its tracked downloads and its search backoffs."""
+
+from collections.abc import Mapping
+from dataclasses import dataclass
+from datetime import datetime
+
+from p2pwatch.domain.download.states import DownloadState
+from p2pwatch.domain.file_key import FileKey
+from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
+
+
+@dataclass(frozen=True)
+class TrackedDownload:
+    """A download with a row in ``downloads``, whatever its state."""
+
+    file: FileKey
+    target_id: str
+    state: DownloadState
+    queued_at: datetime
+    completed_at: datetime | None
+    last_progress_at: datetime | None  # None until its bytes grow
+    waiting_reason: str | None
+    failure_reason: str | None
+
+
+@dataclass(frozen=True)
+class NodeState:
+    """``node_id`` and ``created_at`` are ``None`` until the node first records its id."""
+
+    node_id: str | None
+    created_at: datetime | None
+    downloads: tuple[TrackedDownload, ...]
+    backoff_state_by_key: Mapping[BackoffKey, BackoffState]

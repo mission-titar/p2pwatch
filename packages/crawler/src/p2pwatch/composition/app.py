@@ -50,9 +50,11 @@ from p2pwatch.adapters.driven.persistence_sqlite.backoff_state_repository import
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
 from p2pwatch.adapters.driven.persistence_sqlite.download_repository import SqliteDownloadRepository
+from p2pwatch.adapters.driven.persistence_sqlite.local_read import SqliteNodeStateReader
 from p2pwatch.adapters.driven.persistence_sqlite.local_state_repository import (
     SqliteLocalStateRepository,
 )
+from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driven.persistence_sqlite.source_repository import SqliteSourceRepository
 from p2pwatch.adapters.driven.rng_random import SeededRng
 from p2pwatch.adapters.driven.stdlib_logger import StdlibLogger
@@ -62,6 +64,7 @@ from p2pwatch.adapters.driven.wall_clock_system import SystemWallClock
 from p2pwatch.adapters.driving.process.posix_process import PosixProcess
 from p2pwatch.adapters.driving.webui.app import build_app as build_webui_app
 from p2pwatch.adapters.driving.webui.uvicorn_server_thread import UvicornServerThread
+from p2pwatch.application.describe_node import DescribeNode
 from p2pwatch.application.pause_crawl import PauseCrawl
 from p2pwatch.application.reevaluate_catalog import reevaluate_catalog
 from p2pwatch.application.request_shutdown import RequestShutdown
@@ -137,11 +140,12 @@ class CrawlerApp(CrawlerRunner):
     ) -> None:
         """Start the read-only webui on its OWN thread + loop (spec §5), sharing only IMMUTABLE
         state with the crawler (the parsed matcher/targets, the DB paths). It reads through its
-        OWN ``ReaderProvider`` (inside ``build_webui_app``); nothing here touches the crawler's
+        OWN ``ReaderProvider``s, one connection per thread; nothing here touches the crawler's
         event loop nor its writer connections. Its stop is registered on ``stack`` so it runs
         during the normal LIFO unwind at shutdown, AFTER the loops are stopped."""
         crawler_config = config.crawler_config
         webui_pkg_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent
+        node_state_reader = SqliteNodeStateReader(ReaderProvider(crawler_config.local_db_path))
         app = build_webui_app(
             catalog_db_path=Path(crawler_config.catalog_db_path),
             local_db_path=Path(crawler_config.local_db_path),
@@ -153,6 +157,8 @@ class CrawlerApp(CrawlerRunner):
             crawl_resumer=ResumeCrawl(run_state),
             shutdown_requester=shutdown_requester,
             run_state_reader=run_state,
+            node_describer=DescribeNode(node_state_reader),
+            node_state_reader=node_state_reader,
             client_status_reader=status_board,
             amule_url=crawler_config.webui.amule_url,
             wall_clock=wall_clock,

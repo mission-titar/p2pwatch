@@ -1,13 +1,17 @@
-"""Read-only tests of local.db via LocalReader (Task 8 — W-D8 §node_state)."""
+"""Read-only tests of local.db via SqliteNodeStateReader (Task 8, W-D8 §node_state)."""
 
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.driven.persistence_sqlite.local_read import LocalReader
-from p2pwatch.adapters.driving.webui.views import BackoffRow, DownloadRow, NodeState
+from p2pwatch.adapters.driven.persistence_sqlite.local_read import SqliteNodeStateReader
+from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
+from p2pwatch.domain.download.states import DownloadState
+from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.node_state import NodeState, TrackedDownload
+from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 
 pytestmark = pytest.mark.usefixtures("close_test_connections")
 
@@ -18,11 +22,9 @@ _STARTED_AT_MICROS = 1_781_258_400_000_000  # 2026-06-12T10:00:00Z
 # ---------------------------------------------------------------------------
 
 
-def _open_local(path: Path) -> sqlite3.Connection:
-    """Open local.db in read-only mode (row_factory enabled)."""
-    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-    conn.row_factory = sqlite3.Row
-    return conn
+def _read_node_state(path: Path) -> NodeState:
+    """Read local.db through the webui's read-only connection."""
+    return SqliteNodeStateReader(ReaderProvider(path)).read_node_state()
 
 
 # ---------------------------------------------------------------------------
@@ -37,8 +39,15 @@ def test_node_state_populated(local_db: Path) -> None:
         w.execute(
             "INSERT INTO downloads (file_id, network, native_id, target_id, state, queued_at,"
             " size_bytes, last_progress_at, waiting_reason, failure_reason)"
-            " VALUES (x'00', 'ed2k', ?, '062A', 'active', '2026-06-22T10:00:00Z', ?, ?, ?, ?)",
-            ("aabbccdd" * 4, 1024, "2026-06-23T10:00:00Z", "no_source", "error"),
+            " VALUES (x'00', 'ed2k', ?, '062A', 'failed', ?, ?, ?, ?, ?)",
+            (
+                "aabbccdd" * 4,
+                "2026-06-22T10:00:00.000000+00:00",
+                1024,
+                "2026-06-23T10:00:00.000000+00:00",
+                "no_source",
+                "error",
+            ),
         )
         w.executemany(
             "INSERT INTO backoff_states VALUES (?, ?, ?, ?, ?)",
@@ -50,52 +59,54 @@ def test_node_state_populated(local_db: Path) -> None:
         )
         w.execute(
             "INSERT INTO node_runtime VALUES (?,?)",
-            ("created_at", "2026-06-22T00:00:00Z"),
+            ("created_at", "2026-06-22T00:00:00.000000+00:00"),
         )
         w.commit()
 
-    conn = _open_local(local_db)
-    state = LocalReader(conn).node_state()
-    conn.close()
+    state = _read_node_state(local_db)
 
     # downloads
-    assert len(state.downloads) == 1
-    dl = state.downloads[0]
-    assert isinstance(dl, DownloadRow)
-    assert dl.native_id == "aabbccdd" * 4
-    assert dl.target_id == "062A"
-    assert dl.state == "active"
-    assert dl.queued_at == "2026-06-22T10:00:00Z"
-    assert dl.completed_at is None
-    assert dl.size_bytes == 1024
-    assert dl.last_progress_at == "2026-06-23T10:00:00Z"
-    assert dl.waiting_reason == "no_source"
-    assert dl.failure_reason == "error"
-
-    # backoff, the whole client first, each retry at its start plus its delay
-    assert state.backoff_rows == (
-        BackoffRow("amuled", None, 3, datetime(1970, 1, 1, 0, 2, tzinfo=UTC)),
-        BackoffRow("amuled", "kad", 1, datetime(2026, 6, 12, 10, 0, 2, 500000, tzinfo=UTC)),
+    assert state.downloads == (
+        TrackedDownload(
+            file=FileKey(Network.ED2K, "aabbccdd" * 4),
+            target_id="062A",
+            state=DownloadState.FAILED,
+            queued_at=datetime(2026, 6, 22, 10, tzinfo=UTC),
+            completed_at=None,
+            last_progress_at=datetime(2026, 6, 23, 10, tzinfo=UTC),
+            waiting_reason="no_source",
+            failure_reason="error",
+        ),
     )
+
+    # backoff, the whole client first, each with its start and its delay
+    assert list(state.backoff_state_by_key.items()) == [
+        (
+            BackoffKey("amuled", None),
+            BackoffState(3, datetime(1970, 1, 1, tzinfo=UTC), timedelta(seconds=120)),
+        ),
+        (
+            BackoffKey("amuled", "kad"),
+            BackoffState(1, datetime(2026, 6, 12, 10, tzinfo=UTC), timedelta(seconds=2.5)),
+        ),
+    ]
 
     # node_runtime
     assert state.node_id == "test-node-42"
-    assert state.created_at == "2026-06-22T00:00:00Z"
+    assert state.created_at == datetime(2026, 6, 22, tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------
-# Empty DB (observer mode) — covers the None branches
+# Empty DB (observer mode): covers the None branches
 # ---------------------------------------------------------------------------
 
 
 def test_node_state_empty_db(local_db: Path) -> None:
-    """Empty DB (observer mode): everything empty / None — no error."""
-    conn = _open_local(local_db)
-    state = LocalReader(conn).node_state()
-    conn.close()
+    """Empty DB (observer mode): everything empty or None, no error."""
+    state = _read_node_state(local_db)
 
     assert isinstance(state, NodeState)
     assert state.downloads == ()
-    assert state.backoff_rows == ()
+    assert state.backoff_state_by_key == {}
     assert state.node_id is None
     assert state.created_at is None
