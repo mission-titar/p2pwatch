@@ -218,6 +218,31 @@ async def test_a_call_after_close_raises_instead_of_logging_in_again() -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_close_during_a_login_revokes_the_session_it_opened() -> None:
+    api = FakeAmuleApi()
+    login_reached, login_released = asyncio.Event(), asyncio.Event()
+
+    async def round_trip(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v1/auth/login":
+            login_reached.set()
+            await login_released.wait()
+        return api.handle(request)
+
+    transport = httpx.MockTransport(round_trip)
+    client = AmuleApiClient(
+        "amuled.test", 4711, PASSWORD, transport=transport, monotonic_clock=api.monotonic_clock
+    )
+    call = asyncio.create_task(client.status())
+    await login_reached.wait()
+    closing = asyncio.create_task(client.close())
+    await asyncio.sleep(0)  # close() runs while the login is held
+    login_released.set()
+    outcomes = await asyncio.gather(call, closing, return_exceptions=True)
+
+    assert (api.logins, api.logouts) == (1, 1), outcomes
+
+
+@pytest.mark.asyncio
 async def test_open_logs_in() -> None:
     api = FakeAmuleApi()
     client = _client(api)
