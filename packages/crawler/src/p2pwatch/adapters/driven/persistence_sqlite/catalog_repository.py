@@ -1,7 +1,7 @@
-"""``SqliteCatalogRepository``: ``ReportedFile``/``MatchDecision`` → durable rows.
+"""``SqliteCatalogRepository``: ``FileObservation``/``MatchDecision`` → durable rows.
 
-The adapter stores what the domain ignores (data-model spec §3): ``observed_at``/``decided_at``,
-given by the use-case at each write, and ``node_id``, given at the constructor.
+The adapter stores what the domain ignores (data-model spec §3): ``decided_at``, given by the
+use-case at each write, and ``node_id``, given at the constructor.
 ``raw_meta`` is serialized as a JSON LIST of pairs (``[["0x0308", "0"], …]``), wire order and
 duplicates preserved, ``ensure_ascii=False``, no sorting (spec §3). ``record_observation`` makes
 ONE transaction (spec §4): ``INSERT OR IGNORE`` into ``files`` (first sight wins), into
@@ -32,7 +32,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError, wrap_sqlite_errors
 from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash, iso_to_micros
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.observation import ReportedFile
+from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.retraction import RETRACTED_TIER
 from p2pwatch.ports.driven.catalog_repository import DownloadCandidate, ObservedFile, ReevalRow
 
@@ -103,8 +103,9 @@ class SqliteCatalogRepository:
         self._connection = connection
         self._node_id = node_id
 
-    def record_observation(self, reported_file: ReportedFile, observed_at: datetime) -> None:
+    def record_observation(self, observation: FileObservation) -> None:
         """ONE transaction: file (first sight wins), its variant, the stamped observation."""
+        reported_file = observation.reported_file
         file = reported_file.file
         if not _CANONICAL_HASH_RE.fullmatch(file.native_id):
             raise PersistenceError(f"non-canonical eD2k hash: {file.native_id!r}")
@@ -119,7 +120,7 @@ class SqliteCatalogRepository:
             self._node_id,
         )
         variant_content_hash = content_hash(*variant)
-        observed_at_micros = iso_to_micros(utc_iso(observed_at))
+        observed_at_micros = iso_to_micros(utc_iso(observation.observed_at))
         with wrap_sqlite_errors():
             self._connection.execute("BEGIN")
             try:

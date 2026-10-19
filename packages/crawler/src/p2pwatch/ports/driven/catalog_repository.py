@@ -3,9 +3,10 @@
 SYNCHRONOUS Protocol (spec §3: a local write is sub-millisecond; if plan C wants to
 isolate itself, it will wrap it in ``asyncio.to_thread`` without touching this layer).
 The port imports ONLY the domain. Each stub's ``...`` ends its ``def`` (which runs at class
-creation: covered). The use-case gives each write its instant (``observed_at``/``decided_at``),
-the adapter stamps ``node_id``: ``record_decision`` receives the file key and the instant ALONGSIDE
-the decision (``MatchDecision`` carries neither: a domain without persistence columns).
+creation: covered). The use-case gives each write its instant, the adapter stamps ``node_id``: a
+:class:`FileObservation` carries its ``observed_at``, ``record_decision`` receives the file key and
+the instant ALONGSIDE the decision (``MatchDecision`` carries neither: a domain without persistence
+columns).
 """
 
 from collections.abc import Iterator
@@ -15,7 +16,7 @@ from typing import Protocol
 
 from catalog_matching.domain.engine import DecisionRecord, MatchDecision
 from p2pwatch.domain.file_key import FileKey
-from p2pwatch.domain.observation import ReportedFile
+from p2pwatch.domain.observation import FileObservation
 
 
 @dataclass(frozen=True)
@@ -76,7 +77,7 @@ class CatalogRepository(Protocol):
     file: the append-only table has no delete, so exclusion is an appended row.
     """
 
-    def record_observation(self, reported_file: ReportedFile, observed_at: datetime) -> None: ...
+    def record_observation(self, observation: FileObservation) -> None: ...
 
     def record_decision(
         self, file: FileKey, decision: MatchDecision, decided_at: datetime

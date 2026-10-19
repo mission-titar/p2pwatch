@@ -20,7 +20,7 @@ VISIBLE (``error``-level log, so a persistent failure gets noticed).
 from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.application.decisions import rejudge_file
 from p2pwatch.domain.observability.events import ObservationRecorded
-from p2pwatch.domain.observation import ReportedFile
+from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.ports.driven.catalog_repository import CatalogRepository
 from p2pwatch.ports.driven.clock import WallClock
 from p2pwatch.ports.driven.logger import Logger
@@ -46,7 +46,7 @@ async def record_observation(
     Emits ``ObservationRecorded`` (always) and one ``DecisionsRecorded`` when a row was written.
     A ``RepositoryError`` is absorbed (log + ``0``), the cycle continues (spec §7)."""
     try:
-        catalog.record_observation(reported_file, wall_clock.now())
+        catalog.record_observation(FileObservation(reported_file, wall_clock.now()))
         await telemetry.emit(ObservationRecorded(client_name, channel))
         return await rejudge_file(
             reported_file.file,

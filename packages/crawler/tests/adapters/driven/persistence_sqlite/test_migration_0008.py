@@ -11,7 +11,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import Sqlit
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.observation import ReportedFile
+from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch_testing.adapters.persistence_sqlite.older_catalog import (
     forcing_secure_delete,
     open_catalog_at,
@@ -131,7 +131,7 @@ def test_a_new_sighting_reuses_the_variant_0008_rekeyed(tmp_path: Path) -> None:
     )
     try:
         SqliteCatalogRepository(migrated, "n1").record_observation(
-            reported_file, datetime(2026, 6, 12, tzinfo=UTC)
+            FileObservation(reported_file, datetime(2026, 6, 12, tzinfo=UTC))
         )
         assert migrated.execute("SELECT count(*) FROM observation_variants").fetchone()[0] == 3
         assert migrated.execute("SELECT count(*) FROM observations").fetchone()[0] == 5
