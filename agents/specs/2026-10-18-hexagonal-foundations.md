@@ -243,6 +243,8 @@ them anyway. Port-sync's logger, `p2pwatch_amule.port_sync`, is its only output:
 ### Blocks
 
 (Corrected 2026-10-19: re-measured on a dry run of the whole lot on `013252c`; blocks 30, 60, 70 and 80 split.)
+(Corrected 2026-10-19: the closing block split in four for the file bound, 86 to 88 fixing the holistic
+review's findings, 90 the backlog and the handoff; their sizes are measured, not estimated.)
 
 | # | Branch | Holds | Lines, files |
 |---|---|---|---|
@@ -259,6 +261,9 @@ them anyway. Port-sync's logger, `p2pwatch_amule.port_sync`, is its only output:
 | 77 | `feat/amule-bump-entry-point` | `amule_bump`'s subcommand, its workflow and doc | 133, 7 |
 | 80 | `feat/architecture-gate` | tach over the `p2pwatch` hexagon, `architecture-check` in the gate | 340, 2 |
 | 85 | `feat/architecture-gate-all-hexagons` | tach over the five other hexagons, ast-grep, `AGENTS.md`'s architecture rules | 430, 13 |
+| 86 | `fix/architecture-gate-holes` | closing block: the holistic review's gate findings | 98, 12 |
+| 87 | `refactor/rings-leftover-moves` | closing block: the two modules not yet where they stay | 23, 10 |
+| 88 | `chore/hexagonal-rings-residue` | closing block: the review's test and comment residue | 66, 12 |
 | 90 | `docs/hexagonal-rings-wrap` | closing block: backlog, handoff | |
 
 - Blocks 10, 20, 30, 40 and 60 pass 20 files: they are mechanical moves (`git mv` plus an import rewrite), which
