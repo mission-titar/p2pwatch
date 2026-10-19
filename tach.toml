@@ -371,7 +371,10 @@ depends_on = []
 [[modules]]
 path = "p2pwatch.ports.driven.client_status"
 layer = "ports"
-depends_on = ["p2pwatch.ports.driven.clock"]
+depends_on = [
+  "p2pwatch.domain",
+  "p2pwatch.ports.driven.clock",
+]
 
 [[modules]]
 path = "p2pwatch.ports.driven.clock"
@@ -486,10 +489,7 @@ depends_on = []
 [[modules]]
 path = "p2pwatch.ports.driving.crawl_summarizer"
 layer = "ports"
-depends_on = [
-  "p2pwatch.domain",
-  "p2pwatch.ports.driven.client_status",
-]
+depends_on = ["p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.ports.driving.node_describer"
