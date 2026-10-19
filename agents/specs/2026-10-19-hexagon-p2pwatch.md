@@ -37,8 +37,8 @@ Each goes into `AGENTS.md`'s Naming section in the block that first applies it.
 - **A `Reader`'s operations start with `read_`** (`iter_` for an iterator); a predicate keeps `is_` or `has_`. A
   driving port's operation is its use case's verb (`list_files`). Why: the tree mixes verbs and nouns on its
   reads; one form, and a reader can tell which side of the hexagon a call is on.
-- **A driving port's response model is named from its use case's verb**: `ListFiles` returns a `FileListing` of
-  `ListedFile`, `DescribeFile` a `FileDescription`, `SummarizeCrawl` a `CrawlSummary`. Why: the type says which
+- **A driving port's response model is named from its use case's verb**: `ListFiles` returns a `FileListing` (Corrected
+  2026-10-19: of `CatalogEntry`s, no `ListedFile`), `DescribeFile` a `FileDescription`, `SummarizeCrawl` a `CrawlSummary`. Why: the type says which
   operation produced it, with no technical suffix.
 - **A driven read port returns domain types only.** What a page reads that the domain does not model yet is a
   missing domain concept, added to `domain/` (below), never a type owned by the port. Domain types carry their
@@ -362,7 +362,9 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
 | 110 | `feat/describe-node` | `NodeState`, `TrackedDownload`, the backoff types into the domain; `NodeStateReader`; `DescribeNode`, `/node` on it (Corrected 2026-10-19: block 110 split in 110, 115 and 117, counted at about 25 files before any code; it moves behaviour, so no exemption) | 400, 17 |
 | 115 | `feat/crawl-summary` | `TargetCoverage`, `CoverageReader`; `SummarizeCrawl`, `/` on it; the dashboard's deprecated edges removed | 450, 16 |
 | 117 | `test/crawl-summary-routes-on-fakes` | the `/` and `/node` route tests on fakes of `CrawlSummarizer` and `NodeDescriber` | 400, 5 |
-| 120 | `feat/list-files` | `CatalogFileReader`; `ListFiles`, the files and target routes on it | 450, 12 |
+| 120 | `refactor/catalog-file-counts` | `CatalogFileReader` with its two counts; `/files` reads them under the existing deprecated edge (Corrected 2026-10-19: block 120 split in 120, 123 and 125, measured at 877 lines; it moves behaviour, so no exemption) | 187, 6 |
+| 123 | `refactor/catalog-entry` | `CatalogEntry` in the domain; `read_catalog_entries`; `FileRow`, `FileDecision`, `_ISO` deleted | 498, 10 |
+| 125 | `feat/list-files` | `ListFiles` behind `FileLister`, the files and target routes on it (Corrected 2026-10-19: `FileListing` holds `CatalogEntry`s, no `ListedFile`, which would wrap one with nothing added) | 280, 9 |
 | 130 | `test/list-files-routes-on-fakes` | the files and target route tests on a fake `FileLister` | 450, 6 |
 | 140 | `feat/describe-file` | `SourceReader` with `read_sharing_periods` (Corrected 2026-10-19: was `read_source_periods`, the reader table's name wins); `interval.py` to `domain/`; `DescribeFile`; its route and route tests | 450, 14 |
 | 150 | `feat/list-sources` | `SourceReader`'s list reads; `ListSources`; its route and route tests | 450, 12 |
