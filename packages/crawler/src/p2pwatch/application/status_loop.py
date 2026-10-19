@@ -6,7 +6,6 @@ degradation alerts at most one delay later.
 """
 
 import asyncio
-from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Literal
@@ -21,43 +20,19 @@ from p2pwatch.domain.observability.events import (
     ClientUnreachableLasting,
     Event,
 )
+from p2pwatch.domain.status_reading import STATUS_PERIOD
 from p2pwatch.ports.driven.client_errors import ClientAuthError, ClientError
-from p2pwatch.ports.driven.client_status import StatusClient, StatusReading
+from p2pwatch.ports.driven.client_status import (
+    ClientStatus,
+    ClientStatusWriter,
+    StatusClient,
+    StatusReading,
+)
 from p2pwatch.ports.driven.clock import MonotonicClock, MonotonicInstant, WallClock
 from p2pwatch.ports.driven.telemetry import Telemetry
 
-STATUS_PERIOD = timedelta(minutes=1)
 CHANNEL_ALERT_AFTER = timedelta(minutes=5)
 UNREACHABLE_ALERT_AFTER = timedelta(minutes=2)
-READING_FRESH_FOR = 2 * STATUS_PERIOD
-
-
-class StatusBoard:
-    """Each client's latest reading, published by its loop and read on the webui's thread (D21).
-    Its age is measured on the monotonic clock: its ``read_at`` is for display."""
-
-    def __init__(self, client_names: Iterable[str], monotonic_clock: MonotonicClock) -> None:
-        self._monotonic_clock = monotonic_clock
-        self._readings: Mapping[str, StatusReading | None] = dict.fromkeys(client_names)
-        self._published_at_by_client_name: Mapping[str, MonotonicInstant] = {}
-
-    def publish(self, client_name: str, reading: StatusReading) -> None:
-        # New maps, never a mutation: the other thread reads whole snapshots, no lock needed. The
-        # instant first, so a reader that sees a reading sees when it was published.
-        self._published_at_by_client_name = {
-            **self._published_at_by_client_name,
-            client_name: self._monotonic_clock.now(),
-        }
-        self._readings = {**self._readings, client_name: reading}
-
-    def readings(self) -> Mapping[str, StatusReading | None]:
-        return self._readings
-
-    def is_current(self, client_name: str) -> bool:
-        published_at = self._published_at_by_client_name.get(client_name)
-        if published_at is None:
-            return False
-        return self._monotonic_clock.now() - published_at <= READING_FRESH_FOR
 
 
 @dataclass
@@ -68,7 +43,7 @@ class StatusLoopDeps:
     monotonic_clock: MonotonicClock
     telemetry: Telemetry
     shutdown: asyncio.Event
-    board: StatusBoard
+    client_status_writer: ClientStatusWriter
 
 
 class _AlertTimer:
@@ -96,6 +71,11 @@ class _AlertTimer:
         return "alert"
 
 
+def _publish(deps: StatusLoopDeps, status: ClientStatus | None) -> None:
+    reading = StatusReading(deps.wall_clock.now(), status)
+    deps.client_status_writer.publish(deps.client_name, reading, deps.monotonic_clock.now())
+
+
 async def status_loop(deps: StatusLoopDeps, node_id: str) -> None:
     """Reads the status every period until shutdown, emitting under ``node_id``."""
     api_timer = _AlertTimer(UNREACHABLE_ALERT_AFTER)
@@ -114,7 +94,7 @@ async def status_loop(deps: StatusLoopDeps, node_id: str) -> None:
         except ClientAuthError:
             raise  # a wrong password is config, not an outage
         except ClientError:  # a refused route too: a renamed /version must not end the crawler
-            deps.board.publish(deps.client_name, StatusReading(deps.wall_clock.now(), None))
+            _publish(deps, None)
             await deps.telemetry.emit(ClientUnreachable(deps.client_name), node_id)
             # Every channel is unknown while the API is: only the API's own alert can fire.
             readings: list[tuple[str, bool | None, bool | None]] = [
@@ -122,7 +102,7 @@ async def status_loop(deps: StatusLoopDeps, node_id: str) -> None:
             ]
             reachable = False
         else:
-            deps.board.publish(deps.client_name, StatusReading(deps.wall_clock.now(), status))
+            _publish(deps, status)
             readings = [(c.channel, c.connected, c.connectable) for c in status.channels]
             reachable = True
         await _observe(

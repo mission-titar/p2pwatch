@@ -13,9 +13,9 @@ from catalog_matching.domain.config import MatcherConfig
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 from p2pwatch.adapters.driving.webui.app import build_app
-from p2pwatch.application.status_loop import StatusBoard
 from p2pwatch.ports.driven.clock import MonotonicClock
 from p2pwatch_testing.application.fakes import (
+    FakeClientStatusReader,
     FakeCrawlControls,
     FakeRunState,
     FakeTime,
@@ -90,7 +90,7 @@ def _build(catalog_db: Path, local_db: Path, monotonic_clock: MonotonicClock) ->
         crawl_resumer=controls,
         shutdown_requester=controls,
         run_state_reader=FakeRunState(),
-        status_readings=StatusBoard((), FakeTime().monotonic),
+        client_status_reader=FakeClientStatusReader({}),
         amule_url="http://localhost:4711",
         wall_clock=FakeTime().wall,
         monotonic_clock=monotonic_clock,

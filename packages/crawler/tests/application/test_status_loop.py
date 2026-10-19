@@ -7,19 +7,17 @@ from datetime import timedelta
 import pytest
 
 from p2pwatch.adapters.driven.mule_api.errors import ApiAuthError, ApiRejectedError
-from p2pwatch.application.status_loop import (
-    StatusBoard,
-    StatusLoopDeps,
-    status_loop,
-)
+from p2pwatch.application.status_loop import StatusLoopDeps, status_loop
 from p2pwatch.domain.observability import events as ev
 from p2pwatch.ports.driven.client_errors import ClientError
 from p2pwatch.ports.driven.client_status import (
     ChannelStatus,
     ClientStatus,
+    ClientStatusWriter,
     StatusClient,
     StatusReading,
 )
+from p2pwatch.ports.driven.clock import MonotonicInstant
 from p2pwatch_testing.application.fakes import FakeTime, make_unreachable
 
 type _Reading = ClientStatus | ClientError
@@ -91,6 +89,18 @@ class _TimedTelemetry:
         self.node_ids.add(node_id)
 
 
+class _RecordingStatusWriter(ClientStatusWriter):
+    """Keeps each published reading with its client's name and its instant."""
+
+    def __init__(self) -> None:
+        self.published: list[tuple[str, StatusReading, MonotonicInstant]] = []
+
+    def publish(
+        self, client_name: str, reading: StatusReading, published_at: MonotonicInstant
+    ) -> None:
+        self.published.append((client_name, reading, published_at))
+
+
 def _deps(
     client_name: str,
     client: StatusClient,
@@ -98,9 +108,14 @@ def _deps(
     telemetry: _TimedTelemetry,
     shutdown: asyncio.Event,
 ) -> StatusLoopDeps:
-    board = StatusBoard((client_name,), fake_time.monotonic)
     return StatusLoopDeps(
-        client_name, client, fake_time.wall, fake_time.monotonic, telemetry, shutdown, board
+        client_name,
+        client,
+        fake_time.wall,
+        fake_time.monotonic,
+        telemetry,
+        shutdown,
+        _RecordingStatusWriter(),
     )
 
 
@@ -236,16 +251,19 @@ async def test_each_reading_samples_every_channel_and_unreachable_makes_them_unk
 @pytest.mark.parametrize(
     ("reading", "published"), [(_status(ed2k=_UP), _status(ed2k=_UP)), (_DOWN, None)]
 )
-async def test_each_reading_is_published_with_its_time(
+async def test_each_reading_is_published_with_its_wall_and_monotonic_instants(
     reading: _Reading, published: ClientStatus | None
 ) -> None:
     fake_time, shutdown = FakeTime(), asyncio.Event()
+    fake_time.step_wall(timedelta(hours=1))  # the two clocks part: each instant shows its clock
+    writer = _RecordingStatusWriter()
     client = _ScriptedClient([_status(kad=_UP), reading], shutdown)
     deps = _deps("amuled", client, fake_time, _TimedTelemetry(fake_time), shutdown)
-    assert deps.board.readings() == {"amuled": None}
+    deps.client_status_writer = writer
     await asyncio.wait_for(status_loop(deps, _NODE), timeout=1.0)
     read_at = fake_time.wall.now() - timedelta(seconds=60)  # the loop slept one period after it
-    assert deps.board.readings() == {"amuled": StatusReading(read_at, published)}
+    published_at = fake_time.monotonic.now() - timedelta(seconds=60)
+    assert writer.published[-1] == ("amuled", StatusReading(read_at, published), published_at)
 
 
 @pytest.mark.asyncio
@@ -259,34 +277,3 @@ async def test_a_wall_clock_step_forward_raises_no_alert_before_its_delay() -> N
         timeout=1.0,
     )
     assert [e for _, e in telemetry.events if isinstance(e, _ALERTS)] == []
-
-
-def test_a_reading_older_than_two_status_periods_is_not_current() -> None:
-    fake_time = FakeTime()
-    board = StatusBoard(("amuled",), fake_time.monotonic)
-    board.publish("amuled", StatusReading(fake_time.wall.now(), None))
-    fake_time.advance(timedelta(seconds=120))
-    assert board.is_current("amuled")
-    fake_time.advance(timedelta(seconds=1))
-    assert not board.is_current("amuled")
-
-
-def test_a_wall_clock_step_forward_leaves_a_reading_a_second_old_current() -> None:
-    fake_time = FakeTime()
-    board = StatusBoard(("amuled",), fake_time.monotonic)
-    board.publish("amuled", StatusReading(fake_time.wall.now(), None))
-    fake_time.advance(timedelta(seconds=1))
-    fake_time.step_wall(timedelta(hours=1))
-    assert board.is_current("amuled")
-
-
-def test_a_client_not_read_yet_is_not_current() -> None:
-    assert not StatusBoard(("amuled",), FakeTime().monotonic).is_current("amuled")
-
-
-def test_publishing_replaces_the_snapshot_and_never_changes_one_already_read() -> None:
-    fake_time = FakeTime()
-    board = StatusBoard(("amuled",), fake_time.monotonic)
-    before = board.readings()
-    board.publish("amuled", StatusReading(fake_time.wall.now(), None))
-    assert before == {"amuled": None}
