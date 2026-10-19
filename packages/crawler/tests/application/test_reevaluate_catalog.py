@@ -24,7 +24,7 @@ from p2pwatch.application import reevaluate_catalog as reevaluate_module
 from p2pwatch.application.reevaluate_catalog import ReevaluationSummary, reevaluate_catalog
 from p2pwatch.application.run_download_cycle import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.observation import FileObservation
+from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.retraction import RETRACTED_TIER
 from p2pwatch_testing.application.fakes import (
     FakeLogger,
@@ -44,8 +44,8 @@ _CAT_NAME = "keroro something.avi"
 _MULTI_NAME = "Keroro 062 teletoon.avi"  # → 062A + 062B download (post-fan-out)
 
 
-def _obs(ed2k_hash: str, filename: str) -> FileObservation:
-    return FileObservation(
+def _reported_file(ed2k_hash: str, filename: str) -> ReportedFile:
+    return ReportedFile(
         file=FileKey(Network.ED2K, ed2k_hash),
         filename=filename,
         size_bytes=234_000_000,
@@ -73,8 +73,8 @@ async def test_two_changed_rows_are_all_evaluated_and_written(
     wall_clock: FakeWallClock,
 ) -> None:
     # Never decided: both will change.
-    catalog.record_observation(_obs(_HASH_DL, _DL_NAME), wall_clock.now())
-    catalog.record_observation(_obs(_HASH_CAT, _CAT_NAME), wall_clock.now())
+    catalog.record_observation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now())
+    catalog.record_observation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now())
     telemetry = RecordingTelemetry()
     wake_hub = RecordingWakeHub()
     summary = await reevaluate_catalog(
@@ -102,8 +102,8 @@ async def test_unchanged_row_is_evaluated_but_not_written(
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    catalog.record_observation(_obs(_HASH_CAT, _CAT_NAME), wall_clock.now())
-    candidate = _obs(_HASH_CAT, _CAT_NAME).to_candidate()
+    catalog.record_observation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now())
+    candidate = _reported_file(_HASH_CAT, _CAT_NAME).to_candidate()
     decisions = engine.evaluate_file((candidate,))
     assert decisions  # non-empty
     # pre-seed the "already correct" verdict
@@ -131,8 +131,8 @@ async def test_repository_error_on_one_row_is_absorbed_and_sweep_continues(
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    catalog.record_observation(_obs(_HASH_DL, _DL_NAME), wall_clock.now())
-    catalog.record_observation(_obs(_HASH_CAT, _CAT_NAME), wall_clock.now())
+    catalog.record_observation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now())
+    catalog.record_observation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now())
     logger = FakeLogger()
     # TEST trigger: makes the match_decisions INSERT fail for ONE hash only -> that row's
     # helper call raises RepositoryError, the other row must still be processed.
@@ -191,7 +191,7 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
 ) -> None:
     # §10: an old "unidentified" row under an arbitrary target_id (001A/catalog) is retracted
     # by the set-diff when the file becomes identified (062A + 062B) on the re-evaluation pass.
-    catalog.record_observation(_obs(_HASH_MULTI, _MULTI_NAME), wall_clock.now())
+    catalog.record_observation(_reported_file(_HASH_MULTI, _MULTI_NAME), wall_clock.now())
     catalog.record_decision(
         FileKey(Network.ED2K, _HASH_MULTI),
         _legacy_row("001A", "keroro_large", "catalog"),
@@ -224,7 +224,7 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
     wall_clock: FakeWallClock,
 ) -> None:
     # §10: the old whole-file retraction sentinel (target_id="") is invisible to the set-diff.
-    catalog.record_observation(_obs(_HASH_MULTI, _MULTI_NAME), wall_clock.now())
+    catalog.record_observation(_reported_file(_HASH_MULTI, _MULTI_NAME), wall_clock.now())
     catalog.record_decision(
         FileKey(Network.ED2K, _HASH_MULTI), _legacy_row("", "", RETRACTED_TIER), wall_clock.now()
     )
@@ -256,9 +256,9 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
     fake_time: FakeTime,
     wall_clock: FakeWallClock,
 ) -> None:
-    catalog.record_observation(_obs(_HASH_DL, _DL_NAME), wall_clock.now())
+    catalog.record_observation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now())
     fake_time.advance(timedelta(minutes=1))  # the latest name matches nothing
-    catalog.record_observation(_obs(_HASH_DL, "random.txt"), wall_clock.now())
+    catalog.record_observation(_reported_file(_HASH_DL, "random.txt"), wall_clock.now())
     summary = await reevaluate_catalog(
         catalog=catalog,
         engine=engine,
@@ -282,9 +282,9 @@ async def test_progress_is_logged_at_each_multiple_of_the_cadence_only(
 ) -> None:
     monkeypatch.setattr(reevaluate_module, "_PROGRESS_EVERY", 2)
     logger = FakeLogger()
-    catalog.record_observation(_obs(_HASH_DL, _DL_NAME), wall_clock.now())
-    catalog.record_observation(_obs(_HASH_CAT, _CAT_NAME), wall_clock.now())
-    catalog.record_observation(_obs(_HASH_MULTI, "random.txt"), wall_clock.now())
+    catalog.record_observation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now())
+    catalog.record_observation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now())
+    catalog.record_observation(_reported_file(_HASH_MULTI, "random.txt"), wall_clock.now())
     await reevaluate_catalog(
         catalog=catalog,
         engine=engine,

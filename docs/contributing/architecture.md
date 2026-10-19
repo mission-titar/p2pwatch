@@ -246,7 +246,7 @@ sequenceDiagram
   end
 ```
 
-- Un résultat devient une `FileObservation` via `adapters/driven/mule_api/mapping.py` (capture
+- Un résultat devient un `ReportedFile` via `adapters/driven/mule_api/mapping.py` (capture
   exhaustive : l'identité du fichier, une `FileKey` dont le hash MD4 est l'identifiant natif sur le
   réseau `ed2k`, le nom, la taille, le nombre de sources, plus chaque clé non mappée).
   **La durée, le débit et le codec arrivent maintenant avec le résultat**, quand le serveur qui

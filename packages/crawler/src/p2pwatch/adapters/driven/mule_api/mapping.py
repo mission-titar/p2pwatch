@@ -11,7 +11,7 @@ from dataclasses import replace
 from typing import Any
 
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.observation import FileObservation, fold_raw_meta
+from p2pwatch.domain.observation import ReportedFile, fold_raw_meta
 from p2pwatch.domain.source import (
     SourceKey,
     SourceMeta,
@@ -92,10 +92,10 @@ _WAITING_STATUSES = {
 }
 
 
-def map_search_results(results: object, keyword: str) -> tuple[tuple[FileObservation, ...], int]:
-    """The ``results[]`` of a search → ``(observations, skipped_result_count)``, counting the
-    results that yield no observation; a nameless entry beside a named one is not counted."""
-    observations: list[FileObservation] = []
+def map_search_results(results: object, keyword: str) -> tuple[tuple[ReportedFile, ...], int]:
+    """The ``results[]`` of a search → ``(reported_files, skipped_result_count)``, counting the
+    results that yield no reported file; a nameless entry beside a named one is not counted."""
+    reported_files: list[ReportedFile] = []
     skipped_result_count = 0
     if not isinstance(results, list):
         return (), 0  # unexpected envelope: tolerated, ignored (not a result set)
@@ -103,8 +103,8 @@ def map_search_results(results: object, keyword: str) -> tuple[tuple[FileObserva
         mapped = _map_result(result, keyword)
         if not mapped:
             skipped_result_count += 1
-        observations.extend(mapped)
-    return tuple(observations), skipped_result_count
+        reported_files.extend(mapped)
+    return tuple(reported_files), skipped_result_count
 
 
 def map_download_status(row: object) -> DownloadStatus | None:
@@ -257,8 +257,8 @@ def _channel(channel: str, channel_json: dict[str, Any], connectable: bool | Non
     return ChannelStatus(channel, connected, connectable if connected else None)
 
 
-def _map_result(result: object, keyword: str) -> list[FileObservation]:
-    """One result row → one observation PER FILENAME; none when the row is unusable."""
+def _map_result(result: object, keyword: str) -> list[ReportedFile]:
+    """One result row → one reported file PER FILENAME; none when the row is unusable."""
     if not isinstance(result, dict):
         return []
     native_id = _hash_hex(result.get("hash"))
@@ -270,15 +270,15 @@ def _map_result(result: object, keyword: str) -> list[FileObservation]:
     codec, file_type = _string(media.get("codec")), _string(result.get("file_type"))
     alternates = result.get("alternate_names")
     entries: list[object] = [result, *(alternates if isinstance(alternates, list) else [])]
-    observations: list[FileObservation] = []
+    reported_files: list[ReportedFile] = []
     for entry in entries:
         fields = _as_dict(entry)
         name = _string(fields.get("name"))
         if name is None:
             continue
         total, complete = _source_counts(fields.get("sources"))
-        observations.append(
-            FileObservation(
+        reported_files.append(
+            ReportedFile(
                 file=FileKey(Network.ED2K, native_id),
                 filename=name,
                 size_bytes=size_bytes,
@@ -289,7 +289,7 @@ def _map_result(result: object, keyword: str) -> list[FileObservation]:
                 raw_meta=fold_raw_meta(raw_meta, codec, file_type, complete),
             )
         )
-    return observations
+    return reported_files
 
 
 def _raw_meta(result: dict[str, Any], media: dict[str, Any]) -> tuple[tuple[str, str], ...]:

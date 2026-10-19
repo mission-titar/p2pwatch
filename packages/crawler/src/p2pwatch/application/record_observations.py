@@ -20,7 +20,7 @@ VISIBLE (``error``-level log, so a persistent failure gets noticed).
 from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.application.decisions import rejudge_file
 from p2pwatch.domain.observability.events import ObservationRecorded
-from p2pwatch.domain.observation import FileObservation
+from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.ports.driven.catalog_repository import CatalogRepository
 from p2pwatch.ports.driven.clock import WallClock
 from p2pwatch.ports.driven.logger import Logger
@@ -30,7 +30,7 @@ from p2pwatch.ports.driven.wake_hub import WakeHub
 
 
 async def record_observation(
-    observation: FileObservation,
+    reported_file: ReportedFile,
     *,
     catalog: CatalogRepository,
     engine: MatchingEngine,
@@ -46,11 +46,11 @@ async def record_observation(
     Emits ``ObservationRecorded`` (always) and one ``DecisionsRecorded`` when a row was written.
     A ``RepositoryError`` is absorbed (log + ``0``), the cycle continues (spec §7)."""
     try:
-        catalog.record_observation(observation, wall_clock.now())
+        catalog.record_observation(reported_file, wall_clock.now())
         await telemetry.emit(ObservationRecorded(client_name, channel))
         return await rejudge_file(
-            observation.file,
-            observation.to_candidate(),
+            reported_file.file,
+            reported_file.to_candidate(),
             catalog=catalog,
             engine=engine,
             wake_hub=wake_hub,
@@ -60,8 +60,8 @@ async def record_observation(
     except RepositoryError as error:
         logger.error(
             "persistence failed on file=%s:%s (%s): observation skipped, cycle continues",
-            observation.file.network,
-            observation.file.native_id,
+            reported_file.file.network,
+            reported_file.file.native_id,
             error,
         )
         return 0

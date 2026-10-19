@@ -152,8 +152,8 @@ class AmuleApiClient:
                 search_id = await self._post_search(keyword, search_type)
                 await self._await_end(search_id, budget_seconds, widen=False)
         rows = await self._collect(f"/search/{search_id}/results", "results")
-        observations, skipped_result_count = map_search_results(rows, keyword)
-        return SearchAnswer(observations, skipped_result_count)
+        reported_files, skipped_result_count = map_search_results(rows, keyword)
+        return SearchAnswer(reported_files, skipped_result_count)
 
     async def _start_kad(self, keyword: str, budget_seconds: float) -> int | None:
         """Starts in the Kad word's next free slot, reserved before sleeping; ``None`` without a
