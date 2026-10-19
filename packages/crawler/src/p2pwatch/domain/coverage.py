@@ -12,14 +12,15 @@ from catalog_matching.domain.config import TIER_RANK
 
 
 @dataclass(frozen=True)
-class CoverageStatus:
+class TargetCoverage:
+    target_id: str
     status: str  # "found" | "partial" | "none"
     best_tier: str | None  # "download" | "notify" | "catalog" | None
     file_count: int
 
 
-def coverage_of(decisions: Sequence[tuple[bytes, str]]) -> CoverageStatus:
-    """``decisions`` = ``(file_id, tier)`` of the latest decisions for this target.
+def coverage_of(target_id: str, tiers: Sequence[str]) -> TargetCoverage:
+    """``tiers``: the tier of each file's latest decision for this target.
 
     Catalog-tier decisions are the ``keroro_large`` catch-all: any keroro file with no numeric
     token resolves to the smallest ``target_id`` (``001A``) via the engine tie-break, so counting
@@ -27,11 +28,11 @@ def coverage_of(decisions: Sequence[tuple[bytes, str]]) -> CoverageStatus:
     They do NOT count as coverage of an episode (same ``tier == "catalog"`` criterion the ``/files``
     "unidentified" mask uses in ``adapters.driving.webui.app._resolve_target_display``).
     """
-    identified = [d for d in decisions if d[1] != "catalog"]
+    identified = [tier for tier in tiers if tier != "catalog"]
     if not identified:
-        return CoverageStatus(status="none", best_tier=None, file_count=0)
+        return TargetCoverage(target_id, status="none", best_tier=None, file_count=0)
     # TIER_RANK: increasing integer = stronger tier (download > notify); an unknown tier falls
     # back to ``-1`` (below the weakest), neutral with respect to the choice.
-    best = max(identified, key=lambda d: TIER_RANK.get(d[1], -1))[1]
+    best = max(identified, key=lambda tier: TIER_RANK.get(tier, -1))
     status = "found" if best == "download" else "partial"
-    return CoverageStatus(status=status, best_tier=best, file_count=len(identified))
+    return TargetCoverage(target_id, status=status, best_tier=best, file_count=len(identified))

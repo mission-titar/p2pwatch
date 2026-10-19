@@ -87,25 +87,21 @@ from p2pwatch.adapters.driving.webui.views import (
     SourceListRow,
     SourcePeriodView,
     SourceRow,
-    TargetCoverageRow,
+    TargetCoverageDisplay,
     TierFacet,
     TimelineRow,
     TokenCoverage,
     TrackedDownloadDisplay,
 )
 from p2pwatch.application.matching_read import MatchingExplainer
-from p2pwatch.domain.coverage import coverage_of
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.node_state import NodeState
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.source import SourceKey
-from p2pwatch.domain.status_reading import is_reading_fresh
-from p2pwatch.ports.driven.client_status import ClientStatusReader
 from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
-from p2pwatch.ports.driven.node_state_reader import NodeStateReader
-from p2pwatch.ports.driven.run_state import RunStateReader
 from p2pwatch.ports.driving.crawl_pauser import CrawlPauser
 from p2pwatch.ports.driving.crawl_resumer import CrawlResumer
+from p2pwatch.ports.driving.crawl_summarizer import ClientSummary, CrawlSummarizer
 from p2pwatch.ports.driving.node_describer import NodeDescriber
 from p2pwatch.ports.driving.shutdown_requester import ShutdownRequester
 
@@ -542,20 +538,17 @@ _CONTROL_MESSAGES: dict[str, str] = {
 _YES_NO: dict[bool | None, str] = {True: "yes", False: "no", None: "unknown"}
 
 
-def _client_lines(
-    client_status_reader: ClientStatusReader, monotonic_clock: MonotonicClock
-) -> tuple[ClientLine, ...]:
+def _client_lines(client_summaries: tuple[ClientSummary, ...]) -> tuple[ClientLine, ...]:
     """Each client's last reading, its values shown only while fresh (stage 2 D20)."""
     lines = []
-    published_readings = client_status_reader.read_readings()
-    now = monotonic_clock.now()
-    for client_name, published in published_readings.items():
-        if published is None:
+    for client_summary in client_summaries:
+        client_name, reading = client_summary.client_name, client_summary.reading
+        if reading is None:
             lines.append(ClientLine(client_name, "No reading yet.", "unknown", "unknown", ()))
             continue
-        read_at = short_timestamp(published.reading.read_at.isoformat())
-        client_status = published.reading.status
-        if not is_reading_fresh(now - published.published_at):
+        read_at = short_timestamp(reading.read_at.isoformat())
+        client_status = reading.status
+        if not client_summary.is_fresh:
             text = f"Out of date: last reading at {read_at}."
             lines.append(ClientLine(client_name, text, "unknown", "unknown", ()))
         elif client_status is None:
@@ -669,10 +662,8 @@ def build_app(
     crawl_pauser: CrawlPauser,
     crawl_resumer: CrawlResumer,
     shutdown_requester: ShutdownRequester,
-    run_state_reader: RunStateReader,
+    crawl_summarizer: CrawlSummarizer,
     node_describer: NodeDescriber,
-    node_state_reader: NodeStateReader,
-    client_status_reader: ClientStatusReader,
     amule_url: str,
     wall_clock: WallClock,
     monotonic_clock: MonotonicClock,
@@ -686,8 +677,7 @@ def build_app(
     keeps the explainer's config from drifting from the persisted decisions (spec §8).
 
     Each control POST calls its use case, which returns at once; the webui itself holds no write
-    connection (spec §4/§10). ``client_status_reader`` reads the status loops' last readings;
-    ``node_describer`` serves /node, and the dashboard reads ``node_state_reader`` itself.
+    connection (spec §4/§10). ``crawl_summarizer`` serves the dashboard, ``node_describer`` /node.
 
     ``amule_url`` is the base the nav's aMule entry points at (design §9); the caller reads it
     from ``webui.amule_url``. ``source_period_gap`` is the longest gap within a source period, from
@@ -727,23 +717,18 @@ def build_app(
         return JSONResponse({"status": "ok"})
 
     async def handle_dashboard(request: Request) -> Response:
-        catalog = CatalogReader(catalog_reader.connection())
-        coverage_data = catalog.target_coverage()
-        node_state = node_state_reader.read_node_state()
+        summary = crawl_summarizer.summarize_crawl()
 
-        coverage_rows = []
-        for seg in target_segments:
-            decisions = coverage_data.get(seg.target_id, [])
-            cov = coverage_of(decisions)
-            coverage_rows.append(
-                TargetCoverageRow(
-                    target_id=seg.target_id,
-                    title=seg.title,
-                    status=cov.status,
-                    best_tier_display=cov.best_tier if cov.best_tier is not None else "·",
-                    file_count=cov.file_count,
-                )
+        coverage_rows = [
+            TargetCoverageDisplay(
+                target_id=coverage.target_id,
+                title=_segment_by_id[coverage.target_id].title,
+                status=coverage.status,
+                best_tier_display=coverage.best_tier if coverage.best_tier is not None else "·",
+                file_count=coverage.file_count,
             )
+            for coverage in summary.target_coverages
+        ]
 
         done = request.query_params.get("done")
         message = _CONTROL_MESSAGES.get(done) if done is not None else None
@@ -752,9 +737,9 @@ def build_app(
             "dashboard.html",
             {
                 "coverage_rows": coverage_rows,
-                "node_state": _node_state_display(node_state),
-                "clients": _client_lines(client_status_reader, monotonic_clock),
-                "crawl_state": "paused" if run_state_reader.is_paused() else "running",
+                "node_state": _node_state_display(summary.node_state),
+                "clients": _client_lines(summary.client_summaries),
+                "crawl_state": "paused" if summary.is_paused else "running",
                 # 0-or-1-element tuple the template iterates with {% for %} (no {% if %}, W-D8).
                 "messages": (message,) if message is not None else (),
             },

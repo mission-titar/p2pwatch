@@ -1,12 +1,12 @@
 """Read-only reads of the catalog (webui spec W-D6 / §6).
 
+``SqliteCoverageReader.read_target_coverage()``: per ``target_id``, the tier of each file's
+LATEST match decision **per target** (ROW_NUMBER window PARTITION BY ``(file_id, target_id)``),
+so a whole-episode file contributes to every target it matches. The legacy ``target_id=''``
+sentinel and per-target ``retracted`` rows are excluded.
+
 ``CatalogReader`` exposes these reads:
 
-- ``target_coverage()``: per ``target_id``, the list of ``(file_id, tier)`` from each
-  file's LATEST match decision **per target** (ROW_NUMBER window PARTITION BY
-  ``(file_id, target_id)``), so a whole-episode file contributes to every target it
-  matches. The legacy ``target_id=''`` sentinel and per-target ``retracted`` rows are
-  excluded.
 - ``list_files()``: filtered paginated explorer (files ⨝ latest observation ⨝
   latest decision, optional filters + LIMIT/OFFSET).
 - ``count_files()``: ``(matched, total)`` counts over the same filtered source, for the
@@ -32,6 +32,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.observation_read import (
     latest_observation,
     observations_between,
 )
+from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driving.webui.views import (
     DecisionView,
     FileDecision,
@@ -46,6 +47,7 @@ from p2pwatch.adapters.driving.webui.views import (
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceKey, SourceRole
+from p2pwatch.ports.driven.coverage_reader import CoverageReader
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -453,6 +455,19 @@ def _split_concat(concat: str | None) -> list[str]:
     return concat.split("\x1f") if concat is not None else []
 
 
+class SqliteCoverageReader(CoverageReader):
+    """Reads through the calling thread's read-only connection."""
+
+    def __init__(self, reader_provider: ReaderProvider) -> None:
+        self._reader_provider = reader_provider
+
+    def read_target_coverage(self) -> dict[str, tuple[str, ...]]:
+        tiers_by_target: dict[str, list[str]] = {}
+        for row in self._reader_provider.connection().execute(_SQL_COVERAGE):
+            tiers_by_target.setdefault(row["target_id"], []).append(row["tier"])
+        return {target_id: tuple(tiers) for target_id, tiers in tiers_by_target.items()}
+
+
 # ---------------------------------------------------------------------------
 # CatalogReader
 # ---------------------------------------------------------------------------
@@ -463,25 +478,6 @@ class CatalogReader:
 
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._conn = connection
-
-    # ------------------------------------------------------------------
-    # Coverage
-    # ------------------------------------------------------------------
-
-    def target_coverage(self) -> dict[str, list[tuple[bytes, str]]]:
-        """Return, for each ``target_id``, the list of ``(file_id, tier)``
-        from each file's LATEST match decision **per target** (a whole-episode
-        file appears under every target it currently matches).
-        """
-        rows = self._conn.execute(_SQL_COVERAGE).fetchall()
-        result: dict[str, list[tuple[bytes, str]]] = {}
-        for row in rows:
-            target_id: str = row["target_id"]
-            entry = (row["file_id"], row["tier"])
-            if target_id not in result:
-                result[target_id] = []
-            result[target_id].append(entry)
-        return result
 
     # ------------------------------------------------------------------
     # Filtered paginated explorer
