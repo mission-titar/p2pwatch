@@ -193,6 +193,7 @@ path = "p2pwatch.adapters.driven.persistence_sqlite.catalog_read"
 layer = "adapters"
 depends_on = [
   "p2pwatch.domain",
+  "p2pwatch.ports.driven.catalog_file_reader",
   "p2pwatch.ports.driven.coverage_reader",
   # Its own adapter, a module apart to break the cycle with the webui: lot 2 folds it back.
   { path = "p2pwatch.adapters.driven.persistence_sqlite", deprecated = true },
@@ -350,6 +351,11 @@ depends_on = ["p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.ports.driven.catalog_copier"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driven.catalog_file_reader"
 layer = "ports"
 depends_on = []
 

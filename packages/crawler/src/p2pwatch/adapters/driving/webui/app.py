@@ -34,6 +34,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
     SORT_COLUMNS,
     SORT_DIRECTIONS,
     CatalogReader,
+    SqliteCatalogFileReader,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driven.persistence_sqlite.sql_console import (
@@ -699,6 +700,7 @@ def build_app(
     # obtain a connection via ``provider.connection()`` and NEVER close it (the point is
     # reuse).
     catalog_reader = ReaderProvider(catalog_db_path)
+    catalog_file_reader = SqliteCatalogFileReader(catalog_reader)
 
     def _now_and_interval(request: Request) -> tuple[datetime, Interval]:
         """The second the request is read at, and the interval it asks for."""
@@ -767,10 +769,8 @@ def build_app(
             sort=sort_param,
             direction=direction_param,
         )
-        matched_count, total_count = catalog.count_files(
-            target=target_id_param,
-            tier=tier_param,
-            query=search_text,
+        matched_count, total_count = catalog_file_reader.read_matched_and_total_file_counts(
+            target_id=target_id_param, tier=tier_param, search_text=search_text
         )
 
         display_rows = _to_display_rows(file_rows, _segment_by_id)
@@ -805,7 +805,9 @@ def build_app(
         # facet links carry every active param except ``tier`` and ``page`` (selecting a tier
         # replaces it, resets page); the search hidden inputs carry every active param except
         # ``search`` and ``page`` (submitting a search preserves the rest, resets page).
-        file_count_by_tier = catalog.tier_counts(target=target_id_param, query=search_text)
+        file_count_by_tier = catalog_file_reader.read_file_count_by_tier(
+            target_id=target_id_param, search_text=search_text
+        )
         facet_kept_params = {k: v for k, v in filter_params.items() if k != "tier"}
         facet_kept_params.update(sort_params)
         facets = _tier_facets(
