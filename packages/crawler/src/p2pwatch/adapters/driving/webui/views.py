@@ -5,7 +5,8 @@ from dataclasses import dataclass
 
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.observation import FileObservation
-from p2pwatch.domain.source import SourceKey, SourceRole
+from p2pwatch.domain.sharing_period import SharingPeriod
+from p2pwatch.domain.source import SourceKey
 
 # ---------------------------------------------------------------------------
 # Top nav (shared by every page via a context processor)
@@ -103,31 +104,6 @@ class FileDetail:
 
 
 @dataclass(frozen=True)
-class PeriodWindow:
-    """The points a page reads, ``since`` included to ``until`` excluded, and the gap that cuts a
-    period (source points spec, D6); all in microseconds."""
-
-    since: int
-    until: int
-    gap: int
-
-
-@dataclass(frozen=True)
-class SourcePeriodView:
-    """One period of a source on a file (source points spec, D6); times in microseconds."""
-
-    source: SourceKey | None  # None for a source without a user hash
-    name: str | None
-    role: SourceRole
-    contact_point: str | None
-    connectable: bool | None
-    first_seen_at: int
-    last_seen_at: int
-    received_bytes: int
-    node_id: str  # the node that read it: a merged catalog holds several
-
-
-@dataclass(frozen=True)
 class SourceRow:
     """One source of the sources list (stage 4 spec, D13); ``last_seen_at`` in microseconds."""
 
@@ -139,11 +115,10 @@ class SourceRow:
 
 @dataclass(frozen=True)
 class SourceFilePeriod:
-    """A source period with the file it was read on and that file's best name, if ever seen."""
+    """A sharing period and its file's best name, if ever seen."""
 
-    file: FileKey
     file_name: str | None
-    period: SourcePeriodView
+    period: SharingPeriod
 
 
 @dataclass(frozen=True)

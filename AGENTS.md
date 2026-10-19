@@ -147,6 +147,7 @@ a function does.
 | `target` | an episode segment to recover: `target_id`, `TargetSegment`, its `letter` | `segment` for the letter; Kad's keyword target, which is a `kad_word` |
 | `tier` | a decision's strength: `catalog`, `notify`, `download` | `before`, `after` |
 | `coverage` | `TargetCoverage`, how far a target is recovered: its status, its best tier and its file count, catalog-tier decisions left out | `progress` |
+| `sharing period` | `SharingPeriod`, one source's consecutive readings on one file by one node: its first and last reading, the bytes received; a page reads them in a `PeriodWindow` | `source range` |
 | `catalog entry` | `CatalogEntry`, a file as a listing shows it: its size, its latest observation, its current decisions | `file row` |
 | `search text` | `search_text`, the text a listed name must contain | `query`, which is SQL's |
 | `token` | a named matcher of the policy (`tokens:`) | a word of a text |
