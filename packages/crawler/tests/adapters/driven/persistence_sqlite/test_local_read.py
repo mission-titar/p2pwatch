@@ -96,6 +96,25 @@ def test_node_state_populated(local_db: Path) -> None:
     assert state.created_at == datetime(2026, 6, 22, tzinfo=UTC)
 
 
+def test_a_completed_download_reads_its_completion(local_db: Path) -> None:
+    with sqlite3.connect(local_db) as w:
+        w.execute(
+            "INSERT INTO downloads (file_id, network, native_id, target_id, state, queued_at,"
+            " completed_at) VALUES (x'00', 'ed2k', ?, '062A', 'completed', ?, ?)",
+            (
+                "aabbccdd" * 4,
+                "2026-06-22T10:00:00.000000+00:00",
+                "2026-06-24T10:00:00.250000+00:00",
+            ),
+        )
+
+    (download,) = _read_node_state(local_db).downloads
+
+    assert download.state is DownloadState.COMPLETED
+    assert download.completed_at == datetime(2026, 6, 24, 10, 0, 0, 250000, tzinfo=UTC)
+    assert download.last_progress_at is None
+
+
 # ---------------------------------------------------------------------------
 # Empty DB (observer mode): covers the None branches
 # ---------------------------------------------------------------------------
