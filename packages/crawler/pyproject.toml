@@ -87,6 +87,7 @@ exclude_also = ["if TYPE_CHECKING:"]
 "tests/adapters/driven/persistence_sqlite/test_migration_0012.py" = "a SQL migration of catalog.db"
 "tests/adapters/driven/persistence_sqlite/test_migration_drop_verification.py" = "SQL migrations of both databases"
 "tests/adapters/driven/persistence_sqlite/test_migration_last_seen_at.py" = "a SQL migration of local.db"
+"tests/application/test_download_fakes.py" = "p2pwatch_testing's download client fake"
 "tests/application/test_fakes.py" = "p2pwatch_testing's fakes"
 "tests/composition/test_prod_targets.py" = "deploy/targets.yml"
 "tests/integration/" = "a real daemon or the compose stack: integration suites, deselected by marker"
