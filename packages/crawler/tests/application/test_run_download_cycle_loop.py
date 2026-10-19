@@ -10,17 +10,14 @@ from p2pwatch.application.run_download_cycle import (
 )
 from p2pwatch.ports.driven.catalog_repository import DownloadCandidate
 from p2pwatch.ports.driven.clock import MonotonicInstant
-
-# Reuse the fakes from test_run_download_cycle (imported explicitly).
-from p2pwatch_testing.application.fakes import FakeLogger, FakeTime, RecordingTelemetry
-from tests.application.test_run_download_cycle import (
-    _TARGETS,
+from p2pwatch_testing.application.download_fakes import (
     FakeCatalogReads,
     FakeDiskSpace,
     FakeDownloadClient,
     FakeDownloadRepo,
     FakeSourceRepo,
 )
+from p2pwatch_testing.application.fakes import FakeLogger, FakeTime, RecordingTelemetry
 
 
 class RecordingWakeHub:
@@ -55,7 +52,7 @@ def _loop_deps(
         downloads=FakeDownloadRepo(),
         sources=FakeSourceRepo(),
         catalog=FakeCatalogReads(),
-        targets=_TARGETS,
+        targets=(),
         disk=FakeDiskSpace(1_000_000),
         min_free_bytes=0,
         lost_after=timedelta(days=1),
