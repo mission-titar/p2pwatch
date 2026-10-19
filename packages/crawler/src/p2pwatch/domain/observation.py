@@ -4,6 +4,7 @@
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from catalog_matching.domain.models import FileCandidate
 from p2pwatch.domain.file_key import FileKey
@@ -71,6 +72,14 @@ class ReportedFile:
         return candidate_from_fields(
             self.filename, self.size_bytes, self.duration_seconds, self.bitrate_kbps
         )
+
+
+@dataclass(frozen=True)
+class FileObservation:
+    """A reported file and the instant the crawler learned of it, which the network never dates."""
+
+    reported_file: ReportedFile
+    observed_at: datetime
 
 
 @dataclass(frozen=True)

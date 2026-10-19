@@ -233,9 +233,9 @@ sequenceDiagram
   participant D as WakeHub
 
   W->>A: search(keyword, channel, budget)
-  A-->>W: SearchAnswer (observations, skipped results)
-  loop each observation
-    W->>C: record_observation()
+  A-->>W: SearchAnswer (reported files, skipped results)
+  loop each reported file
+    W->>C: record_observation(FileObservation)
     W->>C: known_filenames(file)
     W->>E: evaluate_file(candidates)
     E-->>W: list[MatchDecision]
@@ -253,10 +253,13 @@ sequenceDiagram
   répond les annonce : c'est une déclaration du réseau, jamais une mesure locale, et le champ vaut
   `null` sur la plupart des résultats globaux et Kad. Rien n'ouvre jamais le fichier pour en savoir
   plus. Un fichier annoncé sous plusieurs noms arrive **replié** en un seul résultat ; le mapper le
-  redéplie en une observation par nom, comme l'EC en produisait une par entrée. Un résultat sans
+  redéplie en un `ReportedFile` par nom, comme l'EC en produisait un par entrée. Un résultat sans
   hash, sans taille exploitable, sans aucun nom ou qui n'est pas un objet est écarté et compté : la
   `SearchAnswer` porte ce compte jusqu'à `SearchExecuted`, qui l'ajoute à
   `p2pwatch_search_results_skipped`.
+- amuleapi ne date pas ses résultats : `record_observation` (`application/record_observations.py`)
+  fait de chaque `ReportedFile` un `FileObservation` daté par `wall_clock.now()` juste avant
+  l'écriture, l'instant où le crawler a appris l'existence du fichier.
 - `search()` rend la main quand amuled signale la fin de la recherche, au plus tard 120 s
   (le budget, constante du cœur) après son départ réseau. Attendre est l'affaire de l'adaptateur.
 - Dans l'adaptateur, une recherche **Kad** est élargie à chaque tour de sondage à partir du deuxième
