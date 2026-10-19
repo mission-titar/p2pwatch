@@ -1,7 +1,7 @@
 id: application-imports
 language: python
 severity: error
-message: A use case imports only the pure standard library on this list and its own hexagon.
+message: A use case imports only the pure standard library on this list and first-party packages; the dependency checks keep those to its own hexagon.
 note: "A module that needs I/O goes behind a port; a new pure module is a new line here."
 files: ["packages/*/src/*/application/**/*.py"]
 ignores: ["packages/crawler_testing/**"]

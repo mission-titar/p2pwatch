@@ -1,0 +1,8 @@
+id: domain-configparser
+valid:
+  - import dataclasses
+  - from p2pwatch_amule.domain.conf import reconcile
+invalid:
+  - import configparser
+  - from configparser import ConfigParser
+  - import configparser as parsers

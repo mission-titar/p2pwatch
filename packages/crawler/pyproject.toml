@@ -90,6 +90,7 @@ exclude_also = ["if TYPE_CHECKING:"]
 "tests/application/test_fakes.py" = "p2pwatch_testing's fakes"
 "tests/composition/test_prod_targets.py" = "deploy/targets.yml"
 "tests/integration/" = "a real daemon or the compose stack: integration suites, deselected by marker"
+"tests/test_workspace_dependencies.py" = "every package's pyproject.toml: hexagon isolation"
 
 [tool.sqlfluff.core]
 dialect = "sqlite"

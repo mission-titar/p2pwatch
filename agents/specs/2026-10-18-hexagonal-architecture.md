@@ -98,7 +98,9 @@ it relies on.
 - **D3. Six hexagons, which never import one another**: `p2pwatch` (the crawler, its webui, `merge`, and
   `catalog_matching`, which is its domain ring in its own distribution package, under
   `catalog_matching/domain/`), `p2pwatch_amule`, `vex_checks`, `template_checks`, `coverage_checks` and
-  `amule_bump`. Tests and `p2pwatch_testing` are outside the ring rules (not D4's ban). Why: a hexagon is
+  `amule_bump`. Tests and `p2pwatch_testing` are outside the ring rules (not D4's ban). (Corrected 2026-10-19:
+  no tool refuses a cross-hexagon import its package declares, so a test holds the workspace's internal
+  dependencies to `p2pwatch` on `catalog_matching` and on its test support; lot 1b's spec, "The check".) Why: a hexagon is
   one application with its use cases, not a package; the crawler, the webui and `merge` share one domain,
   one database and one schema (the webui runs in the crawler's process), so the imports measured between
   them are one hexagon cut along the wrong axis. The tooling packages follow the rule because a convention
@@ -200,7 +202,9 @@ it relies on.
   `lint-all` with `layers`, `layers_explicit_depends_on`, `exact`, `forbid_circular_dependencies`,
   `visibility` and `root_module = "forbid"`, the root `__main__.py` modules declared in the composition
   layer. (Corrected 2026-10-19: `tach check-external` in place of `visibility`, which no import
-  across distributions reaches; lot 1b's spec, section "The check".) An exception is a dependency declared `deprecated = true` in `tach.toml`, beside a comment naming
+  across distributions reaches; lot 1b's spec, section "The check".) (Corrected 2026-10-19: `check-external`
+  refuses only an undeclared import, as deptry did; a test of the workspace's internal dependencies holds the
+  declarations themselves, D3.) An exception is a dependency declared `deprecated = true` in `tach.toml`, beside a comment naming
   its reason and the lot that removes it; no `# tach-ignore` is written. Why tach rather than import-linter:
   the operator's choice, after the trial proved it refuses the three violation shapes and its gap
   (third-party imports) is covered by D9. Why deprecated edges: they live in one file, survive ruff and
@@ -234,7 +238,9 @@ it relies on.
      would declare `connect` abstract in three ports for D10 to delete, and convert ports the webui's read
      side rebuilds.
   3. **The five other hexagons** (their I/O behind ports, each package's tests off `monkeypatch`), and
-     the documentation left over. About 8 blocks; the least certain estimate.
+     the documentation left over. About 8 blocks; the least certain estimate. (Corrected 2026-10-19: lot 3
+     also names the entry functions the command lines call, still `main`, after their operation, and gives
+     each check one word across its module, subcommand and parameter; lot 1b's holistic review.)
 
   (Corrected 2026-10-18: `merge` moves to a use case in lot 1 instead of lot 2, and lot 1 becomes two lots,
   each with its stack and holistic review: 1a, the composition and the command line, and 1b, the moves, the
