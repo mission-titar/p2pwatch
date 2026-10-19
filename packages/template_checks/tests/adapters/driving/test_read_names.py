@@ -1,7 +1,6 @@
 """Tests for the attribute names the webui's templates read, handed to vulture."""
 
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -40,12 +39,5 @@ def test_main_prints_the_names_sorted_and_comma_joined(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "page.html").write_text("{{ row.size_mib }}{{ row.filename }}")
-    with patch("sys.argv", ["read_names", str(tmp_path)]):
-        main()
+    main(tmp_path)
     assert capsys.readouterr().out == "filename,size_mib\n"
-
-
-def test_main_exits_with_usage_when_no_arg() -> None:
-    with patch("sys.argv", ["read_names"]), pytest.raises(SystemExit) as exc_info:
-        main()
-    assert exc_info.value.code == "usage: read_names <templates dir>"

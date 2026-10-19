@@ -1,6 +1,5 @@
 """The attribute names the webui's templates read, unseen by vulture: its `--ignore-names`."""
 
-import sys
 from pathlib import Path
 
 from jinja2 import Environment, nodes
@@ -16,12 +15,6 @@ def find_read_names(directory: Path) -> frozenset[str]:
     return frozenset(read_names)
 
 
-def main() -> None:
-    """CLI entry point: `python -m template_checks.adapters.driving.read_names <templates dir>`."""
-    if len(sys.argv) < 2:
-        sys.exit("usage: read_names <templates dir>")
-    print(",".join(sorted(find_read_names(Path(sys.argv[1])))))
-
-
-if __name__ == "__main__":
-    main()  # pragma: no cover
+def main(templates_dir: Path) -> None:
+    """Prints the names the templates under *templates_dir* read, sorted and comma-joined."""
+    print(",".join(sorted(find_read_names(templates_dir))))

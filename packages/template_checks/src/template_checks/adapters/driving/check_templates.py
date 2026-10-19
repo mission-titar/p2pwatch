@@ -30,7 +30,6 @@ Regexes used
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 
 # --- Forbidden patterns ---
@@ -69,18 +68,9 @@ def find_logic_violations(directory: Path) -> list[str]:
     return violations
 
 
-def main() -> None:
-    """CLI entry point: ``python -m template_checks.adapters.driving.check_templates <dir>``."""
-    if len(sys.argv) < 2:
-        sys.exit("usage: check_templates <dir>")
-    directory = Path(sys.argv[1])
-    violations = find_logic_violations(directory)
-    if violations:
-        for v in violations:
-            print(v)
-        sys.exit(1)
-    sys.exit(0)
-
-
-if __name__ == "__main__":
-    main()  # pragma: no cover
+def main(templates_dir: Path) -> int:
+    """Prints each violation under *templates_dir*, returns 1 if there is any."""
+    violations = find_logic_violations(templates_dir)
+    for v in violations:
+        print(v)
+    return 1 if violations else 0
