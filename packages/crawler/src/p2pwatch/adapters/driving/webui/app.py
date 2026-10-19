@@ -30,6 +30,7 @@ from catalog_matching.domain.models import TargetSegment
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
     PAGE_SIZE,
     CatalogReader,
+    SqliteCatalogFileReader,
     SqliteSourceReader,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
@@ -63,6 +64,7 @@ from p2pwatch.adapters.driving.webui.views import (
     ConsoleRow,
     DbOption,
     DecisionCell,
+    DecisionDisplay,
     FileDetailDisplay,
     FileRowDisplay,
     FilesSummary,
@@ -696,6 +698,7 @@ def build_app(
     # obtain a connection via ``provider.connection()`` and NEVER close it (the point is
     # reuse).
     catalog_reader = ReaderProvider(catalog_db_path)
+    catalog_file_reader = SqliteCatalogFileReader(catalog_reader)
     source_reader = SqliteSourceReader(catalog_reader)
 
     def _now_and_interval(request: Request) -> tuple[datetime, Interval]:
@@ -922,9 +925,10 @@ def build_app(
 
         now, interval = _now_and_interval(request)
         window = PeriodWindow(interval.since, interval.until, source_period_gap)
-        catalog = CatalogReader(catalog_reader.connection())
         detail = (
-            catalog.file_detail(bytes.fromhex(file_id_hex), window)
+            catalog_file_reader.read_file_history(
+                bytes.fromhex(file_id_hex), since=interval.since, until=interval.until
+            )
             if _HEX_ID.fullmatch(file_id_hex)
             else None
         )
@@ -932,7 +936,9 @@ def build_app(
         if detail is None:
             return templates.TemplateResponse(request, "404.html", {}, status_code=404)
 
-        latest = None if detail.latest is None else detail.latest.reported_file
+        latest = (
+            None if detail.latest_observation is None else detail.latest_observation.reported_file
+        )
         ed2k_link = ""
         if latest is not None:
             match detail.file.network:
@@ -959,7 +965,7 @@ def build_app(
                 size_bytes=latest.size_bytes,
                 duration_seconds=latest.duration_seconds,
                 bitrate_kbps=latest.bitrate_kbps,
-                target_id=first_decision.target_id,
+                target_id=first_decision.decision.target_id,
             )
             if explanation is not None:
                 explanation_target_id = explanation.target_id
@@ -981,7 +987,15 @@ def build_app(
                 _source_history_row(period)
                 for period in source_reader.read_sharing_periods(detail.file, window)
             ),
-            decisions=detail.decisions,
+            decisions=tuple(
+                DecisionDisplay(
+                    target_id=dated.decision.target_id,
+                    rule_name=dated.decision.rule_name,
+                    tier=dated.decision.tier,
+                    decided_at=dated.decided_at.isoformat(timespec="microseconds"),
+                )
+                for dated in detail.decisions
+            ),
             ed2k_link=ed2k_link,
             explanation_target_id=explanation_target_id,
             explanation_rules_fired=explanation_rules_fired,

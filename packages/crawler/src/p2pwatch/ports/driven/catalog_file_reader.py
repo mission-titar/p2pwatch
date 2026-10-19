@@ -2,8 +2,10 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
+from datetime import datetime
 
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
+from p2pwatch.domain.file_history import FileHistory
 
 
 class CatalogFileReader(ABC):
@@ -39,3 +41,10 @@ class CatalogFileReader(ABC):
         self, *, target_id: str | None, search_text: str | None
     ) -> Mapping[str, int]:
         """By tier, how many files passing the filters hold a current decision of that tier."""
+
+    @abstractmethod
+    def read_file_history(
+        self, file_id: bytes, *, since: datetime, until: datetime
+    ) -> FileHistory | None:
+        """The file's history, its observations from ``since`` included to ``until`` excluded;
+        ``None`` for a file the catalog does not hold."""

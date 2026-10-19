@@ -33,6 +33,7 @@ from p2pwatch.adapters.driving.webui.views import (
     SourceRow,
 )
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
+from p2pwatch.domain.file_history import DatedDecision, FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
@@ -57,8 +58,7 @@ LATEST_OBSERVATION_PROBE = (
     "SELECT file_id, filename, source_count, observed_at FROM latest_observation"
 )
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
-# Every instant a test writes, from the epoch to the year 3000.
-_ALL_TIME = PeriodWindow(since=_EPOCH, until=datetime(3000, 1, 1, tzinfo=UTC), gap=timedelta(0))
+_YEAR_3000 = datetime(3000, 1, 1, tzinfo=UTC)  # after every instant a test writes
 _LIMIT = 50
 
 
@@ -305,50 +305,61 @@ def test_count_files_whole_episode_counts_as_one_file(catalog_db: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_file_detail_carries_observations_and_decisions(catalog_db: Path) -> None:
+def _history(
+    catalog_db: Path, native_id: str, *, since: datetime = _EPOCH, until: datetime = _YEAR_3000
+) -> FileHistory | None:
+    reader = SqliteCatalogFileReader(ReaderProvider(catalog_db))
+    return reader.read_file_history(file_id(native_id), since=since, until=until)
+
+
+def test_file_history_carries_observations_and_dated_decisions(catalog_db: Path) -> None:
     _seed(catalog_db)
-    detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("a" * 32), _ALL_TIME)
+    detail = _history(catalog_db, "a" * 32)
     assert detail is not None
     assert detail.file == FileKey(Network.ED2K, "a" * 32)
     assert detail.size_bytes == 100
-    assert len(detail.decisions) == 1
-    assert detail.decisions[0].target_id == "062A"
+    assert detail.decisions == (
+        DatedDecision(
+            DecisionRecord(target_id="062A", rule_name="id_segment_exact", tier="download"),
+            decided_at=datetime(2026, 6, 22, 10, 0, 1, tzinfo=UTC),
+            node_id="n1",
+        ),
+    )
     assert [o.reported_file.filename for o in detail.observations] == ["keroro_062.avi"]
-    assert detail.latest == detail.observations[0]
+    assert detail.latest_observation == detail.observations[0]
     assert detail.known_filenames == ("keroro_062.avi",)
 
 
-def test_file_detail_reads_its_timeline_in_the_window_and_its_latest_observation_in_any(
+def test_file_history_reads_its_observations_in_the_window_and_its_latest_in_any(
     catalog_db: Path,
 ) -> None:
     _seed(catalog_db)
     with sqlite3.connect(catalog_db) as conn:
         insert_observation(conn, "a" * 32, "older.avi", observed_at="2026-06-21T10:00:00+00:00")
-    since = datetime(2026, 6, 1, tzinfo=UTC)
-    window = PeriodWindow(since=since, until=datetime.fromisoformat(SEEN_AT), gap=timedelta(0))
-    detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("a" * 32), window)
+    since, until = datetime(2026, 6, 1, tzinfo=UTC), datetime.fromisoformat(SEEN_AT)
+    detail = _history(catalog_db, "a" * 32, since=since, until=until)
     assert detail is not None
     assert [o.reported_file.filename for o in detail.observations] == ["older.avi"]
-    assert detail.latest is not None
-    assert detail.latest.reported_file.filename == "keroro_062.avi"
+    assert detail.latest_observation is not None
+    assert detail.latest_observation.reported_file.filename == "keroro_062.avi"
 
 
-def test_file_detail_unknown_file_id_is_none(catalog_db: Path) -> None:
+def test_file_history_of_an_unknown_file_id_is_none(catalog_db: Path) -> None:
     _seed(catalog_db)
-    assert CatalogReader(open_reader(catalog_db)).file_detail(file_id("f" * 32), _ALL_TIME) is None
+    assert _history(catalog_db, "f" * 32) is None
 
 
-def test_file_detail_retracted_target_is_no_decision(catalog_db: Path) -> None:
+def test_file_history_retracted_target_is_no_decision(catalog_db: Path) -> None:
     """A file whose LATEST decision is the crawler's retraction sentinel exposes NO decision
-    from ``file_detail``, identical to an unmatched file (spec §9). The earlier
+    from ``read_file_history``, identical to an unmatched file (spec §9). The earlier
     (pre-retraction) real decision must not leak through."""
     _seed_retracted(catalog_db)
-    detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("c" * 32), _ALL_TIME)
+    detail = _history(catalog_db, "c" * 32)
     assert detail is not None
     assert detail.decisions == ()
 
 
-def test_file_detail_no_decision(catalog_db: Path) -> None:
+def test_file_history_no_decision(catalog_db: Path) -> None:
     """Detail works even without a decision (unmatched file)."""
     with sqlite3.connect(catalog_db) as conn:
         insert_file(conn, "b" * 32, 200)
@@ -359,17 +370,17 @@ def test_file_detail_no_decision(catalog_db: Path) -> None:
             observed_at="2026-06-22T09:00:00.000000+00:00",
             size_bytes=200,
         )
-    detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("b" * 32), _ALL_TIME)
+    detail = _history(catalog_db, "b" * 32)
     assert detail is not None
     assert detail.decisions == ()
     assert detail.size_bytes == 200
 
 
-def test_file_detail_whole_episode_lists_both_decisions(catalog_db: Path) -> None:
+def test_file_history_whole_episode_lists_both_decisions(catalog_db: Path) -> None:
     _seed_whole_episode(catalog_db)
-    detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("a" * 32), _ALL_TIME)
+    detail = _history(catalog_db, "a" * 32)
     assert detail is not None
-    assert [d.target_id for d in detail.decisions] == ["072A", "072B"]
+    assert [d.decision.target_id for d in detail.decisions] == ["072A", "072B"]
 
 
 # ---------------------------------------------------------------------------
@@ -736,10 +747,10 @@ def test_coverage_tie_break_on_id(catalog_db: Path) -> None:
     assert coverage["062A"] == ("download",)
 
 
-def test_file_detail_observations_include_media_fields_none(catalog_db: Path) -> None:
+def test_file_history_observations_include_media_fields_none(catalog_db: Path) -> None:
     """An observation's duration_seconds and bitrate_kbps are None when the network gave none."""
     _seed(catalog_db)
-    detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id("a" * 32), _ALL_TIME)
+    detail = _history(catalog_db, "a" * 32)
     assert detail is not None
     assert len(detail.observations) == 1
     obs = detail.observations[0].reported_file
@@ -747,7 +758,7 @@ def test_file_detail_observations_include_media_fields_none(catalog_db: Path) ->
     assert obs.bitrate_kbps is None
 
 
-def test_file_detail_observations_include_media_fields_present(catalog_db: Path) -> None:
+def test_file_history_observations_include_media_fields_present(catalog_db: Path) -> None:
     """An observation's duration_seconds and bitrate_kbps are filled when present."""
     h = "d" * 32
     with sqlite3.connect(catalog_db) as conn:
@@ -761,7 +772,7 @@ def test_file_detail_observations_include_media_fields_present(catalog_db: Path)
             duration_seconds=1320,
             bitrate_kbps=192,
         )
-    detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id(h), _ALL_TIME)
+    detail = _history(catalog_db, h)
     assert detail is not None
     assert len(detail.observations) == 1
     obs = detail.observations[0].reported_file
@@ -1116,11 +1127,15 @@ def test_list_files_observation_tie_break_on_the_newest_variant(catalog_db: Path
     assert _latest_filename(rows[0]) == "second.avi"
 
 
-def test_file_detail_of_a_file_never_seen_has_no_observation(catalog_db: Path) -> None:
+def test_file_history_of_a_file_never_seen_has_no_observation(catalog_db: Path) -> None:
     h = _seed_file_without_observation(catalog_db)
-    detail = CatalogReader(open_reader(catalog_db)).file_detail(file_id(h), _ALL_TIME)
+    detail = _history(catalog_db, h)
     assert detail is not None
-    assert (detail.observations, detail.latest, detail.known_filenames) == ((), None, ())
+    assert (detail.observations, detail.latest_observation, detail.known_filenames) == (
+        (),
+        None,
+        (),
+    )
 
 
 # ---------------------------------------------------------------------------
