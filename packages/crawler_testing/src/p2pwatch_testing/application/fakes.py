@@ -8,6 +8,7 @@
 ``FakeNodeIdStore`` and ``FakeNodeIdGenerator``: the node id's stored and new values.
 ``FakeRunState``: keeps each change; ``FakeCrawlControls``: each control the webui calls.
 ``FakeClientStatusReader``: reads the readings it is given; ``FakeNodeStateReader``, the state.
+``FakeCrawlSummarizer`` and ``FakeNodeDescriber``: the dashboard's and the node page's use cases.
 ``RecordingWakeHub``: captures woken subjects. The repos are the REAL SQLite repos
 (spec §8: "real repos on tmp_path"): no fakes here.
 """
@@ -31,6 +32,8 @@ from p2pwatch.ports.driven.run_state import RunStateReader, RunStateWriter
 from p2pwatch.ports.driven.search_client import SearchAnswer
 from p2pwatch.ports.driving.crawl_pauser import CrawlPauser
 from p2pwatch.ports.driving.crawl_resumer import CrawlResumer
+from p2pwatch.ports.driving.crawl_summarizer import CrawlSummarizer, CrawlSummary
+from p2pwatch.ports.driving.node_describer import NodeDescriber, NodeDescription
 from p2pwatch.ports.driving.shutdown_requester import ShutdownRequester
 
 
@@ -220,6 +223,26 @@ class FakeNodeStateReader(NodeStateReader):
 
     def read_node_state(self) -> NodeState:
         return self._node_state
+
+
+class FakeCrawlSummarizer(CrawlSummarizer):
+    """Summarizes the crawl as it is given."""
+
+    def __init__(self, crawl_summary: CrawlSummary) -> None:
+        self._crawl_summary = crawl_summary
+
+    def summarize_crawl(self) -> CrawlSummary:
+        return self._crawl_summary
+
+
+class FakeNodeDescriber(NodeDescriber):
+    """Describes the node as it is given."""
+
+    def __init__(self, node_description: NodeDescription) -> None:
+        self._node_description = node_description
+
+    def describe_node(self) -> NodeDescription:
+        return self._node_description
 
 
 class RecordingTelemetry:

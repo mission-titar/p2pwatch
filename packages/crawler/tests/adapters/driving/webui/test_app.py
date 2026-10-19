@@ -2,6 +2,7 @@
 
 import re
 import sqlite3
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -17,12 +18,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from catalog_matching.domain.config import MatcherConfig
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
-from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
-    PAGE_SIZE,
-    SqliteCoverageReader,
-)
-from p2pwatch.adapters.driven.persistence_sqlite.local_read import SqliteNodeStateReader
-from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
+from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import PAGE_SIZE
 from p2pwatch.adapters.driving.webui.app import (
     _normalize_direction,
     _normalize_sort,
@@ -39,20 +35,19 @@ from p2pwatch.adapters.driving.webui.views import (
     FileRow,
     HiddenInput,
 )
-from p2pwatch.application.describe_node import DescribeNode
-from p2pwatch.application.summarize_crawl import SummarizeCrawl
+from p2pwatch.domain.coverage import TargetCoverage
+from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.node_state import NodeState, TrackedDownload
+from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from p2pwatch.domain.source import SourceKey
-from p2pwatch.ports.driven.client_status import (
-    ChannelStatus,
-    ClientStatus,
-    PublishedReading,
-    StatusReading,
-)
+from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus, StatusReading
+from p2pwatch.ports.driving.crawl_summarizer import ClientSummary, CrawlSummary
+from p2pwatch.ports.driving.node_describer import NodeDescription
 from p2pwatch_testing.application.fakes import (
-    FakeClientStatusReader,
     FakeCrawlControls,
-    FakeRunState,
+    FakeCrawlSummarizer,
+    FakeNodeDescriber,
     FakeTime,
 )
 from p2pwatch_testing.catalog_rows import (
@@ -80,34 +75,62 @@ _FAKE_TIME = FakeTime(datetime(2026, 10, 14, 20, 0, tzinfo=UTC))
 _WALL_CLOCK = _FAKE_TIME.wall
 _MONOTONIC_CLOCK = _FAKE_TIME.monotonic
 _GAP = timedelta(seconds=90)
-_CREATED_AT = "2024-01-01T00:00:00.000000+00:00"  # as local.db stores an instant
 
 
-_NO_STATUS = FakeClientStatusReader({})
 # The read-path fixtures never call the controls, and read the crawl as running.
 _NO_CONTROLS = FakeCrawlControls()
-_RUNNING = FakeRunState()
+_NODE_STATE = NodeState(
+    node_id="node-test-001",
+    created_at=datetime(2024, 1, 1, tzinfo=UTC),
+    downloads=(),
+    backoff_state_by_key={},
+)
+_CRAWL_SUMMARY = CrawlSummary(
+    client_summaries=(),
+    is_paused=False,
+    node_state=_NODE_STATE,
+    target_coverages=(TargetCoverage("062A", status="none", best_tier=None, file_count=0),),
+)
+_SUMMARIZER = FakeCrawlSummarizer(_CRAWL_SUMMARY)
+_DESCRIBER = FakeNodeDescriber(NodeDescription(_NODE_STATE))
+# The dashboard and the node page read their use case only: opening this path would fail.
+_NO_DB = Path("/nonexistent/p2pwatch.db")
 
 
-def _node_state_reader(local_db: Path) -> SqliteNodeStateReader:
-    return SqliteNodeStateReader(ReaderProvider(local_db))
+def _app_on_fakes(
+    *,
+    crawl_summary: CrawlSummary = _CRAWL_SUMMARY,
+    node_state: NodeState = _NODE_STATE,
+    controls: FakeCrawlControls = _NO_CONTROLS,
+    amule_url: str = _AMULE_URL,
+) -> Starlette:
+    import p2pwatch.adapters.driving.webui
 
-
-def _crawl_summarizer(
-    targets: tuple[TargetSegment, ...],
-    catalog_db: Path,
-    local_db: Path,
-    run_state: FakeRunState = _RUNNING,
-    status: FakeClientStatusReader = _NO_STATUS,
-) -> SummarizeCrawl:
-    return SummarizeCrawl(
-        target_ids=tuple(target.target_id for target in targets),
-        coverage_reader=SqliteCoverageReader(ReaderProvider(catalog_db)),
-        node_state_reader=_node_state_reader(local_db),
-        run_state_reader=run_state,
-        client_status_reader=status,
+    webui_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent
+    return build_app(
+        catalog_db_path=_NO_DB,
+        local_db_path=_NO_DB,
+        matcher_config=_matcher(),
+        target_segments=_targets(),
+        templates_dir=webui_dir / "templates",
+        static_dir=webui_dir / "static",
+        crawl_pauser=controls,
+        crawl_resumer=controls,
+        shutdown_requester=controls,
+        crawl_summarizer=FakeCrawlSummarizer(crawl_summary),
+        node_describer=FakeNodeDescriber(NodeDescription(node_state)),
+        amule_url=amule_url,
+        wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
+        source_period_gap=_GAP,
     )
+
+
+async def _page(app: Starlette, url: str) -> str:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(url)
+    assert resp.status_code == 200
+    return resp.text
 
 
 def _detail_url(ed2k_hash: str) -> str:
@@ -178,11 +201,6 @@ def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         )
         insert_decision(conn, TEST_HASH, "062A", "catalog", rule_name="catalog")
 
-    with sqlite3.connect(local_db) as conn:
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-test-001"))
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
-        conn.commit()
-
     matcher_config = _matcher()
     targets = _targets()
 
@@ -201,8 +219,8 @@ def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         crawl_pauser=_NO_CONTROLS,
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_crawl_summarizer(targets, catalog_db, local_db),
-        node_describer=DescribeNode(_node_state_reader(local_db)),
+        crawl_summarizer=_SUMMARIZER,
+        node_describer=_DESCRIBER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -225,11 +243,6 @@ def app_no_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         )
         # No decision
 
-    with sqlite3.connect(local_db) as conn:
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-no-dec"))
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
-        conn.commit()
-
     matcher_config = _matcher()
     targets = _targets()
 
@@ -248,8 +261,8 @@ def app_no_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         crawl_pauser=_NO_CONTROLS,
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_crawl_summarizer(targets, catalog_db, local_db),
-        node_describer=DescribeNode(_node_state_reader(local_db)),
+        crawl_summarizer=_SUMMARIZER,
+        node_describer=_DESCRIBER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -284,11 +297,6 @@ def app_retracted_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette,
             decided_at="2026-06-23T10:00:00.000000+00:00",
         )
 
-    with sqlite3.connect(local_db) as conn:
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-retracted"))
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
-        conn.commit()
-
     matcher_config = _matcher()
     targets = _targets()
 
@@ -307,8 +315,8 @@ def app_retracted_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette,
         crawl_pauser=_NO_CONTROLS,
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_crawl_summarizer(targets, catalog_db, local_db),
-        node_describer=DescribeNode(_node_state_reader(local_db)),
+        crawl_summarizer=_SUMMARIZER,
+        node_describer=_DESCRIBER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -324,11 +332,6 @@ def app_no_observations(catalog_db: Path, local_db: Path) -> tuple[Starlette, st
         insert_file(conn, TEST_HASH, 100_000_000)
         # No observations
 
-    with sqlite3.connect(local_db) as conn:
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-no-obs"))
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
-        conn.commit()
-
     matcher_config = _matcher()
     targets = _targets()
 
@@ -347,8 +350,8 @@ def app_no_observations(catalog_db: Path, local_db: Path) -> tuple[Starlette, st
         crawl_pauser=_NO_CONTROLS,
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_crawl_summarizer(targets, catalog_db, local_db),
-        node_describer=DescribeNode(_node_state_reader(local_db)),
+        crawl_summarizer=_SUMMARIZER,
+        node_describer=_DESCRIBER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -372,11 +375,6 @@ def app_unknown_target(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         # target_id unknown to the current YAML config
         insert_decision(conn, TEST_HASH, "S9E999Z", "catalog", rule_name="catalog")
 
-    with sqlite3.connect(local_db) as conn:
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-unk"))
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
-        conn.commit()
-
     matcher_config = _matcher()
     targets = _targets()
 
@@ -395,8 +393,8 @@ def app_unknown_target(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         crawl_pauser=_NO_CONTROLS,
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_crawl_summarizer(targets, catalog_db, local_db),
-        node_describer=DescribeNode(_node_state_reader(local_db)),
+        crawl_summarizer=_SUMMARIZER,
+        node_describer=_DESCRIBER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -420,11 +418,6 @@ def app_download_tier_known_target(catalog_db: Path, local_db: Path) -> tuple[St
         )
         insert_decision(conn, TEST_HASH, "062A", "download", rule_name="high_confidence")
 
-    with sqlite3.connect(local_db) as conn:
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-dl"))
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
-        conn.commit()
-
     matcher_config = _matcher()
     targets = _targets()
 
@@ -443,8 +436,8 @@ def app_download_tier_known_target(catalog_db: Path, local_db: Path) -> tuple[St
         crawl_pauser=_NO_CONTROLS,
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_crawl_summarizer(targets, catalog_db, local_db),
-        node_describer=DescribeNode(_node_state_reader(local_db)),
+        crawl_summarizer=_SUMMARIZER,
+        node_describer=_DESCRIBER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -468,11 +461,6 @@ def app_download_tier_unknown_target(catalog_db: Path, local_db: Path) -> tuple[
         )
         insert_decision(conn, TEST_HASH, "999Z", "download", rule_name="high_confidence")
 
-    with sqlite3.connect(local_db) as conn:
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-dl-unk"))
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
-        conn.commit()
-
     matcher_config = _matcher()
     targets = _targets()
 
@@ -491,8 +479,8 @@ def app_download_tier_unknown_target(catalog_db: Path, local_db: Path) -> tuple[
         crawl_pauser=_NO_CONTROLS,
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_crawl_summarizer(targets, catalog_db, local_db),
-        node_describer=DescribeNode(_node_state_reader(local_db)),
+        crawl_summarizer=_SUMMARIZER,
+        node_describer=_DESCRIBER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -516,33 +504,25 @@ async def test_health_returns_200(populated_app: tuple[Starlette, str]) -> None:
     assert resp.json() == {"status": "ok"}
 
 
-@pytest.mark.asyncio
-async def test_dashboard_returns_200_with_target_id(
-    populated_app: tuple[Starlette, str],
-) -> None:
-    """/ → 200 + contains 062A in the page."""
-    app, _ = populated_app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/")
-    assert resp.status_code == 200
-    assert "062A" in resp.text
+async def _coverage_cells(coverage: TargetCoverage) -> list[str]:
+    summary = replace(_CRAWL_SUMMARY, target_coverages=(coverage,))
+    text = await _page(_app_on_fakes(crawl_summary=summary), "/")
+    return re.findall(r"<td>(.*?)</td>", text[text.index("<h2>Target coverage</h2>") :])
 
 
 @pytest.mark.asyncio
-async def test_dashboard_excludes_catalog_tier_from_coverage(
-    populated_app: tuple[Starlette, str],
-) -> None:
-    """The only decision in ``populated_app`` is the ``keroro_large`` catch-all (tier=catalog)
-    on 062A. It must NOT count as coverage: the 062A row reads none / "·" / 0, never the
-    polluted partial / catalog / 1 the catch-all tie-break would otherwise produce."""
-    app, _ = populated_app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/")
-    assert resp.status_code == 200
-    assert "<td>none</td>" in resp.text
-    assert "<td>0</td>" in resp.text
-    assert "<td>partial</td>" not in resp.text
-    assert "<td>catalog</td>" not in resp.text
+async def test_dashboard_shows_each_target_coverage_with_its_title() -> None:
+    coverage = TargetCoverage("062A", status="found", best_tier="download", file_count=2)
+    assert await _coverage_cells(coverage) == [
+        '<a href="/targets/062A">062A</a>',
+        *("La Grenouille Cosmique", "found", "download", "2"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_dashboard_shows_a_target_without_a_best_tier_as_a_dot() -> None:
+    coverage = TargetCoverage("062A", status="none", best_tier=None, file_count=0)
+    assert (await _coverage_cells(coverage))[2:] == ["none", "·", "0"]
 
 
 @pytest.mark.asyncio
@@ -717,10 +697,6 @@ def app_vetoed_alias(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
             conn, TEST_HASH, "keroro ITA.avi", observed_at="2026-06-23T10:00:00.000000+00:00"
         )
         insert_decision(conn, TEST_HASH, "062A", "catalog", rule_name="catalog")
-    with sqlite3.connect(local_db) as conn:
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-veto"))
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
-        conn.commit()
     matcher_config = parse_matcher_config(
         {
             "tokens": {
@@ -753,8 +729,8 @@ def app_vetoed_alias(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         crawl_pauser=_NO_CONTROLS,
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_crawl_summarizer(_targets(), catalog_db, local_db),
-        node_describer=DescribeNode(_node_state_reader(local_db)),
+        crawl_summarizer=_SUMMARIZER,
+        node_describer=_DESCRIBER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1173,15 +1149,8 @@ async def test_target_page_has_no_summary_line(
 
 
 @pytest.mark.asyncio
-async def test_node_returns_200_with_node_info(
-    populated_app: tuple[Starlette, str],
-) -> None:
-    """/node → 200 + contains the node id."""
-    app, _ = populated_app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/node")
-    assert resp.status_code == 200
-    assert "node-test-001" in resp.text
+async def test_node_page_shows_the_node_id() -> None:
+    assert "<dd>node-test-001</dd>" in await _page(_app_on_fakes(), "/node")
 
 
 @pytest.mark.asyncio
@@ -1221,25 +1190,33 @@ async def test_base_nav_uses_singular_node_href(
     assert 'href="/nodes"' not in resp.text
 
 
+_DOWNLOAD = TrackedDownload(
+    file=FileKey(Network.ED2K, TEST_HASH),
+    target_id="062A",
+    state=DownloadState.DOWNLOADING,
+    queued_at=datetime(2026, 10, 10, tzinfo=UTC),
+    completed_at=None,
+    last_progress_at=None,
+    waiting_reason=None,
+    failure_reason=None,
+)
+
+
+async def _node_page(node_state: NodeState) -> str:
+    return await _page(_app_on_fakes(node_state=node_state), "/node")
+
+
 @pytest.mark.asyncio
-async def test_node_page_shows_each_backoff_and_its_planned_retry_in_utc(
-    populated_app: tuple[Starlette, str], local_db: Path
-) -> None:
-    app, _ = populated_app
-    started_at_micros = 1_781_258_400_000_000  # 2026-06-12T10:00:00Z
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        before = await client.get("/node")
-        with sqlite3.connect(local_db) as conn:
-            conn.executemany(
-                "INSERT INTO backoff_states VALUES (?, ?, ?, ?, ?)",
-                [
-                    ("amuled", None, 3, started_at_micros, 120.0),
-                    ("amuled", "kad", 1, started_at_micros, 2.5),
-                ],
-            )
-        after = await client.get("/node")
-    assert "No backoff." in before.text
-    cells = re.findall(r"<td>([^<]*)</td>", after.text)
+async def test_node_page_shows_each_backoff_and_its_planned_retry_in_utc() -> None:
+    started_at = datetime(2026, 6, 12, 10, tzinfo=UTC)
+    backoff_state_by_key = {
+        BackoffKey("amuled", None): BackoffState(3, started_at, timedelta(seconds=120)),
+        BackoffKey("amuled", "kad"): BackoffState(1, started_at, timedelta(seconds=2.5)),
+    }
+    before = await _node_page(_NODE_STATE)
+    after = await _node_page(replace(_NODE_STATE, backoff_state_by_key=backoff_state_by_key))
+    assert "No backoff." in before
+    cells = re.findall(r"<td>([^<]*)</td>", after)
     assert cells == [
         *("amuled", "whole client", "3", "2026-06-12T10:02:00.000000+00:00"),
         *("amuled", "kad", "1", "2026-06-12T10:00:02.500000+00:00"),
@@ -1247,40 +1224,25 @@ async def test_node_page_shows_each_backoff_and_its_planned_retry_in_utc(
 
 
 @pytest.mark.asyncio
-async def test_node_page_names_a_download_by_its_native_id(
-    populated_app: tuple[Starlette, str], local_db: Path
-) -> None:
-    app, hash_ = populated_app
-    with sqlite3.connect(local_db) as conn:
-        conn.execute(
-            "INSERT INTO downloads (file_id, network, native_id, target_id, state, queued_at)"
-            " VALUES (?, 'ed2k', ?, '062A', 'downloading', '2026-10-10T00:00:00.000000+00:00')",
-            (file_id(hash_), hash_),
-        )
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/node")
-    assert f"<td>{hash_}</td>" in resp.text
+async def test_node_page_names_a_download_by_its_native_id() -> None:
+    text = await _node_page(replace(_NODE_STATE, downloads=(_DOWNLOAD,)))
+    assert f"<td>{TEST_HASH}</td>" in text
 
 
 @pytest.mark.asyncio
-async def test_node_page_shows_a_downloads_lifecycle(
-    populated_app: tuple[Starlette, str], local_db: Path
-) -> None:
-    app, hash_ = populated_app
-    with sqlite3.connect(local_db) as conn:
-        conn.execute(
-            "INSERT INTO downloads (file_id, network, native_id, target_id, state, queued_at,"
-            " last_progress_at, waiting_reason, failure_reason) VALUES"
-            " (?, 'ed2k', ?, '062A', 'failed', '2026-10-10T00:00:00.000000+00:00',"
-            " '2026-10-11T00:00:00.000000+00:00', 'local_processing', 'error')",
-            (file_id(hash_), hash_),
-        )
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/node")
-    assert "<td>2026-10-11T00:00:00.000000+00:00</td>" in resp.text
-    assert "<td>local_processing</td>" in resp.text
-    assert "<td>error</td>" in resp.text
-    assert "None" not in resp.text  # an unknown value shows blank
+async def test_node_page_shows_a_downloads_lifecycle() -> None:
+    download = replace(
+        _DOWNLOAD,
+        state=DownloadState.FAILED,
+        last_progress_at=datetime(2026, 10, 11, tzinfo=UTC),
+        waiting_reason="local_processing",
+        failure_reason="error",
+    )
+    text = await _node_page(replace(_NODE_STATE, downloads=(download,)))
+    assert "<td>2026-10-11T00:00:00.000000+00:00</td>" in text
+    assert "<td>local_processing</td>" in text
+    assert "<td>error</td>" in text
+    assert "None" not in text  # an unknown value shows blank
 
 
 @pytest.fixture
@@ -1298,11 +1260,6 @@ def app_with_media_obs(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
             bitrate_kbps=192,
         )
         insert_decision(conn, TEST_HASH, "062A", "catalog", rule_name="catalog")
-
-    with sqlite3.connect(local_db) as conn:
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-media"))
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
-        conn.commit()
 
     matcher_config = _matcher()
     targets = _targets()
@@ -1322,8 +1279,8 @@ def app_with_media_obs(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         crawl_pauser=_NO_CONTROLS,
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_crawl_summarizer(targets, catalog_db, local_db),
-        node_describer=DescribeNode(_node_state_reader(local_db)),
+        crawl_summarizer=_SUMMARIZER,
+        node_describer=_DESCRIBER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1382,8 +1339,8 @@ async def test_a_template_reading_what_its_context_lacks_raises(
         crawl_pauser=_NO_CONTROLS,
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_crawl_summarizer(_targets(), catalog_db, local_db),
-        node_describer=DescribeNode(_node_state_reader(local_db)),
+        crawl_summarizer=_SUMMARIZER,
+        node_describer=_DESCRIBER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1464,10 +1421,6 @@ def app_with_hostile_filename(catalog_db: Path, local_db: Path) -> tuple[Starlet
     with sqlite3.connect(catalog_db) as conn:
         insert_file(conn, TEST_HASH, 100_000_000)
         insert_observation(conn, TEST_HASH, hostile, size_bytes=100_000_000)
-    with sqlite3.connect(local_db) as conn:
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-hostile"))
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
-        conn.commit()
     matcher_config = _matcher()
     targets = _targets()
     import p2pwatch.adapters.driving.webui
@@ -1484,8 +1437,8 @@ def app_with_hostile_filename(catalog_db: Path, local_db: Path) -> tuple[Starlet
         crawl_pauser=_NO_CONTROLS,
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_crawl_summarizer(targets, catalog_db, local_db),
-        node_describer=DescribeNode(_node_state_reader(local_db)),
+        crawl_summarizer=_SUMMARIZER,
+        node_describer=_DESCRIBER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1545,10 +1498,6 @@ async def test_files_page_shows_pagination_navigation(catalog_db: Path, local_db
             insert_file(conn, ed2k)
             insert_observation(conn, ed2k, f"file-{i}.bin")
             insert_decision(conn, ed2k, "062A", "catalog", rule_name="catalog")
-    with sqlite3.connect(local_db) as conn:
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-paged"))
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
-        conn.commit()
     matcher_config = _matcher()
     targets = _targets()
     import p2pwatch.adapters.driving.webui
@@ -1565,8 +1514,8 @@ async def test_files_page_shows_pagination_navigation(catalog_db: Path, local_db
         crawl_pauser=_NO_CONTROLS,
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_crawl_summarizer(targets, catalog_db, local_db),
-        node_describer=DescribeNode(_node_state_reader(local_db)),
+        crawl_summarizer=_SUMMARIZER,
+        node_describer=_DESCRIBER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1865,11 +1814,6 @@ def app_whole_episode(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]
         insert_decision(conn, TEST_HASH, "072A", "download", rule_name="numero_nu_confirmed")
         insert_decision(conn, TEST_HASH, "072B", "download", rule_name="numero_nu_confirmed")
 
-    with sqlite3.connect(local_db) as conn:
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("node_id", "node-whole"))
-        conn.execute("INSERT INTO node_runtime VALUES (?, ?)", ("created_at", _CREATED_AT))
-        conn.commit()
-
     matcher_config = _matcher()
     targets = _targets_ab()
 
@@ -1887,8 +1831,8 @@ def app_whole_episode(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]
         crawl_pauser=_NO_CONTROLS,
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_crawl_summarizer(targets, catalog_db, local_db),
-        node_describer=DescribeNode(_node_state_reader(local_db)),
+        crawl_summarizer=_SUMMARIZER,
+        node_describer=_DESCRIBER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1979,8 +1923,8 @@ def app_title_coverage(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         crawl_pauser=_NO_CONTROLS,
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_crawl_summarizer(_targets_ab(), catalog_db, local_db),
-        node_describer=DescribeNode(_node_state_reader(local_db)),
+        crawl_summarizer=_SUMMARIZER,
+        node_describer=_DESCRIBER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -2008,49 +1952,11 @@ async def test_file_detail_shows_each_coverage_value_to_two_decimals(
 # ---------------------------------------------------------------------------
 
 
-def _dashboard_app(
-    catalog_db: Path,
-    local_db: Path,
-    controls: FakeCrawlControls,
-    status: FakeClientStatusReader,
-    run_state: FakeRunState = _RUNNING,
-) -> Starlette:
-    import p2pwatch.adapters.driving.webui
-
-    webui_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent
-    return build_app(
-        catalog_db_path=catalog_db,
-        local_db_path=local_db,
-        matcher_config=_matcher(),
-        target_segments=_targets(),
-        templates_dir=webui_dir / "templates",
-        static_dir=webui_dir / "static",
-        crawl_pauser=controls,
-        crawl_resumer=controls,
-        shutdown_requester=controls,
-        crawl_summarizer=_crawl_summarizer(
-            _targets(), catalog_db, local_db, run_state=run_state, status=status
-        ),
-        node_describer=DescribeNode(_node_state_reader(local_db)),
-        amule_url=_AMULE_URL,
-        wall_clock=_WALL_CLOCK,
-        monotonic_clock=_MONOTONIC_CLOCK,
-        source_period_gap=_GAP,
-    )
-
-
 @pytest.fixture
-def controls_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, FakeCrawlControls]:
+def controls_app() -> tuple[Starlette, FakeCrawlControls]:
     """App wired with fake controls, for the runtime-control route tests."""
     controls = FakeCrawlControls()
-    return _dashboard_app(catalog_db, local_db, controls, _NO_STATUS), controls
-
-
-async def _dashboard(app: Starlette) -> str:
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/")
-    assert resp.status_code == 200
-    return resp.text
+    return _app_on_fakes(controls=controls), controls
 
 
 @pytest.mark.asyncio
@@ -2058,7 +1964,7 @@ async def test_dashboard_renders_the_three_action_forms_and_the_running_crawl(
     controls_app: tuple[Starlette, FakeCrawlControls],
 ) -> None:
     app, _ = controls_app
-    text = await _dashboard(app)
+    text = await _page(app, "/")
     assert 'action="/controls/pause"' in text
     assert 'action="/controls/resume"' in text
     assert 'action="/controls/restart"' in text
@@ -2066,10 +1972,9 @@ async def test_dashboard_renders_the_three_action_forms_and_the_running_crawl(
 
 
 @pytest.mark.asyncio
-async def test_dashboard_shows_a_paused_crawl(catalog_db: Path, local_db: Path) -> None:
-    paused = FakeRunState(paused=True)
-    app = _dashboard_app(catalog_db, local_db, FakeCrawlControls(), _NO_STATUS, paused)
-    assert "The crawl is paused." in await _dashboard(app)
+async def test_dashboard_shows_a_paused_crawl() -> None:
+    app = _app_on_fakes(crawl_summary=replace(_CRAWL_SUMMARY, is_paused=True))
+    assert "The crawl is paused." in await _page(app, "/")
 
 
 @pytest.mark.asyncio
@@ -2089,7 +1994,7 @@ async def test_dashboard_without_done_shows_no_banner(
     controls_app: tuple[Starlette, FakeCrawlControls],
 ) -> None:
     app, _ = controls_app
-    assert "control-banner" not in await _dashboard(app)
+    assert "control-banner" not in await _page(app, "/")
 
 
 @pytest.mark.asyncio
@@ -2161,16 +2066,12 @@ async def test_each_control_followed_lands_on_its_dashboard_banner(
 
 
 _CHANNELS = (ChannelStatus("ed2k", True, False), ChannelStatus("x", False, None))
-_FRESH = timedelta(0)
 
 
-async def _clients_section(
-    catalog_db: Path, local_db: Path, reading: StatusReading | None, *, age: timedelta = _FRESH
-) -> str:
-    published_at = _MONOTONIC_CLOCK.now() - age
-    published = None if reading is None else PublishedReading(reading, published_at)
-    status = FakeClientStatusReader({"amuled": published})
-    text = await _dashboard(_dashboard_app(catalog_db, local_db, FakeCrawlControls(), status))
+async def _clients_section(reading: StatusReading | None, *, is_fresh: bool = True) -> str:
+    client_summary = ClientSummary("amuled", reading, is_fresh=is_fresh)
+    summary = replace(_CRAWL_SUMMARY, client_summaries=(client_summary,))
+    text = await _page(_app_on_fakes(crawl_summary=summary), "/")
     return text[text.index("<h2>Clients</h2>") : text.index("<h2>Crawl</h2>")]
 
 
@@ -2179,12 +2080,8 @@ def _read_now(status: ClientStatus | None) -> StatusReading:
 
 
 @pytest.mark.asyncio
-async def test_dashboard_shows_each_client_and_channel_of_a_current_reading(
-    catalog_db: Path, local_db: Path
-) -> None:
-    section = await _clients_section(
-        catalog_db, local_db, _read_now(ClientStatus("2.3.3", _CHANNELS))
-    )
+async def test_dashboard_shows_each_client_and_channel_of_a_current_reading() -> None:
+    section = await _clients_section(_read_now(ClientStatus("2.3.3", _CHANNELS)))
     assert "<h3>amuled</h3>" in section
     assert "<th>Connected</th>" in section
     assert "<dd>2.3.3</dd>" in section
@@ -2195,29 +2092,22 @@ async def test_dashboard_shows_each_client_and_channel_of_a_current_reading(
 
 
 @pytest.mark.asyncio
-async def test_dashboard_shows_an_unknown_version(catalog_db: Path, local_db: Path) -> None:
-    section = await _clients_section(catalog_db, local_db, _read_now(ClientStatus(None, ())))
+async def test_dashboard_shows_an_unknown_version() -> None:
+    section = await _clients_section(_read_now(ClientStatus(None, ())))
     assert "<dt>Version</dt><dd>unknown</dd>" in section
     assert "No current channel reading." in section
 
 
 @pytest.mark.asyncio
-async def test_dashboard_shows_an_unreachable_client(catalog_db: Path, local_db: Path) -> None:
-    section = await _clients_section(catalog_db, local_db, _read_now(None))
+async def test_dashboard_shows_an_unreachable_client() -> None:
+    section = await _clients_section(_read_now(None))
     assert "<dt>API reachable</dt><dd>no</dd>" in section
     assert "No current channel reading." in section
 
 
 @pytest.mark.asyncio
-async def test_dashboard_never_shows_an_old_reading_as_current(
-    catalog_db: Path, local_db: Path
-) -> None:
-    section = await _clients_section(
-        catalog_db,
-        local_db,
-        _read_now(ClientStatus("2.3.3", _CHANNELS)),
-        age=timedelta(minutes=2, microseconds=1),
-    )
+async def test_dashboard_never_shows_a_stale_reading_as_current() -> None:
+    section = await _clients_section(_read_now(ClientStatus("2.3.3", _CHANNELS)), is_fresh=False)
     assert "<dd>Out of date: last reading at 2026-06-12 00:00Z.</dd>" in section
     assert "2.3.3" not in section
     assert "<dt>API reachable</dt><dd>unknown</dd>" in section
@@ -2225,8 +2115,8 @@ async def test_dashboard_never_shows_an_old_reading_as_current(
 
 
 @pytest.mark.asyncio
-async def test_dashboard_shows_a_client_not_read_yet(catalog_db: Path, local_db: Path) -> None:
-    section = await _clients_section(catalog_db, local_db, None)
+async def test_dashboard_shows_a_client_not_read_yet() -> None:
+    section = await _clients_section(None, is_fresh=False)
     assert "<h3>amuled</h3>" in section
     assert "<dd>No reading yet.</dd>" in section
     assert "<dt>API reachable</dt><dd>unknown</dd>" in section
@@ -2302,8 +2192,8 @@ def sortable_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, list[str]
         crawl_pauser=_NO_CONTROLS,
         crawl_resumer=_NO_CONTROLS,
         shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_crawl_summarizer(_targets(), catalog_db, local_db),
-        node_describer=DescribeNode(_node_state_reader(local_db)),
+        crawl_summarizer=_SUMMARIZER,
+        node_describer=_DESCRIBER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -2515,32 +2405,11 @@ async def test_nav_links_to_the_amule_web_ui(populated_app: tuple[Starlette, str
 
 
 @pytest.mark.asyncio
-async def test_nav_amule_link_uses_the_configured_base(catalog_db: Path, local_db: Path) -> None:
+async def test_nav_amule_link_uses_the_configured_base() -> None:
     """The base is configurable so the link survives a reverse proxy in front of 8080: p2pwatch
     cannot infer from the request how amuleweb is reachable from the operator's browser."""
-    import p2pwatch.adapters.driving.webui
-
-    webui_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent
-    app = build_app(
-        catalog_db_path=catalog_db,
-        local_db_path=local_db,
-        matcher_config=_matcher(),
-        target_segments=_targets(),
-        templates_dir=webui_dir / "templates",
-        static_dir=webui_dir / "static",
-        crawl_pauser=_NO_CONTROLS,
-        crawl_resumer=_NO_CONTROLS,
-        shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_crawl_summarizer(_targets(), catalog_db, local_db),
-        node_describer=DescribeNode(_node_state_reader(local_db)),
-        amule_url="https://mule.example.org/amule",
-        wall_clock=_WALL_CLOCK,
-        monotonic_clock=_MONOTONIC_CLOCK,
-        source_period_gap=_GAP,
-    )
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/")
-    assert '<a href="https://mule.example.org/amule">aMule</a>' in resp.text
+    app = _app_on_fakes(amule_url="https://mule.example.org/amule")
+    assert '<a href="https://mule.example.org/amule">aMule</a>' in await _page(app, "/")
 
 
 @pytest.mark.asyncio
