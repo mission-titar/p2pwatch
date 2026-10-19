@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from p2pwatch.domain.coverage import TargetCoverage
 from p2pwatch.domain.node_state import NodeState
-from p2pwatch.ports.driven.client_status import StatusReading
+from p2pwatch.domain.status_reading import StatusReading
 
 
 @dataclass(frozen=True)

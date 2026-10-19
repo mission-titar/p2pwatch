@@ -6,8 +6,8 @@ from datetime import UTC, datetime
 from p2pwatch.application.summarize_crawl import SummarizeCrawl
 from p2pwatch.domain.coverage import TargetCoverage
 from p2pwatch.domain.node_state import NodeState
-from p2pwatch.domain.status_reading import READING_FRESH_FOR
-from p2pwatch.ports.driven.client_status import PublishedReading, StatusReading
+from p2pwatch.domain.status_reading import READING_FRESH_FOR, StatusReading
+from p2pwatch.ports.driven.client_status import PublishedReading
 from p2pwatch.ports.driven.coverage_reader import CoverageReader
 from p2pwatch.ports.driving.crawl_summarizer import ClientSummary, CrawlSummary
 from p2pwatch_testing.application.fakes import (

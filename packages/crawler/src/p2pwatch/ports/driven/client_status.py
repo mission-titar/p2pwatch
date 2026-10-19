@@ -4,35 +4,17 @@
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Protocol
 
+# Imported from here too until their importers move to the domain.
+from p2pwatch.domain.status_reading import ChannelStatus as ChannelStatus
+from p2pwatch.domain.status_reading import ClientStatus as ClientStatus
+from p2pwatch.domain.status_reading import StatusReading as StatusReading
 from p2pwatch.ports.driven.clock import MonotonicInstant
-
-
-@dataclass(frozen=True)
-class ChannelStatus:
-    """``connectable``: peers can connect to us; ``None`` when the client cannot tell."""
-
-    channel: str
-    connected: bool
-    connectable: bool | None
-
-
-@dataclass(frozen=True)
-class ClientStatus:
-    version: str | None
-    channels: tuple[ChannelStatus, ...]
 
 
 class StatusClient(Protocol):
     async def status(self) -> ClientStatus: ...
-
-
-@dataclass(frozen=True)
-class StatusReading:
-    read_at: datetime  # for display: a reading's age is measured on the monotonic clock
-    status: ClientStatus | None  # None: the client's API did not answer
 
 
 @dataclass(frozen=True)
