@@ -629,7 +629,7 @@ def build_app(
     keeps the explainer's config from drifting from the persisted decisions (spec §8).
 
     ``control`` is the runtime-control PORT (``CrawlerControl``): the webui depends on the port,
-    never on the concrete adapter (composition wires ``LoopCrawlerControl``). Every control POST
+    never on the concrete adapter (composition wires ``AsyncioRunState``). Every control POST
     dispatches a thread-safe, fire-and-forget intent to the crawler loop; the webui itself holds
     no write connection (spec §4/§10). ``status_readings`` holds the status loops' last readings.
 

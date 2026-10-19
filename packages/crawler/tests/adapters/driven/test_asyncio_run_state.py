@@ -1,6 +1,6 @@
-"""Tests for ``LoopCrawlerControl`` (webui to crawler-loop control adapter, phase P6a).
+"""Tests for ``AsyncioRunState``, the run state the webui changes from its own thread.
 
-The load-bearing property: every control mutation is HANDED OFF to the crawler loop via
+The load-bearing property: every change is HANDED OFF to the crawler loop via
 ``loop.call_soon_threadsafe`` (never applied inline on the caller/webui thread). Two fake loops
 model the two facets:
 
@@ -13,17 +13,14 @@ model the two facets:
 import asyncio
 from collections.abc import Callable
 
-from p2pwatch.adapters.driven.crawler_control_loop import LoopCrawlerControl
+from p2pwatch.adapters.driven.asyncio_run_state import AsyncioRunState
+from p2pwatch.ports.driven.run_state import RunStateReader, RunStateWriter
 
 
 class _ImmediateLoop:
     """Fake loop whose ``call_soon_threadsafe`` runs the callback INLINE."""
 
-    def __init__(self) -> None:
-        self.scheduled = 0
-
     def call_soon_threadsafe(self, callback: Callable[[], None]) -> None:
-        self.scheduled += 1
         callback()
 
 
@@ -37,57 +34,49 @@ class _RecordingLoop:
         self.callbacks.append(callback)
 
 
-def _control_with(loop: object) -> tuple[LoopCrawlerControl, asyncio.Event, asyncio.Event]:
+def _run_state_with(
+    loop: object,
+) -> tuple[RunStateWriter, RunStateReader, asyncio.Event, asyncio.Event]:
+    """The run state seen through its two ports, and its two events."""
     resumed = asyncio.Event()
     shutdown = asyncio.Event()
-    control = LoopCrawlerControl(
+    run_state = AsyncioRunState(
         loop=loop,  # type: ignore[arg-type]  # fake loop, only call_soon_threadsafe is used
         resumed=resumed,
         shutdown=shutdown,
     )
-    return control, resumed, shutdown
+    return run_state, run_state, resumed, shutdown
 
 
 def test_pause_clears_the_resumed_event() -> None:
-    control, resumed, shutdown = _control_with(_ImmediateLoop())
+    writer, _reader, resumed, shutdown = _run_state_with(_ImmediateLoop())
     resumed.set()  # running
-    control.pause()
+    writer.pause()
     assert not resumed.is_set()
     assert not shutdown.is_set()
 
 
 def test_resume_sets_the_resumed_event() -> None:
-    control, resumed, shutdown = _control_with(_ImmediateLoop())
+    writer, _reader, resumed, shutdown = _run_state_with(_ImmediateLoop())
     resumed.clear()  # paused
-    control.resume()
+    writer.resume()
     assert resumed.is_set()
     assert not shutdown.is_set()
 
 
 def test_request_shutdown_sets_only_the_shutdown_event() -> None:
-    control, resumed, shutdown = _control_with(_ImmediateLoop())
-    control.request_shutdown()
+    writer, _reader, resumed, shutdown = _run_state_with(_ImmediateLoop())
+    writer.request_shutdown()
     assert shutdown.is_set()
     assert not resumed.is_set()
-
-
-def test_control_holds_no_db_connection_and_only_events_plus_loop() -> None:
-    """Structural read-only guarantee (spec §4): the control's only effect is scheduling event
-    mutations on the loop. It holds NO DB connection / cannot write: its slots, the only state
-    it can hold, are exactly the loop + the two events."""
-    loop = _ImmediateLoop()
-    control, resumed, shutdown = _control_with(loop)
-    assert LoopCrawlerControl.__slots__ == ("_loop", "_resumed", "_shutdown")
-    held: tuple[object, ...] = (control._loop, control._resumed, control._shutdown)
-    assert held == (loop, resumed, shutdown)
 
 
 def test_mutation_is_deferred_to_the_loop_thread_via_call_soon_threadsafe() -> None:
     """The hand-off goes through ``call_soon_threadsafe``: the event is NOT mutated inline on the
     caller thread; it is scheduled and only mutates once the loop runs the callback."""
     loop = _RecordingLoop()
-    control, _resumed, shutdown = _control_with(loop)
-    control.request_shutdown()
+    writer, _reader, _resumed, shutdown = _run_state_with(loop)
+    writer.request_shutdown()
     # Scheduled, but NOT yet applied (deferred to the crawler loop thread).
     assert len(loop.callbacks) == 1
     assert not shutdown.is_set()
@@ -97,7 +86,7 @@ def test_mutation_is_deferred_to_the_loop_thread_via_call_soon_threadsafe() -> N
 
 
 def test_is_paused_reads_the_pause_gate() -> None:
-    control, resumed, _ = _control_with(_RecordingLoop())
-    assert control.is_paused()
+    _writer, reader, resumed, _shutdown = _run_state_with(_RecordingLoop())
+    assert reader.is_paused()
     resumed.set()
-    assert not control.is_paused()
+    assert not reader.is_paused()
