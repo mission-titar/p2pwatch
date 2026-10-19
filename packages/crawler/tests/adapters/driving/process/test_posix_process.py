@@ -5,18 +5,22 @@ import signal
 
 import pytest
 
-from p2pwatch.adapters.driven.asyncio_run_state import AsyncioRunState
 from p2pwatch.adapters.driving.process.posix_process import PosixProcess
+from p2pwatch.ports.driving.shutdown_requester import ShutdownRequester
 
 _REQUESTED = (
     "Shutdown requested: finishing in-flight searches, clean close… (Ctrl-C again to force)"
 )
 
 
-def _run_state(shutdown: asyncio.Event) -> AsyncioRunState:
-    return AsyncioRunState(
-        loop=asyncio.get_running_loop(), resumed=asyncio.Event(), shutdown=shutdown
-    )
+class _FakeShutdownRequester(ShutdownRequester):
+    """Sets ``requested`` on each request, for the test to wait on."""
+
+    def __init__(self) -> None:
+        self.requested = asyncio.Event()
+
+    def request_shutdown(self) -> None:
+        self.requested.set()
 
 
 @pytest.mark.asyncio
@@ -24,21 +28,21 @@ def _run_state(shutdown: asyncio.Event) -> AsyncioRunState:
 async def test_a_first_signal_requests_the_shutdown_and_says_how_to_force(
     signal_number: signal.Signals, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    shutdown = asyncio.Event()
+    shutdown_requester = _FakeShutdownRequester()
 
-    async with PosixProcess(_run_state(shutdown)):
+    async with PosixProcess(shutdown_requester):
         signal.raise_signal(signal_number)
-        await asyncio.wait_for(shutdown.wait(), 1.0)
+        await asyncio.wait_for(shutdown_requester.requested.wait(), 1.0)
 
     assert capsys.readouterr().err == f"{_REQUESTED}\n"
 
 
 def test_a_second_signal_forces_the_exit(capsys: pytest.CaptureFixture[str]) -> None:
     async def signal_twice() -> None:
-        shutdown = asyncio.Event()
-        async with PosixProcess(_run_state(shutdown)):
+        shutdown_requester = _FakeShutdownRequester()
+        async with PosixProcess(shutdown_requester):
             signal.raise_signal(signal.SIGTERM)
-            await shutdown.wait()
+            await shutdown_requester.requested.wait()
             signal.raise_signal(signal.SIGINT)
             await asyncio.wait_for(asyncio.Event().wait(), 1.0)  # only the forced exit ends it
 
@@ -52,7 +56,7 @@ def test_a_second_signal_forces_the_exit(capsys: pytest.CaptureFixture[str]) -> 
 
 @pytest.mark.asyncio
 async def test_on_exit_the_signals_get_their_default_handlers_back() -> None:
-    async with PosixProcess(_run_state(asyncio.Event())):
+    async with PosixProcess(_FakeShutdownRequester()):
         assert signal.getsignal(signal.SIGINT) is not signal.default_int_handler
         assert signal.getsignal(signal.SIGTERM) is not signal.SIG_DFL
 
@@ -72,7 +76,7 @@ async def test_on_exit_it_closes_all_it_holds_and_lets_only_the_first_error_thro
         raise close_failure
 
     with pytest.raises(ValueError, match="setup failed"):
-        async with PosixProcess(_run_state(asyncio.Event())) as resources:
+        async with PosixProcess(_FakeShutdownRequester()) as resources:
             resources.callback(closed.append, "catalog")
             resources.push_async_callback(fail_to_close)
             raise ValueError("setup failed")

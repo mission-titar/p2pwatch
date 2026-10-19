@@ -61,7 +61,10 @@ from p2pwatch.adapters.driven.wall_clock_system import SystemWallClock
 from p2pwatch.adapters.driving.process.posix_process import PosixProcess
 from p2pwatch.adapters.driving.webui.app import build_app as build_webui_app
 from p2pwatch.adapters.driving.webui.uvicorn_server_thread import UvicornServerThread
+from p2pwatch.application.pause_crawl import PauseCrawl
 from p2pwatch.application.reevaluate_catalog import reevaluate_catalog
+from p2pwatch.application.request_shutdown import RequestShutdown
+from p2pwatch.application.resume_crawl import ResumeCrawl
 from p2pwatch.application.run_crawler import RunCrawler
 from p2pwatch.application.run_download_cycle import (
     DownloadLoopDeps,
@@ -76,7 +79,6 @@ from p2pwatch.application.search_worker import (
 )
 from p2pwatch.application.status_loop import StatusBoard, StatusLoopDeps, status_loop
 from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
-from p2pwatch.ports.driving.crawler_control import CrawlerControl
 from p2pwatch.ports.driving.crawler_runner import CrawlerRunner
 
 _logger = logging.getLogger("p2pwatch.composition.app")
@@ -127,7 +129,8 @@ class CrawlerApp(CrawlerRunner):
         config: LoadedConfig,
         stack: AsyncExitStack,
         status_board: StatusBoard,
-        control: CrawlerControl,
+        run_state: AsyncioRunState,
+        shutdown_requester: RequestShutdown,
         wall_clock: WallClock,
         monotonic_clock: MonotonicClock,
     ) -> None:
@@ -145,7 +148,10 @@ class CrawlerApp(CrawlerRunner):
             target_segments=config.targets,
             templates_dir=webui_pkg_dir / "templates",
             static_dir=webui_pkg_dir / "static",
-            control=control,
+            crawl_pauser=PauseCrawl(run_state),
+            crawl_resumer=ResumeCrawl(run_state),
+            shutdown_requester=shutdown_requester,
+            run_state_reader=run_state,
             status_readings=status_board,
             amule_url=crawler_config.webui.amule_url,
             wall_clock=wall_clock,
@@ -181,7 +187,8 @@ class CrawlerApp(CrawlerRunner):
         loop = asyncio.get_running_loop()
         # On the crawler's OWN loop + events, so the webui thread changes it thread-safely.
         run_state = AsyncioRunState(loop=loop, resumed=resumed, shutdown=shutdown)
-        async with PosixProcess(run_state) as stack:
+        shutdown_requester = RequestShutdown(run_state)
+        async with PosixProcess(shutdown_requester) as stack:
             catalog_conn = open_catalog(crawler_config.catalog_db_path)
             stack.callback(catalog_conn.close)
             local_conn = open_local(crawler_config.local_db_path)
@@ -213,7 +220,8 @@ class CrawlerApp(CrawlerRunner):
                     config=config,
                     stack=stack,
                     status_board=board,
-                    control=run_state,
+                    run_state=run_state,
+                    shutdown_requester=shutdown_requester,
                     wall_clock=wall_clock,
                     monotonic_clock=monotonic_clock,
                 )

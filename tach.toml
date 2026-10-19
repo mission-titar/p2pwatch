@@ -245,14 +245,16 @@ depends_on = [
 [[modules]]
 path = "p2pwatch.adapters.driving.process"
 layer = "adapters"
-depends_on = ["p2pwatch.ports.driving.crawler_control"]
+depends_on = ["p2pwatch.ports.driving.shutdown_requester"]
 
 [[modules]]
 path = "p2pwatch.adapters.driving.webui"
 layer = "adapters"
 depends_on = [
   "p2pwatch.domain",
-  "p2pwatch.ports.driving.crawler_control",
+  "p2pwatch.ports.driving.crawl_pauser",
+  "p2pwatch.ports.driving.crawl_resumer",
+  "p2pwatch.ports.driving.shutdown_requester",
   # The webui builds and calls the readers itself: lot 2 puts use cases between them.
   { path = "p2pwatch.adapters.driven.persistence_sqlite", deprecated = true },
   { path = "p2pwatch.adapters.driven.persistence_sqlite.catalog_read", deprecated = true },
@@ -265,6 +267,8 @@ depends_on = [
   # The webui reads the clocks and the client status directly: lot 2 gives it driving ports.
   { path = "p2pwatch.ports.driven.client_status", deprecated = true },
   { path = "p2pwatch.ports.driven.clock", deprecated = true },
+  # The dashboard reads the run state itself: lot 2's SummarizeCrawl (block 110) reads it instead.
+  { path = "p2pwatch.ports.driven.run_state", deprecated = true },
 ]
 
 [[modules]]
@@ -292,6 +296,7 @@ depends_on = [
   "p2pwatch.ports.driven.node_id",
   "p2pwatch.ports.driven.repository_errors",
   "p2pwatch.ports.driven.rng",
+  "p2pwatch.ports.driven.run_state",
   "p2pwatch.ports.driven.search_client",
   "p2pwatch.ports.driven.source_client",
   "p2pwatch.ports.driven.source_repository",
@@ -299,6 +304,9 @@ depends_on = [
   "p2pwatch.ports.driven.wake_hub",
   "p2pwatch.ports.driving.catalog_merger",
   "p2pwatch.ports.driving.config_validator",
+  "p2pwatch.ports.driving.crawl_pauser",
+  "p2pwatch.ports.driving.crawl_resumer",
+  "p2pwatch.ports.driving.shutdown_requester",
 ]
 
 [[modules]]
@@ -321,7 +329,6 @@ depends_on = [
   "p2pwatch.adapters.driving.webui",
   "p2pwatch.application",
   "p2pwatch.ports.driven.clock",
-  "p2pwatch.ports.driving.crawler_control",
   "p2pwatch.ports.driving.crawler_runner",
 ]
 
@@ -446,12 +453,22 @@ layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driving.crawler_control"
+path = "p2pwatch.ports.driving.crawl_pauser"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driving.crawl_resumer"
 layer = "ports"
 depends_on = []
 
 [[modules]]
 path = "p2pwatch.ports.driving.crawler_runner"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driving.shutdown_requester"
 layer = "ports"
 depends_on = []
 

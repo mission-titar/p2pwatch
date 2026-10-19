@@ -38,7 +38,7 @@ from p2pwatch.adapters.driving.webui.views import (
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceKey
 from p2pwatch.ports.driven.client_status import ChannelStatus, ClientStatus, StatusReading
-from p2pwatch_testing.application.fakes import FakeTime
+from p2pwatch_testing.application.fakes import FakeCrawlControls, FakeRunState, FakeTime
 from p2pwatch_testing.catalog_rows import (
     SEEN_AT,
     file_id,
@@ -81,6 +81,9 @@ class _Readings:
 
 
 _NO_STATUS = _Readings({})
+# The read-path fixtures never call the controls, and read the crawl as running.
+_NO_CONTROLS = FakeCrawlControls()
+_RUNNING = FakeRunState()
 
 
 def _detail_url(ed2k_hash: str) -> str:
@@ -96,28 +99,6 @@ def _query(since: datetime, until: datetime, **kept: str) -> str:
 def _href(path: str, since: datetime, until: datetime, **kept: str) -> str:
     """An interval's link as the page escapes it."""
     return f'href="{path}?{_query(since, until, **kept)}"'.replace("&", "&amp;")
-
-
-class _RecordingControl:
-    """Records runtime-control intents (phase P6a). Satisfies ``CrawlerControl`` structurally;
-    the throwaway instances passed to the read-path fixtures are never invoked, while the
-    controls-route tests inspect ``calls``."""
-
-    def __init__(self) -> None:
-        self.calls: list[str] = []
-        self.paused = False
-
-    def is_paused(self) -> bool:
-        return self.paused
-
-    def pause(self) -> None:
-        self.calls.append("pause")
-
-    def resume(self) -> None:
-        self.calls.append("resume")
-
-    def request_shutdown(self) -> None:
-        self.calls.append("request_shutdown")
 
 
 def _targets() -> tuple[TargetSegment, ...]:
@@ -195,7 +176,10 @@ def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
-        control=_RecordingControl(),
+        crawl_pauser=_NO_CONTROLS,
+        crawl_resumer=_NO_CONTROLS,
+        shutdown_requester=_NO_CONTROLS,
+        run_state_reader=_RUNNING,
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -241,7 +225,10 @@ def app_no_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
-        control=_RecordingControl(),
+        crawl_pauser=_NO_CONTROLS,
+        crawl_resumer=_NO_CONTROLS,
+        shutdown_requester=_NO_CONTROLS,
+        run_state_reader=_RUNNING,
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -299,7 +286,10 @@ def app_retracted_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette,
         target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
-        control=_RecordingControl(),
+        crawl_pauser=_NO_CONTROLS,
+        crawl_resumer=_NO_CONTROLS,
+        shutdown_requester=_NO_CONTROLS,
+        run_state_reader=_RUNNING,
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -338,7 +328,10 @@ def app_no_observations(catalog_db: Path, local_db: Path) -> tuple[Starlette, st
         target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
-        control=_RecordingControl(),
+        crawl_pauser=_NO_CONTROLS,
+        crawl_resumer=_NO_CONTROLS,
+        shutdown_requester=_NO_CONTROLS,
+        run_state_reader=_RUNNING,
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -385,7 +378,10 @@ def app_unknown_target(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
-        control=_RecordingControl(),
+        crawl_pauser=_NO_CONTROLS,
+        crawl_resumer=_NO_CONTROLS,
+        shutdown_requester=_NO_CONTROLS,
+        run_state_reader=_RUNNING,
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -432,7 +428,10 @@ def app_download_tier_known_target(catalog_db: Path, local_db: Path) -> tuple[St
         target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
-        control=_RecordingControl(),
+        crawl_pauser=_NO_CONTROLS,
+        crawl_resumer=_NO_CONTROLS,
+        shutdown_requester=_NO_CONTROLS,
+        run_state_reader=_RUNNING,
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -479,7 +478,10 @@ def app_download_tier_unknown_target(catalog_db: Path, local_db: Path) -> tuple[
         target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
-        control=_RecordingControl(),
+        crawl_pauser=_NO_CONTROLS,
+        crawl_resumer=_NO_CONTROLS,
+        shutdown_requester=_NO_CONTROLS,
+        run_state_reader=_RUNNING,
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -740,7 +742,10 @@ def app_vetoed_alias(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         target_segments=_targets(),
         templates_dir=webui_dir / "templates",
         static_dir=webui_dir / "static",
-        control=_RecordingControl(),
+        crawl_pauser=_NO_CONTROLS,
+        crawl_resumer=_NO_CONTROLS,
+        shutdown_requester=_NO_CONTROLS,
+        run_state_reader=_RUNNING,
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -1308,7 +1313,10 @@ def app_with_media_obs(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
-        control=_RecordingControl(),
+        crawl_pauser=_NO_CONTROLS,
+        crawl_resumer=_NO_CONTROLS,
+        shutdown_requester=_NO_CONTROLS,
+        run_state_reader=_RUNNING,
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -1365,7 +1373,10 @@ async def test_a_template_reading_what_its_context_lacks_raises(
         target_segments=_targets(),
         templates_dir=templates_dir,
         static_dir=Path(p2pwatch.adapters.driving.webui.__file__).parent / "static",
-        control=_RecordingControl(),
+        crawl_pauser=_NO_CONTROLS,
+        crawl_resumer=_NO_CONTROLS,
+        shutdown_requester=_NO_CONTROLS,
+        run_state_reader=_RUNNING,
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -1466,7 +1477,10 @@ def app_with_hostile_filename(catalog_db: Path, local_db: Path) -> tuple[Starlet
         target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
-        control=_RecordingControl(),
+        crawl_pauser=_NO_CONTROLS,
+        crawl_resumer=_NO_CONTROLS,
+        shutdown_requester=_NO_CONTROLS,
+        run_state_reader=_RUNNING,
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -1546,7 +1560,10 @@ async def test_files_page_shows_pagination_navigation(catalog_db: Path, local_db
         target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
-        control=_RecordingControl(),
+        crawl_pauser=_NO_CONTROLS,
+        crawl_resumer=_NO_CONTROLS,
+        shutdown_requester=_NO_CONTROLS,
+        run_state_reader=_RUNNING,
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -1867,7 +1884,10 @@ def app_whole_episode(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]
         target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
-        control=_RecordingControl(),
+        crawl_pauser=_NO_CONTROLS,
+        crawl_resumer=_NO_CONTROLS,
+        shutdown_requester=_NO_CONTROLS,
+        run_state_reader=_RUNNING,
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -1956,7 +1976,10 @@ def app_title_coverage(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         target_segments=_targets_ab(),
         templates_dir=webui_dir / "templates",
         static_dir=webui_dir / "static",
-        control=_RecordingControl(),
+        crawl_pauser=_NO_CONTROLS,
+        crawl_resumer=_NO_CONTROLS,
+        shutdown_requester=_NO_CONTROLS,
+        run_state_reader=_RUNNING,
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -1986,7 +2009,11 @@ async def test_file_detail_shows_each_coverage_value_to_two_decimals(
 
 
 def _dashboard_app(
-    catalog_db: Path, local_db: Path, control: _RecordingControl, status: _Readings
+    catalog_db: Path,
+    local_db: Path,
+    controls: FakeCrawlControls,
+    status: _Readings,
+    run_state: FakeRunState = _RUNNING,
 ) -> Starlette:
     import p2pwatch.adapters.driving.webui
 
@@ -1998,7 +2025,10 @@ def _dashboard_app(
         target_segments=_targets(),
         templates_dir=webui_dir / "templates",
         static_dir=webui_dir / "static",
-        control=control,
+        crawl_pauser=controls,
+        crawl_resumer=controls,
+        shutdown_requester=controls,
+        run_state_reader=run_state,
         status_readings=status,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -2008,10 +2038,10 @@ def _dashboard_app(
 
 
 @pytest.fixture
-def controls_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, _RecordingControl]:
-    """App wired with a recording control, for the runtime-control route tests."""
-    control = _RecordingControl()
-    return _dashboard_app(catalog_db, local_db, control, _NO_STATUS), control
+def controls_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, FakeCrawlControls]:
+    """App wired with fake controls, for the runtime-control route tests."""
+    controls = FakeCrawlControls()
+    return _dashboard_app(catalog_db, local_db, controls, _NO_STATUS), controls
 
 
 async def _dashboard(app: Starlette) -> str:
@@ -2023,7 +2053,7 @@ async def _dashboard(app: Starlette) -> str:
 
 @pytest.mark.asyncio
 async def test_dashboard_renders_the_three_action_forms_and_the_running_crawl(
-    controls_app: tuple[Starlette, _RecordingControl],
+    controls_app: tuple[Starlette, FakeCrawlControls],
 ) -> None:
     app, _ = controls_app
     text = await _dashboard(app)
@@ -2034,17 +2064,15 @@ async def test_dashboard_renders_the_three_action_forms_and_the_running_crawl(
 
 
 @pytest.mark.asyncio
-async def test_dashboard_shows_a_paused_crawl(
-    controls_app: tuple[Starlette, _RecordingControl],
-) -> None:
-    app, control = controls_app
-    control.paused = True
+async def test_dashboard_shows_a_paused_crawl(catalog_db: Path, local_db: Path) -> None:
+    paused = FakeRunState(paused=True)
+    app = _dashboard_app(catalog_db, local_db, FakeCrawlControls(), _NO_STATUS, paused)
     assert "The crawl is paused." in await _dashboard(app)
 
 
 @pytest.mark.asyncio
 async def test_the_controls_page_and_its_nav_entry_are_gone(
-    controls_app: tuple[Starlette, _RecordingControl],
+    controls_app: tuple[Starlette, FakeCrawlControls],
 ) -> None:
     app, _ = controls_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -2056,7 +2084,7 @@ async def test_the_controls_page_and_its_nav_entry_are_gone(
 
 @pytest.mark.asyncio
 async def test_dashboard_without_done_shows_no_banner(
-    controls_app: tuple[Starlette, _RecordingControl],
+    controls_app: tuple[Starlette, FakeCrawlControls],
 ) -> None:
     app, _ = controls_app
     assert "control-banner" not in await _dashboard(app)
@@ -2064,7 +2092,7 @@ async def test_dashboard_without_done_shows_no_banner(
 
 @pytest.mark.asyncio
 async def test_dashboard_unknown_done_shows_no_banner(
-    controls_app: tuple[Starlette, _RecordingControl],
+    controls_app: tuple[Starlette, FakeCrawlControls],
 ) -> None:
     app, _ = controls_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -2075,33 +2103,33 @@ async def test_dashboard_unknown_done_shows_no_banner(
 
 @pytest.mark.asyncio
 async def test_there_is_no_force_cycle_control(
-    controls_app: tuple[Starlette, _RecordingControl],
+    controls_app: tuple[Starlette, FakeCrawlControls],
 ) -> None:
-    app, control = controls_app
+    app, controls = controls_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post("/controls/force-cycle")
     assert resp.status_code == 404
-    assert control.calls == []
+    assert controls.calls == []
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("action", "call", "done"),
     [
-        ("pause", "pause", "paused"),
-        ("resume", "resume", "resumed"),
+        ("pause", "pause_crawl", "paused"),
+        ("resume", "resume_crawl", "resumed"),
         ("restart", "request_shutdown", "restarted"),
     ],
 )
 async def test_each_control_dispatches_and_redirects_to_the_dashboard(
-    controls_app: tuple[Starlette, _RecordingControl], action: str, call: str, done: str
+    controls_app: tuple[Starlette, FakeCrawlControls], action: str, call: str, done: str
 ) -> None:
-    app, control = controls_app
+    app, controls = controls_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(f"/controls/{action}")
     assert resp.status_code == 303
     assert resp.headers["location"] == f"/?done={done}"
-    assert control.calls == [call]
+    assert controls.calls == [call]
 
 
 @pytest.mark.parametrize(
@@ -2118,16 +2146,16 @@ async def test_each_control_dispatches_and_redirects_to_the_dashboard(
 )
 @pytest.mark.asyncio
 async def test_each_control_followed_lands_on_its_dashboard_banner(
-    controls_app: tuple[Starlette, _RecordingControl], action: str, banner: str
+    controls_app: tuple[Starlette, FakeCrawlControls], action: str, banner: str
 ) -> None:
-    app, control = controls_app
+    app, controls = controls_app
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test", follow_redirects=True
     ) as client:
         resp = await client.post(f"/controls/{action}")
     assert resp.status_code == 200
     assert f'<p class="control-banner" role="status">{banner}</p>' in resp.text
-    assert len(control.calls) == 1
+    assert len(controls.calls) == 1
 
 
 _CHANNELS = (ChannelStatus("ed2k", True, False), ChannelStatus("x", False, None))
@@ -2137,7 +2165,7 @@ async def _clients_section(
     catalog_db: Path, local_db: Path, reading: StatusReading | None, *, current: bool = True
 ) -> str:
     status = _Readings({"amuled": reading}, current=current)
-    text = await _dashboard(_dashboard_app(catalog_db, local_db, _RecordingControl(), status))
+    text = await _dashboard(_dashboard_app(catalog_db, local_db, FakeCrawlControls(), status))
     return text[text.index("<h2>Clients</h2>") : text.index("<h2>Crawl</h2>")]
 
 
@@ -2263,7 +2291,10 @@ def sortable_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, list[str]
         target_segments=_targets(),
         templates_dir=templates_dir,
         static_dir=static_dir,
-        control=_RecordingControl(),
+        crawl_pauser=_NO_CONTROLS,
+        crawl_resumer=_NO_CONTROLS,
+        shutdown_requester=_NO_CONTROLS,
+        run_state_reader=_RUNNING,
         status_readings=_NO_STATUS,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
@@ -2489,7 +2520,10 @@ async def test_nav_amule_link_uses_the_configured_base(catalog_db: Path, local_d
         target_segments=_targets(),
         templates_dir=webui_dir / "templates",
         static_dir=webui_dir / "static",
-        control=_RecordingControl(),
+        crawl_pauser=_NO_CONTROLS,
+        crawl_resumer=_NO_CONTROLS,
+        shutdown_requester=_NO_CONTROLS,
+        run_state_reader=_RUNNING,
         status_readings=_NO_STATUS,
         amule_url="https://mule.example.org/amule",
         wall_clock=_WALL_CLOCK,

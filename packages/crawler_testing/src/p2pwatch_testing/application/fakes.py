@@ -6,6 +6,7 @@
 ``TickingMonotonicClock``: each read a second after the previous one.
 ``FakeRng``: FIXED jitter (determinism). ``FakeLogger``: keeps each line it is given.
 ``FakeNodeIdStore`` and ``FakeNodeIdGenerator``: the node id's stored and new values.
+``FakeRunState``: keeps each change; ``FakeCrawlControls``: each control the webui calls.
 ``RecordingWakeHub``: captures woken subjects. The repos are the REAL SQLite repos
 (spec §8: "real repos on tmp_path"): no fakes here.
 """
@@ -21,7 +22,11 @@ from p2pwatch.ports.driven.client_errors import ClientUnreachableError, SearchFa
 from p2pwatch.ports.driven.clock import MonotonicInstant
 from p2pwatch.ports.driven.logger import Logger
 from p2pwatch.ports.driven.node_id import NodeIdGenerator, NodeIdReader, NodeIdWriter
+from p2pwatch.ports.driven.run_state import RunStateReader, RunStateWriter
 from p2pwatch.ports.driven.search_client import SearchAnswer
+from p2pwatch.ports.driving.crawl_pauser import CrawlPauser
+from p2pwatch.ports.driving.crawl_resumer import CrawlResumer
+from p2pwatch.ports.driving.shutdown_requester import ShutdownRequester
 
 
 class FakeTime:
@@ -154,6 +159,42 @@ class FakeNodeIdGenerator(NodeIdGenerator):
 
     def new_node_id(self) -> str:
         return self._node_id
+
+
+class FakeRunState(RunStateWriter, RunStateReader):
+    """Keeps each change by its method's name; reads ``paused``, which no change moves."""
+
+    def __init__(self, *, paused: bool = False) -> None:
+        self.changes: list[str] = []
+        self.paused = paused
+
+    def pause(self) -> None:
+        self.changes.append("pause")
+
+    def resume(self) -> None:
+        self.changes.append("resume")
+
+    def request_shutdown(self) -> None:
+        self.changes.append("request_shutdown")
+
+    def is_paused(self) -> bool:
+        return self.paused
+
+
+class FakeCrawlControls(CrawlPauser, CrawlResumer, ShutdownRequester):
+    """The three control use cases: keeps each call by its operation's name."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def pause_crawl(self) -> None:
+        self.calls.append("pause_crawl")
+
+    def resume_crawl(self) -> None:
+        self.calls.append("resume_crawl")
+
+    def request_shutdown(self) -> None:
+        self.calls.append("request_shutdown")
 
 
 class RecordingTelemetry:
