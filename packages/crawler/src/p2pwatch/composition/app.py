@@ -196,8 +196,7 @@ class CrawlerApp(CrawlerRunner):
             observability = crawler_config.observability
             registry = CollectorRegistry()
             notifier = AppriseNotifier(
-                tuple((t.url, t.audience, t.node_prefix) for t in observability.notifications),
-                node_id=node_id,
+                tuple((t.url, t.audience, t.node_prefix) for t in observability.notifications)
             )
             telemetry = ObservabilityDispatcher(
                 metrics=PrometheusSink(registry),
@@ -260,7 +259,7 @@ class CrawlerApp(CrawlerRunner):
             )
             loops: list[Callable[[], Coroutine[object, object, None]]] = [
                 partial(search_tasks.run, node_id),
-                partial(status_loop, status_deps),
+                partial(status_loop, status_deps, node_id),
             ]
 
             _logger.info("crawler started: node_id=%s", node_id)
@@ -295,7 +294,9 @@ class CrawlerApp(CrawlerRunner):
                 loops.append(partial(download_loop, download_deps, node_id))
                 _logger.info("download enabled: download loop armed")
 
-            await telemetry.emit(CrawlerStarted(download_enabled=download_config is not None))
+            await telemetry.emit(
+                CrawlerStarted(download_enabled=download_config is not None), node_id
+            )
 
             # Startup re-evaluation (spec §7/§7.1): re-evaluate the WHOLE catalogue against the
             # current matcher, gated by a policy fingerprint stored in local.db (a

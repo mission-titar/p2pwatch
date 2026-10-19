@@ -163,7 +163,8 @@ class SearchWorker:
         await self._deps.telemetry.emit(
             SearchExecuted(
                 self._client_name, channel, len(answer.reported_files), answer.skipped_result_count
-            )
+            ),
+            node_id,
         )
         changed = 0
         for reported_file in answer.reported_files:
@@ -196,7 +197,7 @@ class SearchWorker:
                 error,
                 delay.total_seconds(),
             )
-            await self._deps.telemetry.emit(SearchFailed(self._client_name, task.channel))
+            await self._deps.telemetry.emit(SearchFailed(self._client_name, task.channel), node_id)
             return
         except ClientUnreachableError as error:
             delay = self._deps.backoff.record_failure(self._client_backoff_key)
@@ -206,7 +207,7 @@ class SearchWorker:
                 error,
                 delay.total_seconds(),
             )
-            await self._deps.telemetry.emit(ClientUnreachable(self._client_name))
+            await self._deps.telemetry.emit(ClientUnreachable(self._client_name), node_id)
             return
         changed = await self._record_observations(task.channel, answer, node_id)
         self._deps.backoff.reset(channel_backoff_key)

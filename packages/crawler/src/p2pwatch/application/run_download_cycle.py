@@ -211,7 +211,7 @@ def _best_filename(deps: DownloadDeps, file: FileKey) -> str:
 
 
 async def _record_completion(
-    deps: DownloadDeps, file: FileKey, states: dict[FileKey, DownloadState]
+    deps: DownloadDeps, file: FileKey, states: dict[FileKey, DownloadState], node_id: str
 ) -> None:
     """Marks ``completed`` (stamps completed_at) and notifies (step 2, §5).
 
@@ -226,7 +226,8 @@ async def _record_completion(
             file,
             _best_filename(deps, file),
             _target_titles(deps, file) or (TargetTitle("unknown", ""),),
-        )
+        ),
+        node_id,
     )
     deps.logger.info("file=%s completed", file.native_id)
 
@@ -235,6 +236,7 @@ async def _handle_completions(
     deps: DownloadDeps,
     states: dict[FileKey, DownloadState],
     listed_statuses: tuple[DownloadStatus, ...],
+    node_id: str,
 ) -> None:
     """Completes each tracked file the client reports ``completed``.
 
@@ -249,7 +251,7 @@ async def _handle_completions(
         if current is DownloadState.COMPLETED:
             continue  # already completed: the notification fired once
         try:
-            await _record_completion(deps, file, states)
+            await _record_completion(deps, file, states, node_id)
         except RepositoryError as error:
             deps.logger.error(
                 "completion file=%s repo failure (%s): file skipped, continues",
@@ -295,19 +297,19 @@ def _fail_lost(deps: DownloadDeps, listed_files: frozenset[FileKey]) -> None:
         )
 
 
-async def _queue_new_candidates(deps: DownloadDeps, outstanding_bytes: int) -> None:
+async def _queue_new_candidates(deps: DownloadDeps, outstanding_bytes: int, node_id: str) -> None:
     """Replays tier=download decisions missing from ``downloads`` (step 3, spec §5).
 
     ``outstanding_bytes`` is what the client still has to transfer, measured from the cycle's
     snapshot; ``free_bytes`` is read once here. Both are MEASURED, never declared.
     """
     free_bytes = deps.disk.free_bytes()
-    await deps.telemetry.emit(FreeSpaceSampled(free_bytes=free_bytes))
+    await deps.telemetry.emit(FreeSpaceSampled(free_bytes=free_bytes), node_id)
     if free_bytes >= deps.min_free_bytes:
         deps.disk_low_edge.leave("disk_low")
     elif deps.disk_low_edge.enter("disk_low"):
         await deps.telemetry.emit(
-            DiskSpaceLow(free_bytes=free_bytes, min_free_bytes=deps.min_free_bytes)
+            DiskSpaceLow(free_bytes=free_bytes, min_free_bytes=deps.min_free_bytes), node_id
         )
     for candidate in deps.catalog.download_candidates():
         if deps.downloads.is_tracked(candidate.file):
@@ -343,7 +345,7 @@ async def _queue_new_candidates(deps: DownloadDeps, outstanding_bytes: int) -> N
             deps.loss_deadline_by_file[candidate.file] = deadline
         outstanding_bytes += size_bytes  # the client does not list it yet
         deps.logger.info("candidate file=%s queued for download", candidate.file.native_id)
-        await deps.telemetry.emit(DownloadQueued(target_id=candidate.target_id))
+        await deps.telemetry.emit(DownloadQueued(target_id=candidate.target_id), node_id)
 
 
 async def _start_unlisted(deps: DownloadDeps, listed_files: frozenset[FileKey]) -> None:
@@ -418,7 +420,7 @@ async def _alert_sources(
                 source, source_name, file, filename, target_titles, alert.absent_for.total_seconds()
             )
         )
-        await deps.telemetry.emit(event)
+        await deps.telemetry.emit(event, node_id)
 
 
 async def _record_sources(
@@ -508,7 +510,7 @@ async def run_download_cycle(deps: DownloadDeps, node_id: str) -> None:
     # a repo failure in one must NOT prevent the other from running.
     try:
         fresh_states = deps.downloads.tracked_states()
-        await _handle_completions(deps, fresh_states, listed_statuses)
+        await _handle_completions(deps, fresh_states, listed_statuses, node_id)
     except RepositoryError as error:
         deps.logger.error("download completions repo failure (%s): step skipped, continues", error)
     # Step 2b - PRESENCE + LOSS: ``last_seen_at`` is for the next start; loss is measured here.
@@ -518,7 +520,7 @@ async def run_download_cycle(deps: DownloadDeps, node_id: str) -> None:
     except RepositoryError as error:
         deps.logger.error("download presence repo failure (%s): step skipped, continues", error)
     try:
-        await _queue_new_candidates(deps, outstanding_bytes)
+        await _queue_new_candidates(deps, outstanding_bytes, node_id)
     except RepositoryError as error:
         deps.logger.error("download candidates repo failure (%s): step skipped, continues", error)
     except OSError as error:

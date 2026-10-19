@@ -618,7 +618,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  uc["use-case<br/>emit(Event)"]
+  uc["use-case<br/>emit(Event, node_id)"]
   desc["describe()<br/>→ Report"]
   disp["Dispatcher"]
   log["logs"]

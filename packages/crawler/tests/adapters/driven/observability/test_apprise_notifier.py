@@ -1,5 +1,5 @@
-"""Apprise notifier: add(url, tag) at setup, node_id in the title, routes by tag, maps
-NotifyType, sends markdown with every mention neutralised."""
+"""Apprise notifier: groups built per node_id on its first notification, add(url, tag) into
+them, node_id in the title, routes by tag, maps NotifyType, sends markdown, mentions neutralised."""
 
 import apprise
 import pytest
@@ -7,6 +7,8 @@ from apprise.plugins.discord import USER_ROLE_DETECTION_RE
 
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
 from p2pwatch.domain.observability.policy import Audience, Severity
+
+_NODE = "titar-node-1"
 
 
 class _FakeApprise:
@@ -24,7 +26,8 @@ class _FakeApprise:
         return True
 
 
-def _notifier() -> tuple[AppriseNotifier, _FakeApprise, _FakeApprise]:
+def _notifier() -> tuple[AppriseNotifier, list[_FakeApprise]]:
+    """The notifier and every apprise group it builds, in order."""
     targets = (
         ("discord://x", Audience.COMMUNITY, True),
         ("discord://y", Audience.OPERATIONS, True),
@@ -36,19 +39,24 @@ def _notifier() -> tuple[AppriseNotifier, _FakeApprise, _FakeApprise]:
         groups.append(_FakeApprise(asset))
         return groups[-1]
 
-    notifier = AppriseNotifier(targets, node_id="titar-node-1", apprise_factory=factory)
-    return notifier, groups[0], groups[1]
+    return AppriseNotifier(targets, apprise_factory=factory), groups
 
 
-def test_targets_are_added_with_tags_to_the_prefixed_or_the_bare_group() -> None:
-    _, prefixed, bare = _notifier()
+@pytest.mark.asyncio
+async def test_targets_are_added_with_tags_to_the_prefixed_or_the_bare_group() -> None:
+    notifier, groups = _notifier()
+    assert groups == []  # nothing built before a notification names its node
+    await notifier.notify(Audience.COMMUNITY, "t", "x", Severity.INFO, _NODE)
+    prefixed, bare = groups
     assert prefixed.added == [("discord://x", "community"), ("discord://y", "operations")]
     assert bare.added == [("discord://z", "community")]
 
 
-def test_both_groups_name_the_node_and_send_no_image() -> None:
-    _, prefixed, bare = _notifier()
-    for asset in (prefixed.asset, bare.asset):
+@pytest.mark.asyncio
+async def test_both_groups_name_the_node_and_send_no_image() -> None:
+    notifier, groups = _notifier()
+    await notifier.notify(Audience.COMMUNITY, "t", "x", Severity.INFO, _NODE)
+    for asset in (group.asset for group in groups):
         assert asset.app_id == "p2pwatch - titar-node-1"
         assert asset.app_url == "https://github.com/mission-titar/p2pwatch"
         assert asset.image_url(apprise.NotifyType.INFO) is None
@@ -56,10 +64,27 @@ def test_both_groups_name_the_node_and_send_no_image() -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_node_keeps_its_groups_and_another_node_gets_its_own() -> None:
+    notifier, groups = _notifier()
+    await notifier.notify(Audience.COMMUNITY, "t", "x", Severity.INFO, _NODE)
+    await notifier.notify(Audience.COMMUNITY, "t", "x", Severity.INFO, _NODE)
+    await notifier.notify(Audience.COMMUNITY, "t", "x", Severity.INFO, "titar-node-2")
+    assert [group.asset.app_id for group in groups] == [
+        "p2pwatch - titar-node-1",
+        "p2pwatch - titar-node-1",
+        "p2pwatch - titar-node-2",
+        "p2pwatch - titar-node-2",
+    ]
+    assert [len(group.sent) for group in groups] == [2, 2, 1, 1]
+    assert [call["title"] for call in groups[2].sent] == ["[titar-node-2] t"]
+
+
+@pytest.mark.asyncio
 async def test_the_node_prefix_goes_into_the_title_of_the_prefixed_group_only() -> None:
-    notifier, prefixed, bare = _notifier()
-    await notifier.notify(Audience.COMMUNITY, "📥 Download", "body", Severity.INFO)
-    await notifier.notify(Audience.COMMUNITY, "", "online", Severity.INFO)
+    notifier, groups = _notifier()
+    await notifier.notify(Audience.COMMUNITY, "📥 Download", "body", Severity.INFO, _NODE)
+    await notifier.notify(Audience.COMMUNITY, "", "online", Severity.INFO, _NODE)
+    prefixed, bare = groups
     assert [(c["tag"], c["title"], c["body"]) for c in prefixed.sent + bare.sent] == [
         ("community", "[titar-node-1] 📥 Download", "body"),
         ("community", "[titar-node-1]", "online"),
@@ -70,18 +95,18 @@ async def test_the_node_prefix_goes_into_the_title_of_the_prefixed_group_only() 
 
 @pytest.mark.asyncio
 async def test_every_message_is_sent_as_markdown() -> None:
-    notifier, prefixed, bare = _notifier()
-    await notifier.notify(Audience.OPERATIONS, "", "x", Severity.WARNING)
-    calls = prefixed.sent + bare.sent
+    notifier, groups = _notifier()
+    await notifier.notify(Audience.OPERATIONS, "", "x", Severity.WARNING, _NODE)
+    calls = [call for group in groups for call in group.sent]
     assert [c["body_format"] for c in calls] == [apprise.NotifyFormat.MARKDOWN] * 2
 
 
 @pytest.mark.asyncio
 async def test_no_mention_reaches_apprise() -> None:
     hostile = "@everyone @here <@123> <@&456>"
-    notifier, prefixed, bare = _notifier()
-    await notifier.notify(Audience.COMMUNITY, hostile, hostile, Severity.INFO)
-    for call in prefixed.sent + bare.sent:
+    notifier, groups = _notifier()
+    await notifier.notify(Audience.COMMUNITY, hostile, hostile, Severity.INFO, _NODE)
+    for call in (call for group in groups for call in group.sent):
         for text in (call["title"], call["body"]):
             assert isinstance(text, str)
             assert USER_ROLE_DETECTION_RE.search(text) is None, text
@@ -100,13 +125,13 @@ async def test_no_mention_reaches_apprise() -> None:
 async def test_severity_maps_to_a_notify_type(
     severity: Severity, notify_type: apprise.NotifyType
 ) -> None:
-    notifier, prefixed, _ = _notifier()
-    await notifier.notify(Audience.OPERATIONS, "", "x", severity)
-    assert prefixed.sent[-1]["notify_type"] == notify_type
+    notifier, groups = _notifier()
+    await notifier.notify(Audience.OPERATIONS, "", "x", severity, _NODE)
+    assert groups[0].sent[-1]["notify_type"] == notify_type
 
 
 @pytest.mark.asyncio
 async def test_default_apprise_obj_is_built_from_targets() -> None:
     # Without an injected factory, the notifier builds a real Apprise (no URL → safe no-op).
-    notifier = AppriseNotifier((), node_id="n")
-    await notifier.notify(Audience.COMMUNITY, "t", "x", Severity.INFO)  # does not raise
+    notifier = AppriseNotifier(())
+    await notifier.notify(Audience.COMMUNITY, "t", "x", Severity.INFO, "n")  # does not raise

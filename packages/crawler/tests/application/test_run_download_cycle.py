@@ -685,6 +685,7 @@ async def test_emits_download_queued() -> None:
     )
     await run_download_cycle(deps, _NODE)
     assert any(type(e).__name__ == "DownloadQueued" for e in telemetry.events)
+    assert telemetry.node_ids == {_NODE}
 
 
 @pytest.mark.asyncio
@@ -704,6 +705,7 @@ async def test_emits_download_completed() -> None:
     completed = [e for e in telemetry.events if isinstance(e, DownloadCompleted)]
     # No observation, no decision left: the hash names the file, the queued row its target.
     assert completed == [DownloadCompleted(_key(_A), _A, (TargetTitle("062A", "t"),))]
+    assert telemetry.node_ids == {_NODE}
 
 
 @pytest.mark.asyncio
@@ -1135,6 +1137,7 @@ async def test_low_disk_warns_once_per_crossing_and_rearms_at_the_floor() -> Non
         )
     assert warnings_per_cycle == [1, 0, 0, 1]
     assert DiskSpaceLow(free_bytes=500, min_free_bytes=600) in telemetry.events
+    assert telemetry.node_ids == {_NODE}
 
 
 @pytest.mark.asyncio
@@ -1518,6 +1521,7 @@ async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
             _PEER, "AnimuseeFMR", _key(_A), "Keroro 062.avi", (TargetTitle("062A", "t"),)
         )
     ]
+    assert telemetry.node_ids == {_NODE}
 
 
 @pytest.mark.asyncio

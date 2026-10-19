@@ -8,6 +8,7 @@ import signal
 import socket
 import threading
 from datetime import timedelta
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
@@ -268,6 +269,49 @@ async def test_the_download_loop_records_a_tracked_downloads_sources_under_the_n
     catalog = open_catalog(tmp_path / "catalog.db")
     assert source_variant_node_ids(catalog) == {"wired-node"}
     catalog.close()
+
+
+class _NotificationSink(BaseHTTPRequestHandler):
+    """Records each apprise ``json://`` notification: its User-Agent (the app_id) and title."""
+
+    received: list[tuple[str, str]] = []
+
+    def do_POST(self) -> None:  # noqa: N802 (http.server's name)
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        self.received.append((self.headers["User-Agent"], body["title"]))
+        self.send_response(200)
+        self.end_headers()
+
+    def log_message(self, format: str, *args: object) -> None:
+        pass  # stderr stays quiet
+
+
+@pytest.mark.asyncio
+async def test_the_nodes_notifications_carry_its_id_in_their_username_and_title(
+    tmp_path: Path,
+) -> None:
+    sink = ThreadingHTTPServer(("127.0.0.1", 0), _NotificationSink)
+    _NotificationSink.received = []
+    threading.Thread(target=sink.serve_forever, daemon=True).start()
+    notification = {"url": f"json://127.0.0.1:{sink.server_port}/", "audience": "operations"}
+    observability = {"log_level": "INFO", "notifications": [notification]}
+    config_path = _write(
+        tmp_path / "crawler.yml",
+        _config(tmp_path, node_id="wired-node", observability=observability),
+    )
+    default_sigterm = signal.getsignal(signal.SIGTERM)
+
+    with FakeAmuleApiServer(FakeAmuleApi()) as server:
+        run = _crawl(server, config_path)
+        assert await asyncio.to_thread(
+            server.wait_for, lambda seen: _searches_read(seen) >= 1, _WAIT_SECONDS
+        )
+        _send_sigterm(default_sigterm)
+        await asyncio.wait_for(run, _WAIT_SECONDS)
+    sink.shutdown()
+    sink.server_close()
+
+    assert ("p2pwatch - wired-node", "[wired-node]") in _NotificationSink.received
 
 
 @pytest.mark.asyncio

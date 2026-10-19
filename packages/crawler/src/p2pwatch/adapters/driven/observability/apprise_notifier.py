@@ -1,13 +1,13 @@
 """Apprise notifier: routes a notification per AUDIENCE via apprise tags (E-D7).
 
-ADAPTER layer (implements ``Notifier``). At wiring time: ``add(url, tag=audience)`` for each
-target, into one of two apprise groups: prefixed or bare (``node_prefix``). ``notify`` sends the
-title PREFIXED with the ``node_id`` (distributed network) to the first group and as is
-to the second, since apprise sends one message to every URL of a tag. Every message is markdown
-(a Discord embed) with every ``@`` neutralised, and both groups share an asset naming the node
-(spec discord-embed-notifications §4). No URL → natural no-op (apprise with no service returns
-``None``). ``apprise_factory`` injectable for testing (default: a real ``apprise.Apprise``). The
-timeout/error absorption live in the dispatcher (E-D13).
+ADAPTER layer (implements ``Notifier``). On a ``node_id``'s first notification:
+``add(url, tag=audience)`` for each target, into one of two apprise groups: prefixed or bare
+(``node_prefix``). ``notify`` sends the title PREFIXED with the ``node_id`` (distributed network)
+to the first group and as is to the second, since apprise sends one message to every URL of a
+tag. Every message is markdown (a Discord embed) with every ``@`` neutralised, and both groups
+share an asset naming the node (spec discord-embed-notifications §4). No URL → natural no-op
+(apprise with no service returns ``None``). ``apprise_factory`` injectable for testing (default:
+a real ``apprise.Apprise``). The timeout/error absorption live in the dispatcher (E-D13).
 
 DECISION (audit 2026-06-23 / security-network#2): the apprise egress (Slack, Discord, SMTP,
 etc. webhooks) traverses the crawler's HOST network, not the VPN. The packaging spec accepts this
@@ -44,12 +44,17 @@ class AppriseNotifier:
     """``Notifier`` adapter: one apprise tag per audience, in a prefixed group and a bare one."""
 
     def __init__(
-        self,
-        targets: AppriseTargets,
-        *,
-        node_id: str,
-        apprise_factory: Callable[..., object] = apprise.Apprise,
+        self, targets: AppriseTargets, *, apprise_factory: Callable[..., object] = apprise.Apprise
     ) -> None:
+        self._targets = targets
+        self._apprise_factory = apprise_factory
+        self._groups_by_node_id: dict[str, tuple[object, object]] = {}
+
+    def _groups(self, node_id: str) -> tuple[object, object]:
+        """The node's prefixed and bare groups, built on its first notification."""
+        # Per node: apprise hands the asset, its username, to each URL when it is added.
+        if node_id in self._groups_by_node_id:
+            return self._groups_by_node_id[node_id]
         # No image: a Discord webhook keeps its own avatar.
         asset = apprise.AppriseAsset(
             app_id=f"p2pwatch - {node_id}",
@@ -59,16 +64,20 @@ class AppriseNotifier:
         )
         # Typed ``object`` on purpose: the adapter does not depend on apprise's (untyped)
         # surface; ``.add``/``.async_notify`` carry a ``# type: ignore[attr-defined]``.
-        self._prefixed_group: object = apprise_factory(asset=asset)
-        self._bare_group: object = apprise_factory(asset=asset)
-        for url, audience, node_prefix in targets:
-            group = self._prefixed_group if node_prefix else self._bare_group
+        prefixed_group: object = self._apprise_factory(asset=asset)
+        bare_group: object = self._apprise_factory(asset=asset)
+        for url, audience, node_prefix in self._targets:
+            group = prefixed_group if node_prefix else bare_group
             group.add(url, tag=audience.value)  # type: ignore[attr-defined]
-        self._node_id = node_id
+        self._groups_by_node_id[node_id] = (prefixed_group, bare_group)
+        return prefixed_group, bare_group
 
-    async def notify(self, audience: Audience, title: str, body: str, severity: Severity) -> None:
-        prefixed = f"[{self._node_id}] {title}".rstrip()
-        for group, heading in ((self._prefixed_group, prefixed), (self._bare_group, title)):
+    async def notify(
+        self, audience: Audience, title: str, body: str, severity: Severity, node_id: str
+    ) -> None:
+        prefixed_group, bare_group = self._groups(node_id)
+        prefixed = f"[{node_id}] {title}".rstrip()
+        for group, heading in ((prefixed_group, prefixed), (bare_group, title)):
             await group.async_notify(  # type: ignore[attr-defined]
                 title=heading.replace("@", _NO_MENTION),
                 body=body.replace("@", _NO_MENTION),

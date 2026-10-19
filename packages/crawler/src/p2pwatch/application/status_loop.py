@@ -96,8 +96,8 @@ class _AlertTimer:
         return "alert"
 
 
-async def status_loop(deps: StatusLoopDeps) -> None:
-    """Reads the status every period until shutdown."""
+async def status_loop(deps: StatusLoopDeps, node_id: str) -> None:
+    """Reads the status every period until shutdown, emitting under ``node_id``."""
     api_timer = _AlertTimer(UNREACHABLE_ALERT_AFTER)
     channel_timers: dict[tuple[str, ChannelField], _AlertTimer] = {}
 
@@ -106,7 +106,7 @@ async def status_loop(deps: StatusLoopDeps) -> None:
     ) -> None:
         change = timer.observe(healthy, deps.monotonic_clock.now())
         if change is not None:
-            await deps.telemetry.emit(alert if change == "alert" else recovery)
+            await deps.telemetry.emit(alert if change == "alert" else recovery, node_id)
 
     while not deps.shutdown.is_set():
         try:
@@ -115,7 +115,7 @@ async def status_loop(deps: StatusLoopDeps) -> None:
             raise  # a wrong password is config, not an outage
         except ClientError:  # a refused route too: a renamed /version must not end the crawler
             deps.board.publish(deps.client_name, StatusReading(deps.wall_clock.now(), None))
-            await deps.telemetry.emit(ClientUnreachable(deps.client_name))
+            await deps.telemetry.emit(ClientUnreachable(deps.client_name), node_id)
             # Every channel is unknown while the API is: only the API's own alert can fire.
             readings: list[tuple[str, bool | None, bool | None]] = [
                 (channel, None, None) for channel in dict.fromkeys(c for c, _ in channel_timers)
@@ -133,7 +133,8 @@ async def status_loop(deps: StatusLoopDeps) -> None:
         )
         for channel, connected, connectable in readings:
             await deps.telemetry.emit(
-                ChannelStatusSampled(deps.client_name, channel, connected, connectable)
+                ChannelStatusSampled(deps.client_name, channel, connected, connectable),
+                node_id,
             )
             fields: tuple[tuple[ChannelField, bool | None], ...] = (
                 ("connected", connected),

@@ -16,10 +16,10 @@ class MetricsSink(Protocol):
 @runtime_checkable
 class Notifier(Protocol):
     async def notify(
-        self, audience: Audience, title: str, body: str, severity: Severity
+        self, audience: Audience, title: str, body: str, severity: Severity, node_id: str
     ) -> None: ...
 
 
 @runtime_checkable
 class Telemetry(Protocol):
-    async def emit(self, event: Event) -> None: ...
+    async def emit(self, event: Event, node_id: str) -> None: ...

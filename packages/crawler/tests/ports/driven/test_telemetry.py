@@ -16,13 +16,15 @@ class _Sink:
 
 
 class _Notifier:
-    async def notify(self, audience: Audience, title: str, body: str, severity: Severity) -> None:
-        self.last = (audience, title, body, severity)
+    async def notify(
+        self, audience: Audience, title: str, body: str, severity: Severity, node_id: str
+    ) -> None:
+        self.last = (audience, title, body, severity, node_id)
 
 
 class _Telemetry:
-    async def emit(self, event: Event) -> None:
-        self.last = event
+    async def emit(self, event: Event, node_id: str) -> None:
+        self.last = (event, node_id)
 
 
 def test_fakes_satisfy_ports() -> None:
