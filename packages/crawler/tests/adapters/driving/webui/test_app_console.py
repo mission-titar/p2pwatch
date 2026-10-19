@@ -12,7 +12,14 @@ from starlette.applications import Starlette
 from catalog_matching.domain.config import MatcherConfig
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
+from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
+    SqliteCatalogFileReader,
+    SqliteSourceReader,
+)
+from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driving.webui.app import build_app
+from p2pwatch.application.describe_file import DescribeFile
+from p2pwatch.application.matching_read import MatchingExplainer
 from p2pwatch.domain.node_state import NodeState
 from p2pwatch.ports.driven.clock import MonotonicClock
 from p2pwatch.ports.driving.crawl_summarizer import CrawlSummary
@@ -85,10 +92,10 @@ def _build(catalog_db: Path, local_db: Path, monotonic_clock: MonotonicClock) ->
     static_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "static"
     controls = FakeCrawlControls()  # the console routes never call them
     node_state = NodeState(node_id=None, created_at=None, downloads=(), backoff_state_by_key={})
+    wall_clock, gap = FakeTime().wall, timedelta(seconds=90)
     return build_app(
         catalog_db_path=catalog_db,
         local_db_path=local_db,
-        matcher_config=matcher_config,
         target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
@@ -98,10 +105,17 @@ def _build(catalog_db: Path, local_db: Path, monotonic_clock: MonotonicClock) ->
         crawl_summarizer=FakeCrawlSummarizer(CrawlSummary((), False, node_state, ())),
         node_describer=FakeNodeDescriber(NodeDescription(node_state)),
         file_lister=FakeFileLister(FileListing((), False, 0, 0, {})),
+        file_describer=DescribeFile(
+            catalog_file_reader=SqliteCatalogFileReader(ReaderProvider(catalog_db)),
+            source_reader=SqliteSourceReader(ReaderProvider(catalog_db)),
+            explainer=MatchingExplainer(matcher_config=matcher_config, targets=targets),
+            wall_clock=wall_clock,
+            source_period_gap=gap,
+        ),
         amule_url="http://localhost:4711",
-        wall_clock=FakeTime().wall,
+        wall_clock=wall_clock,
         monotonic_clock=monotonic_clock,
-        source_period_gap=timedelta(seconds=90),
+        source_period_gap=gap,
     )
 
 

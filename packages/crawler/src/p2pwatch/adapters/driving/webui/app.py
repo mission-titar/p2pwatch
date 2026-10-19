@@ -24,14 +24,11 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 
-from catalog_matching.domain.config import MatcherConfig
 from catalog_matching.domain.ed2k_link import build_ed2k_link
 from catalog_matching.domain.models import TargetSegment
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
     PAGE_SIZE,
     CatalogReader,
-    SqliteCatalogFileReader,
-    SqliteSourceReader,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driven.persistence_sqlite.sql_console import (
@@ -84,7 +81,6 @@ from p2pwatch.adapters.driving.webui.views import (
     TokenCoverage,
     TrackedDownloadDisplay,
 )
-from p2pwatch.application.matching_read import MatchingExplainer
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.interval import (
@@ -101,6 +97,7 @@ from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
 from p2pwatch.ports.driving.crawl_pauser import CrawlPauser
 from p2pwatch.ports.driving.crawl_resumer import CrawlResumer
 from p2pwatch.ports.driving.crawl_summarizer import ClientSummary, CrawlSummarizer
+from p2pwatch.ports.driving.file_describer import FileDescriber
 from p2pwatch.ports.driving.file_lister import FileLister
 from p2pwatch.ports.driving.node_describer import NodeDescriber
 from p2pwatch.ports.driving.shutdown_requester import ShutdownRequester
@@ -666,7 +663,6 @@ def build_app(
     *,
     catalog_db_path: Path,
     local_db_path: Path,
-    matcher_config: MatcherConfig,
     target_segments: tuple[TargetSegment, ...],
     templates_dir: Path,
     static_dir: Path,
@@ -676,6 +672,7 @@ def build_app(
     crawl_summarizer: CrawlSummarizer,
     node_describer: NodeDescriber,
     file_lister: FileLister,
+    file_describer: FileDescriber,
     amule_url: str,
     wall_clock: WallClock,
     monotonic_clock: MonotonicClock,
@@ -683,14 +680,11 @@ def build_app(
 ) -> Starlette:
     """Build and return the wired Starlette application.
 
-    ``matcher_config`` + ``target_segments`` arrive ALREADY PARSED from the caller (``__main__`` for
-    the standalone entrypoint, ``CrawlerApp`` in-process later); this module no longer reads
-    ``matcher.yml`` / ``targets.yml`` itself. Passing the crawler's own parsed matcher is what
-    keeps the explainer's config from drifting from the persisted decisions (spec §8).
+    ``target_segments`` arrive ALREADY PARSED from the caller, for their titles.
 
     Each control POST calls its use case, which returns at once; the webui itself holds no write
     connection (spec §4/§10). ``crawl_summarizer`` serves the dashboard, ``node_describer`` /node,
-    ``file_lister`` /files and a target's page.
+    ``file_lister`` /files and a target's page, ``file_describer`` a file's page.
 
     ``amule_url`` is the base the nav's aMule entry points at (design §9); the caller reads it
     from ``webui.amule_url``. ``source_period_gap`` is the longest gap within a source period, from
@@ -705,15 +699,12 @@ def build_app(
         ),
         context_processors=[_make_nav_context(amule_url)],
     )
-    explainer = MatchingExplainer(matcher_config=matcher_config, targets=target_segments)
 
     # Centralized read-only connection management (spec §7): one reused, thread-affine
     # connection per DB per thread: warm page cache, no per-request cold open. Handlers
     # obtain a connection via ``provider.connection()`` and NEVER close it (the point is
     # reuse).
     catalog_reader = ReaderProvider(catalog_db_path)
-    catalog_file_reader = SqliteCatalogFileReader(catalog_reader)
-    source_reader = SqliteSourceReader(catalog_reader)
 
     def _now_and_interval(request: Request) -> tuple[datetime, Interval]:
         """The second the request is read at, and the interval it asks for."""
@@ -936,18 +927,20 @@ def build_app(
     async def handle_file_detail(request: Request) -> Response:
         file_id_hex: str = request.path_params["file_id"]
 
-        now, interval = _now_and_interval(request)
-        window = PeriodWindow(interval.since, interval.until, source_period_gap)
-        detail = (
-            catalog_file_reader.read_file_history(
-                bytes.fromhex(file_id_hex), since=interval.since, until=interval.until
+        requested_since, requested_until = _requested_ends(request)
+        description = (
+            file_describer.describe_file(
+                bytes.fromhex(file_id_hex),
+                requested_since=requested_since,
+                requested_until=requested_until,
             )
             if _HEX_ID.fullmatch(file_id_hex)
             else None
         )
 
-        if detail is None:
+        if description is None:
             return templates.TemplateResponse(request, "404.html", {}, status_code=404)
+        detail, explanation = description.file_history, description.explanation
 
         latest = (
             None if detail.latest_observation is None else detail.latest_observation.reported_file
@@ -970,36 +963,23 @@ def build_app(
         explanation_vetoes_fired: tuple[str, ...] = ()
         explanation_notes: tuple[str, ...] = ()
 
-        first_decision = detail.decisions[0] if detail.decisions else None
-        if first_decision is not None and latest is not None:
-            # Every known name with the latest fields, as the crawler judges.
-            explanation = explainer.explain(
-                filenames=detail.known_filenames,
-                size_bytes=latest.size_bytes,
-                duration_seconds=latest.duration_seconds,
-                bitrate_kbps=latest.bitrate_kbps,
-                target_id=first_decision.decision.target_id,
+        if explanation is not None:
+            explanation_target_id = explanation.target_id
+            explanation_rules_fired = explanation.rules_fired
+            explanation_tokens_matched = explanation.tokens_matched
+            explanation_coverage_values = tuple(
+                TokenCoverage(token_name=token_name, value_display=f"{coverage:.2f}")
+                for token_name, coverage in explanation.coverage_values
             )
-            if explanation is not None:
-                explanation_target_id = explanation.target_id
-                explanation_rules_fired = explanation.rules_fired
-                explanation_tokens_matched = explanation.tokens_matched
-                explanation_coverage_values = tuple(
-                    TokenCoverage(token_name=token_name, value_display=f"{coverage:.2f}")
-                    for token_name, coverage in explanation.coverage_values
-                )
-                explanation_vetoes_fired = explanation.vetoes_fired
-                explanation_notes = ("Evaluated against the current configuration",)
+            explanation_vetoes_fired = explanation.vetoes_fired
+            explanation_notes = ("Evaluated against the current configuration",)
 
         display = FileDetailDisplay(
             network=detail.file.network,
             native_id=detail.file.native_id,
             size_bytes=detail.size_bytes,
             timeline=tuple(_timeline_row(observation) for observation in detail.observations),
-            source_history=tuple(
-                _source_history_row(period)
-                for period in source_reader.read_sharing_periods(detail.file, window)
-            ),
+            source_history=tuple(map(_source_history_row, description.sharing_periods)),
             decisions=tuple(
                 DecisionDisplay(
                     target_id=dated.decision.target_id,
@@ -1023,7 +1003,9 @@ def build_app(
             "file_detail.html",
             {
                 "file": display,
-                "interval": _interval_selector(interval, now, f"/files/{file_id_hex}", {}),
+                "interval": _interval_selector(
+                    description.interval, description.now, f"/files/{file_id_hex}", {}
+                ),
             },
         )
 

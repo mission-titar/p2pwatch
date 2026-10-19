@@ -19,7 +19,12 @@ from catalog_matching.domain.config import MatcherConfig
 from catalog_matching.domain.engine import DecisionRecord
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
-from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import PAGE_SIZE
+from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
+    PAGE_SIZE,
+    SqliteCatalogFileReader,
+    SqliteSourceReader,
+)
+from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driving.webui.app import (
     _normalize_direction,
     _normalize_sort,
@@ -31,6 +36,8 @@ from p2pwatch.adapters.driving.webui.app import (
     build_app,
 )
 from p2pwatch.adapters.driving.webui.views import DecisionCell, HiddenInput
+from p2pwatch.application.describe_file import DescribeFile
+from p2pwatch.application.matching_read import MatchingExplainer
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.coverage import TargetCoverage
 from p2pwatch.domain.download.states import DownloadState
@@ -109,6 +116,20 @@ _DEFAULT_CALL = ListFilesCall(
 _NO_DB = Path("/nonexistent/p2pwatch.db")
 
 
+def _file_describer(
+    catalog_db: Path, matcher_config: MatcherConfig, target_segments: tuple[TargetSegment, ...]
+) -> DescribeFile:
+    """The file page's use case over the fixture catalog, until its route tests run on a fake."""
+    reader_provider = ReaderProvider(catalog_db)
+    return DescribeFile(
+        catalog_file_reader=SqliteCatalogFileReader(reader_provider),
+        source_reader=SqliteSourceReader(reader_provider),
+        explainer=MatchingExplainer(matcher_config=matcher_config, targets=target_segments),
+        wall_clock=_WALL_CLOCK,
+        source_period_gap=_GAP,
+    )
+
+
 def _app_on_fakes(
     *,
     crawl_summary: CrawlSummary = _CRAWL_SUMMARY,
@@ -124,7 +145,6 @@ def _app_on_fakes(
     return build_app(
         catalog_db_path=_NO_DB,
         local_db_path=_NO_DB,
-        matcher_config=_matcher(),
         target_segments=_targets() if target_segments is None else target_segments,
         templates_dir=webui_dir / "templates",
         static_dir=webui_dir / "static",
@@ -134,6 +154,7 @@ def _app_on_fakes(
         crawl_summarizer=FakeCrawlSummarizer(crawl_summary),
         node_describer=FakeNodeDescriber(NodeDescription(node_state)),
         file_lister=file_lister,
+        file_describer=_file_describer(_NO_DB, _matcher(), _targets()),
         amule_url=amule_url,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -250,7 +271,6 @@ def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
     app = build_app(
         catalog_db_path=catalog_db,
         local_db_path=local_db,
-        matcher_config=matcher_config,
         target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
@@ -260,6 +280,7 @@ def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
         file_lister=_NO_FILE_LISTER,
+        file_describer=_file_describer(catalog_db, matcher_config, targets),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -293,7 +314,6 @@ def app_no_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
     app = build_app(
         catalog_db_path=catalog_db,
         local_db_path=local_db,
-        matcher_config=matcher_config,
         target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
@@ -303,6 +323,7 @@ def app_no_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
         file_lister=_NO_FILE_LISTER,
+        file_describer=_file_describer(catalog_db, matcher_config, targets),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -348,7 +369,6 @@ def app_retracted_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette,
     app = build_app(
         catalog_db_path=catalog_db,
         local_db_path=local_db,
-        matcher_config=matcher_config,
         target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
@@ -358,6 +378,7 @@ def app_retracted_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
         file_lister=_NO_FILE_LISTER,
+        file_describer=_file_describer(catalog_db, matcher_config, targets),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -384,7 +405,6 @@ def app_no_observations(catalog_db: Path, local_db: Path) -> tuple[Starlette, st
     app = build_app(
         catalog_db_path=catalog_db,
         local_db_path=local_db,
-        matcher_config=matcher_config,
         target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
@@ -394,6 +414,7 @@ def app_no_observations(catalog_db: Path, local_db: Path) -> tuple[Starlette, st
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
         file_lister=_NO_FILE_LISTER,
+        file_describer=_file_describer(catalog_db, matcher_config, targets),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -428,7 +449,6 @@ def app_unknown_target(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
     app = build_app(
         catalog_db_path=catalog_db,
         local_db_path=local_db,
-        matcher_config=matcher_config,
         target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
@@ -438,6 +458,7 @@ def app_unknown_target(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
         file_lister=_NO_FILE_LISTER,
+        file_describer=_file_describer(catalog_db, matcher_config, targets),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -627,7 +648,6 @@ def app_vetoed_alias(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
     app = build_app(
         catalog_db_path=catalog_db,
         local_db_path=local_db,
-        matcher_config=matcher_config,
         target_segments=_targets(),
         templates_dir=webui_dir / "templates",
         static_dir=webui_dir / "static",
@@ -637,6 +657,7 @@ def app_vetoed_alias(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
         file_lister=_NO_FILE_LISTER,
+        file_describer=_file_describer(catalog_db, matcher_config, _targets()),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1164,7 +1185,6 @@ def app_with_media_obs(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
     app = build_app(
         catalog_db_path=catalog_db,
         local_db_path=local_db,
-        matcher_config=matcher_config,
         target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
@@ -1174,6 +1194,7 @@ def app_with_media_obs(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
         file_lister=_NO_FILE_LISTER,
+        file_describer=_file_describer(catalog_db, matcher_config, targets),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1225,7 +1246,6 @@ async def test_a_template_reading_what_its_context_lacks_raises(
     app = build_app(
         catalog_db_path=catalog_db,
         local_db_path=local_db,
-        matcher_config=_matcher(),
         target_segments=_targets(),
         templates_dir=templates_dir,
         static_dir=Path(p2pwatch.adapters.driving.webui.__file__).parent / "static",
@@ -1235,6 +1255,7 @@ async def test_a_template_reading_what_its_context_lacks_raises(
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
         file_lister=_NO_FILE_LISTER,
+        file_describer=_file_describer(catalog_db, _matcher(), _targets()),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1324,7 +1345,6 @@ def app_with_hostile_filename(catalog_db: Path, local_db: Path) -> tuple[Starlet
     app = build_app(
         catalog_db_path=catalog_db,
         local_db_path=local_db,
-        matcher_config=matcher_config,
         target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
@@ -1334,6 +1354,7 @@ def app_with_hostile_filename(catalog_db: Path, local_db: Path) -> tuple[Starlet
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
         file_lister=_NO_FILE_LISTER,
+        file_describer=_file_describer(catalog_db, matcher_config, targets),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1648,7 +1669,6 @@ def app_whole_episode(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]
     app = build_app(
         catalog_db_path=catalog_db,
         local_db_path=local_db,
-        matcher_config=matcher_config,
         target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
@@ -1658,6 +1678,7 @@ def app_whole_episode(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
         file_lister=_NO_FILE_LISTER,
+        file_describer=_file_describer(catalog_db, matcher_config, targets),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1723,7 +1744,6 @@ def app_title_coverage(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
     app = build_app(
         catalog_db_path=catalog_db,
         local_db_path=local_db,
-        matcher_config=matcher_config,
         target_segments=_targets_ab(),
         templates_dir=webui_dir / "templates",
         static_dir=webui_dir / "static",
@@ -1733,6 +1753,7 @@ def app_title_coverage(catalog_db: Path, local_db: Path) -> tuple[Starlette, str
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
         file_lister=_NO_FILE_LISTER,
+        file_describer=_file_describer(catalog_db, matcher_config, _targets_ab()),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,

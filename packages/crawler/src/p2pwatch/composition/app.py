@@ -50,6 +50,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.backoff_state_repository import
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
     SqliteCatalogFileReader,
     SqliteCoverageReader,
+    SqliteSourceReader,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
@@ -68,8 +69,10 @@ from p2pwatch.adapters.driven.wall_clock_system import SystemWallClock
 from p2pwatch.adapters.driving.process.posix_process import PosixProcess
 from p2pwatch.adapters.driving.webui.app import build_app as build_webui_app
 from p2pwatch.adapters.driving.webui.uvicorn_server_thread import UvicornServerThread
+from p2pwatch.application.describe_file import DescribeFile
 from p2pwatch.application.describe_node import DescribeNode
 from p2pwatch.application.list_files import ListFiles
+from p2pwatch.application.matching_read import MatchingExplainer
 from p2pwatch.application.pause_crawl import PauseCrawl
 from p2pwatch.application.reevaluate_catalog import reevaluate_catalog
 from p2pwatch.application.request_shutdown import RequestShutdown
@@ -152,10 +155,11 @@ class CrawlerApp(CrawlerRunner):
         crawler_config = config.crawler_config
         webui_pkg_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent
         node_state_reader = SqliteNodeStateReader(ReaderProvider(crawler_config.local_db_path))
+        catalog_reader_provider = ReaderProvider(crawler_config.catalog_db_path)
+        catalog_file_reader = SqliteCatalogFileReader(catalog_reader_provider)
         app = build_webui_app(
             catalog_db_path=Path(crawler_config.catalog_db_path),
             local_db_path=Path(crawler_config.local_db_path),
-            matcher_config=config.matcher_config,
             target_segments=config.targets,
             templates_dir=webui_pkg_dir / "templates",
             static_dir=webui_pkg_dir / "static",
@@ -173,8 +177,15 @@ class CrawlerApp(CrawlerRunner):
                 monotonic_clock=monotonic_clock,
             ),
             node_describer=DescribeNode(node_state_reader),
-            file_lister=ListFiles(
-                SqliteCatalogFileReader(ReaderProvider(crawler_config.catalog_db_path))
+            file_lister=ListFiles(catalog_file_reader),
+            file_describer=DescribeFile(
+                catalog_file_reader=catalog_file_reader,
+                source_reader=SqliteSourceReader(catalog_reader_provider),
+                explainer=MatchingExplainer(
+                    matcher_config=config.matcher_config, targets=config.targets
+                ),
+                wall_clock=wall_clock,
+                source_period_gap=crawler_config.webui.source_period_gap,
             ),
             amule_url=crawler_config.webui.amule_url,
             wall_clock=wall_clock,
