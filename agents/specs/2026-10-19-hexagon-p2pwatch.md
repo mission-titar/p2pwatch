@@ -368,7 +368,7 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
 | 150 | `feat/list-sources` | `SourceReader`'s list reads; `ListSources`; its route and route tests | 450, 12 |
 | 160 | `feat/describe-source` | `DescribeSource`, `DescribeSourceName`; their routes and route tests; the dead `{% else %}` | 450, 12 |
 | 170 | `feat/console-query` | `SqlExecutor`, `RunConsoleQuery`; `displays.py`; the last webui exceptions in `tach.toml` | 400, 12 |
-| 180 | `refactor/role-ports` | the five catalog ports, `CatalogRepository` and `DownloadCatalogReader` deleted; the download, source point, backoff and policy fingerprint ports | 900, 34 |
+| 180 | `refactor/role-ports` | the five catalog ports, `CatalogRepository` and `DownloadCatalogReader` deleted; the download, source point, backoff and policy fingerprint ports; the re-exports of the types blocks 110 and 115 moved to the domain (`BackoffKey`, `BackoffState`, `StatusReading`, `ClientStatus`, `ChannelStatus`) go, their importers reading the domain (Corrected 2026-10-19: added) | 900, 34 |
 | 190 | `refactor/ports-as-abcs` | the five capability renames; the remaining `Protocol`s to ABCs; `channels`; the Gotchas; the ast-grep rule and its test | 750, 72 |
 | 200 | `docs/hexagon-p2pwatch-wrap` | closing block: backlog, handoff | |
 
