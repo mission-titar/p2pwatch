@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.__main__ import main
-from p2pwatch_testing.merge.helpers import HASH_A, HASH_B, count, make_catalog
+from p2pwatch_testing.adapters.persistence_sqlite.helpers import HASH_A, HASH_B, count, make_catalog
 
 _DEPLOY = Path(__file__).resolve().parents[3] / "deploy"
 

@@ -9,8 +9,8 @@ import os
 import subprocess
 import time
 
+from p2pwatch_amule.adapters.driven import settings
 from p2pwatch_amule.adapters.driven.gluetun import forwarded_port
-from p2pwatch_amule.adapters.driving import settings
 from p2pwatch_amule.domain.conf import AMULE_CONF_PATH, tcp_listen_port, with_listen_port
 
 AMULED_SERVICE_DIR = "/etc/services.d/amuled"
