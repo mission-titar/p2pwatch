@@ -3,11 +3,29 @@
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 
+from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
+
 
 class CatalogFileReader(ABC):
     """Reads the catalog from any thread. A file passes ``target_id`` when it holds a current
     decision of that target and a tier other than ``catalog``, ``tier`` when it holds one of that
     tier, ``search_text`` when its latest filename contains it."""
+
+    @abstractmethod
+    def read_catalog_entries(
+        self,
+        *,
+        target_id: str | None,
+        tier: str | None,
+        search_text: str | None,
+        matched_only: bool,
+        sort: CatalogEntrySort,
+        direction: SortDirection,
+        limit: int,
+        offset: int,
+    ) -> tuple[CatalogEntry, ...]:
+        """The files passing the filters, ``matched_only`` keeping those with a current
+        decision, sorted then by ``file_id``."""
 
     @abstractmethod
     def read_matched_and_total_file_counts(

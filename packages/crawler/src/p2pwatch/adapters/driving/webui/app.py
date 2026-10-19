@@ -28,11 +28,7 @@ from catalog_matching.domain.config import MatcherConfig
 from catalog_matching.domain.ed2k_link import build_ed2k_link
 from catalog_matching.domain.models import TargetSegment
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
-    DEFAULT_DIR,
-    DEFAULT_SORT,
     PAGE_SIZE,
-    SORT_COLUMNS,
-    SORT_DIRECTIONS,
     CatalogReader,
     SqliteCatalogFileReader,
 )
@@ -68,7 +64,6 @@ from p2pwatch.adapters.driving.webui.views import (
     DbOption,
     DecisionCell,
     FileDetailDisplay,
-    FileRow,
     FileRowDisplay,
     FilesSummary,
     FilterBar,
@@ -95,6 +90,7 @@ from p2pwatch.adapters.driving.webui.views import (
     TrackedDownloadDisplay,
 )
 from p2pwatch.application.matching_read import MatchingExplainer
+from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.node_state import NodeState
 from p2pwatch.domain.observation import FileObservation
@@ -155,14 +151,14 @@ def _make_nav_context(amule_url: str) -> Callable[[Request], dict[str, Any]]:
 
 
 def _resolve_target_display(
-    row: FileRow, segment_by_id: Mapping[str, TargetSegment]
+    entry: CatalogEntry, segment_by_id: Mapping[str, TargetSegment]
 ) -> list[tuple[str, str]]:
-    """Per-decision ``(target, title)`` pairs for a file row, in the row's
+    """Per-decision ``(target, title)`` pairs for a catalog entry, in the entry's
     decision order (by target_id). Empty when the file has no current decision. The
     ``catalog → "unidentified"`` mask is applied per decision (``keroro_large`` is the only
     catalog-tier rule; cf. ``views.FileRowDisplay``)."""
     resolved: list[tuple[str, str]] = []
-    for dec in row.decisions:
+    for dec in entry.decisions:
         if dec.tier == "catalog":
             resolved.append(("unidentified", "·"))
             continue
@@ -178,34 +174,39 @@ def _resolve_target_display(
 
 
 def _to_display_rows(
-    file_rows: Iterable[FileRow], segment_by_id: Mapping[str, TargetSegment]
+    catalog_entries: Iterable[CatalogEntry], segment_by_id: Mapping[str, TargetSegment]
 ) -> list[FileRowDisplay]:
-    """Convert catalog rows into ``FileRowDisplay`` view-models: one row per file, the file's
+    """Convert catalog entries into ``FileRowDisplay`` view-models: one row per file, the file's
     (usually two) segment decisions surfaced as one ``DecisionCell`` each in ``decisions_display``
     while ``tier_display`` still aggregates (shared tier, or per-target joined with ``" · "``).
     Shared by ``handle_files`` and ``handle_target``."""
     rows = []
-    for row in file_rows:
-        if row.decisions:
-            pairs = _resolve_target_display(row, segment_by_id)
+    for entry in catalog_entries:
+        if entry.decisions:
+            pairs = _resolve_target_display(entry, segment_by_id)
             decisions_display = tuple(DecisionCell(target=t, title=ti) for t, ti in pairs)
-            tier_values = {dec.tier for dec in row.decisions}
+            tier_values = {dec.tier for dec in entry.decisions}
             if len(tier_values) == 1:
-                tier_display = row.decisions[0].tier
+                tier_display = entry.decisions[0].tier
             else:
-                tier_display = " · ".join(f"{dec.target_id}: {dec.tier}" for dec in row.decisions)
+                tier_display = " · ".join(f"{dec.target_id}: {dec.tier}" for dec in entry.decisions)
         else:
             decisions_display = ()
             tier_display = "·"
+        latest = entry.latest_observation
         rows.append(
             FileRowDisplay(
-                file_id=row.file.file_id.hex(),
-                short_hash=short_hash(row.file.native_id),
-                filename=row.filename,
-                sources_display="unknown" if row.source_count is None else str(row.source_count),
+                file_id=entry.file.file_id.hex(),
+                short_hash=short_hash(entry.file.native_id),
+                filename="" if latest is None else latest.reported_file.filename,
+                sources_display=(
+                    "unknown" if latest is None else str(latest.reported_file.source_count)
+                ),
                 decisions_display=decisions_display,
-                size_display=human_size(row.size_bytes),
-                last_seen_display=short_timestamp(row.last_seen),
+                size_display=human_size(entry.size_bytes),
+                last_seen_display=(
+                    "" if latest is None else short_timestamp(latest.observed_at.isoformat())
+                ),
                 tier_display=tier_display,
             )
         )
@@ -401,14 +402,18 @@ _DEFAULT_DIRECTION_BY_COLUMN: dict[str, str] = {
 _OPPOSITE_BY_DIRECTION: dict[str, str] = {"asc": "desc", "desc": "asc"}
 
 
-def _normalize_sort(raw: str | None) -> str:
-    """Map a raw ``sort`` param to an allowlist key, or the default (unknown/missing -> default)."""
-    return raw if raw in SORT_COLUMNS else DEFAULT_SORT
+_DEFAULT_SORT = CatalogEntrySort.LAST_SEEN
+_DEFAULT_DIRECTION = SortDirection.DESC
 
 
-def _normalize_direction(raw: str | None) -> str:
+def _normalize_sort(raw: str | None) -> CatalogEntrySort:
+    """Map a raw ``sort`` param to its sort, or the default (unknown/missing -> default)."""
+    return CatalogEntrySort(raw) if raw is not None and raw in CatalogEntrySort else _DEFAULT_SORT
+
+
+def _normalize_direction(raw: str | None) -> SortDirection:
     """Map a raw ``direction`` param to ``asc``/``desc``, or the default when unknown or missing."""
-    return raw if raw in SORT_DIRECTIONS else DEFAULT_DIR
+    return SortDirection(raw) if raw is not None and raw in SortDirection else _DEFAULT_DIRECTION
 
 
 def _sort_header(
@@ -431,9 +436,9 @@ def _sort_header(
     )
     indicator = active_direction if active else ""
     link_params = dict(kept_params)
-    if column_key != DEFAULT_SORT:
+    if column_key != _DEFAULT_SORT:
         link_params["sort"] = column_key
-    if next_direction != DEFAULT_DIR:
+    if next_direction != _DEFAULT_DIRECTION:
         link_params["direction"] = next_direction
     url = "/files?" + urlencode(link_params) if link_params else "/files"
     return SortHeader(label=label, url=url, indicator=indicator)
@@ -759,21 +764,21 @@ def build_app(
         direction_param = _normalize_direction(request.query_params.get("direction"))
         page = _page_number(request.query_params.get("page"))
 
-        catalog = CatalogReader(catalog_reader.connection())
-        file_rows = catalog.list_files(
-            target=target_id_param,
+        catalog_entries = catalog_file_reader.read_catalog_entries(
+            target_id=target_id_param,
             tier=tier_param,
-            query=search_text,
-            page=page,
+            search_text=search_text,
             matched_only=not show_unmatched,
             sort=sort_param,
             direction=direction_param,
+            limit=PAGE_SIZE,
+            offset=(page - 1) * PAGE_SIZE,
         )
         matched_count, total_count = catalog_file_reader.read_matched_and_total_file_counts(
             target_id=target_id_param, tier=tier_param, search_text=search_text
         )
 
-        display_rows = _to_display_rows(file_rows, _segment_by_id)
+        display_rows = _to_display_rows(catalog_entries, _segment_by_id)
         # Active, non-default params (page excluded). Every URL derives from these two ordered
         # dicts, so param order is deterministic. ``filter_params`` is what a re-sort keeps;
         # ``sort_params`` is what a filter/toggle/page keeps.
@@ -787,9 +792,9 @@ def build_app(
         if show_unmatched:
             filter_params["show_unmatched"] = "1"
         sort_params: dict[str, str] = {}
-        if sort_param != DEFAULT_SORT:
+        if sort_param != _DEFAULT_SORT:
             sort_params["sort"] = sort_param
-        if direction_param != DEFAULT_DIR:
+        if direction_param != _DEFAULT_DIRECTION:
             sort_params["direction"] = direction_param
 
         sort_headers = _sort_headers(
@@ -1004,15 +1009,18 @@ def build_app(
 
     async def handle_target(request: Request) -> Response:
         target_id: str = request.path_params["target_id"]
-        catalog = CatalogReader(catalog_reader.connection())
-        file_rows = catalog.list_files(
-            target=target_id,
+        catalog_entries = catalog_file_reader.read_catalog_entries(
+            target_id=target_id,
             tier=None,
-            query=None,
-            page=1,
+            search_text=None,
+            matched_only=False,
+            sort=_DEFAULT_SORT,
+            direction=_DEFAULT_DIRECTION,
+            limit=PAGE_SIZE,
+            offset=0,
         )
 
-        display_rows = _to_display_rows(file_rows, _segment_by_id)
+        display_rows = _to_display_rows(catalog_entries, _segment_by_id)
         # No pagination here (target view: we expect few). Empty nav.
         nav = PageNav(page=1, prev_url=None, next_url=None)
         # files.html is shared with /files, whose matched/all summary line and filter bar are

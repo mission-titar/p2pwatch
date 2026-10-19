@@ -46,7 +46,7 @@ LATEST_OBSERVATION_CTE = """latest_observation AS (
     )
 )"""
 
-# Every query below returns these columns in this order, so ``_observation`` maps them all.
+# Every query below returns these columns in this order, for ``observation_from_row``.
 _COLUMNS = (
     "network, native_id, filename, size_bytes, source_count, keyword, duration_seconds,"
     " bitrate_kbps, raw_meta, observed_at"
@@ -93,7 +93,7 @@ LIMIT 1
 )
 
 
-def _observation(row: Any) -> FileObservation:
+def observation_from_row(row: Any) -> FileObservation:
     reported_file = ReportedFile(
         file=FileKey(Network(row[0]), row[1]),
         filename=row[2],
@@ -110,12 +110,12 @@ def _observation(row: Any) -> FileObservation:
 def latest_observation(connection: sqlite3.Connection, file: FileKey) -> FileObservation | None:
     """The latest observation; ``None`` for a file never seen."""
     row = connection.execute(SELECT_LATEST_OBSERVATION, (file.file_id,)).fetchone()
-    return None if row is None else _observation(row)
+    return None if row is None else observation_from_row(row)
 
 
 def iter_latest_observations(connection: sqlite3.Connection) -> Iterator[FileObservation]:
     """Each seen file's latest observation, sorted by network and native id, streamed."""
-    return map(_observation, connection.execute(SELECT_LATEST_OBSERVATIONS))
+    return map(observation_from_row, connection.execute(SELECT_LATEST_OBSERVATIONS))
 
 
 def known_filenames(connection: sqlite3.Connection, file: FileKey) -> tuple[str, ...]:
@@ -127,7 +127,7 @@ def known_filenames(connection: sqlite3.Connection, file: FileKey) -> tuple[str,
 def best_observation(connection: sqlite3.Connection, file: FileKey) -> FileObservation | None:
     """The observation of the clean filename (most sources, then latest); ``None`` if never seen."""
     row = connection.execute(_SELECT_BEST_OBSERVATION, (file.file_id,)).fetchone()
-    return None if row is None else _observation(row)
+    return None if row is None else observation_from_row(row)
 
 
 def observations_between(
@@ -136,4 +136,4 @@ def observations_between(
     """The file's timeline from ``since`` included to ``until`` excluded, in microseconds, oldest
     first."""
     rows = connection.execute(_SELECT_OBSERVATIONS_BETWEEN, (file.file_id, since, until)).fetchall()
-    return tuple(map(_observation, rows))
+    return tuple(map(observation_from_row, rows))
