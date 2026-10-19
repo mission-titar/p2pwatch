@@ -13,7 +13,7 @@ import sys
 import unicodedata
 from collections.abc import Callable
 
-from p2pwatch_amule.adapters.driving import settings
+from p2pwatch_amule.adapters.driven import settings
 from p2pwatch_amule.domain.conf import (
     AMULE_CONF_PATH,
     CONFIG_DIR,

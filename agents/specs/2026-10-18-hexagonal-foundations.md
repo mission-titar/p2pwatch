@@ -181,7 +181,7 @@ that removes it.
 | `webui/adapters/matching_read.py` | `application/` | the webui imports it directly: lot 2 |
 | `webui/composition/uvicorn_server_thread.py` (Corrected 2026-10-18: row added) | `adapters/driving/webui/` | |
 | `catalog_matching/*` | `catalog_matching/domain/` | |
-| `p2pwatch_amule` | `boot/conf.py` to `domain/`; `boot`, `port_sync` and `settings` to `adapters/driving/`, `gluetun` to `adapters/driven/` (Corrected 2026-10-19: sides named) | three, adapters importing adapters: lot 3 |
+| `p2pwatch_amule` | `boot/conf.py` to `domain/`; `boot` and `port_sync` to `adapters/driving/`, `gluetun` and `settings` to `adapters/driven/` (Corrected 2026-10-19: sides named; `settings` driven, since lot 3 puts a driven port before it) | three, adapters importing adapters: lot 3 |
 | `vex_checks` | descriptors, registry and violations to `domain/`; the four `check_*` to `adapters/driving/`, `repo`, `vex_io`, `grype`, `sbom`, `sarif` and `source_scan` to `adapters/driven/` (Corrected 2026-10-19: sides named) | 13: lot 3 |
 | `template_checks` | `adapters/driving/` | |
 | `coverage_checks` | `function_bodies` to `domain/`, `unit_coverage` to `adapters/driving/`, `own_tests` to `adapters/driven/` (Corrected 2026-10-19: sides named) | one: lot 3 |

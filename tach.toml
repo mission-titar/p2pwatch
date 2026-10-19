@@ -1,4 +1,4 @@
-# The rings: agents/specs/2026-10-18-hexagonal-architecture.md (D1, D6, D15).
+# Imports point inward, adapters never import each other (2026-10-18-hexagonal-architecture.md).
 # A deprecated edge is a temporary exception; the comment above names why and the lot removing it.
 # tach check never sees an import across distributions: check-external holds them to each pyproject.
 source_roots = [
@@ -440,12 +440,17 @@ layer = "adapters"
 depends_on = []
 
 [[modules]]
+path = "p2pwatch_amule.adapters.driven.settings"
+layer = "adapters"
+depends_on = []
+
+[[modules]]
 path = "p2pwatch_amule.adapters.driving.boot"
 layer = "adapters"
 depends_on = [
   "p2pwatch_amule.domain",
-  # Both entry points read port-sync's settings adapter: lot 3 puts a port between them.
-  { path = "p2pwatch_amule.adapters.driving.settings", deprecated = true },
+  # Both entry points read port-sync's settings through their adapter: lot 3 gives it a driven port.
+  { path = "p2pwatch_amule.adapters.driven.settings", deprecated = true },
 ]
 
 [[modules]]
@@ -460,14 +465,9 @@ depends_on = [
   "p2pwatch_amule.domain",
   # Port-sync asks gluetun through its adapter, past any port: lot 3 gives it a driven port.
   { path = "p2pwatch_amule.adapters.driven.gluetun", deprecated = true },
-  # Both entry points read port-sync's settings adapter: lot 3 puts a port between them.
-  { path = "p2pwatch_amule.adapters.driving.settings", deprecated = true },
+  # Both entry points read port-sync's settings through their adapter: lot 3 gives it a driven port.
+  { path = "p2pwatch_amule.adapters.driven.settings", deprecated = true },
 ]
-
-[[modules]]
-path = "p2pwatch_amule.adapters.driving.settings"
-layer = "adapters"
-depends_on = []
 
 [[modules]]
 path = "p2pwatch_amule.domain"
