@@ -347,7 +347,8 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
 |---|---|---|---|
 | 10 | `feat/logger-port` | this spec, the corrections, the backlog; `Logger`, `StdlibLogger`, `FakeLogger`; the seven modules on it; `logging` off the allowlist | 600, 23 |
 | 20 | `test/download-doubles-shared` | the five download doubles into `p2pwatch_testing` | 200, 4 |
-| 30 | `refactor/amuleapi-session` | `_call` opens the session; closed stays closed; the re-login serialized; `connect`/`close` off the ports; one session per node | 350, 18 |
+| 30 | `refactor/amuleapi-session` | `_call` opens the session; closed stays closed; the re-login serialized | 111, 7 |
+| 35 | `refactor/one-amuleapi-session` | `connect`/`close` off the ports; one session per node (Corrected 2026-10-19: split from block 30, measured at 24 files; this half moves behaviour, so no exemption) | 265, 19 |
 | 40 | `refactor/reported-file` | `FileObservation` renamed `ReportedFile`, with its variables | 200, 19 |
 | 50 | `refactor/one-observation` | `FileObservation` with `observed_at`; `Sighting`, `ObservedFile`, `ReevalRow` deleted | 400, 16 |
 | 60 | `refactor/node-id-catalog-and-source-points` | the `node_id` through the catalog's three writes and the source points' write and two reads | 550, 22 |
@@ -383,7 +384,7 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
    is seen failing on an injected `class X(Protocol)`.
 2. **No `logging` in the core** (block 10): ast-grep fails on an injected `import logging` in `application/`;
    `grep -rln "import logging" application` prints nothing (on `main`: 7 files).
-3. **No `connect` on a port, one session** (block 30): `grep -rn "def connect\|def close" ports` prints nothing; the
+3. **No `connect` on a port, one session** (blocks 30 and 35; Corrected 2026-10-19: was block 30): `grep -rn "def connect\|def close" ports` prints nothing; the
    wiring test with download enabled asserts one `POST /auth/login` on `FakeAmuleApiServer` (on `main` it asserts
    `api.logins == 2`, `test_app_wiring.py:196`); a client test sees a call after a tolerated unreachable `open()`
    log in and succeed, and a call after `close()` raise.
@@ -410,7 +411,7 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
     and of the Prometheus adapter shows no key or metric name changed; the notifier's tests assert the Discord
     username `p2pwatch - <node_id>` and the prefixed title.
 11. **The gate is green** at every block, and CI's smoke and integration suites pass on amd64 and arm64 at blocks
-    30, 80 and 170.
+    35, 80 and 170 (Corrected 2026-10-19: 35 for 30, the split's top).
 
 ## Risks
 
