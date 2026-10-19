@@ -57,6 +57,8 @@ it relies on.
   (`application/run_download_cycle.py`), `DownloadSourceClient` and `WebuiServer` (`composition/app.py`, which
   imports `AmuleApiClient`: inheriting `DownloadSourceClient` would be an import cycle), `Matcher`
   (`catalog_matching/combinators.py:12`), and the I/O seams of `amule_bump/github.py` and `vex_checks/grype.py`.
+  (Corrected 2026-10-19: 21 are left in the hexagon `p2pwatch` at `859b440`, the figure lot 2 acts on, not 26
+  in all packages; lot 2's spec, appendix.)
 - **Methods declared by two ports**: `connect` in `SearchClient`, `StatusClient` and `DownloadClient`;
   `close` in `SearchClient` and `DownloadClient`; `download_candidates`, `latest_observation` and
   `best_observation` in both `CatalogRepository` (10 methods) and `DownloadCatalogReader` (3); `now` in
@@ -65,12 +67,12 @@ it relies on.
   `close()`, and a daemon restart surfaces as a `401` that its re-login renews; the comment at
   `application/run_download_cycle.py:477` ("re-arms a stream the adapter discarded") dates from EC.
 - **Logging in the core**: 27 `_logger` calls in 5 modules of `application/`, each holding a
-  `logging.getLogger(...)` global.
+  `logging.getLogger(...)` global. (Corrected 2026-10-19: 31 calls in 7 modules; lot 2's spec, appendix.)
 - **The composition's tests**: `tests/composition/test_app.py` (1,578 lines) drives `composition/app.py`
   (581) through injected factories (`_client_factory`, `_download_client_factory`, `WebuiServer`)
   (Corrected 2026-10-18: through more seams than these three, `metrics_server`, three `monkeypatch.setattr`
   targets and three private methods among them, and `tests/integration/test_crawler_loop.py` uses
-  `client_factory` too); `test_main.py` (303) monkeypatches `composition/__main__.py`, and 16 of its 19 tests cover the command
+  `client_factory` too) (Corrected 2026-10-19: lot 1a removed these seams); `test_main.py` (303) monkeypatches `composition/__main__.py`, and 16 of its 19 tests cover the command
   line's own logic (exit codes, `validate-config`'s rejections and defaults, the bare invocation).
 - **The amuleapi endpoint** is a code constant, `ed2k:4711` (`adapters/config/crawler_config.py:60-61`).
 - **The webui's readers build its response models**: `webui/adapters/catalog_read.py` imports 10 types of
@@ -127,12 +129,14 @@ it relies on.
   amuleapi client and the SQL console hold a `MonotonicClock`); a use case implements a driving port and
   consumes driven ports. `CrawlerControl` and `StatusReadings` become driving ports implemented by use
   cases, over driven ports that `LoopCrawlerControl` and the status board implement; the webui's HTTP module
-  stops importing the clock ports. tach states it with one module per port file, `depends_on`,
+  stops importing the clock ports. (Corrected 2026-10-19: with one use case per page, the status board and
+  the run state are driven ports that a use case consumes, not driving ports; lot 2's spec, D6.) tach states it with one module per port file, `depends_on`,
   `layers_explicit_depends_on` and `exact`, and isolates each hexagon with `visibility` (Corrected 2026-10-19: with `tach check-external`, D15). Why: the same rule
   on both sides; one module per port file is what lets "exactly the ports it uses" be written.
 - **D7. Every use case has a driving port**, and every read goes through a use case, even a pure
   delegation (Corrected 2026-10-18: one driving port, `CrawlerRunner`, is implemented by the composition, since
-  what it builds depends on the config the command line just read; lot 1a's spec). Why: one rule with no exception to judge, and a driving adapter's test receives a typed fake
+  what it builds depends on the config the command line just read; lot 1a's spec) (Corrected 2026-10-19: the loops and the startup steps are internal steps of `RunCrawler`, the
+  root of the crawler's graph, which the composition invokes and which has no driving port; lot 2's spec). Why: one rule with no exception to judge, and a driving adapter's test receives a typed fake
   of its use case; the operator accepts the delegating functions and the rename in two places this costs.
 - **D8. Each boundary owns its data types.** A domain concept crosses any boundary as itself: `FileKey`,
   `SourceKey`, and the one observation into which section 7 of `agents/specs/2026-10-13-descriptive-names.md`
@@ -142,7 +146,9 @@ it relies on.
   view models (section 7's `<Thing>Display`) and formatting to the HTTP adapter, whose presenter produces
   them. Why: a driven adapter cannot see a driving port (D6), storage and screen evolve apart, and the
   mapping is where read logic will land; a page-shaped row with its counts and facets is not a domain
-  concept, and reusing the driven types on the driving side would undo D6.
+  concept, and reusing the driven types on the driving side would undo D6. (Corrected 2026-10-19: a read
+  projection is a domain concept that the driven port returns, not a type the driven port owns; the response
+  models stay with their driving port; lot 2's spec, "Conventions this lot sets".)
 - **D9. No I/O in the core outside a port**: a per-ring allowlist of what the core may import, enforced by
   ast-grep, every other import refused. The base is the pure standard library the core uses today
   (`abc`, `collections`, `collections.abc`, `contextlib`, `dataclasses`, `datetime`, `enum`, `functools`,
@@ -158,7 +164,9 @@ it relies on.
   the composition opens the concrete adapter at startup (a wrong password still fails the start, a daemon
   not yet listening is still tolerated) and closes it. Why: only the adapter knows its transport's state,
   and a use case forgetting `connect()` is the class of defect behind a past 7-day wedge; the measurement
-  shows the loops' calls are already no-ops after the first success.
+  shows the loops' calls are already no-ops after the first success. (Corrected 2026-10-19: the lock and the
+  tolerated `open()` were already in the tree, and the download loop shares the one session: one session per
+  node; lot 2's spec, D10.)
 - **D11. The composition only wires, without injected factories, and is tested in integration.** The client
   factories, `WebuiServer` and the intersection types go, with `test_app.py`. The command line (argument
   parsing, subcommands, `validate-config`, the exit codes) is a driving adapter with its own unit tests,

@@ -138,12 +138,13 @@ re-measurement. None of it is done in this lot.
   `484-505`); `WebuiServer` exists only so that the composition's tests can replace uvicorn. The operator's view:
   wiring is a concern between units, so the composition should be built without injected factories and tested in
   integration, which deletes all three; that amends `AGENTS.md`'s unit coverage rule and reworks the 1,881 lines
-  of `tests/composition/test_app.py` and `test_main.py`.
+  of `tests/composition/test_app.py` and `test_main.py`. (Corrected 2026-10-19: lot 1a removed `WebuiServer` and
+  the intersection types; lot 2's spec, `2026-10-19-hexagon-p2pwatch.md`.)
 - **What an ABC conversion breaks mechanically**: `@runtime_checkable` on `MetricsSink`, `Notifier` and
   `Telemetry` (`ports/telemetry.py:11,16,23`) raises on a non-`Protocol`; `LoopCrawlerControl`'s `__slots__`
   (`adapters/crawler_control_loop.py:28`) stop locking once it inherits a slotless port, and the operator decided
   they would then go with the test that reads them, being only the rewrite of a `vars()` test (gate tooling lot,
-  block 160); `SearchClient.channels` and `WebuiServer.should_exit` are attributes, not methods.
+  block 160) (Corrected 2026-10-19: that test reads the `__slots__` tuple, with no `vars()`; lot 2's spec); `SearchClient.channels` and `WebuiServer.should_exit` are attributes, not methods.
 - **A guard for whichever form wins**: an ast-grep rule refusing a `Protocol` base under `packages/*/src` was
   prototyped and matches today's 26 ports, `typing.Protocol`, `Protocol[T]` and multi-line base lists included.
 - **The `tests.*` import gap** of the claims above, which a move of the shared doubles into

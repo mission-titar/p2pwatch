@@ -169,6 +169,8 @@ flowchart TB
   d'env. L'interpolation `${VAR}` dans `crawler.yml` est résolue par l'adapter de config **avant**
   que quoi que ce soit n'atteigne le domaine.
 - **`application/`** orchestre les cas d'usage asynchrones en parlant à des **ports** (protocoles).
+  Ses journaux passent eux aussi par un port, `Logger`, que `StdlibLogger` implémente sous le nom
+  du module (`p2pwatch.application.search_worker`), celui que filtre un opérateur.
 - **`adapters/`** portent toutes les I/O et satisfont les ports structurellement.
 - **`composition/`** (`CrawlerApp`) charge la config, que l'adapter de config valide *fail-fast*,
   et câble les adapters concrets qu'elle décrit.
