@@ -320,7 +320,6 @@ depends_on = [
   "p2pwatch.adapters.driving.process",
   "p2pwatch.adapters.driving.webui",
   "p2pwatch.application",
-  "p2pwatch.domain",
   "p2pwatch.ports.driven.clock",
   "p2pwatch.ports.driving.crawler_control",
   "p2pwatch.ports.driving.crawler_runner",

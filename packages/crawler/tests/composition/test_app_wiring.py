@@ -203,6 +203,10 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
     assert f"p2pwatch version {version('p2pwatch')}" in caplog.messages
     named_messages = [(record.name, record.getMessage()) for record in caplog.records]
     assert (  # each use case logs under its module's name, which an operator's filters read
+        "p2pwatch.application.run_crawler",
+        "crawler started: node_id=wired-node",
+    ) in named_messages
+    assert (
         "p2pwatch.application.reevaluate_if_policy_changed",
         "catalogue re-evaluated: 0 files, 0 rows written",
     ) in named_messages

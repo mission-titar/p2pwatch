@@ -173,7 +173,9 @@ flowchart TB
   du module (`p2pwatch.application.search_worker`), celui que filtre un opérateur.
 - **`adapters/`** portent toutes les I/O et satisfont les ports structurellement.
 - **`composition/`** (`CrawlerApp`) charge la config, que l'adapter de config valide *fail-fast*,
-  et câble les adapters concrets qu'elle décrit.
+  câble les adapters concrets qu'elle décrit, puis lance `RunCrawler`
+  (`application/run_crawler.py`), la racine du graphe : il résout le `node_id`, annonce le
+  démarrage, réévalue le catalogue si la politique a changé, puis supervise les boucles.
 - **`python -m p2pwatch`** construit les ports `crawl`, `validate-config` et `merge` (le cas
   d'usage `MergeCatalogs`) et les passe à la ligne de commande, `adapters/driving/cli/`, qui lit
   la sous-commande et rend son code de sortie.
@@ -666,7 +668,8 @@ démon sont
 
 | Sous-système | Emplacement (sous `packages/crawler/src/p2pwatch/` sauf mention) |
 |---|---|
-| Boucles et câblage | `composition/app.py` (`CrawlerApp`) |
+| Câblage | `composition/app.py` (`CrawlerApp`) |
+| Démarrage et boucles | `application/run_crawler.py` (`RunCrawler`), `supervise_loops.py` |
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
 | Cas d'usage | `application/search_tasks.py`, `status_loop.py`, `run_download_cycle.py` |
 | Recherche (pure) | `domain/search/` (`keywords`, `backoff`) |
