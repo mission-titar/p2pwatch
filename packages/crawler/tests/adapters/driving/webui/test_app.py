@@ -46,12 +46,15 @@ from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from p2pwatch.domain.source import SourceKey
 from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus, StatusReading
 from p2pwatch.ports.driving.crawl_summarizer import ClientSummary, CrawlSummary
+from p2pwatch.ports.driving.file_lister import FileListing
 from p2pwatch.ports.driving.node_describer import NodeDescription
 from p2pwatch_testing.application.fakes import (
     FakeCrawlControls,
     FakeCrawlSummarizer,
+    FakeFileLister,
     FakeNodeDescriber,
     FakeTime,
+    ListFilesCall,
 )
 from p2pwatch_testing.catalog_rows import (
     SEEN_AT,
@@ -96,7 +99,18 @@ _CRAWL_SUMMARY = CrawlSummary(
 )
 _SUMMARIZER = FakeCrawlSummarizer(_CRAWL_SUMMARY)
 _DESCRIBER = FakeNodeDescriber(NodeDescription(_NODE_STATE))
-# The dashboard and the node page read their use case only: opening this path would fail.
+_NO_FILE_LISTER = FakeFileLister(FileListing((), False, 0, 0, {}))
+# What /files asks for with no parameter.
+_DEFAULT_CALL = ListFilesCall(
+    target_id=None,
+    tier=None,
+    search_text=None,
+    matched_only=True,
+    sort=CatalogEntrySort.LAST_SEEN,
+    direction=SortDirection.DESC,
+    page=1,
+)
+# The pages on fakes read their use case only: opening this path would fail.
 _NO_DB = Path("/nonexistent/p2pwatch.db")
 
 
@@ -108,6 +122,7 @@ def _app_on_fakes(
     *,
     crawl_summary: CrawlSummary = _CRAWL_SUMMARY,
     node_state: NodeState = _NODE_STATE,
+    file_lister: FakeFileLister = _NO_FILE_LISTER,
     controls: FakeCrawlControls = _NO_CONTROLS,
     amule_url: str = _AMULE_URL,
 ) -> Starlette:
@@ -126,7 +141,7 @@ def _app_on_fakes(
         shutdown_requester=controls,
         crawl_summarizer=FakeCrawlSummarizer(crawl_summary),
         node_describer=FakeNodeDescriber(NodeDescription(node_state)),
-        file_lister=_file_lister(_NO_DB),
+        file_lister=file_lister,
         amule_url=amule_url,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -139,6 +154,27 @@ async def _page(app: Starlette, url: str) -> str:
         resp = await client.get(url)
     assert resp.status_code == 200
     return resp.text
+
+
+def _listing(*catalog_entries: CatalogEntry) -> FileListing:
+    return FileListing(catalog_entries, False, 0, 0, {})
+
+
+def _one_file(*decisions: DecisionRecord) -> FileListing:
+    return _listing(_catalog_entry(decisions=decisions))
+
+
+async def _files_page(
+    url: str,
+    file_listing: FileListing | None = None,
+) -> tuple[str, ListFilesCall]:
+    """The page rendered from ``file_listing`` (one catalog-tier file by default), and its call."""
+    if file_listing is None:
+        file_listing = _one_file(_decision("062A", "catalog"))
+    file_lister = FakeFileLister(file_listing)
+    text = await _page(_app_on_fakes(file_lister=file_lister), url)
+    (call,) = file_lister.calls
+    return text, call
 
 
 def _detail_url(ed2k_hash: str) -> str:
@@ -541,103 +577,54 @@ async def test_dashboard_shows_a_target_without_a_best_tier_as_a_dot() -> None:
 
 
 @pytest.mark.asyncio
-async def test_files_returns_200_with_catalog_entry(
-    populated_app: tuple[Starlette, str],
-) -> None:
-    """/files → 200 + contains the inserted file's hash."""
-    app, hash_ = populated_app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files")
-    assert resp.status_code == 200
-    assert hash_[:8] in resp.text
+async def test_files_asks_for_the_first_page_of_matched_files_by_last_seen() -> None:
+    text, call = await _files_page("/files")
+    assert call == _DEFAULT_CALL
+    assert TEST_HASH[:8] in text
 
 
 @pytest.mark.asyncio
-async def test_files_default_hides_unmatched(
-    app_no_decision: tuple[Starlette, str],
-) -> None:
-    """/files defaults to matched-only → an unmatched file is hidden."""
-    app, hash_ = app_no_decision
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files")
-    assert resp.status_code == 200
-    assert hash_[:8] not in resp.text
-    assert "Showing matched files only: 0 of 1 catalogued." in resp.text
-    assert "Show all catalogued files" in resp.text
-    assert "show_unmatched=1" in resp.text
+async def test_files_default_summarizes_the_matched_files_and_offers_all() -> None:
+    listing = replace(_listing(), matched_file_count=3, total_file_count=1234)
+    text, _ = await _files_page("/files", listing)
+    assert "Showing matched files only: 3 of 1,234 catalogued." in text
+    assert 'href="/files?show_unmatched=1">Show all catalogued files' in text
 
 
 @pytest.mark.asyncio
-async def test_files_default_hides_retracted(
-    app_retracted_decision: tuple[Starlette, str],
-) -> None:
-    """A retracted latest decision is treated exactly like no decision: the matched-only
-    default (/files) hides it and counts it as unmatched in the summary."""
-    app, hash_ = app_retracted_decision
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files")
-    assert resp.status_code == 200
-    assert hash_[:8] not in resp.text
-    assert "Showing matched files only: 0 of 1 catalogued." in resp.text
-
-
-@pytest.mark.asyncio
-async def test_files_retracted_shows_as_unmatched_in_all_view(
-    app_retracted_decision: tuple[Starlette, str],
-) -> None:
-    """The all-view (show_unmatched=1) renders a retracted file as an unmatched row: "·"
-    cells, never "<td>unidentified</td>", never a tier badge (e.g. never the literal
-    "retracted" string in a cell)."""
-    app, hash_ = app_retracted_decision
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files?show_unmatched=1")
-    assert resp.status_code == 200
-    assert hash_[:8] in resp.text
-    assert "<td>unidentified</td>" not in resp.text
-    assert "<td>retracted</td>" not in resp.text
-    assert "La Grenouille Cosmique" not in resp.text
-
-
-@pytest.mark.asyncio
-async def test_files_toggle_preserves_active_filter(
-    populated_app: tuple[Starlette, str],
-) -> None:
-    """The matched→all toggle must carry the active q filter (spec §5: filters preserved)."""
-    app, hash_ = populated_app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files?search=keroro")
-    assert resp.status_code == 200
-    assert hash_[:8] in resp.text  # the matched file still shows under the q filter
+async def test_files_toggle_preserves_active_filter() -> None:
+    """The matched→all toggle must carry the active search (spec §5: filters preserved)."""
+    text, call = await _files_page("/files?search=keroro")
+    assert call == replace(_DEFAULT_CALL, search_text="keroro")
     # Jinja2 autoescapes "&" to "&amp;" inside the href attribute.
-    assert 'href="/files?search=keroro&amp;show_unmatched=1">Show all catalogued files' in resp.text
+    assert 'href="/files?search=keroro&amp;show_unmatched=1">Show all catalogued files' in text
 
 
-@pytest.mark.parametrize(("key", "old_key"), [("search", "q"), ("target_id", "target")])
+@pytest.mark.parametrize(
+    ("key", "old_key", "filtered_call"),
+    [
+        ("search", "q", replace(_DEFAULT_CALL, search_text="001A")),
+        ("target_id", "target", replace(_DEFAULT_CALL, target_id="001A")),
+    ],
+)
 @pytest.mark.asyncio
 async def test_files_filters_on_its_query_key_and_ignores_the_4x_one(
-    populated_app: tuple[Starlette, str], key: str, old_key: str
+    key: str, old_key: str, filtered_call: ListFilesCall
 ) -> None:
-    app, hash_ = populated_app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        filtered = await client.get(f"/files?{key}=001A")
-        unfiltered = await client.get(f"/files?{old_key}=001A")
-    assert hash_[:8] not in filtered.text
-    assert hash_[:8] in unfiltered.text
+    _, filtered = await _files_page(f"/files?{key}=001A")
+    _, unfiltered = await _files_page(f"/files?{old_key}=001A")
+    assert filtered == filtered_call
+    assert unfiltered == _DEFAULT_CALL
 
 
 @pytest.mark.asyncio
-async def test_files_show_unmatched_reveals_and_toggles_back(
-    app_no_decision: tuple[Starlette, str],
-) -> None:
-    """/files?show_unmatched=1 reveals the whole catalogue; toggle points back to matched-only."""
-    app, hash_ = app_no_decision
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files?show_unmatched=1")
-    assert resp.status_code == 200
-    assert hash_[:8] in resp.text
-    assert "Showing all catalogued files: 1 catalogued (0 matched)." in resp.text
-    assert "Matched only" in resp.text
-    assert 'href="/files">Matched only' in resp.text  # toggle drops the param → bare /files
+async def test_files_show_unmatched_reveals_and_toggles_back() -> None:
+    """/files?show_unmatched=1 asks for the whole catalogue; toggle points back to matched-only."""
+    listing = replace(_listing(), matched_file_count=0, total_file_count=1)
+    text, call = await _files_page("/files?show_unmatched=1", listing)
+    assert call == replace(_DEFAULT_CALL, matched_only=False)
+    assert "Showing all catalogued files: 1 catalogued (0 matched)." in text
+    assert 'href="/files">Matched only' in text  # toggle drops the param → bare /files
 
 
 @pytest.mark.asyncio
@@ -693,13 +680,9 @@ async def test_file_detail_malformed_file_id_returns_404(
 
 
 @pytest.mark.asyncio
-async def test_files_list_links_each_file_to_its_file_id(
-    populated_app: tuple[Starlette, str],
-) -> None:
-    app, hash_ = populated_app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files")
-    assert f'<a href="{_detail_url(hash_)}">{hash_[:8]}…</a>' in resp.text
+async def test_files_list_links_each_file_to_its_file_id() -> None:
+    text, _ = await _files_page("/files")
+    assert f'<a href="{_detail_url(TEST_HASH)}">{TEST_HASH[:8]}…</a>' in text
 
 
 @pytest.fixture
@@ -1139,29 +1122,20 @@ async def test_file_detail_unknown_hash_returns_404(
 
 
 @pytest.mark.asyncio
-async def test_targets_shortcut_returns_200(
-    populated_app: tuple[Starlette, str],
-) -> None:
-    """/targets/{target_id} → 200 (shortcut to filtered /files)."""
-    app, _ = populated_app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/targets/062A")
-    assert resp.status_code == 200
+async def test_target_page_asks_for_every_file_of_its_target_on_one_page() -> None:
+    """/targets/{target_id}: a shortcut to /files filtered on it, matched or not."""
+    _, call = await _files_page("/targets/062A?page=2&sort=size&tier=notify")
+    assert call == replace(_DEFAULT_CALL, target_id="062A", matched_only=False)
 
 
 @pytest.mark.asyncio
-async def test_target_page_has_no_summary_line(
-    populated_app: tuple[Starlette, str],
-) -> None:
+async def test_target_page_has_no_summary_line() -> None:
     """/targets/{id} shares files.html, but the matched/all summary is meaningless on a
     target-scoped page: the summary line and its toggle must not render there."""
-    app, _ = populated_app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/targets/062A")
-    assert resp.status_code == 200
-    assert "files-summary" not in resp.text
-    assert "Showing matched files only" not in resp.text
-    assert "Show all catalogued files" not in resp.text
+    text, _ = await _files_page("/targets/062A")
+    assert "files-summary" not in text
+    assert "Showing matched files only" not in text
+    assert "Show all catalogued files" not in text
 
 
 @pytest.mark.asyncio
@@ -1170,14 +1144,9 @@ async def test_node_page_shows_the_node_id() -> None:
 
 
 @pytest.mark.asyncio
-async def test_files_non_numeric_page_defaults_to_1(
-    populated_app: tuple[Starlette, str],
-) -> None:
-    """/files?page=abc → 200 (non-numeric page → default 1)."""
-    app, _ = populated_app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files?page=abc")
-    assert resp.status_code == 200
+async def test_files_non_numeric_page_defaults_to_1() -> None:
+    _, call = await _files_page("/files?page=abc")
+    assert call == _DEFAULT_CALL
 
 
 @pytest.mark.asyncio
@@ -1467,31 +1436,21 @@ def app_with_hostile_filename(catalog_db: Path, local_db: Path) -> tuple[Starlet
 
 
 @pytest.mark.asyncio
-async def test_empty_filter_param_does_not_silently_zero_results(
-    populated_app: tuple[Starlette, str],
-) -> None:
+async def test_empty_filter_param_does_not_silently_zero_results() -> None:
     # webui-security#0 regression (filters): ``?target_id=`` (empty, common with a <select>
     # that has an empty option) must be treated as "no filter", not as ``target_id = ''`` which
     # matches 0 results with no message.
-    app, hash_ = populated_app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files?target_id=&tier=&search=")
-    assert resp.status_code == 200
-    assert hash_[:8] in resp.text  # the inserted file is rendered despite the empty filters
+    _, call = await _files_page("/files?target_id=&tier=&search=")
+    assert call == _DEFAULT_CALL
 
 
 @pytest.mark.asyncio
-async def test_page_zero_is_clamped_to_first_page(
-    populated_app: tuple[Starlette, str],
-) -> None:
+async def test_page_zero_is_clamped_to_first_page() -> None:
     # webui-security#2 regression: ``?page=0`` → OFFSET=-50 (SQLite returned page 1 by
     # luck). Now ``max(1, page)`` clamps.
-    app, hash_ = populated_app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files?page=0")
-    assert resp.status_code == 200
-    assert hash_[:8] in resp.text
-    assert "Page 1" in resp.text
+    text, call = await _files_page("/files?page=0")
+    assert call == _DEFAULT_CALL
+    assert "<span>Page 1</span>" in text
 
 
 @pytest.mark.asyncio
@@ -1508,48 +1467,15 @@ async def test_security_headers_are_set_on_every_response(
 
 
 @pytest.mark.asyncio
-async def test_files_page_shows_pagination_navigation(catalog_db: Path, local_db: Path) -> None:
-    # webui-security#1: the page lists 50 files max; when it is FULL, a "Next →" link
-    # must be rendered (heuristic: we don't have the total count).
-    with sqlite3.connect(catalog_db) as conn:
-        for i in range(50):
-            ed2k = f"{i:032d}"
-            insert_file(conn, ed2k)
-            insert_observation(conn, ed2k, f"file-{i}.bin")
-            insert_decision(conn, ed2k, "062A", "catalog", rule_name="catalog")
-    matcher_config = _matcher()
-    targets = _targets()
-    import p2pwatch.adapters.driving.webui
-
-    templates_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "templates"
-    static_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "static"
-    app = build_app(
-        catalog_db_path=catalog_db,
-        local_db_path=local_db,
-        matcher_config=matcher_config,
-        target_segments=targets,
-        templates_dir=templates_dir,
-        static_dir=static_dir,
-        crawl_pauser=_NO_CONTROLS,
-        crawl_resumer=_NO_CONTROLS,
-        shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_SUMMARIZER,
-        node_describer=_DESCRIBER,
-        file_lister=_file_lister(catalog_db),
-        amule_url=_AMULE_URL,
-        wall_clock=_WALL_CLOCK,
-        monotonic_clock=_MONOTONIC_CLOCK,
-        source_period_gap=_GAP,
-    )
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp1 = await client.get("/files")
-        resp2 = await client.get("/files?page=2")
-    # page 1: full page → "Next" present, "Previous" absent.
-    assert "Next" in resp1.text
-    assert "Previous" not in resp1.text
-    # page 2: not full (0 files) → "Previous" present, "Next" absent.
-    assert "Previous" in resp2.text
-    assert "Next" not in resp2.text
+async def test_files_page_shows_pagination_navigation() -> None:
+    # webui-security#1: a "Next →" link when the listing has a next page.
+    first, _ = await _files_page("/files?search=x", replace(_listing(), has_next_page=True))
+    second, call = await _files_page("/files?search=x&page=2")
+    assert call == replace(_DEFAULT_CALL, search_text="x", page=2)
+    assert '<a href="/files?search=x&amp;page=2">Next →</a>' in first
+    assert "Previous" not in first
+    assert '<a href="/files?search=x&amp;page=1">← Previous</a>' in second
+    assert "Next" not in second
 
 
 @pytest.mark.asyncio
@@ -1894,20 +1820,6 @@ async def test_files_whole_episode_renders_one_row_with_aggregated_targets(
 
 
 @pytest.mark.asyncio
-async def test_whole_episode_appears_under_each_target(
-    app_whole_episode: tuple[Starlette, str],
-) -> None:
-    app, hash_ = app_whole_episode
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp_a = await client.get("/targets/072A")
-        resp_b = await client.get("/targets/072B")
-    assert resp_a.status_code == 200
-    assert resp_b.status_code == 200
-    assert hash_[:8] in resp_a.text
-    assert hash_[:8] in resp_b.text
-
-
-@pytest.mark.asyncio
 async def test_file_detail_whole_episode_shows_both_targets(
     app_whole_episode: tuple[Starlette, str],
 ) -> None:
@@ -2203,54 +2115,17 @@ def test_sort_headers_active_column_flips_and_preserves_filters() -> None:
     assert headers.name.url == "/files?search=keroro&tier=notify&sort=name&direction=asc"
 
 
-@pytest.fixture
-def sortable_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, list[str]]:
-    """App over three matched files with distinct sizes (300/200/100), for the sort-order test.
-    Returns (app, hashes-in-descending-size-order)."""
-    big, mid, small = "a" * 32, "b" * 32, "c" * 32
-    with sqlite3.connect(catalog_db) as conn:
-        for h, size, name in ((big, 300, "x.avi"), (mid, 200, "y.avi"), (small, 100, "z.avi")):
-            insert_file(conn, h, size)
-            insert_observation(conn, h, name, size_bytes=size)
-            insert_decision(conn, h, "062A", "download")
-    import p2pwatch.adapters.driving.webui
-
-    templates_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "templates"
-    static_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "static"
-    app = build_app(
-        catalog_db_path=catalog_db,
-        local_db_path=local_db,
-        matcher_config=_matcher(),
-        target_segments=_targets(),
-        templates_dir=templates_dir,
-        static_dir=static_dir,
-        crawl_pauser=_NO_CONTROLS,
-        crawl_resumer=_NO_CONTROLS,
-        shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_SUMMARIZER,
-        node_describer=_DESCRIBER,
-        file_lister=_file_lister(catalog_db),
-        amule_url=_AMULE_URL,
-        wall_clock=_WALL_CLOCK,
-        monotonic_clock=_MONOTONIC_CLOCK,
-        source_period_gap=_GAP,
-    )
-    return app, [big, mid, small]
-
-
 @pytest.mark.asyncio
-async def test_files_sort_by_size_orders_rows(sortable_app: tuple[Starlette, list[str]]) -> None:
-    app, ordered_desc = sortable_app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files?sort=size&direction=asc")
-        old_key = await client.get("/files?sort=size&dir=asc")
-    assert resp.status_code == 200
-    # smallest first: the three short-hashes appear in ascending-size order in the body
-    positions = [resp.text.index(h[:8]) for h in reversed(ordered_desc)]
-    assert positions == sorted(positions)
-    # 4.x's ``dir`` is ignored: the default direction, largest first
-    positions = [old_key.text.index(h[:8]) for h in ordered_desc]
-    assert positions == sorted(positions)
+async def test_files_sort_by_size_renders_the_rows_in_the_order_listed() -> None:
+    first, second = (
+        replace(_catalog_entry(decisions=()), file=FileKey(Network.ED2K, h * 32)) for h in "ca"
+    )
+    text, call = await _files_page("/files?sort=size&direction=asc", _listing(first, second))
+    _, old_key = await _files_page("/files?sort=size&dir=asc")
+    assert call == replace(_DEFAULT_CALL, sort=CatalogEntrySort.SIZE, direction=SortDirection.ASC)
+    assert 0 < text.index("cccccccc") < text.index("aaaaaaaa")
+    # 4.x's ``dir`` is ignored: the default direction
+    assert old_key == replace(_DEFAULT_CALL, sort=CatalogEntrySort.SIZE)
 
 
 @pytest.mark.asyncio
@@ -2276,17 +2151,13 @@ async def test_target_page_headers_are_plain_text(
 
 
 @pytest.mark.asyncio
-async def test_sort_header_links_preserve_target_and_tier_filters(
-    app_download_tier_known_target: tuple[Starlette, str],
-) -> None:
+async def test_sort_header_links_preserve_target_and_tier_filters() -> None:
     """An active target + tier filter is carried into every sort-header link (the ordered
     ``filters`` dict is threaded into each header URL, then sort/dir override for that column)."""
-    app, _ = app_download_tier_known_target
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files?target_id=062A&tier=download")
-    assert resp.status_code == 200
+    text, call = await _files_page("/files?target_id=062A&tier=download")
+    assert call == replace(_DEFAULT_CALL, target_id="062A", tier="download")
     # the Name header keeps both filters (autoescaped & -> &amp;) then adds its own sort + dir
-    assert "target_id=062A&amp;tier=download&amp;sort=name&amp;direction=asc" in resp.text
+    assert "target_id=062A&amp;tier=download&amp;sort=name&amp;direction=asc" in text
 
 
 # ---------------------------------------------------------------------------
@@ -2343,18 +2214,18 @@ def test_search_bar_no_query_is_empty_string() -> None:
 
 
 @pytest.mark.asyncio
-async def test_files_renders_search_prefill_and_facet(
-    populated_app: tuple[Starlette, str],
-) -> None:
-    app, _ = populated_app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/files?search=keroro&show_unmatched=1")
-    assert 'name="search"' in resp.text
-    assert 'value="keroro"' in resp.text  # prefill
-    assert 'name="show_unmatched"' in resp.text  # carried as a hidden input
-    # populated_app's single file is a catalog-tier decision → facet shows "unidentified (1)"
-    assert "unidentified" in resp.text
-    assert 'href="/files?search=keroro&amp;show_unmatched=1&amp;tier=catalog"' in resp.text
+async def test_files_renders_search_prefill_and_facet() -> None:
+    listing = replace(_listing(), file_count_by_tier={"catalog": 1})
+    text, call = await _files_page("/files?search=keroro&show_unmatched=1", listing)
+    assert call == replace(_DEFAULT_CALL, search_text="keroro", matched_only=False)
+    assert 'name="search"' in text
+    assert 'value="keroro"' in text  # prefill
+    assert 'name="show_unmatched"' in text  # carried as a hidden input
+    # one catalog-tier file → the facet shows "unidentified (1)"
+    assert (
+        '<a href="/files?search=keroro&amp;show_unmatched=1&amp;tier=catalog" data-selected="">'
+        "unidentified (1)</a>"
+    ) in text
 
 
 @pytest.mark.asyncio
