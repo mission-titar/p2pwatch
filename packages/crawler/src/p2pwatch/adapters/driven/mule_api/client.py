@@ -82,19 +82,23 @@ class AmuleApiClient:
         self._transport = transport
         self._monotonic_clock = monotonic_clock
         self._http: httpx.AsyncClient | None = None
-        self._connect_lock = asyncio.Lock()
+        self._closed = False
+        self._login_lock = asyncio.Lock()
+        self._login_count = 0  # lets a call rejected with 401 tell whether another renewed it
         # Held from an ed2k start to its end: aMule's core keeps one ed2k search anchor.
         self._ed2k_lock = asyncio.Lock()
         self._ed2k_next_start: MonotonicInstant | None = None  # no ed2k start yet
         self._kad_next_start: dict[str, MonotonicInstant] = {}
         self._keywords_without_kad_word: set[str] = set()
 
-    async def connect(self) -> None:
-        """Opens the session and logs in. IDEMPOTENT, and serialized: callers arriving during a
-        login wait for it rather than open a session each."""
-        async with self._connect_lock:
+    async def _connect(self) -> httpx.AsyncClient:
+        """The session, opened and logged in if there is none. Serialized: callers arriving
+        during a login wait for it rather than open a session each."""
+        async with self._login_lock:
+            if self._closed:
+                raise ApiUnreachableError("amuleapi client closed")
             if self._http is not None:
-                return
+                return self._http
             if not self._password:
                 raise ApiAuthError("empty amuleapi password (refused before asking the daemon)")
             http = httpx.AsyncClient(
@@ -108,19 +112,25 @@ class AmuleApiClient:
                 await http.aclose()
                 raise
             self._http = http
+            return http
+
+    async def connect(self) -> None:
+        """Opens the session now rather than on the first call. IDEMPOTENT."""
+        await self._connect()
 
     async def open(self) -> None:
-        """``connect`` at startup, tolerating an amuled not listening yet: both containers start
-        together, so the crawler routinely knocks first, and its loops retry. A refused password
-        still raises."""
+        """Logs in at startup, tolerating an amuled not listening yet: both containers start
+        together, so the crawler routinely knocks first, and the next call logs in. A refused
+        password still raises."""
         try:
-            await self.connect()
+            await self._connect()
         except ApiUnreachableError as error:
             _logger.warning("amuled unreachable at startup (%s): tolerated, the loops retry", error)
 
     async def close(self) -> None:
-        """Revokes the token, then closes the session. Bypasses the 401 rule on purpose: a
-        rejected logout means the session is already gone, so re-logging in to end it is waste."""
+        """Revokes the token, then closes the session for good. Bypasses the 401 rule on purpose:
+        a rejected logout means the session is already gone, so re-logging in to end it is waste."""
+        self._closed = True
         http, self._http = self._http, None
         if http is None:
             return
@@ -282,10 +292,9 @@ class AmuleApiClient:
         body: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """One request on the connected session, decoded into a JSON object."""
-        if self._http is None:
-            raise ApiUnreachableError("amuleapi client not connected (call connect() first)")
-        return await self._send_with_relogin(self._http, method, path, body=body, params=params)
+        """One request on the session, opened first if there is none, decoded into a JSON object."""
+        http = self._http if self._http is not None else await self._connect()
+        return await self._send_with_relogin(http, method, path, body=body, params=params)
 
     async def _send_with_relogin(
         self,
@@ -298,9 +307,12 @@ class AmuleApiClient:
     ) -> dict[str, Any]:
         """Sends, renewing the token ONCE on a 401. Never twice: amuleapi locks an IP out for
         300 s after 30 rejected tokens, and only a successful login clears that state."""
+        login_count = self._login_count
         response = await _send(http, method, path, body=body, params=params)
         if response.status_code == httpx.codes.UNAUTHORIZED:
-            await self._login(http)
+            async with self._login_lock:
+                if self._login_count == login_count:  # no other call renewed it meanwhile
+                    await self._login(http)
             response = await _send(http, method, path, body=body, params=params)
         if not response.is_success:
             raise error_from_response(response)
@@ -323,6 +335,7 @@ class AmuleApiClient:
         if not isinstance(token, str) or not token:
             raise ApiAuthError("POST /auth/login answered without a token")
         http.headers["Authorization"] = f"Bearer {token}"
+        self._login_count += 1
 
     async def _collect(
         self,
