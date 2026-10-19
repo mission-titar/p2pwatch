@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
+from p2pwatch.domain.catalog_entry import CatalogEntrySort, SortDirection
 from p2pwatch.domain.node_state import NodeState
 from p2pwatch.domain.observability.events import Event
 from p2pwatch.domain.observation import ReportedFile
@@ -33,6 +34,7 @@ from p2pwatch.ports.driven.search_client import SearchAnswer
 from p2pwatch.ports.driving.crawl_pauser import CrawlPauser
 from p2pwatch.ports.driving.crawl_resumer import CrawlResumer
 from p2pwatch.ports.driving.crawl_summarizer import CrawlSummarizer, CrawlSummary
+from p2pwatch.ports.driving.file_lister import FileLister, FileListing
 from p2pwatch.ports.driving.node_describer import NodeDescriber, NodeDescription
 from p2pwatch.ports.driving.shutdown_requester import ShutdownRequester
 
@@ -233,6 +235,42 @@ class FakeCrawlSummarizer(CrawlSummarizer):
 
     def summarize_crawl(self) -> CrawlSummary:
         return self._crawl_summary
+
+
+@dataclass(frozen=True)
+class ListFilesCall:
+    """The arguments of one ``list_files`` call."""
+
+    target_id: str | None
+    tier: str | None
+    search_text: str | None
+    matched_only: bool
+    sort: CatalogEntrySort
+    direction: SortDirection
+    page: int
+
+
+class FakeFileLister(FileLister):
+    """Lists the files it is given, and keeps each call's arguments."""
+
+    def __init__(self, file_listing: FileListing) -> None:
+        self._file_listing = file_listing
+        self.calls: list[ListFilesCall] = []
+
+    def list_files(
+        self,
+        *,
+        target_id: str | None,
+        tier: str | None,
+        search_text: str | None,
+        matched_only: bool,
+        sort: CatalogEntrySort,
+        direction: SortDirection,
+        page: int,
+    ) -> FileListing:
+        call = ListFilesCall(target_id, tier, search_text, matched_only, sort, direction, page)
+        self.calls.append(call)
+        return self._file_listing
 
 
 class FakeNodeDescriber(NodeDescriber):

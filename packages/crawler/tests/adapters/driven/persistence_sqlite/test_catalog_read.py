@@ -278,9 +278,12 @@ def test_list_files_whole_episode_is_one_row_with_two_decisions(catalog_db: Path
     )
 
 
-def test_list_files_filter_by_one_target_returns_whole_episode(catalog_db: Path) -> None:
+@pytest.mark.parametrize("target_id", ["072A", "072B"])
+def test_list_files_filter_by_one_target_returns_whole_episode(
+    catalog_db: Path, target_id: str
+) -> None:
     _seed_whole_episode(catalog_db)
-    rows = _entries(catalog_db, target_id="072B")
+    rows = _entries(catalog_db, target_id=target_id)
     assert len(rows) == 1
     assert [d.target_id for d in rows[0].decisions] == ["072A", "072B"]
 
@@ -792,6 +795,12 @@ def test_list_files_matched_only_excludes_retracted(catalog_db: Path) -> None:
     rows = _entries(catalog_db, matched_only=True)
     hashes = {r.file.native_id for r in rows}
     assert hashes == {"a" * 32}  # the retracted file ("c"*32) is excluded
+
+
+def test_list_files_lists_a_retracted_file_with_no_decision(catalog_db: Path) -> None:
+    _seed_retracted(catalog_db)
+    [row] = _entries(catalog_db)
+    assert row.decisions == ()
 
 
 def test_list_files_default_includes_unmatched(catalog_db: Path) -> None:
