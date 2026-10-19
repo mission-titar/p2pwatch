@@ -19,9 +19,6 @@ def test_a_client_status_is_frozen_and_holds_its_channels() -> None:
 class _StubClient:
     """Satisfies StatusClient structurally, without importing it."""
 
-    async def connect(self) -> None:
-        return None
-
     async def status(self) -> ClientStatus:
         return ClientStatus(version=None, channels=())
 
@@ -30,6 +27,5 @@ class _StubClient:
 async def test_stub_client_satisfies_the_status_protocol() -> None:
     # The annotation makes mypy check the structural match.
     client: StatusClient = _StubClient()
-    await client.connect()
 
     assert await client.status() == ClientStatus(version=None, channels=())

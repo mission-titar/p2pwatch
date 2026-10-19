@@ -6,7 +6,7 @@ COMPOSITION layer (the only one allowed to import adapters AND application). Bui
   via ``open_catalog``/``open_local`` (migrations checked at startup, fail-fast §14).
 - the ``MatchingEngine`` (once), the ``node_id`` (``resolve_node_id``),
 - ONE ``AmuleApiClient`` + ``SearchWorker`` on the one amuled the core drives, whose
-  session the status loop shares.
+  session the status and download loops share.
 
 Loops: the search tasks (``SearchTaskRunner``), the status loop, and the download loop when
 configured, run by ``supervise_loops`` until ``PosixProcess`` or the webui requests the shutdown.
@@ -117,7 +117,7 @@ class CrawlerApp(CrawlerRunner):
     def _amule_api_client(
         self, crawler_config: CrawlerConfig, monotonic_clock: MonotonicClock
     ) -> AmuleApiClient:
-        """A session of its own on amuled, paced on the composition's monotonic clock."""
+        """The node's one session on amuled, paced on the composition's monotonic clock."""
         host, port = self._amule_api_address
         return AmuleApiClient(
             host, port, crawler_config.amule_api_password, monotonic_clock=monotonic_clock
@@ -245,7 +245,7 @@ class CrawlerApp(CrawlerRunner):
             stack.push_async_callback(client.close)
             await client.open()
             workers = [SearchWorker(AMULE_CLIENT_NAME, client, deps)]
-            # The status loop shares the search session (one session per container's amuled).
+            # The status and download loops share the search session: one session per node.
             status_deps = StatusLoopDeps(
                 AMULE_CLIENT_NAME, client, wall_clock, monotonic_clock, telemetry, shutdown, board
             )
@@ -267,15 +267,12 @@ class CrawlerApp(CrawlerRunner):
 
             # Download enabled ⟺ the ``download`` section is present (``enabled: true``). Its loop
             # shares the catalog's repos and ``local_conn`` (one writer, on the event loop), and
-            # has its own session to the daemon.
+            # the search session.
             download_config = crawler_config.download
             if download_config is not None:
-                download_client = self._amule_api_client(crawler_config, monotonic_clock)
-                stack.push_async_callback(download_client.close)
-                await download_client.open()
                 download_deps = DownloadLoopDeps(
-                    download_client=download_client,
-                    source_client=download_client,
+                    download_client=client,
+                    source_client=client,
                     downloads=SqliteDownloadRepository(local_conn),
                     sources=SqliteSourceRepository(
                         catalog_conn, node_id, download_config.time_between_source_reads

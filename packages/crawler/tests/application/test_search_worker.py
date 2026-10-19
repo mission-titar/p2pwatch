@@ -303,19 +303,6 @@ async def test_multiple_observations_some_unchanged_are_all_processed(
 
 
 @pytest.mark.asyncio
-async def test_connect_failure_arms_instance_backoff_and_skips_the_item(
-    catalog: SqliteCatalogRepository, engine: MatchingEngine
-) -> None:
-    fake_time = FakeTime()
-    registry = _registry(fake_time)
-    client = FakeSearchClient(connect_failures=[make_unreachable()])
-    worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
-    await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
-    assert client.searches == []  # item dropped, never searched
-    assert registry.is_in_backoff(_CLIENT) is True  # client in backoff (skip until retry)
-
-
-@pytest.mark.asyncio
 async def test_backoff_expires_and_item_runs_again(
     catalog: SqliteCatalogRepository, engine: MatchingEngine
 ) -> None:
@@ -327,20 +314,6 @@ async def test_backoff_expires_and_item_runs_again(
     fake_time.advance(timedelta(seconds=3.0))  # the channel is no longer in backoff
     await worker.run_task(SearchTask(keyword="k", channel="kad"))
     assert client.searches == [("k", "kad")]
-
-
-@pytest.mark.asyncio
-async def test_already_connected_does_not_reconnect(
-    catalog: SqliteCatalogRepository, engine: MatchingEngine
-) -> None:
-    fake_time = FakeTime()
-    client = FakeSearchClient(results=[(), ()])
-    worker = SearchWorker(
-        "amule-1", client, _deps(catalog, engine, _registry(fake_time), fake_time)
-    )
-    await worker.run_task(SearchTask(keyword="k1", channel="ed2k"))
-    await worker.run_task(SearchTask(keyword="k2", channel="ed2k"))
-    assert client.connect_calls == 1  # connected only once for two tasks
 
 
 @pytest.mark.asyncio
@@ -367,17 +340,15 @@ async def test_transport_failure_marks_instance_down(
     worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
     await worker.run_task(SearchTask(keyword="k1", channel="ed2k"))
     assert registry.is_in_backoff(_CLIENT) is True
-    # After the backoff expires, the next task FORCES a reconnect (down marked).
     fake_time.advance(timedelta(seconds=3.0))
     await worker.run_task(SearchTask(keyword="k2", channel="ed2k"))
-    assert client.connect_calls == 2
+    assert client.searches == [("k1", "ed2k"), ("k2", "ed2k")]  # searched again once it expires
 
 
 @pytest.mark.asyncio
 async def test_the_client_backoff_grows_until_a_search_succeeds(
     catalog: SqliteCatalogRepository, engine: MatchingEngine
 ) -> None:
-    # The adapter's connect() succeeds without touching the network: only a search proves reach.
     fake_time = FakeTime()
     registry = _registry(fake_time)
     client = FakeSearchClient(search_failures=[make_unreachable()] * 4, results=[(_obs(),)])
@@ -445,20 +416,6 @@ async def test_search_failure_emits_search_failed(
 
 
 @pytest.mark.asyncio
-async def test_connect_failure_emits_instance_unreachable(
-    catalog: SqliteCatalogRepository, engine: MatchingEngine
-) -> None:
-    # A connection failure (unreachable daemon) emits ClientUnreachable.
-    fake_time = FakeTime()
-    telemetry = RecordingTelemetry()
-    client = FakeSearchClient(connect_failures=[make_unreachable()])
-    deps = _deps(catalog, engine, _registry(fake_time), fake_time, telemetry=telemetry)
-    worker = SearchWorker("amule-1", client, deps)
-    await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"))
-    assert telemetry.events == [ClientUnreachable("amule-1")]
-
-
-@pytest.mark.asyncio
 async def test_transport_failure_during_search_emits_instance_unreachable(
     catalog: SqliteCatalogRepository, engine: MatchingEngine
 ) -> None:
@@ -497,7 +454,6 @@ async def test_a_search_logs_on_the_worker_logger_and_a_failed_observation_on_it
     await SearchWorker("amule-1", client, deps).run_task(SearchTask("keroro", "ed2k"))
 
     assert logger.lines == [
-        LoggedLine("info", "client amule-1 connected"),
         LoggedLine("info", "client amule-1: 'keroro'/ed2k → 0 verdict(s) changed"),
     ]
     assert [line.level for line in observation_logger.lines] == ["error"]

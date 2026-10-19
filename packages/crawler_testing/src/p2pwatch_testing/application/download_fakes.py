@@ -8,7 +8,6 @@ from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceKey, SourceReading
 from p2pwatch.ports.driven.catalog_repository import DownloadCandidate, ObservedFile
-from p2pwatch.ports.driven.client_errors import ClientUnreachableError
 from p2pwatch.ports.driven.download_client import (
     DownloadRequest,
     DownloadStatus,
@@ -25,61 +24,38 @@ class FakeDownloadClient:
 
     It is the SourceClient too, as the real adapter is: ``readings`` per hash, ``source_reads``
     the hashes read, each read advancing ``fake_time`` by a second when one is given.
-
-    ``disconnected`` models the REAL adapter's state before a login: every I/O call raises
-    ``ClientUnreachableError`` until ``connect()`` succeeds.
     """
 
     def __init__(
         self,
         *,
         listed: list[tuple[DownloadStatus, ...]] | None = None,
-        connect_failures: list[Exception] | None = None,
         list_failures: list[Exception] | None = None,
         start_failures: list[Exception] | None = None,
         source_failures: list[Exception] | None = None,
         readings: dict[str, tuple[SourceReading, ...]] | None = None,
         fake_time: FakeTime | None = None,
-        disconnected: bool = False,
     ) -> None:
         self._listed = list(listed or [()])
-        self._connect_failures = list(connect_failures or [])
         self._list_failures = list(list_failures or [])
         self._start_failures = list(start_failures or [])
         self._source_failures = list(source_failures or [])
         self._readings = readings or {}
         self._fake_time = fake_time
-        self._disconnected = disconnected
         self.started: list[DownloadRequest] = []
         self.source_reads: list[str] = []
-        self.connect_calls = 0
-
-    def _require_connected(self) -> None:
-        if self._disconnected:
-            raise ClientUnreachableError("client not connected (call connect() first)")
-
-    async def connect(self) -> None:
-        self.connect_calls += 1
-        if self._connect_failures:
-            raise self._connect_failures.pop(0)
-        self._disconnected = False
-
-    async def close(self) -> None: ...
 
     async def start(self, request: DownloadRequest) -> None:
-        self._require_connected()
         if self._start_failures:
             raise self._start_failures.pop(0)
         self.started.append(request)
 
     async def downloads(self) -> tuple[DownloadStatus, ...]:
-        self._require_connected()
         if self._list_failures:
             raise self._list_failures.pop(0)
         return self._listed.pop(0) if self._listed else ()
 
     async def sources(self, file: FileKey) -> tuple[SourceReading, ...]:
-        self._require_connected()
         self.source_reads.append(file.native_id)
         if self._fake_time is not None:
             self._fake_time.advance(timedelta(seconds=1))

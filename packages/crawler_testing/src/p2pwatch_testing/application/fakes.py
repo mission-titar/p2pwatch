@@ -158,8 +158,7 @@ class FakeSearchClient:
     """Scripted client (satisfies SearchClient structurally, spec §8).
 
     ``results``: list of observation tuples, one per ``search`` call (exhausted → empty
-    tuple). ``connect_failures``: exceptions to raise on the first N ``connect`` calls (then
-    success). ``search_failures``: exceptions to raise on the first N ``search`` calls (then
+    tuple). ``search_failures``: exceptions to raise on the first N ``search`` calls (then
     success). Every answer reports ``skipped_result_count`` skipped results.
     """
 
@@ -169,24 +168,14 @@ class FakeSearchClient:
         self,
         *,
         results: list[tuple[FileObservation, ...]] | None = None,
-        connect_failures: list[Exception] | None = None,
         search_failures: list[Exception] | None = None,
         skipped_result_count: int = 0,
     ) -> None:
         self._results = list(results or [])
         self._skipped_result_count = skipped_result_count
-        self._connect_failures = list(connect_failures or [])
         self._search_failures = list(search_failures or [])
-        self.connect_calls = 0
         self.searches: list[tuple[str, str]] = []
         self.budgets: list[float] = []
-
-    async def connect(self) -> None:
-        self.connect_calls += 1
-        if self._connect_failures:
-            raise self._connect_failures.pop(0)
-
-    async def close(self) -> None: ...
 
     async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
         self.searches.append((keyword, channel))
