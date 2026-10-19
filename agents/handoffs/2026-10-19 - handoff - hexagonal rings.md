@@ -38,9 +38,6 @@ Nothing of the stack is merged. The lot changes what both images run (the aMule 
 script, logger names in both), so Wrap (f) proposes a release, but not before the backlog's "A copy before a
 migration that rewrites rows" ships (spec, section "Backlog").
 
-**One open point**: block 86's dependency test also allows `p2pwatch-testing` on `p2pwatch`, beyond the two
-edges the operator named for exit (a). The lead has asked the operator; the answer is pending.
-
 ## What was built
 
 - **`catalog_matching` in its domain ring** (block 10): its ten modules under `catalog_matching/domain/`, their
@@ -100,8 +97,8 @@ edges the operator named for exit (a). The lead has asked the operator; the answ
   - `domain-configparser`: `configparser` refused in every domain but `p2pwatch_amule`'s, by `ignores`;
   - `packages/crawler/tests/test_workspace_dependencies.py` reads every `packages/*/pyproject.toml` and holds the
     workspace's internal dependencies to `p2pwatch` on `catalog-matching` and on `p2pwatch-testing` (`dev`),
-    and `p2pwatch-testing` on `p2pwatch` (the open point above), so a declared cross-hexagon dependency fails
-    the gate;
+    and `p2pwatch-testing` on `p2pwatch`, the three edges that exist today, so a new cross-hexagon dependency
+    fails the gate;
   - the ring rules' messages no longer claim "its own hexagon"; `AGENTS.md`'s package boundary invariant is
     rewritten from the hexagon rule, and the core's rule says what the checks see.
 - **Two modules where they stay** (block 87): port-sync's `settings` to `adapters/driven/`, since lot 3 gives it
@@ -181,8 +178,9 @@ edges the operator named for exit (a). The lead has asked the operator; the answ
 - **ast-grep's lists are one per ring** (block 85): `io`, `ast`, `difflib`, `textwrap` and `rapidfuzz` sit in
   their ring's list for every hexagon; `io` is reachable by `StringIO` only. `configparser`, which reads files,
   is held to `p2pwatch_amule`'s domain by its own rule (block 86), the appendix's stated reason corrected.
-- **The dependency test also allows `p2pwatch-testing` on `p2pwatch`** (block 86): that package's runtime
-  dependency today, without which the test fails on the current tree. Pending the operator's answer.
+- **The dependency test allows the three existing edges** (block 86), `p2pwatch-testing` on `p2pwatch`
+  included, which the lead's wording of exit (a) left out: the operator's choice was a check freezing the
+  workspace's internal dependencies as they are, so this is no departure.
 - **`core-builtins` also refuses `exec` and `eval`** (block 86), beyond the review's four.
 - **The fake-`grype` case was copied, not moved** (block 88): `tests/test_main.py` keeps its stale-claims wiring
   test against the real runner.
@@ -280,7 +278,7 @@ the lot but 12 (lot 3) and 15 (an accepted limit).
 1. MAJOR, an aliased import of `asyncio`, `uuid` or `io` bypassing `core-import-names`: fixed (block 86).
 2. MAJOR, the spec row `p2pwatch_testing/merge/helpers.py` dropped: fixed (block 87), moved, `merge/` deleted.
 3. Hexagon isolation with no check of its own, `check-external` duplicating deptry: fixed (block 86) with the
-   operator's choice (a), "Reco ok": the workspace dependency test. Its third edge is the open point.
+   operator's choice (a), "Reco ok": the workspace dependency test. It freezes the three existing edges.
 4. The ring rules' messages claiming "its own hexagon": fixed (block 86), reworded.
 5. `AGENTS.md`'s "no I/O in the core" stating more than the gate checks: fixed (block 86), `core-builtins`.
 6. `configparser` allowed in every domain: fixed (block 86), `domain-configparser`, the spec's reason corrected.
@@ -313,7 +311,7 @@ pushed.
 
 ## Next
 
-- The operator answers the open point, reviews and merges the stack. A release waits for "A copy before a
+- The operator reviews and merges the stack. A release waits for "A copy before a
   migration that rewrites rows".
 - Then lot 2 of the umbrella, the `p2pwatch` hexagon: the self-reconnecting session, the logging port, the
   webui's read side behind use cases, the ports as ABCs split into roles. It removes the twelve `p2pwatch`
