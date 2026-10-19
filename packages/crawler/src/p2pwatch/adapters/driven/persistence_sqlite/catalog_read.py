@@ -57,7 +57,6 @@ from p2pwatch.ports.driven.coverage_reader import CoverageReader
 # ---------------------------------------------------------------------------
 
 PAGE_SIZE = 50
-_PAGE_SIZE = PAGE_SIZE  # historical alias (internal); the public value is used by the handler
 
 # Sort allowlist (webui spec §3.1): a sort maps to a FIXED ORDER BY expression; no param value is
 # ever interpolated into SQL. ``tier`` sorts by the file's strongest tier rank
@@ -629,7 +628,7 @@ class CatalogReader:
             + search
             + "ORDER BY seen.last_seen_at DESC, s.source_id\nLIMIT ? OFFSET ?\n"
         )
-        rows = self._conn.execute(sql, [*params, _PAGE_SIZE, (page - 1) * _PAGE_SIZE])
+        rows = self._conn.execute(sql, [*params, PAGE_SIZE, (page - 1) * PAGE_SIZE])
         return tuple(
             SourceRow(
                 source=SourceKey(Network(row["network"]), row["native_id"]),
@@ -674,7 +673,7 @@ class CatalogReader:
         )
 
     def _pairs(self, where: str, key: bytes | str, page: int) -> tuple[SourceRow, ...]:
-        params = {"key": key, "limit": _PAGE_SIZE, "offset": (page - 1) * _PAGE_SIZE}
+        params = {"key": key, "limit": PAGE_SIZE, "offset": (page - 1) * PAGE_SIZE}
         rows = self._conn.execute(_SQL_PAIRS + where + _SQL_PAIRS_END, params)
         return tuple(
             SourceRow(

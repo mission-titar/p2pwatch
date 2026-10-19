@@ -27,11 +27,7 @@ from starlette.templating import Jinja2Templates
 from catalog_matching.domain.config import MatcherConfig
 from catalog_matching.domain.ed2k_link import build_ed2k_link
 from catalog_matching.domain.models import TargetSegment
-from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
-    PAGE_SIZE,
-    CatalogReader,
-    SqliteCatalogFileReader,
-)
+from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import PAGE_SIZE, CatalogReader
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driven.persistence_sqlite.sql_console import (
     ROW_CAP,
@@ -99,6 +95,7 @@ from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
 from p2pwatch.ports.driving.crawl_pauser import CrawlPauser
 from p2pwatch.ports.driving.crawl_resumer import CrawlResumer
 from p2pwatch.ports.driving.crawl_summarizer import ClientSummary, CrawlSummarizer
+from p2pwatch.ports.driving.file_lister import FileLister
 from p2pwatch.ports.driving.node_describer import NodeDescriber
 from p2pwatch.ports.driving.shutdown_requester import ShutdownRequester
 
@@ -342,17 +339,17 @@ def _page_number(raw: str | None) -> int:
     return max(1, page)
 
 
-def _page_nav(page: int, row_count: int, base_path: str, kept_params: dict[str, str]) -> PageNav:
-    """Precompute the prev/next links for a page (W-D8: view-model, no template logic).
-    We don't have the total count → ``next`` is rendered when the page is FULL (standard
-    heuristic; at worst a next click returns an empty page)."""
+def _page_nav(
+    page: int, has_next_page: bool, base_path: str, kept_params: dict[str, str]
+) -> PageNav:
+    """Precompute the prev/next links for a page (W-D8: view-model, no template logic)."""
     prev_url: str | None = None
     next_url: str | None = None
     if page > 1:
         prev = dict(kept_params)
         prev["page"] = str(page - 1)
         prev_url = f"{base_path}?{urlencode(prev)}"
-    if row_count >= PAGE_SIZE:
+    if has_next_page:
         nxt = dict(kept_params)
         nxt["page"] = str(page + 1)
         next_url = f"{base_path}?{urlencode(nxt)}"
@@ -670,6 +667,7 @@ def build_app(
     shutdown_requester: ShutdownRequester,
     crawl_summarizer: CrawlSummarizer,
     node_describer: NodeDescriber,
+    file_lister: FileLister,
     amule_url: str,
     wall_clock: WallClock,
     monotonic_clock: MonotonicClock,
@@ -683,7 +681,8 @@ def build_app(
     keeps the explainer's config from drifting from the persisted decisions (spec §8).
 
     Each control POST calls its use case, which returns at once; the webui itself holds no write
-    connection (spec §4/§10). ``crawl_summarizer`` serves the dashboard, ``node_describer`` /node.
+    connection (spec §4/§10). ``crawl_summarizer`` serves the dashboard, ``node_describer`` /node,
+    ``file_lister`` /files and a target's page.
 
     ``amule_url`` is the base the nav's aMule entry points at (design §9); the caller reads it
     from ``webui.amule_url``. ``source_period_gap`` is the longest gap within a source period, from
@@ -705,7 +704,6 @@ def build_app(
     # obtain a connection via ``provider.connection()`` and NEVER close it (the point is
     # reuse).
     catalog_reader = ReaderProvider(catalog_db_path)
-    catalog_file_reader = SqliteCatalogFileReader(catalog_reader)
 
     def _now_and_interval(request: Request) -> tuple[datetime, Interval]:
         """The second the request is read at, and the interval it asks for."""
@@ -764,21 +762,17 @@ def build_app(
         direction_param = _normalize_direction(request.query_params.get("direction"))
         page = _page_number(request.query_params.get("page"))
 
-        catalog_entries = catalog_file_reader.read_catalog_entries(
+        file_listing = file_lister.list_files(
             target_id=target_id_param,
             tier=tier_param,
             search_text=search_text,
             matched_only=not show_unmatched,
             sort=sort_param,
             direction=direction_param,
-            limit=PAGE_SIZE,
-            offset=(page - 1) * PAGE_SIZE,
-        )
-        matched_count, total_count = catalog_file_reader.read_matched_and_total_file_counts(
-            target_id=target_id_param, tier=tier_param, search_text=search_text
+            page=page,
         )
 
-        display_rows = _to_display_rows(catalog_entries, _segment_by_id)
+        display_rows = _to_display_rows(file_listing.catalog_entries, _segment_by_id)
         # Active, non-default params (page excluded). Every URL derives from these two ordered
         # dicts, so param order is deterministic. ``filter_params`` is what a re-sort keeps;
         # ``sort_params`` is what a filter/toggle/page keeps.
@@ -804,19 +798,21 @@ def build_app(
         # summary toggle preserves sort and direction (not show_unmatched, which it manages itself)
         summary_kept_params = {k: v for k, v in filter_params.items() if k != "show_unmatched"}
         summary_kept_params.update(sort_params)
-        summary = _files_summary(matched_count, total_count, show_unmatched, summary_kept_params)
+        summary = _files_summary(
+            file_listing.matched_file_count,
+            file_listing.total_file_count,
+            show_unmatched,
+            summary_kept_params,
+        )
 
         # Tier facet (facet-lite: never filtered by its own tier) + filename search form. The
         # facet links carry every active param except ``tier`` and ``page`` (selecting a tier
         # replaces it, resets page); the search hidden inputs carry every active param except
         # ``search`` and ``page`` (submitting a search preserves the rest, resets page).
-        file_count_by_tier = catalog_file_reader.read_file_count_by_tier(
-            target_id=target_id_param, search_text=search_text
-        )
         facet_kept_params = {k: v for k, v in filter_params.items() if k != "tier"}
         facet_kept_params.update(sort_params)
         facets = _tier_facets(
-            file_count_by_tier=file_count_by_tier,
+            file_count_by_tier=file_listing.file_count_by_tier,
             active_tier=tier_param,
             kept_params=facet_kept_params,
         )
@@ -827,7 +823,9 @@ def build_app(
 
         filter_bar = FilterBar(searchbar=searchbar, facets=facets)
 
-        nav = _page_nav(page, len(display_rows), "/files", {**filter_params, **sort_params})
+        nav = _page_nav(
+            page, file_listing.has_next_page, "/files", {**filter_params, **sort_params}
+        )
         return templates.TemplateResponse(
             request,
             "files.html",
@@ -855,7 +853,7 @@ def build_app(
             "sources.html",
             {
                 "rows": rows,
-                "nav": _page_nav(page, len(rows), "/sources", kept_params),
+                "nav": _page_nav(page, len(rows) >= PAGE_SIZE, "/sources", kept_params),
                 "summary": (
                     f"Sources recorded: {count:,}."
                     if search_text is None
@@ -886,7 +884,9 @@ def build_app(
                 "source": detail.source,
                 "names": tuple(_source_list_row(row) for row in detail.names),
                 "periods": tuple(_source_file_row(item) for item in detail.periods),
-                "nav": _page_nav(page, len(detail.names), path, _interval_params(request)),
+                "nav": _page_nav(
+                    page, len(detail.names) >= PAGE_SIZE, path, _interval_params(request)
+                ),
                 "interval": _interval_selector(interval, now, path, _page_param(page)),
             },
         )
@@ -914,7 +914,7 @@ def build_app(
                 "periods": tuple(_source_file_row(item) for item in detail.periods),
                 "nav": _page_nav(
                     page,
-                    len(detail.sources),
+                    len(detail.sources) >= PAGE_SIZE,
                     path,
                     {**source_name_params, **_interval_params(request)},
                 ),
@@ -1009,18 +1009,17 @@ def build_app(
 
     async def handle_target(request: Request) -> Response:
         target_id: str = request.path_params["target_id"]
-        catalog_entries = catalog_file_reader.read_catalog_entries(
+        file_listing = file_lister.list_files(
             target_id=target_id,
             tier=None,
             search_text=None,
             matched_only=False,
             sort=_DEFAULT_SORT,
             direction=_DEFAULT_DIRECTION,
-            limit=PAGE_SIZE,
-            offset=0,
+            page=1,
         )
 
-        display_rows = _to_display_rows(catalog_entries, _segment_by_id)
+        display_rows = _to_display_rows(file_listing.catalog_entries, _segment_by_id)
         # No pagination here (target view: we expect few). Empty nav.
         nav = PageNav(page=1, prev_url=None, next_url=None)
         # files.html is shared with /files, whose matched/all summary line and filter bar are
