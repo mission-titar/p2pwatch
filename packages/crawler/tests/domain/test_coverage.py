@@ -1,8 +1,4 @@
-import pytest
-
 from p2pwatch.domain.coverage import coverage_of
-
-pytestmark = pytest.mark.usefixtures("close_test_connections")
 
 
 def test_no_decision_is_none() -> None:

@@ -126,9 +126,8 @@ signed.
 A `not_affected` claim is a promise about how the image is built and run. Over time source
 and base images drift, so four checks (`python -m vex_checks`, one subcommand each) assert
 those promises still hold. They run as a non-blocking PR job (only `validate / gate` is
-required to merge) and, for
-the three that catch a genuinely false claim, as hard-fail steps in the release before anything
-is signed or attested:
+required to merge) and, for the three that catch a genuinely false claim, as hard-fail steps
+in the release before anything is signed or attested:
 
 - **`source-claims`** (PR job, release hard-fail): fails if our own source starts
   reaching code a `vulnerable_code_not_in_execute_path` claim says we never execute, for
