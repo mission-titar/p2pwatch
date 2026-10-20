@@ -14,8 +14,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.source_repository import SqliteSourceRepository
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.source import SourceKey, SourceReading, SourceRole
-from p2pwatch.ports.driven.source_points import RecordedReading
+from p2pwatch.domain.source import RecordedReading, SourceKey, SourceReading, SourceRole
 from p2pwatch_testing.catalog_rows import insert_file
 
 _FILE, _OTHER_FILE = FileKey(Network.ED2K, "a" * 32), FileKey(Network.ED2K, "b" * 32)

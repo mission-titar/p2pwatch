@@ -8,8 +8,8 @@ from p2pwatch.application.run_download_cycle import (
     DownloadLoopDeps,
     download_loop,
 )
-from p2pwatch.ports.driven.catalog import DownloadCandidate
-from p2pwatch.ports.driven.clock import MonotonicInstant
+from p2pwatch.domain.download.candidate import DownloadCandidate
+from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch_testing.application.download_fakes import (
     FakeCatalogReads,
     FakeDiskSpace,

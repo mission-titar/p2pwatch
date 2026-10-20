@@ -141,6 +141,7 @@ a function does.
 | `native_id` | the network's own file id (MD4 on eD2k) | `ed2k_hash` past the mapper |
 | `filename` | a file's name, a string: `latest_filename`, `best_filename`, `known_filenames` | `name`, `file_name` |
 | `source` | a peer sharing a file, `SourceKey`; `source_name` its advertised name | a bare `name` beside a filename |
+| `source point` | one source's reading of one of our downloads, kept in local.db with its role: `RecordedReading` is one the writer kept, `EarlierPoints` what this node's earlier points tell of a source | a sharing period, which spans consecutive ones |
 | `reported file` | `ReportedFile`, what the network reports of a file, with no instant: the mapper builds it, a `SearchAnswer` carries it | `observation` |
 | `observation` | `FileObservation`, a reported file and its `observed_at`, the instant the crawler learned of it, stamped right before the write; every catalog read returns it whole | a reported file, `sighting` |
 | `candidate` | a `FileCandidate`, one name of a file and its metadata, the matcher's input; a `DownloadCandidate` is a file with a download-tier decision | `names` |
@@ -161,11 +162,13 @@ a function does.
 | `word` | a piece of normalized text | `token` |
 | `reevaluation` | re-judging every file when the policy changed | `backfill` |
 | `tracked` | a download with a row in `downloads`, whatever its state: `TrackedDownload` | `downloaded`, `active` |
+| `download status` | `DownloadStatus`, a download as its client lists it: its bytes, its `completed` signal, its `WaitingReason` or `FailureReason` | a tracked download, which is ours |
 | `node state` | `NodeState`, what a node holds of its own: its identity, its tracked downloads, its search backoffs | `node info` |
 | `query answer` | `QueryAnswer`, a console query's columns and first rows, each cell as text; `QueryFailure` when it gave none | `result` |
 | `display` | a `<Thing>Display`, the view model a webui template renders, its values already text | `view` |
 | `wake` | `WakeHub` wakes the loops waiting on a subject | `signal`, `nudge` |
 | `run state` | whether the crawler searches or idles, and whether its shutdown was requested: `RunStateWriter` changes it, `RunStateReader` reads it | `control` |
+| `status reading` | `StatusReading`, a client's status at one read, its `status` `None` when its API did not answer; a `PublishedReading` is one on the status board, with its `published_at` on the monotonic clock | a source's reading |
 | `first useful`, `reappeared` | a source's two alerts | `new`, `useful again` |
 | `audience` | who a notification is for: `community`, `operations` | `tag` (apprise's keyword aside), `channel` |
 | `error_label` | the label a parser prints in its errors | `what`, `label`, `field` |

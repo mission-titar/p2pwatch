@@ -4,7 +4,7 @@ import asyncio
 import time
 from datetime import timedelta
 
-from p2pwatch.ports.driven.clock import MonotonicInstant
+from p2pwatch.domain.monotonic_instant import MonotonicInstant
 
 
 class AsyncioMonotonicClock:

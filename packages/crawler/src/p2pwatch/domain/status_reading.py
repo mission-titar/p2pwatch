@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from p2pwatch.domain.monotonic_instant import MonotonicInstant
+
 STATUS_PERIOD = timedelta(minutes=1)
 READING_FRESH_FOR = 2 * STATUS_PERIOD
 
@@ -31,3 +33,9 @@ class ClientStatus:
 class StatusReading:
     read_at: datetime  # for display: a reading's age is measured on the monotonic clock
     status: ClientStatus | None  # None: the client's API did not answer
+
+
+@dataclass(frozen=True)
+class PublishedReading:
+    reading: StatusReading
+    published_at: MonotonicInstant

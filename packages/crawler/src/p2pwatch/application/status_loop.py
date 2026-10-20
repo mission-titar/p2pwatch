@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Literal
 
+from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.observability.events import (
     ChannelDegraded,
     ChannelField,
@@ -23,7 +24,7 @@ from p2pwatch.domain.observability.events import (
 from p2pwatch.domain.status_reading import STATUS_PERIOD, ClientStatus, StatusReading
 from p2pwatch.ports.driven.client_errors import ClientAuthError, ClientError
 from p2pwatch.ports.driven.client_status import ClientStatusWriter, StatusClient
-from p2pwatch.ports.driven.clock import MonotonicClock, MonotonicInstant, WallClock
+from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
 from p2pwatch.ports.driven.telemetry import Telemetry
 
 CHANNEL_ALERT_AFTER = timedelta(minutes=5)
