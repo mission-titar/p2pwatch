@@ -60,6 +60,12 @@ _RESULT = {
     "sources": {"total": 3},
 }
 _LOGIN = ("POST", "/api/v1/auth/login")
+# A million recursion steps: tens of milliseconds at least, far below the console's budget.
+_COUNTING_QUERY = (
+    "WITH RECURSIVE r(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM r WHERE x < 1000000)"
+    " SELECT count(*) FROM r"
+)
+_CONSOLE_ELAPSED = re.compile(r"1 rows in (\d+) ms")
 _WEBUI_SERVING = re.compile(r"^webui serving on (.+):(\d+) \(own thread\)$")
 # Far beyond what the fake takes to see each step: only a broken assembly ever reaches it.
 _WAIT_SECONDS = 10.0
@@ -204,6 +210,12 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
                     {"sql": "SELECT native_id FROM downloads", "db": "local"},
                 )
             ]
+            dashboard, files, node = [
+                await http.get(f"http://{host}:{port}{path}") for path in ("/", "/files", "/node")
+            ]
+            timed_query = await http.post(
+                f"http://{host}:{port}/console", data={"sql": _COUNTING_QUERY, "db": "catalog"}
+            )
             restart = await http.post(f"http://{host}:{port}/controls/restart")
         await asyncio.wait_for(run, _WAIT_SECONDS)
 
@@ -232,6 +244,12 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
     assert "p2pwatch_observations_total{" in metrics.text
     assert (catalog_query.status_code, local_query.status_code) == (200, 200)
     assert _HASH in catalog_query.text and _HASH in local_query.text
+    assert '<a href="/targets/062A">062A</a>' in dashboard.text  # catalog.db's coverage
+    assert f"<dd>{api.version['daemon_version']}</dd>" in dashboard.text  # the status board
+    assert 'title="Keroro N°062A Les demoiselles cambrioleuses.avi"' in files.text
+    assert f"<td>{_HASH}</td>" in node.text  # local.db's tracked download
+    elapsed = _CONSOLE_ELAPSED.search(timed_query.text)
+    assert elapsed is not None and int(elapsed.group(1)) > 0  # timed on the app's monotonic clock
     assert restart.status_code == 303
     assert not any(thread.name == "webui" for thread in threading.enumerate())
 
