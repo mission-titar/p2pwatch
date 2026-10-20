@@ -16,7 +16,7 @@
     {% for f in fb.facets %}<a href="{{ f.url }}" data-selected="{{ f.selected_flag }}">{{ f.label }} {{ f.count_display }}</a>{% endfor %}
   </nav>
   <form class="files-search" action="/files" method="get" role="search">
-    <input type="search" name="search" value="{{ fb.searchbar.query }}" placeholder="Search filename">
+    <input type="search" name="search" value="{{ fb.searchbar.search_text }}" placeholder="Search filename">
     {% for h in fb.searchbar.hidden %}<input type="hidden" name="{{ h.name }}" value="{{ h.value }}">{% endfor %}
     <button type="submit">Search</button>
   </form>

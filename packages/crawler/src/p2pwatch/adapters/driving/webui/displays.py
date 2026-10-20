@@ -52,7 +52,7 @@ class ChannelLineDisplay:
 class ClientLineDisplay:
     """Dashboard block: one client; an old or missing reading has no channel line."""
 
-    name: str
+    client_name: str
     reading: str
     version: str
     api_reachable: str
@@ -60,7 +60,7 @@ class ClientLineDisplay:
 
 
 # ---------------------------------------------------------------------------
-# File detail
+# File history
 # ---------------------------------------------------------------------------
 
 
@@ -68,7 +68,7 @@ class ClientLineDisplay:
 class TimelineRowDisplay:
     """One observation of a file's timeline, precomputed."""
 
-    name: str
+    filename: str
     size_bytes: int
     sources: str
     keyword: str
@@ -245,10 +245,10 @@ class HiddenInputDisplay:
 
 @dataclass(frozen=True)
 class SearchBarDisplay:
-    """The filename search form, precomputed (W-D8): ``query`` prefills the text input, ``hidden``
-    carries every active param except ``q`` and ``page`` so submitting a search preserves them."""
+    """The filename search form, precomputed (W-D8): ``search_text`` prefills the text input,
+    ``hidden`` carries every active param except ``search`` and ``page``, which a search keeps."""
 
-    query: str
+    search_text: str
     hidden: tuple[HiddenInputDisplay, ...]
 
 
@@ -282,11 +282,6 @@ class FilterBarDisplay:
 
     searchbar: SearchBarDisplay
     facets: tuple[TierFacetDisplay, ...]
-
-
-# ---------------------------------------------------------------------------
-# File detail · display view (precomputed)
-# ---------------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------
@@ -335,7 +330,7 @@ class SourceHistoryRowDisplay:
     user hash, so the template renders the plain text with ``{% for %}``/``{% else %}``.
     """
 
-    name: str
+    source_name: str
     name_link: tuple[str, ...]
     short_hash: str
     source_link: tuple[str, ...]
@@ -361,7 +356,7 @@ class SourceKeyDisplay:
 class SourceListRowDisplay:
     """One line of ``/sources`` (stage 4 spec, D13), its links as ``SourceHistoryRowDisplay``'s."""
 
-    name: str
+    source_name: str
     name_link: tuple[str, ...]
     short_hash: str
     source_link: tuple[str, ...]
@@ -387,7 +382,7 @@ class TokenCoverageDisplay:
 
 
 @dataclass(frozen=True)
-class FileDetailDisplay:
+class FileHistoryDisplay:
     """Full view of a file: all fields precomputed for the template.
 
     ``decisions`` holds 0..N current decisions (latest per target, excluding retractions and

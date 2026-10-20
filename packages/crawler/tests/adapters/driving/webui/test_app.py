@@ -1674,18 +1674,18 @@ def test_tier_facets_only_present_tiers_appear() -> None:
     assert [f.label for f in facets] == ["all", "notify"]
 
 
-def test_search_bar_prefill_and_hidden_excludes_q() -> None:
+def test_search_bar_prefill_and_hidden_excludes_search() -> None:
     bar = _search_bar(search_text="keroro", kept_params={"tier": "notify", "sort": "size"})
-    assert bar.query == "keroro"
+    assert bar.search_text == "keroro"
     assert bar.hidden == (
         HiddenInputDisplay(name="tier", value="notify"),
         HiddenInputDisplay(name="sort", value="size"),
     )
 
 
-def test_search_bar_no_query_is_empty_string() -> None:
+def test_search_bar_no_search_text_is_empty_string() -> None:
     bar = _search_bar(search_text=None, kept_params={})
-    assert bar.query == ""
+    assert bar.search_text == ""
     assert bar.hidden == ()
 
 
@@ -1791,7 +1791,7 @@ async def test_nav_amule_link_uses_the_configured_base() -> None:
 async def test_nav_on_a_non_nav_path_renders_every_entry_as_a_link(
     populated_app: tuple[Starlette, str],
 ) -> None:
-    """A page that is NOT a nav destination (here /files/{file_id}, the file detail) leaves every
+    """A page that is NOT a nav destination (here /files/{file_id}, a file's page) leaves every
     entry a link and marks none active: the active entry is an EXACT path match, not a prefix."""
     app, hash_ = populated_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

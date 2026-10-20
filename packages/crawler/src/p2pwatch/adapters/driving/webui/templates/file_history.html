@@ -86,7 +86,7 @@
     <tbody>
       {% for row in file.timeline %}
       <tr>
-        <td>{{ row.name }}</td>
+        <td>{{ row.filename }}</td>
         <td>{{ row.size_bytes }}</td>
         <td>{{ row.sources }}</td>
         <td>{{ row.keyword }}</td>
@@ -120,7 +120,7 @@
     <tbody>
       {% for row in file.source_history %}
       <tr>
-        <td>{% for href in row.name_link %}<a href="{{ href }}">{{ row.name }}</a>{% else %}{{ row.name }}{% endfor %}</td>
+        <td>{% for href in row.name_link %}<a href="{{ href }}">{{ row.source_name }}</a>{% else %}{{ row.source_name }}{% endfor %}</td>
         <td>{% for href in row.source_link %}<a href="{{ href }}">{{ row.short_hash }}</a>{% else %}{{ row.short_hash }}{% endfor %}</td>
         <td>{{ row.role }}</td>
         <td>{{ row.contact_point }}</td>
