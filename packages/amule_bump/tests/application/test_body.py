@@ -11,6 +11,7 @@ from amule_bump.domain.dockerfile import Pin
 from tests.fakes import FakeRepoReader
 
 GITHUB_BODY_MAX_CHARACTERS = 65536
+CHANGELOG_WIDTH_CHARACTERS = 100
 OLD = Pin("3.0.1", "02db0d7faecfc377694ff6242bc23346185990ed")
 NEW = Pin("3.1.0", "909d304d993ee07df6c6f6acf501a6d791d53666")
 
@@ -113,7 +114,7 @@ def full_repo_reader() -> FakeRepoReader:
 
 
 def test_build_body_links_the_release_and_the_compare_view() -> None:
-    body = build_pull_request_body(full_repo_reader(), OLD, NEW)
+    body = build_pull_request_body(full_repo_reader(), OLD, NEW, CHANGELOG_WIDTH_CHARACTERS)
     assert body.startswith(
         "Bumps aMule from 3.0.1 to [3.1.0](https://github.com/amule-org/amule/releases/tag/3.1.0)"
         " (commit `909d304d993ee07df6c6f6acf501a6d791d53666`). Full upstream diff:"
@@ -122,13 +123,13 @@ def test_build_body_links_the_release_and_the_compare_view() -> None:
 
 
 def test_build_body_fences_the_changelog_section() -> None:
-    body = build_pull_request_body(full_repo_reader(), OLD, NEW)
+    body = build_pull_request_body(full_repo_reader(), OLD, NEW, CHANGELOG_WIDTH_CHARACTERS)
     assert '## Changelog\n\n````text\n## Version 3.1.0 - "REST"\n' in body
     assert "older entry" not in body
 
 
 def test_build_body_carries_both_diffs() -> None:
-    body = build_pull_request_body(full_repo_reader(), OLD, NEW)
+    body = build_pull_request_body(full_repo_reader(), OLD, NEW, CHANGELOG_WIDTH_CHARACTERS)
     assert "## `cmake/options.cmake` (3.0.1 to 3.1.0)\n\n````diff\n" in body
     assert "+option(B)\n" in body
     assert "## `docs/api/REFERENCE.md` (3.0.1 to 3.1.0)\n\n````diff\n" in body
@@ -136,7 +137,7 @@ def test_build_body_carries_both_diffs() -> None:
 
 
 def test_build_body_ends_with_the_checklist_naming_the_new_version() -> None:
-    body = build_pull_request_body(full_repo_reader(), OLD, NEW)
+    body = build_pull_request_body(full_repo_reader(), OLD, NEW, CHANGELOG_WIDTH_CHARACTERS)
     assert body.endswith(
         "## Checklist\n\n"
         "- [ ] Read the changelog: anything that changes the daemon's defaults or the network"
@@ -153,7 +154,7 @@ def test_build_body_ends_with_the_checklist_naming_the_new_version() -> None:
 
 
 def test_build_body_says_so_when_the_changelog_or_a_diff_is_empty() -> None:
-    body = build_pull_request_body(FakeRepoReader(), OLD, NEW)
+    body = build_pull_request_body(FakeRepoReader(), OLD, NEW, CHANGELOG_WIDTH_CHARACTERS)
     assert "No `## Version 3.1.0` section in upstream's docs/CHANGELOG.md.\n" in body
     assert body.count("No change between the two tags.\n") == 2
 
@@ -167,6 +168,6 @@ def test_build_body_stays_under_the_github_limit_with_huge_upstream_text() -> No
             ("3.1.0", "docs/api/REFERENCE.md"): huge * 5000,
         }
     )
-    body = build_pull_request_body(repo_reader, OLD, NEW)
+    body = build_pull_request_body(repo_reader, OLD, NEW, CHANGELOG_WIDTH_CHARACTERS)
     assert len(body) < GITHUB_BODY_MAX_CHARACTERS
     assert body.count(TRUNCATION_NOTICE) == 3

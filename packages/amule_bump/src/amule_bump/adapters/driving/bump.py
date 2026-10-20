@@ -26,6 +26,7 @@ def main(
     dockerfile_writer: DockerfileWriter,
     pull_request_body_writer: PullRequestBodyWriter,
     step_output_writer: StepOutputWriter,
+    changelog_width_characters: int,
 ) -> int:
     """Prints a bump error and returns 1."""
     try:
@@ -38,6 +39,7 @@ def main(
             dockerfile_writer,
             pull_request_body_writer,
             step_output_writer,
+            changelog_width_characters,
         )
     except (BumpError, OSError) as error:  # OSError covers urllib errors and a missing file
         print(f"error: {error}", file=sys.stderr)
@@ -53,6 +55,7 @@ def _bump(
     dockerfile_writer: DockerfileWriter,
     pull_request_body_writer: PullRequestBodyWriter,
     step_output_writer: StepOutputWriter,
+    changelog_width_characters: int,
 ) -> int:
     dockerfile_text = dockerfile_reader.read_dockerfile(dockerfile)
     old = read_pin(dockerfile_text)
@@ -68,7 +71,7 @@ def _bump(
         return 0
 
     new = Pin(latest, peeled_commit(repo_reader, latest))
-    body = build_pull_request_body(repo_reader, old, new)
+    body = build_pull_request_body(repo_reader, old, new, changelog_width_characters)
     if dry_run:
         print(new.arg_lines())
         print(f"--- PR body ({len(body)} characters) ---")

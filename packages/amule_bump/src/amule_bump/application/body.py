@@ -22,14 +22,16 @@ CHECKLIST = """## Checklist
 """
 
 
-def build_pull_request_body(repo_reader: RepoReader, old: Pin, new: Pin) -> str:
+def build_pull_request_body(
+    repo_reader: RepoReader, old: Pin, new: Pin, changelog_width_characters: int
+) -> str:
     upstream = f"https://github.com/{UPSTREAM}"
     parts = [
         f"Bumps aMule from {old.version} to [{new.version}]({upstream}/releases/tag/{new.version})"
         f" (commit `{new.commit}`). Full upstream diff:"
         f" {upstream}/compare/{old.version}...{new.version}",
         "## Changelog",
-        _changelog_part(repo_reader, new),
+        _changelog_part(repo_reader, new, changelog_width_characters),
     ]
     for path in WATCHED_FILES:
         parts += [
@@ -59,7 +61,7 @@ def tag_diff(repo_reader: RepoReader, old: Pin, new: Pin, path: str) -> str:
     return "".join(f"{line}\n" for line in diff)
 
 
-def wrap(text: str, width: int = 100) -> str:
+def wrap(text: str, width: int) -> str:
     lines: list[str] = []
     for line in text.splitlines():
         lines += textwrap.wrap(line, width, break_long_words=False, break_on_hyphens=False) or [""]
@@ -81,11 +83,11 @@ def fenced(text: str, language: str) -> str:
     return f"{fence}{language}\n{text.removesuffix('\n')}\n{fence}"
 
 
-def _changelog_part(repo_reader: RepoReader, new: Pin) -> str:
+def _changelog_part(repo_reader: RepoReader, new: Pin, changelog_width_characters: int) -> str:
     section = changelog_section(repo_reader.file(new.version, "docs/CHANGELOG.md"), new.version)
     if not section:
         return f"No `## Version {new.version}` section in upstream's docs/CHANGELOG.md."
-    return fenced(clip(wrap(section), CHANGELOG_MAX_CHARACTERS), "text")
+    return fenced(clip(wrap(section, changelog_width_characters), CHANGELOG_MAX_CHARACTERS), "text")
 
 
 def _diff_part(repo_reader: RepoReader, old: Pin, new: Pin, path: str) -> str:

@@ -95,8 +95,9 @@ Sans l'App, ou pour une autre version que la dernière release, travaillez sur u
 uv run python -m amule_bump bump
 ```
 
-Ajoutez `--dry-run` pour seulement afficher les deux lignes et la description de PR qu'il
-produirait. Avec `GH_TOKEN="$(gh auth token)"` devant, les appels à l'API GitHub sont
+Hors Actions, il affiche ensuite la nouvelle version (`version=`) et le chemin de la description
+de PR qu'il a écrite (`body-path=`). Ajoutez `--dry-run` pour seulement afficher les deux lignes et
+la description de PR qu'il produirait. Avec `GH_TOKEN="$(gh auth token)"` devant, les appels à l'API GitHub sont
 authentifiés ; sans, ils sont limités à 60 par heure.
 
 **Vers une autre version**, écrivez les deux `ARG` vous-même :
