@@ -18,7 +18,8 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from catalog_matching.domain.engine import DecisionRecord, Explanation
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_targets
-from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import PAGE_SIZE
+from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import PAGE_SIZE, SqliteSourceReader
+from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driving.webui.app import (
     _normalize_direction,
     _normalize_sort,
@@ -30,6 +31,7 @@ from p2pwatch.adapters.driving.webui.app import (
     build_app,
 )
 from p2pwatch.adapters.driving.webui.views import DecisionCell, HiddenInput
+from p2pwatch.application.list_sources import ListSources
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.coverage import TargetCoverage
 from p2pwatch.domain.download.states import DownloadState
@@ -158,6 +160,7 @@ def _app_on_fakes(
         node_describer=FakeNodeDescriber(NodeDescription(node_state)),
         file_lister=file_lister,
         file_describer=file_describer,
+        source_lister=ListSources(SqliteSourceReader(ReaderProvider(_NO_DB))),
         amule_url=amule_url,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -276,6 +279,7 @@ def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         node_describer=_DESCRIBER,
         file_lister=_NO_FILE_LISTER,
         file_describer=FakeFileDescriber(_FILE_DESCRIPTION),
+        source_lister=ListSources(SqliteSourceReader(ReaderProvider(catalog_db))),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -922,6 +926,7 @@ async def test_a_template_reading_what_its_context_lacks_raises(
         node_describer=_DESCRIBER,
         file_lister=_NO_FILE_LISTER,
         file_describer=_NO_FILE_DESCRIBER,
+        source_lister=ListSources(SqliteSourceReader(ReaderProvider(catalog_db))),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,

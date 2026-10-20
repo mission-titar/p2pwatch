@@ -16,6 +16,7 @@ from p2pwatch.domain.catalog_entry import CatalogEntry
 from p2pwatch.domain.file_history import DatedDecision, FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.interval import Interval
+from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceRole
@@ -85,6 +86,12 @@ class _FakeCatalogFileReader(CatalogFileReader):
 class _FakeSourceReader(SourceReader):
     def __init__(self) -> None:
         self.calls: list[tuple[FileKey, PeriodWindow]] = []
+
+    def read_known_sources(self, **arguments: Any) -> tuple[KnownSource, ...]:
+        raise AssertionError("DescribeFile lists no source")
+
+    def read_source_count(self, **arguments: Any) -> int:
+        raise AssertionError("DescribeFile counts no source")
 
     def read_sharing_periods(
         self, file: FileKey, window: PeriodWindow

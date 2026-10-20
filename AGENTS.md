@@ -152,7 +152,8 @@ a function does.
 | `interval` | `Interval`, the stretch of wall-clock time a page reads, at most 7 days, resolved from the ends a request asks for | `range`, `period` |
 | `sharing period` | `SharingPeriod`, one source's consecutive readings on one file by one node: its first and last reading, the bytes received; a page reads them in a `PeriodWindow` | `source range` |
 | `catalog entry` | `CatalogEntry`, a file as a listing shows it: its size, its latest observation, its current decisions | `file row` |
-| `search text` | `search_text`, the text a listed name must contain | `query`, which is SQL's |
+| `known source` | `KnownSource`, a source with a user hash as the sources list shows it: its latest `source_name`, its latest reading, its file count | `source row` |
+| `search text` | `search_text`, the text a listed name must contain, or a listed source's hash prefix | `query`, which is SQL's |
 | `token` | a named matcher of the policy (`tokens:`) | a word of a text |
 | `word` | a piece of normalized text | `token` |
 | `reevaluation` | re-judging every file when the policy changed | `backfill` |
