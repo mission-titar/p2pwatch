@@ -266,6 +266,7 @@ async def test_a_401_answered_during_close_logs_in_no_more() -> None:
     await closing
     assert api.logins == 1  # a token minted now would never be revoked
 
+
 @pytest.mark.asyncio
 async def test_open_logs_in() -> None:
     api = FakeAmuleApi()
