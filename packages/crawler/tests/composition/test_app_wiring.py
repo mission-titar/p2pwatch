@@ -1,12 +1,14 @@
 """The real assembly, run against the amuleapi fake on a loopback socket: what no unit test sees."""
 
 import asyncio
+import gc
 import json
 import logging
 import re
 import signal
 import socket
 import threading
+import warnings
 from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.metadata import version
@@ -252,6 +254,10 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
     assert elapsed is not None and int(elapsed.group(1)) > 0  # timed on the app's monotonic clock
     assert restart.status_code == 303
     assert not any(thread.name == "webui" for thread in threading.enumerate())
+    with warnings.catch_warnings(record=True) as caught:  # the webui's readers left unclosed
+        warnings.simplefilter("always")
+        gc.collect()
+    assert [str(warning.message) for warning in caught] == []
 
 
 def _has_read_the_sources_then_listed_again(api: FakeAmuleApi) -> bool:

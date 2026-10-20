@@ -160,7 +160,8 @@ class CrawlerApp(CrawlerRunner):
         during the normal LIFO unwind at shutdown, AFTER the loops are stopped."""
         crawler_config = config.crawler_config
         webui_pkg_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent
-        node_state_reader = SqliteNodeStateReader(ReaderProvider(crawler_config.local_db_path))
+        local_reader_provider = ReaderProvider(crawler_config.local_db_path)
+        node_state_reader = SqliteNodeStateReader(local_reader_provider)
         catalog_reader_provider = ReaderProvider(crawler_config.catalog_db_path)
         catalog_file_reader = SqliteCatalogFileReader(catalog_reader_provider)
         source_reader = SqliteSourceReader(catalog_reader_provider)
@@ -213,7 +214,11 @@ class CrawlerApp(CrawlerRunner):
             ),
             amule_url=crawler_config.webui.amule_url,
         )
-        server_thread = UvicornServerThread(app, self._webui_address)
+        server_thread = UvicornServerThread(
+            app,
+            self._webui_address,
+            serving_resources=(catalog_reader_provider, local_reader_provider),
+        )
         stack.push_async_callback(server_thread.stop)
         await server_thread.start()
 

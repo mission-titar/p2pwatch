@@ -4,6 +4,8 @@ import asyncio
 import logging
 import socket
 import threading
+from collections.abc import Iterable
+from contextlib import AbstractContextManager, ExitStack
 
 import uvicorn
 from starlette.applications import Starlette
@@ -36,8 +38,10 @@ class UvicornServerThread:
         address: tuple[str, int],
         *,
         start_timeout_seconds: float = _START_TIMEOUT_SECONDS,
+        serving_resources: Iterable[AbstractContextManager[object]] = (),
     ) -> None:
         host, port = address
+        self._serving_resources = tuple(serving_resources)
         self._settled = threading.Event()
         self._server = _StartReportingServer(
             uvicorn.Config(app, host=host, port=port, log_level="info"), self._settled
@@ -69,7 +73,11 @@ class UvicornServerThread:
     def _serve(self) -> None:
         # uvicorn ends a failed bind with ``sys.exit``, whose traceback chains the ``OSError``.
         try:
-            asyncio.run(self._server.serve())
+            # Entered and left on this thread: what they hold may be thread-affine.
+            with ExitStack() as stack:
+                for resource in self._serving_resources:
+                    stack.enter_context(resource)
+                asyncio.run(self._server.serve())
         except (Exception, SystemExit) as error:
             _logger.error("webui degraded: the crawler carries on without HTTP", exc_info=error)
         finally:
