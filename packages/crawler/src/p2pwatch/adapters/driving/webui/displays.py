@@ -350,6 +350,14 @@ class SourceHistoryRowDisplay:
 
 
 @dataclass(frozen=True)
+class SourceKeyDisplay:
+    """The source a source's page describes: its network and its user hash."""
+
+    network: str
+    native_id: str
+
+
+@dataclass(frozen=True)
 class SourceListRowDisplay:
     """One line of ``/sources`` (stage 4 spec, D13), its links as ``SourceHistoryRowDisplay``'s."""
 
