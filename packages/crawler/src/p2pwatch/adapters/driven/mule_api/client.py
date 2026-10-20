@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import re
+from collections.abc import Callable
 from contextlib import suppress
 from datetime import timedelta
 from typing import Any
@@ -76,14 +77,15 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         port: int,
         password: str,
         *,
-        timeout_seconds: float = 10.0,
+        timeout_seconds: float,
         monotonic_clock: MonotonicClock,
-        transport: httpx.AsyncBaseTransport | None = None,
+        transport_factory: Callable[[], httpx.AsyncBaseTransport],
     ) -> None:
         self._base_url = f"http://{host}:{port}/api/v1"
         self._password = password
         self._timeout_seconds = timeout_seconds
-        self._transport = transport
+        # One transport per session: closing a session closes its transport.
+        self._transport_factory = transport_factory
         self._monotonic_clock = monotonic_clock
         self._http: httpx.AsyncClient | None = None
         self._closed = False
@@ -111,7 +113,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
             http = httpx.AsyncClient(
                 base_url=self._base_url,
                 timeout=httpx.Timeout(self._timeout_seconds),
-                transport=self._transport,
+                transport=self._transport_factory(),
             )
             try:
                 await self._login(http)

@@ -19,7 +19,12 @@ async def test_the_real_client_logs_in_and_out_over_the_socket() -> None:
 
     with FakeAmuleApiServer(api) as server:
         client = AmuleApiClient(
-            server.host, server.port, PASSWORD, monotonic_clock=api.monotonic_clock
+            server.host,
+            server.port,
+            PASSWORD,
+            timeout_seconds=10.0,
+            transport_factory=httpx.AsyncHTTPTransport,
+            monotonic_clock=api.monotonic_clock,
         )
         await client.open()
         await client.close()
