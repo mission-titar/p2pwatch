@@ -70,7 +70,7 @@ class DecisionReader(ABC):
         """Every file and target whose latest verdict is tier=download (spec download §5)."""
 
 
-class CatalogScanner(ABC):
+class CatalogScanReader(ABC):
     """Walks the whole catalog, for the startup re-evaluation (spec re-evaluation §6)."""
 
     @abstractmethod

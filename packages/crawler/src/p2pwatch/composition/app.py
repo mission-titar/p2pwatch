@@ -385,7 +385,7 @@ class CrawlerApp(CrawlerRunner):
                     observation_reader=catalog_repo,
                     decision_writer=catalog_repo,
                     decision_reader=catalog_repo,
-                    catalog_scanner=catalog_repo,
+                    catalog_scan_reader=catalog_repo,
                     engine=engine,
                     waker=waker,
                     event_emitter=event_emitter,
