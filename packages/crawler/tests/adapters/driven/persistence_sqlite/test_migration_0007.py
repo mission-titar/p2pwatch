@@ -10,8 +10,8 @@ from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch_testing.adapters.persistence_sqlite.older_catalog import (
-    configure_forcing_secure_delete,
     open_catalog_at,
+    open_catalog_forcing_secure_delete_at,
 )
 
 _A, _B = "a" * 32, "b" * 32
@@ -140,7 +140,7 @@ def test_a_mapped_result_reuses_the_variant_0007_migrated_from_its_old_row(
 def test_the_runner_restores_the_pragmas_0007_sets(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
     _old_catalog(path, _BARE)
-    connection = open_catalog_at(path, 7, configure=configure_forcing_secure_delete)
+    connection = open_catalog_forcing_secure_delete_at(path, 7)
     try:
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 7
         assert connection.execute("PRAGMA secure_delete").fetchone()[0] == 1
@@ -158,7 +158,7 @@ def test_dropping_the_old_table_keeps_its_pages_out_of_the_wal(tmp_path: Path) -
     dropped = raw.execute("SELECT sum(pgsize) FROM dbstat WHERE name = 'file_observations'")
     dropped_bytes = int(dropped.fetchone()[0])
     raw.close()
-    connection = open_catalog_at(path, 7, configure=configure_forcing_secure_delete)
+    connection = open_catalog_forcing_secure_delete_at(path, 7)
     try:
         wal_bytes = (tmp_path / "catalog.db-wal").stat().st_size
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 7

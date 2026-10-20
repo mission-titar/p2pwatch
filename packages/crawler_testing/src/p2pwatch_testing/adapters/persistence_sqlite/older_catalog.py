@@ -1,6 +1,5 @@
 import hashlib
 import sqlite3
-from collections.abc import Callable
 from importlib import resources
 from pathlib import Path
 
@@ -15,42 +14,34 @@ from p2pwatch.domain.source import SourceKey
 _MIGRATIONS = resources.files("p2pwatch.adapters.driven.persistence_sqlite") / "migrations"
 
 
-def open_catalog_at(
-    path: Path,
-    version: int,
-    *,
-    configure: Callable[[sqlite3.Connection], None] = connection_module._configure,
-) -> sqlite3.Connection:
+def open_catalog_at(path: Path, version: int) -> sqlite3.Connection:
     """A catalog.db migrated by the runner up to ``version`` only, as an older release left it."""
-    return _open_at(path, "catalog", version, configure)
+    return _open_at(path, "catalog", version, forcing_secure_delete=False)
+
+
+def open_catalog_forcing_secure_delete_at(path: Path, version: int) -> sqlite3.Connection:
+    """The same, ``secure_delete`` ON: stands for the image's SQLite, which compiles it in."""
+    return _open_at(path, "catalog", version, forcing_secure_delete=True)
 
 
 def open_local_at(path: Path, version: int) -> sqlite3.Connection:
     """The same for a local.db."""
-    return _open_at(path, "local", version, connection_module._configure)
+    return _open_at(path, "local", version, forcing_secure_delete=False)
 
 
 def _open_at(
-    path: Path,
-    database: str,
-    version: int,
-    configure: Callable[[sqlite3.Connection], None],
+    path: Path, database: str, version: int, *, forcing_secure_delete: bool
 ) -> sqlite3.Connection:
     connection = sqlite3.connect(path, autocommit=True)
-    configure(connection)
+    connection_module._configure(connection)
+    if forcing_secure_delete:
+        connection.execute("PRAGMA secure_delete = ON")
     register_sql_functions(connection)
     scripts = connection_module._load_scripts(_MIGRATIONS / database)
     connection_module._apply_migrations(
         connection, tuple(s for s in scripts if s.version <= version)
     )
     return connection
-
-
-def configure_forcing_secure_delete(connection: sqlite3.Connection) -> None:
-    """Configures as the runner does, then stands for the image's SQLite, which compiles
-    ``SECURE_DELETE`` in."""
-    connection_module._configure(connection)
-    connection.execute("PRAGMA secure_delete = ON")
 
 
 def insert_stage4_variant(

@@ -13,8 +13,8 @@ from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch_testing.adapters.persistence_sqlite.older_catalog import (
-    configure_forcing_secure_delete,
     open_catalog_at,
+    open_catalog_forcing_secure_delete_at,
 )
 
 _A, _B = "a" * 32, "b" * 32
@@ -141,9 +141,7 @@ def test_a_new_observation_reuses_the_variant_0008_rekeyed(tmp_path: Path) -> No
 
 def test_the_runner_restores_the_pragmas_0008_sets(tmp_path: Path) -> None:
     _catalog_at_7(tmp_path / "catalog.db")
-    connection = open_catalog_at(
-        tmp_path / "catalog.db", 8, configure=configure_forcing_secure_delete
-    )
+    connection = open_catalog_forcing_secure_delete_at(tmp_path / "catalog.db", 8)
     try:
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
         assert connection.execute("PRAGMA secure_delete").fetchone()[0] == 1
