@@ -37,7 +37,8 @@ async def _connected(api: FakeAmuleApi) -> AmuleApiClient:
         "amuled.test",
         4711,
         PASSWORD,
-        transport=api.transport(),
+        timeout_seconds=10.0,
+        transport_factory=api.transport,
         monotonic_clock=api.monotonic_clock,
     )
     await client.open()

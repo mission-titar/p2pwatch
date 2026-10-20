@@ -4,6 +4,7 @@ Dedicated run: uv run pytest -m api_integration --no-cov
 Without eD2k access the results are empty: what is validated is the cycle, not their richness.
 """
 
+import httpx
 import pytest
 
 from p2pwatch.adapters.driven.monotonic_clock_asyncio import AsyncioMonotonicClock
@@ -22,6 +23,7 @@ async def test_real_login_succeeds(amuled: ApiEndpoint) -> None:
         amuled.password,
         timeout_seconds=30.0,
         monotonic_clock=AsyncioMonotonicClock(),
+        transport_factory=httpx.AsyncHTTPTransport,
     )
     await client.status()  # its login accepts the admin password written by --set-admin-pass
     await client.close()
@@ -35,6 +37,7 @@ async def test_real_login_fails_with_wrong_password(amuled: ApiEndpoint) -> None
         "wrong-password",
         timeout_seconds=30.0,
         monotonic_clock=AsyncioMonotonicClock(),
+        transport_factory=httpx.AsyncHTTPTransport,
     )
     with pytest.raises(ApiAuthError):
         await client.status()
@@ -48,6 +51,7 @@ async def test_real_status(amuled: ApiEndpoint) -> None:
         amuled.password,
         timeout_seconds=30.0,
         monotonic_clock=AsyncioMonotonicClock(),
+        transport_factory=httpx.AsyncHTTPTransport,
     )
     try:
         status = await client.status()
@@ -64,6 +68,7 @@ async def test_real_search(amuled: ApiEndpoint) -> None:
         amuled.password,
         timeout_seconds=30.0,
         monotonic_clock=AsyncioMonotonicClock(),
+        transport_factory=httpx.AsyncHTTPTransport,
     )
     try:
         try:

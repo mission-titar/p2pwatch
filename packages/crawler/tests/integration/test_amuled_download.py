@@ -6,6 +6,7 @@ Validates the MECHANICS of the download: ``start`` accepted + the file appears i
 from the ephemeral container): it is the start -> list -> status cycle that is validated.
 """
 
+import httpx
 import pytest
 
 from p2pwatch.adapters.driven.monotonic_clock_asyncio import AsyncioMonotonicClock
@@ -32,6 +33,7 @@ async def test_start_then_appears_in_downloads(amuled: ApiEndpoint) -> None:
         amuled.password,
         timeout_seconds=30.0,
         monotonic_clock=AsyncioMonotonicClock(),
+        transport_factory=httpx.AsyncHTTPTransport,
     )
     try:
         file = FileKey(Network.ED2K, _HASH)

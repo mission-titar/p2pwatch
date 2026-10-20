@@ -38,7 +38,8 @@ def _client(api: FakeAmuleApi, *, password: str = PASSWORD) -> AmuleApiClient:
         "amuled.test",
         4711,
         password,
-        transport=api.transport(),
+        timeout_seconds=10.0,
+        transport_factory=api.transport,
         monotonic_clock=api.monotonic_clock,
     )
 
@@ -116,7 +117,12 @@ def _yielding_client(api: FakeAmuleApi) -> AmuleApiClient:
 
     transport = httpx.MockTransport(round_trip)
     return AmuleApiClient(
-        "amuled.test", 4711, PASSWORD, transport=transport, monotonic_clock=api.monotonic_clock
+        "amuled.test",
+        4711,
+        PASSWORD,
+        timeout_seconds=10.0,
+        transport_factory=lambda: transport,
+        monotonic_clock=api.monotonic_clock,
     )
 
 
@@ -222,7 +228,12 @@ async def test_a_close_during_a_login_revokes_the_session_it_opened() -> None:
 
     transport = httpx.MockTransport(round_trip)
     client = AmuleApiClient(
-        "amuled.test", 4711, PASSWORD, transport=transport, monotonic_clock=api.monotonic_clock
+        "amuled.test",
+        4711,
+        PASSWORD,
+        timeout_seconds=10.0,
+        transport_factory=lambda: transport,
+        monotonic_clock=api.monotonic_clock,
     )
     call = asyncio.create_task(client.status())
     await login_reached.wait()
@@ -252,7 +263,12 @@ async def test_a_401_answered_during_close_logs_in_no_more() -> None:
 
     transport = httpx.MockTransport(round_trip)
     client = AmuleApiClient(
-        "amuled.test", 4711, PASSWORD, transport=transport, monotonic_clock=api.monotonic_clock
+        "amuled.test",
+        4711,
+        PASSWORD,
+        timeout_seconds=10.0,
+        transport_factory=lambda: transport,
+        monotonic_clock=api.monotonic_clock,
     )
     await client.open()
     call = asyncio.create_task(client.status())
@@ -299,6 +315,36 @@ async def test_a_call_after_a_tolerated_unreachable_open_logs_in_and_succeeds(
     del api.overrides[("POST", "/api/v1/auth/login")]
     await client.status()  # the session opens once the daemon listens
     assert api.logins == 1
+
+
+@pytest.mark.asyncio
+async def test_a_session_opened_after_a_failed_login_gets_a_transport_of_its_own() -> None:
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    api = FakeAmuleApi()
+    api.overrides[("POST", "/api/v1/auth/login")] = refuse
+    transports: list[httpx.MockTransport] = []
+
+    def transport_factory() -> httpx.MockTransport:
+        transports.append(api.transport())
+        return transports[-1]
+
+    client = AmuleApiClient(
+        "amuled.test",
+        4711,
+        PASSWORD,
+        timeout_seconds=10.0,
+        transport_factory=transport_factory,
+        monotonic_clock=api.monotonic_clock,
+    )
+    await client.open()
+    del api.overrides[("POST", "/api/v1/auth/login")]
+    await client.status()
+    await client.close()
+
+    # The failed login closed its session, and the transport with it.
+    assert len(transports) == 2
 
 
 @pytest.mark.asyncio

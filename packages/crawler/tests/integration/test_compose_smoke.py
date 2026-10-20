@@ -454,12 +454,18 @@ _API_HOST, _API_PORT = _AMULE, 4711
 
 _SHARED_HASHES = f"""
 import asyncio, json
+import httpx
 from p2pwatch.adapters.driven.monotonic_clock_asyncio import AsyncioMonotonicClock
 from p2pwatch.adapters.driven.mule_api.client import AmuleApiClient
 
 async def main() -> None:
     client = AmuleApiClient(
-        {_API_HOST!r}, {_API_PORT}, {_API_PASSWORD!r}, monotonic_clock=AsyncioMonotonicClock()
+        {_API_HOST!r},
+        {_API_PORT},
+        {_API_PASSWORD!r},
+        timeout_seconds=10.0,
+        monotonic_clock=AsyncioMonotonicClock(),
+        transport_factory=httpx.AsyncHTTPTransport,
     )
     completed = [d.file.native_id for d in await client.downloads() if d.completed]
     print(json.dumps(sorted(completed)))
