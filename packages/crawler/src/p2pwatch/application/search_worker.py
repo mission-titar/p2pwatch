@@ -6,6 +6,7 @@ from datetime import timedelta
 
 from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.application.record_observations import record_observation
+from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.observability.events import (
     ClientUnreachable,
     SearchExecuted,
@@ -20,7 +21,7 @@ from p2pwatch.ports.driven.catalog import (
     ObservationWriter,
 )
 from p2pwatch.ports.driven.client_errors import ClientUnreachableError, SearchFailedError
-from p2pwatch.ports.driven.clock import MonotonicClock, MonotonicInstant, WallClock
+from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
 from p2pwatch.ports.driven.logger import Logger
 from p2pwatch.ports.driven.rng import Rng
 from p2pwatch.ports.driven.search_client import SearchAnswer, SearchClient

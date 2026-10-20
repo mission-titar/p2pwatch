@@ -8,9 +8,9 @@ import pytest
 from catalog_matching.domain.engine import Explanation, MatchDecision
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
+from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation, ReportedFile
-from p2pwatch.ports.driven.catalog import DownloadCandidate
 
 _A = FileKey(Network.ED2K, "a" * 32)
 _B = FileKey(Network.ED2K, "b" * 32)

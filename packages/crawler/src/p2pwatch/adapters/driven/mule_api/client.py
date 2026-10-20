@@ -34,11 +34,13 @@ from p2pwatch.adapters.driven.mule_api.mapping import (
     merge_duplicate_sources,
     offering_source_ecid,
 )
+from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.source import SourceReading
 from p2pwatch.domain.status_reading import ClientStatus
-from p2pwatch.ports.driven.clock import MonotonicClock, MonotonicInstant
-from p2pwatch.ports.driven.download_client import DownloadRequest, DownloadStatus
+from p2pwatch.ports.driven.clock import MonotonicClock
+from p2pwatch.ports.driven.download_client import DownloadRequest
 from p2pwatch.ports.driven.search_client import SearchAnswer
 
 # Rows asked for per list request. Every list route caps at 100 when `limit` is omitted, which

@@ -128,7 +128,6 @@ layer = "adapters"
 depends_on = [
   "p2pwatch.domain",
   "p2pwatch.ports.driven.client_status",
-  "p2pwatch.ports.driven.clock",
 ]
 
 [[modules]]
@@ -147,7 +146,7 @@ depends_on = []
 [[modules]]
 path = "p2pwatch.adapters.driven.monotonic_clock_asyncio"
 layer = "adapters"
-depends_on = ["p2pwatch.ports.driven.clock"]
+depends_on = ["p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.adapters.driven.mule_api"
@@ -184,7 +183,6 @@ depends_on = [
   "p2pwatch.ports.driven.catalog_file_reader",
   "p2pwatch.ports.driven.clock",
   "p2pwatch.ports.driven.coverage_reader",
-  "p2pwatch.ports.driven.download_client",
   "p2pwatch.ports.driven.downloads",
   "p2pwatch.ports.driven.node_id",
   "p2pwatch.ports.driven.node_state_reader",
@@ -363,15 +361,12 @@ depends_on = []
 [[modules]]
 path = "p2pwatch.ports.driven.client_status"
 layer = "ports"
-depends_on = [
-  "p2pwatch.domain",
-  "p2pwatch.ports.driven.clock",
-]
+depends_on = ["p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.ports.driven.clock"
 layer = "ports"
-depends_on = []
+depends_on = ["p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.ports.driven.config_checker"
@@ -396,10 +391,7 @@ depends_on = ["p2pwatch.domain"]
 [[modules]]
 path = "p2pwatch.ports.driven.downloads"
 layer = "ports"
-depends_on = [
-  "p2pwatch.domain",
-  "p2pwatch.ports.driven.download_client",
-]
+depends_on = ["p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.ports.driven.logger"

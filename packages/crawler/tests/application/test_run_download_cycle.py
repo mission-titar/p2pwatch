@@ -11,7 +11,9 @@ from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog,
 from p2pwatch.adapters.driven.persistence_sqlite.download_repository import SqliteDownloadRepository
 from p2pwatch.adapters.driven.persistence_sqlite.source_repository import SqliteSourceRepository
 from p2pwatch.application.run_download_cycle import DownloadDeps, run_download_cycle
-from p2pwatch.domain.download.states import DownloadState
+from p2pwatch.domain.download.candidate import DownloadCandidate
+from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
+from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability.events import (
     DiskSpaceLow,
@@ -23,17 +25,16 @@ from p2pwatch.domain.observability.events import (
     TargetTitle,
 )
 from p2pwatch.domain.observation import FileObservation, ReportedFile
-from p2pwatch.domain.source import SourceKey, SourceReading, SourceRole
-from p2pwatch.ports.driven.catalog import DownloadCandidate
-from p2pwatch.ports.driven.client_errors import ClientUnreachableError, DownloadRejectedError
-from p2pwatch.ports.driven.download_client import (
-    DownloadRequest,
-    DownloadStatus,
-    FailureReason,
-    WaitingReason,
+from p2pwatch.domain.source import (
+    EarlierPoints,
+    RecordedReading,
+    SourceKey,
+    SourceReading,
+    SourceRole,
 )
+from p2pwatch.ports.driven.client_errors import ClientUnreachableError, DownloadRejectedError
+from p2pwatch.ports.driven.download_client import DownloadRequest
 from p2pwatch.ports.driven.repository_errors import RepositoryError
-from p2pwatch.ports.driven.source_points import EarlierPoints, RecordedReading
 from p2pwatch_testing.application.download_fakes import (
     FakeCatalogReads,
     FakeDiskSpace,

@@ -10,6 +10,8 @@ from collections.abc import Iterable
 from dataclasses import replace
 from typing import Any
 
+from p2pwatch.domain.download.states import FailureReason, WaitingReason
+from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import ReportedFile, fold_raw_meta
 from p2pwatch.domain.source import (
@@ -20,7 +22,6 @@ from p2pwatch.domain.source import (
     is_contact_point,
 )
 from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus
-from p2pwatch.ports.driven.download_client import DownloadStatus, FailureReason, WaitingReason
 
 _HASH_LENGTH = 32
 

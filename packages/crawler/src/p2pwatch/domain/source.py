@@ -7,7 +7,7 @@ import ipaddress
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from enum import StrEnum
 
 from p2pwatch.domain.file_key import Network
@@ -122,3 +122,20 @@ class SourceReading:
     connectable: bool | None
     raw_meta: SourceMeta
     session_received_bytes: int
+
+
+@dataclass(frozen=True)
+class RecordedReading:
+    """A reading ``record_readings`` kept, with its role, a carried one included."""
+
+    source: SourceKey | None
+    source_name: str | None
+    role: SourceRole
+
+
+@dataclass(frozen=True)
+class EarlierPoints:
+    """D5's two answers: a useful point exists, and when the latest useful or not-useful one was."""
+
+    has_useful_point: bool
+    latest_known_at: datetime | None

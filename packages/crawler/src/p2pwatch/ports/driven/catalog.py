@@ -9,20 +9,12 @@ instant and its ``node_id``: a :class:`FileObservation` carries its ``observed_a
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from dataclasses import dataclass
 from datetime import datetime
 
 from catalog_matching.domain.engine import DecisionRecord, MatchDecision
+from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.observation import FileObservation
-
-
-@dataclass(frozen=True)
-class DownloadCandidate:
-    """A file whose latest verdict for ``target_id`` is tier=download, for the download loop."""
-
-    file: FileKey
-    target_id: str
 
 
 class ObservationWriter(ABC):

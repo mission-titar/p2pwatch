@@ -6,9 +6,9 @@ from collections.abc import Iterable
 from datetime import datetime
 from typing import Literal
 
-from p2pwatch.domain.download.states import DownloadState
+from p2pwatch.domain.download.states import DownloadState, FailureReason
+from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey
-from p2pwatch.ports.driven.download_client import DownloadStatus, FailureReason
 
 
 class DownloadWriter(ABC):

@@ -3,7 +3,7 @@ import time
 from datetime import timedelta
 
 from p2pwatch.adapters.driven.monotonic_clock_asyncio import AsyncioMonotonicClock
-from p2pwatch.ports.driven.clock import MonotonicInstant
+from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch_testing.virtual_time import run_virtual
 
 

@@ -8,9 +8,9 @@ import pytest
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_local, utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.download_repository import SqliteDownloadRepository
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
-from p2pwatch.domain.download.states import DownloadState
+from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
+from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.ports.driven.download_client import DownloadStatus, FailureReason, WaitingReason
 
 _A = FileKey(Network.ED2K, "a" * 32)
 _B = FileKey(Network.ED2K, "b" * 32)

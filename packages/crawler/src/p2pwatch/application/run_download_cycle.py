@@ -28,8 +28,10 @@ from catalog_matching.domain.models import TargetSegment
 from p2pwatch.application.edge_state import EdgeState
 from p2pwatch.application.source_alerts import FirstUseful, source_alert
 from p2pwatch.domain.download.policy import DownloadVerdict, decide_download
-from p2pwatch.domain.download.states import DownloadState
+from p2pwatch.domain.download.states import DownloadState, FailureReason
+from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey
+from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.observability.events import (
     DiskSpaceLow,
     DownloadCompleted,
@@ -40,26 +42,17 @@ from p2pwatch.domain.observability.events import (
     TargetTitle,
 )
 from p2pwatch.domain.persisted_wait import remaining_wait
-from p2pwatch.domain.source import SourceKey, SourceUsefulness
+from p2pwatch.domain.source import RecordedReading, SourceKey, SourceUsefulness
 from p2pwatch.ports.driven.catalog import DecisionReader, ObservationReader
 from p2pwatch.ports.driven.client_errors import ClientUnreachableError, DownloadRejectedError
-from p2pwatch.ports.driven.clock import MonotonicClock, MonotonicInstant, WallClock
+from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
 from p2pwatch.ports.driven.disk_space import DiskSpace
-from p2pwatch.ports.driven.download_client import (
-    DownloadClient,
-    DownloadRequest,
-    DownloadStatus,
-    FailureReason,
-)
+from p2pwatch.ports.driven.download_client import DownloadClient, DownloadRequest
 from p2pwatch.ports.driven.downloads import DownloadReader, DownloadWriter
 from p2pwatch.ports.driven.logger import Logger
 from p2pwatch.ports.driven.repository_errors import RepositoryError
 from p2pwatch.ports.driven.source_client import SourceClient
-from p2pwatch.ports.driven.source_points import (
-    RecordedReading,
-    SourcePointReader,
-    SourcePointWriter,
-)
+from p2pwatch.ports.driven.source_points import SourcePointReader, SourcePointWriter
 from p2pwatch.ports.driven.telemetry import Telemetry
 from p2pwatch.ports.driven.wake_hub import WakeHub
 

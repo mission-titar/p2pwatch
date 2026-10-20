@@ -31,6 +31,7 @@ from p2pwatch.adapters.driven.persistence_sqlite import observation_read
 from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError, wrap_sqlite_errors
 from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash, iso_to_micros
+from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.retraction import RETRACTED_TIER
@@ -38,7 +39,6 @@ from p2pwatch.ports.driven.catalog import (
     CatalogScanner,
     DecisionReader,
     DecisionWriter,
-    DownloadCandidate,
     ObservationReader,
     ObservationWriter,
 )

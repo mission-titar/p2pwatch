@@ -6,28 +6,10 @@ gives.
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from dataclasses import dataclass
 from datetime import datetime
 
 from p2pwatch.domain.file_key import FileKey
-from p2pwatch.domain.source import SourceKey, SourceReading, SourceRole
-
-
-@dataclass(frozen=True)
-class RecordedReading:
-    """A reading ``record_readings`` kept, with its role, a carried one included."""
-
-    source: SourceKey | None
-    source_name: str | None
-    role: SourceRole
-
-
-@dataclass(frozen=True)
-class EarlierPoints:
-    """D5's two answers: a useful point exists, and when the latest useful or not-useful one was."""
-
-    has_useful_point: bool
-    latest_known_at: datetime | None
+from p2pwatch.domain.source import EarlierPoints, RecordedReading, SourceKey, SourceReading
 
 
 class SourcePointWriter(ABC):

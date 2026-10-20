@@ -14,7 +14,9 @@ from p2pwatch.adapters.driven.mule_api.errors import (
     ApiRejectedError,
     ApiUnreachableError,
 )
+from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.source import SourceRole
 from p2pwatch.domain.status_reading import ChannelStatus
 from p2pwatch.ports.driven.client_errors import (
@@ -22,8 +24,7 @@ from p2pwatch.ports.driven.client_errors import (
     DownloadRejectedError,
     SearchFailedError,
 )
-from p2pwatch.ports.driven.clock import MonotonicInstant
-from p2pwatch.ports.driven.download_client import DownloadClient, DownloadRequest, DownloadStatus
+from p2pwatch.ports.driven.download_client import DownloadClient, DownloadRequest
 from p2pwatch.ports.driven.source_client import SourceClient
 from p2pwatch_testing.adapters.mule_api.api_fakes import PASSWORD, TOKEN, FakeAmuleApi, error
 

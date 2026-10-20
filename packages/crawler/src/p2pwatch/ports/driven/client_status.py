@@ -3,21 +3,14 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass
 from typing import Protocol
 
-from p2pwatch.domain.status_reading import ClientStatus, StatusReading
-from p2pwatch.ports.driven.clock import MonotonicInstant
+from p2pwatch.domain.monotonic_instant import MonotonicInstant
+from p2pwatch.domain.status_reading import ClientStatus, PublishedReading, StatusReading
 
 
 class StatusClient(Protocol):
     async def status(self) -> ClientStatus: ...
-
-
-@dataclass(frozen=True)
-class PublishedReading:
-    reading: StatusReading
-    published_at: MonotonicInstant
 
 
 class ClientStatusWriter(ABC):
