@@ -181,11 +181,13 @@ depends_on = [
   "p2pwatch.ports.driven.backoff_state_repository",
   "p2pwatch.ports.driven.catalog_copier",
   "p2pwatch.ports.driven.catalog_repository",
+  "p2pwatch.ports.driven.clock",
   "p2pwatch.ports.driven.download_client",
   "p2pwatch.ports.driven.node_id",
   "p2pwatch.ports.driven.node_state_reader",
   "p2pwatch.ports.driven.repository_errors",
   "p2pwatch.ports.driven.source_repository",
+  "p2pwatch.ports.driven.sql_executor",
 ]
 
 [[modules]]
@@ -196,15 +198,6 @@ depends_on = [
   "p2pwatch.ports.driven.catalog_file_reader",
   "p2pwatch.ports.driven.coverage_reader",
   "p2pwatch.ports.driven.source_reader",
-  # Its own adapter, a module apart to break the cycle with the webui: lot 2 folds it back.
-  { path = "p2pwatch.adapters.driven.persistence_sqlite", deprecated = true },
-]
-
-[[modules]]
-path = "p2pwatch.adapters.driven.persistence_sqlite.sql_console"
-layer = "adapters"
-depends_on = [
-  "p2pwatch.ports.driven.clock",
   # Its own adapter, a module apart to break the cycle with the webui: lot 2 folds it back.
   { path = "p2pwatch.adapters.driven.persistence_sqlite", deprecated = true },
 ]
@@ -254,6 +247,7 @@ path = "p2pwatch.adapters.driving.webui"
 layer = "adapters"
 depends_on = [
   "p2pwatch.domain",
+  "p2pwatch.ports.driving.console_query_runner",
   "p2pwatch.ports.driving.crawl_pauser",
   "p2pwatch.ports.driving.crawl_resumer",
   "p2pwatch.ports.driving.crawl_summarizer",
@@ -264,12 +258,8 @@ depends_on = [
   "p2pwatch.ports.driving.source_describer",
   "p2pwatch.ports.driving.source_lister",
   "p2pwatch.ports.driving.source_name_describer",
-  # The webui builds and calls the readers itself: lot 2 puts use cases between them.
-  { path = "p2pwatch.adapters.driven.persistence_sqlite.sql_console", deprecated = true },
   # Its own views, a module apart to break the readers' cycle: lot 2 folds it back.
   { path = "p2pwatch.adapters.driving.webui.views", deprecated = true },
-  # The webui reads the clocks directly: lot 2 gives it driving ports.
-  { path = "p2pwatch.ports.driven.clock", deprecated = true },
 ]
 
 [[modules]]
@@ -305,10 +295,12 @@ depends_on = [
   "p2pwatch.ports.driven.source_client",
   "p2pwatch.ports.driven.source_reader",
   "p2pwatch.ports.driven.source_repository",
+  "p2pwatch.ports.driven.sql_executor",
   "p2pwatch.ports.driven.telemetry",
   "p2pwatch.ports.driven.wake_hub",
   "p2pwatch.ports.driving.catalog_merger",
   "p2pwatch.ports.driving.config_validator",
+  "p2pwatch.ports.driving.console_query_runner",
   "p2pwatch.ports.driving.crawl_pauser",
   "p2pwatch.ports.driving.crawl_resumer",
   "p2pwatch.ports.driving.crawl_summarizer",
@@ -342,6 +334,7 @@ depends_on = [
   "p2pwatch.adapters.driving.process",
   "p2pwatch.adapters.driving.webui",
   "p2pwatch.application",
+  "p2pwatch.domain",
   "p2pwatch.ports.driven.clock",
   "p2pwatch.ports.driving.crawler_runner",
 ]
@@ -470,6 +463,11 @@ layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
+path = "p2pwatch.ports.driven.sql_executor"
+layer = "ports"
+depends_on = ["p2pwatch.domain"]
+
+[[modules]]
 path = "p2pwatch.ports.driven.telemetry"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
@@ -488,6 +486,11 @@ depends_on = []
 path = "p2pwatch.ports.driving.config_validator"
 layer = "ports"
 depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driving.console_query_runner"
+layer = "ports"
+depends_on = ["p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.ports.driving.crawl_pauser"

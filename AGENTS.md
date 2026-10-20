@@ -162,6 +162,7 @@ a function does.
 | `reevaluation` | re-judging every file when the policy changed | `backfill` |
 | `tracked` | a download with a row in `downloads`, whatever its state: `TrackedDownload` | `downloaded`, `active` |
 | `node state` | `NodeState`, what a node holds of its own: its identity, its tracked downloads, its search backoffs | `node info` |
+| `query answer` | `QueryAnswer`, a console query's columns and first rows, each cell as text; `QueryFailure` when it gave none | `result` |
 | `display` | a `<Thing>Display`, the view model a webui template renders, its values already text | `view` |
 | `wake` | `WakeHub` wakes the loops waiting on a subject | `signal`, `nudge` |
 | `run state` | whether the crawler searches or idles, and whether its shutdown was requested: `RunStateWriter` changes it, `RunStateReader` reads it | `control` |

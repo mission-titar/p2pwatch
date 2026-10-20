@@ -197,6 +197,13 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
         host, port = _webui_bound_address(caplog.messages)
         async with httpx.AsyncClient() as http:
             metrics = await http.get(f"http://127.0.0.1:{metrics_port}/metrics")
+            catalog_query, local_query = [  # each table lives in one database only
+                await http.post(f"http://{host}:{port}/console.csv", data=form)
+                for form in (
+                    {"sql": "SELECT native_id FROM files", "db": "catalog"},
+                    {"sql": "SELECT native_id FROM downloads", "db": "local"},
+                )
+            ]
             restart = await http.post(f"http://{host}:{port}/controls/restart")
         await asyncio.wait_for(run, _WAIT_SECONDS)
 
@@ -223,6 +230,8 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
     catalog.close()
     assert (host, port != 8080) == ("127.0.0.1", True)
     assert "p2pwatch_observations_total{" in metrics.text
+    assert (catalog_query.status_code, local_query.status_code) == (200, 200)
+    assert _HASH in catalog_query.text and _HASH in local_query.text
     assert restart.status_code == 303
     assert not any(thread.name == "webui" for thread in threading.enumerate())
 

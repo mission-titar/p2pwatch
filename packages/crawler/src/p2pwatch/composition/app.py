@@ -61,6 +61,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.local_state_repository import (
 )
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driven.persistence_sqlite.source_repository import SqliteSourceRepository
+from p2pwatch.adapters.driven.persistence_sqlite.sql_console import SqliteSqlExecutor
 from p2pwatch.adapters.driven.rng_random import SeededRng
 from p2pwatch.adapters.driven.stdlib_logger import StdlibLogger
 from p2pwatch.adapters.driven.uuid4_node_id_generator import Uuid4NodeIdGenerator
@@ -80,6 +81,7 @@ from p2pwatch.application.pause_crawl import PauseCrawl
 from p2pwatch.application.reevaluate_catalog import reevaluate_catalog
 from p2pwatch.application.request_shutdown import RequestShutdown
 from p2pwatch.application.resume_crawl import ResumeCrawl
+from p2pwatch.application.run_console_query import RunConsoleQuery
 from p2pwatch.application.run_crawler import RunCrawler
 from p2pwatch.application.run_download_cycle import (
     DownloadLoopDeps,
@@ -94,6 +96,7 @@ from p2pwatch.application.search_worker import (
 )
 from p2pwatch.application.status_loop import StatusLoopDeps, status_loop
 from p2pwatch.application.summarize_crawl import SummarizeCrawl
+from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
 from p2pwatch.ports.driving.crawler_runner import CrawlerRunner
 
@@ -162,8 +165,6 @@ class CrawlerApp(CrawlerRunner):
         catalog_file_reader = SqliteCatalogFileReader(catalog_reader_provider)
         source_reader = SqliteSourceReader(catalog_reader_provider)
         app = build_webui_app(
-            catalog_db_path=Path(crawler_config.catalog_db_path),
-            local_db_path=Path(crawler_config.local_db_path),
             target_segments=config.targets,
             templates_dir=webui_pkg_dir / "templates",
             static_dir=webui_pkg_dir / "static",
@@ -202,8 +203,17 @@ class CrawlerApp(CrawlerRunner):
                 wall_clock=wall_clock,
                 source_period_gap=crawler_config.webui.source_period_gap,
             ),
+            console_query_runner=RunConsoleQuery(
+                {
+                    ConsoleDatabase.CATALOG: SqliteSqlExecutor(
+                        Path(crawler_config.catalog_db_path), monotonic_clock
+                    ),
+                    ConsoleDatabase.LOCAL: SqliteSqlExecutor(
+                        Path(crawler_config.local_db_path), monotonic_clock
+                    ),
+                }
+            ),
             amule_url=crawler_config.webui.amule_url,
-            monotonic_clock=monotonic_clock,
         )
         server_thread = UvicornServerThread(app, self._webui_address)
         stack.push_async_callback(server_thread.stop)

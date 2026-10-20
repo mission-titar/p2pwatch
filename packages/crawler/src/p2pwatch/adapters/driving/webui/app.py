@@ -26,12 +26,6 @@ from starlette.templating import Jinja2Templates
 
 from catalog_matching.domain.ed2k_link import build_ed2k_link
 from catalog_matching.domain.models import TargetSegment
-from p2pwatch.adapters.driven.persistence_sqlite.sql_console import (
-    ROW_CAP,
-    TIMEOUT_SECONDS,
-    ConsoleOutcome,
-    run_query,
-)
 from p2pwatch.adapters.driving.webui.format import (
     average_rate,
     human_size,
@@ -74,6 +68,7 @@ from p2pwatch.adapters.driving.webui.views import (
     TrackedDownloadDisplay,
 )
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
+from p2pwatch.domain.console_query import ConsoleDatabase, QueryAnswer, QueryFailure
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.interval import (
     MAX_INTERVAL_SPAN,
@@ -86,7 +81,7 @@ from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.sharing_period import SharingPeriod
 from p2pwatch.domain.source import SourceKey
 from p2pwatch.domain.source_history import SourceNaming
-from p2pwatch.ports.driven.clock import MonotonicClock
+from p2pwatch.ports.driving.console_query_runner import ConsoleQueryRunner
 from p2pwatch.ports.driving.crawl_pauser import CrawlPauser
 from p2pwatch.ports.driving.crawl_resumer import CrawlResumer
 from p2pwatch.ports.driving.crawl_summarizer import ClientSummary, CrawlSummarizer
@@ -622,12 +617,11 @@ def _backoff_entries(node_state: NodeState) -> tuple[BackoffEntry, ...]:
 # SQL console (spec §11). The two selectable databases, in display order: value (allowlist key)
 # + human label. Neither holds a peer's address (a source is a pseudonymous id at most), so
 # read-only exposure of either is fine.
-_CONSOLE_DBS: tuple[tuple[str, str], ...] = (
-    ("catalog", "catalog.db"),
-    ("local", "local.db"),
+_CONSOLE_DBS: tuple[tuple[ConsoleDatabase, str], ...] = (
+    (ConsoleDatabase.CATALOG, "catalog.db"),
+    (ConsoleDatabase.LOCAL, "local.db"),
 )
 _CONSOLE_UNKNOWN_DB = "Unknown database. Choose catalog.db or local.db."
-_CONSOLE_TRUNCATED = f"Results truncated to the first {ROW_CAP:,} rows."
 
 
 def _console_db_options(selected: str) -> tuple[DbOption, ...]:
@@ -654,23 +648,28 @@ async def _read_console_form(request: Request) -> tuple[str, str]:
     return parsed.get("sql", [""])[0], parsed.get("db", [""])[0]
 
 
-def _to_console_result(outcome: ConsoleOutcome) -> ConsoleResult:
-    """Build the console result view-model from a successful ``run_query`` outcome. ``truncated``
-    becomes a 0-or-1 message tuple for the logic-free banner."""
-    truncated = (_CONSOLE_TRUNCATED,) if outcome.truncated else ()
+def _console_database(db_key: str) -> ConsoleDatabase | None:
+    """The database the form names, ``None`` when it names none."""
+    return ConsoleDatabase(db_key) if db_key in ConsoleDatabase else None
+
+
+def _to_console_result(query_answer: QueryAnswer, row_cap: int) -> ConsoleResult:
+    """Build the console result view-model from a query's answer. ``truncated`` becomes a 0-or-1
+    message tuple for the logic-free banner."""
+    truncated = (
+        (f"Results truncated to the first {row_cap:,} rows.",) if query_answer.truncated else ()
+    )
     return ConsoleResult(
-        columns=outcome.columns,
-        rows=tuple(ConsoleRow(cells=cells) for cells in outcome.rows),
-        row_count=outcome.row_count,
-        elapsed_ms=outcome.elapsed_ms,
+        columns=query_answer.columns,
+        rows=tuple(ConsoleRow(cells=cells) for cells in query_answer.rows),
+        row_count=len(query_answer.rows),
+        elapsed_ms=round(query_answer.elapsed / timedelta(milliseconds=1)),
         truncated=truncated,
     )
 
 
 def build_app(
     *,
-    catalog_db_path: Path,
-    local_db_path: Path,
     target_segments: tuple[TargetSegment, ...],
     templates_dir: Path,
     static_dir: Path,
@@ -684,8 +683,8 @@ def build_app(
     source_lister: SourceLister,
     source_describer: SourceDescriber,
     source_name_describer: SourceNameDescriber,
+    console_query_runner: ConsoleQueryRunner,
     amule_url: str,
-    monotonic_clock: MonotonicClock,
 ) -> Starlette:
     """Build and return the wired Starlette application.
 
@@ -694,7 +693,8 @@ def build_app(
     Each control POST calls its use case, which returns at once; the webui itself holds no write
     connection (spec §4/§10). ``crawl_summarizer`` serves the dashboard, ``node_describer`` /node,
     ``file_lister`` /files and a target's page, ``file_describer`` a file's page, ``source_lister``
-    /sources, ``source_describer`` a source's page, ``source_name_describer`` a name's page.
+    /sources, ``source_describer`` a source's page, ``source_name_describer`` a name's page,
+    ``console_query_runner`` the console.
 
     ``amule_url`` is the base the nav's aMule entry points at (design §9); the caller reads it
     from ``webui.amule_url``."""
@@ -1085,14 +1085,10 @@ def build_app(
 
     # ------------------------------------------------------------------
     # SQL console (spec §11): a read-only power-user console over either DB.
-    # ``run_query`` opens its OWN fresh ``mode=ro`` + ``query_only`` connection with a per-query
-    # progress-handler timeout, so a runaway query cannot write and cannot disturb the reused
-    # page-serving readers. It runs OFF the event loop via ``run_in_threadpool`` so a slow query
-    # (up to the timeout) blocks neither the crawler thread nor the webui loop, only its pool slot.
+    # A query runs OFF the event loop via ``run_in_threadpool`` so a slow query (up to its time
+    # limit) blocks neither the crawler thread nor the webui loop, only its pool slot.
     # NO CSRF token: consistent with the no-auth, network-trust-boundary posture (spec §12).
     # ------------------------------------------------------------------
-
-    _console_db_paths = {"catalog": catalog_db_path, "local": local_db_path}
 
     async def handle_console(request: Request) -> Response:
         return templates.TemplateResponse(
@@ -1109,7 +1105,8 @@ def build_app(
     async def handle_console_run(request: Request) -> Response:
         sql, db_key = await _read_console_form(request)
         db_options = _console_db_options(db_key)
-        if db_key not in _console_db_paths:
+        database = _console_database(db_key)
+        if database is None:
             return templates.TemplateResponse(
                 request,
                 "console.html",
@@ -1120,15 +1117,9 @@ def build_app(
                     "errors": (_CONSOLE_UNKNOWN_DB,),
                 },
             )
-        outcome = await run_in_threadpool(
-            run_query,
-            db_path=_console_db_paths[db_key],
-            sql=sql,
-            row_cap=ROW_CAP,
-            timeout_seconds=TIMEOUT_SECONDS,
-            monotonic_clock=monotonic_clock,
-        )
-        if outcome.error is not None:
+        outcome = await run_in_threadpool(console_query_runner.run_console_query, database, sql)
+        query_answer = outcome.query_answer
+        if isinstance(query_answer, QueryFailure):
             return templates.TemplateResponse(
                 request,
                 "console.html",
@@ -1136,7 +1127,7 @@ def build_app(
                     "sql": sql,
                     "db_options": db_options,
                     "results": (),
-                    "errors": (outcome.error,),
+                    "errors": (query_answer.message,),
                 },
             )
         return templates.TemplateResponse(
@@ -1145,29 +1136,24 @@ def build_app(
             {
                 "sql": sql,
                 "db_options": db_options,
-                "results": (_to_console_result(outcome),),
+                "results": (_to_console_result(query_answer, outcome.row_cap),),
                 "errors": (),
             },
         )
 
     async def handle_console_csv(request: Request) -> Response:
         sql, db_key = await _read_console_form(request)
-        if db_key not in _console_db_paths:
+        database = _console_database(db_key)
+        if database is None:
             return Response(_CONSOLE_UNKNOWN_DB, status_code=400, media_type="text/plain")
-        outcome = await run_in_threadpool(
-            run_query,
-            db_path=_console_db_paths[db_key],
-            sql=sql,
-            row_cap=ROW_CAP,
-            timeout_seconds=TIMEOUT_SECONDS,
-            monotonic_clock=monotonic_clock,
-        )
-        if outcome.error is not None:
-            return Response(outcome.error, status_code=400, media_type="text/plain")
+        outcome = await run_in_threadpool(console_query_runner.run_console_query, database, sql)
+        query_answer = outcome.query_answer
+        if isinstance(query_answer, QueryFailure):
+            return Response(query_answer.message, status_code=400, media_type="text/plain")
         buffer = io.StringIO()
         writer = csv.writer(buffer)
-        writer.writerow(outcome.columns)
-        writer.writerows(outcome.rows)
+        writer.writerow(query_answer.columns)
+        writer.writerows(query_answer.rows)
         return Response(
             buffer.getvalue(),
             media_type="text/csv",

@@ -29,6 +29,7 @@ from p2pwatch.adapters.driving.webui.app import (
     build_app,
 )
 from p2pwatch.adapters.driving.webui.views import DecisionCell, HiddenInput
+from p2pwatch.application.run_console_query import RunConsoleQuery
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.coverage import TargetCoverage
 from p2pwatch.domain.download.states import DownloadState
@@ -85,7 +86,6 @@ _AMULE_URL = "http://localhost:4711"
 # Wednesday 2026-10-14 20:00 UTC: the period tables read the 7 days before it.
 _FAKE_TIME = FakeTime(datetime(2026, 10, 14, 20, 0, tzinfo=UTC))
 _WALL_CLOCK = _FAKE_TIME.wall
-_MONOTONIC_CLOCK = _FAKE_TIME.monotonic
 
 
 # The read-path fixtures never call the controls, and read the crawl as running.
@@ -119,8 +119,8 @@ _NO_FILE_DESCRIBER = FakeFileDescriber(None)
 _NO_SOURCE_LISTER = FakeSourceLister(SourceListing((), has_next_page=False, source_count=0))
 _NO_SOURCE_DESCRIBER = FakeSourceDescriber(None)
 _NO_SOURCE_NAME_DESCRIBER = FakeSourceNameDescriber(None)
-# The pages on fakes read their use case only: opening this path would fail.
-_NO_DB = Path("/nonexistent/p2pwatch.db")
+# These tests run no console query: it would find no database.
+_NO_CONSOLE_QUERY_RUNNER = RunConsoleQuery({})
 _FILE = FileKey(Network.ED2K, TEST_HASH)
 _OBSERVATION = FileObservation(
     ReportedFile(_FILE, "keroro_s2e62a_vf.avi", 100_000_000, 5, "keroro"),
@@ -157,8 +157,6 @@ def _app_on_fakes(
 
     webui_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent
     return build_app(
-        catalog_db_path=_NO_DB,
-        local_db_path=_NO_DB,
         target_segments=_targets() if target_segments is None else target_segments,
         templates_dir=webui_dir / "templates",
         static_dir=webui_dir / "static",
@@ -173,7 +171,7 @@ def _app_on_fakes(
         source_describer=source_describer,
         source_name_describer=source_name_describer,
         amule_url=amule_url,
-        monotonic_clock=_MONOTONIC_CLOCK,
+        console_query_runner=_NO_CONSOLE_QUERY_RUNNER,
     )
 
 
@@ -276,8 +274,6 @@ def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
     static_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "static"
 
     app = build_app(
-        catalog_db_path=catalog_db,
-        local_db_path=local_db,
         target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
@@ -292,7 +288,7 @@ def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         source_describer=FakeSourceDescriber(_SOURCE_DESCRIPTION),
         source_name_describer=FakeSourceNameDescriber(_SOURCE_NAME_DESCRIPTION),
         amule_url=_AMULE_URL,
-        monotonic_clock=_MONOTONIC_CLOCK,
+        console_query_runner=_NO_CONSOLE_QUERY_RUNNER,
     )
     return app, TEST_HASH
 
@@ -1027,7 +1023,7 @@ async def test_node_page_shows_a_downloads_lifecycle() -> None:
 )
 @pytest.mark.asyncio
 async def test_a_template_reading_what_its_context_lacks_raises(
-    template: str, catalog_db: Path, local_db: Path, tmp_path: Path
+    template: str, tmp_path: Path
 ) -> None:
     """A renamed context key or field fails the render instead of printing an empty string."""
     import p2pwatch.adapters.driving.webui
@@ -1036,8 +1032,6 @@ async def test_a_template_reading_what_its_context_lacks_raises(
     templates_dir.mkdir()
     (templates_dir / "404.html").write_text(template, encoding="utf-8")
     app = build_app(
-        catalog_db_path=catalog_db,
-        local_db_path=local_db,
         target_segments=_targets(),
         templates_dir=templates_dir,
         static_dir=Path(p2pwatch.adapters.driving.webui.__file__).parent / "static",
@@ -1052,7 +1046,7 @@ async def test_a_template_reading_what_its_context_lacks_raises(
         source_describer=_NO_SOURCE_DESCRIBER,
         source_name_describer=_NO_SOURCE_NAME_DESCRIBER,
         amule_url=_AMULE_URL,
-        monotonic_clock=_MONOTONIC_CLOCK,
+        console_query_runner=_NO_CONSOLE_QUERY_RUNNER,
     )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         with pytest.raises(UndefinedError):

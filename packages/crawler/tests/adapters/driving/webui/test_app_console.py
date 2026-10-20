@@ -10,7 +10,10 @@ from starlette.applications import Starlette
 
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_targets
+from p2pwatch.adapters.driven.persistence_sqlite.sql_console import SqliteSqlExecutor
 from p2pwatch.adapters.driving.webui.app import build_app
+from p2pwatch.application.run_console_query import RunConsoleQuery
+from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.node_state import NodeState
 from p2pwatch.ports.driven.clock import MonotonicClock
 from p2pwatch.ports.driving.crawl_summarizer import CrawlSummary
@@ -70,8 +73,6 @@ def _build(catalog_db: Path, local_db: Path, monotonic_clock: MonotonicClock) ->
     controls = FakeCrawlControls()  # the console routes never call them
     node_state = NodeState(node_id=None, created_at=None, downloads=(), backoff_state_by_key={})
     return build_app(
-        catalog_db_path=catalog_db,
-        local_db_path=local_db,
         target_segments=targets,
         templates_dir=templates_dir,
         static_dir=static_dir,
@@ -85,8 +86,13 @@ def _build(catalog_db: Path, local_db: Path, monotonic_clock: MonotonicClock) ->
         source_lister=FakeSourceLister(SourceListing((), has_next_page=False, source_count=0)),
         source_describer=FakeSourceDescriber(None),
         source_name_describer=FakeSourceNameDescriber(None),
+        console_query_runner=RunConsoleQuery(
+            {
+                ConsoleDatabase.CATALOG: SqliteSqlExecutor(catalog_db, monotonic_clock),
+                ConsoleDatabase.LOCAL: SqliteSqlExecutor(local_db, monotonic_clock),
+            }
+        ),
         amule_url="http://localhost:4711",
-        monotonic_clock=monotonic_clock,
     )
 
 
