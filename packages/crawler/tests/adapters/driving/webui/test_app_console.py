@@ -9,17 +9,9 @@ import yaml
 from httpx import ASGITransport, AsyncClient
 from starlette.applications import Starlette
 
-from catalog_matching.domain.config import MatcherConfig
 from catalog_matching.domain.models import TargetSegment
-from catalog_matching.domain.validation import parse_matcher_config, parse_targets
-from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
-    SqliteCatalogFileReader,
-    SqliteSourceReader,
-)
-from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
+from catalog_matching.domain.validation import parse_targets
 from p2pwatch.adapters.driving.webui.app import build_app
-from p2pwatch.application.describe_file import DescribeFile
-from p2pwatch.application.matching_read import MatchingExplainer
 from p2pwatch.domain.node_state import NodeState
 from p2pwatch.ports.driven.clock import MonotonicClock
 from p2pwatch.ports.driving.crawl_summarizer import CrawlSummary
@@ -28,6 +20,7 @@ from p2pwatch.ports.driving.node_describer import NodeDescription
 from p2pwatch_testing.application.fakes import (
     FakeCrawlControls,
     FakeCrawlSummarizer,
+    FakeFileDescriber,
     FakeFileLister,
     FakeNodeDescriber,
     FakeTime,
@@ -65,26 +58,7 @@ episodes:
     )
 
 
-def _matcher() -> MatcherConfig:
-    return parse_matcher_config(
-        yaml.safe_load(
-            """\
-tokens:
-  keroro:
-    keyword: keroro
-rules:
-  - name: catalog
-    tier: catalog
-    scope: unattributed
-    any:
-      - keroro
-"""
-        )
-    )
-
-
 def _build(catalog_db: Path, local_db: Path, monotonic_clock: MonotonicClock) -> Starlette:
-    matcher_config = _matcher()
     targets = _targets()
     import p2pwatch.adapters.driving.webui
 
@@ -105,13 +79,7 @@ def _build(catalog_db: Path, local_db: Path, monotonic_clock: MonotonicClock) ->
         crawl_summarizer=FakeCrawlSummarizer(CrawlSummary((), False, node_state, ())),
         node_describer=FakeNodeDescriber(NodeDescription(node_state)),
         file_lister=FakeFileLister(FileListing((), False, 0, 0, {})),
-        file_describer=DescribeFile(
-            catalog_file_reader=SqliteCatalogFileReader(ReaderProvider(catalog_db)),
-            source_reader=SqliteSourceReader(ReaderProvider(catalog_db)),
-            explainer=MatchingExplainer(matcher_config=matcher_config, targets=targets),
-            wall_clock=wall_clock,
-            source_period_gap=gap,
-        ),
+        file_describer=FakeFileDescriber(None),
         amule_url="http://localhost:4711",
         wall_clock=wall_clock,
         monotonic_clock=monotonic_clock,

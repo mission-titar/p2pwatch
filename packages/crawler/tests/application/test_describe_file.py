@@ -116,10 +116,11 @@ def test_a_file_the_catalog_does_not_hold_has_no_description() -> None:
 
 
 def test_the_history_is_read_over_the_last_7_days_ending_now_to_the_second() -> None:
-    reader = _FakeCatalogFileReader(_HISTORY)
-    description = _describe(reader)
+    reader, source_reader = _FakeCatalogFileReader(_HISTORY), _FakeSourceReader()
+    description = _describe(reader, source_reader)
     week = Interval(_SECOND_NOW - timedelta(days=7), _SECOND_NOW)
     assert reader.calls == [(b"\x01" * 16, {"since": week.since, "until": week.until})]
+    assert source_reader.calls == [(_FILE, PeriodWindow(week.since, week.until, _GAP))]
     assert description is not None
     assert (description.interval, description.now) == (week, _SECOND_NOW)
 
