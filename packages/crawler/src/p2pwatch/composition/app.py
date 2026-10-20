@@ -173,9 +173,7 @@ class CrawlerApp(CrawlerRunner):
             shutdown_requester=shutdown_requester,
             crawl_summarizer=SummarizeCrawl(
                 target_ids=tuple(target.target_id for target in config.targets),
-                coverage_reader=SqliteCoverageReader(
-                    ReaderProvider(crawler_config.catalog_db_path)
-                ),
+                coverage_reader=SqliteCoverageReader(catalog_reader_provider),
                 node_state_reader=node_state_reader,
                 run_state_reader=run_state,
                 client_status_reader=status_board,
