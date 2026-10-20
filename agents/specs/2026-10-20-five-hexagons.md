@@ -220,7 +220,7 @@ follow C3.
 
 | Driving port | Use case | Returns |
 |---|---|---|
-| `AmuleBumper` | `BumpAmule` | `AmuleBump`: the new pin and the body, or nothing to do |
+| `AmuleBumper` | `BumpAmule` | `AmuleBump(new_pin, body)`, `PinIsLatest(version)` or `PinAheadOfLatest(pinned_version, latest_version)`: the core tells the two cases with nothing to do apart, the command line only prints each (Corrected: was "or nothing to do") |
 
 | Driven port | Adapter | What it does |
 |---|---|---|
@@ -266,8 +266,8 @@ Each changes in the block that makes it false.
 
 Estimates by a Sonnet agent on `main` at `38bfe15`, before any code, about 20 % either way
 (`.reviews/lot3-estimate.md`); each teammate measures its block and splits it at a bound. No block is purely
-mechanical, so none takes the size exemption. Headroom under the cap of 19: 3 splits for 3a (Corrected: 5 before
-blocks 14 and 16), 5 for 3b; five rows sit
+mechanical, so none takes the size exemption. Headroom under the cap of 19: 2 splits for 3a (Corrected: 5 before
+blocks 14, 16 and 21), 5 for 3b; five rows sit
 at 450 to 480 lines (3a 20, 40, 44, 52; 3b 52), and 3a 40's fallback is to hand its fakes to 42.
 
 Every block leaves its new surface called by production code, since `dead-code-check` reports a class only tests
@@ -280,9 +280,10 @@ call: the old entry function delegates to what the block adds until a later bloc
 | 10 | `test/crawler-constants-as-parameters` | this spec; `_PROGRESS_EVERY` a parameter; the migration runner and the SQL functions' memo apart (Corrected: were `_MIGRATIONS`, `_configure`, `_load_scripts`, `content_hash`, `fold_raw_meta` as parameters); the migration tests and `older_catalog.py` off `monkeypatch` | 300, 12 |
 | 11 | `test/crawler-connections-closed` | D1b: `ResourceWarning` an error; the readers' tests open and seed with closing; `close_test_connections` gone | 350, 8 |
 | 12 | `test/crawler-process-state-as-values` | `main(argv, env, cwd)`; the root logger passed; `start_http_server` a parameter of `start_metrics_server`; the command line's default paths against the given `cwd`; `FilesystemCatalogFinder` (C3); the finder, the command line and the compose smoke off `monkeypatch` | 250, 9 |
-| 14 | `refactor/adapter-values-from-composition` | the six parameter defaults of the crawler's adapters gone, the composition passing them (Corrected: added) | 110, 13 |
+| 14 | `refactor/adapter-values-from-composition` | the six parameter defaults of the crawler's adapters gone, the composition passing them; `AmuleApiClient` takes a `transport_factory`, one transport per session as before, so httpx no longer reads `HTTP_PROXY` for amuleapi (Corrected: added) | 110, 13 |
 | 16 | `refactor/config-defaults-in-domain` | the defaults of `crawler.yml`'s absent keys into the domain; C5 in `AGENTS.md` (Corrected: added) | 185, 6 |
-| 20 | `refactor/bump-amule` | `BumpAmule` behind `AmuleBumper`; the three writers and their adapters; the default paths against the given `cwd` and temporary directory; `wrap`'s width from the composition (Corrected: added); `test_bump` rewritten; `docs/contributing/amule-bump.md` | 450, 16 |
+| 20 | `refactor/bump-amule` | the three writers and their adapters, `bump.main` writing through them, their edges `deprecated` until 21 (Corrected: split from 21) | 250, 15 |
+| 21 | `feat/bump-amule-use-case` | `BumpAmule` behind `AmuleBumper`; `bump.py` and `test_bump.py` gone; the default paths against the given `cwd` and temporary directory; `wrap`'s width from the composition; `docs/contributing/amule-bump.md` if it changes (Corrected: split from 20) | 250, 14 |
 | 22 | `refactor/repo-reader-domain-types` | `RepoReader`'s `read_` methods on domain types; GitHub's API URL as a composition value; the loopback test | 300, 12 |
 | 30 | `refactor/amule-settings-in-domain` | the environment's validation into the domain, its error, and the values of unset variables (C5, Corrected: added); `env` and the paths as values from `__main__` | 300, 10 |
 | 40 | `feat/boot-container` | `BootContainer` behind `ContainerBooter`; `AmuleConfReader`, `AmuleConfWriter`, `PosixAmuleConf`; `boot.main` delegating to `BootContainer` | 480, 14 |
