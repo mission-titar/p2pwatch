@@ -110,8 +110,9 @@ def test_is_archive_rejects_comic_book_formats(filename: str) -> None:
 
 
 # --- single-catalog-rule invariant (cross-package: relied on by p2pwatch's webui) -------
-# p2pwatch.adapters.driving.webui.views.FileRowDisplay documents that ANY decision with
-# tier=="catalog" is displayed as "unidentified" (DecisionCell.target) / "·" (DecisionCell.title),
+# p2pwatch.adapters.driving.webui.displays.FileRowDisplay documents that ANY decision with
+# tier=="catalog" is displayed as "unidentified" (DecisionCellDisplay.target) / "·"
+# (DecisionCellDisplay.title),
 # and it relies on the prod policy having exactly ONE catalog-tier rule, the target-agnostic
 # catch-all (keroro_large). If a second catalog-tier rule were ever added, the webui would silently
 # mislabel a real, identified episode as "unidentified" instead of showing its title. This

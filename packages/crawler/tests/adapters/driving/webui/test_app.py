@@ -27,7 +27,7 @@ from p2pwatch.adapters.driving.webui.app import (
     _to_display_rows,
     build_app,
 )
-from p2pwatch.adapters.driving.webui.views import DecisionCell, HiddenInput
+from p2pwatch.adapters.driving.webui.displays import DecisionCellDisplay, HiddenInputDisplay
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.console_query import QueryFailure
 from p2pwatch.domain.coverage import TargetCoverage
@@ -1212,8 +1212,8 @@ def test_to_display_rows_two_segments_aggregate_cells_shared_tier() -> None:
     entry = _catalog_entry(decisions=(_decision("062A", "download"), _decision("062B", "download")))
     [display] = _to_display_rows([entry], _SEGMENTS_AB)
     assert display.decisions_display == (
-        DecisionCell(target="062A / S02E11A", title="La Grenouille Cosmique"),
-        DecisionCell(target="062B / S02E11B", title="Duel Contre Giroro"),
+        DecisionCellDisplay(target="062A / S02E11A", title="La Grenouille Cosmique"),
+        DecisionCellDisplay(target="062B / S02E11B", title="Duel Contre Giroro"),
     )
     assert display.tier_display == "download"
 
@@ -1677,8 +1677,8 @@ def test_search_bar_prefill_and_hidden_excludes_q() -> None:
     bar = _search_bar(search_text="keroro", kept_params={"tier": "notify", "sort": "size"})
     assert bar.query == "keroro"
     assert bar.hidden == (
-        HiddenInput(name="tier", value="notify"),
-        HiddenInput(name="sort", value="size"),
+        HiddenInputDisplay(name="tier", value="notify"),
+        HiddenInputDisplay(name="sort", value="size"),
     )
 
 
