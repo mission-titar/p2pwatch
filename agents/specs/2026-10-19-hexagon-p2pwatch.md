@@ -379,7 +379,9 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
 | 163 | `refactor/source-name-history` | `SourceNameHistory`; `read_source_name_history`; `CatalogReader` and the views it returned deleted (Corrected 2026-10-20: split from 164, measured at 517 lines and 20 files; it moves behaviour, so no exemption) | 245, 14 |
 | 164 | `feat/describe-source-name` | `DescribeSourceName`, `/sources/name` on it; the webui's deprecated edges to the readers | 280, 9 |
 | 165 | `test/source-pages-routes-on-fakes` | the two source pages' route tests on fakes of their describers | 350, 5 |
-| 170 | `feat/console-query` | `SqlExecutor`, `RunConsoleQuery`; `displays.py`; the last webui exceptions in `tach.toml` | 400, 12 |
+| 170 | `feat/console-query` | `SqlExecutor`, `RunConsoleQuery` behind `ConsoleQueryRunner`; the console's routes on it (Corrected 2026-10-20: block 170 split in 170, 173 and 175, counted at about 870 lines and 25 files before any code; it moves behaviour, so no exemption) | 470, 16 |
+| 173 | `test/console-routes-on-fakes` | the console's route tests on a fake `ConsoleQueryRunner`; the last fixture databases leave the route tests | 350, 5 |
+| 175 | `refactor/webui-displays` | `views.py` becomes `displays.py`, every view model a `<Thing>Display`; the last webui exceptions in `tach.toml`; Acceptance 7 to 9 | 150, 9 |
 | 180 | `refactor/role-ports` | the five catalog ports, `CatalogRepository` and `DownloadCatalogReader` deleted; the download, source point, backoff and policy fingerprint ports; the re-exports of the types blocks 110 and 115 moved to the domain (`BackoffKey`, `BackoffState`, `StatusReading`, `ClientStatus`, `ChannelStatus`) go, their importers reading the domain (Corrected 2026-10-19: added) | 900, 34 |
 | 190 | `refactor/ports-as-abcs` | the five capability renames; the remaining `Protocol`s to ABCs; `channels`; the Gotchas; the ast-grep rule and its test | 750, 72 |
 | 200 | `docs/hexagon-p2pwatch-wrap` | closing block: backlog, handoff | |
@@ -419,22 +421,22 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
    `best_observation`, `close`, `connect`, `download_candidates`, `latest_observation`, `now`). `now` stays twice by
    design: `WallClock.now` and `MonotonicClock.now` are two operations (D5). (Corrected 2026-10-19: was an `awk`
    on the text of the classes; the ast-grep rule reads the syntax tree, and prints the same list on `main`.)
-7. **No exception left for lot 2** (block 170): `uv run tach check 2>&1 | grep -c '^\[WARN\] packages/crawler/'`
+7. **No exception left for lot 2** (block 175; Corrected 2026-10-20: was 170): `uv run tach check 2>&1 | grep -c '^\[WARN\] packages/crawler/'`
    prints 0 (on `main`: 66), and `tach.toml` names lot 2 nowhere.
-8. **The route tests use fakes** (block 170):
+8. **The route tests use fakes** (block 175; Corrected 2026-10-20: was 170):
    `grep -lE "sqlite3|catalog_db|local_db|catalog_rows|insert_file|close_test_connections" tests/adapters/driving/webui/test_app*.py`
    prints nothing (on `main`: both files).
-9. **The pages render as before** (block 170): a throwaway script renders, from the same fixture databases, a
+9. **The pages render as before** (block 175; Corrected 2026-10-20: was 170): a throwaway script renders, from the same fixture databases, a
    fixed wall clock, a fixed status reading and the crawler running, on `main` and at the top of the stack:
    every read page at its default URL, `/files` sorted by one column, filtered on one tier and on page 2,
    `/targets/{id}`, one file and one source on a preset interval, `/sources/name?...`, and one console query;
-   `diff` of the two outputs prints nothing. The script and its output go in block 170's report.
+   `diff` of the two outputs prints nothing. The script and its output go in block 175's report.
 10. **Nothing out of scope changes**: `git diff -M100% --name-status origin/main...<top branch> -- '*/migrations/*' deploy/ | grep -v '^R100'`
     prints nothing; the `Route(` lines of the webui's module are the same set; the diff of `adapters/driven/config/`
     and of the Prometheus adapter shows no key or metric name changed; the notifier's tests assert the Discord
     username `p2pwatch - <node_id>` and the prefixed title.
 11. **The gate is green** at every block, and CI's smoke and integration suites pass on amd64 and arm64 at blocks
-    35, 80 and 170 (Corrected 2026-10-19: 35 for 30, the split's top).
+    35, 80 and 175 (Corrected 2026-10-19: 35 for 30, the split's top; 2026-10-20: 175 for 170).
 
 ## Risks
 
