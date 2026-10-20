@@ -16,7 +16,7 @@ from starlette.applications import Starlette
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from catalog_matching.domain.config import MatcherConfig
-from catalog_matching.domain.engine import DecisionRecord
+from catalog_matching.domain.engine import DecisionRecord, Explanation
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
@@ -325,153 +325,11 @@ def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
 
 
 @pytest.fixture
-def app_no_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
-    """File without a match decision (decision=None branch)."""
-    with sqlite3.connect(catalog_db) as conn:
-        insert_file(conn, TEST_HASH, 100_000_000)
-        insert_observation(
-            conn,
-            TEST_HASH,
-            "keroro_s2e62a_vf.avi",
-            size_bytes=100_000_000,
-            source_count=5,
-        )
-        # No decision
-
-    matcher_config = _matcher()
-    targets = _targets()
-
-    import p2pwatch.adapters.driving.webui
-
-    templates_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "templates"
-    static_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "static"
-
-    app = build_app(
-        catalog_db_path=catalog_db,
-        local_db_path=local_db,
-        target_segments=targets,
-        templates_dir=templates_dir,
-        static_dir=static_dir,
-        crawl_pauser=_NO_CONTROLS,
-        crawl_resumer=_NO_CONTROLS,
-        shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_SUMMARIZER,
-        node_describer=_DESCRIBER,
-        file_lister=_NO_FILE_LISTER,
-        file_describer=_file_describer(catalog_db, matcher_config, targets),
-        amule_url=_AMULE_URL,
-        wall_clock=_WALL_CLOCK,
-        monotonic_clock=_MONOTONIC_CLOCK,
-        source_period_gap=_GAP,
-    )
-    return app, TEST_HASH
-
-
-@pytest.fixture
-def app_retracted_decision(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
-    """File whose LATEST decision for target 062A is a per-target retraction sentinel
-    (``target_id="062A", rule_name="", tier="retracted"``): must be treated exactly like
-    ``app_no_decision`` (unmatched), never like a real decision."""
-    with sqlite3.connect(catalog_db) as conn:
-        insert_file(conn, TEST_HASH, 100_000_000)
-        insert_observation(
-            conn,
-            TEST_HASH,
-            "keroro_s2e62a_vf.avi",
-            size_bytes=100_000_000,
-            source_count=5,
-        )
-        # First a real decision (was matched)...
-        insert_decision(conn, TEST_HASH, "062A", "download", rule_name="high_confidence")
-        # ...then the per-target retraction sentinel, now the LATEST row for 062A.
-        insert_decision(
-            conn,
-            TEST_HASH,
-            "062A",
-            "retracted",
-            rule_name="",
-            decided_at="2026-06-23T10:00:00.000000+00:00",
-        )
-
-    matcher_config = _matcher()
-    targets = _targets()
-
-    import p2pwatch.adapters.driving.webui
-
-    templates_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "templates"
-    static_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "static"
-
-    app = build_app(
-        catalog_db_path=catalog_db,
-        local_db_path=local_db,
-        target_segments=targets,
-        templates_dir=templates_dir,
-        static_dir=static_dir,
-        crawl_pauser=_NO_CONTROLS,
-        crawl_resumer=_NO_CONTROLS,
-        shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_SUMMARIZER,
-        node_describer=_DESCRIBER,
-        file_lister=_NO_FILE_LISTER,
-        file_describer=_file_describer(catalog_db, matcher_config, targets),
-        amule_url=_AMULE_URL,
-        wall_clock=_WALL_CLOCK,
-        monotonic_clock=_MONOTONIC_CLOCK,
-        source_period_gap=_GAP,
-    )
-    return app, TEST_HASH
-
-
-@pytest.fixture
 def app_no_observations(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
     """File without observations (last_obs=None branch → link='')."""
     with sqlite3.connect(catalog_db) as conn:
         insert_file(conn, TEST_HASH, 100_000_000)
         # No observations
-
-    matcher_config = _matcher()
-    targets = _targets()
-
-    import p2pwatch.adapters.driving.webui
-
-    templates_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "templates"
-    static_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "static"
-
-    app = build_app(
-        catalog_db_path=catalog_db,
-        local_db_path=local_db,
-        target_segments=targets,
-        templates_dir=templates_dir,
-        static_dir=static_dir,
-        crawl_pauser=_NO_CONTROLS,
-        crawl_resumer=_NO_CONTROLS,
-        shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_SUMMARIZER,
-        node_describer=_DESCRIBER,
-        file_lister=_NO_FILE_LISTER,
-        file_describer=_file_describer(catalog_db, matcher_config, targets),
-        amule_url=_AMULE_URL,
-        wall_clock=_WALL_CLOCK,
-        monotonic_clock=_MONOTONIC_CLOCK,
-        source_period_gap=_GAP,
-    )
-    return app, TEST_HASH
-
-
-@pytest.fixture
-def app_unknown_target(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
-    """File with a decision for a target_id unknown to the current config."""
-    with sqlite3.connect(catalog_db) as conn:
-        insert_file(conn, TEST_HASH, 100_000_000)
-        insert_observation(
-            conn,
-            TEST_HASH,
-            "keroro_s2e62a_vf.avi",
-            size_bytes=100_000_000,
-            source_count=5,
-        )
-        # target_id unknown to the current YAML config
-        insert_decision(conn, TEST_HASH, "S9E999Z", "catalog", rule_name="catalog")
 
     matcher_config = _matcher()
     targets = _targets()
@@ -589,32 +447,40 @@ async def test_files_show_unmatched_reveals_and_toggles_back() -> None:
     assert 'href="/files">Matched only' in text  # toggle drops the param → bare /files
 
 
-@pytest.mark.asyncio
-async def test_file_detail_with_decision_returns_200(
-    populated_app: tuple[Starlette, str],
-) -> None:
-    """/files/{file_id} with a decision → 200, contains the ed2k link + explanation info."""
-    app, hash_ = populated_app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get(_detail_url(hash_))
-    assert resp.status_code == 200
-    assert "ed2k://" in resp.text
-    assert "062A" in resp.text
-    assert "<dd>2026-06-22T10:00:00.000000+00:00</dd>" in resp.text  # decided at, as stored
-    assert "AICH" not in resp.text
+def _history(**changes: Any) -> FileHistory:
+    return replace(_FILE_DESCRIPTION.file_history, **changes)
+
+
+async def _file_page(file_description: FileDescription = _FILE_DESCRIPTION) -> str:
+    """The file page rendered from ``file_description``, with no space between tags."""
+    response, _ = await _file_response(_detail_url(TEST_HASH), file_description)
+    assert response.status_code == 200
+    return re.sub(r">\s+<", "><", response.text)
 
 
 @pytest.mark.asyncio
-async def test_file_detail_shows_the_network_and_the_native_id(
-    populated_app: tuple[Starlette, str],
-) -> None:
-    app, hash_ = populated_app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get(_detail_url(hash_))
-    page = re.sub(r">\s+<", "><", resp.text)
+async def test_file_page_shows_the_network_the_native_id_and_the_ed2k_link() -> None:
+    page = await _file_page()
+    link = f"ed2k://|file|keroro_s2e62a_vf.avi|100000000|{TEST_HASH}|/"
     assert "<dt>Network</dt><dd>ed2k</dd>" in page
-    assert f"<dt>Native ID</dt><dd>{hash_}</dd>" in page
+    assert f"<dt>Native ID</dt><dd>{TEST_HASH}</dd>" in page
+    assert f'<dt>eD2k link</dt><dd><a href="{link}">{link}</a></dd>' in page
     assert "eD2k hash" not in page
+    assert "AICH" not in page
+
+
+@pytest.mark.asyncio
+async def test_file_page_shows_each_decision_with_its_rule_tier_and_instant() -> None:
+    decisions = tuple(
+        DatedDecision(DecisionRecord(target_id, "numero_nu_confirmed", "download"), at, "n1")
+        for target_id, at in (("072A", _OBSERVATION.observed_at), ("072B", _WALL_CLOCK.now()))
+    )
+    page = await _file_page(replace(_FILE_DESCRIPTION, file_history=_history(decisions=decisions)))
+    for target_id, decided_at in (("072A", SEEN_AT), ("072B", "2026-10-14T20:00:00.000000+00:00")):
+        terms = ("Target", target_id), ("Rule", "numero_nu_confirmed"), ("Tier", "download")
+        cells = "".join(f"<dt>{term}</dt><dd>{value}</dd>" for term, value in terms)
+        assert f"<dl>{cells}<dt>Decided at</dt><dd>{decided_at}</dd></dl>" in page
+    assert "No matching decision." not in page
 
 
 @pytest.mark.parametrize(
@@ -679,70 +545,24 @@ async def test_files_list_links_each_file_to_its_file_id() -> None:
     assert f'<a href="{_detail_url(TEST_HASH)}">{TEST_HASH[:8]}…</a>' in text
 
 
-@pytest.fixture
-def app_vetoed_alias(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
-    """One file seen under a clean name and a foreign alias, with a veto on the alias."""
-    with sqlite3.connect(catalog_db) as conn:
-        insert_file(conn, TEST_HASH, 100_000_000)
-        insert_observation(conn, TEST_HASH, "keroro_s2e62a_vf.avi")
-        insert_observation(
-            conn, TEST_HASH, "keroro ITA.avi", observed_at="2026-06-23T10:00:00.000000+00:00"
-        )
-        insert_decision(conn, TEST_HASH, "062A", "catalog", rule_name="catalog")
-    matcher_config = parse_matcher_config(
-        {
-            "tokens": {
-                "keroro": {"keyword": "keroro"},
-                "vf": {"regex": "vf"},
-                "ita": {"regex": r"\bITA\b"},
-            },
-            "vetoes": ["ita"],
-            "rules": [
-                {
-                    "name": "catalog",
-                    "tier": "catalog",
-                    "scope": "unattributed",
-                    "all": ["keroro", "vf"],
-                }
-            ],
-        }
-    )
-
-    import p2pwatch.adapters.driving.webui
-
-    webui_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent
-    app = build_app(
-        catalog_db_path=catalog_db,
-        local_db_path=local_db,
-        target_segments=_targets(),
-        templates_dir=webui_dir / "templates",
-        static_dir=webui_dir / "static",
-        crawl_pauser=_NO_CONTROLS,
-        crawl_resumer=_NO_CONTROLS,
-        shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_SUMMARIZER,
-        node_describer=_DESCRIBER,
-        file_lister=_NO_FILE_LISTER,
-        file_describer=_file_describer(catalog_db, matcher_config, _targets()),
-        amule_url=_AMULE_URL,
-        wall_clock=_WALL_CLOCK,
-        monotonic_clock=_MONOTONIC_CLOCK,
-        source_period_gap=_GAP,
-    )
-    return app, TEST_HASH
-
-
 @pytest.mark.asyncio
-async def test_file_detail_explains_over_every_name_and_lists_the_vetoes_fired(
-    app_vetoed_alias: tuple[Starlette, str],
-) -> None:
-    app, hash_ = app_vetoed_alias
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get(_detail_url(hash_))
-    assert resp.status_code == 200
-    assert "Vetoes fired:" in resp.text
-    assert "<li>ita</li>" in resp.text  # fired by the ITA alias only
-    assert "<li>catalog</li>" in resp.text  # fired by the VF name only
+async def test_file_page_shows_the_explanation_its_use_case_gives() -> None:
+    explanation = Explanation(
+        target_id="072B",
+        rules_fired=("title_review",),
+        tokens_matched=("ita", "keroro", "title_hit"),
+        coverage_values=(("title_hit", 2 / 3),),
+        vetoes_fired=("ita",),
+    )
+    page = await _file_page(replace(_FILE_DESCRIPTION, explanation=explanation))
+    assert (
+        "<p>Evaluated against the current configuration</p><p>Target: 072B</p>"
+        "<p>Rules fired:</p><ul><li>title_review</li></ul>"
+        "<p>Matched tokens:</p><ul><li>ita</li><li>keroro</li><li>title_hit</li></ul>"
+        "<p>Coverage values:</p><ul><li>title_hit: 0.67</li></ul>"
+        "<p>Vetoes fired:</p><ul><li>ita</li></ul>"
+    ) in page
+    assert "No explanation available." not in page
 
 
 @pytest.mark.asyncio
@@ -1061,46 +881,20 @@ async def test_source_and_name_pages_show_every_period_of_the_window_on_one_page
 
 
 @pytest.mark.asyncio
-async def test_file_detail_without_decision_returns_200(
-    app_no_decision: tuple[Starlette, str],
-) -> None:
-    """/files/{file_id} without a decision → 200, empty branches rendered."""
-    app, hash_ = app_no_decision
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get(_detail_url(hash_))
-    assert resp.status_code == 200
-    assert "ed2k://" in resp.text
-    assert "No matching decision." in resp.text
-    assert "No explanation available." in resp.text
+async def test_file_page_without_a_decision_says_so() -> None:
+    page = await _file_page(replace(_FILE_DESCRIPTION, file_history=_history(decisions=())))
+    assert "<p>No matching decision.</p>" in page
+    assert "<p>No explanation available.</p>" in page
+    assert "ed2k://" in page
 
 
 @pytest.mark.asyncio
-async def test_file_detail_retracted_shows_no_decision(
-    app_retracted_decision: tuple[Starlette, str],
-) -> None:
-    """/files/{file_id} whose LATEST decision is a retraction renders exactly like a file with
-    no decision at all: "No matching decision.", never a tier/target/rule badge, and never
-    the literal "retracted" string anywhere in the page."""
-    app, hash_ = app_retracted_decision
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get(_detail_url(hash_))
-    assert resp.status_code == 200
-    assert "No matching decision." in resp.text
-    assert "No explanation available." in resp.text
-    assert "retracted" not in resp.text
-    assert "062A" not in resp.text  # the earlier, pre-retraction decision must not leak through
-
-
-@pytest.mark.asyncio
-async def test_file_detail_explanation_none_unknown_target(
-    app_unknown_target: tuple[Starlette, str],
-) -> None:
-    """/files/{file_id} with a target_id unknown to the config → 200 (explanation=None)."""
-    app, hash_ = app_unknown_target
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get(_detail_url(hash_))
-    assert resp.status_code == 200
-    assert "ed2k://" in resp.text
+async def test_file_page_with_a_decision_but_no_explanation_says_so() -> None:
+    # The explainer has none for a target the current config does not know.
+    unknown = replace(_DECISION, decision=DecisionRecord("S9E999Z", "catalog", "catalog"))
+    page = await _file_page(replace(_FILE_DESCRIPTION, file_history=_history(decisions=(unknown,))))
+    assert "<dt>Target</dt><dd>S9E999Z</dd>" in page
+    assert "<p>No explanation available.</p>" in page
 
 
 @pytest.mark.asyncio
@@ -1210,63 +1004,6 @@ async def test_node_page_shows_a_downloads_lifecycle() -> None:
     assert "<td>local_processing</td>" in text
     assert "<td>error</td>" in text
     assert "None" not in text  # an unknown value shows blank
-
-
-@pytest.fixture
-def app_with_media_obs(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
-    """File with an observation having non-null duration_seconds and bitrate_kbps."""
-    with sqlite3.connect(catalog_db) as conn:
-        insert_file(conn, TEST_HASH, 100_000_000)
-        insert_observation(
-            conn,
-            TEST_HASH,
-            "keroro_s2e62a_vf.avi",
-            size_bytes=100_000_000,
-            source_count=5,
-            duration_seconds=1320,
-            bitrate_kbps=192,
-        )
-        insert_decision(conn, TEST_HASH, "062A", "catalog", rule_name="catalog")
-
-    matcher_config = _matcher()
-    targets = _targets()
-
-    import p2pwatch.adapters.driving.webui
-
-    templates_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "templates"
-    static_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "static"
-
-    app = build_app(
-        catalog_db_path=catalog_db,
-        local_db_path=local_db,
-        target_segments=targets,
-        templates_dir=templates_dir,
-        static_dir=static_dir,
-        crawl_pauser=_NO_CONTROLS,
-        crawl_resumer=_NO_CONTROLS,
-        shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_SUMMARIZER,
-        node_describer=_DESCRIBER,
-        file_lister=_NO_FILE_LISTER,
-        file_describer=_file_describer(catalog_db, matcher_config, targets),
-        amule_url=_AMULE_URL,
-        wall_clock=_WALL_CLOCK,
-        monotonic_clock=_MONOTONIC_CLOCK,
-        source_period_gap=_GAP,
-    )
-    return app, TEST_HASH
-
-
-@pytest.mark.asyncio
-async def test_file_detail_with_media_fields_returns_200(
-    app_with_media_obs: tuple[Starlette, str],
-) -> None:
-    """/files/{file_id} with duration_seconds + bitrate_kbps → 200, explanation computed."""
-    app, hash_ = app_with_media_obs
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get(_detail_url(hash_))
-    assert resp.status_code == 200
-    assert "062A" in resp.text
 
 
 @pytest.mark.parametrize(
@@ -1688,46 +1425,6 @@ episodes:
     )
 
 
-@pytest.fixture
-def app_whole_episode(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
-    """One file matched to BOTH 072A and 072B (two current decisions, tier download) against a
-    two-segment targets.yaml: the core multi-target end-to-end fixture (spec §9)."""
-    with sqlite3.connect(catalog_db) as conn:
-        insert_file(conn, TEST_HASH, 170_000_000)
-        insert_observation(
-            conn, TEST_HASH, "keroro_072_vf.avi", size_bytes=170_000_000, source_count=7
-        )
-        insert_decision(conn, TEST_HASH, "072A", "download", rule_name="numero_nu_confirmed")
-        insert_decision(conn, TEST_HASH, "072B", "download", rule_name="numero_nu_confirmed")
-
-    matcher_config = _matcher()
-    targets = _targets_ab()
-
-    import p2pwatch.adapters.driving.webui
-
-    templates_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "templates"
-    static_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "static"
-    app = build_app(
-        catalog_db_path=catalog_db,
-        local_db_path=local_db,
-        target_segments=targets,
-        templates_dir=templates_dir,
-        static_dir=static_dir,
-        crawl_pauser=_NO_CONTROLS,
-        crawl_resumer=_NO_CONTROLS,
-        shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_SUMMARIZER,
-        node_describer=_DESCRIBER,
-        file_lister=_NO_FILE_LISTER,
-        file_describer=_file_describer(catalog_db, matcher_config, targets),
-        amule_url=_AMULE_URL,
-        wall_clock=_WALL_CLOCK,
-        monotonic_clock=_MONOTONIC_CLOCK,
-        source_period_gap=_GAP,
-    )
-    return app, TEST_HASH
-
-
 @pytest.mark.asyncio
 async def test_files_whole_episode_renders_one_row_with_aggregated_targets() -> None:
     listing = _one_file(_decision("072A", "download"), _decision("072B", "download"))
@@ -1741,79 +1438,6 @@ async def test_files_whole_episode_renders_one_row_with_aggregated_targets() -> 
         in text
     )
     assert "<td>download</td>" in text
-
-
-@pytest.mark.asyncio
-async def test_file_detail_whole_episode_shows_both_targets(
-    app_whole_episode: tuple[Starlette, str],
-) -> None:
-    app, hash_ = app_whole_episode
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get(_detail_url(hash_))
-    assert resp.status_code == 200
-    assert "072A" in resp.text
-    assert "072B" in resp.text
-
-
-@pytest.fixture
-def app_title_coverage(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
-    """One file whose name covers two of its target's three title words, decided on that."""
-    with sqlite3.connect(catalog_db) as conn:
-        insert_file(conn, TEST_HASH, 100_000_000)
-        insert_observation(conn, TEST_HASH, "keroro_duel_giroro_vf.avi")
-        insert_decision(conn, TEST_HASH, "072B", "notify", rule_name="title_review")
-    matcher_config = parse_matcher_config(
-        {
-            "tokens": {
-                "keroro": {"keyword": "keroro"},
-                "title_hit": {"coverage": "title", "min_coverage": 0.6},
-            },
-            "rules": [
-                {
-                    "name": "title_review",
-                    "tier": "notify",
-                    "scope": "segment",
-                    "all": ["keroro", "title_hit"],
-                }
-            ],
-        }
-    )
-
-    import p2pwatch.adapters.driving.webui
-
-    webui_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent
-    app = build_app(
-        catalog_db_path=catalog_db,
-        local_db_path=local_db,
-        target_segments=_targets_ab(),
-        templates_dir=webui_dir / "templates",
-        static_dir=webui_dir / "static",
-        crawl_pauser=_NO_CONTROLS,
-        crawl_resumer=_NO_CONTROLS,
-        shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_SUMMARIZER,
-        node_describer=_DESCRIBER,
-        file_lister=_NO_FILE_LISTER,
-        file_describer=_file_describer(catalog_db, matcher_config, _targets_ab()),
-        amule_url=_AMULE_URL,
-        wall_clock=_WALL_CLOCK,
-        monotonic_clock=_MONOTONIC_CLOCK,
-        source_period_gap=_GAP,
-    )
-    return app, TEST_HASH
-
-
-@pytest.mark.asyncio
-async def test_file_detail_shows_each_coverage_value_to_two_decimals(
-    app_title_coverage: tuple[Starlette, str],
-) -> None:
-    app, hash_ = app_title_coverage
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get(_detail_url(hash_))
-    assert resp.status_code == 200
-    assert "<li>title_hit</li>" in resp.text  # fired: 0.67 reaches min_coverage
-    assert "Coverage values:" in resp.text
-    assert "<li>title_hit: 0.67</li>" in resp.text  # "duel" and "giroro" of "Duel Contre Giroro"
 
 
 # ---------------------------------------------------------------------------
