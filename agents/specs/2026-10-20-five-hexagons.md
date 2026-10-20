@@ -35,7 +35,9 @@ this spec: they apply a rule `AGENTS.md` already has, or a tool enforces them it
 - **C1. No module patching in a test**: no `monkeypatch`, `pytest.MonkeyPatch` or `unittest.mock.patch`. Process
   state is read only by a `__main__.py` and passed down as values; a constant a test tunes is a parameter; a
   function a test replaces is passed to what calls it, a port when the core needs it, a typed `Callable` inside an
-  adapter. Hard rules, 3b 90 (the rule that enforces it); the three replacements in Hard rules from 3a 10.
+  adapter. The composition passes the real value, never a parameter's default, even for an adapter's own
+  resources (Corrected: defaults were not excluded). Hard rules, 3b 90 (the rule that enforces it); the three
+  replacements in Hard rules from 3a 10.
 - **C2. An adapter receives from the composition what it drives**: a directory or a file, a URL or an address, a
   command runner or an executable's path. Its unit test hands it a local stand-in, the integration suites the real
   one. Hard rules, 3a 12.
@@ -45,6 +47,10 @@ this spec: they apply a rule `AGENTS.md` already has, or a tool enforces them it
   Naming, 3a 12.
 - **C4. A check returns a report**: a `<Thing>Report` response model with a `problems` field, which the command
   line prints or writes. Naming, 3b 20.
+- **C5. A value taken when the operator sets nothing is the domain's**: a key absent from `crawler.yml`, an
+  environment variable left unset. The parser applies the domain's value; a value a component receives comes
+  from the composition (C1, C2). Hard rules, 3a 16 (Corrected: added after the operator's approval, so that no
+  value is written in an adapter).
 
 ## Decisions
 
@@ -53,11 +59,13 @@ this spec: they apply a rule `AGENTS.md` already has, or a tool enforces them it
   needs to patch a module; a test that does tests the module's insides, and nothing enforces the convention today
   (12 crawler and test support files still use it). The three replacements:
   - **Process state** (`os.environ`, the working directory, the root logger) is read only by a `__main__.py` and
-    passed down as values: `main(argv, env, cwd)`, the root logger handed to what configures it (the command line,
+    passed down as values: `main(argv, env, cwd)`, with no `argv=None` falling back to `sys.argv` (Corrected: the
+    six command lines' `run(argv=None)`, each fixed by the block that touches it), the root logger handed to what configures it (the command line,
     and the crawler's composition, which sets its level). Why: it is the composition's to read, as `CrawlerApp`
     already receives `env=os.environ`.
   - **A module constant a test tunes** (`_PROGRESS_EVERY`, `_MIGRATIONS`, the aMule paths, `PREMISES`) becomes a
-    parameter, the composition passing the real value. Why: the test then says what it sets.
+    parameter, the composition passing the real value, never a default of the parameter (Corrected: defaults were
+    not excluded). Why: the test then says what it sets, and one rule leaves nothing to decide case by case.
   - **A function a test replaces** is passed to what calls it: a driven port when the core needs it, a plain typed
     `Callable` parameter when an adapter uses it internally (`start_http_server`, a parameter of
     `start_metrics_server`, which the composition passes; `content_hash` and `fold_raw_meta`, parameters of
@@ -222,11 +230,17 @@ The 12 crawler and `p2pwatch_testing` files still on `monkeypatch` (appendix) fo
 `close_test_connections` goes by D1b: still needed today, since the 5 test files that use it build
 `ReaderProvider(...)` without `with` and seed through `with sqlite3.connect(...)`, which does not close.
 
+Six parameter defaults only tests change follow C1 (Corrected: added after the operator's approval,
+`.reviews/lot3-default-sweep.md`): `AmuleApiClient`'s `transport` and `timeout_seconds`, `AppriseNotifier`'s
+`apprise_factory`, `RandomJitterGenerator`'s `jitter_seed`, `UvicornServerThread`'s `start_timeout_seconds` and
+`serving_resources`. The defaults `crawler_config.py` takes for an absent key move to the domain (C5); the
+doubles of `p2pwatch_testing` keep theirs, which are test data.
+
 ## `AGENTS.md` and the documentation
 
 Each changes in the block that makes it false.
 
-- `AGENTS.md`: the conventions C1 to C4, each in the block the section "Conventions this lot sets" names.
+- `AGENTS.md`: the conventions C1 to C5, each in the block the section "Conventions this lot sets" names.
 - `AGENTS.md`: the `TID251` exemption of `packages/amule/` goes (3a 54, umbrella D19); the hard rules gain "no
   module patching" (3b 90); "No I/O in the core" names `jinja2` in `template_checks`' domain (3b 60); the Commands
   section names `_template-attributes` (3b 60); the subsystem table's rows for port-sync and the container boot
@@ -244,7 +258,8 @@ Each changes in the block that makes it false.
 
 Estimates by a Sonnet agent on `main` at `38bfe15`, before any code, about 20 % either way
 (`.reviews/lot3-estimate.md`); each teammate measures its block and splits it at a bound. No block is purely
-mechanical, so none takes the size exemption. Headroom under the cap of 19: 5 splits for 3a, 5 for 3b; five rows sit
+mechanical, so none takes the size exemption. Headroom under the cap of 19: 3 splits for 3a (Corrected: 5 before
+blocks 14 and 16), 5 for 3b; five rows sit
 at 450 to 480 lines (3a 20, 40, 44, 52; 3b 52), and 3a 40's fallback is to hand its fakes to 42.
 
 Every block leaves its new surface called by production code, since `dead-code-check` reports a class only tests
@@ -257,9 +272,11 @@ call: the old entry function delegates to what the block adds until a later bloc
 | 10 | `test/crawler-constants-as-parameters` | this spec; `_MIGRATIONS`, `_configure`, `_load_scripts`, `_PROGRESS_EVERY` as parameters; `content_hash`, `fold_raw_meta` parameters of `register_sql_functions`; the migration tests and `older_catalog.py` off `monkeypatch` | 300, 12 |
 | 11 | `test/crawler-connections-closed` | D1b: `ResourceWarning` an error; the readers' tests open and seed with closing; `close_test_connections` gone | 350, 8 |
 | 12 | `test/crawler-process-state-as-values` | `main(argv, env, cwd)`; the root logger passed; `start_http_server` a parameter of `start_metrics_server`; the command line's default paths against the given `cwd`; `FilesystemCatalogFinder` (C3); the finder, the command line and the compose smoke off `monkeypatch` | 250, 9 |
-| 20 | `refactor/bump-amule` | `BumpAmule` behind `AmuleBumper`; the three writers and their adapters; the default paths against the given `cwd` and temporary directory; `test_bump` rewritten; `docs/contributing/amule-bump.md` | 450, 16 |
+| 14 | `refactor/adapter-values-from-composition` | the six parameter defaults of the crawler's adapters gone, the composition passing them (Corrected: added) | pending, pending |
+| 16 | `refactor/config-defaults-in-domain` | the defaults of `crawler.yml`'s absent keys into the domain; C5 in `AGENTS.md` (Corrected: added) | pending, pending |
+| 20 | `refactor/bump-amule` | `BumpAmule` behind `AmuleBumper`; the three writers and their adapters; the default paths against the given `cwd` and temporary directory; `wrap`'s width from the composition (Corrected: added); `test_bump` rewritten; `docs/contributing/amule-bump.md` | 450, 16 |
 | 22 | `refactor/repo-reader-domain-types` | `RepoReader`'s `read_` methods on domain types; GitHub's API URL as a composition value; the loopback test | 300, 12 |
-| 30 | `refactor/amule-settings-in-domain` | the environment's validation into the domain, its error; `env` and the paths as values from `__main__` | 300, 10 |
+| 30 | `refactor/amule-settings-in-domain` | the environment's validation into the domain, its error, and the values of unset variables (C5, Corrected: added); `env` and the paths as values from `__main__` | 300, 10 |
 | 40 | `feat/boot-container` | `BootContainer` behind `ContainerBooter`; `AmuleConfReader`, `AmuleConfWriter`, `PosixAmuleConf`; `boot.main` delegating to `BootContainer` | 480, 14 |
 | 42 | `feat/boot-accounts-and-mount-points` | `AccountManager`, `MountPointPreparer` and their adapters; `BootContainer` gains the two steps, `boot.py` loses them | 300, 10 |
 | 44 | `feat/boot-password-and-supervisor` | `AdminPasswordSetter`, `ServiceSupervisor`'s `down` file; `boot.py` and `test_boot.py` gone; `AGENTS.md`'s boot row | 450, 15 |
