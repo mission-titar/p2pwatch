@@ -20,10 +20,20 @@ from p2pwatch.ports.driving.crawler_runner import CrawlerRunner
 _LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 
 
-def _add_config_options(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--config", type=PurePath, default=PurePath("deploy/crawler.yml"))
-    parser.add_argument("--targets", type=PurePath, default=PurePath("deploy/targets.yml"))
-    parser.add_argument("--matcher", type=PurePath, default=PurePath("deploy/matcher.yml"))
+def _add_config_options(parser: argparse.ArgumentParser, deploy: PurePath) -> None:
+    parser.add_argument("--config", type=PurePath, default=deploy / "crawler.yml")
+    parser.add_argument("--targets", type=PurePath, default=deploy / "targets.yml")
+    parser.add_argument("--matcher", type=PurePath, default=deploy / "matcher.yml")
+
+
+def _configure_logging(root_logger: logging.Logger) -> None:
+    """``logging.basicConfig`` on ``root_logger``: left as it is once it has a handler."""
+    if root_logger.handlers:
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+    root_logger.addHandler(handler)
+    root_logger.setLevel(logging.INFO)
 
 
 def _add_merge_options(parser: argparse.ArgumentParser) -> None:
@@ -54,7 +64,8 @@ def _add_merge_options(parser: argparse.ArgumentParser) -> None:
 
 
 class ArgparseCommandLine:
-    """``crawl``, ``validate-config`` and ``merge``, each over its driving port."""
+    """``crawl``, ``validate-config`` and ``merge``, each over its driving port; the config's
+    default paths are under ``cwd``."""
 
     def __init__(
         self,
@@ -62,23 +73,29 @@ class ArgparseCommandLine:
         crawler_runner: CrawlerRunner,
         config_validator: ConfigValidator,
         catalog_merger: CatalogMerger,
+        root_logger: logging.Logger,
+        cwd: PurePath,
     ) -> None:
         self._crawler_runner = crawler_runner
         self._config_validator = config_validator
         self._catalog_merger = catalog_merger
+        self._root_logger = root_logger
+        self._cwd = cwd
 
-    def run(self, argv: Sequence[str] | None = None) -> int:
-        """Runs the subcommand ``argv`` names (``sys.argv`` if ``None``), returns its exit code."""
-        logging.basicConfig(level=logging.INFO, format=_LOG_FORMAT)
+    def run(self, argv: Sequence[str]) -> int:
+        """Runs the subcommand ``argv`` names, returns its exit code."""
+        _configure_logging(self._root_logger)
+        deploy = self._cwd / "deploy"
         parser = argparse.ArgumentParser(prog="p2pwatch", description="eMule crawler")
         subparsers = parser.add_subparsers(dest="command", required=True)
         _add_config_options(
-            subparsers.add_parser("crawl", help="crawl the eMule network until stopped")
+            subparsers.add_parser("crawl", help="crawl the eMule network until stopped"), deploy
         )
         _add_config_options(
             subparsers.add_parser(
                 "validate-config", help="load and check the config, start nothing"
-            )
+            ),
+            deploy,
         )
         _add_merge_options(
             subparsers.add_parser(

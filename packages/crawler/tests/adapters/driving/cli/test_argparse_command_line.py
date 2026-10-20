@@ -17,10 +17,11 @@ from p2pwatch.ports.driving.catalog_merger import (
 from p2pwatch.ports.driving.config_validator import ConfigValidator
 from p2pwatch.ports.driving.crawler_runner import CrawlerRunner
 
+_CWD = PurePath("/srv/node")
 _DEFAULT_PATHS = (
-    PurePath("deploy/crawler.yml"),
-    PurePath("deploy/targets.yml"),
-    PurePath("deploy/matcher.yml"),
+    _CWD / "deploy" / "crawler.yml",
+    _CWD / "deploy" / "targets.yml",
+    _CWD / "deploy" / "matcher.yml",
 )
 _GIVEN_PATHS = (PurePath("c.yml"), PurePath("t.yml"), PurePath("m.yml"))
 _GIVEN_ARGV = ["--config", "c.yml", "--targets", "t.yml", "--matcher", "m.yml"]
@@ -75,11 +76,14 @@ def _command_line(
     crawler_runner: CrawlerRunner | None = None,
     config_validator: ConfigValidator | None = None,
     catalog_merger: CatalogMerger | None = None,
+    root_logger: logging.Logger | None = None,
 ) -> ArgparseCommandLine:
     return ArgparseCommandLine(
         crawler_runner=crawler_runner or _FakeCrawlerRunner(),
         config_validator=config_validator or _FakeConfigValidator(),
         catalog_merger=catalog_merger or _FakeCatalogMerger(),
+        root_logger=root_logger or logging.Logger("root"),
+        cwd=_CWD,
     )
 
 
@@ -91,7 +95,7 @@ def test_crawl_runs_the_crawler_on_the_paths_given() -> None:
     assert crawler_runner.crawled_paths == [_GIVEN_PATHS]
 
 
-def test_crawl_defaults_to_the_deploy_directory() -> None:
+def test_crawl_defaults_to_the_deploy_directory_under_the_working_directory_given() -> None:
     crawler_runner = _FakeCrawlerRunner()
 
     assert _command_line(crawler_runner=crawler_runner).run(["crawl"]) == 0
@@ -132,7 +136,9 @@ def test_validate_config_validates_the_paths_given_and_starts_nothing(
     assert capsys.readouterr().out == "Config valid\n"
 
 
-def test_validate_config_defaults_to_the_deploy_directory() -> None:
+def test_validate_config_defaults_to_the_deploy_directory_under_the_working_directory_given() -> (
+    None
+):
     config_validator = _FakeConfigValidator()
 
     assert _command_line(config_validator=config_validator).run(["validate-config"]) == 0
@@ -177,20 +183,27 @@ def test_the_help_lists_the_subcommands_and_names_no_observer_mode(
 @pytest.mark.parametrize(
     "argv", [["crawl"], ["validate-config"], ["merge", "--output", "out.db", "a.db"]]
 )
-def test_every_subcommand_logs_at_info_with_its_logger_name(
-    argv: list[str], monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
-) -> None:
-    root = logging.getLogger()
-    root_level = root.level
-    request.addfinalizer(lambda: root.setLevel(root_level))
-    monkeypatch.setattr(root, "handlers", [])  # pytest's own, which basicConfig would keep
+def test_every_subcommand_logs_at_info_with_its_logger_name(argv: list[str]) -> None:
+    root_logger = logging.Logger("root")
 
-    _command_line().run(argv)
+    _command_line(root_logger=root_logger).run(argv)
 
-    [handler] = root.handlers
+    [handler] = root_logger.handlers
     assert handler.formatter is not None
     assert handler.formatter._fmt == "%(asctime)s %(levelname)s %(name)s %(message)s"
-    assert root.level == logging.INFO
+    assert root_logger.level == logging.INFO
+
+
+def test_a_root_logger_with_a_handler_is_left_as_it_is() -> None:
+    # As ``logging.basicConfig``: what configured the root logger first wins.
+    root_logger = logging.Logger("root", logging.WARNING)
+    handler = logging.NullHandler()
+    root_logger.addHandler(handler)
+
+    _command_line(root_logger=root_logger).run(["crawl"])
+
+    assert root_logger.handlers == [handler]
+    assert root_logger.level == logging.WARNING
 
 
 _A = PurePath("a.db")

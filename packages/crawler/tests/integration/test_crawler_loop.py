@@ -51,15 +51,14 @@ class _SearchRecordedHandler(logging.Handler):
 
 
 @pytest.mark.asyncio
-async def test_real_loop_runs_one_search_and_stops(
-    amuled: ApiEndpoint, tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+async def test_real_loop_runs_one_search_and_stops(amuled: ApiEndpoint, tmp_path: Path) -> None:
     config_path = tmp_path / "crawler.yml"
     config_path.write_text(_CONFIG.format(data=tmp_path), encoding="utf-8")
     app = CrawlerApp(
         webui_address=("127.0.0.1", 0),
         amule_api_address=(amuled.host, amuled.port),
         env={"AMULE_API_PASSWORD": amuled.password},
+        root_logger=logging.Logger("root"),
     )
     handler = _SearchRecordedHandler()
     search_worker_logger = logging.getLogger(_SEARCH_WORKER_LOGGER)
@@ -68,20 +67,18 @@ async def test_real_loop_runs_one_search_and_stops(
     search_worker_logger.setLevel(logging.INFO)
     default_sigterm = signal.getsignal(signal.SIGTERM)
     try:
-        # caplog restores the root level the config sets.
-        with caplog.at_level(logging.INFO):
-            run = asyncio.create_task(
-                app.crawl(
-                    config_path=config_path,
-                    targets_path=_DEPLOY / "targets.yml",
-                    matcher_path=_DEPLOY / "matcher.yml",
-                )
+        run = asyncio.create_task(
+            app.crawl(
+                config_path=config_path,
+                targets_path=_DEPLOY / "targets.yml",
+                matcher_path=_DEPLOY / "matcher.yml",
             )
-            # Without this wait, the test passed before any search even returned.
-            await asyncio.wait_for(handler.recorded.wait(), timeout=150.0)
-            assert signal.getsignal(signal.SIGTERM) is not default_sigterm
-            signal.raise_signal(signal.SIGTERM)
-            await asyncio.wait_for(run, timeout=30.0)
+        )
+        # Without this wait, the test passed before any search even returned.
+        await asyncio.wait_for(handler.recorded.wait(), timeout=150.0)
+        assert signal.getsignal(signal.SIGTERM) is not default_sigterm
+        signal.raise_signal(signal.SIGTERM)
+        await asyncio.wait_for(run, timeout=30.0)
     finally:
         search_worker_logger.setLevel(level)
         search_worker_logger.removeHandler(handler)

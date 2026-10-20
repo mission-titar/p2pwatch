@@ -100,12 +100,16 @@ def _write(path: Path, config: dict[str, Any]) -> Path:
 
 
 def _crawl(
-    server: FakeAmuleApiServer, config_path: Path, targets_path: Path = _SHIPPED_TARGETS
+    server: FakeAmuleApiServer,
+    config_path: Path,
+    targets_path: Path = _SHIPPED_TARGETS,
+    root_logger: logging.Logger | None = None,
 ) -> asyncio.Task[None]:
     crawler_app = CrawlerApp(
         webui_address=("127.0.0.1", 0),
         amule_api_address=(server.host, server.port),
         env={"AMULE_API_PASSWORD": PASSWORD},
+        root_logger=root_logger or logging.Logger("root"),
     )
     return asyncio.create_task(
         crawler_app.crawl(config_path=config_path, targets_path=targets_path, matcher_path=_MATCHER)
@@ -367,19 +371,19 @@ async def test_observer_mode_crawls_its_config_files_with_one_ed2k_search_until_
     )
     api = FakeAmuleApi()
     default_sigterm = signal.getsignal(signal.SIGTERM)
+    root_logger = logging.Logger("root")
 
     with FakeAmuleApiServer(api) as server, caplog.at_level(logging.INFO):
-        run = _crawl(server, config_path)
+        run = _crawl(server, config_path, root_logger=root_logger)
         # The first ed2k search and both Kad ones, each read to its end.
         assert await asyncio.to_thread(
             server.wait_for, lambda seen: _searches_read(seen) >= 3, _WAIT_SECONDS
         )
         _send_sigterm(default_sigterm)
         await asyncio.wait_for(run, _WAIT_SECONDS)
-        root_level = logging.getLogger().level  # the config's, until caplog restores its own
 
     assert _search_types(api).count("global") == 1
-    assert root_level == logging.DEBUG
+    assert root_logger.level == logging.DEBUG
     assert "🟢 node online (download off)" in caplog.messages
     assert api.logins == 1
     assert not any(map(_WEBUI_SERVING.match, caplog.messages))

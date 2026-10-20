@@ -110,19 +110,25 @@ _RENDER_DOTENV = {
 _DAEMON_SELECTORS = ("DOCKER_CONTEXT", "DOCKER_HOST")
 
 
-def _docker_env(*extra: Mapping[str, str]) -> dict[str, str]:
-    """The environment handed to a `docker` subprocess: PATH, the stubs, the daemon selectors."""
-    env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin")}
+def _docker_env(caller_env: Mapping[str, str], *extra: Mapping[str, str]) -> dict[str, str]:
+    """The environment handed to a `docker` subprocess: the caller's PATH, the stubs, the
+    caller's daemon selectors."""
+    env = {"PATH": caller_env.get("PATH", "/usr/bin:/bin")}
     for mapping in extra:
         env.update(mapping)
     for name in _DAEMON_SELECTORS:
-        value = os.environ.get(name)
+        value = caller_env.get(name)
         if value is not None:
             env[name] = value
     return env
 
 
-def _run(*args: str, files: tuple[Path, ...], timeout: float) -> subprocess.CompletedProcess[str]:
+def _run(
+    *args: str,
+    files: tuple[Path, ...],
+    timeout: float,
+    caller_env: Mapping[str, str] = os.environ,
+) -> subprocess.CompletedProcess[str]:
     """Run `docker compose -p <project> -f ... <args>` from the repo root (cwd)."""
     file_flags: list[str] = []
     for path in files:
@@ -140,7 +146,9 @@ def _run(*args: str, files: tuple[Path, ...], timeout: float) -> subprocess.Comp
     return subprocess.run(
         command,
         cwd=_REPO_ROOT,
-        env=_docker_env(_SMOKE_ENV, {"IMAGE_TAG": _IMAGE_TAG} if _IMAGE_TAG is not None else {}),
+        env=_docker_env(
+            caller_env, _SMOKE_ENV, {"IMAGE_TAG": _IMAGE_TAG} if _IMAGE_TAG is not None else {}
+        ),
         capture_output=True,
         text=True,
         timeout=timeout,
@@ -249,29 +257,23 @@ def project_files() -> Iterator[tuple[Path, ...]]:
         shutil.rmtree(_STATE_DIR, ignore_errors=True)
 
 
-def test_the_harness_hides_everything_but_the_daemon_selectors(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("DOCKER_CONTEXT", "chosen")
-    monkeypatch.setenv("HOME", "/somewhere")
-    env = _docker_env(_SMOKE_ENV)
+def test_the_harness_hides_everything_but_the_daemon_selectors() -> None:
+    env = _docker_env({"DOCKER_CONTEXT": "chosen", "HOME": "/somewhere"}, _SMOKE_ENV)
 
     assert env["DOCKER_CONTEXT"] == "chosen"
     assert env["PUID"] == str(os.getuid())
     assert "HOME" not in env  # the sanitised environment is what keeps the smoke reproducible
 
 
-def test_a_chosen_daemon_that_answers_nothing_fails_the_call(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_a_chosen_daemon_that_answers_nothing_fails_the_call() -> None:
     """Negative path of the two daemon selectors, which is the only side worth proving.
 
     Without the allowlist the variable never reaches the CLI: the call quietly lands on the
     machine's default daemon and SUCCEEDS, which is how a run meant for one engine ends up
     exercising another. Pointing it at a socket nothing listens on must therefore fail.
     """
-    monkeypatch.setenv("DOCKER_HOST", "unix:///nonexistent/p2pwatch-smoke.sock")
-    result = _run("ps", files=(_SMOKE,), timeout=120)
+    caller_env = {**os.environ, "DOCKER_HOST": "unix:///nonexistent/p2pwatch-smoke.sock"}
+    result = _run("ps", files=(_SMOKE,), timeout=120, caller_env=caller_env)
 
     assert result.returncode != 0, result.stdout
     assert "p2pwatch-smoke.sock" in result.stderr + result.stdout
@@ -385,7 +387,7 @@ def _render(variant: str, tmp_path: Path) -> Any:
     result = subprocess.run(
         ["docker", "compose", "-f", str(compose), "config", "--format", "json"],
         cwd=tmp_path,
-        env=_docker_env(),
+        env=_docker_env(os.environ),
         capture_output=True,
         text=True,
         timeout=120,
