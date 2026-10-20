@@ -147,9 +147,14 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
 - **Quelques lignes de journal et noms de loggers changent**, ceux des modules déplacés ou
   renommés : filtrez sur le message plutôt que sur le logger. Un catalogue web qui ne démarre pas
   le dit désormais par `webui degraded`. Les lignes de démarrage `crawler started` et
-  `download enabled` journalisent sous `p2pwatch.application.run_crawler`. Le port-sync, `mulewatch.application.port_sync_loop` en
-  4.x, journalise sous `p2pwatch_amule.adapters.driving.port_sync`, et ses échecs à joindre
-  gluetun sous `p2pwatch_amule.adapters.driven.gluetun`.
+  `download enabled` journalisent sous `p2pwatch.application.run_crawler`. La recherche ne
+  journalise plus `client <nom> connected` ni l'avertissement
+  `client <nom> unreachable (...): reconnect backoff ...` : la session amuleapi s'ouvre d'elle-même
+  au premier appel, et un amuled injoignable reste signalé par
+  `client <nom> unreachable (...), client down, backoff ...`. Le port-sync,
+  `mulewatch.application.port_sync_loop` en 4.x, journalise sous
+  `p2pwatch_amule.adapters.driving.port_sync`, et ses échecs à joindre gluetun sous
+  `p2pwatch_amule.adapters.driven.gluetun`.
 - **La documentation** est désormais sur <https://mission-titar.github.io/p2pwatch/>.
 
 ## Retour arrière
