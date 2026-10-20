@@ -23,7 +23,7 @@ from functools import partial
 from importlib.metadata import version
 from pathlib import Path, PurePath
 
-from prometheus_client import CollectorRegistry
+from prometheus_client import CollectorRegistry, start_http_server
 
 import p2pwatch.adapters.driving.webui
 from catalog_matching.domain.engine import MatchingEngine
@@ -128,10 +128,12 @@ class CrawlerApp(CrawlerRunner):
         webui_address: tuple[str, int],
         amule_api_address: tuple[str, int],
         env: Mapping[str, str],
+        root_logger: logging.Logger,
     ) -> None:
         self._webui_address = webui_address
         self._amule_api_address = amule_api_address
         self._env = env
+        self._root_logger = root_logger
 
     def _amule_api_client(
         self, crawler_config: CrawlerConfig, monotonic_clock: MonotonicClock
@@ -232,7 +234,7 @@ class CrawlerApp(CrawlerRunner):
         """
         config = load_config(Path(config_path), Path(targets_path), Path(matcher_path), self._env)
         crawler_config = config.crawler_config
-        logging.getLogger().setLevel(crawler_config.observability.log_level)
+        self._root_logger.setLevel(crawler_config.observability.log_level)
         # Startup version line (spec 2026-07-10-git-driven-versioning): the number baked into the
         # installed wheel by the build (setuptools-scm / SETUPTOOLS_SCM_PRETEND_VERSION), so an
         # operator can correlate a running node to a release.
@@ -265,7 +267,9 @@ class CrawlerApp(CrawlerRunner):
                 notifier=notifier,
                 notification_timeout_seconds=observability.notification_timeout_seconds,
             )
-            stack.callback(start_metrics_server(registry, observability.metrics_port))
+            stack.callback(
+                start_metrics_server(registry, observability.metrics_port, start_http_server)
+            )
             catalog_repo = SqliteCatalogRepository(catalog_conn)
             backoff_states = SqliteBackoffStateRepository(local_conn)
             engine = MatchingEngine(config.matcher_config, config.targets)

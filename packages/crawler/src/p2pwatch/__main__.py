@@ -1,10 +1,13 @@
 """``python -m p2pwatch``: builds the driving ports' implementations and runs the command line."""
 
+import logging
 import os
-from collections.abc import Sequence
+import sys
+from collections.abc import Mapping, Sequence
+from pathlib import Path
 
 from p2pwatch.adapters.driven.config.yaml_config_checker import YamlConfigChecker
-from p2pwatch.adapters.driven.pathlib_catalog_finder import PathlibCatalogFinder
+from p2pwatch.adapters.driven.filesystem_catalog_finder import FilesystemCatalogFinder
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier import SqliteCatalogCopier
 from p2pwatch.adapters.driven.stdlib_logger import StdlibLogger
 from p2pwatch.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
@@ -19,21 +22,28 @@ _WEBUI_ADDRESS = ("0.0.0.0", 8080)
 _AMULE_API_ADDRESS = ("ed2k", 4711)
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    """Runs the subcommand ``argv`` names (``sys.argv`` when ``None``), returns its exit code."""
+def main(argv: Sequence[str], env: Mapping[str, str], cwd: Path) -> int:
+    """Runs the subcommand ``argv`` names in the environment ``env`` and the directory ``cwd``,
+    returns its exit code."""
+    root_logger = logging.getLogger()
     command_line = ArgparseCommandLine(
         crawler_runner=CrawlerApp(
-            webui_address=_WEBUI_ADDRESS, amule_api_address=_AMULE_API_ADDRESS, env=os.environ
+            webui_address=_WEBUI_ADDRESS,
+            amule_api_address=_AMULE_API_ADDRESS,
+            env=env,
+            root_logger=root_logger,
         ),
-        config_validator=ValidateConfig(YamlConfigChecker(os.environ)),
+        config_validator=ValidateConfig(YamlConfigChecker(env)),
         catalog_merger=MergeCatalogs(
-            PathlibCatalogFinder(),
+            FilesystemCatalogFinder(cwd),
             SqliteCatalogCopier(),
             StdlibLogger("p2pwatch.application.merge_catalogs"),
         ),
+        root_logger=root_logger,
+        cwd=cwd,
     )
     return command_line.run(argv)
 
 
 if __name__ == "__main__":  # pragma: no cover
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:], os.environ, Path.cwd()))
