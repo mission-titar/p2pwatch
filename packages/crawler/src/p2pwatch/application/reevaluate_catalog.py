@@ -1,7 +1,7 @@
 """Re-evaluation use-case: re-evaluate the whole catalogue against the current matcher (spec §7).
 
 APPLICATION layer. Iterates every catalogued hash's LATEST observation
-(``catalog_scanner.iter_latest_observations()``), rebuilds a :class:`FileCandidate` via
+(``catalog_scan_reader.iter_latest_observations()``), rebuilds a :class:`FileCandidate` via
 ``ReportedFile.to_candidate`` (the single conversion, spec re-evaluation §6), and delegates to
 the shared ``rejudge_file`` helper (``decisions.py``, which judges the hash on
 all its known filenames) so retraction + notify/download wakes happen identically to the live
@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.application.decisions import rejudge_file
 from p2pwatch.ports.driven.catalog import (
-    CatalogScanner,
+    CatalogScanReader,
     DecisionReader,
     DecisionWriter,
     ObservationReader,
@@ -50,7 +50,7 @@ async def reevaluate_catalog(
     observation_reader: ObservationReader,
     decision_writer: DecisionWriter,
     decision_reader: DecisionReader,
-    catalog_scanner: CatalogScanner,
+    catalog_scan_reader: CatalogScanReader,
     engine: MatchingEngine,
     waker: Waker,
     event_emitter: EventEmitter,
@@ -63,10 +63,10 @@ async def reevaluate_catalog(
     Per-item isolation (spec §7): a ``RepositoryError`` on one row is logged and the sweep
     continues with the next row.
     """
-    total = catalog_scanner.read_file_count()
+    total = catalog_scan_reader.read_file_count()
     files_evaluated = 0
     rows_written = 0
-    for observation in catalog_scanner.iter_latest_observations():
+    for observation in catalog_scan_reader.iter_latest_observations():
         files_evaluated += 1
         reported_file = observation.reported_file
         try:

@@ -36,7 +36,7 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.retraction import RETRACTED_TIER
 from p2pwatch.ports.driven.catalog import (
-    CatalogScanner,
+    CatalogScanReader,
     DecisionReader,
     DecisionWriter,
     ObservationReader,
@@ -104,7 +104,7 @@ _COUNT_FILES = "SELECT COUNT(*) FROM files"
 
 
 class SqliteCatalogRepository(
-    ObservationWriter, ObservationReader, DecisionWriter, DecisionReader, CatalogScanner
+    ObservationWriter, ObservationReader, DecisionWriter, DecisionReader, CatalogScanReader
 ):
     """SQLite implementation of the catalog's five ports."""
 
