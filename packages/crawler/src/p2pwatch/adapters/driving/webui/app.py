@@ -26,11 +26,6 @@ from starlette.templating import Jinja2Templates
 
 from catalog_matching.domain.ed2k_link import build_ed2k_link
 from catalog_matching.domain.models import TargetSegment
-from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
-    PAGE_SIZE,
-    SqliteSourceReader,
-)
-from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driven.persistence_sqlite.sql_console import (
     ROW_CAP,
     TIMEOUT_SECONDS,
@@ -84,15 +79,14 @@ from p2pwatch.domain.interval import (
     MAX_INTERVAL_SPAN,
     Interval,
     interval_ending,
-    requested_interval,
 )
 from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.node_state import NodeState
 from p2pwatch.domain.observation import FileObservation
-from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
+from p2pwatch.domain.sharing_period import SharingPeriod
 from p2pwatch.domain.source import SourceKey
 from p2pwatch.domain.source_history import SourceNaming
-from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
+from p2pwatch.ports.driven.clock import MonotonicClock
 from p2pwatch.ports.driving.crawl_pauser import CrawlPauser
 from p2pwatch.ports.driving.crawl_resumer import CrawlResumer
 from p2pwatch.ports.driving.crawl_summarizer import ClientSummary, CrawlSummarizer
@@ -102,6 +96,7 @@ from p2pwatch.ports.driving.node_describer import NodeDescriber
 from p2pwatch.ports.driving.shutdown_requester import ShutdownRequester
 from p2pwatch.ports.driving.source_describer import SourceDescriber
 from p2pwatch.ports.driving.source_lister import SourceLister
+from p2pwatch.ports.driving.source_name_describer import SourceNameDescriber
 
 # A detail page's path segment: a file_id or a source_id as 32 lowercase hex (stage 1 and 4 D13).
 _HEX_ID = re.compile(r"[0-9a-f]{32}")
@@ -688,10 +683,9 @@ def build_app(
     file_describer: FileDescriber,
     source_lister: SourceLister,
     source_describer: SourceDescriber,
+    source_name_describer: SourceNameDescriber,
     amule_url: str,
-    wall_clock: WallClock,
     monotonic_clock: MonotonicClock,
-    source_period_gap: timedelta,
 ) -> Starlette:
     """Build and return the wired Starlette application.
 
@@ -700,11 +694,10 @@ def build_app(
     Each control POST calls its use case, which returns at once; the webui itself holds no write
     connection (spec §4/§10). ``crawl_summarizer`` serves the dashboard, ``node_describer`` /node,
     ``file_lister`` /files and a target's page, ``file_describer`` a file's page, ``source_lister``
-    /sources, ``source_describer`` a source's page.
+    /sources, ``source_describer`` a source's page, ``source_name_describer`` a name's page.
 
     ``amule_url`` is the base the nav's aMule entry points at (design §9); the caller reads it
-    from ``webui.amule_url``. ``source_period_gap`` is the longest gap within a source period, from
-    ``webui.source_period_gap_seconds`` (source points spec, D6)."""
+    from ``webui.amule_url``."""
 
     # No type checker reads templates: a name missing from the context raises, never prints "".
     templates = Jinja2Templates(
@@ -715,15 +708,6 @@ def build_app(
         ),
         context_processors=[_make_nav_context(amule_url)],
     )
-
-    # Centralized read-only connection management (spec §7): one reused, thread-affine
-    # connection per DB per thread: warm page cache, no per-request cold open.
-    source_reader = SqliteSourceReader(ReaderProvider(catalog_db_path))
-
-    def _now_and_interval(request: Request) -> tuple[datetime, Interval]:
-        """The second the request is read at, and the interval it asks for."""
-        now = wall_clock.now().replace(microsecond=0)
-        return now, requested_interval(*_requested_ends(request), now)
 
     # Full segment by target_id (Task 3: seasonal locator + title resolution on /files)
     _segment_by_id = {seg.target_id: seg for seg in target_segments}
@@ -912,17 +896,20 @@ def build_app(
     async def handle_source_name(request: Request) -> Response:
         source_name = request.query_params.get("source_name")
         page = _page_number(request.query_params.get("page"))
-        now, interval = _now_and_interval(request)
-        window = PeriodWindow(interval.since, interval.until, source_period_gap)
-        source_name_history = (
+        requested_since, requested_until = _requested_ends(request)
+        description = (
             None
             if source_name is None
-            else source_reader.read_source_name_history(
-                source_name, limit=PAGE_SIZE, offset=(page - 1) * PAGE_SIZE, window=window
+            else source_name_describer.describe_source_name(
+                source_name,
+                page=page,
+                requested_since=requested_since,
+                requested_until=requested_until,
             )
         )
-        if source_name_history is None:
+        if description is None:
             return templates.TemplateResponse(request, "404.html", {}, status_code=404)
+        source_name_history = description.source_name_history
         best_filename_by_file = source_name_history.best_filename_by_file
         path = "/sources/name"
         source_name_params = {"source_name": source_name_history.source_name}
@@ -938,12 +925,15 @@ def build_app(
                 ),
                 "nav": _page_nav(
                     page,
-                    len(source_name_history.source_namings) >= PAGE_SIZE,
+                    description.has_next_page,
                     path,
                     {**source_name_params, **_interval_params(request)},
                 ),
                 "interval": _interval_selector(
-                    interval, now, path, {**source_name_params, **_page_param(page)}
+                    description.interval,
+                    description.now,
+                    path,
+                    {**source_name_params, **_page_param(page)},
                 ),
             },
         )

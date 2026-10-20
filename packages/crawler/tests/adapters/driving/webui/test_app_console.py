@@ -15,6 +15,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import SqliteSourc
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driving.webui.app import build_app
 from p2pwatch.application.describe_source import DescribeSource
+from p2pwatch.application.describe_source_name import DescribeSourceName
 from p2pwatch.domain.node_state import NodeState
 from p2pwatch.ports.driven.clock import MonotonicClock
 from p2pwatch.ports.driving.crawl_summarizer import CrawlSummary
@@ -72,6 +73,7 @@ def _build(catalog_db: Path, local_db: Path, monotonic_clock: MonotonicClock) ->
     controls = FakeCrawlControls()  # the console routes never call them
     node_state = NodeState(node_id=None, created_at=None, downloads=(), backoff_state_by_key={})
     wall_clock, gap = FakeTime().wall, timedelta(seconds=90)
+    source_reader = SqliteSourceReader(ReaderProvider(catalog_db))
     return build_app(
         catalog_db_path=catalog_db,
         local_db_path=local_db,
@@ -87,14 +89,13 @@ def _build(catalog_db: Path, local_db: Path, monotonic_clock: MonotonicClock) ->
         file_describer=FakeFileDescriber(None),
         source_lister=FakeSourceLister(SourceListing((), has_next_page=False, source_count=0)),
         source_describer=DescribeSource(
-            source_reader=SqliteSourceReader(ReaderProvider(catalog_db)),
-            wall_clock=wall_clock,
-            source_period_gap=gap,
+            source_reader=source_reader, wall_clock=wall_clock, source_period_gap=gap
+        ),
+        source_name_describer=DescribeSourceName(
+            source_reader=source_reader, wall_clock=wall_clock, source_period_gap=gap
         ),
         amule_url="http://localhost:4711",
-        wall_clock=wall_clock,
         monotonic_clock=monotonic_clock,
-        source_period_gap=gap,
     )
 
 
