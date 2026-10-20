@@ -64,6 +64,15 @@ def _full_download_section() -> dict[str, Any]:
     }
 
 
+def _webui_of_defaults(*, enabled: bool) -> WebuiConfig:
+    """The webui of a section that sets at most ``enabled``: the default aMule link and gap."""
+    return WebuiConfig(
+        enabled=enabled,
+        amule_url="http://localhost:4711",
+        source_period_gap=timedelta(seconds=990),
+    )
+
+
 def _section(raw: dict[str, Any], path: str | None) -> dict[str, Any]:
     """The mapping at the dotted ``path`` of ``raw``, ``raw`` itself for ``None``."""
     for name in path.split(".") if path else ():
@@ -93,7 +102,11 @@ def test_parses_a_valid_config() -> None:
         catalog_db_path="/data/catalog.db",
         local_db_path="/data/local.db",
         node_id=None,
+        observability=ObservabilityConfig(
+            log_level="INFO", metrics=None, notification_timeout_seconds=5.0, notifications=()
+        ),
         download=None,
+        webui=_webui_of_defaults(enabled=True),
     )
 
 
@@ -669,20 +682,20 @@ def test_webui_absent_defaults_to_enabled() -> None:
     # No webui section → the in-process webui is ON by default. The bind is fixed at
     # 0.0.0.0:8080 in the composition layer; it is NOT configurable here.
     cfg = parse_crawler_config(_minimal_raw(), _env())
-    assert cfg.webui == WebuiConfig(enabled=True)
+    assert cfg.webui == _webui_of_defaults(enabled=True)
 
 
 def test_webui_enabled_false_disables_the_surface() -> None:
     raw = _minimal_raw() | {"webui": {"enabled": False}}
-    assert parse_crawler_config(raw, _env()).webui == WebuiConfig(enabled=False)
+    assert parse_crawler_config(raw, _env()).webui == _webui_of_defaults(enabled=False)
 
 
 def test_webui_host_and_port_are_silently_ignored() -> None:
     # A legacy config still carrying host/port must NOT fail: those keys are simply not read
-    # (the bind is fixed in code). The result carries only `enabled`, nothing else.
+    # (the bind is fixed in code). The result is `enabled` and the defaults, nothing else.
     raw = _minimal_raw() | {"webui": {"enabled": True, "host": "1.2.3.4", "port": 9999}}
     cfg = parse_crawler_config(raw, _env())
-    assert cfg.webui == WebuiConfig(enabled=True)
+    assert cfg.webui == _webui_of_defaults(enabled=True)
     # the type no longer carries a bind
     assert {field.name for field in dataclasses.fields(WebuiConfig)}.isdisjoint({"host", "port"})
 
@@ -691,7 +704,7 @@ def test_webui_enabled_defaults_true_when_key_absent_in_section() -> None:
     # Section present (with a now-ignored host) but no `enabled` key → default True
     # (missing-key branch of _bool_default); the host is ignored.
     raw = _minimal_raw() | {"webui": {"host": "1.2.3.4"}}
-    assert parse_crawler_config(raw, _env()).webui == WebuiConfig(enabled=True)
+    assert parse_crawler_config(raw, _env()).webui == _webui_of_defaults(enabled=True)
 
 
 def test_webui_section_must_be_a_mapping() -> None:
