@@ -70,7 +70,6 @@ from p2pwatch.adapters.driving.webui.views import (
     SearchBar,
     SortHeader,
     SortHeaders,
-    SourceFilePeriod,
     SourceFileRow,
     SourceHistoryRow,
     SourceListRow,
@@ -94,6 +93,7 @@ from p2pwatch.domain.node_state import NodeState
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey
+from p2pwatch.domain.source_history import SourceNaming
 from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
 from p2pwatch.ports.driving.crawl_pauser import CrawlPauser
 from p2pwatch.ports.driving.crawl_resumer import CrawlResumer
@@ -102,6 +102,7 @@ from p2pwatch.ports.driving.file_describer import FileDescriber
 from p2pwatch.ports.driving.file_lister import FileLister
 from p2pwatch.ports.driving.node_describer import NodeDescriber
 from p2pwatch.ports.driving.shutdown_requester import ShutdownRequester
+from p2pwatch.ports.driving.source_describer import SourceDescriber
 from p2pwatch.ports.driving.source_lister import SourceLister
 
 # A detail page's path segment: a file_id or a source_id as 32 lowercase hex (stage 1 and 4 D13).
@@ -317,8 +318,20 @@ def _known_source_row(known_source: KnownSource) -> SourceListRow:
     )
 
 
+def _source_naming_row(source_naming: SourceNaming) -> SourceListRow:
+    """A source under one of its names, as one line of a source's page."""
+    return SourceListRow(
+        name=source_naming.source_name,
+        name_link=_name_link(source_naming.source_name),
+        short_hash=short_hash(source_naming.source.native_id),
+        source_link=_source_link(source_naming.source),
+        last_seen=utc_timestamp(source_naming.last_seen_at),
+        files=str(source_naming.file_count),
+    )
+
+
 def _source_list_row(source: SourceRow) -> SourceListRow:
-    """A source and one name it carried, as one line of a source's or a name's page."""
+    """A source and one name it carried, as one line of a name's page."""
     return SourceListRow(
         name="unknown" if source.name is None else source.name,
         name_link=_name_link(source.name),
@@ -329,13 +342,12 @@ def _source_list_row(source: SourceRow) -> SourceListRow:
     )
 
 
-def _source_file_row(item: SourceFilePeriod) -> SourceFileRow:
+def _source_file_row(period: SharingPeriod, best_filename: str | None) -> SourceFileRow:
     """A period of a source's or a name's page, with the file it was read on."""
-    file = item.period.file
     return SourceFileRow(
-        file=item.file_name or short_hash(file.native_id),
-        file_link=f"/files/{file.file_id.hex()}",
-        history=_source_history_row(item.period),
+        file=best_filename or short_hash(period.file.native_id),
+        file_link=f"/files/{period.file.file_id.hex()}",
+        history=_source_history_row(period),
     )
 
 
@@ -689,6 +701,7 @@ def build_app(
     file_lister: FileLister,
     file_describer: FileDescriber,
     source_lister: SourceLister,
+    source_describer: SourceDescriber,
     amule_url: str,
     wall_clock: WallClock,
     monotonic_clock: MonotonicClock,
@@ -701,7 +714,7 @@ def build_app(
     Each control POST calls its use case, which returns at once; the webui itself holds no write
     connection (spec §4/§10). ``crawl_summarizer`` serves the dashboard, ``node_describer`` /node,
     ``file_lister`` /files and a target's page, ``file_describer`` a file's page, ``source_lister``
-    /sources.
+    /sources, ``source_describer`` a source's page.
 
     ``amule_url`` is the base the nav's aMule entry points at (design §9); the caller reads it
     from ``webui.amule_url``. ``source_period_gap`` is the longest gap within a source period, from
@@ -880,28 +893,35 @@ def build_app(
     async def handle_source(request: Request) -> Response:
         source_id_hex: str = request.path_params["source_id"]
         page = _page_number(request.query_params.get("page"))
-        now, interval = _now_and_interval(request)
-        window = PeriodWindow(interval.since, interval.until, source_period_gap)
-        catalog = CatalogReader(catalog_reader.connection())
-        detail = (
-            catalog.source_detail(bytes.fromhex(source_id_hex), page=page, window=window)
+        requested_since, requested_until = _requested_ends(request)
+        description = (
+            source_describer.describe_source(
+                bytes.fromhex(source_id_hex),
+                page=page,
+                requested_since=requested_since,
+                requested_until=requested_until,
+            )
             if _HEX_ID.fullmatch(source_id_hex)
             else None
         )
-        if detail is None:
+        if description is None:
             return templates.TemplateResponse(request, "404.html", {}, status_code=404)
-        path = f"/sources/{source_id_hex}"
+        source_history, path = description.source_history, f"/sources/{source_id_hex}"
+        best_filename_by_file = source_history.best_filename_by_file
         return templates.TemplateResponse(
             request,
             "source_detail.html",
             {
-                "source": detail.source,
-                "names": tuple(_source_list_row(row) for row in detail.names),
-                "periods": tuple(_source_file_row(item) for item in detail.periods),
-                "nav": _page_nav(
-                    page, len(detail.names) >= PAGE_SIZE, path, _interval_params(request)
+                "source": source_history.source,
+                "names": tuple(map(_source_naming_row, source_history.source_namings)),
+                "periods": tuple(
+                    _source_file_row(period, best_filename_by_file.get(period.file))
+                    for period in source_history.sharing_periods
                 ),
-                "interval": _interval_selector(interval, now, path, _page_param(page)),
+                "nav": _page_nav(page, description.has_next_page, path, _interval_params(request)),
+                "interval": _interval_selector(
+                    description.interval, description.now, path, _page_param(page)
+                ),
             },
         )
 
@@ -925,7 +945,9 @@ def build_app(
             {
                 "name": detail.name,
                 "sources": tuple(_source_list_row(row) for row in detail.sources),
-                "periods": tuple(_source_file_row(item) for item in detail.periods),
+                "periods": tuple(
+                    _source_file_row(item.period, item.file_name) for item in detail.periods
+                ),
                 "nav": _page_nav(
                     page,
                     len(detail.sources) >= PAGE_SIZE,

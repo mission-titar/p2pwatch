@@ -18,7 +18,11 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from catalog_matching.domain.engine import DecisionRecord, Explanation
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_targets
-from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import PAGE_SIZE
+from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
+    PAGE_SIZE,
+    SqliteSourceReader,
+)
+from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driving.webui.app import (
     _normalize_direction,
     _normalize_sort,
@@ -30,6 +34,7 @@ from p2pwatch.adapters.driving.webui.app import (
     build_app,
 )
 from p2pwatch.adapters.driving.webui.views import DecisionCell, HiddenInput
+from p2pwatch.application.describe_source import DescribeSource
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.coverage import TargetCoverage
 from p2pwatch.domain.download.states import DownloadState
@@ -137,6 +142,14 @@ _FILE_DESCRIPTION = FileDescription(
 )
 
 
+def _source_describer(catalog_db: Path) -> DescribeSource:
+    return DescribeSource(
+        source_reader=SqliteSourceReader(ReaderProvider(catalog_db)),
+        wall_clock=_WALL_CLOCK,
+        source_period_gap=_GAP,
+    )
+
+
 def _app_on_fakes(
     *,
     crawl_summary: CrawlSummary = _CRAWL_SUMMARY,
@@ -165,6 +178,7 @@ def _app_on_fakes(
         file_lister=file_lister,
         file_describer=file_describer,
         source_lister=source_lister,
+        source_describer=_source_describer(_NO_DB),
         amule_url=amule_url,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -284,6 +298,7 @@ def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         file_lister=_NO_FILE_LISTER,
         file_describer=FakeFileDescriber(_FILE_DESCRIPTION),
         source_lister=_NO_SOURCE_LISTER,
+        source_describer=_source_describer(catalog_db),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -937,6 +952,7 @@ async def test_a_template_reading_what_its_context_lacks_raises(
         file_lister=_NO_FILE_LISTER,
         file_describer=_NO_FILE_DESCRIBER,
         source_lister=_NO_SOURCE_LISTER,
+        source_describer=_source_describer(catalog_db),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
