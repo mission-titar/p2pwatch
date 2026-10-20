@@ -266,8 +266,8 @@ Each changes in the block that makes it false.
 
 Estimates by a Sonnet agent on `main` at `38bfe15`, before any code, about 20 % either way
 (`.reviews/lot3-estimate.md`); each teammate measures its block and splits it at a bound. No block is purely
-mechanical, so none takes the size exemption. Headroom under the cap of 19: 2 splits for 3a (Corrected: 5 before
-blocks 14, 16 and 21), 5 for 3b; five rows sit
+mechanical, so none takes the size exemption. Headroom under the cap of 19: 1 split for 3a (Corrected: 5 before
+blocks 14, 16, 21 and 22; the repo reader's block renumbered 24), 5 for 3b; five rows sit
 at 450 to 480 lines (3a 20, 40, 44, 52; 3b 52), and 3a 40's fallback is to hand its fakes to 42.
 
 Every block leaves its new surface called by production code, since `dead-code-check` reports a class only tests
@@ -283,8 +283,9 @@ call: the old entry function delegates to what the block adds until a later bloc
 | 14 | `refactor/adapter-values-from-composition` | the six parameter defaults of the crawler's adapters gone, the composition passing them; `AmuleApiClient` takes a `transport_factory`, one transport per session as before, so httpx no longer reads `HTTP_PROXY` for amuleapi (Corrected: added) | 110, 13 |
 | 16 | `refactor/config-defaults-in-domain` | the defaults of `crawler.yml`'s absent keys into the domain; C5 in `AGENTS.md` (Corrected: added) | 185, 6 |
 | 20 | `refactor/bump-amule` | the three writers and their adapters, `bump.main` writing through them, their edges `deprecated` until 21 (Corrected: split from 21) | 250, 15 |
-| 21 | `feat/bump-amule-use-case` | `BumpAmule` behind `AmuleBumper`; `bump.py` and `test_bump.py` gone; the default paths against the given `cwd` and temporary directory; `wrap`'s width from the composition; `docs/contributing/amule-bump.md` if it changes (Corrected: split from 20) | 250, 14 |
-| 22 | `refactor/repo-reader-domain-types` | `RepoReader`'s `read_` methods on domain types; GitHub's API URL as a composition value; the loopback test | 300, 12 |
+| 21 | `feat/bump-amule-use-case` | `TerminalStepOutputWriter` outside Actions, `GitHubStepOutputWriter` given a path only; `main(argv, env, cwd, temporary_directory)`; the default paths against the given `cwd` and temporary directory; `wrap`'s width from the composition; `docs/contributing/amule-bump.md` (Corrected: split from 20, then from 22) | 182, 14 |
+| 22 | `feat/bump-amule-driving-port` | `BumpAmule` behind `AmuleBumper` and its three outcomes; the command line printing each; `bump.py`, `test_bump.py` and `amule_bump`'s deprecated edges gone (Corrected: split from 21) | 380, 11 |
+| 24 | `refactor/repo-reader-domain-types` | `RepoReader`'s `read_` methods on domain types; GitHub's API URL as a composition value; the loopback test | 300, 12 |
 | 30 | `refactor/amule-settings-in-domain` | the environment's validation into the domain, its error, and the values of unset variables (C5, Corrected: added); `env` and the paths as values from `__main__` | 300, 10 |
 | 40 | `feat/boot-container` | `BootContainer` behind `ContainerBooter`; `AmuleConfReader`, `AmuleConfWriter`, `PosixAmuleConf`; `boot.main` delegating to `BootContainer` | 480, 14 |
 | 42 | `feat/boot-accounts-and-mount-points` | `AccountManager`, `MountPointPreparer` and their adapters; `BootContainer` gains the two steps, `boot.py` loses them | 300, 10 |
