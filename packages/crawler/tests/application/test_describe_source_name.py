@@ -95,6 +95,28 @@ def test_the_periods_are_read_over_the_requested_interval_with_the_gap() -> None
     assert reader.calls[0][1]["window"] == PeriodWindow(since, until, _GAP)
 
 
+def test_a_request_past_7_days_reads_the_7_ending_at_its_until() -> None:
+    reader = _FakeSourceReader(_history())
+    since, until = datetime(2026, 9, 1, tzinfo=UTC), datetime(2026, 10, 1, tzinfo=UTC)
+    week = Interval(until - timedelta(days=7), until, clamped=True)
+
+    description = _describe(reader, requested_since=since, requested_until=until)
+
+    assert description is not None and description.interval == week
+    assert reader.calls[0][1]["window"] == PeriodWindow(week.since, until, _GAP)
+
+
+def test_an_inverted_request_reads_the_7_days_ending_at_its_until() -> None:
+    reader = _FakeSourceReader(_history())
+    since, until = datetime(2026, 10, 12, tzinfo=UTC), datetime(2026, 10, 10, tzinfo=UTC)
+    week = Interval(until - timedelta(days=7), until)
+
+    description = _describe(reader, requested_since=since, requested_until=until)
+
+    assert description is not None and description.interval == week
+    assert reader.calls[0][1]["window"] == PeriodWindow(week.since, until, _GAP)
+
+
 def test_a_page_starts_after_the_sources_of_the_pages_before_it() -> None:
     reader = _FakeSourceReader(_history())
 
