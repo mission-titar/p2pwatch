@@ -28,7 +28,7 @@ from catalog_matching.domain.ed2k_link import build_ed2k_link
 from catalog_matching.domain.models import TargetSegment
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
     PAGE_SIZE,
-    CatalogReader,
+    SqliteSourceReader,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driven.persistence_sqlite.sql_console import (
@@ -41,7 +41,6 @@ from p2pwatch.adapters.driving.webui.format import (
     average_rate,
     human_size,
     input_timestamp,
-    micros_timestamp,
     parse_instant,
     seasonal_locator,
     short_hash,
@@ -73,7 +72,6 @@ from p2pwatch.adapters.driving.webui.views import (
     SourceFileRow,
     SourceHistoryRow,
     SourceListRow,
-    SourceRow,
     TargetCoverageDisplay,
     TierFacet,
     TimelineRow,
@@ -319,7 +317,7 @@ def _known_source_row(known_source: KnownSource) -> SourceListRow:
 
 
 def _source_naming_row(source_naming: SourceNaming) -> SourceListRow:
-    """A source under one of its names, as one line of a source's page."""
+    """A source under one of its names, as one line of a source's or a name's page."""
     return SourceListRow(
         name=source_naming.source_name,
         name_link=_name_link(source_naming.source_name),
@@ -327,18 +325,6 @@ def _source_naming_row(source_naming: SourceNaming) -> SourceListRow:
         source_link=_source_link(source_naming.source),
         last_seen=utc_timestamp(source_naming.last_seen_at),
         files=str(source_naming.file_count),
-    )
-
-
-def _source_list_row(source: SourceRow) -> SourceListRow:
-    """A source and one name it carried, as one line of a name's page."""
-    return SourceListRow(
-        name="unknown" if source.name is None else source.name,
-        name_link=_name_link(source.name),
-        short_hash=short_hash(source.source.native_id),
-        source_link=_source_link(source.source),
-        last_seen=micros_timestamp(source.last_seen_at),
-        files=str(source.file_count),
     )
 
 
@@ -731,10 +717,8 @@ def build_app(
     )
 
     # Centralized read-only connection management (spec §7): one reused, thread-affine
-    # connection per DB per thread: warm page cache, no per-request cold open. Handlers
-    # obtain a connection via ``provider.connection()`` and NEVER close it (the point is
-    # reuse).
-    catalog_reader = ReaderProvider(catalog_db_path)
+    # connection per DB per thread: warm page cache, no per-request cold open.
+    source_reader = SqliteSourceReader(ReaderProvider(catalog_db_path))
 
     def _now_and_interval(request: Request) -> tuple[datetime, Interval]:
         """The second the request is read at, and the interval it asks for."""
@@ -930,27 +914,31 @@ def build_app(
         page = _page_number(request.query_params.get("page"))
         now, interval = _now_and_interval(request)
         window = PeriodWindow(interval.since, interval.until, source_period_gap)
-        catalog = CatalogReader(catalog_reader.connection())
-        detail = (
+        source_name_history = (
             None
             if source_name is None
-            else catalog.name_detail(source_name, page=page, window=window)
+            else source_reader.read_source_name_history(
+                source_name, limit=PAGE_SIZE, offset=(page - 1) * PAGE_SIZE, window=window
+            )
         )
-        if detail is None:
+        if source_name_history is None:
             return templates.TemplateResponse(request, "404.html", {}, status_code=404)
-        path, source_name_params = "/sources/name", {"source_name": detail.name}
+        best_filename_by_file = source_name_history.best_filename_by_file
+        path = "/sources/name"
+        source_name_params = {"source_name": source_name_history.source_name}
         return templates.TemplateResponse(
             request,
             "source_name.html",
             {
-                "name": detail.name,
-                "sources": tuple(_source_list_row(row) for row in detail.sources),
+                "source_name": source_name_history.source_name,
+                "sources": tuple(map(_source_naming_row, source_name_history.source_namings)),
                 "periods": tuple(
-                    _source_file_row(item.period, item.file_name) for item in detail.periods
+                    _source_file_row(period, best_filename_by_file.get(period.file))
+                    for period in source_name_history.sharing_periods
                 ),
                 "nav": _page_nav(
                     page,
-                    len(detail.sources) >= PAGE_SIZE,
+                    len(source_name_history.source_namings) >= PAGE_SIZE,
                     path,
                     {**source_name_params, **_interval_params(request)},
                 ),

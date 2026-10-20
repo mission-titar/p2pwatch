@@ -6,7 +6,6 @@ from p2pwatch.adapters.driving.webui.format import (
     average_rate,
     human_size,
     input_timestamp,
-    micros_timestamp,
     parse_instant,
     seasonal_locator,
     short_hash,
@@ -14,8 +13,7 @@ from p2pwatch.adapters.driving.webui.format import (
     utc_timestamp,
 )
 
-# Tuesday 2026-10-13 20:00:00 UTC, in microseconds since the Unix epoch.
-TUESDAY_8PM = 1_791_921_600_000_000
+# Tuesday 2026-10-13 20:00:00 UTC.
 _TUESDAY_8PM = datetime(2026, 10, 13, 20, tzinfo=UTC)
 
 
@@ -128,12 +126,13 @@ def test_seasonal_id_uppercases_letter() -> None:
 
 
 # ---------------------------------------------------------------------------
-# micros_timestamp and average_rate: a source's last reading, a sharing period's rate (D12)
+# utc_timestamp and average_rate: a source's last reading, a sharing period's rate (D12)
 # ---------------------------------------------------------------------------
 
 
-def test_micros_timestamp_keeps_the_seconds_of_a_range_end() -> None:
-    assert micros_timestamp(TUESDAY_8PM + 30_999_999) == "2026-10-13 20:00:30Z"
+def test_utc_timestamp_keeps_the_seconds_of_a_period_end() -> None:
+    period_end = _TUESDAY_8PM + timedelta(microseconds=30_999_999)
+    assert utc_timestamp(period_end) == "2026-10-13 20:00:30Z"
 
 
 def test_average_rate_is_the_bytes_over_the_range_length() -> None:

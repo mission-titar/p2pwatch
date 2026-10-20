@@ -155,6 +155,7 @@ a function does.
 | `known source` | `KnownSource`, a source with a user hash as the sources list shows it: its latest `source_name`, its latest reading, its file count | `source row` |
 | `source naming` | `SourceNaming`, a source under one `source_name` it carried: its latest reading and its file count under that name | `source row` |
 | `source history` | `SourceHistory`, a source as its page shows it: a page of its source namings, its sharing periods over every file, their files' best filenames | `source detail` |
+| `source name history` | `SourceNameHistory`, a `source_name` as its page shows it: a page of the source namings that carried it, its sharing periods without a user hash, their files' best filenames | `name detail` |
 | `search text` | `search_text`, the text a listed name must contain, or a listed source's hash prefix | `query`, which is SQL's |
 | `token` | a named matcher of the policy (`tokens:`) | a word of a text |
 | `word` | a piece of normalized text | `token` |

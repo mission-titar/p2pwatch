@@ -1,5 +1,5 @@
-"""A source as its page shows it: the names it carried and its sharing periods (stage 4 spec,
-D13)."""
+"""A source and a source name as their pages show them: the names a source carried, the sources
+that carried a name, and their sharing periods (stage 4 spec, D13)."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -26,6 +26,17 @@ class SourceHistory:
     newest first, and the best filename of each of their files ever seen."""
 
     source: SourceKey
+    source_namings: tuple[SourceNaming, ...]
+    sharing_periods: tuple[SharingPeriod, ...]
+    best_filename_by_file: Mapping[FileKey, str]
+
+
+@dataclass(frozen=True)
+class SourceNameHistory:
+    """A name, the sources read under it, last seen first, its sharing periods without a user
+    hash, newest first, and the best filename of each of their files ever seen."""
+
+    source_name: str
     source_namings: tuple[SourceNaming, ...]
     sharing_periods: tuple[SharingPeriod, ...]
     best_filename_by_file: Mapping[FileKey, str]

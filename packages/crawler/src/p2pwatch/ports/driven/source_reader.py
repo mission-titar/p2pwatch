@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
-from p2pwatch.domain.source_history import SourceHistory
+from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory
 
 
 class SourceReader(ABC):
@@ -28,6 +28,13 @@ class SourceReader(ABC):
     ) -> SourceHistory | None:
         """The source's names from ``offset``, at most ``limit``, and its periods in ``window``;
         ``None`` for a source never recorded."""
+
+    @abstractmethod
+    def read_source_name_history(
+        self, source_name: str, *, limit: int, offset: int, window: PeriodWindow
+    ) -> SourceNameHistory | None:
+        """The sources that carried the name from ``offset``, at most ``limit``, and its periods
+        without a user hash in ``window``; ``None`` for a name never recorded."""
 
     @abstractmethod
     def read_sharing_periods(

@@ -10,7 +10,7 @@ from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey
-from p2pwatch.domain.source_history import SourceHistory, SourceNaming
+from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory, SourceNaming
 from p2pwatch.ports.driven.source_reader import SourceReader
 from p2pwatch.ports.driving.source_describer import SourceDescription
 from p2pwatch_testing.application.fakes import FakeTime
@@ -42,6 +42,11 @@ class _FakeSourceReader(SourceReader):
 
     def read_source_count(self, **arguments: Any) -> int:
         raise AssertionError("DescribeSource counts no source")
+
+    def read_source_name_history(
+        self, source_name: str, **arguments: Any
+    ) -> SourceNameHistory | None:
+        raise AssertionError("DescribeSource describes no source name")
 
     def read_sharing_periods(
         self, file: FileKey, window: PeriodWindow

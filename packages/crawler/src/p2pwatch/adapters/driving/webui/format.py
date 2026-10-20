@@ -81,12 +81,6 @@ def seasonal_locator(*, season: int, seasonal_number: int, letter: str) -> str:
     return f"S{season:02d}E{seasonal_number:02d}{letter.upper()}"
 
 
-def micros_timestamp(micros: int) -> str:
-    """Microseconds since the Unix epoch as ``YYYY-MM-DD HH:MM:SSZ``: a source period's ends, to
-    the second."""
-    return utc_timestamp(_EPOCH + timedelta(microseconds=micros))
-
-
 def utc_timestamp(at: datetime) -> str:
     """A UTC instant as ``YYYY-MM-DD HH:MM:SSZ``, the webui's time format."""
     return f"{at:%Y-%m-%d %H:%M:%S}Z"

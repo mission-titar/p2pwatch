@@ -198,8 +198,6 @@ depends_on = [
   "p2pwatch.ports.driven.source_reader",
   # Its own adapter, a module apart to break the cycle with the webui: lot 2 folds it back.
   { path = "p2pwatch.adapters.driven.persistence_sqlite", deprecated = true },
-  # The reader builds the webui's views: lot 2 gives the read ports their own types.
-  { path = "p2pwatch.adapters.driving.webui.views", deprecated = true },
 ]
 
 [[modules]]
@@ -278,7 +276,7 @@ depends_on = [
 [[modules]]
 path = "p2pwatch.adapters.driving.webui.views"
 layer = "adapters"
-depends_on = ["p2pwatch.domain"]
+depends_on = []
 
 [[modules]]
 path = "p2pwatch.application"
