@@ -5,11 +5,12 @@ from collections.abc import Callable, Mapping
 
 from rapidfuzz import fuzz
 
+from catalog_matching.domain.combinators import Matcher
 from catalog_matching.domain.models import FileCandidate
 from catalog_matching.domain.normalization import fold, split_words
 
 
-class KeywordMatcher:
+class KeywordMatcher(Matcher):
     """True if the phrase's words are a CONTIGUOUS subsequence of the filename's words."""
 
     def __init__(self, phrase: str) -> None:
@@ -27,7 +28,7 @@ class KeywordMatcher:
         )
 
 
-class RegexMatcher:
+class RegexMatcher(Matcher):
     """Regex match on ``fold(filename)``. If ``"i"`` in ``flags``, prefixes ``(?i)``.
 
     Patterns are compiled with ``re.ASCII`` so ``\\b \\d \\s \\w`` keep ASCII semantics
@@ -76,7 +77,7 @@ STOPWORDS_FR: frozenset[str] = frozenset(
 )
 
 
-class CoverageMatcher:
+class CoverageMatcher(Matcher):
     """Fuzzy fraction of ``reference``'s significant words that are covered (cf. spec §8.2)."""
 
     def __init__(self, reference: str, min_coverage: float, min_similarity: float = 0.85) -> None:
@@ -111,7 +112,7 @@ READERS_BY_ATTR: Mapping[str, Callable[[FileCandidate], float | None]] = {
 }
 
 
-class AttrBetweenMatcher:
+class AttrBetweenMatcher(Matcher):
     """True if the numeric attribute is PRESENT and within ``[min_bound, max_bound]`` (§8.2).
 
     Open bounds when ``min_bound``/``max_bound`` are ``None``. Missing attribute -> false.

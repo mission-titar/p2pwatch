@@ -28,20 +28,20 @@ from prometheus_client import CollectorRegistry
 import p2pwatch.adapters.driving.webui
 from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.adapters.driven.asyncio_run_state import AsyncioRunState
+from p2pwatch.adapters.driven.asyncio_waker import AsyncioWaker
 from p2pwatch.adapters.driven.config.crawler_config import (
     AMULE_CLIENT_NAME,
     CrawlerConfig,
     LoadedConfig,
     load_config,
 )
-from p2pwatch.adapters.driven.disk_space_shutil import ShutilDiskSpace
 from p2pwatch.adapters.driven.in_memory_status_board import InMemoryStatusBoard
 from p2pwatch.adapters.driven.monotonic_clock_asyncio import AsyncioMonotonicClock
 from p2pwatch.adapters.driven.mule_api.client import AmuleApiClient
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
 from p2pwatch.adapters.driven.observability.dispatcher import ObservabilityDispatcher
-from p2pwatch.adapters.driven.observability.prometheus_sink import (
-    PrometheusSink,
+from p2pwatch.adapters.driven.observability.prometheus_metrics_recorder import (
+    PrometheusMetricsRecorder,
     start_metrics_server,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.backoff_state_repository import (
@@ -62,10 +62,10 @@ from p2pwatch.adapters.driven.persistence_sqlite.local_state_repository import (
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driven.persistence_sqlite.source_repository import SqliteSourceRepository
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_sql_executor import SqliteSqlExecutor
-from p2pwatch.adapters.driven.rng_random import SeededRng
+from p2pwatch.adapters.driven.random_jitter_generator import RandomJitterGenerator
+from p2pwatch.adapters.driven.shutil_free_space_meter import ShutilFreeSpaceMeter
 from p2pwatch.adapters.driven.stdlib_logger import StdlibLogger
 from p2pwatch.adapters.driven.uuid4_node_id_generator import Uuid4NodeIdGenerator
-from p2pwatch.adapters.driven.wake_hub_asyncio import AsyncioWakeHub
 from p2pwatch.adapters.driven.wall_clock_system import SystemWallClock
 from p2pwatch.adapters.driving.process.posix_process import PosixProcess
 from p2pwatch.adapters.driving.webui.app import build_app as build_webui_app
@@ -236,7 +236,7 @@ class CrawlerApp(CrawlerRunner):
         _logger.info("p2pwatch version %s", version("p2pwatch"))
         wall_clock = SystemWallClock()
         monotonic_clock = AsyncioMonotonicClock()
-        wake_hub = AsyncioWakeHub()
+        waker = AsyncioWaker()
         shutdown = asyncio.Event()
         # The pause gate, armed (set = un-paused) so the crawler starts running.
         resumed = asyncio.Event()
@@ -257,8 +257,8 @@ class CrawlerApp(CrawlerRunner):
             notifier = AppriseNotifier(
                 tuple((t.url, t.audience, t.node_prefix) for t in observability.notifications)
             )
-            telemetry = ObservabilityDispatcher(
-                metrics=PrometheusSink(registry),
+            event_emitter = ObservabilityDispatcher(
+                metrics_recorder=PrometheusMetricsRecorder(registry),
                 notifier=notifier,
                 notification_timeout_seconds=observability.notification_timeout_seconds,
             )
@@ -286,7 +286,10 @@ class CrawlerApp(CrawlerRunner):
             # (backoff survives restart, spec §3/§7), injected into ALL workers
             # + passed to the search tasks that persist it. Single writer on the event loop.
             backoff = BackoffRegistry(
-                _backoff_policy(crawler_config), wall_clock, monotonic_clock, SeededRng()
+                _backoff_policy(crawler_config),
+                wall_clock,
+                monotonic_clock,
+                RandomJitterGenerator(),
             )
             backoff.load_from(backoff_states.read_backoff_states())
             deps = WorkerDeps(
@@ -295,9 +298,9 @@ class CrawlerApp(CrawlerRunner):
                 decision_writer=catalog_repo,
                 decision_reader=catalog_repo,
                 engine=engine,
-                wake_hub=wake_hub,
+                waker=waker,
                 backoff=backoff,
-                telemetry=telemetry,
+                event_emitter=event_emitter,
                 wall_clock=wall_clock,
                 logger=StdlibLogger("p2pwatch.application.search_worker"),
                 observation_logger=StdlibLogger("p2pwatch.application.record_observations"),
@@ -309,7 +312,13 @@ class CrawlerApp(CrawlerRunner):
             workers = [SearchWorker(AMULE_CLIENT_NAME, client, deps)]
             # The status and download loops share the search session: one session per node.
             status_deps = StatusLoopDeps(
-                AMULE_CLIENT_NAME, client, wall_clock, monotonic_clock, telemetry, shutdown, board
+                AMULE_CLIENT_NAME,
+                client,
+                wall_clock,
+                monotonic_clock,
+                event_emitter,
+                shutdown,
+                board,
             )
             search_tasks = SearchTaskRunner(
                 workers=workers,
@@ -344,7 +353,7 @@ class CrawlerApp(CrawlerRunner):
                     decision_reader=catalog_repo,
                     observation_reader=catalog_repo,
                     targets=config.targets,
-                    disk=ShutilDiskSpace(download_config.output_dir),
+                    free_space_meter=ShutilFreeSpaceMeter(download_config.output_dir),
                     min_free_bytes=download_config.min_free_bytes,
                     lost_after=download_config.lost_after,
                     poll_interval_seconds=download_config.poll_interval_seconds,
@@ -352,9 +361,9 @@ class CrawlerApp(CrawlerRunner):
                     sources_interval=download_config.sources_interval,
                     wall_clock=wall_clock,
                     monotonic_clock=monotonic_clock,
-                    telemetry=telemetry,
+                    event_emitter=event_emitter,
                     logger=StdlibLogger("p2pwatch.application.run_download_cycle"),
-                    wake_hub=wake_hub,
+                    waker=waker,
                     shutdown=shutdown,
                 )
                 loops.append(partial(download_loop, download_deps))
@@ -365,7 +374,7 @@ class CrawlerApp(CrawlerRunner):
                 node_id_writer=local_repo,
                 node_id_generator=Uuid4NodeIdGenerator(),
                 wall_clock=wall_clock,
-                telemetry=telemetry,
+                event_emitter=event_emitter,
                 policy_fingerprint=config.policy_fingerprint,
                 policy_fingerprint_reader=local_repo,
                 policy_fingerprint_writer=local_repo,
@@ -375,8 +384,8 @@ class CrawlerApp(CrawlerRunner):
                     decision_reader=catalog_repo,
                     catalog_scanner=catalog_repo,
                     engine=engine,
-                    wake_hub=wake_hub,
-                    telemetry=telemetry,
+                    waker=waker,
+                    event_emitter=event_emitter,
                     wall_clock=wall_clock,
                     logger=StdlibLogger("p2pwatch.application.reevaluate_catalog"),
                     node_id=node_id,

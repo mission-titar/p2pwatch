@@ -13,6 +13,7 @@ from p2pwatch.domain.observability import events as ev
 from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus, StatusReading
 from p2pwatch.ports.driven.client_errors import ClientError
 from p2pwatch.ports.driven.client_status import ClientStatusWriter, StatusClient
+from p2pwatch.ports.driven.telemetry import EventEmitter
 from p2pwatch_testing.application.fakes import FakeTime, make_unreachable
 
 type _Reading = ClientStatus | ClientError
@@ -36,7 +37,7 @@ def _status(**channels: tuple[bool, bool | None]) -> ClientStatus:
     )
 
 
-class _ScriptedClient:
+class _ScriptedClient(StatusClient):
     """One scripted reading per call; the last one asks for shutdown."""
 
     def __init__(self, readings: list[_Reading], shutdown: asyncio.Event) -> None:
@@ -69,7 +70,7 @@ class _SteppedClient(_ScriptedClient):
         return await super().status()
 
 
-class _TimedTelemetry:
+class _TimedEventEmitter(EventEmitter):
     """Each event with the seconds elapsed on the monotonic clock when it was emitted."""
 
     def __init__(self, fake_time: FakeTime) -> None:
@@ -100,7 +101,7 @@ def _deps(
     client_name: str,
     client: StatusClient,
     fake_time: FakeTime,
-    telemetry: _TimedTelemetry,
+    event_emitter: _TimedEventEmitter,
     shutdown: asyncio.Event,
 ) -> StatusLoopDeps:
     return StatusLoopDeps(
@@ -108,7 +109,7 @@ def _deps(
         client,
         fake_time.wall,
         fake_time.monotonic,
-        telemetry,
+        event_emitter,
         shutdown,
         _RecordingStatusWriter(),
     )
@@ -116,25 +117,25 @@ def _deps(
 
 async def _run(*readings: _Reading, client: str = "amuled") -> list[tuple[float, ev.Event]]:
     fake_time, shutdown = FakeTime(), asyncio.Event()
-    telemetry = _TimedTelemetry(fake_time)
+    event_emitter = _TimedEventEmitter(fake_time)
     scripted = _ScriptedClient(list(readings), shutdown)
     await asyncio.wait_for(
-        status_loop(_deps(client, scripted, fake_time, telemetry, shutdown), _NODE), timeout=1.0
+        status_loop(_deps(client, scripted, fake_time, event_emitter, shutdown), _NODE), timeout=1.0
     )
-    return telemetry.events
+    return event_emitter.events
 
 
 @pytest.mark.asyncio
 async def test_every_event_is_emitted_under_the_node_id_the_loop_runs_with() -> None:
     fake_time, shutdown = FakeTime(), asyncio.Event()
-    telemetry = _TimedTelemetry(fake_time)
+    event_emitter = _TimedEventEmitter(fake_time)
     readings: list[_Reading] = [_DOWN, _DOWN, _DOWN, _status(ed2k=_UP)]
     client = _ScriptedClient(readings, shutdown)
     await asyncio.wait_for(
-        status_loop(_deps("amuled", client, fake_time, telemetry, shutdown), _NODE), timeout=1.0
+        status_loop(_deps("amuled", client, fake_time, event_emitter, shutdown), _NODE), timeout=1.0
     )
-    assert any(isinstance(event, _ALERTS) for _, event in telemetry.events)
-    assert telemetry.node_ids == {_NODE}
+    assert any(isinstance(event, _ALERTS) for _, event in event_emitter.events)
+    assert event_emitter.node_ids == {_NODE}
 
 
 async def _alerts(*readings: _Reading) -> list[tuple[float, ev.Event]]:
@@ -253,7 +254,7 @@ async def test_each_reading_is_published_with_its_wall_and_monotonic_instants(
     fake_time.step_wall(timedelta(hours=1))  # the two clocks part: each instant shows its clock
     writer = _RecordingStatusWriter()
     client = _ScriptedClient([_status(kad=_UP), reading], shutdown)
-    deps = _deps("amuled", client, fake_time, _TimedTelemetry(fake_time), shutdown)
+    deps = _deps("amuled", client, fake_time, _TimedEventEmitter(fake_time), shutdown)
     deps.client_status_writer = writer
     await asyncio.wait_for(status_loop(deps, _NODE), timeout=1.0)
     read_at = fake_time.wall.now() - timedelta(seconds=60)  # the loop slept one period after it
@@ -265,10 +266,10 @@ async def test_each_reading_is_published_with_its_wall_and_monotonic_instants(
 async def test_a_wall_clock_step_forward_raises_no_alert_before_its_delay() -> None:
     # Degraded for four minutes of monotonic time, an hour and four minutes of wall clock.
     fake_time, shutdown = FakeTime(), asyncio.Event()
-    telemetry = _TimedTelemetry(fake_time)
+    event_emitter = _TimedEventEmitter(fake_time)
     client = _SteppedClient([_status(ed2k=_LOW_ID)] * 5, shutdown, fake_time)
     await asyncio.wait_for(
-        status_loop(_deps("amuled", client, fake_time, telemetry, shutdown), _NODE),
+        status_loop(_deps("amuled", client, fake_time, event_emitter, shutdown), _NODE),
         timeout=1.0,
     )
-    assert [e for _, e in telemetry.events if isinstance(e, _ALERTS)] == []
+    assert [e for _, e in event_emitter.events if isinstance(e, _ALERTS)] == []

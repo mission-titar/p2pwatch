@@ -2,12 +2,12 @@ import asyncio
 
 import pytest
 
-from p2pwatch.adapters.driven.wake_hub_asyncio import AsyncioWakeHub
+from p2pwatch.adapters.driven.asyncio_waker import AsyncioWaker
 
 
 @pytest.mark.asyncio
 async def test_signal_wakes_a_waiter() -> None:
-    hub = AsyncioWakeHub()
+    hub = AsyncioWaker()
     waiter = asyncio.create_task(hub.wait("062A"))
     await asyncio.sleep(0)
     assert not waiter.done()
@@ -19,14 +19,14 @@ async def test_signal_wakes_a_waiter() -> None:
 @pytest.mark.asyncio
 async def test_signal_before_wait_is_not_lost() -> None:
     # A wake WITHOUT a waiter leaves the event armed: the next wait returns immediately.
-    hub = AsyncioWakeHub()
+    hub = AsyncioWaker()
     hub.wake("062A")
     await asyncio.wait_for(hub.wait("062A"), timeout=1.0)  # ne bloque pas
 
 
 @pytest.mark.asyncio
 async def test_wait_rearms_for_the_next_signal() -> None:
-    hub = AsyncioWakeHub()
+    hub = AsyncioWaker()
     hub.wake("h")
     await asyncio.wait_for(hub.wait("h"), timeout=1.0)
     # Sleeps again: no signal pending anymore → the next wait does not resolve on its own.
@@ -39,7 +39,7 @@ async def test_wait_rearms_for_the_next_signal() -> None:
 
 @pytest.mark.asyncio
 async def test_subjects_are_independent() -> None:
-    hub = AsyncioWakeHub()
+    hub = AsyncioWaker()
     waiter_a = asyncio.create_task(hub.wait("a"))
     await asyncio.sleep(0)
     hub.wake("b")  # other subject: does not wake a

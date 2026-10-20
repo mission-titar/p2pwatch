@@ -25,7 +25,7 @@ from p2pwatch.domain.status_reading import STATUS_PERIOD, ClientStatus, StatusRe
 from p2pwatch.ports.driven.client_errors import ClientAuthError, ClientError
 from p2pwatch.ports.driven.client_status import ClientStatusWriter, StatusClient
 from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
-from p2pwatch.ports.driven.telemetry import Telemetry
+from p2pwatch.ports.driven.telemetry import EventEmitter
 
 CHANNEL_ALERT_AFTER = timedelta(minutes=5)
 UNREACHABLE_ALERT_AFTER = timedelta(minutes=2)
@@ -37,7 +37,7 @@ class StatusLoopDeps:
     client: StatusClient
     wall_clock: WallClock
     monotonic_clock: MonotonicClock
-    telemetry: Telemetry
+    event_emitter: EventEmitter
     shutdown: asyncio.Event
     client_status_writer: ClientStatusWriter
 
@@ -82,7 +82,7 @@ async def status_loop(deps: StatusLoopDeps, node_id: str) -> None:
     ) -> None:
         change = timer.observe(healthy, deps.monotonic_clock.now())
         if change is not None:
-            await deps.telemetry.emit(alert if change == "alert" else recovery, node_id)
+            await deps.event_emitter.emit(alert if change == "alert" else recovery, node_id)
 
     while not deps.shutdown.is_set():
         try:
@@ -91,7 +91,7 @@ async def status_loop(deps: StatusLoopDeps, node_id: str) -> None:
             raise  # a wrong password is config, not an outage
         except ClientError:  # a refused route too: a renamed /version must not end the crawler
             _publish(deps, None)
-            await deps.telemetry.emit(ClientUnreachable(deps.client_name), node_id)
+            await deps.event_emitter.emit(ClientUnreachable(deps.client_name), node_id)
             # Every channel is unknown while the API is: only the API's own alert can fire.
             readings: list[tuple[str, bool | None, bool | None]] = [
                 (channel, None, None) for channel in dict.fromkeys(c for c, _ in channel_timers)
@@ -108,7 +108,7 @@ async def status_loop(deps: StatusLoopDeps, node_id: str) -> None:
             ClientReachableAgain(deps.client_name),
         )
         for channel, connected, connectable in readings:
-            await deps.telemetry.emit(
+            await deps.event_emitter.emit(
                 ChannelStatusSampled(deps.client_name, channel, connected, connectable),
                 node_id,
             )

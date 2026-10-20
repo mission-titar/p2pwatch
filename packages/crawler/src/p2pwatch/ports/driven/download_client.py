@@ -1,10 +1,7 @@
-"""What the crawler expects from any client that downloads; its errors are in ``client_errors``.
+"""What the crawler expects from any client that downloads; its errors are in ``client_errors``."""
 
-Protocol stubs stay on ONE line: a body on a second one is an uncovered branch.
-"""
-
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Protocol
 
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey
@@ -17,9 +14,13 @@ class DownloadRequest:
     size_bytes: int
 
 
-class DownloadClient(Protocol):
-    """``downloads`` returns every download the client knows, completed ones included."""
+class DownloadClient(ABC):
+    """Queues downloads and reports them."""
 
-    async def start(self, request: DownloadRequest) -> None: ...
+    @abstractmethod
+    async def start(self, request: DownloadRequest) -> None:
+        """Queues the requested file."""
 
-    async def downloads(self) -> tuple[DownloadStatus, ...]: ...
+    @abstractmethod
+    async def downloads(self) -> tuple[DownloadStatus, ...]:
+        """Every download the client knows, completed ones included."""

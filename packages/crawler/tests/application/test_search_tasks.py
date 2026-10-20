@@ -31,13 +31,13 @@ from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from p2pwatch.ports.driven.client_errors import SearchFailedError
 from p2pwatch.ports.driven.repository_errors import RepositoryError
-from p2pwatch.ports.driven.search_client import SearchAnswer
+from p2pwatch.ports.driven.search_client import SearchAnswer, SearchClient
 from p2pwatch_testing.application.fakes import (
+    FakeEventEmitter,
+    FakeJitterGenerator,
     FakeLogger,
-    FakeRng,
+    FakeWaker,
     LoggedLine,
-    RecordingTelemetry,
-    RecordingWakeHub,
     make_unreachable,
 )
 from p2pwatch_testing.catalog_rows import observation_node_ids
@@ -53,7 +53,7 @@ _POLICY = BackoffPolicy(
 )
 
 
-class _TimedClient:
+class _TimedClient(SearchClient):
     """A search takes its channel's duration in loop time; scripted failures come first."""
 
     def __init__(
@@ -63,11 +63,14 @@ class _TimedClient:
         search_failures: list[Exception] | None = None,
         reported_files: tuple[ReportedFile, ...] = (),
     ) -> None:
-        self.channels = tuple(durations)
+        self._channels = tuple(durations)
         self._durations = durations
         self._search_failures = search_failures or []
         self._reported_files = reported_files
         self.searches: list[tuple[float, str, str]] = []
+
+    def channels(self) -> tuple[str, ...]:
+        return self._channels
 
     async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
         self.searches.append((asyncio.get_running_loop().time(), keyword, channel))
@@ -132,17 +135,17 @@ def tasks(
 ) -> Iterator[_Tasks]:
     connection = open_local(tmp_path / "local.db")
     wall_clock = LoopWallClock()
-    backoff = BackoffRegistry(_POLICY, wall_clock, LoopMonotonicClock(), FakeRng())
-    wake_hub, telemetry = RecordingWakeHub(), RecordingTelemetry()
+    backoff = BackoffRegistry(_POLICY, wall_clock, LoopMonotonicClock(), FakeJitterGenerator())
+    waker, event_emitter = FakeWaker(), FakeEventEmitter()
     deps = WorkerDeps(
         observation_writer=catalog,
         observation_reader=catalog,
         decision_writer=catalog,
         decision_reader=catalog,
         engine=engine,
-        wake_hub=wake_hub,
+        waker=waker,
         backoff=backoff,
-        telemetry=telemetry,
+        event_emitter=event_emitter,
         wall_clock=wall_clock,
         logger=FakeLogger(),
         observation_logger=FakeLogger(),
@@ -174,7 +177,7 @@ def test_a_task_records_its_observations_under_the_node_id_the_tasks_run_with(
 def test_channels_do_not_wait_for_each_other(tasks: _Tasks) -> None:
     client = _TimedClient({"ed2k": 6.0, "kad": 60.0})
     tasks.run_for(_HOUR, client, ["keroro"])
-    counts = {name: sum(1 for *_, c in client.searches if c == name) for name in client.channels}
+    counts = {name: sum(1 for *_, c in client.searches if c == name) for name in client.channels()}
     assert counts["ed2k"] >= 5 * counts["kad"]
 
 
@@ -225,16 +228,17 @@ def test_a_failed_save_is_logged_and_retried_after_the_next_search(tasks: _Tasks
     assert tasks.state.saved == [{BackoffKey("amuled", "kad"): second_failure}]
 
 
-class _NeverSuspends:
+class _NeverSuspends(SearchClient):
     """A search that returns without suspending, and fails if the loop ran nothing else since
     the previous one."""
-
-    channels = ("x",)
 
     def __init__(self) -> None:
         self.calls = 0
         self.ticks = 0  # advanced by a concurrent coroutine
         self._ticks_seen = -1
+
+    def channels(self) -> tuple[str, ...]:
+        return ("x",)
 
     async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
         self.calls += 1

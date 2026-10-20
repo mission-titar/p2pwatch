@@ -1,10 +1,12 @@
-"""``SeededRng``: the ``Rng`` port's jitter draw, over ``random.Random``."""
+"""``RandomJitterGenerator``: the ``JitterGenerator`` port's jitter draw, over ``random.Random``."""
 
 import random
 
+from p2pwatch.ports.driven.jitter_generator import JitterGenerator
 
-class SeededRng:
-    """Real ``Rng`` (STRUCTURAL port satisfaction).
+
+class RandomJitterGenerator(JitterGenerator):
+    """Real ``JitterGenerator``.
 
     ``jitter``: REAL draw in ``[0, span)`` via a dedicated ``random.Random`` instance,
     seeded at construction (``jitter_seed``, defaults to system entropy): the backoff

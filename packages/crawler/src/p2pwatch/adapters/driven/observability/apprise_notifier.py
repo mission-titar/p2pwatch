@@ -22,6 +22,7 @@ from collections.abc import Callable, Sequence
 import apprise
 
 from p2pwatch.domain.observability.policy import Audience, Severity
+from p2pwatch.ports.driven.telemetry import Notifier
 
 # (url, audience, node_prefix), from the config's ``observability.notifications``.
 AppriseTargets = Sequence[tuple[str, Audience, bool]]
@@ -40,7 +41,7 @@ _NOTIFY_TYPES: dict[Severity, object] = {
 _NO_MENTION = "@\u200b"
 
 
-class AppriseNotifier:
+class AppriseNotifier(Notifier):
     """``Notifier`` adapter: one apprise tag per audience, in a prefixed group and a bare one."""
 
     def __init__(

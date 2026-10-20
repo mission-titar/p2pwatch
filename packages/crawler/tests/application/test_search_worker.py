@@ -26,13 +26,13 @@ from p2pwatch.domain.observability.events import (
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from p2pwatch_testing.application.fakes import (
+    FakeEventEmitter,
+    FakeJitterGenerator,
     FakeLogger,
-    FakeRng,
     FakeSearchClient,
     FakeTime,
+    FakeWaker,
     LoggedLine,
-    RecordingTelemetry,
-    RecordingWakeHub,
     make_search_failed,
     make_unreachable,
 )
@@ -49,7 +49,7 @@ _CLIENT = BackoffKey("amule-1", None)
 _KAD = BackoffKey("amule-1", "kad")
 _ED2K = BackoffKey("amule-1", "ed2k")
 
-# jitter_ratio 0.0 + FakeRng(jitter_value=0.0) → backoff = exact NOMINAL delay (clean assertions).
+# jitter_ratio 0.0 + FakeJitterGenerator(jitter_value=0.0) → backoff = exact NOMINAL delay.
 _POLICY = BackoffPolicy(
     base_seconds=2.0,
     cap_seconds=60.0,
@@ -68,8 +68,12 @@ def _reported_file() -> ReportedFile:
     )
 
 
-def _registry(fake_time: FakeTime, rng: FakeRng | None = None) -> BackoffRegistry:
-    return BackoffRegistry(_POLICY, fake_time.wall, fake_time.monotonic, rng or FakeRng())
+def _registry(
+    fake_time: FakeTime, jitter_generator: FakeJitterGenerator | None = None
+) -> BackoffRegistry:
+    return BackoffRegistry(
+        _POLICY, fake_time.wall, fake_time.monotonic, jitter_generator or FakeJitterGenerator()
+    )
 
 
 def _deps(
@@ -78,7 +82,7 @@ def _deps(
     backoff: BackoffRegistry,
     fake_time: FakeTime,
     *,
-    telemetry: RecordingTelemetry | None = None,
+    event_emitter: FakeEventEmitter | None = None,
     logger: FakeLogger | None = None,
     observation_logger: FakeLogger | None = None,
 ) -> WorkerDeps:
@@ -88,16 +92,16 @@ def _deps(
         decision_writer=catalog,
         decision_reader=catalog,
         engine=engine,
-        wake_hub=RecordingWakeHub(),
+        waker=FakeWaker(),
         backoff=backoff,
-        telemetry=telemetry or RecordingTelemetry(),
+        event_emitter=event_emitter or FakeEventEmitter(),
         wall_clock=fake_time.wall,
         logger=logger or FakeLogger(),
         observation_logger=observation_logger or FakeLogger(),
     )
 
 
-# --- BackoffRegistry (logic, deterministic via fake time/rng) ---
+# --- BackoffRegistry (logic, deterministic via fake time/jitter_generator) ---
 
 
 def test_backoff_registry_grows_then_resets() -> None:
@@ -169,11 +173,11 @@ def test_backoff_registry_unknown_key_is_not_in_backoff() -> None:
 def test_backoff_registry_jitter_extends_the_delay() -> None:
     fake_time = FakeTime()
     policy = dataclasses.replace(_POLICY, jitter_ratio=0.5)  # jitter in [0, 0.5*delay)
-    rng = FakeRng(jitter_value=1.0)  # constant 1.0s jitter
-    registry = BackoffRegistry(policy, fake_time.wall, fake_time.monotonic, rng)
+    jitter_generator = FakeJitterGenerator(jitter_value=1.0)  # constant 1.0s jitter
+    registry = BackoffRegistry(policy, fake_time.wall, fake_time.monotonic, jitter_generator)
     delay = registry.record_failure(_KAD)
     assert delay == timedelta(seconds=3)  # base 2.0 + jitter 1.0
-    assert rng.jitter_spans == [1.0]  # span = jitter_ratio (0.5) * delay (2.0)
+    assert jitter_generator.jitter_spans == [1.0]  # span = jitter_ratio (0.5) * delay (2.0)
 
 
 def test_the_snapshot_holds_each_waits_start_on_the_wall_clock_and_its_delay() -> None:
@@ -217,8 +221,7 @@ def test_a_worker_declares_the_channels_of_its_client(
     catalog: SqliteCatalogRepository, engine: MatchingEngine
 ) -> None:
     fake_time = FakeTime()
-    client = FakeSearchClient()
-    client.channels = ("kad",)
+    client = FakeSearchClient(channels=("kad",))
     worker = SearchWorker(
         "amule-1", client, _deps(catalog, engine, _registry(fake_time), fake_time)
     )
@@ -399,18 +402,18 @@ async def test_successful_search_emits_search_executed_with_network_and_counts(
     # A successful ed2k search emits SearchExecuted FIRST, labelled with its client,
     # before the per-observation events (ObservationRecorded/DecisionsRecorded).
     fake_time = FakeTime()
-    telemetry = RecordingTelemetry()
+    event_emitter = FakeEventEmitter()
     client = FakeSearchClient(results=[(_reported_file(),)], skipped_result_count=2)
-    deps = _deps(catalog, engine, _registry(fake_time), fake_time, telemetry=telemetry)
+    deps = _deps(catalog, engine, _registry(fake_time), fake_time, event_emitter=event_emitter)
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"), _NODE)
-    assert telemetry.events[0] == SearchExecuted(
+    assert event_emitter.events[0] == SearchExecuted(
         client_name="amule-1", channel="ed2k", observation_count=1, skipped_result_count=2
     )
-    kinds = [type(e).__name__ for e in telemetry.events]
+    kinds = [type(e).__name__ for e in event_emitter.events]
     assert kinds == ["SearchExecuted", "ObservationRecorded", "DecisionsRecorded"]
-    assert telemetry.events[1] == ObservationRecorded(client_name="amule-1", channel="ed2k")
-    assert telemetry.node_ids == {_NODE}
+    assert event_emitter.events[1] == ObservationRecorded(client_name="amule-1", channel="ed2k")
+    assert event_emitter.node_ids == {_NODE}
 
 
 @pytest.mark.asyncio
@@ -420,13 +423,13 @@ async def test_search_failure_emits_search_failed(
     # An application-level channel failure (SearchFailedError) emits
     # SearchFailed(client, network).
     fake_time = FakeTime()
-    telemetry = RecordingTelemetry()
+    event_emitter = FakeEventEmitter()
     client = FakeSearchClient(search_failures=[make_search_failed()])
-    deps = _deps(catalog, engine, _registry(fake_time), fake_time, telemetry=telemetry)
+    deps = _deps(catalog, engine, _registry(fake_time), fake_time, event_emitter=event_emitter)
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"), _NODE)
-    assert telemetry.events == [SearchFailed(client_name="amule-1", channel="ed2k")]
-    assert telemetry.node_ids == {_NODE}
+    assert event_emitter.events == [SearchFailed(client_name="amule-1", channel="ed2k")]
+    assert event_emitter.node_ids == {_NODE}
 
 
 @pytest.mark.asyncio
@@ -435,13 +438,13 @@ async def test_transport_failure_during_search_emits_instance_unreachable(
 ) -> None:
     # A transport failure during search (dead stream) emits ClientUnreachable.
     fake_time = FakeTime()
-    telemetry = RecordingTelemetry()
+    event_emitter = FakeEventEmitter()
     client = FakeSearchClient(search_failures=[make_unreachable()], results=[(_reported_file(),)])
-    deps = _deps(catalog, engine, _registry(fake_time), fake_time, telemetry=telemetry)
+    deps = _deps(catalog, engine, _registry(fake_time), fake_time, event_emitter=event_emitter)
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"), _NODE)
-    assert telemetry.events == [ClientUnreachable("amule-1")]
-    assert telemetry.node_ids == {_NODE}
+    assert event_emitter.events == [ClientUnreachable("amule-1")]
+    assert event_emitter.node_ids == {_NODE}
 
 
 @pytest.mark.asyncio

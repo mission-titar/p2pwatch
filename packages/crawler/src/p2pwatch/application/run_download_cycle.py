@@ -46,15 +46,15 @@ from p2pwatch.domain.source import RecordedReading, SourceKey, SourceUsefulness
 from p2pwatch.ports.driven.catalog import DecisionReader, ObservationReader
 from p2pwatch.ports.driven.client_errors import ClientUnreachableError, DownloadRejectedError
 from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
-from p2pwatch.ports.driven.disk_space import DiskSpace
 from p2pwatch.ports.driven.download_client import DownloadClient, DownloadRequest
 from p2pwatch.ports.driven.downloads import DownloadReader, DownloadWriter
+from p2pwatch.ports.driven.free_space_meter import FreeSpaceMeter
 from p2pwatch.ports.driven.logger import Logger
 from p2pwatch.ports.driven.repository_errors import RepositoryError
 from p2pwatch.ports.driven.source_client import SourceClient
 from p2pwatch.ports.driven.source_points import SourcePointReader, SourcePointWriter
-from p2pwatch.ports.driven.telemetry import Telemetry
-from p2pwatch.ports.driven.wake_hub import WakeHub
+from p2pwatch.ports.driven.telemetry import EventEmitter
+from p2pwatch.ports.driven.waker import Waker
 
 # Conventional subject of the download wake (DECISION D13). D-download subscribes to THIS
 # subject; the producer side (the pipeline) calls wake("download").
@@ -68,8 +68,9 @@ _UNAVAILABLE = (ClientUnreachableError, DownloadRejectedError)
 class DownloadDeps:
     """Dependencies of the download loop (composition assembles them once).
 
-    ``targets`` serves the ``target_id → status`` lookup (pure policy). ``disk`` measures the
-    free space of the filesystem the client writes to (metadata only, no file is opened).
+    ``targets`` serves the ``target_id → status`` lookup (pure policy). ``free_space_meter``
+    measures the free space of the filesystem the client writes to (metadata only, no file is
+    opened).
     """
 
     download_client: DownloadClient
@@ -81,7 +82,7 @@ class DownloadDeps:
     decision_reader: DecisionReader
     observation_reader: ObservationReader
     targets: Sequence[TargetSegment]
-    disk: DiskSpace
+    free_space_meter: FreeSpaceMeter
     min_free_bytes: int
     lost_after: timedelta
     poll_interval_seconds: float
@@ -89,7 +90,7 @@ class DownloadDeps:
     sources_interval: timedelta
     wall_clock: WallClock
     monotonic_clock: MonotonicClock
-    telemetry: Telemetry
+    event_emitter: EventEmitter
     logger: Logger
     disk_low_edge: EdgeState = field(default_factory=EdgeState, kw_only=True)  # low-disk warning
     # The sources step's last start.
@@ -102,9 +103,9 @@ class DownloadDeps:
 
 @dataclass
 class DownloadLoopDeps(DownloadDeps):
-    """``DownloadDeps`` + what it takes to REPEAT (wake hub, shutdown) - DECISION D12."""
+    """``DownloadDeps`` + what it takes to REPEAT (waker, shutdown) - DECISION D12."""
 
-    wake_hub: WakeHub
+    waker: Waker
     shutdown: asyncio.Event
 
 
@@ -172,7 +173,7 @@ async def _record_completion(
     """
     deps.download_writer.record_completed(file, deps.wall_clock.now())
     states[file] = DownloadState.COMPLETED
-    await deps.telemetry.emit(
+    await deps.event_emitter.emit(
         DownloadCompleted(
             file,
             _best_filename(deps, file),
@@ -254,12 +255,12 @@ async def _queue_new_candidates(deps: DownloadDeps, outstanding_bytes: int, node
     ``outstanding_bytes`` is what the client still has to transfer, measured from the cycle's
     snapshot; ``free_bytes`` is read once here. Both are MEASURED, never declared.
     """
-    free_bytes = deps.disk.free_bytes()
-    await deps.telemetry.emit(FreeSpaceSampled(free_bytes=free_bytes), node_id)
+    free_bytes = deps.free_space_meter.free_bytes()
+    await deps.event_emitter.emit(FreeSpaceSampled(free_bytes=free_bytes), node_id)
     if free_bytes >= deps.min_free_bytes:
         deps.disk_low_edge.leave("disk_low")
     elif deps.disk_low_edge.enter("disk_low"):
-        await deps.telemetry.emit(
+        await deps.event_emitter.emit(
             DiskSpaceLow(free_bytes=free_bytes, min_free_bytes=deps.min_free_bytes), node_id
         )
     for candidate in deps.decision_reader.read_download_candidates():
@@ -296,7 +297,7 @@ async def _queue_new_candidates(deps: DownloadDeps, outstanding_bytes: int, node
             deps.loss_deadline_by_file[candidate.file] = deadline
         outstanding_bytes += size_bytes  # the client does not list it yet
         deps.logger.info("candidate file=%s queued for download", candidate.file.native_id)
-        await deps.telemetry.emit(DownloadQueued(target_id=candidate.target_id), node_id)
+        await deps.event_emitter.emit(DownloadQueued(target_id=candidate.target_id), node_id)
 
 
 async def _start_unlisted(deps: DownloadDeps, listed_files: frozenset[FileKey]) -> None:
@@ -375,7 +376,7 @@ async def _alert_sources(
                 source, source_name, file, filename, target_titles, alert.absent_for.total_seconds()
             )
         )
-        await deps.telemetry.emit(event, node_id)
+        await deps.event_emitter.emit(event, node_id)
 
 
 async def _record_sources(
@@ -511,7 +512,7 @@ async def _sleep_or_wake(deps: DownloadLoopDeps) -> None:
     """
     poll_interval = timedelta(seconds=deps.poll_interval_seconds)
     sleep_task = asyncio.ensure_future(deps.monotonic_clock.sleep(poll_interval))
-    wake_task = asyncio.ensure_future(deps.wake_hub.wait(DOWNLOAD_WAKE_SUBJECT))
+    wake_task = asyncio.ensure_future(deps.waker.wait(DOWNLOAD_WAKE_SUBJECT))
     try:
         await asyncio.wait({sleep_task, wake_task}, return_when=asyncio.FIRST_COMPLETED)
     finally:

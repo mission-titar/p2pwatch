@@ -25,8 +25,8 @@ from p2pwatch.domain.observability.events import DecisionChange, DecisionsRecord
 from p2pwatch.domain.retraction import RETRACTED_TIER
 from p2pwatch.ports.driven.catalog import DecisionReader, DecisionWriter, ObservationReader
 from p2pwatch.ports.driven.clock import WallClock
-from p2pwatch.ports.driven.telemetry import Telemetry
-from p2pwatch.ports.driven.wake_hub import WakeHub
+from p2pwatch.ports.driven.telemetry import EventEmitter
+from p2pwatch.ports.driven.waker import Waker
 
 
 async def rejudge_file(
@@ -37,8 +37,8 @@ async def rejudge_file(
     decision_writer: DecisionWriter,
     decision_reader: DecisionReader,
     engine: MatchingEngine,
-    wake_hub: WakeHub,
-    telemetry: Telemetry,
+    waker: Waker,
+    event_emitter: EventEmitter,
     wall_clock: WallClock,
     node_id: str,
 ) -> int:
@@ -72,7 +72,7 @@ async def rejudge_file(
         decision_writer.record_decision(file, decision, wall_clock.now(), node_id)
         changes.append(change(decision.target_id, decision.tier))
         if decision.tier == "download":
-            wake_hub.wake(DOWNLOAD_WAKE_SUBJECT)
+            waker.wake(DOWNLOAD_WAKE_SUBJECT)
     for target_id in sorted(persisted):
         if persisted[target_id].tier == RETRACTED_TIER or target_id in fresh_ids:
             continue
@@ -85,5 +85,7 @@ async def rejudge_file(
             filename, size_bytes = base_candidate.filename, 0
         else:
             filename, size_bytes = best.reported_file.filename, best.reported_file.size_bytes
-        await telemetry.emit(DecisionsRecorded(file, filename, size_bytes, tuple(changes)), node_id)
+        await event_emitter.emit(
+            DecisionsRecorded(file, filename, size_bytes, tuple(changes)), node_id
+        )
     return len(changes)

@@ -8,8 +8,8 @@ from catalog_matching.domain.matchers import KeywordMatcher
 from catalog_matching.domain.models import FileCandidate
 
 
-class _Const:
-    """Test matcher with a constant verdict (satisfies the Matcher Protocol)."""
+class _Const(Matcher):
+    """Test matcher with a constant verdict."""
 
     def __init__(self, verdict: bool) -> None:
         self._verdict = verdict
@@ -64,7 +64,7 @@ def test_nested_combinators() -> None:
     assert matcher.matches(_ANY) is True
 
 
-def test_real_leaf_satisfies_protocol_and_composes() -> None:
+def test_real_leaf_composes() -> None:
     leaf: Matcher = KeywordMatcher("keroro")
     matcher = AnyMatcher((leaf, _Const(False)))
     assert matcher.matches(FileCandidate(filename="Keroro 062A.avi")) is True

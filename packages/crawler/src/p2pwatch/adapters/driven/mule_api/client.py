@@ -1,4 +1,4 @@
-"""Drives ``amuled`` over amuleapi, satisfying ``SearchClient``, ``StatusClient``,
+"""Drives ``amuled`` over amuleapi, implementing ``SearchClient``, ``StatusClient``,
 ``DownloadClient`` and ``SourceClient``.
 
 ``search()`` waits for its own search and paces its starts by the networks' rules. Beyond pacing,
@@ -39,9 +39,11 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.source import SourceReading
 from p2pwatch.domain.status_reading import ClientStatus
+from p2pwatch.ports.driven.client_status import StatusClient
 from p2pwatch.ports.driven.clock import MonotonicClock
-from p2pwatch.ports.driven.download_client import DownloadRequest
-from p2pwatch.ports.driven.search_client import SearchAnswer
+from p2pwatch.ports.driven.download_client import DownloadClient, DownloadRequest
+from p2pwatch.ports.driven.search_client import SearchAnswer, SearchClient
+from p2pwatch.ports.driven.source_client import SourceClient
 
 # Rows asked for per list request. Every list route caps at 100 when `limit` is omitted, which
 # would silently truncate the shared-file sweep completion detection depends on (§7.5).
@@ -65,9 +67,7 @@ _KAD_WORD_HELD = "already on search list"
 _logger = logging.getLogger("p2pwatch.adapters.driven.mule_api.client")
 
 
-class AmuleApiClient:
-    channels: tuple[str, ...] = tuple(_SEARCH_TYPES)
-
+class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
     def __init__(
         self,
         host: str,
@@ -92,6 +92,9 @@ class AmuleApiClient:
         self._ed2k_next_start: MonotonicInstant | None = None  # no ed2k start yet
         self._kad_next_start: dict[str, MonotonicInstant] = {}
         self._keywords_without_kad_word: set[str] = set()
+
+    def channels(self) -> tuple[str, ...]:
+        return tuple(_SEARCH_TYPES)
 
     async def _connect(self) -> httpx.AsyncClient:
         """The session, opened and logged in if there is none. Serialized: callers arriving

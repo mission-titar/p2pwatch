@@ -13,12 +13,12 @@ from p2pwatch.ports.driven.policy_fingerprint import (
     PolicyFingerprintWriter,
 )
 from p2pwatch_testing.application.fakes import (
+    FakeEventEmitter,
     FakeLogger,
     FakeNodeIdGenerator,
     FakeNodeIdStore,
     FakeTime,
     LoggedLine,
-    RecordingTelemetry,
 )
 
 _FINGERPRINT = "policy-2"
@@ -48,7 +48,7 @@ class _Crawl:
         download_enabled: bool = False,
     ) -> None:
         self.steps: list[str] = []
-        self.telemetry = RecordingTelemetry()
+        self.event_emitter = FakeEventEmitter()
         self.fingerprints = _FakeFingerprints(stored_fingerprint)
         self.logger = FakeLogger()
         self.reevaluation_gate_logger = FakeLogger()
@@ -61,7 +61,7 @@ class _Crawl:
             node_id_writer=FakeNodeIdStore(stored_node_id=None),
             node_id_generator=FakeNodeIdGenerator("new-node"),
             wall_clock=FakeTime().wall,
-            telemetry=self.telemetry,
+            event_emitter=self.event_emitter,
             policy_fingerprint=_FINGERPRINT,
             policy_fingerprint_reader=self.fingerprints,
             policy_fingerprint_writer=self.fingerprints,
@@ -74,7 +74,9 @@ class _Crawl:
         )
 
     async def _reevaluate(self, node_id: str) -> ReevaluationSummary:
-        self.steps.append(f"reevaluated under {node_id}, {len(self.telemetry.events)} event(s) out")
+        self.steps.append(
+            f"reevaluated under {node_id}, {len(self.event_emitter.events)} event(s) out"
+        )
         return ReevaluationSummary(files_evaluated=3, rows_written=1)
 
     def _loop(self, name: str) -> Callable[[str], Coroutine[object, object, None]]:
@@ -103,8 +105,8 @@ async def test_the_crawler_starts_under_the_stored_node_id_and_runs_each_loop_wi
     await crawl.run_until_both_loops_start_then_stop()
 
     assert crawl.logger.lines == [LoggedLine("info", "crawler started: node_id=stored-node")]
-    assert crawl.telemetry.events == [CrawlerStarted(download_enabled=False)]
-    assert crawl.telemetry.node_ids == {"stored-node"}
+    assert crawl.event_emitter.events == [CrawlerStarted(download_enabled=False)]
+    assert crawl.event_emitter.node_ids == {"stored-node"}
     assert crawl.steps == ["search under stored-node", "status under stored-node", "bound armed"]
 
 
@@ -118,8 +120,8 @@ async def test_a_configured_node_id_and_the_download_loop_show_in_the_start() ->
         LoggedLine("info", "crawler started: node_id=forced-node"),
         LoggedLine("info", "download enabled: download loop armed"),
     ]
-    assert crawl.telemetry.events == [CrawlerStarted(download_enabled=True)]
-    assert crawl.telemetry.node_ids == {"forced-node"}
+    assert crawl.event_emitter.events == [CrawlerStarted(download_enabled=True)]
+    assert crawl.event_emitter.node_ids == {"forced-node"}
 
 
 @pytest.mark.asyncio

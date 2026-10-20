@@ -15,7 +15,7 @@ from p2pwatch.ports.driven.policy_fingerprint import (
     PolicyFingerprintReader,
     PolicyFingerprintWriter,
 )
-from p2pwatch.ports.driven.telemetry import Telemetry
+from p2pwatch.ports.driven.telemetry import EventEmitter
 
 
 class RunCrawler:
@@ -29,7 +29,7 @@ class RunCrawler:
         node_id_writer: NodeIdWriter,
         node_id_generator: NodeIdGenerator,
         wall_clock: WallClock,
-        telemetry: Telemetry,
+        event_emitter: EventEmitter,
         policy_fingerprint: str,
         policy_fingerprint_reader: PolicyFingerprintReader,
         policy_fingerprint_writer: PolicyFingerprintWriter,
@@ -45,7 +45,7 @@ class RunCrawler:
         self._node_id_writer = node_id_writer
         self._node_id_generator = node_id_generator
         self._wall_clock = wall_clock
-        self._telemetry = telemetry
+        self._event_emitter = event_emitter
         self._policy_fingerprint = policy_fingerprint
         self._policy_fingerprint_reader = policy_fingerprint_reader
         self._policy_fingerprint_writer = policy_fingerprint_writer
@@ -68,7 +68,9 @@ class RunCrawler:
         self._logger.info("crawler started: node_id=%s", node_id)
         if self._download_enabled:
             self._logger.info("download enabled: download loop armed")
-        await self._telemetry.emit(CrawlerStarted(download_enabled=self._download_enabled), node_id)
+        await self._event_emitter.emit(
+            CrawlerStarted(download_enabled=self._download_enabled), node_id
+        )
         # Before the loops, so the first search's tier actions (download wake, notify) see the
         # current policy. A comment-only edit of matcher.yml or targets.yml still runs one pass.
         await reevaluate_if_policy_changed(
