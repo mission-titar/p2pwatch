@@ -20,6 +20,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from p2pwatch.domain.catalog_entry import CatalogEntrySort, SortDirection
+from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.node_state import NodeState
 from p2pwatch.domain.observability.events import Event
 from p2pwatch.domain.observation import ReportedFile
@@ -31,6 +32,7 @@ from p2pwatch.ports.driven.node_id import NodeIdGenerator, NodeIdReader, NodeIdW
 from p2pwatch.ports.driven.node_state_reader import NodeStateReader
 from p2pwatch.ports.driven.run_state import RunStateReader, RunStateWriter
 from p2pwatch.ports.driven.search_client import SearchAnswer
+from p2pwatch.ports.driving.console_query_runner import ConsoleQueryOutcome, ConsoleQueryRunner
 from p2pwatch.ports.driving.crawl_pauser import CrawlPauser
 from p2pwatch.ports.driving.crawl_resumer import CrawlResumer
 from p2pwatch.ports.driving.crawl_summarizer import CrawlSummarizer, CrawlSummary
@@ -391,6 +393,26 @@ class FakeNodeDescriber(NodeDescriber):
 
     def describe_node(self) -> NodeDescription:
         return self._node_description
+
+
+@dataclass(frozen=True)
+class RunConsoleQueryCall:
+    """The arguments of one ``run_console_query`` call."""
+
+    database: ConsoleDatabase
+    sql: str
+
+
+class FakeConsoleQueryRunner(ConsoleQueryRunner):
+    """Answers any query with the outcome it is given, and keeps each call's arguments."""
+
+    def __init__(self, console_query_outcome: ConsoleQueryOutcome) -> None:
+        self._console_query_outcome = console_query_outcome
+        self.calls: list[RunConsoleQueryCall] = []
+
+    def run_console_query(self, database: ConsoleDatabase, sql: str) -> ConsoleQueryOutcome:
+        self.calls.append(RunConsoleQueryCall(database, sql))
+        return self._console_query_outcome
 
 
 class RecordingTelemetry:

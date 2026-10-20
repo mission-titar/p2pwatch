@@ -1,7 +1,6 @@
 """TDD tests for the Starlette application (adapters/driving/webui/app.py, Task 11)."""
 
 import re
-import sqlite3
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -29,8 +28,8 @@ from p2pwatch.adapters.driving.webui.app import (
     build_app,
 )
 from p2pwatch.adapters.driving.webui.views import DecisionCell, HiddenInput
-from p2pwatch.application.run_console_query import RunConsoleQuery
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
+from p2pwatch.domain.console_query import QueryFailure
 from p2pwatch.domain.coverage import TargetCoverage
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_history import DatedDecision, FileHistory
@@ -44,6 +43,7 @@ from p2pwatch.domain.sharing_period import SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory, SourceNaming
 from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus, StatusReading
+from p2pwatch.ports.driving.console_query_runner import ConsoleQueryOutcome
 from p2pwatch.ports.driving.crawl_summarizer import ClientSummary, CrawlSummary
 from p2pwatch.ports.driving.file_describer import FileDescription
 from p2pwatch.ports.driving.file_lister import FileListing
@@ -55,6 +55,7 @@ from p2pwatch_testing.application.fakes import (
     DescribeFileCall,
     DescribeSourceCall,
     DescribeSourceNameCall,
+    FakeConsoleQueryRunner,
     FakeCrawlControls,
     FakeCrawlSummarizer,
     FakeFileDescriber,
@@ -67,21 +68,13 @@ from p2pwatch_testing.application.fakes import (
     ListFilesCall,
     ListSourcesCall,
 )
-from p2pwatch_testing.catalog_rows import (
-    SEEN_AT,
-    file_id,
-    insert_decision,
-    insert_file,
-    insert_observation,
-)
-
-pytestmark = pytest.mark.usefixtures("close_test_connections")
 
 # ---------------------------------------------------------------------------
 # Parsed-config helpers (since P4a build_app takes already-parsed config)
 # ---------------------------------------------------------------------------
 
 TEST_HASH = "aabbccdd00112233aabbccdd00112233"
+SEEN_AT = "2026-06-22T10:00:00.000000+00:00"
 _AMULE_URL = "http://localhost:4711"
 # Wednesday 2026-10-14 20:00 UTC: the period tables read the 7 days before it.
 _FAKE_TIME = FakeTime(datetime(2026, 10, 14, 20, 0, tzinfo=UTC))
@@ -119,8 +112,8 @@ _NO_FILE_DESCRIBER = FakeFileDescriber(None)
 _NO_SOURCE_LISTER = FakeSourceLister(SourceListing((), has_next_page=False, source_count=0))
 _NO_SOURCE_DESCRIBER = FakeSourceDescriber(None)
 _NO_SOURCE_NAME_DESCRIBER = FakeSourceNameDescriber(None)
-# These tests run no console query: it would find no database.
-_NO_CONSOLE_QUERY_RUNNER = RunConsoleQuery({})
+# These tests run no console query: ``test_app_console.py`` does.
+_NO_CONSOLE_QUERY_RUNNER = FakeConsoleQueryRunner(ConsoleQueryOutcome(QueryFailure(""), 1000))
 _FILE = FileKey(Network.ED2K, TEST_HASH)
 _OBSERVATION = FileObservation(
     ReportedFile(_FILE, "keroro_s2e62a_vf.avi", 100_000_000, 5, "keroro"),
@@ -206,7 +199,7 @@ async def _files_page(
 
 
 def _detail_url(ed2k_hash: str) -> str:
-    return f"/files/{file_id(ed2k_hash).hex()}"
+    return f"/files/{FileKey(Network.ED2K, ed2k_hash).file_id.hex()}"
 
 
 async def _file_response(
@@ -253,42 +246,12 @@ episodes:
 
 
 @pytest.fixture
-def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
-    """Insert test data and build the Starlette app."""
-    with sqlite3.connect(catalog_db) as conn:
-        insert_file(conn, TEST_HASH, 100_000_000)
-        insert_observation(
-            conn,
-            TEST_HASH,
-            "keroro_s2e62a_vf.avi",
-            size_bytes=100_000_000,
-            source_count=5,
-        )
-        insert_decision(conn, TEST_HASH, "062A", "catalog", rule_name="catalog")
-
-    targets = _targets()
-
-    import p2pwatch.adapters.driving.webui
-
-    templates_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "templates"
-    static_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "static"
-
-    app = build_app(
-        target_segments=targets,
-        templates_dir=templates_dir,
-        static_dir=static_dir,
-        crawl_pauser=_NO_CONTROLS,
-        crawl_resumer=_NO_CONTROLS,
-        shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_SUMMARIZER,
-        node_describer=_DESCRIBER,
-        file_lister=_NO_FILE_LISTER,
+def populated_app() -> tuple[Starlette, str]:
+    """The app on fakes describing one file, one source and one name."""
+    app = _app_on_fakes(
         file_describer=FakeFileDescriber(_FILE_DESCRIPTION),
-        source_lister=_NO_SOURCE_LISTER,
         source_describer=FakeSourceDescriber(_SOURCE_DESCRIPTION),
         source_name_describer=FakeSourceNameDescriber(_SOURCE_NAME_DESCRIPTION),
-        amule_url=_AMULE_URL,
-        console_query_runner=_NO_CONSOLE_QUERY_RUNNER,
     )
     return app, TEST_HASH
 
@@ -446,7 +409,7 @@ async def test_file_page_asks_for_its_file_over_the_ends_its_query_names(
     # The use case resolves the interval: an inverted or a malformed end reaches it as read.
     response, calls = await _file_response(f"{_detail_url(TEST_HASH)}?{query}")
     assert response.status_code == 200
-    assert calls == [DescribeFileCall(file_id(TEST_HASH), requested_since, requested_until)]
+    assert calls == [DescribeFileCall(_FILE.file_id, requested_since, requested_until)]
 
 
 @pytest.mark.asyncio
@@ -461,7 +424,7 @@ async def test_file_page_of_a_file_the_catalog_does_not_hold_is_a_styled_404() -
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "malformed",
-    ["zz", file_id(TEST_HASH).hex().upper(), file_id(TEST_HASH).hex()[:31], " " * 32],
+    ["zz", _FILE.file_id.hex().upper(), _FILE.file_id.hex()[:31], " " * 32],
 )
 async def test_file_page_of_a_malformed_file_id_is_a_404_that_asks_for_nothing(
     malformed: str,
@@ -1106,7 +1069,7 @@ async def test_each_page_passes_its_template_only_what_it_reads(
     app, hash_ = populated_app
     recorder = _TemplateRecorder(app)
     async with AsyncClient(transport=ASGITransport(app=recorder), base_url="http://test") as client:
-        await client.get(url.format(file_id=file_id(hash_).hex()))
+        await client.get(url.format(file_id=_FILE.file_id.hex()))
     (rendered,) = recorder.rendered
     loader = FileSystemLoader(Path(p2pwatch.adapters.driving.webui.__file__).parent / "templates")
     passed = set(rendered["context"]) - {"request"}
