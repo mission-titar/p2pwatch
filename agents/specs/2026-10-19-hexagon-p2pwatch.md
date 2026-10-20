@@ -383,6 +383,7 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
 | 173 | `test/console-routes-on-fakes` | the console's route tests on a fake `ConsoleQueryRunner`; the last fixture databases leave the route tests | 350, 5 |
 | 175 | `refactor/webui-displays` | `views.py` becomes `displays.py`, every view model a `<Thing>Display`; the last webui exceptions in `tach.toml`; Acceptance 7 to 9 | 150, 9 |
 | 180 | `refactor/role-ports` | the five catalog ports, `CatalogRepository` and `DownloadCatalogReader` deleted; the download, source point, backoff and policy fingerprint ports; the re-exports of the types blocks 110 and 115 moved to the domain (`BackoffKey`, `BackoffState`, `StatusReading`, `ClientStatus`, `ChannelStatus`) go, their importers reading the domain (Corrected 2026-10-19: added) | 900, 34 |
+| 185 | `refactor/read-types-in-domain` | `DownloadCandidate`, `RecordedReading`, `EarlierPoints` and any other type a driven read port still owns move to the domain (Corrected 2026-10-20: added, block 180 found them left against the convention) | |
 | 190 | `refactor/ports-as-abcs` | the five capability renames; the remaining `Protocol`s to ABCs; `channels`; the Gotchas; the ast-grep rule and its test | 750, 72 |
 | 200 | `docs/hexagon-p2pwatch-wrap` | closing block: backlog, handoff | |
 
