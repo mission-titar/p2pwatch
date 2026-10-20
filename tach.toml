@@ -22,16 +22,34 @@ layers = ["composition", "adapters", "application", "ports", "domain"]
 path = "amule_bump.__main__"
 layer = "composition"
 depends_on = [
+  "amule_bump.adapters.driven.filesystem_dockerfile",
+  "amule_bump.adapters.driven.filesystem_pull_request_body_writer",
   "amule_bump.adapters.driven.github_repo_reader",
+  "amule_bump.adapters.driven.github_step_output_writer",
   "amule_bump.adapters.driving.bump",
   "amule_bump.adapters.driving.cli",
   "amule_bump.domain",
 ]
 
 [[modules]]
+path = "amule_bump.adapters.driven.filesystem_dockerfile"
+layer = "adapters"
+depends_on = ["amule_bump.ports.driven.dockerfile"]
+
+[[modules]]
+path = "amule_bump.adapters.driven.filesystem_pull_request_body_writer"
+layer = "adapters"
+depends_on = ["amule_bump.ports.driven.pull_request_body_writer"]
+
+[[modules]]
 path = "amule_bump.adapters.driven.github_repo_reader"
 layer = "adapters"
 depends_on = ["amule_bump.ports.driven.repo_reader"]
+
+[[modules]]
+path = "amule_bump.adapters.driven.github_step_output_writer"
+layer = "adapters"
+depends_on = ["amule_bump.ports.driven.step_output_writer"]
 
 [[modules]]
 path = "amule_bump.adapters.driving.bump"
@@ -42,6 +60,10 @@ depends_on = [
   { path = "amule_bump.application", deprecated = true },
   # The bump hands the use cases their driven port: lot 3's driving port takes it over.
   { path = "amule_bump.ports.driven.repo_reader", deprecated = true },
+  # The bump reads and writes through its driven ports: block 21 removes it.
+  { path = "amule_bump.ports.driven.dockerfile", deprecated = true },
+  { path = "amule_bump.ports.driven.pull_request_body_writer", deprecated = true },
+  { path = "amule_bump.ports.driven.step_output_writer", deprecated = true },
 ]
 
 [[modules]]
@@ -63,7 +85,22 @@ layer = "domain"
 depends_on = []
 
 [[modules]]
+path = "amule_bump.ports.driven.dockerfile"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "amule_bump.ports.driven.pull_request_body_writer"
+layer = "ports"
+depends_on = []
+
+[[modules]]
 path = "amule_bump.ports.driven.repo_reader"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "amule_bump.ports.driven.step_output_writer"
 layer = "ports"
 depends_on = []
 

@@ -4,39 +4,57 @@ The workflow opens the PR afterwards, from the `version` and `body-path` step ou
 """
 
 import sys
-from pathlib import Path
+from pathlib import PurePath
 
 from amule_bump.application.body import build_pull_request_body
 from amule_bump.application.release import is_newer, latest_release_tag, peeled_commit
 from amule_bump.domain.bump_error import BumpError
 from amule_bump.domain.dockerfile import Pin, read_pin, rewrite_pin
+from amule_bump.ports.driven.dockerfile import DockerfileReader, DockerfileWriter
+from amule_bump.ports.driven.pull_request_body_writer import PullRequestBodyWriter
 from amule_bump.ports.driven.repo_reader import RepoReader
+from amule_bump.ports.driven.step_output_writer import StepOutputWriter
 
 
 def main(
-    dockerfile: Path,
-    body_file: Path,
+    dockerfile: PurePath,
+    body_file: PurePath,
     dry_run: bool,
     *,
     repo_reader: RepoReader,
-    github_output: str | None,
+    dockerfile_reader: DockerfileReader,
+    dockerfile_writer: DockerfileWriter,
+    pull_request_body_writer: PullRequestBodyWriter,
+    step_output_writer: StepOutputWriter,
 ) -> int:
-    """Prints a bump error and returns 1; ``github_output`` is Actions' step-outputs file."""
+    """Prints a bump error and returns 1."""
     try:
-        return _bump(dockerfile, body_file, dry_run, repo_reader, github_output)
+        return _bump(
+            dockerfile,
+            body_file,
+            dry_run,
+            repo_reader,
+            dockerfile_reader,
+            dockerfile_writer,
+            pull_request_body_writer,
+            step_output_writer,
+        )
     except (BumpError, OSError) as error:  # OSError covers urllib errors and a missing file
         print(f"error: {error}", file=sys.stderr)
         return 1
 
 
 def _bump(
-    dockerfile: Path,
-    body_file: Path,
+    dockerfile: PurePath,
+    body_file: PurePath,
     dry_run: bool,
     repo_reader: RepoReader,
-    github_output: str | None,
+    dockerfile_reader: DockerfileReader,
+    dockerfile_writer: DockerfileWriter,
+    pull_request_body_writer: PullRequestBodyWriter,
+    step_output_writer: StepOutputWriter,
 ) -> int:
-    dockerfile_text = dockerfile.read_text()
+    dockerfile_text = dockerfile_reader.read_dockerfile(dockerfile)
     old = read_pin(dockerfile_text)
     latest = latest_release_tag(repo_reader)
     if latest == old.version:
@@ -57,14 +75,7 @@ def _bump(
         print(body, end="")
         return 0
 
-    dockerfile.write_text(rewrite_pin(dockerfile_text, new))
-    body_file.write_text(body)
-    _write_step_outputs(github_output, new.version, body_file)
+    dockerfile_writer.write_dockerfile(dockerfile, rewrite_pin(dockerfile_text, new))
+    pull_request_body_writer.write_pull_request_body(body_file, body)
+    step_output_writer.write_step_outputs(new.version, body_file)
     return 0
-
-
-def _write_step_outputs(github_output: str | None, version: str, body_file: Path) -> None:
-    """Hand the new version and the body's path to the workflow's next step, when in Actions."""
-    if github_output:
-        with open(github_output, "a") as output:
-            output.write(f"version={version}\nbody-path={body_file}\n")
