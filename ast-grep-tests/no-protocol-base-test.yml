@@ -1,0 +1,11 @@
+id: no-protocol-base
+valid:
+  - "class Waker(ABC): ..."
+  - "class AsyncioWaker(Waker): ..."
+  - "class Settings: ..."
+  - "from typing import Protocol"
+invalid:
+  - "class Waker(Protocol): ..."
+  - "class Reader(Protocol[T]): ..."
+  - "class Waker(typing.Protocol): ..."
+  - "class Both(Base, Protocol): ..."
