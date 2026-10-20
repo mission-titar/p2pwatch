@@ -29,6 +29,20 @@ from catalog_matching.domain.validation import (
 from p2pwatch.adapters.driven.config.errors import ConfigError as ConfigError  # explicit re-export
 from p2pwatch.adapters.driven.config.interpolation import interpolate
 from p2pwatch.adapters.driven.config.yaml_loader import YamlLoadError, load_yaml
+from p2pwatch.domain.config_defaults import (
+    DEFAULT_AMULE_URL,
+    DEFAULT_DOWNLOAD_ENABLED,
+    DEFAULT_LOG_LEVEL,
+    DEFAULT_LOST_AFTER,
+    DEFAULT_MIN_FREE_BYTES,
+    DEFAULT_NODE_PREFIX,
+    DEFAULT_NOTIFICATION_TIMEOUT_SECONDS,
+    DEFAULT_OUTPUT_DIR,
+    DEFAULT_REAPPEARED_AFTER,
+    DEFAULT_SOURCE_PERIOD_GAP,
+    DEFAULT_SOURCES_INTERVAL,
+    DEFAULT_WEBUI_ENABLED,
+)
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.policy_fingerprint import policy_fingerprint
@@ -66,7 +80,7 @@ class NotificationTarget:
 
     url: str
     audience: Audience
-    node_prefix: bool = True
+    node_prefix: bool
 
 
 @dataclass(frozen=True)
@@ -88,10 +102,6 @@ class DownloadConfig:
         return self.sources_interval + timedelta(seconds=self.poll_interval_seconds)
 
 
-# 3 x (300 + 30): the carried role's max age at the shipped intervals (source points spec, D6).
-_DEFAULT_SOURCE_PERIOD_GAP = timedelta(seconds=990)
-
-
 @dataclass(frozen=True)
 class WebuiConfig:
     """In-process read-only webui HTTP surface (monolith-consolidation spec §8).
@@ -110,11 +120,9 @@ class WebuiConfig:
     """
 
     enabled: bool
-    amule_url: str = "http://localhost:4711"
-    source_period_gap: timedelta = _DEFAULT_SOURCE_PERIOD_GAP
+    amule_url: str
+    source_period_gap: timedelta
 
-
-_DEFAULT_WEBUI = WebuiConfig(enabled=True)
 
 _LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
 
@@ -159,12 +167,6 @@ class ObservabilityConfig:
         return self.metrics.port
 
 
-# An absent section: INFO, no metrics server, no notification.
-_DEFAULT_OBSERVABILITY = ObservabilityConfig(
-    log_level="INFO", metrics=None, notification_timeout_seconds=5.0, notifications=()
-)
-
-
 @dataclass(frozen=True)
 class CrawlerConfig:
     """Unified crawler config (policy + wiring). All durations in SECONDS.
@@ -184,9 +186,9 @@ class CrawlerConfig:
     catalog_db_path: str
     local_db_path: str
     node_id: str | None
-    observability: ObservabilityConfig = _DEFAULT_OBSERVABILITY
-    download: DownloadConfig | None = None
-    webui: WebuiConfig = _DEFAULT_WEBUI
+    observability: ObservabilityConfig
+    download: DownloadConfig | None
+    webui: WebuiConfig
 
 
 def _require_mapping(value: Any, error_label: str) -> dict[str, Any]:
@@ -308,7 +310,7 @@ def _string(section: dict[str, Any], key: str, error_label: str, env: Mapping[st
 
 
 def _parse_observability(section: dict[str, Any], env: Mapping[str, str]) -> ObservabilityConfig:
-    log_level = section.get("log_level", _DEFAULT_OBSERVABILITY.log_level)
+    log_level = section.get("log_level", DEFAULT_LOG_LEVEL)
     if not isinstance(log_level, str) or log_level not in _LOG_LEVELS:
         raise ConfigError(
             f"observability.log_level: one of {sorted(_LOG_LEVELS)} expected, got {log_level!r}"
@@ -324,7 +326,7 @@ def _parse_observability(section: dict[str, Any], env: Mapping[str, str]) -> Obs
         section,
         "notification_timeout_seconds",
         "observability",
-        _DEFAULT_OBSERVABILITY.notification_timeout_seconds,
+        DEFAULT_NOTIFICATION_TIMEOUT_SECONDS,
     )
     notifications: list[NotificationTarget] = []
     for index, entry in enumerate(section.get("notifications", [])):
@@ -346,7 +348,9 @@ def _parse_observability(section: dict[str, Any], env: Mapping[str, str]) -> Obs
             NotificationTarget(
                 url=_string(notification, "url", error_label, env),
                 audience=audience,
-                node_prefix=_bool_default(notification, "node_prefix", error_label, True),
+                node_prefix=_bool_default(
+                    notification, "node_prefix", error_label, DEFAULT_NODE_PREFIX
+                ),
             )
         )
     return ObservabilityConfig(
@@ -357,36 +361,24 @@ def _parse_observability(section: dict[str, Any], env: Mapping[str, str]) -> Obs
     )
 
 
-# The three download knobs of 2026-09-13 default rather than fail fast: an operator config
-# written before them must still boot. 24 h absorbs an amuled restart or a night of downtime.
-_DEFAULT_MIN_FREE_BYTES = 10_737_418_240  # 10 GiB
-_DEFAULT_LOST_AFTER_SECONDS = 86_400.0
-_DEFAULT_OUTPUT_DIR = "/downloads"  # the bind mount in deploy/compose.yml
-_DEFAULT_REAPPEARED_AFTER_SECONDS = 43_200.0  # 12 h: a night off does not notify (stage 4 spec, D9)
-# 5 min: enough to recognise a sharer, a tenth of the detail calls (source points spec, D3).
-_DEFAULT_SOURCES_INTERVAL_SECONDS = 300.0
-
-
 def _parse_download(document: dict[str, Any]) -> DownloadConfig | None:
-    if "download" not in document:
-        return None
-    section = _require_mapping(document["download"], "section 'download'")
-    if not _bool_default(section, "enabled", "download", False):
+    section = _require_mapping(document.get("download", {}), "section 'download'")
+    if not _bool_default(section, "enabled", "download", DEFAULT_DOWNLOAD_ENABLED):
         return None  # laziness: we read/interpolate NOTHING else (no variable required)
-    output_dir = section.get("output_dir", _DEFAULT_OUTPUT_DIR)
+    output_dir = section.get("output_dir", DEFAULT_OUTPUT_DIR)
     if not isinstance(output_dir, str) or not output_dir:
         raise ConfigError(f"download.output_dir: non-empty string expected, got {output_dir!r}")
     return DownloadConfig(
         poll_interval_seconds=_seconds(section, "poll_interval_seconds", "download"),
         min_free_bytes=_positive_int_default(
-            section, "min_free_bytes", "download", _DEFAULT_MIN_FREE_BYTES
+            section, "min_free_bytes", "download", DEFAULT_MIN_FREE_BYTES
         ),
         lost_after=timedelta(
             seconds=_seconds(
                 section,
                 "lost_after_seconds",
                 "download",
-                _DEFAULT_LOST_AFTER_SECONDS,
+                DEFAULT_LOST_AFTER.total_seconds(),
                 at_most=_THIRTY_DAYS_SECONDS,
             )
         ),
@@ -396,13 +388,16 @@ def _parse_download(document: dict[str, Any]) -> DownloadConfig | None:
                 section,
                 "reappeared_after_seconds",
                 "download",
-                _DEFAULT_REAPPEARED_AFTER_SECONDS,
+                DEFAULT_REAPPEARED_AFTER.total_seconds(),
                 at_most=_THIRTY_DAYS_SECONDS,
             )
         ),
         sources_interval=timedelta(
             seconds=_seconds(
-                section, "sources_interval_seconds", "download", _DEFAULT_SOURCES_INTERVAL_SECONDS
+                section,
+                "sources_interval_seconds",
+                "download",
+                DEFAULT_SOURCES_INTERVAL.total_seconds(),
             )
         ),
     )
@@ -443,25 +438,23 @@ def _parse_backoff(search: dict[str, Any]) -> BackoffConfig:
 
 
 def _parse_webui(document: dict[str, Any], env: Mapping[str, str]) -> WebuiConfig:
-    """`webui` section (optional). Absent ⇒ enabled, default aMule link and period gap.
+    """`webui` section (optional): an absent section or key takes the domain's default.
 
     The bind is FIXED at 0.0.0.0:8080 in the composition layer, so this reads no host/port: an
     unknown key (a legacy ``host``/``port``) is ignored silently, no fail-fast."""
-    if "webui" not in document:
-        return _DEFAULT_WEBUI
-    section = _require_mapping(document["webui"], "section 'webui'")
-    enabled = _bool_default(section, "enabled", "webui", True)
+    section = _require_mapping(document.get("webui", {}), "section 'webui'")
+    enabled = _bool_default(section, "enabled", "webui", DEFAULT_WEBUI_ENABLED)
     gap = timedelta(
         seconds=_seconds(
             section,
             "source_period_gap_seconds",
             "webui",
-            _DEFAULT_SOURCE_PERIOD_GAP.total_seconds(),
+            DEFAULT_SOURCE_PERIOD_GAP.total_seconds(),
         )
     )
-    if "amule_url" not in section:
-        return WebuiConfig(enabled=enabled, source_period_gap=gap)
-    amule_url = _string(section, "amule_url", "webui", env)
+    amule_url = (
+        _string(section, "amule_url", "webui", env) if "amule_url" in section else DEFAULT_AMULE_URL
+    )
     return WebuiConfig(enabled=enabled, amule_url=amule_url, source_period_gap=gap)
 
 
@@ -477,11 +470,9 @@ def parse_crawler_config(document: dict[str, Any], env: Mapping[str, str]) -> Cr
     node_id_raw = document.get("node_id")
     if node_id_raw is not None and (not isinstance(node_id_raw, str) or not node_id_raw):
         raise ConfigError(f"node_id: non-empty string or absent expected, got {node_id_raw!r}")
-    observability = _DEFAULT_OBSERVABILITY
-    if "observability" in document:
-        observability = _parse_observability(
-            _require_mapping(document["observability"], "section 'observability'"), env
-        )
+    observability = _parse_observability(
+        _require_mapping(document.get("observability", {}), "section 'observability'"), env
+    )
     return CrawlerConfig(
         search=_parse_search(document),
         shutdown_deadline_seconds=_seconds(document, "shutdown_deadline_seconds", _ROOT),
