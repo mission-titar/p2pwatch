@@ -238,7 +238,7 @@ dead `{% else %}` at `templates/sources.html:25-26` goes with the sources' block
 ### The control and the status board (D6)
 
 - **Control**: three use cases, `PauseCrawl` (`CrawlPauser`), `ResumeCrawl` (`CrawlResumer`) and `RequestShutdown`
-  (`ShutdownRequester`), over `RunStateWriter` (`pause`, `resume`, `request_shutdown`). `LoopCrawlerControl`
+  (`ShutdownRequester`), over `RunStateWriter` (`pause`, `resume`, `shut_down`; Corrected 2026-10-20: was `request_shutdown`). `LoopCrawlerControl`
   becomes `AsyncioRunState`, which also implements `RunStateReader` (`is_paused`), read by `SummarizeCrawl`; until
   that use case exists, the dashboard reads `RunStateReader` under a deprecated edge. `PosixProcess` calls
   `ShutdownRequester`. `CrawlerControl` is deleted. Why: a use case is named after one operation.
@@ -428,6 +428,7 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
    `best_observation`, `close`, `connect`, `download_candidates`, `latest_observation`, `now`). `now` stays twice by
    design: `WallClock.now` and `MonotonicClock.now` are two operations (D5). (Corrected 2026-10-19: was an `awk`
    on the text of the classes; the ast-grep rule reads the syntax tree, and prints the same list on `main`.)
+   (Corrected 2026-10-20: closed at block 203 by renaming RunStateWriter.request_shutdown to shut_down.)
 7. **No exception left for lot 2** (block 175; Corrected 2026-10-20: was 170): `uv run tach check 2>&1 | grep -c '^\[WARN\] packages/crawler/'`
    prints 0 (on `main`: 66), and `tach.toml` names lot 2 nowhere.
 8. **The route tests use fakes** (block 175; Corrected 2026-10-20: was 170):
