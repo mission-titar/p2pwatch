@@ -4,10 +4,11 @@ without a user hash over the requested interval."""
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from p2pwatch.application.describe_source_name import PAGE_SIZE, DescribeSourceName
+from p2pwatch.application.describe_source_name import DescribeSourceName
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.known_source import KnownSource
+from p2pwatch.domain.paging import PAGE_SIZE
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory, SourceNaming

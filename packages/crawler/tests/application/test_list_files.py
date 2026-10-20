@@ -4,10 +4,11 @@ from collections.abc import Mapping
 from typing import Any
 
 from catalog_matching.domain.engine import DecisionRecord
-from p2pwatch.application.list_files import PAGE_SIZE, ListFiles
+from p2pwatch.application.list_files import ListFiles
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.paging import PAGE_SIZE
 from p2pwatch.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.ports.driving.file_lister import FileListing
 

@@ -1,9 +1,8 @@
 """Lists the catalog's sources a page at a time, with the count the sources page shows."""
 
+from p2pwatch.domain.paging import PAGE_SIZE
 from p2pwatch.ports.driven.source_reader import SourceReader
 from p2pwatch.ports.driving.source_lister import SourceLister, SourceListing
-
-PAGE_SIZE = 50
 
 
 class ListSources(SourceLister):
