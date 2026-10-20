@@ -391,7 +391,7 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
 | 201 | `refactor/holistic-domain-types` | `SearchAnswer`, `DownloadRequest` to the domain; `TrackedDownload`'s reasons as enums | 96, 19 |
 | 202 | `fix/holistic-wiring` | the read pages through the composed app in the wiring test; the shared catalog reader; `FakeDownloadRepo`'s target | 35, 4 |
 | 203 | `refactor/holistic-names` | the holistic review's naming and docstring findings; `shut_down`, `CatalogScanReader` | 399, 41 |
-| 210 | `docs/hexagon-p2pwatch-wrap` | closing block: the docs findings, backlog, handoff | |
+| 210 | `docs/hexagon-p2pwatch-wrap` | closing block: the docs findings, backlog, handoff | 22, 4 |
 
 - Blocks 10, 60, 180 and 190 pass a bound: each only replaces names, signatures or base classes, with no behaviour
   moved (the injected logger for the module global, a parameter threaded to its call sites, a port split into its
