@@ -10,7 +10,7 @@ from urllib.parse import urlencode
 
 import pytest
 import yaml
-from httpx import ASGITransport, AsyncClient
+from httpx import ASGITransport, AsyncClient, Response
 from jinja2 import Environment, FileSystemLoader, UndefinedError, meta
 from starlette.applications import Starlette
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -41,18 +41,23 @@ from p2pwatch.application.matching_read import MatchingExplainer
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.coverage import TargetCoverage
 from p2pwatch.domain.download.states import DownloadState
+from p2pwatch.domain.file_history import DatedDecision, FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from p2pwatch.domain.source import SourceKey
 from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus, StatusReading
 from p2pwatch.ports.driving.crawl_summarizer import ClientSummary, CrawlSummary
+from p2pwatch.ports.driving.file_describer import FileDescription
 from p2pwatch.ports.driving.file_lister import FileListing
 from p2pwatch.ports.driving.node_describer import NodeDescription
 from p2pwatch_testing.application.fakes import (
+    DescribeFileCall,
     FakeCrawlControls,
     FakeCrawlSummarizer,
+    FakeFileDescriber,
     FakeFileLister,
     FakeNodeDescriber,
     FakeTime,
@@ -112,8 +117,26 @@ _DEFAULT_CALL = ListFilesCall(
     direction=SortDirection.DESC,
     page=1,
 )
+_NO_FILE_DESCRIBER = FakeFileDescriber(None)
 # The pages on fakes read their use case only: opening this path would fail.
 _NO_DB = Path("/nonexistent/p2pwatch.db")
+_FILE = FileKey(Network.ED2K, TEST_HASH)
+_OBSERVATION = FileObservation(
+    ReportedFile(_FILE, "keroro_s2e62a_vf.avi", 100_000_000, 5, "keroro"),
+    datetime.fromisoformat(SEEN_AT),
+)
+_DECISION = DatedDecision(
+    DecisionRecord("062A", "catalog", "catalog"), datetime.fromisoformat(SEEN_AT), "n1"
+)
+_WEEK = Interval(_WALL_CLOCK.now() - timedelta(days=7), _WALL_CLOCK.now())
+# One file seen once under one name, decided on 062A, with no source and no explanation.
+_FILE_DESCRIPTION = FileDescription(
+    FileHistory(_FILE, 100_000_000, (_OBSERVATION,), _OBSERVATION, (_DECISION,), ()),
+    sharing_periods=(),
+    explanation=None,
+    interval=_WEEK,
+    now=_WALL_CLOCK.now(),
+)
 
 
 def _file_describer(
@@ -135,6 +158,7 @@ def _app_on_fakes(
     crawl_summary: CrawlSummary = _CRAWL_SUMMARY,
     node_state: NodeState = _NODE_STATE,
     file_lister: FakeFileLister = _NO_FILE_LISTER,
+    file_describer: FakeFileDescriber = _NO_FILE_DESCRIBER,
     target_segments: tuple[TargetSegment, ...] | None = None,
     controls: FakeCrawlControls = _NO_CONTROLS,
     amule_url: str = _AMULE_URL,
@@ -154,7 +178,7 @@ def _app_on_fakes(
         crawl_summarizer=FakeCrawlSummarizer(crawl_summary),
         node_describer=FakeNodeDescriber(NodeDescription(node_state)),
         file_lister=file_lister,
-        file_describer=_file_describer(_NO_DB, _matcher(), _targets()),
+        file_describer=file_describer,
         amule_url=amule_url,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -194,6 +218,17 @@ async def _files_page(
 
 def _detail_url(ed2k_hash: str) -> str:
     return f"/files/{file_id(ed2k_hash).hex()}"
+
+
+async def _file_response(
+    url: str, file_description: FileDescription | None = _FILE_DESCRIPTION
+) -> tuple[Response, list[DescribeFileCall]]:
+    """The file page's response, rendered from ``file_description``, and its calls."""
+    file_describer = FakeFileDescriber(file_description)
+    app = _app_on_fakes(file_describer=file_describer)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(url)
+    return response, file_describer.calls
 
 
 def _query(since: datetime, until: datetime, **kept: str) -> str:
@@ -582,14 +617,46 @@ async def test_file_detail_shows_the_network_and_the_native_id(
     assert "eD2k hash" not in page
 
 
+@pytest.mark.parametrize(
+    ("query", "requested_since", "requested_until"),
+    [
+        ("", None, None),
+        (
+            "from=2026-10-14+19%3A00%3A00Z&to=2026-10-14+20%3A00%3A00Z",
+            datetime(2026, 10, 14, 19, tzinfo=UTC),
+            datetime(2026, 10, 14, 20, tzinfo=UTC),
+        ),
+        (
+            "from=2026-10-08T00%3A00%3A00&to=2026-10-11T00%3A00%3A00",
+            datetime(2026, 10, 8, tzinfo=UTC),
+            datetime(2026, 10, 11, tzinfo=UTC),
+        ),
+        (
+            "from=2026-10-11+00%3A00%3A00Z&to=2026-10-08+00%3A00%3A00Z",
+            datetime(2026, 10, 11, tzinfo=UTC),
+            datetime(2026, 10, 8, tzinfo=UTC),
+        ),
+        ("from=yesterday&to=2026-10-11+00%3A00%3A00Z", None, datetime(2026, 10, 11, tzinfo=UTC)),
+    ],
+    ids=["none", "preset", "custom", "inverted", "malformed"],
+)
 @pytest.mark.asyncio
-async def test_file_detail_by_the_ed2k_hash_returns_404(
-    populated_app: tuple[Starlette, str],
+async def test_file_page_asks_for_its_file_over_the_ends_its_query_names(
+    query: str, requested_since: datetime | None, requested_until: datetime | None
 ) -> None:
-    app, hash_ = populated_app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get(f"/files/{hash_}")
-    assert resp.status_code == 404
+    # The use case resolves the interval: an inverted or a malformed end reaches it as read.
+    response, calls = await _file_response(f"{_detail_url(TEST_HASH)}?{query}")
+    assert response.status_code == 200
+    assert calls == [DescribeFileCall(file_id(TEST_HASH), requested_since, requested_until)]
+
+
+@pytest.mark.asyncio
+async def test_file_page_of_a_file_the_catalog_does_not_hold_is_a_styled_404() -> None:
+    # The ed2k hash is a well-formed id, but not a file's.
+    response, calls = await _file_response(f"/files/{TEST_HASH}", None)
+    assert response.status_code == 404
+    assert "not found" in response.text.lower()
+    assert calls == [DescribeFileCall(bytes.fromhex(TEST_HASH), None, None)]
 
 
 @pytest.mark.asyncio
@@ -597,14 +664,13 @@ async def test_file_detail_by_the_ed2k_hash_returns_404(
     "malformed",
     ["zz", file_id(TEST_HASH).hex().upper(), file_id(TEST_HASH).hex()[:31], " " * 32],
 )
-async def test_file_detail_malformed_file_id_returns_404(
-    populated_app: tuple[Starlette, str], malformed: str
+async def test_file_page_of_a_malformed_file_id_is_a_404_that_asks_for_nothing(
+    malformed: str,
 ) -> None:
-    app, _ = populated_app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get(f"/files/{malformed}")
-    assert resp.status_code == 404
-    assert "not found" in resp.text.lower()
+    response, calls = await _file_response(f"/files/{malformed}")
+    assert response.status_code == 404
+    assert "not found" in response.text.lower()
+    assert calls == []
 
 
 @pytest.mark.asyncio
@@ -1038,18 +1104,6 @@ async def test_file_detail_explanation_none_unknown_target(
 
 
 @pytest.mark.asyncio
-async def test_file_detail_unknown_hash_returns_404(
-    populated_app: tuple[Starlette, str],
-) -> None:
-    """/files/{file_id} nonexistent (32 hex) → 404."""
-    app, _ = populated_app
-    unknown = "00000000000000000000000000000000"
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get(f"/files/{unknown}")
-    assert resp.status_code == 404
-
-
-@pytest.mark.asyncio
 async def test_target_page_asks_for_every_file_of_its_target_on_one_page() -> None:
     """/targets/{target_id}: a shortcut to /files filtered on it, matched or not."""
     _, call = await _files_page("/targets/062A?page=2&sort=size&tier=notify")
@@ -1213,19 +1267,6 @@ async def test_file_detail_with_media_fields_returns_200(
         resp = await client.get(_detail_url(hash_))
     assert resp.status_code == 200
     assert "062A" in resp.text
-
-
-@pytest.mark.asyncio
-async def test_file_detail_unknown_hash_returns_styled_404(
-    populated_app: tuple[Starlette, str],
-) -> None:
-    """/files/{file_id} nonexistent → 404 with the styled HTML template (contains 'not found')."""
-    app, _ = populated_app
-    unknown = "00000000000000000000000000000000"
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get(f"/files/{unknown}")
-    assert resp.status_code == 404
-    assert "not found" in resp.text.lower()
 
 
 @pytest.mark.parametrize(

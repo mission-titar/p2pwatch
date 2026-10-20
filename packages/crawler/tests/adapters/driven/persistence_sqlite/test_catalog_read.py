@@ -347,6 +347,9 @@ def test_file_history_reads_its_observations_in_the_window_and_its_latest_in_any
 def test_file_history_of_an_unknown_file_id_is_none(catalog_db: Path) -> None:
     _seed(catalog_db)
     assert _history(catalog_db, "f" * 32) is None
+    reader = SqliteCatalogFileReader(ReaderProvider(catalog_db))
+    by_native_id = reader.read_file_history(bytes.fromhex("a" * 32), since=_EPOCH, until=_YEAR_3000)
+    assert by_native_id is None  # a file is read by its id, never by its ed2k hash
 
 
 def test_file_history_retracted_target_is_no_decision(catalog_db: Path) -> None:
