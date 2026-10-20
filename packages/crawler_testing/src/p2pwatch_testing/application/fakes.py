@@ -38,7 +38,9 @@ from p2pwatch.ports.driving.file_describer import FileDescriber, FileDescription
 from p2pwatch.ports.driving.file_lister import FileLister, FileListing
 from p2pwatch.ports.driving.node_describer import NodeDescriber, NodeDescription
 from p2pwatch.ports.driving.shutdown_requester import ShutdownRequester
+from p2pwatch.ports.driving.source_describer import SourceDescriber, SourceDescription
 from p2pwatch.ports.driving.source_lister import SourceLister, SourceListing
+from p2pwatch.ports.driving.source_name_describer import SourceNameDescriber, SourceNameDescription
 
 
 class FakeTime:
@@ -320,6 +322,65 @@ class FakeSourceLister(SourceLister):
     def list_sources(self, *, search_text: str | None, page: int) -> SourceListing:
         self.calls.append(ListSourcesCall(search_text, page))
         return self._source_listing
+
+
+@dataclass(frozen=True)
+class DescribeSourceCall:
+    """The arguments of one ``describe_source`` call."""
+
+    source_id: bytes
+    page: int
+    requested_since: datetime | None
+    requested_until: datetime | None
+
+
+class FakeSourceDescriber(SourceDescriber):
+    """Describes any source as it is given, and keeps each call's arguments."""
+
+    def __init__(self, source_description: SourceDescription | None) -> None:
+        self._source_description = source_description
+        self.calls: list[DescribeSourceCall] = []
+
+    def describe_source(
+        self,
+        source_id: bytes,
+        *,
+        page: int,
+        requested_since: datetime | None,
+        requested_until: datetime | None,
+    ) -> SourceDescription | None:
+        self.calls.append(DescribeSourceCall(source_id, page, requested_since, requested_until))
+        return self._source_description
+
+
+@dataclass(frozen=True)
+class DescribeSourceNameCall:
+    """The arguments of one ``describe_source_name`` call."""
+
+    source_name: str
+    page: int
+    requested_since: datetime | None
+    requested_until: datetime | None
+
+
+class FakeSourceNameDescriber(SourceNameDescriber):
+    """Describes any source name as it is given, and keeps each call's arguments."""
+
+    def __init__(self, source_name_description: SourceNameDescription | None) -> None:
+        self._source_name_description = source_name_description
+        self.calls: list[DescribeSourceNameCall] = []
+
+    def describe_source_name(
+        self,
+        source_name: str,
+        *,
+        page: int,
+        requested_since: datetime | None,
+        requested_until: datetime | None,
+    ) -> SourceNameDescription | None:
+        call = DescribeSourceNameCall(source_name, page, requested_since, requested_until)
+        self.calls.append(call)
+        return self._source_name_description
 
 
 class FakeNodeDescriber(NodeDescriber):

@@ -1,7 +1,6 @@
 """TDD tests for the read-only SQL console's ``/console`` + ``/console.csv`` routes (spec §11),
 built with the shared webui fixtures + a no-op control."""
 
-from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -11,11 +10,7 @@ from starlette.applications import Starlette
 
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_targets
-from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import SqliteSourceReader
-from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driving.webui.app import build_app
-from p2pwatch.application.describe_source import DescribeSource
-from p2pwatch.application.describe_source_name import DescribeSourceName
 from p2pwatch.domain.node_state import NodeState
 from p2pwatch.ports.driven.clock import MonotonicClock
 from p2pwatch.ports.driving.crawl_summarizer import CrawlSummary
@@ -28,7 +23,9 @@ from p2pwatch_testing.application.fakes import (
     FakeFileDescriber,
     FakeFileLister,
     FakeNodeDescriber,
+    FakeSourceDescriber,
     FakeSourceLister,
+    FakeSourceNameDescriber,
     FakeTime,
     TickingMonotonicClock,
 )
@@ -72,8 +69,6 @@ def _build(catalog_db: Path, local_db: Path, monotonic_clock: MonotonicClock) ->
     static_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "static"
     controls = FakeCrawlControls()  # the console routes never call them
     node_state = NodeState(node_id=None, created_at=None, downloads=(), backoff_state_by_key={})
-    wall_clock, gap = FakeTime().wall, timedelta(seconds=90)
-    source_reader = SqliteSourceReader(ReaderProvider(catalog_db))
     return build_app(
         catalog_db_path=catalog_db,
         local_db_path=local_db,
@@ -88,12 +83,8 @@ def _build(catalog_db: Path, local_db: Path, monotonic_clock: MonotonicClock) ->
         file_lister=FakeFileLister(FileListing((), False, 0, 0, {})),
         file_describer=FakeFileDescriber(None),
         source_lister=FakeSourceLister(SourceListing((), has_next_page=False, source_count=0)),
-        source_describer=DescribeSource(
-            source_reader=source_reader, wall_clock=wall_clock, source_period_gap=gap
-        ),
-        source_name_describer=DescribeSourceName(
-            source_reader=source_reader, wall_clock=wall_clock, source_period_gap=gap
-        ),
+        source_describer=FakeSourceDescriber(None),
+        source_name_describer=FakeSourceNameDescriber(None),
         amule_url="http://localhost:4711",
         monotonic_clock=monotonic_clock,
     )
