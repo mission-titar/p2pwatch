@@ -4,15 +4,13 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-import pytest
-
 from p2pwatch.adapters.driven.mule_api.mapping import map_search_results
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch_testing.adapters.persistence_sqlite.older_catalog import (
-    forcing_secure_delete,
+    configure_forcing_secure_delete,
     open_catalog_at,
 )
 
@@ -139,13 +137,10 @@ def test_a_mapped_result_reuses_the_variant_0007_migrated_from_its_old_row(
         connection.close()
 
 
-def test_the_runner_restores_the_pragmas_0007_sets(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_the_runner_restores_the_pragmas_0007_sets(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
     _old_catalog(path, _BARE)
-    forcing_secure_delete(monkeypatch)
-    connection = open_catalog_at(path, 7)
+    connection = open_catalog_at(path, 7, configure=configure_forcing_secure_delete)
     try:
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 7
         assert connection.execute("PRAGMA secure_delete").fetchone()[0] == 1
@@ -154,9 +149,7 @@ def test_the_runner_restores_the_pragmas_0007_sets(
         connection.close()
 
 
-def test_dropping_the_old_table_keeps_its_pages_out_of_the_wal(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_dropping_the_old_table_keeps_its_pages_out_of_the_wal(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
     # One variant observed 2,000 times: a large old table, a small new one.
     long_name = _with(_BARE, filename="x" * 1000)
@@ -165,8 +158,7 @@ def test_dropping_the_old_table_keeps_its_pages_out_of_the_wal(
     dropped = raw.execute("SELECT sum(pgsize) FROM dbstat WHERE name = 'file_observations'")
     dropped_bytes = int(dropped.fetchone()[0])
     raw.close()
-    forcing_secure_delete(monkeypatch)
-    connection = open_catalog_at(path, 7)
+    connection = open_catalog_at(path, 7, configure=configure_forcing_secure_delete)
     try:
         wal_bytes = (tmp_path / "catalog.db-wal").stat().st_size
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 7

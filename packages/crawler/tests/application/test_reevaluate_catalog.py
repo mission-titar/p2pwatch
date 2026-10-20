@@ -20,7 +20,6 @@ from catalog_matching.domain.engine import (
 )
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
-from p2pwatch.application import reevaluate_catalog as reevaluate_module
 from p2pwatch.application.reevaluate_catalog import ReevaluationSummary, reevaluate_catalog
 from p2pwatch.application.run_download_cycle import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.domain.file_key import FileKey, Network
@@ -93,6 +92,7 @@ async def test_two_changed_rows_are_all_evaluated_and_written(
         wall_clock=wall_clock,
         logger=FakeLogger(),
         node_id=_NODE,
+        progress_every_files=200,
     )
     assert summary == ReevaluationSummary(files_evaluated=2, rows_written=2)
     tiers = dict(decision_tiers(catalog_connection))
@@ -133,6 +133,7 @@ async def test_unchanged_row_is_evaluated_but_not_written(
         wall_clock=wall_clock,
         logger=FakeLogger(),
         node_id=_NODE,
+        progress_every_files=200,
     )
     assert summary == ReevaluationSummary(files_evaluated=1, rows_written=0)
     assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 1
@@ -174,6 +175,7 @@ async def test_repository_error_on_one_row_is_absorbed_and_sweep_continues(
         wall_clock=wall_clock,
         logger=logger,
         node_id=_NODE,
+        progress_every_files=200,
     )
     assert summary == ReevaluationSummary(files_evaluated=2, rows_written=1)
     assert decision_tiers(catalog_connection) == [(_HASH_CAT, "catalog")]
@@ -204,6 +206,7 @@ async def test_empty_catalogue_yields_zero_summary(
         wall_clock=wall_clock,
         logger=FakeLogger(),
         node_id=_NODE,
+        progress_every_files=200,
     )
     assert summary == ReevaluationSummary(files_evaluated=0, rows_written=0)
     assert event_emitter.events == []
@@ -240,6 +243,7 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
         wall_clock=wall_clock,
         logger=FakeLogger(),
         node_id=_NODE,
+        progress_every_files=200,
     )
     assert summary == ReevaluationSummary(
         files_evaluated=1, rows_written=3
@@ -280,6 +284,7 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
         wall_clock=wall_clock,
         logger=FakeLogger(),
         node_id=_NODE,
+        progress_every_files=200,
     )
     assert summary == ReevaluationSummary(
         files_evaluated=1, rows_written=2
@@ -321,6 +326,7 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
         wall_clock=wall_clock,
         logger=FakeLogger(),
         node_id=_NODE,
+        progress_every_files=200,
     )
     assert summary == ReevaluationSummary(files_evaluated=1, rows_written=1)
     assert catalog.read_latest_decisions(FileKey(Network.ED2K, _HASH_DL)) == {
@@ -333,9 +339,7 @@ async def test_progress_is_logged_at_each_multiple_of_the_cadence_only(
     catalog: SqliteCatalogRepository,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(reevaluate_module, "_PROGRESS_EVERY", 2)
     logger = FakeLogger()
     catalog.record_observation(
         FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now()), _NODE
@@ -357,11 +361,8 @@ async def test_progress_is_logged_at_each_multiple_of_the_cadence_only(
         wall_clock=wall_clock,
         logger=logger,
         node_id=_NODE,
+        progress_every_files=2,
     )
     assert logger.lines == [
         LoggedLine("info", "catalogue re-evaluation: 2/3 files, 2 rows written")
     ]
-
-
-def test_progress_cadence_is_every_200_files() -> None:
-    assert reevaluate_module._PROGRESS_EVERY == 200

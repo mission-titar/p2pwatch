@@ -6,11 +6,12 @@ Changing the serialization changes every stored ``content_hash``: it needs a mig
 import hashlib
 import json
 import sqlite3
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from functools import cache
 
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.observation import fold_raw_meta
+from p2pwatch.domain.observation import RawMeta, fold_raw_meta
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _MICROSECOND = timedelta(microseconds=1)
@@ -51,7 +52,16 @@ def file_id(network: str, native_id: str) -> bytes:
     return FileKey(Network(network), native_id).file_id
 
 
-def register_sql_functions(connection: sqlite3.Connection) -> None:
+def register_sql_functions(
+    connection: sqlite3.Connection,
+    *,
+    content_hash: Callable[
+        [str | bytes, str, int, int | None, int | None, str, str, str], bytes
+    ] = content_hash,
+    fold_raw_meta: Callable[
+        [tuple[tuple[str, str], ...], str | None, str | None, int], RawMeta
+    ] = fold_raw_meta,
+) -> None:
     """Registers ``content_hash``, ``file_id``, ``fold_raw_meta`` and ``iso_to_micros``."""
 
     # A stored raw_meta, folded and serialized as record_observation serializes it.
