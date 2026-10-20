@@ -9,7 +9,7 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
-from p2pwatch.domain.source import SourceKey
+from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory, SourceNaming
 from p2pwatch.ports.driven.source_reader import SourceReader
 from p2pwatch.ports.driving.source_name_describer import SourceNameDescription
@@ -108,3 +108,16 @@ def test_only_a_full_page_of_sources_offers_a_next_one() -> None:
     short = _describe(_FakeSourceReader(_history(PAGE_SIZE - 1)))
     assert full is not None and full.has_next_page
     assert short is not None and not short.has_next_page
+
+
+def test_every_period_read_is_described_on_every_page() -> None:
+    period = SharingPeriod(
+        FileKey(Network.ED2K, "a" * 32), None, "AnimuseeFMR", SourceRole.QUEUED,
+        None, None, _NOW, _NOW, 0, "n1",
+    )  # fmt: skip
+    history = SourceNameHistory("AnimuseeFMR", (_NAMING,), (period,) * (PAGE_SIZE + 1), {})
+
+    description = _describe(_FakeSourceReader(history), page=2)
+
+    assert description is not None
+    assert description.source_name_history == history
