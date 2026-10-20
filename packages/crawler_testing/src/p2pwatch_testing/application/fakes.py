@@ -38,6 +38,7 @@ from p2pwatch.ports.driving.file_describer import FileDescriber, FileDescription
 from p2pwatch.ports.driving.file_lister import FileLister, FileListing
 from p2pwatch.ports.driving.node_describer import NodeDescriber, NodeDescription
 from p2pwatch.ports.driving.shutdown_requester import ShutdownRequester
+from p2pwatch.ports.driving.source_lister import SourceLister, SourceListing
 
 
 class FakeTime:
@@ -299,6 +300,26 @@ class FakeFileDescriber(FileDescriber):
     ) -> FileDescription | None:
         self.calls.append(DescribeFileCall(file_id, requested_since, requested_until))
         return self._file_description
+
+
+@dataclass(frozen=True)
+class ListSourcesCall:
+    """The arguments of one ``list_sources`` call."""
+
+    search_text: str | None
+    page: int
+
+
+class FakeSourceLister(SourceLister):
+    """Lists the sources it is given, and keeps each call's arguments."""
+
+    def __init__(self, source_listing: SourceListing) -> None:
+        self._source_listing = source_listing
+        self.calls: list[ListSourcesCall] = []
+
+    def list_sources(self, *, search_text: str | None, page: int) -> SourceListing:
+        self.calls.append(ListSourcesCall(search_text, page))
+        return self._source_listing
 
 
 class FakeNodeDescriber(NodeDescriber):

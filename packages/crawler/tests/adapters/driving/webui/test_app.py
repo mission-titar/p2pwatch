@@ -18,8 +18,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from catalog_matching.domain.engine import DecisionRecord, Explanation
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_targets
-from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import PAGE_SIZE, SqliteSourceReader
-from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
+from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import PAGE_SIZE
 from p2pwatch.adapters.driving.webui.app import (
     _normalize_direction,
     _normalize_sort,
@@ -31,13 +30,13 @@ from p2pwatch.adapters.driving.webui.app import (
     build_app,
 )
 from p2pwatch.adapters.driving.webui.views import DecisionCell, HiddenInput
-from p2pwatch.application.list_sources import ListSources
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.coverage import TargetCoverage
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_history import DatedDecision, FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.interval import Interval
+from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
@@ -48,6 +47,7 @@ from p2pwatch.ports.driving.crawl_summarizer import ClientSummary, CrawlSummary
 from p2pwatch.ports.driving.file_describer import FileDescription
 from p2pwatch.ports.driving.file_lister import FileListing
 from p2pwatch.ports.driving.node_describer import NodeDescription
+from p2pwatch.ports.driving.source_lister import SourceListing
 from p2pwatch_testing.application.fakes import (
     DescribeFileCall,
     FakeCrawlControls,
@@ -55,8 +55,10 @@ from p2pwatch_testing.application.fakes import (
     FakeFileDescriber,
     FakeFileLister,
     FakeNodeDescriber,
+    FakeSourceLister,
     FakeTime,
     ListFilesCall,
+    ListSourcesCall,
 )
 from p2pwatch_testing.catalog_rows import (
     SEEN_AT,
@@ -113,6 +115,7 @@ _DEFAULT_CALL = ListFilesCall(
     page=1,
 )
 _NO_FILE_DESCRIBER = FakeFileDescriber(None)
+_NO_SOURCE_LISTER = FakeSourceLister(SourceListing((), has_next_page=False, source_count=0))
 # The pages on fakes read their use case only: opening this path would fail.
 _NO_DB = Path("/nonexistent/p2pwatch.db")
 _FILE = FileKey(Network.ED2K, TEST_HASH)
@@ -140,6 +143,7 @@ def _app_on_fakes(
     node_state: NodeState = _NODE_STATE,
     file_lister: FakeFileLister = _NO_FILE_LISTER,
     file_describer: FakeFileDescriber = _NO_FILE_DESCRIBER,
+    source_lister: FakeSourceLister = _NO_SOURCE_LISTER,
     target_segments: tuple[TargetSegment, ...] | None = None,
     controls: FakeCrawlControls = _NO_CONTROLS,
     amule_url: str = _AMULE_URL,
@@ -160,7 +164,7 @@ def _app_on_fakes(
         node_describer=FakeNodeDescriber(NodeDescription(node_state)),
         file_lister=file_lister,
         file_describer=file_describer,
-        source_lister=ListSources(SqliteSourceReader(ReaderProvider(_NO_DB))),
+        source_lister=source_lister,
         amule_url=amule_url,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -279,7 +283,7 @@ def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         node_describer=_DESCRIBER,
         file_lister=_NO_FILE_LISTER,
         file_describer=FakeFileDescriber(_FILE_DESCRIPTION),
-        source_lister=ListSources(SqliteSourceReader(ReaderProvider(catalog_db))),
+        source_lister=_NO_SOURCE_LISTER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -567,6 +571,11 @@ async def test_file_page_without_a_source_in_its_interval_says_so() -> None:
 # ---------------------------------------------------------------------------
 
 _OTHER = "9c0d" * 8
+_KNOWN_SOURCE = KnownSource(
+    _SOURCE, "AnimuseeFMR", datetime(2026, 10, 13, 20, 0, 30, tzinfo=UTC), 1
+)
+# One source on a list counting two.
+_TWO_SOURCES = SourceListing((_KNOWN_SOURCE,), has_next_page=False, source_count=2)
 
 
 def _seed_two_sources(catalog_db: Path, ed2k_hash: str) -> None:
@@ -585,16 +594,22 @@ async def _sources_page(app: Starlette, url: str) -> str:
     return re.sub(r">\s+<", "><", resp.text)
 
 
+async def _source_listing_page(
+    url: str, source_listing: SourceListing = _TWO_SOURCES
+) -> tuple[str, ListSourcesCall]:
+    """The sources page rendered from ``source_listing``, and its call."""
+    source_lister = FakeSourceLister(source_listing)
+    page = await _sources_page(_app_on_fakes(source_lister=source_lister), url)
+    (call,) = source_lister.calls
+    return page, call
+
+
 @pytest.mark.asyncio
-async def test_sources_lists_each_source_with_its_links_last_seen_and_files(
-    populated_app: tuple[Starlette, str], catalog_db: Path
-) -> None:
-    app, hash_ = populated_app
-    _seed_two_sources(catalog_db, hash_)
-    page = await _sources_page(app, "/sources")
+async def test_sources_lists_each_source_with_its_links_last_seen_and_files() -> None:
+    page, call = await _source_listing_page("/sources")
+    assert call == ListSourcesCall(search_text=None, page=1)
     name = '<a href="/sources/name?source_name=AnimuseeFMR">AnimuseeFMR</a>'
-    source = f'<a href="/sources/{SourceKey(Network.ED2K, _USER).source_id.hex()}">1f2e1f2e…</a>'
-    assert _row(name, source, "2026-10-13 20:00:30Z", "1") in page
+    assert _row(name, _SOURCE_LINK, "2026-10-13 20:00:30Z", "1") in page
     assert "Sources recorded: 2." in page
     assert (
         '<input type="search" name="search" value="" placeholder="Search name or user hash">'
@@ -603,51 +618,48 @@ async def test_sources_lists_each_source_with_its_links_last_seen_and_files(
 
 
 @pytest.mark.asyncio
-async def test_sources_search_keeps_its_query_and_counts_its_matches(
-    populated_app: tuple[Starlette, str], catalog_db: Path
-) -> None:
-    app, hash_ = populated_app
-    _seed_two_sources(catalog_db, hash_)
-    page = await _sources_page(app, "/sources?search=+shinob+")
-    assert "Shinobu</a>" in page
-    assert "AnimuseeFMR" not in page
+async def test_sources_search_keeps_its_text_and_counts_its_matches() -> None:
+    listing = SourceListing((_KNOWN_SOURCE,), has_next_page=False, source_count=1)
+    page, call = await _source_listing_page("/sources?search=+shinob+", listing)
+    assert call == ListSourcesCall(search_text="shinob", page=1)
     assert "Sources matching the search: 1." in page
     assert 'name="search" value="shinob"' in page
 
 
 @pytest.mark.asyncio
-async def test_sources_ignore_the_4x_search_key(
-    populated_app: tuple[Starlette, str], catalog_db: Path
-) -> None:
-    app, hash_ = populated_app
-    _seed_two_sources(catalog_db, hash_)
-    page = await _sources_page(app, "/sources?q=shinob")
-    assert "AnimuseeFMR</a>" in page
+async def test_sources_ignore_the_4x_search_key() -> None:
+    page, call = await _source_listing_page("/sources?q=shinob")
+    assert call == ListSourcesCall(search_text=None, page=1)
     assert "Sources recorded: 2." in page
 
 
 @pytest.mark.asyncio
-async def test_sources_without_a_source_says_so(populated_app: tuple[Starlette, str]) -> None:
-    app, _ = populated_app
-    page = await _sources_page(app, "/sources?page=nope")
+async def test_sources_without_a_source_says_so() -> None:
+    page, call = await _source_listing_page(
+        "/sources?page=nope", SourceListing((), has_next_page=False, source_count=0)
+    )
+    assert call == ListSourcesCall(search_text=None, page=1)
     assert '<td colspan="4">No source found.</td>' in page
     assert "<span>Page 1</span>" in page
 
 
 @pytest.mark.asyncio
-async def test_sources_pages_keep_the_search(
-    populated_app: tuple[Starlette, str], catalog_db: Path
-) -> None:
-    app, hash_ = populated_app
-    with sqlite3.connect(catalog_db) as conn:
-        for n in range(PAGE_SIZE + 1):
-            insert_source(conn, f"{n:032x}")
-            insert_source_point(conn, insert_source_variant(conn, hash_, f"{n:032x}"), n)
-    first = await _sources_page(app, "/sources?search=FMR")
-    second = await _sources_page(app, "/sources?search=FMR&page=2")
+async def test_sources_pages_keep_the_search() -> None:
+    full = SourceListing((_KNOWN_SOURCE,), has_next_page=True, source_count=51)
+    first, _ = await _source_listing_page("/sources?search=FMR", full)
+    second, call = await _source_listing_page("/sources?search=FMR&page=2")
+    assert call == ListSourcesCall(search_text="FMR", page=2)
     assert 'href="/sources?search=FMR&amp;page=2"' in first
     assert 'href="/sources?search=FMR&amp;page=1"' in second
+    assert "Next →" not in second
     assert second.count("<tr><td>") == 1
+
+
+@pytest.mark.asyncio
+async def test_sources_list_a_source_without_a_name_as_unknown_unlinked() -> None:
+    listing = SourceListing((replace(_KNOWN_SOURCE, source_name=None),), False, 1)
+    page, _ = await _source_listing_page("/sources", listing)
+    assert _row("unknown", _SOURCE_LINK, "2026-10-13 20:00:30Z", "1") in page
 
 
 # ---------------------------------------------------------------------------
@@ -689,7 +701,7 @@ async def test_source_page_shows_its_hash_its_names_and_its_periods(
 
 
 @pytest.mark.asyncio
-async def test_a_source_without_a_name_reads_unknown_unlinked_on_the_list_and_its_page(
+async def test_a_source_without_a_name_reads_unknown_unlinked_on_its_page(
     populated_app: tuple[Starlette, str], catalog_db: Path
 ) -> None:
     app, hash_ = populated_app
@@ -697,10 +709,8 @@ async def test_a_source_without_a_name_reads_unknown_unlinked_on_the_list_and_it
         insert_source(conn, _USER)
         unnamed = insert_source_variant(conn, hash_, _USER, name=None)
         insert_source_point(conn, unnamed, _TUESDAY_8PM)
-    source = f'<a href="/sources/{SourceKey(Network.ED2K, _USER).source_id.hex()}">1f2e1f2e…</a>'
     file = f'<a href="/files/{file_id(hash_).hex()}">keroro_s2e62a_vf.avi</a>'
     stamp = "2026-10-13 20:00:00Z"
-    assert _row("unknown", source, stamp, "1") in await _sources_page(app, "/sources")
     period = _row(file, "unknown", "queued", "unknown", "unknown", stamp, stamp, "", "", "n1")
     assert period in await _sources_page(app, _USER_PAGE)
 
@@ -926,7 +936,7 @@ async def test_a_template_reading_what_its_context_lacks_raises(
         node_describer=_DESCRIBER,
         file_lister=_NO_FILE_LISTER,
         file_describer=_NO_FILE_DESCRIBER,
-        source_lister=ListSources(SqliteSourceReader(ReaderProvider(catalog_db))),
+        source_lister=_NO_SOURCE_LISTER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
