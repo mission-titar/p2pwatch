@@ -8,8 +8,3 @@ def test_write_step_outputs_appends_the_version_and_the_body_s_path(tmp_path: Pa
     output_path.write_text("earlier=kept\n")
     GitHubStepOutputWriter(output_path).write_step_outputs("3.1.0", PurePath("/tmp/body.md"))
     assert output_path.read_text() == "earlier=kept\nversion=3.1.0\nbody-path=/tmp/body.md\n"
-
-
-def test_write_step_outputs_writes_nothing_outside_actions(tmp_path: Path) -> None:
-    GitHubStepOutputWriter(None).write_step_outputs("3.1.0", tmp_path / "body.md")
-    assert list(tmp_path.iterdir()) == []

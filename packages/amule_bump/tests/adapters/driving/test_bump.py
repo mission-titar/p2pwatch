@@ -18,6 +18,7 @@ NEW_COMMIT = "909d304d993ee07df6c6f6acf501a6d791d53666"
 DOCKERFILE = f"FROM debian\nARG AMULE_VERSION=3.0.1\nARG AMULE_COMMIT={OLD_COMMIT}\n"
 DOCKERFILE_PATH = PurePath("/repo/packages/amule/Dockerfile")
 BODY_PATH = PurePath("/tmp/body.md")
+CHANGELOG_LINE = "- amuleapi, " + "word " * 10
 
 
 def upstream(latest: str) -> FakeRepoReader:
@@ -26,7 +27,7 @@ def upstream(latest: str) -> FakeRepoReader:
             "releases/latest": {"tag_name": latest},
             f"git/ref/tags/{latest}": {"object": {"type": "commit", "sha": NEW_COMMIT}},
         },
-        files={("3.1.0", "docs/CHANGELOG.md"): "## Version 3.1.0 - REST\n- amuleapi\n"},
+        files={("3.1.0", "docs/CHANGELOG.md"): f"## Version 3.1.0 - REST\n{CHANGELOG_LINE}\n"},
     )
 
 
@@ -52,6 +53,7 @@ class Bump:
             dockerfile_writer=self.dockerfile,
             pull_request_body_writer=self.pull_request_body_writer,
             step_output_writer=self.step_output_writer,
+            changelog_width_characters=30,
         )
 
     def wrote_nothing(self, dockerfile_text: str) -> bool:
@@ -94,6 +96,13 @@ def test_a_new_release_is_announced_to_the_workflow() -> None:
     bump = Bump()
     bump.run(upstream("3.1.0"), dry_run=False)
     assert bump.step_output_writer.step_outputs == [("3.1.0", BODY_PATH)]
+
+
+def test_the_changelog_wraps_at_the_width_the_bump_is_given() -> None:
+    bump = Bump()
+    bump.run(upstream("3.1.0"), dry_run=False)
+    body = bump.pull_request_body_writer.bodies_by_path[BODY_PATH]
+    assert "- amuleapi, word word word\nword word word word word word\nword\n" in body
 
 
 def test_dry_run_prints_the_new_pin_and_body_and_writes_nothing(
