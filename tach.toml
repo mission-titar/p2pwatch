@@ -27,8 +27,8 @@ depends_on = [
   "amule_bump.adapters.driven.github_repo_reader",
   "amule_bump.adapters.driven.github_step_output_writer",
   "amule_bump.adapters.driven.terminal_step_output_writer",
-  "amule_bump.adapters.driving.bump",
   "amule_bump.adapters.driving.cli",
+  "amule_bump.application",
   "amule_bump.domain",
 ]
 
@@ -58,31 +58,20 @@ layer = "adapters"
 depends_on = ["amule_bump.ports.driven.step_output_writer"]
 
 [[modules]]
-path = "amule_bump.adapters.driving.bump"
-layer = "adapters"
-depends_on = [
-  "amule_bump.domain",
-  # The bump calls the use cases past any driving port: lot 3 gives it one.
-  { path = "amule_bump.application", deprecated = true },
-  # The bump hands the use cases their driven port: lot 3's driving port takes it over.
-  { path = "amule_bump.ports.driven.repo_reader", deprecated = true },
-  # The bump reads and writes through its driven ports: block 21 removes it.
-  { path = "amule_bump.ports.driven.dockerfile", deprecated = true },
-  { path = "amule_bump.ports.driven.pull_request_body_writer", deprecated = true },
-  { path = "amule_bump.ports.driven.step_output_writer", deprecated = true },
-]
-
-[[modules]]
 path = "amule_bump.adapters.driving.cli"
 layer = "adapters"
-depends_on = []
+depends_on = ["amule_bump.domain", "amule_bump.ports.driving.amule_bumper"]
 
 [[modules]]
 path = "amule_bump.application"
 layer = "application"
 depends_on = [
   "amule_bump.domain",
+  "amule_bump.ports.driven.dockerfile",
+  "amule_bump.ports.driven.pull_request_body_writer",
   "amule_bump.ports.driven.repo_reader",
+  "amule_bump.ports.driven.step_output_writer",
+  "amule_bump.ports.driving.amule_bumper",
 ]
 
 [[modules]]
@@ -109,6 +98,11 @@ depends_on = []
 path = "amule_bump.ports.driven.step_output_writer"
 layer = "ports"
 depends_on = []
+
+[[modules]]
+path = "amule_bump.ports.driving.amule_bumper"
+layer = "ports"
+depends_on = ["amule_bump.domain"]
 
 [[modules]]
 path = "catalog_matching.domain"
