@@ -1,1 +1,1 @@
-"""Ports tests (Protocols + DTOs)."""
+"""Ports tests: the errors the driven ports declare."""

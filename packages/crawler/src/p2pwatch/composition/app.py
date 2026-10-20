@@ -153,11 +153,11 @@ class CrawlerApp(CrawlerRunner):
         wall_clock: WallClock,
         monotonic_clock: MonotonicClock,
     ) -> None:
-        """Start the read-only webui on its OWN thread + loop (spec §5), sharing only IMMUTABLE
-        state with the crawler (the parsed matcher/targets, the DB paths). It reads through its
-        OWN ``ReaderProvider``s, one connection per thread; nothing here touches the crawler's
-        event loop nor its writer connections. Its stop is registered on ``stack`` so it runs
-        during the normal LIFO unwind at shutdown, AFTER the loops are stopped."""
+        """Start the read-only webui on its OWN thread + loop (spec §5). It shares with the crawler
+        the parsed config (immutable), the clocks (stateless), the status board (whole snapshots
+        swapped, never mutated) and the run state (every change scheduled on the crawler's loop).
+        It reads through its OWN ``ReaderProvider``s, one connection per thread. Its stop is
+        registered on ``stack`` so it runs during the normal LIFO unwind, AFTER the loops stop."""
         crawler_config = config.crawler_config
         webui_pkg_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent
         local_reader_provider = ReaderProvider(crawler_config.local_db_path)

@@ -1,1 +1,1 @@
-"""Ports (Clean Architecture): async Protocols + frozen DTOs, NO implementation."""
+"""Ports: ABCs, driving and driven, no implementation."""

@@ -1,4 +1,4 @@
-"""The interval a page reads its periods and its observations in (source points spec, D6)."""
+"""The interval a page reads its periods and its observations in."""
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta

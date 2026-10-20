@@ -1,4 +1,4 @@
-"""A source the catalog knows by its user hash, as the sources list shows it (stage 4 spec, D13)."""
+"""A source the catalog knows by its user hash, as the sources list shows it."""
 
 from dataclasses import dataclass
 from datetime import datetime

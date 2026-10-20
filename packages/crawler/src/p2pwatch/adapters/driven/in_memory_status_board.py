@@ -1,5 +1,5 @@
 """``InMemoryStatusBoard``: each client's latest reading, published by its status loop and read
-on the webui's thread (D21)."""
+on the webui's thread."""
 
 from collections.abc import Iterable, Mapping
 
