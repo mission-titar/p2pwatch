@@ -168,10 +168,10 @@ flowchart TB
 - **`domain/`** est **pur** : pas d'I/O, pas de `yaml`/DB/réseau/horloge/logging, aucune lecture
   d'env. L'interpolation `${VAR}` dans `crawler.yml` est résolue par l'adapter de config **avant**
   que quoi que ce soit n'atteigne le domaine.
-- **`application/`** orchestre les cas d'usage asynchrones en parlant à des **ports** (protocoles).
+- **`application/`** orchestre les cas d'usage asynchrones en parlant à des **ports** (des ABC).
   Ses journaux passent eux aussi par un port, `Logger`, que `StdlibLogger` implémente sous le nom
   du module (`p2pwatch.application.search_worker`), celui que filtre un opérateur.
-- **`adapters/`** portent toutes les I/O et satisfont les ports structurellement.
+- **`adapters/`** portent toutes les I/O et héritent des ports qu'ils implémentent.
 - **`composition/`** (`CrawlerApp`) charge la config, que l'adapter de config valide *fail-fast*,
   câble les adapters concrets qu'elle décrit, puis lance `RunCrawler`
   (`application/run_crawler.py`), la racine du graphe : il résout le `node_id`, annonce le
@@ -232,7 +232,7 @@ sequenceDiagram
   participant A as amuled
   participant C as catalog.db
   participant E as MatchingEngine
-  participant D as WakeHub
+  participant D as Waker
 
   W->>A: search(keyword, channel, budget)
   A-->>W: SearchAnswer (reported files, skipped results)
@@ -642,7 +642,7 @@ port et pointez-y votre propre Prometheus si vous voulez des tableaux de bord.
 **Discipline de frontière (E-D13)** : les échecs de notifieur (apprise) et les échecs d'appel au
 démon sont
 **absorbés** (dégradation) ; un échec dans un composant in-process testé à 100 % (par exemple
-`PrometheusSink`) **crashe bruyamment**, parce que c'est un bug, pas un transitoire.
+`PrometheusMetricsRecorder`) **crashe bruyamment**, parce que c'est un bug, pas un transitoire.
 
 ## 11. Invariants de conception (récapitulatif)
 

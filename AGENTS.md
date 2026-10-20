@@ -49,7 +49,7 @@ The crawler is Clean/Hexagonal (Hard rules): `domain/` pure, `ports/` its drivin
 - **Two run modes, one topology:** `download.enabled: true` (the shipped default) wires the download loop live; `download.enabled: false` or an absent `download:` section is crawl-only. This is a **config flag**, not two ways of assembling the stack: both compose variants start every service unconditionally, and there is no compose profile anywhere.
 - **The merge** (`python -m p2pwatch merge`) is never called by the crawl and writes only to its destination: a new file (`--output`), or the source named by `--into`, which `open_catalog` first migrates in place to the current schema.
 - **`deploy/` is the operator-owned single source of truth for config**: `deploy/crawler.yml` / `deploy/matcher.yml` / `deploy/targets.yml` stay editable-by-operator deployment config, next to the compose files that mount them; it is **forbidden to canonicalize them as code artifacts** (package data, inline policy dicts, or duplicate test fixtures that shadow them). Every consumer *derives from* `deploy/`, never the reverse: the matcher policy has exactly ONE copy (`deploy/matcher.yml`), read by the matching golden corpus + engine unit tests via `parents[N]`: a test-time path coupling to `deploy/`, deliberately accepted (test-only, not an import; the code DAG is unchanged). Do not reintroduce a `canonical_config.yaml` fixture or an inline `_CANONICAL_RAW` policy dict.
-- **Boundary discipline** absorb failures from external I/O (an apprise notifier, a call to the daemon → degrade), but let in-process 100%-tested code crash loudly (a `PrometheusSink` failure is a bug, not a transient).
+- **Boundary discipline** absorb failures from external I/O (an apprise notifier, a call to the daemon → degrade), but let in-process 100%-tested code crash loudly (a `PrometheusMetricsRecorder` failure is a bug, not a transient).
 - **A store has no clock**: a repository, or `InMemoryStatusBoard`, stores the instants it is given and decides no wait; its caller reads the clock right before each write (`wall_clock.now()` for a row). An adapter other than a store may hold a `MonotonicClock` for a guard of its own I/O: the amuleapi client's start pacing and search deadlines, the SQL console's query budget.
 
 ## Commands
@@ -114,8 +114,9 @@ a function does.
 - **No abbreviation but the glossary's**, units and protocol names (`kbps`, `tcp`, `md4`, `ed2k`) aside.
 - **Comments, docstrings and log messages use the code's words.**
 - **The most telling word wins over the most widespread one**: an existing name is not a reason to keep it.
-- **A port is named after the one who does its action**: `CatalogMerger`, "the one who merges catalogs". New
-  ports are ABCs.
+- **A port is named after the one who does its action**: `CatalogMerger`, "the one who merges catalogs". A port
+  is an ABC its implementers and fakes inherit: `code-pattern-check` refuses a `Protocol` base in the crawler's,
+  the matching's and the testing package's `src`.
 - **A port over stored state is a `<Thing>Writer` or a `<Thing>Reader`, never both** (both databases, the status
   board, the run state). A `Writer`'s operations keep their verbs (`record_observation`, `set_state`); a
   `Reader`'s start with `read_` (`iter_` for an iterator), a predicate keeps `is_` or `has_`.
@@ -166,7 +167,7 @@ a function does.
 | `node state` | `NodeState`, what a node holds of its own: its identity, its tracked downloads, its search backoffs | `node info` |
 | `query answer` | `QueryAnswer`, a console query's columns and first rows, each cell as text; `QueryFailure` when it gave none | `result` |
 | `display` | a `<Thing>Display`, the view model a webui template renders, its values already text | `view` |
-| `wake` | `WakeHub` wakes the loops waiting on a subject | `signal`, `nudge` |
+| `wake` | `Waker` wakes the loops waiting on a subject | `signal`, `nudge` |
 | `run state` | whether the crawler searches or idles, and whether its shutdown was requested: `RunStateWriter` changes it, `RunStateReader` reads it | `control` |
 | `status reading` | `StatusReading`, a client's status at one read, its `status` `None` when its API did not answer; a `PublishedReading` is one on the status board, with its `published_at` on the monotonic clock | a source's reading |
 | `first useful`, `reappeared` | a source's two alerts | `new`, `useful again` |
@@ -192,7 +193,7 @@ Tiers, phases, blocks, the stack, pull requests, Wrap and review findings: `agen
 
 **Matching engine (stdlib `re`, `re.ASCII`):**
 - Regex tokens compile with `re.compile(pattern, re.ASCII)` (`matchers.py`, `validation.py`). `re.ASCII` keeps `\b \d \s \w` ASCII: matching the pre-2026-07-03 RE2 default the existing policy relies on (`fold()` does not reduce non-Latin scripts to ASCII). Case-insensitivity is a leading `(?i)` prefix (not a flag arg). An invalid pattern raises **`re.error`** (caught in `validation.py` → `MatchingConfigError` "not compilable").
-- Coverage idioms: a `Protocol` stub `def m(...) -> bool: ...` must be **one line** (a body with `...` on a second line counts as an uncovered branch under `branch=true`). A `case _: assert_never(x)` arm (the "unreachable default" of a `match` over a closed tagged-union) needs `# pragma: no cover` because it is unreachable by design but the branch counter doesn't know that.
+- Coverage idioms: an `@abstractmethod`'s body is its docstring alone (a `...` or `pass` under it is a line no test runs). A `case _: assert_never(x)` arm (the "unreachable default" of a `match` over a closed tagged-union) needs `# pragma: no cover` because it is unreachable by design but the branch counter doesn't know that.
 - Don't validate config order-dependently (parse pass = structural; graph pass = full table). Recursive validators need an explicit depth guard → a clean `DepthExceededError`, not `RecursionError` (which is a Python runtime artifact, not a domain error).
 
 **Coverage by own tests (`_unit-coverage-check`):**
@@ -209,7 +210,8 @@ Tiers, phases, blocks, the stack, pull requests, Wrap and review findings: `agen
 - **Neither password has a length minimum** in aMule at the pinned commit (no 12-character rule exists); the boot step refuses only control characters in them.
 
 **Serena and its language server, pyrefly (sections cited from `agents/reference/2026-10-16-python-language-server-bench.md`):**
-- **A port method is renamed from the port, then again from each implementer.** The ports are `Protocol`s, and no server links a structural implementation to its port (bench 11). Renamed from a base or an ABC, pyrefly reaches the overrides; renamed from an override, it never climbs to the base.
+- **A port method is renamed from the port.** The ports are ABCs, and renamed from a base, pyrefly reaches the overrides; renamed from an override, it never climbs to the base (bench 11).
+- **Check a rename's diff before anything else**: in block 190, renames run back to back reached a few references each and wrote some edits at shifted offsets (`import ClientUnreachableError` became `impoFreeSpaceMeterUnreachableError`).
 - **An override whose base comes from another test module is not renamed with its base** (`from tests.application.test_run_download_cycle import ...`): pyrefly does not resolve one `tests` package importing another, and mypy stays green, since the stale override becomes an extra method (bench 11).
 - **Never renamed completely by any server**: a pytest fixture's uses in the test bodies, an attribute only a Jinja template reads, a name inside a string (`__all__` included, under pyrefly) and a `dataclasses.replace` keyword (bench 3.1, 5.7).
 - **`.serena/project.yml` pins pyrefly 1.4.0 in `lazy-blocking` mode only in a project Serena trusts** (`trusted_project_path_patterns` in the user's global Serena config). Untrusted, Serena starts its own pyrefly 1.2.0 in the default mode, whose first rename after start is partial (bench 11).
