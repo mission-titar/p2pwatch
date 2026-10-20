@@ -27,6 +27,9 @@ An agent adds an entry only after the operator has agreed to it.
 - **The Grype scan back on p2pwatch at the v5 release**: one leg per image, `p2pwatch` and `p2pwatch-amule`, each with
   its versioned VEX and signed by `mission-titar/p2pwatch`, in place of v4's `mulewatch` leg. `.github/workflows/grype-scan.yml`.
 
+- **The VEX's Python claims applied by Grype**: CVE-2025-15366 and -15367 target `pkg:generic/python`, which matches
+  none of the Debian packages Grype reports them on, so they still show (proved on v4.1.0's attested SBOM). `SECURITY.md`.
+
 - **The metrics served by the webui on 8080**: `/metrics` mounted in Starlette, one server instead of two; `webui.enabled`,
   `observability.metrics.enabled` and `.port` removed, a deliberate breaking change. Today's setup: `docs/settings.md`.
 
