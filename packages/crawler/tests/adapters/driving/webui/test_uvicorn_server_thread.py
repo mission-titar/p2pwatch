@@ -29,7 +29,12 @@ def _webui_threads() -> list[threading.Thread]:
 async def test_start_serves_the_app_on_the_port_bound_and_stop_ends_the_thread(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    server_thread = UvicornServerThread(Starlette(routes=[Route("/", _ok)]), ("127.0.0.1", 0))
+    server_thread = UvicornServerThread(
+        Starlette(routes=[Route("/", _ok)]),
+        ("127.0.0.1", 0),
+        start_timeout_seconds=5.0,
+        serving_resources=(),
+    )
     with caplog.at_level(logging.INFO, logger=_LOGGER):
         await server_thread.start()
     host, port = server_thread.bound_address
@@ -51,7 +56,9 @@ async def test_a_port_already_bound_degrades_the_webui_without_raising(
     with socket.socket() as holder:
         holder.bind(("127.0.0.1", 0))
         holder.listen()
-        server_thread = UvicornServerThread(Starlette(), holder.getsockname())
+        server_thread = UvicornServerThread(
+            Starlette(), holder.getsockname(), start_timeout_seconds=5.0, serving_resources=()
+        )
         with caplog.at_level(logging.INFO, logger=_LOGGER):
             await server_thread.start()
         await server_thread.stop()
@@ -72,7 +79,10 @@ async def test_a_server_that_does_not_start_in_time_degrades_the_webui(
         yield
 
     server_thread = UvicornServerThread(
-        Starlette(lifespan=held_startup), ("127.0.0.1", 0), start_timeout_seconds=0.05
+        Starlette(lifespan=held_startup),
+        ("127.0.0.1", 0),
+        start_timeout_seconds=0.05,
+        serving_resources=(),
     )
     with caplog.at_level(logging.INFO, logger=_LOGGER):
         await server_thread.start()
@@ -91,7 +101,12 @@ async def test_a_failing_lifespan_degrades_the_webui_without_raising(
         raise RuntimeError("startup refused")
         yield
 
-    server_thread = UvicornServerThread(Starlette(lifespan=failing_startup), ("127.0.0.1", 0))
+    server_thread = UvicornServerThread(
+        Starlette(lifespan=failing_startup),
+        ("127.0.0.1", 0),
+        start_timeout_seconds=5.0,
+        serving_resources=(),
+    )
     with caplog.at_level(logging.INFO, logger=_LOGGER):
         await server_thread.start()
     await server_thread.stop()
@@ -116,7 +131,7 @@ class _ThreadRecordingContext(AbstractContextManager[None]):
 async def test_the_serving_resources_are_held_by_the_webui_thread_while_it_serves() -> None:
     resource = _ThreadRecordingContext()
     server_thread = UvicornServerThread(
-        Starlette(), ("127.0.0.1", 0), serving_resources=(resource,)
+        Starlette(), ("127.0.0.1", 0), start_timeout_seconds=5.0, serving_resources=(resource,)
     )
     await server_thread.start()
     entered = list(resource.threads)
@@ -132,7 +147,10 @@ async def test_the_serving_resources_are_left_when_serving_fails() -> None:
         holder.bind(("127.0.0.1", 0))
         holder.listen()
         server_thread = UvicornServerThread(
-            Starlette(), holder.getsockname(), serving_resources=(resource,)
+            Starlette(),
+            holder.getsockname(),
+            start_timeout_seconds=5.0,
+            serving_resources=(resource,),
         )
         await server_thread.start()
         await server_thread.stop()

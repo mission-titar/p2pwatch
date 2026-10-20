@@ -6,8 +6,8 @@ ADAPTER layer (implements ``Notifier``). On a ``node_id``'s first notification:
 to the first group and as is to the second, since apprise sends one message to every URL of a
 tag. Every message is markdown (a Discord embed) with every ``@`` neutralised, and both groups
 share an asset naming the node (spec discord-embed-notifications §4). No URL → natural no-op
-(apprise with no service returns ``None``). ``apprise_factory`` injectable for testing (default:
-a real ``apprise.Apprise``). The timeout/error absorption live in the dispatcher (E-D13).
+(apprise with no service returns ``None``). ``apprise_factory`` builds a group: ``apprise.Apprise``
+from the composition. The timeout/error absorption live in the dispatcher (E-D13).
 
 DECISION (audit 2026-06-23 / security-network#2): the apprise egress (Slack, Discord, SMTP,
 etc. webhooks) traverses the crawler's HOST network, not the VPN. The packaging spec accepts this
@@ -44,9 +44,7 @@ _NO_MENTION = "@\u200b"
 class AppriseNotifier(Notifier):
     """``Notifier`` adapter: one apprise tag per audience, in a prefixed group and a bare one."""
 
-    def __init__(
-        self, targets: AppriseTargets, *, apprise_factory: Callable[..., object] = apprise.Apprise
-    ) -> None:
+    def __init__(self, targets: AppriseTargets, *, apprise_factory: Callable[..., object]) -> None:
         self._targets = targets
         self._apprise_factory = apprise_factory
         self._groups_by_node_id: dict[str, tuple[object, object]] = {}

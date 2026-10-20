@@ -131,7 +131,6 @@ async def test_severity_maps_to_a_notify_type(
 
 
 @pytest.mark.asyncio
-async def test_default_apprise_obj_is_built_from_targets() -> None:
-    # Without an injected factory, the notifier builds a real Apprise (no URL → safe no-op).
-    notifier = AppriseNotifier(())
+async def test_a_real_apprise_with_no_url_notifies_nothing() -> None:
+    notifier = AppriseNotifier((), apprise_factory=apprise.Apprise)
     await notifier.notify(Audience.COMMUNITY, "t", "x", Severity.INFO, "n")  # does not raise

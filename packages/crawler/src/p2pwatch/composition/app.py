@@ -23,6 +23,8 @@ from functools import partial
 from importlib.metadata import version
 from pathlib import Path, PurePath
 
+import apprise
+import httpx
 from prometheus_client import CollectorRegistry, start_http_server
 
 import p2pwatch.adapters.driving.webui
@@ -102,6 +104,9 @@ from p2pwatch.ports.driving.crawler_runner import CrawlerRunner
 
 _logger = logging.getLogger("p2pwatch.composition.app")
 
+_AMULE_API_TIMEOUT_SECONDS = 10.0
+_WEBUI_START_TIMEOUT_SECONDS = 5.0
+
 
 def _print_progress(message: str) -> None:
     """Human shutdown line on stderr (spec §6: observable progress, outside logging)."""
@@ -141,7 +146,12 @@ class CrawlerApp(CrawlerRunner):
         """The node's one session on amuled, paced on the composition's monotonic clock."""
         host, port = self._amule_api_address
         return AmuleApiClient(
-            host, port, crawler_config.amule_api_password, monotonic_clock=monotonic_clock
+            host,
+            port,
+            crawler_config.amule_api_password,
+            timeout_seconds=_AMULE_API_TIMEOUT_SECONDS,
+            monotonic_clock=monotonic_clock,
+            transport_factory=httpx.AsyncHTTPTransport,
         )
 
     async def _start_webui(
@@ -219,6 +229,7 @@ class CrawlerApp(CrawlerRunner):
         server_thread = UvicornServerThread(
             app,
             self._webui_address,
+            start_timeout_seconds=_WEBUI_START_TIMEOUT_SECONDS,
             serving_resources=(catalog_reader_provider, local_reader_provider),
         )
         stack.push_async_callback(server_thread.stop)
@@ -260,7 +271,8 @@ class CrawlerApp(CrawlerRunner):
             observability = crawler_config.observability
             registry = CollectorRegistry()
             notifier = AppriseNotifier(
-                tuple((t.url, t.audience, t.node_prefix) for t in observability.notifications)
+                tuple((t.url, t.audience, t.node_prefix) for t in observability.notifications),
+                apprise_factory=apprise.Apprise,
             )
             event_emitter = ObservabilityDispatcher(
                 metrics_recorder=PrometheusMetricsRecorder(registry),
@@ -296,7 +308,7 @@ class CrawlerApp(CrawlerRunner):
                 _backoff_policy(crawler_config),
                 wall_clock,
                 monotonic_clock,
-                RandomJitterGenerator(),
+                RandomJitterGenerator(jitter_seed=None),  # seeded by the system's entropy
             )
             backoff.load_from(backoff_states.read_backoff_states())
             deps = WorkerDeps(
