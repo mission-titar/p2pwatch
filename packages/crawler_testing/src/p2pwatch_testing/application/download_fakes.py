@@ -66,7 +66,7 @@ class FakeDownloadClient(DownloadClient, SourceClient):
         return self._readings.get(file.native_id, ())
 
 
-class FakeSourceRepo(SourcePointWriter, SourcePointReader):
+class FakeSourcePointStore(SourcePointWriter, SourcePointReader):
     """Records each ``record_readings`` call, answering ``kept`` per hash; raises
     ``RepositoryError`` for ``fail_for``. ``history`` answers ``read_earlier_points`` per source,
     never useful by default, and ``baseline`` answers ``has_points_before``, each call noted in
@@ -117,7 +117,7 @@ class FakeSourceRepo(SourcePointWriter, SourcePointReader):
         return self._baseline
 
 
-class FakeDownloadRepo(DownloadWriter, DownloadReader):
+class FakeDownloadStore(DownloadWriter, DownloadReader):
     """In-memory downloads repo (the contract of SqliteDownloadRepository, without SQL).
 
     Keyed by ``native_id``; ``failures`` holds the failure reasons, ``queued_at``,
@@ -212,7 +212,7 @@ class FakeDownloadRepo(DownloadWriter, DownloadReader):
         return {FileKey(Network.ED2K, h): state for h, state in self.states.items()}
 
 
-class FakeCatalogReads(DecisionReader, ObservationReader):
+class FakeCatalogReader(DecisionReader, ObservationReader):
     """The download loop's catalog reads, scripted: its candidates, latest and best observations."""
 
     def __init__(
