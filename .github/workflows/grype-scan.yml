@@ -17,14 +17,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # v4's single image until v5 ships: signed under the repository's old name, and no versioned
+        # file holds its VEX, so the attested one.
         include:
-          - package: crawler
-            image: ghcr.io/mission-titar/p2pwatch
-          - package: amule
-            image: ghcr.io/mission-titar/p2pwatch-amule
+          - package: mulewatch
+            image: ghcr.io/mission-titar/mulewatch
+            signer: mission-titar/mulewatch
+            vex: /tmp/vex.openvex.json
     env:
       IMAGE: ${{ matrix.image }}
-      VEX: security/${{ matrix.package }}.vex.openvex.json
+      VEX: ${{ matrix.vex }}
     steps:
       - name: Check out the repository (for the vex_checks consistency checks)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -59,7 +61,7 @@ jobs:
       #   - OpenVEX (type openvex): applied via Grype's --vex.
       - name: Extract SBOM and VEX from image attestations
         env:
-          CERT_REGEXP: "^${{ github.server_url }}/${{ github.repository }}/.github/workflows/release.yml@refs/"
+          CERT_REGEXP: "^${{ github.server_url }}/${{ matrix.signer }}/.github/workflows/release.yml@refs/"
         run: |
           verify() {  # $1 = predicate type -> stdout: the raw predicate JSON
             cosign verify-attestation \
@@ -72,7 +74,7 @@ jobs:
           verify "https://syft.dev/bom" > /tmp/sbom.syft.json
           verify openvex                > /tmp/vex.openvex.json
 
-      # The two vex_checks image checks run in SARIF mode against the versioned VEX: they always
+      # The two vex_checks image checks run in SARIF mode against the leg's VEX: they always
       # exit 0, so a drift surfaces in Code scanning rather than failing this daily job.
       - name: Check image-family VEX claims against the SBOM
         run: >
