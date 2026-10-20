@@ -3,9 +3,10 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from p2pwatch.application.list_sources import PAGE_SIZE, ListSources
+from p2pwatch.application.list_sources import ListSources
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.known_source import KnownSource
+from p2pwatch.domain.paging import PAGE_SIZE
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey
 from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory

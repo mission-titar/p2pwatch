@@ -4,6 +4,7 @@ without a user hash over the requested interval."""
 from datetime import datetime, timedelta
 
 from p2pwatch.domain.interval import requested_interval
+from p2pwatch.domain.paging import PAGE_SIZE
 from p2pwatch.domain.sharing_period import PeriodWindow
 from p2pwatch.ports.driven.clock import WallClock
 from p2pwatch.ports.driven.source_reader import SourceReader
@@ -11,8 +12,6 @@ from p2pwatch.ports.driving.source_name_describer import (
     SourceNameDescriber,
     SourceNameDescription,
 )
-
-PAGE_SIZE = 50
 
 
 class DescribeSourceName(SourceNameDescriber):
