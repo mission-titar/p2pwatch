@@ -29,8 +29,6 @@ An agent adds an entry only after the operator has agreed to it.
 
 - **Hexagonal architecture**: rings read from the paths, ports as ABCs, six hexagons that never import one another,
   enforced by tach and ast-grep. Umbrella spec: `agents/specs/2026-10-18-hexagonal-architecture.md`, lots in D18.
-  - **Lot 2, the `p2pwatch` hexagon**: the self-reconnecting session, the logging port, the webui's read side behind
-    use cases, the ports as ABCs split into roles. Inherits the two sections D20 of the umbrella spec names.
   - **Lot 3, the other five hexagons**: their I/O behind ports, their tests off `monkeypatch`, and the documentation
     left over. D18 of the umbrella spec.
 
@@ -48,3 +46,9 @@ An agent adds an entry only after the operator has agreed to it.
 
 - **Contract tests for the fakes**: one suite per port, run against the fake and the real adapter, so a fake cannot
   drift from what it stands for. Section 7 of `agents/specs/2026-10-15-gate-tooling.md`.
+
+- **The node page shows a node id set in `crawler.yml`**: `resolve_node_id` returns a configured id without
+  recording it, so `/node` shows `None`. Section "Backlog" of `agents/specs/2026-10-19-hexagon-p2pwatch.md`.
+
+- **The ast-grep rule tests bound to their rules by design**: a test whose rule does not exist passes, and no rule
+  must have a test; fix the cause, not a pairing check. Section "Backlog" of `agents/specs/2026-10-19-hexagon-p2pwatch.md`.
