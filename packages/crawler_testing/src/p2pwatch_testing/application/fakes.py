@@ -34,6 +34,7 @@ from p2pwatch.ports.driven.search_client import SearchAnswer
 from p2pwatch.ports.driving.crawl_pauser import CrawlPauser
 from p2pwatch.ports.driving.crawl_resumer import CrawlResumer
 from p2pwatch.ports.driving.crawl_summarizer import CrawlSummarizer, CrawlSummary
+from p2pwatch.ports.driving.file_describer import FileDescriber, FileDescription
 from p2pwatch.ports.driving.file_lister import FileLister, FileListing
 from p2pwatch.ports.driving.node_describer import NodeDescriber, NodeDescription
 from p2pwatch.ports.driving.shutdown_requester import ShutdownRequester
@@ -271,6 +272,33 @@ class FakeFileLister(FileLister):
         call = ListFilesCall(target_id, tier, search_text, matched_only, sort, direction, page)
         self.calls.append(call)
         return self._file_listing
+
+
+@dataclass(frozen=True)
+class DescribeFileCall:
+    """The arguments of one ``describe_file`` call."""
+
+    file_id: bytes
+    requested_since: datetime | None
+    requested_until: datetime | None
+
+
+class FakeFileDescriber(FileDescriber):
+    """Describes any file as it is given, and keeps each call's arguments."""
+
+    def __init__(self, file_description: FileDescription | None) -> None:
+        self._file_description = file_description
+        self.calls: list[DescribeFileCall] = []
+
+    def describe_file(
+        self,
+        file_id: bytes,
+        *,
+        requested_since: datetime | None,
+        requested_until: datetime | None,
+    ) -> FileDescription | None:
+        self.calls.append(DescribeFileCall(file_id, requested_since, requested_until))
+        return self._file_description
 
 
 class FakeNodeDescriber(NodeDescriber):
