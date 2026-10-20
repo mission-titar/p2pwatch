@@ -695,8 +695,8 @@ async def test_emits_download_completed() -> None:
     event_emitter = FakeEventEmitter()
     client = FakeDownloadClient(listed=[(_status(_A, completed=True),)])
     downloads = FakeDownloadRepo()
+    downloads.record_queued(_key(_A), "062A", 100, FakeTime().wall.now())
     downloads.states[_A] = DownloadState.DOWNLOADING
-    downloads._target_ids[_A] = "062A"
     deps = _deps(
         client=client,
         downloads=downloads,
@@ -722,8 +722,8 @@ async def test_a_completion_names_the_clean_file_and_every_download_target_of_th
     )
     event_emitter = FakeEventEmitter()
     downloads = FakeDownloadRepo()
+    downloads.record_queued(_key(_A), "062A", 100, FakeTime().wall.now())
     downloads.states[_A] = DownloadState.DOWNLOADING
-    downloads._target_ids[_A] = "062A"
     catalog = FakeCatalogReads(
         candidates=(_candidate(_A, "062A"), _candidate(_A, "062B"), _candidate(_B, "063A")),
         observations={_A: _observation(_A, "Keroro Ã©.avi", 100)},
@@ -1544,8 +1544,9 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
         _B: (RecordedReading(_PEER, "AnimuseeFMR", SourceRole.SENDING),),
     }
     sources = FakeSourceRepo(kept=kept, history=history)
-    downloads = _tracking(_A, _B)
-    downloads._target_ids[_B] = "063A"  # queued for it, no decision left
+    downloads = FakeDownloadRepo()
+    downloads.record_queued(_key(_B), "063A", 100, start)  # queued for it, no decision left
+    downloads.states.update({_A: DownloadState.DOWNLOADING, _B: DownloadState.DOWNLOADING})
     event_emitter = FakeEventEmitter()
     client = FakeDownloadClient(listed=[(_status(_A), _status(_B))], fake_time=fake_time)
     deps = _deps(

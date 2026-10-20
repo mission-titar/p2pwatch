@@ -6,7 +6,7 @@ from typing import Literal, NoReturn
 
 from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.download.request import DownloadRequest
-from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
+from p2pwatch.domain.download.states import DownloadState, FailureReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
@@ -120,9 +120,9 @@ class FakeSourceRepo(SourcePointWriter, SourcePointReader):
 class FakeDownloadRepo(DownloadWriter, DownloadReader):
     """In-memory downloads repo (the contract of SqliteDownloadRepository, without SQL).
 
-    Keyed by ``native_id``; ``failures`` and ``waiting`` hold the lifecycle reasons,
-    ``queued_at``, ``completed_at`` and ``seen_at`` the instants received, and ``last_seen_at``
-    what ``read_last_seen_at_by_file`` reads back.
+    Keyed by ``native_id``; ``failures`` holds the failure reasons, ``queued_at``,
+    ``completed_at`` and ``seen_at`` the instants received, and ``last_seen_at`` what
+    ``read_last_seen_at_by_file`` reads back.
     ``fail_set_state_for`` and ``fail_record_completed_for``: hashes for which ``set_state`` or
     ``record_completed`` raises ``RepositoryError``, to simulate a mid-cycle repo failure
     (cf. logic-download#2/error-boundary#2).
@@ -140,7 +140,6 @@ class FakeDownloadRepo(DownloadWriter, DownloadReader):
     ) -> None:
         self.states: dict[str, DownloadState] = {}
         self.failures: dict[str, FailureReason | None] = {}
-        self.waiting: dict[str, WaitingReason | None] = {}
         self.sizes: dict[str, int] = {}
         self.queued_at: dict[str, datetime] = {}
         self.completed_at: dict[str, datetime] = {}
@@ -165,6 +164,7 @@ class FakeDownloadRepo(DownloadWriter, DownloadReader):
         if file.native_id in self.states:
             return False
         self.states[file.native_id] = DownloadState.QUEUED
+        self._target_ids[file.native_id] = target_id
         self.sizes[file.native_id] = size_bytes
         self.queued_at[file.native_id] = queued_at
         self.last_seen_at[file.native_id] = queued_at
@@ -197,7 +197,6 @@ class FakeDownloadRepo(DownloadWriter, DownloadReader):
         statuses = tuple(statuses)
         self.seen.append({status.file.native_id for status in statuses})
         self.seen_at.append(seen_at)
-        self.waiting.update({s.file.native_id: s.waiting_reason for s in statuses})
         self.last_seen_at.update({s.file.native_id: seen_at for s in statuses})
 
     def read_last_seen_at_by_file(self) -> dict[FileKey, datetime]:
