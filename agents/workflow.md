@@ -46,7 +46,8 @@ reasons this document leaves out.
     2. **Coherent alone.** Nothing it adds is unreachable: every new port method has a caller, every config key is read.
        A surface whose consumer arrives in a later block is named in the spec and in the pull request.
     3. **Readable alone.** **Under 500 changed lines and under 20 changed files**, both strict. Past either bound the
-       block splits, or the spec states in one line why it cannot.
+       block splits. A purely mechanical block (files moved, symbols renamed, nothing else) may pass them, flagged
+       and approved by the operator: on its row of the spec, or in Act by the lead asking before the block starts.
 - **A changed line is counted per hunk of `git diff -U0`**: each hunk costs the larger of its deleted and added counts,
   and the block costs the sum.
 - **Outside both counts**: the four dated directories (`agents/specs`, `agents/plans`, `agents/handoffs`,
@@ -90,6 +91,10 @@ Tier Direct is not drawn: it skips Discuss, Spec and both reviews.
   teammate's brief is the one Act states.
 - **Written untracked in the tree on `main` until approved**, then committed in the first block's first commit.
 - **The block table numbers blocks by tens and names each branch**, so an inserted block takes a free number.
+- **A lot holds at most 19 blocks, the closing one included.** A larger lot is cut into lots that merge one after the
+  other.
+- **The block table's estimates are measured on the tree by a named Sonnet agent**, from the files each row touches.
+  An estimate guides the cut. The bound is checked after committing.
 - **Every decision the spec settles states its reason.** It names every adjacent `BACKLOG.md` item and why each stays
   open, or says there is none.
 - **Reviewed by a named agent on `agents/reviews/spec.md`**, its findings closed, then by the operator.
@@ -104,6 +109,8 @@ Tier Direct is not drawn: it skips Discuss, Spec and both reviews.
 - **The lead cuts each block's branch with `gh stack init` / `gh stack add`** before the block's first file is
   written, never with `-A` while an untracked file it does not mean to commit lies in the tree. `gh stack init` checks
   the top branch out, so the lead switches back before committing to a lower one. Only the lead rewrites the stack.
+- **A block that passes a bound splits within the lot's 19 blocks.** A split that would take the stack past 19 stops
+  the lead, who asks the operator: cut the lot, or accept the larger stack.
 - **One teammate per block, one working at a time.** The next block starts once the previous one is green locally and
   its pull request open, not once it has merged.
 - **The brief points at the block's row in the spec, the spec, `AGENTS.md`, this document's Act, Verify, Integrate
