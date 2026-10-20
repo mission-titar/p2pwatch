@@ -1,11 +1,16 @@
 from dataclasses import dataclass, field
-from email.message import Message
 from pathlib import PurePath
-from urllib.error import HTTPError
 
 import pytest
 
-from amule_bump.adapters.driving.bump import main
+from amule_bump.application.bump_amule import BumpAmule
+from amule_bump.domain.bump_error import BumpError
+from amule_bump.domain.dockerfile import Pin
+from amule_bump.ports.driving.amule_bumper import (
+    AmuleBump,
+    PinAheadOfLatest,
+    PinIsLatest,
+)
 from tests.fakes import (
     FakeDockerfile,
     FakePullRequestBodyWriter,
@@ -43,11 +48,10 @@ class Bump:
     )
     step_output_writer: FakeStepOutputWriter = field(default_factory=FakeStepOutputWriter)
 
-    def run(self, repo_reader: FakeRepoReader, *, dry_run: bool) -> int:
-        return main(
-            DOCKERFILE_PATH,
-            BODY_PATH,
-            dry_run,
+    def run(
+        self, repo_reader: FakeRepoReader, *, dry_run: bool
+    ) -> AmuleBump | PinIsLatest | PinAheadOfLatest:
+        bump_amule = BumpAmule(
             repo_reader=repo_reader,
             dockerfile_reader=self.dockerfile,
             dockerfile_writer=self.dockerfile,
@@ -55,6 +59,7 @@ class Bump:
             step_output_writer=self.step_output_writer,
             changelog_width_characters=30,
         )
+        return bump_amule.bump_amule(DOCKERFILE_PATH, BODY_PATH, dry_run=dry_run)
 
     def wrote_nothing(self, dockerfile_text: str) -> bool:
         return (
@@ -64,32 +69,31 @@ class Bump:
         )
 
 
-def test_same_version_is_nothing_to_do(capsys: pytest.CaptureFixture[str]) -> None:
+def test_same_version_is_the_pin_is_latest() -> None:
     pinned = DOCKERFILE.replace("3.0.1", "3.1.0")
     bump = Bump(dockerfile=FakeDockerfile({DOCKERFILE_PATH: pinned}))
-    assert bump.run(upstream("3.1.0"), dry_run=False) == 0
-    assert capsys.readouterr().out == "aMule 3.1.0 is the latest release: nothing to do\n"
+    assert bump.run(upstream("3.1.0"), dry_run=False) == PinIsLatest("3.1.0")
     assert bump.wrote_nothing(pinned)
 
 
-def test_an_older_upstream_release_is_nothing_to_do(capsys: pytest.CaptureFixture[str]) -> None:
+def test_an_older_upstream_release_is_the_pin_ahead_of_latest() -> None:
     bump = Bump()
-    assert bump.run(upstream("3.0.0"), dry_run=False) == 0
-    assert capsys.readouterr().out == (
-        "latest upstream release 3.0.0 is older than the pinned 3.0.1: nothing to do\n"
+    assert bump.run(upstream("3.0.0"), dry_run=False) == PinAheadOfLatest(
+        pinned_version="3.0.1", latest_version="3.0.0"
     )
     assert bump.wrote_nothing(DOCKERFILE)
 
 
-def test_a_new_release_rewrites_the_pin_and_writes_the_body() -> None:
+def test_a_new_release_rewrites_the_pin_and_writes_the_body_it_returns() -> None:
     bump = Bump()
-    assert bump.run(upstream("3.1.0"), dry_run=False) == 0
+    amule_bump = bump.run(upstream("3.1.0"), dry_run=False)
     assert bump.dockerfile.dockerfile_texts_by_path == {
         DOCKERFILE_PATH: f"FROM debian\nARG AMULE_VERSION=3.1.0\nARG AMULE_COMMIT={NEW_COMMIT}\n"
     }
-    body = bump.pull_request_body_writer.bodies_by_path[BODY_PATH]
-    assert body.startswith("Bumps aMule from 3.0.1 to [3.1.0]")
-    assert "- amuleapi" in body
+    assert amule_bump == AmuleBump(
+        Pin("3.1.0", NEW_COMMIT), bump.pull_request_body_writer.bodies_by_path[BODY_PATH]
+    )
+    assert amule_bump.body.startswith("Bumps aMule from 3.0.1 to [3.1.0]")
 
 
 def test_a_new_release_is_announced_to_the_workflow() -> None:
@@ -99,43 +103,21 @@ def test_a_new_release_is_announced_to_the_workflow() -> None:
 
 
 def test_the_changelog_wraps_at_the_width_the_bump_is_given() -> None:
-    bump = Bump()
-    bump.run(upstream("3.1.0"), dry_run=False)
-    body = bump.pull_request_body_writer.bodies_by_path[BODY_PATH]
-    assert "- amuleapi, word word word\nword word word word word word\nword\n" in body
+    amule_bump = Bump().run(upstream("3.1.0"), dry_run=False)
+    assert isinstance(amule_bump, AmuleBump)
+    assert "- amuleapi, word word word\nword word word word word word\nword\n" in amule_bump.body
 
 
-def test_dry_run_prints_the_new_pin_and_body_and_writes_nothing(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
+def test_a_dry_run_returns_the_new_pin_and_body_and_writes_nothing() -> None:
     bump = Bump()
-    assert bump.run(upstream("3.1.0"), dry_run=True) == 0
-    printed = capsys.readouterr().out
-    assert printed.startswith(
-        f"ARG AMULE_VERSION=3.1.0\nARG AMULE_COMMIT={NEW_COMMIT}\n--- PR body ("
-    )
-    assert "Bumps aMule from 3.0.1 to [3.1.0]" in printed
+    amule_bump = bump.run(upstream("3.1.0"), dry_run=True)
+    assert isinstance(amule_bump, AmuleBump)
+    assert amule_bump.new_pin == Pin("3.1.0", NEW_COMMIT)
+    assert amule_bump.body.startswith("Bumps aMule from 3.0.1 to [3.1.0]")
     assert bump.wrote_nothing(DOCKERFILE)
 
 
-def test_a_bad_pin_fails_with_a_clear_message(capsys: pytest.CaptureFixture[str]) -> None:
+def test_a_bad_pin_raises_before_reading_upstream() -> None:
     bump = Bump(dockerfile=FakeDockerfile({DOCKERFILE_PATH: "FROM debian\n"}))
-    assert bump.run(upstream("3.1.0"), dry_run=False) == 1
-    assert capsys.readouterr().err == "error: expected one 'ARG AMULE_VERSION=' line, found 0\n"
-
-
-def test_a_missing_dockerfile_fails_with_a_clear_message(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    bump = Bump(dockerfile=FakeDockerfile({}))
-    assert bump.run(upstream("3.1.0"), dry_run=False) == 1
-    assert capsys.readouterr().err == f"error: no Dockerfile at {DOCKERFILE_PATH}\n"
-
-
-def test_an_http_failure_fails_with_a_clear_message(capsys: pytest.CaptureFixture[str]) -> None:
-    class DownRepoReader(FakeRepoReader):
-        def json(self, path: str) -> object:
-            raise HTTPError(path, 503, "Service Unavailable", Message(), None)
-
-    assert Bump().run(DownRepoReader(), dry_run=False) == 1
-    assert capsys.readouterr().err == "error: HTTP Error 503: Service Unavailable\n"
+    with pytest.raises(BumpError, match="expected one 'ARG AMULE_VERSION=' line, found 0"):
+        bump.run(FakeRepoReader(), dry_run=False)
