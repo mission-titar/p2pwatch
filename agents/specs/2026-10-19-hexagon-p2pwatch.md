@@ -385,7 +385,9 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
 | 180 | `refactor/role-ports` | the five catalog ports, `CatalogRepository` and `DownloadCatalogReader` deleted; the download, source point, backoff and policy fingerprint ports; the re-exports of the types blocks 110 and 115 moved to the domain (`BackoffKey`, `BackoffState`, `StatusReading`, `ClientStatus`, `ChannelStatus`) go, their importers reading the domain (Corrected 2026-10-19: added) | 900, 34 |
 | 185 | `refactor/read-types-in-domain` | `DownloadCandidate`, `RecordedReading`, `EarlierPoints` and any other type a driven read port still owns move to the domain (Corrected 2026-10-20: added, block 180 found them left against the convention) | |
 | 190 | `refactor/ports-as-abcs` | the five capability renames; the remaining `Protocol`s to ABCs; `channels`; the Gotchas; the ast-grep rule and its test | 750, 72 |
-| 200 | `fix/holistic-code-and-tests` | the holistic review's code and test findings (Corrected 2026-10-20: the closing block split in 200, 203 and 210 after the holistic review's 39 findings) | |
+| 200 | `fix/holistic-code-and-tests` | the holistic review's test gaps, the re-login after `close()`, `SourceKeyDisplay`, `PAGE_SIZE` (Corrected 2026-10-20: the closing block split in 200, 201, 202, 203 and 210 after the holistic review's 39 findings) | 145, 16 |
+| 201 | `refactor/holistic-domain-types` | `SearchAnswer`, `DownloadRequest` to the domain; `TrackedDownload`'s reasons as enums | 96, 19 |
+| 202 | `fix/holistic-wiring` | the read pages through the composed app in the wiring test; the shared catalog reader; `FakeDownloadRepo`'s target | 35, 4 |
 | 203 | `refactor/holistic-names` | the holistic review's naming and docstring findings | |
 | 210 | `docs/hexagon-p2pwatch-wrap` | closing block: the docs findings, backlog, handoff | |
 
