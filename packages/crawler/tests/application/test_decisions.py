@@ -71,7 +71,11 @@ def _reported_file(ed2k_hash: str, filename: str, sources: int = 3) -> ReportedF
 
 
 def _seed_decision(
-    catalog: SqliteCatalogRepository, ed2k_hash: str, target_id: str, decided_at: datetime
+    catalog: SqliteCatalogRepository,
+    ed2k_hash: str,
+    target_id: str,
+    decided_at: datetime,
+    node_id: str = _NODE,
 ) -> None:
     explanation = Explanation(
         target_id=target_id, rules_fired=(), tokens_matched=(), coverage_values=()
@@ -80,7 +84,7 @@ def _seed_decision(
         _key(ed2k_hash),
         MatchDecision(target_id, "title_review", "notify", explanation),
         decided_at,
-        _NODE,
+        node_id,
     )
 
 
@@ -210,13 +214,14 @@ async def test_unchanged_decision_is_not_reappended_emitted_or_signalled(
 @pytest.mark.asyncio
 async def test_a_target_no_name_supports_is_retracted_without_nudge(
     catalog: SqliteCatalogRepository,
+    catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
     catalog.record_observation(
         FileObservation(_reported_file(_HASH_CAT, _DISCARD_NAME), wall_clock.now()), _NODE
     )
-    _seed_decision(catalog, _HASH_CAT, "062A", wall_clock.now())
+    _seed_decision(catalog, _HASH_CAT, "062A", wall_clock.now(), node_id="seed-node")
     event_emitter, waker = FakeEventEmitter(), FakeWaker()
     written = await _record(
         _HASH_CAT, _DISCARD_NAME, catalog, engine, waker, event_emitter, wall_clock
@@ -225,6 +230,7 @@ async def test_a_target_no_name_supports_is_retracted_without_nudge(
     assert catalog.read_latest_decisions(_key(_HASH_CAT)) == {
         "062A": DecisionRecord(target_id="062A", rule_name="", tier=RETRACTED_TIER)
     }
+    assert decision_node_ids(catalog_connection) == {"seed-node", _NODE}
     assert event_emitter.events == [
         _event(_HASH_CAT, _DISCARD_NAME, DecisionChange("062A", _TITLE_A, "notify", RETRACTED_TIER))
     ]
