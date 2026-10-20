@@ -71,6 +71,7 @@ from p2pwatch.adapters.driving.webui.app import build_app as build_webui_app
 from p2pwatch.adapters.driving.webui.uvicorn_server_thread import UvicornServerThread
 from p2pwatch.application.describe_file import DescribeFile
 from p2pwatch.application.describe_node import DescribeNode
+from p2pwatch.application.describe_source import DescribeSource
 from p2pwatch.application.list_files import ListFiles
 from p2pwatch.application.list_sources import ListSources
 from p2pwatch.application.matching_read import MatchingExplainer
@@ -190,6 +191,11 @@ class CrawlerApp(CrawlerRunner):
                 source_period_gap=crawler_config.webui.source_period_gap,
             ),
             source_lister=ListSources(source_reader),
+            source_describer=DescribeSource(
+                source_reader=source_reader,
+                wall_clock=wall_clock,
+                source_period_gap=crawler_config.webui.source_period_gap,
+            ),
             amule_url=crawler_config.webui.amule_url,
             wall_clock=wall_clock,
             monotonic_clock=monotonic_clock,

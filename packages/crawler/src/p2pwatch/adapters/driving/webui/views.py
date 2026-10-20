@@ -107,15 +107,6 @@ class SourceFilePeriod:
 
 
 @dataclass(frozen=True)
-class SourceDetail:
-    """A page of a source (D13): one ``SourceRow`` per name it carried, its periods newest first."""
-
-    source: SourceKey
-    names: tuple[SourceRow, ...]
-    periods: tuple[SourceFilePeriod, ...]
-
-
-@dataclass(frozen=True)
 class NameDetail:
     """A page of a name (D13): one ``SourceRow`` per hash that carried it, its hash-less periods."""
 

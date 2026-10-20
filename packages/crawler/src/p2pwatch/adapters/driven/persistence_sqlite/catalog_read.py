@@ -11,10 +11,9 @@ tier facet; and a file's history: its observations in an interval, its latest on
 and its current decisions, ``None`` if the file is unknown.
 
 ``SqliteSourceReader`` reads the sources with a user hash, last seen first, and how many match
-the search; and a file's sharing periods in a window, newest first.
+the search; a source's history; and a file's sharing periods in a window, newest first.
 
-``CatalogReader.source_detail()`` / ``name_detail()`` read the page of a source and the page of a
-name; ``None`` if never recorded.
+``CatalogReader.name_detail()`` reads the page of a name; ``None`` if never recorded.
 
 All SQL lives in module constants, parameterized (no value interpolation).
 """
@@ -34,18 +33,14 @@ from p2pwatch.adapters.driven.persistence_sqlite.observation_read import (
     observations_between,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
-from p2pwatch.adapters.driving.webui.views import (
-    NameDetail,
-    SourceDetail,
-    SourceFilePeriod,
-    SourceRow,
-)
+from p2pwatch.adapters.driving.webui.views import NameDetail, SourceFilePeriod, SourceRow
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_history import DatedDecision, FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
+from p2pwatch.domain.source_history import SourceHistory, SourceNaming
 from p2pwatch.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.ports.driven.coverage_reader import CoverageReader
 from p2pwatch.ports.driven.source_reader import SourceReader
@@ -465,6 +460,33 @@ def _period_rows(
     return connection.execute(_SQL_PERIODS + where + _SQL_PERIODS_END, params).fetchall()
 
 
+def _source_namings(
+    connection: sqlite3.Connection, where: str, key: bytes | str, limit: int, offset: int
+) -> tuple[SourceNaming, ...]:
+    params = {"key": key, "limit": limit, "offset": offset}
+    return tuple(
+        SourceNaming(
+            source=SourceKey(Network(row["network"]), row["native_id"]),
+            source_name=row["name"],
+            last_seen_at=_EPOCH + row["last_seen_at"] * _MICROSECOND,
+            file_count=row["file_count"],
+        )
+        for row in connection.execute(_SQL_PAIRS + where + _SQL_PAIRS_END, params)
+    )
+
+
+def _best_filename_by_file(
+    connection: sqlite3.Connection, sharing_periods: tuple[SharingPeriod, ...]
+) -> dict[FileKey, str]:
+    """The best filename of each file of ``sharing_periods`` ever seen."""
+    best_filename_by_file = {}
+    for file in {period.file for period in sharing_periods}:
+        best = best_observation(connection, file)
+        if best is not None:
+            best_filename_by_file[file] = best.reported_file.filename
+    return best_filename_by_file
+
+
 def _latest_observation_join(search_text: str | None) -> str:
     """The counters' join to the latest observation, which only the name filter reads."""
     return "" if search_text is None else _JOIN_LATEST_OBSERVATION
@@ -521,6 +543,25 @@ class SqliteSourceReader(SourceReader):
         sql = "SELECT COUNT(*) AS n\n" + _SQL_SOURCES_FROM + search
         count: int = self._reader_provider.connection().execute(sql, params).fetchone()["n"]
         return count
+
+    def read_source_history(
+        self, source_id: bytes, *, limit: int, offset: int, window: PeriodWindow
+    ) -> SourceHistory | None:
+        connection = self._reader_provider.connection()
+        row = connection.execute(_SQL_SOURCE, (source_id,)).fetchone()
+        if row is None:
+            return None
+        sharing_periods = tuple(
+            map(_sharing_period, _period_rows(connection, _WHERE_SOURCE, source_id, window))
+        )
+        return SourceHistory(
+            source=SourceKey(Network(row["network"]), row["native_id"]),
+            source_namings=_source_namings(
+                connection, _WHERE_SOURCE_NAMED, source_id, limit, offset
+            ),
+            sharing_periods=sharing_periods,
+            best_filename_by_file=_best_filename_by_file(connection, sharing_periods),
+        )
 
     def read_sharing_periods(
         self, file: FileKey, window: PeriodWindow
@@ -668,21 +709,6 @@ class CatalogReader:
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._conn = connection
 
-    def source_detail(
-        self, source_id: bytes, *, page: int, window: PeriodWindow
-    ) -> SourceDetail | None:
-        """A page of the source's names, and its periods in ``window``; ``None`` for an unknown
-        source."""
-        row = self._conn.execute(_SQL_SOURCE, (source_id,)).fetchone()
-        if row is None:
-            return None
-        source = SourceKey(Network(row["network"]), row["native_id"])
-        return SourceDetail(
-            source=source,
-            names=self._pairs(_WHERE_SOURCE_NAMED, source_id, page),
-            periods=self._file_periods(_WHERE_SOURCE, source_id, window),
-        )
-
     def name_detail(self, name: str, *, page: int, window: PeriodWindow) -> NameDetail | None:
         """A page of the hashes that carried the name, and its hash-less periods in ``window``;
         ``None`` for a name never recorded."""
@@ -711,11 +737,8 @@ class CatalogReader:
         self, where: str, key: bytes | str, window: PeriodWindow
     ) -> tuple[SourceFilePeriod, ...]:
         periods = tuple(map(_sharing_period, _period_rows(self._conn, where, key, window)))
-        names = {file: self._file_name(file) for file in {period.file for period in periods}}
+        best_filename_by_file = _best_filename_by_file(self._conn, periods)
         return tuple(
-            SourceFilePeriod(file_name=names[period.file], period=period) for period in periods
+            SourceFilePeriod(file_name=best_filename_by_file.get(period.file), period=period)
+            for period in periods
         )
-
-    def _file_name(self, file: FileKey) -> str | None:
-        best = best_observation(self._conn, file)
-        return None if best is None else best.reported_file.filename

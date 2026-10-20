@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
+from p2pwatch.domain.source_history import SourceHistory
 
 
 class SourceReader(ABC):
@@ -20,6 +21,13 @@ class SourceReader(ABC):
     @abstractmethod
     def read_source_count(self, *, search_text: str | None) -> int:
         """How many sources ``read_known_sources`` pages through for this ``search_text``."""
+
+    @abstractmethod
+    def read_source_history(
+        self, source_id: bytes, *, limit: int, offset: int, window: PeriodWindow
+    ) -> SourceHistory | None:
+        """The source's names from ``offset``, at most ``limit``, and its periods in ``window``;
+        ``None`` for a source never recorded."""
 
     @abstractmethod
     def read_sharing_periods(
