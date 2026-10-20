@@ -64,9 +64,9 @@ def test_resume_sets_the_resumed_event() -> None:
     assert not shutdown.is_set()
 
 
-def test_request_shutdown_sets_only_the_shutdown_event() -> None:
+def test_shut_down_sets_only_the_shutdown_event() -> None:
     writer, _reader, resumed, shutdown = _run_state_with(_ImmediateLoop())
-    writer.request_shutdown()
+    writer.shut_down()
     assert shutdown.is_set()
     assert not resumed.is_set()
 
@@ -76,7 +76,7 @@ def test_mutation_is_deferred_to_the_loop_thread_via_call_soon_threadsafe() -> N
     caller thread; it is scheduled and only mutates once the loop runs the callback."""
     loop = _RecordingLoop()
     writer, _reader, _resumed, shutdown = _run_state_with(loop)
-    writer.request_shutdown()
+    writer.shut_down()
     # Scheduled, but NOT yet applied (deferred to the crawler loop thread).
     assert len(loop.callbacks) == 1
     assert not shutdown.is_set()

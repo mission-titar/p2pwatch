@@ -11,4 +11,4 @@ class RequestShutdown(ShutdownRequester):
         self._run_state = run_state
 
     def request_shutdown(self) -> None:
-        self._run_state.request_shutdown()
+        self._run_state.shut_down()
