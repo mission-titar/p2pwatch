@@ -6,7 +6,6 @@ fixtures with the canonical ``parse_matcher_config`` / ``parse_targets`` and pas
 objects.
 """
 
-import pytest
 import yaml
 
 from catalog_matching.domain.config import MatcherConfig
@@ -14,8 +13,6 @@ from catalog_matching.domain.engine import Explanation
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 from p2pwatch.application.matching_read import MatchingExplainer
-
-pytestmark = pytest.mark.usefixtures("close_test_connections")
 
 # ---------------------------------------------------------------------------
 # Parsed-config minimal helpers

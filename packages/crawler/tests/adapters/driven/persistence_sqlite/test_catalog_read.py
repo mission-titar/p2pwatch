@@ -3,6 +3,7 @@
 import re
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -44,8 +45,6 @@ from p2pwatch_testing.catalog_rows import (
     source_id,
 )
 
-pytestmark = pytest.mark.usefixtures("close_test_connections")
-
 # Selects the CTE under test on its own: SQLite drops the CTEs a query does not reference, so
 # the resulting plan is exactly how ``latest_observation`` is resolved.
 LATEST_OBSERVATION_PROBE = (
@@ -67,16 +66,17 @@ def _entries(
     direction: SortDirection = SortDirection.DESC,
     offset: int = 0,
 ) -> tuple[CatalogEntry, ...]:
-    return SqliteCatalogFileReader(ReaderProvider(catalog_db)).read_catalog_entries(
-        target_id=target_id,
-        tier=tier,
-        search_text=search_text,
-        matched_only=matched_only,
-        sort=sort,
-        direction=direction,
-        limit=_LIMIT,
-        offset=offset,
-    )
+    with ReaderProvider(catalog_db) as reader_provider:
+        return SqliteCatalogFileReader(reader_provider).read_catalog_entries(
+            target_id=target_id,
+            tier=tier,
+            search_text=search_text,
+            matched_only=matched_only,
+            sort=sort,
+            direction=direction,
+            limit=_LIMIT,
+            offset=offset,
+        )
 
 
 def _counts(
@@ -86,17 +86,19 @@ def _counts(
     tier: str | None = None,
     search_text: str | None = None,
 ) -> tuple[int, int]:
-    return SqliteCatalogFileReader(ReaderProvider(catalog_db)).read_matched_and_total_file_counts(
-        target_id=target_id, tier=tier, search_text=search_text
-    )
+    with ReaderProvider(catalog_db) as reader_provider:
+        return SqliteCatalogFileReader(reader_provider).read_matched_and_total_file_counts(
+            target_id=target_id, tier=tier, search_text=search_text
+        )
 
 
 def _read_file_count_by_tier(
     catalog_db: Path, *, search_text: str | None = None
 ) -> Mapping[str, int]:
-    return SqliteCatalogFileReader(ReaderProvider(catalog_db)).read_file_count_by_tier(
-        target_id=None, search_text=search_text
-    )
+    with ReaderProvider(catalog_db) as reader_provider:
+        return SqliteCatalogFileReader(reader_provider).read_file_count_by_tier(
+            target_id=None, search_text=search_text
+        )
 
 
 def _latest_filename(entry: CatalogEntry) -> str | None:
@@ -111,7 +113,7 @@ def _latest_filename(entry: CatalogEntry) -> str | None:
 
 def _seed(db: Path) -> None:
     """Populate the database with a file, an observation, a decision."""
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn, conn:
         insert_file(conn, "a" * 32)
         insert_observation(conn, "a" * 32, "keroro_062.avi", source_count=5)
         insert_decision(
@@ -129,7 +131,7 @@ def _seed_whole_episode(db: Path) -> None:
     current decisions at tier ``download``): the core multi-target fixture (spec §9).
     Standalone: never combine with ``_seed`` (same hash)."""
     h = "a" * 32
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn, conn:
         insert_file(conn, h, 170_000_000)
         insert_observation(
             conn,
@@ -156,7 +158,8 @@ def _seed_whole_episode(db: Path) -> None:
 
 
 def _read_target_coverage(catalog_db: Path) -> Mapping[str, tuple[str, ...]]:
-    return SqliteCoverageReader(ReaderProvider(catalog_db)).read_target_coverage()
+    with ReaderProvider(catalog_db) as reader_provider:
+        return SqliteCoverageReader(reader_provider).read_target_coverage()
 
 
 def test_target_coverage_groups_by_target(catalog_db: Path) -> None:
@@ -172,7 +175,7 @@ def test_target_coverage_empty_db_returns_empty(catalog_db: Path) -> None:
 
 def test_target_coverage_multiple_files_same_target(catalog_db: Path) -> None:
     """Two files matching the same target_id → two tiers."""
-    with sqlite3.connect(catalog_db) as conn:
+    with closing(sqlite3.connect(catalog_db)) as conn, conn:
         for suffix in ("a", "b"):
             insert_file(conn, suffix * 32)
             insert_decision(conn, suffix * 32, "062A", "download")
@@ -189,7 +192,7 @@ def test_target_coverage_whole_episode_contributes_to_both_targets(catalog_db: P
 
 def test_target_coverage_ignores_legacy_empty_target_sentinel(catalog_db: Path) -> None:
     h = "e" * 32
-    with sqlite3.connect(catalog_db) as conn:
+    with closing(sqlite3.connect(catalog_db)) as conn, conn:
         insert_file(conn, h)
         insert_decision(
             conn,
@@ -307,8 +310,9 @@ def test_read_matched_and_total_file_counts_whole_episode_counts_as_one_file(
 def _history(
     catalog_db: Path, native_id: str, *, since: datetime = _EPOCH, until: datetime = _YEAR_3000
 ) -> FileHistory | None:
-    reader = SqliteCatalogFileReader(ReaderProvider(catalog_db))
-    return reader.read_file_history(file_id(native_id), since=since, until=until)
+    with ReaderProvider(catalog_db) as reader_provider:
+        reader = SqliteCatalogFileReader(reader_provider)
+        return reader.read_file_history(file_id(native_id), since=since, until=until)
 
 
 def test_file_history_carries_observations_and_dated_decisions(catalog_db: Path) -> None:
@@ -333,7 +337,7 @@ def test_file_history_reads_its_observations_in_the_window_and_its_latest_in_any
     catalog_db: Path,
 ) -> None:
     _seed(catalog_db)
-    with sqlite3.connect(catalog_db) as conn:
+    with closing(sqlite3.connect(catalog_db)) as conn, conn:
         insert_observation(conn, "a" * 32, "older.avi", observed_at="2026-06-21T10:00:00+00:00")
     since, until = datetime(2026, 6, 1, tzinfo=UTC), datetime.fromisoformat(SEEN_AT)
     detail = _history(catalog_db, "a" * 32, since=since, until=until)
@@ -346,8 +350,11 @@ def test_file_history_reads_its_observations_in_the_window_and_its_latest_in_any
 def test_file_history_of_an_unknown_file_id_is_none(catalog_db: Path) -> None:
     _seed(catalog_db)
     assert _history(catalog_db, "f" * 32) is None
-    reader = SqliteCatalogFileReader(ReaderProvider(catalog_db))
-    by_native_id = reader.read_file_history(bytes.fromhex("a" * 32), since=_EPOCH, until=_YEAR_3000)
+    with ReaderProvider(catalog_db) as reader_provider:
+        reader = SqliteCatalogFileReader(reader_provider)
+        by_native_id = reader.read_file_history(
+            bytes.fromhex("a" * 32), since=_EPOCH, until=_YEAR_3000
+        )
     assert by_native_id is None  # a file is read by its id, never by its ed2k hash
 
 
@@ -363,7 +370,7 @@ def test_file_history_retracted_target_is_no_decision(catalog_db: Path) -> None:
 
 def test_file_history_no_decision(catalog_db: Path) -> None:
     """Detail works even without a decision (unmatched file)."""
-    with sqlite3.connect(catalog_db) as conn:
+    with closing(sqlite3.connect(catalog_db)) as conn, conn:
         insert_file(conn, "b" * 32, 200)
         insert_observation(
             conn,
@@ -408,7 +415,7 @@ _Points = Sequence[tuple[str, int, int]]
 
 
 def _seed_points(db: Path, points: _Points) -> None:
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn, conn:
         insert_file(conn, "a" * 32)
         insert_source(conn, _USER)
         variants: dict[str, int] = {}
@@ -420,8 +427,9 @@ def _seed_points(db: Path, points: _Points) -> None:
 
 def _periods(db: Path, window: PeriodWindow = _WINDOW) -> list[tuple[str, int, int, int]]:
     """``(role, first_seen_at, last_seen_at, received_bytes)`` of file a's periods, in micros."""
-    reader = SqliteSourceReader(ReaderProvider(db))
-    periods = reader.read_sharing_periods(FileKey(Network.ED2K, "a" * 32), window)
+    with ReaderProvider(db) as reader_provider:
+        reader = SqliteSourceReader(reader_provider)
+        periods = reader.read_sharing_periods(FileKey(Network.ED2K, "a" * 32), window)
     return [
         (p.role.value, _micros(p.first_seen_at), _micros(p.last_seen_at), p.received_bytes)
         for p in periods
@@ -488,7 +496,7 @@ def test_only_the_windows_points_are_read(catalog_db: Path) -> None:
 
 
 def test_sharing_periods_join_each_identity_on_each_node_newest_first(catalog_db: Path) -> None:
-    with sqlite3.connect(catalog_db) as conn:
+    with closing(sqlite3.connect(catalog_db)) as conn, conn:
         insert_file(conn, "a" * 32)
         insert_file(conn, "b" * 32)
         insert_source(conn, _USER)
@@ -503,7 +511,8 @@ def test_sharing_periods_join_each_identity_on_each_node_newest_first(catalog_db
         insert_source_point(conn, hashless, 45 * _S)
         insert_source_point(conn, insert_source_variant(conn, "b" * 32, _USER), 200 * _S)
     a = FileKey(Network.ED2K, "a" * 32)
-    periods = SqliteSourceReader(ReaderProvider(catalog_db)).read_sharing_periods(a, _WINDOW)
+    with ReaderProvider(catalog_db) as reader_provider:
+        periods = SqliteSourceReader(reader_provider).read_sharing_periods(a, _WINDOW)
     key, queued_role = SourceKey(Network.ED2K, _USER), SourceRole.QUEUED
     at_30, at_45 = _at(30 * _S), _at(45 * _S)
     assert periods == (
@@ -527,8 +536,9 @@ def test_sharing_periods_join_each_identity_on_each_node_newest_first(catalog_db
 
 def test_sharing_periods_of_a_file_never_read_are_empty(catalog_db: Path) -> None:
     _seed(catalog_db)
-    reader = SqliteSourceReader(ReaderProvider(catalog_db))
-    assert reader.read_sharing_periods(FileKey(Network.ED2K, "a" * 32), _WINDOW) == ()
+    with ReaderProvider(catalog_db) as reader_provider:
+        reader = SqliteSourceReader(reader_provider)
+        assert reader.read_sharing_periods(FileKey(Network.ED2K, "a" * 32), _WINDOW) == ()
 
 
 # ---------------------------------------------------------------------------
@@ -540,7 +550,7 @@ _OTHER = "9c0d" * 8
 
 def _seed_sources(db: Path) -> None:
     """``_USER`` renamed on two files, then read without a name; ``_OTHER``, seen earlier."""
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn, conn:
         insert_file(conn, "a" * 32)
         insert_file(conn, "b" * 32)
         insert_source(conn, _USER)
@@ -558,8 +568,9 @@ def _seed_sources(db: Path) -> None:
 
 
 def _known_sources(db: Path, *, search_text: str | None, offset: int) -> tuple[KnownSource, ...]:
-    reader = SqliteSourceReader(ReaderProvider(db))
-    return reader.read_known_sources(search_text=search_text, limit=_LIMIT, offset=offset)
+    with ReaderProvider(db) as reader_provider:
+        reader = SqliteSourceReader(reader_provider)
+        return reader.read_known_sources(search_text=search_text, limit=_LIMIT, offset=offset)
 
 
 def test_known_sources_are_each_source_once_by_last_seen_with_its_latest_name(
@@ -573,7 +584,7 @@ def test_known_sources_are_each_source_once_by_last_seen_with_its_latest_name(
 
 
 def test_a_source_never_named_is_known_without_a_source_name(catalog_db: Path) -> None:
-    with sqlite3.connect(catalog_db) as conn:
+    with closing(sqlite3.connect(catalog_db)) as conn, conn:
         insert_file(conn, "a" * 32)
         insert_source(conn, _USER)
         insert_source_point(conn, insert_source_variant(conn, "a" * 32, _USER, name=None), 7)
@@ -592,12 +603,13 @@ def test_known_sources_match_a_hash_prefix_or_any_name_the_source_carried(
     _seed_sources(catalog_db)
     known_sources = _known_sources(catalog_db, search_text=search_text, offset=0)
     assert [known.source.native_id for known in known_sources] == expected
-    reader = SqliteSourceReader(ReaderProvider(catalog_db))
-    assert reader.read_source_count(search_text=search_text) == len(expected)
+    with ReaderProvider(catalog_db) as reader_provider:
+        reader = SqliteSourceReader(reader_provider)
+        assert reader.read_source_count(search_text=search_text) == len(expected)
 
 
 def test_known_sources_read_at_most_their_limit_from_their_offset(catalog_db: Path) -> None:
-    with sqlite3.connect(catalog_db) as conn:
+    with closing(sqlite3.connect(catalog_db)) as conn, conn:
         insert_file(conn, "a" * 32)
         for n in range(_LIMIT + 1):
             insert_source(conn, f"{n:032x}")
@@ -606,8 +618,9 @@ def test_known_sources_read_at_most_their_limit_from_their_offset(catalog_db: Pa
     second = _known_sources(catalog_db, search_text=None, offset=_LIMIT)
     assert (len(first), first[0].last_seen_at) == (_LIMIT, _at(_LIMIT))
     assert [known.last_seen_at for known in second] == [_at(0)]
-    reader = SqliteSourceReader(ReaderProvider(catalog_db))
-    assert reader.read_source_count(search_text=None) == _LIMIT + 1
+    with ReaderProvider(catalog_db) as reader_provider:
+        reader = SqliteSourceReader(reader_provider)
+        assert reader.read_source_count(search_text=None) == _LIMIT + 1
 
 
 # ---------------------------------------------------------------------------
@@ -620,7 +633,7 @@ _THIRD = "5a6b" * 8
 def _seed_pages(db: Path) -> None:
     """``_seed_sources``, plus ``Keroro`` on ``_OTHER`` and ``_THIRD``, and a hash-less name."""
     _seed_sources(db)
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn, conn:
         insert_observation(conn, "a" * 32, "keroro_062a.avi")
         insert_source(conn, _THIRD)
         for user, at in ((_OTHER, 6), (_THIRD, 8)):
@@ -641,8 +654,11 @@ def _period(
 def _source_history(
     db: Path, user: str, *, limit: int = _LIMIT, offset: int = 0, window: PeriodWindow = _WINDOW
 ) -> SourceHistory | None:
-    reader = SqliteSourceReader(ReaderProvider(db))
-    return reader.read_source_history(source_id(user), limit=limit, offset=offset, window=window)
+    with ReaderProvider(db) as reader_provider:
+        reader = SqliteSourceReader(reader_provider)
+        return reader.read_source_history(
+            source_id(user), limit=limit, offset=offset, window=window
+        )
 
 
 def test_a_source_history_holds_its_names_its_periods_over_every_file_and_their_filenames(
@@ -673,7 +689,7 @@ def test_a_source_history_holds_its_names_its_periods_over_every_file_and_their_
 def test_a_source_history_reads_at_most_its_limit_of_names_from_their_offset_and_every_period(
     catalog_db: Path,
 ) -> None:
-    with sqlite3.connect(catalog_db) as conn:
+    with closing(sqlite3.connect(catalog_db)) as conn, conn:
         insert_file(conn, "a" * 32)
         insert_source(conn, _USER)
         for n in range(3):
@@ -696,8 +712,11 @@ def _source_name_history(
     offset: int = 0,
     window: PeriodWindow = _WINDOW,
 ) -> SourceNameHistory | None:
-    reader = SqliteSourceReader(ReaderProvider(db))
-    return reader.read_source_name_history(source_name, limit=limit, offset=offset, window=window)
+    with ReaderProvider(db) as reader_provider:
+        reader = SqliteSourceReader(reader_provider)
+        return reader.read_source_name_history(
+            source_name, limit=limit, offset=offset, window=window
+        )
 
 
 def test_a_source_name_history_holds_its_hashes_and_its_periods_without_one(
@@ -723,7 +742,7 @@ def test_a_source_name_history_holds_its_hashes_and_its_periods_without_one(
 def test_a_source_name_history_reads_at_most_its_limit_of_hashes_from_their_offset_and_every_period(
     catalog_db: Path,
 ) -> None:
-    with sqlite3.connect(catalog_db) as conn:
+    with closing(sqlite3.connect(catalog_db)) as conn, conn:
         insert_file(conn, "a" * 32)
         insert_observation(conn, "a" * 32, "keroro_062a.avi")
         for n, role in enumerate(("standby", "queued", "sending")):
@@ -778,7 +797,7 @@ def test_read_catalog_entries_combined_target_and_tier_filters(catalog_db: Path)
 
 
 def test_read_catalog_entries_reads_at_most_its_limit_from_its_offset(catalog_db: Path) -> None:
-    with sqlite3.connect(catalog_db) as conn:
+    with closing(sqlite3.connect(catalog_db)) as conn, conn:
         for n in range(_LIMIT + 2):
             insert_file(conn, f"{n:032x}", size_bytes=n)
     first = _entries(catalog_db, sort=CatalogEntrySort.SIZE, direction=SortDirection.ASC)
@@ -797,7 +816,7 @@ def test_read_catalog_entries_reads_at_most_its_limit_from_its_offset(catalog_db
 def test_target_coverage_uses_latest_decision_per_hash(catalog_db: Path) -> None:
     """Same hash with two decisions (T1 < T2) → the coverage reads T2's tier."""
     h = "a" * 32
-    with sqlite3.connect(catalog_db) as conn:
+    with closing(sqlite3.connect(catalog_db)) as conn, conn:
         insert_file(conn, h)
         insert_decision(conn, h, "062A", "catalog")
         insert_decision(conn, h, "062A", "download", decided_at="2026-06-22T11:00:00.000000+00:00")
@@ -817,7 +836,7 @@ def test_target_coverage_omits_retracted(catalog_db: Path) -> None:
 def test_coverage_tie_break_on_id(catalog_db: Path) -> None:
     """Same hash, same decided_at, two different tiers → the larger id wins."""
     h = "b" * 32
-    with sqlite3.connect(catalog_db) as conn:
+    with closing(sqlite3.connect(catalog_db)) as conn, conn:
         insert_file(conn, h, 200)
         insert_decision(conn, h, "062A", "catalog")
         insert_decision(conn, h, "062A", "download")
@@ -839,7 +858,7 @@ def test_file_history_observations_include_media_fields_none(catalog_db: Path) -
 def test_file_history_observations_include_media_fields_present(catalog_db: Path) -> None:
     """An observation's duration_seconds and bitrate_kbps are filled when present."""
     h = "d" * 32
-    with sqlite3.connect(catalog_db) as conn:
+    with closing(sqlite3.connect(catalog_db)) as conn, conn:
         insert_file(conn, h, 150)
         insert_observation(
             conn,
@@ -864,7 +883,7 @@ def _seed_retracted(db: Path) -> None:
     (the new per-target retraction model, spec §6). Its latest 063A row is a retraction, so
     it must be treated as unmatched everywhere."""
     h = "c" * 32
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn, conn:
         insert_file(conn, h, 300)
         insert_observation(
             conn,
@@ -887,7 +906,7 @@ def _seed_retracted(db: Path) -> None:
 
 def _seed_unmatched(db: Path) -> None:
     """Add a second file (b*32) with an observation but NO match decision."""
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn, conn:
         insert_file(conn, "b" * 32, 200)
         insert_observation(
             conn,
@@ -933,7 +952,7 @@ def test_read_catalog_entries_default_includes_unmatched(catalog_db: Path) -> No
 def test_read_catalog_entries_shows_latest_observation(catalog_db: Path) -> None:
     """Same hash with two observations → read_catalog_entries returns the most recent filename."""
     h = "c" * 32
-    with sqlite3.connect(catalog_db) as conn:
+    with closing(sqlite3.connect(catalog_db)) as conn, conn:
         insert_file(conn, h, 300)
         insert_observation(
             conn,
@@ -1001,7 +1020,7 @@ def test_read_matched_and_total_file_counts_empty_catalogue_matched_is_zero_not_
 
 def _seed_catalog_tier_on_001a(db: Path) -> None:
     """A keroro_large catch-all file: its only decision is tier 'catalog' pinned to 001A."""
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn, conn:
         insert_file(conn, "b" * 32, 50)
         insert_observation(
             conn,
@@ -1058,7 +1077,7 @@ def _seed_sortable(db: Path) -> None:
         ("b" * 32, "alpha.avi", 100, 15, "2026-01-02T10:00:00.000000+00:00", "072A", "download"),
         ("c" * 32, "gamma.avi", 200, 10, "2026-01-03T10:00:00.000000+00:00", "001A", "catalog"),
     ]
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn, conn:
         for h, name, size, sources, seen, tid, tier in rows:
             insert_file(conn, h, size)
             insert_observation(
@@ -1096,7 +1115,7 @@ def test_read_catalog_entries_sort_orders(
 
 def test_read_catalog_entries_sort_tiebreak_is_file_id(catalog_db: Path) -> None:
     """Two files with the same sort key keep a deterministic order via the file_id tiebreak."""
-    with sqlite3.connect(catalog_db) as conn:
+    with closing(sqlite3.connect(catalog_db)) as conn, conn:
         for h in ("a" * 32, "e" * 32):  # inserted a-first on purpose
             insert_file(conn, h)
             insert_observation(conn, h, "same.avi", observed_at="2026-01-01T10:00:00.000000+00:00")
@@ -1125,7 +1144,7 @@ def _seed_mixed_tier_file(db: Path) -> None:
     """One file with TWO current decisions in DIFFERENT tiers (download + notify): it must count
     under both facets."""
     h = "d" * 32
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn, conn:
         insert_file(conn, h)
         insert_observation(conn, h, "mixed.avi", observed_at="2026-01-01T10:00:00.000000+00:00")
         for tid, tier in (("062A", "download"), ("062B", "notify")):
@@ -1165,7 +1184,7 @@ def _seed_file_without_observation(db: Path) -> str:
     """A file with NO observation at all (a file row is written before its first observation is
     recorded). Returns its hash."""
     h = "d" * 32
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn, conn:
         insert_file(conn, h, 42)
     return h
 
@@ -1205,7 +1224,7 @@ def test_read_catalog_entries_search_text_filter_excludes_file_with_no_observati
 def test_read_catalog_entries_observation_tie_break_on_the_newest_variant(catalog_db: Path) -> None:
     """Two observations at the SAME ``observed_at``: the higher ``variant_id`` wins (D4)."""
     h = "a" * 32
-    with sqlite3.connect(catalog_db) as conn:
+    with closing(sqlite3.connect(catalog_db)) as conn, conn:
         insert_file(conn, h)
         for name in ("first.avi", "second.avi"):  # same instant, ascending variant ids
             insert_observation(conn, h, name, observed_at="2026-07-03T10:00:00.000000+00:00")
@@ -1256,7 +1275,8 @@ def test_latest_obs_seeks_per_file_instead_of_scanning_observations(
     """Every /files query reading the latest observation SEEKS each variant's observations by
     primary key, never walks ``observations`` (11.6M rows on the node). Asserts the PLAN, not a
     duration, so it stays deterministic; each real query is checked, not the CTE alone."""
-    plan = [str(row[3]) for row in open_reader(catalog_db).execute("EXPLAIN QUERY PLAN " + sql)]
+    with closing(open_reader(catalog_db)) as reader:
+        plan = [str(row[3]) for row in reader.execute("EXPLAIN QUERY PLAN " + sql)]
 
     assert any(re.match(r"SEARCH o\w* USING PRIMARY KEY \(variant_id=\?", step) for step in plan), (
         f"{label} does not seek observations by key: {plan}"
@@ -1282,7 +1302,6 @@ def test_counters_read_observations_only_for_a_name_filter(
     catalog_db: Path, counter: str, search_text: str | None
 ) -> None:
     """The default /files page counts without a per-file latest observation (D18)."""
-    reader_provider = ReaderProvider(catalog_db)
     tables: set[str] = set()
 
     def record(action: int, table: str | None, *_: str | None) -> int:
@@ -1290,6 +1309,7 @@ def test_counters_read_observations_only_for_a_name_filter(
             tables.add(table)
         return sqlite3.SQLITE_OK
 
-    reader_provider.connection().set_authorizer(record)
-    _COUNTERS[counter](SqliteCatalogFileReader(reader_provider), search_text)
+    with ReaderProvider(catalog_db) as reader_provider:
+        reader_provider.connection().set_authorizer(record)
+        _COUNTERS[counter](SqliteCatalogFileReader(reader_provider), search_text)
     assert ("observations" in tables) is (search_text is not None)

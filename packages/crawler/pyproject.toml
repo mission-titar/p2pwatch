@@ -56,6 +56,8 @@ markers = [
     "compose_integration: e2e smoke of the assembled docker compose stack (no VPN), Docker and compose required; deselected by default, dedicated run: cd packages/crawler && uv run pytest -m compose_integration --no-cov",
 ]
 asyncio_mode = "strict"
+# A leaked connection warns in its finalizer, which pytest reports as unraisable: both fail.
+filterwarnings = ["error::ResourceWarning", "error::pytest.PytestUnraisableExceptionWarning"]
 asyncio_default_fixture_loop_scope = "function"
 
 [tool.coverage.run]
