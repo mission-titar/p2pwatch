@@ -371,7 +371,9 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
 | 143 | `refactor/file-history` | `FileHistory`, `DatedDecision` in the domain; `CatalogFileReader.read_file_history`; `FileDetail`, `DecisionView` deleted | 300, 8 |
 | 145 | `refactor/domain-interval` | `interval.py` to `domain/` (Corrected 2026-10-19: split from 146, measured at 676 lines, the move counted twice; it moves behaviour, so no exemption) | 283, 8 |
 | 146 | `feat/describe-file` | `DescribeFile` behind `FileDescriber`; its route on it | 393, 8 |
-| 147 | `test/describe-file-routes-on-fakes` | the file page's route tests on a fake `FileDescriber` | 550, 3 |
+| 147 | `test/describe-file-routes-on-fakes` | `FakeFileDescriber`; the file page's decoding tests on it (Corrected 2026-10-19: block 147 split in 147, 148 and 149, measured at 875 lines; it moves assertions, so no exemption) | 138, 3 |
+| 148 | `test/file-page-rendering-on-fakes` | the file page's general, decision and explanation rendering on the fake | 457, 1 |
+| 149 | `test/file-page-history-on-fakes` | the file page's timeline, source history and interval selector on the fake | 294, 3 |
 | 150 | `feat/list-sources` | `SourceReader`'s list reads; `ListSources`; its route and route tests | 450, 12 |
 | 160 | `feat/describe-source` | `DescribeSource`, `DescribeSourceName`; their routes and route tests; the dead `{% else %}` | 450, 12 |
 | 170 | `feat/console-query` | `SqlExecutor`, `RunConsoleQuery`; `displays.py`; the last webui exceptions in `tach.toml` | 400, 12 |
