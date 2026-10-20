@@ -9,9 +9,12 @@ from p2pwatch.application.resolve_node_id import resolve_node_id
 from p2pwatch.application.supervise_loops import supervise_loops
 from p2pwatch.domain.observability.events import CrawlerStarted
 from p2pwatch.ports.driven.clock import WallClock
-from p2pwatch.ports.driven.local_state_repository import LocalStateRepository
 from p2pwatch.ports.driven.logger import Logger
 from p2pwatch.ports.driven.node_id import NodeIdGenerator, NodeIdReader, NodeIdWriter
+from p2pwatch.ports.driven.policy_fingerprint import (
+    PolicyFingerprintReader,
+    PolicyFingerprintWriter,
+)
 from p2pwatch.ports.driven.telemetry import Telemetry
 
 
@@ -28,7 +31,8 @@ class RunCrawler:
         wall_clock: WallClock,
         telemetry: Telemetry,
         policy_fingerprint: str,
-        local_state: LocalStateRepository,
+        policy_fingerprint_reader: PolicyFingerprintReader,
+        policy_fingerprint_writer: PolicyFingerprintWriter,
         reevaluate: Callable[[str], Awaitable[ReevaluationSummary]],
         loops: Sequence[Callable[[str], Coroutine[object, object, None]]],
         download_enabled: bool,
@@ -43,7 +47,8 @@ class RunCrawler:
         self._wall_clock = wall_clock
         self._telemetry = telemetry
         self._policy_fingerprint = policy_fingerprint
-        self._local_state = local_state
+        self._policy_fingerprint_reader = policy_fingerprint_reader
+        self._policy_fingerprint_writer = policy_fingerprint_writer
         self._reevaluate = reevaluate
         self._loops = loops
         self._download_enabled = download_enabled
@@ -68,7 +73,8 @@ class RunCrawler:
         # current policy. A comment-only edit of matcher.yml or targets.yml still runs one pass.
         await reevaluate_if_policy_changed(
             fingerprint=self._policy_fingerprint,
-            local_repo=self._local_state,
+            policy_fingerprint_reader=self._policy_fingerprint_reader,
+            policy_fingerprint_writer=self._policy_fingerprint_writer,
             reevaluate=lambda: self._reevaluate(node_id),
             logger=self._reevaluation_gate_logger,
         )

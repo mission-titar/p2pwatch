@@ -19,7 +19,7 @@ from p2pwatch.domain.source import (
     SourceRole,
     is_contact_point,
 )
-from p2pwatch.ports.driven.client_status import ChannelStatus, ClientStatus
+from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus
 from p2pwatch.ports.driven.download_client import DownloadStatus, FailureReason, WaitingReason
 
 _HASH_LENGTH = 32

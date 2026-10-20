@@ -126,6 +126,7 @@ depends_on = ["p2pwatch.ports.driven.run_state"]
 path = "p2pwatch.adapters.driven.in_memory_status_board"
 layer = "adapters"
 depends_on = [
+  "p2pwatch.domain",
   "p2pwatch.ports.driven.client_status",
   "p2pwatch.ports.driven.clock",
 ]
@@ -154,7 +155,6 @@ layer = "adapters"
 depends_on = [
   "p2pwatch.domain",
   "p2pwatch.ports.driven.client_errors",
-  "p2pwatch.ports.driven.client_status",
   "p2pwatch.ports.driven.clock",
   "p2pwatch.ports.driven.download_client",
   "p2pwatch.ports.driven.search_client",
@@ -178,18 +178,20 @@ path = "p2pwatch.adapters.driven.persistence_sqlite"
 layer = "adapters"
 depends_on = [
   "p2pwatch.domain",
-  "p2pwatch.ports.driven.backoff_state_repository",
+  "p2pwatch.ports.driven.backoff_states",
+  "p2pwatch.ports.driven.catalog",
   "p2pwatch.ports.driven.catalog_copier",
   "p2pwatch.ports.driven.catalog_file_reader",
-  "p2pwatch.ports.driven.catalog_repository",
   "p2pwatch.ports.driven.clock",
   "p2pwatch.ports.driven.coverage_reader",
   "p2pwatch.ports.driven.download_client",
+  "p2pwatch.ports.driven.downloads",
   "p2pwatch.ports.driven.node_id",
   "p2pwatch.ports.driven.node_state_reader",
+  "p2pwatch.ports.driven.policy_fingerprint",
   "p2pwatch.ports.driven.repository_errors",
+  "p2pwatch.ports.driven.source_points",
   "p2pwatch.ports.driven.source_reader",
-  "p2pwatch.ports.driven.source_repository",
   "p2pwatch.ports.driven.sql_executor",
 ]
 
@@ -256,11 +258,11 @@ path = "p2pwatch.application"
 layer = "application"
 depends_on = [
   "p2pwatch.domain",
-  "p2pwatch.ports.driven.backoff_state_repository",
+  "p2pwatch.ports.driven.backoff_states",
+  "p2pwatch.ports.driven.catalog",
   "p2pwatch.ports.driven.catalog_copier",
   "p2pwatch.ports.driven.catalog_file_reader",
   "p2pwatch.ports.driven.catalog_finder",
-  "p2pwatch.ports.driven.catalog_repository",
   "p2pwatch.ports.driven.client_errors",
   "p2pwatch.ports.driven.client_status",
   "p2pwatch.ports.driven.clock",
@@ -268,17 +270,18 @@ depends_on = [
   "p2pwatch.ports.driven.coverage_reader",
   "p2pwatch.ports.driven.disk_space",
   "p2pwatch.ports.driven.download_client",
-  "p2pwatch.ports.driven.local_state_repository",
+  "p2pwatch.ports.driven.downloads",
   "p2pwatch.ports.driven.logger",
   "p2pwatch.ports.driven.node_id",
   "p2pwatch.ports.driven.node_state_reader",
+  "p2pwatch.ports.driven.policy_fingerprint",
   "p2pwatch.ports.driven.repository_errors",
   "p2pwatch.ports.driven.rng",
   "p2pwatch.ports.driven.run_state",
   "p2pwatch.ports.driven.search_client",
   "p2pwatch.ports.driven.source_client",
+  "p2pwatch.ports.driven.source_points",
   "p2pwatch.ports.driven.source_reader",
-  "p2pwatch.ports.driven.source_repository",
   "p2pwatch.ports.driven.sql_executor",
   "p2pwatch.ports.driven.telemetry",
   "p2pwatch.ports.driven.wake_hub",
@@ -328,7 +331,12 @@ layer = "domain"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driven.backoff_state_repository"
+path = "p2pwatch.ports.driven.backoff_states"
+layer = "ports"
+depends_on = ["p2pwatch.domain"]
+
+[[modules]]
+path = "p2pwatch.ports.driven.catalog"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
@@ -346,11 +354,6 @@ depends_on = ["p2pwatch.domain"]
 path = "p2pwatch.ports.driven.catalog_finder"
 layer = "ports"
 depends_on = []
-
-[[modules]]
-path = "p2pwatch.ports.driven.catalog_repository"
-layer = "ports"
-depends_on = ["p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.ports.driven.client_errors"
@@ -391,9 +394,12 @@ layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.local_state_repository"
+path = "p2pwatch.ports.driven.downloads"
 layer = "ports"
-depends_on = []
+depends_on = [
+  "p2pwatch.domain",
+  "p2pwatch.ports.driven.download_client",
+]
 
 [[modules]]
 path = "p2pwatch.ports.driven.logger"
@@ -409,6 +415,11 @@ depends_on = []
 path = "p2pwatch.ports.driven.node_state_reader"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
+
+[[modules]]
+path = "p2pwatch.ports.driven.policy_fingerprint"
+layer = "ports"
+depends_on = []
 
 [[modules]]
 path = "p2pwatch.ports.driven.repository_errors"
@@ -436,12 +447,12 @@ layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.source_reader"
+path = "p2pwatch.ports.driven.source_points"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.source_repository"
+path = "p2pwatch.ports.driven.source_reader"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 

@@ -12,9 +12,13 @@ from p2pwatch.domain.observability.events import (
     SearchFailed,
 )
 from p2pwatch.domain.persisted_wait import remaining_wait
-from p2pwatch.domain.search.backoff import backoff_delay
-from p2pwatch.ports.driven.backoff_state_repository import BackoffKey, BackoffState
-from p2pwatch.ports.driven.catalog_repository import CatalogRepository
+from p2pwatch.domain.search.backoff import BackoffKey, BackoffState, backoff_delay
+from p2pwatch.ports.driven.catalog import (
+    DecisionReader,
+    DecisionWriter,
+    ObservationReader,
+    ObservationWriter,
+)
 from p2pwatch.ports.driven.client_errors import ClientUnreachableError, SearchFailedError
 from p2pwatch.ports.driven.clock import MonotonicClock, MonotonicInstant, WallClock
 from p2pwatch.ports.driven.logger import Logger
@@ -125,7 +129,10 @@ class WorkerDeps:
     which persist it). Single writer on the event loop → no race (spec §3).
     """
 
-    catalog: CatalogRepository
+    observation_writer: ObservationWriter
+    observation_reader: ObservationReader
+    decision_writer: DecisionWriter
+    decision_reader: DecisionReader
     engine: MatchingEngine
     wake_hub: WakeHub
     backoff: "BackoffRegistry"
@@ -170,7 +177,10 @@ class SearchWorker:
         for reported_file in answer.reported_files:
             if await record_observation(
                 reported_file,
-                catalog=self._deps.catalog,
+                observation_writer=self._deps.observation_writer,
+                observation_reader=self._deps.observation_reader,
+                decision_writer=self._deps.decision_writer,
+                decision_reader=self._deps.decision_reader,
                 engine=self._deps.engine,
                 wake_hub=self._deps.wake_hub,
                 telemetry=self._deps.telemetry,

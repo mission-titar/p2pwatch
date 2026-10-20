@@ -25,6 +25,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError,
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.ports.driven.download_client import DownloadStatus, FailureReason
+from p2pwatch.ports.driven.downloads import DownloadReader, DownloadWriter
 
 _INSERT_QUEUED = """
 INSERT INTO downloads
@@ -63,8 +64,8 @@ WHERE state IN ('queued', 'downloading')
 """
 
 
-class SqliteDownloadRepository:
-    """SQLite implementation of download persistence (STRUCTURAL satisfaction)."""
+class SqliteDownloadRepository(DownloadWriter, DownloadReader):
+    """SQLite implementation of the downloads' ports."""
 
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
@@ -154,20 +155,20 @@ class SqliteDownloadRepository:
                 ],
             )
 
-    def last_seen_at_by_file(self) -> dict[FileKey, datetime]:
+    def read_last_seen_at_by_file(self) -> dict[FileKey, datetime]:
         """Each ``queued`` or ``downloading`` download's ``last_seen_at``: when the client last
         listed it, else when it was queued."""
         with wrap_sqlite_errors():
             rows = self._connection.execute(_LAST_SEEN_AT_BY_FILE).fetchall()
         return {FileKey(Network(row[0]), row[1]): datetime.fromisoformat(row[2]) for row in rows}
 
-    def tracked_states(self) -> dict[FileKey, DownloadState]:
+    def read_tracked_states(self) -> dict[FileKey, DownloadState]:
         """File→state map of ALL tracked downloads, whatever their state."""
         with wrap_sqlite_errors():
             rows = self._connection.execute(_TRACKED_STATES).fetchall()
         return {FileKey(Network(row[0]), row[1]): DownloadState(row[2]) for row in rows}
 
-    def queued_target_id(self, file: FileKey) -> str | None:
+    def read_queued_target_id(self, file: FileKey) -> str | None:
         """``target_id`` the file was queued for, or ``None`` (never queued).
 
         The download loop uses it to label the completion notification; ``None`` is a normal

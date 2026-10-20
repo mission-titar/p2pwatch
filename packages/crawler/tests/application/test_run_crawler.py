@@ -8,6 +8,10 @@ import pytest
 from p2pwatch.application.reevaluate_catalog import ReevaluationSummary
 from p2pwatch.application.run_crawler import RunCrawler
 from p2pwatch.domain.observability.events import CrawlerStarted
+from p2pwatch.ports.driven.policy_fingerprint import (
+    PolicyFingerprintReader,
+    PolicyFingerprintWriter,
+)
 from p2pwatch_testing.application.fakes import (
     FakeLogger,
     FakeNodeIdGenerator,
@@ -20,16 +24,16 @@ from p2pwatch_testing.application.fakes import (
 _FINGERPRINT = "policy-2"
 
 
-class _FakeFingerprints:
-    """``LocalStateRepository`` stub: keeps the fingerprint it is given."""
+class _FakeFingerprints(PolicyFingerprintReader, PolicyFingerprintWriter):
+    """Keeps the fingerprint it is given."""
 
     def __init__(self, stored_fingerprint: str | None) -> None:
         self.stored_fingerprint = stored_fingerprint
 
-    def reevaluated_policy_fingerprint(self) -> str | None:
+    def read_policy_fingerprint(self) -> str | None:
         return self.stored_fingerprint
 
-    def set_reevaluated_policy_fingerprint(self, fingerprint: str) -> None:
+    def set_policy_fingerprint(self, fingerprint: str) -> None:
         self.stored_fingerprint = fingerprint
 
 
@@ -59,7 +63,8 @@ class _Crawl:
             wall_clock=FakeTime().wall,
             telemetry=self.telemetry,
             policy_fingerprint=_FINGERPRINT,
-            local_state=self.fingerprints,
+            policy_fingerprint_reader=self.fingerprints,
+            policy_fingerprint_writer=self.fingerprints,
             reevaluate=self._reevaluate,
             loops=[self._loop("search"), self._loop("status")],
             download_enabled=download_enabled,

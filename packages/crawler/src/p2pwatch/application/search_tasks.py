@@ -10,7 +10,7 @@ from datetime import timedelta
 
 from p2pwatch.application.search_worker import BackoffRegistry, SearchTask, SearchWorker
 from p2pwatch.domain.search.keywords import dedupe_keywords
-from p2pwatch.ports.driven.backoff_state_repository import BackoffStateRepository
+from p2pwatch.ports.driven.backoff_states import BackoffStateWriter
 from p2pwatch.ports.driven.clock import MonotonicClock
 from p2pwatch.ports.driven.logger import Logger
 from p2pwatch.ports.driven.repository_errors import RepositoryError
@@ -26,7 +26,7 @@ class SearchTaskRunner:
         keywords: Sequence[str],
         resumed: asyncio.Event,
         backoff: BackoffRegistry,
-        backoff_states: BackoffStateRepository,
+        backoff_state_writer: BackoffStateWriter,
         monotonic_clock: MonotonicClock,
         logger: Logger,
     ) -> None:
@@ -34,7 +34,7 @@ class SearchTaskRunner:
         self._keywords = keywords
         self._resumed = resumed
         self._backoff = backoff
-        self._backoff_states = backoff_states
+        self._backoff_state_writer = backoff_state_writer
         self._monotonic_clock = monotonic_clock
         self._logger = logger
         self._saved = backoff.snapshot()
@@ -67,7 +67,7 @@ class SearchTaskRunner:
         if current == self._saved:
             return
         try:
-            self._backoff_states.save_backoff_states(current)
+            self._backoff_state_writer.save_backoff_states(current)
         except RepositoryError as error:
             self._logger.error("backoff not saved (%s): retried after the next search", error)
             return

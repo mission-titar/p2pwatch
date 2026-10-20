@@ -8,7 +8,7 @@ from p2pwatch.application.run_download_cycle import (
     DownloadLoopDeps,
     download_loop,
 )
-from p2pwatch.ports.driven.catalog_repository import DownloadCandidate
+from p2pwatch.ports.driven.catalog import DownloadCandidate
 from p2pwatch.ports.driven.clock import MonotonicInstant
 from p2pwatch_testing.application.download_fakes import (
     FakeCatalogReads,
@@ -47,13 +47,19 @@ def _loop_deps(
     fake_time: FakeTime | None = None,
 ) -> DownloadLoopDeps:
     client = FakeDownloadClient()
+    downloads = FakeDownloadRepo()
+    sources = FakeSourceRepo()
+    catalog = FakeCatalogReads()
     fake_time = fake_time or FakeTime()
     return DownloadLoopDeps(
         download_client=client,
         source_client=client,
-        downloads=FakeDownloadRepo(),
-        sources=FakeSourceRepo(),
-        catalog=FakeCatalogReads(),
+        download_writer=downloads,
+        download_reader=downloads,
+        source_point_writer=sources,
+        source_point_reader=sources,
+        decision_reader=catalog,
+        observation_reader=catalog,
         targets=(),
         disk=FakeDiskSpace(1_000_000),
         min_free_bytes=0,
@@ -117,13 +123,13 @@ async def test_nudge_wakes_the_loop_before_poll_expires() -> None:
 
 
 class _ShutdownDuringCycleCatalog(FakeCatalogReads):
-    """DownloadCatalogReader setting ``shutdown`` on the 1st ``download_candidates``, mid-cycle."""
+    """Sets ``shutdown`` on the 1st ``read_download_candidates``, mid-cycle."""
 
     def __init__(self, shutdown: asyncio.Event) -> None:
         super().__init__()
         self._shutdown = shutdown
 
-    def download_candidates(self) -> tuple[DownloadCandidate, ...]:
+    def read_download_candidates(self) -> tuple[DownloadCandidate, ...]:
         self._shutdown.set()
         return ()
 
@@ -135,7 +141,7 @@ async def test_loop_breaks_when_shutdown_is_set_during_the_cycle() -> None:
     shutdown = asyncio.Event()
     fake_time = FakeTime()
     deps = _loop_deps(wake_hub=RecordingWakeHub(), shutdown=shutdown, fake_time=fake_time)
-    deps.catalog = _ShutdownDuringCycleCatalog(shutdown)
+    deps.decision_reader = _ShutdownDuringCycleCatalog(shutdown)
     await asyncio.wait_for(download_loop(deps, _NODE), timeout=1.0)
     assert fake_time.sleeps == []  # break before any sleep/wake
 

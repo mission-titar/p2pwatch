@@ -1,12 +1,11 @@
 from datetime import UTC, datetime
 
 from p2pwatch.adapters.driven.in_memory_status_board import InMemoryStatusBoard
+from p2pwatch.domain.status_reading import ClientStatus, StatusReading
 from p2pwatch.ports.driven.client_status import (
-    ClientStatus,
     ClientStatusReader,
     ClientStatusWriter,
     PublishedReading,
-    StatusReading,
 )
 from p2pwatch.ports.driven.clock import MonotonicInstant
 
