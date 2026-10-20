@@ -91,7 +91,9 @@ def _counts(
     )
 
 
-def _tier_counts(catalog_db: Path, *, search_text: str | None = None) -> Mapping[str, int]:
+def _read_file_count_by_tier(
+    catalog_db: Path, *, search_text: str | None = None
+) -> Mapping[str, int]:
     return SqliteCatalogFileReader(ReaderProvider(catalog_db)).read_file_count_by_tier(
         target_id=None, search_text=search_text
     )
@@ -210,7 +212,7 @@ def test_target_coverage_ignores_legacy_empty_target_sentinel(catalog_db: Path) 
 # ---------------------------------------------------------------------------
 
 
-def test_list_files_no_filter_returns_all(catalog_db: Path) -> None:
+def test_read_catalog_entries_no_filter_returns_all(catalog_db: Path) -> None:
     _seed(catalog_db)
     rows = _entries(catalog_db)
     assert rows == (
@@ -228,7 +230,7 @@ def test_list_files_no_filter_returns_all(catalog_db: Path) -> None:
     )
 
 
-def test_list_files_filter_by_target(catalog_db: Path) -> None:
+def test_read_catalog_entries_filter_by_target(catalog_db: Path) -> None:
     _seed(catalog_db)
     hit = _entries(catalog_db, target_id="062A")
     miss = _entries(catalog_db, target_id="001A")
@@ -236,7 +238,7 @@ def test_list_files_filter_by_target(catalog_db: Path) -> None:
     assert miss == ()
 
 
-def test_list_files_filter_by_tier(catalog_db: Path) -> None:
+def test_read_catalog_entries_filter_by_tier(catalog_db: Path) -> None:
     _seed(catalog_db)
     hit = _entries(catalog_db, tier="download")
     miss = _entries(catalog_db, tier="notify")
@@ -244,7 +246,7 @@ def test_list_files_filter_by_tier(catalog_db: Path) -> None:
     assert miss == ()
 
 
-def test_list_files_filter_by_query(catalog_db: Path) -> None:
+def test_read_catalog_entries_filter_by_search_text(catalog_db: Path) -> None:
     _seed(catalog_db)
     hit = _entries(catalog_db, search_text="keroro")
     miss = _entries(catalog_db, search_text="unknown")
@@ -252,17 +254,18 @@ def test_list_files_filter_by_query(catalog_db: Path) -> None:
     assert miss == ()
 
 
-def test_list_files_reads_none_past_the_offset(catalog_db: Path) -> None:
+def test_read_catalog_entries_reads_none_past_the_offset(catalog_db: Path) -> None:
     _seed(catalog_db)
     assert _entries(catalog_db, offset=1) == ()
 
 
 # ---------------------------------------------------------------------------
-# Tests: list_files / count_files: one row per file, decisions aggregated (spec §9)
+# Tests: read_catalog_entries / read_matched_and_total_file_counts: one row per file, decisions
+# aggregated (spec §9)
 # ---------------------------------------------------------------------------
 
 
-def test_list_files_whole_episode_is_one_row_with_two_decisions(catalog_db: Path) -> None:
+def test_read_catalog_entries_whole_episode_is_one_row_with_two_decisions(catalog_db: Path) -> None:
     _seed_whole_episode(catalog_db)
     rows = _entries(catalog_db)
     assert len(rows) == 1
@@ -273,7 +276,7 @@ def test_list_files_whole_episode_is_one_row_with_two_decisions(catalog_db: Path
 
 
 @pytest.mark.parametrize("target_id", ["072A", "072B"])
-def test_list_files_filter_by_one_target_returns_whole_episode(
+def test_read_catalog_entries_filter_by_one_target_returns_whole_episode(
     catalog_db: Path, target_id: str
 ) -> None:
     _seed_whole_episode(catalog_db)
@@ -282,13 +285,15 @@ def test_list_files_filter_by_one_target_returns_whole_episode(
     assert [d.target_id for d in rows[0].decisions] == ["072A", "072B"]
 
 
-def test_list_files_unmatched_file_has_empty_decisions(catalog_db: Path) -> None:
+def test_read_catalog_entries_unmatched_file_has_empty_decisions(catalog_db: Path) -> None:
     _seed_unmatched(catalog_db)
     [row] = _entries(catalog_db)
     assert row.decisions == ()
 
 
-def test_count_files_whole_episode_counts_as_one_file(catalog_db: Path) -> None:
+def test_read_matched_and_total_file_counts_whole_episode_counts_as_one_file(
+    catalog_db: Path,
+) -> None:
     _seed_whole_episode(catalog_db)
     matched, total = _counts(catalog_db)
     assert (matched, total) == (1, 1)
@@ -760,11 +765,11 @@ def test_the_pages_periods_are_read_in_the_window_only(catalog_db: Path) -> None
 
 
 # ---------------------------------------------------------------------------
-# Tests: list_files with multiple combined filters
+# Tests: read_catalog_entries with multiple combined filters
 # ---------------------------------------------------------------------------
 
 
-def test_list_files_combined_target_and_tier_filters(catalog_db: Path) -> None:
+def test_read_catalog_entries_combined_target_and_tier_filters(catalog_db: Path) -> None:
     _seed(catalog_db)
     hit = _entries(catalog_db, target_id="062A", tier="download")
     miss = _entries(catalog_db, target_id="062A", tier="notify")
@@ -772,7 +777,7 @@ def test_list_files_combined_target_and_tier_filters(catalog_db: Path) -> None:
     assert miss == ()
 
 
-def test_list_files_reads_at_most_its_limit_from_its_offset(catalog_db: Path) -> None:
+def test_read_catalog_entries_reads_at_most_its_limit_from_its_offset(catalog_db: Path) -> None:
     with sqlite3.connect(catalog_db) as conn:
         for n in range(_LIMIT + 2):
             insert_file(conn, f"{n:032x}", size_bytes=n)
@@ -893,7 +898,7 @@ def _seed_unmatched(db: Path) -> None:
         )
 
 
-def test_list_files_matched_only_excludes_unmatched(catalog_db: Path) -> None:
+def test_read_catalog_entries_matched_only_excludes_unmatched(catalog_db: Path) -> None:
     _seed(catalog_db)
     _seed_unmatched(catalog_db)
     rows = _entries(catalog_db, matched_only=True)
@@ -901,7 +906,7 @@ def test_list_files_matched_only_excludes_unmatched(catalog_db: Path) -> None:
     assert hashes == {"a" * 32}  # only the matched file
 
 
-def test_list_files_matched_only_excludes_retracted(catalog_db: Path) -> None:
+def test_read_catalog_entries_matched_only_excludes_retracted(catalog_db: Path) -> None:
     """A file whose latest decision is a retraction is NOT matched, even though its
     ``target_id`` column is non-NULL (the crawler's sentinel is an empty string, not NULL)."""
     _seed(catalog_db)
@@ -911,13 +916,13 @@ def test_list_files_matched_only_excludes_retracted(catalog_db: Path) -> None:
     assert hashes == {"a" * 32}  # the retracted file ("c"*32) is excluded
 
 
-def test_list_files_lists_a_retracted_file_with_no_decision(catalog_db: Path) -> None:
+def test_read_catalog_entries_lists_a_retracted_file_with_no_decision(catalog_db: Path) -> None:
     _seed_retracted(catalog_db)
     [row] = _entries(catalog_db)
     assert row.decisions == ()
 
 
-def test_list_files_default_includes_unmatched(catalog_db: Path) -> None:
+def test_read_catalog_entries_default_includes_unmatched(catalog_db: Path) -> None:
     _seed(catalog_db)
     _seed_unmatched(catalog_db)
     rows = _entries(catalog_db)
@@ -925,8 +930,8 @@ def test_list_files_default_includes_unmatched(catalog_db: Path) -> None:
     assert hashes == {"a" * 32, "b" * 32}  # default matched_only=False → both
 
 
-def test_list_files_shows_latest_observation(catalog_db: Path) -> None:
-    """Same hash with two observations → list_files returns the most recent filename."""
+def test_read_catalog_entries_shows_latest_observation(catalog_db: Path) -> None:
+    """Same hash with two observations → read_catalog_entries returns the most recent filename."""
     h = "c" * 32
     with sqlite3.connect(catalog_db) as conn:
         insert_file(conn, h, 300)
@@ -951,25 +956,27 @@ def test_list_files_shows_latest_observation(catalog_db: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tests: count_files, /files summary (matched, total)
+# Tests: read_matched_and_total_file_counts, /files summary (matched, total)
 # ---------------------------------------------------------------------------
 
 
-def test_count_files_no_filter_returns_matched_and_total(catalog_db: Path) -> None:
+def test_read_matched_and_total_file_counts_no_filter_returns_matched_and_total(
+    catalog_db: Path,
+) -> None:
     _seed(catalog_db)  # 1 matched file
     _seed_unmatched(catalog_db)  # 1 unmatched file
     matched, total = _counts(catalog_db)
     assert (matched, total) == (1, 2)
 
 
-def test_count_files_respects_query_filter(catalog_db: Path) -> None:
+def test_read_matched_and_total_file_counts_respects_search_text(catalog_db: Path) -> None:
     _seed(catalog_db)  # filename keroro_062.avi (matched)
     _seed_unmatched(catalog_db)  # filename gallego_ep021.ogm (unmatched)
     matched, total = _counts(catalog_db, search_text="gallego")
-    assert (matched, total) == (0, 1)  # only the unmatched file matches the query
+    assert (matched, total) == (0, 1)  # only the unmatched file matches the search text
 
 
-def test_count_files_counts_retracted_as_unmatched(catalog_db: Path) -> None:
+def test_read_matched_and_total_file_counts_counts_retracted_as_unmatched(catalog_db: Path) -> None:
     """A retracted file counts toward ``total`` but not ``matched`` (the matched count is
     unchanged by its presence, even though its ``target_id`` column is non-NULL)."""
     _seed(catalog_db)  # 1 matched file
@@ -978,7 +985,9 @@ def test_count_files_counts_retracted_as_unmatched(catalog_db: Path) -> None:
     assert (matched, total) == (1, 2)
 
 
-def test_count_files_empty_catalogue_matched_is_zero_not_none(catalog_db: Path) -> None:
+def test_read_matched_and_total_file_counts_empty_catalogue_matched_is_zero_not_none(
+    catalog_db: Path,
+) -> None:
     """Regression guard for the COUNT → SUM(CASE ...) rewrite: SUM over zero rows is NULL in
     SQL, unlike COUNT which is 0. An empty catalogue must still report ``matched == 0``."""
     matched, total = _counts(catalog_db)
@@ -1028,7 +1037,7 @@ def test_target_scope_keeps_non_catalog_tier(catalog_db: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tests: sortable list_files via the fixed column allowlist + best_tier_rank
+# Tests: sortable read_catalog_entries via the fixed column allowlist + best_tier_rank
 # ---------------------------------------------------------------------------
 
 
@@ -1077,7 +1086,7 @@ def _hashes(rows: tuple[CatalogEntry, ...]) -> list[str]:
         ("tier", "asc", ["c", "a", "b"]),
     ],
 )
-def test_list_files_sort_orders(
+def test_read_catalog_entries_sort_orders(
     catalog_db: Path, sort: str, direction: str, expected: list[str]
 ) -> None:
     _seed_sortable(catalog_db)
@@ -1085,7 +1094,7 @@ def test_list_files_sort_orders(
     assert _hashes(rows) == [c * 32 for c in expected]
 
 
-def test_list_files_sort_tiebreak_is_file_id(catalog_db: Path) -> None:
+def test_read_catalog_entries_sort_tiebreak_is_file_id(catalog_db: Path) -> None:
     """Two files with the same sort key keep a deterministic order via the file_id tiebreak."""
     with sqlite3.connect(catalog_db) as conn:
         for h in ("a" * 32, "e" * 32):  # inserted a-first on purpose
@@ -1108,7 +1117,7 @@ def test_every_sort_has_its_column() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tests: tier_counts, the tier facet's live counts (spec §3.3)
+# Tests: read_file_count_by_tier, the tier facet's live counts (spec §3.3)
 # ---------------------------------------------------------------------------
 
 
@@ -1123,27 +1132,27 @@ def _seed_mixed_tier_file(db: Path) -> None:
             insert_decision(conn, h, tid, tier, decided_at="2026-01-02T10:00:00.000000+00:00")
 
 
-def test_tier_counts_groups_by_tier(catalog_db: Path) -> None:
+def test_read_file_count_by_tier_groups_by_tier(catalog_db: Path) -> None:
     _seed_sortable(catalog_db)  # one file per tier
-    counts = _tier_counts(catalog_db)
+    counts = _read_file_count_by_tier(catalog_db)
     assert counts == {"download": 1, "notify": 1, "catalog": 1}
 
 
-def test_tier_counts_empty_catalogue_is_empty(catalog_db: Path) -> None:
-    counts = _tier_counts(catalog_db)
+def test_read_file_count_by_tier_empty_catalogue_is_empty(catalog_db: Path) -> None:
+    counts = _read_file_count_by_tier(catalog_db)
     assert counts == {}
 
 
-def test_tier_counts_multi_tier_file_counts_in_both(catalog_db: Path) -> None:
+def test_read_file_count_by_tier_multi_tier_file_counts_in_both(catalog_db: Path) -> None:
     _seed_mixed_tier_file(catalog_db)
-    counts = _tier_counts(catalog_db)
+    counts = _read_file_count_by_tier(catalog_db)
     assert counts == {"download": 1, "notify": 1}
 
 
-def test_tier_counts_respects_query_filter(catalog_db: Path) -> None:
-    """The facet honours the OTHER filters (here ``query``): only alpha.avi (download) matches."""
+def test_read_file_count_by_tier_respects_search_text(catalog_db: Path) -> None:
+    """The facet honours the OTHER filters (here ``search_text``): only alpha.avi matches."""
     _seed_sortable(catalog_db)
-    counts = _tier_counts(catalog_db, search_text="alpha")
+    counts = _read_file_count_by_tier(catalog_db, search_text="alpha")
     assert counts == {"download": 1}
 
 
@@ -1161,7 +1170,7 @@ def _seed_file_without_observation(db: Path) -> str:
     return h
 
 
-def test_list_files_lists_file_with_no_observation(catalog_db: Path) -> None:
+def test_read_catalog_entries_lists_file_with_no_observation(catalog_db: Path) -> None:
     """A file with no observation is still listed, with none.
 
     This is THE case where the two shapes of ``latest_obs`` differ internally: the seek form
@@ -1175,21 +1184,25 @@ def test_list_files_lists_file_with_no_observation(catalog_db: Path) -> None:
     assert rows[0].latest_observation is None
 
 
-def test_count_files_counts_file_with_no_observation(catalog_db: Path) -> None:
+def test_read_matched_and_total_file_counts_counts_file_with_no_observation(
+    catalog_db: Path,
+) -> None:
     """It counts in ``total`` (it is a catalogued file) but not in ``matched`` (no decision)."""
     _seed_file_without_observation(catalog_db)
     matched, total = _counts(catalog_db)
     assert (matched, total) == (0, 1)
 
 
-def test_list_files_query_filter_excludes_file_with_no_observation(catalog_db: Path) -> None:
+def test_read_catalog_entries_search_text_filter_excludes_file_with_no_observation(
+    catalog_db: Path,
+) -> None:
     """No observation means no filename to match: ``NULL LIKE ?`` is NULL, so the row drops."""
     _seed_file_without_observation(catalog_db)
     rows = _entries(catalog_db, search_text="keroro")
     assert rows == ()
 
 
-def test_list_files_observation_tie_break_on_the_newest_variant(catalog_db: Path) -> None:
+def test_read_catalog_entries_observation_tie_break_on_the_newest_variant(catalog_db: Path) -> None:
     """Two observations at the SAME ``observed_at``: the higher ``variant_id`` wins (D4)."""
     h = "a" * 32
     with sqlite3.connect(catalog_db) as conn:
@@ -1220,11 +1233,22 @@ def test_file_history_of_a_file_never_seen_has_no_observation(catalog_db: Path) 
     ("label", "sql"),
     [
         ("latest_observation alone", _SQL_CTES + LATEST_OBSERVATION_PROBE),
-        ("list_files", _SQL_LIST_FILES_BASE + "ORDER BY obs.observed_at DESC LIMIT 50"),
-        ("count_files", _SQL_COUNT_FILES_BASE + _JOIN_LATEST_OBSERVATION + _JOIN_DECISIONS),
-        ("tier_counts", _SQL_TIER_COUNTS_BASE + _JOIN_LATEST_OBSERVATION + "GROUP BY ld.tier"),
+        ("read_catalog_entries", _SQL_LIST_FILES_BASE + "ORDER BY obs.observed_at DESC LIMIT 50"),
+        (
+            "read_matched_and_total_file_counts",
+            _SQL_COUNT_FILES_BASE + _JOIN_LATEST_OBSERVATION + _JOIN_DECISIONS,
+        ),
+        (
+            "read_file_count_by_tier",
+            _SQL_TIER_COUNTS_BASE + _JOIN_LATEST_OBSERVATION + "GROUP BY ld.tier",
+        ),
     ],
-    ids=["latest_observation alone", "list_files", "count_files", "tier_counts"],
+    ids=[
+        "latest_observation alone",
+        "read_catalog_entries",
+        "read_matched_and_total_file_counts",
+        "read_file_count_by_tier",
+    ],
 )
 def test_latest_obs_seeks_per_file_instead_of_scanning_observations(
     catalog_db: Path, label: str, sql: str
@@ -1241,19 +1265,21 @@ def test_latest_obs_seeks_per_file_instead_of_scanning_observations(
 
 
 _COUNTERS: dict[str, Callable[[SqliteCatalogFileReader, str | None], object]] = {
-    "count_files": lambda reader, search_text: reader.read_matched_and_total_file_counts(
-        target_id=None, tier=None, search_text=search_text
+    "read_matched_and_total_file_counts": lambda reader, search_text: (
+        reader.read_matched_and_total_file_counts(
+            target_id=None, tier=None, search_text=search_text
+        )
     ),
-    "tier_counts": lambda reader, search_text: reader.read_file_count_by_tier(
+    "read_file_count_by_tier": lambda reader, search_text: reader.read_file_count_by_tier(
         target_id=None, search_text=search_text
     ),
 }
 
 
 @pytest.mark.parametrize("counter", sorted(_COUNTERS))
-@pytest.mark.parametrize("query", [None, "keroro"])
+@pytest.mark.parametrize("search_text", [None, "keroro"])
 def test_counters_read_observations_only_for_a_name_filter(
-    catalog_db: Path, counter: str, query: str | None
+    catalog_db: Path, counter: str, search_text: str | None
 ) -> None:
     """The default /files page counts without a per-file latest observation (D18)."""
     reader_provider = ReaderProvider(catalog_db)
@@ -1265,5 +1291,5 @@ def test_counters_read_observations_only_for_a_name_filter(
         return sqlite3.SQLITE_OK
 
     reader_provider.connection().set_authorizer(record)
-    _COUNTERS[counter](SqliteCatalogFileReader(reader_provider), query)
-    assert ("observations" in tables) is (query is not None)
+    _COUNTERS[counter](SqliteCatalogFileReader(reader_provider), search_text)
+    assert ("observations" in tables) is (search_text is not None)
