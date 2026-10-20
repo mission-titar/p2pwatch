@@ -25,8 +25,8 @@ from p2pwatch.ports.driven.catalog import (
 from p2pwatch.ports.driven.clock import WallClock
 from p2pwatch.ports.driven.logger import Logger
 from p2pwatch.ports.driven.repository_errors import RepositoryError
-from p2pwatch.ports.driven.telemetry import Telemetry
-from p2pwatch.ports.driven.wake_hub import WakeHub
+from p2pwatch.ports.driven.telemetry import EventEmitter
+from p2pwatch.ports.driven.waker import Waker
 
 # One INFO progress line per this many files, so a long sweep visibly advances.
 _PROGRESS_EVERY = 200
@@ -52,8 +52,8 @@ async def reevaluate_catalog(
     decision_reader: DecisionReader,
     catalog_scanner: CatalogScanner,
     engine: MatchingEngine,
-    wake_hub: WakeHub,
-    telemetry: Telemetry,
+    waker: Waker,
+    event_emitter: EventEmitter,
     wall_clock: WallClock,
     logger: Logger,
     node_id: str,
@@ -77,8 +77,8 @@ async def reevaluate_catalog(
                 decision_writer=decision_writer,
                 decision_reader=decision_reader,
                 engine=engine,
-                wake_hub=wake_hub,
-                telemetry=telemetry,
+                waker=waker,
+                event_emitter=event_emitter,
                 wall_clock=wall_clock,
                 node_id=node_id,
             )

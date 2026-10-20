@@ -14,12 +14,12 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability.events import ObservationRecorded
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch_testing.application.fakes import (
+    FakeEventEmitter,
     FakeLogger,
     FakeTime,
+    FakeWaker,
     FakeWallClock,
     LoggedLine,
-    RecordingTelemetry,
-    RecordingWakeHub,
 )
 from p2pwatch_testing.catalog_rows import (
     count_observations,
@@ -54,8 +54,8 @@ async def test_observation_is_always_recorded_even_when_discarded(
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    telemetry = RecordingTelemetry()
-    wake_hub = RecordingWakeHub()
+    event_emitter = FakeEventEmitter()
+    waker = FakeWaker()
     changed = await record_observation(
         _reported_file(_HASH_DISCARD, "random.txt"),
         observation_writer=catalog,
@@ -63,8 +63,8 @@ async def test_observation_is_always_recorded_even_when_discarded(
         decision_writer=catalog,
         decision_reader=catalog,
         engine=engine,
-        wake_hub=wake_hub,
-        telemetry=telemetry,
+        waker=waker,
+        event_emitter=event_emitter,
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
@@ -74,7 +74,7 @@ async def test_observation_is_always_recorded_even_when_discarded(
     assert changed == 0
     assert count_observations(catalog_connection) == 1
     assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 0
-    assert wake_hub.woken_subjects == []
+    assert waker.woken_subjects == []
 
 
 @pytest.mark.asyncio
@@ -91,8 +91,8 @@ async def test_the_observation_carries_the_clocks_instant(
         decision_writer=catalog,
         decision_reader=catalog,
         engine=engine,
-        wake_hub=RecordingWakeHub(),
-        telemetry=RecordingTelemetry(),
+        waker=FakeWaker(),
+        event_emitter=FakeEventEmitter(),
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
@@ -110,8 +110,8 @@ async def test_new_verdict_is_persisted_and_nudged(
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    telemetry = RecordingTelemetry()
-    wake_hub = RecordingWakeHub()
+    event_emitter = FakeEventEmitter()
+    waker = FakeWaker()
     changed = await record_observation(
         _reported_file(_HASH_DL, _DL_NAME),
         observation_writer=catalog,
@@ -119,8 +119,8 @@ async def test_new_verdict_is_persisted_and_nudged(
         decision_writer=catalog,
         decision_reader=catalog,
         engine=engine,
-        wake_hub=wake_hub,
-        telemetry=telemetry,
+        waker=waker,
+        event_emitter=event_emitter,
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
@@ -133,8 +133,8 @@ async def test_new_verdict_is_persisted_and_nudged(
     )
     assert observation_node_ids(catalog_connection) == decision_node_ids(catalog_connection)
     assert decision_node_ids(catalog_connection) == {_NODE}
-    assert telemetry.node_ids == {_NODE}
-    assert wake_hub.woken_subjects == [DOWNLOAD_WAKE_SUBJECT]
+    assert event_emitter.node_ids == {_NODE}
+    assert waker.woken_subjects == [DOWNLOAD_WAKE_SUBJECT]
 
 
 @pytest.mark.asyncio
@@ -145,8 +145,8 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
     fake_time: FakeTime,
     wall_clock: FakeWallClock,
 ) -> None:
-    telemetry = RecordingTelemetry()
-    wake_hub = RecordingWakeHub()
+    event_emitter = FakeEventEmitter()
+    waker = FakeWaker()
     reported_file = _reported_file(_HASH_CAT, "keroro something.avi")
     assert (
         await record_observation(
@@ -156,8 +156,8 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
             decision_writer=catalog,
             decision_reader=catalog,
             engine=engine,
-            wake_hub=wake_hub,
-            telemetry=telemetry,
+            waker=waker,
+            event_emitter=event_emitter,
             wall_clock=wall_clock,
             client_name="amuled",
             channel="ed2k",
@@ -176,8 +176,8 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
             decision_writer=catalog,
             decision_reader=catalog,
             engine=engine,
-            wake_hub=wake_hub,
-            telemetry=telemetry,
+            waker=waker,
+            event_emitter=event_emitter,
             wall_clock=wall_clock,
             client_name="amuled",
             channel="ed2k",
@@ -189,7 +189,7 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
     assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 1
     # But the observation itself is re-persisted (periodic re-observation = the goal).
     assert count_observations(catalog_connection) == 2
-    assert wake_hub.woken_subjects == []
+    assert waker.woken_subjects == []
 
 
 @pytest.mark.asyncio
@@ -199,8 +199,8 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    telemetry = RecordingTelemetry()
-    wake_hub = RecordingWakeHub()
+    event_emitter = FakeEventEmitter()
+    waker = FakeWaker()
     await record_observation(
         _reported_file(_HASH_DL, _NOTIFY_NAME),
         observation_writer=catalog,
@@ -208,8 +208,8 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
         decision_writer=catalog,
         decision_reader=catalog,
         engine=engine,
-        wake_hub=wake_hub,
-        telemetry=telemetry,
+        waker=waker,
+        event_emitter=event_emitter,
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
@@ -224,8 +224,8 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
         decision_writer=catalog,
         decision_reader=catalog,
         engine=engine,
-        wake_hub=wake_hub,
-        telemetry=telemetry,
+        waker=waker,
+        event_emitter=event_emitter,
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
@@ -240,7 +240,7 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
         ).fetchall()
     ]
     assert tiers == ["notify", "download"]
-    assert wake_hub.woken_subjects == [DOWNLOAD_WAKE_SUBJECT]
+    assert waker.woken_subjects == [DOWNLOAD_WAKE_SUBJECT]
 
 
 @pytest.mark.asyncio
@@ -255,8 +255,8 @@ async def test_persistence_error_is_absorbed_and_cycle_continues(
         "CREATE TRIGGER boom BEFORE INSERT ON observations"
         " BEGIN SELECT RAISE(ABORT, 'injected failure'); END"
     )
-    telemetry = RecordingTelemetry()
-    wake_hub = RecordingWakeHub()
+    event_emitter = FakeEventEmitter()
+    waker = FakeWaker()
     logger = FakeLogger()
     changed = await record_observation(
         _reported_file(_HASH_DL, _DL_NAME),
@@ -265,8 +265,8 @@ async def test_persistence_error_is_absorbed_and_cycle_continues(
         decision_writer=catalog,
         decision_reader=catalog,
         engine=engine,
-        wake_hub=wake_hub,
-        telemetry=telemetry,
+        waker=waker,
+        event_emitter=event_emitter,
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
@@ -274,7 +274,7 @@ async def test_persistence_error_is_absorbed_and_cycle_continues(
         node_id=_NODE,
     )
     assert changed == 0  # absorbed, the cycle continues
-    assert wake_hub.woken_subjects == []
+    assert waker.woken_subjects == []
     assert logger.lines == [  # file= as key=value, like the download side's
         LoggedLine(
             "error",
@@ -290,9 +290,9 @@ async def test_signal_consumer_awaits_the_nudge(
 ) -> None:
     # The hub IS consumed by an await (not dead code, DECISION 9): a consumer sleeps
     # on the subject and is woken by the post-commit wake.
-    telemetry = RecordingTelemetry()
-    wake_hub = RecordingWakeHub()
-    waiter = asyncio.create_task(wake_hub.wait(DOWNLOAD_WAKE_SUBJECT))
+    event_emitter = FakeEventEmitter()
+    waker = FakeWaker()
+    waiter = asyncio.create_task(waker.wait(DOWNLOAD_WAKE_SUBJECT))
     await asyncio.sleep(0)
     assert not waiter.done()
     await record_observation(
@@ -302,8 +302,8 @@ async def test_signal_consumer_awaits_the_nudge(
         decision_writer=catalog,
         decision_reader=catalog,
         engine=engine,
-        wake_hub=wake_hub,
-        telemetry=telemetry,
+        waker=waker,
+        event_emitter=event_emitter,
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
@@ -321,8 +321,8 @@ async def test_download_tier_verdict_also_nudges_the_download_subject(
     wall_clock: FakeWallClock,
 ) -> None:
     # a NEW "download"-tier verdict wakes the "download" subject (the download loop, DECISION DV9).
-    telemetry = RecordingTelemetry()
-    wake_hub = RecordingWakeHub()
+    event_emitter = FakeEventEmitter()
+    waker = FakeWaker()
     changed = await record_observation(
         _reported_file(_HASH_DL, _DL_NAME),
         observation_writer=catalog,
@@ -330,8 +330,8 @@ async def test_download_tier_verdict_also_nudges_the_download_subject(
         decision_writer=catalog,
         decision_reader=catalog,
         engine=engine,
-        wake_hub=wake_hub,
-        telemetry=telemetry,
+        waker=waker,
+        event_emitter=event_emitter,
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
@@ -339,7 +339,7 @@ async def test_download_tier_verdict_also_nudges_the_download_subject(
         node_id=_NODE,
     )
     assert changed == 1
-    assert wake_hub.woken_subjects == [DOWNLOAD_WAKE_SUBJECT]
+    assert waker.woken_subjects == [DOWNLOAD_WAKE_SUBJECT]
 
 
 @pytest.mark.asyncio
@@ -349,8 +349,8 @@ async def test_non_download_tier_verdict_does_not_nudge_the_download_subject(
     wall_clock: FakeWallClock,
 ) -> None:
     # a "catalog"-tier verdict NEVER wakes the "download" subject.
-    telemetry = RecordingTelemetry()
-    wake_hub = RecordingWakeHub()
+    event_emitter = FakeEventEmitter()
+    waker = FakeWaker()
     changed = await record_observation(
         _reported_file(_HASH_CAT, "keroro something.avi"),
         observation_writer=catalog,
@@ -358,8 +358,8 @@ async def test_non_download_tier_verdict_does_not_nudge_the_download_subject(
         decision_writer=catalog,
         decision_reader=catalog,
         engine=engine,
-        wake_hub=wake_hub,
-        telemetry=telemetry,
+        waker=waker,
+        event_emitter=event_emitter,
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
@@ -367,15 +367,15 @@ async def test_non_download_tier_verdict_does_not_nudge_the_download_subject(
         node_id=_NODE,
     )
     assert changed == 1
-    assert wake_hub.woken_subjects == []
+    assert waker.woken_subjects == []
 
 
 @pytest.mark.asyncio
 async def test_emits_observation_then_decision_on_change(
     catalog: SqliteCatalogRepository, engine: MatchingEngine, wall_clock: FakeWallClock
 ) -> None:
-    telemetry = RecordingTelemetry()
-    wake_hub = RecordingWakeHub()
+    event_emitter = FakeEventEmitter()
+    waker = FakeWaker()
     reported_file = _reported_file(_HASH_DL, _DL_NAME)  # matches at tier=download
     await record_observation(
         reported_file,
@@ -384,24 +384,24 @@ async def test_emits_observation_then_decision_on_change(
         decision_writer=catalog,
         decision_reader=catalog,
         engine=engine,
-        wake_hub=wake_hub,
-        telemetry=telemetry,
+        waker=waker,
+        event_emitter=event_emitter,
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
         logger=FakeLogger(),
         node_id=_NODE,
     )
-    kinds = [type(e).__name__ for e in telemetry.events]
+    kinds = [type(e).__name__ for e in event_emitter.events]
     assert kinds == ["ObservationRecorded", "DecisionsRecorded"]
-    assert telemetry.events[0] == ObservationRecorded(client_name="amuled", channel="ed2k")
+    assert event_emitter.events[0] == ObservationRecorded(client_name="amuled", channel="ed2k")
 
 
 @pytest.mark.asyncio
 async def test_emits_only_observation_when_discarded(
     catalog: SqliteCatalogRepository, engine: MatchingEngine, wall_clock: FakeWallClock
 ) -> None:
-    telemetry = RecordingTelemetry()
+    event_emitter = FakeEventEmitter()
     reported_file = _reported_file(_HASH_DISCARD, "random.txt")  # discarded by the engine
     await record_observation(
         reported_file,
@@ -410,15 +410,15 @@ async def test_emits_only_observation_when_discarded(
         decision_writer=catalog,
         decision_reader=catalog,
         engine=engine,
-        wake_hub=RecordingWakeHub(),
-        telemetry=telemetry,
+        waker=FakeWaker(),
+        event_emitter=event_emitter,
         wall_clock=wall_clock,
         client_name="amuled",
         channel="kad",
         logger=FakeLogger(),
         node_id=_NODE,
     )
-    assert [type(e).__name__ for e in telemetry.events] == ["ObservationRecorded"]
+    assert [type(e).__name__ for e in event_emitter.events] == ["ObservationRecorded"]
 
 
 @pytest.mark.asyncio
@@ -428,8 +428,8 @@ async def test_multi_segment_observation_records_two_rows(
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    telemetry = RecordingTelemetry()
-    wake_hub = RecordingWakeHub()
+    event_emitter = FakeEventEmitter()
+    waker = FakeWaker()
     changed = await record_observation(
         _reported_file(_HASH_DL, "Keroro 062 teletoon.avi"),
         observation_writer=catalog,
@@ -437,8 +437,8 @@ async def test_multi_segment_observation_records_two_rows(
         decision_writer=catalog,
         decision_reader=catalog,
         engine=engine,
-        wake_hub=wake_hub,
-        telemetry=telemetry,
+        waker=waker,
+        event_emitter=event_emitter,
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",

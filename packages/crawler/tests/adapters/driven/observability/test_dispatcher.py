@@ -9,10 +9,10 @@ from p2pwatch.adapters.driven.observability.dispatcher import ObservabilityDispa
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability import events as ev
 from p2pwatch.domain.observability.policy import Audience, MetricInstruction, Severity
-from p2pwatch.ports.driven.telemetry import MetricsSink, Notifier
+from p2pwatch.ports.driven.telemetry import MetricsRecorder, Notifier
 
 
-class _RecordingSink:
+class FakeMetricsRecorder(MetricsRecorder):
     def __init__(self) -> None:
         self.applied: list[MetricInstruction] = []
 
@@ -20,7 +20,7 @@ class _RecordingSink:
         self.applied.append(instruction)
 
 
-class _RecordingNotifier:
+class _RecordingNotifier(Notifier):
     def __init__(self) -> None:
         self.calls: list[tuple[Audience, str, str, Severity]] = []
         self.node_ids: list[str] = []
@@ -32,14 +32,14 @@ class _RecordingNotifier:
         self.node_ids.append(node_id)
 
 
-class _RaisingNotifier:
+class _RaisingNotifier(Notifier):
     async def notify(
         self, audience: Audience, title: str, body: str, severity: Severity, node_id: str
     ) -> None:
         raise RuntimeError("canal mort")
 
 
-class _HangingNotifier:
+class _HangingNotifier(Notifier):
     async def notify(
         self, audience: Audience, title: str, body: str, severity: Severity, node_id: str
     ) -> None:
@@ -53,34 +53,33 @@ _COMPLETED = ev.DownloadCompleted(
 
 
 def _dispatcher(
-    sink: MetricsSink, notifier: Notifier, timeout: float = 5.0
+    metrics_recorder: MetricsRecorder, notifier: Notifier, timeout: float = 5.0
 ) -> ObservabilityDispatcher:
-    # _RecordingSink/_RecordingNotifier/… structurally satisfy MetricsSink/Notifier.
     return ObservabilityDispatcher(
-        metrics=sink, notifier=notifier, notification_timeout_seconds=timeout
+        metrics_recorder=metrics_recorder, notifier=notifier, notification_timeout_seconds=timeout
     )
 
 
 @pytest.mark.asyncio
 async def test_logs_and_applies_metrics_no_audience() -> None:
-    sink, notifier = _RecordingSink(), _RecordingNotifier()
-    await _dispatcher(sink, notifier).emit(
+    metrics_recorder, notifier = FakeMetricsRecorder(), _RecordingNotifier()
+    await _dispatcher(metrics_recorder, notifier).emit(
         ev.ObservationRecorded(client_name="amuled", channel="ed2k"), _NODE
     )
-    assert [m.name.value for m in sink.applied] == ["p2pwatch_observations"]
+    assert [m.name.value for m in metrics_recorder.applied] == ["p2pwatch_observations"]
     assert notifier.calls == []  # ObservationRecorded has no audience
 
 
 @pytest.mark.asyncio
 async def test_two_metrics_one_event() -> None:
-    sink, notifier = _RecordingSink(), _RecordingNotifier()
-    await _dispatcher(sink, notifier).emit(
+    metrics_recorder, notifier = FakeMetricsRecorder(), _RecordingNotifier()
+    await _dispatcher(metrics_recorder, notifier).emit(
         ev.ChannelStatusSampled(
             client_name="amuled", channel="kad", connected=True, connectable=True
         ),
         _NODE,
     )
-    assert [m.name.value for m in sink.applied] == [
+    assert [m.name.value for m in metrics_recorder.applied] == [
         "p2pwatch_channel_connected",
         "p2pwatch_channel_connectable",
     ]
@@ -88,8 +87,10 @@ async def test_two_metrics_one_event() -> None:
 
 @pytest.mark.asyncio
 async def test_notifies_the_message_when_there_is_no_separate_body() -> None:
-    sink, notifier = _RecordingSink(), _RecordingNotifier()
-    await _dispatcher(sink, notifier).emit(ev.CrawlerStarted(download_enabled=True), _NODE)
+    metrics_recorder, notifier = FakeMetricsRecorder(), _RecordingNotifier()
+    await _dispatcher(metrics_recorder, notifier).emit(
+        ev.CrawlerStarted(download_enabled=True), _NODE
+    )
     assert notifier.calls == [
         (Audience.OPERATIONS, "", "🟢 node online (download on)", Severity.INFO)
     ]
@@ -98,10 +99,10 @@ async def test_notifies_the_message_when_there_is_no_separate_body() -> None:
 
 @pytest.mark.asyncio
 async def test_logs_the_message_but_notifies_the_body(caplog: pytest.LogCaptureFixture) -> None:
-    sink, notifier = _RecordingSink(), _RecordingNotifier()
+    metrics_recorder, notifier = FakeMetricsRecorder(), _RecordingNotifier()
     change = ev.DecisionChange("062A", "Les demoiselles cambrioleuses", None, "download")
     with caplog.at_level(logging.INFO, logger="p2pwatch.observability"):
-        await _dispatcher(sink, notifier).emit(
+        await _dispatcher(metrics_recorder, notifier).emit(
             ev.DecisionsRecorded(
                 FileKey(Network.ED2K, "a" * 32), "Keroro 062.avi", 1024, (change,)
             ),
@@ -115,31 +116,31 @@ async def test_logs_the_message_but_notifies_the_body(caplog: pytest.LogCaptureF
 
 @pytest.mark.asyncio
 async def test_log_level_matches_severity(caplog: pytest.LogCaptureFixture) -> None:
-    sink, notifier = _RecordingSink(), _RecordingNotifier()
+    metrics_recorder, notifier = FakeMetricsRecorder(), _RecordingNotifier()
     with caplog.at_level(logging.DEBUG, logger="p2pwatch.observability"):
-        await _dispatcher(sink, notifier).emit(ev.ClientUnreachable("amuled"), _NODE)
+        await _dispatcher(metrics_recorder, notifier).emit(ev.ClientUnreachable("amuled"), _NODE)
     assert caplog.records[-1].levelno == logging.WARNING
 
 
 @pytest.mark.asyncio
 async def test_a_success_logs_as_info(caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.DEBUG, logger="p2pwatch.observability"):
-        await _dispatcher(_RecordingSink(), _RecordingNotifier()).emit(_COMPLETED, _NODE)
+        await _dispatcher(FakeMetricsRecorder(), _RecordingNotifier()).emit(_COMPLETED, _NODE)
     assert caplog.records[-1].levelno == logging.INFO
 
 
 @pytest.mark.asyncio
 async def test_notification_failure_is_absorbed(caplog: pytest.LogCaptureFixture) -> None:
-    sink = _RecordingSink()
+    metrics_recorder = FakeMetricsRecorder()
     with caplog.at_level(logging.WARNING, logger="p2pwatch.observability"):
-        await _dispatcher(sink, _RaisingNotifier()).emit(_COMPLETED, _NODE)
-    assert sink.applied  # the metric went through despite the notification failure
+        await _dispatcher(metrics_recorder, _RaisingNotifier()).emit(_COMPLETED, _NODE)
+    assert metrics_recorder.applied  # the metric went through despite the notification failure
     assert any("failed" in r.getMessage() for r in caplog.records)
 
 
 @pytest.mark.asyncio
 async def test_notification_timeout_is_absorbed() -> None:
-    sink = _RecordingSink()
+    metrics_recorder = FakeMetricsRecorder()
     # short timeout + hanging notifier → wait_for raises TimeoutError, absorbed.
-    await _dispatcher(sink, _HangingNotifier(), timeout=0.01).emit(_COMPLETED, _NODE)
-    assert sink.applied
+    await _dispatcher(metrics_recorder, _HangingNotifier(), timeout=0.01).emit(_COMPLETED, _NODE)
+    assert metrics_recorder.applied

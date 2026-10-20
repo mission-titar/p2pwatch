@@ -1,6 +1,6 @@
-"""Prometheus sink: applies a ``MetricInstruction`` to a DEDICATED ``CollectorRegistry`` (E-D9).
+"""Applies a ``MetricInstruction`` to a DEDICATED Prometheus ``CollectorRegistry`` (E-D9).
 
-ADAPTER layer (implements ``MetricsSink``). Catalog declared on the INJECTED registry (never
+ADAPTER layer (implements ``MetricsRecorder``). Catalog declared on the INJECTED registry (never
 the global registry) → testable on a throwaway registry, no shared state. Two HOMOGENEOUS maps
 (counters/gauges) indexed by ``MetricName`` → ``apply`` routes on ``kind``. GOTCHA: counters
 are named WITHOUT ``_total`` (added by the lib at exposition time)."""
@@ -10,6 +10,7 @@ from collections.abc import Callable
 from prometheus_client import CollectorRegistry, Counter, Gauge, start_http_server
 
 from p2pwatch.domain.observability.policy import MetricInstruction, MetricName
+from p2pwatch.ports.driven.telemetry import MetricsRecorder
 
 # The stop runs on the event loop, where no shutdown deadline can cut a blocking call.
 _JOIN_TIMEOUT_SECONDS = 1.0
@@ -38,8 +39,8 @@ _GAUGES: tuple[tuple[MetricName, str, tuple[str, ...]], ...] = (
 )
 
 
-class PrometheusSink:
-    """``MetricsSink`` adapter over an injected dedicated registry."""
+class PrometheusMetricsRecorder(MetricsRecorder):
+    """``MetricsRecorder`` adapter over an injected dedicated registry."""
 
     def __init__(self, registry: CollectorRegistry) -> None:
         self._counters = {

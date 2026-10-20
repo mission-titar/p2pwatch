@@ -359,7 +359,7 @@ async def test_search_starts_the_keyword_on_the_channels_search_type(
 
 
 def test_the_client_declares_the_channels_it_searches() -> None:
-    assert _client(FakeAmuleApi()).channels == ("ed2k", "kad")
+    assert _client(FakeAmuleApi()).channels() == ("ed2k", "kad")
 
 
 @pytest.mark.asyncio

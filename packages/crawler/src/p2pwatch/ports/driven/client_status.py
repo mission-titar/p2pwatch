@@ -1,16 +1,19 @@
-"""What the crawler expects from any client that reports its status; reachability is
-``status()`` not raising ``ClientUnreachableError``. Stubs stay on ONE line."""
+"""What the crawler expects from any client that reports its status, and the board of the
+latest readings."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from typing import Protocol
 
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.status_reading import ClientStatus, PublishedReading, StatusReading
 
 
-class StatusClient(Protocol):
-    async def status(self) -> ClientStatus: ...
+class StatusClient(ABC):
+    """Reports the client's status."""
+
+    @abstractmethod
+    async def status(self) -> ClientStatus:
+        """The client's status; reachability is this call not raising ``ClientUnreachableError``."""
 
 
 class ClientStatusWriter(ABC):

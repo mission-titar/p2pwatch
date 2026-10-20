@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
+from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
 
 # The instants the loop's time zero reads on each clock.
 EPOCH = datetime(2026, 10, 9, tzinfo=UTC)
@@ -37,14 +38,14 @@ class _VirtualLoop(asyncio.SelectorEventLoop):
         return self._virtual.time
 
 
-class LoopWallClock:
+class LoopWallClock(WallClock):
     """The running loop's time as the ``WallClock`` port."""
 
     def now(self) -> datetime:
         return EPOCH + timedelta(seconds=asyncio.get_running_loop().time())
 
 
-class LoopMonotonicClock:
+class LoopMonotonicClock(MonotonicClock):
     """The running loop's time as the ``MonotonicClock`` port."""
 
     def now(self) -> MonotonicInstant:

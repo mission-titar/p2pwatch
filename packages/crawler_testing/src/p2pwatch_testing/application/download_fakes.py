@@ -11,14 +11,16 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.source import EarlierPoints, RecordedReading, SourceKey, SourceReading
 from p2pwatch.ports.driven.catalog import DecisionReader, ObservationReader
-from p2pwatch.ports.driven.download_client import DownloadRequest
+from p2pwatch.ports.driven.download_client import DownloadClient, DownloadRequest
 from p2pwatch.ports.driven.downloads import DownloadReader, DownloadWriter
+from p2pwatch.ports.driven.free_space_meter import FreeSpaceMeter
 from p2pwatch.ports.driven.repository_errors import RepositoryError
+from p2pwatch.ports.driven.source_client import SourceClient
 from p2pwatch.ports.driven.source_points import SourcePointReader, SourcePointWriter
 from p2pwatch_testing.application.fakes import FakeTime
 
 
-class FakeDownloadClient:
+class FakeDownloadClient(DownloadClient, SourceClient):
     """Scripted DownloadClient: SCRIPTED ``downloads()`` snapshots, captures the started requests.
 
     It is the SourceClient too, as the real adapter is: ``readings`` per hash, ``source_reads``
@@ -240,7 +242,7 @@ class FakeCatalogReads(DecisionReader, ObservationReader):
         raise AssertionError("the download loop reads no file's filenames")
 
 
-class FakeDiskSpace:
+class FakeFreeSpaceMeter(FreeSpaceMeter):
     """Scripted free space (the real adapter calls shutil.disk_usage)."""
 
     def __init__(self, free: int) -> None:

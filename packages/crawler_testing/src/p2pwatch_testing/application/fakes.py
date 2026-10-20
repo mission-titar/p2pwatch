@@ -1,15 +1,15 @@
 """Deterministic fakes for the application-layer tests (spec §8).
 
 ``FakeSearchClient``: results SCRIPTED per ``search`` call, injectable failures
-(``ClientUnreachableError``/``SearchFailedError``) at ``connect``/``search``.
+(``ClientUnreachableError``/``SearchFailedError``) at ``search``.
 ``FakeTime``: one timeline read through a wall and a monotonic clock.
 ``TickingMonotonicClock``: each read a second after the previous one.
-``FakeRng``: FIXED jitter (determinism). ``FakeLogger``: keeps each line it is given.
+``FakeJitterGenerator``: FIXED jitter (determinism). ``FakeLogger``: keeps each line it is given.
 ``FakeNodeIdStore`` and ``FakeNodeIdGenerator``: the node id's stored and new values.
 ``FakeRunState``: keeps each change; ``FakeCrawlControls``: each control the webui calls.
 ``FakeClientStatusReader``: reads the readings it is given; ``FakeNodeStateReader``, the state.
 ``FakeCrawlSummarizer`` and ``FakeNodeDescriber``: the dashboard's and the node page's use cases.
-``RecordingWakeHub``: captures woken subjects. The repos are the REAL SQLite repos
+``FakeWaker``: captures woken subjects. The repos are the REAL SQLite repos
 (spec §8: "real repos on tmp_path"): no fakes here.
 """
 
@@ -28,11 +28,15 @@ from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.status_reading import PublishedReading
 from p2pwatch.ports.driven.client_errors import ClientUnreachableError, SearchFailedError
 from p2pwatch.ports.driven.client_status import ClientStatusReader
+from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
+from p2pwatch.ports.driven.jitter_generator import JitterGenerator
 from p2pwatch.ports.driven.logger import Logger
 from p2pwatch.ports.driven.node_id import NodeIdGenerator, NodeIdReader, NodeIdWriter
 from p2pwatch.ports.driven.node_state_reader import NodeStateReader
 from p2pwatch.ports.driven.run_state import RunStateReader, RunStateWriter
-from p2pwatch.ports.driven.search_client import SearchAnswer
+from p2pwatch.ports.driven.search_client import SearchAnswer, SearchClient
+from p2pwatch.ports.driven.telemetry import EventEmitter
+from p2pwatch.ports.driven.waker import Waker
 from p2pwatch.ports.driving.console_query_runner import ConsoleQueryOutcome, ConsoleQueryRunner
 from p2pwatch.ports.driving.crawl_pauser import CrawlPauser
 from p2pwatch.ports.driving.crawl_resumer import CrawlResumer
@@ -65,7 +69,7 @@ class FakeTime:
         self._wall_now += step
 
 
-class FakeWallClock:
+class FakeWallClock(WallClock):
     def __init__(self, fake_time: FakeTime) -> None:
         self._fake_time = fake_time
 
@@ -82,7 +86,7 @@ class TickingWallClock(FakeWallClock):
         return moment
 
 
-class FakeMonotonicClock:
+class FakeMonotonicClock(MonotonicClock):
     """Its ``sleep`` advances the timeline at once, without a real wait."""
 
     def __init__(self, fake_time: FakeTime) -> None:
@@ -106,13 +110,10 @@ class TickingMonotonicClock(FakeMonotonicClock):
         return moment
 
 
-class FakeRng:
-    """DETERMINISTIC fake rng: constant jitter (``jitter_value``).
-
-    ``jitter`` returns
-    ``jitter_value`` (0.0 by default → backoff/pause = exact NOMINAL value), but honors
-    the port CONTRACT like the real ``SeededRng``: ``span <= 0`` → ``0.0`` (otherwise the
-    min==max pause test would lie about real behavior)."""
+class FakeJitterGenerator(JitterGenerator):
+    """DETERMINISTIC jitter: ``jitter`` returns ``jitter_value`` (0.0 by default → backoff/pause =
+    exact NOMINAL value), but honors the port CONTRACT like the real ``RandomJitterGenerator``:
+    ``span <= 0`` → ``0.0`` (otherwise the min==max pause test would lie about real behavior)."""
 
     def __init__(self, *, jitter_value: float = 0.0) -> None:
         self._jitter_value = jitter_value
@@ -416,8 +417,8 @@ class FakeConsoleQueryRunner(ConsoleQueryRunner):
         return self._console_query_outcome
 
 
-class RecordingTelemetry:
-    """Fake telemetry: captures emitted events (the test asserts the sequence)."""
+class FakeEventEmitter(EventEmitter):
+    """Captures emitted events (the test asserts the sequence)."""
 
     def __init__(self) -> None:
         self.events: list[Event] = []
@@ -428,8 +429,8 @@ class RecordingTelemetry:
         self.node_ids.add(node_id)
 
 
-class RecordingWakeHub:
-    """Wake hub that RECORDS woken subjects (the test inspects/awaits)."""
+class FakeWaker(Waker):
+    """Waker that RECORDS woken subjects (the test inspects/awaits)."""
 
     def __init__(self) -> None:
         self.woken_subjects: list[str] = []
@@ -445,28 +446,31 @@ class RecordingWakeHub:
         event.clear()
 
 
-class FakeSearchClient:
-    """Scripted client (satisfies SearchClient structurally, spec §8).
+class FakeSearchClient(SearchClient):
+    """Scripted client (spec §8): ``channels`` are the ones it declares.
 
     ``results``: list of reported file tuples, one per ``search`` call (exhausted → empty
     tuple). ``search_failures``: exceptions to raise on the first N ``search`` calls (then
     success). Every answer reports ``skipped_result_count`` skipped results.
     """
 
-    channels: tuple[str, ...] = ("ed2k", "kad")
-
     def __init__(
         self,
         *,
+        channels: tuple[str, ...] = ("ed2k", "kad"),
         results: list[tuple[ReportedFile, ...]] | None = None,
         search_failures: list[Exception] | None = None,
         skipped_result_count: int = 0,
     ) -> None:
+        self._channels = channels
         self._results = list(results or [])
         self._skipped_result_count = skipped_result_count
         self._search_failures = list(search_failures or [])
         self.searches: list[tuple[str, str]] = []
         self.budgets: list[float] = []
+
+    def channels(self) -> tuple[str, ...]:
+        return self._channels
 
     async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
         self.searches.append((keyword, channel))

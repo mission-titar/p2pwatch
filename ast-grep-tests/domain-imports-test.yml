@@ -1,5 +1,6 @@
 id: domain-imports
 valid:
+  - from abc import ABC, abstractmethod
   - import dataclasses
   - import dataclasses, re
   - from collections.abc import Iterable

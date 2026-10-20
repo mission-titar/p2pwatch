@@ -123,6 +123,11 @@ layer = "adapters"
 depends_on = ["p2pwatch.ports.driven.run_state"]
 
 [[modules]]
+path = "p2pwatch.adapters.driven.asyncio_waker"
+layer = "adapters"
+depends_on = ["p2pwatch.ports.driven.waker"]
+
+[[modules]]
 path = "p2pwatch.adapters.driven.in_memory_status_board"
 layer = "adapters"
 depends_on = [
@@ -139,14 +144,12 @@ depends_on = [
 ]
 
 [[modules]]
-path = "p2pwatch.adapters.driven.disk_space_shutil"
-layer = "adapters"
-depends_on = []
-
-[[modules]]
 path = "p2pwatch.adapters.driven.monotonic_clock_asyncio"
 layer = "adapters"
-depends_on = ["p2pwatch.domain"]
+depends_on = [
+  "p2pwatch.domain",
+  "p2pwatch.ports.driven.clock",
+]
 
 [[modules]]
 path = "p2pwatch.adapters.driven.mule_api"
@@ -154,9 +157,11 @@ layer = "adapters"
 depends_on = [
   "p2pwatch.domain",
   "p2pwatch.ports.driven.client_errors",
+  "p2pwatch.ports.driven.client_status",
   "p2pwatch.ports.driven.clock",
   "p2pwatch.ports.driven.download_client",
   "p2pwatch.ports.driven.search_client",
+  "p2pwatch.ports.driven.source_client",
 ]
 
 [[modules]]
@@ -194,9 +199,14 @@ depends_on = [
 ]
 
 [[modules]]
-path = "p2pwatch.adapters.driven.rng_random"
+path = "p2pwatch.adapters.driven.random_jitter_generator"
 layer = "adapters"
-depends_on = []
+depends_on = ["p2pwatch.ports.driven.jitter_generator"]
+
+[[modules]]
+path = "p2pwatch.adapters.driven.shutil_free_space_meter"
+layer = "adapters"
+depends_on = ["p2pwatch.ports.driven.free_space_meter"]
 
 [[modules]]
 path = "p2pwatch.adapters.driven.stdlib_logger"
@@ -209,14 +219,9 @@ layer = "adapters"
 depends_on = ["p2pwatch.ports.driven.node_id"]
 
 [[modules]]
-path = "p2pwatch.adapters.driven.wake_hub_asyncio"
-layer = "adapters"
-depends_on = []
-
-[[modules]]
 path = "p2pwatch.adapters.driven.wall_clock_system"
 layer = "adapters"
-depends_on = []
+depends_on = ["p2pwatch.ports.driven.clock"]
 
 [[modules]]
 path = "p2pwatch.adapters.driving.cli"
@@ -266,15 +271,15 @@ depends_on = [
   "p2pwatch.ports.driven.clock",
   "p2pwatch.ports.driven.config_checker",
   "p2pwatch.ports.driven.coverage_reader",
-  "p2pwatch.ports.driven.disk_space",
   "p2pwatch.ports.driven.download_client",
   "p2pwatch.ports.driven.downloads",
+  "p2pwatch.ports.driven.free_space_meter",
+  "p2pwatch.ports.driven.jitter_generator",
   "p2pwatch.ports.driven.logger",
   "p2pwatch.ports.driven.node_id",
   "p2pwatch.ports.driven.node_state_reader",
   "p2pwatch.ports.driven.policy_fingerprint",
   "p2pwatch.ports.driven.repository_errors",
-  "p2pwatch.ports.driven.rng",
   "p2pwatch.ports.driven.run_state",
   "p2pwatch.ports.driven.search_client",
   "p2pwatch.ports.driven.source_client",
@@ -282,7 +287,7 @@ depends_on = [
   "p2pwatch.ports.driven.source_reader",
   "p2pwatch.ports.driven.sql_executor",
   "p2pwatch.ports.driven.telemetry",
-  "p2pwatch.ports.driven.wake_hub",
+  "p2pwatch.ports.driven.waker",
   "p2pwatch.ports.driving.catalog_merger",
   "p2pwatch.ports.driving.config_validator",
   "p2pwatch.ports.driving.console_query_runner",
@@ -303,17 +308,17 @@ path = "p2pwatch.composition"
 layer = "composition"
 depends_on = [
   "p2pwatch.adapters.driven.asyncio_run_state",
+  "p2pwatch.adapters.driven.asyncio_waker",
   "p2pwatch.adapters.driven.config",
-  "p2pwatch.adapters.driven.disk_space_shutil",
   "p2pwatch.adapters.driven.in_memory_status_board",
   "p2pwatch.adapters.driven.monotonic_clock_asyncio",
   "p2pwatch.adapters.driven.mule_api",
   "p2pwatch.adapters.driven.observability",
   "p2pwatch.adapters.driven.persistence_sqlite",
-  "p2pwatch.adapters.driven.rng_random",
+  "p2pwatch.adapters.driven.random_jitter_generator",
+  "p2pwatch.adapters.driven.shutil_free_space_meter",
   "p2pwatch.adapters.driven.stdlib_logger",
   "p2pwatch.adapters.driven.uuid4_node_id_generator",
-  "p2pwatch.adapters.driven.wake_hub_asyncio",
   "p2pwatch.adapters.driven.wall_clock_system",
   "p2pwatch.adapters.driving.process",
   "p2pwatch.adapters.driving.webui",
@@ -379,11 +384,6 @@ layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driven.disk_space"
-layer = "ports"
-depends_on = []
-
-[[modules]]
 path = "p2pwatch.ports.driven.download_client"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
@@ -392,6 +392,16 @@ depends_on = ["p2pwatch.domain"]
 path = "p2pwatch.ports.driven.downloads"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
+
+[[modules]]
+path = "p2pwatch.ports.driven.free_space_meter"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.ports.driven.jitter_generator"
+layer = "ports"
+depends_on = []
 
 [[modules]]
 path = "p2pwatch.ports.driven.logger"
@@ -415,11 +425,6 @@ depends_on = []
 
 [[modules]]
 path = "p2pwatch.ports.driven.repository_errors"
-layer = "ports"
-depends_on = []
-
-[[modules]]
-path = "p2pwatch.ports.driven.rng"
 layer = "ports"
 depends_on = []
 
@@ -459,7 +464,7 @@ layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.wake_hub"
+path = "p2pwatch.ports.driven.waker"
 layer = "ports"
 depends_on = []
 

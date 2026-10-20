@@ -22,11 +22,11 @@ from p2pwatch.ports.driven.catalog import (
 )
 from p2pwatch.ports.driven.client_errors import ClientUnreachableError, SearchFailedError
 from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
+from p2pwatch.ports.driven.jitter_generator import JitterGenerator
 from p2pwatch.ports.driven.logger import Logger
-from p2pwatch.ports.driven.rng import Rng
 from p2pwatch.ports.driven.search_client import SearchAnswer, SearchClient
-from p2pwatch.ports.driven.telemetry import Telemetry
-from p2pwatch.ports.driven.wake_hub import WakeHub
+from p2pwatch.ports.driven.telemetry import EventEmitter
+from p2pwatch.ports.driven.waker import Waker
 
 # A ceiling, not a duration: above Kad's 45 s and an ed2k sweep, it guards a search never ending.
 SEARCH_BUDGET_SECONDS = 120.0
@@ -63,12 +63,12 @@ class BackoffRegistry:
         policy: BackoffPolicy,
         wall_clock: WallClock,
         monotonic_clock: MonotonicClock,
-        rng: Rng,
+        jitter_generator: JitterGenerator,
     ) -> None:
         self._policy = policy
         self._wall_clock = wall_clock
         self._monotonic_clock = monotonic_clock
-        self._rng = rng
+        self._jitter_generator = jitter_generator
         self._state_by_key: dict[BackoffKey, BackoffState] = {}
         self._deadline_by_key: dict[BackoffKey, MonotonicInstant] = {}
 
@@ -110,7 +110,7 @@ class BackoffRegistry:
             cap=self._policy.cap_seconds,
             factor=self._policy.factor,
         )
-        delay_seconds += self._rng.jitter(self._policy.jitter_ratio * delay_seconds)
+        delay_seconds += self._jitter_generator.jitter(self._policy.jitter_ratio * delay_seconds)
         delay = timedelta(seconds=delay_seconds)
         self._state_by_key[backoff_key] = BackoffState(attempts, self._wall_clock.now(), delay)
         self._deadline_by_key[backoff_key] = self._monotonic_clock.now() + delay
@@ -135,9 +135,9 @@ class WorkerDeps:
     decision_writer: DecisionWriter
     decision_reader: DecisionReader
     engine: MatchingEngine
-    wake_hub: WakeHub
+    waker: Waker
     backoff: "BackoffRegistry"
-    telemetry: Telemetry
+    event_emitter: EventEmitter
     wall_clock: WallClock
     logger: Logger
     observation_logger: Logger  # record_observation's
@@ -155,7 +155,7 @@ class SearchWorker:
     @property
     def channels(self) -> tuple[str, ...]:
         """The channels its client declares."""
-        return self._client.channels
+        return self._client.channels()
 
     def time_until_ready(self, channel: str) -> timedelta:
         """How long until neither the client nor ``channel`` is backed off."""
@@ -168,7 +168,7 @@ class SearchWorker:
     async def _record_observations(self, channel: str, answer: SearchAnswer, node_id: str) -> int:
         """Per-obs pipeline; returns the number of CHANGED verdicts (logging). A
         ``RepositoryError`` per obs is ABSORBED inside ``record_observation`` (spec §7)."""
-        await self._deps.telemetry.emit(
+        await self._deps.event_emitter.emit(
             SearchExecuted(
                 self._client_name, channel, len(answer.reported_files), answer.skipped_result_count
             ),
@@ -183,8 +183,8 @@ class SearchWorker:
                 decision_writer=self._deps.decision_writer,
                 decision_reader=self._deps.decision_reader,
                 engine=self._deps.engine,
-                wake_hub=self._deps.wake_hub,
-                telemetry=self._deps.telemetry,
+                waker=self._deps.waker,
+                event_emitter=self._deps.event_emitter,
                 wall_clock=self._deps.wall_clock,
                 client_name=self._client_name,
                 channel=channel,
@@ -208,7 +208,9 @@ class SearchWorker:
                 error,
                 delay.total_seconds(),
             )
-            await self._deps.telemetry.emit(SearchFailed(self._client_name, task.channel), node_id)
+            await self._deps.event_emitter.emit(
+                SearchFailed(self._client_name, task.channel), node_id
+            )
             return
         except ClientUnreachableError as error:
             delay = self._deps.backoff.record_failure(self._client_backoff_key)
@@ -218,7 +220,7 @@ class SearchWorker:
                 error,
                 delay.total_seconds(),
             )
-            await self._deps.telemetry.emit(ClientUnreachable(self._client_name), node_id)
+            await self._deps.event_emitter.emit(ClientUnreachable(self._client_name), node_id)
             return
         changed = await self._record_observations(task.channel, answer, node_id)
         self._deps.backoff.reset(channel_backoff_key)

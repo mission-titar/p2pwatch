@@ -34,19 +34,20 @@ from p2pwatch.domain.source import (
 )
 from p2pwatch.ports.driven.client_errors import ClientUnreachableError, DownloadRejectedError
 from p2pwatch.ports.driven.download_client import DownloadRequest
+from p2pwatch.ports.driven.free_space_meter import FreeSpaceMeter
 from p2pwatch.ports.driven.repository_errors import RepositoryError
 from p2pwatch_testing.application.download_fakes import (
     FakeCatalogReads,
-    FakeDiskSpace,
     FakeDownloadClient,
     FakeDownloadRepo,
+    FakeFreeSpaceMeter,
     FakeSourceRepo,
 )
 from p2pwatch_testing.application.fakes import (
+    FakeEventEmitter,
     FakeLogger,
     FakeTime,
     LoggedLine,
-    RecordingTelemetry,
     TickingWallClock,
 )
 from p2pwatch_testing.catalog_rows import insert_file, source_variant_node_ids
@@ -109,7 +110,7 @@ def _deps(
     free: int = 1_000_000,
     min_free: int = 0,
     lost_after: timedelta = timedelta(days=1),
-    telemetry: RecordingTelemetry | None = None,
+    event_emitter: FakeEventEmitter | None = None,
     targets: Sequence[TargetSegment] | None = None,
     sources: FakeSourceRepo | SqliteSourceRepository | None = None,
     fake_time: FakeTime | None = None,
@@ -128,7 +129,7 @@ def _deps(
         decision_reader=catalog,
         observation_reader=catalog,
         targets=targets if targets is not None else _TARGETS,
-        disk=FakeDiskSpace(free),
+        free_space_meter=FakeFreeSpaceMeter(free),
         min_free_bytes=min_free,
         lost_after=lost_after,
         poll_interval_seconds=30.0,
@@ -136,7 +137,7 @@ def _deps(
         sources_interval=sources_interval,
         wall_clock=fake_time.wall,
         monotonic_clock=fake_time.monotonic,
-        telemetry=telemetry or RecordingTelemetry(),
+        event_emitter=event_emitter or FakeEventEmitter(),
         logger=logger or FakeLogger(),
     )
 
@@ -194,7 +195,7 @@ async def test_two_segment_candidates_same_hash_dedup_to_one_download() -> None:
             season=2, seasonal_number=12, absolute_number=62, letter="B", title="t", status="lost"
         ),
     )
-    telemetry = RecordingTelemetry()
+    event_emitter = FakeEventEmitter()
     client = FakeDownloadClient()
     downloads = FakeDownloadRepo()
     catalog = FakeCatalogReads(
@@ -205,7 +206,7 @@ async def test_two_segment_candidates_same_hash_dedup_to_one_download() -> None:
         client=client,
         downloads=downloads,
         catalog=catalog,
-        telemetry=telemetry,
+        event_emitter=event_emitter,
         targets=targets,
     )
     await run_download_cycle(deps, _NODE)
@@ -218,7 +219,7 @@ async def test_two_segment_candidates_same_hash_dedup_to_one_download() -> None:
     # `is_tracked` continue-guard were removed, unlike the hash-keyed dict observables
     # above (states/started), which stay collapsed regardless thanks to
     # FakeDownloadRepo.record_queued's own idempotency guard.
-    queued_events = [e for e in telemetry.events if isinstance(e, DownloadQueued)]
+    queued_events = [e for e in event_emitter.events if isinstance(e, DownloadQueued)]
     assert len(queued_events) == 1
 
 
@@ -671,7 +672,7 @@ async def test_completion_and_new_candidate_in_the_same_cycle() -> None:
 
 @pytest.mark.asyncio
 async def test_emits_download_queued() -> None:
-    telemetry = RecordingTelemetry()
+    event_emitter = FakeEventEmitter()
     client = FakeDownloadClient()
     downloads = FakeDownloadRepo()
     catalog = FakeCatalogReads(
@@ -682,16 +683,16 @@ async def test_emits_download_queued() -> None:
         client=client,
         downloads=downloads,
         catalog=catalog,
-        telemetry=telemetry,
+        event_emitter=event_emitter,
     )
     await run_download_cycle(deps, _NODE)
-    assert any(type(e).__name__ == "DownloadQueued" for e in telemetry.events)
-    assert telemetry.node_ids == {_NODE}
+    assert any(type(e).__name__ == "DownloadQueued" for e in event_emitter.events)
+    assert event_emitter.node_ids == {_NODE}
 
 
 @pytest.mark.asyncio
 async def test_emits_download_completed() -> None:
-    telemetry = RecordingTelemetry()
+    event_emitter = FakeEventEmitter()
     client = FakeDownloadClient(listed=[(_status(_A, completed=True),)])
     downloads = FakeDownloadRepo()
     downloads.states[_A] = DownloadState.DOWNLOADING
@@ -700,13 +701,13 @@ async def test_emits_download_completed() -> None:
         client=client,
         downloads=downloads,
         catalog=FakeCatalogReads(),
-        telemetry=telemetry,
+        event_emitter=event_emitter,
     )
     await run_download_cycle(deps, _NODE)
-    completed = [e for e in telemetry.events if isinstance(e, DownloadCompleted)]
+    completed = [e for e in event_emitter.events if isinstance(e, DownloadCompleted)]
     # No observation, no decision left: the hash names the file, the queued row its target.
     assert completed == [DownloadCompleted(_key(_A), _A, (TargetTitle("062A", "t"),))]
-    assert telemetry.node_ids == {_NODE}
+    assert event_emitter.node_ids == {_NODE}
 
 
 @pytest.mark.asyncio
@@ -719,7 +720,7 @@ async def test_a_completion_names_the_clean_file_and_every_download_target_of_th
             season=2, seasonal_number=12, absolute_number=62, letter="B", title="tb", status="lost"
         ),
     )
-    telemetry = RecordingTelemetry()
+    event_emitter = FakeEventEmitter()
     downloads = FakeDownloadRepo()
     downloads.states[_A] = DownloadState.DOWNLOADING
     downloads._target_ids[_A] = "062A"
@@ -732,11 +733,11 @@ async def test_a_completion_names_the_clean_file_and_every_download_target_of_th
         client=FakeDownloadClient(listed=[(_status(_A, completed=True),)]),
         downloads=downloads,
         catalog=catalog,
-        telemetry=telemetry,
+        event_emitter=event_emitter,
         targets=targets,
     )
     await run_download_cycle(deps, _NODE)
-    completed = [e for e in telemetry.events if isinstance(e, DownloadCompleted)]
+    completed = [e for e in event_emitter.events if isinstance(e, DownloadCompleted)]
     assert completed == [
         DownloadCompleted(
             _key(_A), "Keroro é.avi", (TargetTitle("062A", "ta"), TargetTitle("062B", "tb"))
@@ -930,16 +931,16 @@ async def test_already_completed_shared_hash_is_not_recompleted() -> None:
 
     downloads = _NoRecordCompletedRepo()
     downloads.states[_A] = DownloadState.COMPLETED
-    telemetry = RecordingTelemetry()
+    event_emitter = FakeEventEmitter()
     client = FakeDownloadClient(listed=[(_status(_A, completed=True),)])
     deps = _deps(
         client=client,
         downloads=downloads,
         catalog=FakeCatalogReads(),
-        telemetry=telemetry,
+        event_emitter=event_emitter,
     )
     await run_download_cycle(deps, _NODE)
-    assert not any(isinstance(e, DownloadCompleted) for e in telemetry.events)
+    assert not any(isinstance(e, DownloadCompleted) for e in event_emitter.events)
 
 
 @pytest.mark.asyncio
@@ -948,17 +949,17 @@ async def test_failed_shared_hash_is_resurrected_and_notified() -> None:
     # IncomingDir. Finding it shared afterwards is amuled saying it exists: complete + notify.
     downloads = FakeDownloadRepo()
     downloads.states[_A] = DownloadState.FAILED
-    telemetry = RecordingTelemetry()
+    event_emitter = FakeEventEmitter()
     client = FakeDownloadClient(listed=[(_status(_A, completed=True),)])
     deps = _deps(
         client=client,
         downloads=downloads,
         catalog=FakeCatalogReads(),
-        telemetry=telemetry,
+        event_emitter=event_emitter,
     )
     await run_download_cycle(deps, _NODE)
     assert downloads.states[_A] is DownloadState.COMPLETED
-    assert any(isinstance(event, DownloadCompleted) for event in telemetry.events)
+    assert any(isinstance(event, DownloadCompleted) for event in event_emitter.events)
 
 
 @pytest.mark.asyncio
@@ -1083,7 +1084,7 @@ async def test_presence_repo_failure_is_absorbed_and_candidates_still_run() -> N
 async def test_an_unmeasurable_output_directory_admits_nothing_and_does_not_raise() -> None:
     # A missing output mount must not take the crawler down: it also catalogues, which is the
     # primary mission. Refusing every candidate is the conservative degradation.
-    class _BrokenDisk:
+    class _BrokenDisk(FreeSpaceMeter):
         def free_bytes(self) -> int:
             raise FileNotFoundError("/data/downloads")
 
@@ -1093,52 +1094,52 @@ async def test_an_unmeasurable_output_directory_admits_nothing_and_does_not_rais
         candidates=(_candidate(_A, "062A"),),
         observations={_A: _observation(_A, "x", 100)},
     )
-    telemetry = RecordingTelemetry()
-    deps = _deps(client=client, downloads=downloads, catalog=catalog, telemetry=telemetry)
-    deps.disk = _BrokenDisk()
+    event_emitter = FakeEventEmitter()
+    deps = _deps(client=client, downloads=downloads, catalog=catalog, event_emitter=event_emitter)
+    deps.free_space_meter = _BrokenDisk()
     await run_download_cycle(deps, _NODE)
     assert client.started == []
     assert _A not in downloads.states
-    assert not [e for e in telemetry.events if isinstance(e, FreeSpaceSampled | DiskSpaceLow)]
+    assert not [e for e in event_emitter.events if isinstance(e, FreeSpaceSampled | DiskSpaceLow)]
 
 
 @pytest.mark.asyncio
 async def test_each_cycle_reports_the_measured_free_space() -> None:
-    telemetry = RecordingTelemetry()
+    event_emitter = FakeEventEmitter()
     deps = _deps(
         client=FakeDownloadClient(),
         downloads=FakeDownloadRepo(),
         catalog=FakeCatalogReads(),
         free=4_242,
-        telemetry=telemetry,
+        event_emitter=event_emitter,
     )
     await run_download_cycle(deps, _NODE)
-    assert FreeSpaceSampled(free_bytes=4_242) in telemetry.events
+    assert FreeSpaceSampled(free_bytes=4_242) in event_emitter.events
 
 
 @pytest.mark.asyncio
 async def test_low_disk_warns_once_per_crossing_and_rearms_at_the_floor() -> None:
-    telemetry = RecordingTelemetry()
-    disk = FakeDiskSpace(500)
+    event_emitter = FakeEventEmitter()
+    free_space_meter = FakeFreeSpaceMeter(500)
     deps = _deps(
         client=FakeDownloadClient(),
         downloads=FakeDownloadRepo(),
         catalog=FakeCatalogReads(),
         min_free=600,
-        telemetry=telemetry,
+        event_emitter=event_emitter,
     )
-    deps.disk = disk
+    deps.free_space_meter = free_space_meter
     warnings_per_cycle: list[int] = []
     for free in (500, 400, 600, 599):  # cross down, stay low, back AT the floor, cross again
-        disk.free = free
-        before = len(telemetry.events)
+        free_space_meter.free = free
+        before = len(event_emitter.events)
         await run_download_cycle(deps, _NODE)
         warnings_per_cycle.append(
-            sum(isinstance(e, DiskSpaceLow) for e in telemetry.events[before:])
+            sum(isinstance(e, DiskSpaceLow) for e in event_emitter.events[before:])
         )
     assert warnings_per_cycle == [1, 0, 0, 1]
-    assert DiskSpaceLow(free_bytes=500, min_free_bytes=600) in telemetry.events
-    assert telemetry.node_ids == {_NODE}
+    assert DiskSpaceLow(free_bytes=500, min_free_bytes=600) in event_emitter.events
+    assert event_emitter.node_ids == {_NODE}
 
 
 @pytest.mark.asyncio
@@ -1506,23 +1507,25 @@ async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
         candidates=(_candidate(_A, "062A"),),
         best={_A: _observation(_A, "Keroro 062.avi", 1)},
     )
-    telemetry = RecordingTelemetry()
+    event_emitter = FakeEventEmitter()
     client = FakeDownloadClient(listed=[(_status(_A), _status(_B))])
     deps = _deps(
         client=client,
         downloads=_tracking(_A, _B),
         catalog=catalog,
         sources=sources,
-        telemetry=telemetry,
+        event_emitter=event_emitter,
     )
     await run_download_cycle(deps, _NODE)
-    alerts = [e for e in telemetry.events if isinstance(e, SourceFirstUseful | SourceReappeared)]
+    alerts = [
+        e for e in event_emitter.events if isinstance(e, SourceFirstUseful | SourceReappeared)
+    ]
     assert alerts == [
         SourceFirstUseful(
             _PEER, "AnimuseeFMR", _key(_A), "Keroro 062.avi", (TargetTitle("062A", "t"),)
         )
     ]
-    assert telemetry.node_ids == {_NODE}
+    assert event_emitter.node_ids == {_NODE}
 
 
 @pytest.mark.asyncio
@@ -1543,20 +1546,22 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
     sources = FakeSourceRepo(kept=kept, history=history)
     downloads = _tracking(_A, _B)
     downloads._target_ids[_B] = "063A"  # queued for it, no decision left
-    telemetry = RecordingTelemetry()
+    event_emitter = FakeEventEmitter()
     client = FakeDownloadClient(listed=[(_status(_A), _status(_B))], fake_time=fake_time)
     deps = _deps(
         client=client,
         downloads=downloads,
         catalog=FakeCatalogReads(),
         sources=sources,
-        telemetry=telemetry,
+        event_emitter=event_emitter,
         fake_time=fake_time,
     )
     await run_download_cycle(deps, _NODE)
     assert sources.asked == [(_OTHER_PEER, start), (_PEER, start)]
     assert sources.node_ids == {_NODE}  # the round writes and reads the cycle's node's points
-    alerts = [e for e in telemetry.events if isinstance(e, SourceFirstUseful | SourceReappeared)]
+    alerts = [
+        e for e in event_emitter.events if isinstance(e, SourceFirstUseful | SourceReappeared)
+    ]
     assert alerts == [
         SourceReappeared(_PEER, "AnimuseeFMR", _key(_B), _B, (TargetTitle("063A", "t2"),), 46800.0)
     ]
@@ -1565,18 +1570,20 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
 @pytest.mark.asyncio
 async def test_a_reading_without_a_source_id_raises_nothing() -> None:
     sources = FakeSourceRepo(kept={_A: (RecordedReading(None, "peer", SourceRole.QUEUED),)})
-    telemetry = RecordingTelemetry()
+    event_emitter = FakeEventEmitter()
     client = FakeDownloadClient(listed=[(_status(_A),)])
     deps = _deps(
         client=client,
         downloads=_tracking(_A),
         catalog=FakeCatalogReads(),
         sources=sources,
-        telemetry=telemetry,
+        event_emitter=event_emitter,
     )
     await run_download_cycle(deps, _NODE)
     assert sources.asked == []
-    assert not any(isinstance(e, SourceFirstUseful | SourceReappeared) for e in telemetry.events)
+    assert not any(
+        isinstance(e, SourceFirstUseful | SourceReappeared) for e in event_emitter.events
+    )
 
 
 @pytest.mark.asyncio
@@ -1629,19 +1636,21 @@ async def test_the_baseline_is_asked_once_per_round_against_its_start() -> None:
 async def test_a_repo_failure_asking_the_baseline_skips_that_downloads_alerts_only() -> None:
     queued = (RecordedReading(_PEER, "AnimuseeFMR", SourceRole.QUEUED),)
     sources = FakeSourceRepo(kept={_A: queued, _B: queued}, baseline_failures=1)
-    telemetry = RecordingTelemetry()
+    event_emitter = FakeEventEmitter()
     client = FakeDownloadClient(listed=[(_status(_A), _status(_B))])
     deps = _deps(
         client=client,
         downloads=_tracking(_A, _B),
         catalog=FakeCatalogReads(),
         sources=sources,
-        telemetry=telemetry,
+        event_emitter=event_emitter,
     )
     await run_download_cycle(deps, _NODE)
     assert [file for file, *_ in sources.recorded] == [_A, _B]
     assert len(sources.baselines) == 2
-    alerts = [e for e in telemetry.events if isinstance(e, SourceFirstUseful | SourceReappeared)]
+    alerts = [
+        e for e in event_emitter.events if isinstance(e, SourceFirstUseful | SourceReappeared)
+    ]
     assert alerts == [SourceFirstUseful(_PEER, "AnimuseeFMR", _key(_B), _B, ())]
 
 
@@ -1661,24 +1670,28 @@ async def test_the_first_recording_round_is_a_baseline(
     fake_time = FakeTime()
     rounds = [tuple(_status(h) for h in order)] * 2
     client = FakeDownloadClient(listed=rounds, readings=readings, fake_time=fake_time)
-    telemetry = RecordingTelemetry()
+    event_emitter = FakeEventEmitter()
     deps = _deps(
         client=client,
         downloads=_tracking(_A, _B),
         catalog=FakeCatalogReads(),
         sources=SqliteSourceRepository(catalog, timedelta(seconds=30)),
-        telemetry=telemetry,
+        event_emitter=event_emitter,
         fake_time=fake_time,
     )
     await run_download_cycle(deps, _NODE)
-    alerts = [e for e in telemetry.events if isinstance(e, SourceFirstUseful | SourceReappeared)]
+    alerts = [
+        e for e in event_emitter.events if isinstance(e, SourceFirstUseful | SourceReappeared)
+    ]
     assert alerts == []
     assert source_variant_node_ids(catalog) == {_NODE}
     fake_time.advance(timedelta(seconds=30))
     third = SourceKey(Network.ED2K, "d" * 32)
     readings[_A] = (_peer(_PEER), _peer(third))
     await run_download_cycle(deps, _NODE)
-    alerts = [e for e in telemetry.events if isinstance(e, SourceFirstUseful | SourceReappeared)]
+    alerts = [
+        e for e in event_emitter.events if isinstance(e, SourceFirstUseful | SourceReappeared)
+    ]
     assert alerts == [SourceFirstUseful(third, "peer", _key(_A), _A, ())]
     catalog.close()
 
@@ -1698,7 +1711,7 @@ def real_catalog(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 def _real_deps(
     catalog: sqlite3.Connection,
     client: FakeDownloadClient,
-    telemetry: RecordingTelemetry,
+    event_emitter: FakeEventEmitter,
     fake_time: FakeTime,
 ) -> DownloadDeps:
     """``_A`` tracked, its sources written to a real catalog."""
@@ -1708,13 +1721,13 @@ def _real_deps(
         downloads=_tracking(_A),
         catalog=FakeCatalogReads(),
         sources=sources,
-        telemetry=telemetry,
+        event_emitter=event_emitter,
         fake_time=fake_time,
     )
 
 
-def _alerts(telemetry: RecordingTelemetry) -> list[object]:
-    return [e for e in telemetry.events if isinstance(e, SourceFirstUseful | SourceReappeared)]
+def _alerts(event_emitter: FakeEventEmitter) -> list[object]:
+    return [e for e in event_emitter.events if isinstance(e, SourceFirstUseful | SourceReappeared)]
 
 
 @pytest.mark.asyncio
@@ -1723,15 +1736,15 @@ async def test_a_source_useful_at_three_consecutive_reads_is_new_once(
 ) -> None:
     # From its second read on, its earlier useful point is recent: no event (D5).
     readings: dict[str, tuple[SourceReading, ...]] = {_A: (_peer(_OTHER_PEER),)}
-    fake_time, telemetry = FakeTime(), RecordingTelemetry()
+    fake_time, event_emitter = FakeTime(), FakeEventEmitter()
     client = FakeDownloadClient(listed=[(_status(_A),)] * 4, readings=readings, fake_time=fake_time)
-    deps = _real_deps(real_catalog, client, telemetry, fake_time)
+    deps = _real_deps(real_catalog, client, event_emitter, fake_time)
     await run_download_cycle(deps, _NODE)  # the node's first round, a baseline
     readings[_A] = (_peer(_OTHER_PEER), _peer(_PEER))
     for _ in range(3):
         fake_time.advance(timedelta(seconds=30))
         await run_download_cycle(deps, _NODE)
-    assert _alerts(telemetry) == [SourceFirstUseful(_PEER, "peer", _key(_A), _A, ())]
+    assert _alerts(event_emitter) == [SourceFirstUseful(_PEER, "peer", _key(_A), _A, ())]
 
 
 @pytest.mark.asyncio
@@ -1740,9 +1753,9 @@ async def test_a_source_back_after_13_hours_through_an_undetermined_read_reappea
 ) -> None:
     # An unknown point does not end an absence (stage 4, D9).
     readings: dict[str, tuple[SourceReading, ...]] = {_A: (_peer(_PEER),)}
-    fake_time, telemetry = FakeTime(), RecordingTelemetry()
+    fake_time, event_emitter = FakeTime(), FakeEventEmitter()
     client = FakeDownloadClient(listed=[(_status(_A),)] * 3, readings=readings, fake_time=fake_time)
-    deps = _real_deps(real_catalog, client, telemetry, fake_time)
+    deps = _real_deps(real_catalog, client, event_emitter, fake_time)
     last_useful = fake_time.wall.now()
     await run_download_cycle(deps, _NODE)
     fake_time.advance(timedelta(hours=13))
@@ -1752,4 +1765,4 @@ async def test_a_source_back_after_13_hours_through_an_undetermined_read_reappea
     readings[_A] = (_peer(_PEER),)
     absent = (fake_time.wall.now() - last_useful).total_seconds()
     await run_download_cycle(deps, _NODE)
-    assert _alerts(telemetry) == [SourceReappeared(_PEER, "peer", _key(_A), _A, (), absent)]
+    assert _alerts(event_emitter) == [SourceReappeared(_PEER, "peer", _key(_A), _A, (), absent)]

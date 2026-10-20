@@ -1,6 +1,6 @@
-"""Real wake-hub adapter: one ``asyncio.Event`` per subject (orchestration spec §3/§4).
+"""Real waker: one ``asyncio.Event`` per subject (orchestration spec §3/§4).
 
-STRUCTURALLY implements the ``WakeHub`` port. ``wake(subject)`` wakes any
+Implements the ``Waker`` port. ``wake(subject)`` wakes any
 in-flight ``wait(subject)`` then re-arms the event (``set`` followed by the ``clear`` by the
 woken waiter): a consumer sleeping on the subject resumes immediately, then goes back to
 sleep on the next wake. A ``wake`` with NO waiter is harmless (the event stays armed
@@ -13,9 +13,11 @@ synchronously on that same loop, no races). No lock needed.
 
 import asyncio
 
+from p2pwatch.ports.driven.waker import Waker
 
-class AsyncioWakeHub:
-    """In-process wake hub (one ``asyncio.Event`` per subject, created on demand)."""
+
+class AsyncioWaker(Waker):
+    """In-process waker (one ``asyncio.Event`` per subject, created on demand)."""
 
     def __init__(self) -> None:
         self._events: dict[str, asyncio.Event] = {}

@@ -1,7 +1,7 @@
 """Per-observation pipeline: record → delegate to the shared decision helper (spec §4).
 
 APPLICATION layer (orchestration spec §4): orchestrates PORTS (sync repos + pure engine
-+ async wake hub), does no I/O itself. For EACH observation (spec §4):
++ async waker), does no I/O itself. For EACH observation (spec §4):
 
 1. ``record_observation`` ALWAYS (periodic re-observation is the goal, spec §3/§6).
 2. ``rejudge_file`` (``decisions.py``) does the rest: evaluate via the pure
@@ -30,8 +30,8 @@ from p2pwatch.ports.driven.catalog import (
 from p2pwatch.ports.driven.clock import WallClock
 from p2pwatch.ports.driven.logger import Logger
 from p2pwatch.ports.driven.repository_errors import RepositoryError
-from p2pwatch.ports.driven.telemetry import Telemetry
-from p2pwatch.ports.driven.wake_hub import WakeHub
+from p2pwatch.ports.driven.telemetry import EventEmitter
+from p2pwatch.ports.driven.waker import Waker
 
 
 async def record_observation(
@@ -42,8 +42,8 @@ async def record_observation(
     decision_writer: DecisionWriter,
     decision_reader: DecisionReader,
     engine: MatchingEngine,
-    wake_hub: WakeHub,
-    telemetry: Telemetry,
+    waker: Waker,
+    event_emitter: EventEmitter,
     wall_clock: WallClock,
     client_name: str,
     channel: str,
@@ -58,7 +58,7 @@ async def record_observation(
         observation_writer.record_observation(
             FileObservation(reported_file, wall_clock.now()), node_id
         )
-        await telemetry.emit(ObservationRecorded(client_name, channel), node_id)
+        await event_emitter.emit(ObservationRecorded(client_name, channel), node_id)
         return await rejudge_file(
             reported_file.file,
             reported_file.to_candidate(),
@@ -66,8 +66,8 @@ async def record_observation(
             decision_writer=decision_writer,
             decision_reader=decision_reader,
             engine=engine,
-            wake_hub=wake_hub,
-            telemetry=telemetry,
+            waker=waker,
+            event_emitter=event_emitter,
             wall_clock=wall_clock,
             node_id=node_id,
         )
