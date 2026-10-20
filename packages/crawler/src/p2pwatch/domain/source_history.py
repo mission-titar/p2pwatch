@@ -1,5 +1,5 @@
 """A source and a source name as their pages show them: the names a source carried, the sources
-that carried a name, and their sharing periods (stage 4 spec, D13)."""
+that carried a name, and their sharing periods."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass

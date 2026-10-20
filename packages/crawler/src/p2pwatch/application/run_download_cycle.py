@@ -527,7 +527,7 @@ async def _sleep_or_wake(deps: DownloadLoopDeps) -> None:
 async def download_loop(deps: DownloadLoopDeps, node_id: str) -> None:
     """Repeats ``run_download_cycle`` then waits (poll/wake) until shutdown (DECISION D12).
 
-    Wired by ``CrawlerApp`` into the ``TaskGroup``; cancellation (shutdown) lands
+    Launched by ``RunCrawler`` through ``supervise_loops``; cancellation (shutdown) lands
     at the next ``await`` (a poll or the sleep/wake wait), never mid DB write.
     """
     while not deps.shutdown.is_set():

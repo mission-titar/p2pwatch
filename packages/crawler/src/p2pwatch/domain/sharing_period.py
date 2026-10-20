@@ -1,5 +1,4 @@
-"""A source's sharing periods on a file, and the window a page reads them in (source points
-spec, D6)."""
+"""A source's sharing periods on a file, and the window a page reads them in."""
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta

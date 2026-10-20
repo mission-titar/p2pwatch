@@ -1,7 +1,7 @@
 """The catalog's ports: its durable memory, append-only (spec data-model §4).
 
-SYNCHRONOUS (spec §3: a local write is sub-millisecond; if plan C wants to isolate itself, it will
-wrap it in ``asyncio.to_thread`` without touching this layer). The use case gives each write its
+SYNCHRONOUS (spec §3): a local write is sub-millisecond, and a caller that must not block wraps it
+in ``asyncio.to_thread`` without touching this layer. The use case gives each write its
 instant and its ``node_id``: a :class:`FileObservation` carries its ``observed_at``,
 ``record_decision`` receives the file key, the instant and the ``node_id`` ALONGSIDE the decision
 (``MatchDecision`` carries none: a domain without persistence columns).

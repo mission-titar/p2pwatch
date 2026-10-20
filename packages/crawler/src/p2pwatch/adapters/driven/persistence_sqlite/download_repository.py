@@ -9,9 +9,9 @@ connection ``in_transaction``), ``wrap_sqlite_errors``.
 Methods take a ``FileKey``; rows are keyed by its ``file_id`` (stage 2 spec D19). Each write
 stores the instant the use-case gives it. ``record_queued`` is dedup-safe (PK = ``file_id``,
 ``ON CONFLICT DO NOTHING``); ``record_completed`` stamps ``completed_at``; ``mark_seen`` stamps
-``last_seen_at`` and the lifecycle columns (stage 2 spec D12), which ``last_seen_at_by_file`` reads
-back for the lost-download detection; ``tracked_states`` returns the file→state map (the loop
-reconciles the client's list with it).
+``last_seen_at`` and the lifecycle columns (stage 2 spec D12), which ``read_last_seen_at_by_file``
+reads back for the lost-download detection; ``read_tracked_states`` returns the file→state map
+(the loop reconciles the client's list with it).
 """
 
 import sqlite3

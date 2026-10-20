@@ -1,7 +1,7 @@
 """Starlette application factory (webui spec, Task 11).
 
-``build_app`` wires the adapters (SQLite, YAML, templates) and registers all
-routes. The handlers are closures capturing the dependencies: no ``app.state``.
+``build_app`` receives the pages' driving ports and registers every route. The handlers are
+closures capturing the dependencies: no ``app.state``.
 """
 
 import csv
