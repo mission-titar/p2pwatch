@@ -8,9 +8,10 @@ All SQL lives in module constants, parameterized (no value interpolation).
 """
 
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
-from p2pwatch.domain.download.states import DownloadState
+from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
@@ -52,6 +53,10 @@ def _instant(iso: str | None) -> datetime | None:
     return None if iso is None else datetime.fromisoformat(iso)
 
 
+def _optional[Reason: StrEnum](reason_type: type[Reason], stored: str | None) -> Reason | None:
+    return None if stored is None else reason_type(stored)
+
+
 # ---------------------------------------------------------------------------
 # SqliteNodeStateReader
 # ---------------------------------------------------------------------------
@@ -78,8 +83,8 @@ class SqliteNodeStateReader(NodeStateReader):
                 queued_at=datetime.fromisoformat(row["queued_at"]),
                 completed_at=_instant(row["completed_at"]),
                 last_progress_at=_instant(row["last_progress_at"]),
-                waiting_reason=row["waiting_reason"],
-                failure_reason=row["failure_reason"],
+                waiting_reason=_optional(WaitingReason, row["waiting_reason"]),
+                failure_reason=_optional(FailureReason, row["failure_reason"]),
             )
             for row in dl_rows
         )

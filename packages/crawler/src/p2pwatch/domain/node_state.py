@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
-from p2pwatch.domain.download.states import DownloadState
+from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 
@@ -19,8 +19,8 @@ class TrackedDownload:
     queued_at: datetime
     completed_at: datetime | None
     last_progress_at: datetime | None  # None until its bytes grow
-    waiting_reason: str | None
-    failure_reason: str | None
+    waiting_reason: WaitingReason | None
+    failure_reason: FailureReason | None
 
 
 @dataclass(frozen=True)
