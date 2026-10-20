@@ -234,6 +234,39 @@ async def test_a_close_during_a_login_revokes_the_session_it_opened() -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_401_answered_during_close_logs_in_no_more() -> None:
+    api = FakeAmuleApi()
+    status_reached, status_released = asyncio.Event(), asyncio.Event()
+    logout_reached, logout_released = asyncio.Event(), asyncio.Event()
+
+    async def round_trip(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v1/status":
+            status_reached.set()
+            await status_released.wait()
+            return error(401, "unauthorized")
+        if request.url.path == "/api/v1/auth/logout":
+            logout_reached.set()
+            await logout_released.wait()
+        return api.handle(request)
+
+    transport = httpx.MockTransport(round_trip)
+    client = AmuleApiClient(
+        "amuled.test", 4711, PASSWORD, transport=transport, monotonic_clock=api.monotonic_clock
+    )
+    await client.open()
+    call = asyncio.create_task(client.status())
+    await status_reached.wait()
+    closing = asyncio.create_task(client.close())
+    await logout_reached.wait()  # closed, its session not yet dropped
+    status_released.set()
+
+    with pytest.raises(ApiUnreachableError, match="closed"):
+        await call
+    logout_released.set()
+    await closing
+    assert api.logins == 1  # a token minted now would never be revoked
+
+@pytest.mark.asyncio
 async def test_open_logs_in() -> None:
     api = FakeAmuleApi()
     client = _client(api)

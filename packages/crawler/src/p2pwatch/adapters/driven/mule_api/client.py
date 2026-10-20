@@ -313,6 +313,8 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         response = await _send(http, method, path, body=body, params=params)
         if response.status_code == httpx.codes.UNAUTHORIZED:
             async with self._login_lock:
+                if self._closed:
+                    raise ApiUnreachableError("amuleapi client closed")
                 if self._login_count == login_count:  # no other call renewed it meanwhile
                     await self._login(http)
             response = await _send(http, method, path, body=body, params=params)
