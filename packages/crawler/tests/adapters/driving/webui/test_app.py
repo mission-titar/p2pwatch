@@ -31,7 +31,7 @@ from p2pwatch.adapters.driving.webui.displays import DecisionCellDisplay, Hidden
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.console_query import QueryFailure
 from p2pwatch.domain.coverage import TargetCoverage
-from p2pwatch.domain.download.states import DownloadState
+from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
 from p2pwatch.domain.file_history import DatedDecision, FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.interval import Interval
@@ -970,8 +970,8 @@ async def test_node_page_shows_a_downloads_lifecycle() -> None:
         _DOWNLOAD,
         state=DownloadState.FAILED,
         last_progress_at=datetime(2026, 10, 11, tzinfo=UTC),
-        waiting_reason="local_processing",
-        failure_reason="error",
+        waiting_reason=WaitingReason.LOCAL_PROCESSING,
+        failure_reason=FailureReason.ERROR,
     )
     text = await _node_page(replace(_NODE_STATE, downloads=(download,)))
     assert "<td>2026-10-11T00:00:00.000000+00:00</td>" in text

@@ -9,6 +9,7 @@ import io
 import re
 from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime, timedelta
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, assert_never
 from urllib.parse import parse_qs, urlencode
@@ -588,6 +589,10 @@ def _stored_instant(moment: datetime | None) -> str | None:
     return None if moment is None else moment.isoformat(timespec="microseconds")
 
 
+def _reason_text(reason: StrEnum | None) -> str | None:
+    return None if reason is None else reason.value
+
+
 def _node_state_display(node_state: NodeState) -> NodeStateDisplay:
     return NodeStateDisplay(
         node_id=node_state.node_id,
@@ -600,8 +605,8 @@ def _node_state_display(node_state: NodeState) -> NodeStateDisplay:
                 queued_at=download.queued_at.isoformat(timespec="microseconds"),
                 completed_at=_stored_instant(download.completed_at),
                 last_progress_at=_stored_instant(download.last_progress_at),
-                waiting_reason=download.waiting_reason,
-                failure_reason=download.failure_reason,
+                waiting_reason=_reason_text(download.waiting_reason),
+                failure_reason=_reason_text(download.failure_reason),
             )
             for download in node_state.downloads
         ),

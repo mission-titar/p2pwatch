@@ -8,7 +8,7 @@ import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.local_read import SqliteNodeStateReader
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
-from p2pwatch.domain.download.states import DownloadState
+from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
@@ -74,10 +74,14 @@ def test_node_state_populated(local_db: Path) -> None:
             queued_at=datetime(2026, 6, 22, 10, tzinfo=UTC),
             completed_at=None,
             last_progress_at=datetime(2026, 6, 23, 10, tzinfo=UTC),
-            waiting_reason="no_source",
-            failure_reason="error",
+            waiting_reason=WaitingReason.NO_SOURCE,
+            failure_reason=FailureReason.ERROR,
         ),
     )
+    # The domain's members, not their text: a StrEnum compares equal to its value.
+    (download,) = state.downloads
+    assert download.waiting_reason is WaitingReason.NO_SOURCE
+    assert download.failure_reason is FailureReason.ERROR
 
     # backoff, the whole client first, each with its start and its delay
     assert list(state.backoff_state_by_key.items()) == [
