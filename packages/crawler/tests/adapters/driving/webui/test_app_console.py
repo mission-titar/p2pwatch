@@ -1,26 +1,27 @@
-"""TDD tests for the read-only SQL console's ``/console`` + ``/console.csv`` routes (spec §11),
-built with the shared webui fixtures + a no-op control."""
+"""The read-only SQL console's routes, ``/console`` and ``/console.csv`` (spec §11), on a fake of
+``ConsoleQueryRunner``: what the form asks it, and how its outcome renders."""
 
+from dataclasses import replace
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 import yaml
-from httpx import ASGITransport, AsyncClient
+from httpx import ASGITransport, AsyncClient, Response
 from starlette.applications import Starlette
 
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_targets
-from p2pwatch.adapters.driven.persistence_sqlite.sql_console import SqliteSqlExecutor
 from p2pwatch.adapters.driving.webui.app import build_app
-from p2pwatch.application.run_console_query import RunConsoleQuery
-from p2pwatch.domain.console_query import ConsoleDatabase
+from p2pwatch.domain.console_query import ConsoleDatabase, QueryAnswer, QueryFailure
 from p2pwatch.domain.node_state import NodeState
-from p2pwatch.ports.driven.clock import MonotonicClock
+from p2pwatch.ports.driving.console_query_runner import ConsoleQueryOutcome
 from p2pwatch.ports.driving.crawl_summarizer import CrawlSummary
 from p2pwatch.ports.driving.file_lister import FileListing
 from p2pwatch.ports.driving.node_describer import NodeDescription
 from p2pwatch.ports.driving.source_lister import SourceListing
 from p2pwatch_testing.application.fakes import (
+    FakeConsoleQueryRunner,
     FakeCrawlControls,
     FakeCrawlSummarizer,
     FakeFileDescriber,
@@ -29,19 +30,14 @@ from p2pwatch_testing.application.fakes import (
     FakeSourceDescriber,
     FakeSourceLister,
     FakeSourceNameDescriber,
-    FakeTime,
-    TickingMonotonicClock,
+    RunConsoleQueryCall,
 )
-from p2pwatch_testing.catalog_rows import insert_file
-
-pytestmark = pytest.mark.usefixtures("close_test_connections")
 
 _HASH_A = "a" * 32
-# A few hundredths of a second of real time, past a 5 s budget on a TickingMonotonicClock.
-_PAST_BUDGET_SQL = (
-    "WITH RECURSIVE r(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM r WHERE i < 100000)"
-    " SELECT count(*) FROM r"
-)
+_SQL = "SELECT native_id FROM files"
+_ANSWER = QueryAnswer(("native_id",), ((_HASH_A,),), timedelta(milliseconds=3), truncated=False)
+_OUTCOME = ConsoleQueryOutcome(_ANSWER, row_cap=1000)
+_UNKNOWN_DB = "Unknown database. Choose catalog.db or local.db."
 
 # ---------------------------------------------------------------------------
 # Route fixtures
@@ -64,8 +60,7 @@ episodes:
     )
 
 
-def _build(catalog_db: Path, local_db: Path, monotonic_clock: MonotonicClock) -> Starlette:
-    targets = _targets()
+def _build(console_query_runner: FakeConsoleQueryRunner) -> Starlette:
     import p2pwatch.adapters.driving.webui
 
     templates_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "templates"
@@ -73,7 +68,7 @@ def _build(catalog_db: Path, local_db: Path, monotonic_clock: MonotonicClock) ->
     controls = FakeCrawlControls()  # the console routes never call them
     node_state = NodeState(node_id=None, created_at=None, downloads=(), backoff_state_by_key={})
     return build_app(
-        target_segments=targets,
+        target_segments=_targets(),
         templates_dir=templates_dir,
         static_dir=static_dir,
         crawl_pauser=controls,
@@ -86,28 +81,27 @@ def _build(catalog_db: Path, local_db: Path, monotonic_clock: MonotonicClock) ->
         source_lister=FakeSourceLister(SourceListing((), has_next_page=False, source_count=0)),
         source_describer=FakeSourceDescriber(None),
         source_name_describer=FakeSourceNameDescriber(None),
-        console_query_runner=RunConsoleQuery(
-            {
-                ConsoleDatabase.CATALOG: SqliteSqlExecutor(catalog_db, monotonic_clock),
-                ConsoleDatabase.LOCAL: SqliteSqlExecutor(local_db, monotonic_clock),
-            }
-        ),
+        console_query_runner=console_query_runner,
         amule_url="http://localhost:4711",
     )
 
 
-@pytest.fixture
-def console_app(catalog_db: Path, local_db: Path) -> Starlette:
-    """App wired against real (schema-only) DBs, plus one catalog file + one backoff row so
-    both DBs return something readable through the console."""
-    import sqlite3
+async def _get(path: str) -> Response:
+    app = _build(FakeConsoleQueryRunner(_OUTCOME))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        return await client.get(path)
 
-    with sqlite3.connect(catalog_db) as conn:
-        insert_file(conn, _HASH_A, 10)
-    with sqlite3.connect(local_db) as conn:
-        conn.execute("INSERT INTO backoff_states VALUES ('seeded-client', NULL, 1, 0, 1.0)")
-        conn.commit()
-    return _build(catalog_db, local_db, FakeTime().monotonic)
+
+async def _post(
+    path: str, form: dict[str, str], outcome: ConsoleQueryOutcome = _OUTCOME
+) -> tuple[Response, list[RunConsoleQueryCall]]:
+    """The response to ``form`` posted to ``path``, the runner answering ``outcome``, and the
+    runner's calls."""
+    console_query_runner = FakeConsoleQueryRunner(outcome)
+    app = _build(console_query_runner)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(path, data=form)
+    return response, console_query_runner.calls
 
 
 # ---------------------------------------------------------------------------
@@ -116,12 +110,9 @@ def console_app(catalog_db: Path, local_db: Path) -> Starlette:
 
 
 @pytest.mark.asyncio
-async def test_get_console_renders_empty_form(console_app: Starlette) -> None:
+async def test_get_console_renders_empty_form() -> None:
     """GET /console -> 200 with the form (textarea, Run, Download CSV, db selector), no result."""
-    async with AsyncClient(
-        transport=ASGITransport(app=console_app), base_url="http://test"
-    ) as client:
-        resp = await client.get("/console")
+    resp = await _get("/console")
     assert resp.status_code == 200
     assert 'name="sql"' in resp.text
     assert 'name="db"' in resp.text
@@ -133,27 +124,20 @@ async def test_get_console_renders_empty_form(console_app: Starlette) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_console_defaults_to_catalog_selected(console_app: Starlette) -> None:
+async def test_get_console_defaults_to_catalog_selected() -> None:
     """GET /console selects the catalog DB by default."""
-    async with AsyncClient(
-        transport=ASGITransport(app=console_app), base_url="http://test"
-    ) as client:
-        resp = await client.get("/console")
+    resp = await _get("/console")
     assert resp.status_code == 200
     assert '<option value="catalog" selected>' in resp.text
+    assert '<option value="local" >' in resp.text
 
 
 @pytest.mark.asyncio
-async def test_console_nav_entry_links_from_elsewhere_and_is_active_on_console(
-    console_app: Starlette,
-) -> None:
+async def test_console_nav_entry_links_from_elsewhere_and_is_active_on_console() -> None:
     """The base nav carries a Console entry: a link (href="/console") from any other page, and
     the active non-link on /console itself, where that href is gone by construction."""
-    async with AsyncClient(
-        transport=ASGITransport(app=console_app), base_url="http://test"
-    ) as client:
-        elsewhere = await client.get("/")
-        on_console = await client.get("/console")
+    elsewhere = await _get("/")
+    on_console = await _get("/console")
     assert elsewhere.status_code == 200
     assert '<a href="/console">Console</a>' in elsewhere.text
     assert on_console.status_code == 200
@@ -166,91 +150,71 @@ async def test_console_nav_entry_links_from_elsewhere_and_is_active_on_console(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("database", list(ConsoleDatabase))
 @pytest.mark.asyncio
-async def test_post_console_valid_select_renders_result(console_app: Starlette) -> None:
-    """POST a valid SELECT -> 200, result table with the value, SQL echoed, db still selected."""
-    async with AsyncClient(
-        transport=ASGITransport(app=console_app), base_url="http://test"
-    ) as client:
-        resp = await client.post(
-            "/console", data={"sql": "SELECT native_id FROM files", "db": "catalog"}
-        )
+async def test_post_console_runs_the_sql_on_the_chosen_database(database: ConsoleDatabase) -> None:
+    """The query runs on the database the form names, which stays selected, its SQL echoed."""
+    resp, calls = await _post("/console", {"sql": _SQL, "db": database})
     assert resp.status_code == 200
-    assert _HASH_A in resp.text  # the row value rendered
-    assert "SELECT native_id FROM files" in resp.text  # SQL echoed into the textarea
-    assert '<option value="catalog" selected>' in resp.text
+    assert calls == [RunConsoleQueryCall(database, _SQL)]
+    assert f'<option value="{database}" selected>' in resp.text
+    assert f">{_SQL}</textarea>" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_post_console_renders_the_answer() -> None:
+    """An answer renders its count, its time in milliseconds, its columns and its cells."""
+    resp, _ = await _post("/console", {"sql": _SQL, "db": "catalog"})
+    assert resp.status_code == 200
+    assert '<p class="console-meta">1 rows in 3 ms</p>' in resp.text
+    assert "<th>native_id</th>" in resp.text
+    assert f"<td>{_HASH_A}</td>" in resp.text
     assert 'class="console-table"' in resp.text
+    assert 'class="console-truncated"' not in resp.text
+    assert 'class="console-error"' not in resp.text
 
 
 @pytest.mark.asyncio
-async def test_post_console_bogus_db_shows_error_no_query(console_app: Starlette) -> None:
+async def test_post_console_answer_without_rows_says_so() -> None:
+    answer = replace(_ANSWER, rows=())
+    resp, _ = await _post(
+        "/console", {"sql": _SQL, "db": "catalog"}, replace(_OUTCOME, query_answer=answer)
+    )
+    assert '<p class="console-meta">0 rows in 3 ms</p>' in resp.text
+    assert "<tr><td>No rows.</td></tr>" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_post_console_bogus_db_shows_error_no_query() -> None:
     """POST db=bogus -> 200 with an error banner, no query run (no result table)."""
-    async with AsyncClient(
-        transport=ASGITransport(app=console_app), base_url="http://test"
-    ) as client:
-        resp = await client.post(
-            "/console", data={"sql": "SELECT native_id FROM files", "db": "bogus"}
-        )
+    resp, calls = await _post("/console", {"sql": _SQL, "db": "bogus"})
     assert resp.status_code == 200
-    assert 'class="console-error"' in resp.text
+    assert f'<p class="console-error" role="alert">{_UNKNOWN_DB}</p>' in resp.text
     assert 'class="console-table"' not in resp.text
-    assert _HASH_A not in resp.text
+    assert " selected>" not in resp.text
+    assert calls == []
 
 
 @pytest.mark.asyncio
-async def test_post_console_local_db_is_queried(console_app: Starlette) -> None:
-    """POST db=local reads local.db (the seeded backoff_states row comes back)."""
-    async with AsyncClient(
-        transport=ASGITransport(app=console_app), base_url="http://test"
-    ) as client:
-        resp = await client.post(
-            "/console", data={"sql": "SELECT client_name FROM backoff_states", "db": "local"}
-        )
+async def test_post_console_query_failure_shows_error_banner() -> None:
+    """A failed query renders its message in the error banner, still HTTP 200."""
+    outcome = replace(_OUTCOME, query_answer=QueryFailure("SQL error: near FROM"))
+    resp, _ = await _post("/console", {"sql": "SELECT FROM", "db": "catalog"}, outcome)
     assert resp.status_code == 200
-    assert "seeded-client" in resp.text
-    assert '<option value="local" selected>' in resp.text
-
-
-@pytest.mark.asyncio
-async def test_post_console_query_error_shows_error_banner(console_app: Starlette) -> None:
-    """A SQL error POSTed to /console renders in the error banner, still HTTP 200."""
-    async with AsyncClient(
-        transport=ASGITransport(app=console_app), base_url="http://test"
-    ) as client:
-        resp = await client.post("/console", data={"sql": "SELECT FROM", "db": "catalog"})
-    assert resp.status_code == 200
-    assert 'class="console-error"' in resp.text
+    assert '<p class="console-error" role="alert">SQL error: near FROM</p>' in resp.text
     assert 'class="console-table"' not in resp.text
 
 
 @pytest.mark.asyncio
-async def test_post_console_measures_its_budget_on_the_apps_monotonic_clock(
-    catalog_db: Path, local_db: Path
-) -> None:
-    app = _build(catalog_db, local_db, TickingMonotonicClock(FakeTime()))
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.post("/console", data={"sql": _PAST_BUDGET_SQL, "db": "catalog"})
+async def test_post_console_truncation_banner_names_the_row_cap() -> None:
+    """A truncated answer renders the banner with the cap the outcome carries."""
+    outcome = ConsoleQueryOutcome(replace(_ANSWER, truncated=True), row_cap=1000)
+    resp, _ = await _post("/console", {"sql": _SQL, "db": "catalog"}, outcome)
     assert resp.status_code == 200
-    assert "time limit" in resp.text
-
-
-@pytest.mark.asyncio
-async def test_post_console_truncation_banner(console_app: Starlette) -> None:
-    """A result over the row cap renders the truncation banner (multi-target end to end via a
-    tiny generated set only needs the cap, so we rely on the default cap being small enough)."""
-    async with AsyncClient(
-        transport=ASGITransport(app=console_app), base_url="http://test"
-    ) as client:
-        resp = await client.post(
-            "/console",
-            data={
-                "sql": "WITH RECURSIVE r(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM r"
-                " WHERE x < 2000) SELECT x FROM r",
-                "db": "catalog",
-            },
-        )
-    assert resp.status_code == 200
-    assert 'class="console-truncated"' in resp.text
+    assert (
+        '<p class="console-truncated" role="status">Results truncated to the first 1,000 rows.</p>'
+        in resp.text
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -259,42 +223,31 @@ async def test_post_console_truncation_banner(console_app: Starlette) -> None:
 
 
 @pytest.mark.asyncio
-async def test_post_console_csv_valid_select(console_app: Starlette) -> None:
+async def test_post_console_csv_valid_select() -> None:
     """POST a valid SELECT to /console.csv -> text/csv attachment with the CSV body."""
-    async with AsyncClient(
-        transport=ASGITransport(app=console_app), base_url="http://test"
-    ) as client:
-        resp = await client.post(
-            "/console.csv", data={"sql": "SELECT native_id FROM files", "db": "catalog"}
-        )
+    resp, calls = await _post("/console.csv", {"sql": _SQL, "db": "local"})
     assert resp.status_code == 200
+    assert calls == [RunConsoleQueryCall(ConsoleDatabase.LOCAL, _SQL)]
     assert resp.headers["content-type"].startswith("text/csv")
-    assert "attachment" in resp.headers["content-disposition"]
-    assert "query.csv" in resp.headers["content-disposition"]
-    assert "native_id" in resp.text  # header row
-    assert _HASH_A in resp.text  # data row
+    assert resp.headers["content-disposition"] == 'attachment; filename="query.csv"'
+    assert resp.text == f"native_id\r\n{_HASH_A}\r\n"
 
 
 @pytest.mark.asyncio
-async def test_post_console_csv_bad_db_returns_400(console_app: Starlette) -> None:
-    """POST /console.csv with an unknown db -> 400 plain text with the error."""
-    async with AsyncClient(
-        transport=ASGITransport(app=console_app), base_url="http://test"
-    ) as client:
-        resp = await client.post(
-            "/console.csv", data={"sql": "SELECT native_id FROM files", "db": "bogus"}
-        )
+async def test_post_console_csv_bad_db_returns_400() -> None:
+    """POST /console.csv with an unknown db -> 400 plain text with the error, no query run."""
+    resp, calls = await _post("/console.csv", {"sql": _SQL, "db": "bogus"})
     assert resp.status_code == 400
     assert resp.headers["content-type"].startswith("text/plain")
-    assert resp.text != ""
+    assert resp.text == _UNKNOWN_DB
+    assert calls == []
 
 
 @pytest.mark.asyncio
-async def test_post_console_csv_query_error_returns_400(console_app: Starlette) -> None:
-    """POST /console.csv with a SQL error -> 400 plain text with the error message."""
-    async with AsyncClient(
-        transport=ASGITransport(app=console_app), base_url="http://test"
-    ) as client:
-        resp = await client.post("/console.csv", data={"sql": "SELECT FROM", "db": "catalog"})
+async def test_post_console_csv_query_failure_returns_400() -> None:
+    """POST /console.csv with a failed query -> 400 plain text with its message."""
+    outcome = replace(_OUTCOME, query_answer=QueryFailure("SQL error: near FROM"))
+    resp, _ = await _post("/console.csv", {"sql": "SELECT FROM", "db": "catalog"}, outcome)
     assert resp.status_code == 400
-    assert "syntax" in resp.text.lower()
+    assert resp.headers["content-type"].startswith("text/plain")
+    assert resp.text == "SQL error: near FROM"
