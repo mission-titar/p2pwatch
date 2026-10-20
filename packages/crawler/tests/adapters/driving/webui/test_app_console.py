@@ -111,7 +111,7 @@ async def _post(
 
 @pytest.mark.asyncio
 async def test_get_console_renders_empty_form() -> None:
-    """GET /console -> 200 with the form (textarea, Run, Download CSV, db selector), no result."""
+    """GET /console -> 200 with the form (textarea, Run, Download CSV, db selector), no answer."""
     resp = await _get("/console")
     assert resp.status_code == 200
     assert 'name="sql"' in resp.text
@@ -186,7 +186,7 @@ async def test_post_console_answer_without_rows_says_so() -> None:
 
 @pytest.mark.asyncio
 async def test_post_console_bogus_db_shows_error_no_query() -> None:
-    """POST db=bogus -> 200 with an error banner, no query run (no result table)."""
+    """POST db=bogus -> 200 with an error banner, no query run (no query answer table)."""
     resp, calls = await _post("/console", {"sql": _SQL, "db": "bogus"})
     assert resp.status_code == 200
     assert f'<p class="console-error" role="alert">{_UNKNOWN_DB}</p>' in resp.text

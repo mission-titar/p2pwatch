@@ -20,19 +20,19 @@
 <p class="console-error" role="alert">{{ e }}</p>
 {% endfor %}
 
-{% for res in results %}
-<p class="console-meta">{{ res.row_count }} rows in {{ res.elapsed_ms }} ms</p>
-{% for t in res.truncated %}
+{% for query_answer in query_answers %}
+<p class="console-meta">{{ query_answer.row_count }} rows in {{ query_answer.elapsed_ms }} ms</p>
+{% for t in query_answer.truncated %}
 <p class="console-truncated" role="status">{{ t }}</p>
 {% endfor %}
 <table class="console-table">
   <thead>
     <tr>
-      {% for c in res.columns %}<th>{{ c }}</th>{% endfor %}
+      {% for c in query_answer.columns %}<th>{{ c }}</th>{% endfor %}
     </tr>
   </thead>
   <tbody>
-    {% for r in res.rows %}
+    {% for r in query_answer.rows %}
     <tr>
       {% for cell in r.cells %}<td>{{ cell }}</td>{% endfor %}
     </tr>

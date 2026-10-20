@@ -34,7 +34,7 @@ from p2pwatch.adapters.driving.webui.displays import (
     DbOptionDisplay,
     DecisionCellDisplay,
     DecisionDisplay,
-    FileDetailDisplay,
+    FileHistoryDisplay,
     FileRowDisplay,
     FilesSummaryDisplay,
     FilterBarDisplay,
@@ -95,7 +95,7 @@ from p2pwatch.ports.driving.source_describer import SourceDescriber
 from p2pwatch.ports.driving.source_lister import SourceLister
 from p2pwatch.ports.driving.source_name_describer import SourceNameDescriber
 
-# A detail page's path segment: a file_id or a source_id as 32 lowercase hex (stage 1 and 4 D13).
+# A file's or a source's page path segment: its file_id or source_id as 32 lowercase hex.
 _HEX_ID = re.compile(r"[0-9a-f]{32}")
 
 _INTERVAL_PRESETS: tuple[tuple[str, timedelta], ...] = (
@@ -147,25 +147,25 @@ def _make_nav_context(amule_url: str) -> Callable[[Request], dict[str, Any]]:
 
 
 def _resolve_target_display(
-    entry: CatalogEntry, segment_by_id: Mapping[str, TargetSegment]
+    catalog_entry: CatalogEntry, segment_by_id: Mapping[str, TargetSegment]
 ) -> list[tuple[str, str]]:
     """Per-decision ``(target, title)`` pairs for a catalog entry, in the entry's
     decision order (by target_id). Empty when the file has no current decision. The
     ``catalog → "unidentified"`` mask is applied per decision (``keroro_large`` is the only
     catalog-tier rule; cf. ``displays.FileRowDisplay``)."""
     resolved: list[tuple[str, str]] = []
-    for dec in entry.decisions:
-        if dec.tier == "catalog":
+    for decision in catalog_entry.decisions:
+        if decision.tier == "catalog":
             resolved.append(("unidentified", "·"))
             continue
-        seg = segment_by_id.get(dec.target_id)
-        if seg is None:
-            resolved.append((dec.target_id, "·"))
+        segment = segment_by_id.get(decision.target_id)
+        if segment is None:
+            resolved.append((decision.target_id, "·"))
             continue
         locator = seasonal_locator(
-            season=seg.season, seasonal_number=seg.seasonal_number, letter=seg.letter
+            season=segment.season, seasonal_number=segment.seasonal_number, letter=segment.letter
         )
-        resolved.append((f"{dec.target_id} / {locator}", seg.title))
+        resolved.append((f"{decision.target_id} / {locator}", segment.title))
     return resolved
 
 
@@ -177,29 +177,33 @@ def _to_display_rows(
     ``decisions_display`` while ``tier_display`` still aggregates (shared tier, or per-target
     joined with ``" · "``). Shared by ``handle_files`` and ``handle_target``."""
     rows = []
-    for entry in catalog_entries:
-        if entry.decisions:
-            pairs = _resolve_target_display(entry, segment_by_id)
-            decisions_display = tuple(DecisionCellDisplay(target=t, title=ti) for t, ti in pairs)
-            tier_values = {dec.tier for dec in entry.decisions}
+    for catalog_entry in catalog_entries:
+        if catalog_entry.decisions:
+            pairs = _resolve_target_display(catalog_entry, segment_by_id)
+            decisions_display = tuple(
+                DecisionCellDisplay(target=target, title=title) for target, title in pairs
+            )
+            tier_values = {decision.tier for decision in catalog_entry.decisions}
             if len(tier_values) == 1:
-                tier_display = entry.decisions[0].tier
+                tier_display = catalog_entry.decisions[0].tier
             else:
-                tier_display = " · ".join(f"{dec.target_id}: {dec.tier}" for dec in entry.decisions)
+                tier_display = " · ".join(
+                    f"{decision.target_id}: {decision.tier}" for decision in catalog_entry.decisions
+                )
         else:
             decisions_display = ()
             tier_display = "·"
-        latest = entry.latest_observation
+        latest = catalog_entry.latest_observation
         rows.append(
             FileRowDisplay(
-                file_id=entry.file.file_id.hex(),
-                short_hash=short_hash(entry.file.native_id),
+                file_id=catalog_entry.file.file_id.hex(),
+                short_hash=short_hash(catalog_entry.file.native_id),
                 filename="" if latest is None else latest.reported_file.filename,
                 sources_display=(
                     "unknown" if latest is None else str(latest.reported_file.source_count)
                 ),
                 decisions_display=decisions_display,
-                size_display=human_size(entry.size_bytes),
+                size_display=human_size(catalog_entry.size_bytes),
                 last_seen_display=(
                     "" if latest is None else short_timestamp(latest.observed_at.isoformat())
                 ),
@@ -213,7 +217,7 @@ def _timeline_row(observation: FileObservation) -> TimelineRowDisplay:
     """An observation as one timeline line, its instant as ``utc_iso`` writes it."""
     reported_file = observation.reported_file
     return TimelineRowDisplay(
-        name=reported_file.filename,
+        filename=reported_file.filename,
         size_bytes=reported_file.size_bytes,
         sources=str(reported_file.source_count),
         keyword=reported_file.keyword,
@@ -238,7 +242,7 @@ def _source_history_row(period: SharingPeriod) -> SourceHistoryRowDisplay:
     page."""
     source_name, source = period.source_name, period.source
     return SourceHistoryRowDisplay(
-        name="unknown" if source_name is None else source_name,
+        source_name="unknown" if source_name is None else source_name,
         name_link=_name_link(source_name),
         short_hash="unknown" if source is None else short_hash(source.native_id),
         source_link=_source_link(source),
@@ -301,7 +305,7 @@ def _known_source_row(known_source: KnownSource) -> SourceListRowDisplay:
     """A source as one line of ``/sources``."""
     source_name = known_source.source_name
     return SourceListRowDisplay(
-        name="unknown" if source_name is None else source_name,
+        source_name="unknown" if source_name is None else source_name,
         name_link=_name_link(source_name),
         short_hash=short_hash(known_source.source.native_id),
         source_link=_source_link(known_source.source),
@@ -313,7 +317,7 @@ def _known_source_row(known_source: KnownSource) -> SourceListRowDisplay:
 def _source_naming_row(source_naming: SourceNaming) -> SourceListRowDisplay:
     """A source under one of its names, as one line of a source's or a name's page."""
     return SourceListRowDisplay(
-        name=source_naming.source_name,
+        source_name=source_naming.source_name,
         name_link=_name_link(source_naming.source_name),
         short_hash=short_hash(source_naming.source.native_id),
         source_link=_source_link(source_naming.source),
@@ -518,7 +522,7 @@ def _search_bar(*, search_text: str | None, kept_params: dict[str, str]) -> Sear
     """Precompute the search form (W-D8): the ``search`` prefill (empty string when none) + hidden
     inputs from ``kept_params`` (already without ``search`` and ``page``)."""
     hidden = tuple(HiddenInputDisplay(name=k, value=v) for k, v in kept_params.items())
-    return SearchBarDisplay(query=search_text or "", hidden=hidden)
+    return SearchBarDisplay(search_text=search_text or "", hidden=hidden)
 
 
 async def _add_security_headers(request: Request, call_next: RequestResponseEndpoint) -> Response:
@@ -668,7 +672,7 @@ def _console_database(db_key: str) -> ConsoleDatabase | None:
 
 
 def _to_query_answer_display(query_answer: QueryAnswer, row_cap: int) -> QueryAnswerDisplay:
-    """Build the console result view-model from a query's answer. ``truncated`` becomes a 0-or-1
+    """Build the query answer display from a query's answer. ``truncated`` becomes a 0-or-1
     message tuple for the logic-free banner."""
     truncated = (
         (f"Results truncated to the first {row_cap:,} rows.",) if query_answer.truncated else ()
@@ -892,7 +896,7 @@ def build_app(
         best_filename_by_file = source_history.best_filename_by_file
         return templates.TemplateResponse(
             request,
-            "source_detail.html",
+            "source_history.html",
             {
                 "source": SourceKeyDisplay(
                     str(source_history.source.network), source_history.source.native_id
@@ -954,7 +958,7 @@ def build_app(
             },
         )
 
-    async def handle_file_detail(request: Request) -> Response:
+    async def handle_file(request: Request) -> Response:
         file_id_hex: str = request.path_params["file_id"]
 
         requested_since, requested_until = _requested_ends(request)
@@ -970,20 +974,22 @@ def build_app(
 
         if description is None:
             return templates.TemplateResponse(request, "404.html", {}, status_code=404)
-        detail, explanation = description.file_history, description.explanation
+        file_history, explanation = description.file_history, description.explanation
 
         latest = (
-            None if detail.latest_observation is None else detail.latest_observation.reported_file
+            None
+            if file_history.latest_observation is None
+            else file_history.latest_observation.reported_file
         )
         ed2k_link = ""
         if latest is not None:
-            match detail.file.network:
+            match file_history.file.network:
                 case Network.ED2K:
                     ed2k_link = build_ed2k_link(
-                        latest.filename, latest.size_bytes, detail.file.native_id
+                        latest.filename, latest.size_bytes, file_history.file.native_id
                     )
                 case _:  # pragma: no cover
-                    assert_never(detail.file.network)
+                    assert_never(file_history.file.network)
 
         # Explanation from the current config
         explanation_target_id: str | None = None
@@ -1004,11 +1010,11 @@ def build_app(
             explanation_vetoes_fired = explanation.vetoes_fired
             explanation_notes = ("Evaluated against the current configuration",)
 
-        display = FileDetailDisplay(
-            network=detail.file.network,
-            native_id=detail.file.native_id,
-            size_bytes=detail.size_bytes,
-            timeline=tuple(_timeline_row(observation) for observation in detail.observations),
+        display = FileHistoryDisplay(
+            network=file_history.file.network,
+            native_id=file_history.file.native_id,
+            size_bytes=file_history.size_bytes,
+            timeline=tuple(_timeline_row(observation) for observation in file_history.observations),
             source_history=tuple(map(_source_history_row, description.sharing_periods)),
             decisions=tuple(
                 DecisionDisplay(
@@ -1017,7 +1023,7 @@ def build_app(
                     tier=dated.decision.tier,
                     decided_at=dated.decided_at.isoformat(timespec="microseconds"),
                 )
-                for dated in detail.decisions
+                for dated in file_history.decisions
             ),
             ed2k_link=ed2k_link,
             explanation_target_id=explanation_target_id,
@@ -1030,7 +1036,7 @@ def build_app(
 
         return templates.TemplateResponse(
             request,
-            "file_detail.html",
+            "file_history.html",
             {
                 "file": display,
                 "interval": _interval_selector(
@@ -1113,7 +1119,7 @@ def build_app(
             {
                 "sql": "",
                 "db_options": _console_db_options("catalog"),
-                "results": (),
+                "query_answers": (),
                 "errors": (),
             },
         )
@@ -1129,7 +1135,7 @@ def build_app(
                 {
                     "sql": sql,
                     "db_options": db_options,
-                    "results": (),
+                    "query_answers": (),
                     "errors": (_CONSOLE_UNKNOWN_DB,),
                 },
             )
@@ -1142,7 +1148,7 @@ def build_app(
                 {
                     "sql": sql,
                     "db_options": db_options,
-                    "results": (),
+                    "query_answers": (),
                     "errors": (query_answer.message,),
                 },
             )
@@ -1152,7 +1158,7 @@ def build_app(
             {
                 "sql": sql,
                 "db_options": db_options,
-                "results": (_to_query_answer_display(query_answer, outcome.row_cap),),
+                "query_answers": (_to_query_answer_display(query_answer, outcome.row_cap),),
                 "errors": (),
             },
         )
@@ -1185,7 +1191,7 @@ def build_app(
             Route("/health", handle_health),
             Route("/", handle_dashboard),
             Route("/files", handle_files),
-            Route("/files/{file_id}", handle_file_detail),
+            Route("/files/{file_id}", handle_file),
             Route("/sources", handle_sources),
             # Before ``/sources/{source_id}``, which would otherwise take ``name`` (D13).
             Route("/sources/name", handle_source_name),
