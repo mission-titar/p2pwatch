@@ -376,7 +376,8 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
 | 149 | `test/file-page-history-on-fakes` | the file page's timeline, source history and interval selector on the fake | 294, 3 |
 | 150 | `feat/list-sources` | `SourceReader`'s list reads; `ListSources`; its route and route tests | 450, 12 |
 | 160 | `feat/describe-source` | `SourceHistory`; `read_source_history`; `DescribeSource`, `/sources/{id}` on it; the dead `{% else %}` (Corrected 2026-10-19: block 160 split in 160, 163 and 165, counted at 19 files and about 1,100 lines before any code; it moves behaviour, so no exemption) | 400, 14 |
-| 163 | `feat/describe-source-name` | `SourceNameHistory`; `read_source_name_history`; `DescribeSourceName`, `/sources/name` on it; the webui's deprecated edges to the readers | 380, 14 |
+| 163 | `refactor/source-name-history` | `SourceNameHistory`; `read_source_name_history`; `CatalogReader` and the views it returned deleted (Corrected 2026-10-20: split from 164, measured at 517 lines and 20 files; it moves behaviour, so no exemption) | 245, 14 |
+| 164 | `feat/describe-source-name` | `DescribeSourceName`, `/sources/name` on it; the webui's deprecated edges to the readers | 280, 9 |
 | 165 | `test/source-pages-routes-on-fakes` | the two source pages' route tests on fakes of their describers | 350, 5 |
 | 170 | `feat/console-query` | `SqlExecutor`, `RunConsoleQuery`; `displays.py`; the last webui exceptions in `tach.toml` | 400, 12 |
 | 180 | `refactor/role-ports` | the five catalog ports, `CatalogRepository` and `DownloadCatalogReader` deleted; the download, source point, backoff and policy fingerprint ports; the re-exports of the types blocks 110 and 115 moved to the domain (`BackoffKey`, `BackoffState`, `StatusReading`, `ClientStatus`, `ChannelStatus`) go, their importers reading the domain (Corrected 2026-10-19: added) | 900, 34 |
