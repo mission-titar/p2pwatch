@@ -6,11 +6,8 @@ from p2pwatch.ports.driven.catalog_finder import CatalogFinder
 
 
 class FilesystemCatalogFinder(CatalogFinder):
-    """Resolves the path through its symbolic links, relative to the directory ``cwd``."""
-
-    def __init__(self, cwd: Path) -> None:
-        self._cwd = cwd
+    """Resolves the path, absolute as the command line gives it, through its symbolic links."""
 
     def find_catalog(self, path: PurePath) -> PurePath | None:
-        catalog = self._cwd / path
+        catalog = Path(path)
         return catalog.resolve() if catalog.exists() else None

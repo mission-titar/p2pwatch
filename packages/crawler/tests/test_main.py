@@ -49,17 +49,16 @@ def test_validate_config_refuses_a_broken_matcher(
     assert capsys.readouterr().err.startswith("Invalid config: ")
 
 
-def test_merge_of_two_catalogs_into_a_new_one_holds_both(
+def test_merge_of_two_catalogs_named_under_cwd_into_a_new_one_holds_both(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    catalogs = [
+    for letter, ed2k in (("a", HASH_A), ("b", HASH_B)):
         make_catalog(tmp_path / f"{letter}.db", {"files": [{"ed2k_hash": ed2k, "size_bytes": 100}]})
-        for letter, ed2k in (("a", HASH_A), ("b", HASH_B))
-    ]
     merged = tmp_path / "merged.db"
 
     with caplog.at_level(logging.INFO):
-        assert main(["merge", "--output", str(merged), *map(str, catalogs)], _ENV, tmp_path) == 0
+        # Relative names, under a ``cwd`` that is not the process's own.
+        assert main(["merge", "--output", "merged.db", "a.db", "b.db"], _ENV, tmp_path) == 0
 
     assert count(merged, "files") == 2
     done = next(record for record in caplog.records if record.getMessage().startswith("merge done"))
