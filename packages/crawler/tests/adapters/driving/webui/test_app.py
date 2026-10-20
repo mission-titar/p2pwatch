@@ -808,7 +808,8 @@ async def test_source_page_shows_its_hash_its_names_and_its_periods() -> None:
     page = await _source_page()
     file = f'<a href="/files/{_FILE.file_id.hex()}">keroro_s2e62a_vf.avi</a>'
     first, last = "2026-10-13 20:00:00Z", "2026-10-13 20:00:30Z"
-    assert f"<dd>{_USER}</dd>" in page
+    assert f"<title>Source {_USER} · p2pwatch</title>" in page
+    assert f"<dd>ed2k</dd><dt>User hash</dt><dd>{_USER}</dd>" in page
     assert "<th>Connectable</th>" in page
     assert _row(_NAME_LINK, last, "2") in page
     assert _row(file, _NAME_LINK, "queued", "unknown", "unknown", first, last, "", "", "n1") in page

@@ -50,6 +50,7 @@ from p2pwatch.adapters.driving.webui.displays import (
     SortHeadersDisplay,
     SourceFileRowDisplay,
     SourceHistoryRowDisplay,
+    SourceKeyDisplay,
     SourceListRowDisplay,
     TargetCoverageDisplay,
     TierFacetDisplay,
@@ -888,7 +889,9 @@ def build_app(
             request,
             "source_detail.html",
             {
-                "source": source_history.source,
+                "source": SourceKeyDisplay(
+                    str(source_history.source.network), source_history.source.native_id
+                ),
                 "names": tuple(map(_source_naming_row, source_history.source_namings)),
                 "periods": tuple(
                     _source_file_row(period, best_filename_by_file.get(period.file))
