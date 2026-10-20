@@ -23,7 +23,7 @@ from p2pwatch.application.run_download_cycle import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.observability.events import DecisionChange, DecisionsRecorded
 from p2pwatch.domain.retraction import RETRACTED_TIER
-from p2pwatch.ports.driven.catalog_repository import CatalogRepository
+from p2pwatch.ports.driven.catalog import DecisionReader, DecisionWriter, ObservationReader
 from p2pwatch.ports.driven.clock import WallClock
 from p2pwatch.ports.driven.telemetry import Telemetry
 from p2pwatch.ports.driven.wake_hub import WakeHub
@@ -33,7 +33,9 @@ async def rejudge_file(
     file: FileKey,
     base_candidate: FileCandidate,
     *,
-    catalog: CatalogRepository,
+    observation_reader: ObservationReader,
+    decision_writer: DecisionWriter,
+    decision_reader: DecisionReader,
     engine: MatchingEngine,
     wake_hub: WakeHub,
     telemetry: Telemetry,
@@ -45,11 +47,11 @@ async def rejudge_file(
 
     Returns the number of rows written (0..N). May propagate ``RepositoryError`` (pure
     orchestration; the caller absorbs it)."""
-    filenames = catalog.known_filenames(file)
+    filenames = observation_reader.read_known_filenames(file)
     fresh = engine.evaluate_file(
         replace(base_candidate, filename=filename) for filename in filenames
     )
-    persisted = catalog.latest_decisions(file)
+    persisted = decision_reader.read_latest_decisions(file)
     changes: list[DecisionChange] = []
 
     def change(target_id: str, new_tier: str) -> DecisionChange:
@@ -67,18 +69,18 @@ async def rejudge_file(
         fresh_ids.add(decision.target_id)
         if persisted.get(decision.target_id) == to_record(decision):
             continue
-        catalog.record_decision(file, decision, wall_clock.now(), node_id)
+        decision_writer.record_decision(file, decision, wall_clock.now(), node_id)
         changes.append(change(decision.target_id, decision.tier))
         if decision.tier == "download":
             wake_hub.wake(DOWNLOAD_WAKE_SUBJECT)
     for target_id in sorted(persisted):
         if persisted[target_id].tier == RETRACTED_TIER or target_id in fresh_ids:
             continue
-        catalog.record_retraction(file, target_id, wall_clock.now(), node_id)
+        decision_writer.record_retraction(file, target_id, wall_clock.now(), node_id)
         changes.append(change(target_id, RETRACTED_TIER))
     if changes:
         # No filename left means only retractions were written, which are never notified.
-        best = catalog.best_observation(file)
+        best = observation_reader.read_best_observation(file)
         if best is None:
             filename, size_bytes = base_candidate.filename, 0
         else:

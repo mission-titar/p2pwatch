@@ -3,11 +3,11 @@ on the webui's thread (D21)."""
 
 from collections.abc import Iterable, Mapping
 
+from p2pwatch.domain.status_reading import StatusReading
 from p2pwatch.ports.driven.client_status import (
     ClientStatusReader,
     ClientStatusWriter,
     PublishedReading,
-    StatusReading,
 )
 from p2pwatch.ports.driven.clock import MonotonicInstant
 

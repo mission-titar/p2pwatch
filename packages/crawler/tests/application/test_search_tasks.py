@@ -28,7 +28,7 @@ from p2pwatch.application.search_worker import (
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import ReportedFile
-from p2pwatch.ports.driven.backoff_state_repository import BackoffKey, BackoffState
+from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from p2pwatch.ports.driven.client_errors import SearchFailedError
 from p2pwatch.ports.driven.repository_errors import RepositoryError
 from p2pwatch.ports.driven.search_client import SearchAnswer
@@ -110,7 +110,7 @@ class _Tasks:
             keywords=keywords,
             resumed=self.resumed,
             backoff=self.deps.backoff,
-            backoff_states=self.state,
+            backoff_state_writer=self.state,
             monotonic_clock=LoopMonotonicClock(),
             logger=self.logger,
         ).run(_NODE)
@@ -135,7 +135,10 @@ def tasks(
     backoff = BackoffRegistry(_POLICY, wall_clock, LoopMonotonicClock(), FakeRng())
     wake_hub, telemetry = RecordingWakeHub(), RecordingTelemetry()
     deps = WorkerDeps(
-        catalog=catalog,
+        observation_writer=catalog,
+        observation_reader=catalog,
+        decision_writer=catalog,
+        decision_reader=catalog,
         engine=engine,
         wake_hub=wake_hub,
         backoff=backoff,
@@ -207,7 +210,7 @@ def test_the_backoff_is_saved_at_each_change(tasks: _Tasks) -> None:
     client = _TimedClient({"kad": 30.0}, search_failures=[SearchFailedError("refused")])
     tasks.run_for(_HOUR, client, ["keroro"])
     assert [set(saved) for saved in tasks.state.saved] == [{BackoffKey("amuled", "kad")}, set()]
-    assert tasks.state.load_backoff_states() == {}
+    assert tasks.state.read_backoff_states() == {}
 
 
 def test_a_failed_save_is_logged_and_retried_after_the_next_search(tasks: _Tasks) -> None:

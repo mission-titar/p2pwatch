@@ -20,14 +20,9 @@ from p2pwatch.domain.observability.events import (
     ClientUnreachableLasting,
     Event,
 )
-from p2pwatch.domain.status_reading import STATUS_PERIOD
+from p2pwatch.domain.status_reading import STATUS_PERIOD, ClientStatus, StatusReading
 from p2pwatch.ports.driven.client_errors import ClientAuthError, ClientError
-from p2pwatch.ports.driven.client_status import (
-    ClientStatus,
-    ClientStatusWriter,
-    StatusClient,
-    StatusReading,
-)
+from p2pwatch.ports.driven.client_status import ClientStatusWriter, StatusClient
 from p2pwatch.ports.driven.clock import MonotonicClock, MonotonicInstant, WallClock
 from p2pwatch.ports.driven.telemetry import Telemetry
 

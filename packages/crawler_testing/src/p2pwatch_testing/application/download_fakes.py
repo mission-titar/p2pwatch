@@ -2,21 +2,27 @@
 
 from collections.abc import Iterable, Sequence
 from datetime import datetime, timedelta
-from typing import Literal
+from typing import Literal, NoReturn
 
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.source import SourceKey, SourceReading
-from p2pwatch.ports.driven.catalog_repository import DownloadCandidate
+from p2pwatch.ports.driven.catalog import DecisionReader, DownloadCandidate, ObservationReader
 from p2pwatch.ports.driven.download_client import (
     DownloadRequest,
     DownloadStatus,
     FailureReason,
     WaitingReason,
 )
+from p2pwatch.ports.driven.downloads import DownloadReader, DownloadWriter
 from p2pwatch.ports.driven.repository_errors import RepositoryError
-from p2pwatch.ports.driven.source_repository import EarlierPoints, RecordedReading
+from p2pwatch.ports.driven.source_points import (
+    EarlierPoints,
+    RecordedReading,
+    SourcePointReader,
+    SourcePointWriter,
+)
 from p2pwatch_testing.application.fakes import FakeTime
 
 
@@ -65,9 +71,9 @@ class FakeDownloadClient:
         return self._readings.get(file.native_id, ())
 
 
-class FakeSourceRepo:
+class FakeSourceRepo(SourcePointWriter, SourcePointReader):
     """Records each ``record_readings`` call, answering ``kept`` per hash; raises
-    ``RepositoryError`` for ``fail_for``. ``history`` answers ``earlier_points`` per source,
+    ``RepositoryError`` for ``fail_for``. ``history`` answers ``read_earlier_points`` per source,
     never useful by default, and ``baseline`` answers ``has_points_before``, each call noted in
     ``baselines``, the first ``baseline_failures`` raising ``RepositoryError``."""
 
@@ -99,7 +105,9 @@ class FakeSourceRepo:
         self.recorded.append((file.native_id, tuple(readings), read_at))
         return self._kept.get(file.native_id, ())
 
-    def earlier_points(self, source: SourceKey, before: datetime, node_id: str) -> EarlierPoints:
+    def read_earlier_points(
+        self, source: SourceKey, before: datetime, node_id: str
+    ) -> EarlierPoints:
         self.node_ids.add(node_id)
         self.asked.append((source, before))
         return self._history.get(
@@ -114,16 +122,16 @@ class FakeSourceRepo:
         return self._baseline
 
 
-class FakeDownloadRepo:
+class FakeDownloadRepo(DownloadWriter, DownloadReader):
     """In-memory downloads repo (the contract of SqliteDownloadRepository, without SQL).
 
     Keyed by ``native_id``; ``failures`` and ``waiting`` hold the lifecycle reasons,
     ``queued_at``, ``completed_at`` and ``seen_at`` the instants received, and ``last_seen_at``
-    what ``last_seen_at_by_file`` reads back.
+    what ``read_last_seen_at_by_file`` reads back.
     ``fail_set_state_for`` and ``fail_record_completed_for``: hashes for which ``set_state`` or
     ``record_completed`` raises ``RepositoryError``, to simulate a mid-cycle repo failure
     (cf. logic-download#2/error-boundary#2).
-    ``fail_active_states``: ``tracked_states()`` raises, to simulate persistence being down
+    ``fail_active_states``: ``read_tracked_states()`` raises, to simulate persistence being down
     also at re-read time (every step of the cycle absorbs)."""
 
     def __init__(
@@ -151,7 +159,7 @@ class FakeDownloadRepo:
         self._fail_mark_seen = fail_mark_seen
         self._target_ids: dict[str, str] = {}
 
-    def queued_target_id(self, file: FileKey) -> str | None:
+    def read_queued_target_id(self, file: FileKey) -> str | None:
         return self._target_ids.get(file.native_id)
 
     def record_queued(
@@ -197,21 +205,21 @@ class FakeDownloadRepo:
         self.waiting.update({s.file.native_id: s.waiting_reason for s in statuses})
         self.last_seen_at.update({s.file.native_id: seen_at for s in statuses})
 
-    def last_seen_at_by_file(self) -> dict[FileKey, datetime]:
+    def read_last_seen_at_by_file(self) -> dict[FileKey, datetime]:
         return {
             FileKey(Network.ED2K, h): last_seen_at
             for h, last_seen_at in self.last_seen_at.items()
             if self.states.get(h) in {DownloadState.QUEUED, DownloadState.DOWNLOADING}
         }
 
-    def tracked_states(self) -> dict[FileKey, DownloadState]:
+    def read_tracked_states(self) -> dict[FileKey, DownloadState]:
         if self._fail_active_states:
-            raise RepositoryError("tracked_states failed")
+            raise RepositoryError("read_tracked_states failed")
         return {FileKey(Network.ED2K, h): state for h, state in self.states.items()}
 
 
-class FakeCatalogReads:
-    """Catalog read side: download_candidates, latest_observation and best_observation scripted."""
+class FakeCatalogReads(DecisionReader, ObservationReader):
+    """The download loop's catalog reads, scripted: its candidates, latest and best observations."""
 
     def __init__(
         self,
@@ -224,14 +232,20 @@ class FakeCatalogReads:
         self._observations = observations or {}
         self._best = best or {}
 
-    def download_candidates(self) -> tuple[DownloadCandidate, ...]:
+    def read_latest_decisions(self, file: FileKey) -> NoReturn:
+        raise AssertionError("the download loop reads no file's decisions")
+
+    def read_download_candidates(self) -> tuple[DownloadCandidate, ...]:
         return self._candidates
 
-    def latest_observation(self, file: FileKey) -> FileObservation | None:
+    def read_latest_observation(self, file: FileKey) -> FileObservation | None:
         return self._observations.get(file.native_id)
 
-    def best_observation(self, file: FileKey) -> FileObservation | None:
+    def read_best_observation(self, file: FileKey) -> FileObservation | None:
         return self._best.get(file.native_id)
+
+    def read_known_filenames(self, file: FileKey) -> NoReturn:
+        raise AssertionError("the download loop reads no file's filenames")
 
 
 class FakeDiskSpace:

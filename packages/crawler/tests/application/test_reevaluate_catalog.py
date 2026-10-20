@@ -3,7 +3,7 @@
 Real engine + real SQLite catalog repo (same convention as ``test_decisions.py``: "real
 repos on tmp_path"); only ``wake_hub``/``telemetry``/``wall_clock`` are fakes (``RecordingWakeHub``/
 ``RecordingTelemetry``/``FakeWallClock``). Each hash under test is seeded via
-``catalog.record_observation`` first so it shows up in ``iter_reevaluation_rows`` (the source the
+``catalog.record_observation`` first so it shows up in ``iter_latest_observations`` (the source the
 re-evaluation iterates).
 """
 
@@ -83,7 +83,10 @@ async def test_two_changed_rows_are_all_evaluated_and_written(
     telemetry = RecordingTelemetry()
     wake_hub = RecordingWakeHub()
     summary = await reevaluate_catalog(
-        catalog=catalog,
+        observation_reader=catalog,
+        decision_writer=catalog,
+        decision_reader=catalog,
+        catalog_scanner=catalog,
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
@@ -120,7 +123,10 @@ async def test_unchanged_row_is_evaluated_but_not_written(
     telemetry = RecordingTelemetry()
     wake_hub = RecordingWakeHub()
     summary = await reevaluate_catalog(
-        catalog=catalog,
+        observation_reader=catalog,
+        decision_writer=catalog,
+        decision_reader=catalog,
+        catalog_scanner=catalog,
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
@@ -158,7 +164,10 @@ async def test_repository_error_on_one_row_is_absorbed_and_sweep_continues(
     telemetry = RecordingTelemetry()
     wake_hub = RecordingWakeHub()
     summary = await reevaluate_catalog(
-        catalog=catalog,
+        observation_reader=catalog,
+        decision_writer=catalog,
+        decision_reader=catalog,
+        catalog_scanner=catalog,
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
@@ -168,7 +177,7 @@ async def test_repository_error_on_one_row_is_absorbed_and_sweep_continues(
     )
     assert summary == ReevaluationSummary(files_evaluated=2, rows_written=1)
     assert decision_tiers(catalog_connection) == [(_HASH_CAT, "catalog")]
-    assert catalog.latest_decisions(FileKey(Network.ED2K, _HASH_DL)) == {}
+    assert catalog.read_latest_decisions(FileKey(Network.ED2K, _HASH_DL)) == {}
     assert logger.lines == [
         LoggedLine(
             "error",
@@ -185,7 +194,10 @@ async def test_empty_catalogue_yields_zero_summary(
     telemetry = RecordingTelemetry()
     wake_hub = RecordingWakeHub()
     summary = await reevaluate_catalog(
-        catalog=catalog,
+        observation_reader=catalog,
+        decision_writer=catalog,
+        decision_reader=catalog,
+        catalog_scanner=catalog,
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
@@ -218,7 +230,10 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
     )
     telemetry, wake_hub = RecordingTelemetry(), RecordingWakeHub()
     summary = await reevaluate_catalog(
-        catalog=catalog,
+        observation_reader=catalog,
+        decision_writer=catalog,
+        decision_reader=catalog,
+        catalog_scanner=catalog,
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
@@ -229,7 +244,7 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
     assert summary == ReevaluationSummary(
         files_evaluated=1, rows_written=3
     )  # 062A + 062B + retract 001A
-    assert catalog.latest_decisions(FileKey(Network.ED2K, _HASH_MULTI)) == {
+    assert catalog.read_latest_decisions(FileKey(Network.ED2K, _HASH_MULTI)) == {
         "062A": DecisionRecord(target_id="062A", rule_name="numero_nu_confirmed", tier="download"),
         "062B": DecisionRecord(target_id="062B", rule_name="numero_nu_confirmed", tier="download"),
         "001A": DecisionRecord(target_id="001A", rule_name="", tier=RETRACTED_TIER),
@@ -255,7 +270,10 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
     )
     telemetry, wake_hub = RecordingTelemetry(), RecordingWakeHub()
     summary = await reevaluate_catalog(
-        catalog=catalog,
+        observation_reader=catalog,
+        decision_writer=catalog,
+        decision_reader=catalog,
+        catalog_scanner=catalog,
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
@@ -266,7 +284,10 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
     assert summary == ReevaluationSummary(
         files_evaluated=1, rows_written=2
     )  # only 062A + 062B; "" untouched
-    assert set(catalog.latest_decisions(FileKey(Network.ED2K, _HASH_MULTI))) == {"062A", "062B"}
+    assert set(catalog.read_latest_decisions(FileKey(Network.ED2K, _HASH_MULTI))) == {
+        "062A",
+        "062B",
+    }
     assert (
         catalog_connection.execute(
             "SELECT count(*) FROM match_decisions WHERE target_id = ''"
@@ -290,7 +311,10 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
         FileObservation(_reported_file(_HASH_DL, "random.txt"), wall_clock.now()), _NODE
     )
     summary = await reevaluate_catalog(
-        catalog=catalog,
+        observation_reader=catalog,
+        decision_writer=catalog,
+        decision_reader=catalog,
+        catalog_scanner=catalog,
         engine=engine,
         wake_hub=RecordingWakeHub(),
         telemetry=RecordingTelemetry(),
@@ -299,7 +323,7 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
         node_id=_NODE,
     )
     assert summary == ReevaluationSummary(files_evaluated=1, rows_written=1)
-    assert catalog.latest_decisions(FileKey(Network.ED2K, _HASH_DL)) == {
+    assert catalog.read_latest_decisions(FileKey(Network.ED2K, _HASH_DL)) == {
         "062A": DecisionRecord(target_id="062A", rule_name="id_segment_exact", tier="download")
     }
 
@@ -323,7 +347,10 @@ async def test_progress_is_logged_at_each_multiple_of_the_cadence_only(
         FileObservation(_reported_file(_HASH_MULTI, "random.txt"), wall_clock.now()), _NODE
     )
     await reevaluate_catalog(
-        catalog=catalog,
+        observation_reader=catalog,
+        decision_writer=catalog,
+        decision_reader=catalog,
+        catalog_scanner=catalog,
         engine=engine,
         wake_hub=RecordingWakeHub(),
         telemetry=RecordingTelemetry(),

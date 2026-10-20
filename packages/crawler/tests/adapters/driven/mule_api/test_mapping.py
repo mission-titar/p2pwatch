@@ -18,7 +18,7 @@ from p2pwatch.adapters.driven.mule_api.mapping import (
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.source import SourceKey, SourceReading, SourceRole
-from p2pwatch.ports.driven.client_status import ChannelStatus, ClientStatus
+from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus
 from p2pwatch.ports.driven.download_client import DownloadStatus, FailureReason, WaitingReason
 
 _HASH = "8b54a3c20fae9e4b9f7e0c2c8c01b6b1"

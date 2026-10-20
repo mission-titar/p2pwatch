@@ -36,7 +36,7 @@ from p2pwatch.adapters.driven.mule_api.mapping import (
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceReading
-from p2pwatch.ports.driven.client_status import ClientStatus
+from p2pwatch.domain.status_reading import ClientStatus
 from p2pwatch.ports.driven.clock import MonotonicClock, MonotonicInstant
 from p2pwatch.ports.driven.download_client import DownloadRequest, DownloadStatus
 from p2pwatch.ports.driven.search_client import SearchAnswer

@@ -28,7 +28,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.download_repository import (
 from p2pwatch.adapters.driven.wall_clock_system import SystemWallClock
 from p2pwatch.composition.app import CrawlerApp
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.ports.driven.backoff_state_repository import BackoffKey, BackoffState
+from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from p2pwatch_testing.adapters.mule_api.api_fakes import (
     PASSWORD,
     FakeAmuleApi,

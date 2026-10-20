@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from p2pwatch.domain.source import SourceRole, SourceUsefulness
-from p2pwatch.ports.driven.source_repository import EarlierPoints
+from p2pwatch.ports.driven.source_points import EarlierPoints
 
 
 @dataclass(frozen=True)

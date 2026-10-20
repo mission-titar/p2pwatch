@@ -10,7 +10,6 @@ from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.local_state_repository import (
     SqliteLocalStateRepository,
 )
-from p2pwatch.ports.driven.local_state_repository import LocalStateRepository
 
 _START = datetime(2026, 6, 11, 12, 0, 0, tzinfo=UTC)
 _NODE_ID = "0c9d6b5e-2f4a-4e1b-9a7d-3c2b1a0f9e8d"
@@ -89,35 +88,25 @@ def test_a_naive_created_at_does_not_wedge_the_connection(
     assert repository.read_node_id() == _NODE_ID
 
 
-# --- port satisfaction ------------------------------------------------------------------
-
-
-def test_repository_satisfies_the_port_structurally(
-    repository: SqliteLocalStateRepository,
-) -> None:
-    port: LocalStateRepository = repository  # mypy proves structural satisfaction
-    assert port.reevaluated_policy_fingerprint() is None
-
-
 # --- reevaluated policy fingerprint (spec §7.1: startup re-evaluation gate) ------------
 
 
 def test_last_backfill_policy_is_none_before_any_set(
     repository: SqliteLocalStateRepository,
 ) -> None:
-    assert repository.reevaluated_policy_fingerprint() is None
+    assert repository.read_policy_fingerprint() is None
 
 
 def test_set_last_backfill_policy_then_read_back(
     repository: SqliteLocalStateRepository,
 ) -> None:
-    repository.set_reevaluated_policy_fingerprint("abc")
-    assert repository.reevaluated_policy_fingerprint() == "abc"
+    repository.set_policy_fingerprint("abc")
+    assert repository.read_policy_fingerprint() == "abc"
 
 
 def test_set_last_backfill_policy_overwrites_on_a_second_call(
     repository: SqliteLocalStateRepository,
 ) -> None:
-    repository.set_reevaluated_policy_fingerprint("abc")
-    repository.set_reevaluated_policy_fingerprint("def")
-    assert repository.reevaluated_policy_fingerprint() == "def"
+    repository.set_policy_fingerprint("abc")
+    repository.set_policy_fingerprint("def")
+    assert repository.read_policy_fingerprint() == "def"

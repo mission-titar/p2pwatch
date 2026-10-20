@@ -1,19 +1,7 @@
-import dataclasses
-
 import pytest
 
-from p2pwatch.ports.driven.client_status import ChannelStatus, ClientStatus, StatusClient
-
-
-def test_a_client_status_is_frozen_and_holds_its_channels() -> None:
-    kad = ChannelStatus(channel="kad", connected=True, connectable=None)
-    status = ClientStatus(version="3.0.1", channels=(kad,))
-
-    assert status.channels[0].connectable is None
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        kad.connected = False  # type: ignore[misc]
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        status.version = None  # type: ignore[misc]
+from p2pwatch.domain.status_reading import ClientStatus
+from p2pwatch.ports.driven.client_status import StatusClient
 
 
 class _StubClient:

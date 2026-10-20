@@ -71,7 +71,7 @@ def test_is_downloaded_is_false_for_unknown_hash(repository: SqliteDownloadRepos
 def test_set_state_updates_the_state(repository: SqliteDownloadRepository) -> None:
     repository.record_queued(_A, "062A", 100, _T0)
     repository.set_state(_A, DownloadState.DOWNLOADING)
-    assert repository.tracked_states()[_A] is DownloadState.DOWNLOADING
+    assert repository.read_tracked_states()[_A] is DownloadState.DOWNLOADING
 
 
 def test_record_completed_stamps_the_completed_at_it_is_given(
@@ -79,7 +79,7 @@ def test_record_completed_stamps_the_completed_at_it_is_given(
 ) -> None:
     repository.record_queued(_A, "062A", 100, _T0)
     repository.record_completed(_A, _T0 + _DAY)
-    assert repository.tracked_states()[_A] is DownloadState.COMPLETED
+    assert repository.read_tracked_states()[_A] is DownloadState.COMPLETED
     stamped = connection.execute(
         "SELECT completed_at FROM downloads WHERE file_id = ?", (_A.file_id,)
     ).fetchone()[0]
@@ -111,7 +111,7 @@ def test_active_states_maps_hash_to_state(repository: SqliteDownloadRepository) 
     repository.record_queued(_A, "062A", 100, _T0)
     repository.record_queued(_B, "063A", 200, _T0)
     repository.set_state(_B, DownloadState.FAILED)
-    states = repository.tracked_states()
+    states = repository.read_tracked_states()
     assert states == {_A: DownloadState.QUEUED, _B: DownloadState.FAILED}
 
 
@@ -131,11 +131,11 @@ def test_get_target_id_returns_target_for_known_hash(
     repository: SqliteDownloadRepository,
 ) -> None:
     repository.record_queued(_A, "062A", 100, _T0)
-    assert repository.queued_target_id(_A) == "062A"
+    assert repository.read_queued_target_id(_A) == "062A"
 
 
 def test_get_target_id_is_none_for_unknown_hash(repository: SqliteDownloadRepository) -> None:
-    assert repository.queued_target_id(_A) is None
+    assert repository.read_queued_target_id(_A) is None
 
 
 def _last_seen(connection: sqlite3.Connection, file: FileKey) -> str:
@@ -179,7 +179,7 @@ def test_last_seen_at_by_file_reads_when_the_client_last_listed_each_download(
     repository.record_queued(_B, "063A", 200, _T0)
     repository.set_state(_B, DownloadState.DOWNLOADING)
     repository.mark_seen([_status(_B)], _T0 + _DAY)
-    assert repository.last_seen_at_by_file() == {_A: _T0, _B: _T0 + _DAY}
+    assert repository.read_last_seen_at_by_file() == {_A: _T0, _B: _T0 + _DAY}
 
 
 def test_last_seen_at_by_file_leaves_the_terminal_downloads_out(
@@ -189,7 +189,7 @@ def test_last_seen_at_by_file_leaves_the_terminal_downloads_out(
         repository.record_queued(file, "062A", 100, _T0)
     repository.record_completed(_B, _T0)
     repository.set_state(_C, DownloadState.FAILED, FailureReason.LOST)
-    assert repository.last_seen_at_by_file() == {_A: _T0}
+    assert repository.read_last_seen_at_by_file() == {_A: _T0}
 
 
 def test_last_seen_at_by_file_reads_a_row_never_stamped_at_its_queuing(
@@ -198,7 +198,7 @@ def test_last_seen_at_by_file_reads_a_row_never_stamped_at_its_queuing(
     # Only a row written by hand can hold a NULL: it ages from its queuing, as local 0005 did.
     repository.record_queued(_A, "062A", 100, _T0)
     connection.execute("UPDATE downloads SET last_seen_at = NULL")
-    assert repository.last_seen_at_by_file() == {_A: _T0}
+    assert repository.read_last_seen_at_by_file() == {_A: _T0}
 
 
 def test_a_queued_download_starts_at_zero_bytes_with_no_progress(

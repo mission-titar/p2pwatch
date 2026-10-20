@@ -24,7 +24,7 @@ from p2pwatch.domain.observability.events import (
     SearchFailed,
 )
 from p2pwatch.domain.observation import ReportedFile
-from p2pwatch.ports.driven.backoff_state_repository import BackoffKey, BackoffState
+from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from p2pwatch_testing.application.fakes import (
     FakeLogger,
     FakeRng,
@@ -83,7 +83,10 @@ def _deps(
     observation_logger: FakeLogger | None = None,
 ) -> WorkerDeps:
     return WorkerDeps(
-        catalog=catalog,
+        observation_writer=catalog,
+        observation_reader=catalog,
+        decision_writer=catalog,
+        decision_reader=catalog,
         engine=engine,
         wake_hub=RecordingWakeHub(),
         backoff=backoff,

@@ -20,7 +20,12 @@ from p2pwatch.domain.source import (
     carried_role_max_age,
     is_contact_point,
 )
-from p2pwatch.ports.driven.source_repository import EarlierPoints, RecordedReading
+from p2pwatch.ports.driven.source_points import (
+    EarlierPoints,
+    RecordedReading,
+    SourcePointReader,
+    SourcePointWriter,
+)
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _MICROSECOND = timedelta(microseconds=1)
@@ -87,8 +92,8 @@ SELECT EXISTS (
 """
 
 
-class SqliteSourceRepository:
-    """SQLite implementation of the ``SourceRepository`` port (STRUCTURAL satisfaction).
+class SqliteSourceRepository(SourcePointWriter, SourcePointReader):
+    """SQLite implementation of the source points' ports.
 
     ``time_between_reads`` is what the carried role's max age assumes (D3)."""
 
@@ -161,7 +166,9 @@ class SqliteSourceRepository:
             return None
         return SourceRole(row[0])
 
-    def earlier_points(self, source: SourceKey, before: datetime, node_id: str) -> EarlierPoints:
+    def read_earlier_points(
+        self, source: SourceKey, before: datetime, node_id: str
+    ) -> EarlierPoints:
         """Whether a useful point exists, and the latest useful or not-useful one."""
         with wrap_sqlite_errors():
             rows = self._connection.execute(

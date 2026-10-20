@@ -1,4 +1,4 @@
-"""``SqliteBackoffStateRepository``: the ``BackoffStateRepository`` port on ``local.db``'s
+"""``SqliteBackoffStateRepository``: the backoff states' ports on ``local.db``'s
 ``backoff_states``, mutable state that no append-only trigger guards."""
 
 import sqlite3
@@ -8,7 +8,8 @@ from datetime import UTC, datetime, timedelta
 from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
 from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
-from p2pwatch.ports.driven.backoff_state_repository import BackoffKey, BackoffState
+from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
+from p2pwatch.ports.driven.backoff_states import BackoffStateReader, BackoffStateWriter
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
@@ -20,11 +21,11 @@ VALUES (?, ?, ?, ?, ?)
 """
 
 
-class SqliteBackoffStateRepository:
+class SqliteBackoffStateRepository(BackoffStateReader, BackoffStateWriter):
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
 
-    def load_backoff_states(self) -> dict[BackoffKey, BackoffState]:
+    def read_backoff_states(self) -> dict[BackoffKey, BackoffState]:
         with wrap_sqlite_errors():
             rows = self._connection.execute(_SELECT).fetchall()
         return {

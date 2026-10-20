@@ -1,7 +1,7 @@
 """``SqliteCatalogRepository``: ``FileObservation``/``MatchDecision`` → durable rows.
 
 The adapter stores what the domain ignores (data-model spec §3): ``decided_at``, given by the
-use-case at each write, and ``node_id``, given at the constructor.
+use-case at each write, and ``node_id``, given with it.
 ``raw_meta`` is serialized as a JSON LIST of pairs (``[["0x0308", "0"], …]``), wire order and
 duplicates preserved, ``ensure_ascii=False``, no sorting (spec §3). ``record_observation`` makes
 ONE transaction (spec §4): ``INSERT OR IGNORE`` into ``files`` (first sight wins), into
@@ -34,7 +34,14 @@ from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash, i
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.retraction import RETRACTED_TIER
-from p2pwatch.ports.driven.catalog_repository import DownloadCandidate
+from p2pwatch.ports.driven.catalog import (
+    CatalogScanner,
+    DecisionReader,
+    DecisionWriter,
+    DownloadCandidate,
+    ObservationReader,
+    ObservationWriter,
+)
 
 _CANONICAL_HASH_RE = re.compile(r"[0-9a-f]{32}\Z")
 
@@ -96,8 +103,10 @@ ORDER BY f.network, f.native_id, d.target_id
 _COUNT_FILES = "SELECT COUNT(*) FROM files"
 
 
-class SqliteCatalogRepository:
-    """SQLite implementation of the ``CatalogRepository`` port (STRUCTURAL satisfaction)."""
+class SqliteCatalogRepository(
+    ObservationWriter, ObservationReader, DecisionWriter, DecisionReader, CatalogScanner
+):
+    """SQLite implementation of the catalog's five ports."""
 
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
@@ -187,7 +196,7 @@ class SqliteCatalogRepository:
                 ),
             )
 
-    def latest_decisions(self, file: FileKey) -> dict[str, DecisionRecord]:
+    def read_latest_decisions(self, file: FileKey) -> dict[str, DecisionRecord]:
         """Latest verdict per target for this file (set-diff anti-redundancy, spec §7), READ.
 
         Maps ``target_id`` → its latest :class:`DecisionRecord`. INCLUDES a target whose latest
@@ -201,7 +210,7 @@ class SqliteCatalogRepository:
             row[0]: DecisionRecord(target_id=row[0], rule_name=row[1], tier=row[2]) for row in rows
         }
 
-    def download_candidates(self) -> tuple[DownloadCandidate, ...]:
+    def read_download_candidates(self) -> tuple[DownloadCandidate, ...]:
         """``(file, target_id)`` whose LATEST verdict is tier=download, to replay (download §5).
 
         Keyed per ``(file, target_id)``: a whole-episode file matching both segments now yields
@@ -214,28 +223,28 @@ class SqliteCatalogRepository:
             for row in rows
         )
 
-    def latest_observation(self, file: FileKey) -> FileObservation | None:
+    def read_latest_observation(self, file: FileKey) -> FileObservation | None:
         """The file's latest observation, or ``None`` (read)."""
         with wrap_sqlite_errors():
             return observation_read.latest_observation(self._connection, file)
 
-    def best_observation(self, file: FileKey) -> FileObservation | None:
+    def read_best_observation(self, file: FileKey) -> FileObservation | None:
         """The observation of the clean filename (most sources, then latest), or ``None``."""
         with wrap_sqlite_errors():
             return observation_read.best_observation(self._connection, file)
 
-    def known_filenames(self, file: FileKey) -> tuple[str, ...]:
+    def read_known_filenames(self, file: FileKey) -> tuple[str, ...]:
         """Every distinct filename this file was observed under, sorted (read)."""
         with wrap_sqlite_errors():
             return observation_read.known_filenames(self._connection, file)
 
-    def count_files(self) -> int:
+    def read_file_count(self) -> int:
         """Number of catalogued files, the re-evaluation progress total (read)."""
         with wrap_sqlite_errors():
             row = self._connection.execute(_COUNT_FILES).fetchone()
         return int(row[0])
 
-    def iter_reevaluation_rows(self) -> Iterator[FileObservation]:
+    def iter_latest_observations(self) -> Iterator[FileObservation]:
         """Every seen file's latest observation, streamed (spec re-evaluation §6)."""
         with wrap_sqlite_errors():
             yield from observation_read.iter_latest_observations(self._connection)

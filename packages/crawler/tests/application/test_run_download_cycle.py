@@ -10,11 +10,7 @@ from catalog_matching.domain.models import TargetSegment
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
 from p2pwatch.adapters.driven.persistence_sqlite.download_repository import SqliteDownloadRepository
 from p2pwatch.adapters.driven.persistence_sqlite.source_repository import SqliteSourceRepository
-from p2pwatch.application.run_download_cycle import (
-    DownloadDeps,
-    DownloadRepository,
-    run_download_cycle,
-)
+from p2pwatch.application.run_download_cycle import DownloadDeps, run_download_cycle
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability.events import (
@@ -28,7 +24,7 @@ from p2pwatch.domain.observability.events import (
 )
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.source import SourceKey, SourceReading, SourceRole
-from p2pwatch.ports.driven.catalog_repository import DownloadCandidate
+from p2pwatch.ports.driven.catalog import DownloadCandidate
 from p2pwatch.ports.driven.client_errors import ClientUnreachableError, DownloadRejectedError
 from p2pwatch.ports.driven.download_client import (
     DownloadRequest,
@@ -37,7 +33,7 @@ from p2pwatch.ports.driven.download_client import (
     WaitingReason,
 )
 from p2pwatch.ports.driven.repository_errors import RepositoryError
-from p2pwatch.ports.driven.source_repository import EarlierPoints, RecordedReading, SourceRepository
+from p2pwatch.ports.driven.source_points import EarlierPoints, RecordedReading
 from p2pwatch_testing.application.download_fakes import (
     FakeCatalogReads,
     FakeDiskSpace,
@@ -107,25 +103,29 @@ def _started(client: FakeDownloadClient) -> list[str]:
 def _deps(
     *,
     client: FakeDownloadClient,
-    downloads: DownloadRepository,
+    downloads: FakeDownloadRepo | SqliteDownloadRepository,
     catalog: FakeCatalogReads,
     free: int = 1_000_000,
     min_free: int = 0,
     lost_after: timedelta = timedelta(days=1),
     telemetry: RecordingTelemetry | None = None,
     targets: Sequence[TargetSegment] | None = None,
-    sources: SourceRepository | None = None,
+    sources: FakeSourceRepo | SqliteSourceRepository | None = None,
     fake_time: FakeTime | None = None,
     sources_interval: timedelta = timedelta(seconds=30),
     logger: FakeLogger | None = None,
 ) -> DownloadDeps:
     fake_time = fake_time or FakeTime()
+    sources = sources or FakeSourceRepo()
     return DownloadDeps(
         download_client=client,
         source_client=client,
-        downloads=downloads,
-        sources=sources or FakeSourceRepo(),
-        catalog=catalog,
+        download_writer=downloads,
+        download_reader=downloads,
+        source_point_writer=sources,
+        source_point_reader=sources,
+        decision_reader=catalog,
+        observation_reader=catalog,
         targets=targets if targets is not None else _TARGETS,
         disk=FakeDiskSpace(free),
         min_free_bytes=min_free,
@@ -179,7 +179,7 @@ async def test_already_downloaded_candidate_is_deduped() -> None:
 @pytest.mark.asyncio
 async def test_two_segment_candidates_same_hash_dedup_to_one_download() -> None:
     # spec §8: a whole-episode file yields BOTH (hash,062A) and (hash,062B) in
-    # download_candidates; is_tracked(hash) dedups them to ONE physical download.
+    # read_download_candidates; is_tracked(hash) dedups them to ONE physical download.
     #
     # Both targets are DOWNLOAD-eligible ("lost", not "complete") so the ONLY thing that
     # can collapse the two candidates is the `is_tracked(hash)` guard in
@@ -424,7 +424,7 @@ async def test_monitor_repo_error_still_promotes_completions_in_same_cycle() -> 
     # down on another hash), the old code set ``states={}`` then called ``_handle_completions``
     # → each shared hash → ``states.get(...) is None`` → ignored → NO completion recorded
     # in the whole cycle (latency +1 cycle although we already have the signal). The fix re-reads
-    # ``tracked_states()`` BEFORE ``_handle_completions`` so the completions are seen.
+    # ``read_tracked_states()`` BEFORE ``_handle_completions`` so the completions are seen.
     client = FakeDownloadClient(
         # _A completed: the completion must be recorded in this very cycle. _B is listed and
         # fails its set_state transition.
@@ -447,8 +447,8 @@ async def test_monitor_repo_error_still_promotes_completions_in_same_cycle() -> 
 
 @pytest.mark.asyncio
 async def test_active_states_repo_failure_is_absorbed_at_step_2() -> None:
-    # ``tracked_states`` that raises IN A LOOP (persistent repo failure): step 1 absorbs, then the
-    # re-read of step 2 (logic-download#2) absorbs in turn → the cycle ends without
+    # ``read_tracked_states`` that raises IN A LOOP (persistent repo failure): step 1 absorbs, then
+    # the re-read of step 2 (logic-download#2) absorbs in turn → the cycle ends without
     # crashing the loop (the next cycle will replay). We exercise HERE the branch
     # ``except RepositoryError`` of step 2 separately from that of step 1.
     client = FakeDownloadClient()
@@ -1204,7 +1204,7 @@ async def test_a_wall_clock_step_forward_fails_no_download_absent_from_one_poll(
     await run_download_cycle(deps, _NODE)
     fake_time.step_wall(timedelta(days=2))
     await run_download_cycle(deps, _NODE)
-    assert real_downloads.tracked_states() == {_key(_A): DownloadState.DOWNLOADING}
+    assert real_downloads.read_tracked_states() == {_key(_A): DownloadState.DOWNLOADING}
 
 
 @pytest.mark.asyncio
@@ -1224,10 +1224,10 @@ async def test_a_last_seen_at_in_the_future_waits_lost_after_no_more(
     await run_download_cycle(deps, _NODE)
     fake_time.advance(timedelta(days=1) - timedelta(seconds=1))
     await run_download_cycle(deps, _NODE)
-    assert real_downloads.tracked_states() == {_key(_A): DownloadState.QUEUED}
+    assert real_downloads.read_tracked_states() == {_key(_A): DownloadState.QUEUED}
     fake_time.advance(timedelta(seconds=1))
     await run_download_cycle(deps, _NODE)
-    assert real_downloads.tracked_states() == {_key(_A): DownloadState.FAILED}
+    assert real_downloads.read_tracked_states() == {_key(_A): DownloadState.FAILED}
 
 
 @pytest.mark.asyncio
@@ -1244,7 +1244,7 @@ async def test_a_download_last_seen_two_days_ago_fails_at_the_first_cycle(
         fake_time=fake_time,
     )
     await run_download_cycle(deps, _NODE)
-    assert real_downloads.tracked_states() == {_key(_A): DownloadState.FAILED}
+    assert real_downloads.read_tracked_states() == {_key(_A): DownloadState.FAILED}
 
 
 @pytest.mark.asyncio
@@ -1265,10 +1265,10 @@ async def test_a_download_the_node_queued_is_lost_after_lost_after_of_monotonic_
     await run_download_cycle(deps, _NODE)
     fake_time.step_wall(timedelta(days=2))
     await run_download_cycle(deps, _NODE)
-    assert real_downloads.tracked_states() == {_key(_A): DownloadState.QUEUED}
+    assert real_downloads.read_tracked_states() == {_key(_A): DownloadState.QUEUED}
     fake_time.advance(timedelta(days=1))
     await run_download_cycle(deps, _NODE)
-    assert real_downloads.tracked_states() == {_key(_A): DownloadState.FAILED}
+    assert real_downloads.read_tracked_states() == {_key(_A): DownloadState.FAILED}
 
 
 class _LaggingDownloadRepo(FakeDownloadRepo):

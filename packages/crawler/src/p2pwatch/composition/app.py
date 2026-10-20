@@ -288,9 +288,12 @@ class CrawlerApp(CrawlerRunner):
             backoff = BackoffRegistry(
                 _backoff_policy(crawler_config), wall_clock, monotonic_clock, SeededRng()
             )
-            backoff.load_from(backoff_states.load_backoff_states())
+            backoff.load_from(backoff_states.read_backoff_states())
             deps = WorkerDeps(
-                catalog=catalog_repo,
+                observation_writer=catalog_repo,
+                observation_reader=catalog_repo,
+                decision_writer=catalog_repo,
+                decision_reader=catalog_repo,
                 engine=engine,
                 wake_hub=wake_hub,
                 backoff=backoff,
@@ -313,7 +316,7 @@ class CrawlerApp(CrawlerRunner):
                 keywords=crawler_config.search.keywords,
                 resumed=resumed,
                 backoff=backoff,
-                backoff_states=backoff_states,
+                backoff_state_writer=backoff_states,
                 monotonic_clock=monotonic_clock,
                 logger=StdlibLogger("p2pwatch.application.search_tasks"),
             )
@@ -327,14 +330,19 @@ class CrawlerApp(CrawlerRunner):
             # the search session.
             download_config = crawler_config.download
             if download_config is not None:
+                download_repo = SqliteDownloadRepository(local_conn)
+                source_repo = SqliteSourceRepository(
+                    catalog_conn, download_config.time_between_source_reads
+                )
                 download_deps = DownloadLoopDeps(
                     download_client=client,
                     source_client=client,
-                    downloads=SqliteDownloadRepository(local_conn),
-                    sources=SqliteSourceRepository(
-                        catalog_conn, download_config.time_between_source_reads
-                    ),
-                    catalog=catalog_repo,
+                    download_writer=download_repo,
+                    download_reader=download_repo,
+                    source_point_writer=source_repo,
+                    source_point_reader=source_repo,
+                    decision_reader=catalog_repo,
+                    observation_reader=catalog_repo,
                     targets=config.targets,
                     disk=ShutilDiskSpace(download_config.output_dir),
                     min_free_bytes=download_config.min_free_bytes,
@@ -359,9 +367,13 @@ class CrawlerApp(CrawlerRunner):
                 wall_clock=wall_clock,
                 telemetry=telemetry,
                 policy_fingerprint=config.policy_fingerprint,
-                local_state=local_repo,
+                policy_fingerprint_reader=local_repo,
+                policy_fingerprint_writer=local_repo,
                 reevaluate=lambda node_id: reevaluate_catalog(
-                    catalog=catalog_repo,
+                    observation_reader=catalog_repo,
+                    decision_writer=catalog_repo,
+                    decision_reader=catalog_repo,
+                    catalog_scanner=catalog_repo,
                     engine=engine,
                     wake_hub=wake_hub,
                     telemetry=telemetry,

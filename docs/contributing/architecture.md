@@ -238,7 +238,7 @@ sequenceDiagram
   A-->>W: SearchAnswer (reported files, skipped results)
   loop each reported file
     W->>C: record_observation(FileObservation)
-    W->>C: known_filenames(file)
+    W->>C: read_known_filenames(file)
     W->>E: evaluate_file(candidates)
     E-->>W: list[MatchDecision]
     loop each changed decision

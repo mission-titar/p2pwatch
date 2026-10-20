@@ -15,7 +15,6 @@ from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash, i
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation, ReportedFile, fold_raw_meta
 from p2pwatch.domain.retraction import RETRACTED_TIER
-from p2pwatch.ports.driven.catalog_repository import CatalogRepository
 from p2pwatch_testing.catalog_rows import count_observations, insert_file
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
@@ -263,13 +262,6 @@ def test_record_decision_rejects_non_canonical_hash(
     assert connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 0
 
 
-def test_repository_satisfies_the_port_structurally(
-    repository: SqliteCatalogRepository,
-) -> None:
-    port: CatalogRepository = repository  # mypy proves structural satisfaction
-    port.record_observation(FileObservation(_reported_file(), _T0), _NODE)
-
-
 def test_record_retraction_round_trip(
     repository: SqliteCatalogRepository, connection: sqlite3.Connection
 ) -> None:
@@ -279,7 +271,7 @@ def test_record_retraction_round_trip(
         "SELECT file_id, target_id, rule_name, tier, decided_at, node_id FROM match_decisions"
     ).fetchone()
     assert row == (_KEY.file_id, "062A", "", RETRACTED_TIER, _T0_ISO, _NODE)
-    assert repository.latest_decisions(_KEY) == {
+    assert repository.read_latest_decisions(_KEY) == {
         "062A": DecisionRecord(target_id="062A", rule_name="", tier=RETRACTED_TIER)
     }
 
@@ -323,7 +315,7 @@ def test_record_retraction_row_is_append_only(
     with pytest.raises(sqlite3.IntegrityError, match="match_decisions is append-only"):
         connection.execute("DELETE FROM match_decisions")
     # The retracted row SURVIVED both attempts, untouched.
-    assert repository.latest_decisions(_KEY) == {
+    assert repository.read_latest_decisions(_KEY) == {
         "062A": DecisionRecord(target_id="062A", rule_name="", tier=RETRACTED_TIER)
     }
 
@@ -350,13 +342,13 @@ def test_iter_reevaluation_rows_returns_the_latest_observation_per_hash(
     )
     repository.record_observation(newest, _NODE)
     repository.record_observation(other, _NODE)
-    assert list(repository.iter_reevaluation_rows()) == [newest, other]
+    assert list(repository.iter_latest_observations()) == [newest, other]
 
 
 def test_iter_reevaluation_rows_is_empty_with_an_empty_catalogue(
     repository: SqliteCatalogRepository,
 ) -> None:
-    assert list(repository.iter_reevaluation_rows()) == []
+    assert list(repository.iter_latest_observations()) == []
 
 
 def test_iter_reevaluation_rows_breaks_an_observed_at_tie_on_the_highest_variant(
@@ -368,7 +360,7 @@ def test_iter_reevaluation_rows_breaks_an_observed_at_tie_on_the_highest_variant
         FileObservation(_reported_file(filename="second.avi"), _T0), _NODE
     )
     filenames = [
-        observation.reported_file.filename for observation in repository.iter_reevaluation_rows()
+        observation.reported_file.filename for observation in repository.iter_latest_observations()
     ]
     assert filenames == ["second.avi"]
 
@@ -376,7 +368,7 @@ def test_iter_reevaluation_rows_breaks_an_observed_at_tie_on_the_highest_variant
 def test_count_files_counts_catalogued_hashes_not_observations(
     repository: SqliteCatalogRepository,
 ) -> None:
-    assert repository.count_files() == 0
+    assert repository.read_file_count() == 0
     repository.record_observation(FileObservation(_reported_file(), _T0), _NODE)
     repository.record_observation(FileObservation(_reported_file(), _T0), _NODE)
     repository.record_observation(
@@ -385,18 +377,18 @@ def test_count_files_counts_catalogued_hashes_not_observations(
         ),
         _NODE,
     )
-    assert repository.count_files() == 2
+    assert repository.read_file_count() == 2
 
 
 def test_iter_reevaluation_rows_skips_a_file_never_observed(
     repository: SqliteCatalogRepository, connection: sqlite3.Connection
 ) -> None:
     insert_file(connection, _HASH, 1)
-    assert list(repository.iter_reevaluation_rows()) == []
+    assert list(repository.iter_latest_observations()) == []
 
 
 def test_last_observation_of_a_file_never_observed_is_none(
     repository: SqliteCatalogRepository, connection: sqlite3.Connection
 ) -> None:
     insert_file(connection, _HASH, 1)
-    assert repository.latest_observation(_KEY) is None
+    assert repository.read_latest_observation(_KEY) is None

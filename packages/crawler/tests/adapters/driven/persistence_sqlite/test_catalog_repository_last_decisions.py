@@ -55,7 +55,7 @@ def test_last_decisions_is_empty_when_never_decided(
     repository: SqliteCatalogRepository,
 ) -> None:
     repository.record_observation(FileObservation(_reported_file(_A), _T0), _NODE)
-    assert repository.latest_decisions(_A) == {}
+    assert repository.read_latest_decisions(_A) == {}
 
 
 def test_last_decisions_returns_the_latest_record_per_target(
@@ -67,7 +67,7 @@ def test_last_decisions_returns_the_latest_record_per_target(
         _A, _decision("id_segment_exact", "download", "062A"), _T1, _NODE
     )  # newer
     repository.record_decision(_A, _decision("numero_nu", "notify", "062B"), _T0, _NODE)
-    assert repository.latest_decisions(_A) == {
+    assert repository.read_latest_decisions(_A) == {
         "062A": DecisionRecord(target_id="062A", rule_name="id_segment_exact", tier="download"),
         "062B": DecisionRecord(target_id="062B", rule_name="numero_nu", tier="notify"),
     }
@@ -79,7 +79,7 @@ def test_last_decisions_includes_a_target_whose_latest_tier_is_retracted(
     repository.record_observation(FileObservation(_reported_file(_A), _T0), _NODE)
     repository.record_decision(_A, _decision("id_segment_exact", "download", "062A"), _T0, _NODE)
     repository.record_decision(_A, _decision("", RETRACTED_TIER, "062A"), _T1, _NODE)
-    assert repository.latest_decisions(_A) == {
+    assert repository.read_latest_decisions(_A) == {
         "062A": DecisionRecord(target_id="062A", rule_name="", tier=RETRACTED_TIER)
     }
 
@@ -92,7 +92,7 @@ def test_last_decisions_excludes_the_legacy_empty_sentinel(
     repository.record_decision(
         _A, _decision("", RETRACTED_TIER, ""), _T1, _NODE
     )  # legacy target_id=""
-    assert repository.latest_decisions(_A) == {
+    assert repository.read_latest_decisions(_A) == {
         "062A": DecisionRecord(target_id="062A", rule_name="numero_nu", tier="notify")
     }
 
@@ -100,4 +100,4 @@ def test_last_decisions_excludes_the_legacy_empty_sentinel(
 def test_last_decisions_for_unknown_hash_is_empty(
     repository: SqliteCatalogRepository,
 ) -> None:
-    assert repository.latest_decisions(_A) == {}
+    assert repository.read_latest_decisions(_A) == {}

@@ -6,10 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
-# Imported from here too until their importers move to the domain.
-from p2pwatch.domain.status_reading import ChannelStatus as ChannelStatus
-from p2pwatch.domain.status_reading import ClientStatus as ClientStatus
-from p2pwatch.domain.status_reading import StatusReading as StatusReading
+from p2pwatch.domain.status_reading import ClientStatus, StatusReading
 from p2pwatch.ports.driven.clock import MonotonicInstant
 
 

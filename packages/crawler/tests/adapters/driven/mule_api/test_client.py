@@ -16,12 +16,12 @@ from p2pwatch.adapters.driven.mule_api.errors import (
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceRole
+from p2pwatch.domain.status_reading import ChannelStatus
 from p2pwatch.ports.driven.client_errors import (
     ClientUnreachableError,
     DownloadRejectedError,
     SearchFailedError,
 )
-from p2pwatch.ports.driven.client_status import ChannelStatus
 from p2pwatch.ports.driven.clock import MonotonicInstant
 from p2pwatch.ports.driven.download_client import DownloadClient, DownloadRequest, DownloadStatus
 from p2pwatch.ports.driven.source_client import SourceClient

@@ -10,6 +10,10 @@ from datetime import datetime
 from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
 from p2pwatch.ports.driven.node_id import NodeIdReader, NodeIdWriter
+from p2pwatch.ports.driven.policy_fingerprint import (
+    PolicyFingerprintReader,
+    PolicyFingerprintWriter,
+)
 
 _SELECT_NODE_ID = "SELECT value FROM node_runtime WHERE key = 'node_id'"
 
@@ -27,8 +31,10 @@ ON CONFLICT (id) DO UPDATE SET policy_fingerprint = excluded.policy_fingerprint
 """
 
 
-class SqliteLocalStateRepository(NodeIdReader, NodeIdWriter):
-    """SQLite implementation of the node id's ports and of ``LocalStateRepository`` (structural)."""
+class SqliteLocalStateRepository(
+    NodeIdReader, NodeIdWriter, PolicyFingerprintReader, PolicyFingerprintWriter
+):
+    """SQLite implementation of the node id's ports and of the policy fingerprint's."""
 
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
@@ -57,13 +63,13 @@ class SqliteLocalStateRepository(NodeIdReader, NodeIdWriter):
                     self._connection.execute("ROLLBACK")
                 raise
 
-    def reevaluated_policy_fingerprint(self) -> str | None:
+    def read_policy_fingerprint(self) -> str | None:
         """The stored policy fingerprint, or ``None`` if no re-evaluation ever ran (spec §7.1)."""
         with wrap_sqlite_errors():
             row = self._connection.execute(_SELECT_POLICY_FINGERPRINT).fetchone()
         return str(row[0]) if row is not None else None
 
-    def set_reevaluated_policy_fingerprint(self, fingerprint: str) -> None:
+    def set_policy_fingerprint(self, fingerprint: str) -> None:
         """Upserts the single-row marker (called only AFTER a full re-evaluation pass)."""
         with wrap_sqlite_errors():
             self._connection.execute(_UPSERT_POLICY_FINGERPRINT, (fingerprint,))

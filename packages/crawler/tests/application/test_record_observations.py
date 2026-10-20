@@ -58,7 +58,10 @@ async def test_observation_is_always_recorded_even_when_discarded(
     wake_hub = RecordingWakeHub()
     changed = await record_observation(
         _reported_file(_HASH_DISCARD, "random.txt"),
-        catalog=catalog,
+        observation_writer=catalog,
+        observation_reader=catalog,
+        decision_writer=catalog,
+        decision_reader=catalog,
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
@@ -83,7 +86,10 @@ async def test_the_observation_carries_the_clocks_instant(
 ) -> None:
     await record_observation(
         _reported_file(_HASH_DISCARD, "random.txt"),
-        catalog=catalog,
+        observation_writer=catalog,
+        observation_reader=catalog,
+        decision_writer=catalog,
+        decision_reader=catalog,
         engine=engine,
         wake_hub=RecordingWakeHub(),
         telemetry=RecordingTelemetry(),
@@ -108,7 +114,10 @@ async def test_new_verdict_is_persisted_and_nudged(
     wake_hub = RecordingWakeHub()
     changed = await record_observation(
         _reported_file(_HASH_DL, _DL_NAME),
-        catalog=catalog,
+        observation_writer=catalog,
+        observation_reader=catalog,
+        decision_writer=catalog,
+        decision_reader=catalog,
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
@@ -142,7 +151,10 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
     assert (
         await record_observation(
             reported_file,
-            catalog=catalog,
+            observation_writer=catalog,
+            observation_reader=catalog,
+            decision_writer=catalog,
+            decision_reader=catalog,
             engine=engine,
             wake_hub=wake_hub,
             telemetry=telemetry,
@@ -159,7 +171,10 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
     assert (
         await record_observation(
             reported_file,
-            catalog=catalog,
+            observation_writer=catalog,
+            observation_reader=catalog,
+            decision_writer=catalog,
+            decision_reader=catalog,
             engine=engine,
             wake_hub=wake_hub,
             telemetry=telemetry,
@@ -188,7 +203,10 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
     wake_hub = RecordingWakeHub()
     await record_observation(
         _reported_file(_HASH_DL, _NOTIFY_NAME),
-        catalog=catalog,
+        observation_writer=catalog,
+        observation_reader=catalog,
+        decision_writer=catalog,
+        decision_reader=catalog,
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
@@ -201,7 +219,10 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
     # 2nd view of the SAME hash, DOWNLOAD name → verdict changes → re-append + wake.
     changed = await record_observation(
         _reported_file(_HASH_DL, _DL_NAME),
-        catalog=catalog,
+        observation_writer=catalog,
+        observation_reader=catalog,
+        decision_writer=catalog,
+        decision_reader=catalog,
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
@@ -239,7 +260,10 @@ async def test_persistence_error_is_absorbed_and_cycle_continues(
     logger = FakeLogger()
     changed = await record_observation(
         _reported_file(_HASH_DL, _DL_NAME),
-        catalog=catalog,
+        observation_writer=catalog,
+        observation_reader=catalog,
+        decision_writer=catalog,
+        decision_reader=catalog,
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
@@ -273,7 +297,10 @@ async def test_signal_consumer_awaits_the_nudge(
     assert not waiter.done()
     await record_observation(
         _reported_file(_HASH_DL, _DL_NAME),
-        catalog=catalog,
+        observation_writer=catalog,
+        observation_reader=catalog,
+        decision_writer=catalog,
+        decision_reader=catalog,
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
@@ -298,7 +325,10 @@ async def test_download_tier_verdict_also_nudges_the_download_subject(
     wake_hub = RecordingWakeHub()
     changed = await record_observation(
         _reported_file(_HASH_DL, _DL_NAME),
-        catalog=catalog,
+        observation_writer=catalog,
+        observation_reader=catalog,
+        decision_writer=catalog,
+        decision_reader=catalog,
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
@@ -323,7 +353,10 @@ async def test_non_download_tier_verdict_does_not_nudge_the_download_subject(
     wake_hub = RecordingWakeHub()
     changed = await record_observation(
         _reported_file(_HASH_CAT, "keroro something.avi"),
-        catalog=catalog,
+        observation_writer=catalog,
+        observation_reader=catalog,
+        decision_writer=catalog,
+        decision_reader=catalog,
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
@@ -346,7 +379,10 @@ async def test_emits_observation_then_decision_on_change(
     reported_file = _reported_file(_HASH_DL, _DL_NAME)  # matches at tier=download
     await record_observation(
         reported_file,
-        catalog=catalog,
+        observation_writer=catalog,
+        observation_reader=catalog,
+        decision_writer=catalog,
+        decision_reader=catalog,
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
@@ -369,7 +405,10 @@ async def test_emits_only_observation_when_discarded(
     reported_file = _reported_file(_HASH_DISCARD, "random.txt")  # discarded by the engine
     await record_observation(
         reported_file,
-        catalog=catalog,
+        observation_writer=catalog,
+        observation_reader=catalog,
+        decision_writer=catalog,
+        decision_reader=catalog,
         engine=engine,
         wake_hub=RecordingWakeHub(),
         telemetry=telemetry,
@@ -393,7 +432,10 @@ async def test_multi_segment_observation_records_two_rows(
     wake_hub = RecordingWakeHub()
     changed = await record_observation(
         _reported_file(_HASH_DL, "Keroro 062 teletoon.avi"),
-        catalog=catalog,
+        observation_writer=catalog,
+        observation_reader=catalog,
+        decision_writer=catalog,
+        decision_reader=catalog,
         engine=engine,
         wake_hub=wake_hub,
         telemetry=telemetry,
