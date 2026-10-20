@@ -1,13 +1,13 @@
 """The metrics recorder: inc/set/remove on a throwaway CollectorRegistry (get_sample_value)."""
 
 import socket
+import socketserver
 import threading
 
 import httpx
 import pytest
-from prometheus_client import CollectorRegistry
+from prometheus_client import CollectorRegistry, start_http_server
 
-from p2pwatch.adapters.driven.observability import prometheus_metrics_recorder
 from p2pwatch.adapters.driven.observability.prometheus_metrics_recorder import (
     PrometheusMetricsRecorder,
     start_metrics_server,
@@ -168,7 +168,7 @@ def test_the_metrics_server_serves_the_registry_on_its_port_until_stopped() -> N
     )
     port = _free_port()
 
-    stop = start_metrics_server(registry, port)
+    stop = start_metrics_server(registry, port, start_http_server)
     try:
         page = httpx.get(f"http://127.0.0.1:{port}/metrics").text
     finally:
@@ -182,30 +182,24 @@ def test_the_metrics_server_serves_the_registry_on_its_port_until_stopped() -> N
 def test_no_metrics_server_without_a_port() -> None:
     threads = threading.enumerate()
 
-    stop = start_metrics_server(CollectorRegistry(), None)
+    stop = start_metrics_server(CollectorRegistry(), None, start_http_server)
     stop()
 
     assert threading.enumerate() == threads
 
 
-class _ShutDownServer:
+class _ShutDownServer(socketserver.BaseServer):
     def shutdown(self) -> None: ...
 
     def server_close(self) -> None: ...
 
 
-def test_the_stop_gives_up_on_a_server_thread_that_does_not_end(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_the_stop_gives_up_on_a_server_thread_that_does_not_end() -> None:
     released = threading.Event()
     stuck = threading.Thread(target=released.wait, daemon=True)
     stuck.start()
-    monkeypatch.setattr(
-        prometheus_metrics_recorder,
-        "start_http_server",
-        lambda port, registry: (_ShutDownServer(), stuck),
-    )
-    stop = start_metrics_server(CollectorRegistry(), 9090)
+    server = _ShutDownServer(("127.0.0.1", 9090), socketserver.BaseRequestHandler)
+    stop = start_metrics_server(CollectorRegistry(), 9090, lambda port, registry: (server, stuck))
 
     stopping = threading.Thread(target=stop)
     stopping.start()

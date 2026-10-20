@@ -6,8 +6,10 @@ the global registry) → testable on a throwaway registry, no shared state. Two 
 are named WITHOUT ``_total`` (added by the lib at exposition time)."""
 
 from collections.abc import Callable
+from socketserver import BaseServer
+from threading import Thread
 
-from prometheus_client import CollectorRegistry, Counter, Gauge, start_http_server
+from prometheus_client import CollectorRegistry, Counter, Gauge
 
 from p2pwatch.domain.observability.policy import MetricInstruction, MetricName
 from p2pwatch.ports.driven.telemetry import MetricsRecorder
@@ -63,9 +65,13 @@ class PrometheusMetricsRecorder(MetricsRecorder):
             self._gauges[instruction.name].remove_by_labels(labels)
 
 
-def start_metrics_server(registry: CollectorRegistry, port: int | None) -> Callable[[], None]:
-    """Serves ``registry`` on ``/metrics`` from a daemon thread, or nothing when ``port`` is
-    ``None``; returns what stops it."""
+def start_metrics_server(
+    registry: CollectorRegistry,
+    port: int | None,
+    start_http_server: Callable[..., tuple[BaseServer, Thread]],
+) -> Callable[[], None]:
+    """Serves ``registry`` on ``/metrics`` from the daemon thread ``start_http_server`` starts,
+    or nothing when ``port`` is ``None``; returns what stops it."""
     if port is None:
         return lambda: None
     server, thread = start_http_server(port, registry=registry)
