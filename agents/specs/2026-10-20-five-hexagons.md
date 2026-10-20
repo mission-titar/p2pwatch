@@ -35,8 +35,10 @@ this spec: they apply a rule `AGENTS.md` already has, or a tool enforces them it
 - **C1. No module patching in a test**: no `monkeypatch`, `pytest.MonkeyPatch` or `unittest.mock.patch`. Process
   state is read only by a `__main__.py` and passed down as values; a constant a test tunes is a parameter; a
   function a test replaces is passed to what calls it, a port when the core needs it, a typed `Callable` inside an
-  adapter. The composition passes the real value, never a parameter's default, even for an adapter's own
-  resources (Corrected: defaults were not excluded). Hard rules, 3b 90 (the rule that enforces it); the three
+  adapter. The composition passes the real value, never a parameter's default (Corrected: defaults were not
+  excluded). What is part of an adapter's code (its SQL, its migration scripts, the SQL functions they call) is
+  no parameter: a test that tunes it tests a generic mechanism, which moves apart and receives it (Corrected:
+  the migration runner and the SQL functions' memo, block 10). Hard rules, 3b 90 (the rule that enforces it); the three
   replacements in Hard rules from 3a 10.
 - **C2. An adapter receives from the composition what it drives**: a directory or a file, a URL or an address, a
   command runner or an executable's path. Its unit test hands it a local stand-in, the integration suites the real
@@ -63,13 +65,19 @@ this spec: they apply a rule `AGENTS.md` already has, or a tool enforces them it
     six command lines' `run(argv=None)`, each fixed by the block that touches it), the root logger handed to what configures it (the command line,
     and the crawler's composition, which sets its level). Why: it is the composition's to read, as `CrawlerApp`
     already receives `env=os.environ`.
-  - **A module constant a test tunes** (`_PROGRESS_EVERY`, `_MIGRATIONS`, the aMule paths, `PREMISES`) becomes a
+  - **A module constant a test tunes** (`_PROGRESS_EVERY`, the aMule paths, `PREMISES`) becomes a
     parameter, the composition passing the real value, never a default of the parameter (Corrected: defaults were
     not excluded). Why: the test then says what it sets, and one rule leaves nothing to decide case by case.
   - **A function a test replaces** is passed to what calls it: a driven port when the core needs it, a plain typed
     `Callable` parameter when an adapter uses it internally (`start_http_server`, a parameter of
-    `start_metrics_server`, which the composition passes; `content_hash` and `fold_raw_meta`, parameters of
-    `register_sql_functions`). Why: an ABC of one method that no core consumes would be a port in name only.
+    `start_metrics_server`, which the composition passes). Why: an ABC of one method that no core consumes would
+    be a port in name only.
+  - **What a test tuned inside an adapter's own code** moves into a generic piece that receives it: the migration
+    runner takes its scripts, so `open_catalog(path)` and `open_local(path)` keep applying their own; a memo
+    takes the function it memoizes, so `register_sql_functions` keeps `content_hash` and `fold_raw_meta`, its
+    tests checking their output. Why: the scripts and the hash are the database's definition, and passing others
+    would break the stored rows. Accepted limit: no test proves `register_sql_functions` registers them memoized;
+    the line shows it (Corrected: `_MIGRATIONS`, `content_hash` and `fold_raw_meta` were parameters).
 
   **An adapter receives from the composition what it drives**: a directory or a file, a URL or an address, a
   command runner or an executable's path. Its unit test hands it a local stand-in (`tmp_path`, a loopback server, a
@@ -269,11 +277,11 @@ call: the old entry function delegates to what the block adds until a later bloc
 
 | # | Branch | Holds | Lines, files (est.) |
 |---|---|---|---|
-| 10 | `test/crawler-constants-as-parameters` | this spec; `_MIGRATIONS`, `_configure`, `_load_scripts`, `_PROGRESS_EVERY` as parameters; `content_hash`, `fold_raw_meta` parameters of `register_sql_functions`; the migration tests and `older_catalog.py` off `monkeypatch` | 300, 12 |
+| 10 | `test/crawler-constants-as-parameters` | this spec; `_PROGRESS_EVERY` a parameter; the migration runner and the SQL functions' memo apart (Corrected: were `_MIGRATIONS`, `_configure`, `_load_scripts`, `content_hash`, `fold_raw_meta` as parameters); the migration tests and `older_catalog.py` off `monkeypatch` | 300, 12 |
 | 11 | `test/crawler-connections-closed` | D1b: `ResourceWarning` an error; the readers' tests open and seed with closing; `close_test_connections` gone | 350, 8 |
 | 12 | `test/crawler-process-state-as-values` | `main(argv, env, cwd)`; the root logger passed; `start_http_server` a parameter of `start_metrics_server`; the command line's default paths against the given `cwd`; `FilesystemCatalogFinder` (C3); the finder, the command line and the compose smoke off `monkeypatch` | 250, 9 |
-| 14 | `refactor/adapter-values-from-composition` | the six parameter defaults of the crawler's adapters gone, the composition passing them (Corrected: added) | pending, pending |
-| 16 | `refactor/config-defaults-in-domain` | the defaults of `crawler.yml`'s absent keys into the domain; C5 in `AGENTS.md` (Corrected: added) | pending, pending |
+| 14 | `refactor/adapter-values-from-composition` | the six parameter defaults of the crawler's adapters gone, the composition passing them (Corrected: added) | 110, 13 |
+| 16 | `refactor/config-defaults-in-domain` | the defaults of `crawler.yml`'s absent keys into the domain; C5 in `AGENTS.md` (Corrected: added) | 185, 6 |
 | 20 | `refactor/bump-amule` | `BumpAmule` behind `AmuleBumper`; the three writers and their adapters; the default paths against the given `cwd` and temporary directory; `wrap`'s width from the composition (Corrected: added); `test_bump` rewritten; `docs/contributing/amule-bump.md` | 450, 16 |
 | 22 | `refactor/repo-reader-domain-types` | `RepoReader`'s `read_` methods on domain types; GitHub's API URL as a composition value; the loopback test | 300, 12 |
 | 30 | `refactor/amule-settings-in-domain` | the environment's validation into the domain, its error, and the values of unset variables (C5, Corrected: added); `env` and the paths as values from `__main__` | 300, 10 |
