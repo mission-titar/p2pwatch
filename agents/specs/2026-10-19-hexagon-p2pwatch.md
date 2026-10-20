@@ -388,7 +388,7 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
 | 200 | `fix/holistic-code-and-tests` | the holistic review's test gaps, the re-login after `close()`, `SourceKeyDisplay`, `PAGE_SIZE` (Corrected 2026-10-20: the closing block split in 200, 201, 202, 203 and 210 after the holistic review's 39 findings) | 145, 16 |
 | 201 | `refactor/holistic-domain-types` | `SearchAnswer`, `DownloadRequest` to the domain; `TrackedDownload`'s reasons as enums | 96, 19 |
 | 202 | `fix/holistic-wiring` | the read pages through the composed app in the wiring test; the shared catalog reader; `FakeDownloadRepo`'s target | 35, 4 |
-| 203 | `refactor/holistic-names` | the holistic review's naming and docstring findings | 373, 32 |
+| 203 | `refactor/holistic-names` | the holistic review's naming and docstring findings; `shut_down`, `CatalogScanReader` | 399, 41 |
 | 210 | `docs/hexagon-p2pwatch-wrap` | closing block: the docs findings, backlog, handoff | |
 
 - Blocks 10, 60, 180 and 190 pass a bound: each only replaces names, signatures or base classes, with no behaviour
@@ -399,7 +399,7 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
   (Corrected 2026-10-19: block 70 takes it too, measured at 20 files and 227 lines: the `node_id`
   threaded to the call sites of `emit` and `notify`.)
   (Corrected 2026-10-20: block 185 takes it too, measured at 45 files and 427 lines: types moved with their imports.)
-  (Corrected 2026-10-20: block 203 takes it too, measured at 32 files and 373 lines: names and docstrings only.)
+  (Corrected 2026-10-20: block 203 takes it too, measured at 41 files and 399 lines: names and docstrings only.)
 - 19 blocks before the closing one, more than the 12 to 15 Discuss first estimated: `RunCrawler`, the `node_id`
   through the calls, the route tests on fakes and the local.db splits each added some. Lot 1b's 17 blocks went with
   no fix-back and no cascaded rebase.
