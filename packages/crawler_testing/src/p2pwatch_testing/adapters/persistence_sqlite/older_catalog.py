@@ -1,9 +1,8 @@
 import hashlib
 import sqlite3
+from collections.abc import Callable
 from importlib import resources
 from pathlib import Path
-
-import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite import connection as connection_module
 from p2pwatch.adapters.driven.persistence_sqlite.variants import (
@@ -16,19 +15,29 @@ from p2pwatch.domain.source import SourceKey
 _MIGRATIONS = resources.files("p2pwatch.adapters.driven.persistence_sqlite") / "migrations"
 
 
-def open_catalog_at(path: Path, version: int) -> sqlite3.Connection:
+def open_catalog_at(
+    path: Path,
+    version: int,
+    *,
+    configure: Callable[[sqlite3.Connection], None] = connection_module._configure,
+) -> sqlite3.Connection:
     """A catalog.db migrated by the runner up to ``version`` only, as an older release left it."""
-    return _open_at(path, "catalog", version)
+    return _open_at(path, "catalog", version, configure)
 
 
 def open_local_at(path: Path, version: int) -> sqlite3.Connection:
     """The same for a local.db."""
-    return _open_at(path, "local", version)
+    return _open_at(path, "local", version, connection_module._configure)
 
 
-def _open_at(path: Path, database: str, version: int) -> sqlite3.Connection:
+def _open_at(
+    path: Path,
+    database: str,
+    version: int,
+    configure: Callable[[sqlite3.Connection], None],
+) -> sqlite3.Connection:
     connection = sqlite3.connect(path, autocommit=True)
-    connection_module._configure(connection)
+    configure(connection)
     register_sql_functions(connection)
     scripts = connection_module._load_scripts(_MIGRATIONS / database)
     connection_module._apply_migrations(
@@ -37,15 +46,11 @@ def _open_at(path: Path, database: str, version: int) -> sqlite3.Connection:
     return connection
 
 
-def forcing_secure_delete(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Stands for the image's SQLite, which compiles ``SECURE_DELETE`` in."""
-    configure = connection_module._configure
-
-    def configure_then_force(connection: sqlite3.Connection) -> None:
-        configure(connection)
-        connection.execute("PRAGMA secure_delete = ON")
-
-    monkeypatch.setattr(connection_module, "_configure", configure_then_force)
+def configure_forcing_secure_delete(connection: sqlite3.Connection) -> None:
+    """Configures as the runner does, then stands for the image's SQLite, which compiles
+    ``SECURE_DELETE`` in."""
+    connection_module._configure(connection)
+    connection.execute("PRAGMA secure_delete = ON")
 
 
 def insert_stage4_variant(

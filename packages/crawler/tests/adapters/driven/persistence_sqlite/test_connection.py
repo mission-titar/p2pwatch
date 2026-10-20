@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.driven.persistence_sqlite import connection as connection_module
 from p2pwatch.adapters.driven.persistence_sqlite.connection import (
     Migration,
     _apply_migrations,
@@ -68,15 +67,12 @@ def test_open_catalog_indexes_the_source_variants(tmp_path: Path) -> None:
         connection.close()
 
 
-def test_open_catalog_registers_the_variant_functions_before_migrating(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    (tmp_path / "catalog").mkdir()
-    (tmp_path / "catalog" / "0001_probe.sql").write_text(
+def test_open_catalog_registers_the_variant_functions_before_migrating(tmp_path: Path) -> None:
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "0001_probe.sql").write_text(
         "CREATE TABLE probe AS SELECT iso_to_micros('1970-01-01T00:00:00.000001+00:00') AS us;"
     )
-    monkeypatch.setattr(connection_module, "_MIGRATIONS", tmp_path)
-    connection = open_catalog(tmp_path / "catalog.db")
+    connection = open_catalog(tmp_path / "catalog.db", scripts_dir=tmp_path / "scripts")
     try:
         assert connection.execute("SELECT us FROM probe").fetchone()[0] == 1
     finally:
@@ -320,26 +316,14 @@ def test_stray_commit_followed_by_a_failure_keeps_the_version_unstamped(tmp_path
         connection.close()
 
 
-def test_open_closes_the_connection_on_a_non_persistence_error(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_open_closes_the_connection_on_a_non_persistence_error(tmp_path: Path) -> None:
     # FileNotFoundError is neither sqlite3.Error nor PersistenceError: it must
     # propagate AS IS, but the connection must not leak (unconditional close).
     captured: list[sqlite3.Connection] = []
-    real_configure = connection_module._configure
-
-    # Captured through `_configure`: patching `sqlite3.connect` breaks coverage's per-test contexts.
-    def capturing_configure(connection: sqlite3.Connection) -> None:
-        captured.append(connection)
-        real_configure(connection)
-
-    def exploding_load_scripts(directory: object) -> tuple[Migration, ...]:
-        raise FileNotFoundError("repertoire de migrations disparu")
-
-    monkeypatch.setattr(connection_module, "_configure", capturing_configure)
-    monkeypatch.setattr(connection_module, "_load_scripts", exploding_load_scripts)
     with pytest.raises(FileNotFoundError):
-        open_catalog(tmp_path / "catalog.db")
+        open_catalog(
+            tmp_path / "catalog.db", scripts_dir=tmp_path / "absent", configure=captured.append
+        )
     assert len(captured) == 1
     with pytest.raises(sqlite3.ProgrammingError, match="[Cc]losed"):
         captured[0].execute("SELECT 1")

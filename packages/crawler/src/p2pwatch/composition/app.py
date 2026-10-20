@@ -392,6 +392,8 @@ class CrawlerApp(CrawlerRunner):
                     wall_clock=wall_clock,
                     logger=StdlibLogger("p2pwatch.application.reevaluate_catalog"),
                     node_id=node_id,
+                    # One INFO progress line per this many files, so a long sweep visibly advances.
+                    progress_every_files=200,
                 ),
                 loops=loops,
                 download_enabled=download_config is not None,

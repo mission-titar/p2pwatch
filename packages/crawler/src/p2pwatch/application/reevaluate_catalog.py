@@ -28,9 +28,6 @@ from p2pwatch.ports.driven.repository_errors import RepositoryError
 from p2pwatch.ports.driven.telemetry import EventEmitter
 from p2pwatch.ports.driven.waker import Waker
 
-# One INFO progress line per this many files, so a long sweep visibly advances.
-_PROGRESS_EVERY = 200
-
 
 @dataclass(frozen=True)
 class ReevaluationSummary:
@@ -57,6 +54,7 @@ async def reevaluate_catalog(
     wall_clock: WallClock,
     logger: Logger,
     node_id: str,
+    progress_every_files: int,
 ) -> ReevaluationSummary:
     """Re-evaluate every catalogued hash's latest observation against ``engine``.
 
@@ -89,7 +87,7 @@ async def reevaluate_catalog(
                 reported_file.file.native_id,
                 error,
             )
-        if files_evaluated % _PROGRESS_EVERY == 0:
+        if files_evaluated % progress_every_files == 0:
             logger.info(
                 "catalogue re-evaluation: %d/%d files, %d rows written",
                 files_evaluated,
