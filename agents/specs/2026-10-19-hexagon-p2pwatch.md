@@ -385,7 +385,9 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
 | 180 | `refactor/role-ports` | the five catalog ports, `CatalogRepository` and `DownloadCatalogReader` deleted; the download, source point, backoff and policy fingerprint ports; the re-exports of the types blocks 110 and 115 moved to the domain (`BackoffKey`, `BackoffState`, `StatusReading`, `ClientStatus`, `ChannelStatus`) go, their importers reading the domain (Corrected 2026-10-19: added) | 900, 34 |
 | 185 | `refactor/read-types-in-domain` | `DownloadCandidate`, `RecordedReading`, `EarlierPoints` and any other type a driven read port still owns move to the domain (Corrected 2026-10-20: added, block 180 found them left against the convention) | |
 | 190 | `refactor/ports-as-abcs` | the five capability renames; the remaining `Protocol`s to ABCs; `channels`; the Gotchas; the ast-grep rule and its test | 750, 72 |
-| 200 | `docs/hexagon-p2pwatch-wrap` | closing block: backlog, handoff | |
+| 200 | `fix/holistic-code-and-tests` | the holistic review's code and test findings (Corrected 2026-10-20: the closing block split in 200, 203 and 210 after the holistic review's 39 findings) | |
+| 203 | `refactor/holistic-names` | the holistic review's naming and docstring findings | |
+| 210 | `docs/hexagon-p2pwatch-wrap` | closing block: the docs findings, backlog, handoff | |
 
 - Blocks 10, 60, 180 and 190 pass a bound: each only replaces names, signatures or base classes, with no behaviour
   moved (the injected logger for the module global, a parameter threaded to its call sites, a port split into its
@@ -398,7 +400,7 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
 - 19 blocks before the closing one, more than the 12 to 15 Discuss first estimated: `RunCrawler`, the `node_id`
   through the calls, the route tests on fakes and the local.db splits each added some. Lot 1b's 17 blocks went with
   no fix-back and no cascaded rebase.
-- The webui's deprecated edges in `tach.toml` go page by page, the last in block 170; `exact` fails a block that
+- The webui's deprecated edges in `tach.toml` go page by page, the last in block 175 (Corrected 2026-10-20: was 170); `exact` fails a block that
   leaves an unused one.
 
 ## Acceptance
