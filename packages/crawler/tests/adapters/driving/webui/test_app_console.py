@@ -11,7 +11,10 @@ from starlette.applications import Starlette
 
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_targets
+from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import SqliteSourceReader
+from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driving.webui.app import build_app
+from p2pwatch.application.list_sources import ListSources
 from p2pwatch.domain.node_state import NodeState
 from p2pwatch.ports.driven.clock import MonotonicClock
 from p2pwatch.ports.driving.crawl_summarizer import CrawlSummary
@@ -80,6 +83,7 @@ def _build(catalog_db: Path, local_db: Path, monotonic_clock: MonotonicClock) ->
         node_describer=FakeNodeDescriber(NodeDescription(node_state)),
         file_lister=FakeFileLister(FileListing((), False, 0, 0, {})),
         file_describer=FakeFileDescriber(None),
+        source_lister=ListSources(SqliteSourceReader(ReaderProvider(catalog_db))),
         amule_url="http://localhost:4711",
         wall_clock=wall_clock,
         monotonic_clock=monotonic_clock,

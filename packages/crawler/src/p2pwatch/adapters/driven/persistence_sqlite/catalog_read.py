@@ -10,14 +10,11 @@ current decisions, optional filters + LIMIT/OFFSET), their ``(matched, total)`` 
 tier facet; and a file's history: its observations in an interval, its latest one, its known names
 and its current decisions, ``None`` if the file is unknown.
 
-``SqliteSourceReader`` reads a file's sharing periods in a window, newest first.
+``SqliteSourceReader`` reads the sources with a user hash, last seen first, and how many match
+the search; and a file's sharing periods in a window, newest first.
 
-``CatalogReader`` exposes these reads:
-
-- ``list_sources()`` / ``count_sources()``: the sources with a user hash, last seen first, and
-  how many match the search.
-- ``source_detail()`` / ``name_detail()``: the page of a source and the page of a name; ``None``
-  if never recorded.
+``CatalogReader.source_detail()`` / ``name_detail()`` read the page of a source and the page of a
+name; ``None`` if never recorded.
 
 All SQL lives in module constants, parameterized (no value interpolation).
 """
@@ -46,6 +43,7 @@ from p2pwatch.adapters.driving.webui.views import (
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_history import DatedDecision, FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch.ports.driven.catalog_file_reader import CatalogFileReader
@@ -426,11 +424,11 @@ def _filter_clauses(
     return clauses, params
 
 
-def _sources_search(query: str | None) -> tuple[str, list[str]]:
-    """The sources list's search clause and its parameters; none without a query."""
-    if query is None:
+def _sources_search(search_text: str | None) -> tuple[str, list[str]]:
+    """The sources list's search clause and its parameters; none without a search text."""
+    if search_text is None:
         return "", []
-    return _SQL_SOURCES_SEARCH, [f"{query}%", f"%{query}%"]
+    return _SQL_SOURCES_SEARCH, [f"{search_text}%", f"%{search_text}%"]
 
 
 def _micros(moment: datetime) -> int:
@@ -496,6 +494,33 @@ class SqliteSourceReader(SourceReader):
 
     def __init__(self, reader_provider: ReaderProvider) -> None:
         self._reader_provider = reader_provider
+
+    def read_known_sources(
+        self, *, search_text: str | None, limit: int, offset: int
+    ) -> tuple[KnownSource, ...]:
+        search, params = _sources_search(search_text)
+        sql = (
+            _SQL_LIST_SOURCES_SELECT
+            + _SQL_SOURCES_FROM
+            + search
+            + "ORDER BY seen.last_seen_at DESC, s.source_id\nLIMIT ? OFFSET ?\n"
+        )
+        rows = self._reader_provider.connection().execute(sql, [*params, limit, offset])
+        return tuple(
+            KnownSource(
+                source=SourceKey(Network(row["network"]), row["native_id"]),
+                source_name=row["name"],
+                last_seen_at=_EPOCH + row["last_seen_at"] * _MICROSECOND,
+                file_count=row["file_count"],
+            )
+            for row in rows
+        )
+
+    def read_source_count(self, *, search_text: str | None) -> int:
+        search, params = _sources_search(search_text)
+        sql = "SELECT COUNT(*) AS n\n" + _SQL_SOURCES_FROM + search
+        count: int = self._reader_provider.connection().execute(sql, params).fetchone()["n"]
+        return count
 
     def read_sharing_periods(
         self, file: FileKey, window: PeriodWindow
@@ -642,37 +667,6 @@ class CatalogReader:
 
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._conn = connection
-
-    # ------------------------------------------------------------------
-    # Sources
-    # ------------------------------------------------------------------
-
-    def list_sources(self, *, query: str | None, page: int) -> tuple[SourceRow, ...]:
-        """A page of sources, last seen first; ``query`` as ``_SQL_SOURCES_SEARCH`` reads it."""
-        search, params = _sources_search(query)
-        sql = (
-            _SQL_LIST_SOURCES_SELECT
-            + _SQL_SOURCES_FROM
-            + search
-            + "ORDER BY seen.last_seen_at DESC, s.source_id\nLIMIT ? OFFSET ?\n"
-        )
-        rows = self._conn.execute(sql, [*params, PAGE_SIZE, (page - 1) * PAGE_SIZE])
-        return tuple(
-            SourceRow(
-                source=SourceKey(Network(row["network"]), row["native_id"]),
-                name=row["name"],
-                last_seen_at=row["last_seen_at"],
-                file_count=row["file_count"],
-            )
-            for row in rows
-        )
-
-    def count_sources(self, *, query: str | None) -> int:
-        """How many sources ``list_sources`` pages through for this ``query``."""
-        search, params = _sources_search(query)
-        row = self._conn.execute("SELECT COUNT(*) AS n\n" + _SQL_SOURCES_FROM + search, params)
-        count: int = row.fetchone()["n"]
-        return count
 
     def source_detail(
         self, source_id: bytes, *, page: int, window: PeriodWindow

@@ -72,6 +72,7 @@ from p2pwatch.adapters.driving.webui.uvicorn_server_thread import UvicornServerT
 from p2pwatch.application.describe_file import DescribeFile
 from p2pwatch.application.describe_node import DescribeNode
 from p2pwatch.application.list_files import ListFiles
+from p2pwatch.application.list_sources import ListSources
 from p2pwatch.application.matching_read import MatchingExplainer
 from p2pwatch.application.pause_crawl import PauseCrawl
 from p2pwatch.application.reevaluate_catalog import reevaluate_catalog
@@ -157,6 +158,7 @@ class CrawlerApp(CrawlerRunner):
         node_state_reader = SqliteNodeStateReader(ReaderProvider(crawler_config.local_db_path))
         catalog_reader_provider = ReaderProvider(crawler_config.catalog_db_path)
         catalog_file_reader = SqliteCatalogFileReader(catalog_reader_provider)
+        source_reader = SqliteSourceReader(catalog_reader_provider)
         app = build_webui_app(
             catalog_db_path=Path(crawler_config.catalog_db_path),
             local_db_path=Path(crawler_config.local_db_path),
@@ -180,13 +182,14 @@ class CrawlerApp(CrawlerRunner):
             file_lister=ListFiles(catalog_file_reader),
             file_describer=DescribeFile(
                 catalog_file_reader=catalog_file_reader,
-                source_reader=SqliteSourceReader(catalog_reader_provider),
+                source_reader=source_reader,
                 explainer=MatchingExplainer(
                     matcher_config=config.matcher_config, targets=config.targets
                 ),
                 wall_clock=wall_clock,
                 source_period_gap=crawler_config.webui.source_period_gap,
             ),
+            source_lister=ListSources(source_reader),
             amule_url=crawler_config.webui.amule_url,
             wall_clock=wall_clock,
             monotonic_clock=monotonic_clock,

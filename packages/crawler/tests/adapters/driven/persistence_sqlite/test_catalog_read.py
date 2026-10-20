@@ -17,7 +17,6 @@ from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
     _SQL_CTES,
     _SQL_LIST_FILES_BASE,
     _SQL_TIER_COUNTS_BASE,
-    PAGE_SIZE,
     SORT_COLUMNS,
     CatalogReader,
     SqliteCatalogFileReader,
@@ -35,6 +34,7 @@ from p2pwatch.adapters.driving.webui.views import (
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_history import DatedDecision, FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
@@ -558,42 +558,47 @@ def _seed_sources(db: Path) -> None:
                 insert_source_point(conn, variant, at)
 
 
-def test_list_sources_lists_each_source_once_by_last_seen_with_its_latest_name(
+def _known_sources(db: Path, *, search_text: str | None, offset: int) -> tuple[KnownSource, ...]:
+    reader = SqliteSourceReader(ReaderProvider(db))
+    return reader.read_known_sources(search_text=search_text, limit=_LIMIT, offset=offset)
+
+
+def test_known_sources_are_each_source_once_by_last_seen_with_its_latest_name(
     catalog_db: Path,
 ) -> None:
     _seed_sources(catalog_db)
-    rows = CatalogReader(open_reader(catalog_db)).list_sources(query=None, page=1)
-    assert rows == (
-        SourceRow(SourceKey(Network.ED2K, _USER), "AnimuseeFMR", 60, 2),
-        SourceRow(SourceKey(Network.ED2K, _OTHER), "AnimuseeFMR", 5, 1),
+    assert _known_sources(catalog_db, search_text=None, offset=0) == (
+        KnownSource(SourceKey(Network.ED2K, _USER), "AnimuseeFMR", _at(60), 2),
+        KnownSource(SourceKey(Network.ED2K, _OTHER), "AnimuseeFMR", _at(5), 1),
     )
 
 
 @pytest.mark.parametrize(
-    ("query", "expected"),
+    ("search_text", "expected"),
     [("1F2E1F", [_USER]), ("shinob", [_USER]), ("FMR", [_USER, _OTHER]), ("2e1f", [])],
 )
-def test_list_sources_matches_a_hash_prefix_or_any_name_the_source_carried(
-    catalog_db: Path, query: str, expected: list[str]
+def test_known_sources_match_a_hash_prefix_or_any_name_the_source_carried(
+    catalog_db: Path, search_text: str, expected: list[str]
 ) -> None:
     _seed_sources(catalog_db)
-    reader = CatalogReader(open_reader(catalog_db))
-    rows = reader.list_sources(query=query, page=1)
-    assert [row.source.native_id for row in rows] == expected
-    assert reader.count_sources(query=query) == len(expected)
+    known_sources = _known_sources(catalog_db, search_text=search_text, offset=0)
+    assert [known.source.native_id for known in known_sources] == expected
+    reader = SqliteSourceReader(ReaderProvider(catalog_db))
+    assert reader.read_source_count(search_text=search_text) == len(expected)
 
 
-def test_list_sources_pages_by_fifty(catalog_db: Path) -> None:
+def test_known_sources_read_at_most_their_limit_from_their_offset(catalog_db: Path) -> None:
     with sqlite3.connect(catalog_db) as conn:
         insert_file(conn, "a" * 32)
-        for n in range(PAGE_SIZE + 1):
+        for n in range(_LIMIT + 1):
             insert_source(conn, f"{n:032x}")
             insert_source_point(conn, insert_source_variant(conn, "a" * 32, f"{n:032x}"), n)
-    reader = CatalogReader(open_reader(catalog_db))
-    first, second = reader.list_sources(query=None, page=1), reader.list_sources(query=None, page=2)
-    assert (len(first), first[0].last_seen_at) == (PAGE_SIZE, PAGE_SIZE)
-    assert [row.last_seen_at for row in second] == [0]
-    assert reader.count_sources(query=None) == PAGE_SIZE + 1
+    first = _known_sources(catalog_db, search_text=None, offset=0)
+    second = _known_sources(catalog_db, search_text=None, offset=_LIMIT)
+    assert (len(first), first[0].last_seen_at) == (_LIMIT, _at(_LIMIT))
+    assert [known.last_seen_at for known in second] == [_at(0)]
+    reader = SqliteSourceReader(ReaderProvider(catalog_db))
+    assert reader.read_source_count(search_text=None) == _LIMIT + 1
 
 
 # ---------------------------------------------------------------------------

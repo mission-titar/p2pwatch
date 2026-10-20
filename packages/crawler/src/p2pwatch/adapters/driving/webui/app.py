@@ -89,6 +89,7 @@ from p2pwatch.domain.interval import (
     interval_ending,
     requested_interval,
 )
+from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.node_state import NodeState
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
@@ -101,6 +102,7 @@ from p2pwatch.ports.driving.file_describer import FileDescriber
 from p2pwatch.ports.driving.file_lister import FileLister
 from p2pwatch.ports.driving.node_describer import NodeDescriber
 from p2pwatch.ports.driving.shutdown_requester import ShutdownRequester
+from p2pwatch.ports.driving.source_lister import SourceLister
 
 # A detail page's path segment: a file_id or a source_id as 32 lowercase hex (stage 1 and 4 D13).
 _HEX_ID = re.compile(r"[0-9a-f]{32}")
@@ -302,8 +304,21 @@ def _interval_selector(
     )
 
 
-def _source_list_row(source: SourceRow) -> SourceListRow:
+def _known_source_row(known_source: KnownSource) -> SourceListRow:
     """A source as one line of ``/sources``."""
+    source_name = known_source.source_name
+    return SourceListRow(
+        name="unknown" if source_name is None else source_name,
+        name_link=_name_link(source_name),
+        short_hash=short_hash(known_source.source.native_id),
+        source_link=_source_link(known_source.source),
+        last_seen=utc_timestamp(known_source.last_seen_at),
+        files=str(known_source.file_count),
+    )
+
+
+def _source_list_row(source: SourceRow) -> SourceListRow:
+    """A source and one name it carried, as one line of a source's or a name's page."""
     return SourceListRow(
         name="unknown" if source.name is None else source.name,
         name_link=_name_link(source.name),
@@ -673,6 +688,7 @@ def build_app(
     node_describer: NodeDescriber,
     file_lister: FileLister,
     file_describer: FileDescriber,
+    source_lister: SourceLister,
     amule_url: str,
     wall_clock: WallClock,
     monotonic_clock: MonotonicClock,
@@ -684,7 +700,8 @@ def build_app(
 
     Each control POST calls its use case, which returns at once; the webui itself holds no write
     connection (spec §4/§10). ``crawl_summarizer`` serves the dashboard, ``node_describer`` /node,
-    ``file_lister`` /files and a target's page, ``file_describer`` a file's page.
+    ``file_lister`` /files and a target's page, ``file_describer`` a file's page, ``source_lister``
+    /sources.
 
     ``amule_url`` is the base the nav's aMule entry points at (design §9); the caller reads it
     from ``webui.amule_url``. ``source_period_gap`` is the longest gap within a source period, from
@@ -842,18 +859,15 @@ def build_app(
     async def handle_sources(request: Request) -> Response:
         search_text = _normalize_param(request.query_params.get("search"))
         page = _page_number(request.query_params.get("page"))
-        catalog = CatalogReader(catalog_reader.connection())
-        rows = tuple(
-            _source_list_row(row) for row in catalog.list_sources(query=search_text, page=page)
-        )
-        count = catalog.count_sources(query=search_text)
+        source_listing = source_lister.list_sources(search_text=search_text, page=page)
+        count = source_listing.source_count
         kept_params = {} if search_text is None else {"search": search_text}
         return templates.TemplateResponse(
             request,
             "sources.html",
             {
-                "rows": rows,
-                "nav": _page_nav(page, len(rows) >= PAGE_SIZE, "/sources", kept_params),
+                "rows": tuple(map(_known_source_row, source_listing.known_sources)),
+                "nav": _page_nav(page, source_listing.has_next_page, "/sources", kept_params),
                 "summary": (
                     f"Sources recorded: {count:,}."
                     if search_text is None
