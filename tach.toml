@@ -109,7 +109,7 @@ path = "p2pwatch.__main__"
 layer = "composition"
 depends_on = [
   "p2pwatch.adapters.driven.config",
-  "p2pwatch.adapters.driven.pathlib_catalog_finder",
+  "p2pwatch.adapters.driven.filesystem_catalog_finder",
   "p2pwatch.adapters.driven.persistence_sqlite",
   "p2pwatch.adapters.driven.stdlib_logger",
   "p2pwatch.adapters.driving.cli",
@@ -173,7 +173,7 @@ depends_on = [
 ]
 
 [[modules]]
-path = "p2pwatch.adapters.driven.pathlib_catalog_finder"
+path = "p2pwatch.adapters.driven.filesystem_catalog_finder"
 layer = "adapters"
 depends_on = ["p2pwatch.ports.driven.catalog_finder"]
 
