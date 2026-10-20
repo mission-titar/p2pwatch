@@ -154,7 +154,7 @@ flowchart TB
   comp["composition/"]
   appl["application/"]
   dom["domain/ · pure"]
-  ports["ports/ · protocols"]
+  ports["ports/ · ABC"]
   adp["adapters/ · I/O"]
 
   comp --> appl
@@ -671,7 +671,8 @@ démon sont
 | Câblage | `composition/app.py` (`CrawlerApp`) |
 | Démarrage et boucles | `application/run_crawler.py` (`RunCrawler`), `supervise_loops.py` |
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
-| Cas d'usage | `application/search_tasks.py`, `status_loop.py`, `run_download_cycle.py` |
+| Boucles | `application/search_tasks.py`, `status_loop.py`, `run_download_cycle.py` |
+| Cas d'usage | `application/` : les pages (`summarize_crawl.py`, `describe_*.py`, `list_*.py`, `run_console_query.py`), les contrôles (`pause_crawl.py`, `resume_crawl.py`, `request_shutdown.py`), `validate_config.py`, `merge_catalogs.py` |
 | Recherche (pure) | `domain/search/` (`keywords`, `backoff`) |
 | Matching | `packages/matching/src/catalog_matching/` (moteur + politique `deploy/matcher.yml`) |
 | Frontière amuleapi | `adapters/driven/mule_api/` (client / mapping / erreurs) ; ports `ports/driven/search_client.py`, `download_client.py`, `source_client.py` |

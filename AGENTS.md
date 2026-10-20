@@ -166,6 +166,7 @@ a function does.
 | `download status` | `DownloadStatus`, a download as its client lists it: its bytes, its `completed` signal, its `WaitingReason` or `FailureReason` | a tracked download, which is ours |
 | `node state` | `NodeState`, what a node holds of its own: its identity, its tracked downloads, its search backoffs | `node info` |
 | `query answer` | `QueryAnswer`, a console query's columns and first rows, each cell as text; `QueryFailure` when it gave none | `result` |
+| `response model` | what a driving port returns, named from its use case's verb: `FileListing`, `NodeDescription` | `result`, `view` |
 | `display` | a `<Thing>Display`, the view model a webui template renders, its values already text | `view` |
 | `wake` | `Waker` wakes the loops waiting on a subject | `signal`, `nudge` |
 | `run state` | whether the crawler searches or idles, and whether its shutdown was requested: `RunStateWriter` changes it, `RunStateReader` reads it | `control` |
@@ -211,7 +212,7 @@ Tiers, phases, blocks, the stack, pull requests, Wrap and review findings: `agen
 
 **Serena and its language server, pyrefly (sections cited from `agents/reference/2026-10-16-python-language-server-bench.md`):**
 - **A port method is renamed from the port.** The ports are ABCs, and renamed from a base, pyrefly reaches the overrides; renamed from an override, it never climbs to the base (bench 11).
-- **Check a rename's diff before anything else**: in block 190, renames run back to back reached a few references each and wrote some edits at shifted offsets (`import ClientUnreachableError` became `impoFreeSpaceMeterUnreachableError`).
-- **An override whose base comes from another test module is not renamed with its base** (`from tests.application.test_run_download_cycle import ...`): pyrefly does not resolve one `tests` package importing another, and mypy stays green, since the stale override becomes an extra method (bench 11).
+- **Check each rename's diff before the next one**: renames run back to back can reach a few references each and write some edits at shifted offsets; then `git grep -w` the old name.
+- **A double two test modules share lives in `p2pwatch_testing`**, never in a test module the other imports: pyrefly does not resolve one `tests` package importing another, so an override there is not renamed with its base, and mypy stays green, since the stale override becomes an extra method (bench 11).
 - **Never renamed completely by any server**: a pytest fixture's uses in the test bodies, an attribute only a Jinja template reads, a name inside a string (`__all__` included, under pyrefly) and a `dataclasses.replace` keyword (bench 3.1, 5.7).
 - **`.serena/project.yml` pins pyrefly 1.4.0 in `lazy-blocking` mode only in a project Serena trusts** (`trusted_project_path_patterns` in the user's global Serena config). Untrusted, Serena starts its own pyrefly 1.2.0 in the default mode, whose first rename after start is partial (bench 11).
