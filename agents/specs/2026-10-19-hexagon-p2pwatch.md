@@ -181,7 +181,9 @@ observation. Decoding `raw_meta` on every read costs about 0.1 s over the whole 
 | console | `RunConsoleQuery` | `ConsoleQueryRunner.run_console_query` | `ConsoleQueryOutcome` |
 
 `/targets/{id}` is the files page filtered on one target (`handle_target` calls `list_files(target=...)` and
-renders `files.html`), so it calls `ListFiles` with that target. A route makes one call and receives one response
+renders `files.html`), so it calls `ListFiles` with that target (Corrected 2026-10-20: an accepted limit, added at
+Wrap from the holistic review: the target page also runs the two catalog-wide counts `ListFiles` returns, which it
+does not render; the price of one use case per page). A route makes one call and receives one response
 model; the assembly the routes do today (the dashboard reads the coverage, the node state, the run state and the
 client status) moves into the use case. `DescribeFile` calls today's `MatchingExplainer`
 (`application/matching_read.py`), an internal step with no port.
@@ -468,6 +470,15 @@ bound. New ports are born ABCs, so the conversion converts only what is left.
   lot, which rewrites the read side they touch.
 - **Every stamp an integer of microseconds**, **Adopt ty** and **Multi network, stage 5** stay open: none
   concerns this lot's ports.
+- **The node page shows a node id set in `crawler.yml`** (added at Wrap, found by block 202, already so on
+  `main`): `resolve_node_id` returns a configured id without recording it, and local.db is all `/node` reads, so
+  the page shows `None` while every row the node writes carries the configured id. The fix decides which id the
+  page shows: the resolved one, or the one local.db records.
+- **The ast-grep rule tests bound to their rules by design** (added at Wrap, holistic review): `ast-grep test`
+  prints `Configuration not found!` and exits 0 for a test whose rule id does not exist, so a renamed or deleted
+  rule leaves its test silently unrun, and no rule must have a test (`no-dynamic-attribute` has none). The
+  operator refused a check that pairs the files as a patch on the symptom: the entry asks for a layout or a runner
+  in which a rule and its test cannot exist apart.
 
 ## Corrections of earlier specs
 
