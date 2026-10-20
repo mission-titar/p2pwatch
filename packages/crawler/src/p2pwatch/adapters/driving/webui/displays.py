@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class NavItem:
+class NavItemDisplay:
     """One entry of the shared top nav, precomputed (W-D8: no template logic).
 
     ``link`` is a 0-or-1 element tuple holding the href, so the template picks the rendering with
@@ -40,7 +40,7 @@ class TargetCoverageDisplay:
 
 
 @dataclass(frozen=True)
-class ChannelLine:
+class ChannelLineDisplay:
     """Dashboard row: one channel of a client, each field "yes", "no" or "unknown"."""
 
     channel: str
@@ -49,14 +49,14 @@ class ChannelLine:
 
 
 @dataclass(frozen=True)
-class ClientLine:
+class ClientLineDisplay:
     """Dashboard block: one client; an old or missing reading has no channel line."""
 
     name: str
     reading: str
     version: str
     api_reachable: str
-    channels: tuple[ChannelLine, ...]
+    channels: tuple[ChannelLineDisplay, ...]
 
 
 # ---------------------------------------------------------------------------
@@ -65,7 +65,7 @@ class ClientLine:
 
 
 @dataclass(frozen=True)
-class TimelineRow:
+class TimelineRowDisplay:
     """One observation of a file's timeline, precomputed."""
 
     name: str
@@ -105,7 +105,7 @@ class TrackedDownloadDisplay:
 
 
 @dataclass(frozen=True)
-class BackoffEntry:
+class BackoffEntryDisplay:
     """One line of /node's backoff section (precomputed for the template)."""
 
     client_name: str
@@ -129,7 +129,7 @@ class NodeStateDisplay:
 
 
 @dataclass(frozen=True)
-class DecisionCell:
+class DecisionCellDisplay:
     """One current decision, resolved for display: the target locator and its episode title.
 
     ``target`` is the canonical id joined with its seasonal locator (``"062A / S02E11A"``), a raw
@@ -146,11 +146,11 @@ class FileRowDisplay:
 
     A file usually carries 0, 1, or 2 current decisions (``CatalogEntry.decisions``, already
     excluding retractions and the legacy ``target_id == ""`` sentinel: those never reach
-    this layer). Each current decision becomes one ``DecisionCell`` in ``decisions_display``:
+    this layer). Each current decision becomes one ``DecisionCellDisplay`` in ``decisions_display``:
 
     - no decisions at all → ``decisions_display`` is empty and ``tier_display`` is the
       literal ``"·"``.
-    - per decision, ``DecisionCell.target``/``.title`` resolve via
+    - per decision, ``DecisionCellDisplay.target``/``.title`` resolve via
       ``app._resolve_target_display``: ``tier == "catalog"`` → ``"unidentified"``
       / ``"·"`` (the ``keroro_large`` catch-all, the only catalog-tier rule); otherwise the
       target is looked up in the current catalogue: found → the canonical id joined with its
@@ -164,14 +164,16 @@ class FileRowDisplay:
     short_hash: str  # of the native id
     filename: str
     sources_display: str  # the count, or "unknown" for a file never seen
-    decisions_display: tuple[DecisionCell, ...]  # one per current decision, 0..N; () when none
+    decisions_display: tuple[
+        DecisionCellDisplay, ...
+    ]  # one per current decision, 0..N; () when none
     size_display: str  # human_size(size_bytes)
     last_seen_display: str  # short_timestamp(last_seen)
     tier_display: str  # shared tier, or "target_id: tier" per decision joined with " · "
 
 
 @dataclass(frozen=True)
-class PageNav:
+class PageNavDisplay:
     """Paginated navigation of a list: precomputed handler-side (spec W-D8: no logic in the
     template). ``prev_url``/``next_url`` are ``None`` when the end is reached; the template
     iterates ``(url,) if url`` to render the link when it exists.
@@ -183,7 +185,7 @@ class PageNav:
 
 
 @dataclass(frozen=True)
-class FilesSummary:
+class FilesSummaryDisplay:
     """Precomputed summary line for the /files explorer (spec W-D8: no template logic).
 
     ``summary_text`` states how many files are shown vs. catalogued; ``toggle_label`` +
@@ -196,7 +198,7 @@ class FilesSummary:
 
 
 @dataclass(frozen=True)
-class SortHeader:
+class SortHeaderDisplay:
     """A sortable column header, fully precomputed (W-D8). ``url`` re-sorts by this column
     (flipping direction when it is the active one, else a per-column default direction),
     preserving every active filter; ``indicator`` is ``""``, ``"asc"``, or ``"desc"`` (the
@@ -208,19 +210,19 @@ class SortHeader:
 
 
 @dataclass(frozen=True)
-class SortHeaders:
+class SortHeadersDisplay:
     """The five sortable headers of the /files table, one attribute per column so the fixed
     thead can interpolate ``{{ headers.name.url }}`` etc. with no template logic (W-D8)."""
 
-    name: SortHeader
-    size: SortHeader
-    sources: SortHeader
-    last_seen: SortHeader
-    tier: SortHeader
+    name: SortHeaderDisplay
+    size: SortHeaderDisplay
+    sources: SortHeaderDisplay
+    last_seen: SortHeaderDisplay
+    tier: SortHeaderDisplay
 
 
 @dataclass(frozen=True)
-class TierFacet:
+class TierFacetDisplay:
     """One tier-filter option with its live count, precomputed (W-D8). ``label`` is the display
     tier (``catalog`` masked to ``"unidentified"``, or the literal ``"all"`` reset);
     ``count_display`` is ``"(<n>)"`` for a tier and ``""`` for the reset; ``url`` selects (or, for
@@ -234,7 +236,7 @@ class TierFacet:
 
 
 @dataclass(frozen=True)
-class HiddenInput:
+class HiddenInputDisplay:
     """One hidden form field carried by a GET form (name/value already stringified)."""
 
     name: str
@@ -242,16 +244,16 @@ class HiddenInput:
 
 
 @dataclass(frozen=True)
-class SearchBar:
+class SearchBarDisplay:
     """The filename search form, precomputed (W-D8): ``query`` prefills the text input, ``hidden``
     carries every active param except ``q`` and ``page`` so submitting a search preserves them."""
 
     query: str
-    hidden: tuple[HiddenInput, ...]
+    hidden: tuple[HiddenInputDisplay, ...]
 
 
 @dataclass(frozen=True)
-class IntervalLink:
+class IntervalLinkDisplay:
     """A preset of the interval selector: its label and its href."""
 
     label: str
@@ -259,14 +261,14 @@ class IntervalLink:
 
 
 @dataclass(frozen=True)
-class IntervalSelector:
+class IntervalSelectorDisplay:
     """A page's interval selector (source points spec, D6), precomputed (W-D8): ``hidden`` carries
     the page's other params, ``notices`` and ``next_urls`` hold 0 or 1 element."""
 
-    hidden: tuple[HiddenInput, ...]
+    hidden: tuple[HiddenInputDisplay, ...]
     shown: str
     notices: tuple[str, ...]
-    presets: tuple[IntervalLink, ...]
+    presets: tuple[IntervalLinkDisplay, ...]
     from_value: str
     to_value: str
     previous_url: str
@@ -274,12 +276,12 @@ class IntervalSelector:
 
 
 @dataclass(frozen=True)
-class FilterBar:
+class FilterBarDisplay:
     """The /files filter bar: the search form + the tier facet. Passed as a 0-or-1-element tuple
     so ``handle_target`` can reuse ``files.html`` with an empty bar (like ``summaries``)."""
 
-    searchbar: SearchBar
-    facets: tuple[TierFacet, ...]
+    searchbar: SearchBarDisplay
+    facets: tuple[TierFacetDisplay, ...]
 
 
 # ---------------------------------------------------------------------------
@@ -293,29 +295,29 @@ class FilterBar:
 
 
 @dataclass(frozen=True)
-class ConsoleRow:
-    """One result row: its cells already stringified (NULL rendered as the literal "NULL")."""
+class QueryRowDisplay:
+    """One row of a query's answer: its cells already text (NULL as the literal "NULL")."""
 
     cells: tuple[str, ...]
 
 
 @dataclass(frozen=True)
-class ConsoleResult:
-    """A successful console query result, all fields precomputed for the template (W-D8).
+class QueryAnswerDisplay:
+    """A query's answer, all fields precomputed for the template (W-D8).
 
     ``truncated`` is a 0-or-1 element message tuple so the template can render the truncation
     banner with ``{% for t in res.truncated %}`` (the guard forbids ``{% if %}``).
     """
 
     columns: tuple[str, ...]
-    rows: tuple[ConsoleRow, ...]
+    rows: tuple[QueryRowDisplay, ...]
     row_count: int
     elapsed_ms: int
     truncated: tuple[str, ...]  # 0 or 1 message: the truncation banner text
 
 
 @dataclass(frozen=True)
-class DbOption:
+class DbOptionDisplay:
     """One ``<select>`` option for the console DB picker. ``selected_attr`` is precomputed as the
     literal ``"selected"`` or ``""`` so the template renders ``{{ o.selected_attr }}`` with no
     logic."""
@@ -326,7 +328,7 @@ class DbOption:
 
 
 @dataclass(frozen=True)
-class SourceHistoryRow:
+class SourceHistoryRowDisplay:
     """One line of a file's "Source history" (stage 4 spec, D12), precomputed for the template.
 
     ``name_link`` and ``source_link`` hold 0 or 1 href, empty when the period has no name or no
@@ -348,8 +350,8 @@ class SourceHistoryRow:
 
 
 @dataclass(frozen=True)
-class SourceListRow:
-    """One line of ``/sources`` (stage 4 spec, D13), its links as ``SourceHistoryRow``'s."""
+class SourceListRowDisplay:
+    """One line of ``/sources`` (stage 4 spec, D13), its links as ``SourceHistoryRowDisplay``'s."""
 
     name: str
     name_link: tuple[str, ...]
@@ -360,16 +362,16 @@ class SourceListRow:
 
 
 @dataclass(frozen=True)
-class SourceFileRow:
+class SourceFileRowDisplay:
     """One period of a source's or a name's page (D13): the file it was read on, then the period."""
 
     file: str  # the file's best name, its short hash when never seen
     file_link: str
-    history: SourceHistoryRow
+    history: SourceHistoryRowDisplay
 
 
 @dataclass(frozen=True)
-class TokenCoverage:
+class TokenCoverageDisplay:
     """One coverage token of an explanation and its best value over the file's names."""
 
     token_name: str
@@ -390,14 +392,14 @@ class FileDetailDisplay:
     network: str
     native_id: str
     size_bytes: int
-    timeline: tuple[TimelineRow, ...]  # one row per observation, oldest first
-    source_history: tuple[SourceHistoryRow, ...]  # one row per source period, newest first
+    timeline: tuple[TimelineRowDisplay, ...]  # one row per observation, oldest first
+    source_history: tuple[SourceHistoryRowDisplay, ...]  # one row per source period, newest first
     decisions: tuple[DecisionDisplay, ...]  # 0..N elements: for template iteration
     ed2k_link: str  # precomputed from the latest observation
     # Explanation fields (None if no explanation available)
     explanation_target_id: str | None
     explanation_rules_fired: tuple[str, ...]
     explanation_tokens_matched: tuple[str, ...]
-    explanation_coverage_values: tuple[TokenCoverage, ...]
+    explanation_coverage_values: tuple[TokenCoverageDisplay, ...]
     explanation_vetoes_fired: tuple[str, ...]
     explanation_notes: tuple[str, ...]  # 0 or 1 element: the text note itself

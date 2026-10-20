@@ -180,26 +180,17 @@ depends_on = [
   "p2pwatch.domain",
   "p2pwatch.ports.driven.backoff_state_repository",
   "p2pwatch.ports.driven.catalog_copier",
+  "p2pwatch.ports.driven.catalog_file_reader",
   "p2pwatch.ports.driven.catalog_repository",
   "p2pwatch.ports.driven.clock",
+  "p2pwatch.ports.driven.coverage_reader",
   "p2pwatch.ports.driven.download_client",
   "p2pwatch.ports.driven.node_id",
   "p2pwatch.ports.driven.node_state_reader",
   "p2pwatch.ports.driven.repository_errors",
+  "p2pwatch.ports.driven.source_reader",
   "p2pwatch.ports.driven.source_repository",
   "p2pwatch.ports.driven.sql_executor",
-]
-
-[[modules]]
-path = "p2pwatch.adapters.driven.persistence_sqlite.catalog_read"
-layer = "adapters"
-depends_on = [
-  "p2pwatch.domain",
-  "p2pwatch.ports.driven.catalog_file_reader",
-  "p2pwatch.ports.driven.coverage_reader",
-  "p2pwatch.ports.driven.source_reader",
-  # Its own adapter, a module apart to break the cycle with the webui: lot 2 folds it back.
-  { path = "p2pwatch.adapters.driven.persistence_sqlite", deprecated = true },
 ]
 
 [[modules]]
@@ -258,14 +249,7 @@ depends_on = [
   "p2pwatch.ports.driving.source_describer",
   "p2pwatch.ports.driving.source_lister",
   "p2pwatch.ports.driving.source_name_describer",
-  # Its own views, a module apart to break the readers' cycle: lot 2 folds it back.
-  { path = "p2pwatch.adapters.driving.webui.views", deprecated = true },
 ]
-
-[[modules]]
-path = "p2pwatch.adapters.driving.webui.views"
-layer = "adapters"
-depends_on = []
 
 [[modules]]
 path = "p2pwatch.application"
@@ -325,7 +309,6 @@ depends_on = [
   "p2pwatch.adapters.driven.mule_api",
   "p2pwatch.adapters.driven.observability",
   "p2pwatch.adapters.driven.persistence_sqlite",
-  "p2pwatch.adapters.driven.persistence_sqlite.catalog_read",
   "p2pwatch.adapters.driven.rng_random",
   "p2pwatch.adapters.driven.stdlib_logger",
   "p2pwatch.adapters.driven.uuid4_node_id_generator",

@@ -26,6 +26,37 @@ from starlette.templating import Jinja2Templates
 
 from catalog_matching.domain.ed2k_link import build_ed2k_link
 from catalog_matching.domain.models import TargetSegment
+from p2pwatch.adapters.driving.webui.displays import (
+    BackoffEntryDisplay,
+    ChannelLineDisplay,
+    ClientLineDisplay,
+    DbOptionDisplay,
+    DecisionCellDisplay,
+    DecisionDisplay,
+    FileDetailDisplay,
+    FileRowDisplay,
+    FilesSummaryDisplay,
+    FilterBarDisplay,
+    HiddenInputDisplay,
+    IntervalLinkDisplay,
+    IntervalSelectorDisplay,
+    NavItemDisplay,
+    NodeStateDisplay,
+    PageNavDisplay,
+    QueryAnswerDisplay,
+    QueryRowDisplay,
+    SearchBarDisplay,
+    SortHeaderDisplay,
+    SortHeadersDisplay,
+    SourceFileRowDisplay,
+    SourceHistoryRowDisplay,
+    SourceListRowDisplay,
+    TargetCoverageDisplay,
+    TierFacetDisplay,
+    TimelineRowDisplay,
+    TokenCoverageDisplay,
+    TrackedDownloadDisplay,
+)
 from p2pwatch.adapters.driving.webui.format import (
     average_rate,
     human_size,
@@ -35,37 +66,6 @@ from p2pwatch.adapters.driving.webui.format import (
     short_hash,
     short_timestamp,
     utc_timestamp,
-)
-from p2pwatch.adapters.driving.webui.views import (
-    BackoffEntry,
-    ChannelLine,
-    ClientLine,
-    ConsoleResult,
-    ConsoleRow,
-    DbOption,
-    DecisionCell,
-    DecisionDisplay,
-    FileDetailDisplay,
-    FileRowDisplay,
-    FilesSummary,
-    FilterBar,
-    HiddenInput,
-    IntervalLink,
-    IntervalSelector,
-    NavItem,
-    NodeStateDisplay,
-    PageNav,
-    SearchBar,
-    SortHeader,
-    SortHeaders,
-    SourceFileRow,
-    SourceHistoryRow,
-    SourceListRow,
-    TargetCoverageDisplay,
-    TierFacet,
-    TimelineRow,
-    TokenCoverage,
-    TrackedDownloadDisplay,
 )
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.console_query import ConsoleDatabase, QueryAnswer, QueryFailure
@@ -134,10 +134,10 @@ def _make_nav_context(amule_url: str) -> Callable[[Request], dict[str, Any]]:
         return {
             "nav_items": (
                 *(
-                    NavItem(label=label, link=() if path == current else (path,))
+                    NavItemDisplay(label=label, link=() if path == current else (path,))
                     for path, label in _NAV_DESTINATIONS
                 ),
-                NavItem(label="aMule", link=(amule_url,)),
+                NavItemDisplay(label="aMule", link=(amule_url,)),
             )
         }
 
@@ -150,7 +150,7 @@ def _resolve_target_display(
     """Per-decision ``(target, title)`` pairs for a catalog entry, in the entry's
     decision order (by target_id). Empty when the file has no current decision. The
     ``catalog → "unidentified"`` mask is applied per decision (``keroro_large`` is the only
-    catalog-tier rule; cf. ``views.FileRowDisplay``)."""
+    catalog-tier rule; cf. ``displays.FileRowDisplay``)."""
     resolved: list[tuple[str, str]] = []
     for dec in entry.decisions:
         if dec.tier == "catalog":
@@ -171,14 +171,14 @@ def _to_display_rows(
     catalog_entries: Iterable[CatalogEntry], segment_by_id: Mapping[str, TargetSegment]
 ) -> list[FileRowDisplay]:
     """Convert catalog entries into ``FileRowDisplay`` view-models: one row per file, the file's
-    (usually two) segment decisions surfaced as one ``DecisionCell`` each in ``decisions_display``
-    while ``tier_display`` still aggregates (shared tier, or per-target joined with ``" · "``).
-    Shared by ``handle_files`` and ``handle_target``."""
+    (usually two) segment decisions surfaced as one ``DecisionCellDisplay`` each in
+    ``decisions_display`` while ``tier_display`` still aggregates (shared tier, or per-target
+    joined with ``" · "``). Shared by ``handle_files`` and ``handle_target``."""
     rows = []
     for entry in catalog_entries:
         if entry.decisions:
             pairs = _resolve_target_display(entry, segment_by_id)
-            decisions_display = tuple(DecisionCell(target=t, title=ti) for t, ti in pairs)
+            decisions_display = tuple(DecisionCellDisplay(target=t, title=ti) for t, ti in pairs)
             tier_values = {dec.tier for dec in entry.decisions}
             if len(tier_values) == 1:
                 tier_display = entry.decisions[0].tier
@@ -207,10 +207,10 @@ def _to_display_rows(
     return rows
 
 
-def _timeline_row(observation: FileObservation) -> TimelineRow:
+def _timeline_row(observation: FileObservation) -> TimelineRowDisplay:
     """An observation as one timeline line, its instant as ``utc_iso`` writes it."""
     reported_file = observation.reported_file
-    return TimelineRow(
+    return TimelineRowDisplay(
         name=reported_file.filename,
         size_bytes=reported_file.size_bytes,
         sources=str(reported_file.source_count),
@@ -231,11 +231,11 @@ def _source_link(source: SourceKey | None) -> tuple[str, ...]:
     return () if source is None else (f"/sources/{source.source_id.hex()}",)
 
 
-def _source_history_row(period: SharingPeriod) -> SourceHistoryRow:
+def _source_history_row(period: SharingPeriod) -> SourceHistoryRowDisplay:
     """A sharing period as one line; its name links to the name page, its hash to the source
     page."""
     source_name, source = period.source_name, period.source
-    return SourceHistoryRow(
+    return SourceHistoryRowDisplay(
         name="unknown" if source_name is None else source_name,
         name_link=_name_link(source_name),
         short_hash="unknown" if source is None else short_hash(source.native_id),
@@ -270,7 +270,7 @@ def _page_param(page: int) -> dict[str, str]:
 
 def _interval_selector(
     interval: Interval, now: datetime, path: str, kept_params: dict[str, str]
-) -> IntervalSelector:
+) -> IntervalSelectorDisplay:
     """The selector of the page at ``path``, whose other params are ``kept_params`` (D6): the
     presets end ``now``, and Next is offered until the interval reaches it."""
 
@@ -278,12 +278,14 @@ def _interval_selector(
         ends = {"from": utc_timestamp(shown.since), "to": utc_timestamp(shown.until)}
         return f"{path}?{urlencode({**kept_params, **ends})}"
 
-    return IntervalSelector(
-        hidden=tuple(HiddenInput(name=name, value=value) for name, value in kept_params.items()),
+    return IntervalSelectorDisplay(
+        hidden=tuple(
+            HiddenInputDisplay(name=name, value=value) for name, value in kept_params.items()
+        ),
         shown=f"{utc_timestamp(interval.since)} to {utc_timestamp(interval.until)}",
         notices=(_CLAMPED_NOTICE,) if interval.clamped else (),
         presets=tuple(
-            IntervalLink(label, url(interval_ending(now, span)))
+            IntervalLinkDisplay(label, url(interval_ending(now, span)))
             for label, span in _INTERVAL_PRESETS
         ),
         from_value=input_timestamp(interval.since),
@@ -293,10 +295,10 @@ def _interval_selector(
     )
 
 
-def _known_source_row(known_source: KnownSource) -> SourceListRow:
+def _known_source_row(known_source: KnownSource) -> SourceListRowDisplay:
     """A source as one line of ``/sources``."""
     source_name = known_source.source_name
-    return SourceListRow(
+    return SourceListRowDisplay(
         name="unknown" if source_name is None else source_name,
         name_link=_name_link(source_name),
         short_hash=short_hash(known_source.source.native_id),
@@ -306,9 +308,9 @@ def _known_source_row(known_source: KnownSource) -> SourceListRow:
     )
 
 
-def _source_naming_row(source_naming: SourceNaming) -> SourceListRow:
+def _source_naming_row(source_naming: SourceNaming) -> SourceListRowDisplay:
     """A source under one of its names, as one line of a source's or a name's page."""
-    return SourceListRow(
+    return SourceListRowDisplay(
         name=source_naming.source_name,
         name_link=_name_link(source_naming.source_name),
         short_hash=short_hash(source_naming.source.native_id),
@@ -318,9 +320,9 @@ def _source_naming_row(source_naming: SourceNaming) -> SourceListRow:
     )
 
 
-def _source_file_row(period: SharingPeriod, best_filename: str | None) -> SourceFileRow:
+def _source_file_row(period: SharingPeriod, best_filename: str | None) -> SourceFileRowDisplay:
     """A period of a source's or a name's page, with the file it was read on."""
-    return SourceFileRow(
+    return SourceFileRowDisplay(
         file=best_filename or short_hash(period.file.native_id),
         file_link=f"/files/{period.file.file_id.hex()}",
         history=_source_history_row(period),
@@ -349,7 +351,7 @@ def _page_number(raw: str | None) -> int:
 
 def _page_nav(
     page: int, has_next_page: bool, base_path: str, kept_params: dict[str, str]
-) -> PageNav:
+) -> PageNavDisplay:
     """Precompute the prev/next links for a page (W-D8: view-model, no template logic)."""
     prev_url: str | None = None
     next_url: str | None = None
@@ -361,12 +363,12 @@ def _page_nav(
         nxt = dict(kept_params)
         nxt["page"] = str(page + 1)
         next_url = f"{base_path}?{urlencode(nxt)}"
-    return PageNav(page=page, prev_url=prev_url, next_url=next_url)
+    return PageNavDisplay(page=page, prev_url=prev_url, next_url=next_url)
 
 
 def _files_summary(
     matched_count: int, total_count: int, show_unmatched: bool, kept_params: dict[str, str]
-) -> FilesSummary:
+) -> FilesSummaryDisplay:
     """Precompute the /files summary line + matched/all toggle (W-D8: no template logic).
 
     The toggle preserves the active filters and drops ``page`` (counts differ between modes,
@@ -384,7 +386,9 @@ def _files_summary(
         toggle_label = "Show all catalogued files"
         toggle_params = {**kept_params, "show_unmatched": "1"}
     toggle_url = "/files?" + urlencode(toggle_params) if toggle_params else "/files"
-    return FilesSummary(summary_text=summary_text, toggle_label=toggle_label, toggle_url=toggle_url)
+    return FilesSummaryDisplay(
+        summary_text=summary_text, toggle_label=toggle_label, toggle_url=toggle_url
+    )
 
 
 # The sortable columns in display order: (allowlist key, header label).
@@ -427,7 +431,7 @@ def _sort_header(
     active_sort: str,
     active_direction: str,
     kept_params: dict[str, str],
-) -> SortHeader:
+) -> SortHeaderDisplay:
     """Build one column header. Keeps every ``kept_params`` param and OVERRIDES ``sort`` and
     ``direction``: the active column flips direction and shows its indicator; an inactive column
     uses its default direction and no indicator. Params equal to the default are omitted from the
@@ -446,18 +450,18 @@ def _sort_header(
     if next_direction != _DEFAULT_DIRECTION:
         link_params["direction"] = next_direction
     url = "/files?" + urlencode(link_params) if link_params else "/files"
-    return SortHeader(label=label, url=url, indicator=indicator)
+    return SortHeaderDisplay(label=label, url=url, indicator=indicator)
 
 
 def _sort_headers(
     *, active_sort: str, active_direction: str, kept_params: dict[str, str]
-) -> SortHeaders:
+) -> SortHeadersDisplay:
     """Precompute all five sortable headers (W-D8)."""
     built = {
         column_key: _sort_header(column_key, label, active_sort, active_direction, kept_params)
         for column_key, label in _SORTABLE_COLUMNS
     }
-    return SortHeaders(
+    return SortHeadersDisplay(
         name=built["name"],
         size=built["size"],
         sources=built["sources"],
@@ -479,14 +483,14 @@ def _facet_label(tier: str) -> str:
 
 def _tier_facets(
     *, file_count_by_tier: Mapping[str, int], active_tier: str | None, kept_params: dict[str, str]
-) -> tuple[TierFacet, ...]:
+) -> tuple[TierFacetDisplay, ...]:
     """Precompute the tier facet (W-D8): an "all" reset (no count) followed by one entry per tier
     present, in ``_FACET_TIER_ORDER``. ``kept_params`` are the params to preserve (the filters but
     ``tier``, plus ``sort`` and ``direction``; ``page`` already excluded); a tier entry appends
     ``tier=<t>``, the reset omits it."""
     all_url = "/files?" + urlencode(kept_params) if kept_params else "/files"
     facets = [
-        TierFacet(
+        TierFacetDisplay(
             label="all",
             count_display="",
             url=all_url,
@@ -498,7 +502,7 @@ def _tier_facets(
             continue
         link_params = {**kept_params, "tier": tier}
         facets.append(
-            TierFacet(
+            TierFacetDisplay(
                 label=_facet_label(tier),
                 count_display=f"({file_count_by_tier[tier]})",
                 url="/files?" + urlencode(link_params),
@@ -508,11 +512,11 @@ def _tier_facets(
     return tuple(facets)
 
 
-def _search_bar(*, search_text: str | None, kept_params: dict[str, str]) -> SearchBar:
+def _search_bar(*, search_text: str | None, kept_params: dict[str, str]) -> SearchBarDisplay:
     """Precompute the search form (W-D8): the ``search`` prefill (empty string when none) + hidden
     inputs from ``kept_params`` (already without ``search`` and ``page``)."""
-    hidden = tuple(HiddenInput(name=k, value=v) for k, v in kept_params.items())
-    return SearchBar(query=search_text or "", hidden=hidden)
+    hidden = tuple(HiddenInputDisplay(name=k, value=v) for k, v in kept_params.items())
+    return SearchBarDisplay(query=search_text or "", hidden=hidden)
 
 
 async def _add_security_headers(request: Request, call_next: RequestResponseEndpoint) -> Response:
@@ -549,28 +553,32 @@ _CONTROL_MESSAGES: dict[str, str] = {
 _YES_NO: dict[bool | None, str] = {True: "yes", False: "no", None: "unknown"}
 
 
-def _client_lines(client_summaries: tuple[ClientSummary, ...]) -> tuple[ClientLine, ...]:
+def _client_lines(client_summaries: tuple[ClientSummary, ...]) -> tuple[ClientLineDisplay, ...]:
     """Each client's last reading, its values shown only while fresh (stage 2 D20)."""
     lines = []
     for client_summary in client_summaries:
         client_name, reading = client_summary.client_name, client_summary.reading
         if reading is None:
-            lines.append(ClientLine(client_name, "No reading yet.", "unknown", "unknown", ()))
+            lines.append(
+                ClientLineDisplay(client_name, "No reading yet.", "unknown", "unknown", ())
+            )
             continue
         read_at = short_timestamp(reading.read_at.isoformat())
         client_status = reading.status
         if not client_summary.is_fresh:
             text = f"Out of date: last reading at {read_at}."
-            lines.append(ClientLine(client_name, text, "unknown", "unknown", ()))
+            lines.append(ClientLineDisplay(client_name, text, "unknown", "unknown", ()))
         elif client_status is None:
-            lines.append(ClientLine(client_name, f"Read at {read_at}.", "unknown", "no", ()))
+            lines.append(ClientLineDisplay(client_name, f"Read at {read_at}.", "unknown", "no", ()))
         else:
             channels = tuple(
-                ChannelLine(c.channel, _YES_NO[c.connected], _YES_NO[c.connectable])
+                ChannelLineDisplay(c.channel, _YES_NO[c.connected], _YES_NO[c.connectable])
                 for c in client_status.channels
             )
             version = client_status.version or "unknown"
-            lines.append(ClientLine(client_name, f"Read at {read_at}.", version, "yes", channels))
+            lines.append(
+                ClientLineDisplay(client_name, f"Read at {read_at}.", version, "yes", channels)
+            )
     return tuple(lines)
 
 
@@ -599,10 +607,10 @@ def _node_state_display(node_state: NodeState) -> NodeStateDisplay:
     )
 
 
-def _backoff_entries(node_state: NodeState) -> tuple[BackoffEntry, ...]:
+def _backoff_entries(node_state: NodeState) -> tuple[BackoffEntryDisplay, ...]:
     """Each backoff and its planned retry: its start plus its delay."""
     return tuple(
-        BackoffEntry(
+        BackoffEntryDisplay(
             client_name=backoff_key.client_name,
             channel="whole client" if backoff_key.channel is None else backoff_key.channel,
             attempts=backoff_state.attempts,
@@ -624,11 +632,11 @@ _CONSOLE_DBS: tuple[tuple[ConsoleDatabase, str], ...] = (
 _CONSOLE_UNKNOWN_DB = "Unknown database. Choose catalog.db or local.db."
 
 
-def _console_db_options(selected: str) -> tuple[DbOption, ...]:
+def _console_db_options(selected: str) -> tuple[DbOptionDisplay, ...]:
     """Precompute the DB picker options, marking ``selected`` (W-D8: no template logic). An
     unknown ``selected`` (e.g. a bogus form value echoed back) marks none."""
     return tuple(
-        DbOption(
+        DbOptionDisplay(
             value=value,
             label=label,
             selected_attr="selected" if value == selected else "",
@@ -653,15 +661,15 @@ def _console_database(db_key: str) -> ConsoleDatabase | None:
     return ConsoleDatabase(db_key) if db_key in ConsoleDatabase else None
 
 
-def _to_console_result(query_answer: QueryAnswer, row_cap: int) -> ConsoleResult:
+def _to_query_answer_display(query_answer: QueryAnswer, row_cap: int) -> QueryAnswerDisplay:
     """Build the console result view-model from a query's answer. ``truncated`` becomes a 0-or-1
     message tuple for the logic-free banner."""
     truncated = (
         (f"Results truncated to the first {row_cap:,} rows.",) if query_answer.truncated else ()
     )
-    return ConsoleResult(
+    return QueryAnswerDisplay(
         columns=query_answer.columns,
-        rows=tuple(ConsoleRow(cells=cells) for cells in query_answer.rows),
+        rows=tuple(QueryRowDisplay(cells=cells) for cells in query_answer.rows),
         row_count=len(query_answer.rows),
         elapsed_ms=round(query_answer.elapsed / timedelta(milliseconds=1)),
         truncated=truncated,
@@ -819,7 +827,7 @@ def build_app(
         search_kept_params.update(sort_params)
         searchbar = _search_bar(search_text=search_text, kept_params=search_kept_params)
 
-        filter_bar = FilterBar(searchbar=searchbar, facets=facets)
+        filter_bar = FilterBarDisplay(searchbar=searchbar, facets=facets)
 
         nav = _page_nav(
             page, file_listing.has_next_page, "/files", {**filter_params, **sort_params}
@@ -973,7 +981,7 @@ def build_app(
         explanation_target_id: str | None = None
         explanation_rules_fired: tuple[str, ...] = ()
         explanation_tokens_matched: tuple[str, ...] = ()
-        explanation_coverage_values: tuple[TokenCoverage, ...] = ()
+        explanation_coverage_values: tuple[TokenCoverageDisplay, ...] = ()
         explanation_vetoes_fired: tuple[str, ...] = ()
         explanation_notes: tuple[str, ...] = ()
 
@@ -982,7 +990,7 @@ def build_app(
             explanation_rules_fired = explanation.rules_fired
             explanation_tokens_matched = explanation.tokens_matched
             explanation_coverage_values = tuple(
-                TokenCoverage(token_name=token_name, value_display=f"{coverage:.2f}")
+                TokenCoverageDisplay(token_name=token_name, value_display=f"{coverage:.2f}")
                 for token_name, coverage in explanation.coverage_values
             )
             explanation_vetoes_fired = explanation.vetoes_fired
@@ -1037,7 +1045,7 @@ def build_app(
 
         display_rows = _to_display_rows(file_listing.catalog_entries, _segment_by_id)
         # No pagination here (target view: we expect few). Empty nav.
-        nav = PageNav(page=1, prev_url=None, next_url=None)
+        nav = PageNavDisplay(page=1, prev_url=None, next_url=None)
         # files.html is shared with /files, whose matched/all summary line and filter bar are
         # meaningless on a target-scoped page: pass empty tuples so they render nothing. This
         # page is NOT a nav destination, though, so unlike /files it does carry a heading.
@@ -1136,7 +1144,7 @@ def build_app(
             {
                 "sql": sql,
                 "db_options": db_options,
-                "results": (_to_console_result(query_answer, outcome.row_cap),),
+                "results": (_to_query_answer_display(query_answer, outcome.row_cap),),
                 "errors": (),
             },
         )

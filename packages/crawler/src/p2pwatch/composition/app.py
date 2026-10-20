@@ -61,7 +61,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.local_state_repository import (
 )
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driven.persistence_sqlite.source_repository import SqliteSourceRepository
-from p2pwatch.adapters.driven.persistence_sqlite.sql_console import SqliteSqlExecutor
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_sql_executor import SqliteSqlExecutor
 from p2pwatch.adapters.driven.rng_random import SeededRng
 from p2pwatch.adapters.driven.stdlib_logger import StdlibLogger
 from p2pwatch.adapters.driven.uuid4_node_id_generator import Uuid4NodeIdGenerator
