@@ -263,9 +263,8 @@ depends_on = [
   "p2pwatch.ports.driving.shutdown_requester",
   "p2pwatch.ports.driving.source_describer",
   "p2pwatch.ports.driving.source_lister",
+  "p2pwatch.ports.driving.source_name_describer",
   # The webui builds and calls the readers itself: lot 2 puts use cases between them.
-  { path = "p2pwatch.adapters.driven.persistence_sqlite", deprecated = true },
-  { path = "p2pwatch.adapters.driven.persistence_sqlite.catalog_read", deprecated = true },
   { path = "p2pwatch.adapters.driven.persistence_sqlite.sql_console", deprecated = true },
   # Its own views, a module apart to break the readers' cycle: lot 2 folds it back.
   { path = "p2pwatch.adapters.driving.webui.views", deprecated = true },
@@ -319,6 +318,7 @@ depends_on = [
   "p2pwatch.ports.driving.shutdown_requester",
   "p2pwatch.ports.driving.source_describer",
   "p2pwatch.ports.driving.source_lister",
+  "p2pwatch.ports.driving.source_name_describer",
 ]
 
 [[modules]]
@@ -536,6 +536,11 @@ depends_on = ["p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.ports.driving.source_lister"
+layer = "ports"
+depends_on = ["p2pwatch.domain"]
+
+[[modules]]
+path = "p2pwatch.ports.driving.source_name_describer"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 

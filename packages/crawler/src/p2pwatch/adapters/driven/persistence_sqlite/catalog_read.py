@@ -47,7 +47,6 @@ from p2pwatch.ports.driven.source_reader import SourceReader
 # Constants
 # ---------------------------------------------------------------------------
 
-PAGE_SIZE = 50
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _MICROSECOND = timedelta(microseconds=1)
 
