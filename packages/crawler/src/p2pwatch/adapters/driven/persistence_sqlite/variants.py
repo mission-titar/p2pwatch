@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 from functools import cache
 
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.observation import RawMeta, fold_raw_meta
+from p2pwatch.domain.observation import fold_raw_meta
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _MICROSECOND = timedelta(microseconds=1)
@@ -52,16 +52,7 @@ def file_id(network: str, native_id: str) -> bytes:
     return FileKey(Network(network), native_id).file_id
 
 
-def register_sql_functions(
-    connection: sqlite3.Connection,
-    *,
-    content_hash: Callable[
-        [str | bytes, str, int, int | None, int | None, str, str, str], bytes
-    ] = content_hash,
-    fold_raw_meta: Callable[
-        [tuple[tuple[str, str], ...], str | None, str | None, int], RawMeta
-    ] = fold_raw_meta,
-) -> None:
+def register_sql_functions(connection: sqlite3.Connection) -> None:
     """Registers ``content_hash``, ``file_id``, ``fold_raw_meta`` and ``iso_to_micros``."""
 
     # A stored raw_meta, folded and serialized as record_observation serializes it.
@@ -71,8 +62,18 @@ def register_sql_functions(
         )
 
     # Memoized for the connection's life, the crawler's included: one entry per variant 0007 wrote.
-    connection.create_function("content_hash", 8, cache(content_hash), deterministic=True)
-    connection.create_function("fold_raw_meta", 4, cache(fold_stored), deterministic=True)
+    create_memoized_function(connection, "content_hash", 8, content_hash)
+    create_memoized_function(connection, "fold_raw_meta", 4, fold_stored)
     connection.create_function("file_id", 2, file_id, deterministic=True)
     # Never memoized: every observation has its own stamp, the memo would hold them all.
     connection.create_function("iso_to_micros", 1, iso_to_micros, deterministic=True)
+
+
+def create_memoized_function(
+    connection: sqlite3.Connection,
+    name: str,
+    argument_count: int,
+    function: Callable[..., str | bytes],
+) -> None:
+    """Registers ``function`` as the SQL function ``name``, called once per distinct arguments."""
+    connection.create_function(name, argument_count, cache(function), deterministic=True)

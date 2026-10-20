@@ -9,6 +9,7 @@ import pytest
 from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.variants import (
     content_hash,
+    create_memoized_function,
     iso_to_micros,
     register_sql_functions,
 )
@@ -58,23 +59,6 @@ def test_content_hash_sql_function_matches_the_python_one(connection: sqlite3.Co
     assert row[0] == _hash()
 
 
-def test_content_hash_sql_function_hashes_each_distinct_key_once() -> None:
-    calls: list[object] = []
-
-    def counting(*values: object) -> bytes:
-        calls.append(values)
-        return b"h"
-
-    connection = sqlite3.connect(":memory:", autocommit=True)
-    register_sql_functions(connection, content_hash=counting)
-    connection.execute(
-        "SELECT content_hash(h, 'f', 1, NULL, NULL, '[]', 'k', 'n')"
-        " FROM (SELECT 'a' AS h UNION ALL SELECT 'a' UNION ALL SELECT 'b')"
-    ).fetchall()
-    connection.close()
-    assert len(calls) == 2
-
-
 def test_fold_raw_meta_sql_function_folds_the_stored_text_as_the_domain_does(
     connection: sqlite3.Connection,
 ) -> None:
@@ -84,21 +68,21 @@ def test_fold_raw_meta_sql_function_folds_the_stored_text_as_the_domain_does(
     assert row[0] == json.dumps(fold_raw_meta(pairs, "xvid", None, 2), ensure_ascii=False)
 
 
-def test_fold_raw_meta_sql_function_folds_each_distinct_key_once() -> None:
-    calls: list[object] = []
+def test_a_memoized_sql_function_calls_its_function_once_per_distinct_arguments() -> None:
+    calls: list[tuple[str, int]] = []
 
-    def counting(*values: object) -> tuple[tuple[str, str | int | None], ...]:
-        calls.append(values)
-        return ()
+    def counting(text: str, number: int) -> str:
+        calls.append((text, number))
+        return text * number
 
     connection = sqlite3.connect(":memory:", autocommit=True)
-    register_sql_functions(connection, fold_raw_meta=counting)
-    connection.execute(
-        "SELECT fold_raw_meta('[]', c, NULL, 0)"
-        " FROM (SELECT 'a' AS c UNION ALL SELECT 'a' UNION ALL SELECT 'b')"
+    create_memoized_function(connection, "repeat", 2, counting)
+    rows = connection.execute(
+        "SELECT repeat(c, 2) FROM (SELECT 'a' AS c UNION ALL SELECT 'a' UNION ALL SELECT 'b')"
     ).fetchall()
     connection.close()
-    assert len(calls) == 2
+    assert rows == [("aa",), ("aa",), ("bb",)]
+    assert calls == [("a", 2), ("b", 2)]
 
 
 def test_iso_to_micros_counts_microseconds_since_the_epoch() -> None:

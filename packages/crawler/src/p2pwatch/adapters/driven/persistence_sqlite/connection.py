@@ -18,7 +18,6 @@ claim sorts on ``enqueued_at``).
 
 import logging
 import sqlite3
-from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -60,6 +59,31 @@ def utc_iso(moment: datetime) -> str:
     return moment.astimezone(UTC).isoformat(timespec="microseconds")
 
 
+def open_catalog(path: Path | str) -> sqlite3.Connection:
+    """Opens/migrates ``catalog.db`` (the append-only triggers are part of the schema)."""
+    return _open(path, _load_scripts(_MIGRATIONS / "catalog"))
+
+
+def open_local(path: Path | str) -> sqlite3.Connection:
+    """Opens/migrates ``local.db``."""
+    return _open(path, _load_scripts(_MIGRATIONS / "local"))
+
+
+def _open(path: Path | str, migrations: tuple[Migration, ...]) -> sqlite3.Connection:
+    with wrap_sqlite_errors():
+        connection = sqlite3.connect(path, autocommit=True)
+    try:
+        with wrap_sqlite_errors():
+            _configure(connection)
+            register_sql_functions(connection)
+            _apply_migrations(connection, migrations)
+    except BaseException:
+        # Unconditional close: whatever fails, the connection must not leak.
+        connection.close()
+        raise
+    return connection
+
+
 def _configure(connection: sqlite3.Connection) -> None:
     journal_mode = connection.execute("PRAGMA journal_mode=WAL").fetchone()[0]
     if journal_mode != "wal":
@@ -68,42 +92,6 @@ def _configure(connection: sqlite3.Connection) -> None:
         )
     connection.execute("PRAGMA foreign_keys=ON")
     connection.execute("PRAGMA recursive_triggers=ON")
-
-
-def open_catalog(
-    path: Path | str,
-    *,
-    scripts_dir: Traversable = _MIGRATIONS / "catalog",
-    configure: Callable[[sqlite3.Connection], None] = _configure,
-) -> sqlite3.Connection:
-    """Opens/migrates ``catalog.db`` (the append-only triggers are part of the schema)."""
-    return _open(path, scripts_dir, register_sql_functions, configure)
-
-
-def open_local(path: Path | str) -> sqlite3.Connection:
-    """Opens/migrates ``local.db``."""
-    return _open(path, _MIGRATIONS / "local", register_sql_functions, _configure)
-
-
-def _open(
-    path: Path | str,
-    scripts_dir: Traversable,
-    register_sql_functions: Callable[[sqlite3.Connection], None],
-    configure: Callable[[sqlite3.Connection], None],
-) -> sqlite3.Connection:
-    with wrap_sqlite_errors():
-        connection = sqlite3.connect(path, autocommit=True)
-    try:
-        with wrap_sqlite_errors():
-            configure(connection)
-            register_sql_functions(connection)
-            _apply_migrations(connection, _load_scripts(scripts_dir))
-    except BaseException:
-        # Unconditional close: a NON-sqlite error (e.g. OSError from iterdir) must not
-        # leak the connection; it then propagates as-is.
-        connection.close()
-        raise
-    return connection
 
 
 def _load_scripts(directory: Traversable) -> tuple[Migration, ...]:
