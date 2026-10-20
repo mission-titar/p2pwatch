@@ -11,9 +11,8 @@ tier facet; and a file's history: its observations in an interval, its latest on
 and its current decisions, ``None`` if the file is unknown.
 
 ``SqliteSourceReader`` reads the sources with a user hash, last seen first, and how many match
-the search; a source's history; and a file's sharing periods in a window, newest first.
-
-``CatalogReader.name_detail()`` reads the page of a name; ``None`` if never recorded.
+the search; a source's history and a source name's; and a file's sharing periods in a window,
+newest first.
 
 All SQL lives in module constants, parameterized (no value interpolation).
 """
@@ -33,14 +32,13 @@ from p2pwatch.adapters.driven.persistence_sqlite.observation_read import (
     observations_between,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
-from p2pwatch.adapters.driving.webui.views import NameDetail, SourceFilePeriod, SourceRow
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_history import DatedDecision, FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
-from p2pwatch.domain.source_history import SourceHistory, SourceNaming
+from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory, SourceNaming
 from p2pwatch.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.ports.driven.coverage_reader import CoverageReader
 from p2pwatch.ports.driven.source_reader import SourceReader
@@ -563,6 +561,25 @@ class SqliteSourceReader(SourceReader):
             best_filename_by_file=_best_filename_by_file(connection, sharing_periods),
         )
 
+    def read_source_name_history(
+        self, source_name: str, *, limit: int, offset: int, window: PeriodWindow
+    ) -> SourceNameHistory | None:
+        connection = self._reader_provider.connection()
+        if connection.execute(_SQL_NAME_EXISTS, (source_name,)).fetchone() is None:
+            return None
+        sharing_periods = tuple(
+            map(
+                _sharing_period,
+                _period_rows(connection, _WHERE_NAME_HASHLESS, source_name, window),
+            )
+        )
+        return SourceNameHistory(
+            source_name=source_name,
+            source_namings=_source_namings(connection, _WHERE_NAME, source_name, limit, offset),
+            sharing_periods=sharing_periods,
+            best_filename_by_file=_best_filename_by_file(connection, sharing_periods),
+        )
+
     def read_sharing_periods(
         self, file: FileKey, window: PeriodWindow
     ) -> tuple[SharingPeriod, ...]:
@@ -700,45 +717,4 @@ class SqliteCatalogFileReader(CatalogFileReader):
             latest_observation=latest_observation(connection, file),
             decisions=decisions,
             known_filenames=known_filenames(connection, file),
-        )
-
-
-class CatalogReader:
-    """Read-only access to the catalog via a SQLite connection (see ``reader.open_reader``)."""
-
-    def __init__(self, connection: sqlite3.Connection) -> None:
-        self._conn = connection
-
-    def name_detail(self, name: str, *, page: int, window: PeriodWindow) -> NameDetail | None:
-        """A page of the hashes that carried the name, and its hash-less periods in ``window``;
-        ``None`` for a name never recorded."""
-        if self._conn.execute(_SQL_NAME_EXISTS, (name,)).fetchone() is None:
-            return None
-        return NameDetail(
-            name=name,
-            sources=self._pairs(_WHERE_NAME, name, page),
-            periods=self._file_periods(_WHERE_NAME_HASHLESS, name, window),
-        )
-
-    def _pairs(self, where: str, key: bytes | str, page: int) -> tuple[SourceRow, ...]:
-        params = {"key": key, "limit": PAGE_SIZE, "offset": (page - 1) * PAGE_SIZE}
-        rows = self._conn.execute(_SQL_PAIRS + where + _SQL_PAIRS_END, params)
-        return tuple(
-            SourceRow(
-                source=SourceKey(Network(row["network"]), row["native_id"]),
-                name=row["name"],
-                last_seen_at=row["last_seen_at"],
-                file_count=row["file_count"],
-            )
-            for row in rows
-        )
-
-    def _file_periods(
-        self, where: str, key: bytes | str, window: PeriodWindow
-    ) -> tuple[SourceFilePeriod, ...]:
-        periods = tuple(map(_sharing_period, _period_rows(self._conn, where, key, window)))
-        best_filename_by_file = _best_filename_by_file(self._conn, periods)
-        return tuple(
-            SourceFilePeriod(file_name=best_filename_by_file.get(period.file), period=period)
-            for period in periods
         )

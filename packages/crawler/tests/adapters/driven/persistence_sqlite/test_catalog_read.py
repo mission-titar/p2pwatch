@@ -18,14 +18,12 @@ from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
     _SQL_LIST_FILES_BASE,
     _SQL_TIER_COUNTS_BASE,
     SORT_COLUMNS,
-    CatalogReader,
     SqliteCatalogFileReader,
     SqliteCoverageReader,
     SqliteSourceReader,
     _tier_rank_case,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider, open_reader
-from p2pwatch.adapters.driving.webui.views import NameDetail, SourceFilePeriod, SourceRow
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_history import DatedDecision, FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
@@ -33,7 +31,7 @@ from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
-from p2pwatch.domain.source_history import SourceHistory, SourceNaming
+from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory, SourceNaming
 from p2pwatch_testing.catalog_rows import (
     SEEN_AT,
     file_id,
@@ -685,21 +683,58 @@ def test_a_source_history_reads_at_most_its_limit_of_names_from_their_offset_and
     assert len(source_history.sharing_periods) == 3
 
 
-def test_name_detail_lists_its_hashes_and_its_periods_without_one(catalog_db: Path) -> None:
+def _source_name_history(
+    db: Path,
+    source_name: str,
+    *,
+    limit: int = _LIMIT,
+    offset: int = 0,
+    window: PeriodWindow = _WINDOW,
+) -> SourceNameHistory | None:
+    reader = SqliteSourceReader(ReaderProvider(db))
+    return reader.read_source_name_history(source_name, limit=limit, offset=offset, window=window)
+
+
+def test_a_source_name_history_holds_its_hashes_and_its_periods_without_one(
+    catalog_db: Path,
+) -> None:
     _seed_pages(catalog_db)
-    detail = CatalogReader(open_reader(catalog_db)).name_detail(
-        "AnimuseeFMR", page=1, window=_WINDOW
-    )
     user, other = SourceKey(Network.ED2K, _USER), SourceKey(Network.ED2K, _OTHER)
     b = FileKey(Network.ED2K, "b" * 32)
     hashless = SharingPeriod(
         b, None, "AnimuseeFMR", SourceRole.STANDBY, None, None, _at(95), _at(95), 0, "n1"
     )
-    assert detail == NameDetail(
-        name="AnimuseeFMR",
-        sources=(SourceRow(user, "AnimuseeFMR", 40, 1), SourceRow(other, "AnimuseeFMR", 5, 1)),
-        periods=(SourceFilePeriod(None, hashless),),
+    assert _source_name_history(catalog_db, "AnimuseeFMR") == SourceNameHistory(
+        source_name="AnimuseeFMR",
+        source_namings=(
+            SourceNaming(user, "AnimuseeFMR", _at(40), 1),
+            SourceNaming(other, "AnimuseeFMR", _at(5), 1),
+        ),
+        sharing_periods=(hashless,),
+        best_filename_by_file={},
     )
+
+
+def test_a_source_name_history_reads_at_most_its_limit_of_hashes_from_their_offset_and_every_period(
+    catalog_db: Path,
+) -> None:
+    with sqlite3.connect(catalog_db) as conn:
+        insert_file(conn, "a" * 32)
+        insert_observation(conn, "a" * 32, "keroro_062a.avi")
+        for n, role in enumerate(("standby", "queued", "sending")):
+            insert_source(conn, f"{n:032x}")
+            insert_source_point(conn, insert_source_variant(conn, "a" * 32, f"{n:032x}"), n)
+            insert_source_point(conn, insert_source_variant(conn, "a" * 32, None, role=role), n)
+    source_name_history = _source_name_history(catalog_db, "AnimuseeFMR", limit=2, offset=1)
+    assert source_name_history is not None
+    assert [naming.source.native_id for naming in source_name_history.source_namings] == [
+        f"{1:032x}",
+        f"{0:032x}",
+    ]
+    assert len(source_name_history.sharing_periods) == 3
+    assert source_name_history.best_filename_by_file == {
+        FileKey(Network.ED2K, "a" * 32): "keroro_062a.avi"
+    }
 
 
 def test_the_history_of_a_source_never_recorded_is_none(catalog_db: Path) -> None:
@@ -707,24 +742,21 @@ def test_the_history_of_a_source_never_recorded_is_none(catalog_db: Path) -> Non
     assert _source_history(catalog_db, "0" * 32) is None
 
 
-def test_name_detail_of_a_name_never_recorded_is_none(catalog_db: Path) -> None:
+def test_the_history_of_a_source_name_never_recorded_is_none(catalog_db: Path) -> None:
     _seed_pages(catalog_db)
-    reader = CatalogReader(open_reader(catalog_db))
-    assert reader.name_detail("nobody", page=1, window=_WINDOW) is None
+    assert _source_name_history(catalog_db, "nobody") is None
 
 
 def test_the_pages_periods_are_read_in_the_window_only(catalog_db: Path) -> None:
     _seed_pages(catalog_db)
     window = PeriodWindow(since=_at(55), until=_at(1_000), gap=_WINDOW.gap)
     source = _source_history(catalog_db, _USER, window=window)
-    name = CatalogReader(open_reader(catalog_db)).name_detail("AnimuseeFMR", page=1, window=window)
+    name = _source_name_history(catalog_db, "AnimuseeFMR", window=window)
     assert source is not None and name is not None
     assert [(p.first_seen_at, p.last_seen_at) for p in source.sharing_periods] == [
         (_at(60), _at(60))
     ]
-    assert [(p.period.first_seen_at, p.period.last_seen_at) for p in name.periods] == [
-        (_at(95), _at(95))
-    ]
+    assert [(p.first_seen_at, p.last_seen_at) for p in name.sharing_periods] == [(_at(95), _at(95))]
 
 
 # ---------------------------------------------------------------------------

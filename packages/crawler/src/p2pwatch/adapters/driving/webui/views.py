@@ -3,9 +3,6 @@ these fields. No template-side logic."""
 
 from dataclasses import dataclass
 
-from p2pwatch.domain.sharing_period import SharingPeriod
-from p2pwatch.domain.source import SourceKey
-
 # ---------------------------------------------------------------------------
 # Top nav (shared by every page via a context processor)
 # ---------------------------------------------------------------------------
@@ -86,33 +83,6 @@ class DecisionDisplay:
     rule_name: str
     tier: str
     decided_at: str
-
-
-@dataclass(frozen=True)
-class SourceRow:
-    """One source of the sources list (stage 4 spec, D13); ``last_seen_at`` in microseconds."""
-
-    source: SourceKey
-    name: str | None  # the latest name it carried, None when no reading had one
-    last_seen_at: int
-    file_count: int
-
-
-@dataclass(frozen=True)
-class SourceFilePeriod:
-    """A sharing period and its file's best name, if ever seen."""
-
-    file_name: str | None
-    period: SharingPeriod
-
-
-@dataclass(frozen=True)
-class NameDetail:
-    """A page of a name (D13): one ``SourceRow`` per hash that carried it, its hash-less periods."""
-
-    name: str
-    sources: tuple[SourceRow, ...]
-    periods: tuple[SourceFilePeriod, ...]
 
 
 # ---------------------------------------------------------------------------

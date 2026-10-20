@@ -20,7 +20,7 @@ from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceRole
-from p2pwatch.domain.source_history import SourceHistory
+from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory
 from p2pwatch.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.ports.driven.source_reader import SourceReader
 from p2pwatch.ports.driving.file_describer import FileDescription
@@ -96,6 +96,11 @@ class _FakeSourceReader(SourceReader):
 
     def read_source_history(self, source_id: bytes, **arguments: Any) -> SourceHistory | None:
         raise AssertionError("DescribeFile describes no source")
+
+    def read_source_name_history(
+        self, source_name: str, **arguments: Any
+    ) -> SourceNameHistory | None:
+        raise AssertionError("DescribeFile describes no source name")
 
     def read_sharing_periods(
         self, file: FileKey, window: PeriodWindow
