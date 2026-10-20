@@ -28,6 +28,7 @@ from catalog_matching.domain.models import TargetSegment
 from p2pwatch.application.edge_state import EdgeState
 from p2pwatch.application.source_alerts import FirstUseful, source_alert
 from p2pwatch.domain.download.policy import DownloadVerdict, decide_download
+from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.states import DownloadState, FailureReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey
@@ -46,7 +47,7 @@ from p2pwatch.domain.source import RecordedReading, SourceKey, SourceUsefulness
 from p2pwatch.ports.driven.catalog import DecisionReader, ObservationReader
 from p2pwatch.ports.driven.client_errors import ClientUnreachableError, DownloadRejectedError
 from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
-from p2pwatch.ports.driven.download_client import DownloadClient, DownloadRequest
+from p2pwatch.ports.driven.download_client import DownloadClient
 from p2pwatch.ports.driven.downloads import DownloadReader, DownloadWriter
 from p2pwatch.ports.driven.free_space_meter import FreeSpaceMeter
 from p2pwatch.ports.driven.logger import Logger

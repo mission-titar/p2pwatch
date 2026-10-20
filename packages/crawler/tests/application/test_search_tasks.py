@@ -28,10 +28,11 @@ from p2pwatch.application.search_worker import (
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import ReportedFile
+from p2pwatch.domain.search.answer import SearchAnswer
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from p2pwatch.ports.driven.client_errors import SearchFailedError
 from p2pwatch.ports.driven.repository_errors import RepositoryError
-from p2pwatch.ports.driven.search_client import SearchAnswer, SearchClient
+from p2pwatch.ports.driven.search_client import SearchClient
 from p2pwatch_testing.application.fakes import (
     FakeEventEmitter,
     FakeJitterGenerator,

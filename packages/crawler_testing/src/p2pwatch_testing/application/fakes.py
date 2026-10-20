@@ -25,6 +25,7 @@ from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.node_state import NodeState
 from p2pwatch.domain.observability.events import Event
 from p2pwatch.domain.observation import ReportedFile
+from p2pwatch.domain.search.answer import SearchAnswer
 from p2pwatch.domain.status_reading import PublishedReading
 from p2pwatch.ports.driven.client_errors import ClientUnreachableError, SearchFailedError
 from p2pwatch.ports.driven.client_status import ClientStatusReader
@@ -34,7 +35,7 @@ from p2pwatch.ports.driven.logger import Logger
 from p2pwatch.ports.driven.node_id import NodeIdGenerator, NodeIdReader, NodeIdWriter
 from p2pwatch.ports.driven.node_state_reader import NodeStateReader
 from p2pwatch.ports.driven.run_state import RunStateReader, RunStateWriter
-from p2pwatch.ports.driven.search_client import SearchAnswer, SearchClient
+from p2pwatch.ports.driven.search_client import SearchClient
 from p2pwatch.ports.driven.telemetry import EventEmitter
 from p2pwatch.ports.driven.waker import Waker
 from p2pwatch.ports.driving.console_query_runner import ConsoleQueryOutcome, ConsoleQueryRunner
