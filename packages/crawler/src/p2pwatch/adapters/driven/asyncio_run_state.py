@@ -37,7 +37,7 @@ class AsyncioRunState(RunStateWriter, RunStateReader):
     def resume(self) -> None:
         self._loop.call_soon_threadsafe(self._resumed.set)
 
-    def request_shutdown(self) -> None:
+    def shut_down(self) -> None:
         self._loop.call_soon_threadsafe(self._shutdown.set)
 
     def is_paused(self) -> bool:

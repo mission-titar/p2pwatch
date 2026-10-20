@@ -9,4 +9,4 @@ def test_a_shutdown_request_reaches_the_run_state() -> None:
 
     RequestShutdown(run_state).request_shutdown()
 
-    assert run_state.changes == ["request_shutdown"]
+    assert run_state.changes == ["shut_down"]

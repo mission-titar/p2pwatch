@@ -193,8 +193,8 @@ class FakeRunState(RunStateWriter, RunStateReader):
     def resume(self) -> None:
         self.changes.append("resume")
 
-    def request_shutdown(self) -> None:
-        self.changes.append("request_shutdown")
+    def shut_down(self) -> None:
+        self.changes.append("shut_down")
 
     def is_paused(self) -> bool:
         return self.paused

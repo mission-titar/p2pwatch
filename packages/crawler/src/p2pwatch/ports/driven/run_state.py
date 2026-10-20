@@ -15,7 +15,7 @@ class RunStateWriter(ABC):
         """The crawler searches again."""
 
     @abstractmethod
-    def request_shutdown(self) -> None:
+    def shut_down(self) -> None:
         """The crawler shuts down gracefully, and the container restarts it."""
 
 
