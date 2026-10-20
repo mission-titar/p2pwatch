@@ -26,7 +26,7 @@ def test_short_hash_short_input_is_unchanged() -> None:
 
 
 # ---------------------------------------------------------------------------
-# human_size — binary (1024-based) units, matching this codebase's existing
+# human_size: binary (1024-based) units, matching this codebase's existing
 # ``size_mib`` convention (see application/matching_read.py: "binary Mio").
 # ---------------------------------------------------------------------------
 
@@ -52,7 +52,7 @@ def test_human_size_exact_mib_boundary() -> None:
 
 
 def test_human_size_matches_task_brief_example() -> None:
-    """349 MiB — the exact example from the task brief."""
+    """349 MiB: the exact example from the task brief."""
     assert human_size(349 * 1024 * 1024) == "349 MB"
 
 
@@ -73,7 +73,7 @@ def test_human_size_multi_tb() -> None:
 
 
 def test_human_size_just_under_mib_promotes_to_mb() -> None:
-    # Rounding 1024**2 - 1 bytes / 1024 lands exactly on 1024 (KB) — must promote to "1 MB",
+    # Rounding 1024**2 - 1 bytes / 1024 lands exactly on 1024 (KB): it must promote to "1 MB",
     # not render "1024 KB".
     assert human_size(1024**2 - 1) == "1 MB"
 

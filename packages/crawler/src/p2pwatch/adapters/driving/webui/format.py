@@ -60,7 +60,7 @@ def short_timestamp(iso: str) -> str:
 
     E.g. ``2026-07-03T23:45:24.104990+00:00`` → ``2026-07-03 23:45Z``. Works whether or not
     the input carries microseconds/a timezone offset: only the date and the first 5
-    characters after ``T`` (``HH:MM``) are kept — everything after that (seconds,
+    characters after ``T`` (``HH:MM``) are kept; everything after that (seconds,
     microseconds, offset) is dropped, not parsed. Input is assumed UTC (as stored by the
     persistence layer).
 

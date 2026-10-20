@@ -34,7 +34,7 @@ def backoff_delay(attempt: int, *, base: float, cap: float, factor: float) -> fl
 
     ``attempt = 1`` → ``base``; each additional failure multiplies by ``factor``; the
     result is capped at ``cap`` (spec MVP §6: "exponential backoff"). An ``attempt`` of 0
-    or negative is treated as the first attempt (``base``) — a caller must never request a
+    or negative is treated as the first attempt (``base``): a caller must never request a
     delay for "zero failures", but we do not crash on an out-of-bounds input (resilience,
     spec §14).
     """

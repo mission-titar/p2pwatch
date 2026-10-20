@@ -746,7 +746,7 @@ async def test_a_completion_names_the_clean_file_and_every_download_target_of_th
 
 
 # ---------------------------------------------------------------------------
-# I2 — per-STEP error granularity (anti-starvation): a RepositoryError in one
+# I2: per-STEP error granularity (anti-starvation): a RepositoryError in one
 # step (completions / new candidates) must NOT prevent the OTHER from running.
 # ---------------------------------------------------------------------------
 
@@ -807,7 +807,7 @@ async def test_candidate_repo_failure_does_not_starve_completions() -> None:
 async def test_monitor_unreachable_aborts_subsequent_steps() -> None:
     # ClientUnreachableError at step 0 (downloads) = dead daemon → ABORT of the iteration:
     # neither the completions (step 2) nor the new candidates (step 3) must run.
-    # (Doctrine "a dead daemon fails everything" — distinct from RepositoryError isolation.)
+    # (Doctrine "a dead daemon fails everything", distinct from RepositoryError isolation.)
     client = FakeDownloadClient(list_failures=[ClientUnreachableError("daemon down")])
     downloads = FakeDownloadStore()
     downloads.states[_A] = DownloadState.COMPLETED  # a pending completion (step 2)
