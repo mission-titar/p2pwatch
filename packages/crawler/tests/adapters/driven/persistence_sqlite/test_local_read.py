@@ -1,10 +1,9 @@
 """Read-only tests of local.db via SqliteNodeStateReader (Task 8, W-D8 §node_state)."""
 
 import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-
-import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.local_read import SqliteNodeStateReader
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
@@ -12,8 +11,6 @@ from p2pwatch.domain.download.states import DownloadState, FailureReason, Waitin
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
-
-pytestmark = pytest.mark.usefixtures("close_test_connections")
 
 _STARTED_AT_MICROS = 1_781_258_400_000_000  # 2026-06-12T10:00:00Z
 
@@ -24,7 +21,8 @@ _STARTED_AT_MICROS = 1_781_258_400_000_000  # 2026-06-12T10:00:00Z
 
 def _read_node_state(path: Path) -> NodeState:
     """Read local.db through the webui's read-only connection."""
-    return SqliteNodeStateReader(ReaderProvider(path)).read_node_state()
+    with ReaderProvider(path) as reader_provider:
+        return SqliteNodeStateReader(reader_provider).read_node_state()
 
 
 # ---------------------------------------------------------------------------
@@ -35,7 +33,7 @@ def _read_node_state(path: Path) -> NodeState:
 def test_node_state_populated(local_db: Path) -> None:
     """Populated DB: downloads, backoff_states, node_runtime."""
     # --- populate ---
-    with sqlite3.connect(local_db) as w:
+    with closing(sqlite3.connect(local_db)) as w, w:
         w.execute(
             "INSERT INTO downloads (file_id, network, native_id, target_id, state, queued_at,"
             " size_bytes, last_progress_at, waiting_reason, failure_reason)"
@@ -101,7 +99,7 @@ def test_node_state_populated(local_db: Path) -> None:
 
 
 def test_a_completed_download_reads_its_completion(local_db: Path) -> None:
-    with sqlite3.connect(local_db) as w:
+    with closing(sqlite3.connect(local_db)) as w, w:
         w.execute(
             "INSERT INTO downloads (file_id, network, native_id, target_id, state, queued_at,"
             " completed_at) VALUES (x'00', 'ed2k', ?, '062A', 'completed', ?, ?)",

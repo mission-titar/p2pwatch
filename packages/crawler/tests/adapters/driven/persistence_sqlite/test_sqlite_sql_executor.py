@@ -7,16 +7,12 @@ real ``mode=ro`` file to open, exactly like the ``test_reader.py`` persistence t
 from datetime import timedelta
 from pathlib import Path
 
-import pytest
-
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_sql_executor import SqliteSqlExecutor
 from p2pwatch.domain.console_query import QueryAnswer, QueryFailure
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch_testing.application.fakes import FakeTime, TickingMonotonicClock
 from p2pwatch_testing.catalog_rows import insert_file
-
-pytestmark = pytest.mark.usefixtures("close_test_connections")
 
 _HASH_A = "a" * 32
 _TIME_LIMIT = timedelta(seconds=5)

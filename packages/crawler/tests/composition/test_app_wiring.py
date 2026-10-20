@@ -385,8 +385,7 @@ async def test_observer_mode_crawls_its_config_files_with_one_ed2k_search_until_
     assert not any(map(_WEBUI_SERVING.match, caplog.messages))
 
 
-@pytest.mark.asyncio
-async def test_the_shutdown_deadline_spares_the_run_then_cuts_a_logout_amuled_never_answers(
+def test_the_shutdown_deadline_spares_the_run_then_cuts_a_logout_amuled_never_answers(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     deadline_seconds = 0.2
@@ -402,25 +401,32 @@ async def test_the_shutdown_deadline_spares_the_run_then_cuts_a_logout_amuled_ne
 
     api.overrides[("POST", "/api/v1/auth/logout")] = stalled_logout
     default_sigterm = signal.getsignal(signal.SIGTERM)
-    loop = asyncio.get_running_loop()
 
-    with FakeAmuleApiServer(api) as server, caplog.at_level(logging.INFO):
-        run = _crawl(server, config_path)
-        assert await asyncio.to_thread(
-            server.wait_for, lambda seen: _searches_read(seen) >= 1, _WAIT_SECONDS
-        )
-        # Only time shows an absence: armed from the start, the deadline would have ended the run.
-        await asyncio.sleep(2 * deadline_seconds)
-        logged_out_before_the_stop = _has_logged_out(api)
-        _send_sigterm(default_sigterm)
-        stopped_at = loop.time()
-        await asyncio.wait({run}, timeout=2 * _WAIT_SECONDS)
-        elapsed = loop.time() - stopped_at
-        released.set()
+    async def stop_during_the_logout() -> tuple[bool, bool, float]:
+        loop = asyncio.get_running_loop()
+        with FakeAmuleApiServer(api) as server:
+            run = _crawl(server, config_path)
+            assert await asyncio.to_thread(
+                server.wait_for, lambda seen: _searches_read(seen) >= 1, _WAIT_SECONDS
+            )
+            # Only time shows an absence: armed from the start, the deadline would end the run.
+            await asyncio.sleep(2 * deadline_seconds)
+            logged_out_before_the_stop = _has_logged_out(api)
+            _send_sigterm(default_sigterm)
+            stopped_at = loop.time()
+            await asyncio.wait({run}, timeout=2 * _WAIT_SECONDS)
+            elapsed = loop.time() - stopped_at
+            released.set()
+        return logged_out_before_the_stop, isinstance(run.exception(), TimeoutError), elapsed
+
+    # The cut close leaves the client's sockets open, as the process exit closes them in production.
+    with caplog.at_level(logging.INFO), pytest.warns(ResourceWarning, match="unclosed"):
+        logged_out_before_the_stop, timed_out, elapsed = asyncio.run(stop_during_the_logout())
+        gc.collect()
 
     assert not logged_out_before_the_stop
     # Unbounded, the close would wait out the client's own 10 s timeout, then return.
-    assert isinstance(run.exception(), TimeoutError)
+    assert timed_out
     assert elapsed < _WAIT_SECONDS / 2
 
 
