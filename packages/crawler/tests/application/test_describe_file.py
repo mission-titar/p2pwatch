@@ -154,6 +154,26 @@ def test_the_sharing_periods_are_read_over_the_requested_interval_with_the_gap()
     assert description.interval == Interval(since, until)
 
 
+def test_a_request_past_7_days_reads_the_7_ending_at_its_until() -> None:
+    since, until = datetime(2026, 9, 1, tzinfo=UTC), datetime(2026, 10, 1, tzinfo=UTC)
+    week = Interval(until - timedelta(days=7), until, clamped=True)
+    reader, source_reader = _FakeCatalogFileReader(_HISTORY), _FakeSourceReader()
+    description = _describe(reader, source_reader, requested_since=since, requested_until=until)
+    assert reader.calls == [(b"\x01" * 16, {"since": week.since, "until": until})]
+    assert source_reader.calls == [(_FILE, PeriodWindow(week.since, until, _GAP))]
+    assert description is not None and description.interval == week
+
+
+def test_an_inverted_request_reads_the_7_days_ending_at_its_until() -> None:
+    since, until = datetime(2026, 10, 12, tzinfo=UTC), datetime(2026, 10, 10, tzinfo=UTC)
+    week = Interval(until - timedelta(days=7), until)
+    reader, source_reader = _FakeCatalogFileReader(_HISTORY), _FakeSourceReader()
+    description = _describe(reader, source_reader, requested_since=since, requested_until=until)
+    assert reader.calls == [(b"\x01" * 16, {"since": week.since, "until": until})]
+    assert source_reader.calls == [(_FILE, PeriodWindow(week.since, until, _GAP))]
+    assert description is not None and description.interval == week
+
+
 def test_the_first_decision_is_explained_over_every_known_filename() -> None:
     description = _describe(_FakeCatalogFileReader(_HISTORY))
     assert description is not None
