@@ -573,6 +573,16 @@ def test_known_sources_are_each_source_once_by_last_seen_with_its_latest_name(
     )
 
 
+def test_a_source_never_named_is_known_without_a_source_name(catalog_db: Path) -> None:
+    with sqlite3.connect(catalog_db) as conn:
+        insert_file(conn, "a" * 32)
+        insert_source(conn, _USER)
+        insert_source_point(conn, insert_source_variant(conn, "a" * 32, _USER, name=None), 7)
+    assert _known_sources(catalog_db, search_text=None, offset=0) == (
+        KnownSource(SourceKey(Network.ED2K, _USER), None, _at(7), 1),
+    )
+
+
 @pytest.mark.parametrize(
     ("search_text", "expected"),
     [("1F2E1F", [_USER]), ("shinob", [_USER]), ("FMR", [_USER, _OTHER]), ("2e1f", [])],
