@@ -15,16 +15,10 @@ from jinja2 import Environment, FileSystemLoader, UndefinedError, meta
 from starlette.applications import Starlette
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from catalog_matching.domain.config import MatcherConfig
 from catalog_matching.domain.engine import DecisionRecord, Explanation
 from catalog_matching.domain.models import TargetSegment
-from catalog_matching.domain.validation import parse_matcher_config, parse_targets
-from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
-    PAGE_SIZE,
-    SqliteCatalogFileReader,
-    SqliteSourceReader,
-)
-from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
+from catalog_matching.domain.validation import parse_targets
+from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import PAGE_SIZE
 from p2pwatch.adapters.driving.webui.app import (
     _normalize_direction,
     _normalize_sort,
@@ -36,8 +30,6 @@ from p2pwatch.adapters.driving.webui.app import (
     build_app,
 )
 from p2pwatch.adapters.driving.webui.views import DecisionCell, HiddenInput
-from p2pwatch.application.describe_file import DescribeFile
-from p2pwatch.application.matching_read import MatchingExplainer
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.coverage import TargetCoverage
 from p2pwatch.domain.download.states import DownloadState
@@ -47,7 +39,8 @@ from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
-from p2pwatch.domain.source import SourceKey
+from p2pwatch.domain.sharing_period import SharingPeriod
+from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus, StatusReading
 from p2pwatch.ports.driving.crawl_summarizer import ClientSummary, CrawlSummary
 from p2pwatch.ports.driving.file_describer import FileDescription
@@ -137,20 +130,6 @@ _FILE_DESCRIPTION = FileDescription(
     interval=_WEEK,
     now=_WALL_CLOCK.now(),
 )
-
-
-def _file_describer(
-    catalog_db: Path, matcher_config: MatcherConfig, target_segments: tuple[TargetSegment, ...]
-) -> DescribeFile:
-    """The file page's use case over the fixture catalog, until its route tests run on a fake."""
-    reader_provider = ReaderProvider(catalog_db)
-    return DescribeFile(
-        catalog_file_reader=SqliteCatalogFileReader(reader_provider),
-        source_reader=SqliteSourceReader(reader_provider),
-        explainer=MatchingExplainer(matcher_config=matcher_config, targets=target_segments),
-        wall_clock=_WALL_CLOCK,
-        source_period_gap=_GAP,
-    )
 
 
 def _app_on_fakes(
@@ -258,24 +237,6 @@ episodes:
     )
 
 
-def _matcher() -> MatcherConfig:
-    return parse_matcher_config(
-        yaml.safe_load(
-            """\
-tokens:
-  keroro:
-    keyword: keroro
-rules:
-  - name: catalog
-    tier: catalog
-    scope: unattributed
-    any:
-      - keroro
-"""
-        )
-    )
-
-
 # ---------------------------------------------------------------------------
 # Fixture: app with data
 # ---------------------------------------------------------------------------
@@ -295,7 +256,6 @@ def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         )
         insert_decision(conn, TEST_HASH, "062A", "catalog", rule_name="catalog")
 
-    matcher_config = _matcher()
     targets = _targets()
 
     import p2pwatch.adapters.driving.webui
@@ -315,43 +275,7 @@ def populated_app(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
         file_lister=_NO_FILE_LISTER,
-        file_describer=_file_describer(catalog_db, matcher_config, targets),
-        amule_url=_AMULE_URL,
-        wall_clock=_WALL_CLOCK,
-        monotonic_clock=_MONOTONIC_CLOCK,
-        source_period_gap=_GAP,
-    )
-    return app, TEST_HASH
-
-
-@pytest.fixture
-def app_no_observations(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
-    """File without observations (last_obs=None branch → link='')."""
-    with sqlite3.connect(catalog_db) as conn:
-        insert_file(conn, TEST_HASH, 100_000_000)
-        # No observations
-
-    matcher_config = _matcher()
-    targets = _targets()
-
-    import p2pwatch.adapters.driving.webui
-
-    templates_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "templates"
-    static_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "static"
-
-    app = build_app(
-        catalog_db_path=catalog_db,
-        local_db_path=local_db,
-        target_segments=targets,
-        templates_dir=templates_dir,
-        static_dir=static_dir,
-        crawl_pauser=_NO_CONTROLS,
-        crawl_resumer=_NO_CONTROLS,
-        shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_SUMMARIZER,
-        node_describer=_DESCRIBER,
-        file_lister=_NO_FILE_LISTER,
-        file_describer=_file_describer(catalog_db, matcher_config, targets),
+        file_describer=FakeFileDescriber(_FILE_DESCRIPTION),
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -566,20 +490,15 @@ async def test_file_page_shows_the_explanation_its_use_case_gives() -> None:
 
 
 @pytest.mark.asyncio
-async def test_file_detail_timeline_shows_each_observation_as_one_plain_line(
-    populated_app: tuple[Starlette, str],
-) -> None:
-    app, hash_ = populated_app
-    day = _query(datetime(2026, 6, 22, tzinfo=UTC), datetime(2026, 6, 23, tzinfo=UTC))
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get(f"{_detail_url(hash_)}?{day}")
-    cells = ("keroro_s2e62a_vf.avi", "100000000", "5", "keroro", SEEN_AT)
-    line = "<tr>" + "".join(f"<td>{cell}</td>" for cell in cells) + "</tr>"
-    assert line in re.sub(r">\s+<", "><", resp.text)
-    assert "Times seen" not in resp.text
+async def test_file_page_timeline_shows_each_observation_as_one_plain_line() -> None:
+    page = await _file_page()
+    assert _row("keroro_s2e62a_vf.avi", "100000000", "5", "keroro", SEEN_AT) in page
+    assert "Times seen" not in page
 
 
 _USER = "1f2e" * 8
+_SOURCE = SourceKey(Network.ED2K, _USER)
+_SOURCE_LINK = f'<a href="/sources/{_SOURCE.source_id.hex()}">1f2e1f2e…</a>'
 # Tuesday 2026-10-13 20:00:00 UTC, in microseconds since the Unix epoch.
 _TUESDAY_8PM = 1_791_921_600_000_000
 
@@ -589,37 +508,26 @@ def _row(*cells: str) -> str:
 
 
 @pytest.mark.asyncio
-async def test_file_detail_shows_its_source_history_newest_first(
-    populated_app: tuple[Starlette, str], catalog_db: Path
-) -> None:
-    app, hash_ = populated_app
-    with sqlite3.connect(catalog_db) as conn:
-        insert_source(conn, _USER)
-        queued = insert_source_variant(
-            conn,
-            hash_,
-            _USER,
-            contact_point="198.51.100.7:4661",
-            connectable=False,
-            node_id="n2",
-        )
-        sending = insert_source_variant(conn, hash_, _USER, role="sending", node_id="n1")
-        for at in (30, 60):
-            insert_source_point(conn, queued, _TUESDAY_8PM + at * 1_000_000)
-        for step in range(129):  # every 80 s, 10 MB in 10,240 s
-            at, counter = _TUESDAY_8PM + (90 + 80 * step) * 1_000_000, step * 81_920
-            insert_source_point(conn, sending, at, session_received_bytes=counter)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get(_detail_url(hash_))
-    page = re.sub(r">\s+<", "><", resp.text)
+async def test_file_page_shows_its_source_history_in_the_order_read() -> None:
+    sending = SharingPeriod(
+        _FILE, _SOURCE, "AnimuseeFMR", SourceRole.SENDING, None, None,
+        datetime(2026, 10, 13, 20, 1, 30, tzinfo=UTC),
+        datetime(2026, 10, 13, 22, 52, 10, tzinfo=UTC),
+        10_485_760, "n1",
+    )  # fmt: skip
+    queued = SharingPeriod(
+        _FILE, _SOURCE, "AnimuseeFMR", SourceRole.QUEUED, "198.51.100.7:4661", False,
+        datetime(2026, 10, 13, 20, 0, 30, tzinfo=UTC), datetime(2026, 10, 13, 20, 1, tzinfo=UTC),
+        0, "n2",
+    )  # fmt: skip
+    page = await _file_page(replace(_FILE_DESCRIPTION, sharing_periods=(sending, queued)))
     name = '<a href="/sources/name?source_name=AnimuseeFMR">AnimuseeFMR</a>'
-    source = f'<a href="/sources/{SourceKey(Network.ED2K, _USER).source_id.hex()}">1f2e1f2e…</a>'
     sending_line = _row(
-        name, source, "sending", "unknown", "unknown",
+        name, _SOURCE_LINK, "sending", "unknown", "unknown",
         "2026-10-13 20:01:30Z", "2026-10-13 22:52:10Z", "10 MB", "1 KB/s", "n1",
     )  # fmt: skip
     queued_line = _row(
-        name, source, "queued", "198.51.100.7:4661", "no",
+        name, _SOURCE_LINK, "queued", "198.51.100.7:4661", "no",
         "2026-10-13 20:00:30Z", "2026-10-13 20:01:00Z", "", "", "n2",
     )  # fmt: skip
     assert "<h2>Source history</h2>" in page
@@ -629,40 +537,25 @@ async def test_file_detail_shows_its_source_history_newest_first(
 
 
 @pytest.mark.asyncio
-async def test_file_detail_links_only_the_name_or_the_hash_a_period_has(
-    populated_app: tuple[Starlette, str], catalog_db: Path
-) -> None:
-    app, hash_ = populated_app
-    with sqlite3.connect(catalog_db) as conn:
-        insert_source(conn, _USER)
-        unnamed = insert_source_variant(conn, hash_, _USER, name=None, connectable=True)
-        hashless = insert_source_variant(conn, hash_, None, name="http://emule-project.net")
-        insert_source_point(conn, unnamed, _TUESDAY_8PM)
-        insert_source_point(conn, hashless, _TUESDAY_8PM)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get(_detail_url(hash_))
-    page = re.sub(r">\s+<", "><", resp.text)
-    source = f'<a href="/sources/{SourceKey(Network.ED2K, _USER).source_id.hex()}">1f2e1f2e…</a>'
+async def test_file_page_links_only_the_name_or_the_hash_a_period_has() -> None:
+    at, queued = datetime(2026, 10, 13, 20, tzinfo=UTC), SourceRole.QUEUED
+    unnamed = SharingPeriod(_FILE, _SOURCE, None, queued, None, True, at, at, 0, "n1")
+    hashless = SharingPeriod(
+        _FILE, None, "http://emule-project.net", queued, None, None, at, at, 0, "n1"
+    )
+    page = await _file_page(replace(_FILE_DESCRIPTION, sharing_periods=(unnamed, hashless)))
     name = '<a href="/sources/name?source_name=http%3A%2F%2Femule-project.net">http://emule-project.net</a>'
     stamp = "2026-10-13 20:00:00Z"
-    assert _row("unknown", source, "queued", "unknown", "yes", stamp, stamp, "", "", "n1") in page
+    assert (
+        _row("unknown", _SOURCE_LINK, "queued", "unknown", "yes", stamp, stamp, "", "", "n1")
+        in page
+    )
     assert _row(name, "unknown", "queued", "unknown", "unknown", stamp, stamp, "", "", "n1") in page
 
 
 @pytest.mark.asyncio
-async def test_file_detail_shows_no_source_older_than_7_days(
-    populated_app: tuple[Starlette, str], catalog_db: Path
-) -> None:
-    app, hash_ = populated_app
-    with sqlite3.connect(catalog_db) as conn:
-        insert_source(conn, _USER)
-        week_before = (_WALL_CLOCK.now() - timedelta(days=7, microseconds=1)).timestamp()
-        insert_source_point(
-            conn, insert_source_variant(conn, hash_, _USER), int(week_before * 1_000_000)
-        )
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get(_detail_url(hash_))
-    assert '<td colspan="10">No source read in this interval.</td>' in resp.text
+async def test_file_page_without_a_source_in_its_interval_says_so() -> None:
+    assert '<td colspan="10">No source read in this interval.</td>' in await _file_page()
 
 
 # ---------------------------------------------------------------------------
@@ -926,16 +819,11 @@ async def test_files_non_numeric_page_defaults_to_1() -> None:
 
 
 @pytest.mark.asyncio
-async def test_file_detail_no_observations_returns_200(
-    app_no_observations: tuple[Starlette, str],
-) -> None:
-    """/files/{file_id} without observations → 200; no ed2k link, empty branch rendered."""
-    app, hash_ = app_no_observations
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get(_detail_url(hash_))
-    assert resp.status_code == 200
-    assert "ed2k://" not in resp.text
-    assert "No observation in this interval." in resp.text
+async def test_file_page_of_a_file_never_seen_has_no_ed2k_link() -> None:
+    never_seen = _history(observations=(), latest_observation=None)
+    page = await _file_page(replace(_FILE_DESCRIPTION, file_history=never_seen))
+    assert "ed2k://" not in page
+    assert '<td colspan="5">No observation in this interval.</td>' in page
 
 
 @pytest.mark.asyncio
@@ -1033,7 +921,7 @@ async def test_a_template_reading_what_its_context_lacks_raises(
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
         file_lister=_NO_FILE_LISTER,
-        file_describer=_file_describer(catalog_db, _matcher(), _targets()),
+        file_describer=_NO_FILE_DESCRIBER,
         amule_url=_AMULE_URL,
         wall_clock=_WALL_CLOCK,
         monotonic_clock=_MONOTONIC_CLOCK,
@@ -1105,42 +993,6 @@ async def test_each_page_passes_its_template_only_what_it_reads(
     assert passed == _template_reads(loader, rendered["template"].name)
 
 
-@pytest.fixture
-def app_with_hostile_filename(catalog_db: Path, local_db: Path) -> tuple[Starlette, str]:
-    """File whose name contains a ``|`` (eD2k link separator). A webui-security#0
-    regression: without percent-encoding, the ``|`` in the name shifts size/hash and the
-    link points elsewhere."""
-    hostile = "weird|name.avi"
-    with sqlite3.connect(catalog_db) as conn:
-        insert_file(conn, TEST_HASH, 100_000_000)
-        insert_observation(conn, TEST_HASH, hostile, size_bytes=100_000_000)
-    matcher_config = _matcher()
-    targets = _targets()
-    import p2pwatch.adapters.driving.webui
-
-    templates_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "templates"
-    static_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "static"
-    app = build_app(
-        catalog_db_path=catalog_db,
-        local_db_path=local_db,
-        target_segments=targets,
-        templates_dir=templates_dir,
-        static_dir=static_dir,
-        crawl_pauser=_NO_CONTROLS,
-        crawl_resumer=_NO_CONTROLS,
-        shutdown_requester=_NO_CONTROLS,
-        crawl_summarizer=_SUMMARIZER,
-        node_describer=_DESCRIBER,
-        file_lister=_NO_FILE_LISTER,
-        file_describer=_file_describer(catalog_db, matcher_config, targets),
-        amule_url=_AMULE_URL,
-        wall_clock=_WALL_CLOCK,
-        monotonic_clock=_MONOTONIC_CLOCK,
-        source_period_gap=_GAP,
-    )
-    return app, TEST_HASH
-
-
 @pytest.mark.asyncio
 async def test_empty_filter_param_does_not_silently_zero_results() -> None:
     # webui-security#0 regression (filters): ``?target_id=`` (empty, common with a <select>
@@ -1185,25 +1037,24 @@ async def test_files_page_shows_pagination_navigation() -> None:
 
 
 @pytest.mark.asyncio
-async def test_hostile_filename_is_escaped_in_ed2k_link(
-    app_with_hostile_filename: tuple[Starlette, str],
-) -> None:
+async def test_hostile_filename_is_escaped_in_ed2k_link() -> None:
     # webui-security#0 regression: a hostile ``|`` in the name must be percent-encoded
     # (%7C). Without this escaping, the link would have 6 ``|`` (instead of 5 structural
     # separators) and size/hash would be shifted → unusable file / pointing elsewhere.
-    app, hash_ = app_with_hostile_filename
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get(_detail_url(hash_))
-    assert resp.status_code == 200
+    reported_file = replace(_OBSERVATION.reported_file, filename="weird|name.avi")
+    hostile = FileObservation(reported_file, _OBSERVATION.observed_at)
+    text = await _file_page(
+        replace(_FILE_DESCRIPTION, file_history=_history(latest_observation=hostile))
+    )
     # The link in the response must contain %7C (and NOT a raw ``|`` in the middle of the name).
-    assert "%7C" in resp.text
+    assert "%7C" in text
     # We extract the first occurrence of ``ed2k://`` up to the next whitespace/`"` to
     # verify it has EXACTLY 5 ``|`` (the 5 structural separators of the canonical link).
-    start = resp.text.index("ed2k://")
+    start = text.index("ed2k://")
     end = start
-    while end < len(resp.text) and resp.text[end] not in ('"', "<", " ", "\n"):
+    while end < len(text) and text[end] not in ('"', "<", " ", "\n"):
         end += 1
-    link = resp.text[start:end]
+    link = text[start:end]
     assert link.count("|") == 5
 
 
@@ -1913,18 +1764,9 @@ def _seed_points(catalog_db: Path, ed2k_hash: str, *moments: datetime) -> None:
 
 
 @pytest.mark.asyncio
-async def test_an_interval_of_3_days_shows_those_days_only_and_moves_by_3_days(
-    populated_app: tuple[Starlette, str], catalog_db: Path
-) -> None:
-    app, hash_ = populated_app
-    _seed_points(catalog_db, hash_, _OCT_8 - _SECOND, _OCT_8, _OCT_11 - _SECOND, _OCT_11)
-    path = _detail_url(hash_)
-    page = await _sources_page(app, f"{path}?{_query(_OCT_8, _OCT_11)}")
-    assert [f"<td>{n}.avi</td>" in page for n in range(4)] == [False, True, True, False]
-    cells = ("2026-10-07 23:59:59Z", "2026-10-08 00:00:00Z", "2026-10-10 23:59:59Z")
-    assert [f"<td>{cell}</td>" in page for cell in cells] == [False, True, True]
-    assert "<td>2026-10-11 00:00:00Z</td>" not in page
-    days = timedelta(days=3)
+async def test_an_interval_of_3_days_shows_those_days_and_moves_by_3_days() -> None:
+    page = await _file_page(replace(_FILE_DESCRIPTION, interval=Interval(_OCT_8, _OCT_11)))
+    path, days = _detail_url(TEST_HASH), timedelta(days=3)
     assert f"<a {_href(path, _OCT_8 - days, _OCT_8)}>← Previous</a>" in page
     assert f"<a {_href(path, _OCT_11, _OCT_11 + days)}>Next →</a>" in page
     assert "Showing 2026-10-08 00:00:00Z to 2026-10-11 00:00:00Z." in page
@@ -1932,29 +1774,18 @@ async def test_an_interval_of_3_days_shows_those_days_only_and_moves_by_3_days(
 
 
 @pytest.mark.asyncio
-async def test_an_interval_of_30_days_shows_the_7_ending_at_its_to_and_says_so(
-    populated_app: tuple[Starlette, str], catalog_db: Path
-) -> None:
-    app, hash_ = populated_app
-    week_before = _OCT_11 - timedelta(days=7)
-    _seed_points(catalog_db, hash_, week_before - _SECOND, week_before)
-    month = _query(_OCT_11 - timedelta(days=30), _OCT_11)
-    page = await _sources_page(app, f"{_detail_url(hash_)}?{month}")
+async def test_a_clamped_interval_says_so_and_shows_its_ends_in_the_inputs() -> None:
+    clamped = Interval(_OCT_11 - timedelta(days=7), _OCT_11, clamped=True)
+    page = await _file_page(replace(_FILE_DESCRIPTION, interval=clamped))
     notice = "The interval requested is longer than 7 days: showing the 7 days ending at its end."
     assert f"<p>{notice}</p>" in page
     assert '<input type="datetime-local" name="from" step="1" value="2026-10-04T00:00:00">' in page
     assert '<input type="datetime-local" name="to" step="1" value="2026-10-11T00:00:00">' in page
-    assert ["<td>0.avi</td>" in page, "<td>1.avi</td>" in page] == [False, True]
 
 
 @pytest.mark.asyncio
-async def test_no_parameter_shows_the_last_7_days_and_no_next(
-    populated_app: tuple[Starlette, str],
-) -> None:
-    app, hash_ = populated_app
-    path = _detail_url(hash_)
-    page = await _sources_page(app, path)
-    now = _WALL_CLOCK.now()
+async def test_an_interval_ending_now_shows_no_next() -> None:
+    page, path, now = await _file_page(), _detail_url(TEST_HASH), _WALL_CLOCK.now()
     assert "Showing 2026-10-07 20:00:00Z to 2026-10-14 20:00:00Z." in page
     assert f"<a {_href(path, now - timedelta(days=14), now - timedelta(days=7))}>" in page
     assert "Next →" not in page
@@ -1962,24 +1793,12 @@ async def test_no_parameter_shows_the_last_7_days_and_no_next(
 
 
 @pytest.mark.asyncio
-async def test_the_presets_end_now(populated_app: tuple[Starlette, str]) -> None:
-    app, hash_ = populated_app
-    path = _detail_url(hash_)
-    page = await _sources_page(app, f"{path}?{_query(_OCT_8, _OCT_11)}")
-    now, hours = _WALL_CLOCK.now(), {"hour": 1, "6 hours": 6, "24 hours": 24, "7 days": 168}
+async def test_the_presets_end_at_the_now_the_use_case_read() -> None:
+    now = datetime(2026, 10, 12, 6, tzinfo=UTC)  # not the wall clock's
+    page = await _file_page(replace(_FILE_DESCRIPTION, interval=Interval(_OCT_8, _OCT_11), now=now))
+    path, hours = _detail_url(TEST_HASH), {"hour": 1, "6 hours": 6, "24 hours": 24, "7 days": 168}
     for label, span in hours.items():
         assert f"<a {_href(path, now - timedelta(hours=span), now)}>Last {label}</a>" in page
-
-
-@pytest.mark.asyncio
-async def test_a_period_crossing_from_starts_at_its_first_point_inside(
-    populated_app: tuple[Starlette, str], catalog_db: Path
-) -> None:
-    app, hash_ = populated_app
-    _seed_points(catalog_db, hash_, *(_OCT_8 + n * 30 * _SECOND for n in (-1, 1, 2)))
-    page = await _sources_page(app, f"{_detail_url(hash_)}?{_query(_OCT_8, _OCT_11)}")
-    period = ("queued", "unknown", "unknown", "2026-10-08 00:00:30Z", "2026-10-08 00:01:00Z")
-    assert "".join(f"<td>{cell}</td>" for cell in period) in page
 
 
 @pytest.mark.parametrize(
