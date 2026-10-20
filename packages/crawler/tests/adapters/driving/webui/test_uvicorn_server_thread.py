@@ -3,7 +3,7 @@ import logging
 import socket
 import threading
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AbstractContextManager, asynccontextmanager
 
 import httpx
 import pytest
@@ -99,3 +99,43 @@ async def test_a_failing_lifespan_degrades_the_webui_without_raising(
     await server_thread.stop()
     assert caplog.messages == ["webui degraded: the crawler carries on without HTTP"]
     assert _webui_threads() == []
+
+
+class _ThreadRecordingContext(AbstractContextManager[None]):
+    """Records the thread that enters it and the one that leaves it."""
+
+    def __init__(self) -> None:
+        self.threads: list[tuple[str, str]] = []
+
+    def __enter__(self) -> None:
+        self.threads.append(("enter", threading.current_thread().name))
+
+    def __exit__(self, *exc_info: object) -> None:
+        self.threads.append(("exit", threading.current_thread().name))
+
+
+@pytest.mark.asyncio
+async def test_the_serving_resources_are_held_by_the_webui_thread_while_it_serves() -> None:
+    resource = _ThreadRecordingContext()
+    server_thread = UvicornServerThread(
+        Starlette(), ("127.0.0.1", 0), serving_resources=(resource,)
+    )
+    await server_thread.start()
+    entered = list(resource.threads)
+    await server_thread.stop()
+    assert entered == [("enter", "webui")]
+    assert resource.threads == [("enter", "webui"), ("exit", "webui")]
+
+
+@pytest.mark.asyncio
+async def test_the_serving_resources_are_left_when_serving_fails() -> None:
+    resource = _ThreadRecordingContext()
+    with socket.socket() as holder:
+        holder.bind(("127.0.0.1", 0))
+        holder.listen()
+        server_thread = UvicornServerThread(
+            Starlette(), holder.getsockname(), serving_resources=(resource,)
+        )
+        await server_thread.start()
+        await server_thread.stop()
+    assert resource.threads == [("enter", "webui"), ("exit", "webui")]

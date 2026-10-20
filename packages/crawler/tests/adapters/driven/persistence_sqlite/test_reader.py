@@ -160,3 +160,23 @@ def test_reused_connection_sees_data_committed_after_first_handout(tmp_path: Pat
     finally:
         writer.close()
         reader.close()
+
+
+def test_leaving_the_provider_closes_the_calling_threads_connection(tmp_path: Path) -> None:
+    path = tmp_path / "catalog.db"
+    _seed(path)
+    with ReaderProvider(path) as provider:
+        first = provider.connection()
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        first.execute("SELECT 1")
+    reopened = provider.connection()  # a later read opens a fresh one
+    try:
+        assert reopened is not first
+    finally:
+        reopened.close()
+
+
+def test_leaving_the_provider_unused_opens_nothing(tmp_path: Path) -> None:
+    with ReaderProvider(tmp_path / "never-opened.db"):
+        pass
+    assert not (tmp_path / "never-opened.db").exists()

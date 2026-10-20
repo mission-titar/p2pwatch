@@ -24,6 +24,7 @@ paying a cold open per request.
 import sqlite3
 import threading
 from pathlib import Path
+from typing import Self
 
 
 def open_reader(path: Path | str) -> sqlite3.Connection:
@@ -59,3 +60,12 @@ class ReaderProvider:
         connection = open_reader(self._path)
         self._local.connection = connection
         return connection
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        """Closes the calling thread's connection, which only its own thread may close."""
+        connection, self._local.connection = self._local.connection, None
+        if connection is not None:
+            connection.close()
