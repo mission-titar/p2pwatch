@@ -12,7 +12,6 @@ from starlette.applications import Starlette
 
 _logger = logging.getLogger("p2pwatch.adapters.driving.webui.uvicorn_server_thread")
 
-_START_TIMEOUT_SECONDS = 5.0
 # uvicorn polls ``should_exit`` every 0.1 s, so the join normally returns well within its bound.
 _JOIN_TIMEOUT_SECONDS = 5.0
 
@@ -37,8 +36,8 @@ class UvicornServerThread:
         app: Starlette,
         address: tuple[str, int],
         *,
-        start_timeout_seconds: float = _START_TIMEOUT_SECONDS,
-        serving_resources: Iterable[AbstractContextManager[object]] = (),
+        start_timeout_seconds: float,
+        serving_resources: Iterable[AbstractContextManager[object]],
     ) -> None:
         host, port = address
         self._serving_resources = tuple(serving_resources)

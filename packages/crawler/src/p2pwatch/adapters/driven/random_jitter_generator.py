@@ -9,10 +9,10 @@ class RandomJitterGenerator(JitterGenerator):
     """Real ``JitterGenerator``.
 
     ``jitter``: REAL draw in ``[0, span)`` via a dedicated ``random.Random`` instance,
-    seeded at construction (``jitter_seed``, defaults to system entropy): the backoff
+    seeded at construction (``jitter_seed``, ``None`` for the system's entropy): the backoff
     jitter breaks the thundering-herd between nodes/channels."""
 
-    def __init__(self, *, jitter_seed: int | str | None = None) -> None:
+    def __init__(self, *, jitter_seed: int | str | None) -> None:
         self._random = random.Random(jitter_seed)
 
     def jitter(self, span: float) -> float:
