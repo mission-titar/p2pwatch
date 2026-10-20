@@ -13,6 +13,7 @@ from p2pwatch.domain.observability.events import (
     SearchFailed,
 )
 from p2pwatch.domain.persisted_wait import remaining_wait
+from p2pwatch.domain.search.answer import SearchAnswer
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState, backoff_delay
 from p2pwatch.ports.driven.catalog import (
     DecisionReader,
@@ -24,7 +25,7 @@ from p2pwatch.ports.driven.client_errors import ClientUnreachableError, SearchFa
 from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
 from p2pwatch.ports.driven.jitter_generator import JitterGenerator
 from p2pwatch.ports.driven.logger import Logger
-from p2pwatch.ports.driven.search_client import SearchAnswer, SearchClient
+from p2pwatch.ports.driven.search_client import SearchClient
 from p2pwatch.ports.driven.telemetry import EventEmitter
 from p2pwatch.ports.driven.waker import Waker
 

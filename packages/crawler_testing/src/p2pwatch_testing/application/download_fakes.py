@@ -5,13 +5,14 @@ from datetime import datetime, timedelta
 from typing import Literal, NoReturn
 
 from p2pwatch.domain.download.candidate import DownloadCandidate
+from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.source import EarlierPoints, RecordedReading, SourceKey, SourceReading
 from p2pwatch.ports.driven.catalog import DecisionReader, ObservationReader
-from p2pwatch.ports.driven.download_client import DownloadClient, DownloadRequest
+from p2pwatch.ports.driven.download_client import DownloadClient
 from p2pwatch.ports.driven.downloads import DownloadReader, DownloadWriter
 from p2pwatch.ports.driven.free_space_meter import FreeSpaceMeter
 from p2pwatch.ports.driven.repository_errors import RepositoryError
