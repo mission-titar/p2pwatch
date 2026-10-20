@@ -13,11 +13,11 @@ from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.ports.driven.clock import MonotonicClock
 from p2pwatch.ports.driven.waker import Waker
 from p2pwatch_testing.application.download_fakes import (
-    FakeCatalogReads,
+    FakeCatalogReader,
     FakeDownloadClient,
-    FakeDownloadRepo,
+    FakeDownloadStore,
     FakeFreeSpaceMeter,
-    FakeSourceRepo,
+    FakeSourcePointStore,
 )
 from p2pwatch_testing.application.fakes import FakeEventEmitter, FakeLogger, FakeTime
 
@@ -49,9 +49,9 @@ def _loop_deps(
     fake_time: FakeTime | None = None,
 ) -> DownloadLoopDeps:
     client = FakeDownloadClient()
-    downloads = FakeDownloadRepo()
-    sources = FakeSourceRepo()
-    catalog = FakeCatalogReads()
+    downloads = FakeDownloadStore()
+    sources = FakeSourcePointStore()
+    catalog = FakeCatalogReader()
     fake_time = fake_time or FakeTime()
     return DownloadLoopDeps(
         download_client=client,
@@ -124,7 +124,7 @@ async def test_nudge_wakes_the_loop_before_poll_expires() -> None:
     assert DOWNLOAD_WAKE_SUBJECT in waker.waited
 
 
-class _ShutdownDuringCycleCatalog(FakeCatalogReads):
+class _ShutdownDuringCycleCatalog(FakeCatalogReader):
     """Sets ``shutdown`` on the 1st ``read_download_candidates``, mid-cycle."""
 
     def __init__(self, shutdown: asyncio.Event) -> None:
