@@ -7,6 +7,7 @@ from typing import Any
 
 import yaml
 
+from catalog_matching.domain.config import MatcherConfig
 from catalog_matching.domain.engine import DecisionRecord, Explanation
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 from p2pwatch.application.describe_file import DescribeFile
@@ -98,11 +99,12 @@ def _describe(
     *,
     requested_since: datetime | None = None,
     requested_until: datetime | None = None,
+    matcher_config: MatcherConfig = _MATCHER,
 ) -> FileDescription | None:
     describe_file = DescribeFile(
         catalog_file_reader=catalog_file_reader,
         source_reader=source_reader or _FakeSourceReader(),
-        explainer=MatchingExplainer(matcher_config=_MATCHER, targets=_TARGETS),
+        explainer=MatchingExplainer(matcher_config=matcher_config, targets=_TARGETS),
         wall_clock=FakeTime(_NOW).wall,
         source_period_gap=_GAP,
     )
@@ -146,6 +148,26 @@ def test_the_first_decision_is_explained_over_every_known_filename() -> None:
         coverage_values=(),
         vetoes_fired=("ita",),
     )
+
+
+def test_the_explanation_judges_the_latest_observations_duration_and_bitrate() -> None:
+    # Each token holds only on the latest observation's exact value (1300 s, 900 kbps).
+    media_tokens = {
+        "long": {"attr_between": "duration_seconds", "min": 1300.0, "max": 1300.0},
+        "dense": {"attr_between": "bitrate_kbps", "min": 900.0, "max": 900.0},
+    }
+    matcher_config = parse_matcher_config(
+        {
+            "tokens": {"keroro": {"keyword": "keroro"}, **media_tokens},
+            "rules": [
+                {"name": "media", "tier": "catalog", "scope": "unattributed", "all": ["long"]}
+            ],
+        }
+    )
+    description = _describe(_FakeCatalogFileReader(_HISTORY), matcher_config=matcher_config)
+    assert description is not None
+    assert description.explanation is not None
+    assert description.explanation.tokens_matched == ("dense", "keroro", "long")
 
 
 def test_a_file_without_a_decision_or_never_seen_has_no_explanation() -> None:
