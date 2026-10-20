@@ -320,7 +320,7 @@ def test_record_retraction_row_is_append_only(
     }
 
 
-def test_iter_reevaluation_rows_returns_the_latest_observation_per_hash(
+def test_iter_latest_observations_returns_the_latest_per_hash(
     repository: SqliteCatalogRepository,
 ) -> None:
     # _HASH gets TWO observations a minute apart: only the LATEST must come back.
@@ -345,13 +345,13 @@ def test_iter_reevaluation_rows_returns_the_latest_observation_per_hash(
     assert list(repository.iter_latest_observations()) == [newest, other]
 
 
-def test_iter_reevaluation_rows_is_empty_with_an_empty_catalogue(
+def test_iter_latest_observations_is_empty_with_an_empty_catalogue(
     repository: SqliteCatalogRepository,
 ) -> None:
     assert list(repository.iter_latest_observations()) == []
 
 
-def test_iter_reevaluation_rows_breaks_an_observed_at_tie_on_the_highest_variant(
+def test_iter_latest_observations_breaks_an_observed_at_tie_on_the_highest_variant(
     repository: SqliteCatalogRepository,
 ) -> None:
     # Both rows share observed_at, so the newer variant (higher variant_id) wins.
@@ -365,7 +365,7 @@ def test_iter_reevaluation_rows_breaks_an_observed_at_tie_on_the_highest_variant
     assert filenames == ["second.avi"]
 
 
-def test_count_files_counts_catalogued_hashes_not_observations(
+def test_read_file_count_counts_catalogued_hashes_not_observations(
     repository: SqliteCatalogRepository,
 ) -> None:
     assert repository.read_file_count() == 0
@@ -380,14 +380,14 @@ def test_count_files_counts_catalogued_hashes_not_observations(
     assert repository.read_file_count() == 2
 
 
-def test_iter_reevaluation_rows_skips_a_file_never_observed(
+def test_iter_latest_observations_skips_a_file_never_observed(
     repository: SqliteCatalogRepository, connection: sqlite3.Connection
 ) -> None:
     insert_file(connection, _HASH, 1)
     assert list(repository.iter_latest_observations()) == []
 
 
-def test_last_observation_of_a_file_never_observed_is_none(
+def test_read_latest_observation_of_a_file_never_observed_is_none(
     repository: SqliteCatalogRepository, connection: sqlite3.Connection
 ) -> None:
     insert_file(connection, _HASH, 1)
