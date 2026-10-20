@@ -23,8 +23,8 @@ _DEFAULT_PATHS = (
     _CWD / "deploy" / "targets.yml",
     _CWD / "deploy" / "matcher.yml",
 )
-_GIVEN_PATHS = (PurePath("c.yml"), PurePath("t.yml"), PurePath("m.yml"))
-_GIVEN_ARGV = ["--config", "c.yml", "--targets", "t.yml", "--matcher", "m.yml"]
+_GIVEN_PATHS = (PurePath("/etc/p2pwatch/c.yml"), _CWD / "t.yml", _CWD / "m.yml")
+_GIVEN_ARGV = ["--config", "/etc/p2pwatch/c.yml", "--targets", "t.yml", "--matcher", "m.yml"]
 
 
 class _FakeCrawlerRunner(CrawlerRunner):
@@ -87,7 +87,7 @@ def _command_line(
     )
 
 
-def test_crawl_runs_the_crawler_on_the_paths_given() -> None:
+def test_crawl_runs_the_crawler_on_the_paths_given_a_relative_one_under_cwd() -> None:
     crawler_runner = _FakeCrawlerRunner()
 
     assert _command_line(crawler_runner=crawler_runner).run(["crawl", *_GIVEN_ARGV]) == 0
@@ -122,7 +122,7 @@ def test_crawl_exits_zero_when_the_shutdown_deadline_fires(
     assert "Shutdown deadline elapsed" in capsys.readouterr().err
 
 
-def test_validate_config_validates_the_paths_given_and_starts_nothing(
+def test_validate_config_validates_the_paths_given_under_cwd_and_starts_nothing(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     crawler_runner = _FakeCrawlerRunner()
@@ -206,25 +206,26 @@ def test_a_root_logger_with_a_handler_is_left_as_it_is() -> None:
     assert root_logger.level == logging.WARNING
 
 
-_A = PurePath("a.db")
-_B = PurePath("b.db")
+_A = _CWD / "a.db"
+_B = PurePath("/data/b.db")
 
 
 @pytest.mark.parametrize(
     ("options", "destination"),
     [
-        (["--output", "out.db"], NewCatalog(PurePath("out.db"), force=False)),
-        (["-o", "out.db", "--force"], NewCatalog(PurePath("out.db"), force=True)),
+        (["--output", "out.db"], NewCatalog(_CWD / "out.db", force=False)),
+        (["-o", "/data/out.db", "--force"], NewCatalog(PurePath("/data/out.db"), force=True)),
         (["--into", "a.db"], ListedSourceCatalog(_A)),
     ],
 )
-def test_merge_merges_the_catalogs_given_into_the_destination_given(
+def test_merge_merges_the_catalogs_given_into_the_destination_given_relative_ones_under_cwd(
     options: list[str], destination: NewCatalog | ListedSourceCatalog
 ) -> None:
     catalog_merger = _FakeCatalogMerger()
 
     assert (
-        _command_line(catalog_merger=catalog_merger).run(["merge", *options, "a.db", "b.db"]) == 0
+        _command_line(catalog_merger=catalog_merger).run(["merge", *options, "a.db", "/data/b.db"])
+        == 0
     )
 
     assert catalog_merger.merges == [([_A, _B], destination)]

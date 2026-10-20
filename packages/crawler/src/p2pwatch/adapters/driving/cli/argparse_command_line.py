@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import logging
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import PurePath
 
 from p2pwatch.domain.invalid_config import InvalidConfigError
@@ -20,10 +20,13 @@ from p2pwatch.ports.driving.crawler_runner import CrawlerRunner
 _LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 
 
-def _add_config_options(parser: argparse.ArgumentParser, deploy: PurePath) -> None:
-    parser.add_argument("--config", type=PurePath, default=deploy / "crawler.yml")
-    parser.add_argument("--targets", type=PurePath, default=deploy / "targets.yml")
-    parser.add_argument("--matcher", type=PurePath, default=deploy / "matcher.yml")
+def _add_config_options(
+    parser: argparse.ArgumentParser, under_cwd: Callable[[str], PurePath]
+) -> None:
+    deploy = under_cwd("deploy")
+    parser.add_argument("--config", type=under_cwd, default=deploy / "crawler.yml")
+    parser.add_argument("--targets", type=under_cwd, default=deploy / "targets.yml")
+    parser.add_argument("--matcher", type=under_cwd, default=deploy / "matcher.yml")
 
 
 def _configure_logging(root_logger: logging.Logger) -> None:
@@ -36,24 +39,26 @@ def _configure_logging(root_logger: logging.Logger) -> None:
     root_logger.setLevel(logging.INFO)
 
 
-def _add_merge_options(parser: argparse.ArgumentParser) -> None:
+def _add_merge_options(
+    parser: argparse.ArgumentParser, under_cwd: Callable[[str], PurePath]
+) -> None:
     parser.add_argument(
         "source_catalogs",
         metavar="CATALOG",
         nargs="+",
-        type=PurePath,
+        type=under_cwd,
         help="1..N catalog.db files to merge (≥ 1).",
     )
     destination = parser.add_mutually_exclusive_group(required=True)
     destination.add_argument(
         "--output",
         "-o",
-        type=PurePath,
+        type=under_cwd,
         help="FRESH output file (refused if it exists, unless --force).",
     )
     destination.add_argument(
         "--into",
-        type=PurePath,
+        type=under_cwd,
         help="Destination = one of the listed source catalogs (merged into it).",
     )
     parser.add_argument(
@@ -64,8 +69,8 @@ def _add_merge_options(parser: argparse.ArgumentParser) -> None:
 
 
 class ArgparseCommandLine:
-    """``crawl``, ``validate-config`` and ``merge``, each over its driving port; the config's
-    default paths are under ``cwd``."""
+    """``crawl``, ``validate-config`` and ``merge``, each over its driving port; a relative path,
+    the config's default ones included, is taken under ``cwd``."""
 
     def __init__(
         self,
@@ -85,24 +90,25 @@ class ArgparseCommandLine:
     def run(self, argv: Sequence[str]) -> int:
         """Runs the subcommand ``argv`` names, returns its exit code."""
         _configure_logging(self._root_logger)
-        deploy = self._cwd / "deploy"
         parser = argparse.ArgumentParser(prog="p2pwatch", description="eMule crawler")
         subparsers = parser.add_subparsers(dest="command", required=True)
         _add_config_options(
-            subparsers.add_parser("crawl", help="crawl the eMule network until stopped"), deploy
+            subparsers.add_parser("crawl", help="crawl the eMule network until stopped"),
+            self._under_cwd,
         )
         _add_config_options(
             subparsers.add_parser(
                 "validate-config", help="load and check the config, start nothing"
             ),
-            deploy,
+            self._under_cwd,
         )
         _add_merge_options(
             subparsers.add_parser(
                 "merge",
                 help="merge catalogs into one",
                 description="Merge N catalog.db into one (idempotent, append-only preserved).",
-            )
+            ),
+            self._under_cwd,
         )
         args = parser.parse_args(argv)
         if args.command == "crawl":
@@ -110,6 +116,10 @@ class ArgparseCommandLine:
         if args.command == "validate-config":
             return self._validate_config(args)
         return self._merge(args)
+
+    def _under_cwd(self, path: str) -> PurePath:
+        """``path`` under ``cwd``, or as it is when absolute."""
+        return self._cwd / path
 
     def _crawl(self, args: argparse.Namespace) -> int:
         try:

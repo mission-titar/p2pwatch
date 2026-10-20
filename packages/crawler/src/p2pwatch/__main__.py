@@ -35,7 +35,7 @@ def main(argv: Sequence[str], env: Mapping[str, str], cwd: Path) -> int:
         ),
         config_validator=ValidateConfig(YamlConfigChecker(env)),
         catalog_merger=MergeCatalogs(
-            FilesystemCatalogFinder(cwd),
+            FilesystemCatalogFinder(),
             SqliteCatalogCopier(),
             StdlibLogger("p2pwatch.application.merge_catalogs"),
         ),
