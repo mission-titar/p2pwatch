@@ -24,6 +24,12 @@ An agent adds an entry only after the operator has agreed to it.
 - **The webui in the visitor's time zone**: UTC rendered, the browser converts each date with JavaScript; needs
   `AGENTS.md`'s "Python only" amended and a JS test chain. Section 6 of `agents/specs/2026-10-13-append-only-source-points.md`.
 
+- **The Grype scan back on p2pwatch at the v5 release**: one leg per image, `p2pwatch` and `p2pwatch-amule`, each with
+  its versioned VEX and signed by `mission-titar/p2pwatch`, in place of v4's `mulewatch` leg. `.github/workflows/grype-scan.yml`.
+
+- **The metrics served by the webui on 8080**: `/metrics` mounted in Starlette, one server instead of two; `webui.enabled`,
+  `observability.metrics.enabled` and `.port` removed, a deliberate breaking change. Today's setup: `docs/settings.md`.
+
 - **Every stamp an integer of microseconds since the epoch**, as the catalog's points already are: the ISO-8601 TEXT
   stamps left in both databases converted; the catalog's waits for the copy before a migration that rewrites rows. D12 of `agents/specs/2026-10-14-monotonic-clock.md`.
 
