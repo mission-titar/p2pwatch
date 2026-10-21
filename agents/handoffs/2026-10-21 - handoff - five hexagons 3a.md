@@ -1,7 +1,7 @@
 # Handoff: the five other hexagons, lot 3a of the hexagonal architecture umbrella
 
-Drafted by block 32 from the lot's block reports (#331, #332, #334 to #342), for the closing block 90 to correct
-with the holistic review and the operator's answers.
+Drafted by block 32 from the lot's block reports (#331, #332, #334 to #342), corrected by the closing block 90
+with the holistic review (`.reviews/lot3a-holistic.md`, gitignored).
 
 ## State
 
@@ -49,7 +49,8 @@ migration that rewrites rows" ships (spec, section "Backlog").
   logger handed to the command line (format, INFO, left alone once it has a handler) and to `CrawlerApp` (the
   config's level); every path argument, defaults included, taken under `cwd`; `start_http_server` a parameter of
   `start_metrics_server`; `PathlibCatalogFinder` renamed `FilesystemCatalogFinder`, which now only sees absolute
-  paths. C2 and C3 in `AGENTS.md`.
+  paths. C2 and C3 in `AGENTS.md`; C1 and C2's hard rules name `p2pwatch_amule`, `vex_checks` and
+  `coverage_checks` as following them from lots 3b and 3c (block 90), a clause 3c's Wrap removes.
 - **The values an adapter drives from the composition** (block 14): the six parameter defaults only tests changed
   are gone. `AmuleApiClient` takes a `transport_factory` (one transport per session, as before) and its timeout;
   `AppriseNotifier` its `apprise_factory`; `RandomJitterGenerator` its seed (`None`, the system's entropy);
@@ -63,8 +64,10 @@ migration that rewrites rows" ships (spec, section "Backlog").
   `main(argv, env, cwd, temporary_directory, github_api_url)`; `BumpAmule` behind `AmuleBumper` returns
   `AmuleBump(new_pin, body)`, `PinIsLatest(version)` or `PinAheadOfLatest(pinned_version, latest_version)`, which the
   command line prints; `bump.py` is deleted. `RepoReader`'s four `read_` methods return domain types
-  (`GitObject(kind, object_id)`, `GitObjectKind` a `StrEnum`); GitHub's API URL is a value of `__main__`; the
-  adapter's and the wiring tests run against `FakeGitHubServer` on a loopback port. `amule_bump` has no
+  (`GitObject(kind, object_id)`, `GitObjectKind` a `StrEnum`); GitHub's API URL (`_GITHUB_API_URL`) and the URL
+  opener are values of `__main__`, which passes `urllib.request.build_opener()`, the environment's proxies (block
+  90); the adapter's and the wiring tests run against `FakeGitHubServer` on a loopback port, through its
+  proxy-less `url_opener`. `amule_bump` has no
   `monkeypatch` and no deprecated edge left.
 - **`p2pwatch_amule`'s settings in the domain** (blocks 30, 32): `p2pwatch_amule.domain.settings` parses the
   boot step's variables (`BootSettings`, `parse_boot_settings`) and port-sync's (`PortSyncSettings`,
@@ -79,8 +82,8 @@ migration that rewrites rows" ships (spec, section "Backlog").
 ## What an operator sees change
 
 - **amuleapi no longer follows `HTTP_PROXY`/`NO_PROXY`** (block 14): httpx reads them only when it builds its own
-  transport. `deploy/` sets none and amuleapi is reached inside the compose network. `docs/` mentions neither
-  variable, before or after.
+  transport. `deploy/` sets none and amuleapi is reached inside the compose network. `docs/migration-4x.md`
+  says so among v5's changes (block 90).
 - **A merge error or log line names the absolute path** of a relative argument (block 12).
 - **A manual `amule_bump` run that is not a dry run prints `version=` and `body-path=`** (block 21),
   `TerminalStepOutputWriter`'s lines; `docs/contributing/amule-bump.md` says so.
@@ -142,12 +145,14 @@ same stderr line with exit 1 on both sides, for `boot` with no variable, `boot` 
 
 ## Spec corrections
 
-Each a `(Corrected: ...)` in the lot's spec: C1 (no parameter default; an adapter's own code is no parameter, the
+Each a `(Corrected: ...)` in the lot's spec. From the holistic review (block 90): what an operator sees change (was
+"nothing"); D1b's second filter, the failure landing on the test the garbage collector interrupts, the deadline
+test's mark; D1's last paragraph and rows 12 and 21, every relative path argument under `cwd` (was "default
+paths"), and `GitHubRepoReader`'s opener; 2 of the 5 test files needing `close_test_connections`; 3 splits and 2
+added blocks (was "5 splits"). Earlier: C1 (no parameter default; an adapter's own code is no parameter, the
 runner and the memo apart, block 10); C5 and the six parameter defaults (blocks 14 and 16 added); D1's
 `argv=None` fixed by the block that touches each command line; `amule_bump`'s three outcomes (block 22); the block
 table's splits (20, 21, 22, 24; 30, 32); the cut into 3a, 3b and 3c, with the Acceptance each meets (`a3120abc`).
-Block 11's report corrects a measurement the spec carries: of the 5 files using `close_test_connections`, 2 still
-opened connections.
 
 ## Tests pruned or moved
 
@@ -156,6 +161,11 @@ opened connections.
 - Block 11: the fixture `close_test_connections` and three `usefixtures` marks that did nothing.
 - Block 12: `test_crawler_loop.py`'s `caplog.at_level`, there only to restore the root level.
 - Block 22: `test_bump.py`, with `bump.py`, its cases on `test_bump_amule.py` and the command line's tests.
+- Block 90 adds `test_a_missing_dockerfile_raises_before_reading_upstream` (seen failing with upstream read
+  first: `unexpected upstream release tag ''`) and
+  `test_the_forcing_opener_closes_its_connection_when_opening_fails` (seen failing with the close removed: a
+  `ResourceWarning` caught); the deadline test no longer requires its leak (seen failing without its mark:
+  `ResourceWarning: unclosed transport`).
 - Blocks 30, 32: the boot step's and port-sync's refusal tests moved to `tests/domain/test_settings.py`, every case
   kept; `test_boot.py` keeps one parametrized test that a refused variable, boot's or port-sync's, stops the boot
   before any command, chown or directory.
@@ -195,6 +205,13 @@ Taken during Act, each from a class 2 question or a point the lead brought:
   its tests' names close when the bound is near, as lot 2 found.
 - **A scope added in Act is not in the estimate**: block 30's estimate (300) left out the boot step's variables,
   which its brief's "the environment's validation" covered.
+- **A leak fails the test the garbage collector interrupts**, not the one that leaked: an injected leaking test
+  failed `test_status_reading.py`'s first test; `PYTHONTRACEMALLOC=20` names the line that opened it (block 90,
+  `docs/contributing/testing.md`).
+- **urllib sends loopback requests through `HTTP_PROXY`** unless `no_proxy` lists them: `urlopen` made 9
+  `amule_bump` tests fail under `HTTP_PROXY=http://127.0.0.1:9`; an opener built with `ProxyHandler({})` does
+  not (block 90). The crawler's 7 failures under that variable (httpx straight to the webui, the metrics, the
+  fake's control routes) predate the lot.
 - **`error::ResourceWarning` alone does not fail on a leak**: a finalizer's warning goes to
   `sys.unraisablehook`, which pytest reports as `PytestUnraisableExceptionWarning` (block 11).
 - **`closing(sqlite3.connect(...))` does not commit**: `close()` rolls back, so seeding keeps the inner `conn`
@@ -225,28 +242,50 @@ Taken during Act, each from a class 2 question or a point the lead brought:
 
 ## Holistic review
 
-Not run yet: `lot3a-holistic` over `git diff origin/main...origin/refactor/amule-paths-from-main`. Block 90 writes
-its counts and each finding's exit here.
+`holistic-3a` over `git diff origin/main...origin/refactor/amule-paths-from-main` at `375cb575` (91 files, +2,781,
+-1,281): 0 critical, 1 major, 10 minor. Each finding's exit:
+
+- MAJOR, five spec claims the code contradicts, with no `(Corrected: ...)`: fixed in block 90 (Spec corrections).
+- `amule_bump`'s suite fails under `HTTP_PROXY`: fixed in block 90 by C2, the opener from the composition. Under
+  `HTTP_PROXY=http://127.0.0.1:9`: `9 failed, 62 passed` before (`ConnectionRefusedError`), `72 passed` after.
+- Three hard rules describe a tree that does not follow them yet: fixed in block 90, a clause on C1's and C2's
+  rules naming `p2pwatch_amule`, `vex_checks` and `coverage_checks` (lots 3b and 3c), which 3c's Wrap removes.
+  C5's rule takes none: it holds in every package (`git grep -nE "environ|getenv|env\.get"` over the remaining
+  packages' `src` finds the environment read by `p2pwatch_amule`'s `__main__` and domain only).
+- The deadline test requires its leak: fixed in block 90, the review's first option (a
+  `filterwarnings("ignore:unclosed:ResourceWarning")` mark, its comment kept).
+- `older_catalog`'s `_open_at` re-implements `_open`: fixed in block 90, `open_catalog_at` and `open_local_at`
+  through `_open(path, scripts)`, the forcing variant closing on failure.
+- `FakeDockerfile`'s untested branch: fixed in block 90, a use-case test that a missing Dockerfile raises before any
+  upstream read.
+- C3 and the adapters named after `argparse` and `random`: waits for the operator's answer.
+- Abbreviations outside the glossary (`argv`, `env`, `cwd`, `dir`): waits for the operator's answer.
+- A composition value spelled three ways: fixed in block 90, `_REEVALUATION_PROGRESS_EVERY_FILES` beside the two
+  timeouts, `_GITHUB_API_URL` in `amule_bump`'s `__main__`.
+- Pull request bodies naming renumbered lots: fixed in block 90, #331's two mentions now say "lot 3c" (and "lots 3a
+  to 3c remove"); #341 and #342 already said "lot 3b's blocks 40 to 52".
+- The crawler suite's leak failure undocumented: fixed in block 90, a paragraph in `docs/contributing/testing.md`.
 
 ## Wrap counts
 
-Draft from `gh run list --branch <branch>` on 2026-10-21, before the closing block; block 90 recounts.
+From `gh run list --branch <branch>` on 2026-10-21, over the 11 blocks before the closing one.
 
-- **Runs**: 15 over the 11 blocks. Each pull request has one green run at its current head, with `build-and-verify`
-  on amd64 and arm64, but #342, whose run at `a3120abc` (the lead's spec cut) is in progress after a green one at
-  `f0393436`. The others:
+- **Runs**: 16. Each block's current head has one green run, `build-and-verify` on amd64 and arm64 included. The
+  others:
   - #331 at `0d0544e1`, green, superseded by the fix-back below;
   - #332 at `451a2139`, green, superseded by the cascade below;
-  - #334 at `e94a5cf0`, cancelled by the push of `81ca9aa4` (every path argument under `cwd`, the lead's request).
+  - #334 at `e94a5cf0`, cancelled by the push of `81ca9aa4` (every path argument under `cwd`, the lead's request);
+  - #342 at `f0393436`, green, then `a3120abc` (the lead's spec cut), cancelled by the push of `375cb575` (this
+    handoff's draft).
 - **Fix-backs**: 1, block 10 (`0d0544e1` to `33d95253`, the operator's refusal of the defaults).
-- **Cascaded rebases**: 1, block 11 onto block 10's fix (`451a2139` became `0fd29189`), one run re-triggered.
+- **Cascaded rebases**: 1, block 11 onto block 10's fix (`451a2139` became `0fd29189`).
+- **Runs re-triggered** by the fix-back and the cascade: 2, against 11 blocks.
 - **Splits**: 3 (20, 21, 30) and 2 blocks added (14, 16). **Exemptions**: none.
 - **Bodies called unreadable**: none at writing; the operator has not reviewed the stack yet.
 
 ## Next
 
-- Block 90 (`docs/five-hexagons-3a-wrap`): the holistic review's findings; `BACKLOG.md`'s lot 3 sub-item narrowed to
-  3b and 3c; this handoff corrected.
+- Block 90: the two findings waiting for the operator's answers (C3's `argparse` and `random`, the abbreviations).
 - The operator reviews and merges the stack, after the lead rebases it onto `main` if `main` moved.
 - "A copy before a migration that rewrites rows" ships before any release; this lot changes both images.
 - **Lot 3b**, the aMule container's boot and port-sync, from the tree 3a leaves, re-measuring its blocks (40 to 56,
