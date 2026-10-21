@@ -18,6 +18,7 @@ from p2pwatch_amule.adapters.driven.posix_amuled_directory_preparer import (
     PosixAmuledDirectoryPreparer,
 )
 from p2pwatch_amule.adapters.driven.s6_service_supervisor import S6ServiceSupervisor
+from p2pwatch_amule.adapters.driven.stdlib_logger import StdlibLogger
 from p2pwatch_amule.adapters.driven.system_monotonic_clock import SystemMonotonicClock
 from p2pwatch_amule.adapters.driving import port_sync
 from p2pwatch_amule.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
@@ -70,6 +71,9 @@ def main(argv: Sequence[str], env: Mapping[str, str]) -> int:
             amule_conf_path=_AMULE_CONF_PATH,
             amuled_service_directory=_AMULED_SERVICE_DIRECTORY,
             monotonic_clock=SystemMonotonicClock(),
+            # The two names docs/migration-4x.md gives the operator.
+            logger=StdlibLogger("p2pwatch_amule.adapters.driving.port_sync"),
+            gluetun_logger=StdlibLogger("p2pwatch_amule.adapters.driven.gluetun"),
         ),
         env=env,
         root_logger=logging.getLogger(),

@@ -1,6 +1,5 @@
 """Port-sync's loop: amuled is never left down, and the port is written only while it is down."""
 
-import logging
 import os
 import subprocess
 from collections.abc import Callable
@@ -14,13 +13,16 @@ from p2pwatch_amule.adapters.driving import port_sync
 from p2pwatch_amule.domain.conf import tcp_listen_port, with_listen_port
 from p2pwatch_amule.domain.monotonic_instant import MonotonicInstant
 from p2pwatch_amule.domain.settings import PortSyncSettings
-from tests.fakes import FakeMonotonicClock
+from p2pwatch_amule.ports.driven.logger import Logger
+from tests.fakes import FakeLogger, FakeMonotonicClock, LoggedLine
 
 AMULED_SERVICE_DIRECTORY = "/run/service/amuled"
 DOWN = ["s6-svc", "-wD", "-T", "60000", "-d", AMULED_SERVICE_DIRECTORY]
 UP = ["s6-svc", "-u", AMULED_SERVICE_DIRECTORY]
 SETTINGS = PortSyncSettings(
-    gluetun_control_url="http://localhost:8000", poll_seconds=60, restart_min_seconds=300
+    gluetun_control_url="http://localhost:8000",
+    poll_interval=timedelta(seconds=60),
+    restart_min_interval=timedelta(seconds=300),
 )
 CONF = "[eMule]\nPort=4662\nUDPPort=4672\nMaxUpload=42\n\n[AmuleApi]\nEnabled=1\n\n"
 
@@ -30,7 +32,8 @@ def instant_at(seconds: int) -> MonotonicInstant:
 
 
 class Node:
-    """amule.conf under tmp_path, gluetun's answer, a fake s6 recording its commands, a clock."""
+    """amule.conf under tmp_path, gluetun's answer, a fake s6 recording its commands, a clock,
+    port-sync's and gluetun's loggers."""
 
     def __init__(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         self.conf = tmp_path / "amule.conf"
@@ -40,6 +43,8 @@ class Node:
         self.down_exit = 0
         self.on_down: Callable[[], None] = lambda: None
         self.monotonic_clock = FakeMonotonicClock()
+        self.logger = FakeLogger()
+        self.gluetun_logger = FakeLogger()
         monkeypatch.setattr(port_sync, "forwarded_port", self._forwarded_port)
         monkeypatch.setattr(subprocess, "run", self._run)
 
@@ -52,6 +57,8 @@ class Node:
             now,
             amule_conf_path=self.conf,
             amuled_service_directory=Path(AMULED_SERVICE_DIRECTORY),
+            logger=self.logger,
+            gluetun_logger=self.gluetun_logger,
         )
 
     def main(self, env: dict[str, str] | None = None) -> None:
@@ -60,10 +67,12 @@ class Node:
             amule_conf_path=self.conf,
             amuled_service_directory=Path(AMULED_SERVICE_DIRECTORY),
             monotonic_clock=self.monotonic_clock,
+            logger=self.logger,
+            gluetun_logger=self.gluetun_logger,
         )
 
-    def _forwarded_port(self, url: str) -> int | None:
-        assert url == "http://localhost:8000"
+    def _forwarded_port(self, url: str, logger: Logger) -> int | None:
+        assert (url, logger) == ("http://localhost:8000", self.gluetun_logger)
         return self.forwarded
 
     def _run(self, argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
@@ -84,6 +93,10 @@ def test_a_new_port_stops_amuled_writes_both_ports_and_starts_it(node: Node) -> 
     assert node.commands == [DOWN, UP]
     assert node.conf.read_text() == with_listen_port(CONF, 51820)
     assert tcp_listen_port(node.conf.read_text()) == 51820
+    assert node.logger.lines == [
+        LoggedLine("info", "gluetun forwards 51820, amuled listens on 4662: restarting amuled"),
+        LoggedLine("info", "amule.conf now sets Port and UDPPort to 51820"),
+    ]
 
 
 def test_the_file_is_written_only_once_amuled_is_down(node: Node) -> None:
@@ -109,29 +122,29 @@ def test_the_written_file_stays_private_to_its_owner(node: Node) -> None:
     assert node.conf.stat().st_mode & 0o777 == 0o600
 
 
-def test_a_down_wait_that_fails_writes_nothing_and_still_starts_amuled(
-    node: Node, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_a_down_wait_that_fails_writes_nothing_and_still_starts_amuled(node: Node) -> None:
     node.down_exit = 99
-    with caplog.at_level(logging.ERROR):
-        assert node.sync_once(None, now=instant_at(1000)) == instant_at(1000)
+    assert node.sync_once(None, now=instant_at(1000)) == instant_at(1000)
     assert node.commands == [DOWN, UP]
     assert node.conf.read_text() == CONF
-    assert "exited 99: timed out" in caplog.text
+    assert node.logger.lines[1:] == [
+        LoggedLine("error", "s6-svc -wD -T 60000 -d exited 99: timed out")
+    ]
 
 
 def test_a_write_that_raises_still_starts_amuled_and_is_logged(
-    node: Node, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    node: Node, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def replace(source: str, destination: str) -> None:
         raise OSError("No space left on device")
 
     monkeypatch.setattr(os, "replace", replace)
-    with caplog.at_level(logging.ERROR):
-        assert node.sync_once(None, now=instant_at(1000)) == instant_at(1000)
+    assert node.sync_once(None, now=instant_at(1000)) == instant_at(1000)
     assert node.commands == [DOWN, UP]
     assert node.conf.read_text() == CONF
-    assert "No space left on device" in caplog.text
+    assert node.logger.lines[1:] == [
+        LoggedLine("error", "amule.conf was not written (No space left on device)")
+    ]
 
 
 def test_the_same_port_calls_no_s6_command(node: Node) -> None:
@@ -163,7 +176,7 @@ class _Stop(Exception):
 def test_the_start_sends_up_before_the_first_round_then_polls_every_60s(
     node: Node, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def forwarded_port(url: str) -> int | None:
+    def forwarded_port(url: str, logger: Logger) -> int | None:
         node.commands.append(["GET", url])
         return 4662
 
@@ -206,13 +219,15 @@ def test_the_restart_time_carries_from_one_round_to_the_next(node: Node) -> None
 
 @pytest.mark.parametrize("conf", ["[eMule]\nPort=4662x\n", "Port=4662\n", None])
 def test_an_unreadable_amule_conf_calls_no_s6_command_and_is_logged(
-    node: Node, caplog: pytest.LogCaptureFixture, conf: str | None
+    node: Node, conf: str | None
 ) -> None:
     if conf is None:
         node.conf.unlink()
     else:
         node.conf.write_text(conf)
-    with caplog.at_level(logging.ERROR):
-        assert node.sync_once(instant_at(5), now=instant_at(1000)) == instant_at(5)
+    assert node.sync_once(instant_at(5), now=instant_at(1000)) == instant_at(5)
     assert node.commands == []
-    assert "amule.conf's port is unreadable" in caplog.text
+    assert [line.level for line in node.logger.lines] == ["error"]
+    assert node.logger.lines[0].message.startswith(
+        "amule.conf's port is unreadable, amuled left as is ("
+    )

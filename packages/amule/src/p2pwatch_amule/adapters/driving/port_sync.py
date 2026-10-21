@@ -4,20 +4,18 @@ Each round puts gluetun's forwarded port in amule.conf, restarting amuled throug
 """
 
 import configparser
-import logging
 import os
 import subprocess
 from collections.abc import Mapping
-from datetime import timedelta
 from pathlib import Path
 
 from p2pwatch_amule.adapters.driven.gluetun import forwarded_port
+from p2pwatch_amule.domain.amuled_restart import is_amuled_restart_due
 from p2pwatch_amule.domain.conf import tcp_listen_port, with_listen_port
 from p2pwatch_amule.domain.monotonic_instant import MonotonicInstant
 from p2pwatch_amule.domain.settings import PortSyncSettings, parse_port_sync_settings
+from p2pwatch_amule.ports.driven.logger import Logger
 from p2pwatch_amule.ports.driven.monotonic_clock import MonotonicClock
-
-_logger = logging.getLogger("p2pwatch_amule.adapters.driving.port_sync")
 
 
 def sync_listen_port_once(
@@ -27,9 +25,11 @@ def sync_listen_port_once(
     *,
     amule_conf_path: Path,
     amuled_service_directory: Path,
+    logger: Logger,
+    gluetun_logger: Logger,
 ) -> MonotonicInstant | None:
     """Run one round; return amuled's latest restart, `now` if this round restarted it."""
-    forwarded = forwarded_port(port_sync_settings.gluetun_control_url)
+    forwarded = forwarded_port(port_sync_settings.gluetun_control_url, gluetun_logger)
     if forwarded is None:
         return latest_restart
     try:
@@ -37,27 +37,29 @@ def sync_listen_port_once(
             configured_port = tcp_listen_port(handle.read())
     except (OSError, ValueError, configparser.Error) as error:
         # The operator's file: a crash would only make s6 respawn port-sync every second.
-        _logger.error("amule.conf's port is unreadable, amuled left as is (%s)", error)
+        logger.error("amule.conf's port is unreadable, amuled left as is (%s)", error)
         return latest_restart
-    if forwarded == configured_port:
-        return latest_restart
-    if latest_restart is not None and now - latest_restart < timedelta(
-        seconds=port_sync_settings.restart_min_seconds
+    if not is_amuled_restart_due(
+        forwarded_port=forwarded,
+        configured_port=configured_port,
+        latest_restart=latest_restart,
+        now=now,
+        restart_min_interval=port_sync_settings.restart_min_interval,
     ):
         return latest_restart
 
-    _logger.info(
+    logger.info(
         "gluetun forwards %d, amuled listens on %d: restarting amuled", forwarded, configured_port
     )
     try:
         # amuled flushes its config when it exits: a write while it runs could be overwritten.
-        if _signal_amuled(amuled_service_directory, "-wD", "-T", "60000", "-d"):
-            _write_listen_port(amule_conf_path, forwarded)
+        if _signal_amuled(amuled_service_directory, logger, "-wD", "-T", "60000", "-d"):
+            _write_listen_port(amule_conf_path, forwarded, logger)
     except OSError as error:
-        _logger.error("amule.conf was not written (%s)", error)
+        logger.error("amule.conf was not written (%s)", error)
     finally:
         # A -d leaves amuled wanted down: without this -u it would stay down for good.
-        _signal_amuled(amuled_service_directory, "-u")
+        _signal_amuled(amuled_service_directory, logger, "-u")
     return now
 
 
@@ -67,10 +69,12 @@ def main(
     amule_conf_path: Path,
     amuled_service_directory: Path,
     monotonic_clock: MonotonicClock,
+    logger: Logger,
+    gluetun_logger: Logger,
 ) -> None:
     port_sync_settings = parse_port_sync_settings(env)
     # A port-sync stopped between a -d and its -u left amuled down: bring it back first.
-    _signal_amuled(amuled_service_directory, "-u")
+    _signal_amuled(amuled_service_directory, logger, "-u")
     latest_restart = None
     while True:
         latest_restart = sync_listen_port_once(
@@ -79,22 +83,24 @@ def main(
             monotonic_clock.now(),
             amule_conf_path=amule_conf_path,
             amuled_service_directory=amuled_service_directory,
+            logger=logger,
+            gluetun_logger=gluetun_logger,
         )
-        monotonic_clock.sleep(timedelta(seconds=port_sync_settings.poll_seconds))
+        monotonic_clock.sleep(port_sync_settings.poll_interval)
 
 
-def _signal_amuled(amuled_service_directory: Path, *options: str) -> bool:
+def _signal_amuled(amuled_service_directory: Path, logger: Logger, *options: str) -> bool:
     """Run `s6-svc <options>` on amuled; return whether it exited 0, logging why not."""
     result = subprocess.run(
         ["s6-svc", *options, str(amuled_service_directory)], capture_output=True, text=True
     )
     if result.returncode != 0:
         command = " ".join(["s6-svc", *options])
-        _logger.error("%s exited %d: %s", command, result.returncode, result.stderr.strip())
+        logger.error("%s exited %d: %s", command, result.returncode, result.stderr.strip())
     return result.returncode == 0
 
 
-def _write_listen_port(amule_conf_path: Path, port: int) -> None:
+def _write_listen_port(amule_conf_path: Path, port: int, logger: Logger) -> None:
     with open(amule_conf_path) as handle:
         conf = handle.read()
     # Replaced, not rewritten in place: a failed write must not leave amuled a truncated file.
@@ -102,4 +108,4 @@ def _write_listen_port(amule_conf_path: Path, port: int) -> None:
     with open(os.open(temporary_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as handle:
         handle.write(with_listen_port(conf, port))
     os.replace(temporary_path, amule_conf_path)
-    _logger.info("amule.conf now sets Port and UDPPort to %d", port)
+    logger.info("amule.conf now sets Port and UDPPort to %d", port)

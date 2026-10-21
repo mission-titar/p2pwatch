@@ -2,7 +2,6 @@
 
 import http.client
 import io
-import logging
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -10,6 +9,7 @@ from collections.abc import Callable
 import pytest
 
 from p2pwatch_amule.adapters.driven.gluetun import forwarded_port
+from tests.fakes import FakeLogger
 
 Urlopen = Callable[..., io.BytesIO]
 
@@ -38,8 +38,10 @@ def test_the_forwarded_port_is_read_from_gluetuns_control_server(
         return io.BytesIO(b'{"port": 51820}')
 
     monkeypatch.setattr(urllib.request, "urlopen", urlopen)
-    assert forwarded_port("http://gluetun:8000/") == 51820
+    logger = FakeLogger()
+    assert forwarded_port("http://gluetun:8000/", logger) == 51820
     assert requests == [("http://gluetun:8000/v1/portforward", 10)]
+    assert logger.lines == []
 
 
 @pytest.mark.parametrize(
@@ -58,12 +60,14 @@ def test_the_forwarded_port_is_read_from_gluetuns_control_server(
     ],
 )
 def test_a_reply_without_a_positive_integer_port_is_no_port(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, body: bytes
+    monkeypatch: pytest.MonkeyPatch, body: bytes
 ) -> None:
     monkeypatch.setattr(urllib.request, "urlopen", _replying(body))
-    with caplog.at_level(logging.WARNING):
-        assert forwarded_port("http://gluetun:8000") is None
-    assert "no forwarded port" in caplog.text
+    logger = FakeLogger()
+    assert forwarded_port("http://gluetun:8000", logger) is None
+    assert [(line.level, line.message) for line in logger.lines] == [
+        ("warning", f"gluetun reports no forwarded port ({body[:100]!r})")
+    ]
 
 
 @pytest.mark.parametrize(
@@ -76,10 +80,10 @@ def test_a_reply_without_a_positive_integer_port_is_no_port(
         http.client.BadStatusLine("garbage"),
     ],
 )
-def test_a_failed_request_is_no_port(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, error: Exception
-) -> None:
+def test_a_failed_request_is_no_port(monkeypatch: pytest.MonkeyPatch, error: Exception) -> None:
     monkeypatch.setattr(urllib.request, "urlopen", _raising(error))
-    with caplog.at_level(logging.WARNING):
-        assert forwarded_port("http://gluetun:8000") is None
-    assert "gluetun's control server is unavailable" in caplog.text
+    logger = FakeLogger()
+    assert forwarded_port("http://gluetun:8000", logger) is None
+    assert [(line.level, line.message) for line in logger.lines] == [
+        ("warning", f"gluetun's control server is unavailable ({error})")
+    ]

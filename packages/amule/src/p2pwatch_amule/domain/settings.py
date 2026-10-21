@@ -6,13 +6,14 @@ A refused value raises `SettingsError` naming the variable.
 import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import timedelta
 from urllib.parse import urlsplit
 
 from p2pwatch_amule.domain.settings_error import SettingsError
 
 DEFAULT_GLUETUN_CONTROL_URL = "http://localhost:8000"
-DEFAULT_PORT_SYNC_POLL_SECONDS = 60
-DEFAULT_PORT_SYNC_RESTART_MIN_SECONDS = 300
+DEFAULT_PORT_SYNC_POLL_INTERVAL = timedelta(seconds=60)
+DEFAULT_PORT_SYNC_RESTART_MIN_INTERVAL = timedelta(seconds=300)
 
 # gluetun's own booleans (gosettings' parseBool), since PORT_SYNC receives VPN_PORT_FORWARDING.
 _ON = ("enabled", "yes", "on", "true")
@@ -30,8 +31,8 @@ class BootSettings:
 @dataclass(frozen=True)
 class PortSyncSettings:
     gluetun_control_url: str
-    poll_seconds: int
-    restart_min_seconds: int
+    poll_interval: timedelta
+    restart_min_interval: timedelta
 
 
 def parse_boot_settings(env: Mapping[str, str]) -> BootSettings:
@@ -71,9 +72,9 @@ def parse_port_sync_settings(env: Mapping[str, str]) -> PortSyncSettings:
         )
     return PortSyncSettings(
         gluetun_control_url=url,
-        poll_seconds=_seconds(env, "PORT_SYNC_POLL_SECONDS", DEFAULT_PORT_SYNC_POLL_SECONDS),
-        restart_min_seconds=_seconds(
-            env, "PORT_SYNC_RESTART_MIN_SECONDS", DEFAULT_PORT_SYNC_RESTART_MIN_SECONDS
+        poll_interval=_seconds(env, "PORT_SYNC_POLL_SECONDS", DEFAULT_PORT_SYNC_POLL_INTERVAL),
+        restart_min_interval=_seconds(
+            env, "PORT_SYNC_RESTART_MIN_SECONDS", DEFAULT_PORT_SYNC_RESTART_MIN_INTERVAL
         ),
     )
 
@@ -101,11 +102,11 @@ def _required_id(env: Mapping[str, str], name: str) -> int:
     return int(value)
 
 
-def _seconds(env: Mapping[str, str], name: str, default: int) -> int:
+def _seconds(env: Mapping[str, str], name: str, default: timedelta) -> timedelta:
     value = env.get(name)
     if not value:
         return default
     # isascii + isdigit: int() would also take "-1", "+1", "1_000", " 1" and non-ASCII digits.
     if not (value.isascii() and value.isdigit()) or int(value) == 0:
         raise SettingsError(f"{name} must be a positive integer, got {value!r}")
-    return int(value)
+    return timedelta(seconds=int(value))
