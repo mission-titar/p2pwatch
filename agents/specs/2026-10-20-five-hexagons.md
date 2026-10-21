@@ -16,7 +16,11 @@
   The aMule image boots and syncs its port as before; its environment
   variables, its s6 services and their names do not change, and port-sync keeps the two logger names
   `docs/migration-4x.md` documents (`p2pwatch_amule.adapters.driving.port_sync`, `p2pwatch_amule.adapters.driven.gluetun`),
-  handed to `StdlibLogger` as lot 2 did for the crawler.
+  handed to `StdlibLogger` as lot 2 did for the crawler (Corrected: three behaviours narrowed in 3b: port-sync
+  refuses an unset `PUID` or `PGID`, which the boot refuses first; a missing `amule.conf` logs `amule.conf does not
+  exist` instead of the errno text; a boot that cannot read the conf stops on the read rather than on the write.
+  Both now write `amule.conf` through `amule.conf.tmp`, created 0600 afresh, then `os.replace`: the boot wrote it in
+  place, port-sync through `amule.conf.port-sync`).
 - Paths are under `packages/<pkg>/src/<module>/` unless noted. The measurements are in the appendix.
 
 ## Summary
@@ -159,7 +163,7 @@ follow C3.
 | Driving port | Use case | Returns |
 |---|---|---|
 | `ContainerBooter` | `BootContainer` | nothing, raises on failure |
-| `PortSyncLoopRunner` | `RunPortSyncLoop` | nothing, runs until stopped |
+| `PortSyncLoopRunner` | `PortSyncApp`, which assembles `RunPortSyncLoop` (Corrected: was `RunPortSyncLoop`, now port-sync's root behind no port, as `RunCrawler`; `PortSyncApp` holds `env` from its constructor as `CrawlerApp` does, the boot keeps `boot_container(env)`, closing block 60) | nothing, runs until stopped |
 
 | Driven port | Adapter | What it does |
 |---|---|---|
@@ -169,8 +173,8 @@ follow C3.
 | `AccountManager` | `PosixAccountManager` | find or create the `amule` user and group |
 | `AmuledDirectoryPreparer` | `PosixAmuledDirectoryPreparer` | create the home, `.aMule` and the download mount points, chown them (Corrected: was `MountPointPreparer`, which also prepares the home and `.aMule`) |
 | `AdminPasswordSetter` | `AmuleApiAdminPasswordSetter` | run `amuleapi --set-admin-pass` |
-| `MonotonicClock` | `SystemMonotonicClock` | `now`, `sleep`, this hexagon's own copy |
-| `Logger` | `StdlibLogger` | log under the name it is given: port-sync's two documented names |
+| `MonotonicClock` | `SystemMonotonicClock` | `now`, `sleep`, this hexagon's own copy (Corrected: its `MonotonicInstant` keeps only the difference of two instants, the one arithmetic port-sync takes, closing block 60) |
+| `Logger` | `StdlibLogger` | log under the name it is given: port-sync's two documented names (Corrected: and the boot's `S6ServiceSupervisor` under `p2pwatch_amule.application.boot_container`, a third name it never writes, since only port-sync stops or starts amuled) |
 
 - The environment's validation (`settings.py`) and port-sync's decision (compare the ports, the restart window) move
   to the domain. A refused variable raises a domain error naming it; only the command line exits. Why: they are
@@ -284,7 +288,7 @@ Estimates by a Sonnet agent on `main` at `38bfe15`, before any code, about 20 % 
 mechanical, so none takes the size exemption. 3a used its headroom in 3 splits (blocks 20, 21 and 30, giving 21,
 22 and 32; the repo reader's block renumbered 24) and 2 added blocks (14, 16) (Corrected: was "5 splits"), and its boot and port-sync blocks became 3b, which re-measures them on the
 tree 3a leaves (Corrected: 3a held blocks 40 to 56). 3b's table holds its re-measure;
-3b 40's fallback is to split its skeleton from the accounts. 3c 52 sat at 480 lines.
+3b 40's fallback is to split its skeleton from the accounts (Corrected: was "to hand its fakes to 42"). 3c 52 sat at 480 lines.
 
 Every block leaves its new surface called by production code, since `dead-code-check` reports a class only tests
 call: the old entry function delegates to what the block adds until a later block deletes it.
@@ -324,7 +328,7 @@ this hexagon's own copy of `MonotonicInstant`.
 | 52 | `refactor/port-sync-decision-and-logger` | port-sync's decision into the domain; `Logger`, `StdlibLogger` under the two documented names | 340, 10 |
 | 54 | `refactor/port-sync-gluetun-reader` | `ForwardedPortReader`, `GluetunForwardedPortReader` on a loopback server; `gluetun.py` gone | 385, 10 |
 | 56 | `feat/port-sync-loop` | the supervisor's stop and start; port-sync on `ServiceSupervisor` and `AmuleConfReader`/`AmuleConfWriter`, amule.conf owned by `PUID:PGID`, its tests off `monkeypatch` (Corrected: split from 57, measured at 893 lines whole: neither `port_sync.py` nor its tests pair with their move) | 435, 12 |
-| 57 | `feat/port-sync-loop-use-case` | `RunPortSyncLoop` behind `PortSyncLoopRunner`; `port_sync.py` and its deprecated edges gone, its tests moved; `__main__`'s seam on the use case; `AGENTS.md`'s port-sync row (Corrected: split from 56); `architecture.md`'s port-sync path (Corrected: moved from block 58) | 310, 9 |
+| 57 | `feat/port-sync-loop-use-case` | `RunPortSyncLoop` behind `PortSyncLoopRunner` (Corrected: behind no port since block 60, `PortSyncApp` implementing it); `port_sync.py` and its deprecated edges gone, its tests moved; `__main__`'s seam on the use case; `AGENTS.md`'s port-sync row (Corrected: split from 56); `architecture.md`'s port-sync path (Corrected: moved from block 58) | 310, 9 |
 | 58 | `refactor/port-sync-runner-wired` | the composition and `port_sync_loop_runner` (D4) (Corrected: `architecture.md`'s port-sync path moved to block 57, its boot part to block 48; section 9 names no path) | 100, 8 |
 | 59 | `test/port-sync-smoke` | a compose smoke case: a stand-in for gluetun's `/v1/portforward` (a static file served by `python -m http.server`), port-sync rewrites `Port` and `UDPPort` and restarts amuled | 150, 4 |
 | 60 | `docs/five-hexagons-3b-wrap` | closing block: the holistic findings, backlog, handoff | |
