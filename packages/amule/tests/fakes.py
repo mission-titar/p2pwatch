@@ -1,4 +1,5 @@
 from p2pwatch_amule.ports.driven.account_manager import AccountManager
+from p2pwatch_amule.ports.driven.amule_conf import AmuleConfReader, AmuleConfWriter
 from p2pwatch_amule.ports.driven.amuled_directory_preparer import AmuledDirectoryPreparer
 
 
@@ -19,4 +20,19 @@ class FakeAmuledDirectoryPreparer(AmuledDirectoryPreparer):
         self.owners: list[tuple[int, int]] = []
 
     def prepare_amuled_directories(self, uid: int, gid: int) -> None:
+        self.owners.append((uid, gid))
+
+
+class FakeAmuleConf(AmuleConfReader, AmuleConfWriter):
+    """amule.conf held as text, ``None`` when absent; records the owner of each write."""
+
+    def __init__(self) -> None:
+        self.conf: str | None = None
+        self.owners: list[tuple[int, int]] = []
+
+    def read_amule_conf(self) -> str | None:
+        return self.conf
+
+    def write_amule_conf(self, conf: str, uid: int, gid: int) -> None:
+        self.conf = conf
         self.owners.append((uid, gid))

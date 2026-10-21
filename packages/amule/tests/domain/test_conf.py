@@ -1,9 +1,14 @@
-"""reconcile_conf, tcp_listen_port, with_listen_port: amule.conf for the boot step and port-sync."""
+"""amule.conf for the boot step and port-sync: its EC digest, reconciled keys and listen port."""
 
 import configparser
 import hashlib
 
-from p2pwatch_amule.domain.conf import reconcile_conf, tcp_listen_port, with_listen_port
+from p2pwatch_amule.domain.conf import (
+    ec_password_digest,
+    reconcile_conf,
+    tcp_listen_port,
+    with_listen_port,
+)
 
 DIGEST = hashlib.md5(b"hunter2").hexdigest()
 
@@ -13,6 +18,10 @@ def _section(content: str, name: str) -> dict[str, str]:
     parser.optionxform = str  # type: ignore[assignment,method-assign]
     parser.read_string(content)
     return dict(parser[name])
+
+
+def test_the_ec_password_digest_is_its_md5_in_hex() -> None:
+    assert ec_password_digest("hunter2") == "2ab96390c7dbe3439de74d0c9b0b1767"
 
 
 def test_fresh_install_writes_the_minimal_conf_as_amule_formats_it() -> None:

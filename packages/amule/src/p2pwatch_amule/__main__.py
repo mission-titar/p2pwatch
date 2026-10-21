@@ -10,6 +10,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from p2pwatch_amule.adapters.driven.posix_account_manager import PosixAccountManager
+from p2pwatch_amule.adapters.driven.posix_amule_conf import PosixAmuleConf
 from p2pwatch_amule.adapters.driven.posix_amuled_directory_preparer import (
     PosixAmuledDirectoryPreparer,
 )
@@ -27,6 +28,7 @@ _AMULED_SERVICE_DIRECTORY = Path("/etc/services.d/amuled")
 
 def main(argv: Sequence[str], env: Mapping[str, str]) -> int:
     """Runs the subcommand ``argv`` names in the environment ``env``, returns its exit code."""
+    amule_conf = PosixAmuleConf(amule_conf_path=_AMULE_CONF_PATH, change_owner=os.chown)
     container_booter = BootContainer(
         account_manager=PosixAccountManager(
             home_directory=_HOME_DIRECTORY,
@@ -44,6 +46,8 @@ def main(argv: Sequence[str], env: Mapping[str, str]) -> int:
             ],
             change_owner=os.chown,
         ),
+        amule_conf_reader=amule_conf,
+        amule_conf_writer=amule_conf,
     )
     command_line = ArgparseCommandLine(
         boot=lambda: boot.main(
@@ -51,7 +55,6 @@ def main(argv: Sequence[str], env: Mapping[str, str]) -> int:
             container_booter=container_booter,
             home_directory=_HOME_DIRECTORY,
             config_directory=_CONFIG_DIRECTORY,
-            amule_conf_path=_AMULE_CONF_PATH,
             port_sync_down_file=_PORT_SYNC_DOWN_FILE,
         ),
         sync_listen_port=lambda: port_sync.main(

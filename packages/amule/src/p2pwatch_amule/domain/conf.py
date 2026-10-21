@@ -1,6 +1,7 @@
 """amule.conf: the file the container boots with (`reconcile_conf`), and its listen port."""
 
 import configparser
+import hashlib
 import io
 
 INCOMING_DIR = "/downloads/incoming"
@@ -13,6 +14,12 @@ class _CaseSensitiveParser(configparser.RawConfigParser):
     # aMule keys are case-sensitive (ECPassword, not ecpassword); the default lowercases them.
     def optionxform(self, optionstr: str) -> str:
         return optionstr
+
+
+def ec_password_digest(ec_password: str) -> str:
+    """Return what amule.conf's `ECPassword` holds for `ec_password`."""
+    # ECPassword is read as-is (only the GUI hashes what you type): the file holds the digest.
+    return hashlib.md5(ec_password.encode()).hexdigest()
 
 
 def reconcile_conf(existing_conf: str | None, ec_digest: str) -> str:
