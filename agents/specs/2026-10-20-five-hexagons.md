@@ -324,6 +324,7 @@ this hexagon's own copy of `MonotonicInstant`.
 | 52 | `refactor/port-sync-decision-and-logger` | port-sync's decision into the domain; `Logger`, `StdlibLogger` under the two documented names | 340, 10 |
 | 54 | `refactor/port-sync-gluetun-reader` | `ForwardedPortReader`, `GluetunForwardedPortReader` on a loopback server; `gluetun.py` gone | 385, 10 |
 | 56 | `feat/port-sync-loop` | the supervisor's stop and start; port-sync on `ServiceSupervisor` and `AmuleConfReader`/`AmuleConfWriter`, amule.conf owned by `PUID:PGID`, its tests off `monkeypatch` (Corrected: split from 57, measured at 893 lines whole: neither `port_sync.py` nor its tests pair with their move) | 435, 12 |
+| 57 | `feat/port-sync-loop-use-case` | `RunPortSyncLoop` behind `PortSyncLoopRunner`; `port_sync.py` and its deprecated edges gone, its tests moved; `__main__`'s seam on the use case; `AGENTS.md`'s port-sync row (Corrected: split from 56) | 310, 9 |
 | 58 | `refactor/port-sync-runner-wired` | the composition and `port_sync_loop_runner` (D4); `architecture.md` sections 9 and 12, port-sync's paths (Corrected: section 12's boot part moved to block 48) | 100, 8 |
 | 59 | `test/port-sync-smoke` | a compose smoke case: a stand-in for gluetun's `/v1/portforward` (a static file served by `python -m http.server`), port-sync rewrites `Port` and `UDPPort` and restarts amuled | 150, 4 |
 | 60 | `docs/five-hexagons-3b-wrap` | closing block: the holistic findings, backlog, handoff | |
