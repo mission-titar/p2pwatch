@@ -212,7 +212,7 @@ follow C3.
 | `SbomReader` | `SyftSbomReader` | read the packages and declared components of a Syft-JSON SBOM |
 | `VulnerabilityScanner` | `GrypeVulnerabilityScanner` | scan an SBOM, return the vulnerabilities found (replaces the `GrypeRunner` `Protocol`) |
 | `SarifWriter` | `JsonSarifWriter` | write the SARIF report |
-| `SourceRuleReader` | `FilesystemSourceRuleReader` | list the ast-grep source rules' ids, for `claim-coverage` |
+| `SourceRuleReader` | `FilesystemSourceRuleReader` | list the ast-grep source rules' ids, for `claim-coverage` (Corrected: refusing a rule whose `id:` is not its file's name) |
 
 - The premise evaluation and the claims' merge move to the domain; the `::error::` lines are printed by the command
   line from the response model; `__main__` computes the repository's root and passes it. The use cases receive the
@@ -227,7 +227,9 @@ follow C3.
 - `claim-coverage`'s bijection runs over the VEX claims on one side and, on the other, the image premises of the
   registry plus the source rules' ids, refusing an id present in both.
 - A rule's id is its file's name, as every rule of `ast-grep-rules/` already is, so `FilesystemSourceRuleReader` lists
-  file names and parses no YAML. Why: no new dependency (`pyyaml`) for one field.
+  file names and parses no YAML. Why: no new dependency (`pyyaml`) for one field. (Corrected: the reader refuses
+  a rule whose `id:` line, read as text, does not name its file, since ast-grep reports that id; closing block
+  101.)
 
 ### `template_checks`
 
@@ -383,7 +385,7 @@ Rows 22, 26, 60 and 62 have no margin and split in Act if measured over.
 | 52 | `refactor/shortfall-in-domain` | the shortfall into the domain, over `TestCoverage`; `test coverage` in the glossary; the old entry function hands it a `TestCoverage` (Corrected: split from 52 at the line bound, 585 lines) | 229, 5 (measured) |
 | 53 | `refactor/test-coverage-reader` | `TestCoverageReader`, `CoveragePyReader` given the data file, the package's directory and a report directory; `PackageTreeReader` reads a module's source; the old entry function delegates (Corrected: split from 52 at the line bound, 585 lines) | 370, 10 (measured) |
 | 54 | `feat/check-unit-coverage` | `CheckUnitCoverage` behind `UnitCoverageChecker`; the old entry function delegates (Corrected: split from 52) | 340, 10 |
-| 56 | `refactor/unit-coverage-cut-over` | `unit_coverage.py` and its test gone; the command line; `main(argv, env, cwd)`, the package's directory and name passed (Corrected: split from 52; `main(argv, cwd)`, the package reads no environment variable) | 410, 9 |
+| 56 | `refactor/unit-coverage-cut-over` | `unit_coverage.py` and its test gone; the command line; `main(argv, env, cwd)`, the package's directory and name passed (Corrected: split from 52; `main(argv, cwd)`, the package reads no environment variable, and the report directory from the `__main__` guard since closing block 101) | 410, 9 |
 | 60 | `refactor/template-reader` | `TemplateReader`, `FilesystemTemplateReader`, the package's rings; `jinja2` on the domain's import list and its rule (Corrected: split from 60 at the file bound, 20 files) | 140, 16 (measured) |
 | 61 | `refactor/template-attributes-rename` | the rename (D4) (Corrected: split from 60 at the file bound, 20 files) | 15, 5 (measured) |
 | 62 | `feat/list-template-attributes` | `ListTemplateAttributes` behind `TemplateAttributeLister`, on Jinja's tree in the domain; `read_names.py` and its test gone; `main(argv, env, cwd)` (Corrected: split from 60; `main(argv, cwd)`, the package reads no environment variable) | 220, 18 |
@@ -391,7 +393,8 @@ Rows 22, 26, 60 and 62 have no margin and split in Act if measured over.
 | 80 | `refactor/logic-free-on-jinja-tree` | the walker on Jinja's tree in the domain; `check_templates.py` calls it, the regex gone | 250, 8 |
 | 82 | `feat/check-logic-free` | `CheckLogicFree` behind `LogicFreeChecker`, the command line's `logic_free_checker`; `check_templates.py` and its test gone (Corrected: split from 80) | 300, 12 |
 | 90 | `chore/no-module-patching-rule` | the ast-grep rule and its test; `AGENTS.md`'s hard rules; `architecture.md` section 4 | 120, 6 |
-| 100 | `docs/five-hexagons-3c-wrap` | closing block: the holistic findings of `vex_checks`, the spec (Corrected: was the whole closing block) | |
+| 100 | `docs/five-hexagons-3c-wrap` | closing block: the holistic findings of `vex_checks` but the source rule's id, the spec (Corrected: was the whole closing block) | |
+| 101 | `chore/five-hexagons-3c-wrap-tools` | the other holistic findings, `BACKLOG.md`, the handoff (Corrected: split from 100 at the file bound) | |
 
 - 3a's block 10 carries this spec. 3b starts once 3a has merged, 3c once 3b has, each on the tree the previous lot
   leaves, re-measuring its blocks first.
