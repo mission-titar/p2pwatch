@@ -1,19 +1,22 @@
 import json
 from typing import Any
 from urllib.error import HTTPError
-from urllib.request import Request, urlopen
+from urllib.request import OpenerDirector, Request
 
 from amule_bump.domain.git_object import GitObject, GitObjectKind
 from amule_bump.ports.driven.repo_reader import RepoReader
 
 
 class GitHubRepoReader(RepoReader):
-    """Reads the repository ``full_name`` through GitHub's REST API at ``api_url``."""
+    """Reads the repository ``full_name`` from GitHub's API at ``api_url``, by ``url_opener``."""
 
-    def __init__(self, api_url: str, full_name: str, token: str | None) -> None:
+    def __init__(
+        self, api_url: str, full_name: str, token: str | None, url_opener: OpenerDirector
+    ) -> None:
         self._api_url = api_url
         self._full_name = full_name
         self._token = token
+        self._url_opener = url_opener
 
     def read_latest_release_tag(self) -> str:
         return str(self._get_json("releases/latest")["tag_name"])
@@ -41,7 +44,7 @@ class GitHubRepoReader(RepoReader):
         if self._token:
             headers["Authorization"] = f"Bearer {self._token}"
         request = Request(f"{self._api_url}/repos/{self._full_name}/{path}", headers=headers)
-        with urlopen(request, timeout=30) as response:
+        with self._url_opener.open(request, timeout=30) as response:
             content: bytes = response.read()
         return content
 

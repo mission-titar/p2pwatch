@@ -5,6 +5,7 @@ import sys
 import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from urllib.request import OpenerDirector, build_opener
 
 from amule_bump.adapters.driven.filesystem_dockerfile import FilesystemDockerfile
 from amule_bump.adapters.driven.filesystem_pull_request_body_writer import (
@@ -18,6 +19,7 @@ from amule_bump.application.bump_amule import BumpAmule
 from amule_bump.domain.upstream import UPSTREAM
 
 _CHANGELOG_WIDTH_CHARACTERS = 100
+_GITHUB_API_URL = "https://api.github.com"
 
 
 def main(
@@ -26,13 +28,15 @@ def main(
     cwd: Path,
     temporary_directory: Path,
     github_api_url: str,
+    url_opener: OpenerDirector,
 ) -> int:
     """Runs the subcommand ``argv`` names in ``env``, a relative path under ``cwd``, the PR body
-    by default in ``temporary_directory``, GitHub at ``github_api_url``; returns its exit code."""
+    by default in ``temporary_directory``, GitHub at ``github_api_url`` by ``url_opener``;
+    returns its exit code."""
     dockerfile = FilesystemDockerfile()
     github_output = env.get("GITHUB_OUTPUT")
     amule_bumper = BumpAmule(
-        repo_reader=GitHubRepoReader(github_api_url, UPSTREAM, env.get("GH_TOKEN")),
+        repo_reader=GitHubRepoReader(github_api_url, UPSTREAM, env.get("GH_TOKEN"), url_opener),
         dockerfile_reader=dockerfile,
         dockerfile_writer=dockerfile,
         pull_request_body_writer=FilesystemPullRequestBodyWriter(),
@@ -56,6 +60,7 @@ if __name__ == "__main__":  # pragma: no cover
             os.environ,
             Path.cwd(),
             Path(tempfile.gettempdir()),
-            "https://api.github.com",
+            _GITHUB_API_URL,
+            build_opener(),  # the environment's proxies, wanted for GitHub
         )
     )
