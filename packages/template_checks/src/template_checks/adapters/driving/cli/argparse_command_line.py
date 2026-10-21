@@ -37,12 +37,12 @@ class ArgparseCommandLine:
         )
         for subparser in (logic_free, template_attributes):
             subparser.add_argument(
-                "templates_dir", type=self._under_cwd, help="the templates directory"
+                "templates_directory", type=self._under_cwd, help="the templates directory"
             )
         args = parser.parse_args(argv)
         if args.command == "logic-free":
-            return self._check_logic_free(args.templates_dir)
-        return self._list_template_attributes(args.templates_dir)
+            return self._check_logic_free(args.templates_directory)
+        return self._list_template_attributes(args.templates_directory)
 
     def _check_logic_free(self, templates_directory: Path) -> int:
         """Prints each problem of the report, returns 1 on any problem."""

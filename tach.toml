@@ -764,8 +764,7 @@ layer = "composition"
 depends_on = [
   "template_checks.adapters.driven.filesystem_template_reader",
   "template_checks.adapters.driving.cli",
-  "template_checks.application.check_logic_free",
-  "template_checks.application.list_template_attributes",
+  "template_checks.application",
 ]
 
 [[modules]]
@@ -782,30 +781,17 @@ depends_on = [
 ]
 
 [[modules]]
-path = "template_checks.application.check_logic_free"
+path = "template_checks.application"
 layer = "application"
 depends_on = [
-  "template_checks.domain.logic_constructs",
+  "template_checks.domain",
   "template_checks.ports.driven.template_reader",
   "template_checks.ports.driving.logic_free_checker",
-]
-
-[[modules]]
-path = "template_checks.application.list_template_attributes"
-layer = "application"
-depends_on = [
-  "template_checks.domain.template_attributes",
-  "template_checks.ports.driven.template_reader",
   "template_checks.ports.driving.template_attribute_lister",
 ]
 
 [[modules]]
-path = "template_checks.domain.logic_constructs"
-layer = "domain"
-depends_on = []
-
-[[modules]]
-path = "template_checks.domain.template_attributes"
+path = "template_checks.domain"
 layer = "domain"
 depends_on = []
 
