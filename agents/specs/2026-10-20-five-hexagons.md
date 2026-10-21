@@ -266,11 +266,11 @@ Each changes in the block that makes it false.
 - `AGENTS.md`: the `TID251` exemption of `packages/amule/` goes (3b 50, umbrella D19); the hard rules gain "no
   module patching" (3c 90); "No I/O in the core" names `jinja2` in `template_checks`' domain (3c 60); the Commands
   section names `_template-attributes` (3c 60); the subsystem table's rows for port-sync and the container boot
-  follow their new paths (3b 48, 56); the glossary gains `claim`, `premise` and `source rule` (3c 12, 30), and
+  follow their new paths (3b 48, 57) (Corrected: was 56, before its split); the glossary gains `claim`, `premise` and `source rule` (3c 12, 30), and
   Naming the `<Thing>Report` response model with its `problems` (3c 20).
-- `docs/contributing/architecture.md`: section 4 describes the six hexagons and their rings (3c 90); sections 9 and
-  12 follow port-sync's new paths (3b 58), section 12 the boot's (3b 48) (Corrected: section 12's boot part moved
-  to block 48).
+- `docs/contributing/architecture.md`: section 4 describes the six hexagons and their rings (3c 90); section 12
+  follows port-sync's new path (3b 57) and the boot's (3b 48) (Corrected: section 12's boot part moved to block
+  48, port-sync's to block 57; section 9 names no path).
 - `docs/contributing/amule-bump.md` follows `application/body.py` (3a 20).
 - `SECURITY.md`: `vex_checks` has three subcommands, and the source claims are ast-grep rules (3c 32).
 - The strings that stay: the subcommands `boot` and `port-sync` keep their names, so `entrypoint.sh` and
@@ -324,8 +324,8 @@ this hexagon's own copy of `MonotonicInstant`.
 | 52 | `refactor/port-sync-decision-and-logger` | port-sync's decision into the domain; `Logger`, `StdlibLogger` under the two documented names | 340, 10 |
 | 54 | `refactor/port-sync-gluetun-reader` | `ForwardedPortReader`, `GluetunForwardedPortReader` on a loopback server; `gluetun.py` gone | 385, 10 |
 | 56 | `feat/port-sync-loop` | the supervisor's stop and start; port-sync on `ServiceSupervisor` and `AmuleConfReader`/`AmuleConfWriter`, amule.conf owned by `PUID:PGID`, its tests off `monkeypatch` (Corrected: split from 57, measured at 893 lines whole: neither `port_sync.py` nor its tests pair with their move) | 435, 12 |
-| 57 | `feat/port-sync-loop-use-case` | `RunPortSyncLoop` behind `PortSyncLoopRunner`; `port_sync.py` and its deprecated edges gone, its tests moved; `__main__`'s seam on the use case; `AGENTS.md`'s port-sync row (Corrected: split from 56) | 310, 9 |
-| 58 | `refactor/port-sync-runner-wired` | the composition and `port_sync_loop_runner` (D4); `architecture.md` sections 9 and 12, port-sync's paths (Corrected: section 12's boot part moved to block 48) | 100, 8 |
+| 57 | `feat/port-sync-loop-use-case` | `RunPortSyncLoop` behind `PortSyncLoopRunner`; `port_sync.py` and its deprecated edges gone, its tests moved; `__main__`'s seam on the use case; `AGENTS.md`'s port-sync row (Corrected: split from 56); `architecture.md`'s port-sync path (Corrected: moved from block 58) | 310, 9 |
+| 58 | `refactor/port-sync-runner-wired` | the composition and `port_sync_loop_runner` (D4) (Corrected: `architecture.md`'s port-sync path moved to block 57, its boot part to block 48; section 9 names no path) | 100, 8 |
 | 59 | `test/port-sync-smoke` | a compose smoke case: a stand-in for gluetun's `/v1/portforward` (a static file served by `python -m http.server`), port-sync rewrites `Port` and `UDPPort` and restarts amuled | 150, 4 |
 | 60 | `docs/five-hexagons-3b-wrap` | closing block: the holistic findings, backlog, handoff | |
 
