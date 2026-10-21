@@ -10,12 +10,12 @@ class JsonSarifWriter(SarifWriter):
     """A SARIF 2.1.0 report as a JSON file at the path each call is given."""
 
     def write_violations(
-        self, sarif_path: PurePath, rule_id: str, violations: Sequence[Violation], vex_relpath: str
+        self, sarif_path: PurePath, rule_id: str, violations: Sequence[Violation], vex_location: str
     ) -> None:
-        Path(sarif_path).write_text(json.dumps(_sarif(rule_id, violations, vex_relpath)))
+        Path(sarif_path).write_text(json.dumps(_sarif(rule_id, violations, vex_location)))
 
 
-def _sarif(rule_id: str, violations: Sequence[Violation], vex_relpath: str) -> dict[str, object]:
+def _sarif(rule_id: str, violations: Sequence[Violation], vex_location: str) -> dict[str, object]:
     return {
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "version": "2.1.0",
@@ -33,7 +33,7 @@ def _sarif(rule_id: str, violations: Sequence[Violation], vex_relpath: str) -> d
                         "level": "error",
                         "message": {"text": f"{violation.advisory_id}: {violation.message}"},
                         "locations": [
-                            {"physicalLocation": {"artifactLocation": {"uri": vex_relpath}}}
+                            {"physicalLocation": {"artifactLocation": {"uri": vex_location}}}
                         ],
                     }
                     for violation in violations

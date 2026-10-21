@@ -10,6 +10,6 @@ class SarifWriter(ABC):
 
     @abstractmethod
     def write_violations(
-        self, sarif_path: PurePath, rule_id: str, violations: Sequence[Violation], vex_relpath: str
+        self, sarif_path: PurePath, rule_id: str, violations: Sequence[Violation], vex_location: str
     ) -> None:
-        """One error result under ``rule_id`` per violation, each located at ``vex_relpath``."""
+        """One error result under ``rule_id`` per violation, each located at ``vex_location``."""

@@ -42,6 +42,14 @@ def test_no_claim_is_stale_while_the_scanner_finds_every_advisory() -> None:
     assert report.problems == ()
 
 
+def test_a_vex_outside_the_repository_is_located_at_its_path_as_given() -> None:
+    checker = _checker(FakeVulnerabilityScanner({"CVE-A"}))
+
+    report = checker.check_stale_claims(SBOM_PATH, PurePath("/tmp/vex.openvex.json"), None)
+
+    assert [problem.location for problem in report.problems] == ["/tmp/vex.openvex.json"]
+
+
 def test_the_scanner_is_given_the_sbom() -> None:
     vulnerability_scanner = FakeVulnerabilityScanner({"CVE-A", "CVE-B"})
 
