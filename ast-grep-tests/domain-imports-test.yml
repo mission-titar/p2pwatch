@@ -9,6 +9,7 @@ valid:
   - import urllib.parse as parse
   - from packaging.version import Version
   - from pathlib import PurePath
+  - from jinja2 import Environment, nodes
 invalid:
   - import dataclasses, sqlite3
   - import sqlite3

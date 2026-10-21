@@ -1,0 +1,8 @@
+id: domain-jinja2
+valid:
+  - import dataclasses
+  - from template_checks.domain.attributes import read_attributes
+invalid:
+  - import jinja2
+  - from jinja2 import Environment, nodes
+  - import jinja2 as templates

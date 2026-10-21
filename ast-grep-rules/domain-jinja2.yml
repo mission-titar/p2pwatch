@@ -1,0 +1,10 @@
+id: domain-jinja2
+language: python
+severity: error
+message: Only `template_checks`' domain imports `jinja2`, whose environments can also load files.
+note: "Parse a string with `Environment().parse`; reading the template is an adapter's."
+files: ["packages/*/src/*/domain/**/*.py"]
+ignores: ["packages/template_checks/src/template_checks/domain/**"]
+rule:
+  matches: imported-module
+  regex: ^jinja2$
