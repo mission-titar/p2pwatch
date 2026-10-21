@@ -24,7 +24,7 @@ def sync_listen_port_once(
     now_monotonic: float,
     *,
     amule_conf_path: Path,
-    amuled_service_dir: Path,
+    amuled_service_directory: Path,
 ) -> float | None:
     """Run one round; return amuled's latest restart, `now_monotonic` if this round restarted it."""
     forwarded = forwarded_port(port_sync_settings.gluetun_control_url)
@@ -50,20 +50,20 @@ def sync_listen_port_once(
     )
     try:
         # amuled flushes its config when it exits: a write while it runs could be overwritten.
-        if _signal_amuled(amuled_service_dir, "-wD", "-T", "60000", "-d"):
+        if _signal_amuled(amuled_service_directory, "-wD", "-T", "60000", "-d"):
             _write_listen_port(amule_conf_path, forwarded)
     except OSError as error:
         _logger.error("amule.conf was not written (%s)", error)
     finally:
         # A -d leaves amuled wanted down: without this -u it would stay down for good.
-        _signal_amuled(amuled_service_dir, "-u")
+        _signal_amuled(amuled_service_directory, "-u")
     return now_monotonic
 
 
-def main(env: Mapping[str, str], *, amule_conf_path: Path, amuled_service_dir: Path) -> None:
+def main(env: Mapping[str, str], *, amule_conf_path: Path, amuled_service_directory: Path) -> None:
     port_sync_settings = parse_port_sync_settings(env)
     # A port-sync stopped between a -d and its -u left amuled down: bring it back first.
-    _signal_amuled(amuled_service_dir, "-u")
+    _signal_amuled(amuled_service_directory, "-u")
     latest_restart_monotonic = None
     while True:
         latest_restart_monotonic = sync_listen_port_once(
@@ -71,15 +71,15 @@ def main(env: Mapping[str, str], *, amule_conf_path: Path, amuled_service_dir: P
             latest_restart_monotonic,
             time.monotonic(),
             amule_conf_path=amule_conf_path,
-            amuled_service_dir=amuled_service_dir,
+            amuled_service_directory=amuled_service_directory,
         )
         time.sleep(port_sync_settings.poll_seconds)
 
 
-def _signal_amuled(amuled_service_dir: Path, *options: str) -> bool:
+def _signal_amuled(amuled_service_directory: Path, *options: str) -> bool:
     """Run `s6-svc <options>` on amuled; return whether it exited 0, logging why not."""
     result = subprocess.run(
-        ["s6-svc", *options, str(amuled_service_dir)], capture_output=True, text=True
+        ["s6-svc", *options, str(amuled_service_directory)], capture_output=True, text=True
     )
     if result.returncode != 0:
         command = " ".join(["s6-svc", *options])
