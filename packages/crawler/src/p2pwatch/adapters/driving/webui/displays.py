@@ -176,14 +176,12 @@ class FileRowDisplay:
 
 @dataclass(frozen=True)
 class PageNavDisplay:
-    """Paginated navigation of a list: precomputed handler-side (spec W-D8: no logic in the
-    template). ``prev_url``/``next_url`` are ``None`` when the end is reached; the template
-    iterates ``(url,) if url`` to render the link when it exists.
-    """
+    """Paginated navigation of a list: ``prev_urls`` and ``next_urls`` hold 0 or 1 element, none
+    at the list's end."""
 
     page: int
-    prev_url: str | None
-    next_url: str | None
+    prev_urls: tuple[str, ...]
+    next_urls: tuple[str, ...]
 
 
 @dataclass(frozen=True)
