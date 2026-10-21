@@ -19,3 +19,12 @@ rule:
         - has: { field: module_name, regex: '^(unittest\.)?mock$' }
         # No `field: name`: it reaches only the first imported name.
         - has: { regex: '^patch( as \w+)?$' }
+    # `unittest.mock` under another name, whose `patch` the arms above cannot see.
+    - kind: aliased_import
+      any:
+        - all:
+            - inside: { kind: import_statement }
+            - has: { field: name, regex: '^(unittest\.)?mock$' }
+        - all:
+            - inside: { kind: import_from_statement, has: { field: module_name, regex: ^unittest$ } }
+            - has: { field: name, regex: ^mock$ }

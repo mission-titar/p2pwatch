@@ -5,7 +5,7 @@ message: Name attributes in the code, never through getattr, setattr, hasattr, d
 note: "An exception carries `# ast-grep-ignore: no-dynamic-attribute` and its reason."
 rule:
   any:
-    # Any reference but an attribute's name (`monkeypatch.setattr` passes), an alias and `__builtins__` included.
+    # Any reference but an attribute's name (`obj.setattr` passes), an alias and `__builtins__` included.
     - kind: identifier
       regex: ^(getattr|setattr|hasattr|delattr|vars|__builtins__)$
       not:

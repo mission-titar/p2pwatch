@@ -3,6 +3,8 @@ valid:
   - "def test_x(tmp_path: Path) -> None: ..."
   - "from unittest.mock import AsyncMock"
   - "from unittest import mock"
+  - "import unittest.mock"
+  - "from tests import mock as fake_mock"
   - "patch = Patch(1)"
   - "dockerfile.patch(pin)"
 invalid:
@@ -15,3 +17,5 @@ invalid:
   - "from mock import patch"
   - "with unittest.mock.patch('os.getcwd'): ..."
   - "with mock.patch.object(os, 'getcwd'): ..."
+  - "import unittest.mock as um"
+  - "from unittest import mock as m"
