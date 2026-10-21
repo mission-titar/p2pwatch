@@ -5,6 +5,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import PurePath
 from threading import Thread
 from typing import Any, Self
+from urllib.request import ProxyHandler, build_opener
 
 from amule_bump.domain.git_object import GitObject
 from amule_bump.ports.driven.dockerfile import DockerfileReader, DockerfileWriter
@@ -70,6 +71,7 @@ class FakeGitHubServer:
         self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         host, port = self._server.server_address[:2]
         self.api_url = f"http://{host!s}:{port}"
+        self.url_opener = build_opener(ProxyHandler({}))  # direct, whatever HTTP_PROXY says
         self._thread = Thread(target=self._server.serve_forever)
 
     def __enter__(self) -> Self:

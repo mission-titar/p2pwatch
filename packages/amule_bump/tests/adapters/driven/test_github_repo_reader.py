@@ -19,7 +19,7 @@ def github() -> Iterator[FakeGitHubServer]:
 
 
 def repo_reader(github: FakeGitHubServer, token: str | None = None) -> GitHubRepoReader:
-    return GitHubRepoReader(github.api_url, "amule-org/amule", token)
+    return GitHubRepoReader(github.api_url, "amule-org/amule", token, github.url_opener)
 
 
 def test_latest_release_tag_is_read_from_the_api_url_with_the_token(

@@ -122,3 +122,9 @@ def test_a_bad_pin_raises_before_reading_upstream() -> None:
     bump = Bump(dockerfile=FakeDockerfile({DOCKERFILE_PATH: "FROM debian\n"}))
     with pytest.raises(BumpError, match="expected one 'ARG AMULE_VERSION=' line, found 0"):
         bump.run(FakeRepoReader(), dry_run=False)
+
+
+def test_a_missing_dockerfile_raises_before_reading_upstream() -> None:
+    bump = Bump(dockerfile=FakeDockerfile({}))
+    with pytest.raises(FileNotFoundError, match=f"no Dockerfile at {DOCKERFILE_PATH}"):
+        bump.run(FakeRepoReader(), dry_run=False)

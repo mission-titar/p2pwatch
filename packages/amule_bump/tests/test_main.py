@@ -39,7 +39,7 @@ def test_bump_reads_upstream_with_gh_token_and_announces_to_github_output(
     output = tmp_path / "output"
     env = {"GH_TOKEN": "secret", "GITHUB_OUTPUT": str(output)}
 
-    assert main(["bump"], env, cwd, temporary_directory, github.api_url) == 0
+    assert main(["bump"], env, cwd, temporary_directory, github.api_url, github.url_opener) == 0
 
     assert {headers["Authorization"] for _, headers in github.requests} == {"Bearer secret"}
     assert f"ARG AMULE_COMMIT={NEW_COMMIT}" in dockerfile.read_text()
@@ -53,7 +53,8 @@ def test_bump_outside_actions_prints_its_step_outputs(
 ) -> None:
     write_dockerfile(tmp_path)
 
-    assert main(["bump", "--body-file", "body.md"], {}, tmp_path, tmp_path, github.api_url) == 0
+    argv = ["bump", "--body-file", "body.md"]
+    assert main(argv, {}, tmp_path, tmp_path, github.api_url, github.url_opener) == 0
 
     assert all("Authorization" not in headers for _, headers in github.requests)
     assert capsys.readouterr().out == f"version=3.1.0\nbody-path={tmp_path / 'body.md'}\n"
