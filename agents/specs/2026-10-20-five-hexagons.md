@@ -332,6 +332,7 @@ this hexagon's own copy of `MonotonicInstant`.
 | 58 | `refactor/port-sync-runner-wired` | the composition and `port_sync_loop_runner` (D4) (Corrected: `architecture.md`'s port-sync path moved to block 57, its boot part to block 48; section 9 names no path) | 100, 8 |
 | 59 | `test/port-sync-smoke` | a compose smoke case: a stand-in for gluetun's `/v1/portforward` (a static file served by `python -m http.server`), port-sync rewrites `Port` and `UDPPort` and restarts amuled | 150, 4 |
 | 60 | `docs/five-hexagons-3b-wrap` | closing block: the holistic findings, backlog, handoff | |
+| 61 | `docs/five-hexagons-3b-backlog` | the handoff and `BACKLOG.md` (Corrected: split from 60 at the file bound) | |
 
 ### Lot 3c: `vex_checks`, `coverage_checks`, `template_checks`, the rule
 
