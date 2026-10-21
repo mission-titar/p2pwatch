@@ -58,6 +58,14 @@ Le projet a **deux niveaux** :
    `[tool.coverage_checks] tests_without_unit` : les tests des migrations SQL, ceux des données de
    `deploy/`, les suites d'intégration.
 
+   La suite du crawler échoue sur une connexion ou une socket laissée ouverte : son `filterwarnings`
+   change en erreurs `ResourceWarning` et `pytest.PytestUnraisableExceptionWarning`. L'avertissement
+   part du finaliseur de l'objet, quand le ramasse-miettes le collecte, si bien que le test en échec
+   n'est pas forcément celui qui a ouvert la connexion. Pour trouver le coupable, relancez avec
+   `PYTHONTRACEMALLOC=20` : le rapport donne alors la pile où l'objet a été créé. Ou ajoutez, le
+   temps de la recherche, une fixture `autouse` qui appelle `gc.collect()` après chaque test :
+   l'échec tombe alors sur le test fautif.
+
    L'`addopts` de chaque paquet **désélectionne** tous les markers d'intégration
    (`-m "not api_integration and not …"`), si bien que le gate ne les lance jamais, et ils sont exclus
    de la mesure de coverage.

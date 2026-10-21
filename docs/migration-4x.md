@@ -116,6 +116,8 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
   port-sync écrivent dans `docker compose logs ed2k`, amuleapi dans `ed2k/amule/amuleapi.log`.
 - **Sous la variante VPN, le crawler sort du tunnel.** Seul `ed2k` passe par `ed2k-gluetun`. Le
   crawler ne parle à aucun pair, et vos notifications partent de l'adresse de votre machine.
+- **Le crawler joint amuleapi en direct**, sans plus suivre `HTTP_PROXY` ni `NO_PROXY` : un proxy
+  donné au conteneur `p2pwatch` ne s'applique plus à cette connexion.
 - **Une configuration invalide fait redémarrer `p2pwatch` en boucle** (`Restarting`) au lieu
   d'arrêter le conteneur. L'erreur est dans `docker compose logs p2pwatch`.
 - **Les métriques `emule_*` deviennent `p2pwatch_*`.** Les trois du port-sync
