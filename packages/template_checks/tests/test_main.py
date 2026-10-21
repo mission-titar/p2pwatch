@@ -17,11 +17,11 @@ def test_logic_free_runs_the_logic_check(
     assert capsys.readouterr().out == "bad.html: forbidden tag '{% if %}'\n"
 
 
-def test_read_names_prints_the_names_the_templates_read(
+def test_template_attributes_prints_the_attributes_the_templates_read(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "page.html").write_text("{{ row.filename }}")
 
-    assert main(["read-names", str(tmp_path)]) == 0
+    assert main(["template-attributes", str(tmp_path)]) == 0
 
     assert capsys.readouterr().out == "filename\n"

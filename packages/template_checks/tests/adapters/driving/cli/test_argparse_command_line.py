@@ -23,7 +23,7 @@ class _Checks:
         return 3
 
     def _print_read_names(self, templates_dir: Path) -> None:
-        self.calls.append(("read-names", templates_dir))
+        self.calls.append(("template-attributes", templates_dir))
 
 
 def test_logic_free_runs_its_check_over_the_directory_and_returns_its_exit_code() -> None:
@@ -34,15 +34,15 @@ def test_logic_free_runs_its_check_over_the_directory_and_returns_its_exit_code(
     assert checks.calls == [("logic-free", Path("templates"))]
 
 
-def test_read_names_prints_the_directory_s_names_and_exits_0() -> None:
+def test_template_attributes_prints_the_directory_s_attributes_and_exits_0() -> None:
     checks = _Checks()
 
-    assert checks.command_line().run(["read-names", "templates"]) == 0
+    assert checks.command_line().run(["template-attributes", "templates"]) == 0
 
-    assert checks.calls == [("read-names", Path("templates"))]
+    assert checks.calls == [("template-attributes", Path("templates"))]
 
 
-@pytest.mark.parametrize("command", ["logic-free", "read-names"])
+@pytest.mark.parametrize("command", ["logic-free", "template-attributes"])
 def test_a_check_requires_the_templates_directory(
     command: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -71,4 +71,4 @@ def test_the_help_lists_the_subcommands(capsys: pytest.CaptureFixture[str]) -> N
         _Checks().command_line().run(["--help"])
 
     assert exit_info.value.code == 0
-    assert "{logic-free,read-names}" in capsys.readouterr().out
+    assert "{logic-free,template-attributes}" in capsys.readouterr().out

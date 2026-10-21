@@ -89,8 +89,8 @@ sql-lint       = { cmd = "sqlfluff lint packages/crawler/src", help = "Lint the 
 code-pattern-check = { help = "Ban dynamic attribute access and the core's other imports (ast-grep, sgconfig.yml), rules tested first", sequence = [{ cmd = "ast-grep test --skip-snapshot-tests" }, { cmd = "ast-grep scan" }] }
 architecture-check = { help = "Check the imports between rings, adapters and hexagons (tach, tach.toml)", sequence = [{ cmd = "tach check" }, { cmd = "tach check-external" }] }
 template-check = { cmd = "python -m template_checks logic-free packages/crawler/src/p2pwatch/adapters/driving/webui/templates", help = "Assert webui templates carry no logic" }
-_template-read-names = { cmd = "python -m template_checks read-names packages/crawler/src/p2pwatch/adapters/driving/webui/templates" }
-dead-code-check = { shell = 'vulture --ignore-names "$TEMPLATE_READ_NAMES"', uses = { TEMPLATE_READ_NAMES = "_template-read-names" }, help = "Find code no production path reaches (vulture on src, template reads ignored)" }
+_template-attributes = { cmd = "python -m template_checks template-attributes packages/crawler/src/p2pwatch/adapters/driving/webui/templates" }
+dead-code-check = { shell = 'vulture --ignore-names "$TEMPLATE_ATTRIBUTES"', uses = { TEMPLATE_ATTRIBUTES = "_template-attributes" }, help = "Find code no production path reaches (vulture on src, the templates' attributes ignored)" }
 vex-source-claims  = { cmd = "ast-grep scan --config packages/vex_checks/ast-grep/sgconfig.yml", help = "Assert our source never reaches code the not_in_execute_path VEX claims exempt (ast-grep, one source rule per claim)" }
 vex-claim-coverage = { cmd = "python -m vex_checks claim-coverage", help = "Assert every VEX not_affected claim maps to exactly one image premise or source rule, and back" }
 lint-fix       = { cmd = "ruff check --fix .", help = "Auto-fix ruff lint violations" }
