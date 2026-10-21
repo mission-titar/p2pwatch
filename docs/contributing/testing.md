@@ -233,8 +233,12 @@ sollicitée). Cinq choses :
    (interrogés via `docker compose exec`, donc aucun port hôte n'est nécessaire), et
    `data/catalog.db` appartient à `PUID`, lu dans le conteneur ;
 3. le port-sync reste arrêté sans `PORT_SYNC` (`false false false` pour `up`, `wantedup` et
-   `normallyup`, depuis 25 s au moins), puis, une fois lancé, ses droits laissent l'utilisateur
-   `amule` arrêter et relancer amuled par `s6-svc -wD -d` et `-wu -u`, avec un nouveau pid ;
+   `normallyup`, depuis 25 s au moins) ; lancé face à une doublure de gluetun (un fichier
+   `/v1/portforward` servi par `python -m http.server` sur le `localhost:8000` d'`ed2k`, l'URL par
+   défaut), il laisse amuled et `amule.conf` tels quels tant que la doublure sert le port
+   qu'amuled écoute, puis, quand elle en sert un autre, écrit ce port en `Port` et `UDPPort` et
+   relance amuled, qui revient avec un nouveau pid. La pile smoke règle
+   `PORT_SYNC_POLL_SECONDS` à 1 ;
 4. un fichier qu'amuled partage et qui a quitté sa file est enregistré `completed` par le cœur,
    par le vrai chemin HTTP vers `ed2k:4711` ;
 5. `deploy/` se rend avec `docker compose config` dans ses deux variantes : services, alias,
@@ -294,15 +298,16 @@ en root** : un `PUID` à 0 ferait passer la vérification de propriété sur un 
     créer de réseau et `docker run` échoue sur
     `failed to add the host (veth…) <=> sandbox (veth…) pair interfaces: operation not supported`.
 
-**Attendu.** **8 tests passés** sur un moteur aux vrais montages du noyau : les deux tests du
+**Attendu.** **9 tests passés** sur un moteur aux vrais montages du noyau : les deux tests du
 harnais (`test_the_harness_hides_everything_but_the_daemon_selectors`,
 `test_a_chosen_daemon_that_answers_nothing_fails_the_call`), `test_build_succeeds`,
 `test_the_two_containers_work_together`,
-`test_port_sync_stays_down_then_its_rights_let_amule_restart_amuled`,
+`test_port_sync_stays_down_with_port_sync_unset`,
+`test_port_sync_restarts_amuled_on_the_forwarded_port_only_when_it_moved`,
 `test_a_file_amuled_shares_is_recorded_completed`, et les 2 cas paramétrés de
-`test_the_deploy_layout_renders` (`direct` et `vpn`). Sous Docker Desktop : 7 passés, 1 échec
+`test_the_deploy_layout_renders` (`direct` et `vpn`). Sous Docker Desktop : 8 passés, 1 échec
 (l'encadré ci-dessus). En CI les images sont préconstruites et `IMAGE_TAG` est posée, si bien que
-`test_build_succeeds` est **ignoré** (7 passés, 1 skip) et que le `up` réutilise les images
+`test_build_succeeds` est **ignoré** (8 passés, 1 skip) et que le `up` réutilise les images
 préconstruites. Le teardown est un `docker compose down -v` plus le répertoire d'état jetable, dans
 un `finally`. Prévoyez plusieurs minutes (le build et le up tiennent sous des timeouts de 1 800 s).
 

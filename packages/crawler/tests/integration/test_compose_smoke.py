@@ -8,7 +8,8 @@ the core `p2pwatch` and the aMule container `ed2k`, and asserts the WIRING, NO r
   2. both containers run, `ed2k` turns `healthy`, the core reaches amuleapi at `ed2k:4711` and
      shows its first reading of `amuled` on the dashboard, and writes data/ as PUID.
   3. deploy/'s layout renders with `docker compose config`, in both variants.
-  4. port-sync stays down with PORT_SYNC unset; started, its rights let `amule` restart amuled.
+  4. port-sync stays down with PORT_SYNC unset; started against a stand-in for gluetun, it
+     restarts amuled on the forwarded port only when that port moved.
 Tear-down: `docker compose down -v` plus the throwaway state directory, in a finally.
 The suite refuses to run as root: a PUID of 0 would make the ownership check pass on a root file.
 
@@ -24,7 +25,7 @@ Mechanics established EMPIRICALLY (compose v5, Docker 29):
     explicitly to `_REPO_ROOT` via `--project-directory` (cf. `_run`): `./tests/smoke/...` and
     `context: .` resolve deterministically, without depending on the default (cwd vs the `-f`
     file's directory). The `subprocess.run` calls also run `cwd=_REPO_ROOT`.
-  * State lives in BIND MOUNTS under `SMOKE_STATE`, like the real stacks — named volumes are
+  * State lives in BIND MOUNTS under `SMOKE_STATE`, like the real stacks: named volumes are
     gone. The test creates the three subdirectories as the invoking user and passes its own
     uid/gid as PUID/PGID, so the smoke exercises the real ownership path: the aMule container's
     root PID 1 chowns its mount points, then drops to the `amule` user, and the core runs as
@@ -325,47 +326,109 @@ def test_the_two_containers_work_together(project_files: tuple[Path, ...]) -> No
     assert owner == str(os.getuid())
 
 
-def _as_amule(*command: str, files: tuple[Path, ...]) -> str:
-    """Run `command` as `amule`, like port-sync, and return its stdout (fails loudly)."""
-    result = _run("exec", "-T", "-u", "amule", _AMULE, *command, files=files, timeout=120)
-    assert result.returncode == 0, f"{command}: rc={result.returncode} {result.stderr}"
-    return result.stdout.strip()
+_PORT_SYNC_SERVICE = "/etc/services.d/port-sync"
+_AMULED_SERVICE = "/etc/services.d/amuled"
 
 
-def test_port_sync_stays_down_then_its_rights_let_amule_restart_amuled(
-    project_files: tuple[Path, ...],
-) -> None:
-    """PORT_SYNC unset keeps port-sync down; started, its run script grants what it needs.
-
-    As root the restart could not reveal a missing right, hence `-u amule`.
-    """
+def test_port_sync_stays_down_with_port_sync_unset(project_files: tuple[Path, ...]) -> None:
     _up_until_ed2k_is_healthy(project_files)
     time.sleep(30)
 
     # A run script respawned every second would read `true` wanted up and an updownfor under 2.
-    port_sync, amuled = "/etc/services.d/port-sync", "/etc/services.d/amuled"
     fields = "up,wantedup,normallyup,updownfor"
     up, wantedup, normallyup, updownfor = _exec(
-        _AMULE, "s6-svstat", "-o", fields, port_sync, files=project_files
+        _AMULE, "s6-svstat", "-o", fields, _PORT_SYNC_SERVICE, files=project_files
     ).split()
     assert (up, wantedup, normallyup) == ("false", "false", "false")
     assert int(updownfor) >= 25
-    assert _exec(_AMULE, "s6-svstat", "-o", "up", amuled, files=project_files) == "true"
+    assert _exec(_AMULE, "s6-svstat", "-o", "up", _AMULED_SERVICE, files=project_files) == "true"
 
-    assert _exec(_AMULE, "s6-svc", "-u", port_sync, files=project_files) == ""
-    granted = "\n".join(
-        f"{amuled} {right}: group amule" for right in ("status", "control", "events")
+
+# gluetun's control server at port-sync's default URL: in the vpn variant `ed2k` shares gluetun's
+# network namespace, so the stand-in serves its answer from `ed2k`'s own localhost:8000.
+_GLUETUN_STAND_IN_ROOT = "/tmp/gluetun-stand-in"
+_GLUETUN_STAND_IN_LOG = "/tmp/gluetun-stand-in.log"
+_FORWARDED_PORT = 40123
+
+_AMULE_CONF_LISTEN_PORTS = """
+import configparser
+parser = configparser.RawConfigParser(strict=False)
+parser.read("/home/amule/.aMule/amule.conf")
+print(parser.get("eMule", "Port", fallback=None), parser.get("eMule", "UDPPort", fallback=None))
+"""
+
+
+def _serve_forwarded_port(port: int, files: tuple[Path, ...]) -> None:
+    """Have the stand-in answer `{"port": <port>}`, its file replaced whole."""
+    answer = f"{_GLUETUN_STAND_IN_ROOT}/v1/portforward"
+    script = (
+        f"mkdir -p {_GLUETUN_STAND_IN_ROOT}/v1"
+        f" && printf '{{\"port\": {port}}}' > {answer}.tmp && mv {answer}.tmp {answer}"
     )
-    svperms = partial(_exec, _AMULE, "s6-svperms", amuled, files=project_files)
-    _wait_for("port-sync's s6-svperms", svperms, granted, project_files)
+    assert _exec(_AMULE, "sh", "-c", script, files=files) == ""
 
-    pid = _as_amule("s6-svstat", "-o", "pid", amuled, files=project_files)
-    _as_amule("s6-svc", "-wD", "-T", "60000", "-d", amuled, files=project_files)
-    assert _as_amule("s6-svstat", "-o", "up", amuled, files=project_files) == "false"
-    _as_amule("s6-svc", "-wu", "-T", "60000", "-u", amuled, files=project_files)
-    up, new_pid = _as_amule("s6-svstat", "-o", "up,pid", amuled, files=project_files).split()
+
+def _forwarded_port_requests(files: tuple[Path, ...]) -> int:
+    """How many times the stand-in served `/v1/portforward`, from its access log."""
+    count = _exec(_AMULE, "grep", "-c", "GET /v1/portforward", _GLUETUN_STAND_IN_LOG, files=files)
+    return int(count) if count.isdigit() else 0
+
+
+def _listen_ports(files: tuple[Path, ...]) -> str:
+    """amule.conf's `Port` and `UDPPort`, read in `ed2k`."""
+    return _exec(_AMULE, "python3", "-c", _AMULE_CONF_LISTEN_PORTS, files=files)
+
+
+def _amuled_up_and_pid(files: tuple[Path, ...]) -> str:
+    """Whether amuled is up, and its pid."""
+    return _exec(_AMULE, "s6-svstat", "-o", "up,pid", _AMULED_SERVICE, files=files)
+
+
+def test_port_sync_restarts_amuled_on_the_forwarded_port_only_when_it_moved(
+    project_files: tuple[Path, ...],
+) -> None:
+    """The stand-in first serves the port amuled listens on, then another one."""
+    _up_until_ed2k_is_healthy(project_files)
+    ports_before = _listen_ports(project_files)
+    port, _ = ports_before.split()
+    up, pid_before = _amuled_up_and_pid(project_files).split()
     assert up == "true"
-    assert new_pid != pid
+    _serve_forwarded_port(int(port), project_files)
+    serve = f"exec python3 -u -m http.server 8000 -d {_GLUETUN_STAND_IN_ROOT}"
+    stand_in = _run(
+        "exec",
+        "-T",
+        "-d",
+        _AMULE,
+        "sh",
+        "-c",
+        f"{serve} 2> {_GLUETUN_STAND_IN_LOG}",
+        files=project_files,
+        timeout=60,
+    )
+    assert stand_in.returncode == 0, stand_in.stderr
+    assert _exec(_AMULE, "s6-svc", "-u", _PORT_SYNC_SERVICE, files=project_files) == ""
+
+    # One round runs at a time: a second request means the first round has finished.
+    _wait_for(
+        "two rounds of port-sync",
+        lambda: str(_forwarded_port_requests(project_files) >= 2),
+        "True",
+        project_files,
+    )
+    assert _listen_ports(project_files) == ports_before
+    assert _amuled_up_and_pid(project_files) == f"true {pid_before}"
+
+    _serve_forwarded_port(_FORWARDED_PORT, project_files)
+    moved = f"{_FORWARDED_PORT} {_FORWARDED_PORT}"
+    _wait_for("amule.conf's ports", partial(_listen_ports, project_files), moved, project_files)
+    # Written only while amuled is down: up again, it is the process port-sync started.
+    amuled_up = partial(
+        _exec, _AMULE, "s6-svstat", "-o", "up", _AMULED_SERVICE, files=project_files
+    )
+    _wait_for("amuled up again", amuled_up, "true", project_files)
+    up, pid_after = _amuled_up_and_pid(project_files).split()
+    assert (up, pid_after != pid_before) == ("true", True)
 
 
 def _render(variant: str, tmp_path: Path) -> Any:
