@@ -37,11 +37,11 @@
   </table>
 </section>
 
-{% for url in (nav.prev_url,) if url %}
+{% for url in nav.prev_urls %}
 <a href="{{ url }}">← Previous</a>
 {% endfor %}
 <span>Page {{ nav.page }}</span>
-{% for url in (nav.next_url,) if url %}
+{% for url in nav.next_urls %}
 <a href="{{ url }}">Next →</a>
 {% endfor %}
 

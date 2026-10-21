@@ -359,17 +359,17 @@ def _page_nav(
     page: int, has_next_page: bool, base_path: str, kept_params: dict[str, str]
 ) -> PageNavDisplay:
     """Precompute the prev/next links for a page (W-D8: view-model, no template logic)."""
-    prev_url: str | None = None
-    next_url: str | None = None
+    prev_urls: tuple[str, ...] = ()
+    next_urls: tuple[str, ...] = ()
     if page > 1:
         prev = dict(kept_params)
         prev["page"] = str(page - 1)
-        prev_url = f"{base_path}?{urlencode(prev)}"
+        prev_urls = (f"{base_path}?{urlencode(prev)}",)
     if has_next_page:
         nxt = dict(kept_params)
         nxt["page"] = str(page + 1)
-        next_url = f"{base_path}?{urlencode(nxt)}"
-    return PageNavDisplay(page=page, prev_url=prev_url, next_url=next_url)
+        next_urls = (f"{base_path}?{urlencode(nxt)}",)
+    return PageNavDisplay(page=page, prev_urls=prev_urls, next_urls=next_urls)
 
 
 def _files_summary(
@@ -1059,7 +1059,7 @@ def build_app(
 
         display_rows = _to_display_rows(file_listing.catalog_entries, _segment_by_id)
         # No pagination here (target view: we expect few). Empty nav.
-        nav = PageNavDisplay(page=1, prev_url=None, next_url=None)
+        nav = PageNavDisplay(page=1, prev_urls=(), next_urls=())
         # files.html is shared with /files, whose matched/all summary line and filter bar are
         # meaningless on a target-scoped page: pass empty tuples so they render nothing. This
         # page is NOT a nav destination, though, so unlike /files it does carry a heading.
