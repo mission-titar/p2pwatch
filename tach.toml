@@ -113,8 +113,11 @@ depends_on = []
 path = "coverage_checks.__main__"
 layer = "composition"
 depends_on = [
+  "coverage_checks.adapters.driven.coverage_py_reader",
+  "coverage_checks.adapters.driven.filesystem_package_tree_reader",
   "coverage_checks.adapters.driving.cli",
   "coverage_checks.adapters.driving.unit_coverage",
+  "coverage_checks.application",
 ]
 
 [[modules]]
@@ -135,11 +138,16 @@ depends_on = []
 [[modules]]
 path = "coverage_checks.adapters.driving.unit_coverage"
 layer = "adapters"
+depends_on = ["coverage_checks.ports.driving.unit_coverage_checker"]
+
+[[modules]]
+path = "coverage_checks.application"
+layer = "application"
 depends_on = [
   "coverage_checks.domain",
-  # The check reads the package's tree and its coverage through their adapters: block 56 removes it.
-  { path = "coverage_checks.adapters.driven.coverage_py_reader", deprecated = true },
-  { path = "coverage_checks.adapters.driven.filesystem_package_tree_reader", deprecated = true },
+  "coverage_checks.ports.driven.package_tree_reader",
+  "coverage_checks.ports.driven.test_coverage_reader",
+  "coverage_checks.ports.driving.unit_coverage_checker",
 ]
 
 [[modules]]
@@ -156,6 +164,11 @@ depends_on = ["coverage_checks.domain"]
 path = "coverage_checks.ports.driven.test_coverage_reader"
 layer = "ports"
 depends_on = ["coverage_checks.domain"]
+
+[[modules]]
+path = "coverage_checks.ports.driving.unit_coverage_checker"
+layer = "ports"
+depends_on = []
 
 [[modules]]
 path = "p2pwatch.__main__"
