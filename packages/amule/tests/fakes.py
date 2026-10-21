@@ -1,5 +1,7 @@
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from datetime import timedelta
+from typing import Literal
 
 from p2pwatch_amule.domain.monotonic_instant import MonotonicInstant
 from p2pwatch_amule.domain.settings_error import SettingsError
@@ -7,6 +9,7 @@ from p2pwatch_amule.ports.driven.account_manager import AccountManager
 from p2pwatch_amule.ports.driven.admin_password_setter import AdminPasswordSetter
 from p2pwatch_amule.ports.driven.amule_conf import AmuleConfReader, AmuleConfWriter
 from p2pwatch_amule.ports.driven.amuled_directory_preparer import AmuledDirectoryPreparer
+from p2pwatch_amule.ports.driven.logger import Logger
 from p2pwatch_amule.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch_amule.ports.driven.service_supervisor import ServiceSupervisor
 from p2pwatch_amule.ports.driving.container_booter import ContainerBooter
@@ -55,6 +58,28 @@ class FakeAdminPasswordSetter(AdminPasswordSetter):
 
     def set_admin_password(self, api_password: str, uid: int, gid: int) -> None:
         self.passwords.append((api_password, uid, gid))
+
+
+@dataclass(frozen=True)
+class LoggedLine:
+    level: Literal["info", "warning", "error"]
+    message: str
+
+
+class FakeLogger(Logger):
+    """Keeps each line, its arguments formatted in as ``logging`` does."""
+
+    def __init__(self) -> None:
+        self.lines: list[LoggedLine] = []
+
+    def info(self, message: str, *args: object) -> None:
+        self.lines.append(LoggedLine("info", message % args))
+
+    def warning(self, message: str, *args: object) -> None:
+        self.lines.append(LoggedLine("warning", message % args))
+
+    def error(self, message: str, *args: object) -> None:
+        self.lines.append(LoggedLine("error", message % args))
 
 
 class FakeMonotonicClock(MonotonicClock):

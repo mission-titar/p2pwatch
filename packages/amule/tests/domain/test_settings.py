@@ -1,6 +1,7 @@
 """The container's variables: the boot step's, required; port-sync's, with the domain's values."""
 
 import re
+from datetime import timedelta
 
 import pytest
 
@@ -90,7 +91,9 @@ def test_any_other_value_is_refused_naming_port_sync(value: str) -> None:
 
 def test_no_variable_set_gives_todays_values() -> None:
     assert parse_port_sync_settings({}) == PortSyncSettings(
-        gluetun_control_url="http://localhost:8000", poll_seconds=60, restart_min_seconds=300
+        gluetun_control_url="http://localhost:8000",
+        poll_interval=timedelta(seconds=60),
+        restart_min_interval=timedelta(seconds=300),
     )
 
 
@@ -110,7 +113,9 @@ def test_each_variable_overrides_the_domains_value() -> None:
         "PORT_SYNC_RESTART_MIN_SECONDS": "30",
     }
     assert parse_port_sync_settings(env) == PortSyncSettings(
-        gluetun_control_url="https://gluetun:9999/prefix", poll_seconds=5, restart_min_seconds=30
+        gluetun_control_url="https://gluetun:9999/prefix",
+        poll_interval=timedelta(seconds=5),
+        restart_min_interval=timedelta(seconds=30),
     )
 
 
