@@ -1,6 +1,12 @@
+import json
+from collections.abc import Mapping
+from email.message import Message
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import PurePath
-from typing import Any
+from threading import Thread
+from typing import Any, Self
 
+from amule_bump.domain.git_object import GitObject
 from amule_bump.ports.driven.dockerfile import DockerfileReader, DockerfileWriter
 from amule_bump.ports.driven.pull_request_body_writer import PullRequestBodyWriter
 from amule_bump.ports.driven.repo_reader import RepoReader
@@ -8,19 +14,81 @@ from amule_bump.ports.driven.step_output_writer import StepOutputWriter
 
 
 class FakeRepoReader(RepoReader):
-    """An upstream repo served from dicts: API paths to JSON, and (tag, path) to file text."""
+    """An upstream repo served from dicts; a file absent from them reads as empty."""
 
     def __init__(
-        self, json: dict[str, Any] | None = None, files: dict[tuple[str, str], str] | None = None
+        self,
+        *,
+        latest_release_tag: str = "",
+        tag_targets_by_tag: dict[str, GitObject] | None = None,
+        annotated_tag_targets_by_object_id: dict[str, GitObject] | None = None,
+        file_texts_by_ref_and_path: dict[tuple[str, str], str] | None = None,
     ) -> None:
-        self._json = json or {}
-        self._files = files or {}
+        self._latest_release_tag = latest_release_tag
+        self._tag_targets_by_tag = tag_targets_by_tag or {}
+        self._annotated_tag_targets_by_object_id = annotated_tag_targets_by_object_id or {}
+        self._file_texts_by_ref_and_path = file_texts_by_ref_and_path or {}
 
-    def json(self, path: str) -> Any:
-        return self._json[path]
+    def read_latest_release_tag(self) -> str:
+        return self._latest_release_tag
 
-    def file(self, ref: str, path: str) -> str:
-        return self._files.get((ref, path), "")
+    def read_tag_target(self, tag: str) -> GitObject:
+        return self._tag_targets_by_tag[tag]
+
+    def read_annotated_tag_target(self, object_id: str) -> GitObject:
+        return self._annotated_tag_targets_by_object_id[object_id]
+
+    def read_file(self, ref: str, path: str) -> str:
+        return self._file_texts_by_ref_and_path.get((ref, path), "")
+
+
+class FakeGitHubServer:
+    """GitHub's REST API on a loopback port: set answers by (request path, Accept), 404 otherwise.
+
+    Records each request's path and headers."""
+
+    def __init__(self) -> None:
+        self.answers_by_path_and_accept: dict[tuple[str, str], tuple[int, bytes]] = {}
+        self.requests: list[tuple[str, Message]] = []
+        fake_server = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                fake_server.requests.append((self.path, self.headers))
+                accept = self.headers["Accept"]
+                status, body = fake_server.answers_by_path_and_accept.get(
+                    (self.path, accept), (404, b'{"message": "Not Found"}')
+                )
+                self.send_response(status)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format: str, *args: Any) -> None:
+                """Silent: the requests are recorded instead."""
+
+        self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        host, port = self._server.server_address[:2]
+        self.api_url = f"http://{host!s}:{port}"
+        self._thread = Thread(target=self._server.serve_forever)
+
+    def __enter__(self) -> Self:
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self._server.shutdown()
+        self._thread.join()
+        self._server.server_close()
+
+    def answer_json(self, path: str, document: Mapping[str, Any]) -> None:
+        self.answers_by_path_and_accept[(path, "application/vnd.github+json")] = (
+            200,
+            json.dumps(document).encode(),
+        )
+
+    def answer_raw(self, path: str, status: int, body: bytes) -> None:
+        self.answers_by_path_and_accept[(path, "application/vnd.github.raw+json")] = (status, body)
 
 
 class FakeDockerfile(DockerfileReader, DockerfileWriter):

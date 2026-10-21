@@ -1,11 +1,12 @@
 import re
 
 from amule_bump.domain.bump_error import BumpError
+from amule_bump.domain.git_object import GitObjectKind
 from amule_bump.ports.driven.repo_reader import RepoReader
 
 
 def latest_release_tag(repo_reader: RepoReader) -> str:
-    tag = str(repo_reader.json("releases/latest")["tag_name"])
+    tag = repo_reader.read_latest_release_tag()
     # The tag ends up in a URL, a branch name and the Dockerfile: accept a plain version only.
     if not _is_plain_version(tag):
         raise BumpError(f"unexpected upstream release tag {tag!r}")
@@ -18,12 +19,12 @@ def is_newer(candidate: str, pinned: str) -> bool:
 
 def peeled_commit(repo_reader: RepoReader, tag: str) -> str:
     """The commit the tag names, never the annotated tag object: BuildKit's --checksum wants it."""
-    git_object = repo_reader.json(f"git/ref/tags/{tag}")["object"]
-    while git_object["type"] == "tag":
-        git_object = repo_reader.json(f"git/tags/{git_object['sha']}")["object"]
-    if git_object["type"] != "commit":
-        raise BumpError(f"tag {tag} points at a {git_object['type']}, not a commit")
-    return str(git_object["sha"])
+    git_object = repo_reader.read_tag_target(tag)
+    while git_object.kind == GitObjectKind.TAG:
+        git_object = repo_reader.read_annotated_tag_target(git_object.object_id)
+    if git_object.kind != GitObjectKind.COMMIT:
+        raise BumpError(f"tag {tag} points at a {git_object.kind}, not a commit")
+    return git_object.object_id
 
 
 def _version(text: str) -> tuple[int, ...]:
