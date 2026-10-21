@@ -177,7 +177,7 @@ flowchart TB
 
   comp --> drivingAdp
   comp --> appl
-  comp -->|injects| drivenAdp
+  comp -->|injecte| drivenAdp
   drivingAdp -->|appelle| ports
   appl -.->|implémente| ports
   drivenAdp -.->|implémente| ports
