@@ -16,12 +16,6 @@ def _write(path: Path, document: object) -> Path:
     return path
 
 
-def _vex_claiming(tmp_path: Path, cve: str) -> Path:
-    claim = {"vulnerability": {"name": cve}, "status": "not_affected"}
-    statement = {**claim, "justification": "vulnerable_code_not_present"}
-    return _write(tmp_path / "vex.openvex.json", {"statements": [statement]})
-
-
 def test_image_claims_locates_the_problems_at_the_vex_relative_to_the_repository(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -43,16 +37,21 @@ def test_image_claims_locates_the_problems_at_the_vex_relative_to_the_repository
 def test_stale_claims_runs_the_grype_found_on_the_path_of_its_environment(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    # The stand-in reports nothing, so every claim of the VEX is stale.
     grype = tmp_path / "grype"
     grype.write_text("#!/bin/sh\necho '{\"matches\": []}'\n")
     grype.chmod(0o755)
-    _write(tmp_path / "sbom.syft.json", {"artifacts": []})
-    _vex_claiming(tmp_path, "CVE-A")
-    argv = ["stale-claims", "--sbom", "sbom.syft.json", "--vex", "vex.openvex.json"]
+    sbom = _write(tmp_path / "sbom.syft.json", {"artifacts": []})
+    argv = ["stale-claims", "--sbom", str(sbom), "--vex", "security/amule.vex.openvex.json"]
 
-    assert main(argv, {"PATH": str(tmp_path)}, tmp_path) == 1
+    assert main(argv, {"PATH": str(tmp_path)}, _REPO_ROOT) == 1
 
-    assert "::error::CVE-A: no longer reported by Grype" in capsys.readouterr().out
+    lines = capsys.readouterr().out.splitlines()
+    assert lines
+    assert all(
+        line.endswith(": no longer reported by Grype (security/amule.vex.openvex.json)")
+        for line in lines
+    )
 
 
 def test_source_claims_runs_the_source_check(

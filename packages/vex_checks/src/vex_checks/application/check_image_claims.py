@@ -4,6 +4,7 @@ import dataclasses
 from collections.abc import Mapping
 from pathlib import PurePath
 
+from vex_checks.application.vex_location import vex_location
 from vex_checks.domain.descriptors import ImagePremise, Premise, is_image_premise
 from vex_checks.domain.image_premises import evaluate_image_premises
 from vex_checks.ports.driven.sarif_writer import SarifWriter
@@ -42,7 +43,7 @@ class CheckImageClaims(ImageClaimsChecker):
             for advisory_id, premise in self._premises.items()
             if advisory_id in claims and is_image_premise(premise)
         }
-        vex_relpath = _relpath(vex_path, self._repo_root)
+        vex_relpath = vex_location(vex_path, self._repo_root)
         unlocated = evaluate_image_premises(
             premises,
             self._sbom_reader.read_dpkg_packages(sbom_path),
@@ -54,8 +55,3 @@ class CheckImageClaims(ImageClaimsChecker):
         if sarif_path is not None:
             self._sarif_writer.write_violations(sarif_path, _RULE_ID, problems, vex_relpath)
         return ImageClaimsReport(problems=problems)
-
-
-def _relpath(path: PurePath, repo_root: PurePath) -> str:
-    """Relative to the repository's root, or as given outside it (CI passes one under /tmp)."""
-    return str(path.relative_to(repo_root)) if path.is_relative_to(repo_root) else str(path)

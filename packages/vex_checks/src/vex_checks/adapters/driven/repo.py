@@ -13,13 +13,6 @@ def repo_root() -> Path:
     return _ROOT
 
 
-def display_path(path: Path) -> str:
-    try:
-        return str(path.resolve().relative_to(_ROOT))
-    except ValueError:
-        return str(path)
-
-
 _UNSHIPPED_PACKAGES = {
     "vex_checks",
     "template_checks",
