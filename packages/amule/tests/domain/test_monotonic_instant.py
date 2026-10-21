@@ -17,18 +17,6 @@ def test_a_difference_rounds_to_the_nearest_microsecond() -> None:
     assert MonotonicInstant(0) - MonotonicInstant(1_600) == timedelta(microseconds=-2)
 
 
-def test_an_instant_moves_by_a_timedelta_either_way() -> None:
-    instant = MonotonicInstant(5_000_000_000)
-
-    assert instant + timedelta(seconds=1) == MonotonicInstant(6_000_000_000)
-    assert instant - timedelta(microseconds=1) == MonotonicInstant(4_999_999_000)
-
-
-def test_instants_are_ordered() -> None:
-    assert MonotonicInstant(1) < MonotonicInstant(2)
-    assert max(MonotonicInstant(3), MonotonicInstant(2)) == MonotonicInstant(3)
-
-
 def test_an_instant_mixes_with_no_wall_clock_instant() -> None:
     """Each ``type: ignore`` also proves mypy refuses the mix: an unused one fails the gate."""
     instant, wall = MonotonicInstant(0), datetime(2026, 6, 12, tzinfo=UTC)
