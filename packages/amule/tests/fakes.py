@@ -107,7 +107,8 @@ class FakeMonotonicClock(MonotonicClock):
 
     def sleep(self, duration: timedelta) -> None:
         self.sleeps.append(duration)
-        self.instant += duration
+        microseconds = duration // timedelta(microseconds=1)
+        self.instant = MonotonicInstant(self.instant.nanoseconds + microseconds * 1000)
         self.on_sleep()
 
 
