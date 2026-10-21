@@ -30,10 +30,10 @@ def _amule_account_missing(lookup: Callable[[str], object]) -> bool:
 def main(
     env: Mapping[str, str],
     *,
-    home_dir: Path,
-    config_dir: Path,
-    incoming_dir: Path,
-    temp_dir: Path,
+    home_directory: Path,
+    config_directory: Path,
+    incoming_directory: Path,
+    temporary_directory: Path,
     amule_conf_path: Path,
     port_sync_down_file: Path,
 ) -> None:
@@ -48,11 +48,21 @@ def main(
     if _amule_account_missing(grp.getgrnam):
         subprocess.run(["groupadd", "-o", "-g", str(pgid), "amule"], check=True)
     if _amule_account_missing(pwd.getpwnam):
-        useradd = ["useradd", "-o", "-u", str(puid), "-g", str(pgid), "-M", "-d", str(home_dir)]
+        useradd = [
+            "useradd",
+            "-o",
+            "-u",
+            str(puid),
+            "-g",
+            str(pgid),
+            "-M",
+            "-d",
+            str(home_directory),
+        ]
         subprocess.run([*useradd, "-s", "/usr/sbin/nologin", "amule"], check=True)
 
     # Not recursive: the mounts can hold hundreds of gigabytes of part files the operator owns.
-    owned_directories = [home_dir, config_dir, incoming_dir, temp_dir]
+    owned_directories = [home_directory, config_directory, incoming_directory, temporary_directory]
     for directory in owned_directories:
         os.makedirs(directory, exist_ok=True)
     for directory in owned_directories:
@@ -75,14 +85,14 @@ def main(
     subprocess.run(
         [
             "amuleapi",
-            f"--config-dir={config_dir}",
+            f"--config-dir={config_directory}",
             f"--set-admin-pass={boot_settings.api_password}",
         ],
         user=puid,
         group=pgid,
         # Empty, not omitted: an omitted list keeps root's supplementary groups, group 0 included.
         extra_groups=[],
-        env={**env, "HOME": str(home_dir)},
+        env={**env, "HOME": str(home_directory)},
         check=True,
     )
 

@@ -10,11 +10,11 @@ from p2pwatch_amule.adapters.driving import boot, port_sync
 from p2pwatch_amule.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from p2pwatch_amule.domain.conf import INCOMING_DIR, TEMP_DIR
 
-_HOME_DIR = Path("/home/amule")
-_CONFIG_DIR = _HOME_DIR / ".aMule"
-_AMULE_CONF_PATH = _CONFIG_DIR / "amule.conf"
+_HOME_DIRECTORY = Path("/home/amule")
+_CONFIG_DIRECTORY = _HOME_DIRECTORY / ".aMule"
+_AMULE_CONF_PATH = _CONFIG_DIRECTORY / "amule.conf"
 _PORT_SYNC_DOWN_FILE = Path("/etc/services.d/port-sync/down")
-_AMULED_SERVICE_DIR = Path("/etc/services.d/amuled")
+_AMULED_SERVICE_DIRECTORY = Path("/etc/services.d/amuled")
 
 
 def main(argv: Sequence[str], env: Mapping[str, str]) -> int:
@@ -22,16 +22,18 @@ def main(argv: Sequence[str], env: Mapping[str, str]) -> int:
     command_line = ArgparseCommandLine(
         boot=lambda: boot.main(
             env,
-            home_dir=_HOME_DIR,
-            config_dir=_CONFIG_DIR,
+            home_directory=_HOME_DIRECTORY,
+            config_directory=_CONFIG_DIRECTORY,
             # The mount points are the directories reconcile_conf writes into amule.conf.
-            incoming_dir=Path(INCOMING_DIR),
-            temp_dir=Path(TEMP_DIR),
+            incoming_directory=Path(INCOMING_DIR),
+            temporary_directory=Path(TEMP_DIR),
             amule_conf_path=_AMULE_CONF_PATH,
             port_sync_down_file=_PORT_SYNC_DOWN_FILE,
         ),
         sync_listen_port=lambda: port_sync.main(
-            env, amule_conf_path=_AMULE_CONF_PATH, amuled_service_dir=_AMULED_SERVICE_DIR
+            env,
+            amule_conf_path=_AMULE_CONF_PATH,
+            amuled_service_directory=_AMULED_SERVICE_DIRECTORY,
         ),
         root_logger=logging.getLogger(),
     )

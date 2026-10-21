@@ -14,9 +14,9 @@ from p2pwatch_amule.adapters.driving import port_sync
 from p2pwatch_amule.domain.conf import tcp_listen_port, with_listen_port
 from p2pwatch_amule.domain.settings import PortSyncSettings
 
-AMULED_SERVICE_DIR = "/run/service/amuled"
-DOWN = ["s6-svc", "-wD", "-T", "60000", "-d", AMULED_SERVICE_DIR]
-UP = ["s6-svc", "-u", AMULED_SERVICE_DIR]
+AMULED_SERVICE_DIRECTORY = "/run/service/amuled"
+DOWN = ["s6-svc", "-wD", "-T", "60000", "-d", AMULED_SERVICE_DIRECTORY]
+UP = ["s6-svc", "-u", AMULED_SERVICE_DIRECTORY]
 SETTINGS = PortSyncSettings(
     gluetun_control_url="http://localhost:8000", poll_seconds=60, restart_min_seconds=300
 )
@@ -44,12 +44,14 @@ class Node:
             latest_restart_monotonic,
             now_monotonic,
             amule_conf_path=self.conf,
-            amuled_service_dir=Path(AMULED_SERVICE_DIR),
+            amuled_service_directory=Path(AMULED_SERVICE_DIRECTORY),
         )
 
     def main(self, env: dict[str, str] | None = None) -> None:
         port_sync.main(
-            env or {}, amule_conf_path=self.conf, amuled_service_dir=Path(AMULED_SERVICE_DIR)
+            env or {},
+            amule_conf_path=self.conf,
+            amuled_service_directory=Path(AMULED_SERVICE_DIRECTORY),
         )
 
     def _forwarded_port(self, url: str) -> int | None:

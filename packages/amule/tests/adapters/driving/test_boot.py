@@ -50,10 +50,10 @@ class Boot:
     def main(self) -> None:
         entry.main(
             self.env,
-            home_dir=self.home,
-            config_dir=self.config,
-            incoming_dir=self.incoming,
-            temp_dir=self.temp,
+            home_directory=self.home,
+            config_directory=self.config,
+            incoming_directory=self.incoming,
+            temporary_directory=self.temp,
             amule_conf_path=self.conf,
             port_sync_down_file=self.port_sync_down,
         )
