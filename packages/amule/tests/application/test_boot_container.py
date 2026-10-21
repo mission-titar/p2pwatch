@@ -27,47 +27,43 @@ ENV = {
 
 
 class Booter:
-    """A BootContainer over the package's fakes."""
+    """A BootContainer over the package's fakes, each recording into one action list."""
 
     def __init__(self) -> None:
-        self.account_manager = FakeAccountManager()
-        self.amuled_directory_preparer = FakeAmuledDirectoryPreparer()
-        self.amule_conf = FakeAmuleConf()
-        self.admin_password_setter = FakeAdminPasswordSetter()
-        self.service_supervisor = FakeServiceSupervisor()
+        self.actions: list[str] = []
+        self.amule_conf = FakeAmuleConf(self.actions)
         self.container_booter = BootContainer(
-            account_manager=self.account_manager,
-            amuled_directory_preparer=self.amuled_directory_preparer,
+            account_manager=FakeAccountManager(self.actions),
+            amuled_directory_preparer=FakeAmuledDirectoryPreparer(self.actions),
             amule_conf_reader=self.amule_conf,
             amule_conf_writer=self.amule_conf,
-            admin_password_setter=self.admin_password_setter,
-            service_supervisor=self.service_supervisor,
+            admin_password_setter=FakeAdminPasswordSetter(self.actions),
+            service_supervisor=FakeServiceSupervisor(self.actions),
         )
 
 
-def test_the_account_takes_puid_and_pgid() -> None:
+def test_each_step_runs_as_puid_and_pgid_in_order_port_sync_last() -> None:
     booter = Booter()
 
     booter.container_booter.boot_container(ENV)
 
-    assert booter.account_manager.accounts == [(1000, 1001)]
+    # The password follows the directories: amuleapi writes under .aMule as PUID:PGID.
+    assert booter.actions == [
+        "account 1000:1001",
+        "directories 1000:1001",
+        "read amule.conf",
+        "write amule.conf as 1000:1001",
+        "admin password s3cret as 1000:1001",
+        "disable port-sync",
+    ]
 
 
-def test_the_amuled_directories_are_owned_by_puid_and_pgid() -> None:
-    booter = Booter()
-
-    booter.container_booter.boot_container(ENV)
-
-    assert booter.amuled_directory_preparer.owners == [(1000, 1001)]
-
-
-def test_first_boot_writes_the_minimal_conf_owned_by_puid_and_pgid() -> None:
+def test_first_boot_writes_the_minimal_conf() -> None:
     booter = Booter()
 
     booter.container_booter.boot_container(ENV)
 
     assert booter.amule_conf.conf == reconcile_conf(None, DIGEST)
-    assert booter.amule_conf.owners == [(1000, 1001)]
 
 
 def test_an_existing_conf_is_reconciled_not_replaced() -> None:
@@ -81,12 +77,12 @@ def test_an_existing_conf_is_reconciled_not_replaced() -> None:
 
 
 @pytest.mark.parametrize("api_password", ["s3cret", "mot de passé"])
-def test_the_admin_password_is_the_one_given_set_as_puid_and_pgid(api_password: str) -> None:
+def test_the_admin_password_is_the_one_given(api_password: str) -> None:
     booter = Booter()
 
     booter.container_booter.boot_container({**ENV, "AMULE_API_PASSWORD": api_password})
 
-    assert booter.admin_password_setter.passwords == [(api_password, 1000, 1001)]
+    assert f"admin password {api_password} as 1000:1001" in booter.actions
 
 
 @pytest.mark.parametrize(
@@ -108,11 +104,7 @@ def test_a_refused_variable_aborts_the_boot_before_any_change(
     with pytest.raises(SettingsError, match=f"^{re.escape(message)}"):
         booter.container_booter.boot_container({**ENV, **variables})
 
-    assert booter.account_manager.accounts == []
-    assert booter.amuled_directory_preparer.owners == []
-    assert booter.amule_conf.owners == []
-    assert booter.admin_password_setter.passwords == []
-    assert booter.service_supervisor.actions == []
+    assert booter.actions == []
 
 
 def test_port_sync_off_leaves_its_other_variables_unread() -> None:
@@ -121,7 +113,7 @@ def test_port_sync_off_leaves_its_other_variables_unread() -> None:
 
     booter.container_booter.boot_container(env)
 
-    assert booter.account_manager.accounts == [(1000, 1001)]
+    assert booter.actions[-1] == "disable port-sync"
 
 
 @pytest.mark.parametrize("port_sync", ["off", "", None])
@@ -131,7 +123,7 @@ def test_port_sync_off_or_unset_is_disabled(port_sync: str | None) -> None:
 
     booter.container_booter.boot_container(env)
 
-    assert booter.service_supervisor.actions == ["disable port-sync"]
+    assert booter.actions[-1] == "disable port-sync"
 
 
 @pytest.mark.parametrize("port_sync", ["yes", "On"])
@@ -140,4 +132,4 @@ def test_port_sync_on_is_enabled(port_sync: str) -> None:
 
     booter.container_booter.boot_container({**ENV, "PORT_SYNC": port_sync})
 
-    assert booter.service_supervisor.actions == ["enable port-sync"]
+    assert booter.actions[-1] == "enable port-sync"

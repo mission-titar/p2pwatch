@@ -6,16 +6,7 @@ from pathlib import Path
 import pytest
 
 from p2pwatch_amule.adapters.driven.posix_amule_conf import PosixAmuleConf
-
-
-class FakeOwnership:
-    """Records each chown with the text the file held: the gate cannot chown to another uid."""
-
-    def __init__(self) -> None:
-        self.chowned_files: list[tuple[str, int, int]] = []
-
-    def change_owner(self, path: Path, uid: int, gid: int) -> None:
-        self.chowned_files.append((path.read_text(), uid, gid))
+from tests.fakes import FakeOwnership
 
 
 def _amule_conf(amule_conf_path: Path, ownership: FakeOwnership) -> PosixAmuleConf:
@@ -45,7 +36,7 @@ def test_the_written_conf_is_owned_and_private(tmp_path: Path) -> None:
     _amule_conf(amule_conf_path, ownership).write_amule_conf("[eMule]\nMaxUpload=7\n", 1000, 1001)
 
     assert amule_conf_path.read_text() == "[eMule]\nMaxUpload=7\n"
-    assert ownership.chowned_files == [("[eMule]\nMaxUpload=7\n", 1000, 1001)]
+    assert ownership.chowns == [(tmp_path / "amule.conf.tmp", 1000, 1001)]
     assert stat.S_IMODE(amule_conf_path.stat().st_mode) == 0o600
     assert list(tmp_path.iterdir()) == [amule_conf_path]
 
@@ -71,22 +62,14 @@ def test_a_leftover_temporary_file_lends_the_conf_none_of_its_mode(tmp_path: Pat
     assert stat.S_IMODE(amule_conf_path.stat().st_mode) == 0o600
 
 
-class _RefusedOwnership:
-    """A chown the system refuses."""
-
-    def change_owner(self, path: Path, uid: int, gid: int) -> None:
-        raise PermissionError(f"chown {path}")
-
-
 def test_a_failed_write_leaves_the_previous_conf_and_no_temporary_file(tmp_path: Path) -> None:
     amule_conf_path = tmp_path / "amule.conf"
     amule_conf_path.write_text("[eMule]\nMaxUpload=42\n")
-    amule_conf = PosixAmuleConf(
-        amule_conf_path=amule_conf_path, change_owner=_RefusedOwnership().change_owner
-    )
+    ownership = FakeOwnership()
+    ownership.error = PermissionError("chown refused")
 
     with pytest.raises(PermissionError):
-        amule_conf.write_amule_conf("[eMule]\n", 1000, 1001)
+        _amule_conf(amule_conf_path, ownership).write_amule_conf("[eMule]\n", 1000, 1001)
 
     assert amule_conf_path.read_text() == "[eMule]\nMaxUpload=42\n"
     assert list(tmp_path.iterdir()) == [amule_conf_path]
