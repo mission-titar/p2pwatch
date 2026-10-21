@@ -1,12 +1,16 @@
-"""BootContainer: every variable refused first, then the account, then amuled's directories."""
+"""BootContainer: every variable refused first, then the account, amuled's directories, conf."""
 
+import hashlib
 import re
 
 import pytest
 
 from p2pwatch_amule.application.boot_container import BootContainer
+from p2pwatch_amule.domain.conf import reconcile_conf
 from p2pwatch_amule.domain.settings_error import SettingsError
-from tests.fakes import FakeAccountManager, FakeAmuledDirectoryPreparer
+from tests.fakes import FakeAccountManager, FakeAmuleConf, FakeAmuledDirectoryPreparer
+
+DIGEST = hashlib.md5(b"hunter2").hexdigest()
 
 ENV = {
     "PUID": "1000",
@@ -22,9 +26,12 @@ class Booter:
     def __init__(self) -> None:
         self.account_manager = FakeAccountManager()
         self.amuled_directory_preparer = FakeAmuledDirectoryPreparer()
+        self.amule_conf = FakeAmuleConf()
         self.container_booter = BootContainer(
             account_manager=self.account_manager,
             amuled_directory_preparer=self.amuled_directory_preparer,
+            amule_conf_reader=self.amule_conf,
+            amule_conf_writer=self.amule_conf,
         )
 
 
@@ -42,6 +49,25 @@ def test_the_amuled_directories_are_owned_by_puid_and_pgid() -> None:
     booter.container_booter.boot_container(ENV)
 
     assert booter.amuled_directory_preparer.owners == [(1000, 1001)]
+
+
+def test_first_boot_writes_the_minimal_conf_owned_by_puid_and_pgid() -> None:
+    booter = Booter()
+
+    booter.container_booter.boot_container(ENV)
+
+    assert booter.amule_conf.conf == reconcile_conf(None, DIGEST)
+    assert booter.amule_conf.owners == [(1000, 1001)]
+
+
+def test_an_existing_conf_is_reconciled_not_replaced() -> None:
+    booter = Booter()
+    existing_conf = "[eMule]\nMaxUpload=42\n\n[ExternalConnect]\nECPassword=dead\n"
+    booter.amule_conf.conf = existing_conf
+
+    booter.container_booter.boot_container(ENV)
+
+    assert booter.amule_conf.conf == reconcile_conf(existing_conf, DIGEST)
 
 
 @pytest.mark.parametrize(
@@ -65,6 +91,7 @@ def test_a_refused_variable_aborts_the_boot_before_any_change(
 
     assert booter.account_manager.accounts == []
     assert booter.amuled_directory_preparer.owners == []
+    assert booter.amule_conf.owners == []
 
 
 def test_port_sync_off_leaves_its_other_variables_unread() -> None:
