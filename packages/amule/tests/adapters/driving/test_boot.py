@@ -1,12 +1,10 @@
-"""boot main: its variables refused first, then user, mount points, amule.conf, admin pass."""
+"""boot main: the booter first, then mount points, amule.conf, admin pass, port-sync."""
 
-import grp
 import hashlib
 import os
-import pwd
-import re
 import stat
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +13,7 @@ import pytest
 from p2pwatch_amule.adapters.driving import boot as entry
 from p2pwatch_amule.domain.conf import reconcile_conf
 from p2pwatch_amule.domain.settings_error import SettingsError
+from p2pwatch_amule.ports.driving.container_booter import ContainerBooter
 
 DIGEST = hashlib.md5(b"hunter2").hexdigest()
 ENV = {
@@ -25,6 +24,19 @@ ENV = {
 }
 
 Call = tuple[list[str], dict[str, Any]]
+
+
+class FakeContainerBooter(ContainerBooter):
+    """Records each environment it boots in, or raises a set error."""
+
+    def __init__(self) -> None:
+        self.error: SettingsError | None = None
+        self.envs: list[Mapping[str, str]] = []
+
+    def boot_container(self, env: Mapping[str, str]) -> None:
+        self.envs.append(env)
+        if self.error is not None:
+            raise self.error
 
 
 class Boot:
@@ -39,17 +51,16 @@ class Boot:
         self.port_sync_down = tmp_path / "services.d/port-sync/down"
         self.port_sync_down.parent.mkdir(parents=True)
         self.env = dict(ENV)
-        self.amule_exists = False
+        self.container_booter = FakeContainerBooter()
         self.calls: list[Call] = []
         self.chowns: list[tuple[Path, int, int]] = []
-        monkeypatch.setattr(grp, "getgrnam", self._lookup)
-        monkeypatch.setattr(pwd, "getpwnam", self._lookup)
         monkeypatch.setattr(subprocess, "run", self._run)
         monkeypatch.setattr(os, "chown", self._chown)
 
     def main(self) -> None:
         entry.main(
             self.env,
+            container_booter=self.container_booter,
             home_directory=self.home,
             config_directory=self.config,
             incoming_directory=self.incoming,
@@ -57,12 +68,6 @@ class Boot:
             amule_conf_path=self.conf,
             port_sync_down_file=self.port_sync_down,
         )
-
-    def _lookup(self, name: str) -> object:
-        assert name == "amule"
-        if not self.amule_exists:
-            raise KeyError(name)
-        return object()
 
     def _run(self, argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
         self.calls.append((argv, kwargs))
@@ -88,21 +93,11 @@ def boot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Boot:
     return Boot(tmp_path, monkeypatch)
 
 
-def test_first_boot_creates_the_user_and_writes_the_minimal_conf(boot: Boot) -> None:
+def test_first_boot_boots_the_container_and_writes_the_minimal_conf(boot: Boot) -> None:
     boot.main()
-    useradd = ["useradd", "-o", "-u", "1000", "-g", "1001", "-M", "-d", str(boot.home)]
-    assert boot.calls == [
-        (["groupadd", "-o", "-g", "1001", "amule"], {"check": True}),
-        ([*useradd, "-s", "/usr/sbin/nologin", "amule"], {"check": True}),
-        boot.set_admin_pass(),
-    ]
-    assert boot.conf.read_text() == reconcile_conf(None, DIGEST)
-
-
-def test_existing_user_and_group_are_not_recreated(boot: Boot) -> None:
-    boot.amule_exists = True
-    boot.main()
+    assert boot.container_booter.envs == [boot.env]
     assert boot.calls == [boot.set_admin_pass()]
+    assert boot.conf.read_text() == reconcile_conf(None, DIGEST)
 
 
 def test_mount_points_are_created_and_owned_but_not_their_contents(boot: Boot) -> None:
@@ -132,32 +127,13 @@ def test_the_admin_password_is_the_one_set(boot: Boot) -> None:
     assert "--set-admin-pass=mot de passé" in boot.calls[-1][0]
 
 
-@pytest.mark.parametrize(
-    ("variables", "message"),
-    [
-        ({"PUID": ""}, "PUID is required"),
-        ({"PGID": "amule"}, "PGID must be a numeric id, got 'amule'"),
-        ({"AMULE_API_PASSWORD": "s3cret\n"}, "AMULE_API_PASSWORD must not contain a control"),
-        ({"PORT_SYNC": "maybe"}, "PORT_SYNC must be one of "),
-        ({"PORT_SYNC": "on", "PORT_SYNC_POLL_SECONDS": "0"}, "PORT_SYNC_POLL_SECONDS must be "),
-        ({"PORT_SYNC": "yes", "GLUETUN_CONTROL_URL": "gluetun"}, "GLUETUN_CONTROL_URL must be "),
-    ],
-)
-def test_a_refused_variable_aborts_the_boot_before_any_change(
-    boot: Boot, variables: dict[str, str], message: str
-) -> None:
-    boot.env.update(variables)
-    with pytest.raises(SettingsError, match=f"^{re.escape(message)}"):
+def test_a_refused_variable_aborts_the_boot_before_any_change(boot: Boot) -> None:
+    boot.container_booter.error = SettingsError("PUID is required")
+    with pytest.raises(SettingsError, match="^PUID is required$"):
         boot.main()
     assert boot.calls == []
     assert boot.chowns == []
     assert not boot.home.exists()
-
-
-def test_port_sync_off_leaves_its_other_variables_unread(boot: Boot) -> None:
-    boot.env.update({"PORT_SYNC": "off", "PORT_SYNC_POLL_SECONDS": "0"})
-    boot.main()
-    assert boot.calls[-1] == boot.set_admin_pass()
 
 
 @pytest.mark.parametrize("value", ["off", "", None])

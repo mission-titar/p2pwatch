@@ -1,35 +1,23 @@
 """Entry point of the boot step: run once by the entrypoint, as root.
 
-Before any change, refuses the first variable missing or invalid, port-sync's included.
+The booter first, which refuses the first variable missing or invalid before any change.
 """
 
-import grp
 import hashlib
 import os
-import pwd
 import subprocess
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from pathlib import Path
 
 from p2pwatch_amule.domain.conf import reconcile_conf
-from p2pwatch_amule.domain.settings import (
-    is_port_sync_enabled,
-    parse_boot_settings,
-    parse_port_sync_settings,
-)
-
-
-def _amule_account_missing(lookup: Callable[[str], object]) -> bool:
-    try:
-        lookup("amule")
-    except KeyError:
-        return True
-    return False
+from p2pwatch_amule.domain.settings import is_port_sync_enabled, parse_boot_settings
+from p2pwatch_amule.ports.driving.container_booter import ContainerBooter
 
 
 def main(
     env: Mapping[str, str],
     *,
+    container_booter: ContainerBooter,
     home_directory: Path,
     config_directory: Path,
     incoming_directory: Path,
@@ -37,29 +25,11 @@ def main(
     amule_conf_path: Path,
     port_sync_down_file: Path,
 ) -> None:
+    container_booter.boot_container(env)
+    # Already accepted by the booter.
     boot_settings = parse_boot_settings(env)
     puid, pgid = boot_settings.puid, boot_settings.pgid
     port_sync_enabled = is_port_sync_enabled(env)
-    if port_sync_enabled:
-        parse_port_sync_settings(env)
-
-    # -o tolerates a uid/gid a Debian system account already holds: PUID/PGID only have to match
-    # the host's ownership of the bind mounts.
-    if _amule_account_missing(grp.getgrnam):
-        subprocess.run(["groupadd", "-o", "-g", str(pgid), "amule"], check=True)
-    if _amule_account_missing(pwd.getpwnam):
-        useradd = [
-            "useradd",
-            "-o",
-            "-u",
-            str(puid),
-            "-g",
-            str(pgid),
-            "-M",
-            "-d",
-            str(home_directory),
-        ]
-        subprocess.run([*useradd, "-s", "/usr/sbin/nologin", "amule"], check=True)
 
     # Not recursive: the mounts can hold hundreds of gigabytes of part files the operator owns.
     owned_directories = [home_directory, config_directory, incoming_directory, temporary_directory]
