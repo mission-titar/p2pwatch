@@ -1,6 +1,10 @@
-"""The merge of several VEX documents' claims, each an ``advisory id -> justification`` mapping."""
+"""The merge of several VEX documents' claims, each an ``advisory id -> justification`` mapping,
+and the justification each backing implies."""
 
 from collections.abc import Iterable, Mapping
+
+IMAGE_PREMISE_JUSTIFICATION = "vulnerable_code_not_present"
+SOURCE_RULE_JUSTIFICATION = "vulnerable_code_not_in_execute_path"
 
 
 def merge_claims(claims_of_each_vex: Iterable[Mapping[str, str]]) -> dict[str, str]:

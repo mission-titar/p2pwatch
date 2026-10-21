@@ -140,10 +140,12 @@ class FakeStaleClaimsChecker(StaleClaimsChecker):
 
 
 class FakeClaimCoverageChecker(ClaimCoverageChecker):
-    """Answers the same problems to each check."""
+    """Counts the checks it is asked for, and answers the same problems to each."""
 
     def __init__(self, problems: Sequence[ClaimCoverageProblem] = ()) -> None:
         self._problems = tuple(problems)
+        self.check_count = 0
 
     def check_claim_coverage(self) -> ClaimCoverageReport:
+        self.check_count += 1
         return ClaimCoverageReport(problems=self._problems)

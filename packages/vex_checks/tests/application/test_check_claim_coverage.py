@@ -5,7 +5,7 @@ from pathlib import PurePath
 
 from tests.fakes import FakeSourceRuleReader, FakeVexReader
 from vex_checks.application.check_claim_coverage import CheckClaimCoverage
-from vex_checks.domain.descriptors import DpkgPackageAbsent, ModuleNotImported, Premise
+from vex_checks.domain.descriptors import DpkgPackageAbsent, ImagePremise
 from vex_checks.ports.driving.claim_coverage_checker import ClaimCoverageProblem
 
 CRAWLER_VEX = PurePath("/repo/security/crawler.vex.openvex.json")
@@ -16,7 +16,7 @@ NOT_IN_EXECUTE_PATH = "vulnerable_code_not_in_execute_path"
 
 def _checker(
     *,
-    premises: Mapping[str, Premise],
+    premises: Mapping[str, ImagePremise],
     claims: dict[str, str],
     source_rule_ids: set[str],
 ) -> CheckClaimCoverage:
@@ -62,17 +62,6 @@ def test_a_source_rule_without_a_claim_is_a_problem() -> None:
     assert checker.check_claim_coverage().problems == (
         ClaimCoverageProblem("CVE-A", "source rule has no claim"),
     )
-
-
-def test_the_registry_s_source_premises_back_nothing() -> None:
-    # The source rules back the source claims: a source premise left in the registry is not read.
-    checker = _checker(
-        premises={"CVE-A": ModuleNotImported("imaplib")},
-        claims={"CVE-B": NOT_IN_EXECUTE_PATH},
-        source_rule_ids={"CVE-B"},
-    )
-
-    assert checker.check_claim_coverage().problems == ()
 
 
 def test_a_justification_other_than_its_backing_s_is_a_problem() -> None:

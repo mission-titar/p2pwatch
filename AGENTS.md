@@ -185,7 +185,7 @@ a function does.
 | `persisted wait` | a wait that survives a restart: its start on the wall clock and its duration, clamped by `remaining_wait` when the node meets it again | a deadline persisted alone |
 | `own tests` | a module's own tests: the test files named after it, in the directory mirroring its own (`tests/a/test_b*.py` for `src/<pkg>/a/b.py`) | a test that runs the module in passing |
 | `claim` | one of our OpenVEX `not_affected` statements: an advisory id and its justification; `read_claims` returns a VEX file's justifications by advisory id | `statement` past `JsonVexReader` |
-| `premise` | the falsifiable fact a claim rests on, its descriptor in `PREMISES`: an image premise holds of an image's SBOM, a source premise of our code | the claim itself; a `Violation`, a premise contradicted |
+| `premise` | the falsifiable fact a claim rests on: an image premise holds of an image's SBOM, its descriptor in `PREMISES`; a source premise holds of our code, a source rule checks it | the claim itself; a `Violation`, a premise contradicted |
 | `source rule` | the ast-grep rule that checks one source premise, in `packages/vex_checks/ast-grep/rules/`, its id the advisory id of the claim it backs; `poe vex-source-claims` scans them | a rule of `ast-grep-rules/`, which checks a code pattern |
 | `ring` | one of a hexagon's concentric parts, read from the path: `domain`, `ports`, `application`, `adapters`, `composition` | `layer` |
 | `hexagon` | one application, its core and its adapters, which never imports another hexagon; `p2pwatch` is one | a package |

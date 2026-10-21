@@ -5,6 +5,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from vex_checks.domain.violations import Violation
+from vex_checks.ports.driving.claim_coverage_checker import ClaimCoverageChecker
 from vex_checks.ports.driving.image_claims_checker import ImageClaimsChecker
 from vex_checks.ports.driving.stale_claims_checker import StaleClaimsChecker
 
@@ -46,20 +47,20 @@ def _print_problems(problems: Sequence[Violation], sarif_output: Path | None) ->
 
 
 class ArgparseCommandLine:
-    """``image-claims`` and ``stale-claims`` over their checkers, ``claim-coverage`` over its
-    check. A relative path is taken under ``cwd``."""
+    """``image-claims``, ``stale-claims`` and ``claim-coverage`` over their checkers. A relative
+    path is taken under ``cwd``."""
 
     def __init__(
         self,
         *,
         image_claims_checker: ImageClaimsChecker,
         stale_claims_checker: StaleClaimsChecker,
-        check_claim_coverage: Callable[[], int],
+        claim_coverage_checker: ClaimCoverageChecker,
         cwd: Path,
     ) -> None:
         self._image_claims_checker = image_claims_checker
         self._stale_claims_checker = stale_claims_checker
-        self._check_claim_coverage = check_claim_coverage
+        self._claim_coverage_checker = claim_coverage_checker
         self._cwd = cwd
 
     def run(self, argv: Sequence[str]) -> int:
@@ -69,7 +70,7 @@ class ArgparseCommandLine:
         )
         subparsers = parser.add_subparsers(dest="command", required=True)
         image_claims = subparsers.add_parser(
-            "image-claims", help="check the image-family claims against the image's SBOM"
+            "image-claims", help="check the image claims against the image's SBOM"
         )
         _add_image_options(image_claims, self._under_cwd, self._resolved_under_cwd)
         stale_claims = subparsers.add_parser(
@@ -77,7 +78,8 @@ class ArgparseCommandLine:
         )
         _add_image_options(stale_claims, self._under_cwd, self._resolved_under_cwd)
         subparsers.add_parser(
-            "claim-coverage", help="check that every claim maps to one premise, and back"
+            "claim-coverage",
+            help="check that every claim maps to one image premise or source rule, and back",
         )
         args = parser.parse_args(argv)
         if args.command == "image-claims":
@@ -93,6 +95,12 @@ class ArgparseCommandLine:
     def _check_stale_claims(self, sbom: Path, vex: Path, sarif_output: Path | None) -> int:
         report = self._stale_claims_checker.check_stale_claims(sbom, vex, sarif_output)
         return _print_problems(report.problems, sarif_output)
+
+    def _check_claim_coverage(self) -> int:
+        report = self._claim_coverage_checker.check_claim_coverage()
+        for problem in report.problems:
+            print(f"::error::{problem.advisory_id}: {problem.message}")
+        return 1 if report.problems else 0
 
     def _under_cwd(self, path: str) -> Path:
         """``path`` under ``cwd``, or as it is when absolute."""

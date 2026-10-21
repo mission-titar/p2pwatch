@@ -9,8 +9,7 @@ from vex_checks.domain.descriptors import (
     DeclaredMinVersion,
     DpkgMinVersion,
     DpkgPackageAbsent,
-    ModuleNotImported,
-    Premise,
+    ImagePremise,
 )
 from vex_checks.domain.registry import PREMISES
 from vex_checks.domain.sbom_components import DeclaredComponent, DpkgPackage
@@ -27,7 +26,7 @@ NGHTTP2_PRESENT = Violation(
 
 def _checker(
     *,
-    premises: Mapping[str, Premise],
+    premises: Mapping[str, ImagePremise],
     claims: dict[str, str],
     sbom_reader: FakeSbomReader,
     sarif_writer: FakeSarifWriter | None = None,
@@ -53,13 +52,9 @@ def test_a_claimed_image_premise_the_sbom_falsifies_is_a_problem_located_at_the_
     assert report.problems == (NGHTTP2_PRESENT,)
 
 
-def test_only_the_image_premises_the_vex_claims_are_evaluated() -> None:
-    # A source premise is scoped out, an image premise nothing claims is skipped.
+def test_an_image_premise_the_vex_does_not_claim_is_not_evaluated() -> None:
     checker = _checker(
-        premises={
-            "CVE-SOURCE": ModuleNotImported("imaplib"),
-            "CVE-UNCLAIMED": DpkgMinVersion("curl", "99.0"),
-        },
+        premises={"CVE-UNCLAIMED": DpkgMinVersion("curl", "99.0")},
         claims={"CVE-SOURCE": "vulnerable_code_not_in_execute_path"},
         sbom_reader=FakeSbomReader(dpkg_packages=[DpkgPackage("curl", "8.14.1-2")]),
     )
