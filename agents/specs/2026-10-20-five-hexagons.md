@@ -269,7 +269,8 @@ Each changes in the block that makes it false.
   follow their new paths (3b 48, 56); the glossary gains `claim`, `premise` and `source rule` (3c 12, 30), and
   Naming the `<Thing>Report` response model with its `problems` (3c 20).
 - `docs/contributing/architecture.md`: section 4 describes the six hexagons and their rings (3c 90); sections 9 and
-  12 follow port-sync's and the boot's new paths (3b 58).
+  12 follow port-sync's new paths (3b 58), section 12 the boot's (3b 48) (Corrected: section 12's boot part moved
+  to block 48).
 - `docs/contributing/amule-bump.md` follows `application/body.py` (3a 20).
 - `SECURITY.md`: `vex_checks` has three subcommands, and the source claims are ast-grep rules (3c 32).
 - The strings that stay: the subcommands `boot` and `port-sync` keep their names, so `entrypoint.sh` and
@@ -318,12 +319,12 @@ this hexagon's own copy of `MonotonicInstant`.
 | 42 | `feat/boot-mount-points` | `AmuledDirectoryPreparer`, `PosixAmuledDirectoryPreparer` (Corrected: was `MountPointPreparer`, which also prepares the home and `.aMule`) | 200, 10 |
 | 44 | `feat/boot-amule-conf` | `AmuleConfReader`, `AmuleConfWriter`, `PosixAmuleConf` | 290, 12 |
 | 46 | `feat/boot-admin-password` | `AdminPasswordSetter`, `AmuleApiAdminPasswordSetter` | 195, 10 |
-| 48 | `feat/boot-down-file` | `ServiceSupervisor`'s `down` file, `S6ServiceSupervisor`; `boot.py` and `test_boot.py` gone; `AGENTS.md`'s boot row | 265, 12 |
+| 48 | `feat/boot-down-file` | `ServiceSupervisor`'s `down` file, `S6ServiceSupervisor`; `boot.py` and `test_boot.py` gone; `AGENTS.md`'s boot row; `architecture.md` section 12's boot path (Corrected: moved from block 58) | 265, 12 |
 | 50 | `refactor/port-sync-monotonic-clock` | `MonotonicInstant`, `MonotonicClock`, `SystemMonotonicClock`; the `TID251` exemption gone, `time.sleep` banned, `AGENTS.md`'s rule | 285, 12 |
 | 52 | `refactor/port-sync-decision-and-logger` | port-sync's decision into the domain; `Logger`, `StdlibLogger` under the two documented names | 340, 10 |
 | 54 | `refactor/port-sync-gluetun-reader` | `ForwardedPortReader`, `GluetunForwardedPortReader` on a loopback server; `gluetun.py` gone | 385, 10 |
 | 56 | `feat/port-sync-loop` | `RunPortSyncLoop` behind `PortSyncLoopRunner`; the supervisor's stop and start; `port_sync.py` gone; `AGENTS.md`'s port-sync row (fits only if git pairs `test_port_sync.py`'s move) | 435, 12 |
-| 58 | `refactor/port-sync-runner-wired` | the composition and `port_sync_loop_runner` (D4); `architecture.md` sections 9 and 12 | 100, 8 |
+| 58 | `refactor/port-sync-runner-wired` | the composition and `port_sync_loop_runner` (D4); `architecture.md` sections 9 and 12, port-sync's paths (Corrected: section 12's boot part moved to block 48) | 100, 8 |
 | 59 | `test/port-sync-smoke` | a compose smoke case: a stand-in for gluetun's `/v1/portforward` (a static file served by `python -m http.server`), port-sync rewrites `Port` and `UDPPort` and restarts amuled | 150, 4 |
 | 60 | `docs/five-hexagons-3b-wrap` | closing block: the holistic findings, backlog, handoff | |
 
