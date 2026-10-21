@@ -49,18 +49,18 @@ class RunPortSyncLoop:
         self, latest_restart: MonotonicInstant | None, now: MonotonicInstant
     ) -> MonotonicInstant | None:
         """Run one round; return amuled's latest restart, `now` if this round restarted it."""
-        forwarded = self._forwarded_port_reader.read_forwarded_port()
-        if forwarded is None:
+        forwarded_port = self._forwarded_port_reader.read_forwarded_port()
+        if forwarded_port is None:
             return latest_restart
         try:
-            configured_port = tcp_listen_port(self._read_existing_amule_conf())
+            listen_port = tcp_listen_port(self._read_existing_amule_conf())
         except (OSError, ValueError) as error:
             # The operator's file: a crash would only make s6 respawn port-sync every second.
             self._logger.error("amule.conf's port is unreadable, amuled left as is (%s)", error)
             return latest_restart
         if not is_amuled_restart_due(
-            forwarded_port=forwarded,
-            configured_port=configured_port,
+            forwarded_port=forwarded_port,
+            listen_port=listen_port,
             latest_restart=latest_restart,
             now=now,
             restart_min_interval=self._port_sync_settings.restart_min_interval,
@@ -69,18 +69,18 @@ class RunPortSyncLoop:
 
         self._logger.info(
             "gluetun forwards %d, amuled listens on %d: restarting amuled",
-            forwarded,
-            configured_port,
+            forwarded_port,
+            listen_port,
         )
         try:
             # amuled flushes its config when it exits: a write while it runs could be overwritten.
             if self._service_supervisor.stop_amuled():
                 self._amule_conf_writer.write_amule_conf(
-                    with_listen_port(self._read_existing_amule_conf(), forwarded),
+                    with_listen_port(self._read_existing_amule_conf(), forwarded_port),
                     self._port_sync_settings.puid,
                     self._port_sync_settings.pgid,
                 )
-                self._logger.info("amule.conf now sets Port and UDPPort to %d", forwarded)
+                self._logger.info("amule.conf now sets Port and UDPPort to %d", forwarded_port)
         except OSError as error:
             self._logger.error("amule.conf was not written (%s)", error)
         finally:
