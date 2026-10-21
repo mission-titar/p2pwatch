@@ -762,10 +762,16 @@ depends_on = []
 path = "template_checks.__main__"
 layer = "composition"
 depends_on = [
+  "template_checks.adapters.driven.filesystem_template_reader",
   "template_checks.adapters.driving.check_templates",
   "template_checks.adapters.driving.cli",
   "template_checks.adapters.driving.read_names",
 ]
+
+[[modules]]
+path = "template_checks.adapters.driven.filesystem_template_reader"
+layer = "adapters"
+depends_on = ["template_checks.ports.driven.template_reader"]
 
 [[modules]]
 path = "template_checks.adapters.driving.check_templates"
@@ -780,6 +786,14 @@ depends_on = []
 [[modules]]
 path = "template_checks.adapters.driving.read_names"
 layer = "adapters"
+depends_on = [
+  # The old entry function reads the templates through their driven port: block 62 removes it.
+  { path = "template_checks.ports.driven.template_reader", deprecated = true },
+]
+
+[[modules]]
+path = "template_checks.ports.driven.template_reader"
+layer = "ports"
 depends_on = []
 
 [[modules]]
