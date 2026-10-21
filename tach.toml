@@ -769,7 +769,6 @@ depends_on = [
   "vex_checks.adapters.driven.repo",
   "vex_checks.adapters.driven.syft_sbom_reader",
   "vex_checks.adapters.driving.check_claim_coverage",
-  "vex_checks.adapters.driving.check_source_claims",
   "vex_checks.adapters.driving.cli",
   "vex_checks.application",
   "vex_checks.domain",
@@ -796,15 +795,6 @@ layer = "adapters"
 depends_on = []
 
 [[modules]]
-path = "vex_checks.adapters.driven.source_scan"
-layer = "adapters"
-depends_on = [
-  "vex_checks.domain",
-  # The scanner reads the repo's paths through another adapter: lot 3 gives them a driven port.
-  { path = "vex_checks.adapters.driven.repo", deprecated = true },
-]
-
-[[modules]]
 path = "vex_checks.adapters.driven.syft_sbom_reader"
 layer = "adapters"
 depends_on = ["vex_checks.domain", "vex_checks.ports.driven.sbom_reader"]
@@ -818,16 +808,6 @@ depends_on = [
   { path = "vex_checks.adapters.driven.repo", deprecated = true },
   # The check reads the claims through their driven port: block 42 removes it.
   { path = "vex_checks.ports.driven.vex_reader", deprecated = true },
-]
-
-[[modules]]
-path = "vex_checks.adapters.driving.check_source_claims"
-layer = "adapters"
-depends_on = [
-  "vex_checks.domain",
-  # The check calls its I/O adapters directly: lot 3 gives them driven ports.
-  { path = "vex_checks.adapters.driven.repo", deprecated = true },
-  { path = "vex_checks.adapters.driven.source_scan", deprecated = true },
 ]
 
 [[modules]]

@@ -124,14 +124,15 @@ signed.
 ### Keeping the VEX claims honest: the four consistency checks
 
 A `not_affected` claim is a promise about how the image is built and run. Over time source
-and base images drift, so four checks (`python -m vex_checks`, one subcommand each) assert
-those promises still hold. They run as a non-blocking PR job (only `validate / gate` is
-required to merge) and, for the three that catch a genuinely false claim, as hard-fail steps
-in the release before anything is signed or attested:
+and base images drift, so four checks assert those promises still hold: the source claims as
+ast-grep rules, the other three as subcommands of `python -m vex_checks`. They run as a
+non-blocking PR job (only `validate / gate` is required to merge) and, for the three that catch
+a genuinely false claim, as hard-fail steps in the release before anything is signed or attested:
 
-- **`source-claims`** (PR job, release hard-fail): fails if our own source starts
-  reaching code a `vulnerable_code_not_in_execute_path` claim says we never execute, for
-  example importing `imaplib` or `poplib`.
+- **The source claims** (`poe vex-source-claims`; PR job, release hard-fail): the scan fails if our
+  own source starts reaching code a `vulnerable_code_not_in_execute_path` claim says we never
+  execute, for example importing `imaplib` or `poplib`. Each claim is one ast-grep rule in
+  `packages/vex_checks/ast-grep/rules/`, named after the advisory it backs, with its tests.
 - **`claim-coverage`** (PR job, release hard-fail): reads every VEX file, and fails if a
   VEX `not_affected` claim has no premise in the registry, a premise has no claim, or a
   justification does not match its premise family. It keeps the VEX and the premise registry in

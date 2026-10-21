@@ -46,21 +46,19 @@ def _print_problems(problems: Sequence[Violation], sarif_output: Path | None) ->
 
 
 class ArgparseCommandLine:
-    """``image-claims`` and ``stale-claims`` over their checkers; ``source-claims``,
-    ``claim-coverage``: one check each. A relative path is taken under ``cwd``."""
+    """``image-claims`` and ``stale-claims`` over their checkers, ``claim-coverage`` over its
+    check. A relative path is taken under ``cwd``."""
 
     def __init__(
         self,
         *,
         image_claims_checker: ImageClaimsChecker,
         stale_claims_checker: StaleClaimsChecker,
-        check_source_claims: Callable[[], int],
         check_claim_coverage: Callable[[], int],
         cwd: Path,
     ) -> None:
         self._image_claims_checker = image_claims_checker
         self._stale_claims_checker = stale_claims_checker
-        self._check_source_claims = check_source_claims
         self._check_claim_coverage = check_claim_coverage
         self._cwd = cwd
 
@@ -79,9 +77,6 @@ class ArgparseCommandLine:
         )
         _add_image_options(stale_claims, self._under_cwd, self._resolved_under_cwd)
         subparsers.add_parser(
-            "source-claims", help="check the source-family claims against our tree"
-        )
-        subparsers.add_parser(
             "claim-coverage", help="check that every claim maps to one premise, and back"
         )
         args = parser.parse_args(argv)
@@ -89,8 +84,6 @@ class ArgparseCommandLine:
             return self._check_image_claims(args.sbom, args.vex, _sarif_output(image_claims, args))
         if args.command == "stale-claims":
             return self._check_stale_claims(args.sbom, args.vex, _sarif_output(stale_claims, args))
-        if args.command == "source-claims":
-            return self._check_source_claims()
         return self._check_claim_coverage()
 
     def _check_image_claims(self, sbom: Path, vex: Path, sarif_output: Path | None) -> int:

@@ -8,17 +8,14 @@ from vex_checks.domain.descriptors import (
     ImagePremise,
     ModuleNotImported,
     Premise,
-    ProgramNeverInvoked,
     SourcePremise,
     family,
     is_image_premise,
-    is_source_premise,
 )
 
 
 def test_source_descriptors_report_source_family() -> None:
-    for premise in (ModuleNotImported("tarfile"), ProgramNeverInvoked("ffmpeg")):
-        assert family(premise) == "source"
+    assert family(ModuleNotImported("tarfile")) == "source"
 
 
 def test_image_descriptors_report_image_family() -> None:
@@ -38,12 +35,7 @@ def test_justification_by_family_is_closed() -> None:
 
 
 def test_premise_union_covers_both_families() -> None:
-    assert set(get_args(Premise)) == set(get_args(SourcePremise)) | set(get_args(ImagePremise))
-
-
-def test_is_source_premise_matches_only_the_source_family() -> None:
-    assert is_source_premise(ModuleNotImported("tarfile")) is True
-    assert is_source_premise(DpkgPackageAbsent("nghttp2")) is False
+    assert set(get_args(Premise)) == {SourcePremise, *get_args(ImagePremise)}
 
 
 def test_is_image_premise_matches_only_the_image_family() -> None:

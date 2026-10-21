@@ -16,7 +16,6 @@ from vex_checks.domain.violations import Violation
 
 _CWD = Path("/work/repo")
 _IMAGE_COMMANDS = ["image-claims", "stale-claims"]
-_TREE_COMMANDS = ["source-claims", "claim-coverage"]
 _SARIF_OPTIONS = pytest.mark.parametrize(
     ("options", "sarif_output"),
     [
@@ -33,7 +32,7 @@ _PROBLEMS = (
 
 
 class _Checks:
-    """The two image checkers, answering the same problems, and the tree checks recording each
+    """The two image checkers, answering the same problems, and ``claim-coverage`` recording each
     call, answering a distinct exit code."""
 
     def __init__(self, problems: Sequence[Violation] = ()) -> None:
@@ -45,7 +44,6 @@ class _Checks:
         return ArgparseCommandLine(
             image_claims_checker=self.image_claims_checker,
             stale_claims_checker=self.stale_claims_checker,
-            check_source_claims=self._recorder("source-claims"),
             check_claim_coverage=self._recorder("claim-coverage"),
             cwd=_CWD,
         )
@@ -194,13 +192,23 @@ def test_an_image_check_requires_the_sbom_and_the_vex(
     assert checks.ran_none()
 
 
-@pytest.mark.parametrize("command", _TREE_COMMANDS)
-def test_a_tree_check_runs_alone_and_returns_its_exit_code(command: str) -> None:
+def test_claim_coverage_runs_alone_and_returns_its_exit_code() -> None:
     checks = _Checks()
 
-    assert checks.command_line().run([command]) == 3
+    assert checks.command_line().run(["claim-coverage"]) == 3
 
-    assert checks.calls == [command]
+    assert checks.calls == ["claim-coverage"]
+
+
+def test_source_claims_is_no_subcommand(capsys: pytest.CaptureFixture[str]) -> None:
+    checks = _Checks()
+
+    with pytest.raises(SystemExit) as exit_info:
+        checks.command_line().run(["source-claims"])
+
+    assert exit_info.value.code == 2
+    assert "invalid choice: 'source-claims'" in capsys.readouterr().err
+    assert checks.ran_none()
 
 
 def test_the_bare_invocation_is_refused_with_a_usage_line(
@@ -221,4 +229,4 @@ def test_the_help_lists_the_subcommands(capsys: pytest.CaptureFixture[str]) -> N
         _Checks().command_line().run(["--help"])
 
     assert exit_info.value.code == 0
-    assert "{image-claims,stale-claims,source-claims,claim-coverage}" in capsys.readouterr().out
+    assert "{image-claims,stale-claims,claim-coverage}" in capsys.readouterr().out

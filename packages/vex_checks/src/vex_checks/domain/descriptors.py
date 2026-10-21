@@ -17,11 +17,6 @@ class ModuleNotImported:
 
 
 @dataclass(frozen=True)
-class ProgramNeverInvoked:
-    program: str
-
-
-@dataclass(frozen=True)
 class DpkgPackageAbsent:
     package: str
 
@@ -38,7 +33,7 @@ class DeclaredMinVersion:
     minimum: str
 
 
-SourcePremise = ModuleNotImported | ProgramNeverInvoked
+SourcePremise = ModuleNotImported
 ImagePremise = DpkgPackageAbsent | DpkgMinVersion | DeclaredMinVersion
 Premise = SourcePremise | ImagePremise
 
@@ -52,16 +47,12 @@ JUSTIFICATION_BY_FAMILY: dict[Family, str] = {
 
 def family(premise: Premise) -> Family:
     match premise:
-        case ModuleNotImported() | ProgramNeverInvoked():
+        case ModuleNotImported():
             return "source"
         case DpkgPackageAbsent() | DpkgMinVersion() | DeclaredMinVersion():
             return "image"
         case _:  # pragma: no cover
             assert_never(premise)
-
-
-def is_source_premise(premise: Premise) -> TypeIs[SourcePremise]:
-    return family(premise) == "source"
 
 
 def is_image_premise(premise: Premise) -> TypeIs[ImagePremise]:
