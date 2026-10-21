@@ -980,6 +980,13 @@ async def test_node_page_shows_a_downloads_lifecycle() -> None:
     assert "None" not in text  # an unknown value shows blank
 
 
+@pytest.mark.asyncio
+async def test_node_page_shows_an_unrecorded_identity_blank() -> None:
+    text = await _node_page(replace(_NODE_STATE, node_id=None, created_at=None))
+    assert "<dd></dd>" in text
+    assert "None" not in text
+
+
 @pytest.mark.parametrize(
     "template",
     ["{{ missing }}", "{% for item in nav_items %}{{ item.missing }}{% endfor %}"],

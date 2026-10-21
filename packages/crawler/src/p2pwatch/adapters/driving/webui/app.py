@@ -588,18 +588,18 @@ def _client_lines(client_summaries: tuple[ClientSummary, ...]) -> tuple[ClientLi
     return tuple(lines)
 
 
-def _stored_instant(moment: datetime | None) -> str | None:
-    """An instant as local.db stores it, ``None`` kept."""
-    return None if moment is None else moment.isoformat(timespec="microseconds")
+def _stored_instant(moment: datetime | None) -> str:
+    """An instant as local.db stores it, blank when unknown."""
+    return "" if moment is None else moment.isoformat(timespec="microseconds")
 
 
-def _reason_text(reason: StrEnum | None) -> str | None:
-    return None if reason is None else reason.value
+def _reason_text(reason: StrEnum | None) -> str:
+    return "" if reason is None else reason.value
 
 
 def _node_state_display(node_state: NodeState) -> NodeStateDisplay:
     return NodeStateDisplay(
-        node_id=node_state.node_id,
+        node_id=node_state.node_id or "",
         created_at=_stored_instant(node_state.created_at),
         downloads=tuple(
             TrackedDownloadDisplay(

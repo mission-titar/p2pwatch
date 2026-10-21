@@ -33,10 +33,10 @@
         <td>{{ dl.target_id }}</td>
         <td>{{ dl.state }}</td>
         <td>{{ dl.queued_at }}</td>
-        <td>{{ dl.completed_at or "" }}</td>
-        <td>{{ dl.last_progress_at or "" }}</td>
-        <td>{{ dl.waiting_reason or "" }}</td>
-        <td>{{ dl.failure_reason or "" }}</td>
+        <td>{{ dl.completed_at }}</td>
+        <td>{{ dl.last_progress_at }}</td>
+        <td>{{ dl.waiting_reason }}</td>
+        <td>{{ dl.failure_reason }}</td>
       </tr>
       {% else %}
       <tr><td colspan="8">No downloads.</td></tr>
