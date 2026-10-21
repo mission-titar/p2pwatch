@@ -9,6 +9,9 @@ import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from p2pwatch_amule.adapters.driven.amule_api_admin_password_setter import (
+    AmuleApiAdminPasswordSetter,
+)
 from p2pwatch_amule.adapters.driven.posix_account_manager import PosixAccountManager
 from p2pwatch_amule.adapters.driven.posix_amule_conf import PosixAmuleConf
 from p2pwatch_amule.adapters.driven.posix_amuled_directory_preparer import (
@@ -48,13 +51,17 @@ def main(argv: Sequence[str], env: Mapping[str, str]) -> int:
         ),
         amule_conf_reader=amule_conf,
         amule_conf_writer=amule_conf,
+        admin_password_setter=AmuleApiAdminPasswordSetter(
+            config_directory=_CONFIG_DIRECTORY,
+            home_directory=_HOME_DIRECTORY,
+            env=env,
+            run_command=subprocess.run,
+        ),
     )
     command_line = ArgparseCommandLine(
         boot=lambda: boot.main(
             env,
             container_booter=container_booter,
-            home_directory=_HOME_DIRECTORY,
-            config_directory=_CONFIG_DIRECTORY,
             port_sync_down_file=_PORT_SYNC_DOWN_FILE,
         ),
         sync_listen_port=lambda: port_sync.main(

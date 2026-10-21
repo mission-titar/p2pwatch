@@ -1,4 +1,4 @@
-"""BootContainer: every variable refused first, then the account, amuled's directories, conf."""
+"""BootContainer: every variable refused first, then the account, directories, conf, password."""
 
 import hashlib
 import re
@@ -8,7 +8,12 @@ import pytest
 from p2pwatch_amule.application.boot_container import BootContainer
 from p2pwatch_amule.domain.conf import reconcile_conf
 from p2pwatch_amule.domain.settings_error import SettingsError
-from tests.fakes import FakeAccountManager, FakeAmuleConf, FakeAmuledDirectoryPreparer
+from tests.fakes import (
+    FakeAccountManager,
+    FakeAdminPasswordSetter,
+    FakeAmuleConf,
+    FakeAmuledDirectoryPreparer,
+)
 
 DIGEST = hashlib.md5(b"hunter2").hexdigest()
 
@@ -27,11 +32,13 @@ class Booter:
         self.account_manager = FakeAccountManager()
         self.amuled_directory_preparer = FakeAmuledDirectoryPreparer()
         self.amule_conf = FakeAmuleConf()
+        self.admin_password_setter = FakeAdminPasswordSetter()
         self.container_booter = BootContainer(
             account_manager=self.account_manager,
             amuled_directory_preparer=self.amuled_directory_preparer,
             amule_conf_reader=self.amule_conf,
             amule_conf_writer=self.amule_conf,
+            admin_password_setter=self.admin_password_setter,
         )
 
 
@@ -70,6 +77,15 @@ def test_an_existing_conf_is_reconciled_not_replaced() -> None:
     assert booter.amule_conf.conf == reconcile_conf(existing_conf, DIGEST)
 
 
+@pytest.mark.parametrize("api_password", ["s3cret", "mot de passé"])
+def test_the_admin_password_is_the_one_given_set_as_puid_and_pgid(api_password: str) -> None:
+    booter = Booter()
+
+    booter.container_booter.boot_container({**ENV, "AMULE_API_PASSWORD": api_password})
+
+    assert booter.admin_password_setter.passwords == [(api_password, 1000, 1001)]
+
+
 @pytest.mark.parametrize(
     ("variables", "message"),
     [
@@ -92,6 +108,7 @@ def test_a_refused_variable_aborts_the_boot_before_any_change(
     assert booter.account_manager.accounts == []
     assert booter.amuled_directory_preparer.owners == []
     assert booter.amule_conf.owners == []
+    assert booter.admin_password_setter.passwords == []
 
 
 def test_port_sync_off_leaves_its_other_variables_unread() -> None:

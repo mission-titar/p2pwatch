@@ -1,4 +1,4 @@
-"""Boots the aMule container: refuses its variables, then the account, directories and conf."""
+"""Boots the aMule container: refuses its variables, then account, directories, conf, password."""
 
 from collections.abc import Mapping
 
@@ -9,6 +9,7 @@ from p2pwatch_amule.domain.settings import (
     parse_port_sync_settings,
 )
 from p2pwatch_amule.ports.driven.account_manager import AccountManager
+from p2pwatch_amule.ports.driven.admin_password_setter import AdminPasswordSetter
 from p2pwatch_amule.ports.driven.amule_conf import AmuleConfReader, AmuleConfWriter
 from p2pwatch_amule.ports.driven.amuled_directory_preparer import AmuledDirectoryPreparer
 from p2pwatch_amule.ports.driving.container_booter import ContainerBooter
@@ -24,11 +25,13 @@ class BootContainer(ContainerBooter):
         amuled_directory_preparer: AmuledDirectoryPreparer,
         amule_conf_reader: AmuleConfReader,
         amule_conf_writer: AmuleConfWriter,
+        admin_password_setter: AdminPasswordSetter,
     ) -> None:
         self._account_manager = account_manager
         self._amuled_directory_preparer = amuled_directory_preparer
         self._amule_conf_reader = amule_conf_reader
         self._amule_conf_writer = amule_conf_writer
+        self._admin_password_setter = admin_password_setter
 
     def boot_container(self, env: Mapping[str, str]) -> None:
         boot_settings = parse_boot_settings(env)
@@ -43,3 +46,6 @@ class BootContainer(ContainerBooter):
             ec_password_digest(boot_settings.ec_password),
         )
         self._amule_conf_writer.write_amule_conf(conf, boot_settings.puid, boot_settings.pgid)
+        self._admin_password_setter.set_admin_password(
+            boot_settings.api_password, boot_settings.puid, boot_settings.pgid
+        )
