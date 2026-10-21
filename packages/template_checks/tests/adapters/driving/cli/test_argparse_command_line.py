@@ -105,7 +105,7 @@ def test_a_check_requires_the_templates_directory(
         _command_line(logic_free_checker, template_attribute_lister).run([command])
 
     assert exit_info.value.code == 2
-    assert "the following arguments are required: templates_dir" in capsys.readouterr().err
+    assert "the following arguments are required: templates_directory" in capsys.readouterr().err
     assert logic_free_checker.templates_directories == []
     assert template_attribute_lister.templates_directories == []
 
