@@ -6,14 +6,13 @@ Each round puts gluetun's forwarded port in amule.conf, restarting amuled throug
 import configparser
 import os
 import subprocess
-from collections.abc import Mapping
 from pathlib import Path
 
-from p2pwatch_amule.adapters.driven.gluetun import forwarded_port
 from p2pwatch_amule.domain.amuled_restart import is_amuled_restart_due
 from p2pwatch_amule.domain.conf import tcp_listen_port, with_listen_port
 from p2pwatch_amule.domain.monotonic_instant import MonotonicInstant
-from p2pwatch_amule.domain.settings import PortSyncSettings, parse_port_sync_settings
+from p2pwatch_amule.domain.settings import PortSyncSettings
+from p2pwatch_amule.ports.driven.forwarded_port_reader import ForwardedPortReader
 from p2pwatch_amule.ports.driven.logger import Logger
 from p2pwatch_amule.ports.driven.monotonic_clock import MonotonicClock
 
@@ -25,11 +24,11 @@ def sync_listen_port_once(
     *,
     amule_conf_path: Path,
     amuled_service_directory: Path,
+    forwarded_port_reader: ForwardedPortReader,
     logger: Logger,
-    gluetun_logger: Logger,
 ) -> MonotonicInstant | None:
     """Run one round; return amuled's latest restart, `now` if this round restarted it."""
-    forwarded = forwarded_port(port_sync_settings.gluetun_control_url, gluetun_logger)
+    forwarded = forwarded_port_reader.read_forwarded_port()
     if forwarded is None:
         return latest_restart
     try:
@@ -64,15 +63,14 @@ def sync_listen_port_once(
 
 
 def main(
-    env: Mapping[str, str],
+    port_sync_settings: PortSyncSettings,
     *,
     amule_conf_path: Path,
     amuled_service_directory: Path,
     monotonic_clock: MonotonicClock,
+    forwarded_port_reader: ForwardedPortReader,
     logger: Logger,
-    gluetun_logger: Logger,
 ) -> None:
-    port_sync_settings = parse_port_sync_settings(env)
     # A port-sync stopped between a -d and its -u left amuled down: bring it back first.
     _signal_amuled(amuled_service_directory, logger, "-u")
     latest_restart = None
@@ -83,8 +81,8 @@ def main(
             monotonic_clock.now(),
             amule_conf_path=amule_conf_path,
             amuled_service_directory=amuled_service_directory,
+            forwarded_port_reader=forwarded_port_reader,
             logger=logger,
-            gluetun_logger=gluetun_logger,
         )
         monotonic_clock.sleep(port_sync_settings.poll_interval)
 
