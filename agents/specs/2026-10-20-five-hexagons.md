@@ -6,7 +6,8 @@
   leftovers, `amule_bump` and `p2pwatch_amule`'s settings; 3b, the aMule container's boot and port-sync; 3c, the
   three checking tools, the rule and the documentation. Why: measured at 21 to 25 blocks, over the cap of 19
   (`.reviews/lot3-estimate.md`); the operator chose the cut, then cut 3a again once its splits had used the cap
-  (Corrected: two lots, 3a then 3b).
+  (Corrected: two lots, 3a then 3b). 3c, re-measured at 22 blocks after 3b, stays one lot: the operator allows it up
+  to 30 blocks (Corrected: was the cap of 19).
 - Origin: lot 3 of the umbrella spec `agents/specs/2026-10-18-hexagonal-architecture.md` (D18), whose decisions this
   one applies without restating them. It absorbs the backlog entry "The logic-free template guard on Jinja's syntax
   tree" (section 7 of `agents/specs/2026-10-15-gate-tooling.md`).
@@ -121,8 +122,9 @@ this spec: they apply a rule `AGENTS.md` already has, or a tool enforces them it
     justification `vulnerable_code_not_in_execute_path`. Why: the AST scanner is ours for no reason a tool lacks;
     the rules stay in the VEX package, apart from `code-pattern-check`, because they check a claim, not a code
     pattern (the operator's choice); their tests join the gate because the scanner's tests are in it today. The
-    `source-claims` subcommand, `CheckSourceClaims` and its port go with the scanner, and so does
-    `is_source_premise`, which only that check calls.
+    `source-claims` subcommand, `CheckSourceClaims` and its port go with the scanner; `is_source_premise` and the
+    descriptors' source family go once `claim-coverage` reads the rules' ids instead (Corrected: was "with the
+    scanner"; the old `claim-coverage` still counts the source premises until 3c 42).
   - **`claim-coverage`, `image-claims` stay ours**: no tool ties an OpenVEX claim to a fact of the repository or
     judges its justification; Grype, vexctl and Trivy only apply a VEX.
   - **`stale-claims` stays as it is**: `grype --vex -o json`'s `ignoredMatches` answers another question (does a
@@ -141,7 +143,8 @@ this spec: they apply a rule `AGENTS.md` already has, or a tool enforces them it
   filter); a chained attribute reads a value without computing one, and a loop's `else` is the empty-state text,
   with no expression (the shipped templates hold 31 and 28). The 20 constructs the tree finds in today's templates
   move into the `<Thing>Display`s (appendix). `jinja2` is allowed in `template_checks`' domain only, by a rule of
-  its own like `domain-configparser.yml`, and the domain parses strings (`Environment().parse(text)`), never a
+  its own like `domain-configparser.yml`, which narrows its line in `domain-imports.yml` (Corrected: the line was
+  not named), and the domain parses strings (`Environment().parse(text)`), never a
   loader. Why: the parse is pure computation, as `rapidfuzz` is for the crawler, but jinja2 can also read files.
 - **D4. Each check has one word** for its module, its subcommand and the command line's parameter: `logic-free`
   (`check_logic_free.py`), `template-attributes` (the subcommand `read-names`, the poe task `_template-read-names`
@@ -150,8 +153,10 @@ this spec: they apply a rule `AGENTS.md` already has, or a tool enforces them it
   `sync_listen_port`, `logic_free_checker` replaces `check_logic_free`. Why: one concept, one name in every layer
   (`AGENTS.md`'s Naming); `port-sync` is already the s6 service's and the environment variables' word.
 - **D5. A check returns a report** of its problems, a `<Thing>Report` response model with a `problems` field, and
-  the command line prints them or writes them as SARIF. Why: the image checks write SARIF instead of failing, so a
-  problem is an outcome, not an error; what a check returns is its report (the operator's word).
+  the command line prints them. Asked for SARIF, the use case writes them through `SarifWriter` and the command
+  line exits zero (Corrected: was "the command line writes them as SARIF"; a driving adapter depends on driving
+  ports only). Why: the image checks write SARIF instead of failing, so a problem is an outcome, not an error; what
+  a check returns is its report (the operator's word).
 
 ## The hexagons
 
@@ -193,14 +198,18 @@ follow C3.
 
 | Driven port | Adapter | What it does |
 |---|---|---|
-| `VexReader` | `JsonVexReader` | read the claims of `security/*.vex.openvex.json` |
+| `VexReader` | `JsonVexReader` | read the claims of one VEX file (Corrected: was `security/*.vex.openvex.json`; `--vex` may name a file outside the repository, `claim-coverage` is given the two) |
 | `SbomReader` | `SyftSbomReader` | read the packages and declared components of a Syft-JSON SBOM |
 | `VulnerabilityScanner` | `GrypeVulnerabilityScanner` | scan an SBOM, return the vulnerabilities found (replaces the `GrypeRunner` `Protocol`) |
 | `SarifWriter` | `JsonSarifWriter` | write the SARIF report |
 | `SourceRuleReader` | `FilesystemSourceRuleReader` | list the ast-grep source rules' ids, for `claim-coverage` |
 
 - The premise evaluation and the claims' merge move to the domain; the `::error::` lines are printed by the command
-  line from the response model; `__main__` computes the repository's root and passes it.
+  line from the response model; `__main__` computes the repository's root and passes it. The use cases receive the
+  registry's `PREMISES` and the root, and name a VEX file relative to it; `repo.py`, which derives the root from
+  `__file__`, goes (Corrected: was not named). `packaging` gains its line in the domain's import list.
+- `GrypeRunner` is the last `Protocol` base: `no-protocol-base` covers every package's `src`, where it covers the
+  crawler's, the matching's and the testing package's today, and `AGENTS.md`'s Naming says so (Corrected: added).
 - `claim-coverage`'s bijection runs over the VEX claims on one side and, on the other, the image premises of the
   registry plus the source rules' ids, refusing an id present in both.
 - A rule's id is its file's name, as every rule of `ast-grep-rules/` already is, so `FilesystemSourceRuleReader` lists
@@ -228,7 +237,8 @@ follow C3.
 | `TestCoverageReader` | `CoveragePyReader` | read the statements and branches each test ran, from `.coverage` |
 | `PackageTreeReader` | `FilesystemPackageTreeReader` | list the package's modules and test files, read `[tool.coverage_checks]` |
 
-- `own_tests.py`'s matching of tests to modules moves to the domain; `__main__` passes the package's directory.
+- `own_tests.py`'s matching of tests to modules moves to the domain, on `PurePath`; `__main__` passes the
+  package's directory and its name, which the summary prints (Corrected: was read from the working directory).
 - `TestCoverageReader`, not `CoverageReader`: the crawler's `CoverageReader` reads a target's coverage, another
   concept (the operator's choice). The port sets `__test__ = False`, so pytest never collects a class named `Test...`
   that a test module imports. The glossary gains `test coverage` beside `coverage` (3c 52).
@@ -270,7 +280,7 @@ Each changes in the block that makes it false.
 - `AGENTS.md`: the `TID251` exemption of `packages/amule/` goes (3b 50, umbrella D19); the hard rules gain "no
   module patching" (3c 90); "No I/O in the core" names `jinja2` in `template_checks`' domain (3c 60); the Commands
   section names `_template-attributes` (3c 60); the subsystem table's rows for port-sync and the container boot
-  follow their new paths (3b 48, 57) (Corrected: was 56, before its split); the glossary gains `claim`, `premise` and `source rule` (3c 12, 30), and
+  follow their new paths (3b 48, 57) (Corrected: was 56, before its split); the glossary gains `claim`, `premise` and `source rule` (3c 14, 30) (Corrected: was 12, 30), and
   Naming the `<Thing>Report` response model with its `problems` (3c 20).
 - `docs/contributing/architecture.md`: section 4 describes the six hexagons and their rings (3c 90); section 12
   follows port-sync's new path (3b 57) and the boot's (3b 48) (Corrected: section 12's boot part moved to block
@@ -336,21 +346,35 @@ this hexagon's own copy of `MonotonicInstant`.
 
 ### Lot 3c: `vex_checks`, `coverage_checks`, `template_checks`, the rule
 
+Re-measured on `main` at `08748882` after 3b merged (`.reviews/lot3c-estimate.md`), with 3b's bias applied:
+additive blocks measured about 10 % under, blocks that delete an old entry function and its test about 25 % over.
+Each check now lands as its use case, then a cut-over block that wires it and deletes the old entry function
+(Corrected: were thirteen rows, 10 to 90; rows 20, 22, 40, 52 and 80 measured over 500 lines, 60 over 20 files).
+Rows 22, 26, 60 and 62 have no margin and split in Act if measured over.
+
 | # | Branch | Holds | Lines, files (est.) |
 |---|---|---|---|
-| 10 | `refactor/vex-reader` | `VexReader`, `JsonVexReader`; the claims' merge into the domain | 250, 8 |
-| 12 | `refactor/vex-premises-in-domain` | `SbomReader`, `SyftSbomReader`; the premise evaluation into the domain; `claim`, `premise` in the glossary | 300, 9 |
-| 20 | `feat/check-image-claims` | `CheckImageClaims` behind `ImageClaimsChecker`; `SarifWriter`; the command line prints problems or writes SARIF; `<Thing>Report` in Naming | 430, 14 |
-| 22 | `feat/check-stale-claims` | `CheckStaleClaims` behind `StaleClaimsChecker`; `VulnerabilityScanner` for the last `Protocol`, given grype's path; `no-protocol-base` over every package's `src`; `__main__` | 330, 13 |
-| 30 | `feat/vex-source-rules` | the source premises as ast-grep rules with their tests and `sgconfig.yml`; the poe task on them, their tests in `poe test`; `source rule` in the glossary | 200, 8 |
-| 32 | `refactor/source-scanner-gone` | `source_scan`, `is_source_premise`, the `source-claims` subcommand and its check gone; `SECURITY.md` | 300, 11 |
-| 40 | `feat/check-claim-coverage` | `CheckClaimCoverage` over the claims, the image premises and `SourceRuleReader` | 400, 14 |
-| 50 | `refactor/own-tests-in-domain` | `PackageTreeReader`; the matching of tests to modules into the domain | 400, 12 |
-| 52 | `feat/check-unit-coverage` | `CheckUnitCoverage` behind `UnitCoverageChecker`; `TestCoverageReader`; no working directory | 480, 12 |
-| 60 | `refactor/template-attributes` | `ListTemplateAttributes` on Jinja's tree in the domain; `TemplateReader`; `jinja2` allowed in that domain; the rename (D4) | 400, 16 |
-| 70 | `refactor/webui-templates-logic-free` | the 20 constructs into the `<Thing>Display`s | 130, 9 |
-| 80 | `feat/logic-free-on-jinja-tree` | `CheckLogicFree` on the tree; the regex check gone | 380, 14 |
-| 90 | `chore/no-module-patching-rule` | the ast-grep rule and its test; `AGENTS.md`'s hard rules; `architecture.md` section 4 | 210, 6 |
+| 10 | `refactor/vex-reader` | `VexReader` (one file), `JsonVexReader`; `vex_io.py` gone; the claims' merge into the domain; the package's fakes | 250, 13 |
+| 12 | `refactor/vex-sbom-and-sarif-writers` | `SbomReader`, `SyftSbomReader`, the SBOM's components into the domain; `SarifWriter`, `JsonSarifWriter`; both called by the old entry functions | 350, 16 |
+| 14 | `refactor/vex-premises-in-domain` | the premise evaluation into the domain, `packaging` on its import list; `claim`, `premise` in the glossary (Corrected: split from 12) | 280, 8 |
+| 20 | `feat/check-image-claims` | `CheckImageClaims` behind `ImageClaimsChecker`, given `PREMISES` and the root; the old entry function delegates; `<Thing>Report` in Naming | 360, 13 |
+| 22 | `refactor/image-claims-cut-over` | the command line prints the report; `__main__` wires; `check_image_claims.py` and its test gone (Corrected: split from 20) | 470, 7 |
+| 24 | `refactor/vulnerability-scanner` | `VulnerabilityScanner`, `GrypeVulnerabilityScanner` given grype's path; the `Protocol` gone; `no-protocol-base` over every package's `src`; vex's `main(argv, env, cwd)` (Corrected: split from 22) | 160, 11 |
+| 26 | `feat/check-stale-claims` | `CheckStaleClaims` behind `StaleClaimsChecker`; the command line, `__main__`; `check_stale_claims.py` and its test gone (Corrected: was 22) | 450, 11 |
+| 30 | `feat/vex-source-rules` | the source premises as ast-grep rules with their tests and `sgconfig.yml`; the poe task on them, their tests in `poe test`; `source rule` in the glossary | 110, 6 |
+| 32 | `refactor/source-scanner-gone` | `source_scan`, the `source-claims` subcommand and its check gone, `source_dirs` with them; `SECURITY.md` | 370, 14 |
+| 40 | `feat/check-claim-coverage` | `CheckClaimCoverage` behind `ClaimCoverageChecker`, over the claims, `PREMISES` and `SourceRuleReader`; the old entry function delegates | 310, 13 |
+| 42 | `refactor/claim-coverage-cut-over` | the old check and its test gone; the source premises out of the registry, the source family out of the descriptors, `is_source_premise` included; `repo.py` gone; the command line, `__main__` (Corrected: split from 40; `is_source_premise` was 32's) | 360, 14 |
+| 50 | `refactor/own-tests-in-domain` | `PackageTreeReader`, `FilesystemPackageTreeReader`; the matching of tests to modules into the domain, on `PurePath` | 240, 12 |
+| 52 | `refactor/test-coverage-reader` | `TestCoverageReader`, `CoveragePyReader` given the data file; the shortfall into the domain; `test coverage` in the glossary | 380, 9 |
+| 54 | `feat/check-unit-coverage` | `CheckUnitCoverage` behind `UnitCoverageChecker`; the old entry function delegates (Corrected: split from 52) | 340, 10 |
+| 56 | `refactor/unit-coverage-cut-over` | `unit_coverage.py` and its test gone; the command line; `main(argv, env, cwd)`, the package's directory and name passed (Corrected: split from 52) | 410, 9 |
+| 60 | `refactor/template-reader` | `TemplateReader`, `FilesystemTemplateReader`, the package's rings; `jinja2` on the domain's import list and its rule; the rename (D4) | 150, 18 |
+| 62 | `feat/list-template-attributes` | `ListTemplateAttributes` behind `TemplateAttributeLister`, on Jinja's tree in the domain; `read_names.py` and its test gone; `main(argv, env, cwd)` (Corrected: split from 60) | 220, 18 |
+| 70 | `refactor/webui-templates-logic-free` | the 20 constructs into the `<Thing>Display`s | 150, 10 |
+| 80 | `refactor/logic-free-on-jinja-tree` | the walker on Jinja's tree in the domain; `check_templates.py` calls it, the regex gone | 250, 8 |
+| 82 | `feat/check-logic-free` | `CheckLogicFree` behind `LogicFreeChecker`, the command line's `logic_free_checker`; `check_templates.py` and its test gone (Corrected: split from 80) | 300, 12 |
+| 90 | `chore/no-module-patching-rule` | the ast-grep rule and its test; `AGENTS.md`'s hard rules; `architecture.md` section 4 | 120, 6 |
 | 100 | `docs/five-hexagons-3c-wrap` | closing block: the holistic findings, backlog, handoff | |
 
 - 3a's block 10 carries this spec. 3b starts once 3a has merged, 3c once 3b has, each on the tree the previous lot
