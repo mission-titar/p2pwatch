@@ -12,7 +12,7 @@ class ClaimCoverageProblem:
 
 @dataclass(frozen=True)
 class ClaimCoverageReport:
-    problems: tuple[ClaimCoverageProblem, ...]  # in the order of their advisory ids
+    problems: tuple[ClaimCoverageProblem, ...]  # in the order of their advisory ids, then messages
 
 
 class ClaimCoverageChecker(ABC):
