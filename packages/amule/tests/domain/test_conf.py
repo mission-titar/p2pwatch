@@ -3,6 +3,8 @@
 import configparser
 import hashlib
 
+import pytest
+
 from p2pwatch_amule.domain.conf import (
     ec_password_digest,
     reconcile_conf,
@@ -107,6 +109,12 @@ def test_the_listen_port_is_read_from_the_emule_section() -> None:
 def test_an_absent_listen_port_is_amules_default() -> None:
     assert tcp_listen_port("[eMule]\nMaxUpload=42\n") == 4662
     assert tcp_listen_port("") == 4662
+
+
+@pytest.mark.parametrize("conf", ["[eMule]\nPort=4662x\n", "Port=4662\n"])
+def test_an_unreadable_listen_port_raises_a_value_error(conf: str) -> None:
+    with pytest.raises(ValueError):
+        tcp_listen_port(conf)
 
 
 def test_the_listen_port_is_written_to_both_tcp_and_udp() -> None:

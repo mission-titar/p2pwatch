@@ -20,6 +20,8 @@ BOOT_ENV = {
     "AMULE_EC_PASSWORD": "hunter2",
     "AMULE_API_PASSWORD": "s3cret",
 }
+# amule.conf's owner, which port-sync's writes keep as the boot step's do.
+IDS = {"PUID": "1000", "PGID": "1001"}
 
 
 def test_the_boot_variables_give_the_boot_settings() -> None:
@@ -89,25 +91,29 @@ def test_any_other_value_is_refused_naming_port_sync(value: str) -> None:
         is_port_sync_enabled({"PORT_SYNC": value})
 
 
-def test_no_variable_set_gives_todays_values() -> None:
-    assert parse_port_sync_settings({}) == PortSyncSettings(
+def test_no_variable_set_but_the_ids_gives_todays_values() -> None:
+    assert parse_port_sync_settings(IDS) == PortSyncSettings(
         gluetun_control_url="http://localhost:8000",
         poll_interval=timedelta(seconds=60),
         restart_min_interval=timedelta(seconds=300),
+        puid=1000,
+        pgid=1001,
     )
 
 
 def test_an_empty_variable_takes_the_domains_value() -> None:
     env = {
+        **IDS,
         "GLUETUN_CONTROL_URL": "",
         "PORT_SYNC_POLL_SECONDS": "",
         "PORT_SYNC_RESTART_MIN_SECONDS": "",
     }
-    assert parse_port_sync_settings(env) == parse_port_sync_settings({})
+    assert parse_port_sync_settings(env) == parse_port_sync_settings(IDS)
 
 
 def test_each_variable_overrides_the_domains_value() -> None:
     env = {
+        **IDS,
         "GLUETUN_CONTROL_URL": "https://gluetun:9999/prefix",
         "PORT_SYNC_POLL_SECONDS": "5",
         "PORT_SYNC_RESTART_MIN_SECONDS": "30",
@@ -116,7 +122,16 @@ def test_each_variable_overrides_the_domains_value() -> None:
         gluetun_control_url="https://gluetun:9999/prefix",
         poll_interval=timedelta(seconds=5),
         restart_min_interval=timedelta(seconds=30),
+        puid=1000,
+        pgid=1001,
     )
+
+
+@pytest.mark.parametrize("name", list(IDS))
+def test_port_sync_refuses_a_missing_id_naming_it(name: str) -> None:
+    env = {key: value for key, value in IDS.items() if key != name}
+    with pytest.raises(SettingsError, match=f"^{name} is required$"):
+        parse_port_sync_settings(env)
 
 
 @pytest.mark.parametrize("name", ["PORT_SYNC_POLL_SECONDS", "PORT_SYNC_RESTART_MIN_SECONDS"])
