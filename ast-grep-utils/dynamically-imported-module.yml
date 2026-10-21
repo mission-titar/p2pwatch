@@ -1,0 +1,18 @@
+id: dynamically-imported-module
+language: python
+# The module a dynamic import names as a constant first argument: `importlib.import_module("a.b")`, `import_module("a.b")`, `__import__("a.b")`.
+rule:
+  kind: string_content
+  inside:
+    kind: string
+    nthChild: 1
+    not: { has: { kind: interpolation } }
+    inside:
+      kind: argument_list
+      inside:
+        kind: call
+        has:
+          field: function
+          any:
+            - { kind: identifier, regex: ^(import_module|__import__)$ }
+            - { kind: attribute, has: { field: attribute, regex: ^import_module$ } }
