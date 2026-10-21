@@ -46,9 +46,12 @@ def reconcile_conf(existing_conf: str | None, ec_digest: str) -> str:
 
 
 def tcp_listen_port(conf: str) -> int:
-    """Return the TCP port amuled binds, `[eMule] Port`."""
+    """Return the TCP port amuled binds, `[eMule] Port`; raise `ValueError` when unreadable."""
     parser = _parser()
-    parser.read_string(conf)
+    try:
+        parser.read_string(conf)
+    except configparser.Error as error:
+        raise ValueError(error) from error
     return parser.getint("eMule", "Port", fallback=DEFAULT_TCP_PORT)
 
 

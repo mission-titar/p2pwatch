@@ -33,6 +33,8 @@ class PortSyncSettings:
     gluetun_control_url: str
     poll_interval: timedelta
     restart_min_interval: timedelta
+    puid: int
+    pgid: int
 
 
 def parse_boot_settings(env: Mapping[str, str]) -> BootSettings:
@@ -58,7 +60,8 @@ def is_port_sync_enabled(env: Mapping[str, str]) -> bool:
 
 
 def parse_port_sync_settings(env: Mapping[str, str]) -> PortSyncSettings:
-    """Return port-sync's settings from `env`, an unset or empty variable taking the domain's."""
+    """Return port-sync's settings from `env`, an unset or empty variable taking the domain's
+    value; the ids, amule.conf's owner, are required."""
     url = env.get("GLUETUN_CONTROL_URL") or DEFAULT_GLUETUN_CONTROL_URL
     try:
         parts = urlsplit(url)
@@ -76,6 +79,8 @@ def parse_port_sync_settings(env: Mapping[str, str]) -> PortSyncSettings:
         restart_min_interval=_seconds(
             env, "PORT_SYNC_RESTART_MIN_SECONDS", DEFAULT_PORT_SYNC_RESTART_MIN_INTERVAL
         ),
+        puid=_required_id(env, "PUID"),
+        pgid=_required_id(env, "PGID"),
     )
 
 

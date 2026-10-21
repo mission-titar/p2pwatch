@@ -47,6 +47,14 @@ def main(
     """Runs the subcommand ``argv`` names in the environment ``env``, gluetun read by
     ``url_opener``, port-sync's loop by ``run_port_sync``; returns its exit code."""
     amule_conf = PosixAmuleConf(amule_conf_path=_AMULE_CONF_PATH, change_owner=os.chown)
+    # The two logger names docs/migration-4x.md gives the operator, here and for gluetun's reader.
+    port_sync_logger = StdlibLogger("p2pwatch_amule.adapters.driving.port_sync")
+    service_supervisor = S6ServiceSupervisor(
+        port_sync_service_directory=_PORT_SYNC_SERVICE_DIRECTORY,
+        amuled_service_directory=_AMULED_SERVICE_DIRECTORY,
+        run_command=subprocess.run,
+        logger=port_sync_logger,
+    )
     container_booter = BootContainer(
         account_manager=PosixAccountManager(
             home_directory=_HOME_DIRECTORY,
@@ -72,13 +80,18 @@ def main(
             env=env,
             run_command=subprocess.run,
         ),
-        service_supervisor=S6ServiceSupervisor(
-            port_sync_service_directory=_PORT_SYNC_SERVICE_DIRECTORY
-        ),
+        service_supervisor=service_supervisor,
     )
     command_line = ArgparseCommandLine(
         container_booter=container_booter,
-        sync_listen_port=lambda: _sync_listen_port(env, url_opener, run_port_sync),
+        sync_listen_port=lambda: _sync_listen_port(
+            env,
+            url_opener,
+            run_port_sync,
+            amule_conf=amule_conf,
+            service_supervisor=service_supervisor,
+            logger=port_sync_logger,
+        ),
         env=env,
         root_logger=logging.getLogger(),
     )
@@ -86,23 +99,29 @@ def main(
 
 
 def _sync_listen_port(
-    env: Mapping[str, str], url_opener: OpenerDirector, run_port_sync: Callable[..., None]
+    env: Mapping[str, str],
+    url_opener: OpenerDirector,
+    run_port_sync: Callable[..., None],
+    *,
+    amule_conf: PosixAmuleConf,
+    service_supervisor: S6ServiceSupervisor,
+    logger: StdlibLogger,
 ) -> None:
     """Parses port-sync's variables, so that the command line prints a refused one, then runs it."""
     port_sync_settings = parse_port_sync_settings(env)
     run_port_sync(
         port_sync_settings,
-        amule_conf_path=_AMULE_CONF_PATH,
-        amuled_service_directory=_AMULED_SERVICE_DIRECTORY,
-        monotonic_clock=SystemMonotonicClock(),
         forwarded_port_reader=GluetunForwardedPortReader(
             control_url=port_sync_settings.gluetun_control_url,
             timeout_seconds=_GLUETUN_TIMEOUT_SECONDS,
-            # The two logger names docs/migration-4x.md gives the operator, here and below.
             logger=StdlibLogger("p2pwatch_amule.adapters.driven.gluetun"),
             url_opener=url_opener,
         ),
-        logger=StdlibLogger("p2pwatch_amule.adapters.driving.port_sync"),
+        amule_conf_reader=amule_conf,
+        amule_conf_writer=amule_conf,
+        service_supervisor=service_supervisor,
+        monotonic_clock=SystemMonotonicClock(),
+        logger=logger,
     )
 
 

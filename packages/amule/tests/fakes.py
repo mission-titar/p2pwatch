@@ -40,16 +40,20 @@ class FakeAmuledDirectoryPreparer(AmuledDirectoryPreparer):
 
 
 class FakeAmuleConf(AmuleConfReader, AmuleConfWriter):
-    """amule.conf held as text, ``None`` when absent; records the owner of each write."""
+    """amule.conf held as text, ``None`` when absent; records the owner of each write, or raises
+    ``write_error``."""
 
     def __init__(self) -> None:
         self.conf: str | None = None
         self.owners: list[tuple[int, int]] = []
+        self.write_error: OSError | None = None
 
     def read_amule_conf(self) -> str | None:
         return self.conf
 
     def write_amule_conf(self, conf: str, uid: int, gid: int) -> None:
+        if self.write_error is not None:
+            raise self.write_error
         self.conf = conf
         self.owners.append((uid, gid))
 
@@ -104,16 +108,27 @@ class FakeMonotonicClock(MonotonicClock):
 
 
 class FakeServiceSupervisor(ServiceSupervisor):
-    """Records each action it is asked for, in order."""
+    """Records each action it is asked for, in order; a stop calls ``on_stop_amuled``, then
+    returns ``is_amuled_stopped``."""
 
     def __init__(self) -> None:
         self.actions: list[str] = []
+        self.is_amuled_stopped = True
+        self.on_stop_amuled: Callable[[], None] = lambda: None
 
     def enable_port_sync(self) -> None:
         self.actions.append("enable port-sync")
 
     def disable_port_sync(self) -> None:
         self.actions.append("disable port-sync")
+
+    def stop_amuled(self) -> bool:
+        self.actions.append("stop amuled")
+        self.on_stop_amuled()
+        return self.is_amuled_stopped
+
+    def start_amuled(self) -> None:
+        self.actions.append("start amuled")
 
 
 class FakeContainerBooter(ContainerBooter):

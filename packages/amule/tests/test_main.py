@@ -10,6 +10,8 @@ from p2pwatch_amule.__main__ import main
 from p2pwatch_amule.domain.settings import PortSyncSettings, parse_port_sync_settings
 from tests.fakes import FakeGluetunControlServer
 
+IDS = {"PUID": "1000", "PGID": "1001"}
+
 
 def _no_port_sync(port_sync_settings: PortSyncSettings, **components: Any) -> None:
     raise AssertionError("port-sync ran")
@@ -25,7 +27,7 @@ def test_boot_runs_the_boot_step(capsys: pytest.CaptureFixture[str]) -> None:
 def test_port_sync_refuses_its_variables_before_running(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    env = {"GLUETUN_CONTROL_URL": "ftp://gluetun"}
+    env = {**IDS, "GLUETUN_CONTROL_URL": "ftp://gluetun"}
     assert main(["port-sync"], env, build_opener(ProxyHandler({})), _no_port_sync) == 1
 
     assert capsys.readouterr().err.startswith("GLUETUN_CONTROL_URL must be an http or https URL")
@@ -40,7 +42,7 @@ def test_port_sync_runs_on_gluetuns_reader_under_the_two_documented_logger_names
         received.append((port_sync_settings, components))
 
     with FakeGluetunControlServer() as gluetun:
-        env = {"GLUETUN_CONTROL_URL": gluetun.control_url, "PORT_SYNC_POLL_SECONDS": "5"}
+        env = {**IDS, "GLUETUN_CONTROL_URL": gluetun.control_url, "PORT_SYNC_POLL_SECONDS": "5"}
         assert main(["port-sync"], env, gluetun.url_opener, run_port_sync) == 0
         [(port_sync_settings, components)] = received
         gluetun.body = b"{}"
@@ -49,6 +51,7 @@ def test_port_sync_runs_on_gluetuns_reader_under_the_two_documented_logger_names
             components["logger"].info("a port-sync line")
 
     assert port_sync_settings == parse_port_sync_settings(env)
+    assert components["amule_conf_reader"] is components["amule_conf_writer"]
     assert gluetun.request_lines == ["GET /v1/portforward HTTP/1.1"]
     # The names docs/migration-4x.md gives the operator.
     assert [(record.name, record.getMessage()) for record in caplog.records] == [
