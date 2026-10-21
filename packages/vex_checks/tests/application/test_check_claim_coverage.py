@@ -116,6 +116,30 @@ def test_the_claims_of_every_vex_are_checked() -> None:
     )
 
 
+def test_an_advisory_justified_differently_across_vex_files_is_a_problem() -> None:
+    checker = CheckClaimCoverage(
+        premises={"CVE-IMAGE": DpkgPackageAbsent("nghttp2")},
+        vex_paths=(CRAWLER_VEX, AMULE_VEX),
+        vex_reader=FakeVexReader(
+            {},
+            claims_by_vex_path={
+                CRAWLER_VEX: {"CVE-IMAGE": NOT_IN_EXECUTE_PATH},
+                AMULE_VEX: {"CVE-IMAGE": NOT_PRESENT},
+            },
+        ),
+        source_rule_reader=FakeSourceRuleReader(set()),
+    )
+
+    assert checker.check_claim_coverage().problems == (
+        ClaimCoverageProblem(
+            "CVE-IMAGE",
+            "justification 'vulnerable_code_not_in_execute_path'"
+            " is not 'vulnerable_code_not_present'",
+        ),
+        ClaimCoverageProblem("CVE-IMAGE", "justified differently across VEX files"),
+    )
+
+
 def test_the_problems_are_in_the_order_of_their_advisory_ids() -> None:
     checker = _checker(
         premises={}, claims={"CVE-B": NOT_PRESENT, "CVE-A": NOT_PRESENT}, source_rule_ids=set()

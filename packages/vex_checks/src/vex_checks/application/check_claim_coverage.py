@@ -36,7 +36,10 @@ class CheckClaimCoverage(ClaimCoverageChecker):
         self._source_rule_reader = source_rule_reader
 
     def check_claim_coverage(self) -> ClaimCoverageReport:
-        claims = merge_claims(self._vex_reader.read_claims(path) for path in self._vex_paths)
+        justifications_by_advisory_id = merge_claims(
+            self._vex_reader.read_claims(path) for path in self._vex_paths
+        )
+        claimed_ids = justifications_by_advisory_id.keys()
         image_premise_ids = set(self._premises)
         source_rule_ids = self._source_rule_reader.read_source_rule_ids()
         backed_twice = image_premise_ids & source_rule_ids
@@ -46,31 +49,39 @@ class CheckClaimCoverage(ClaimCoverageChecker):
         }
         problems = [
             *(
+                ClaimCoverageProblem(advisory_id, "justified differently across VEX files")
+                for advisory_id, justifications in justifications_by_advisory_id.items()
+                if len(justifications) > 1
+            ),
+            *(
                 ClaimCoverageProblem(advisory_id, "has both an image premise and a source rule")
                 for advisory_id in backed_twice
             ),
             *(
                 ClaimCoverageProblem(advisory_id, "claim has no premise or source rule")
-                for advisory_id in claims.keys() - justification_by_backed_id.keys()
+                for advisory_id in claimed_ids - justification_by_backed_id.keys()
             ),
             *(
                 ClaimCoverageProblem(advisory_id, "premise has no claim")
-                for advisory_id in image_premise_ids - claims.keys()
+                for advisory_id in image_premise_ids - claimed_ids
             ),
             *(
                 ClaimCoverageProblem(advisory_id, "source rule has no claim")
-                for advisory_id in source_rule_ids - claims.keys()
+                for advisory_id in source_rule_ids - claimed_ids
             ),
             *(
                 ClaimCoverageProblem(
                     advisory_id,
-                    f"justification {claims[advisory_id]!r}"
+                    f"justification {justification!r}"
                     f" is not {justification_by_backed_id[advisory_id]!r}",
                 )
-                for advisory_id in claims.keys() & justification_by_backed_id.keys() - backed_twice
-                if claims[advisory_id] != justification_by_backed_id[advisory_id]
+                for advisory_id in claimed_ids & justification_by_backed_id.keys() - backed_twice
+                for justification in justifications_by_advisory_id[advisory_id]
+                if justification != justification_by_backed_id[advisory_id]
             ),
         ]
         return ClaimCoverageReport(
-            problems=tuple(sorted(problems, key=lambda problem: problem.advisory_id))
+            problems=tuple(
+                sorted(problems, key=lambda problem: (problem.advisory_id, problem.message))
+            )
         )
