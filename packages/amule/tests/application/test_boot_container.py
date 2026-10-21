@@ -1,4 +1,4 @@
-"""BootContainer: every variable refused first, then the account, directories, conf, password."""
+"""BootContainer: every variable refused first, then each step, port-sync's state last."""
 
 import hashlib
 import re
@@ -13,6 +13,7 @@ from tests.fakes import (
     FakeAdminPasswordSetter,
     FakeAmuleConf,
     FakeAmuledDirectoryPreparer,
+    FakeServiceSupervisor,
 )
 
 DIGEST = hashlib.md5(b"hunter2").hexdigest()
@@ -33,12 +34,14 @@ class Booter:
         self.amuled_directory_preparer = FakeAmuledDirectoryPreparer()
         self.amule_conf = FakeAmuleConf()
         self.admin_password_setter = FakeAdminPasswordSetter()
+        self.service_supervisor = FakeServiceSupervisor()
         self.container_booter = BootContainer(
             account_manager=self.account_manager,
             amuled_directory_preparer=self.amuled_directory_preparer,
             amule_conf_reader=self.amule_conf,
             amule_conf_writer=self.amule_conf,
             admin_password_setter=self.admin_password_setter,
+            service_supervisor=self.service_supervisor,
         )
 
 
@@ -109,6 +112,7 @@ def test_a_refused_variable_aborts_the_boot_before_any_change(
     assert booter.amuled_directory_preparer.owners == []
     assert booter.amule_conf.owners == []
     assert booter.admin_password_setter.passwords == []
+    assert booter.service_supervisor.actions == []
 
 
 def test_port_sync_off_leaves_its_other_variables_unread() -> None:
@@ -118,3 +122,22 @@ def test_port_sync_off_leaves_its_other_variables_unread() -> None:
     booter.container_booter.boot_container(env)
 
     assert booter.account_manager.accounts == [(1000, 1001)]
+
+
+@pytest.mark.parametrize("port_sync", ["off", "", None])
+def test_port_sync_off_or_unset_is_disabled(port_sync: str | None) -> None:
+    booter = Booter()
+    env = ENV if port_sync is None else {**ENV, "PORT_SYNC": port_sync}
+
+    booter.container_booter.boot_container(env)
+
+    assert booter.service_supervisor.actions == ["disable port-sync"]
+
+
+@pytest.mark.parametrize("port_sync", ["yes", "On"])
+def test_port_sync_on_is_enabled(port_sync: str) -> None:
+    booter = Booter()
+
+    booter.container_booter.boot_container({**ENV, "PORT_SYNC": port_sync})
+
+    assert booter.service_supervisor.actions == ["enable port-sync"]
