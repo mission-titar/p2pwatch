@@ -4,10 +4,9 @@ import argparse
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
+from vex_checks.domain.violations import Violation
 from vex_checks.ports.driving.image_claims_checker import ImageClaimsChecker
-
-# Over a built image's SBOM and its VEX; given a SARIF output, it writes there instead of failing.
-type ImageCheck = Callable[[Path, Path, Path | None], int]
+from vex_checks.ports.driving.stale_claims_checker import StaleClaimsChecker
 
 
 def _add_image_options(
@@ -37,21 +36,30 @@ def _sarif_output(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
     return args.output if args.format == "sarif" else None
 
 
+def _print_problems(problems: Sequence[Violation], sarif_output: Path | None) -> int:
+    """Each problem a GitHub ``::error::`` line and exit 1, or, written as SARIF, exit 0."""
+    if sarif_output is not None:
+        return 0
+    for problem in problems:
+        print(f"::error::{problem.advisory_id}: {problem.message} ({problem.location})")
+    return 1 if problems else 0
+
+
 class ArgparseCommandLine:
-    """``image-claims`` over ``image_claims_checker``; ``stale-claims``, ``source-claims``,
+    """``image-claims`` and ``stale-claims`` over their checkers; ``source-claims``,
     ``claim-coverage``: one check each. A relative path is taken under ``cwd``."""
 
     def __init__(
         self,
         *,
         image_claims_checker: ImageClaimsChecker,
-        check_stale_claims: ImageCheck,
+        stale_claims_checker: StaleClaimsChecker,
         check_source_claims: Callable[[], int],
         check_claim_coverage: Callable[[], int],
         cwd: Path,
     ) -> None:
         self._image_claims_checker = image_claims_checker
-        self._check_stale_claims = check_stale_claims
+        self._stale_claims_checker = stale_claims_checker
         self._check_source_claims = check_source_claims
         self._check_claim_coverage = check_claim_coverage
         self._cwd = cwd
@@ -86,13 +94,12 @@ class ArgparseCommandLine:
         return self._check_claim_coverage()
 
     def _check_image_claims(self, sbom: Path, vex: Path, sarif_output: Path | None) -> int:
-        """Each problem a GitHub ``::error::`` line and exit 1, or, written as SARIF, exit 0."""
         report = self._image_claims_checker.check_image_claims(sbom, vex, sarif_output)
-        if sarif_output is not None:
-            return 0
-        for problem in report.problems:
-            print(f"::error::{problem.advisory_id}: {problem.message} ({problem.location})")
-        return 1 if report.problems else 0
+        return _print_problems(report.problems, sarif_output)
+
+    def _check_stale_claims(self, sbom: Path, vex: Path, sarif_output: Path | None) -> int:
+        report = self._stale_claims_checker.check_stale_claims(sbom, vex, sarif_output)
+        return _print_problems(report.problems, sarif_output)
 
     def _under_cwd(self, path: str) -> Path:
         """``path`` under ``cwd``, or as it is when absolute."""

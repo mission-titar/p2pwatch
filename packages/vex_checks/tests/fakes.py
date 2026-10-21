@@ -9,6 +9,7 @@ from vex_checks.ports.driven.sbom_reader import SbomReader
 from vex_checks.ports.driven.vex_reader import VexReader
 from vex_checks.ports.driven.vulnerability_scanner import VulnerabilityScanner
 from vex_checks.ports.driving.image_claims_checker import ImageClaimsChecker, ImageClaimsReport
+from vex_checks.ports.driving.stale_claims_checker import StaleClaimsChecker, StaleClaimsReport
 
 
 class FakeVexReader(VexReader):
@@ -41,12 +42,14 @@ class FakeSbomReader(SbomReader):
 
 
 class FakeVulnerabilityScanner(VulnerabilityScanner):
-    """Finds the same advisories in any SBOM."""
+    """Records each SBOM it scans, and finds the same advisories in any."""
 
     def __init__(self, advisory_ids: set[str]) -> None:
         self._advisory_ids = advisory_ids
+        self.scanned_sbom_paths: list[PurePath] = []
 
     def scan_sbom(self, sbom_path: PurePath) -> set[str]:
+        self.scanned_sbom_paths.append(sbom_path)
         return set(self._advisory_ids)
 
 
@@ -91,3 +94,24 @@ class FakeImageClaimsChecker(ImageClaimsChecker):
     ) -> ImageClaimsReport:
         self.checks.append(ImageClaimsCheck(sbom_path, vex_path, sarif_path))
         return ImageClaimsReport(problems=self._problems)
+
+
+@dataclass(frozen=True)
+class StaleClaimsCheck:
+    sbom_path: PurePath
+    vex_path: PurePath
+    sarif_path: PurePath | None
+
+
+class FakeStaleClaimsChecker(StaleClaimsChecker):
+    """Records each check it is asked for, and answers the same problems to each."""
+
+    def __init__(self, problems: Sequence[Violation] = ()) -> None:
+        self._problems = tuple(problems)
+        self.checks: list[StaleClaimsCheck] = []
+
+    def check_stale_claims(
+        self, sbom_path: PurePath, vex_path: PurePath, sarif_path: PurePath | None
+    ) -> StaleClaimsReport:
+        self.checks.append(StaleClaimsCheck(sbom_path, vex_path, sarif_path))
+        return StaleClaimsReport(problems=self._problems)
