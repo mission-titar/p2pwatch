@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from pathlib import PurePath
 
 from vex_checks.application.vex_location import vex_location
-from vex_checks.domain.descriptors import ImagePremise, Premise, is_image_premise
+from vex_checks.domain.descriptors import ImagePremise
 from vex_checks.domain.image_premises import evaluate_image_premises
 from vex_checks.ports.driven.sarif_writer import SarifWriter
 from vex_checks.ports.driven.sbom_reader import SbomReader
@@ -21,7 +21,7 @@ class CheckImageClaims(ImageClaimsChecker):
     def __init__(
         self,
         *,
-        premises: Mapping[str, Premise],
+        premises: Mapping[str, ImagePremise],
         repo_root: PurePath,
         vex_reader: VexReader,
         sbom_reader: SbomReader,
@@ -37,11 +37,10 @@ class CheckImageClaims(ImageClaimsChecker):
         self, sbom_path: PurePath, vex_path: PurePath, sarif_path: PurePath | None
     ) -> ImageClaimsReport:
         claims = self._vex_reader.read_claims(vex_path)
-        # Iterating the items binds the narrowed loop variable: is_image_premise is a TypeIs.
-        premises: dict[str, ImagePremise] = {
+        premises = {
             advisory_id: premise
             for advisory_id, premise in self._premises.items()
-            if advisory_id in claims and is_image_premise(premise)
+            if advisory_id in claims
         }
         vex_relpath = vex_location(vex_path, self._repo_root)
         unlocated = evaluate_image_premises(

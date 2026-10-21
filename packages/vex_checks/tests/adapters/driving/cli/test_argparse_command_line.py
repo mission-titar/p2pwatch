@@ -1,11 +1,12 @@
 """The command line: one subcommand per check, which it calls with typed arguments."""
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
 
 from tests.fakes import (
+    FakeClaimCoverageChecker,
     FakeImageClaimsChecker,
     FakeStaleClaimsChecker,
     ImageClaimsCheck,
@@ -13,6 +14,7 @@ from tests.fakes import (
 )
 from vex_checks.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from vex_checks.domain.violations import Violation
+from vex_checks.ports.driving.claim_coverage_checker import ClaimCoverageProblem
 
 _CWD = Path("/work/repo")
 _IMAGE_COMMANDS = ["image-claims", "stale-claims"]
@@ -32,35 +34,31 @@ _PROBLEMS = (
 
 
 class _Checks:
-    """The two image checkers, answering the same problems, and ``claim-coverage`` recording each
-    call, answering a distinct exit code."""
+    """The two image checkers, answering the same problems, and the claim coverage checker."""
 
-    def __init__(self, problems: Sequence[Violation] = ()) -> None:
+    def __init__(
+        self,
+        problems: Sequence[Violation] = (),
+        claim_coverage_problems: Sequence[ClaimCoverageProblem] = (),
+    ) -> None:
         self.image_claims_checker = FakeImageClaimsChecker(problems)
         self.stale_claims_checker = FakeStaleClaimsChecker(problems)
-        self.calls: list[str] = []
+        self.claim_coverage_checker = FakeClaimCoverageChecker(claim_coverage_problems)
 
     def command_line(self) -> ArgparseCommandLine:
         return ArgparseCommandLine(
             image_claims_checker=self.image_claims_checker,
             stale_claims_checker=self.stale_claims_checker,
-            check_claim_coverage=self._recorder("claim-coverage"),
+            claim_coverage_checker=self.claim_coverage_checker,
             cwd=_CWD,
         )
 
     def ran_none(self) -> bool:
         return (
-            self.calls == []
-            and self.image_claims_checker.checks == []
+            self.image_claims_checker.checks == []
             and self.stale_claims_checker.checks == []
+            and self.claim_coverage_checker.check_count == 0
         )
-
-    def _recorder(self, command: str) -> Callable[[], int]:
-        def record() -> int:
-            self.calls.append(command)
-            return 3
-
-        return record
 
 
 @_SARIF_OPTIONS
@@ -192,12 +190,36 @@ def test_an_image_check_requires_the_sbom_and_the_vex(
     assert checks.ran_none()
 
 
-def test_claim_coverage_runs_alone_and_returns_its_exit_code() -> None:
+def test_claim_coverage_prints_each_problem_as_an_error_and_returns_one(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    checks = _Checks(
+        claim_coverage_problems=[
+            ClaimCoverageProblem("CVE-A", "claim has no premise or source rule"),
+            ClaimCoverageProblem("CVE-B", "premise has no claim"),
+        ]
+    )
+
+    assert checks.command_line().run(["claim-coverage"]) == 1
+
+    assert capsys.readouterr().out == (
+        "::error::CVE-A: claim has no premise or source rule\n"
+        "::error::CVE-B: premise has no claim\n"
+    )
+    assert checks.claim_coverage_checker.check_count == 1
+    assert checks.image_claims_checker.checks == []
+    assert checks.stale_claims_checker.checks == []
+
+
+def test_claim_coverage_with_no_problem_prints_nothing_and_returns_zero(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     checks = _Checks()
 
-    assert checks.command_line().run(["claim-coverage"]) == 3
+    assert checks.command_line().run(["claim-coverage"]) == 0
 
-    assert checks.calls == ["claim-coverage"]
+    assert capsys.readouterr().out == ""
+    assert checks.claim_coverage_checker.check_count == 1
 
 
 def test_source_claims_is_no_subcommand(capsys: pytest.CaptureFixture[str]) -> None:

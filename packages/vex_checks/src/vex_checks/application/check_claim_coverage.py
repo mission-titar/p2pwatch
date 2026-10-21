@@ -4,8 +4,12 @@ rules."""
 from collections.abc import Mapping, Sequence
 from pathlib import PurePath
 
-from vex_checks.domain.claims import merge_claims
-from vex_checks.domain.descriptors import JUSTIFICATION_BY_FAMILY, Premise, is_image_premise
+from vex_checks.domain.claims import (
+    IMAGE_PREMISE_JUSTIFICATION,
+    SOURCE_RULE_JUSTIFICATION,
+    merge_claims,
+)
+from vex_checks.domain.descriptors import ImagePremise
 from vex_checks.ports.driven.source_rule_reader import SourceRuleReader
 from vex_checks.ports.driven.vex_reader import VexReader
 from vex_checks.ports.driving.claim_coverage_checker import (
@@ -16,12 +20,12 @@ from vex_checks.ports.driving.claim_coverage_checker import (
 
 
 class CheckClaimCoverage(ClaimCoverageChecker):
-    """Over the registry's image premises: its source premises are the source rules' to back."""
+    """Over the registry's image premises and the source rules."""
 
     def __init__(
         self,
         *,
-        premises: Mapping[str, Premise],
+        premises: Mapping[str, ImagePremise],
         vex_paths: Sequence[PurePath],
         vex_reader: VexReader,
         source_rule_reader: SourceRuleReader,
@@ -33,16 +37,12 @@ class CheckClaimCoverage(ClaimCoverageChecker):
 
     def check_claim_coverage(self) -> ClaimCoverageReport:
         claims = merge_claims(self._vex_reader.read_claims(path) for path in self._vex_paths)
-        image_premise_ids = {
-            advisory_id
-            for advisory_id, premise in self._premises.items()
-            if is_image_premise(premise)
-        }
+        image_premise_ids = set(self._premises)
         source_rule_ids = self._source_rule_reader.read_source_rule_ids()
         backed_twice = image_premise_ids & source_rule_ids
         justification_by_backed_id = {
-            **dict.fromkeys(image_premise_ids, JUSTIFICATION_BY_FAMILY["image"]),
-            **dict.fromkeys(source_rule_ids, JUSTIFICATION_BY_FAMILY["source"]),
+            **dict.fromkeys(image_premise_ids, IMAGE_PREMISE_JUSTIFICATION),
+            **dict.fromkeys(source_rule_ids, SOURCE_RULE_JUSTIFICATION),
         }
         problems = [
             *(

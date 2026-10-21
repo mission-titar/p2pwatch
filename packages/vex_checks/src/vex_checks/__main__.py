@@ -1,18 +1,15 @@
 """``python -m vex_checks``: hands the checks to the command line."""
 
-import functools
 import os
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from vex_checks.adapters.driven import repo
 from vex_checks.adapters.driven.filesystem_source_rule_reader import FilesystemSourceRuleReader
 from vex_checks.adapters.driven.grype_vulnerability_scanner import GrypeVulnerabilityScanner
 from vex_checks.adapters.driven.json_sarif_writer import JsonSarifWriter
 from vex_checks.adapters.driven.json_vex_reader import JsonVexReader
 from vex_checks.adapters.driven.syft_sbom_reader import SyftSbomReader
-from vex_checks.adapters.driving import check_claim_coverage
 from vex_checks.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from vex_checks.application.check_claim_coverage import CheckClaimCoverage
 from vex_checks.application.check_image_claims import CheckImageClaims
@@ -26,7 +23,8 @@ _GRYPE_EXECUTABLE = "grype"
 def main(argv: Sequence[str], env: Mapping[str, str], cwd: Path) -> int:
     """Runs the subcommand ``argv`` names in the environment ``env`` and the directory ``cwd``,
     returns its exit code."""
-    repo_root = repo.repo_root()
+    # Dev tooling, run from the workspace only: the repository is four parents up from here.
+    repo_root = Path(__file__).resolve().parents[4]
     vex_reader = JsonVexReader()
     sarif_writer = JsonSarifWriter()
     command_line = ArgparseCommandLine(
@@ -45,15 +43,15 @@ def main(argv: Sequence[str], env: Mapping[str, str], cwd: Path) -> int:
             vex_reader=vex_reader,
             sarif_writer=sarif_writer,
         ),
-        check_claim_coverage=functools.partial(
-            check_claim_coverage.main,
-            claim_coverage_checker=CheckClaimCoverage(
-                premises=PREMISES,
-                vex_paths=tuple(repo.vex_files().values()),
-                vex_reader=vex_reader,
-                source_rule_reader=FilesystemSourceRuleReader(
-                    rules_directory=repo_root / "packages" / "vex_checks" / "ast-grep" / "rules"
-                ),
+        claim_coverage_checker=CheckClaimCoverage(
+            premises=PREMISES,
+            vex_paths=tuple(
+                repo_root / "security" / f"{image}.vex.openvex.json"
+                for image in ("crawler", "amule")
+            ),
+            vex_reader=vex_reader,
+            source_rule_reader=FilesystemSourceRuleReader(
+                rules_directory=repo_root / "packages" / "vex_checks" / "ast-grep" / "rules"
             ),
         ),
         cwd=cwd,

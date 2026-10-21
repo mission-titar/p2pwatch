@@ -767,9 +767,7 @@ depends_on = [
   "vex_checks.adapters.driven.grype_vulnerability_scanner",
   "vex_checks.adapters.driven.json_sarif_writer",
   "vex_checks.adapters.driven.json_vex_reader",
-  "vex_checks.adapters.driven.repo",
   "vex_checks.adapters.driven.syft_sbom_reader",
-  "vex_checks.adapters.driving.check_claim_coverage",
   "vex_checks.adapters.driving.cli",
   "vex_checks.application",
   "vex_checks.domain",
@@ -795,26 +793,19 @@ path = "vex_checks.adapters.driven.json_vex_reader"
 layer = "adapters"
 depends_on = ["vex_checks.ports.driven.vex_reader"]
 
-[[modules]]
-path = "vex_checks.adapters.driven.repo"
-layer = "adapters"
-depends_on = []
 
 [[modules]]
 path = "vex_checks.adapters.driven.syft_sbom_reader"
 layer = "adapters"
 depends_on = ["vex_checks.domain", "vex_checks.ports.driven.sbom_reader"]
 
-[[modules]]
-path = "vex_checks.adapters.driving.check_claim_coverage"
-layer = "adapters"
-depends_on = ["vex_checks.ports.driving.claim_coverage_checker"]
 
 [[modules]]
 path = "vex_checks.adapters.driving.cli"
 layer = "adapters"
 depends_on = [
   "vex_checks.domain",
+  "vex_checks.ports.driving.claim_coverage_checker",
   "vex_checks.ports.driving.image_claims_checker",
   "vex_checks.ports.driving.stale_claims_checker",
 ]
