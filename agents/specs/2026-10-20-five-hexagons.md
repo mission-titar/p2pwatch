@@ -2,9 +2,11 @@
 
 - Date: 2026-10-20. Status: approved by the operator on 2026-10-20, after Discuss and a review
   (`.reviews/lot3-spec.md`: 0 critical, 12 major, 19 minor, all answered here).
-- Tier: Spec, two lots that merge one after the other, each with its stack and holistic review: 3a, the crawler's
-  leftovers, `amule_bump` and `p2pwatch_amule`; 3b, the three checking tools, the rule and the documentation. Why:
-  measured at 21 to 25 blocks, over the cap of 19 (`.reviews/lot3-estimate.md`); the operator chose the cut.
+- Tier: Spec, three lots that merge one after the other, each with its stack and holistic review: 3a, the crawler's
+  leftovers, `amule_bump` and `p2pwatch_amule`'s settings; 3b, the aMule container's boot and port-sync; 3c, the
+  three checking tools, the rule and the documentation. Why: measured at 21 to 25 blocks, over the cap of 19
+  (`.reviews/lot3-estimate.md`); the operator chose the cut, then cut 3a again once its splits had used the cap
+  (Corrected: two lots, 3a then 3b).
 - Origin: lot 3 of the umbrella spec `agents/specs/2026-10-18-hexagonal-architecture.md` (D18), whose decisions this
   one applies without restating them. It absorbs the backlog entry "The logic-free template guard on Jinja's syntax
   tree" (section 7 of `agents/specs/2026-10-15-gate-tooling.md`).
@@ -38,7 +40,7 @@ this spec: they apply a rule `AGENTS.md` already has, or a tool enforces them it
   adapter. The composition passes the real value, never a parameter's default (Corrected: defaults were not
   excluded). What is part of an adapter's code (its SQL, its migration scripts, the SQL functions they call) is
   no parameter: a test that tunes it tests a generic mechanism, which moves apart and receives it (Corrected:
-  the migration runner and the SQL functions' memo, block 10). Hard rules, 3b 90 (the rule that enforces it); the three
+  the migration runner and the SQL functions' memo, block 10). Hard rules, 3c 90 (the rule that enforces it); the three
   replacements in Hard rules from 3a 10.
 - **C2. An adapter receives from the composition what it drives**: a directory or a file, a URL or an address, a
   command runner or an executable's path. Its unit test hands it a local stand-in, the integration suites the real
@@ -48,7 +50,7 @@ this spec: they apply a rule `AGENTS.md` already has, or a tool enforces them it
   the system (`ShutilFreeSpaceMeter`, `StdlibLogger`). `PathlibCatalogFinder` becomes `FilesystemCatalogFinder`.
   Naming, 3a 12.
 - **C4. A check returns a report**: a `<Thing>Report` response model with a `problems` field, which the command
-  line prints or writes. Naming, 3b 20.
+  line prints or writes. Naming, 3c 20.
 - **C5. A value taken when the operator sets nothing is the domain's**: a key absent from `crawler.yml`, an
   environment variable left unset. The parser applies the domain's value; a value a component receives comes
   from the composition (C1, C2). Hard rules, 3a 16 (Corrected: added after the operator's approval, so that no
@@ -214,7 +216,7 @@ follow C3.
 - `own_tests.py`'s matching of tests to modules moves to the domain; `__main__` passes the package's directory.
 - `TestCoverageReader`, not `CoverageReader`: the crawler's `CoverageReader` reads a target's coverage, another
   concept (the operator's choice). The port sets `__test__ = False`, so pytest never collects a class named `Test...`
-  that a test module imports. The glossary gains `test coverage` beside `coverage` (3b 52).
+  that a test module imports. The glossary gains `test coverage` beside `coverage` (3c 52).
 
 ### `amule_bump`
 
@@ -249,15 +251,15 @@ doubles of `p2pwatch_testing` keep theirs, which are test data.
 Each changes in the block that makes it false.
 
 - `AGENTS.md`: the conventions C1 to C5, each in the block the section "Conventions this lot sets" names.
-- `AGENTS.md`: the `TID251` exemption of `packages/amule/` goes (3a 54, umbrella D19); the hard rules gain "no
-  module patching" (3b 90); "No I/O in the core" names `jinja2` in `template_checks`' domain (3b 60); the Commands
-  section names `_template-attributes` (3b 60); the subsystem table's rows for port-sync and the container boot
-  follow their new paths (3a 44, 54); the glossary gains `claim`, `premise` and `source rule` (3b 12, 30), and
-  Naming the `<Thing>Report` response model with its `problems` (3b 20).
-- `docs/contributing/architecture.md`: section 4 describes the six hexagons and their rings (3b 90); sections 9 and
-  12 follow port-sync's and the boot's new paths (3a 54).
+- `AGENTS.md`: the `TID251` exemption of `packages/amule/` goes (3b 54, umbrella D19); the hard rules gain "no
+  module patching" (3c 90); "No I/O in the core" names `jinja2` in `template_checks`' domain (3c 60); the Commands
+  section names `_template-attributes` (3c 60); the subsystem table's rows for port-sync and the container boot
+  follow their new paths (3b 44, 54); the glossary gains `claim`, `premise` and `source rule` (3c 12, 30), and
+  Naming the `<Thing>Report` response model with its `problems` (3c 20).
+- `docs/contributing/architecture.md`: section 4 describes the six hexagons and their rings (3c 90); sections 9 and
+  12 follow port-sync's and the boot's new paths (3b 54).
 - `docs/contributing/amule-bump.md` follows `application/body.py` (3a 20).
-- `SECURITY.md`: `vex_checks` has three subcommands, and the source claims are ast-grep rules (3b 32).
+- `SECURITY.md`: `vex_checks` has three subcommands, and the source claims are ast-grep rules (3c 32).
 - The strings that stay: the subcommands `boot` and `port-sync` keep their names, so `entrypoint.sh` and
   `services.d/port-sync/run` do not change; `image-claims` and `stale-claims` keep theirs and their options, so the
   workflows' lines do not change.
@@ -266,14 +268,15 @@ Each changes in the block that makes it false.
 
 Estimates by a Sonnet agent on `main` at `38bfe15`, before any code, about 20 % either way
 (`.reviews/lot3-estimate.md`); each teammate measures its block and splits it at a bound. No block is purely
-mechanical, so none takes the size exemption. Headroom under the cap of 19: 1 split for 3a (Corrected: 5 before
-blocks 14, 16, 21 and 22; the repo reader's block renumbered 24), 5 for 3b; five rows sit
-at 450 to 480 lines (3a 20, 40, 44, 52; 3b 52), and 3a 40's fallback is to hand its fakes to 42.
+mechanical, so none takes the size exemption. 3a used its headroom in 5 splits (blocks 14, 16, 21, 22 and 32;
+the repo reader's block renumbered 24), and its boot and port-sync blocks became 3b, which re-measures them on the
+tree 3a leaves (Corrected: 3a held blocks 40 to 56). Rows that sat at 450 to 480 lines: 3b 40, 44, 52, 3c 52;
+3b 40's fallback is to hand its fakes to 42.
 
 Every block leaves its new surface called by production code, since `dead-code-check` reports a class only tests
 call: the old entry function delegates to what the block adds until a later block deletes it.
 
-### Lot 3a: the crawler's leftovers, `amule_bump`, `p2pwatch_amule`
+### Lot 3a: the crawler's leftovers, `amule_bump`, `p2pwatch_amule`'s settings
 
 | # | Branch | Holds | Lines, files (est.) |
 |---|---|---|---|
@@ -286,7 +289,14 @@ call: the old entry function delegates to what the block adds until a later bloc
 | 21 | `feat/bump-amule-use-case` | `TerminalStepOutputWriter` outside Actions, `GitHubStepOutputWriter` given a path only; `main(argv, env, cwd, temporary_directory)`; the default paths against the given `cwd` and temporary directory; `wrap`'s width from the composition; `docs/contributing/amule-bump.md` (Corrected: split from 20, then from 22) | 182, 14 |
 | 22 | `feat/bump-amule-driving-port` | `BumpAmule` behind `AmuleBumper` and its three outcomes; the command line printing each; `bump.py`, `test_bump.py` and `amule_bump`'s deprecated edges gone (Corrected: split from 21) | 380, 11 |
 | 24 | `refactor/repo-reader-domain-types` | `RepoReader`'s `read_` methods on domain types; GitHub's API URL as a composition value; the loopback test | 300, 12 |
-| 30 | `refactor/amule-settings-in-domain` | the environment's validation into the domain, its error, and the values of unset variables (C5, Corrected: added); `env` and the paths as values from `__main__` | 300, 10 |
+| 30 | `refactor/amule-settings-in-domain` | port-sync's variables into the domain, `SettingsError`, the values of unset variables (C5); `main(argv, env)`, the root logger passed (Corrected: split from 32) | 415, 14 |
+| 32 | `refactor/amule-paths-from-main` | boot's variables into the domain, so that no adapter exits; the paths as values from `__main__` (Corrected: split from 30) | 324, 10 |
+| 90 | `docs/five-hexagons-3a-wrap` | closing block: the holistic findings, backlog, handoff | |
+
+### Lot 3b: the aMule container's boot and port-sync (Corrected: were 3a's blocks 40 to 60)
+
+| # | Branch | Holds | Lines, files (est.) |
+|---|---|---|---|
 | 40 | `feat/boot-container` | `BootContainer` behind `ContainerBooter`; `AmuleConfReader`, `AmuleConfWriter`, `PosixAmuleConf`; `boot.main` delegating to `BootContainer` | 480, 14 |
 | 42 | `feat/boot-accounts-and-mount-points` | `AccountManager`, `MountPointPreparer` and their adapters; `BootContainer` gains the two steps, `boot.py` loses them | 300, 10 |
 | 44 | `feat/boot-password-and-supervisor` | `AdminPasswordSetter`, `ServiceSupervisor`'s `down` file; `boot.py` and `test_boot.py` gone; `AGENTS.md`'s boot row | 450, 15 |
@@ -294,9 +304,9 @@ call: the old entry function delegates to what the block adds until a later bloc
 | 52 | `feat/port-sync-loop` | `RunPortSyncLoop` behind `PortSyncLoopRunner`; the supervisor's stop and start; `port_sync.main` delegating to it | 450, 14 |
 | 54 | `refactor/port-sync-wired` | the composition and `port_sync_loop_runner` (D4); `port_sync.py` gone; the `TID251` exemption, `time.sleep` banned; `AGENTS.md`'s rule and row; `architecture.md` sections 9 and 12 | 350, 11 |
 | 56 | `test/port-sync-smoke` | a compose smoke case: a stand-in for gluetun's `/v1/portforward` (a static file served by `python -m http.server`), port-sync rewrites `Port` and `UDPPort` and restarts amuled | 150, 3 |
-| 60 | `docs/five-hexagons-3a-wrap` | closing block: the holistic findings, backlog, handoff | |
+| 60 | `docs/five-hexagons-3b-wrap` | closing block: the holistic findings, backlog, handoff | |
 
-### Lot 3b: `vex_checks`, `coverage_checks`, `template_checks`, the rule
+### Lot 3c: `vex_checks`, `coverage_checks`, `template_checks`, the rule
 
 | # | Branch | Holds | Lines, files (est.) |
 |---|---|---|---|
@@ -313,19 +323,20 @@ call: the old entry function delegates to what the block adds until a later bloc
 | 70 | `refactor/webui-templates-logic-free` | the 20 constructs into the `<Thing>Display`s | 130, 9 |
 | 80 | `feat/logic-free-on-jinja-tree` | `CheckLogicFree` on the tree; the regex check gone | 380, 14 |
 | 90 | `chore/no-module-patching-rule` | the ast-grep rule and its test; `AGENTS.md`'s hard rules; `architecture.md` section 4 | 210, 6 |
-| 100 | `docs/five-hexagons-3b-wrap` | closing block: the holistic findings, backlog, handoff | |
+| 100 | `docs/five-hexagons-3c-wrap` | closing block: the holistic findings, backlog, handoff | |
 
-- 3a's block 10 carries this spec. 3b starts once 3a has merged, on the tree it leaves, and re-measures its blocks
-  first.
-- In 3b, block 70 comes before 80 so that 80's check passes on the templates it lands on, and block 90 comes last
+- 3a's block 10 carries this spec. 3b starts once 3a has merged, 3c once 3b has, each on the tree the previous lot
+  leaves, re-measuring its blocks first.
+- In 3c, block 70 comes before 80 so that 80's check passes on the templates it lands on, and block 90 comes last
   among the code blocks: the rule fails until every package is off `monkeypatch`.
-- 3a's block 56 adds what no suite runs today: the compose smoke starts port-sync without gluetun and only checks
-  it stays down, so the path that stops amuled, rewrites the ports and starts it again is tested nowhere, and 3a
+- 3b's block 56 adds what no suite runs today: the compose smoke starts port-sync without gluetun and only checks
+  it stays down, so the path that stops amuled, rewrites the ports and starts it again is tested nowhere, and 3b
   rewrites it whole.
 
 ## Acceptance
 
-3a meets 6, 8, 11 and 12, 9 and 10, and 1, 3 and 4 for its packages; 3b meets 2, 5, 7, 13, 9 and 10, and 1, 3 and
+3a meets 8, 11, 9 and 10, and 1, 3 and 4 for the crawler and `amule_bump`; 3b meets 6 and 12, 9 and 10, and 1, 3
+and 4 for `p2pwatch_amule` (Corrected: 3a met 6 and 12 before the cut); 3c meets 2, 5, 7, 13, 9 and 10, and 1, 3 and
 4 in full.
 
 1. **No module patching**: `git grep -nE "monkeypatch|MonkeyPatch|mock\.patch|from unittest\.mock import.*patch" -- '*.py'`
@@ -344,13 +355,13 @@ call: the old entry function delegates to what the block adds until a later bloc
    On `main` the 8 constructs pass.
 6. **The aMule container behaves as before**: CI's compose smoke, and the crawler's `api_integration`,
    `download_integration` and `orchestration_integration` suites against `p2pwatch-amule`, pass on amd64 and arm64 at
-   3a's blocks 44 and 56; boot's refusal messages and port-sync's log lines, with their logger names, are the same
+   3b's blocks 44 and 56; boot's refusal messages and port-sync's log lines, with their logger names, are the same
    set on `main` and at the top (`git grep -hE "sys.exit|_logger\.(info|warning|error)|logger\.(info|warning|error)"`
    over `packages/amule/src` on both sides, then the messages compared).
 7. **The VEX checks give the same verdicts**: `image-claims` and `stale-claims` on
    `ghcr.io/mission-titar/mulewatch:latest`'s attested SBOM and VEX (v4.1.0, verified downloadable on 2026-10-20),
    and `claim-coverage` on the tree, give the same exit codes and the same (advisory, file) problems on `main` and
-   at the top of 3b. `vex-source-claims` fails on an injected `import imaplib` in each of `packages/crawler/src`,
+   at the top of 3c. `vex-source-claims` fails on an injected `import imaplib` in each of `packages/crawler/src`,
    `packages/matching/src` and `packages/amule/src`, and on an `importlib.import_module("poplib")`; it passes on one
    in `packages/amule_bump/src`; on `main` and at the top alike.
 8. **`amule_bump` writes the same thing**: a loopback server serves recorded GitHub answers for a release newer than
@@ -362,16 +373,16 @@ call: the old entry function delegates to what the block adds until a later bloc
 10. **The gate is green** at every block.
 11. **No unclosed connection**: the crawler's pytest config has `error::ResourceWarning`, and an injected test that
     leaves a `sqlite3.connect` open fails the suite.
-12. **Port-sync syncs**: the smoke case of 3a's block 56 sees `amule.conf`'s `Port` and `UDPPort` take the stand-in's
+12. **Port-sync syncs**: the smoke case of 3b's block 56 sees `amule.conf`'s `Port` and `UDPPort` take the stand-in's
     port and amuled's pid change; with the stand-in serving the current port, neither changes.
 13. **The pages render as before**: a throwaway script renders the same seeded GETs as lot 2's Acceptance 9 on
-    `main` and at 3b's block 70; `diff` prints nothing, and one deliberate template edit shows in it.
+    `main` and at 3c's block 70; `diff` prints nothing, and one deliberate template edit shows in it.
 
 ## Backlog
 
-- **Hexagonal architecture**: 3a's Wrap narrows the lot 3 sub-item to 3b; 3b's Wrap deletes it, and with it the
-  entry.
-- **The logic-free template guard on Jinja's syntax tree**: absorbed (D3), deleted at 3b's Wrap.
+- **Hexagonal architecture**: 3a's Wrap narrows the lot 3 sub-item to 3b and 3c, 3b's to 3c; 3c's Wrap deletes
+  it, and with it the entry.
+- **The logic-free template guard on Jinja's syntax tree**: absorbed (D3), deleted at 3c's Wrap.
 - **Contract tests for the fakes** stays open and follows this lot (the operator's order): it needs every port's
   final shape, which this lot gives the five other hexagons.
 - **The ast-grep rule tests bound to their rules by design** stays open; this lot adds rules under the current
