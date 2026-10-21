@@ -1,0 +1,17 @@
+id: no-module-patching
+valid:
+  - "def test_x(tmp_path: Path) -> None: ..."
+  - "from unittest.mock import AsyncMock"
+  - "from unittest import mock"
+  - "patch = Patch(1)"
+  - "dockerfile.patch(pin)"
+invalid:
+  - "def test_x(monkeypatch): ..."
+  - "def test_x(monkeypatch: pytest.MonkeyPatch) -> None: ..."
+  - "patcher = pytest.MonkeyPatch()"
+  - "from _pytest.monkeypatch import MonkeyPatch"
+  - "from unittest.mock import patch"
+  - "from unittest.mock import AsyncMock, patch as replace"
+  - "from mock import patch"
+  - "with unittest.mock.patch('os.getcwd'): ..."
+  - "with mock.patch.object(os, 'getcwd'): ..."
