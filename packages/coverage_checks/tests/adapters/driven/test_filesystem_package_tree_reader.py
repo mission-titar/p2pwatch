@@ -44,3 +44,12 @@ def test_read_package_tree_reads_tests_without_unit_from_the_pyproject(tmp_path:
         "tests/test_migration_0002.py": "its subject is SQL",
         "tests/integration/": 3,
     }
+
+
+def test_read_module_source_reads_a_module_under_the_directory(tmp_path: Path) -> None:
+    (tmp_path / "src/pkg").mkdir(parents=True)
+    (tmp_path / "src/pkg/sizes.py").write_text("LIMIT = 10  # « pas plus »\n", encoding="utf-8")
+
+    reader = FilesystemPackageTreeReader(package_directory=tmp_path)
+
+    assert reader.read_module_source(PurePath("src/pkg/sizes.py")) == "LIMIT = 10  # « pas plus »\n"
