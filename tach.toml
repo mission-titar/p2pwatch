@@ -45,7 +45,7 @@ depends_on = ["amule_bump.ports.driven.pull_request_body_writer"]
 [[modules]]
 path = "amule_bump.adapters.driven.github_repo_reader"
 layer = "adapters"
-depends_on = ["amule_bump.ports.driven.repo_reader"]
+depends_on = ["amule_bump.domain", "amule_bump.ports.driven.repo_reader"]
 
 [[modules]]
 path = "amule_bump.adapters.driven.github_step_output_writer"
@@ -92,7 +92,7 @@ depends_on = []
 [[modules]]
 path = "amule_bump.ports.driven.repo_reader"
 layer = "ports"
-depends_on = []
+depends_on = ["amule_bump.domain"]
 
 [[modules]]
 path = "amule_bump.ports.driven.step_output_writer"

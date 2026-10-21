@@ -54,8 +54,8 @@ def changelog_section(changelog: str, version: str) -> str:
 
 
 def tag_diff(repo_reader: RepoReader, old: Pin, new: Pin, path: str) -> str:
-    before = repo_reader.file(old.version, path).splitlines()
-    after = repo_reader.file(new.version, path).splitlines()
+    before = repo_reader.read_file(old.version, path).splitlines()
+    after = repo_reader.read_file(new.version, path).splitlines()
     labels = (f"{old.version}/{path}", f"{new.version}/{path}")
     diff = difflib.unified_diff(before, after, *labels, lineterm="")
     return "".join(f"{line}\n" for line in diff)
@@ -84,7 +84,9 @@ def fenced(text: str, language: str) -> str:
 
 
 def _changelog_part(repo_reader: RepoReader, new: Pin, changelog_width_characters: int) -> str:
-    section = changelog_section(repo_reader.file(new.version, "docs/CHANGELOG.md"), new.version)
+    section = changelog_section(
+        repo_reader.read_file(new.version, "docs/CHANGELOG.md"), new.version
+    )
     if not section:
         return f"No `## Version {new.version}` section in upstream's docs/CHANGELOG.md."
     return fenced(clip(wrap(section, changelog_width_characters), CHANGELOG_MAX_CHARACTERS), "text")

@@ -1,72 +1,77 @@
-import io
-from email.message import Message
+from collections.abc import Iterator
 from urllib.error import HTTPError
-from urllib.request import Request
 
 import pytest
 
-from amule_bump.adapters.driven import github_repo_reader
 from amule_bump.adapters.driven.github_repo_reader import GitHubRepoReader
+from amule_bump.domain.git_object import GitObject, GitObjectKind
+from tests.fakes import FakeGitHubServer
 
-
-class FakeUrlopen:
-    """Stands in for urlopen: records the request, then answers with a body or an HTTP error."""
-
-    def __init__(self, body: bytes = b"", status: int = 200) -> None:
-        self.body = body
-        self.status = status
-        self.request: Request | None = None
-
-    def __call__(self, request: Request, timeout: float) -> io.BytesIO:
-        self.request = request
-        if self.status != 200:
-            raise HTTPError(request.full_url, self.status, "error", Message(), None)
-        return io.BytesIO(self.body)
+REPO = "/repos/amule-org/amule"
+TAG_OBJECT = "6ccbfdf785390c25c8b01652684f5b06fb18e034"
+COMMIT = "909d304d993ee07df6c6f6acf501a6d791d53666"
 
 
 @pytest.fixture
-def urlopen(monkeypatch: pytest.MonkeyPatch) -> FakeUrlopen:
-    fake = FakeUrlopen()
-    monkeypatch.setattr(github_repo_reader, "urlopen", fake)
-    return fake
+def github() -> Iterator[FakeGitHubServer]:
+    with FakeGitHubServer() as github:
+        yield github
 
 
-def test_json_gets_the_repo_api_path_with_the_token(urlopen: FakeUrlopen) -> None:
-    urlopen.body = b'{"tag_name": "3.1.0"}'
-    assert GitHubRepoReader("amule-org/amule", "secret").json("releases/latest") == {
-        "tag_name": "3.1.0"
-    }
-    assert urlopen.request is not None
-    assert (
-        urlopen.request.full_url == "https://api.github.com/repos/amule-org/amule/releases/latest"
+def repo_reader(github: FakeGitHubServer, token: str | None = None) -> GitHubRepoReader:
+    return GitHubRepoReader(github.api_url, "amule-org/amule", token)
+
+
+def test_latest_release_tag_is_read_from_the_api_url_with_the_token(
+    github: FakeGitHubServer,
+) -> None:
+    github.answer_json(f"{REPO}/releases/latest", {"tag_name": "3.1.0", "draft": False})
+    assert repo_reader(github, "secret").read_latest_release_tag() == "3.1.0"
+    [(_, headers)] = github.requests
+    assert headers["Authorization"] == "Bearer secret"
+    assert headers["X-GitHub-Api-Version"] == "2022-11-28"
+
+
+def test_requests_go_anonymous_without_a_token(github: FakeGitHubServer) -> None:
+    github.answer_json(f"{REPO}/releases/latest", {"tag_name": "3.1.0"})
+    repo_reader(github).read_latest_release_tag()
+    [(_, headers)] = github.requests
+    assert "Authorization" not in headers
+
+
+def test_tag_target_is_the_object_the_tag_ref_names(github: FakeGitHubServer) -> None:
+    github.answer_json(
+        f"{REPO}/git/ref/tags/3.1.0",
+        {"ref": "refs/tags/3.1.0", "object": {"type": "tag", "sha": TAG_OBJECT}},
     )
-    assert urlopen.request.get_header("Authorization") == "Bearer secret"
+    assert repo_reader(github).read_tag_target("3.1.0") == GitObject(GitObjectKind.TAG, TAG_OBJECT)
 
 
-def test_requests_go_anonymous_without_a_token(urlopen: FakeUrlopen) -> None:
-    urlopen.body = b"{}"
-    GitHubRepoReader("amule-org/amule", None).json("releases/latest")
-    assert urlopen.request is not None
-    assert not urlopen.request.has_header("Authorization")
-
-
-def test_file_gets_the_raw_content_at_a_ref(urlopen: FakeUrlopen) -> None:
-    urlopen.body = "## Version 3.1.0 é\n".encode()
-    text = GitHubRepoReader("amule-org/amule", None).file("3.1.0", "docs/CHANGELOG.md")
-    assert text == "## Version 3.1.0 é\n"
-    assert urlopen.request is not None
-    assert urlopen.request.full_url == (
-        "https://api.github.com/repos/amule-org/amule/contents/docs/CHANGELOG.md?ref=3.1.0"
+def test_annotated_tag_target_is_the_object_the_tag_object_names(
+    github: FakeGitHubServer,
+) -> None:
+    github.answer_json(
+        f"{REPO}/git/tags/{TAG_OBJECT}",
+        {"tag": "3.1.0", "object": {"type": "commit", "sha": COMMIT}},
     )
-    assert urlopen.request.get_header("Accept") == "application/vnd.github.raw+json"
+    assert repo_reader(github).read_annotated_tag_target(TAG_OBJECT) == GitObject(
+        GitObjectKind.COMMIT, COMMIT
+    )
 
 
-def test_file_absent_at_the_ref_reads_as_empty(urlopen: FakeUrlopen) -> None:
-    urlopen.status = 404
-    assert GitHubRepoReader("amule-org/amule", None).file("3.0.1", "docs/api/REFERENCE.md") == ""
+def test_file_is_the_raw_content_at_a_ref(github: FakeGitHubServer) -> None:
+    github.answer_raw(
+        f"{REPO}/contents/docs/CHANGELOG.md?ref=3.1.0", 200, "## Version 3.1.0 é\n".encode()
+    )
+    assert repo_reader(github).read_file("3.1.0", "docs/CHANGELOG.md") == "## Version 3.1.0 é\n"
 
 
-def test_file_lets_any_other_http_error_through(urlopen: FakeUrlopen) -> None:
-    urlopen.status = 403
-    with pytest.raises(HTTPError):
-        GitHubRepoReader("amule-org/amule", None).file("3.1.0", "docs/CHANGELOG.md")
+def test_file_absent_at_the_ref_reads_as_empty(github: FakeGitHubServer) -> None:
+    github.answer_raw(f"{REPO}/contents/docs/api/REFERENCE.md?ref=3.0.1", 404, b"{}")
+    assert repo_reader(github).read_file("3.0.1", "docs/api/REFERENCE.md") == ""
+
+
+def test_file_lets_any_other_http_error_through(github: FakeGitHubServer) -> None:
+    github.answer_raw(f"{REPO}/contents/docs/CHANGELOG.md?ref=3.1.0", 403, b"{}")
+    with pytest.raises(HTTPError, match="403"):
+        repo_reader(github).read_file("3.1.0", "docs/CHANGELOG.md")

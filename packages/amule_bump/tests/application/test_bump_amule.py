@@ -6,6 +6,7 @@ import pytest
 from amule_bump.application.bump_amule import BumpAmule
 from amule_bump.domain.bump_error import BumpError
 from amule_bump.domain.dockerfile import Pin
+from amule_bump.domain.git_object import GitObject, GitObjectKind
 from amule_bump.ports.driving.amule_bumper import (
     AmuleBump,
     PinAheadOfLatest,
@@ -28,11 +29,11 @@ CHANGELOG_LINE = "- amuleapi, " + "word " * 10
 
 def upstream(latest: str) -> FakeRepoReader:
     return FakeRepoReader(
-        json={
-            "releases/latest": {"tag_name": latest},
-            f"git/ref/tags/{latest}": {"object": {"type": "commit", "sha": NEW_COMMIT}},
+        latest_release_tag=latest,
+        tag_targets_by_tag={latest: GitObject(GitObjectKind.COMMIT, NEW_COMMIT)},
+        file_texts_by_ref_and_path={
+            ("3.1.0", "docs/CHANGELOG.md"): f"## Version 3.1.0 - REST\n{CHANGELOG_LINE}\n"
         },
-        files={("3.1.0", "docs/CHANGELOG.md"): f"## Version 3.1.0 - REST\n{CHANGELOG_LINE}\n"},
     )
 
 

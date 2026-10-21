@@ -20,13 +20,19 @@ from amule_bump.domain.upstream import UPSTREAM
 _CHANGELOG_WIDTH_CHARACTERS = 100
 
 
-def main(argv: Sequence[str], env: Mapping[str, str], cwd: Path, temporary_directory: Path) -> int:
-    """Runs the subcommand ``argv`` names in the environment ``env``, a relative path under
-    ``cwd``, the PR body by default in ``temporary_directory``; returns its exit code."""
+def main(
+    argv: Sequence[str],
+    env: Mapping[str, str],
+    cwd: Path,
+    temporary_directory: Path,
+    github_api_url: str,
+) -> int:
+    """Runs the subcommand ``argv`` names in ``env``, a relative path under ``cwd``, the PR body
+    by default in ``temporary_directory``, GitHub at ``github_api_url``; returns its exit code."""
     dockerfile = FilesystemDockerfile()
     github_output = env.get("GITHUB_OUTPUT")
     amule_bumper = BumpAmule(
-        repo_reader=GitHubRepoReader(UPSTREAM, env.get("GH_TOKEN")),
+        repo_reader=GitHubRepoReader(github_api_url, UPSTREAM, env.get("GH_TOKEN")),
         dockerfile_reader=dockerfile,
         dockerfile_writer=dockerfile,
         pull_request_body_writer=FilesystemPullRequestBodyWriter(),
@@ -44,4 +50,12 @@ def main(argv: Sequence[str], env: Mapping[str, str], cwd: Path, temporary_direc
 
 
 if __name__ == "__main__":  # pragma: no cover
-    raise SystemExit(main(sys.argv[1:], os.environ, Path.cwd(), Path(tempfile.gettempdir())))
+    raise SystemExit(
+        main(
+            sys.argv[1:],
+            os.environ,
+            Path.cwd(),
+            Path(tempfile.gettempdir()),
+            "https://api.github.com",
+        )
+    )
