@@ -1,10 +1,10 @@
-from vex_checks.adapters.driven.sbom import evaluate_image_premises
 from vex_checks.domain.descriptors import (
     DeclaredMinVersion,
     DpkgMinVersion,
     DpkgPackageAbsent,
     ImagePremise,
 )
+from vex_checks.domain.image_premises import evaluate_image_premises
 from vex_checks.domain.sbom_components import DeclaredComponent, DpkgPackage
 
 

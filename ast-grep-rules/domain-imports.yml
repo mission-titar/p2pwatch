@@ -1,11 +1,11 @@
 id: domain-imports
 language: python
 severity: error
-message: A domain imports only the pure standard library on this list, `rapidfuzz` and first-party packages; the dependency checks keep those to its own hexagon.
+message: A domain imports only the pure standard library on this list, `rapidfuzz`, `packaging.version` and first-party packages; the dependency checks keep those to its own hexagon.
 note: "A module that needs I/O goes behind a port; a new pure module is a new line here."
 files: ["packages/*/src/*/domain/**/*.py"]
 ignores: ["packages/crawler_testing/**"]
 rule:
   matches: imported-module
   not:
-    regex: ^(abc|ast|collections\.abc|configparser|dataclasses|datetime|enum|hashlib|io|ipaddress|rapidfuzz|re|typing|unicodedata|urllib\.parse|uuid|(amule_bump|catalog_matching|coverage_checks|p2pwatch|p2pwatch_amule|template_checks|vex_checks)(\.\w+)*)$
+    regex: ^(abc|ast|collections\.abc|configparser|dataclasses|datetime|enum|hashlib|io|ipaddress|packaging\.version|rapidfuzz|re|typing|unicodedata|urllib\.parse|uuid|(amule_bump|catalog_matching|coverage_checks|p2pwatch|p2pwatch_amule|template_checks|vex_checks)(\.\w+)*)$
