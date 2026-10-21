@@ -106,6 +106,8 @@ _logger = logging.getLogger("p2pwatch.composition.app")
 
 _AMULE_API_TIMEOUT_SECONDS = 10.0
 _WEBUI_START_TIMEOUT_SECONDS = 5.0
+# One INFO progress line per this many files, so a long sweep visibly advances.
+_REEVALUATION_PROGRESS_EVERY_FILES = 200
 
 
 def _print_progress(message: str) -> None:
@@ -408,8 +410,7 @@ class CrawlerApp(CrawlerRunner):
                     wall_clock=wall_clock,
                     logger=StdlibLogger("p2pwatch.application.reevaluate_catalog"),
                     node_id=node_id,
-                    # One INFO progress line per this many files, so a long sweep visibly advances.
-                    progress_every_files=200,
+                    progress_every_files=_REEVALUATION_PROGRESS_EVERY_FILES,
                 ),
                 loops=loops,
                 download_enabled=download_config is not None,
