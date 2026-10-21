@@ -1,3 +1,5 @@
+"""The image premises evaluated against what an image's SBOM lists."""
+
 from typing import assert_never
 
 from packaging.version import Version
@@ -30,24 +32,24 @@ def evaluate_image_premises(
     packages: list[DpkgPackage],
     declared_components: list[DeclaredComponent],
 ) -> list[Violation]:
-    by_name: dict[str, list[DpkgPackage]] = {}
-    for pkg in packages:
-        by_name.setdefault(pkg.name, []).append(pkg)
+    dpkg_packages_by_name: dict[str, list[DpkgPackage]] = {}
+    for dpkg_package in packages:
+        dpkg_packages_by_name.setdefault(dpkg_package.name, []).append(dpkg_package)
     violations: list[Violation] = []
     for advisory_id, premise in premises.items():
         match premise:
             case DpkgPackageAbsent(package):
-                if package in by_name:
+                if package in dpkg_packages_by_name:
                     violations.append(
                         Violation(advisory_id, f"dpkg package {package!r} is present", "security")
                     )
             case DpkgMinVersion(package, minimum):
-                for pkg in by_name.get(package, []):
-                    if Version(_upstream(pkg.version)) < Version(minimum):
+                for dpkg_package in dpkg_packages_by_name.get(package, []):
+                    if Version(_upstream(dpkg_package.version)) < Version(minimum):
                         violations.append(
                             Violation(
                                 advisory_id,
-                                f"{package} {pkg.version} is below {minimum}",
+                                f"{package} {dpkg_package.version} is below {minimum}",
                                 "security",
                             )
                         )

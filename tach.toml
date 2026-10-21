@@ -795,11 +795,6 @@ layer = "adapters"
 depends_on = []
 
 [[modules]]
-path = "vex_checks.adapters.driven.sbom"
-layer = "adapters"
-depends_on = ["vex_checks.domain"]
-
-[[modules]]
 path = "vex_checks.adapters.driven.source_scan"
 layer = "adapters"
 depends_on = [
@@ -831,7 +826,6 @@ depends_on = [
   "vex_checks.domain",
   # The check calls its I/O adapters directly: lot 3 gives them driven ports.
   { path = "vex_checks.adapters.driven.repo", deprecated = true },
-  { path = "vex_checks.adapters.driven.sbom", deprecated = true },
   # The check reads and writes through driven ports: block 22 removes them.
   { path = "vex_checks.ports.driven.sarif_writer", deprecated = true },
   { path = "vex_checks.ports.driven.sbom_reader", deprecated = true },

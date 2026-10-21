@@ -12,8 +12,8 @@ import dataclasses
 from pathlib import Path
 
 from vex_checks.adapters.driven import repo
-from vex_checks.adapters.driven.sbom import evaluate_image_premises
 from vex_checks.domain.descriptors import ImagePremise, is_image_premise
+from vex_checks.domain.image_premises import evaluate_image_premises
 from vex_checks.domain.registry import PREMISES
 from vex_checks.ports.driven.sarif_writer import SarifWriter
 from vex_checks.ports.driven.sbom_reader import SbomReader
