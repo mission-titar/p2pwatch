@@ -10,7 +10,10 @@
 - Origin: lot 3 of the umbrella spec `agents/specs/2026-10-18-hexagonal-architecture.md` (D18), whose decisions this
   one applies without restating them. It absorbs the backlog entry "The logic-free template guard on Jinja's syntax
   tree" (section 7 of `agents/specs/2026-10-15-gate-tooling.md`).
-- What an operator sees change: nothing. The aMule image boots and syncs its port as before; its environment
+- What an operator sees change: the crawler reaches amuleapi directly, no longer following `HTTP_PROXY` or
+  `NO_PROXY` (3a 14); a merge error or log line names a relative path argument as an absolute path (3a 12); a manual
+  `amule_bump` run that is not a dry run prints `version=` and `body-path=` (3a 21) (Corrected: was "nothing").
+  The aMule image boots and syncs its port as before; its environment
   variables, its s6 services and their names do not change, and port-sync keeps the two logger names
   `docs/migration-4x.md` documents (`p2pwatch_amule.adapters.driving.port_sync`, `p2pwatch_amule.adapters.driven.gluetun`),
   handed to `StdlibLogger` as lot 2 did for the crawler.
@@ -89,12 +92,18 @@ this spec: they apply a rule `AGENTS.md` already has, or a tool enforces them it
   `PUID:PGID`, amuleapi's `extra_groups=[]` and `s6-svc` cannot run in the gate, which is not root and runs no s6,
   so a rule that wanted the real system in a unit test would need an exception per adapter. About 30 driven
   adapters already follow it (`.reviews/lot3-adapter-sweep.md` holds the sweep's list); this lot brings the rest:
-  the aMule adapters, `GrypeVulnerabilityScanner` (the executable's path), `GitHubRepoReader` (the API URL), and the
-  command lines' default paths, resolved against the `cwd` and the temporary directory `__main__` passes.
-- **D1b. No unclosed connection.** The crawler's pytest config turns `ResourceWarning` into an error, and
-  `close_test_connections` goes: the readers' tests open `with ReaderProvider(...)`, and seeding goes through
-  `contextlib.closing(sqlite3.connect(...))`. Why: the fixture patches `sqlite3.connect` to close what tests leak,
-  and nothing fails if a test leaks; an error makes the leak visible where it happens.
+  the aMule adapters, `GrypeVulnerabilityScanner` (the executable's path), `GitHubRepoReader` (the API URL, and
+  the URL opener whose proxies it follows), and the command lines' relative path arguments, every one resolved
+  against the `cwd` and the temporary directory `__main__` passes (Corrected: was "default paths"; the opener
+  added by 3a's closing block).
+- **D1b. No unclosed connection.** The crawler's pytest config turns `ResourceWarning` and
+  `pytest.PytestUnraisableExceptionWarning` into errors, and `close_test_connections` goes: the readers' tests open
+  `with ReaderProvider(...)`, and seeding goes through `contextlib.closing(sqlite3.connect(...))`. Why: the fixture
+  patches `sqlite3.connect` to close what tests leak, and nothing fails if a test leaks; an error makes the leak
+  visible. A finalizer's warning reaches pytest as unraisable, hence the second filter, and it fails the test
+  running when the garbage collector runs, which may not be the one that leaked. The shutdown-deadline wiring test
+  tolerates its deliberate leak by a mark of its own (Corrected: was one filter, the leak visible "where it
+  happens").
 - **D2. Third-party tools, verified before deciding** (`.reviews/lot3-tools-*.md`, `.reviews/lot3-trial-*.md`):
   - **`source-claims` becomes ast-grep rules**, one per source premise, in `packages/vex_checks/ast-grep/` with
     their tests and their own `sgconfig.yml` (its `utilDirs` reaching the root's `ast-grep-utils/`), the scan run
@@ -237,8 +246,9 @@ follow C3.
 ### The crawler's leftovers
 
 The 12 crawler and `p2pwatch_testing` files still on `monkeypatch` (appendix) follow D1, and
-`close_test_connections` goes by D1b: still needed today, since the 5 test files that use it build
-`ReaderProvider(...)` without `with` and seed through `with sqlite3.connect(...)`, which does not close.
+`close_test_connections` goes by D1b: still needed today, since 2 of the 5 test files that use it build
+`ReaderProvider(...)` without `with` or seed through `with sqlite3.connect(...)`, which does not close (Corrected:
+was "the 5 test files", block 11's measure).
 
 Six parameter defaults only tests change follow C1 (Corrected: added after the operator's approval,
 `.reviews/lot3-default-sweep.md`): `AmuleApiClient`'s `transport` and `timeout_seconds`, `AppriseNotifier`'s
@@ -268,8 +278,8 @@ Each changes in the block that makes it false.
 
 Estimates by a Sonnet agent on `main` at `38bfe15`, before any code, about 20 % either way
 (`.reviews/lot3-estimate.md`); each teammate measures its block and splits it at a bound. No block is purely
-mechanical, so none takes the size exemption. 3a used its headroom in 5 splits (blocks 14, 16, 21, 22 and 32;
-the repo reader's block renumbered 24), and its boot and port-sync blocks became 3b, which re-measures them on the
+mechanical, so none takes the size exemption. 3a used its headroom in 3 splits (blocks 20, 21 and 30, giving 21,
+22 and 32; the repo reader's block renumbered 24) and 2 added blocks (14, 16) (Corrected: was "5 splits"), and its boot and port-sync blocks became 3b, which re-measures them on the
 tree 3a leaves (Corrected: 3a held blocks 40 to 56). Rows that sat at 450 to 480 lines: 3b 40, 44, 52, 3c 52;
 3b 40's fallback is to hand its fakes to 42.
 
@@ -282,11 +292,11 @@ call: the old entry function delegates to what the block adds until a later bloc
 |---|---|---|---|
 | 10 | `test/crawler-constants-as-parameters` | this spec; `_PROGRESS_EVERY` a parameter; the migration runner and the SQL functions' memo apart (Corrected: were `_MIGRATIONS`, `_configure`, `_load_scripts`, `content_hash`, `fold_raw_meta` as parameters); the migration tests and `older_catalog.py` off `monkeypatch` | 300, 12 |
 | 11 | `test/crawler-connections-closed` | D1b: `ResourceWarning` an error; the readers' tests open and seed with closing; `close_test_connections` gone | 350, 8 |
-| 12 | `test/crawler-process-state-as-values` | `main(argv, env, cwd)`; the root logger passed; `start_http_server` a parameter of `start_metrics_server`; the command line's default paths against the given `cwd`; `FilesystemCatalogFinder` (C3); the finder, the command line and the compose smoke off `monkeypatch` | 250, 9 |
+| 12 | `test/crawler-process-state-as-values` | `main(argv, env, cwd)`; the root logger passed; `start_http_server` a parameter of `start_metrics_server`; every relative path argument of the command line under the given `cwd` (Corrected: was "default paths"); `FilesystemCatalogFinder` (C3); the finder, the command line and the compose smoke off `monkeypatch` | 250, 9 |
 | 14 | `refactor/adapter-values-from-composition` | the six parameter defaults of the crawler's adapters gone, the composition passing them; `AmuleApiClient` takes a `transport_factory`, one transport per session as before, so httpx no longer reads `HTTP_PROXY` for amuleapi (Corrected: added) | 110, 13 |
 | 16 | `refactor/config-defaults-in-domain` | the defaults of `crawler.yml`'s absent keys into the domain; C5 in `AGENTS.md` (Corrected: added) | 185, 6 |
 | 20 | `refactor/bump-amule` | the three writers and their adapters, `bump.main` writing through them, their edges `deprecated` until 21 (Corrected: split from 21) | 250, 15 |
-| 21 | `feat/bump-amule-use-case` | `TerminalStepOutputWriter` outside Actions, `GitHubStepOutputWriter` given a path only; `main(argv, env, cwd, temporary_directory)`; the default paths against the given `cwd` and temporary directory; `wrap`'s width from the composition; `docs/contributing/amule-bump.md` (Corrected: split from 20, then from 22) | 182, 14 |
+| 21 | `feat/bump-amule-use-case` | `TerminalStepOutputWriter` outside Actions, `GitHubStepOutputWriter` given a path only; `main(argv, env, cwd, temporary_directory)`; every relative path argument under the given `cwd`, the body's default in the temporary directory (Corrected: was "the default paths"); `wrap`'s width from the composition; `docs/contributing/amule-bump.md` (Corrected: split from 20, then from 22) | 182, 14 |
 | 22 | `feat/bump-amule-driving-port` | `BumpAmule` behind `AmuleBumper` and its three outcomes; the command line printing each; `bump.py`, `test_bump.py` and `amule_bump`'s deprecated edges gone (Corrected: split from 21) | 380, 11 |
 | 24 | `refactor/repo-reader-domain-types` | `RepoReader`'s `read_` methods on domain types; GitHub's API URL as a composition value; the loopback test | 300, 12 |
 | 30 | `refactor/amule-settings-in-domain` | port-sync's variables into the domain, `SettingsError`, the values of unset variables (C5); `main(argv, env)`, the root logger passed (Corrected: split from 32) | 415, 14 |
