@@ -3,6 +3,8 @@
 import stat
 from pathlib import Path
 
+import pytest
+
 from p2pwatch_amule.adapters.driven.posix_amule_conf import PosixAmuleConf
 
 
@@ -56,3 +58,35 @@ def test_the_previous_conf_is_replaced_not_truncated(tmp_path: Path) -> None:
         _amule_conf(amule_conf_path, FakeOwnership()).write_amule_conf("[eMule]\n", 1000, 1001)
 
         assert previous_conf.read() == "[eMule]\nMaxUpload=42\n"
+
+
+def test_a_leftover_temporary_file_lends_the_conf_none_of_its_mode(tmp_path: Path) -> None:
+    amule_conf_path = tmp_path / "amule.conf"
+    (tmp_path / "amule.conf.tmp").write_text("[eMule]\nMaxUpload=42\n")
+    (tmp_path / "amule.conf.tmp").chmod(0o644)
+
+    _amule_conf(amule_conf_path, FakeOwnership()).write_amule_conf("[eMule]\n", 1000, 1001)
+
+    assert amule_conf_path.read_text() == "[eMule]\n"
+    assert stat.S_IMODE(amule_conf_path.stat().st_mode) == 0o600
+
+
+class _RefusedOwnership:
+    """A chown the system refuses."""
+
+    def change_owner(self, path: Path, uid: int, gid: int) -> None:
+        raise PermissionError(f"chown {path}")
+
+
+def test_a_failed_write_leaves_the_previous_conf_and_no_temporary_file(tmp_path: Path) -> None:
+    amule_conf_path = tmp_path / "amule.conf"
+    amule_conf_path.write_text("[eMule]\nMaxUpload=42\n")
+    amule_conf = PosixAmuleConf(
+        amule_conf_path=amule_conf_path, change_owner=_RefusedOwnership().change_owner
+    )
+
+    with pytest.raises(PermissionError):
+        amule_conf.write_amule_conf("[eMule]\n", 1000, 1001)
+
+    assert amule_conf_path.read_text() == "[eMule]\nMaxUpload=42\n"
+    assert list(tmp_path.iterdir()) == [amule_conf_path]

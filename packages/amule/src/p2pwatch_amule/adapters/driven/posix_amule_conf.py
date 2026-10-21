@@ -23,8 +23,14 @@ class PosixAmuleConf(AmuleConfReader, AmuleConfWriter):
     def write_amule_conf(self, conf: str, uid: int, gid: int) -> None:
         # Replaced, not rewritten in place: a failed write must not leave amuled a truncated file.
         temporary_path = self._amule_conf_path.with_name(self._amule_conf_path.name + ".tmp")
-        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
-        with open(os.open(temporary_path, flags, 0o600), "w") as handle:
-            handle.write(conf)
-        self._change_owner(temporary_path, uid, gid)
-        os.replace(temporary_path, self._amule_conf_path)
+        # Created afresh: the 0600 applies only on creation, a leftover's mode would carry over.
+        temporary_path.unlink(missing_ok=True)
+        try:
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+            with open(os.open(temporary_path, flags, 0o600), "w") as handle:
+                handle.write(conf)
+            self._change_owner(temporary_path, uid, gid)
+            os.replace(temporary_path, self._amule_conf_path)
+        except BaseException:
+            temporary_path.unlink(missing_ok=True)
+            raise
