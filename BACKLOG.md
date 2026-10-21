@@ -38,8 +38,8 @@ An agent adds an entry only after the operator has agreed to it.
 
 - **Hexagonal architecture**: rings read from the paths, ports as ABCs, six hexagons that never import one another,
   enforced by tach and ast-grep. Umbrella spec: `agents/specs/2026-10-18-hexagonal-architecture.md`, lots in D18.
-  - **Lot 3, the other five hexagons**: their I/O behind ports, their tests off `monkeypatch`, and the documentation
-    left over. D18 of the umbrella spec.
+  - **Lots 3b and 3c**: the aMule container's boot and port-sync, then the three checking tools, their I/O behind
+    ports, their tests off `monkeypatch`, the rule refusing it. `agents/specs/2026-10-20-five-hexagons.md`.
 
 - **Adopt ty**, first as the gate's type checker in mypy's place, then as Serena's language server, once it reaches
   parity. Section "ty: the parity conditions" of `agents/specs/2026-10-17-serena-and-the-language-servers.md`.
