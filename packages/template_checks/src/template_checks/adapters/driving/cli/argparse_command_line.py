@@ -1,9 +1,10 @@
 """The command line: parses a subcommand, calls its check, returns the exit code."""
 
 import argparse
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 
+from template_checks.ports.driving.logic_free_checker import LogicFreeChecker
 from template_checks.ports.driving.template_attribute_lister import TemplateAttributeLister
 
 
@@ -14,11 +15,11 @@ class ArgparseCommandLine:
     def __init__(
         self,
         *,
-        check_logic_free: Callable[[Path], int],
+        logic_free_checker: LogicFreeChecker,
         template_attribute_lister: TemplateAttributeLister,
         cwd: Path,
     ) -> None:
-        self._check_logic_free = check_logic_free
+        self._logic_free_checker = logic_free_checker
         self._template_attribute_lister = template_attribute_lister
         self._cwd = cwd
 
@@ -29,7 +30,7 @@ class ArgparseCommandLine:
         )
         subparsers = parser.add_subparsers(dest="command", required=True)
         logic_free = subparsers.add_parser(
-            "logic-free", help="fail on any logic tag or computed expression in a template"
+            "logic-free", help="fail on any logic construct in a template"
         )
         template_attributes = subparsers.add_parser(
             "template-attributes", help="print the attribute names the templates read, comma-joined"
@@ -42,6 +43,13 @@ class ArgparseCommandLine:
         if args.command == "logic-free":
             return self._check_logic_free(args.templates_dir)
         return self._list_template_attributes(args.templates_dir)
+
+    def _check_logic_free(self, templates_directory: Path) -> int:
+        """Prints each problem of the report, returns 1 on any problem."""
+        logic_free_report = self._logic_free_checker.check_logic_free(templates_directory)
+        for problem in logic_free_report.problems:
+            print(problem)
+        return 1 if logic_free_report.problems else 0
 
     def _list_template_attributes(self, templates_directory: Path) -> int:
         """Prints the attribute names the templates read, sorted and comma-joined."""
