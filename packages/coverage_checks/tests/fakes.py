@@ -5,6 +5,11 @@ from coverage_checks.domain.package_tree import PackageTree
 from coverage_checks.domain.test_coverage import TestCoverage
 from coverage_checks.ports.driven.package_tree_reader import PackageTreeReader
 from coverage_checks.ports.driven.test_coverage_reader import TestCoverageReader
+from coverage_checks.ports.driving.unit_coverage_checker import (
+    NoPerTestCoverage,
+    UnitCoverageChecker,
+    UnitCoverageReport,
+)
 
 
 class FakePackageTreeReader(PackageTreeReader):
@@ -45,3 +50,15 @@ class FakeTestCoverageReader(TestCoverageReader):
     ) -> TestCoverage:
         self.own_test_files_by_module[module] = tuple(own_test_files)
         return self._test_coverage_by_module[module]
+
+
+class FakeUnitCoverageChecker(UnitCoverageChecker):
+    """Answers the outcome it is given, counting its checks."""
+
+    def __init__(self, outcome: UnitCoverageReport | NoPerTestCoverage) -> None:
+        self._outcome = outcome
+        self.check_count = 0
+
+    def check_unit_coverage(self) -> UnitCoverageReport | NoPerTestCoverage:
+        self.check_count += 1
+        return self._outcome

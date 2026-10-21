@@ -116,7 +116,6 @@ depends_on = [
   "coverage_checks.adapters.driven.coverage_py_reader",
   "coverage_checks.adapters.driven.filesystem_package_tree_reader",
   "coverage_checks.adapters.driving.cli",
-  "coverage_checks.adapters.driving.unit_coverage",
   "coverage_checks.application",
 ]
 
@@ -132,11 +131,6 @@ depends_on = ["coverage_checks.domain", "coverage_checks.ports.driven.package_tr
 
 [[modules]]
 path = "coverage_checks.adapters.driving.cli"
-layer = "adapters"
-depends_on = []
-
-[[modules]]
-path = "coverage_checks.adapters.driving.unit_coverage"
 layer = "adapters"
 depends_on = ["coverage_checks.ports.driving.unit_coverage_checker"]
 
