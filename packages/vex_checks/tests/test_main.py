@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 from vex_checks.__main__ import main
-from vex_checks.adapters.driving import check_claim_coverage
 
 _REPO_ROOT = Path(__file__).parents[3]
 
@@ -54,11 +53,9 @@ def test_stale_claims_runs_the_grype_found_on_the_path_of_its_environment(
     )
 
 
-def test_claim_coverage_runs_the_coverage_check(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+def test_claim_coverage_finds_the_repository_s_claims_premises_and_source_rules_in_bijection(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(check_claim_coverage, "PREMISES", {})
+    assert main(["claim-coverage"], {}, tmp_path) == 0
 
-    assert main(["claim-coverage"], {}, tmp_path) == 1
-
-    assert "claim has no premise" in capsys.readouterr().out
+    assert capsys.readouterr().out == ""

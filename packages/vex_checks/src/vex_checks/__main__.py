@@ -7,12 +7,14 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from vex_checks.adapters.driven import repo
+from vex_checks.adapters.driven.filesystem_source_rule_reader import FilesystemSourceRuleReader
 from vex_checks.adapters.driven.grype_vulnerability_scanner import GrypeVulnerabilityScanner
 from vex_checks.adapters.driven.json_sarif_writer import JsonSarifWriter
 from vex_checks.adapters.driven.json_vex_reader import JsonVexReader
 from vex_checks.adapters.driven.syft_sbom_reader import SyftSbomReader
 from vex_checks.adapters.driving import check_claim_coverage
 from vex_checks.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
+from vex_checks.application.check_claim_coverage import CheckClaimCoverage
 from vex_checks.application.check_image_claims import CheckImageClaims
 from vex_checks.application.check_stale_claims import CheckStaleClaims
 from vex_checks.domain.registry import PREMISES
@@ -43,7 +45,17 @@ def main(argv: Sequence[str], env: Mapping[str, str], cwd: Path) -> int:
             vex_reader=vex_reader,
             sarif_writer=sarif_writer,
         ),
-        check_claim_coverage=functools.partial(check_claim_coverage.main, vex_reader=vex_reader),
+        check_claim_coverage=functools.partial(
+            check_claim_coverage.main,
+            claim_coverage_checker=CheckClaimCoverage(
+                premises=PREMISES,
+                vex_paths=tuple(repo.vex_files().values()),
+                vex_reader=vex_reader,
+                source_rule_reader=FilesystemSourceRuleReader(
+                    rules_directory=repo_root / "packages" / "vex_checks" / "ast-grep" / "rules"
+                ),
+            ),
+        ),
         cwd=cwd,
     )
     return command_line.run(argv)
