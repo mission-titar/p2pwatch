@@ -11,4 +11,9 @@ class FilesystemSourceRuleReader(SourceRuleReader):
 
     def read_source_rule_ids(self) -> set[str]:
         # iterdir, not glob: an absent directory raises instead of reading no rule.
-        return {path.stem for path in self._rules_directory.iterdir() if path.suffix == ".yml"}
+        rule_paths = [path for path in self._rules_directory.iterdir() if path.suffix == ".yml"]
+        for rule_path in rule_paths:
+            # ast-grep reports the id inside the file: refuse one that is not its file's name.
+            if f"id: {rule_path.stem}" not in rule_path.read_text().splitlines():
+                raise ValueError(f"{rule_path.name}: its id is not {rule_path.stem}")
+        return {rule_path.stem for rule_path in rule_paths}
