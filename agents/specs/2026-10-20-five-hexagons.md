@@ -280,7 +280,7 @@ Each changes in the block that makes it false.
 - `AGENTS.md`: the conventions C1 to C5, each in the block the section "Conventions this lot sets" names.
 - `AGENTS.md`: the `TID251` exemption of `packages/amule/` goes (3b 50, umbrella D19); the hard rules gain "no
   module patching" (3c 90); "No I/O in the core" names `jinja2` in `template_checks`' domain (3c 60); the Commands
-  section names `_template-attributes` (3c 60); the subsystem table's rows for port-sync and the container boot
+  section names `_template-attributes` (3c 61) (Corrected: was 60, split at the file bound); the subsystem table's rows for port-sync and the container boot
   follow their new paths (3b 48, 57) (Corrected: was 56, before its split); the glossary gains `claim`, `premise` and `source rule` (3c 14, 30) (Corrected: was 12, 30), and
   Naming the `<Thing>Report` response model with its `problems` (3c 20).
 - `docs/contributing/architecture.md`: section 4 describes the six hexagons and their rings (3c 90); section 12
@@ -371,7 +371,8 @@ Rows 22, 26, 60 and 62 have no margin and split in Act if measured over.
 | 53 | `refactor/test-coverage-reader` | `TestCoverageReader`, `CoveragePyReader` given the data file, the package's directory and a report directory; `PackageTreeReader` reads a module's source; the old entry function delegates (Corrected: split from 52 at the line bound, 585 lines) | 370, 10 (measured) |
 | 54 | `feat/check-unit-coverage` | `CheckUnitCoverage` behind `UnitCoverageChecker`; the old entry function delegates (Corrected: split from 52) | 340, 10 |
 | 56 | `refactor/unit-coverage-cut-over` | `unit_coverage.py` and its test gone; the command line; `main(argv, env, cwd)`, the package's directory and name passed (Corrected: split from 52) | 410, 9 |
-| 60 | `refactor/template-reader` | `TemplateReader`, `FilesystemTemplateReader`, the package's rings; `jinja2` on the domain's import list and its rule; the rename (D4) | 150, 18 |
+| 60 | `refactor/template-reader` | `TemplateReader`, `FilesystemTemplateReader`, the package's rings; `jinja2` on the domain's import list and its rule (Corrected: split from 60 at the file bound, 20 files) | 140, 16 (measured) |
+| 61 | `refactor/template-attributes-rename` | the rename (D4) (Corrected: split from 60 at the file bound, 20 files) | 15, 5 (measured) |
 | 62 | `feat/list-template-attributes` | `ListTemplateAttributes` behind `TemplateAttributeLister`, on Jinja's tree in the domain; `read_names.py` and its test gone; `main(argv, env, cwd)` (Corrected: split from 60) | 220, 18 |
 | 70 | `refactor/webui-templates-logic-free` | the 20 constructs into the `<Thing>Display`s | 150, 10 |
 | 80 | `refactor/logic-free-on-jinja-tree` | the walker on Jinja's tree in the domain; `check_templates.py` calls it, the regex gone | 250, 8 |
