@@ -11,9 +11,8 @@ import pwd
 import subprocess
 import sys
 import unicodedata
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
-from p2pwatch_amule.adapters.driven import settings
 from p2pwatch_amule.domain.conf import (
     AMULE_CONF_PATH,
     CONFIG_DIR,
@@ -21,28 +20,29 @@ from p2pwatch_amule.domain.conf import (
     TEMP_DIR,
     reconcile_conf,
 )
+from p2pwatch_amule.domain.settings import is_port_sync_enabled, parse_port_sync_settings
 
 HOME_DIR = "/home/amule"
 PORT_SYNC_DOWN_FILE = "/etc/services.d/port-sync/down"
 
 
-def _required(name: str) -> str:
-    value = os.environ.get(name)
+def _required(env: Mapping[str, str], name: str) -> str:
+    value = env.get(name)
     if not value:
         sys.exit(f"{name} is required")
     return value
 
 
-def _password(name: str) -> str:
-    value = _required(name)
+def _password(env: Mapping[str, str], name: str) -> str:
+    value = _required(env, name)
     # Cc: the C0 and C1 controls and DEL, which no typed password holds.
     if any(unicodedata.category(char) == "Cc" for char in value):
         sys.exit(f"{name} must not contain a control character")
     return value
 
 
-def _required_id(name: str) -> int:
-    value = _required(name)
+def _required_id(env: Mapping[str, str], name: str) -> int:
+    value = _required(env, name)
     # isascii + isdigit: int() would also take "-1", "+1", "1_000", " 1" and non-ASCII digits.
     if not (value.isascii() and value.isdigit()):
         sys.exit(f"{name} must be a numeric id, got {value!r}")
@@ -57,14 +57,14 @@ def _amule_account_missing(lookup: Callable[[str], object]) -> bool:
     return False
 
 
-def main() -> None:
-    puid = _required_id("PUID")
-    pgid = _required_id("PGID")
-    ec_password = _password("AMULE_EC_PASSWORD")
-    api_password = _password("AMULE_API_PASSWORD")
-    port_sync_enabled = settings.enabled(os.environ)
+def main(env: Mapping[str, str]) -> None:
+    puid = _required_id(env, "PUID")
+    pgid = _required_id(env, "PGID")
+    ec_password = _password(env, "AMULE_EC_PASSWORD")
+    api_password = _password(env, "AMULE_API_PASSWORD")
+    port_sync_enabled = is_port_sync_enabled(env)
     if port_sync_enabled:
-        settings.load(os.environ)
+        parse_port_sync_settings(env)
 
     # -o tolerates a uid/gid a Debian system account already holds: PUID/PGID only have to match
     # the host's ownership of the bind mounts.
@@ -101,7 +101,7 @@ def main() -> None:
         group=pgid,
         # Empty, not omitted: an omitted list keeps root's supplementary groups, group 0 included.
         extra_groups=[],
-        env={**os.environ, "HOME": HOME_DIR},
+        env={**env, "HOME": HOME_DIR},
         check=True,
     )
 

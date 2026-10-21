@@ -10,12 +10,15 @@ from typing import Any
 
 import pytest
 
-from p2pwatch_amule.adapters.driven.settings import Settings
 from p2pwatch_amule.adapters.driving import port_sync
 from p2pwatch_amule.domain.conf import tcp_listen_port, with_listen_port
+from p2pwatch_amule.domain.settings import PortSyncSettings
 
 DOWN = ["s6-svc", "-wD", "-T", "60000", "-d", "/etc/services.d/amuled"]
 UP = ["s6-svc", "-u", "/etc/services.d/amuled"]
+SETTINGS = PortSyncSettings(
+    gluetun_control_url="http://localhost:8000", poll_seconds=60, restart_min_seconds=300
+)
 CONF = "[eMule]\nPort=4662\nUDPPort=4672\nMaxUpload=42\n\n[AmuleApi]\nEnabled=1\n\n"
 
 
@@ -32,12 +35,6 @@ class Node:
         monkeypatch.setattr(port_sync, "AMULE_CONF_PATH", str(self.conf))
         monkeypatch.setattr(port_sync, "forwarded_port", self._forwarded_port)
         monkeypatch.setattr(subprocess, "run", self._run)
-        for name in (
-            "GLUETUN_CONTROL_URL",
-            "PORT_SYNC_POLL_SECONDS",
-            "PORT_SYNC_RESTART_MIN_SECONDS",
-        ):
-            monkeypatch.delenv(name, raising=False)
 
     def _forwarded_port(self, url: str) -> int | None:
         assert url == "http://localhost:8000"
@@ -57,7 +54,7 @@ def node(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Node:
 
 
 def test_a_new_port_stops_amuled_writes_both_ports_and_starts_it(node: Node) -> None:
-    assert port_sync.sync_listen_port_once(Settings(), None, now_monotonic=1000.0) == 1000.0
+    assert port_sync.sync_listen_port_once(SETTINGS, None, now_monotonic=1000.0) == 1000.0
     assert node.commands == [DOWN, UP]
     assert node.conf.read_text() == with_listen_port(CONF, 51820)
     assert tcp_listen_port(node.conf.read_text()) == 51820
@@ -66,7 +63,7 @@ def test_a_new_port_stops_amuled_writes_both_ports_and_starts_it(node: Node) -> 
 def test_the_file_is_written_only_once_amuled_is_down(node: Node) -> None:
     ports_seen_at_down: list[int] = []
     node.on_down = lambda: ports_seen_at_down.append(tcp_listen_port(node.conf.read_text()))
-    port_sync.sync_listen_port_once(Settings(), None, now_monotonic=1000.0)
+    port_sync.sync_listen_port_once(SETTINGS, None, now_monotonic=1000.0)
     assert ports_seen_at_down == [4662]
 
 
@@ -75,14 +72,14 @@ def test_the_write_keeps_what_amuled_flushed_on_exit(node: Node) -> None:
         node.conf.write_text(CONF.replace("MaxUpload=42", "MaxUpload=42\nNick=flushed"))
 
     node.on_down = flush
-    port_sync.sync_listen_port_once(Settings(), None, now_monotonic=1000.0)
+    port_sync.sync_listen_port_once(SETTINGS, None, now_monotonic=1000.0)
     assert node.conf.read_text() == with_listen_port(
         CONF.replace("MaxUpload=42", "MaxUpload=42\nNick=flushed"), 51820
     )
 
 
 def test_the_written_file_stays_private_to_its_owner(node: Node) -> None:
-    port_sync.sync_listen_port_once(Settings(), None, now_monotonic=1000.0)
+    port_sync.sync_listen_port_once(SETTINGS, None, now_monotonic=1000.0)
     assert node.conf.stat().st_mode & 0o777 == 0o600
 
 
@@ -91,7 +88,7 @@ def test_a_down_wait_that_fails_writes_nothing_and_still_starts_amuled(
 ) -> None:
     node.down_exit = 99
     with caplog.at_level(logging.ERROR):
-        assert port_sync.sync_listen_port_once(Settings(), None, now_monotonic=1000.0) == 1000.0
+        assert port_sync.sync_listen_port_once(SETTINGS, None, now_monotonic=1000.0) == 1000.0
     assert node.commands == [DOWN, UP]
     assert node.conf.read_text() == CONF
     assert "exited 99: timed out" in caplog.text
@@ -105,7 +102,7 @@ def test_a_write_that_raises_still_starts_amuled_and_is_logged(
 
     monkeypatch.setattr(os, "replace", replace)
     with caplog.at_level(logging.ERROR):
-        assert port_sync.sync_listen_port_once(Settings(), None, now_monotonic=1000.0) == 1000.0
+        assert port_sync.sync_listen_port_once(SETTINGS, None, now_monotonic=1000.0) == 1000.0
     assert node.commands == [DOWN, UP]
     assert node.conf.read_text() == CONF
     assert "No space left on device" in caplog.text
@@ -113,23 +110,23 @@ def test_a_write_that_raises_still_starts_amuled_and_is_logged(
 
 def test_the_same_port_calls_no_s6_command(node: Node) -> None:
     node.forwarded = 4662
-    assert port_sync.sync_listen_port_once(Settings(), 5.0, now_monotonic=1000.0) == 5.0
+    assert port_sync.sync_listen_port_once(SETTINGS, 5.0, now_monotonic=1000.0) == 5.0
     assert node.commands == []
 
 
 def test_no_forwarded_port_calls_no_s6_command(node: Node) -> None:
     node.forwarded = None
-    assert port_sync.sync_listen_port_once(Settings(), None, now_monotonic=1000.0) is None
+    assert port_sync.sync_listen_port_once(SETTINGS, None, now_monotonic=1000.0) is None
     assert node.commands == []
 
 
 def test_a_restart_within_the_window_calls_no_s6_command(node: Node) -> None:
-    assert port_sync.sync_listen_port_once(Settings(), 1000.0, now_monotonic=1299.0) == 1000.0
+    assert port_sync.sync_listen_port_once(SETTINGS, 1000.0, now_monotonic=1299.0) == 1000.0
     assert node.commands == []
 
 
 def test_a_restart_once_the_window_is_over_goes_ahead(node: Node) -> None:
-    assert port_sync.sync_listen_port_once(Settings(), 1000.0, now_monotonic=1300.0) == 1300.0
+    assert port_sync.sync_listen_port_once(SETTINGS, 1000.0, now_monotonic=1300.0) == 1300.0
     assert node.commands == [DOWN, UP]
 
 
@@ -154,10 +151,24 @@ def test_the_start_sends_up_before_the_first_round_then_polls_every_60s(
     monkeypatch.setattr(port_sync, "forwarded_port", forwarded_port)
     monkeypatch.setattr(time, "sleep", sleep)
     with pytest.raises(_Stop):
-        port_sync.main()
+        port_sync.main({})
     gluetun = ["GET", "http://localhost:8000"]
     assert node.commands == [UP, gluetun, gluetun]
     assert sleeps == [60, 60]
+
+
+def test_the_poll_interval_is_the_environments(node: Node, monkeypatch: pytest.MonkeyPatch) -> None:
+    sleeps: list[float] = []
+
+    def sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        raise _Stop
+
+    node.forwarded = 4662
+    monkeypatch.setattr(time, "sleep", sleep)
+    with pytest.raises(_Stop):
+        port_sync.main({"PORT_SYNC_POLL_SECONDS": "5"})
+    assert sleeps == [5]
 
 
 def test_the_restart_time_carries_from_one_round_to_the_next(
@@ -176,7 +187,7 @@ def test_the_restart_time_carries_from_one_round_to_the_next(
 
     monkeypatch.setattr(time, "sleep", sleep)
     with pytest.raises(_Stop):
-        port_sync.main()
+        port_sync.main({})
     assert node.commands == [UP, DOWN, UP]
 
 
@@ -189,6 +200,6 @@ def test_an_unreadable_amule_conf_calls_no_s6_command_and_is_logged(
     else:
         node.conf.write_text(conf)
     with caplog.at_level(logging.ERROR):
-        assert port_sync.sync_listen_port_once(Settings(), 5.0, now_monotonic=1000.0) == 5.0
+        assert port_sync.sync_listen_port_once(SETTINGS, 5.0, now_monotonic=1000.0) == 5.0
     assert node.commands == []
     assert "amule.conf's port is unreadable" in caplog.text
