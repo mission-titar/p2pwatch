@@ -664,7 +664,6 @@ depends_on = [
   "p2pwatch_amule.ports.driven.monotonic_clock",
   "p2pwatch_amule.ports.driven.service_supervisor",
   "p2pwatch_amule.ports.driving.container_booter",
-  "p2pwatch_amule.ports.driving.port_sync_loop_runner",
 ]
 
 [[modules]]

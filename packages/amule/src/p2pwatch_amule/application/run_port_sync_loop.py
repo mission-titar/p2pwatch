@@ -10,11 +10,11 @@ from p2pwatch_amule.ports.driven.forwarded_port_reader import ForwardedPortReade
 from p2pwatch_amule.ports.driven.logger import Logger
 from p2pwatch_amule.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch_amule.ports.driven.service_supervisor import ServiceSupervisor
-from p2pwatch_amule.ports.driving.port_sync_loop_runner import PortSyncLoopRunner
 
 
-class RunPortSyncLoop(PortSyncLoopRunner):
-    """Polls every ``poll_interval``, restarts amuled at most once per ``restart_min_interval``."""
+class RunPortSyncLoop:
+    """Polls every ``poll_interval``, restarts amuled at most once per ``restart_min_interval``;
+    the root of port-sync's graph, behind no port, as ``RunCrawler``."""
 
     def __init__(
         self,
