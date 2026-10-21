@@ -580,7 +580,6 @@ path = "p2pwatch_amule.__main__"
 layer = "composition"
 depends_on = [
   "p2pwatch_amule.adapters.driven.amule_api_admin_password_setter",
-  "p2pwatch_amule.adapters.driven.gluetun_forwarded_port_reader",
   "p2pwatch_amule.adapters.driven.posix_account_manager",
   "p2pwatch_amule.adapters.driven.posix_amule_conf",
   "p2pwatch_amule.adapters.driven.posix_amuled_directory_preparer",
@@ -589,8 +588,8 @@ depends_on = [
   "p2pwatch_amule.adapters.driven.system_monotonic_clock",
   "p2pwatch_amule.adapters.driving.cli",
   "p2pwatch_amule.application",
+  "p2pwatch_amule.composition",
   "p2pwatch_amule.domain",
-  "p2pwatch_amule.ports.driving.port_sync_loop_runner",
 ]
 
 [[modules]]
@@ -645,7 +644,11 @@ depends_on = [
 [[modules]]
 path = "p2pwatch_amule.adapters.driving.cli"
 layer = "adapters"
-depends_on = ["p2pwatch_amule.domain", "p2pwatch_amule.ports.driving.container_booter"]
+depends_on = [
+  "p2pwatch_amule.domain",
+  "p2pwatch_amule.ports.driving.container_booter",
+  "p2pwatch_amule.ports.driving.port_sync_loop_runner",
+]
 
 [[modules]]
 path = "p2pwatch_amule.application"
@@ -661,6 +664,20 @@ depends_on = [
   "p2pwatch_amule.ports.driven.monotonic_clock",
   "p2pwatch_amule.ports.driven.service_supervisor",
   "p2pwatch_amule.ports.driving.container_booter",
+  "p2pwatch_amule.ports.driving.port_sync_loop_runner",
+]
+
+[[modules]]
+path = "p2pwatch_amule.composition"
+layer = "composition"
+depends_on = [
+  "p2pwatch_amule.adapters.driven.gluetun_forwarded_port_reader",
+  "p2pwatch_amule.adapters.driven.posix_amule_conf",
+  "p2pwatch_amule.adapters.driven.s6_service_supervisor",
+  "p2pwatch_amule.adapters.driven.stdlib_logger",
+  "p2pwatch_amule.application",
+  "p2pwatch_amule.domain",
+  "p2pwatch_amule.ports.driven.monotonic_clock",
   "p2pwatch_amule.ports.driving.port_sync_loop_runner",
 ]
 

@@ -1,3 +1,4 @@
+import subprocess
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import timedelta
@@ -17,6 +18,7 @@ from p2pwatch_amule.ports.driven.logger import Logger
 from p2pwatch_amule.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch_amule.ports.driven.service_supervisor import ServiceSupervisor
 from p2pwatch_amule.ports.driving.container_booter import ContainerBooter
+from p2pwatch_amule.ports.driving.port_sync_loop_runner import PortSyncLoopRunner
 
 
 class FakeAccountManager(AccountManager):
@@ -142,6 +144,32 @@ class FakeContainerBooter(ContainerBooter):
         self.envs.append(env)
         if self.error is not None:
             raise self.error
+
+
+class FakePortSyncLoopRunner(PortSyncLoopRunner):
+    """Counts its runs, or raises a set error."""
+
+    def __init__(self) -> None:
+        self.error: SettingsError | None = None
+        self.runs = 0
+
+    def run_port_sync_loop(self) -> None:
+        self.runs += 1
+        if self.error is not None:
+            raise self.error
+
+
+class FakeS6:
+    """Records the commands run, each exiting ``exit_code``: the gate runs no s6."""
+
+    def __init__(self) -> None:
+        self.commands: list[list[str]] = []
+        self.exit_code = 0
+
+    def run_command(self, argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        assert kwargs == {"capture_output": True, "text": True}
+        self.commands.append(argv)
+        return subprocess.CompletedProcess(argv, self.exit_code, "", "timed out\n")
 
 
 class FakeForwardedPortReader(ForwardedPortReader):

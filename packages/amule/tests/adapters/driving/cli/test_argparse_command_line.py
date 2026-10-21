@@ -6,71 +6,65 @@ import pytest
 
 from p2pwatch_amule.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from p2pwatch_amule.domain.settings_error import SettingsError
-from tests.fakes import FakeContainerBooter
+from tests.fakes import FakeContainerBooter, FakePortSyncLoopRunner
 
 ENV = {"PUID": "1000"}
 
 
-class _EntryPoints:
-    """Records which entry point each run called."""
+class _DrivingPorts:
+    """The two driving ports, each recording what it was asked."""
 
     def __init__(self) -> None:
         self.container_booter = FakeContainerBooter()
-        self.called: list[str] = []
+        self.port_sync_loop_runner = FakePortSyncLoopRunner()
 
     def command_line(self, root_logger: logging.Logger | None = None) -> ArgparseCommandLine:
         return ArgparseCommandLine(
             container_booter=self.container_booter,
-            sync_listen_port=lambda: self.called.append("port-sync"),
+            port_sync_loop_runner=self.port_sync_loop_runner,
             env=ENV,
             root_logger=root_logger or logging.Logger("root"),
         )
 
 
 def test_boot_boots_the_container_in_the_environment_given() -> None:
-    entry_points = _EntryPoints()
+    driving_ports = _DrivingPorts()
 
-    assert entry_points.command_line().run(["boot"]) == 0
+    assert driving_ports.command_line().run(["boot"]) == 0
 
-    assert entry_points.container_booter.envs == [ENV]
-    assert entry_points.called == []
+    assert driving_ports.container_booter.envs == [ENV]
+    assert driving_ports.port_sync_loop_runner.runs == 0
 
 
-def test_port_sync_runs_its_entry_point_only() -> None:
-    entry_points = _EntryPoints()
+def test_port_sync_runs_its_loop_only() -> None:
+    driving_ports = _DrivingPorts()
 
-    assert entry_points.command_line().run(["port-sync"]) == 0
+    assert driving_ports.command_line().run(["port-sync"]) == 0
 
-    assert entry_points.called == ["port-sync"]
-    assert entry_points.container_booter.envs == []
+    assert driving_ports.port_sync_loop_runner.runs == 1
+    assert driving_ports.container_booter.envs == []
 
 
 def test_a_variable_the_booter_refuses_is_printed_alone_and_returns_one(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    entry_points = _EntryPoints()
-    entry_points.container_booter.error = SettingsError("PUID is required")
+    driving_ports = _DrivingPorts()
+    driving_ports.container_booter.error = SettingsError("PUID is required")
 
-    assert entry_points.command_line().run(["boot"]) == 1
+    assert driving_ports.command_line().run(["boot"]) == 1
 
     assert capsys.readouterr().err == "PUID is required\n"
-
-
-def _refusing_port_sync() -> None:
-    raise SettingsError("PORT_SYNC_POLL_SECONDS must be a positive integer, got '0'")
 
 
 def test_a_variable_port_sync_refuses_is_printed_alone_and_returns_one(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    command_line = ArgparseCommandLine(
-        container_booter=FakeContainerBooter(),
-        sync_listen_port=_refusing_port_sync,
-        env=ENV,
-        root_logger=logging.Logger("root"),
+    driving_ports = _DrivingPorts()
+    driving_ports.port_sync_loop_runner.error = SettingsError(
+        "PORT_SYNC_POLL_SECONDS must be a positive integer, got '0'"
     )
 
-    assert command_line.run(["port-sync"]) == 1
+    assert driving_ports.command_line().run(["port-sync"]) == 1
 
     assert capsys.readouterr().err == "PORT_SYNC_POLL_SECONDS must be a positive integer, got '0'\n"
 
@@ -78,19 +72,19 @@ def test_a_variable_port_sync_refuses_is_printed_alone_and_returns_one(
 def test_the_bare_invocation_is_refused_with_a_usage_line(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    entry_points = _EntryPoints()
+    driving_ports = _DrivingPorts()
 
     with pytest.raises(SystemExit) as exit_info:
-        entry_points.command_line().run([])
+        driving_ports.command_line().run([])
 
     assert exit_info.value.code == 2
     assert capsys.readouterr().err.startswith("usage: p2pwatch_amule ")
-    assert entry_points.called == []
+    assert driving_ports.port_sync_loop_runner.runs == 0
 
 
 def test_the_help_lists_the_subcommands(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as exit_info:
-        _EntryPoints().command_line().run(["--help"])
+        _DrivingPorts().command_line().run(["--help"])
 
     assert exit_info.value.code == 0
     assert "{boot,port-sync}" in capsys.readouterr().out
@@ -100,7 +94,7 @@ def test_the_help_lists_the_subcommands(capsys: pytest.CaptureFixture[str]) -> N
 def test_every_subcommand_logs_at_info_with_its_logger_name(command: str) -> None:
     root_logger = logging.Logger("root")
 
-    _EntryPoints().command_line(root_logger).run([command])
+    _DrivingPorts().command_line(root_logger).run([command])
 
     [handler] = root_logger.handlers
     assert handler.formatter is not None
@@ -114,7 +108,7 @@ def test_a_root_logger_with_a_handler_is_left_as_it_is() -> None:
     handler = logging.NullHandler()
     root_logger.addHandler(handler)
 
-    _EntryPoints().command_line(root_logger).run(["boot"])
+    _DrivingPorts().command_line(root_logger).run(["boot"])
 
     assert root_logger.handlers == [handler]
     assert root_logger.level == logging.WARNING

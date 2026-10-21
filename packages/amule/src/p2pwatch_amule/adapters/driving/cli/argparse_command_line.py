@@ -1,30 +1,31 @@
-"""The command line: parses a subcommand and calls its driving port or its entry point."""
+"""The command line: parses a subcommand and calls its driving port."""
 
 import argparse
 import logging
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 
 from p2pwatch_amule.domain.settings_error import SettingsError
 from p2pwatch_amule.ports.driving.container_booter import ContainerBooter
+from p2pwatch_amule.ports.driving.port_sync_loop_runner import PortSyncLoopRunner
 
 _LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 
 
 class ArgparseCommandLine:
-    """``boot`` over ``container_booter`` in ``env``, ``port-sync`` over its entry point; a refused
-    variable is printed."""
+    """``boot`` over ``container_booter`` in ``env``, ``port-sync`` over
+    ``port_sync_loop_runner``; a refused variable is printed."""
 
     def __init__(
         self,
         *,
         container_booter: ContainerBooter,
-        sync_listen_port: Callable[[], None],
+        port_sync_loop_runner: PortSyncLoopRunner,
         env: Mapping[str, str],
         root_logger: logging.Logger,
     ) -> None:
         self._container_booter = container_booter
-        self._sync_listen_port = sync_listen_port
+        self._port_sync_loop_runner = port_sync_loop_runner
         self._env = env
         self._root_logger = root_logger
 
@@ -44,7 +45,7 @@ class ArgparseCommandLine:
             if args.command == "boot":
                 self._container_booter.boot_container(self._env)
             else:
-                self._sync_listen_port()
+                self._port_sync_loop_runner.run_port_sync_loop()
         except SettingsError as error:
             print(error, file=sys.stderr)
             return 1

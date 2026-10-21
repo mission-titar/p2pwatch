@@ -8,4 +8,5 @@ class PortSyncLoopRunner(ABC):
 
     @abstractmethod
     def run_port_sync_loop(self) -> None:
-        """Never returns; raises ``OSError`` when the supervisor cannot be run."""
+        """Never returns; raises ``SettingsError`` on a refused variable, ``OSError`` when the
+        supervisor cannot be run."""
