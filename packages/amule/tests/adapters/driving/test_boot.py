@@ -1,4 +1,4 @@
-"""boot main: the booter first, then mount points, amule.conf, admin pass, port-sync."""
+"""boot main: the booter first, then amule.conf, admin pass, port-sync."""
 
 import hashlib
 import os
@@ -45,8 +45,8 @@ class Boot:
     def __init__(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         self.home = tmp_path / "home/amule"
         self.config = self.home / ".aMule"
-        self.incoming = tmp_path / "downloads/incoming"
-        self.temp = tmp_path / "downloads/temp"
+        # The booter's mount points.
+        self.config.mkdir(parents=True)
         self.conf = self.config / "amule.conf"
         self.port_sync_down = tmp_path / "services.d/port-sync/down"
         self.port_sync_down.parent.mkdir(parents=True)
@@ -63,8 +63,6 @@ class Boot:
             container_booter=self.container_booter,
             home_directory=self.home,
             config_directory=self.config,
-            incoming_directory=self.incoming,
-            temporary_directory=self.temp,
             amule_conf_path=self.conf,
             port_sync_down_file=self.port_sync_down,
         )
@@ -100,20 +98,13 @@ def test_first_boot_boots_the_container_and_writes_the_minimal_conf(boot: Boot) 
     assert boot.conf.read_text() == reconcile_conf(None, DIGEST)
 
 
-def test_mount_points_are_created_and_owned_but_not_their_contents(boot: Boot) -> None:
-    boot.main()
-    owned = [boot.home, boot.config, boot.incoming, boot.temp]
-    assert all(directory.is_dir() for directory in owned)
-    assert boot.chowns == [(path, 1000, 1001) for path in [*owned, boot.conf]]
-
-
 def test_the_conf_is_private_to_its_owner(boot: Boot) -> None:
     boot.main()
+    assert boot.chowns == [(boot.conf, 1000, 1001)]
     assert stat.S_IMODE(boot.conf.stat().st_mode) == 0o600
 
 
 def test_an_existing_conf_is_reconciled_not_replaced(boot: Boot) -> None:
-    boot.config.mkdir(parents=True)
     boot.conf.write_text("[eMule]\nMaxUpload=42\n\n[ExternalConnect]\nECPassword=dead\n")
     boot.main()
     assert boot.conf.read_text() == reconcile_conf(
@@ -133,7 +124,7 @@ def test_a_refused_variable_aborts_the_boot_before_any_change(boot: Boot) -> Non
         boot.main()
     assert boot.calls == []
     assert boot.chowns == []
-    assert not boot.home.exists()
+    assert not boot.conf.exists()
 
 
 @pytest.mark.parametrize("value", ["off", "", None])

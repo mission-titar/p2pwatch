@@ -20,8 +20,6 @@ def main(
     container_booter: ContainerBooter,
     home_directory: Path,
     config_directory: Path,
-    incoming_directory: Path,
-    temporary_directory: Path,
     amule_conf_path: Path,
     port_sync_down_file: Path,
 ) -> None:
@@ -30,13 +28,6 @@ def main(
     boot_settings = parse_boot_settings(env)
     puid, pgid = boot_settings.puid, boot_settings.pgid
     port_sync_enabled = is_port_sync_enabled(env)
-
-    # Not recursive: the mounts can hold hundreds of gigabytes of part files the operator owns.
-    owned_directories = [home_directory, config_directory, incoming_directory, temporary_directory]
-    for directory in owned_directories:
-        os.makedirs(directory, exist_ok=True)
-    for directory in owned_directories:
-        os.chown(directory, puid, pgid)
 
     try:
         with open(amule_conf_path) as handle:

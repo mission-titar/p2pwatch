@@ -10,6 +10,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from p2pwatch_amule.adapters.driven.posix_account_manager import PosixAccountManager
+from p2pwatch_amule.adapters.driven.posix_mount_point_preparer import PosixMountPointPreparer
 from p2pwatch_amule.adapters.driving import boot, port_sync
 from p2pwatch_amule.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from p2pwatch_amule.application.boot_container import BootContainer
@@ -30,7 +31,17 @@ def main(argv: Sequence[str], env: Mapping[str, str]) -> int:
             run_command=subprocess.run,
             find_group=grp.getgrnam,
             find_user=pwd.getpwnam,
-        )
+        ),
+        mount_point_preparer=PosixMountPointPreparer(
+            # The mount points are the directories reconcile_conf writes into amule.conf.
+            owned_directories=[
+                _HOME_DIRECTORY,
+                _CONFIG_DIRECTORY,
+                Path(INCOMING_DIR),
+                Path(TEMP_DIR),
+            ],
+            change_owner=os.chown,
+        ),
     )
     command_line = ArgparseCommandLine(
         boot=lambda: boot.main(
@@ -38,9 +49,6 @@ def main(argv: Sequence[str], env: Mapping[str, str]) -> int:
             container_booter=container_booter,
             home_directory=_HOME_DIRECTORY,
             config_directory=_CONFIG_DIRECTORY,
-            # The mount points are the directories reconcile_conf writes into amule.conf.
-            incoming_directory=Path(INCOMING_DIR),
-            temporary_directory=Path(TEMP_DIR),
             amule_conf_path=_AMULE_CONF_PATH,
             port_sync_down_file=_PORT_SYNC_DOWN_FILE,
         ),

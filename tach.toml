@@ -580,6 +580,7 @@ path = "p2pwatch_amule.__main__"
 layer = "composition"
 depends_on = [
   "p2pwatch_amule.adapters.driven.posix_account_manager",
+  "p2pwatch_amule.adapters.driven.posix_mount_point_preparer",
   "p2pwatch_amule.adapters.driving.boot",
   "p2pwatch_amule.adapters.driving.cli",
   "p2pwatch_amule.adapters.driving.port_sync",
@@ -596,6 +597,11 @@ depends_on = []
 path = "p2pwatch_amule.adapters.driven.posix_account_manager"
 layer = "adapters"
 depends_on = ["p2pwatch_amule.ports.driven.account_manager"]
+
+[[modules]]
+path = "p2pwatch_amule.adapters.driven.posix_mount_point_preparer"
+layer = "adapters"
+depends_on = ["p2pwatch_amule.ports.driven.mount_point_preparer"]
 
 [[modules]]
 path = "p2pwatch_amule.adapters.driving.boot"
@@ -625,6 +631,7 @@ layer = "application"
 depends_on = [
   "p2pwatch_amule.domain",
   "p2pwatch_amule.ports.driven.account_manager",
+  "p2pwatch_amule.ports.driven.mount_point_preparer",
   "p2pwatch_amule.ports.driving.container_booter",
 ]
 
@@ -635,6 +642,11 @@ depends_on = []
 
 [[modules]]
 path = "p2pwatch_amule.ports.driven.account_manager"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch_amule.ports.driven.mount_point_preparer"
 layer = "ports"
 depends_on = []
 
