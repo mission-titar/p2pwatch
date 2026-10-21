@@ -24,6 +24,9 @@ class FilesystemPackageTreeReader(PackageTreeReader):
             tests_without_unit=tests_without_unit,
         )
 
+    def read_module_source(self, module: PurePath) -> str:
+        return (self._package_directory / module).read_text(encoding="utf-8")
+
     def _list(self, pattern: str) -> tuple[PurePath, ...]:
         return tuple(
             path.relative_to(self._package_directory)

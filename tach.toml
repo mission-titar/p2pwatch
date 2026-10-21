@@ -118,6 +118,11 @@ depends_on = [
 ]
 
 [[modules]]
+path = "coverage_checks.adapters.driven.coverage_py_reader"
+layer = "adapters"
+depends_on = ["coverage_checks.domain", "coverage_checks.ports.driven.test_coverage_reader"]
+
+[[modules]]
 path = "coverage_checks.adapters.driven.filesystem_package_tree_reader"
 layer = "adapters"
 depends_on = ["coverage_checks.domain", "coverage_checks.ports.driven.package_tree_reader"]
@@ -132,7 +137,8 @@ path = "coverage_checks.adapters.driving.unit_coverage"
 layer = "adapters"
 depends_on = [
   "coverage_checks.domain",
-  # The check reads the package's tree through its adapter: block 56 removes it.
+  # The check reads the package's tree and its coverage through their adapters: block 56 removes it.
+  { path = "coverage_checks.adapters.driven.coverage_py_reader", deprecated = true },
   { path = "coverage_checks.adapters.driven.filesystem_package_tree_reader", deprecated = true },
 ]
 
@@ -143,6 +149,11 @@ depends_on = []
 
 [[modules]]
 path = "coverage_checks.ports.driven.package_tree_reader"
+layer = "ports"
+depends_on = ["coverage_checks.domain"]
+
+[[modules]]
+path = "coverage_checks.ports.driven.test_coverage_reader"
 layer = "ports"
 depends_on = ["coverage_checks.domain"]
 

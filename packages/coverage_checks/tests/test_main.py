@@ -11,6 +11,7 @@ def test_unit_coverage_runs_the_check_in_the_current_directory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "pkg"\n')
 
     assert main(["unit-coverage"]) == 1
 
