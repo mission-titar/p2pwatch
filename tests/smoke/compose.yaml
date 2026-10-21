@@ -1,5 +1,6 @@
 # Standalone SMOKE stack (compose_integration test). NOT a real deployment: it uses the
 # tests/smoke/ configs and a throwaway state directory, without gluetun.
+# port-sync stays down (no PORT_SYNC) until a test starts it; it then polls every second.
 # Driven by packages/crawler/tests/integration/test_compose_smoke.py.
 # Invoked with --project-directory <repo root>: every relative path resolves against the repo
 # root (context=., configs ./tests/smoke/*.yml).
@@ -21,6 +22,7 @@ services:
       PGID: ${PGID:?}
       AMULE_EC_PASSWORD: ${AMULE_EC_PASSWORD:?}
       AMULE_API_PASSWORD: ${AMULE_API_PASSWORD:?}
+      PORT_SYNC_POLL_SECONDS: "1"
     volumes:
       - ${SMOKE_STATE:-/tmp/p2pwatch-smoke}/amule:/home/amule/.aMule
       - ${SMOKE_STATE:-/tmp/p2pwatch-smoke}/downloads:/downloads
