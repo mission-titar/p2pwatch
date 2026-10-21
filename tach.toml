@@ -590,23 +590,16 @@ layer = "adapters"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch_amule.adapters.driven.settings"
-layer = "adapters"
-depends_on = []
-
-[[modules]]
 path = "p2pwatch_amule.adapters.driving.boot"
 layer = "adapters"
 depends_on = [
   "p2pwatch_amule.domain",
-  # Both entry points read port-sync's settings through their adapter: lot 3 gives it a driven port.
-  { path = "p2pwatch_amule.adapters.driven.settings", deprecated = true },
 ]
 
 [[modules]]
 path = "p2pwatch_amule.adapters.driving.cli"
 layer = "adapters"
-depends_on = []
+depends_on = ["p2pwatch_amule.domain"]
 
 [[modules]]
 path = "p2pwatch_amule.adapters.driving.port_sync"
@@ -615,8 +608,6 @@ depends_on = [
   "p2pwatch_amule.domain",
   # Port-sync asks gluetun through its adapter, past any port: lot 3 gives it a driven port.
   { path = "p2pwatch_amule.adapters.driven.gluetun", deprecated = true },
-  # Both entry points read port-sync's settings through their adapter: lot 3 gives it a driven port.
-  { path = "p2pwatch_amule.adapters.driven.settings", deprecated = true },
 ]
 
 [[modules]]

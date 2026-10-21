@@ -8,10 +8,11 @@ import logging
 import os
 import subprocess
 import time
+from collections.abc import Mapping
 
-from p2pwatch_amule.adapters.driven import settings
 from p2pwatch_amule.adapters.driven.gluetun import forwarded_port
 from p2pwatch_amule.domain.conf import AMULE_CONF_PATH, tcp_listen_port, with_listen_port
+from p2pwatch_amule.domain.settings import PortSyncSettings, parse_port_sync_settings
 
 AMULED_SERVICE_DIR = "/etc/services.d/amuled"
 
@@ -19,7 +20,7 @@ _logger = logging.getLogger("p2pwatch_amule.adapters.driving.port_sync")
 
 
 def sync_listen_port_once(
-    port_sync_settings: settings.Settings,
+    port_sync_settings: PortSyncSettings,
     latest_restart_monotonic: float | None,
     now_monotonic: float,
 ) -> float | None:
@@ -57,8 +58,8 @@ def sync_listen_port_once(
     return now_monotonic
 
 
-def main() -> None:
-    port_sync_settings = settings.load(os.environ)
+def main(env: Mapping[str, str]) -> None:
+    port_sync_settings = parse_port_sync_settings(env)
     # A port-sync stopped between a -d and its -u left amuled down: bring it back first.
     _signal_amuled("-u")
     latest_restart_monotonic = None
