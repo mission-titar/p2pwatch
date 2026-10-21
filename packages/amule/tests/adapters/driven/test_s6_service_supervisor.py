@@ -1,29 +1,14 @@
 """S6ServiceSupervisor: port-sync kept down by its ``down`` file, amuled stopped and started by
 ``s6-svc``."""
 
-import subprocess
 from pathlib import Path
-from typing import Any
 
 import pytest
 
 from p2pwatch_amule.adapters.driven.s6_service_supervisor import S6ServiceSupervisor
-from tests.fakes import FakeLogger, LoggedLine
+from tests.fakes import FakeLogger, FakeS6, LoggedLine
 
 AMULED_SERVICE_DIRECTORY = Path("/run/service/amuled")
-
-
-class FakeS6:
-    """Records the commands run, each exiting ``exit_code``: the gate runs no s6."""
-
-    def __init__(self) -> None:
-        self.commands: list[list[str]] = []
-        self.exit_code = 0
-
-    def run_command(self, argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
-        assert kwargs == {"capture_output": True, "text": True}
-        self.commands.append(argv)
-        return subprocess.CompletedProcess(argv, self.exit_code, "", "timed out\n")
 
 
 @pytest.fixture
