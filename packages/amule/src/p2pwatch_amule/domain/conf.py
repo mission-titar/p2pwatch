@@ -3,8 +3,6 @@
 import configparser
 import io
 
-CONFIG_DIR = "/home/amule/.aMule"
-AMULE_CONF_PATH = f"{CONFIG_DIR}/amule.conf"
 INCOMING_DIR = "/downloads/incoming"
 TEMP_DIR = "/downloads/temp"
 # aMule's DEFAULT_TCP_PORT (src/Preferences.cpp), what amuled binds when `Port` is absent.

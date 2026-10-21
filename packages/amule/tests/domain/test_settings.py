@@ -1,15 +1,69 @@
-"""Port-sync's variables: PORT_SYNC read as gluetun reads booleans, the others with defaults."""
+"""The container's variables: the boot step's, required; port-sync's, with the domain's values."""
 
 import re
 
 import pytest
 
 from p2pwatch_amule.domain.settings import (
+    BootSettings,
     PortSyncSettings,
     is_port_sync_enabled,
+    parse_boot_settings,
     parse_port_sync_settings,
 )
 from p2pwatch_amule.domain.settings_error import SettingsError
+
+BOOT_ENV = {
+    "PUID": "1000",
+    "PGID": "1001",
+    "AMULE_EC_PASSWORD": "hunter2",
+    "AMULE_API_PASSWORD": "s3cret",
+}
+
+
+def test_the_boot_variables_give_the_boot_settings() -> None:
+    assert parse_boot_settings(BOOT_ENV) == BootSettings(
+        puid=1000, pgid=1001, ec_password="hunter2", api_password="s3cret"
+    )
+
+
+@pytest.mark.parametrize("name", list(BOOT_ENV))
+@pytest.mark.parametrize("value", [None, ""])
+def test_a_missing_or_empty_boot_variable_is_refused_naming_it(
+    name: str, value: str | None
+) -> None:
+    env = {key: setting for key, setting in BOOT_ENV.items() if key != name}
+    if value is not None:
+        env[name] = value
+    with pytest.raises(SettingsError, match=f"^{name} is required$"):
+        parse_boot_settings(env)
+
+
+def test_the_first_missing_boot_variable_is_the_one_named() -> None:
+    with pytest.raises(SettingsError, match="^PUID is required$"):
+        parse_boot_settings({})
+
+
+@pytest.mark.parametrize("name", ["PUID", "PGID"])
+@pytest.mark.parametrize("value", ["amule", "-1", "1 000", "1_000", "+1000", "١٠٠٠"])
+def test_a_non_numeric_id_is_refused_naming_it(name: str, value: str) -> None:
+    message = f"{name} must be a numeric id, got {value!r}"
+    with pytest.raises(SettingsError, match=f"^{re.escape(message)}$"):
+        parse_boot_settings({**BOOT_ENV, name: value})
+
+
+@pytest.mark.parametrize("name", ["AMULE_EC_PASSWORD", "AMULE_API_PASSWORD"])
+@pytest.mark.parametrize(
+    "value", ["hunter2\n", "hun\tter2", "\rhunter2", "hunter2\x7f", "hunter2\x85"]
+)
+def test_a_password_with_a_control_character_is_refused_naming_it(name: str, value: str) -> None:
+    with pytest.raises(SettingsError, match=f"^{name} must not contain a control character$"):
+        parse_boot_settings({**BOOT_ENV, name: value})
+
+
+def test_a_password_may_hold_spaces_and_non_ascii_letters() -> None:
+    env = {**BOOT_ENV, "AMULE_API_PASSWORD": "mot de passé"}
+    assert parse_boot_settings(env).api_password == "mot de passé"
 
 
 @pytest.mark.parametrize("value", ["enabled", "yes", "on", "true", "On", "YES", "True"])

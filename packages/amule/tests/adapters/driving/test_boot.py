@@ -1,4 +1,4 @@
-"""boot main: env check, port-sync's variables, user, mount points, amule.conf, admin pass."""
+"""boot main: its variables refused first, then user, mount points, amule.conf, admin pass."""
 
 import grp
 import hashlib
@@ -23,11 +23,12 @@ ENV = {
     "AMULE_EC_PASSWORD": "hunter2",
     "AMULE_API_PASSWORD": "s3cret",
 }
+
 Call = tuple[list[str], dict[str, Any]]
 
 
 class Boot:
-    """Redirects main's paths under tmp_path, holds its environment, records its commands."""
+    """main's paths under tmp_path, its environment, and its commands and chowns recorded."""
 
     def __init__(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         self.home = tmp_path / "home/amule"
@@ -40,20 +41,22 @@ class Boot:
         self.env = dict(ENV)
         self.amule_exists = False
         self.calls: list[Call] = []
-        self.chowns: list[tuple[str, int, int]] = []
-        monkeypatch.setattr(entry, "HOME_DIR", str(self.home))
-        monkeypatch.setattr(entry, "CONFIG_DIR", str(self.config))
-        monkeypatch.setattr(entry, "INCOMING_DIR", str(self.incoming))
-        monkeypatch.setattr(entry, "TEMP_DIR", str(self.temp))
-        monkeypatch.setattr(entry, "AMULE_CONF_PATH", str(self.conf))
-        monkeypatch.setattr(entry, "PORT_SYNC_DOWN_FILE", str(self.port_sync_down))
+        self.chowns: list[tuple[Path, int, int]] = []
         monkeypatch.setattr(grp, "getgrnam", self._lookup)
         monkeypatch.setattr(pwd, "getpwnam", self._lookup)
         monkeypatch.setattr(subprocess, "run", self._run)
         monkeypatch.setattr(os, "chown", self._chown)
 
     def main(self) -> None:
-        entry.main(self.env)
+        entry.main(
+            self.env,
+            home_dir=self.home,
+            config_dir=self.config,
+            incoming_dir=self.incoming,
+            temp_dir=self.temp,
+            amule_conf_path=self.conf,
+            port_sync_down_file=self.port_sync_down,
+        )
 
     def _lookup(self, name: str) -> object:
         assert name == "amule"
@@ -65,7 +68,7 @@ class Boot:
         self.calls.append((argv, kwargs))
         return subprocess.CompletedProcess(argv, 0)
 
-    def _chown(self, path: str, uid: int, gid: int) -> None:
+    def _chown(self, path: Path, uid: int, gid: int) -> None:
         self.chowns.append((path, uid, gid))
 
     def set_admin_pass(self) -> Call:
@@ -106,7 +109,7 @@ def test_mount_points_are_created_and_owned_but_not_their_contents(boot: Boot) -
     boot.main()
     owned = [boot.home, boot.config, boot.incoming, boot.temp]
     assert all(directory.is_dir() for directory in owned)
-    assert boot.chowns == [(str(path), 1000, 1001) for path in [*owned, boot.conf]]
+    assert boot.chowns == [(path, 1000, 1001) for path in [*owned, boot.conf]]
 
 
 def test_the_conf_is_private_to_its_owner(boot: Boot) -> None:
@@ -123,48 +126,31 @@ def test_an_existing_conf_is_reconciled_not_replaced(boot: Boot) -> None:
     )
 
 
-@pytest.mark.parametrize("name", list(ENV))
-def test_a_missing_variable_aborts_the_boot_naming_it(boot: Boot, name: str) -> None:
-    del boot.env[name]
-    with pytest.raises(SystemExit, match=f"^{name} is required$"):
-        boot.main()
-    assert boot.calls == []
-
-
-@pytest.mark.parametrize("name", ["PUID", "PGID"])
-@pytest.mark.parametrize("value", ["amule", "-1", "1 000", "1_000", "+1000", "١٠٠٠"])
-def test_a_non_numeric_id_aborts_the_boot_before_any_change(
-    boot: Boot, name: str, value: str
-) -> None:
-    boot.env[name] = value
-    with pytest.raises(SystemExit, match=re.escape(f"{name} must be a numeric id, got {value!r}")):
-        boot.main()
-    assert boot.calls == []
-    assert boot.chowns == []
-    assert not boot.home.exists()
-
-
-def test_an_empty_variable_counts_as_missing(boot: Boot) -> None:
-    boot.env["AMULE_EC_PASSWORD"] = ""
-    with pytest.raises(SystemExit, match="^AMULE_EC_PASSWORD is required$"):
-        boot.main()
+def test_the_admin_password_is_the_one_set(boot: Boot) -> None:
+    boot.env["AMULE_API_PASSWORD"] = "mot de passé"
+    boot.main()
+    assert "--set-admin-pass=mot de passé" in boot.calls[-1][0]
 
 
 @pytest.mark.parametrize(
     ("variables", "message"),
     [
+        ({"PUID": ""}, "PUID is required"),
+        ({"PGID": "amule"}, "PGID must be a numeric id, got 'amule'"),
+        ({"AMULE_API_PASSWORD": "s3cret\n"}, "AMULE_API_PASSWORD must not contain a control"),
         ({"PORT_SYNC": "maybe"}, "PORT_SYNC must be one of "),
         ({"PORT_SYNC": "on", "PORT_SYNC_POLL_SECONDS": "0"}, "PORT_SYNC_POLL_SECONDS must be "),
         ({"PORT_SYNC": "yes", "GLUETUN_CONTROL_URL": "gluetun"}, "GLUETUN_CONTROL_URL must be "),
     ],
 )
-def test_a_bad_port_sync_variable_aborts_the_boot_before_any_change(
+def test_a_refused_variable_aborts_the_boot_before_any_change(
     boot: Boot, variables: dict[str, str], message: str
 ) -> None:
     boot.env.update(variables)
-    with pytest.raises(SettingsError, match=f"^{message}"):
+    with pytest.raises(SettingsError, match=f"^{re.escape(message)}"):
         boot.main()
     assert boot.calls == []
+    assert boot.chowns == []
     assert not boot.home.exists()
 
 
@@ -172,26 +158,6 @@ def test_port_sync_off_leaves_its_other_variables_unread(boot: Boot) -> None:
     boot.env.update({"PORT_SYNC": "off", "PORT_SYNC_POLL_SECONDS": "0"})
     boot.main()
     assert boot.calls[-1] == boot.set_admin_pass()
-
-
-@pytest.mark.parametrize("name", ["AMULE_EC_PASSWORD", "AMULE_API_PASSWORD"])
-@pytest.mark.parametrize(
-    "value", ["hunter2\n", "hun\tter2", "\rhunter2", "hunter2\x7f", "hunter2\x85"]
-)
-def test_a_password_with_a_control_character_aborts_the_boot_before_any_change(
-    boot: Boot, name: str, value: str
-) -> None:
-    boot.env[name] = value
-    with pytest.raises(SystemExit, match=f"^{name} must not contain a control character$"):
-        boot.main()
-    assert boot.calls == []
-    assert not boot.home.exists()
-
-
-def test_a_password_may_hold_spaces_and_non_ascii_letters(boot: Boot) -> None:
-    boot.env["AMULE_API_PASSWORD"] = "mot de passé"
-    boot.main()
-    assert "--set-admin-pass=mot de passé" in boot.calls[-1][0]
 
 
 @pytest.mark.parametrize("value", ["off", "", None])

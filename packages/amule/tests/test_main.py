@@ -5,12 +5,11 @@ import pytest
 from p2pwatch_amule.__main__ import main
 
 
-def test_boot_runs_the_boot_step() -> None:
+def test_boot_runs_the_boot_step(capsys: pytest.CaptureFixture[str]) -> None:
     # Refused on its first variable, before the boot step changes anything.
-    with pytest.raises(SystemExit) as exit_info:
-        main(["boot"], {})
+    assert main(["boot"], {}) == 1
 
-    assert exit_info.value.code == "PUID is required"
+    assert capsys.readouterr().err == "PUID is required\n"
 
 
 def test_port_sync_runs_port_sync(capsys: pytest.CaptureFixture[str]) -> None:
