@@ -7,6 +7,7 @@ from vex_checks.domain.violations import Violation
 from vex_checks.ports.driven.sarif_writer import SarifWriter
 from vex_checks.ports.driven.sbom_reader import SbomReader
 from vex_checks.ports.driven.vex_reader import VexReader
+from vex_checks.ports.driving.image_claims_checker import ImageClaimsChecker, ImageClaimsReport
 
 
 class FakeVexReader(VexReader):
@@ -58,3 +59,24 @@ class FakeSarifWriter(SarifWriter):
         self.written_sarifs.append(
             WrittenSarif(sarif_path, rule_id, tuple(violations), vex_relpath)
         )
+
+
+@dataclass(frozen=True)
+class ImageClaimsCheck:
+    sbom_path: PurePath
+    vex_path: PurePath
+    sarif_path: PurePath | None
+
+
+class FakeImageClaimsChecker(ImageClaimsChecker):
+    """Records each check it is asked for, and answers the same problems to each."""
+
+    def __init__(self, problems: Sequence[Violation] = ()) -> None:
+        self._problems = tuple(problems)
+        self.checks: list[ImageClaimsCheck] = []
+
+    def check_image_claims(
+        self, sbom_path: PurePath, vex_path: PurePath, sarif_path: PurePath | None
+    ) -> ImageClaimsReport:
+        self.checks.append(ImageClaimsCheck(sbom_path, vex_path, sarif_path))
+        return ImageClaimsReport(problems=self._problems)
