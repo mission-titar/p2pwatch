@@ -1,4 +1,4 @@
-"""BootContainer: every variable refused first, then the account, then the mount points."""
+"""BootContainer: every variable refused first, then the account, then amuled's directories."""
 
 import re
 
@@ -6,7 +6,7 @@ import pytest
 
 from p2pwatch_amule.application.boot_container import BootContainer
 from p2pwatch_amule.domain.settings_error import SettingsError
-from tests.fakes import FakeAccountManager, FakeMountPointPreparer
+from tests.fakes import FakeAccountManager, FakeAmuledDirectoryPreparer
 
 ENV = {
     "PUID": "1000",
@@ -21,10 +21,10 @@ class Booter:
 
     def __init__(self) -> None:
         self.account_manager = FakeAccountManager()
-        self.mount_point_preparer = FakeMountPointPreparer()
+        self.amuled_directory_preparer = FakeAmuledDirectoryPreparer()
         self.container_booter = BootContainer(
             account_manager=self.account_manager,
-            mount_point_preparer=self.mount_point_preparer,
+            amuled_directory_preparer=self.amuled_directory_preparer,
         )
 
 
@@ -36,12 +36,12 @@ def test_the_account_takes_puid_and_pgid() -> None:
     assert booter.account_manager.accounts == [(1000, 1001)]
 
 
-def test_the_mount_points_are_owned_by_puid_and_pgid() -> None:
+def test_the_amuled_directories_are_owned_by_puid_and_pgid() -> None:
     booter = Booter()
 
     booter.container_booter.boot_container(ENV)
 
-    assert booter.mount_point_preparer.owners == [(1000, 1001)]
+    assert booter.amuled_directory_preparer.owners == [(1000, 1001)]
 
 
 @pytest.mark.parametrize(
@@ -64,7 +64,7 @@ def test_a_refused_variable_aborts_the_boot_before_any_change(
         booter.container_booter.boot_container({**ENV, **variables})
 
     assert booter.account_manager.accounts == []
-    assert booter.mount_point_preparer.owners == []
+    assert booter.amuled_directory_preparer.owners == []
 
 
 def test_port_sync_off_leaves_its_other_variables_unread() -> None:

@@ -167,7 +167,7 @@ follow C3.
 | `ServiceSupervisor` | `S6ServiceSupervisor` | stop and start amuled; set or clear port-sync's `down` file |
 | `ForwardedPortReader` | `GluetunForwardedPortReader` | read gluetun's forwarded port, or none |
 | `AccountManager` | `PosixAccountManager` | find or create the `amule` user and group |
-| `MountPointPreparer` | `PosixMountPointPreparer` | create the download mount points, chown them |
+| `AmuledDirectoryPreparer` | `PosixAmuledDirectoryPreparer` | create the home, `.aMule` and the download mount points, chown them (Corrected: was `MountPointPreparer`, which also prepares the home and `.aMule`) |
 | `AdminPasswordSetter` | `AmuleApiAdminPasswordSetter` | run `amuleapi --set-admin-pass` |
 | `MonotonicClock` | `SystemMonotonicClock` | `now`, `sleep`, this hexagon's own copy |
 | `Logger` | `StdlibLogger` | log under the name it is given: port-sync's two documented names |
@@ -315,7 +315,7 @@ this hexagon's own copy of `MonotonicInstant`.
 | # | Branch | Holds | Lines, files (est.) |
 |---|---|---|---|
 | 40 | `feat/boot-container-accounts` | `BootContainer` behind `ContainerBooter`, the settings then the accounts; `AccountManager`, `PosixAccountManager`; the package's fakes | 420, 16 |
-| 42 | `feat/boot-mount-points` | `MountPointPreparer`, `PosixMountPointPreparer` | 200, 10 |
+| 42 | `feat/boot-mount-points` | `AmuledDirectoryPreparer`, `PosixAmuledDirectoryPreparer` (Corrected: was `MountPointPreparer`, which also prepares the home and `.aMule`) | 200, 10 |
 | 44 | `feat/boot-amule-conf` | `AmuleConfReader`, `AmuleConfWriter`, `PosixAmuleConf` | 290, 12 |
 | 46 | `feat/boot-admin-password` | `AdminPasswordSetter`, `AmuleApiAdminPasswordSetter` | 195, 10 |
 | 48 | `feat/boot-down-file` | `ServiceSupervisor`'s `down` file, `S6ServiceSupervisor`; `boot.py` and `test_boot.py` gone; `AGENTS.md`'s boot row | 265, 12 |
