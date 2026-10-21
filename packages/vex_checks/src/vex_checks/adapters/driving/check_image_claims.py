@@ -9,24 +9,28 @@ the same breaches are then written there as a SARIF report (always exit zero).
 """
 
 import dataclasses
-import json
 from pathlib import Path
 
 from vex_checks.adapters.driven import repo
-from vex_checks.adapters.driven.sarif import build_sarif
-from vex_checks.adapters.driven.sbom import (
-    evaluate_image_premises,
-    load_declared_components,
-    load_dpkg_packages,
-)
+from vex_checks.adapters.driven.sbom import evaluate_image_premises
 from vex_checks.domain.descriptors import ImagePremise, is_image_premise
 from vex_checks.domain.registry import PREMISES
+from vex_checks.ports.driven.sarif_writer import SarifWriter
+from vex_checks.ports.driven.sbom_reader import SbomReader
 from vex_checks.ports.driven.vex_reader import VexReader
 
 _RULE_ID = "unsatisfied-image-claim"
 
 
-def main(sbom: Path, vex: Path, sarif_output: Path | None, *, vex_reader: VexReader) -> int:
+def main(
+    sbom: Path,
+    vex: Path,
+    sarif_output: Path | None,
+    *,
+    vex_reader: VexReader,
+    sbom_reader: SbomReader,
+    sarif_writer: SarifWriter,
+) -> int:
     claims = vex_reader.read_claims(vex)
     # Iterate PREMISES so the value binds the narrowed loop variable: is_image_premise
     # is a TypeIs, so ``premise`` types as ImagePremise here with no cast/ignore.
@@ -37,12 +41,12 @@ def main(sbom: Path, vex: Path, sarif_output: Path | None, *, vex_reader: VexRea
     }
     vex_relpath = repo.display_path(vex)
     unlocated = evaluate_image_premises(
-        premises, load_dpkg_packages(sbom), load_declared_components(sbom)
+        premises, sbom_reader.read_dpkg_packages(sbom), sbom_reader.read_declared_components(sbom)
     )
     violations = [dataclasses.replace(violation, location=vex_relpath) for violation in unlocated]
 
     if sarif_output is not None:
-        sarif_output.write_text(json.dumps(build_sarif(_RULE_ID, violations, vex_relpath)))
+        sarif_writer.write_violations(sarif_output, _RULE_ID, violations, vex_relpath)
         return 0
 
     for violation in violations:

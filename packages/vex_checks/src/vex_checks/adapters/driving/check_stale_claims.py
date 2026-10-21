@@ -9,20 +9,25 @@ non-zero, unless a SARIF output is given: the same entries are then written ther
 a SARIF report (always exit zero).
 """
 
-import json
 from pathlib import Path
 
 from vex_checks.adapters.driven import repo
 from vex_checks.adapters.driven.grype import GrypeRunner
-from vex_checks.adapters.driven.sarif import build_sarif
 from vex_checks.domain.violations import Violation
+from vex_checks.ports.driven.sarif_writer import SarifWriter
 from vex_checks.ports.driven.vex_reader import VexReader
 
 _RULE_ID = "stale-vex-entry"
 
 
 def main(
-    sbom: Path, vex: Path, sarif_output: Path | None, *, runner: GrypeRunner, vex_reader: VexReader
+    sbom: Path,
+    vex: Path,
+    sarif_output: Path | None,
+    *,
+    runner: GrypeRunner,
+    vex_reader: VexReader,
+    sarif_writer: SarifWriter,
 ) -> int:
     reported = runner.run(sbom)
     vex_relpath = repo.display_path(vex)
@@ -33,7 +38,7 @@ def main(
     ]
 
     if sarif_output is not None:
-        sarif_output.write_text(json.dumps(build_sarif(_RULE_ID, stale, vex_relpath)))
+        sarif_writer.write_violations(sarif_output, _RULE_ID, stale, vex_relpath)
         return 0
 
     for violation in stale:
