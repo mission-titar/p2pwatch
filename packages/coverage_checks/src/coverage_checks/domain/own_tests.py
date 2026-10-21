@@ -5,7 +5,9 @@ A test file that tests no module fails, unless its package lists it in `tests_wi
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import PurePath
+
+from coverage_checks.domain.package_tree import PackageTree
 
 _UNIT_NAMES_BY_DUNDER = {"__init__": "init", "__main__": "main"}
 
@@ -14,16 +16,17 @@ _UNIT_NAMES_BY_DUNDER = {"__init__": "init", "__main__": "main"}
 class OwnTests:
     """Each module's own test files, the counts of test files mapped and listed, what is wrong."""
 
-    test_files_by_module: Mapping[Path, tuple[Path, ...]]
+    test_files_by_module: Mapping[PurePath, tuple[PurePath, ...]]
     mapped_test_count: int
     listed_test_count: int
     problems: tuple[str, ...]
 
 
-def find_own_tests(tests_without_unit: Mapping[str, object]) -> OwnTests:
-    """Map each `tests/**/test_*.py` of the package in the working directory to its module."""
-    modules = sorted(Path("src").glob("*/**/*.py"))
-    test_files = sorted(Path("tests").rglob("test_*.py"))
+def find_own_tests(package_tree: PackageTree) -> OwnTests:
+    """Map each test file of *package_tree* to its module, in path order."""
+    modules = sorted(package_tree.modules)
+    test_files = sorted(package_tree.test_files)
+    tests_without_unit = package_tree.tests_without_unit
     problems = [
         f"{listed_path}: listed in tests_without_unit without its reason"
         for listed_path, reason in tests_without_unit.items()
@@ -36,7 +39,7 @@ def find_own_tests(tests_without_unit: Mapping[str, object]) -> OwnTests:
         if module.stem in _UNIT_NAMES_BY_DUNDER.values()
         and module.with_name(f"__{module.stem}__.py") in modules
     ]
-    test_files_by_module: dict[Path, list[Path]] = {module: [] for module in modules}
+    test_files_by_module: dict[PurePath, list[PurePath]] = {module: [] for module in modules}
     listed_test_count = 0
     for test_file in test_files:
         module = _tested_module(test_file, modules)
@@ -67,24 +70,24 @@ def find_own_tests(tests_without_unit: Mapping[str, object]) -> OwnTests:
     )
 
 
-def _tested_module(test_file: Path, modules: Sequence[Path]) -> Path | None:
+def _tested_module(test_file: PurePath, modules: Sequence[PurePath]) -> PurePath | None:
     """The module of the mirrored directory whose name the test file's is, or extends with `_`."""
     tested_name = test_file.stem.removeprefix("test_")
     directory = test_file.parent.relative_to("tests")
     matching_modules = [
         module
         for module in modules
-        if Path(*module.parent.parts[2:]) == directory
+        if PurePath(*module.parent.parts[2:]) == directory
         and (tested_name + "_").startswith(_unit_name(module) + "_")
     ]
     return max(matching_modules, key=lambda module: len(_unit_name(module)), default=None)
 
 
-def _unit_name(module: Path) -> str:
+def _unit_name(module: PurePath) -> str:
     return _UNIT_NAMES_BY_DUNDER.get(module.stem, module.stem)
 
 
-def _lists(listed_path: str, test_file: Path) -> bool:
+def _lists(listed_path: str, test_file: PurePath) -> bool:
     """Whether *listed_path* is the test file, or a directory above it."""
     return listed_path == test_file.as_posix() or (
         listed_path.endswith("/") and test_file.as_posix().startswith(listed_path)

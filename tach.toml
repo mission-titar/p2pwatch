@@ -118,9 +118,9 @@ depends_on = [
 ]
 
 [[modules]]
-path = "coverage_checks.adapters.driven.own_tests"
+path = "coverage_checks.adapters.driven.filesystem_package_tree_reader"
 layer = "adapters"
-depends_on = []
+depends_on = ["coverage_checks.domain", "coverage_checks.ports.driven.package_tree_reader"]
 
 [[modules]]
 path = "coverage_checks.adapters.driving.cli"
@@ -132,14 +132,19 @@ path = "coverage_checks.adapters.driving.unit_coverage"
 layer = "adapters"
 depends_on = [
   "coverage_checks.domain",
-  # The check finds the own tests through their adapter: lot 3 gives it a driven port.
-  { path = "coverage_checks.adapters.driven.own_tests", deprecated = true },
+  # The check reads the package's tree through its adapter: block 56 removes it.
+  { path = "coverage_checks.adapters.driven.filesystem_package_tree_reader", deprecated = true },
 ]
 
 [[modules]]
 path = "coverage_checks.domain"
 layer = "domain"
 depends_on = []
+
+[[modules]]
+path = "coverage_checks.ports.driven.package_tree_reader"
+layer = "ports"
+depends_on = ["coverage_checks.domain"]
 
 [[modules]]
 path = "p2pwatch.__main__"
