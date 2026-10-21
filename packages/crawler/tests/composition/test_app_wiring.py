@@ -389,6 +389,8 @@ async def test_observer_mode_crawls_its_config_files_with_one_ed2k_search_until_
     assert not any(map(_WEBUI_SERVING.match, caplog.messages))
 
 
+# The cut close may leave the client's sockets open, as the process exit closes them in production.
+@pytest.mark.filterwarnings("ignore:unclosed:ResourceWarning")
 def test_the_shutdown_deadline_spares_the_run_then_cuts_a_logout_amuled_never_answers(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -423,10 +425,9 @@ def test_the_shutdown_deadline_spares_the_run_then_cuts_a_logout_amuled_never_an
             released.set()
         return logged_out_before_the_stop, isinstance(run.exception(), TimeoutError), elapsed
 
-    # The cut close leaves the client's sockets open, as the process exit closes them in production.
-    with caplog.at_level(logging.INFO), pytest.warns(ResourceWarning, match="unclosed"):
+    with caplog.at_level(logging.INFO):
         logged_out_before_the_stop, timed_out, elapsed = asyncio.run(stop_during_the_logout())
-        gc.collect()
+        gc.collect()  # collected here, where the leak is tolerated, not in a later test
 
     assert not logged_out_before_the_stop
     # Unbounded, the close would wait out the client's own 10 s timeout, then return.

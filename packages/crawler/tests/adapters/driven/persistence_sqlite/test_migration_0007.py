@@ -1,8 +1,12 @@
 """Catalog 0007 stores observations as variants plus timestamps (stage 1, D4 and D7)."""
 
+import gc
 import sqlite3
+import warnings
 from datetime import UTC, datetime
 from pathlib import Path
+
+import pytest
 
 from p2pwatch.adapters.driven.mule_api.mapping import map_search_results
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
@@ -147,6 +151,18 @@ def test_the_runner_restores_the_pragmas_0007_sets(tmp_path: Path) -> None:
         assert connection.execute("PRAGMA cache_size").fetchone()[0] == -2000
     finally:
         connection.close()
+
+
+def test_the_forcing_opener_closes_its_connection_when_opening_fails(tmp_path: Path) -> None:
+    path = tmp_path / "catalog.db"
+    path.write_bytes(b"not a database" * 100)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with pytest.raises(sqlite3.DatabaseError, match="not a database"):
+            open_catalog_forcing_secure_delete_at(path, 7)
+        # A connection left open warns when it is collected.
+        gc.collect()
+    assert [w for w in caught if issubclass(w.category, ResourceWarning)] == []
 
 
 def test_dropping_the_old_table_keeps_its_pages_out_of_the_wal(tmp_path: Path) -> None:

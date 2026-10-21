@@ -16,32 +16,31 @@ _MIGRATIONS = resources.files("p2pwatch.adapters.driven.persistence_sqlite") / "
 
 def open_catalog_at(path: Path, version: int) -> sqlite3.Connection:
     """A catalog.db migrated by the runner up to ``version`` only, as an older release left it."""
-    return _open_at(path, "catalog", version, forcing_secure_delete=False)
+    return connection_module._open(path, _scripts_up_to("catalog", version))
 
 
 def open_catalog_forcing_secure_delete_at(path: Path, version: int) -> sqlite3.Connection:
     """The same, ``secure_delete`` ON: stands for the image's SQLite, which compiles it in."""
-    return _open_at(path, "catalog", version, forcing_secure_delete=True)
+    connection = sqlite3.connect(path, autocommit=True)
+    try:
+        connection_module._configure(connection)
+        connection.execute("PRAGMA secure_delete = ON")
+        register_sql_functions(connection)
+        connection_module._apply_migrations(connection, _scripts_up_to("catalog", version))
+    except BaseException:
+        connection.close()
+        raise
+    return connection
 
 
 def open_local_at(path: Path, version: int) -> sqlite3.Connection:
     """The same for a local.db."""
-    return _open_at(path, "local", version, forcing_secure_delete=False)
+    return connection_module._open(path, _scripts_up_to("local", version))
 
 
-def _open_at(
-    path: Path, database: str, version: int, *, forcing_secure_delete: bool
-) -> sqlite3.Connection:
-    connection = sqlite3.connect(path, autocommit=True)
-    connection_module._configure(connection)
-    if forcing_secure_delete:
-        connection.execute("PRAGMA secure_delete = ON")
-    register_sql_functions(connection)
+def _scripts_up_to(database: str, version: int) -> tuple[connection_module.Migration, ...]:
     scripts = connection_module._load_scripts(_MIGRATIONS / database)
-    connection_module._apply_migrations(
-        connection, tuple(s for s in scripts if s.version <= version)
-    )
-    return connection
+    return tuple(script for script in scripts if script.version <= version)
 
 
 def insert_stage4_variant(
