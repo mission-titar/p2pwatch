@@ -3,7 +3,7 @@ language: python
 severity: error
 message: A port is an ABC its implementers and fakes inherit, never a structural `Protocol`.
 note: "Inheritance lets the language server reach every implementer from the port (rename, references)."
-files: ["packages/crawler/src/**/*.py", "packages/matching/src/**/*.py", "packages/crawler_testing/src/**/*.py"]
+files: ["packages/*/src/**/*.py"]
 rule:
   kind: class_definition
   has:

@@ -5,20 +5,10 @@ from typing import cast
 
 import pytest
 
+from tests.fakes import FakeVulnerabilityScanner
 from vex_checks.adapters.driven.json_sarif_writer import JsonSarifWriter
 from vex_checks.adapters.driven.json_vex_reader import JsonVexReader
 from vex_checks.adapters.driving import check_stale_claims
-
-
-class _FakeGrypeRunner:
-    """A GrypeRunner whose report is preset, so no real Grype is invoked."""
-
-    def __init__(self, reported: set[str]) -> None:
-        self._reported = reported
-
-    def run(self, sbom_path: Path) -> set[str]:
-        return self._reported
-
 
 _check_stale_claims = functools.partial(
     check_stale_claims.main, vex_reader=JsonVexReader(), sarif_writer=JsonSarifWriter()
@@ -47,9 +37,11 @@ def test_fail_mode_flags_a_stale_claim_and_prints_the_cve(
 ) -> None:
     # Grype still reports CVE-A but no longer CVE-B, so the CVE-B claim is stale.
     vex = _write_vex(tmp_path, ["CVE-A", "CVE-B"])
-    runner = _FakeGrypeRunner({"CVE-A"})
+    vulnerability_scanner = FakeVulnerabilityScanner({"CVE-A"})
 
-    rc = _check_stale_claims(tmp_path / "sbom.json", vex, None, runner=runner)
+    rc = _check_stale_claims(
+        tmp_path / "sbom.json", vex, None, vulnerability_scanner=vulnerability_scanner
+    )
 
     assert rc == 1
     out = capsys.readouterr().out
@@ -62,9 +54,11 @@ def test_fail_mode_returns_zero_when_every_claim_is_still_reported(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     vex = _write_vex(tmp_path, ["CVE-A", "CVE-B"])
-    runner = _FakeGrypeRunner({"CVE-A", "CVE-B"})
+    vulnerability_scanner = FakeVulnerabilityScanner({"CVE-A", "CVE-B"})
 
-    rc = _check_stale_claims(tmp_path / "sbom.json", vex, None, runner=runner)
+    rc = _check_stale_claims(
+        tmp_path / "sbom.json", vex, None, vulnerability_scanner=vulnerability_scanner
+    )
 
     assert rc == 0
     assert capsys.readouterr().out == ""
@@ -72,10 +66,12 @@ def test_fail_mode_returns_zero_when_every_claim_is_still_reported(
 
 def test_sarif_mode_with_a_stale_claim_writes_matching_results(tmp_path: Path) -> None:
     vex = _write_vex(tmp_path, ["CVE-A", "CVE-B"])
-    runner = _FakeGrypeRunner({"CVE-A"})
+    vulnerability_scanner = FakeVulnerabilityScanner({"CVE-A"})
     output = tmp_path / "out.sarif"
 
-    rc = _check_stale_claims(tmp_path / "sbom.json", vex, output, runner=runner)
+    rc = _check_stale_claims(
+        tmp_path / "sbom.json", vex, output, vulnerability_scanner=vulnerability_scanner
+    )
 
     assert rc == 0
     doc = json.loads(output.read_text())
@@ -91,10 +87,12 @@ def test_sarif_mode_with_a_stale_claim_writes_matching_results(tmp_path: Path) -
 
 def test_sarif_mode_with_no_stale_claim_writes_empty_results(tmp_path: Path) -> None:
     vex = _write_vex(tmp_path, ["CVE-A", "CVE-B"])
-    runner = _FakeGrypeRunner({"CVE-A", "CVE-B"})
+    vulnerability_scanner = FakeVulnerabilityScanner({"CVE-A", "CVE-B"})
     output = tmp_path / "out.sarif"
 
-    rc = _check_stale_claims(tmp_path / "sbom.json", vex, output, runner=runner)
+    rc = _check_stale_claims(
+        tmp_path / "sbom.json", vex, output, vulnerability_scanner=vulnerability_scanner
+    )
 
     assert rc == 0
     doc = json.loads(output.read_text())

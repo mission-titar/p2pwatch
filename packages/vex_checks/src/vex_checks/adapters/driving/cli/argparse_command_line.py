@@ -10,16 +10,24 @@ from vex_checks.ports.driving.image_claims_checker import ImageClaimsChecker
 type ImageCheck = Callable[[Path, Path, Path | None], int]
 
 
-def _add_image_options(parser: argparse.ArgumentParser) -> None:
+def _add_image_options(
+    parser: argparse.ArgumentParser,
+    under_cwd: Callable[[str], Path],
+    resolved_under_cwd: Callable[[str], Path],
+) -> None:
     parser.add_argument(
-        "--sbom", type=Path, required=True, help="Syft JSON SBOM of the built image"
+        "--sbom", type=under_cwd, required=True, help="Syft JSON SBOM of the built image"
     )
+    # Resolved, so that a VEX of the repository is located relative to its root.
     parser.add_argument(
-        "--vex", type=Path, required=True, help="OpenVEX document authored for the image"
+        "--vex",
+        type=resolved_under_cwd,
+        required=True,
+        help="OpenVEX document authored for the image",
     )
     parser.add_argument("--format", choices=("fail", "sarif"), default="fail")
     parser.add_argument(
-        "--output", type=Path, help="SARIF output path (required by --format sarif)"
+        "--output", type=under_cwd, help="SARIF output path (required by --format sarif)"
     )
 
 
@@ -31,7 +39,7 @@ def _sarif_output(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
 
 class ArgparseCommandLine:
     """``image-claims`` over ``image_claims_checker``; ``stale-claims``, ``source-claims``,
-    ``claim-coverage``: one check each."""
+    ``claim-coverage``: one check each. A relative path is taken under ``cwd``."""
 
     def __init__(
         self,
@@ -40,14 +48,16 @@ class ArgparseCommandLine:
         check_stale_claims: ImageCheck,
         check_source_claims: Callable[[], int],
         check_claim_coverage: Callable[[], int],
+        cwd: Path,
     ) -> None:
         self._image_claims_checker = image_claims_checker
         self._check_stale_claims = check_stale_claims
         self._check_source_claims = check_source_claims
         self._check_claim_coverage = check_claim_coverage
+        self._cwd = cwd
 
-    def run(self, argv: Sequence[str] | None = None) -> int:
-        """Runs the subcommand ``argv`` names (``sys.argv`` if ``None``), returns its exit code."""
+    def run(self, argv: Sequence[str]) -> int:
+        """Runs the subcommand ``argv`` names, returns its exit code."""
         parser = argparse.ArgumentParser(
             prog="vex_checks", description="keep our OpenVEX not_affected claims honest"
         )
@@ -55,11 +65,11 @@ class ArgparseCommandLine:
         image_claims = subparsers.add_parser(
             "image-claims", help="check the image-family claims against the image's SBOM"
         )
-        _add_image_options(image_claims)
+        _add_image_options(image_claims, self._under_cwd, self._resolved_under_cwd)
         stale_claims = subparsers.add_parser(
             "stale-claims", help="flag the claims Grype no longer reports for the image"
         )
-        _add_image_options(stale_claims)
+        _add_image_options(stale_claims, self._under_cwd, self._resolved_under_cwd)
         subparsers.add_parser(
             "source-claims", help="check the source-family claims against our tree"
         )
@@ -77,9 +87,16 @@ class ArgparseCommandLine:
 
     def _check_image_claims(self, sbom: Path, vex: Path, sarif_output: Path | None) -> int:
         """Each problem a GitHub ``::error::`` line and exit 1, or, written as SARIF, exit 0."""
-        report = self._image_claims_checker.check_image_claims(sbom, vex.resolve(), sarif_output)
+        report = self._image_claims_checker.check_image_claims(sbom, vex, sarif_output)
         if sarif_output is not None:
             return 0
         for problem in report.problems:
             print(f"::error::{problem.advisory_id}: {problem.message} ({problem.location})")
         return 1 if report.problems else 0
+
+    def _under_cwd(self, path: str) -> Path:
+        """``path`` under ``cwd``, or as it is when absolute."""
+        return self._cwd / path
+
+    def _resolved_under_cwd(self, path: str) -> Path:
+        return self._under_cwd(path).resolve()
