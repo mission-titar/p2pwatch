@@ -16,10 +16,9 @@ from coverage import Coverage
 from coverage_checks.adapters.driven.filesystem_package_tree_reader import (
     FilesystemPackageTreeReader,
 )
-from coverage_checks.domain.function_bodies import find_function_body_lines
 from coverage_checks.domain.own_tests import find_own_tests
-
-type Branch = tuple[int, int]
+from coverage_checks.domain.shortfall import find_shortfall
+from coverage_checks.domain.test_coverage import Branch, TestCoverage
 
 
 @dataclass(frozen=True)
@@ -54,7 +53,14 @@ def main() -> int:
         shortfalls = [
             shortfall
             for module, test_files in own_tests.test_files_by_module.items()
-            if (shortfall := _find_shortfall(coverage, report, module, test_files))
+            if (
+                shortfall := find_shortfall(
+                    module,
+                    test_files,
+                    _read_test_coverage(coverage, report, module, test_files),
+                    Path(module).read_text(encoding="utf-8"),
+                )
+            )
         ]
     problems = [*own_tests.problems, *shortfalls]
     for problem in problems:
@@ -70,38 +76,22 @@ def main() -> int:
     return 1 if problems else 0
 
 
-def _find_shortfall(
+def _read_test_coverage(
     coverage: Coverage, report: Path, module: PurePath, test_files: Sequence[PurePath]
-) -> str | None:
-    """What of *module* its own tests leave unrun, but the top-level code any test ran."""
-    every_test = _read_execution(coverage, report, module, contexts=None)
+) -> TestCoverage:
+    run = _read_execution(coverage, report, module, contexts=None)
     own_contexts = [f"^{re.escape(test_file.as_posix())}::" for test_file in test_files]
     own_run = (
         _read_execution(coverage, report, module, own_contexts) if own_contexts else _NOTHING_RUN
     )
-    body_lines = find_function_body_lines(Path(module).read_text(encoding="utf-8"))
-    statements = sorted(
-        statement
-        for statement in every_test.statements - own_run.run_statements
-        if statement in body_lines or statement not in every_test.run_statements
+    return TestCoverage(
+        statements=run.statements,
+        branches=run.branches,
+        statements_run=run.run_statements,
+        branches_run=run.run_branches,
+        statements_run_by_own_tests=own_run.run_statements,
+        branches_run_by_own_tests=own_run.run_branches,
     )
-    branches = sorted(
-        branch
-        for branch in every_test.branches - own_run.run_branches
-        if branch[0] in body_lines or branch not in every_test.run_branches
-    )
-    unrun = [
-        f"{kind} {', '.join(labels)}"
-        for kind, labels in (
-            ("statements", [str(statement) for statement in statements]),
-            ("branches", [f"{start}->{end if end > 0 else 'exit'}" for start, end in branches]),
-        )
-        if labels
-    ]
-    if not unrun:
-        return None
-    own_test_names = ", ".join(test_file.as_posix() for test_file in test_files) or "it has none"
-    return f"{module}: {' and '.join(unrun)} run by none of its own tests ({own_test_names})"
 
 
 def _read_execution(
