@@ -580,6 +580,7 @@ path = "p2pwatch_amule.__main__"
 layer = "composition"
 depends_on = [
   "p2pwatch_amule.adapters.driven.amule_api_admin_password_setter",
+  "p2pwatch_amule.adapters.driven.gluetun_forwarded_port_reader",
   "p2pwatch_amule.adapters.driven.posix_account_manager",
   "p2pwatch_amule.adapters.driven.posix_amule_conf",
   "p2pwatch_amule.adapters.driven.posix_amuled_directory_preparer",
@@ -593,14 +594,17 @@ depends_on = [
 ]
 
 [[modules]]
-path = "p2pwatch_amule.adapters.driven.gluetun"
-layer = "adapters"
-depends_on = ["p2pwatch_amule.ports.driven.logger"]
-
-[[modules]]
 path = "p2pwatch_amule.adapters.driven.amule_api_admin_password_setter"
 layer = "adapters"
 depends_on = ["p2pwatch_amule.ports.driven.admin_password_setter"]
+
+[[modules]]
+path = "p2pwatch_amule.adapters.driven.gluetun_forwarded_port_reader"
+layer = "adapters"
+depends_on = [
+  "p2pwatch_amule.ports.driven.forwarded_port_reader",
+  "p2pwatch_amule.ports.driven.logger",
+]
 
 [[modules]]
 path = "p2pwatch_amule.adapters.driven.posix_account_manager"
@@ -645,9 +649,8 @@ path = "p2pwatch_amule.adapters.driving.port_sync"
 layer = "adapters"
 depends_on = [
   "p2pwatch_amule.domain",
-  # Port-sync asks gluetun through its adapter, past any port: lot 3 gives it a driven port.
-  { path = "p2pwatch_amule.adapters.driven.gluetun", deprecated = true },
   # A driving adapter on driven ports: lot 3b moves the loop into its use case.
+  { path = "p2pwatch_amule.ports.driven.forwarded_port_reader", deprecated = true },
   { path = "p2pwatch_amule.ports.driven.logger", deprecated = true },
   { path = "p2pwatch_amule.ports.driven.monotonic_clock", deprecated = true },
 ]
@@ -687,6 +690,11 @@ depends_on = []
 
 [[modules]]
 path = "p2pwatch_amule.ports.driven.amuled_directory_preparer"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch_amule.ports.driven.forwarded_port_reader"
 layer = "ports"
 depends_on = []
 

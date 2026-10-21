@@ -6,11 +6,15 @@ import os
 import pwd
 import subprocess
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from urllib.request import OpenerDirector, build_opener
 
 from p2pwatch_amule.adapters.driven.amule_api_admin_password_setter import (
     AmuleApiAdminPasswordSetter,
+)
+from p2pwatch_amule.adapters.driven.gluetun_forwarded_port_reader import (
+    GluetunForwardedPortReader,
 )
 from p2pwatch_amule.adapters.driven.posix_account_manager import PosixAccountManager
 from p2pwatch_amule.adapters.driven.posix_amule_conf import PosixAmuleConf
@@ -24,16 +28,24 @@ from p2pwatch_amule.adapters.driving import port_sync
 from p2pwatch_amule.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from p2pwatch_amule.application.boot_container import BootContainer
 from p2pwatch_amule.domain.conf import INCOMING_DIR, TEMP_DIR
+from p2pwatch_amule.domain.settings import parse_port_sync_settings
 
 _HOME_DIRECTORY = Path("/home/amule")
 _CONFIG_DIRECTORY = _HOME_DIRECTORY / ".aMule"
 _AMULE_CONF_PATH = _CONFIG_DIRECTORY / "amule.conf"
 _PORT_SYNC_SERVICE_DIRECTORY = Path("/etc/services.d/port-sync")
 _AMULED_SERVICE_DIRECTORY = Path("/etc/services.d/amuled")
+_GLUETUN_TIMEOUT_SECONDS = 10
 
 
-def main(argv: Sequence[str], env: Mapping[str, str]) -> int:
-    """Runs the subcommand ``argv`` names in the environment ``env``, returns its exit code."""
+def main(
+    argv: Sequence[str],
+    env: Mapping[str, str],
+    url_opener: OpenerDirector,
+    run_port_sync: Callable[..., None],
+) -> int:
+    """Runs the subcommand ``argv`` names in the environment ``env``, gluetun read by
+    ``url_opener``, port-sync's loop by ``run_port_sync``; returns its exit code."""
     amule_conf = PosixAmuleConf(amule_conf_path=_AMULE_CONF_PATH, change_owner=os.chown)
     container_booter = BootContainer(
         account_manager=PosixAccountManager(
@@ -66,20 +78,40 @@ def main(argv: Sequence[str], env: Mapping[str, str]) -> int:
     )
     command_line = ArgparseCommandLine(
         container_booter=container_booter,
-        sync_listen_port=lambda: port_sync.main(
-            env,
-            amule_conf_path=_AMULE_CONF_PATH,
-            amuled_service_directory=_AMULED_SERVICE_DIRECTORY,
-            monotonic_clock=SystemMonotonicClock(),
-            # The two names docs/migration-4x.md gives the operator.
-            logger=StdlibLogger("p2pwatch_amule.adapters.driving.port_sync"),
-            gluetun_logger=StdlibLogger("p2pwatch_amule.adapters.driven.gluetun"),
-        ),
+        sync_listen_port=lambda: _sync_listen_port(env, url_opener, run_port_sync),
         env=env,
         root_logger=logging.getLogger(),
     )
     return command_line.run(argv)
 
 
+def _sync_listen_port(
+    env: Mapping[str, str], url_opener: OpenerDirector, run_port_sync: Callable[..., None]
+) -> None:
+    """Parses port-sync's variables, so that the command line prints a refused one, then runs it."""
+    port_sync_settings = parse_port_sync_settings(env)
+    run_port_sync(
+        port_sync_settings,
+        amule_conf_path=_AMULE_CONF_PATH,
+        amuled_service_directory=_AMULED_SERVICE_DIRECTORY,
+        monotonic_clock=SystemMonotonicClock(),
+        forwarded_port_reader=GluetunForwardedPortReader(
+            control_url=port_sync_settings.gluetun_control_url,
+            timeout_seconds=_GLUETUN_TIMEOUT_SECONDS,
+            # The two logger names docs/migration-4x.md gives the operator, here and below.
+            logger=StdlibLogger("p2pwatch_amule.adapters.driven.gluetun"),
+            url_opener=url_opener,
+        ),
+        logger=StdlibLogger("p2pwatch_amule.adapters.driving.port_sync"),
+    )
+
+
 if __name__ == "__main__":  # pragma: no cover
-    raise SystemExit(main(sys.argv[1:], os.environ))
+    raise SystemExit(
+        main(
+            sys.argv[1:],
+            os.environ,
+            build_opener(),  # the environment's proxies, as urlopen followed them
+            port_sync.main,
+        )
+    )

@@ -1,5 +1,6 @@
 """Port-sync's loop: amuled is never left down, and the port is written only while it is down."""
 
+import dataclasses
 import os
 import subprocess
 from collections.abc import Callable
@@ -13,8 +14,7 @@ from p2pwatch_amule.adapters.driving import port_sync
 from p2pwatch_amule.domain.conf import tcp_listen_port, with_listen_port
 from p2pwatch_amule.domain.monotonic_instant import MonotonicInstant
 from p2pwatch_amule.domain.settings import PortSyncSettings
-from p2pwatch_amule.ports.driven.logger import Logger
-from tests.fakes import FakeLogger, FakeMonotonicClock, LoggedLine
+from tests.fakes import FakeForwardedPortReader, FakeLogger, FakeMonotonicClock, LoggedLine
 
 AMULED_SERVICE_DIRECTORY = "/run/service/amuled"
 DOWN = ["s6-svc", "-wD", "-T", "60000", "-d", AMULED_SERVICE_DIRECTORY]
@@ -32,20 +32,18 @@ def instant_at(seconds: int) -> MonotonicInstant:
 
 
 class Node:
-    """amule.conf under tmp_path, gluetun's answer, a fake s6 recording its commands, a clock,
-    port-sync's and gluetun's loggers."""
+    """amule.conf under tmp_path, gluetun's port, a fake s6 recording its commands, a clock, a
+    logger."""
 
     def __init__(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         self.conf = tmp_path / "amule.conf"
         self.conf.write_text(CONF)
-        self.forwarded: int | None = 51820
+        self.forwarded_port_reader = FakeForwardedPortReader()
         self.commands: list[list[str]] = []
         self.down_exit = 0
         self.on_down: Callable[[], None] = lambda: None
         self.monotonic_clock = FakeMonotonicClock()
         self.logger = FakeLogger()
-        self.gluetun_logger = FakeLogger()
-        monkeypatch.setattr(port_sync, "forwarded_port", self._forwarded_port)
         monkeypatch.setattr(subprocess, "run", self._run)
 
     def sync_once(
@@ -57,23 +55,19 @@ class Node:
             now,
             amule_conf_path=self.conf,
             amuled_service_directory=Path(AMULED_SERVICE_DIRECTORY),
+            forwarded_port_reader=self.forwarded_port_reader,
             logger=self.logger,
-            gluetun_logger=self.gluetun_logger,
         )
 
-    def main(self, env: dict[str, str] | None = None) -> None:
+    def main(self, port_sync_settings: PortSyncSettings = SETTINGS) -> None:
         port_sync.main(
-            env or {},
+            port_sync_settings,
             amule_conf_path=self.conf,
             amuled_service_directory=Path(AMULED_SERVICE_DIRECTORY),
             monotonic_clock=self.monotonic_clock,
+            forwarded_port_reader=self.forwarded_port_reader,
             logger=self.logger,
-            gluetun_logger=self.gluetun_logger,
         )
-
-    def _forwarded_port(self, url: str, logger: Logger) -> int | None:
-        assert (url, logger) == ("http://localhost:8000", self.gluetun_logger)
-        return self.forwarded
 
     def _run(self, argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         self.commands.append(argv)
@@ -148,13 +142,13 @@ def test_a_write_that_raises_still_starts_amuled_and_is_logged(
 
 
 def test_the_same_port_calls_no_s6_command(node: Node) -> None:
-    node.forwarded = 4662
+    node.forwarded_port_reader.forwarded_port = 4662
     assert node.sync_once(instant_at(5), now=instant_at(1000)) == instant_at(5)
     assert node.commands == []
 
 
 def test_no_forwarded_port_calls_no_s6_command(node: Node) -> None:
-    node.forwarded = None
+    node.forwarded_port_reader.forwarded_port = None
     assert node.sync_once(None, now=instant_at(1000)) is None
     assert node.commands == []
 
@@ -173,41 +167,36 @@ class _Stop(Exception):
     pass
 
 
-def test_the_start_sends_up_before_the_first_round_then_polls_every_60s(
-    node: Node, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    def forwarded_port(url: str, logger: Logger) -> int | None:
-        node.commands.append(["GET", url])
-        return 4662
-
+def test_the_start_sends_up_before_the_first_round_then_polls_every_60s(node: Node) -> None:
     def stop_at_the_second_sleep() -> None:
         if len(node.monotonic_clock.sleeps) == 2:
             raise _Stop
 
-    monkeypatch.setattr(port_sync, "forwarded_port", forwarded_port)
+    node.forwarded_port_reader.forwarded_port = 4662
+    node.forwarded_port_reader.on_read = lambda: node.commands.append(["read forwarded port"])
     node.monotonic_clock.on_sleep = stop_at_the_second_sleep
     with pytest.raises(_Stop):
         node.main()
-    gluetun = ["GET", "http://localhost:8000"]
+    gluetun = ["read forwarded port"]
     assert node.commands == [UP, gluetun, gluetun]
     assert node.monotonic_clock.sleeps == [timedelta(seconds=60), timedelta(seconds=60)]
 
 
-def test_the_poll_interval_is_the_environments(node: Node) -> None:
+def test_the_poll_interval_is_the_settings(node: Node) -> None:
     def stop() -> None:
         raise _Stop
 
-    node.forwarded = 4662
+    node.forwarded_port_reader.forwarded_port = 4662
     node.monotonic_clock.on_sleep = stop
     with pytest.raises(_Stop):
-        node.main({"PORT_SYNC_POLL_SECONDS": "5"})
+        node.main(dataclasses.replace(SETTINGS, poll_interval=timedelta(seconds=5)))
     assert node.monotonic_clock.sleeps == [timedelta(seconds=5)]
 
 
 def test_the_restart_time_carries_from_one_round_to_the_next(node: Node) -> None:
     def move_the_port_then_stop_at_the_second_sleep() -> None:
         # The first restart wrote 51820; gluetun moving again 60 s later must wait for the window.
-        node.forwarded = 51821
+        node.forwarded_port_reader.forwarded_port = 51821
         if len(node.monotonic_clock.sleeps) == 2:
             raise _Stop
 
