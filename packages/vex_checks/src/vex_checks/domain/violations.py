@@ -7,4 +7,4 @@ from dataclasses import dataclass
 class Violation:
     advisory_id: str
     message: str
-    location: str  # repo-relative path pointing at the offending file
+    location: str  # the offending file, relative to the repository's root or as given outside it

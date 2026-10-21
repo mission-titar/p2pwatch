@@ -80,7 +80,7 @@ class WrittenSarif:
     sarif_path: PurePath
     rule_id: str
     violations: tuple[Violation, ...]
-    vex_relpath: str
+    vex_location: str
 
 
 class FakeSarifWriter(SarifWriter):
@@ -90,10 +90,10 @@ class FakeSarifWriter(SarifWriter):
         self.written_sarifs: list[WrittenSarif] = []
 
     def write_violations(
-        self, sarif_path: PurePath, rule_id: str, violations: Sequence[Violation], vex_relpath: str
+        self, sarif_path: PurePath, rule_id: str, violations: Sequence[Violation], vex_location: str
     ) -> None:
         self.written_sarifs.append(
-            WrittenSarif(sarif_path, rule_id, tuple(violations), vex_relpath)
+            WrittenSarif(sarif_path, rule_id, tuple(violations), vex_location)
         )
 
 
