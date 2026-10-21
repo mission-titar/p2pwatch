@@ -5,16 +5,7 @@ from pathlib import Path
 from p2pwatch_amule.adapters.driven.posix_amuled_directory_preparer import (
     PosixAmuledDirectoryPreparer,
 )
-
-
-class FakeOwnership:
-    """Records each chown it is asked for: the gate cannot chown to another uid."""
-
-    def __init__(self) -> None:
-        self.chowns: list[tuple[Path, int, int]] = []
-
-    def change_owner(self, path: Path, uid: int, gid: int) -> None:
-        self.chowns.append((path, uid, gid))
+from tests.fakes import FakeOwnership
 
 
 def test_missing_directories_are_created_then_owned(tmp_path: Path) -> None:

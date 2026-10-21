@@ -6,9 +6,10 @@ from pathlib import Path
 import pytest
 
 from p2pwatch_amule.adapters.driven.s6_service_supervisor import S6ServiceSupervisor
-from tests.fakes import FakeLogger, FakeS6, LoggedLine
+from tests.fakes import FakeCommandRunner, FakeLogger, LoggedLine
 
 AMULED_SERVICE_DIRECTORY = Path("/run/service/amuled")
+CAPTURED = {"capture_output": True, "text": True}
 
 
 @pytest.fixture
@@ -20,13 +21,13 @@ def port_sync_service_directory(tmp_path: Path) -> Path:
 
 def _supervisor(
     port_sync_service_directory: Path,
-    s6: FakeS6 | None = None,
+    command_runner: FakeCommandRunner | None = None,
     logger: FakeLogger | None = None,
 ) -> S6ServiceSupervisor:
     return S6ServiceSupervisor(
         port_sync_service_directory=port_sync_service_directory,
         amuled_service_directory=AMULED_SERVICE_DIRECTORY,
-        run_command=(s6 or FakeS6()).run_command,
+        run_command=(command_runner or FakeCommandRunner()).run_command,
         logger=logger or FakeLogger(),
     )
 
@@ -56,36 +57,38 @@ def test_enabling_port_sync_leaves_no_down_file(
 
 
 def test_stopping_amuled_waits_until_it_is_down(port_sync_service_directory: Path) -> None:
-    s6, logger = FakeS6(), FakeLogger()
+    command_runner, logger = FakeCommandRunner(), FakeLogger()
 
-    assert _supervisor(port_sync_service_directory, s6, logger).stop_amuled() is True
+    assert _supervisor(port_sync_service_directory, command_runner, logger).stop_amuled() is True
 
-    assert s6.commands == [["s6-svc", "-wD", "-T", "60000", "-d", "/run/service/amuled"]]
+    assert command_runner.commands == [
+        (["s6-svc", "-wD", "-T", "60000", "-d", "/run/service/amuled"], CAPTURED)
+    ]
     assert logger.lines == []
 
 
 def test_a_stop_that_fails_is_logged(port_sync_service_directory: Path) -> None:
-    s6, logger = FakeS6(), FakeLogger()
-    s6.exit_code = 99
+    command_runner, logger = FakeCommandRunner(), FakeLogger()
+    command_runner.exit_code, command_runner.stderr = 99, "timed out\n"
 
-    assert _supervisor(port_sync_service_directory, s6, logger).stop_amuled() is False
+    assert _supervisor(port_sync_service_directory, command_runner, logger).stop_amuled() is False
 
     assert logger.lines == [LoggedLine("error", "s6-svc -wD -T 60000 -d exited 99: timed out")]
 
 
 def test_starting_amuled_sends_up(port_sync_service_directory: Path) -> None:
-    s6, logger = FakeS6(), FakeLogger()
+    command_runner, logger = FakeCommandRunner(), FakeLogger()
 
-    _supervisor(port_sync_service_directory, s6, logger).start_amuled()
+    _supervisor(port_sync_service_directory, command_runner, logger).start_amuled()
 
-    assert s6.commands == [["s6-svc", "-u", "/run/service/amuled"]]
+    assert command_runner.commands == [(["s6-svc", "-u", "/run/service/amuled"], CAPTURED)]
     assert logger.lines == []
 
 
 def test_a_start_that_fails_is_logged(port_sync_service_directory: Path) -> None:
-    s6, logger = FakeS6(), FakeLogger()
-    s6.exit_code = 111
+    command_runner, logger = FakeCommandRunner(), FakeLogger()
+    command_runner.exit_code, command_runner.stderr = 111, "timed out\n"
 
-    _supervisor(port_sync_service_directory, s6, logger).start_amuled()
+    _supervisor(port_sync_service_directory, command_runner, logger).start_amuled()
 
     assert logger.lines == [LoggedLine("error", "s6-svc -u exited 111: timed out")]

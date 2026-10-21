@@ -3,6 +3,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from threading import Event, Thread
 from typing import Any, Literal, Self
 from urllib.request import ProxyHandler, build_opener
@@ -22,52 +23,53 @@ from p2pwatch_amule.ports.driving.port_sync_loop_runner import PortSyncLoopRunne
 
 
 class FakeAccountManager(AccountManager):
-    """Records the uid and gid of each account it is asked for."""
+    """Records each account it is asked for in ``actions``."""
 
-    def __init__(self) -> None:
-        self.accounts: list[tuple[int, int]] = []
+    def __init__(self, actions: list[str]) -> None:
+        self.actions = actions
 
     def find_or_create_amule_account(self, uid: int, gid: int) -> None:
-        self.accounts.append((uid, gid))
+        self.actions.append(f"account {uid}:{gid}")
 
 
 class FakeAmuledDirectoryPreparer(AmuledDirectoryPreparer):
-    """Records the uid and gid of each preparation it is asked for."""
+    """Records each preparation it is asked for in ``actions``."""
 
-    def __init__(self) -> None:
-        self.owners: list[tuple[int, int]] = []
+    def __init__(self, actions: list[str]) -> None:
+        self.actions = actions
 
     def prepare_amuled_directories(self, uid: int, gid: int) -> None:
-        self.owners.append((uid, gid))
+        self.actions.append(f"directories {uid}:{gid}")
 
 
 class FakeAmuleConf(AmuleConfReader, AmuleConfWriter):
-    """amule.conf held as text, ``None`` when absent; records the owner of each write, or raises
-    ``write_error``."""
+    """amule.conf held as text, ``None`` when absent; records each read and each write in
+    ``actions``, or raises ``write_error`` on a write."""
 
-    def __init__(self) -> None:
+    def __init__(self, actions: list[str]) -> None:
+        self.actions = actions
         self.conf: str | None = None
-        self.owners: list[tuple[int, int]] = []
         self.write_error: OSError | None = None
 
     def read_amule_conf(self) -> str | None:
+        self.actions.append("read amule.conf")
         return self.conf
 
     def write_amule_conf(self, conf: str, uid: int, gid: int) -> None:
         if self.write_error is not None:
             raise self.write_error
         self.conf = conf
-        self.owners.append((uid, gid))
+        self.actions.append(f"write amule.conf as {uid}:{gid}")
 
 
 class FakeAdminPasswordSetter(AdminPasswordSetter):
-    """Records each password set, with the uid and gid it is set as."""
+    """Records each password set, with the uid and gid it is set as, in ``actions``."""
 
-    def __init__(self) -> None:
-        self.passwords: list[tuple[str, int, int]] = []
+    def __init__(self, actions: list[str]) -> None:
+        self.actions = actions
 
     def set_admin_password(self, api_password: str, uid: int, gid: int) -> None:
-        self.passwords.append((api_password, uid, gid))
+        self.actions.append(f"admin password {api_password} as {uid}:{gid}")
 
 
 @dataclass(frozen=True)
@@ -110,11 +112,11 @@ class FakeMonotonicClock(MonotonicClock):
 
 
 class FakeServiceSupervisor(ServiceSupervisor):
-    """Records each action it is asked for, in order; a stop calls ``on_stop_amuled``, then
+    """Records each action it is asked for in ``actions``; a stop calls ``on_stop_amuled``, then
     returns ``is_amuled_stopped``."""
 
-    def __init__(self) -> None:
-        self.actions: list[str] = []
+    def __init__(self, actions: list[str]) -> None:
+        self.actions = actions
         self.is_amuled_stopped = True
         self.on_stop_amuled: Callable[[], None] = lambda: None
 
@@ -159,17 +161,32 @@ class FakePortSyncLoopRunner(PortSyncLoopRunner):
             raise self.error
 
 
-class FakeS6:
-    """Records the commands run, each exiting ``exit_code``: the gate runs no s6."""
+class FakeCommandRunner:
+    """Records each command run with its keyword arguments, each exiting ``exit_code`` with
+    ``stderr``: the gate runs no s6, nor a command as another uid."""
 
     def __init__(self) -> None:
-        self.commands: list[list[str]] = []
+        self.commands: list[tuple[list[str], dict[str, Any]]] = []
         self.exit_code = 0
+        self.stderr = ""
 
     def run_command(self, argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
-        assert kwargs == {"capture_output": True, "text": True}
-        self.commands.append(argv)
-        return subprocess.CompletedProcess(argv, self.exit_code, "", "timed out\n")
+        self.commands.append((argv, kwargs))
+        return subprocess.CompletedProcess(argv, self.exit_code, "", self.stderr)
+
+
+class FakeOwnership:
+    """Records each chown it is asked for, or raises ``error``: the gate cannot chown to another
+    uid."""
+
+    def __init__(self) -> None:
+        self.chowns: list[tuple[Path, int, int]] = []
+        self.error: OSError | None = None
+
+    def change_owner(self, path: Path, uid: int, gid: int) -> None:
+        if self.error is not None:
+            raise self.error
+        self.chowns.append((path, uid, gid))
 
 
 class FakeForwardedPortReader(ForwardedPortReader):
