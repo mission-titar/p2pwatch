@@ -10,7 +10,9 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from p2pwatch_amule.adapters.driven.posix_account_manager import PosixAccountManager
-from p2pwatch_amule.adapters.driven.posix_mount_point_preparer import PosixMountPointPreparer
+from p2pwatch_amule.adapters.driven.posix_amuled_directory_preparer import (
+    PosixAmuledDirectoryPreparer,
+)
 from p2pwatch_amule.adapters.driving import boot, port_sync
 from p2pwatch_amule.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from p2pwatch_amule.application.boot_container import BootContainer
@@ -32,7 +34,7 @@ def main(argv: Sequence[str], env: Mapping[str, str]) -> int:
             find_group=grp.getgrnam,
             find_user=pwd.getpwnam,
         ),
-        mount_point_preparer=PosixMountPointPreparer(
+        amuled_directory_preparer=PosixAmuledDirectoryPreparer(
             # The mount points are the directories reconcile_conf writes into amule.conf.
             owned_directories=[
                 _HOME_DIRECTORY,

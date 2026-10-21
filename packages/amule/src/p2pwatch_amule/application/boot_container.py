@@ -1,4 +1,4 @@
-"""Boots the aMule container: refuses its variables first, then the account and mount points."""
+"""Boots the aMule container: refuses its variables, then prepares the account and directories."""
 
 from collections.abc import Mapping
 
@@ -8,7 +8,7 @@ from p2pwatch_amule.domain.settings import (
     parse_port_sync_settings,
 )
 from p2pwatch_amule.ports.driven.account_manager import AccountManager
-from p2pwatch_amule.ports.driven.mount_point_preparer import MountPointPreparer
+from p2pwatch_amule.ports.driven.amuled_directory_preparer import AmuledDirectoryPreparer
 from p2pwatch_amule.ports.driving.container_booter import ContainerBooter
 
 
@@ -16,14 +16,16 @@ class BootContainer(ContainerBooter):
     """Parses every variable, port-sync's included, before the first change."""
 
     def __init__(
-        self, *, account_manager: AccountManager, mount_point_preparer: MountPointPreparer
+        self, *, account_manager: AccountManager, amuled_directory_preparer: AmuledDirectoryPreparer
     ) -> None:
         self._account_manager = account_manager
-        self._mount_point_preparer = mount_point_preparer
+        self._amuled_directory_preparer = amuled_directory_preparer
 
     def boot_container(self, env: Mapping[str, str]) -> None:
         boot_settings = parse_boot_settings(env)
         if is_port_sync_enabled(env):
             parse_port_sync_settings(env)
         self._account_manager.find_or_create_amule_account(boot_settings.puid, boot_settings.pgid)
-        self._mount_point_preparer.prepare_mount_points(boot_settings.puid, boot_settings.pgid)
+        self._amuled_directory_preparer.prepare_amuled_directories(
+            boot_settings.puid, boot_settings.pgid
+        )

@@ -45,7 +45,7 @@ class Boot:
     def __init__(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         self.home = tmp_path / "home/amule"
         self.config = self.home / ".aMule"
-        # The booter's mount points.
+        # The booter's directories.
         self.config.mkdir(parents=True)
         self.conf = self.config / "amule.conf"
         self.port_sync_down = tmp_path / "services.d/port-sync/down"

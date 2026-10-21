@@ -1,5 +1,5 @@
 from p2pwatch_amule.ports.driven.account_manager import AccountManager
-from p2pwatch_amule.ports.driven.mount_point_preparer import MountPointPreparer
+from p2pwatch_amule.ports.driven.amuled_directory_preparer import AmuledDirectoryPreparer
 
 
 class FakeAccountManager(AccountManager):
@@ -12,11 +12,11 @@ class FakeAccountManager(AccountManager):
         self.accounts.append((uid, gid))
 
 
-class FakeMountPointPreparer(MountPointPreparer):
+class FakeAmuledDirectoryPreparer(AmuledDirectoryPreparer):
     """Records the uid and gid of each preparation it is asked for."""
 
     def __init__(self) -> None:
         self.owners: list[tuple[int, int]] = []
 
-    def prepare_mount_points(self, uid: int, gid: int) -> None:
+    def prepare_amuled_directories(self, uid: int, gid: int) -> None:
         self.owners.append((uid, gid))
