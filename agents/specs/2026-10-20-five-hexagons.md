@@ -263,13 +263,13 @@ doubles of `p2pwatch_testing` keep theirs, which are test data.
 Each changes in the block that makes it false.
 
 - `AGENTS.md`: the conventions C1 to C5, each in the block the section "Conventions this lot sets" names.
-- `AGENTS.md`: the `TID251` exemption of `packages/amule/` goes (3b 54, umbrella D19); the hard rules gain "no
+- `AGENTS.md`: the `TID251` exemption of `packages/amule/` goes (3b 50, umbrella D19); the hard rules gain "no
   module patching" (3c 90); "No I/O in the core" names `jinja2` in `template_checks`' domain (3c 60); the Commands
   section names `_template-attributes` (3c 60); the subsystem table's rows for port-sync and the container boot
-  follow their new paths (3b 44, 54); the glossary gains `claim`, `premise` and `source rule` (3c 12, 30), and
+  follow their new paths (3b 48, 56); the glossary gains `claim`, `premise` and `source rule` (3c 12, 30), and
   Naming the `<Thing>Report` response model with its `problems` (3c 20).
 - `docs/contributing/architecture.md`: section 4 describes the six hexagons and their rings (3c 90); sections 9 and
-  12 follow port-sync's and the boot's new paths (3b 54).
+  12 follow port-sync's and the boot's new paths (3b 58).
 - `docs/contributing/amule-bump.md` follows `application/body.py` (3a 20).
 - `SECURITY.md`: `vex_checks` has three subcommands, and the source claims are ast-grep rules (3c 32).
 - The strings that stay: the subcommands `boot` and `port-sync` keep their names, so `entrypoint.sh` and
@@ -282,8 +282,8 @@ Estimates by a Sonnet agent on `main` at `38bfe15`, before any code, about 20 % 
 (`.reviews/lot3-estimate.md`); each teammate measures its block and splits it at a bound. No block is purely
 mechanical, so none takes the size exemption. 3a used its headroom in 3 splits (blocks 20, 21 and 30, giving 21,
 22 and 32; the repo reader's block renumbered 24) and 2 added blocks (14, 16) (Corrected: was "5 splits"), and its boot and port-sync blocks became 3b, which re-measures them on the
-tree 3a leaves (Corrected: 3a held blocks 40 to 56). Rows that sat at 450 to 480 lines: 3b 40, 44, 52, 3c 52;
-3b 40's fallback is to hand its fakes to 42.
+tree 3a leaves (Corrected: 3a held blocks 40 to 56). 3b's table holds its re-measure;
+3b 40's fallback is to split its skeleton from the accounts. 3c 52 sat at 480 lines.
 
 Every block leaves its new surface called by production code, since `dead-code-check` reports a class only tests
 call: the old entry function delegates to what the block adds until a later block deletes it.
@@ -307,15 +307,24 @@ call: the old entry function delegates to what the block adds until a later bloc
 
 ### Lot 3b: the aMule container's boot and port-sync (Corrected: were 3a's blocks 40 to 60)
 
+Re-measured on `main` at `b48391b` after 3a merged (`.reviews/lot3b-estimate.md`), and re-cut with the operator's
+approval (Corrected: were seven rows, 40 to 56; row 50 measured about 920 lines). The boot's steps move in the
+order the boot runs them; `TID251`'s exemption goes with the clock, where the rule would turn false; the clock is
+this hexagon's own copy of `MonotonicInstant`.
+
 | # | Branch | Holds | Lines, files (est.) |
 |---|---|---|---|
-| 40 | `feat/boot-container` | `BootContainer` behind `ContainerBooter`; `AmuleConfReader`, `AmuleConfWriter`, `PosixAmuleConf`; `boot.main` delegating to `BootContainer` | 480, 14 |
-| 42 | `feat/boot-accounts-and-mount-points` | `AccountManager`, `MountPointPreparer` and their adapters; `BootContainer` gains the two steps, `boot.py` loses them | 300, 10 |
-| 44 | `feat/boot-password-and-supervisor` | `AdminPasswordSetter`, `ServiceSupervisor`'s `down` file; `boot.py` and `test_boot.py` gone; `AGENTS.md`'s boot row | 450, 15 |
-| 50 | `refactor/port-sync-decision-in-domain` | port-sync's decision into the domain; `GluetunForwardedPortReader` on a loopback server; `SystemMonotonicClock`, `StdlibLogger`; `port_sync.main` reading through them | 400, 14 |
-| 52 | `feat/port-sync-loop` | `RunPortSyncLoop` behind `PortSyncLoopRunner`; the supervisor's stop and start; `port_sync.main` delegating to it | 450, 14 |
-| 54 | `refactor/port-sync-wired` | the composition and `port_sync_loop_runner` (D4); `port_sync.py` gone; the `TID251` exemption, `time.sleep` banned; `AGENTS.md`'s rule and row; `architecture.md` sections 9 and 12 | 350, 11 |
-| 56 | `test/port-sync-smoke` | a compose smoke case: a stand-in for gluetun's `/v1/portforward` (a static file served by `python -m http.server`), port-sync rewrites `Port` and `UDPPort` and restarts amuled | 150, 3 |
+| 40 | `feat/boot-container-accounts` | `BootContainer` behind `ContainerBooter`, the settings then the accounts; `AccountManager`, `PosixAccountManager`; the package's fakes | 420, 16 |
+| 42 | `feat/boot-mount-points` | `MountPointPreparer`, `PosixMountPointPreparer` | 200, 10 |
+| 44 | `feat/boot-amule-conf` | `AmuleConfReader`, `AmuleConfWriter`, `PosixAmuleConf` | 290, 12 |
+| 46 | `feat/boot-admin-password` | `AdminPasswordSetter`, `AmuleApiAdminPasswordSetter` | 195, 10 |
+| 48 | `feat/boot-down-file` | `ServiceSupervisor`'s `down` file, `S6ServiceSupervisor`; `boot.py` and `test_boot.py` gone; `AGENTS.md`'s boot row | 265, 12 |
+| 50 | `refactor/port-sync-monotonic-clock` | `MonotonicInstant`, `MonotonicClock`, `SystemMonotonicClock`; the `TID251` exemption gone, `time.sleep` banned, `AGENTS.md`'s rule | 285, 12 |
+| 52 | `refactor/port-sync-decision-and-logger` | port-sync's decision into the domain; `Logger`, `StdlibLogger` under the two documented names | 340, 10 |
+| 54 | `refactor/port-sync-gluetun-reader` | `ForwardedPortReader`, `GluetunForwardedPortReader` on a loopback server; `gluetun.py` gone | 385, 10 |
+| 56 | `feat/port-sync-loop` | `RunPortSyncLoop` behind `PortSyncLoopRunner`; the supervisor's stop and start; `port_sync.py` gone; `AGENTS.md`'s port-sync row (fits only if git pairs `test_port_sync.py`'s move) | 435, 12 |
+| 58 | `refactor/port-sync-runner-wired` | the composition and `port_sync_loop_runner` (D4); `architecture.md` sections 9 and 12 | 100, 8 |
+| 59 | `test/port-sync-smoke` | a compose smoke case: a stand-in for gluetun's `/v1/portforward` (a static file served by `python -m http.server`), port-sync rewrites `Port` and `UDPPort` and restarts amuled | 150, 4 |
 | 60 | `docs/five-hexagons-3b-wrap` | closing block: the holistic findings, backlog, handoff | |
 
 ### Lot 3c: `vex_checks`, `coverage_checks`, `template_checks`, the rule
@@ -341,7 +350,7 @@ call: the old entry function delegates to what the block adds until a later bloc
   leaves, re-measuring its blocks first.
 - In 3c, block 70 comes before 80 so that 80's check passes on the templates it lands on, and block 90 comes last
   among the code blocks: the rule fails until every package is off `monkeypatch`.
-- 3b's block 56 adds what no suite runs today: the compose smoke starts port-sync without gluetun and only checks
+- 3b's block 59 adds what no suite runs today: the compose smoke starts port-sync without gluetun and only checks
   it stays down, so the path that stops amuled, rewrites the ports and starts it again is tested nowhere, and 3b
   rewrites it whole.
 
@@ -367,7 +376,7 @@ and 4 for `p2pwatch_amule` (Corrected: 3a met 6 and 12 before the cut); 3c meets
    On `main` the 8 constructs pass.
 6. **The aMule container behaves as before**: CI's compose smoke, and the crawler's `api_integration`,
    `download_integration` and `orchestration_integration` suites against `p2pwatch-amule`, pass on amd64 and arm64 at
-   3b's blocks 44 and 56; boot's refusal messages and port-sync's log lines, with their logger names, are the same
+   3b's blocks 48 and 59; boot's refusal messages and port-sync's log lines, with their logger names, are the same
    set on `main` and at the top (`git grep -hE "sys.exit|_logger\.(info|warning|error)|logger\.(info|warning|error)"`
    over `packages/amule/src` on both sides, then the messages compared).
 7. **The VEX checks give the same verdicts**: `image-claims` and `stale-claims` on
@@ -385,7 +394,7 @@ and 4 for `p2pwatch_amule` (Corrected: 3a met 6 and 12 before the cut); 3c meets
 10. **The gate is green** at every block.
 11. **No unclosed connection**: the crawler's pytest config has `error::ResourceWarning`, and an injected test that
     leaves a `sqlite3.connect` open fails the suite.
-12. **Port-sync syncs**: the smoke case of 3b's block 56 sees `amule.conf`'s `Port` and `UDPPort` take the stand-in's
+12. **Port-sync syncs**: the smoke case of 3b's block 59 sees `amule.conf`'s `Port` and `UDPPort` take the stand-in's
     port and amuled's pid change; with the stand-in serving the current port, neither changes.
 13. **The pages render as before**: a throwaway script renders the same seeded GETs as lot 2's Acceptance 9 on
     `main` and at 3c's block 70; `diff` prints nothing, and one deliberate template edit shows in it.
