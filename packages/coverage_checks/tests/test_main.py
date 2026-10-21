@@ -1,4 +1,5 @@
-"""``python -m coverage_checks``: the command line wired to the real check, in the given cwd."""
+"""``python -m coverage_checks``: the command line wired to the real check, in the given cwd and
+report directory."""
 
 import importlib.util
 from collections.abc import Callable
@@ -59,12 +60,16 @@ def test_unit_coverage_checks_the_package_in_the_cwd_and_names_it_in_the_summary
         },
     )
 
-    assert main(["unit-coverage"], tmp_path) == 0
+    report_directory = tmp_path / "report"
+    report_directory.mkdir()
+
+    assert main(["unit-coverage"], tmp_path, report_directory) == 0
 
     assert capsys.readouterr().out == (
         f"{tmp_path.name}: 1 test files map to 1 of 1 modules, 0 are listed without a unit;"
         " 0 of 1 modules short of their own tests\n"
     )
+    assert (report_directory / "coverage.json").is_file()
 
 
 def test_unit_coverage_without_recorded_coverage_names_the_cwd_s_data_file(
@@ -72,7 +77,7 @@ def test_unit_coverage_without_recorded_coverage_names_the_cwd_s_data_file(
 ) -> None:
     (tmp_path / "pyproject.toml").write_text('[project]\nname = "pkg"\n')
 
-    assert main(["unit-coverage"], tmp_path) == 1
+    assert main(["unit-coverage"], tmp_path, tmp_path) == 1
 
     assert capsys.readouterr().err.startswith(
         f"no per-test branch coverage in {tmp_path / '.coverage'}: run this package's pytest"
