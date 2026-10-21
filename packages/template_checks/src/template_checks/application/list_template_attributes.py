@@ -1,0 +1,23 @@
+"""Lists the attribute names a directory's templates read."""
+
+from pathlib import PurePath
+
+from template_checks.domain.template_attributes import find_template_attributes
+from template_checks.ports.driven.template_reader import TemplateReader
+from template_checks.ports.driving.template_attribute_lister import (
+    TemplateAttributeLister,
+    TemplateAttributeListing,
+)
+
+
+class ListTemplateAttributes(TemplateAttributeLister):
+    """Over the templates its reader reads."""
+
+    def __init__(self, *, template_reader: TemplateReader) -> None:
+        self._template_reader = template_reader
+
+    def list_template_attributes(self, templates_directory: PurePath) -> TemplateAttributeListing:
+        template_texts = self._template_reader.read_templates(templates_directory).values()
+        return TemplateAttributeListing(
+            template_attributes=find_template_attributes(template_texts)
+        )
