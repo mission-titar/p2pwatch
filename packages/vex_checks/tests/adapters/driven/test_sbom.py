@@ -1,43 +1,11 @@
-import json
-from pathlib import Path
-
-from vex_checks.adapters.driven.sbom import (
-    DeclaredComponent,
-    DpkgPackage,
-    evaluate_image_premises,
-    load_declared_components,
-    load_dpkg_packages,
-)
+from vex_checks.adapters.driven.sbom import evaluate_image_premises
 from vex_checks.domain.descriptors import (
     DeclaredMinVersion,
     DpkgMinVersion,
     DpkgPackageAbsent,
     ImagePremise,
 )
-
-
-def _write_sbom(tmp_path: Path, artifacts: list[dict[str, str]]) -> Path:
-    doc = {"artifacts": artifacts}
-    path = tmp_path / "sbom.syft.json"
-    path.write_text(json.dumps(doc))
-    return path
-
-
-def test_load_dpkg_packages_keeps_only_deb_artifacts(tmp_path: Path) -> None:
-    # aMule is compiled by us and declared by hand, so Syft types it "UnknownPackage", not "deb".
-    path = _write_sbom(
-        tmp_path,
-        [
-            {"type": "deb", "name": "libcurl4t64", "version": "8.14.1-2"},
-            {"type": "deb", "name": "zlib1g", "version": "1:1.3.dfsg+really1.3.1-1"},
-            {"type": "UnknownPackage", "name": "amule", "version": "3.1.0"},
-            {"type": "python", "name": "packaging", "version": "24.0"},
-        ],
-    )
-    assert load_dpkg_packages(path) == [
-        DpkgPackage("libcurl4t64", "8.14.1-2"),
-        DpkgPackage("zlib1g", "1:1.3.dfsg+really1.3.1-1"),
-    ]
+from vex_checks.domain.sbom_components import DeclaredComponent, DpkgPackage
 
 
 def test_package_absent_passes_when_only_sibling_package_present() -> None:
@@ -86,29 +54,6 @@ def test_package_min_version_passes_vacuously_when_package_absent() -> None:
     premises: dict[str, ImagePremise] = {"CVE-2016-1405": DpkgMinVersion("curl", "8.0")}
     packages = [DpkgPackage("libcurl4t64", "8.14.1-2")]
     assert evaluate_image_premises(premises, packages, []) == []
-
-
-def test_load_declared_components_keeps_only_generic_purl_artifacts(tmp_path: Path) -> None:
-    # The real shape of the hand-declared aMule artifact, as Syft 1.52 emits it.
-    path = _write_sbom(
-        tmp_path,
-        [
-            {
-                "type": "UnknownPackage",
-                "name": "amule",
-                "version": "3.1.0",
-                "purl": "pkg:generic/amule@3.1.0",
-            },
-            {
-                "type": "deb",
-                "name": "amule",
-                "version": "1:2.3.3-3",
-                "purl": "pkg:deb/debian/amule@1:2.3.3-3",
-            },
-            {"type": "python", "name": "packaging", "version": "24.0"},
-        ],
-    )
-    assert load_declared_components(path) == [DeclaredComponent("amule", "3.1.0")]
 
 
 def test_declared_min_version_passes_at_or_above_minimum() -> None:

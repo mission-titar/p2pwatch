@@ -1,6 +1,3 @@
-import json
-from dataclasses import dataclass
-from pathlib import Path
 from typing import assert_never
 
 from packaging.version import Version
@@ -11,46 +8,8 @@ from vex_checks.domain.descriptors import (
     DpkgPackageAbsent,
     ImagePremise,
 )
+from vex_checks.domain.sbom_components import DeclaredComponent, DpkgPackage
 from vex_checks.domain.violations import Violation
-
-
-@dataclass(frozen=True)
-class DpkgPackage:
-    name: str
-    version: str
-
-
-def load_dpkg_packages(path: Path) -> list[DpkgPackage]:
-    """The dpkg packages of a Syft JSON SBOM, in document order.
-
-    Syft types those "deb". aMule (declared by hand, see ``load_declared_components``)
-    and our Python wheels do not come from dpkg, so no dpkg premise is checked against them.
-    """
-    doc = json.loads(path.read_text())
-    return [
-        DpkgPackage(name=a["name"], version=a["version"])
-        for a in doc["artifacts"]
-        if a["type"] == "deb"
-    ]
-
-
-@dataclass(frozen=True)
-class DeclaredComponent:
-    name: str
-    version: str
-
-
-def load_declared_components(path: Path) -> list[DeclaredComponent]:
-    """The components declared by hand (aMule) of a Syft JSON SBOM, in document order.
-
-    They are the artifacts with a ``pkg:generic/`` purl, kept apart from dpkg names.
-    """
-    doc = json.loads(path.read_text())
-    return [
-        DeclaredComponent(name=a["name"], version=a["version"])
-        for a in doc["artifacts"]
-        if a.get("purl", "").startswith("pkg:generic/")
-    ]
 
 
 def _upstream(version: str) -> str:

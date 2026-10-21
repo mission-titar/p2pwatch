@@ -1,7 +1,21 @@
+import json
+from collections.abc import Sequence
+from pathlib import Path, PurePath
+
 from vex_checks.domain.violations import Violation
+from vex_checks.ports.driven.sarif_writer import SarifWriter
 
 
-def build_sarif(rule_id: str, violations: list[Violation], vex_relpath: str) -> dict[str, object]:
+class JsonSarifWriter(SarifWriter):
+    """A SARIF 2.1.0 report as a JSON file at the path each call is given."""
+
+    def write_violations(
+        self, sarif_path: PurePath, rule_id: str, violations: Sequence[Violation], vex_relpath: str
+    ) -> None:
+        Path(sarif_path).write_text(json.dumps(_sarif(rule_id, violations, vex_relpath)))
+
+
+def _sarif(rule_id: str, violations: Sequence[Violation], vex_relpath: str) -> dict[str, object]:
     return {
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "version": "2.1.0",

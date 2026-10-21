@@ -1,15 +1,20 @@
+import json
+from pathlib import Path
 from typing import cast
 
-from vex_checks.adapters.driven.sarif import build_sarif
+from vex_checks.adapters.driven.json_sarif_writer import JsonSarifWriter
 from vex_checks.domain.violations import Violation
 
 _RULE_ID = "vex-consistency-tarfile"
 _VEX_RELPATH = "security/crawler.vex.openvex.json"
 
 
-def test_empty_violations_yields_valid_sarif_with_no_results() -> None:
-    doc = build_sarif(_RULE_ID, [], _VEX_RELPATH)
+def test_empty_violations_yields_valid_sarif_with_no_results(tmp_path: Path) -> None:
+    sarif_path = tmp_path / "out.sarif"
 
+    JsonSarifWriter().write_violations(sarif_path, _RULE_ID, [], _VEX_RELPATH)
+
+    doc = json.loads(sarif_path.read_text())
     assert doc["$schema"] == "https://json.schemastore.org/sarif-2.1.0.json"
     assert doc["version"] == "2.1.0"
 
@@ -27,15 +32,17 @@ def test_empty_violations_yields_valid_sarif_with_no_results() -> None:
     assert run["results"] == []
 
 
-def test_one_violation_yields_one_error_result_pointing_at_the_vex_file() -> None:
+def test_one_violation_yields_one_error_result_pointing_at_the_vex_file(tmp_path: Path) -> None:
+    sarif_path = tmp_path / "out.sarif"
     violation = Violation(
         advisory_id="CVE-2026-11940",
         message="tarfile is imported at src/p2pwatch/foo.py",
         location="packages/crawler/src/p2pwatch/foo.py",
     )
 
-    doc = build_sarif(_RULE_ID, [violation], _VEX_RELPATH)
+    JsonSarifWriter().write_violations(sarif_path, _RULE_ID, [violation], _VEX_RELPATH)
 
+    doc = json.loads(sarif_path.read_text())
     runs = cast(list[dict[str, object]], doc["runs"])
     results = cast(list[dict[str, object]], runs[0]["results"])
     assert len(results) == 1
