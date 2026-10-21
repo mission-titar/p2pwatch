@@ -92,6 +92,6 @@ if __name__ == "__main__":  # pragma: no cover
         main(
             sys.argv[1:],
             os.environ,
-            build_opener(),  # the environment's proxies, as urlopen followed them
+            build_opener(),  # gluetun reached through the environment's proxies, if it sets any
         )
     )
