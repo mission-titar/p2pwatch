@@ -1,4 +1,4 @@
-"""Repo-relative paths the checks read: source trees and VEX files.
+"""Repo-relative paths the checks read: the VEX files.
 
 Everything is derived from the repo root (six parents up from this module), so
 the checks stay correct no matter the working directory the gate runs from.
@@ -11,20 +11,6 @@ _ROOT = Path(__file__).resolve().parents[6]
 
 def repo_root() -> Path:
     return _ROOT
-
-
-_UNSHIPPED_PACKAGES = {
-    "vex_checks",
-    "template_checks",
-    "coverage_checks",
-    "amule_bump",
-    "crawler_testing",
-}
-
-
-def source_dirs() -> list[Path]:
-    packages = (_ROOT / "packages").glob("*/src")
-    return sorted(d for d in packages if d.parent.name not in _UNSHIPPED_PACKAGES)
 
 
 def vex_files() -> dict[str, Path]:

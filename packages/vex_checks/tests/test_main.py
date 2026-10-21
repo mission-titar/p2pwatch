@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from vex_checks.__main__ import main
-from vex_checks.adapters.driving import check_claim_coverage, check_source_claims
+from vex_checks.adapters.driving import check_claim_coverage
 
 _REPO_ROOT = Path(__file__).parents[3]
 
@@ -52,17 +52,6 @@ def test_stale_claims_runs_the_grype_found_on_the_path_of_its_environment(
         line.endswith(": no longer reported by Grype (security/amule.vex.openvex.json)")
         for line in lines
     )
-
-
-def test_source_claims_runs_the_source_check(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    (tmp_path / "leak.py").write_text("import imaplib\n")
-    monkeypatch.setattr(check_source_claims, "source_dirs", lambda: [tmp_path])
-
-    assert main(["source-claims"], {}, tmp_path) == 1
-
-    assert "::error::CVE-2025-15366" in capsys.readouterr().out
 
 
 def test_claim_coverage_runs_the_coverage_check(

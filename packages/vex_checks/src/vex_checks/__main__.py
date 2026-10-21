@@ -11,7 +11,7 @@ from vex_checks.adapters.driven.grype_vulnerability_scanner import GrypeVulnerab
 from vex_checks.adapters.driven.json_sarif_writer import JsonSarifWriter
 from vex_checks.adapters.driven.json_vex_reader import JsonVexReader
 from vex_checks.adapters.driven.syft_sbom_reader import SyftSbomReader
-from vex_checks.adapters.driving import check_claim_coverage, check_source_claims
+from vex_checks.adapters.driving import check_claim_coverage
 from vex_checks.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from vex_checks.application.check_image_claims import CheckImageClaims
 from vex_checks.application.check_stale_claims import CheckStaleClaims
@@ -43,7 +43,6 @@ def main(argv: Sequence[str], env: Mapping[str, str], cwd: Path) -> int:
             vex_reader=vex_reader,
             sarif_writer=sarif_writer,
         ),
-        check_source_claims=check_source_claims.main,
         check_claim_coverage=functools.partial(check_claim_coverage.main, vex_reader=vex_reader),
         cwd=cwd,
     )
