@@ -1,9 +1,9 @@
-"""Port-sync's environment variables: `is_port_sync_enabled` for the boot step,
-`parse_port_sync_settings` for its settings.
+"""The container's variables: the boot step's, all required, and port-sync's.
 
-A refused value raises `SettingsError` naming the variable, as the boot step's own variables do.
+A refused value raises `SettingsError` naming the variable.
 """
 
+import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
 from urllib.parse import urlsplit
@@ -20,10 +20,28 @@ _OFF = ("disabled", "no", "off", "false")
 
 
 @dataclass(frozen=True)
+class BootSettings:
+    puid: int
+    pgid: int
+    ec_password: str
+    api_password: str
+
+
+@dataclass(frozen=True)
 class PortSyncSettings:
     gluetun_control_url: str
     poll_seconds: int
     restart_min_seconds: int
+
+
+def parse_boot_settings(env: Mapping[str, str]) -> BootSettings:
+    """Return the boot step's settings from `env`, refusing the first missing or invalid one."""
+    return BootSettings(
+        puid=_required_id(env, "PUID"),
+        pgid=_required_id(env, "PGID"),
+        ec_password=_password(env, "AMULE_EC_PASSWORD"),
+        api_password=_password(env, "AMULE_API_PASSWORD"),
+    )
 
 
 def is_port_sync_enabled(env: Mapping[str, str]) -> bool:
@@ -58,6 +76,29 @@ def parse_port_sync_settings(env: Mapping[str, str]) -> PortSyncSettings:
             env, "PORT_SYNC_RESTART_MIN_SECONDS", DEFAULT_PORT_SYNC_RESTART_MIN_SECONDS
         ),
     )
+
+
+def _required(env: Mapping[str, str], name: str) -> str:
+    value = env.get(name)
+    if not value:
+        raise SettingsError(f"{name} is required")
+    return value
+
+
+def _password(env: Mapping[str, str], name: str) -> str:
+    value = _required(env, name)
+    # Cc: the C0 and C1 controls and DEL, which no typed password holds.
+    if any(unicodedata.category(char) == "Cc" for char in value):
+        raise SettingsError(f"{name} must not contain a control character")
+    return value
+
+
+def _required_id(env: Mapping[str, str], name: str) -> int:
+    value = _required(env, name)
+    # isascii + isdigit: int() would also take "-1", "+1", "1_000", " 1" and non-ASCII digits.
+    if not (value.isascii() and value.isdigit()):
+        raise SettingsError(f"{name} must be a numeric id, got {value!r}")
+    return int(value)
 
 
 def _seconds(env: Mapping[str, str], name: str, default: int) -> int:

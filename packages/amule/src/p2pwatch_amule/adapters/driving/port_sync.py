@@ -9,12 +9,11 @@ import os
 import subprocess
 import time
 from collections.abc import Mapping
+from pathlib import Path
 
 from p2pwatch_amule.adapters.driven.gluetun import forwarded_port
-from p2pwatch_amule.domain.conf import AMULE_CONF_PATH, tcp_listen_port, with_listen_port
+from p2pwatch_amule.domain.conf import tcp_listen_port, with_listen_port
 from p2pwatch_amule.domain.settings import PortSyncSettings, parse_port_sync_settings
-
-AMULED_SERVICE_DIR = "/etc/services.d/amuled"
 
 _logger = logging.getLogger("p2pwatch_amule.adapters.driving.port_sync")
 
@@ -23,13 +22,16 @@ def sync_listen_port_once(
     port_sync_settings: PortSyncSettings,
     latest_restart_monotonic: float | None,
     now_monotonic: float,
+    *,
+    amule_conf_path: Path,
+    amuled_service_dir: Path,
 ) -> float | None:
     """Run one round; return amuled's latest restart, `now_monotonic` if this round restarted it."""
     forwarded = forwarded_port(port_sync_settings.gluetun_control_url)
     if forwarded is None:
         return latest_restart_monotonic
     try:
-        with open(AMULE_CONF_PATH) as handle:
+        with open(amule_conf_path) as handle:
             configured_port = tcp_listen_port(handle.read())
     except (OSError, ValueError, configparser.Error) as error:
         # The operator's file: a crash would only make s6 respawn port-sync every second.
@@ -48,32 +50,36 @@ def sync_listen_port_once(
     )
     try:
         # amuled flushes its config when it exits: a write while it runs could be overwritten.
-        if _signal_amuled("-wD", "-T", "60000", "-d"):
-            _write_listen_port(forwarded)
+        if _signal_amuled(amuled_service_dir, "-wD", "-T", "60000", "-d"):
+            _write_listen_port(amule_conf_path, forwarded)
     except OSError as error:
         _logger.error("amule.conf was not written (%s)", error)
     finally:
         # A -d leaves amuled wanted down: without this -u it would stay down for good.
-        _signal_amuled("-u")
+        _signal_amuled(amuled_service_dir, "-u")
     return now_monotonic
 
 
-def main(env: Mapping[str, str]) -> None:
+def main(env: Mapping[str, str], *, amule_conf_path: Path, amuled_service_dir: Path) -> None:
     port_sync_settings = parse_port_sync_settings(env)
     # A port-sync stopped between a -d and its -u left amuled down: bring it back first.
-    _signal_amuled("-u")
+    _signal_amuled(amuled_service_dir, "-u")
     latest_restart_monotonic = None
     while True:
         latest_restart_monotonic = sync_listen_port_once(
-            port_sync_settings, latest_restart_monotonic, time.monotonic()
+            port_sync_settings,
+            latest_restart_monotonic,
+            time.monotonic(),
+            amule_conf_path=amule_conf_path,
+            amuled_service_dir=amuled_service_dir,
         )
         time.sleep(port_sync_settings.poll_seconds)
 
 
-def _signal_amuled(*options: str) -> bool:
+def _signal_amuled(amuled_service_dir: Path, *options: str) -> bool:
     """Run `s6-svc <options>` on amuled; return whether it exited 0, logging why not."""
     result = subprocess.run(
-        ["s6-svc", *options, AMULED_SERVICE_DIR], capture_output=True, text=True
+        ["s6-svc", *options, str(amuled_service_dir)], capture_output=True, text=True
     )
     if result.returncode != 0:
         command = " ".join(["s6-svc", *options])
@@ -81,12 +87,12 @@ def _signal_amuled(*options: str) -> bool:
     return result.returncode == 0
 
 
-def _write_listen_port(port: int) -> None:
-    with open(AMULE_CONF_PATH) as handle:
+def _write_listen_port(amule_conf_path: Path, port: int) -> None:
+    with open(amule_conf_path) as handle:
         conf = handle.read()
     # Replaced, not rewritten in place: a failed write must not leave amuled a truncated file.
-    temporary_path = AMULE_CONF_PATH + ".port-sync"
+    temporary_path = amule_conf_path.with_name(amule_conf_path.name + ".port-sync")
     with open(os.open(temporary_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as handle:
         handle.write(with_listen_port(conf, port))
-    os.replace(temporary_path, AMULE_CONF_PATH)
+    os.replace(temporary_path, amule_conf_path)
     _logger.info("amule.conf now sets Port and UDPPort to %d", port)

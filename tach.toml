@@ -582,6 +582,7 @@ depends_on = [
   "p2pwatch_amule.adapters.driving.boot",
   "p2pwatch_amule.adapters.driving.cli",
   "p2pwatch_amule.adapters.driving.port_sync",
+  "p2pwatch_amule.domain",
 ]
 
 [[modules]]
