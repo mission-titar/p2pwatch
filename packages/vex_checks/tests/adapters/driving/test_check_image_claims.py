@@ -1,5 +1,7 @@
 import functools
 import json
+import os
+from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 
@@ -10,7 +12,7 @@ from vex_checks.adapters.driven.json_vex_reader import JsonVexReader
 from vex_checks.adapters.driven.repo import repo_root
 from vex_checks.adapters.driven.syft_sbom_reader import SyftSbomReader
 from vex_checks.adapters.driving import check_image_claims
-from vex_checks.domain import registry
+from vex_checks.application.check_image_claims import CheckImageClaims
 from vex_checks.domain.descriptors import (
     DeclaredMinVersion,
     DpkgMinVersion,
@@ -18,10 +20,11 @@ from vex_checks.domain.descriptors import (
     ModuleNotImported,
     Premise,
 )
+from vex_checks.domain.registry import PREMISES
 
 # Tests inject their own premises, keyed on CVEs the real crawler VEX does claim: the document
-# stays a genuine fixture (and lives under the repo, taking the in-repo repo.display_path
-# branch) while the premises stay under test control.
+# stays a genuine fixture (and lives under the repo, located relative to its root) while the
+# premises stay under test control.
 _CRAWLER_VEX = repo_root() / "security" / "crawler.vex.openvex.json"
 _CRAWLER_VEX_RELPATH = "security/crawler.vex.openvex.json"
 _AMULE_VEX = repo_root() / "security" / "amule.vex.openvex.json"
@@ -29,7 +32,7 @@ _AMULE_VEX = repo_root() / "security" / "amule.vex.openvex.json"
 _CLAIMED_IMAGE_CVE = "CVE-2025-15367"
 _CLAIMED_SOURCE_CVE = "CVE-2025-15366"
 
-# Three premises, one per branch of main's filter: an image premise whose CVE is claimed (kept),
+# Three premises, one per branch of the filter: an image premise whose CVE is claimed (kept),
 # a source premise whose CVE is claimed (scoped out), an image premise nothing claims (skipped).
 _PREMISES: dict[str, Premise] = {
     _CLAIMED_IMAGE_CVE: DpkgPackageAbsent("nghttp2"),
@@ -39,17 +42,19 @@ _PREMISES: dict[str, Premise] = {
 }
 
 
+def _image_claims_checker(premises: Mapping[str, Premise]) -> CheckImageClaims:
+    return CheckImageClaims(
+        premises=premises,
+        repo_root=repo_root(),
+        vex_reader=JsonVexReader(),
+        sbom_reader=SyftSbomReader(),
+        sarif_writer=JsonSarifWriter(),
+    )
+
+
 _check_image_claims = functools.partial(
-    check_image_claims.main,
-    vex_reader=JsonVexReader(),
-    sbom_reader=SyftSbomReader(),
-    sarif_writer=JsonSarifWriter(),
+    check_image_claims.main, image_claims_checker=_image_claims_checker(_PREMISES)
 )
-
-
-@pytest.fixture(autouse=True)
-def _premises(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(check_image_claims, "PREMISES", _PREMISES)
 
 
 def _write_sbom(tmp_path: Path, artifacts: list[dict[str, str]]) -> Path:
@@ -100,7 +105,7 @@ def test_fail_mode_flags_a_present_package_and_prints_the_cve(
     assert rc == 1
     out = capsys.readouterr().out
     assert f"::error::{_CLAIMED_IMAGE_CVE}" in out
-    # The in-repo relative repo.display_path branch: the location renders repo-relative.
+    # A VEX in the repo: the location renders repo-relative.
     assert f"({_CRAWLER_VEX_RELPATH})" in out
 
 
@@ -129,10 +134,8 @@ def test_fail_mode_flags_a_declared_component_below_its_minimum(
 
 def test_the_real_amule_claims_fail_on_an_amule_older_than_the_fix(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(check_image_claims, "PREMISES", registry.PREMISES)
     sbom = _write_sbom(
         tmp_path,
         [
@@ -145,7 +148,9 @@ def test_the_real_amule_claims_fail_on_an_amule_older_than_the_fix(
         ],
     )
 
-    rc = _check_image_claims(sbom, _AMULE_VEX, None)
+    rc = check_image_claims.main(
+        sbom, _AMULE_VEX, None, image_claims_checker=_image_claims_checker(PREMISES)
+    )
 
     assert rc == 1
     out = capsys.readouterr().out
@@ -184,8 +189,7 @@ def test_fail_mode_renders_an_out_of_repo_vex_path_verbatim(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    # The repo.display_path ValueError fallback: a VEX outside the repo (CI /tmp) must
-    # not crash; its raw path is echoed as-is in the violation location.
+    # A VEX outside the repo (CI /tmp) is located at its path as given.
     vex = _write_vex(tmp_path, _CLAIMED_IMAGE_CVE, "vulnerable_code_not_present")
     sbom = _violating_sbom(tmp_path)
 
@@ -195,6 +199,18 @@ def test_fail_mode_renders_an_out_of_repo_vex_path_verbatim(
     out = capsys.readouterr().out
     assert f"::error::{_CLAIMED_IMAGE_CVE}" in out
     assert f"({vex})" in out
+
+
+def test_a_relative_vex_path_in_the_repo_renders_repo_relative(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    sbom = _violating_sbom(tmp_path)
+
+    rc = _check_image_claims(sbom, Path(os.path.relpath(_CRAWLER_VEX)), None)
+
+    assert rc == 1
+    assert f"({_CRAWLER_VEX_RELPATH})" in capsys.readouterr().out
 
 
 def test_sarif_mode_with_violation_writes_matching_results(tmp_path: Path) -> None:

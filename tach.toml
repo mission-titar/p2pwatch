@@ -766,12 +766,15 @@ depends_on = [
   "vex_checks.adapters.driven.grype",
   "vex_checks.adapters.driven.json_sarif_writer",
   "vex_checks.adapters.driven.json_vex_reader",
+  "vex_checks.adapters.driven.repo",
   "vex_checks.adapters.driven.syft_sbom_reader",
   "vex_checks.adapters.driving.check_claim_coverage",
   "vex_checks.adapters.driving.check_image_claims",
   "vex_checks.adapters.driving.check_source_claims",
   "vex_checks.adapters.driving.check_stale_claims",
   "vex_checks.adapters.driving.cli",
+  "vex_checks.application",
+  "vex_checks.domain",
 ]
 
 [[modules]]
@@ -822,15 +825,7 @@ depends_on = [
 [[modules]]
 path = "vex_checks.adapters.driving.check_image_claims"
 layer = "adapters"
-depends_on = [
-  "vex_checks.domain",
-  # The check calls its I/O adapters directly: lot 3 gives them driven ports.
-  { path = "vex_checks.adapters.driven.repo", deprecated = true },
-  # The check reads and writes through driven ports: block 22 removes them.
-  { path = "vex_checks.ports.driven.sarif_writer", deprecated = true },
-  { path = "vex_checks.ports.driven.sbom_reader", deprecated = true },
-  { path = "vex_checks.ports.driven.vex_reader", deprecated = true },
-]
+depends_on = ["vex_checks.ports.driving.image_claims_checker"]
 
 [[modules]]
 path = "vex_checks.adapters.driving.check_source_claims"
@@ -861,6 +856,17 @@ layer = "adapters"
 depends_on = []
 
 [[modules]]
+path = "vex_checks.application"
+layer = "application"
+depends_on = [
+  "vex_checks.domain",
+  "vex_checks.ports.driven.sarif_writer",
+  "vex_checks.ports.driven.sbom_reader",
+  "vex_checks.ports.driven.vex_reader",
+  "vex_checks.ports.driving.image_claims_checker",
+]
+
+[[modules]]
 path = "vex_checks.domain"
 layer = "domain"
 depends_on = []
@@ -879,3 +885,8 @@ depends_on = ["vex_checks.domain"]
 path = "vex_checks.ports.driven.vex_reader"
 layer = "ports"
 depends_on = []
+
+[[modules]]
+path = "vex_checks.ports.driving.image_claims_checker"
+layer = "ports"
+depends_on = ["vex_checks.domain"]

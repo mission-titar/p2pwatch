@@ -129,6 +129,8 @@ a function does.
 - **A driving port returns its response model, named from its use case's verb** and defined in the port's file
   (`DescribeNode` returns a `NodeDescription`); a driven read port returns domain types only. The webui renders a
   response model through `<Thing>Display` view models.
+- **A check returns a report**: a `<Thing>Report` response model with a `problems` field (`ImageClaimsReport`),
+  which the command line prints; asked for SARIF, the use case writes them through its driven port instead.
 - **An adapter is named by the system it adapts and what it adapts**, not by the Python module it uses:
   `FilesystemCatalogFinder`, `PosixProcess`, `SqliteCatalogCopier`. A module is the name only when it is the
   system: `ShutilFreeSpaceMeter`, `StdlibLogger`, `ArgparseCommandLine`, `RandomJitterGenerator`.
