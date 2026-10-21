@@ -144,17 +144,61 @@ noted.
 
 ## Holistic review
 
-For the closing block.
+`.reviews/lot3c-holistic.md`: 0 critical, 1 major, 18 minor. Every finding exits fixed in the lot, the code ones by
+TDD, each test seen failing first.
+
+1. **MAJOR. The source rules scanned an allow-list** (`packages/{crawler,matching,amule}/src`) where the scanner
+   failed closed: fixed in block 100. Both rules take `files: packages/*/src/**/*.py` and `ignores` the five
+   unshipped packages' `src`. On a scratch copy of the top (`git archive`), an `import imaplib` in a new
+   `packages/slskd/src` exited 0 before and 1 after; in `crawler`, `matching` and `amule` 1 both times; in the five
+   unshipped packages 0 both times. D2 corrected.
+2. **Row 24 and D1 said grype's path**: fixed in block 100, the spec says its name found on the passed `PATH`.
+3. **Rows 56 and 62 and D1 said `main(argv, env, cwd)`**: fixed in block 100, D1 now reads "each `main` taking only
+   the process state it reads". `coverage_checks` receives its report directory from its `__main__` guard, as
+   `amule_bump` its temporary directory (block 101): `test_main.py` seen failing (`TypeError: main() takes 2
+   positional arguments but 3 were given`), then pins that `coverage.json` lands in the directory given.
+4. **D2 and row 42 named block 42 for `is_source_premise`**: fixed in block 100, with `ProgramNeverInvoked`.
+5. **"The use cases receive `PREMISES` and the root"**: fixed in block 100, the spec says what each receives.
+6. **The `coverage_checks` table named the report alone**: fixed in block 100, `NoPerTestCoverage` added.
+7. **The header's "What an operator sees change" lacked 3c**: fixed in block 100.
+8. **D2's "each rule matches what the scanner matches"**: fixed in block 100, the three differing forms named.
+9. **Block 26's pruned stale-claims case**: fixed in block 100, restored as
+   `test_a_vex_outside_the_repository_is_located_at_its_path_as_given`; seen failing on the review's mutation
+   (`str(vex_path.relative_to(self._repo_root))`): `ValueError: '/tmp/vex.openvex.json' is not in the subpath of
+   '/repo'`.
+10. **A rule's id read from its file name, not from its `id:`**: fixed in block 101, the cheap guard.
+    `FilesystemSourceRuleReader` raises a `ValueError` naming the file unless a line reads `id: <stem>`, as text,
+    so an indented `id:` does not count; two tests seen failing (`DID NOT RAISE ValueError`). A raise, not a
+    `ClaimCoverageProblem`: a malformed rule is a broken input, as a malformed VEX is. D2 and the table corrected.
+11. **`no-module-patching` missed `unittest.mock` aliased**: fixed in block 101, a fourth arm refuses
+    `import unittest.mock as <x>` and `from unittest import mock as <x>`. Its two invalid cases seen failing
+    (`FAIL no-module-patching ................MM`), each half seen failing alone; two valid cases pin
+    `import unittest.mock` and `from tests import mock as fake_mock`.
+12. **`vex_location` in the application**: fixed in block 100, moved to `domain/vex_location.py` as `locate_vex`.
+13. **One value, three names**: fixed in block 100, `vex_location` through `SarifWriter`, `JsonSarifWriter`, both use
+    cases and `WrittenSarif`; `Violation.location`'s comment, which said repository-relative, corrected.
+14. **`templates_dir`**: fixed in block 101, `templates_directory`; the usage test seen failing on the old name.
+15. **`template_checks` declared per file in `tach.toml`**: fixed in block 101, its application and domain one
+    module each, as every other hexagon.
+16. **The backlog's node id entry said `None`**: fixed in block 101, "a blank id"; named beside block 70's change
+    in "What an operator sees change".
+17. **`injects` in a French diagram**: fixed in block 101, `injecte`.
+18. **`no-dynamic-attribute`'s example named `monkeypatch.setattr`**: fixed in block 101, `obj.setattr`.
+19. **`merge_claims` raised on a conflict**: fixed in block 100. It returns each advisory's justifications;
+    `CheckClaimCoverage` reports "justified differently across VEX files" and each justification that is not its
+    backing's, the problems sorted by advisory then message. Tests seen failing (`ValueError: CVE-IMAGE has
+    conflicting justifications across VEX files`); `SECURITY.md` lists the problem.
 
 ## Departures from the spec
 
 - **Splits**: block 52 (585 lines, 13 files) into 52 and 53, the shortfall then the reader; block 60 (155 lines,
   20 files) into 60 and 61, the reader then the rename. Both rows are recorded in the spec. No size exemption.
 - Block 12: the components in `domain/sbom_components.py`; `write_violations(sarif_path, rule_id, violations,
-  vex_relpath)` keeps `build_sarif`'s parameters.
+  vex_relpath)` keeps `build_sarif`'s parameters (`vex_location` since block 100).
 - Block 14: `packaging.version` allowed in every domain, not narrowed to `vex_checks`, since it reads no file.
 - Block 20: the VEX's relative path computed in the application (the domain had no `pathlib` then), which block
-  26 moved to the shared `vex_location`; `__main__` took the root from `repo.repo_root()` until block 42.
+  26 moved to the shared `vex_location` and block 100 into the domain as `locate_vex`; `__main__` took the root
+  from `repo.repo_root()` until block 42.
   `AGENTS.md` followed D5 rather than C4's text, which block 22 corrected in the spec at the lead's request.
 - Block 24: grype is the bare name `grype`, found on the passed `env`'s `PATH`, not a path as the spec said: the
   workflow installs it on `PATH`, and a lookup in `__main__` would fail every other subcommand without grype.
@@ -174,8 +218,8 @@ For the closing block.
   `PackageTreeReader.read_module_source`, which the spec's table does not name.
 - Block 54: `UnitCoverageChecker` returns `UnitCoverageReport | NoPerTestCoverage`; the problems are strings.
 - Blocks 56 and 62: `main(argv, cwd)`, not `main(argv, env, cwd)`: neither package reads an environment
-  variable, and `dead-code-check` refuses an unused parameter. The report directory is a `TemporaryDirectory`
-  made in `__main__.main`.
+  variable, and `dead-code-check` refuses an unused parameter. The report directory was a `TemporaryDirectory`
+  made in `__main__.main`, made by the `__main__` guard since block 101.
 - Block 60: only the rings it uses created; the reader returns each template's path with its text.
 - Block 61: `print_read_names` and `read_names.py` not renamed, since block 62 deleted both.
 - Block 62: the listing a `frozenset`, sorted by the command line; `logic-free`'s directory under `cwd` too.
@@ -184,6 +228,9 @@ For the closing block.
 - Block 82: `FakeTemplateReader` in `tests/fakes.py`, taking templates by path.
 - Block 90: the rule has no `files`, so it scans every Python file as D1 says; `architecture.md` section 4's
   heading changed (no link pointed at its anchor; `poe docs-build` strict, `No issues found`).
+- Closing block: split at the file bound, measured at 20 files whole for its `vex_checks` half alone (a moved test
+  file counts twice once its content changes); the source rule's id moved to 101. The function is `locate_vex`,
+  not `vex_location`: a use case's local `vex_location` would shadow it.
 
 ## Names settled by teammates
 
@@ -193,7 +240,8 @@ By rule or precedent, each in its block's report: `merge_claims`, `sbom_componen
 `find_shortfall`, `read_module_source`, `NoPerTestCoverage`, `find_template_attributes`, `find_logic_constructs`,
 `logic_constructs.py`, `TemplateAttributeListing.template_attributes`; the fakes `FakeVexReader`,
 `FakeImageClaimsChecker`, `FakeStaleClaimsChecker`, `FakeClaimCoverageChecker`, `FakeVulnerabilityScanner`,
-`FakeTemplateReader`, `FakeTemplateAttributeLister`. Block 90: `no-module-patching`, after C1's heading.
+`FakeTemplateReader`, `FakeTemplateAttributeLister`. Block 90: `no-module-patching`, after C1's heading. Block
+100: `locate_vex`, `justifications_by_advisory_id`; block 101: `report_directory`, `main`'s third parameter.
 
 ## Pitfalls
 
@@ -216,32 +264,33 @@ By rule or precedent, each in its block's report: `merge_claims`, `sbom_componen
   allowed one is refused until named; none has a subclass in Jinja 3.1.6.
 - **An old entry function's test that the cut-over deletes is cheaper adapted than rewritten** (block 20).
 - **In zsh, `set -- $pair` does not word-split** (block 30), as 3b met with `$vars`.
+- **`ast-grep scan` exits 0 when a rule's `files` match nothing** (holistic finding 1): a gate over an allow-list
+  of paths passes silently once a path moves. Prefer a deny-list with `ignores`.
+- **`git diff --name-only` counts a moved file twice once its content changes by half or more** (block 100): the
+  rename is no longer detected, and the block's file count grows by one.
 - **Host port 4711 is the deployed node's**: never publish it, never touch the `mulewatch-*` containers.
 
 ## Not validated
 
-- Acceptance 7 on the real image: `image-claims` and `stale-claims` on `ghcr.io/mission-titar/mulewatch:latest`'s
-  attested SBOM and VEX, on `main` and at the top. `stale-claims` never ran against a real grype locally (not
-  installed); the release step and the daily `grype-scan` workflow run both image checks.
+- The attestations' signatures on `ghcr.io/mission-titar/mulewatch:latest` (Acceptance 7): decoded, not verified,
+  no cosign locally. The release step verifies what it signs.
 - The webui's pages driven by hand on a running node (block 70); the render diff covers them.
-- CI on blocks 82 and 90 at writing.
+- CI on blocks 100 and 101 at writing.
 
 ## Wrap counts
 
-From `gh run list --branch <branch>` over blocks 10 to 82 on 2026-10-21, before block 90's own run.
+From `gh run list --branch <branch>` over blocks 10 to 90 on 2026-10-21, before the closing blocks' own runs.
 
-- **Runs**: 23 for 22 blocks. Each block's head has one run, green but block 82's, in progress. The other: #365's
-  `de3c0122`, cancelled when the block pushed its spec correction (`008de192`, C4) on top. #366's run
-  39651903380 had its slow arm64 job cancelled by the lead and rerun green (attempt 2, the same run).
+- **Runs**: 24 for 23 blocks. Each block's head has one green run. The other: #365's `de3c0122`, cancelled when the
+  block pushed its spec correction (`008de192`, C4) on top. #366's run 39651903380 had its slow arm64 job
+  cancelled by the lead and rerun green (attempt 2, the same run).
 - **Fix-backs**: 0. **Cascaded rebases**: 0. **Runs they re-triggered**: 0.
-- **Splits**: 2 in Act (52 at the line bound, 60 at the file bound), after the re-cut from 13 rows to 22 before
-  Act. **Exemptions**: none.
+- **Splits**: 3: 2 in Act (52 at the line bound, 60 at the file bound), after the re-cut from 13 rows to 22 before
+  Act, and the closing block at the file bound (100 and 101). **Exemptions**: none.
 - **Bodies called unreadable**: none at writing; the operator has not reviewed the stack yet.
 
 ## Next
 
 - The operator reviews and merges the stack, after the lead rebases it onto `main` if `main` moved.
-- The closing block deletes the backlog's "Hexagonal architecture" entry and "The logic-free template guard on
-  Jinja's syntax tree" (spec, "Backlog").
 - "A copy before a migration that rewrites rows" ships before any release; 3b and 3c change both images.
 - Then "Contract tests for the fakes", which waited for every port's final shape.
