@@ -118,8 +118,8 @@ a function does.
 - **Comments, docstrings and log messages use the code's words.**
 - **The most telling word wins over the most widespread one**: an existing name is not a reason to keep it.
 - **A port is named after the one who does its action**: `CatalogMerger`, "the one who merges catalogs". A port
-  is an ABC its implementers and fakes inherit: `code-pattern-check` refuses a `Protocol` base in the crawler's,
-  the matching's and the testing package's `src`.
+  is an ABC its implementers and fakes inherit: `code-pattern-check` refuses a `Protocol` base in every package's
+  `src`.
 - **A port over stored state is a `<Thing>Writer` or a `<Thing>Reader`, never both** (both databases, the status
   board, the run state). A `Writer`'s operations keep their verbs (`record_observation`, `set_state`); a
   `Reader`'s start with `read_` (`iter_` for an iterator), a predicate keeps `is_` or `has_`.

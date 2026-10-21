@@ -763,7 +763,7 @@ depends_on = []
 path = "vex_checks.__main__"
 layer = "composition"
 depends_on = [
-  "vex_checks.adapters.driven.grype",
+  "vex_checks.adapters.driven.grype_vulnerability_scanner",
   "vex_checks.adapters.driven.json_sarif_writer",
   "vex_checks.adapters.driven.json_vex_reader",
   "vex_checks.adapters.driven.repo",
@@ -777,9 +777,9 @@ depends_on = [
 ]
 
 [[modules]]
-path = "vex_checks.adapters.driven.grype"
+path = "vex_checks.adapters.driven.grype_vulnerability_scanner"
 layer = "adapters"
-depends_on = []
+depends_on = ["vex_checks.ports.driven.vulnerability_scanner"]
 
 [[modules]]
 path = "vex_checks.adapters.driven.json_sarif_writer"
@@ -837,11 +837,11 @@ layer = "adapters"
 depends_on = [
   "vex_checks.domain",
   # The check calls its I/O adapters directly: lot 3 gives them driven ports.
-  { path = "vex_checks.adapters.driven.grype", deprecated = true },
   { path = "vex_checks.adapters.driven.repo", deprecated = true },
-  # The check reads and writes through driven ports: block 26 removes them.
+  # The check reads, scans and writes through driven ports: block 26 removes them.
   { path = "vex_checks.ports.driven.sarif_writer", deprecated = true },
   { path = "vex_checks.ports.driven.vex_reader", deprecated = true },
+  { path = "vex_checks.ports.driven.vulnerability_scanner", deprecated = true },
 ]
 
 [[modules]]
@@ -877,6 +877,11 @@ depends_on = ["vex_checks.domain"]
 
 [[modules]]
 path = "vex_checks.ports.driven.vex_reader"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "vex_checks.ports.driven.vulnerability_scanner"
 layer = "ports"
 depends_on = []
 

@@ -7,6 +7,7 @@ from vex_checks.domain.violations import Violation
 from vex_checks.ports.driven.sarif_writer import SarifWriter
 from vex_checks.ports.driven.sbom_reader import SbomReader
 from vex_checks.ports.driven.vex_reader import VexReader
+from vex_checks.ports.driven.vulnerability_scanner import VulnerabilityScanner
 from vex_checks.ports.driving.image_claims_checker import ImageClaimsChecker, ImageClaimsReport
 
 
@@ -37,6 +38,16 @@ class FakeSbomReader(SbomReader):
 
     def read_declared_components(self, sbom_path: PurePath) -> list[DeclaredComponent]:
         return list(self._declared_components)
+
+
+class FakeVulnerabilityScanner(VulnerabilityScanner):
+    """Finds the same advisories in any SBOM."""
+
+    def __init__(self, advisory_ids: set[str]) -> None:
+        self._advisory_ids = advisory_ids
+
+    def scan_sbom(self, sbom_path: PurePath) -> set[str]:
+        return set(self._advisory_ids)
 
 
 @dataclass(frozen=True)

@@ -9,13 +9,14 @@ from tests.fakes import FakeImageClaimsChecker, ImageClaimsCheck
 from vex_checks.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from vex_checks.domain.violations import Violation
 
+_CWD = Path("/work/repo")
 _IMAGE_COMMANDS = ["image-claims", "stale-claims"]
 _TREE_COMMANDS = ["source-claims", "claim-coverage"]
 _SARIF_OPTIONS = pytest.mark.parametrize(
     ("options", "sarif_output"),
     [
         ([], None),
-        (["--format", "sarif", "--output", "o.sarif"], Path("o.sarif")),
+        (["--format", "sarif", "--output", "o.sarif"], _CWD / "o.sarif"),
         (["--format", "fail", "--output", "o.sarif"], None),
     ],
     ids=["fail-by-default", "sarif-to-the-output", "output-ignored-without-sarif"],
@@ -40,6 +41,7 @@ class _Checks:
             check_stale_claims=self._recorder("stale-claims"),
             check_source_claims=self._recorder("source-claims"),
             check_claim_coverage=self._recorder("claim-coverage"),
+            cwd=_CWD,
         )
 
     def ran_none(self) -> bool:
@@ -54,7 +56,7 @@ class _Checks:
 
 
 @_SARIF_OPTIONS
-def test_image_claims_checks_the_sbom_the_resolved_vex_and_its_sarif_output(
+def test_image_claims_checks_the_sbom_the_vex_and_its_sarif_output_under_the_cwd(
     options: list[str], sarif_output: Path | None
 ) -> None:
     checks = _Checks()
@@ -62,9 +64,27 @@ def test_image_claims_checks_the_sbom_the_resolved_vex_and_its_sarif_output(
     checks.command_line().run(["image-claims", "--sbom", "s.json", "--vex", "v.json", *options])
 
     assert checks.image_claims_checker.checks == [
-        ImageClaimsCheck(Path("s.json"), Path("v.json").resolve(), sarif_output)
+        ImageClaimsCheck(_CWD / "s.json", _CWD / "v.json", sarif_output)
     ]
     assert checks.calls == []
+
+
+@pytest.mark.parametrize(
+    ("vex", "vex_path"),
+    [
+        ("../security/v.json", Path("/work/security/v.json")),
+        ("/tmp/v.json", Path("/tmp/v.json")),
+    ],
+    ids=["relative-resolved-under-the-cwd", "absolute-as-given"],
+)
+def test_an_image_check_is_given_the_vex_resolved_under_the_cwd(vex: str, vex_path: Path) -> None:
+    checks = _Checks()
+
+    checks.command_line().run(["image-claims", "--sbom", "/s.json", "--vex", vex])
+    checks.command_line().run(["stale-claims", "--sbom", "/s.json", "--vex", vex])
+
+    assert checks.image_claims_checker.checks == [ImageClaimsCheck(Path("/s.json"), vex_path, None)]
+    assert checks.calls == [("stale-claims", (Path("/s.json"), vex_path, None))]
 
 
 def test_image_claims_prints_each_problem_as_an_error_and_returns_one(
@@ -126,7 +146,7 @@ def test_stale_claims_runs_over_the_sbom_the_vex_and_its_sarif_output(
     )
 
     assert exit_code == 3
-    assert checks.calls == [("stale-claims", (Path("s.json"), Path("v.json"), sarif_output))]
+    assert checks.calls == [("stale-claims", (_CWD / "s.json", _CWD / "v.json", sarif_output))]
     assert checks.image_claims_checker.checks == []
 
 

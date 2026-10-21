@@ -12,10 +12,10 @@ a SARIF report (always exit zero).
 from pathlib import Path
 
 from vex_checks.adapters.driven import repo
-from vex_checks.adapters.driven.grype import GrypeRunner
 from vex_checks.domain.violations import Violation
 from vex_checks.ports.driven.sarif_writer import SarifWriter
 from vex_checks.ports.driven.vex_reader import VexReader
+from vex_checks.ports.driven.vulnerability_scanner import VulnerabilityScanner
 
 _RULE_ID = "stale-vex-entry"
 
@@ -25,11 +25,11 @@ def main(
     vex: Path,
     sarif_output: Path | None,
     *,
-    runner: GrypeRunner,
+    vulnerability_scanner: VulnerabilityScanner,
     vex_reader: VexReader,
     sarif_writer: SarifWriter,
 ) -> int:
-    reported = runner.run(sbom)
+    reported = vulnerability_scanner.scan_sbom(sbom)
     vex_relpath = repo.display_path(vex)
     stale = [
         Violation(advisory_id, "no longer reported by Grype", vex_relpath)
