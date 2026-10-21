@@ -4,21 +4,26 @@ import argparse
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
+from template_checks.ports.driving.template_attribute_lister import TemplateAttributeLister
+
 
 class ArgparseCommandLine:
-    """``logic-free`` and ``template-attributes``, each over a templates directory."""
+    """``logic-free`` and ``template-attributes``, each over a templates directory. A relative
+    path is taken under ``cwd``."""
 
     def __init__(
         self,
         *,
         check_logic_free: Callable[[Path], int],
-        print_read_names: Callable[[Path], None],
+        template_attribute_lister: TemplateAttributeLister,
+        cwd: Path,
     ) -> None:
         self._check_logic_free = check_logic_free
-        self._print_read_names = print_read_names
+        self._template_attribute_lister = template_attribute_lister
+        self._cwd = cwd
 
-    def run(self, argv: Sequence[str] | None = None) -> int:
-        """Runs the subcommand ``argv`` names (``sys.argv`` if ``None``), returns its exit code."""
+    def run(self, argv: Sequence[str]) -> int:
+        """Runs the subcommand ``argv`` names, returns its exit code."""
         parser = argparse.ArgumentParser(
             prog="template_checks", description="keep the webui's Jinja templates logic-free"
         )
@@ -30,9 +35,22 @@ class ArgparseCommandLine:
             "template-attributes", help="print the attribute names the templates read, comma-joined"
         )
         for subparser in (logic_free, template_attributes):
-            subparser.add_argument("templates_dir", type=Path, help="the templates directory")
+            subparser.add_argument(
+                "templates_dir", type=self._under_cwd, help="the templates directory"
+            )
         args = parser.parse_args(argv)
         if args.command == "logic-free":
             return self._check_logic_free(args.templates_dir)
-        self._print_read_names(args.templates_dir)
+        return self._list_template_attributes(args.templates_dir)
+
+    def _list_template_attributes(self, templates_directory: Path) -> int:
+        """Prints the attribute names the templates read, sorted and comma-joined."""
+        template_attribute_listing = self._template_attribute_lister.list_template_attributes(
+            templates_directory
+        )
+        print(",".join(sorted(template_attribute_listing.template_attributes)))
         return 0
+
+    def _under_cwd(self, path: str) -> Path:
+        """``path`` under ``cwd``, or as it is when absolute."""
+        return self._cwd / path
