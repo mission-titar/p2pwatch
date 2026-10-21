@@ -155,6 +155,7 @@ a function does.
 | `target` | an episode segment to recover: `target_id`, `TargetSegment`, its `letter` | `segment` for the letter; Kad's keyword target, which is a `kad_word` |
 | `tier` | a decision's strength: `catalog`, `notify`, `download` | `before`, `after` |
 | `coverage` | `TargetCoverage`, how far a target is recovered: its status, its best tier and its file count, catalog-tier decisions left out | `progress` |
+| `test coverage` | `TestCoverage`, a module's statements and branches, those its package's test run ran and those its own tests ran | a bare `coverage`, which is a target's |
 | `file history` | `FileHistory`, a file as its page shows it: its observations over an interval, its latest one, its known filenames, its current decisions | `file detail` |
 | `dated decision` | `DatedDecision`, a `DecisionRecord` with its `decided_at` and its `node_id`, apart since the anti-redundancy compares a record's three fields | `decision view` |
 | `interval` | `Interval`, the stretch of wall-clock time a page reads, at most 7 days, resolved from the ends a request asks for | `range`, `period` |
