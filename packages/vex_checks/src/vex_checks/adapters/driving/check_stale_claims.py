@@ -15,18 +15,20 @@ from pathlib import Path
 from vex_checks.adapters.driven import repo
 from vex_checks.adapters.driven.grype import GrypeRunner
 from vex_checks.adapters.driven.sarif import build_sarif
-from vex_checks.adapters.driven.vex_io import load_claims
 from vex_checks.domain.violations import Violation
+from vex_checks.ports.driven.vex_reader import VexReader
 
 _RULE_ID = "stale-vex-entry"
 
 
-def main(sbom: Path, vex: Path, sarif_output: Path | None, *, runner: GrypeRunner) -> int:
+def main(
+    sbom: Path, vex: Path, sarif_output: Path | None, *, runner: GrypeRunner, vex_reader: VexReader
+) -> int:
     reported = runner.run(sbom)
     vex_relpath = repo.display_path(vex)
     stale = [
         Violation(advisory_id, "no longer reported by Grype", vex_relpath)
-        for advisory_id in load_claims(vex)
+        for advisory_id in vex_reader.read_claims(vex)
         if advisory_id not in reported
     ]
 

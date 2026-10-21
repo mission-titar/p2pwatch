@@ -6,13 +6,14 @@ prints a GitHub ``::error::`` annotation and exits non-zero.
 """
 
 from vex_checks.adapters.driven.repo import vex_files
-from vex_checks.adapters.driven.vex_io import all_claims
+from vex_checks.domain.claims import merge_claims
 from vex_checks.domain.descriptors import JUSTIFICATION_BY_FAMILY, family
 from vex_checks.domain.registry import PREMISES
+from vex_checks.ports.driven.vex_reader import VexReader
 
 
-def main() -> int:
-    claims = all_claims(list(vex_files().values()))
+def main(*, vex_reader: VexReader) -> int:
+    claims = merge_claims(vex_reader.read_claims(path) for path in vex_files().values())
     problems: list[str] = []
     for advisory_id in set(claims) - set(PREMISES):
         problems.append(f"{advisory_id}: claim has no premise")

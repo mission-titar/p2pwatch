@@ -4,6 +4,7 @@ from typing import cast
 
 import pytest
 
+from vex_checks.adapters.driven.json_vex_reader import JsonVexReader
 from vex_checks.adapters.driven.repo import repo_root
 from vex_checks.adapters.driving import check_image_claims
 from vex_checks.domain import registry
@@ -83,7 +84,7 @@ def test_fail_mode_flags_a_present_package_and_prints_the_cve(
 ) -> None:
     sbom = _violating_sbom(tmp_path)
 
-    rc = check_image_claims.main(sbom, _CRAWLER_VEX, None)
+    rc = check_image_claims.main(sbom, _CRAWLER_VEX, None, vex_reader=JsonVexReader())
 
     assert rc == 1
     out = capsys.readouterr().out
@@ -109,7 +110,7 @@ def test_fail_mode_flags_a_declared_component_below_its_minimum(
         ],
     )
 
-    rc = check_image_claims.main(sbom, vex, None)
+    rc = check_image_claims.main(sbom, vex, None, vex_reader=JsonVexReader())
 
     assert rc == 1
     assert "::error::CVE-2006-2691: declared amule 2.1.1 is below 2.1.2" in capsys.readouterr().out
@@ -133,7 +134,7 @@ def test_the_real_amule_claims_fail_on_an_amule_older_than_the_fix(
         ],
     )
 
-    rc = check_image_claims.main(sbom, _AMULE_VEX, None)
+    rc = check_image_claims.main(sbom, _AMULE_VEX, None, vex_reader=JsonVexReader())
 
     assert rc == 1
     out = capsys.readouterr().out
@@ -147,7 +148,7 @@ def test_fail_mode_returns_zero_on_a_clean_sbom(
 ) -> None:
     sbom = _clean_sbom(tmp_path)
 
-    rc = check_image_claims.main(sbom, _CRAWLER_VEX, None)
+    rc = check_image_claims.main(sbom, _CRAWLER_VEX, None, vex_reader=JsonVexReader())
 
     assert rc == 0
     assert capsys.readouterr().out == ""
@@ -162,7 +163,7 @@ def test_a_vex_with_no_image_claim_lets_any_sbom_pass(
     vex = _write_vex(tmp_path, _CLAIMED_SOURCE_CVE, "vulnerable_code_not_in_execute_path")
     sbom = _violating_sbom(tmp_path)
 
-    rc = check_image_claims.main(sbom, vex, None)
+    rc = check_image_claims.main(sbom, vex, None, vex_reader=JsonVexReader())
 
     assert rc == 0
     assert capsys.readouterr().out == ""
@@ -177,7 +178,7 @@ def test_fail_mode_renders_an_out_of_repo_vex_path_verbatim(
     vex = _write_vex(tmp_path, _CLAIMED_IMAGE_CVE, "vulnerable_code_not_present")
     sbom = _violating_sbom(tmp_path)
 
-    rc = check_image_claims.main(sbom, vex, None)
+    rc = check_image_claims.main(sbom, vex, None, vex_reader=JsonVexReader())
 
     assert rc == 1
     out = capsys.readouterr().out
@@ -189,7 +190,7 @@ def test_sarif_mode_with_violation_writes_matching_results(tmp_path: Path) -> No
     sbom = _violating_sbom(tmp_path)
     output = tmp_path / "out.sarif"
 
-    rc = check_image_claims.main(sbom, _CRAWLER_VEX, output)
+    rc = check_image_claims.main(sbom, _CRAWLER_VEX, output, vex_reader=JsonVexReader())
 
     assert rc == 0
     doc = json.loads(output.read_text())
@@ -214,7 +215,7 @@ def test_sarif_mode_on_a_clean_sbom_writes_empty_results(tmp_path: Path) -> None
     sbom = _clean_sbom(tmp_path)
     output = tmp_path / "out.sarif"
 
-    rc = check_image_claims.main(sbom, _CRAWLER_VEX, output)
+    rc = check_image_claims.main(sbom, _CRAWLER_VEX, output, vex_reader=JsonVexReader())
 
     assert rc == 0
     doc = json.loads(output.read_text())

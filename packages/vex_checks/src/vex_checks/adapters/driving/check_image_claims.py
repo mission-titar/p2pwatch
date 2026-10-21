@@ -19,15 +19,15 @@ from vex_checks.adapters.driven.sbom import (
     load_declared_components,
     load_dpkg_packages,
 )
-from vex_checks.adapters.driven.vex_io import load_claims
 from vex_checks.domain.descriptors import ImagePremise, is_image_premise
 from vex_checks.domain.registry import PREMISES
+from vex_checks.ports.driven.vex_reader import VexReader
 
 _RULE_ID = "unsatisfied-image-claim"
 
 
-def main(sbom: Path, vex: Path, sarif_output: Path | None) -> int:
-    claims = load_claims(vex)
+def main(sbom: Path, vex: Path, sarif_output: Path | None, *, vex_reader: VexReader) -> int:
+    claims = vex_reader.read_claims(vex)
     # Iterate PREMISES so the value binds the narrowed loop variable: is_image_premise
     # is a TypeIs, so ``premise`` types as ImagePremise here with no cast/ignore.
     premises: dict[str, ImagePremise] = {

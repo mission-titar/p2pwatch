@@ -764,6 +764,7 @@ path = "vex_checks.__main__"
 layer = "composition"
 depends_on = [
   "vex_checks.adapters.driven.grype",
+  "vex_checks.adapters.driven.json_vex_reader",
   "vex_checks.adapters.driving.check_claim_coverage",
   "vex_checks.adapters.driving.check_image_claims",
   "vex_checks.adapters.driving.check_source_claims",
@@ -775,6 +776,11 @@ depends_on = [
 path = "vex_checks.adapters.driven.grype"
 layer = "adapters"
 depends_on = []
+
+[[modules]]
+path = "vex_checks.adapters.driven.json_vex_reader"
+layer = "adapters"
+depends_on = ["vex_checks.ports.driven.vex_reader"]
 
 [[modules]]
 path = "vex_checks.adapters.driven.repo"
@@ -801,18 +807,14 @@ depends_on = [
 ]
 
 [[modules]]
-path = "vex_checks.adapters.driven.vex_io"
-layer = "adapters"
-depends_on = []
-
-[[modules]]
 path = "vex_checks.adapters.driving.check_claim_coverage"
 layer = "adapters"
 depends_on = [
   "vex_checks.domain",
   # The check calls its I/O adapters directly: lot 3 gives them driven ports.
   { path = "vex_checks.adapters.driven.repo", deprecated = true },
-  { path = "vex_checks.adapters.driven.vex_io", deprecated = true },
+  # The check reads the claims through their driven port: block 42 removes it.
+  { path = "vex_checks.ports.driven.vex_reader", deprecated = true },
 ]
 
 [[modules]]
@@ -824,7 +826,8 @@ depends_on = [
   { path = "vex_checks.adapters.driven.repo", deprecated = true },
   { path = "vex_checks.adapters.driven.sarif", deprecated = true },
   { path = "vex_checks.adapters.driven.sbom", deprecated = true },
-  { path = "vex_checks.adapters.driven.vex_io", deprecated = true },
+  # The check reads the claims through their driven port: block 22 removes it.
+  { path = "vex_checks.ports.driven.vex_reader", deprecated = true },
 ]
 
 [[modules]]
@@ -846,7 +849,8 @@ depends_on = [
   { path = "vex_checks.adapters.driven.grype", deprecated = true },
   { path = "vex_checks.adapters.driven.repo", deprecated = true },
   { path = "vex_checks.adapters.driven.sarif", deprecated = true },
-  { path = "vex_checks.adapters.driven.vex_io", deprecated = true },
+  # The check reads the claims through their driven port: block 26 removes it.
+  { path = "vex_checks.ports.driven.vex_reader", deprecated = true },
 ]
 
 [[modules]]
@@ -857,4 +861,9 @@ depends_on = []
 [[modules]]
 path = "vex_checks.domain"
 layer = "domain"
+depends_on = []
+
+[[modules]]
+path = "vex_checks.ports.driven.vex_reader"
+layer = "ports"
 depends_on = []
