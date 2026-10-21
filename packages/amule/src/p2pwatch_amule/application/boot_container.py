@@ -1,4 +1,4 @@
-"""Boots the aMule container: refuses its variables, then account, directories, conf, password."""
+"""Boots the aMule container: refuses its variables, then each step, port-sync's state last."""
 
 from collections.abc import Mapping
 
@@ -12,6 +12,7 @@ from p2pwatch_amule.ports.driven.account_manager import AccountManager
 from p2pwatch_amule.ports.driven.admin_password_setter import AdminPasswordSetter
 from p2pwatch_amule.ports.driven.amule_conf import AmuleConfReader, AmuleConfWriter
 from p2pwatch_amule.ports.driven.amuled_directory_preparer import AmuledDirectoryPreparer
+from p2pwatch_amule.ports.driven.service_supervisor import ServiceSupervisor
 from p2pwatch_amule.ports.driving.container_booter import ContainerBooter
 
 
@@ -26,16 +27,19 @@ class BootContainer(ContainerBooter):
         amule_conf_reader: AmuleConfReader,
         amule_conf_writer: AmuleConfWriter,
         admin_password_setter: AdminPasswordSetter,
+        service_supervisor: ServiceSupervisor,
     ) -> None:
         self._account_manager = account_manager
         self._amuled_directory_preparer = amuled_directory_preparer
         self._amule_conf_reader = amule_conf_reader
         self._amule_conf_writer = amule_conf_writer
         self._admin_password_setter = admin_password_setter
+        self._service_supervisor = service_supervisor
 
     def boot_container(self, env: Mapping[str, str]) -> None:
         boot_settings = parse_boot_settings(env)
-        if is_port_sync_enabled(env):
+        port_sync_enabled = is_port_sync_enabled(env)
+        if port_sync_enabled:
             parse_port_sync_settings(env)
         self._account_manager.find_or_create_amule_account(boot_settings.puid, boot_settings.pgid)
         self._amuled_directory_preparer.prepare_amuled_directories(
@@ -49,3 +53,7 @@ class BootContainer(ContainerBooter):
         self._admin_password_setter.set_admin_password(
             boot_settings.api_password, boot_settings.puid, boot_settings.pgid
         )
+        if port_sync_enabled:
+            self._service_supervisor.enable_port_sync()
+        else:
+            self._service_supervisor.disable_port_sync()

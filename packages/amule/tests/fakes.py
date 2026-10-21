@@ -1,7 +1,12 @@
+from collections.abc import Mapping
+
+from p2pwatch_amule.domain.settings_error import SettingsError
 from p2pwatch_amule.ports.driven.account_manager import AccountManager
 from p2pwatch_amule.ports.driven.admin_password_setter import AdminPasswordSetter
 from p2pwatch_amule.ports.driven.amule_conf import AmuleConfReader, AmuleConfWriter
 from p2pwatch_amule.ports.driven.amuled_directory_preparer import AmuledDirectoryPreparer
+from p2pwatch_amule.ports.driven.service_supervisor import ServiceSupervisor
+from p2pwatch_amule.ports.driving.container_booter import ContainerBooter
 
 
 class FakeAccountManager(AccountManager):
@@ -47,3 +52,29 @@ class FakeAdminPasswordSetter(AdminPasswordSetter):
 
     def set_admin_password(self, api_password: str, uid: int, gid: int) -> None:
         self.passwords.append((api_password, uid, gid))
+
+
+class FakeServiceSupervisor(ServiceSupervisor):
+    """Records each action it is asked for, in order."""
+
+    def __init__(self) -> None:
+        self.actions: list[str] = []
+
+    def enable_port_sync(self) -> None:
+        self.actions.append("enable port-sync")
+
+    def disable_port_sync(self) -> None:
+        self.actions.append("disable port-sync")
+
+
+class FakeContainerBooter(ContainerBooter):
+    """Records each environment it boots in, or raises a set error."""
+
+    def __init__(self) -> None:
+        self.error: SettingsError | None = None
+        self.envs: list[Mapping[str, str]] = []
+
+    def boot_container(self, env: Mapping[str, str]) -> None:
+        self.envs.append(env)
+        if self.error is not None:
+            raise self.error
