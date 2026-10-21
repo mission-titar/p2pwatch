@@ -50,7 +50,9 @@ this spec: they apply a rule `AGENTS.md` already has, or a tool enforces them it
   one. Hard rules, 3a 12.
 - **C3. An adapter is named by the system it adapts**, not by the Python module it uses: `FilesystemTemplateReader`,
   `CoveragePyReader`, `S6ServiceSupervisor`, `GluetunForwardedPortReader`. A module is the name only when it is
-  the system (`ShutilFreeSpaceMeter`, `StdlibLogger`). `PathlibCatalogFinder` becomes `FilesystemCatalogFinder`.
+  the system (`ShutilFreeSpaceMeter`, `StdlibLogger`, `ArgparseCommandLine`, `RandomJitterGenerator`: `argparse`
+  and `random` count as the system, for want of a more telling name; Corrected: the operator's answer to the
+  holistic review). `PathlibCatalogFinder` becomes `FilesystemCatalogFinder`.
   Naming, 3a 12.
 - **C4. A check returns a report**: a `<Thing>Report` response model with a `problems` field, which the command
   line prints or writes. Naming, 3c 20.
