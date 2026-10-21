@@ -8,11 +8,11 @@ valid:
   - from .file_key import FileKey
   - import urllib.parse as parse
   - from packaging.version import Version
+  - from pathlib import PurePath
 invalid:
   - import dataclasses, sqlite3
   - import sqlite3
   - import os.path
-  - from pathlib import PurePath
   - import json as decoder
   - from collections import abc
   - from p2pwatch_testing.virtual_time import VirtualTime

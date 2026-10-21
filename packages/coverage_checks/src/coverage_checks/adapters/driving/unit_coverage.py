@@ -7,15 +7,17 @@ import json
 import re
 import sys
 import tempfile
-import tomllib
 from collections.abc import Sequence
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePath
 
 from coverage import Coverage
 
-from coverage_checks.adapters.driven.own_tests import find_own_tests
+from coverage_checks.adapters.driven.filesystem_package_tree_reader import (
+    FilesystemPackageTreeReader,
+)
 from coverage_checks.domain.function_bodies import find_function_body_lines
+from coverage_checks.domain.own_tests import find_own_tests
 
 type Branch = tuple[int, int]
 
@@ -45,7 +47,8 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    own_tests = find_own_tests(_read_tests_without_unit())
+    package_tree_reader = FilesystemPackageTreeReader(package_directory=Path.cwd())
+    own_tests = find_own_tests(package_tree_reader.read_package_tree())
     with tempfile.TemporaryDirectory() as report_dir:
         report = Path(report_dir) / "coverage.json"
         shortfalls = [
@@ -67,16 +70,8 @@ def main() -> int:
     return 1 if problems else 0
 
 
-def _read_tests_without_unit() -> dict[str, object]:
-    pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
-    tests_without_unit: dict[str, object] = (
-        pyproject.get("tool", {}).get("coverage_checks", {}).get("tests_without_unit", {})
-    )
-    return tests_without_unit
-
-
 def _find_shortfall(
-    coverage: Coverage, report: Path, module: Path, test_files: Sequence[Path]
+    coverage: Coverage, report: Path, module: PurePath, test_files: Sequence[PurePath]
 ) -> str | None:
     """What of *module* its own tests leave unrun, but the top-level code any test ran."""
     every_test = _read_execution(coverage, report, module, contexts=None)
@@ -84,7 +79,7 @@ def _find_shortfall(
     own_run = (
         _read_execution(coverage, report, module, own_contexts) if own_contexts else _NOTHING_RUN
     )
-    body_lines = find_function_body_lines(module.read_text(encoding="utf-8"))
+    body_lines = find_function_body_lines(Path(module).read_text(encoding="utf-8"))
     statements = sorted(
         statement
         for statement in every_test.statements - own_run.run_statements
@@ -110,7 +105,7 @@ def _find_shortfall(
 
 
 def _read_execution(
-    coverage: Coverage, report: Path, module: Path, contexts: list[str] | None
+    coverage: Coverage, report: Path, module: PurePath, contexts: list[str] | None
 ) -> _Execution:
     """coverage.py's own analysis of *module*, restricted to the tests matching *contexts*."""
     coverage.json_report(morfs=[str(module)], outfile=str(report), contexts=contexts)
