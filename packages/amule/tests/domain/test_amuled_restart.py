@@ -17,7 +17,7 @@ def is_due(
 ) -> bool:
     return is_amuled_restart_due(
         forwarded_port=forwarded_port,
-        configured_port=4662,
+        listen_port=4662,
         latest_restart=latest_restart,
         now=now,
         restart_min_interval=RESTART_MIN_INTERVAL,
