@@ -145,25 +145,61 @@ supervisée par un `TaskGroup` : une boucle qui crashe bruyamment annule ses sœ
 les erreurs d'I/O *attendues* sont absorbées à l'intérieur d'un cycle (voir §10, discipline de
 frontière).
 
-## 4. Architecture interne du crawler (Clean / Hexagonal)
+## 4. Architecture interne : six hexagones (Clean / Hexagonal)
 
-Le graphe de dépendances est un DAG qui pointe vers le **domaine pur**.
+Le dépôt compte six hexagones : six applications, chacune avec son cœur et ses adaptateurs, qui ne
+s'importent jamais l'une l'autre. Les trois outils de contrôle et `amule_bump` ne tournent qu'en
+développement et en CI, jamais dans une image.
+
+| Hexagone | Paquet | Ports pilotants | Ce que pilotent ses adaptateurs |
+|---|---|---|---|
+| `p2pwatch` | `packages/crawler/`, avec `catalog_matching` (`packages/matching/`), son domaine dans une distribution à part | `CrawlerRunner`, `ConfigValidator`, `CatalogMerger` pour la ligne de commande, un port par page ou contrôle de la webui | amuleapi, les deux bases SQLite, les horloges, Prometheus, apprise |
+| `p2pwatch_amule` | `packages/amule/` | `ContainerBooter`, `PortSyncLoopRunner` | `amule.conf`, s6, gluetun, les comptes et répertoires d'amuled, `amuleapi --set-admin-pass` |
+| `vex_checks` | `packages/vex_checks/` | `ImageClaimsChecker`, `StaleClaimsChecker`, `ClaimCoverageChecker` | les VEX, le SBOM Syft, Grype, le SARIF, les règles source d'ast-grep |
+| `template_checks` | `packages/template_checks/` | `LogicFreeChecker`, `TemplateAttributeLister` | les gabarits de la webui |
+| `coverage_checks` | `packages/coverage_checks/` | `UnitCoverageChecker` | `.coverage`, l'arbre du paquet et son `pyproject.toml` |
+| `amule_bump` | `packages/amule_bump/` | `AmuleBumper` | l'API GitHub, le Dockerfile, le corps de la pull request, `GITHUB_OUTPUT` |
+
+Chaque hexagone se découpe en **anneaux**, lus dans le chemin : `domain/`, `ports/`, `application/`,
+`adapters/` et `composition/`, `ports/` et `adapters/` séparés en `driving/` (ce qui appelle le
+cœur : la ligne de commande, la webui) et `driven/` (ce que le cœur appelle : SQLite, amuleapi). Un
+`__main__.py` racine appartient à la composition. Le graphe des imports est un DAG qui pointe vers
+le **domaine pur**.
 
 ```mermaid
 flowchart TB
-  comp["composition/"]
+  comp["composition/ · __main__.py"]
+  drivingAdp["adapters/driving/"]
   appl["application/"]
-  dom["domain/ · pure"]
   ports["ports/ · ABC"]
-  adp["adapters/ · I/O"]
+  dom["domain/ · pure"]
+  drivenAdp["adapters/driven/ · I/O"]
 
+  comp --> drivingAdp
   comp --> appl
-  appl --> dom
-  appl --> ports
+  comp -->|injects| drivenAdp
+  drivingAdp -->|appelle| ports
+  appl -.->|implémente| ports
+  drivenAdp -.->|implémente| ports
   ports --> dom
-  comp -->|injects| adp
-  adp -.->|implement| ports
+  appl --> dom
 ```
+
+- Un adaptateur n'importe jamais un autre adaptateur ; un adaptateur pilotant ne dépend que des
+  ports pilotants, un adaptateur piloté que des ports pilotés qu'il implémente ou consomme.
+- Un cas d'usage implémente un port pilotant sur des ports pilotés. `RunCrawler` et
+  `RunPortSyncLoop`, les racines des graphes du crawler et du port-sync, n'ont pas de port : la
+  composition les lance une fois qu'elle les a construits.
+- Seul un `__main__.py` lit l'état du processus (`argv`, l'environnement, le répertoire courant, le
+  logger racine) et le passe en valeurs ; un adaptateur reçoit de la composition ce qu'il pilote (un
+  répertoire, une URL, un exécutable). Aucun test ne patche un module : `monkeypatch` et
+  `unittest.mock.patch` sont refusés par `code-pattern-check`.
+- Un contrôle rend un rapport, un `<Thing>Report` et ses `problems`, que la ligne de commande
+  imprime.
+- `tach check` tient ces règles sur `tach.toml`, où chaque module est déclaré avec ses dépendances ;
+  les règles ast-grep `*-imports.yml` gardent le cœur sans I/O.
+
+### Le crawler
 
 - **`domain/`** est **pur** : pas d'I/O, pas de `yaml`/DB/réseau/horloge/logging, aucune lecture
   d'env. L'interpolation `${VAR}` dans `crawler.yml` est résolue par l'adapter de config **avant**

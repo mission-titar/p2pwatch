@@ -1,0 +1,21 @@
+id: no-module-patching
+language: python
+severity: error
+message: A test sets what it tunes through a parameter, never by patching a module (`monkeypatch`, `pytest.MonkeyPatch`, `unittest.mock`'s `patch`).
+note: "Pass process state from a `__main__.py`, a tuned constant as a parameter, a replaced function as a port or a typed `Callable`."
+rule:
+  any:
+    # The fixture, its class and its module, under any name or attribute.
+    - kind: identifier
+      regex: ^(monkeypatch|MonkeyPatch)$
+    # `mock.patch`, `unittest.mock.patch`, and `.object` or `.dict` on them.
+    - kind: attribute
+      all:
+        - has: { field: object, regex: '^(unittest\.)?mock$' }
+        - has: { field: attribute, regex: ^patch$ }
+    # `from unittest.mock import patch`, aliased or not.
+    - kind: import_from_statement
+      all:
+        - has: { field: module_name, regex: '^(unittest\.)?mock$' }
+        # No `field: name`: it reaches only the first imported name.
+        - has: { regex: '^patch( as \w+)?$' }
