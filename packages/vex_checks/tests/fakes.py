@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import PurePath
 
@@ -6,20 +6,32 @@ from vex_checks.domain.sbom_components import DeclaredComponent, DpkgPackage
 from vex_checks.domain.violations import Violation
 from vex_checks.ports.driven.sarif_writer import SarifWriter
 from vex_checks.ports.driven.sbom_reader import SbomReader
+from vex_checks.ports.driven.source_rule_reader import SourceRuleReader
 from vex_checks.ports.driven.vex_reader import VexReader
 from vex_checks.ports.driven.vulnerability_scanner import VulnerabilityScanner
+from vex_checks.ports.driving.claim_coverage_checker import (
+    ClaimCoverageChecker,
+    ClaimCoverageProblem,
+    ClaimCoverageReport,
+)
 from vex_checks.ports.driving.image_claims_checker import ImageClaimsChecker, ImageClaimsReport
 from vex_checks.ports.driving.stale_claims_checker import StaleClaimsChecker, StaleClaimsReport
 
 
 class FakeVexReader(VexReader):
-    """Reads the same claims from any VEX file."""
+    """Reads the claims given for a VEX file, and ``claims`` from any other."""
 
-    def __init__(self, claims: dict[str, str]) -> None:
+    def __init__(
+        self,
+        claims: dict[str, str],
+        *,
+        claims_by_vex_path: Mapping[PurePath, dict[str, str]] | None = None,
+    ) -> None:
         self._claims = claims
+        self._claims_by_vex_path = claims_by_vex_path or {}
 
     def read_claims(self, vex_path: PurePath) -> dict[str, str]:
-        return dict(self._claims)
+        return dict(self._claims_by_vex_path.get(vex_path, self._claims))
 
 
 class FakeSbomReader(SbomReader):
@@ -51,6 +63,16 @@ class FakeVulnerabilityScanner(VulnerabilityScanner):
     def scan_sbom(self, sbom_path: PurePath) -> set[str]:
         self.scanned_sbom_paths.append(sbom_path)
         return set(self._advisory_ids)
+
+
+class FakeSourceRuleReader(SourceRuleReader):
+    """Reads the source rules' ids it is given."""
+
+    def __init__(self, source_rule_ids: set[str]) -> None:
+        self._source_rule_ids = source_rule_ids
+
+    def read_source_rule_ids(self) -> set[str]:
+        return set(self._source_rule_ids)
 
 
 @dataclass(frozen=True)
@@ -115,3 +137,13 @@ class FakeStaleClaimsChecker(StaleClaimsChecker):
     ) -> StaleClaimsReport:
         self.checks.append(StaleClaimsCheck(sbom_path, vex_path, sarif_path))
         return StaleClaimsReport(problems=self._problems)
+
+
+class FakeClaimCoverageChecker(ClaimCoverageChecker):
+    """Answers the same problems to each check."""
+
+    def __init__(self, problems: Sequence[ClaimCoverageProblem] = ()) -> None:
+        self._problems = tuple(problems)
+
+    def check_claim_coverage(self) -> ClaimCoverageReport:
+        return ClaimCoverageReport(problems=self._problems)

@@ -763,6 +763,7 @@ depends_on = []
 path = "vex_checks.__main__"
 layer = "composition"
 depends_on = [
+  "vex_checks.adapters.driven.filesystem_source_rule_reader",
   "vex_checks.adapters.driven.grype_vulnerability_scanner",
   "vex_checks.adapters.driven.json_sarif_writer",
   "vex_checks.adapters.driven.json_vex_reader",
@@ -773,6 +774,11 @@ depends_on = [
   "vex_checks.application",
   "vex_checks.domain",
 ]
+
+[[modules]]
+path = "vex_checks.adapters.driven.filesystem_source_rule_reader"
+layer = "adapters"
+depends_on = ["vex_checks.ports.driven.source_rule_reader"]
 
 [[modules]]
 path = "vex_checks.adapters.driven.grype_vulnerability_scanner"
@@ -802,13 +808,7 @@ depends_on = ["vex_checks.domain", "vex_checks.ports.driven.sbom_reader"]
 [[modules]]
 path = "vex_checks.adapters.driving.check_claim_coverage"
 layer = "adapters"
-depends_on = [
-  "vex_checks.domain",
-  # The check calls its I/O adapters directly: lot 3 gives them driven ports.
-  { path = "vex_checks.adapters.driven.repo", deprecated = true },
-  # The check reads the claims through their driven port: block 42 removes it.
-  { path = "vex_checks.ports.driven.vex_reader", deprecated = true },
-]
+depends_on = ["vex_checks.ports.driving.claim_coverage_checker"]
 
 [[modules]]
 path = "vex_checks.adapters.driving.cli"
@@ -826,8 +826,10 @@ depends_on = [
   "vex_checks.domain",
   "vex_checks.ports.driven.sarif_writer",
   "vex_checks.ports.driven.sbom_reader",
+  "vex_checks.ports.driven.source_rule_reader",
   "vex_checks.ports.driven.vex_reader",
   "vex_checks.ports.driven.vulnerability_scanner",
+  "vex_checks.ports.driving.claim_coverage_checker",
   "vex_checks.ports.driving.image_claims_checker",
   "vex_checks.ports.driving.stale_claims_checker",
 ]
@@ -848,12 +850,22 @@ layer = "ports"
 depends_on = ["vex_checks.domain"]
 
 [[modules]]
+path = "vex_checks.ports.driven.source_rule_reader"
+layer = "ports"
+depends_on = []
+
+[[modules]]
 path = "vex_checks.ports.driven.vex_reader"
 layer = "ports"
 depends_on = []
 
 [[modules]]
 path = "vex_checks.ports.driven.vulnerability_scanner"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "vex_checks.ports.driving.claim_coverage_checker"
 layer = "ports"
 depends_on = []
 

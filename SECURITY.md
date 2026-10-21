@@ -134,9 +134,11 @@ a genuinely false claim, as hard-fail steps in the release before anything is si
   execute, for example importing `imaplib` or `poplib`. Each claim is one ast-grep rule in
   `packages/vex_checks/ast-grep/rules/`, named after the advisory it backs, with its tests.
 - **`claim-coverage`** (PR job, release hard-fail): reads every VEX file, and fails if a
-  VEX `not_affected` claim has no premise in the registry, a premise has no claim, or a
-  justification does not match its premise family. It keeps the VEX and the premise registry in
-  bijection.
+  VEX `not_affected` claim has neither an image premise in the registry nor a source rule, an
+  image premise or a source rule has no claim, an advisory has both, or a justification is not
+  its backing's (`vulnerable_code_not_present` for an image premise,
+  `vulnerable_code_not_in_execute_path` for a source rule). It keeps the VEX in bijection with
+  the image premises and the source rules.
 - **`image-claims`** (daily Grype scan as SARIF, release hard-fail): fails if the built
   image's SBOM contradicts an image-scoped claim, for example a dpkg package that should be
   absent is present, or a dpkg package or hand-declared component is below the minimum version
