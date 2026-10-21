@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 class ArgparseCommandLine:
-    """``logic-free`` and ``read-names``, each over a templates directory."""
+    """``logic-free`` and ``template-attributes``, each over a templates directory."""
 
     def __init__(
         self,
@@ -26,10 +26,10 @@ class ArgparseCommandLine:
         logic_free = subparsers.add_parser(
             "logic-free", help="fail on any logic tag or computed expression in a template"
         )
-        read_names = subparsers.add_parser(
-            "read-names", help="print the attribute names the templates read, comma-joined"
+        template_attributes = subparsers.add_parser(
+            "template-attributes", help="print the attribute names the templates read, comma-joined"
         )
-        for subparser in (logic_free, read_names):
+        for subparser in (logic_free, template_attributes):
             subparser.add_argument("templates_dir", type=Path, help="the templates directory")
         args = parser.parse_args(argv)
         if args.command == "logic-free":
