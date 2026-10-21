@@ -1,4 +1,4 @@
-"""BootContainer: every variable refused first, then the account."""
+"""BootContainer: every variable refused first, then the account, then the mount points."""
 
 import re
 
@@ -6,7 +6,7 @@ import pytest
 
 from p2pwatch_amule.application.boot_container import BootContainer
 from p2pwatch_amule.domain.settings_error import SettingsError
-from tests.fakes import FakeAccountManager
+from tests.fakes import FakeAccountManager, FakeMountPointPreparer
 
 ENV = {
     "PUID": "1000",
@@ -16,12 +16,32 @@ ENV = {
 }
 
 
+class Booter:
+    """A BootContainer over the package's fakes."""
+
+    def __init__(self) -> None:
+        self.account_manager = FakeAccountManager()
+        self.mount_point_preparer = FakeMountPointPreparer()
+        self.container_booter = BootContainer(
+            account_manager=self.account_manager,
+            mount_point_preparer=self.mount_point_preparer,
+        )
+
+
 def test_the_account_takes_puid_and_pgid() -> None:
-    account_manager = FakeAccountManager()
+    booter = Booter()
 
-    BootContainer(account_manager=account_manager).boot_container(ENV)
+    booter.container_booter.boot_container(ENV)
 
-    assert account_manager.accounts == [(1000, 1001)]
+    assert booter.account_manager.accounts == [(1000, 1001)]
+
+
+def test_the_mount_points_are_owned_by_puid_and_pgid() -> None:
+    booter = Booter()
+
+    booter.container_booter.boot_container(ENV)
+
+    assert booter.mount_point_preparer.owners == [(1000, 1001)]
 
 
 @pytest.mark.parametrize(
@@ -35,21 +55,22 @@ def test_the_account_takes_puid_and_pgid() -> None:
         ({"PORT_SYNC": "yes", "GLUETUN_CONTROL_URL": "gluetun"}, "GLUETUN_CONTROL_URL must be "),
     ],
 )
-def test_a_refused_variable_aborts_the_boot_before_the_account(
+def test_a_refused_variable_aborts_the_boot_before_any_change(
     variables: dict[str, str], message: str
 ) -> None:
-    account_manager = FakeAccountManager()
+    booter = Booter()
 
     with pytest.raises(SettingsError, match=f"^{re.escape(message)}"):
-        BootContainer(account_manager=account_manager).boot_container({**ENV, **variables})
+        booter.container_booter.boot_container({**ENV, **variables})
 
-    assert account_manager.accounts == []
+    assert booter.account_manager.accounts == []
+    assert booter.mount_point_preparer.owners == []
 
 
 def test_port_sync_off_leaves_its_other_variables_unread() -> None:
-    account_manager = FakeAccountManager()
+    booter = Booter()
     env = {**ENV, "PORT_SYNC": "off", "PORT_SYNC_POLL_SECONDS": "0"}
 
-    BootContainer(account_manager=account_manager).boot_container(env)
+    booter.container_booter.boot_container(env)
 
-    assert account_manager.accounts == [(1000, 1001)]
+    assert booter.account_manager.accounts == [(1000, 1001)]
