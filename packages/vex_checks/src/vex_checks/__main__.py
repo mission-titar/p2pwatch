@@ -10,7 +10,6 @@ from vex_checks.adapters.driven.json_vex_reader import JsonVexReader
 from vex_checks.adapters.driven.syft_sbom_reader import SyftSbomReader
 from vex_checks.adapters.driving import (
     check_claim_coverage,
-    check_image_claims,
     check_source_claims,
     check_stale_claims,
 )
@@ -24,15 +23,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     vex_reader = JsonVexReader()
     sarif_writer = JsonSarifWriter()
     command_line = ArgparseCommandLine(
-        check_image_claims=functools.partial(
-            check_image_claims.main,
-            image_claims_checker=CheckImageClaims(
-                premises=PREMISES,
-                repo_root=repo.repo_root(),
-                vex_reader=vex_reader,
-                sbom_reader=SyftSbomReader(),
-                sarif_writer=sarif_writer,
-            ),
+        image_claims_checker=CheckImageClaims(
+            premises=PREMISES,
+            repo_root=repo.repo_root(),
+            vex_reader=vex_reader,
+            sbom_reader=SyftSbomReader(),
+            sarif_writer=sarif_writer,
         ),
         check_stale_claims=functools.partial(
             check_stale_claims.main,

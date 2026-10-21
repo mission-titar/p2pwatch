@@ -9,6 +9,8 @@ import pytest
 from vex_checks.__main__ import main
 from vex_checks.adapters.driving import check_claim_coverage, check_source_claims
 
+_REPO_ROOT = Path(__file__).parents[3]
+
 
 def _write(path: Path, document: object) -> Path:
     path.write_text(json.dumps(document))
@@ -21,17 +23,22 @@ def _vex_claiming(tmp_path: Path, cve: str) -> Path:
     return _write(tmp_path / "vex.openvex.json", {"statements": [statement]})
 
 
-def test_image_claims_runs_the_image_check(
+def test_image_claims_locates_the_problems_at_the_vex_relative_to_the_repository(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     amule = {"type": "UnknownPackage", "name": "amule", "version": "2.1.1"}
     artifacts = [{**amule, "purl": "pkg:generic/amule@2.1.1"}]
     sbom = _write(tmp_path / "sbom.syft.json", {"artifacts": artifacts})
-    vex = _vex_claiming(tmp_path, "CVE-2006-2691")
+    vex = os.path.relpath(_REPO_ROOT / "security" / "amule.vex.openvex.json")
 
-    assert main(["image-claims", "--sbom", str(sbom), "--vex", str(vex)]) == 1
+    assert main(["image-claims", "--sbom", str(sbom), "--vex", vex]) == 1
 
-    assert "::error::CVE-2006-2691: declared amule 2.1.1 is below 2.1.2" in capsys.readouterr().out
+    assert capsys.readouterr().out == (
+        "::error::CVE-2006-2691: declared amule 2.1.1 is below 2.1.2"
+        " (security/amule.vex.openvex.json)\n"
+        "::error::CVE-2006-2692: declared amule 2.1.1 is below 2.1.2"
+        " (security/amule.vex.openvex.json)\n"
+    )
 
 
 def test_stale_claims_runs_the_stale_check_over_grype(

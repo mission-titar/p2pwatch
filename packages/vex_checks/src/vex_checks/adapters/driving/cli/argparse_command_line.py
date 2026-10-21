@@ -4,6 +4,8 @@ import argparse
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
+from vex_checks.ports.driving.image_claims_checker import ImageClaimsChecker
+
 # Over a built image's SBOM and its VEX; given a SARIF output, it writes there instead of failing.
 type ImageCheck = Callable[[Path, Path, Path | None], int]
 
@@ -21,26 +23,25 @@ def _add_image_options(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _run_image_check(
-    check: ImageCheck, parser: argparse.ArgumentParser, args: argparse.Namespace
-) -> int:
+def _sarif_output(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Path | None:
     if args.format == "sarif" and args.output is None:
         parser.error("--output is required with --format sarif")
-    return check(args.sbom, args.vex, args.output if args.format == "sarif" else None)
+    return args.output if args.format == "sarif" else None
 
 
 class ArgparseCommandLine:
-    """``image-claims``, ``stale-claims``, ``source-claims``, ``claim-coverage``: one check each."""
+    """``image-claims`` over ``image_claims_checker``; ``stale-claims``, ``source-claims``,
+    ``claim-coverage``: one check each."""
 
     def __init__(
         self,
         *,
-        check_image_claims: ImageCheck,
+        image_claims_checker: ImageClaimsChecker,
         check_stale_claims: ImageCheck,
         check_source_claims: Callable[[], int],
         check_claim_coverage: Callable[[], int],
     ) -> None:
-        self._check_image_claims = check_image_claims
+        self._image_claims_checker = image_claims_checker
         self._check_stale_claims = check_stale_claims
         self._check_source_claims = check_source_claims
         self._check_claim_coverage = check_claim_coverage
@@ -67,9 +68,18 @@ class ArgparseCommandLine:
         )
         args = parser.parse_args(argv)
         if args.command == "image-claims":
-            return _run_image_check(self._check_image_claims, image_claims, args)
+            return self._check_image_claims(args.sbom, args.vex, _sarif_output(image_claims, args))
         if args.command == "stale-claims":
-            return _run_image_check(self._check_stale_claims, stale_claims, args)
+            return self._check_stale_claims(args.sbom, args.vex, _sarif_output(stale_claims, args))
         if args.command == "source-claims":
             return self._check_source_claims()
         return self._check_claim_coverage()
+
+    def _check_image_claims(self, sbom: Path, vex: Path, sarif_output: Path | None) -> int:
+        """Each problem a GitHub ``::error::`` line and exit 1, or, written as SARIF, exit 0."""
+        report = self._image_claims_checker.check_image_claims(sbom, vex.resolve(), sarif_output)
+        if sarif_output is not None:
+            return 0
+        for problem in report.problems:
+            print(f"::error::{problem.advisory_id}: {problem.message} ({problem.location})")
+        return 1 if report.problems else 0

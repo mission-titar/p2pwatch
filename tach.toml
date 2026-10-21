@@ -769,7 +769,6 @@ depends_on = [
   "vex_checks.adapters.driven.repo",
   "vex_checks.adapters.driven.syft_sbom_reader",
   "vex_checks.adapters.driving.check_claim_coverage",
-  "vex_checks.adapters.driving.check_image_claims",
   "vex_checks.adapters.driving.check_source_claims",
   "vex_checks.adapters.driving.check_stale_claims",
   "vex_checks.adapters.driving.cli",
@@ -823,11 +822,6 @@ depends_on = [
 ]
 
 [[modules]]
-path = "vex_checks.adapters.driving.check_image_claims"
-layer = "adapters"
-depends_on = ["vex_checks.ports.driving.image_claims_checker"]
-
-[[modules]]
 path = "vex_checks.adapters.driving.check_source_claims"
 layer = "adapters"
 depends_on = [
@@ -853,7 +847,7 @@ depends_on = [
 [[modules]]
 path = "vex_checks.adapters.driving.cli"
 layer = "adapters"
-depends_on = []
+depends_on = ["vex_checks.ports.driving.image_claims_checker"]
 
 [[modules]]
 path = "vex_checks.application"
