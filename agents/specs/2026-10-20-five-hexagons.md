@@ -60,7 +60,8 @@ this spec: they apply a rule `AGENTS.md` already has, or a tool enforces them it
   holistic review). `PathlibCatalogFinder` becomes `FilesystemCatalogFinder`.
   Naming, 3a 12.
 - **C4. A check returns a report**: a `<Thing>Report` response model with a `problems` field, which the command
-  line prints or writes. Naming, 3c 20.
+  line prints; asked for SARIF, the use case writes them through `SarifWriter` (Corrected: was "prints or
+  writes", aligned with D5). Naming, 3c 20.
 - **C5. A value taken when the operator sets nothing is the domain's**: a key absent from `crawler.yml`, an
   environment variable left unset. The parser applies the domain's value; a value a component receives comes
   from the composition (C1, C2). Hard rules, 3a 16 (Corrected: added after the operator's approval, so that no
