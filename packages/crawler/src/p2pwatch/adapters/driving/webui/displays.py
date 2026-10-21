@@ -92,16 +92,17 @@ class DecisionDisplay:
 
 @dataclass(frozen=True)
 class TrackedDownloadDisplay:
-    """One line of /node's downloads, its instants as local.db stores them."""
+    """One line of /node's downloads, its instants as local.db stores them, an unknown one
+    blank."""
 
     native_id: str
     target_id: str
     state: str
     queued_at: str
-    completed_at: str | None
-    last_progress_at: str | None
-    waiting_reason: str | None
-    failure_reason: str | None
+    completed_at: str
+    last_progress_at: str
+    waiting_reason: str
+    failure_reason: str
 
 
 @dataclass(frozen=True)
@@ -116,10 +117,11 @@ class BackoffEntryDisplay:
 
 @dataclass(frozen=True)
 class NodeStateDisplay:
-    """The node's identity and downloads, as the dashboard and /node show them."""
+    """The node's identity and downloads, as the dashboard and /node show them, blank until
+    the node records its id."""
 
-    node_id: str | None
-    created_at: str | None
+    node_id: str
+    created_at: str
     downloads: tuple[TrackedDownloadDisplay, ...]
 
 
