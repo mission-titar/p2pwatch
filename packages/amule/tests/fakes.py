@@ -1,10 +1,13 @@
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from datetime import timedelta
 
+from p2pwatch_amule.domain.monotonic_instant import MonotonicInstant
 from p2pwatch_amule.domain.settings_error import SettingsError
 from p2pwatch_amule.ports.driven.account_manager import AccountManager
 from p2pwatch_amule.ports.driven.admin_password_setter import AdminPasswordSetter
 from p2pwatch_amule.ports.driven.amule_conf import AmuleConfReader, AmuleConfWriter
 from p2pwatch_amule.ports.driven.amuled_directory_preparer import AmuledDirectoryPreparer
+from p2pwatch_amule.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch_amule.ports.driven.service_supervisor import ServiceSupervisor
 from p2pwatch_amule.ports.driving.container_booter import ContainerBooter
 
@@ -52,6 +55,23 @@ class FakeAdminPasswordSetter(AdminPasswordSetter):
 
     def set_admin_password(self, api_password: str, uid: int, gid: int) -> None:
         self.passwords.append((api_password, uid, gid))
+
+
+class FakeMonotonicClock(MonotonicClock):
+    """Its ``sleep`` records the duration and advances ``now`` at once, then calls ``on_sleep``."""
+
+    def __init__(self) -> None:
+        self.instant = MonotonicInstant(0)
+        self.sleeps: list[timedelta] = []
+        self.on_sleep: Callable[[], None] = lambda: None
+
+    def now(self) -> MonotonicInstant:
+        return self.instant
+
+    def sleep(self, duration: timedelta) -> None:
+        self.sleeps.append(duration)
+        self.instant += duration
+        self.on_sleep()
 
 
 class FakeServiceSupervisor(ServiceSupervisor):
