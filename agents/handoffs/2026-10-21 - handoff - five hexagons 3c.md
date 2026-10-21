@@ -1,7 +1,7 @@
 # Handoff: the five other hexagons, lot 3c of the hexagonal architecture umbrella
 
-Drafted by block 90 from the lot's block reports (#360, #361, #363 to #382) and its own, for the closing block 100
-to correct with the holistic review.
+Drafted by block 90 from the lot's block reports (#360, #361, #363 to #382) and its own; corrected by the closing
+blocks 100 and 101 with the holistic review (`.reviews/lot3c-holistic.md`, gitignored).
 
 ## State
 
@@ -10,8 +10,8 @@ Tier Spec lot. Spec `agents/specs/2026-10-20-five-hexagons.md` (approved 2026-10
 operator allowed up to 30 blocks. It carries out the three checking tools' part of lot 3 of the umbrella spec
 `agents/specs/2026-10-18-hexagonal-architecture.md`, and with it the umbrella's lot 3 ends.
 
-One stack cut from `main` at `08748882` (gh stack #362). Twenty-four blocks: the spec's rows 10 to 90, rows 52 and
-60 each split in Act (52 and 53, 60 and 61), then the closing block 100.
+One stack cut from `main` at `08748882` (gh stack #362). Twenty-five blocks: the spec's rows 10 to 90, rows 52 and
+60 each split in Act (52 and 53, 60 and 61), then the closing block, split at the file bound into 100 and 101.
 
 | Block | Pull request | Branch |
 |---|---|---|
@@ -37,8 +37,9 @@ One stack cut from `main` at `08748882` (gh stack #362). Twenty-four blocks: the
 | 70 | #380 | `refactor/webui-templates-logic-free` |
 | 80 | #381 | `refactor/logic-free-on-jinja-tree` |
 | 82 | #382 | `feat/check-logic-free` |
-| 90 | (block 90's) | `chore/no-module-patching-rule` |
-| 100 | | `docs/five-hexagons-3c-wrap` |
+| 90 | #383 | `chore/no-module-patching-rule` |
+| 100 | #384 | `docs/five-hexagons-3c-wrap` |
+| 101 | #385 | `chore/five-hexagons-3c-wrap-tools` |
 
 Nothing of the stack is merged. The lot changes the crawler image's webui (block 70); 3b's aMule image changes
 are not released either. A release waits for the backlog's "A copy before a migration that rewrites rows" (spec,
@@ -52,13 +53,16 @@ are not released either. A release waits for the backlog's "A copy before a migr
   `ClaimCoverageReport` of `ClaimCoverageProblem`s). Driven ports: `VexReader` (`JsonVexReader`, one file per
   call), `SbomReader` (`SyftSbomReader`), `SarifWriter` (`JsonSarifWriter`, called by the use case when asked for
   SARIF), `VulnerabilityScanner` (`GrypeVulnerabilityScanner`, replacing the last `Protocol`, `GrypeRunner`) and
-  `SourceRuleReader` (`FilesystemSourceRuleReader`, the rules' file names). The domain holds `merge_claims`,
+  `SourceRuleReader` (`FilesystemSourceRuleReader`, the rules' file names, refusing a rule whose `id:` line is
+  not its file's name). The domain holds `merge_claims`,
   `evaluate_image_premises` (`packaging.version` on the domain's list), the SBOM's components and the two
-  justifications. The application's `vex_location` names a VEX relative to the root `__main__` passes;
+  justifications. The domain's `locate_vex` names a VEX relative to the root `__main__` passes, or as given
+  outside it;
   `repo.py`, `vex_io.py`, `sbom.py`, `sarif.py`, `grype.py` and the four old entry functions are gone.
 - **The source premises, ast-grep rules** (blocks 30, 32, 42): `packages/vex_checks/ast-grep/`, one rule per
   advisory id (`CVE-2025-15366` for `imaplib`, `CVE-2025-15367` for `poplib`), on the root's `imported-module`
-  and a new `dynamically-imported-module` util; scanned by `poe vex-source-claims`, tested in `poe test`. The
+  and a new `dynamically-imported-module` util, over every package's `src` but the five unshipped packages';
+  scanned by `poe vex-source-claims`, tested in `poe test`. The
   `source-claims` subcommand, `source_scan`, the source family of the descriptors and the registry's source
   premises are gone; `claim-coverage` reads the rules' ids instead.
 - **`coverage_checks`, a hexagon** (blocks 50 to 56): `CheckUnitCoverage` behind `UnitCoverageChecker`, returning
@@ -66,7 +70,8 @@ are not released either. A release waits for the backlog's "A copy before a migr
   the test files, `[tool.coverage_checks]`, a module's source) and `TestCoverageReader` (`CoveragePyReader`, given
   the data file, the package's directory and a report directory). The matching of tests to modules (on
   `PurePath`, `pathlib` on the domain's list) and the shortfall (over `TestCoverage`, `__test__ = False`) moved
-  to the domain. `unit_coverage.py` is gone; `main(argv, cwd)`.
+  to the domain. `unit_coverage.py` is gone; `main(argv, cwd, report_directory)`, the report directory made by the
+  `__main__` guard.
 - **`template_checks`, a hexagon** (blocks 60 to 82): `ListTemplateAttributes` (`TemplateAttributeLister`,
   `TemplateAttributeListing`) and `CheckLogicFree` (`LogicFreeChecker`, `LogicFreeReport`) over
   `TemplateReader` (`FilesystemTemplateReader`, each template's path and text). The domain parses strings with
@@ -78,7 +83,8 @@ are not released either. A release waits for the backlog's "A copy before a migr
   carries its previous and next links as 0 or 1 URL, and a node's unknown values are blank in `NodeStateDisplay`.
 - **The no-module-patching rule** (block 90): `ast-grep-rules/no-module-patching.yml` refuses the `monkeypatch`
   fixture, `pytest.MonkeyPatch` (`_pytest.monkeypatch` included) and `unittest.mock`'s `patch` (imported, aliased,
-  or as `mock.patch`, `unittest.mock.patch` and their `.object`), in every Python file.
+  or as `mock.patch`, `unittest.mock.patch` and their `.object`), and `unittest.mock` imported under another name,
+  in every Python file.
 - **`AGENTS.md`**: `claim`, `premise`, `source rule` and `test coverage` in the glossary; Naming's `<Thing>Report`
   and `no-protocol-base` over every package's `src`; "No I/O in the core" names `packaging.version`, `pathlib`'s
   `PurePath` and `jinja2`; the Commands section names `_template-attributes` and the source rules' tests; C1 names
@@ -88,7 +94,8 @@ are not released either. A release waits for the backlog's "A copy before a migr
 ## What an operator sees change
 
 - **A node's page** shows the node id and its creation time blank before the node records its id, where it showed
-  `None` (block 70). Every other page renders byte for byte as on `main` (Acceptance 13).
+  `None` (block 70). Every other page renders byte for byte as on `main` (Acceptance 13). The backlog's "The node
+  page shows a node id set in `crawler.yml`" now reads a blank id: the known defect shows less than `None` did.
 - **Contributors and CI** (no workflow line changed):
   - `python -m vex_checks source-claims` is gone (exit 2, `invalid choice`); `poe vex-source-claims` runs the
     rules (block 32).
@@ -100,9 +107,14 @@ are not released either. A release waits for the backlog's "A copy before a migr
   - `stale-claims` finds `grype` on the passed environment's `PATH` and runs it in that environment (block 24).
   - `unit-coverage` no longer follows `COVERAGE_FILE` or `COVERAGE_RCFILE`, which nothing sets (block 53).
   - `logic-free` refuses the 8 constructs the regex passed, prints each problem's line and its node's name, and
-    reports a template that does not parse as a problem (blocks 80, 82).
+    reports a template that does not parse as a problem (blocks 80, 82); its usage names `templates_directory`
+    (block 101).
+  - `claim-coverage` reports an advisory the two VEX files justify differently, where it stopped on a traceback
+    (block 100), and refuses a source rule whose `id:` is not its file's name (block 101).
+  - `vex-source-claims` scans every package's `src` but the five unshipped packages', where it scanned three
+    (block 100).
 
-The spec's header lists 3a's and 3b's changes only: the closing block may add 3c's with a `(Corrected: ...)`.
+The spec's header carries 3c's line (closing block 100).
 
 ## Acceptance
 
@@ -126,18 +138,24 @@ noted.
    exited 0; `if`, `set`, `macro`, `+`, a filter and a call exit 1 as before; a `for ... else` and a chained
    attribute exit 0, and so do the shipped templates. Block 82 ran each through the command line and the use case
    alike.
-7. Partly. `vex-source-claims` (block 30): an injected `import imaplib` fails it in the `src` of `crawler`,
-   `matching` and `amule`, `importlib.import_module("poplib")` in the crawler's, and the old scanner gave the same
-   exit codes on the same tree; one in `amule_bump` passes both. `stale-claims` (block 26), with a stand-in grype:
-   the same lines, exit codes and a byte-identical SARIF as its parent's code. `image-claims` (blocks 12 to 24) on
-   the shipped `security/amule.vex.openvex.json` and SBOMs declaring aMule 2.1.1 or 2.3.3: the two `::error::
-   CVE-2006-269x` lines and exit 1, or exit 0. `claim-coverage` (blocks 40, 42) on the tree: exit 0, and exit 1 on
-   each injected fault. Not run: both image checks on `ghcr.io/mission-titar/mulewatch:latest`'s attested SBOM
-   and VEX, on `main` and at the top (Not validated).
+7. Run by the holistic review on 2026-10-21, `main` at `08748882` and the top at `6eb3fb50`, each from a detached
+   worktree. `ghcr.io/mission-titar/mulewatch:latest` and `:4.1.0` resolve to one index; its four sigstore bundles
+   were fetched read-only over the registry API (the OCI referrers tag) and decoded, the Syft-JSON SBOM and the
+   OpenVEX taken from them; **their signatures were not verified** (no cosign). `image-claims` on that SBOM: exit 0
+   both sides; on a copy declaring aMule 2.1.1, exit 1 and the two `::error::CVE-2006-269x` lines both sides,
+   with the VEX at an absolute path outside the repository as `grype-scan.yml` passes it, and from each root on
+   `security/amule.vex.openvex.json` (exit 0 on the crawler's). `stale-claims` with a stand-in printing the real
+   grype output: exit 0; without CVE-2025-15367 and CVE-2006-2692, exit 1 and their two lines. Every pair gave the
+   same exit code and byte-identical stdout, every SARIF pair `cmp` identical. grype itself ran from its pinned
+   image, `anchore/grype:v0.115.0`, on the attested SBOM (356 matches), then as a wrapper on `PATH` for
+   `stale-claims` on both VEX files: exit 0 both sides. `claim-coverage` on the tree: exit 0 both sides.
+   `vex-source-claims` (block 30): an injected `import imaplib` fails it in the `src` of `crawler`, `matching` and
+   `amule`, `importlib.import_module("poplib")` in the crawler's, as the old scanner did; one in `amule_bump`
+   passes both. Block 100 widened the rules' files (holistic finding 1).
 9. `git diff --stat 08748882 HEAD` over `deploy`, `security`, the crawler's `migrations`, `packages/amule/docker`,
    `packages/amule/Dockerfile` and `.github/workflows` prints nothing; nothing under `packages/amule` changed.
-10. The gate green at every block (each report); CI green on every block's head up to 81, block 82's run in
-    progress at writing.
+10. The gate green at every block (each report); CI green on every block's head up to 90 (#383's run 39670804131),
+    the closing blocks' runs started at writing.
 13. Block 70: lot 2's render script, 26 GETs and 11 console POSTs on one seeded catalog, gives 327,802 bytes,
     sha256 `67c4edbcdec2c1af...` (lot 2's value), on `origin/main` and at block 70; `diff` silent, and `← Prev` for
     `← Previous` in `sources.html` shows as one changed line.
