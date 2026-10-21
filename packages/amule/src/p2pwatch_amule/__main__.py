@@ -24,11 +24,12 @@ from p2pwatch_amule.adapters.driven.posix_amuled_directory_preparer import (
 from p2pwatch_amule.adapters.driven.s6_service_supervisor import S6ServiceSupervisor
 from p2pwatch_amule.adapters.driven.stdlib_logger import StdlibLogger
 from p2pwatch_amule.adapters.driven.system_monotonic_clock import SystemMonotonicClock
-from p2pwatch_amule.adapters.driving import port_sync
 from p2pwatch_amule.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from p2pwatch_amule.application.boot_container import BootContainer
+from p2pwatch_amule.application.run_port_sync_loop import RunPortSyncLoop
 from p2pwatch_amule.domain.conf import INCOMING_DIR, TEMP_DIR
 from p2pwatch_amule.domain.settings import parse_port_sync_settings
+from p2pwatch_amule.ports.driving.port_sync_loop_runner import PortSyncLoopRunner
 
 _HOME_DIRECTORY = Path("/home/amule")
 _CONFIG_DIRECTORY = _HOME_DIRECTORY / ".aMule"
@@ -42,10 +43,11 @@ def main(
     argv: Sequence[str],
     env: Mapping[str, str],
     url_opener: OpenerDirector,
-    run_port_sync: Callable[..., None],
+    create_port_sync_loop_runner: Callable[..., PortSyncLoopRunner],
 ) -> int:
     """Runs the subcommand ``argv`` names in the environment ``env``, gluetun read by
-    ``url_opener``, port-sync's loop by ``run_port_sync``; returns its exit code."""
+    ``url_opener``, port-sync's loop built by ``create_port_sync_loop_runner``; returns its exit
+    code."""
     amule_conf = PosixAmuleConf(amule_conf_path=_AMULE_CONF_PATH, change_owner=os.chown)
     # The two logger names docs/migration-4x.md gives the operator, here and for gluetun's reader.
     port_sync_logger = StdlibLogger("p2pwatch_amule.adapters.driving.port_sync")
@@ -87,7 +89,7 @@ def main(
         sync_listen_port=lambda: _sync_listen_port(
             env,
             url_opener,
-            run_port_sync,
+            create_port_sync_loop_runner,
             amule_conf=amule_conf,
             service_supervisor=service_supervisor,
             logger=port_sync_logger,
@@ -101,7 +103,7 @@ def main(
 def _sync_listen_port(
     env: Mapping[str, str],
     url_opener: OpenerDirector,
-    run_port_sync: Callable[..., None],
+    create_port_sync_loop_runner: Callable[..., PortSyncLoopRunner],
     *,
     amule_conf: PosixAmuleConf,
     service_supervisor: S6ServiceSupervisor,
@@ -109,8 +111,8 @@ def _sync_listen_port(
 ) -> None:
     """Parses port-sync's variables, so that the command line prints a refused one, then runs it."""
     port_sync_settings = parse_port_sync_settings(env)
-    run_port_sync(
-        port_sync_settings,
+    create_port_sync_loop_runner(
+        port_sync_settings=port_sync_settings,
         forwarded_port_reader=GluetunForwardedPortReader(
             control_url=port_sync_settings.gluetun_control_url,
             timeout_seconds=_GLUETUN_TIMEOUT_SECONDS,
@@ -122,7 +124,7 @@ def _sync_listen_port(
         service_supervisor=service_supervisor,
         monotonic_clock=SystemMonotonicClock(),
         logger=logger,
-    )
+    ).run_port_sync_loop()
 
 
 if __name__ == "__main__":  # pragma: no cover
@@ -131,6 +133,6 @@ if __name__ == "__main__":  # pragma: no cover
             sys.argv[1:],
             os.environ,
             build_opener(),  # the environment's proxies, as urlopen followed them
-            port_sync.main,
+            RunPortSyncLoop,
         )
     )

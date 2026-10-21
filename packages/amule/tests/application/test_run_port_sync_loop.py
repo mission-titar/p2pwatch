@@ -6,7 +6,7 @@ from datetime import timedelta
 
 import pytest
 
-from p2pwatch_amule.adapters.driving import port_sync
+from p2pwatch_amule.application.run_port_sync_loop import RunPortSyncLoop
 from p2pwatch_amule.domain.conf import tcp_listen_port, with_listen_port
 from p2pwatch_amule.domain.settings import PortSyncSettings
 from tests.fakes import (
@@ -65,15 +65,15 @@ class Node:
 
         self.monotonic_clock.on_sleep = stop_after_the_last_round
         with pytest.raises(_Stop):
-            port_sync.main(
-                port_sync_settings,
+            RunPortSyncLoop(
+                port_sync_settings=port_sync_settings,
                 forwarded_port_reader=self.forwarded_port_reader,
                 amule_conf_reader=self.amule_conf,
                 amule_conf_writer=self.amule_conf,
                 service_supervisor=self.service_supervisor,
                 monotonic_clock=self.monotonic_clock,
                 logger=self.logger,
-            )
+            ).run_port_sync_loop()
 
 
 @pytest.fixture
