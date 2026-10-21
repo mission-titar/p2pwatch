@@ -41,7 +41,7 @@ src = [
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "TID251"]
 
-# Only the clock adapters read the system clock; asyncio's own timeouts run on the loop's time.
+# Only the clock adapters read the system clock or sleep; asyncio's own timeouts run on the loop's time.
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "datetime.datetime.now".msg = "Inject the WallClock port."
 "datetime.datetime.utcnow".msg = "Inject the WallClock port."
@@ -56,13 +56,14 @@ select = ["E", "F", "I", "UP", "B", "SIM", "TID251"]
 "time.clock_gettime".msg = "Inject the WallClock or the MonotonicClock port."
 "time.clock_gettime_ns".msg = "Inject the WallClock or the MonotonicClock port."
 "asyncio.sleep".msg = "Sleep through the MonotonicClock port."
+"time.sleep".msg = "Sleep through the MonotonicClock port."
 
 [tool.ruff.lint.per-file-ignores]
 "packages/crawler/src/p2pwatch/adapters/driven/wall_clock_system.py" = ["TID251"]
 "packages/crawler/src/p2pwatch/adapters/driven/monotonic_clock_asyncio.py" = ["TID251"]
+"packages/amule/src/p2pwatch_amule/adapters/driven/system_monotonic_clock.py" = ["TID251"]
 "**/tests/**" = ["TID251"]
 "packages/crawler_testing/**" = ["TID251"]
-"packages/amule/**" = ["TID251"]
 "vulture_whitelist.py" = ["B018", "F821"]
 
 [tool.mypy]
