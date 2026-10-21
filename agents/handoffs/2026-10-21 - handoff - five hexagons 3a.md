@@ -28,7 +28,7 @@ One stack cut from `main` at `38bfe15` (gh stack #333). The spec's 3a rows 10 to
 | 24 | #340 | `refactor/repo-reader-domain-types` |
 | 30 | #341 | `refactor/amule-settings-in-domain` |
 | 32 | #342 | `refactor/amule-paths-from-main` |
-| 90 | closing | `docs/five-hexagons-3a-wrap` |
+| 90 | #343 | `docs/five-hexagons-3a-wrap` |
 
 Nothing of the stack is merged. The lot changes what both images run (the crawler's amuleapi transport, the aMule
 container's Python), so a release is possible after the merge, but not before the backlog's "A copy before a
@@ -74,8 +74,8 @@ migration that rewrites rows" ships (spec, section "Backlog").
   `is_port_sync_enabled`, `parse_port_sync_settings`, the three `DEFAULT_*`), raising `SettingsError`
   (`domain/settings_error.py`) with the messages of before. `ArgparseCommandLine.run(argv) -> int` prints the
   error and returns 1; `__main__.main(argv, env) -> int` passes the environment, the root logger and the
-  container's paths (`_HOME_DIR`, `_CONFIG_DIR`, `_AMULE_CONF_PATH`, `_PORT_SYNC_DOWN_FILE`,
-  `_AMULED_SERVICE_DIR`; the mount points from `domain/conf.py`'s `INCOMING_DIR` and `TEMP_DIR`, which
+  container's paths (`_HOME_DIRECTORY`, `_CONFIG_DIRECTORY`, `_AMULE_CONF_PATH`,
+  `_PORT_SYNC_DOWN_FILE`, `_AMULED_SERVICE_DIRECTORY`, spelled out by block 90; the mount points from `domain/conf.py`'s `INCOMING_DIR` and `TEMP_DIR`, which
   `reconcile_conf` writes) to `boot.main` and `port_sync.main`. `adapters/driven/settings.py` and its two
   deprecated edges are gone.
 
@@ -193,6 +193,8 @@ Taken during Act, each from a class 2 question or a point the lead brought:
   then the split into 30 and 32. From then on a teammate settles a name that a rule or a precedent decides, and
   notes it in its report.
 - The cut of lot 3 into 3a, 3b and 3c, once 3a's splits had used the cap.
+- Block 90, from the holistic review: `argparse` and `random` count as the system under C3, the names kept "for
+  want of a more telling one"; `argv`, `env`, `cwd` allowed abbreviations, `dir` spelled out.
 
 ## Pitfalls
 
@@ -258,8 +260,14 @@ Taken during Act, each from a class 2 question or a point the lead brought:
   through `_open(path, scripts)`, the forcing variant closing on failure.
 - `FakeDockerfile`'s untested branch: fixed in block 90, a use-case test that a missing Dockerfile raises before any
   upstream read.
-- C3 and the adapters named after `argparse` and `random`: waits for the operator's answer.
-- Abbreviations outside the glossary (`argv`, `env`, `cwd`, `dir`): waits for the operator's answer.
+- C3 and the adapters named after `argparse` and `random`: fixed in block 90 by the operator's answer, the names
+  kept; C3 in `AGENTS.md` and the spec names `ArgparseCommandLine` and `RandomJitterGenerator` beside
+  `ShutilFreeSpaceMeter` and `StdlibLogger`.
+- Abbreviations outside the glossary (`argv`, `env`, `cwd`, `dir`): fixed in block 90 by the operator's answer:
+  `argv`, `env` and `cwd` join the glossary's abbreviation row; `dir` is spelled out in the names the lot added
+  (`home_directory`, `config_directory`, `incoming_directory`, `temporary_directory`, `amuled_service_directory`
+  and the matching `__main__` constants), `git grep -w` finding none of the old names. `DEFAULT_OUTPUT_DIR`
+  keeps its name: it is the default of the operator's key `output_dir`, which the lot did not add.
 - A composition value spelled three ways: fixed in block 90, `_REEVALUATION_PROGRESS_EVERY_FILES` beside the two
   timeouts, `_GITHUB_API_URL` in `amule_bump`'s `__main__`.
 - Pull request bodies naming renumbered lots: fixed in block 90, #331's two mentions now say "lot 3c" (and "lots 3a
@@ -285,7 +293,6 @@ From `gh run list --branch <branch>` on 2026-10-21, over the 11 blocks before th
 
 ## Next
 
-- Block 90: the two findings waiting for the operator's answers (C3's `argparse` and `random`, the abbreviations).
 - The operator reviews and merges the stack, after the lead rebases it onto `main` if `main` moved.
 - "A copy before a migration that rewrites rows" ships before any release; this lot changes both images.
 - **Lot 3b**, the aMule container's boot and port-sync, from the tree 3a leaves, re-measuring its blocks (40 to 56,

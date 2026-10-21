@@ -131,7 +131,7 @@ a function does.
   response model through `<Thing>Display` view models.
 - **An adapter is named by the system it adapts and what it adapts**, not by the Python module it uses:
   `FilesystemCatalogFinder`, `PosixProcess`, `SqliteCatalogCopier`. A module is the name only when it is the
-  system: `ShutilFreeSpaceMeter`, `StdlibLogger`.
+  system: `ShutilFreeSpaceMeter`, `StdlibLogger`, `ArgparseCommandLine`, `RandomJitterGenerator`.
 - **A test double is `Fake` and what it replaces**: `FakeAmuleApiServer`, `FakeSearchClient`.
 
 | Word | Means | Never |
@@ -188,7 +188,7 @@ a function does.
 | `driven` | the side the core calls: a driven port is what the core needs, a driven adapter implements it (SQLite, amuleapi) | `secondary`, `outbound` |
 | `use case` | an `application/` operation behind a driving port: `ValidateConfig`; `RunCrawler`, the graph's root, has none | `service`, `interactor` |
 | `micros` | an integer of microseconds: an instant counts from the epoch | a bare `_at` on an `int` |
-| `id`, `db`, `sql`, `url`, `api`, `json`, `ecid`, `mib`, `iso`, `min`, `max`, `conf` | the abbreviations allowed (`conf`: aMule's `amule.conf`) | |
+| `id`, `db`, `sql`, `url`, `api`, `json`, `ecid`, `mib`, `iso`, `min`, `max`, `conf`, `argv`, `env`, `cwd` | the abbreviations allowed (`conf`: aMule's `amule.conf`; `argv`, `env`, `cwd`: what a `__main__.py` reads of its process) | `dir` for `directory` |
 
 ## Workflow
 
