@@ -763,8 +763,8 @@ path = "template_checks.__main__"
 layer = "composition"
 depends_on = [
   "template_checks.adapters.driven.filesystem_template_reader",
-  "template_checks.adapters.driving.check_templates",
   "template_checks.adapters.driving.cli",
+  "template_checks.application.check_logic_free",
   "template_checks.application.list_template_attributes",
 ]
 
@@ -774,14 +774,21 @@ layer = "adapters"
 depends_on = ["template_checks.ports.driven.template_reader"]
 
 [[modules]]
-path = "template_checks.adapters.driving.check_templates"
-layer = "adapters"
-depends_on = ["template_checks.domain.logic_constructs"]
-
-[[modules]]
 path = "template_checks.adapters.driving.cli"
 layer = "adapters"
-depends_on = ["template_checks.ports.driving.template_attribute_lister"]
+depends_on = [
+  "template_checks.ports.driving.logic_free_checker",
+  "template_checks.ports.driving.template_attribute_lister",
+]
+
+[[modules]]
+path = "template_checks.application.check_logic_free"
+layer = "application"
+depends_on = [
+  "template_checks.domain.logic_constructs",
+  "template_checks.ports.driven.template_reader",
+  "template_checks.ports.driving.logic_free_checker",
+]
 
 [[modules]]
 path = "template_checks.application.list_template_attributes"
@@ -804,6 +811,11 @@ depends_on = []
 
 [[modules]]
 path = "template_checks.ports.driven.template_reader"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "template_checks.ports.driving.logic_free_checker"
 layer = "ports"
 depends_on = []
 
