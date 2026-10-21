@@ -4,6 +4,7 @@ import functools
 from collections.abc import Sequence
 
 from vex_checks.adapters.driven.grype import SubprocessGrypeRunner
+from vex_checks.adapters.driven.json_vex_reader import JsonVexReader
 from vex_checks.adapters.driving import (
     check_claim_coverage,
     check_image_claims,
@@ -15,13 +16,14 @@ from vex_checks.adapters.driving.cli.argparse_command_line import ArgparseComman
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Runs the subcommand ``argv`` names (``sys.argv`` when ``None``), returns its exit code."""
+    vex_reader = JsonVexReader()
     command_line = ArgparseCommandLine(
-        check_image_claims=check_image_claims.main,
+        check_image_claims=functools.partial(check_image_claims.main, vex_reader=vex_reader),
         check_stale_claims=functools.partial(
-            check_stale_claims.main, runner=SubprocessGrypeRunner()
+            check_stale_claims.main, runner=SubprocessGrypeRunner(), vex_reader=vex_reader
         ),
         check_source_claims=check_source_claims.main,
-        check_claim_coverage=check_claim_coverage.main,
+        check_claim_coverage=functools.partial(check_claim_coverage.main, vex_reader=vex_reader),
     )
     return command_line.run(argv)
 
