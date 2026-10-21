@@ -1,4 +1,6 @@
-"""Tests for the check that each module's statements and branches are run by its own tests."""
+"""Tests for the check that each module's statements and branches are run by its own tests.
+
+They run the check end to end, through the composition."""
 
 import importlib.util
 from collections.abc import Callable, Mapping, Sequence
@@ -9,7 +11,7 @@ from types import ModuleType
 import pytest
 from coverage import Coverage
 
-from coverage_checks.adapters.driving.unit_coverage import main
+from coverage_checks import __main__
 
 SIZES = """\
 LIMIT = 10
@@ -39,6 +41,10 @@ def _write(files_by_path: Mapping[str, str]) -> None:
     for path, text in files_by_path.items():
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         Path(path).write_text(dedent(text))
+
+
+def _check() -> int:
+    return __main__.main(["unit-coverage"])
 
 
 def _measure(module_paths: Sequence[str], calls_by_context: Mapping[str, Call]) -> None:
@@ -73,7 +79,7 @@ def test_a_module_its_own_tests_run_whole_passes(
             "tests/test_sizes.py::test_long|run": lambda modules: modules["sizes"].is_short(30),
         },
     )
-    assert main() == 0
+    assert _check() == 0
     assert capsys.readouterr().out == (
         f"{tmp_path.name}: 1 test files map to 1 of 1 modules, 0 are listed without a unit;"
         " 0 of 1 modules short of their own tests\n"
@@ -93,7 +99,7 @@ def test_what_only_another_module_s_test_runs_fails_naming_the_module(
             "tests/test_other.py::test_long|setup": lambda modules: modules["sizes"].is_short(30),
         },
     )
-    assert main() == 1
+    assert _check() == 1
     assert capsys.readouterr().out == (
         "src/pkg/sizes.py: statements 7 and branches 5->7 run by none of its own tests"
         " (tests/test_sizes.py)\n"
@@ -114,7 +120,7 @@ def test_a_function_of_a_module_without_own_tests_is_short(
             "tests/test_other.py::test_run|run": lambda modules: modules["other"].run(),
         },
     )
-    assert main() == 1
+    assert _check() == 1
     assert capsys.readouterr().out.startswith(
         "src/pkg/sizes.py: statements 5, 6, 7 and branches 5->6, 5->7 run by none of its own"
         " tests (it has none)\n"
@@ -138,7 +144,7 @@ def test_what_import_runs_needs_no_own_test(capsys: pytest.CaptureFixture[str]) 
         ["src/pkg/ports.py", "src/pkg/other.py"],
         {"tests/test_other.py::test_run|run": lambda modules: modules["other"].run()},
     )
-    assert main() == 0
+    assert _check() == 0
     assert "0 of 2 modules short of their own tests" in capsys.readouterr().out
 
 
@@ -160,7 +166,7 @@ def test_a_top_level_statement_no_test_runs_is_short(capsys: pytest.CaptureFixtu
         ["src/pkg/widths.py"],
         {"tests/test_widths.py::test_width|run": lambda modules: modules["widths"].width()},
     )
-    assert main() == 1
+    assert _check() == 1
     assert capsys.readouterr().out.startswith(
         "src/pkg/widths.py: statements 6 and branches 3->6 run by none of its own tests"
     )
@@ -177,7 +183,7 @@ def test_a_branch_to_the_function_s_exit_reads_exit(capsys: pytest.CaptureFixtur
         ["src/pkg/names.py"],
         {"tests/test_names.py::test_record|run": lambda modules: modules["names"].record([], "a")},
     )
-    assert main() == 1
+    assert _check() == 1
     assert capsys.readouterr().out.startswith(
         "src/pkg/names.py: branches 2->exit run by none of its own tests (tests/test_names.py)\n"
     )
@@ -190,7 +196,7 @@ def test_a_test_file_mapping_to_no_module_fails(capsys: pytest.CaptureFixture[st
         ["src/pkg/other.py"],
         {"tests/test_other.py::test_run|run": lambda modules: modules["other"].run()},
     )
-    assert main() == 1
+    assert _check() == 1
     assert capsys.readouterr().out.startswith("tests/domain/test_nothing.py: tests no module")
 
 
@@ -207,7 +213,7 @@ def test_a_test_file_listed_in_the_package_s_pyproject_passes(
         ["src/pkg/other.py"],
         {"tests/test_other.py::test_run|run": lambda modules: modules["other"].run()},
     )
-    assert main() == 0
+    assert _check() == 0
     assert capsys.readouterr().out == (
         f"{tmp_path.name}: 1 test files map to 1 of 1 modules, 1 are listed without a unit;"
         " 0 of 1 modules short of their own tests\n"
@@ -219,7 +225,7 @@ def test_no_per_test_context_exits_with_how_to_record_them(
 ) -> None:
     _write({"src/pkg/sizes.py": SIZES})
     _measure(["src/pkg/sizes.py"], {})
-    assert main() == 1
+    assert _check() == 1
     assert capsys.readouterr().err == (
         "no per-test branch coverage in .coverage: run this package's pytest first, with branch"
         " coverage and --cov-context=test\n"
@@ -228,5 +234,5 @@ def test_no_per_test_context_exits_with_how_to_record_them(
 
 def test_no_coverage_data_exits_with_how_to_record_it(capsys: pytest.CaptureFixture[str]) -> None:
     _write({"src/pkg/sizes.py": SIZES})
-    assert main() == 1
+    assert _check() == 1
     assert capsys.readouterr().err.startswith("no per-test branch coverage in .coverage")
