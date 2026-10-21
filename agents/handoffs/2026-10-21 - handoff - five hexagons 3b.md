@@ -11,8 +11,8 @@ carries out the aMule container's part of lot 3 of the umbrella spec
 `agents/specs/2026-10-18-hexagonal-architecture.md`. Lot 3c (the three checking tools, the rule, the
 documentation) follows.
 
-One stack cut from `main` at `b48391b` (gh stack #346). Thirteen blocks: the spec's eleven rows 40 to 58 and 59,
-row 56 split into 56 and 57, then the closing block 60.
+One stack cut from `main` at `b48391b` (gh stack #346). Fourteen blocks: the spec's eleven rows 40 to 58 and 59,
+row 56 split into 56 and 57, then the closing block 60, split into 60 and 61 at the file bound.
 
 | Block | Pull request | Branch |
 |---|---|---|
@@ -28,7 +28,8 @@ row 56 split into 56 and 57, then the closing block 60.
 | 57 | #354 | `feat/port-sync-loop-use-case` |
 | 58 | #355 | `refactor/port-sync-runner-wired` |
 | 59 | #356 | `test/port-sync-smoke` |
-| 60 | (this block) | `docs/five-hexagons-3b-wrap` |
+| 60 | #357 | `docs/five-hexagons-3b-wrap` |
+| 61 | #358 | `docs/five-hexagons-3b-backlog` |
 
 Nothing of the stack is merged. The lot changes the aMule image's Python, so a release is possible after the
 merge, but not before the backlog's "A copy before a migration that rewrites rows" ships (spec, "Backlog").
@@ -226,7 +227,7 @@ From `gh run list --branch <branch>` over blocks 40 to 59 on 2026-10-21, before 
   `0cbfbc1e` cancelled, then `e1fb2cf3` (the lead's docs fix-back).
 - **Fix-backs**: 3 (blocks 42, 48, 57). **Cascaded rebases**: 2 (block 44 onto 42, block 50 onto 48). **Runs they
   re-triggered**: 7, fewer than the 12 blocks.
-- **Splits**: 1 (56). **Exemptions**: none.
+- **Splits**: 2 (56; the closing block 60 at 20 files, its handoff and `BACKLOG.md` into 61). **Exemptions**: none.
 - **Bodies called unreadable**: none at writing; the operator has not reviewed the stack yet. The lead corrected
   three bodies (#349, #350, #351) after the holistic review.
 
