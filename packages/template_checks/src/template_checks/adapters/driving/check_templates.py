@@ -1,76 +1,17 @@
-"""Guard "logic-free Jinja templates": token-match approach.
+"""The logic-free check over a templates directory, until `CheckLogicFree` replaces it."""
 
-Rule: a template may contain only passive constructs.
+from pathlib import Path, PurePath
 
-Allowed
--------
-- Structural tags     : {% extends %} {% block %} {% endblock %} {% include %}
-                        {% for %} {% else %} {% endfor %}
-- Simple interpolation: {{ x }}  {{ x.attr }}  {{ x.attr.sub }}
-  (identifier + attribute access via `.`, no operator or call)
-
-Rejected
---------
-- Logic tags          : {% if … %}  {% elif … %}  {% set … %}  {% macro … %}
-- Computed expressions: any {{ … }} expression containing:
-    · an arithmetic or comparison operator: + - * / % == != < >
-    · a filter                            : |
-    · a function call                     : (
-
-Regexes used
-------------
-1. Forbidden tag    : ``r"\\{%-?\\s*(if|elif|set|macro)\\b"``
-   (detects ``{% if``, ``{%- if``, ``{% set``, etc.)
-
-2. Illegal expression: in ``{{ … }}``, presence of one of the chars ``+ - * / % = ! < > | (``
-   (we don't distinguish `!=` from a lone `!`: sufficient, no legitimate `!` in Jinja).
-   Regex: ``r"\\{\\{[^}]*[+\\-*/%=!<>|(][^}]*\\}\\}"``
-"""
-
-from __future__ import annotations
-
-import re
-from pathlib import Path
-
-# --- Forbidden patterns ---
-
-# {% if %} / {% elif %} / {% set %} / {% macro %} tags
-_FORBIDDEN_TAG: re.Pattern[str] = re.compile(r"\{%-?\s*(if|elif|set|macro)\b")
-
-# {{ … }} expression containing an operator or a call
-_FORBIDDEN_EXPR: re.Pattern[str] = re.compile(r"\{\{[^}]*[+\-*/%=!<>|(][^}]*\}\}")
-
-
-def _check_file(path: Path) -> list[str]:
-    """Return the violations found in *path* (empty list = compliant)."""
-    text = path.read_text(encoding="utf-8")
-    violations: list[str] = []
-
-    for m in _FORBIDDEN_TAG.finditer(text):
-        keyword = m.group(1)
-        violations.append(f"{path.name}: forbidden tag '{{% {keyword} %}}'")
-
-    for m in _FORBIDDEN_EXPR.finditer(text):
-        snippet = m.group(0)[:60]
-        violations.append(f"{path.name}: computed expression '{snippet}'")
-
-    return violations
-
-
-def find_logic_violations(directory: Path) -> list[str]:
-    """Scan *directory* recursively, return all violations found.
-
-    Each entry has the form ``"<file>: <reason>"``.
-    """
-    violations: list[str] = []
-    for html_file in sorted(directory.rglob("*.html")):
-        violations.extend(_check_file(html_file))
-    return violations
+from template_checks.domain.logic_constructs import find_logic_constructs
 
 
 def main(templates_dir: Path) -> int:
-    """Prints each violation under *templates_dir*, returns 1 if there is any."""
-    violations = find_logic_violations(templates_dir)
-    for v in violations:
-        print(v)
-    return 1 if violations else 0
+    """Prints each logic construct under *templates_dir*, returns 1 if there is any."""
+    templates_by_path: dict[PurePath, str] = {
+        template_path.relative_to(templates_dir): template_path.read_text(encoding="utf-8")
+        for template_path in sorted(templates_dir.rglob("*.html"))
+    }
+    problems = find_logic_constructs(templates_by_path)
+    for problem in problems:
+        print(problem)
+    return 1 if problems else 0

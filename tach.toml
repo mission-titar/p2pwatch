@@ -776,7 +776,7 @@ depends_on = ["template_checks.ports.driven.template_reader"]
 [[modules]]
 path = "template_checks.adapters.driving.check_templates"
 layer = "adapters"
-depends_on = []
+depends_on = ["template_checks.domain.logic_constructs"]
 
 [[modules]]
 path = "template_checks.adapters.driving.cli"
@@ -791,6 +791,11 @@ depends_on = [
   "template_checks.ports.driven.template_reader",
   "template_checks.ports.driving.template_attribute_lister",
 ]
+
+[[modules]]
+path = "template_checks.domain.logic_constructs"
+layer = "domain"
+depends_on = []
 
 [[modules]]
 path = "template_checks.domain.template_attributes"

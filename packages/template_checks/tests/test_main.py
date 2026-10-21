@@ -14,7 +14,7 @@ def test_logic_free_runs_the_logic_check(
 
     assert main(["logic-free", str(tmp_path)], tmp_path) == 1
 
-    assert capsys.readouterr().out == "bad.html: forbidden tag '{% if %}'\n"
+    assert capsys.readouterr().out == "bad.html:1: If is not logic-free\n"
 
 
 def test_template_attributes_prints_the_attributes_of_the_templates_under_the_cwd(
