@@ -1,0 +1,59 @@
+[project]
+name = "pytest-settings"
+dynamic = ["version"]
+description = "The pytest settings every package's tests share, loaded through its entry point"
+requires-python = ">=3.13"
+dependencies = ["pytest>=9.1.1"]
+
+[dependency-groups]
+dev = ["pytest-cov>=5"]
+
+[project.entry-points.pytest11]
+settings = "pytest_settings"
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+# Test configuration, never shipped in a prod image: versioned from the shared root git tag like
+# every member (see the crawler pyproject for the rationale).
+[tool.hatch.version]
+source = "vcs"
+tag-pattern = '^v(?P<version>\d+\.\d+\.\d+)$'
+fallback-version = "0.0.0"
+
+[tool.hatch.version.raw-options]
+search_parent_directories = true
+git_describe_command = [
+    "git", "describe", "--dirty", "--tags", "--long",
+    "--match", "v[0-9]*.[0-9]*.[0-9]*", "--exclude", "*-*",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pytest_settings"]
+
+# An entry-point plugin is imported before coverage starts: blocked here, `tests/conftest.py` loads it.
+[tool.pytest.ini_options]
+addopts = "-p no:settings --cov=pytest_settings --cov-branch --cov-report=term-missing --cov-fail-under=100 --cov-context=test"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["pytest_settings"]
+
+[tool.deptry]
+# Replaces the default list, whose `tests` pattern silently drops the tests root.
+exclude = ["\\.venv"]
+known_first_party = ["tests"]
+# A pytest plugin, loaded through its entry point and never imported.
+per_rule_ignores = { DEP002 = ["pytest-cov"] }
+
+# Import errors only, mypy checks the types; `.` resolves `tests`, so Serena's renames reach its doubles.
+[tool.pyrefly]
+python-interpreter-path = "../../.venv/bin/python"
+search-path = ["src", "."]
+preset = "off"
+
+[tool.pyrefly.errors]
+missing-import = "error"
+missing-module-attribute = "error"
