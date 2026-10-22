@@ -193,7 +193,7 @@ rows: 16 moves code verbatim, 20 renames and nothing else, 22 renames local name
 |---|---|---|---|
 | 10 | `refactor/local-state-stores` | this spec; the sizing reference's N11 bullet corrected (D7); `SqliteNodeIdStore`, `SqlitePolicyFingerprintStore` (D2); `FakeBackoffStateStore` replaces `SavesRecorded` (D4) | 290, 9 |
 | 12 | `refactor/decision-store` | **exempt** (Corrected: measured at 1175 lines, 16 files; the operator approved the exemption in Act, since the decisions' code and tests move and the step tests take a `decision_store` fixture; not a pure move, the moved tests seed with `insert_file`): `SqliteDecisionStore` out of `SqliteCatalogRepository`, the guard they share in a helper module (Corrected: they share the canonical `native_id` guard, not SQL) (D2) | 400, 10 |
-| 14 | `refactor/observation-store` | the rest becomes `SqliteObservationStore`, `SqliteCatalogScanReader` out of it (D2) | 450, 12 |
+| 14 | `refactor/observation-store` | **exempt** (Corrected: measured at 672 lines, 15 files; the operator approved the exemption in Act, since it takes block 12's shape: the observations' code and tests move and the step tests take an `observation_store` and a `catalog_scan_reader` fixture): the rest becomes `SqliteObservationStore`, `SqliteCatalogScanReader` out of it (D2) | 450, 12 |
 | 16 | `refactor/catalog-readers-split` | **exempt, a verbatim move**: `catalog_read.py` one file per reader, with its tests (D3) | 2100, 10 |
 | 20 | `refactor/names` | **mechanical, exempt**: appendix A's renames, the moves they force, the two column migrations; C1 (D1, D5, D6, D7) | 3500, 200 |
 | 22 | `refactor/local-names-and-prose` | **mechanical, exempt**: local names, docstrings, prose (D11) | 800, 45 |
