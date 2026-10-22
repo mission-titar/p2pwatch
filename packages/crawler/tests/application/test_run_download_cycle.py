@@ -75,6 +75,18 @@ _TARGETS = (
 )
 
 
+class _NoSetStateStore(FakeDownloadStore):
+    """Fails the test on any state change."""
+
+    def set_state(
+        self,
+        file: FileKey,
+        state: Literal[DownloadState.DOWNLOADING, DownloadState.FAILED],
+        failure_reason: FailureReason | None = None,
+    ) -> None:
+        raise AssertionError("set_state must not be called")
+
+
 def _key(hash_hex: str) -> FileKey:
     return FileKey(Network.ED2K, hash_hex)
 
@@ -346,15 +358,6 @@ async def test_monitor_marks_in_progress_when_not_complete() -> None:
 async def test_monitor_does_not_regress_a_completed_queue_entry() -> None:
     # _reconcile_states: a COMPLETED hash present in the amuled queue MUST NOT regress to
     # DOWNLOADING (the completion notification already fired; re-firing it would be noise).
-    class _NoSetStateStore(FakeDownloadStore):
-        def set_state(
-            self,
-            file: FileKey,
-            state: Literal[DownloadState.DOWNLOADING, DownloadState.FAILED],
-            failure_reason: FailureReason | None = None,
-        ) -> None:
-            raise AssertionError("set_state must not be called (completed state)")
-
     client = FakeDownloadClient(listed=[(_status(_A, done=3, total=10),)])
     repo = _NoSetStateStore()
     repo.states[_A] = DownloadState.COMPLETED
@@ -558,18 +561,6 @@ async def test_monitor_no_op_when_state_already_matches() -> None:
     # _reconcile_states: in-progress entry (done=3/full=10) and repo already DOWNLOADING →
     # wanted_state is current → NO set_state (FALSE branch of `if current is not wanted_state`).
     client = FakeDownloadClient(listed=[(_status(_A, done=3, total=10),)])
-    downloads = FakeDownloadStore()
-    downloads.states[_A] = DownloadState.DOWNLOADING
-
-    class _NoSetStateStore(FakeDownloadStore):
-        def set_state(
-            self,
-            file: FileKey,
-            state: Literal[DownloadState.DOWNLOADING, DownloadState.FAILED],
-            failure_reason: FailureReason | None = None,
-        ) -> None:
-            raise AssertionError("set_state must not be called (state already up to date)")
-
     repo = _NoSetStateStore()
     repo.states[_A] = DownloadState.DOWNLOADING
     deps = _deps(

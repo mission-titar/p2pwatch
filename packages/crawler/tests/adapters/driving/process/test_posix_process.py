@@ -6,21 +6,11 @@ import signal
 import pytest
 
 from p2pwatch.adapters.driving.process.posix_process import PosixProcess
-from p2pwatch.ports.driving.shutdown_requester import ShutdownRequester
+from tests.fakes.application.fakes import FakeShutdownRequester
 
 _REQUESTED = (
     "Shutdown requested: finishing in-flight searches, clean close… (Ctrl-C again to force)"
 )
-
-
-class _FakeShutdownRequester(ShutdownRequester):
-    """Sets ``requested`` on each request, for the test to wait on."""
-
-    def __init__(self) -> None:
-        self.requested = asyncio.Event()
-
-    def request_shutdown(self) -> None:
-        self.requested.set()
 
 
 @pytest.mark.asyncio
@@ -28,7 +18,7 @@ class _FakeShutdownRequester(ShutdownRequester):
 async def test_a_first_signal_requests_the_shutdown_and_says_how_to_force(
     signal_number: signal.Signals, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    shutdown_requester = _FakeShutdownRequester()
+    shutdown_requester = FakeShutdownRequester()
 
     async with PosixProcess(shutdown_requester):
         signal.raise_signal(signal_number)
@@ -39,7 +29,7 @@ async def test_a_first_signal_requests_the_shutdown_and_says_how_to_force(
 
 def test_a_second_signal_forces_the_exit(capsys: pytest.CaptureFixture[str]) -> None:
     async def signal_twice() -> None:
-        shutdown_requester = _FakeShutdownRequester()
+        shutdown_requester = FakeShutdownRequester()
         async with PosixProcess(shutdown_requester):
             signal.raise_signal(signal.SIGTERM)
             await shutdown_requester.requested.wait()
@@ -56,7 +46,7 @@ def test_a_second_signal_forces_the_exit(capsys: pytest.CaptureFixture[str]) -> 
 
 @pytest.mark.asyncio
 async def test_on_exit_the_signals_get_their_default_handlers_back() -> None:
-    async with PosixProcess(_FakeShutdownRequester()):
+    async with PosixProcess(FakeShutdownRequester()):
         assert signal.getsignal(signal.SIGINT) is not signal.default_int_handler
         assert signal.getsignal(signal.SIGTERM) is not signal.SIG_DFL
 
@@ -76,7 +66,7 @@ async def test_on_exit_it_closes_all_it_holds_and_lets_only_the_first_error_thro
         raise close_failure
 
     with pytest.raises(ValueError, match="setup failed"):
-        async with PosixProcess(_FakeShutdownRequester()) as resources:
+        async with PosixProcess(FakeShutdownRequester()) as resources:
             resources.callback(closed.append, "catalog")
             resources.push_async_callback(fail_to_close)
             raise ValueError("setup failed")
