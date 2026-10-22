@@ -1,0 +1,12 @@
+id: no-literal-logger-name
+language: python
+severity: error
+message: A logger is named from the code, never by a string literal.
+note: "`StdlibLogger(<Class>.__module__)` in the composition, `logging.getLogger(__name__)` in an adapter: a literal drifts from its module at each move."
+files: ["packages/*/src/**/*.py"]
+rule:
+  kind: call
+  all:
+    - has: { field: function, regex: '^(StdlibLogger|(logging\.)?getLogger)$' }
+    # Any string in the arguments: a plain, keyword, concatenated or formatted one.
+    - has: { field: arguments, has: { kind: string, stopBy: end } }
