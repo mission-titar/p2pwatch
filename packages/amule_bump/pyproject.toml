@@ -29,12 +29,14 @@ git_describe_command = [
 packages = ["src/amule_bump"]
 
 [tool.pytest.ini_options]
-addopts = "--cov=amule_bump --cov-branch --cov-report=term-missing --cov-fail-under=100 --cov-context=test"
+addopts = "--cov=amule_bump --cov=tests --cov-branch --cov-report=term-missing --cov-fail-under=100 --cov-context=test"
 testpaths = ["tests"]
 
 [tool.coverage.run]
 branch = true
-source = ["amule_bump"]
+source = ["amule_bump", "tests"]
+# The doubles and helpers are measured, the tests and conftests are not.
+omit = ["tests/**/test_*.py", "tests/**/conftest.py"]
 
 [tool.deptry]
 # Replaces the default list, whose `tests` pattern silently drops the tests root.
