@@ -41,9 +41,10 @@ Le projet a **deux niveaux** :
    > chacun des 8 paquets, dans des processus séparés, afin de garder la coverage isolée. Un simple
    > `uv run pytest` depuis la racine du dépôt n'est **pas** le gate (la racine n'a pas de config
    > pytest, et un `conftest.py` racine neutralise la collecte, donnant `exit 5`). Les doublures
-   > et utilitaires partagés des tests du crawler vivent dans ses `tests/fakes/` et
-   > `tests/support/` : sa suite les mesure (`--cov=tests`, fichiers de test et conftests exclus),
-   > si bien qu'une ligne ou une branche qu'aucun test n'y exécute fait échouer le gate.
+   > et utilitaires partagés des tests d'un paquet vivent dans ses `tests/fakes` et
+   > `tests/support` : la suite de chaque paquet qui en a les mesure (`--cov=tests`, fichiers de
+   > test et conftests exclus), si bien qu'une ligne ou une branche qu'aucun test n'y exécute fait
+   > échouer le gate. Aucun fichier nommé `test_*.py` n'y vit, puisque la mesure l'exclurait.
 
    Après les suites, `test` lance `_unit-coverage-check` : dans chaque paquet, chaque module doit
    être couvert, instructions et branches, par **ses propres tests**, les fichiers qui portent son

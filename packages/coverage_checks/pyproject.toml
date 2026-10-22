@@ -29,12 +29,14 @@ git_describe_command = [
 packages = ["src/coverage_checks"]
 
 [tool.pytest.ini_options]
-addopts = "--cov=coverage_checks --cov-branch --cov-report=term-missing --cov-fail-under=100 --cov-context=test"
+addopts = "--cov=coverage_checks --cov=tests --cov-branch --cov-report=term-missing --cov-fail-under=100 --cov-context=test"
 testpaths = ["tests"]
 
 [tool.coverage.run]
 branch = true
-source = ["coverage_checks"]
+source = ["coverage_checks", "tests"]
+# The doubles and helpers are measured, the tests and conftests are not.
+omit = ["tests/**/test_*.py", "tests/**/conftest.py"]
 
 [tool.deptry]
 # Replaces the default list, whose `tests` pattern silently drops the tests root.
