@@ -10,7 +10,7 @@ from p2pwatch.adapters.driven.mule_api.errors import (
     ApiUnreachableError,
     error_from_response,
 )
-from p2pwatch.ports.driven.client_errors import (
+from p2pwatch.domain.client_errors import (
     ClientError,
     ClientUnreachableError,
     DownloadRejectedError,

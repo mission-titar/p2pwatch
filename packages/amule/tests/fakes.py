@@ -12,7 +12,8 @@ from p2pwatch_amule.domain.monotonic_instant import MonotonicInstant
 from p2pwatch_amule.domain.settings_error import SettingsError
 from p2pwatch_amule.ports.driven.account_manager import AccountManager
 from p2pwatch_amule.ports.driven.admin_password_setter import AdminPasswordSetter
-from p2pwatch_amule.ports.driven.amule_conf import AmuleConfReader, AmuleConfWriter
+from p2pwatch_amule.ports.driven.amule_conf_reader import AmuleConfReader
+from p2pwatch_amule.ports.driven.amule_conf_writer import AmuleConfWriter
 from p2pwatch_amule.ports.driven.amuled_directory_preparer import AmuledDirectoryPreparer
 from p2pwatch_amule.ports.driven.forwarded_port_reader import ForwardedPortReader
 from p2pwatch_amule.ports.driven.logger import Logger

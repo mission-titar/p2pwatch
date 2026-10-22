@@ -42,11 +42,11 @@ from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.search.answer import SearchAnswer
 from p2pwatch.domain.source import SourceReading
 from p2pwatch.domain.status_reading import ClientStatus
-from p2pwatch.ports.driven.client_status import StatusClient
-from p2pwatch.ports.driven.clock import MonotonicClock
 from p2pwatch.ports.driven.download_client import DownloadClient
+from p2pwatch.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.ports.driven.search_client import SearchClient
 from p2pwatch.ports.driven.source_client import SourceClient
+from p2pwatch.ports.driven.status_client import StatusClient
 
 # Rows asked for per list request. Every list route caps at 100 when `limit` is omitted, which
 # would silently truncate the shared-file sweep completion detection depends on (§7.5).

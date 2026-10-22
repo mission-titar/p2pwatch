@@ -9,11 +9,10 @@ from datetime import datetime
 
 from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
-from p2pwatch.ports.driven.node_id import NodeIdReader, NodeIdWriter
-from p2pwatch.ports.driven.policy_fingerprint import (
-    PolicyFingerprintReader,
-    PolicyFingerprintWriter,
-)
+from p2pwatch.ports.driven.node_id_reader import NodeIdReader
+from p2pwatch.ports.driven.node_id_writer import NodeIdWriter
+from p2pwatch.ports.driven.policy_fingerprint_reader import PolicyFingerprintReader
+from p2pwatch.ports.driven.policy_fingerprint_writer import PolicyFingerprintWriter
 
 _SELECT_NODE_ID = "SELECT value FROM node_runtime WHERE key = 'node_id'"
 

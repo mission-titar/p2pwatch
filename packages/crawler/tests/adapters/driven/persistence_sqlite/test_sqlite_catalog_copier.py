@@ -11,8 +11,8 @@ import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier import SqliteCatalogCopier
+from p2pwatch.domain.catalog_copy_error import CatalogCopyError
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.ports.driven.catalog_copier import CatalogCopyError
 from tests.support.adapters.driven.persistence_sqlite.helpers import (
     HASH_A,
     HASH_B,

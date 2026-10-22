@@ -6,6 +6,7 @@ from datetime import timedelta
 
 from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.application.record_observations import record_observation
+from p2pwatch.domain.client_errors import ClientUnreachableError, SearchFailedError
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.observability.events import (
     ClientUnreachable,
@@ -15,19 +16,17 @@ from p2pwatch.domain.observability.events import (
 from p2pwatch.domain.persisted_wait import remaining_wait
 from p2pwatch.domain.search.answer import SearchAnswer
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState, backoff_delay
-from p2pwatch.ports.driven.catalog import (
-    DecisionReader,
-    DecisionWriter,
-    ObservationReader,
-    ObservationWriter,
-)
-from p2pwatch.ports.driven.client_errors import ClientUnreachableError, SearchFailedError
-from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
+from p2pwatch.ports.driven.decision_reader import DecisionReader
+from p2pwatch.ports.driven.decision_writer import DecisionWriter
+from p2pwatch.ports.driven.event_emitter import EventEmitter
 from p2pwatch.ports.driven.jitter_generator import JitterGenerator
 from p2pwatch.ports.driven.logger import Logger
+from p2pwatch.ports.driven.monotonic_clock import MonotonicClock
+from p2pwatch.ports.driven.observation_reader import ObservationReader
+from p2pwatch.ports.driven.observation_writer import ObservationWriter
 from p2pwatch.ports.driven.search_client import SearchClient
-from p2pwatch.ports.driven.telemetry import EventEmitter
 from p2pwatch.ports.driven.waker import Waker
+from p2pwatch.ports.driven.wall_clock import WallClock
 
 # A ceiling, not a duration: above Kad's 45 s and an ed2k sweep, it guards a search never ending.
 SEARCH_BUDGET_SECONDS = 120.0

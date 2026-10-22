@@ -3,7 +3,8 @@ from datetime import UTC, datetime
 from p2pwatch.adapters.driven.in_memory_status_board import InMemoryStatusBoard
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.status_reading import ClientStatus, PublishedReading, StatusReading
-from p2pwatch.ports.driven.client_status import ClientStatusReader, ClientStatusWriter
+from p2pwatch.ports.driven.client_status_reader import ClientStatusReader
+from p2pwatch.ports.driven.client_status_writer import ClientStatusWriter
 
 _READING = StatusReading(datetime(2026, 6, 12, tzinfo=UTC), ClientStatus("3.0.1", ()))
 

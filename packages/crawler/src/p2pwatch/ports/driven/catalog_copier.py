@@ -5,10 +5,6 @@ from collections.abc import Sequence
 from pathlib import PurePath
 
 
-class CatalogCopyError(Exception):
-    """A catalog that cannot be opened or copied: the source being copied leaves no row."""
-
-
 class CatalogCopier(ABC):
     """Copies every row a destination lacks, never writing to a source."""
 

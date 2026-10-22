@@ -12,7 +12,9 @@ import logging
 
 from p2pwatch.domain.observability.events import Event
 from p2pwatch.domain.observability.policy import Severity, describe
-from p2pwatch.ports.driven.telemetry import EventEmitter, MetricsRecorder, Notifier
+from p2pwatch.ports.driven.event_emitter import EventEmitter
+from p2pwatch.ports.driven.metrics_recorder import MetricsRecorder
+from p2pwatch.ports.driven.notifier import Notifier
 
 _logger = logging.getLogger("p2pwatch.observability")
 

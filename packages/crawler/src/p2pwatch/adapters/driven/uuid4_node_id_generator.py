@@ -2,7 +2,7 @@
 
 import uuid
 
-from p2pwatch.ports.driven.node_id import NodeIdGenerator
+from p2pwatch.ports.driven.node_id_generator import NodeIdGenerator
 
 
 class Uuid4NodeIdGenerator(NodeIdGenerator):

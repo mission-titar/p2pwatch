@@ -1,6 +1,6 @@
 """Requests the crawler's shutdown through its run state."""
 
-from p2pwatch.ports.driven.run_state import RunStateWriter
+from p2pwatch.ports.driven.run_state_writer import RunStateWriter
 from p2pwatch.ports.driving.shutdown_requester import ShutdownRequester
 
 

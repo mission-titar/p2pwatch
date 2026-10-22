@@ -1,4 +1,4 @@
-from p2pwatch.ports.driven.repository_errors import RepositoryError
+from p2pwatch.domain.repository_errors import RepositoryError
 
 
 def test_repository_error_is_an_exception() -> None:

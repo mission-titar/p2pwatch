@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from p2pwatch.ports.driven.clock import WallClock
+from p2pwatch.ports.driven.wall_clock import WallClock
 
 
 class SystemWallClock(WallClock):

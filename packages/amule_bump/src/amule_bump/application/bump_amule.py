@@ -5,7 +5,8 @@ from pathlib import PurePath
 from amule_bump.application.body import build_pull_request_body
 from amule_bump.application.release import is_newer, latest_release_tag, peeled_commit
 from amule_bump.domain.dockerfile import Pin, read_pin, rewrite_pin
-from amule_bump.ports.driven.dockerfile import DockerfileReader, DockerfileWriter
+from amule_bump.ports.driven.dockerfile_reader import DockerfileReader
+from amule_bump.ports.driven.dockerfile_writer import DockerfileWriter
 from amule_bump.ports.driven.pull_request_body_writer import PullRequestBodyWriter
 from amule_bump.ports.driven.repo_reader import RepoReader
 from amule_bump.ports.driven.step_output_writer import StepOutputWriter

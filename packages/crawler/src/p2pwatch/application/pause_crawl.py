@@ -1,6 +1,6 @@
 """Pauses the crawl by pausing its run state."""
 
-from p2pwatch.ports.driven.run_state import RunStateWriter
+from p2pwatch.ports.driven.run_state_writer import RunStateWriter
 from p2pwatch.ports.driving.crawl_pauser import CrawlPauser
 
 

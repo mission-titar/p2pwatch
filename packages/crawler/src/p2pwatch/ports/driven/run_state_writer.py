@@ -1,4 +1,5 @@
-"""The run state: whether the crawler searches or idles, and whether its shutdown was requested."""
+"""``RunStateWriter``: whether the crawler searches or idles, and whether its shutdown was
+requested."""
 
 from abc import ABC, abstractmethod
 
@@ -17,11 +18,3 @@ class RunStateWriter(ABC):
     @abstractmethod
     def shut_down(self) -> None:
         """The crawler shuts down gracefully, and the container restarts it."""
-
-
-class RunStateReader(ABC):
-    """Reads the run state from any thread."""
-
-    @abstractmethod
-    def is_paused(self) -> bool:
-        """Whether the crawler idles."""

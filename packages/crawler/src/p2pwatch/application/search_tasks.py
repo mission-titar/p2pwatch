@@ -9,11 +9,11 @@ from collections.abc import Sequence
 from datetime import timedelta
 
 from p2pwatch.application.search_worker import BackoffRegistry, SearchTask, SearchWorker
+from p2pwatch.domain.repository_errors import RepositoryError
 from p2pwatch.domain.search.keywords import dedupe_keywords
-from p2pwatch.ports.driven.backoff_states import BackoffStateWriter
-from p2pwatch.ports.driven.clock import MonotonicClock
+from p2pwatch.ports.driven.backoff_state_writer import BackoffStateWriter
 from p2pwatch.ports.driven.logger import Logger
-from p2pwatch.ports.driven.repository_errors import RepositoryError
+from p2pwatch.ports.driven.monotonic_clock import MonotonicClock
 
 
 class SearchTaskRunner:

@@ -8,12 +8,8 @@ import pytest
 
 from p2pwatch.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from p2pwatch.domain.invalid_config import InvalidConfigError
-from p2pwatch.ports.driving.catalog_merger import (
-    CatalogMerger,
-    ListedSourceCatalog,
-    MergeError,
-    NewCatalog,
-)
+from p2pwatch.domain.merge_error import MergeError
+from p2pwatch.ports.driving.catalog_merger import CatalogMerger, ListedSourceCatalog, NewCatalog
 from p2pwatch.ports.driving.config_validator import ConfigValidator
 from p2pwatch.ports.driving.crawler_runner import CrawlerRunner
 

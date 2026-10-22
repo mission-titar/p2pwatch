@@ -10,7 +10,8 @@ from p2pwatch_amule.domain.settings import (
 )
 from p2pwatch_amule.ports.driven.account_manager import AccountManager
 from p2pwatch_amule.ports.driven.admin_password_setter import AdminPasswordSetter
-from p2pwatch_amule.ports.driven.amule_conf import AmuleConfReader, AmuleConfWriter
+from p2pwatch_amule.ports.driven.amule_conf_reader import AmuleConfReader
+from p2pwatch_amule.ports.driven.amule_conf_writer import AmuleConfWriter
 from p2pwatch_amule.ports.driven.amuled_directory_preparer import AmuledDirectoryPreparer
 from p2pwatch_amule.ports.driven.service_supervisor import ServiceSupervisor
 from p2pwatch_amule.ports.driving.container_booter import ContainerBooter

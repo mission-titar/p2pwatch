@@ -99,7 +99,8 @@ from p2pwatch.application.search_worker import (
 from p2pwatch.application.status_loop import StatusLoopDeps, status_loop
 from p2pwatch.application.summarize_crawl import SummarizeCrawl
 from p2pwatch.domain.console_query import ConsoleDatabase
-from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
+from p2pwatch.ports.driven.monotonic_clock import MonotonicClock
+from p2pwatch.ports.driven.wall_clock import WallClock
 from p2pwatch.ports.driving.crawler_runner import CrawlerRunner
 
 _logger = logging.getLogger("p2pwatch.composition.app")

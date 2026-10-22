@@ -12,7 +12,7 @@ from threading import Thread
 from prometheus_client import CollectorRegistry, Counter, Gauge
 
 from p2pwatch.domain.observability.policy import MetricInstruction, MetricName
-from p2pwatch.ports.driven.telemetry import MetricsRecorder
+from p2pwatch.ports.driven.metrics_recorder import MetricsRecorder
 
 # The stop runs on the event loop, where no shutdown deadline can cut a blocking call.
 _JOIN_TIMEOUT_SECONDS = 1.0
