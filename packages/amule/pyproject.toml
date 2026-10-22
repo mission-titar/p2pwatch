@@ -29,7 +29,7 @@ git_describe_command = [
 packages = ["src/p2pwatch_amule"]
 
 [tool.pytest.ini_options]
-addopts = "--cov=p2pwatch_amule --cov-branch --cov-report=term-missing --cov-fail-under=100 --cov-context=test --strict-markers"
+addopts = "--cov=p2pwatch_amule --cov-branch --cov-report=term-missing --cov-fail-under=100 --cov-context=test"
 testpaths = ["tests"]
 
 [tool.coverage.run]

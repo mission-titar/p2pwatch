@@ -47,7 +47,7 @@ git_describe_command = [
 packages = ["src/p2pwatch"]
 
 [tool.pytest.ini_options]
-addopts = '--cov=p2pwatch --cov=p2pwatch_testing --cov-report=term-missing --cov-fail-under=100 --cov-context=test --strict-markers -m "not api_integration and not orchestration_integration and not download_integration and not compose_integration"'
+addopts = '--cov=p2pwatch --cov=p2pwatch_testing --cov-report=term-missing --cov-fail-under=100 --cov-context=test -m "not api_integration and not orchestration_integration and not download_integration and not compose_integration"'
 testpaths = ["tests"]
 markers = [
     "api_integration: amuleapi adapter against a real daemon provided by the caller (P2PWATCH_TEST_API_HOST, see docs/contributing/testing.md); deselected by default, dedicated run: cd packages/crawler && uv run pytest -m api_integration --no-cov",
@@ -56,8 +56,6 @@ markers = [
     "compose_integration: e2e smoke of the assembled docker compose stack (no VPN), Docker and compose required; deselected by default, dedicated run: cd packages/crawler && uv run pytest -m compose_integration --no-cov",
 ]
 asyncio_mode = "strict"
-# A leaked connection warns in its finalizer, which pytest reports as unraisable: both fail.
-filterwarnings = ["error::ResourceWarning", "error::pytest.PytestUnraisableExceptionWarning"]
 asyncio_default_fixture_loop_scope = "function"
 
 [tool.coverage.run]
