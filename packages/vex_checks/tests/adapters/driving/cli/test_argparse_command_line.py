@@ -15,6 +15,7 @@ from tests.fakes.application.use_cases.fake_stale_claims_checker import (
     StaleClaimsCheck,
 )
 from vex_checks.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
+from vex_checks.domain.broken_input_error import BrokenInputError
 from vex_checks.domain.claim_problem import ClaimProblem
 
 _CWD = PurePath("/work/repo")
@@ -208,6 +209,21 @@ def test_claim_coverage_with_no_problem_prints_nothing_and_returns_zero(
 
     assert capsys.readouterr().out == ""
     assert checks.claim_coverage_checker.check_count == 1
+
+
+def test_a_broken_input_is_printed_as_one_error_line_and_returns_one(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    checks = _Checks()
+    checks.claim_coverage_checker = FakeClaimCoverageChecker(
+        broken_input_error=BrokenInputError("/work/repo/security/crawler.vex.json: no such file")
+    )
+
+    assert checks.command_line().run(["claim-coverage"]) == 1
+
+    captured = capsys.readouterr()
+    assert captured.err == "error: /work/repo/security/crawler.vex.json: no such file\n"
+    assert captured.out == ""
 
 
 def test_source_claims_is_no_subcommand(capsys: pytest.CaptureFixture[str]) -> None:

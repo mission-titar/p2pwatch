@@ -984,17 +984,17 @@ depends_on = ["vex_checks.domain", "vex_checks.application.ports.driven.code_sca
 [[modules]]
 path = "vex_checks.adapters.driven.filesystem_source_rule_reader"
 layer = "adapters"
-depends_on = ["vex_checks.application.ports.driven.source_rule_reader"]
+depends_on = ["vex_checks.domain", "vex_checks.application.ports.driven.source_rule_reader"]
 
 [[modules]]
 path = "vex_checks.adapters.driven.grype_vulnerability_scanner"
 layer = "adapters"
-depends_on = ["vex_checks.application.ports.driven.vulnerability_scanner"]
+depends_on = ["vex_checks.domain", "vex_checks.application.ports.driven.vulnerability_scanner"]
 
 [[modules]]
 path = "vex_checks.adapters.driven.open_vex_reader"
 layer = "adapters"
-depends_on = ["vex_checks.application.ports.driven.vex_reader"]
+depends_on = ["vex_checks.domain", "vex_checks.application.ports.driven.vex_reader"]
 
 [[modules]]
 path = "vex_checks.adapters.driven.syft_sbom_reader"

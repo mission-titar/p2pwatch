@@ -1,8 +1,10 @@
+import re
 from pathlib import Path
 
 import pytest
 
 from vex_checks.adapters.driven.filesystem_source_rule_reader import FilesystemSourceRuleReader
+from vex_checks.domain.broken_input_error import BrokenInputError
 
 
 def test_read_source_rule_ids_names_each_rule_by_its_file(tmp_path: Path) -> None:
@@ -22,7 +24,9 @@ def test_read_source_rule_ids_refuses_a_rule_whose_id_is_not_its_file_name(
 
     reader = FilesystemSourceRuleReader(rules_directory=tmp_path)
 
-    with pytest.raises(ValueError, match=r"CVE-2099-0001\.yml: its id is not CVE-2099-0001"):
+    with pytest.raises(
+        BrokenInputError, match=r"/CVE-2099-0001\.yml: its id is not CVE-2099-0001$"
+    ):
         reader.read_source_rule_ids()
 
 
@@ -31,12 +35,19 @@ def test_read_source_rule_ids_refuses_a_rule_with_no_id(tmp_path: Path) -> None:
 
     reader = FilesystemSourceRuleReader(rules_directory=tmp_path)
 
-    with pytest.raises(ValueError, match=r"CVE-2025-15366\.yml: its id is not CVE-2025-15366"):
+    with pytest.raises(
+        BrokenInputError, match=r"/CVE-2025-15366\.yml: its id is not CVE-2025-15366$"
+    ):
         reader.read_source_rule_ids()
 
 
-def test_read_source_rule_ids_of_an_absent_directory_raises(tmp_path: Path) -> None:
-    reader = FilesystemSourceRuleReader(rules_directory=tmp_path / "absent")
+def test_read_source_rule_ids_of_an_absent_directory_raises_a_broken_input_naming_it(
+    tmp_path: Path,
+) -> None:
+    rules_directory = tmp_path / "absent"
+    reader = FilesystemSourceRuleReader(rules_directory=rules_directory)
 
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(
+        BrokenInputError, match=f"^{re.escape(str(rules_directory))}: no such directory$"
+    ):
         reader.read_source_rule_ids()

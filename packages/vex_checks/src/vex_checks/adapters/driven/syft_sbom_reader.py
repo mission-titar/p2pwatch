@@ -2,6 +2,7 @@ import json
 from pathlib import Path, PurePath
 
 from vex_checks.application.ports.driven.sbom_reader import SbomReader
+from vex_checks.domain.broken_input_error import BrokenInputError
 from vex_checks.domain.sbom_components import DeclaredComponent, DpkgPackage
 
 
@@ -26,5 +27,9 @@ class SyftSbomReader(SbomReader):
 
 
 def _read_artifacts(sbom_path: PurePath) -> list[dict[str, str]]:
-    artifacts: list[dict[str, str]] = json.loads(Path(sbom_path).read_text())["artifacts"]
+    try:
+        text = Path(sbom_path).read_text()
+    except FileNotFoundError as error:
+        raise BrokenInputError(f"{sbom_path}: no such file") from error
+    artifacts: list[dict[str, str]] = json.loads(text)["artifacts"]
     return artifacts

@@ -1,12 +1,14 @@
 """The command line: parses a subcommand, calls its check, returns the exit code."""
 
 import argparse
+import sys
 from collections.abc import Callable, Sequence
 from pathlib import PurePath
 
 from vex_checks.application.ports.driving.claim_coverage_checker import ClaimCoverageChecker
 from vex_checks.application.ports.driving.image_claims_checker import ImageClaimsChecker
 from vex_checks.application.ports.driving.stale_claims_checker import StaleClaimsChecker
+from vex_checks.domain.broken_input_error import BrokenInputError
 from vex_checks.domain.claim_problem import ClaimProblem
 
 
@@ -71,11 +73,15 @@ class ArgparseCommandLine:
             help="check that every claim maps to one image premise or source rule, and back",
         )
         args = parser.parse_args(argv)
-        if args.command == "image-claims":
-            return self._check_image_claims(args.sbom, args.vex, args.sarif)
-        if args.command == "stale-claims":
-            return self._check_stale_claims(args.sbom, args.vex, args.sarif)
-        return self._check_claim_coverage()
+        try:
+            if args.command == "image-claims":
+                return self._check_image_claims(args.sbom, args.vex, args.sarif)
+            if args.command == "stale-claims":
+                return self._check_stale_claims(args.sbom, args.vex, args.sarif)
+            return self._check_claim_coverage()
+        except BrokenInputError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
 
     def _check_image_claims(
         self, sbom: PurePath, vex: PurePath, sarif_output: PurePath | None
