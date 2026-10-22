@@ -19,6 +19,7 @@ dev = [
   "ast-grep-cli>=0.50.0",
   "vulture>=2.16",
   "tach==0.35.3",
+  "pyrefly==1.4.0",
 ]
 
 [tool.ruff]
@@ -98,7 +99,7 @@ format-fix     = { cmd = "ruff format .", help = "Apply ruff formatting" }
 sql-fix        = { cmd = "sqlfluff fix packages/crawler/src", help = "Auto-fix the SQLite migrations" }
 docs-build     = { cmd = "zensical build --clean --strict", help = "Build the documentation site (fails on broken links)" }
 docs-serve     = { cmd = "zensical serve", help = "Preview the documentation site locally" }
-lint-all       = { help = "Run every static check (no tests)", sequence = ["lint", "format-check", "dependency-check", "code-pattern-check", "architecture-check", "dead-code-check", "type-check", "sql-lint", "template-check"] }
+lint-all       = { help = "Run every static check (no tests)", sequence = ["lint", "format-check", "dependency-check", "code-pattern-check", "architecture-check", "dead-code-check", "type-check", "pyrefly-check", "sql-lint", "template-check"] }
 fix            = { help = "Auto-fix everything mechanical (ruff lint + format + sqlfluff)", sequence = ["lint-fix", "format-fix", "sql-fix"], ignore_fail = "return_non_zero" }
 check          = { help = "The full gate: every static check + all unit tests", sequence = ["lint-all", "test"] }
 
@@ -150,6 +151,20 @@ sequence = [
   { cmd = "mypy src tests", cwd = "packages/template_checks" },
   { cmd = "mypy src tests", cwd = "packages/coverage_checks" },
   { cmd = "mypy src tests", cwd = "packages/amule_bump" },
+]
+
+# One run per package, each from its own `[tool.pyrefly]`: pyrefly's sub-configs cannot change import paths.
+[tool.poe.tasks.pyrefly-check]
+help = "Check each package's imports with pyrefly (src + tests), the resolution Serena's renames rely on"
+sequence = [
+  { cmd = "pyrefly check", cwd = "packages/matching" },
+  { cmd = "pyrefly check", cwd = "packages/crawler" },
+  { cmd = "pyrefly check", cwd = "packages/crawler_testing" },
+  { cmd = "pyrefly check", cwd = "packages/amule" },
+  { cmd = "pyrefly check", cwd = "packages/vex_checks" },
+  { cmd = "pyrefly check", cwd = "packages/template_checks" },
+  { cmd = "pyrefly check", cwd = "packages/coverage_checks" },
+  { cmd = "pyrefly check", cwd = "packages/amule_bump" },
 ]
 
 # `test` runs each package's suite in its own process (cwd) so per-package coverage

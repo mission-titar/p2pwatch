@@ -29,3 +29,13 @@ packages = ["src/p2pwatch_testing"]
 [tool.deptry]
 # Replaces the default list, whose `tests` pattern silently drops a tests root.
 exclude = ["\\.venv"]
+
+# Import errors only, mypy checks the types; `.` resolves `tests`, so Serena's renames reach its doubles.
+[tool.pyrefly]
+python-interpreter-path = "../../.venv/bin/python"
+search-path = ["src", "."]
+preset = "off"
+
+[tool.pyrefly.errors]
+missing-import = "error"
+missing-module-attribute = "error"

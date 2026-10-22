@@ -335,8 +335,8 @@ Déjà en CI :
   requests) et par `release.yml` (à chaque push sur `main` et de tag). Ses jobs :
   - `lint` : `uv run poe lint-all` (ruff, format, dépendances déclarées par deptry, accès
     dynamiques aux attributs et imports du cœur hors de sa liste refusés par ast-grep, imports
-    entre anneaux et entre hexagones vérifiés par tach, code mort par vulture, mypy, sqlfluff,
-    vérification des templates) ;
+    entre anneaux et entre hexagones vérifiés par tach, code mort par vulture, mypy, imports
+    résolus par pyrefly, sqlfluff, vérification des templates) ;
   - `test` : `uv run poe test` (les 7 suites unitaires par paquet, 100 % de branches chacune, et les tests des règles ast-grep des claims de source de `packages/vex_checks/ast-grep/`, puis `_unit-coverage-check`) ;
   - `build-and-verify` : un job **par architecture sur son runner natif** (`amd64` sur
     `ubuntu-latest`, `arm64` sur `ubuntu-24.04-arm`). Chacun construit les **deux images**, le cœur

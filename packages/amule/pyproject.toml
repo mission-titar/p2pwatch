@@ -42,3 +42,13 @@ exclude = ["\\.venv"]
 known_first_party = ["tests"]
 # A pytest plugin, loaded through its entry point and never imported.
 per_rule_ignores = { DEP002 = ["pytest-cov"] }
+
+# Import errors only, mypy checks the types; `.` resolves `tests`, so Serena's renames reach its doubles.
+[tool.pyrefly]
+python-interpreter-path = "../../.venv/bin/python"
+search-path = ["src", "."]
+preset = "off"
+
+[tool.pyrefly.errors]
+missing-import = "error"
+missing-module-attribute = "error"
