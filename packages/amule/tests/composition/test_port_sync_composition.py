@@ -10,12 +10,10 @@ import pytest
 from p2pwatch_amule.composition.port_sync_composition import PortSyncComposition
 from p2pwatch_amule.domain.conf import with_listen_port
 from p2pwatch_amule.domain.settings_error import SettingsError
-from tests.fakes import (
-    FakeCommandRunner,
-    FakeGluetunControlServer,
-    FakeMonotonicClock,
-    FakeOwnership,
-)
+from tests.fakes.adapters.driven.fake_command_runner import FakeCommandRunner
+from tests.fakes.adapters.driven.fake_monotonic_clock import FakeMonotonicClock
+from tests.fakes.adapters.driven.fake_ownership import FakeOwnership
+from tests.fakes.fake_gluetun_control_server import FakeGluetunControlServer
 
 CONF = "[eMule]\nPort=4662\nUDPPort=4672\n\n"
 CAPTURED = {"capture_output": True, "text": True}

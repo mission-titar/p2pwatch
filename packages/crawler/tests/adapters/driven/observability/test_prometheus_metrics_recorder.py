@@ -15,6 +15,7 @@ from p2pwatch.adapters.driven.observability.prometheus_metrics_recorder import (
 from p2pwatch.domain.observability.events import SearchExecuted, SourceFirstUseful
 from p2pwatch.domain.observability.policy import MetricInstruction, MetricName, describe
 from tests.domain.observability.test_policy import CASES
+from tests.fakes.adapters.driven.shut_down_server import ShutDownServer
 
 
 def test_counter_inc_with_label() -> None:
@@ -188,17 +189,11 @@ def test_no_metrics_server_without_a_port() -> None:
     assert threading.enumerate() == threads
 
 
-class _ShutDownServer(socketserver.BaseServer):
-    def shutdown(self) -> None: ...
-
-    def server_close(self) -> None: ...
-
-
 def test_the_stop_gives_up_on_a_server_thread_that_does_not_end() -> None:
     released = threading.Event()
     stuck = threading.Thread(target=released.wait, daemon=True)
     stuck.start()
-    server = _ShutDownServer(("127.0.0.1", 9090), socketserver.BaseRequestHandler)
+    server = ShutDownServer(("127.0.0.1", 9090), socketserver.BaseRequestHandler)
     stop = start_metrics_server(CollectorRegistry(), 9090, lambda port, registry: (server, stuck))
 
     stopping = threading.Thread(target=stop)

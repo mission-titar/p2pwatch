@@ -8,7 +8,8 @@ import pytest
 from p2pwatch_amule.adapters.driven.gluetun_forwarded_port_reader import (
     GluetunForwardedPortReader,
 )
-from tests.fakes import FakeGluetunControlServer, FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.fake_gluetun_control_server import FakeGluetunControlServer
 
 
 @pytest.fixture

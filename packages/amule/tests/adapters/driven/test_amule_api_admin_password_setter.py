@@ -5,7 +5,7 @@ from pathlib import Path
 from p2pwatch_amule.adapters.driven.amule_api_admin_password_setter import (
     AmuleApiAdminPasswordSetter,
 )
-from tests.fakes import FakeCommandRunner
+from tests.fakes.adapters.driven.fake_command_runner import FakeCommandRunner
 
 HOME_DIRECTORY = Path("/home/amule")
 CONFIG_DIRECTORY = HOME_DIRECTORY / ".aMule"

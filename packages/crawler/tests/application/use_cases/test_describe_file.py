@@ -19,7 +19,9 @@ from p2pwatch.domain.matching_read import MatchingExplainer
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceRole
-from tests.fakes.application.fakes import FakeCatalogFileReader, FakeSourceReader, FakeTime
+from tests.fakes.adapters.driven.fake_catalog_file_reader import FakeCatalogFileReader
+from tests.fakes.adapters.driven.fake_source_reader import FakeSourceReader
+from tests.fakes.adapters.driven.fake_time import FakeTime
 
 _NOW = datetime(2026, 10, 14, 20, 0, 0, 654321, tzinfo=UTC)
 _SECOND_NOW = _NOW.replace(microsecond=0)

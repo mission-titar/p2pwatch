@@ -12,7 +12,8 @@ from p2pwatch.domain.paging import PAGE_SIZE
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch.domain.source_history import SourceNameHistory, SourceNaming
-from tests.fakes.application.fakes import FakeSourceReader, FakeTime
+from tests.fakes.adapters.driven.fake_source_reader import FakeSourceReader
+from tests.fakes.adapters.driven.fake_time import FakeTime
 
 _NOW = datetime(2026, 10, 14, 20, 0, 0, 654321, tzinfo=UTC)
 _SECOND_NOW = _NOW.replace(microsecond=0)

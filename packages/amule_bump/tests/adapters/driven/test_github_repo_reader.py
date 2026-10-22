@@ -5,7 +5,7 @@ import pytest
 
 from amule_bump.adapters.driven.github_repo_reader import GitHubRepoReader
 from amule_bump.domain.git_object import GitObject, GitObjectKind
-from tests.fakes import FakeGitHubServer
+from tests.fakes.fake_git_hub_server import FakeGitHubServer
 
 REPO = "/repos/amule-org/amule"
 TAG_OBJECT = "6ccbfdf785390c25c8b01652684f5b06fb18e034"

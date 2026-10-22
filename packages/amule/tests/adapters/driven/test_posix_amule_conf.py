@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from p2pwatch_amule.adapters.driven.posix_amule_conf import PosixAmuleConf
-from tests.fakes import FakeOwnership
+from tests.fakes.adapters.driven.fake_ownership import FakeOwnership
 
 
 def _amule_conf(amule_conf_path: Path, ownership: FakeOwnership) -> PosixAmuleConf:

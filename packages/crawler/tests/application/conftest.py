@@ -11,7 +11,8 @@ from catalog_matching.domain.validation import parse_matcher_config, parse_targe
 from p2pwatch.adapters.driven.config.yaml_loader import load_yaml
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
-from tests.fakes.application.fakes import FakeTime, FakeWallClock
+from tests.fakes.adapters.driven.fake_time import FakeTime
+from tests.fakes.adapters.driven.fake_wall_clock import FakeWallClock
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 # Matcher: single source of truth = deployment config. Targets: the §7 subset of the golden

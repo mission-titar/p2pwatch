@@ -4,35 +4,19 @@ The load-bearing property: every change is HANDED OFF to the crawler loop via
 ``loop.call_soon_threadsafe`` (never applied inline on the caller/webui thread). Two fake loops
 model the two facets:
 
-- ``_ImmediateLoop`` runs the scheduled callback INLINE (models the crawler loop having already
+- ``ImmediateLoop`` runs the scheduled callback INLINE (models the crawler loop having already
   drained the callback), so we can assert which event each method mutates.
-- ``_RecordingLoop`` RECORDS the scheduled callback WITHOUT running it, so we can assert the
+- ``RecordingLoop`` RECORDS the scheduled callback WITHOUT running it, so we can assert the
   mutation is DEFERRED (the event is not touched until the loop runs the callback).
 """
 
 import asyncio
-from collections.abc import Callable
 
 from p2pwatch.adapters.driven.asyncio_run_state import AsyncioRunState
 from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
 from p2pwatch.application.ports.driven.run_state_writer import RunStateWriter
-
-
-class _ImmediateLoop:
-    """Fake loop whose ``call_soon_threadsafe`` runs the callback INLINE."""
-
-    def call_soon_threadsafe(self, callback: Callable[[], None]) -> None:
-        callback()
-
-
-class _RecordingLoop:
-    """Fake loop that RECORDS scheduled callbacks WITHOUT running them (deferral proof)."""
-
-    def __init__(self) -> None:
-        self.callbacks: list[Callable[[], None]] = []
-
-    def call_soon_threadsafe(self, callback: Callable[[], None]) -> None:
-        self.callbacks.append(callback)
+from tests.fakes.adapters.driven.immediate_loop import ImmediateLoop
+from tests.fakes.adapters.driven.recording_loop import RecordingLoop
 
 
 def _run_state_with(
@@ -50,7 +34,7 @@ def _run_state_with(
 
 
 def test_pause_clears_the_resumed_event() -> None:
-    writer, _reader, resumed, shutdown = _run_state_with(_ImmediateLoop())
+    writer, _reader, resumed, shutdown = _run_state_with(ImmediateLoop())
     resumed.set()  # running
     writer.pause()
     assert not resumed.is_set()
@@ -58,7 +42,7 @@ def test_pause_clears_the_resumed_event() -> None:
 
 
 def test_resume_sets_the_resumed_event() -> None:
-    writer, _reader, resumed, shutdown = _run_state_with(_ImmediateLoop())
+    writer, _reader, resumed, shutdown = _run_state_with(ImmediateLoop())
     resumed.clear()  # paused
     writer.resume()
     assert resumed.is_set()
@@ -66,7 +50,7 @@ def test_resume_sets_the_resumed_event() -> None:
 
 
 def test_shut_down_sets_only_the_shutdown_event() -> None:
-    writer, _reader, resumed, shutdown = _run_state_with(_ImmediateLoop())
+    writer, _reader, resumed, shutdown = _run_state_with(ImmediateLoop())
     writer.shut_down()
     assert shutdown.is_set()
     assert not resumed.is_set()
@@ -75,7 +59,7 @@ def test_shut_down_sets_only_the_shutdown_event() -> None:
 def test_mutation_is_deferred_to_the_loop_thread_via_call_soon_threadsafe() -> None:
     """The hand-off goes through ``call_soon_threadsafe``: the event is NOT mutated inline on the
     caller thread; it is scheduled and only mutates once the loop runs the callback."""
-    loop = _RecordingLoop()
+    loop = RecordingLoop()
     writer, _reader, _resumed, shutdown = _run_state_with(loop)
     writer.shut_down()
     # Scheduled, but NOT yet applied (deferred to the crawler loop thread).
@@ -87,7 +71,7 @@ def test_mutation_is_deferred_to_the_loop_thread_via_call_soon_threadsafe() -> N
 
 
 def test_is_paused_reads_the_pause_gate() -> None:
-    _writer, reader, resumed, _shutdown = _run_state_with(_RecordingLoop())
+    _writer, reader, resumed, _shutdown = _run_state_with(RecordingLoop())
     assert reader.is_paused()
     resumed.set()
     assert not reader.is_paused()

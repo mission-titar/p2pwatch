@@ -4,7 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from p2pwatch_amule.adapters.driven.posix_account_manager import PosixAccountManager
-from tests.fakes import FakeCommandRunner
+from tests.fakes.adapters.driven.fake_command_runner import FakeCommandRunner
 
 HOME_DIRECTORY = Path("/home/amule")
 GROUPADD = ["groupadd", "-o", "-g", "1001", "amule"]

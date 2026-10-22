@@ -15,26 +15,11 @@ from amule_bump.application.ports.driving.amule_bumper import (
 )
 from amule_bump.domain.bump_error import BumpError
 from amule_bump.domain.dockerfile import Pin
+from tests.fakes.application.use_cases.fake_amule_bumper import FakeAmuleBumper
 
 CWD = PurePath("/repo")
 TEMPORARY_DIRECTORY = PurePath("/scratch")
 NEW_PIN = Pin("3.1.0", "909d304d993ee07df6c6f6acf501a6d791d53666")
-
-
-class FakeAmuleBumper(AmuleBumper):
-    """Records each call's options, answers with a set outcome or raises a set error."""
-
-    def __init__(self, outcome: AmuleBump | PinIsLatest | PinAheadOfLatest | Exception) -> None:
-        self._outcome = outcome
-        self.calls: list[tuple[PurePath, PurePath, bool]] = []
-
-    def bump_amule(
-        self, dockerfile_path: PurePath, body_path: PurePath, *, dry_run: bool
-    ) -> AmuleBump | PinIsLatest | PinAheadOfLatest:
-        self.calls.append((dockerfile_path, body_path, dry_run))
-        if isinstance(self._outcome, Exception):
-            raise self._outcome
-        return self._outcome
 
 
 def command_line(amule_bumper: AmuleBumper) -> ArgparseCommandLine:

@@ -25,14 +25,11 @@ from p2pwatch.application.steps.run_download_cycle import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.retraction import RETRACTED_TIER
-from tests.fakes.application.fakes import (
-    FakeEventEmitter,
-    FakeLogger,
-    FakeTime,
-    FakeWaker,
-    FakeWallClock,
-    LoggedLine,
-)
+from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
+from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_time import FakeTime
+from tests.fakes.adapters.driven.fake_waker import FakeWaker
+from tests.fakes.adapters.driven.fake_wall_clock import FakeWallClock
 from tests.support.catalog_rows import decision_node_ids, decision_tiers
 
 _NODE = "n1"

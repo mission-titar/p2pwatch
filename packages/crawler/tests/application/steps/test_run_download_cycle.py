@@ -36,22 +36,19 @@ from p2pwatch.domain.source import (
     SourceReading,
     SourceRole,
 )
-from tests.fakes.application.download_fakes import (
-    FakeDecisionReader,
-    FakeDownloadClient,
-    FakeDownloadStore,
-    FakeFreeSpaceMeter,
-    FakeObservationReader,
-    FakeSourceClient,
-    FakeSourcePointStore,
-)
-from tests.fakes.application.fakes import (
-    FakeEventEmitter,
-    FakeLogger,
-    FakeTime,
-    LoggedLine,
-    TickingWallClock,
-)
+from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
+from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
+from tests.fakes.adapters.driven.fake_download_store import FakeDownloadStore
+from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
+from tests.fakes.adapters.driven.fake_free_space_meter import FakeFreeSpaceMeter
+from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader
+from tests.fakes.adapters.driven.fake_source_client import FakeSourceClient
+from tests.fakes.adapters.driven.fake_source_point_store import FakeSourcePointStore
+from tests.fakes.adapters.driven.fake_time import FakeTime
+from tests.fakes.adapters.driven.lagging_download_store import LaggingDownloadStore
+from tests.fakes.adapters.driven.no_set_state_store import NoSetStateStore
+from tests.fakes.adapters.driven.ticking_wall_clock import TickingWallClock
 from tests.support.catalog_rows import insert_file, source_variant_node_ids
 
 _NODE = "n1"
@@ -73,18 +70,6 @@ _TARGETS = (
         status="complete",
     ),
 )
-
-
-class _NoSetStateStore(FakeDownloadStore):
-    """Fails the test on any state change."""
-
-    def set_state(
-        self,
-        file: FileKey,
-        state: Literal[DownloadState.DOWNLOADING, DownloadState.FAILED],
-        failure_reason: FailureReason | None = None,
-    ) -> None:
-        raise AssertionError("set_state must not be called")
 
 
 def _key(hash_hex: str) -> FileKey:
@@ -359,7 +344,7 @@ async def test_monitor_does_not_regress_a_completed_queue_entry() -> None:
     # _reconcile_states: a COMPLETED hash present in the amuled queue MUST NOT regress to
     # DOWNLOADING (the completion notification already fired; re-firing it would be noise).
     client = FakeDownloadClient(listed=[(_status(_A, done=3, total=10),)])
-    repo = _NoSetStateStore()
+    repo = NoSetStateStore()
     repo.states[_A] = DownloadState.COMPLETED
     deps = _deps(client=client, downloads=repo)
     await run_download_cycle(deps, _NODE)
@@ -561,7 +546,7 @@ async def test_monitor_no_op_when_state_already_matches() -> None:
     # _reconcile_states: in-progress entry (done=3/full=10) and repo already DOWNLOADING →
     # wanted_state is current → NO set_state (FALSE branch of `if current is not wanted_state`).
     client = FakeDownloadClient(listed=[(_status(_A, done=3, total=10),)])
-    repo = _NoSetStateStore()
+    repo = NoSetStateStore()
     repo.states[_A] = DownloadState.DOWNLOADING
     deps = _deps(
         client=client,
@@ -1283,17 +1268,10 @@ async def test_a_download_the_node_queued_is_lost_after_lost_after_of_monotonic_
     assert real_downloads.read_tracked_states() == {_key(_A): DownloadState.FAILED}
 
 
-class _LaggingDownloadStore(FakeDownloadStore):
-    """Untracked whenever asked, as if each row had been queued since by another writer."""
-
-    def is_tracked(self, file: FileKey) -> bool:
-        return False
-
-
 @pytest.mark.asyncio
 async def test_a_duplicate_queuing_keeps_the_deadline_its_last_seen_at_leaves() -> None:
     fake_time = FakeTime()
-    downloads = _LaggingDownloadStore()
+    downloads = LaggingDownloadStore()
     downloads.record_queued(_key(_A), "062A", 10, fake_time.wall.now() - timedelta(hours=23))
     deps = _deps(
         client=FakeDownloadClient(),

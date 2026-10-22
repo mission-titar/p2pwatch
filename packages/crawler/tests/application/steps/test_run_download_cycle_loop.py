@@ -3,24 +3,24 @@ from datetime import timedelta
 
 import pytest
 
-from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.steps.run_download_cycle import (
     DOWNLOAD_WAKE_SUBJECT,
     DownloadLoopDeps,
     download_loop,
 )
-from p2pwatch.domain.download.candidate import DownloadCandidate
-from p2pwatch.domain.monotonic_instant import MonotonicInstant
-from tests.fakes.application.download_fakes import (
-    FakeDecisionReader,
-    FakeDownloadClient,
-    FakeDownloadStore,
-    FakeFreeSpaceMeter,
-    FakeObservationReader,
-    FakeSourceClient,
-    FakeSourcePointStore,
-)
-from tests.fakes.application.fakes import FakeEventEmitter, FakeLogger, FakeTime, FakeWaker
+from tests.fakes.adapters.driven.blocking_monotonic_clock import BlockingMonotonicClock
+from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
+from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
+from tests.fakes.adapters.driven.fake_download_store import FakeDownloadStore
+from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
+from tests.fakes.adapters.driven.fake_free_space_meter import FakeFreeSpaceMeter
+from tests.fakes.adapters.driven.fake_logger import FakeLogger
+from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader
+from tests.fakes.adapters.driven.fake_source_client import FakeSourceClient
+from tests.fakes.adapters.driven.fake_source_point_store import FakeSourcePointStore
+from tests.fakes.adapters.driven.fake_time import FakeTime
+from tests.fakes.adapters.driven.fake_waker import FakeWaker
+from tests.fakes.adapters.driven.shutdown_during_cycle_catalog import ShutdownDuringCycleCatalog
 
 _NODE = "n1"
 
@@ -106,18 +106,6 @@ async def test_nudge_wakes_the_loop_before_poll_expires() -> None:
     assert DOWNLOAD_WAKE_SUBJECT in waker.waited_subjects
 
 
-class _ShutdownDuringCycleCatalog(FakeDecisionReader):
-    """Sets ``shutdown`` on the 1st ``read_download_candidates``, mid-cycle."""
-
-    def __init__(self, shutdown: asyncio.Event) -> None:
-        super().__init__()
-        self._shutdown = shutdown
-
-    def read_download_candidates(self) -> tuple[DownloadCandidate, ...]:
-        self._shutdown.set()
-        return ()
-
-
 @pytest.mark.asyncio
 async def test_loop_breaks_when_shutdown_is_set_during_the_cycle() -> None:
     # the `if deps.shutdown.is_set(): break` AFTER the cycle: shutdown set DURING the cycle
@@ -125,32 +113,19 @@ async def test_loop_breaks_when_shutdown_is_set_during_the_cycle() -> None:
     shutdown = asyncio.Event()
     fake_time = FakeTime()
     deps = _loop_deps(waker=FakeWaker(), shutdown=shutdown, fake_time=fake_time)
-    deps.decision_reader = _ShutdownDuringCycleCatalog(shutdown)
+    deps.decision_reader = ShutdownDuringCycleCatalog(shutdown)
     await asyncio.wait_for(download_loop(deps, _NODE), timeout=1.0)
     assert fake_time.sleeps == []  # break before any sleep/wake
-
-
-class _BlockingMonotonicClock(MonotonicClock):
-    """Monotonic clock whose ``sleep`` BLOCKS for good (the wake must win and cancel the sleep).
-
-    ``now`` is unused by the loop; ``sleep`` never resolves, so the pending sleep_task is cancelled.
-    """
-
-    def now(self) -> MonotonicInstant:
-        return MonotonicInstant(0)
-
-    async def sleep(self, duration: timedelta) -> None:
-        await asyncio.Event().wait()  # NEVER resolves
 
 
 @pytest.mark.asyncio
 async def test_nudge_wins_and_cancels_the_pending_sleep() -> None:
     # _sleep_or_wake: wake PRE-armed → the `if not task.done(): task.cancel()` branch is
-    # exercised on the still-running sleep_task (the _BlockingMonotonicClock never resolves it).
+    # exercised on the still-running sleep_task (the BlockingMonotonicClock never resolves it).
     shutdown = asyncio.Event()
     waker = FakeWaker()
     deps = _loop_deps(waker=waker, shutdown=shutdown)
-    deps.monotonic_clock = _BlockingMonotonicClock()
+    deps.monotonic_clock = BlockingMonotonicClock()
     waker.wake(DOWNLOAD_WAKE_SUBJECT)  # wake already armed → wait() returns at once
 
     async def stop_when_waited() -> None:
@@ -168,13 +143,13 @@ async def test_nudge_wins_and_cancels_the_pending_sleep() -> None:
 @pytest.mark.asyncio
 async def test_loop_cancelled_mid_wait_propagates_cleanly() -> None:
     # The real shutdown trigger in prod: CrawlerComposition's TaskGroup cancels the loop task WHILE
-    # it sleeps in _sleep_or_wake. _BlockingMonotonicClock + no wake → the loop parks on
+    # it sleeps in _sleep_or_wake. BlockingMonotonicClock + no wake → the loop parks on
     # asyncio.wait; the cancellation lands there, the finally cancels the children, and the
     # CancelledError propagates cleanly (the loop stops, with no leaked task).
     shutdown = asyncio.Event()  # NEVER set: only cancellation stops the loop
     waker = FakeWaker()
     deps = _loop_deps(waker=waker, shutdown=shutdown)
-    deps.monotonic_clock = _BlockingMonotonicClock()
+    deps.monotonic_clock = BlockingMonotonicClock()
     task = asyncio.ensure_future(download_loop(deps, _NODE))
     # wait until the loop is parked in _sleep_or_wake (wake_task has called wait())
     while DOWNLOAD_WAKE_SUBJECT not in waker.waited_subjects:

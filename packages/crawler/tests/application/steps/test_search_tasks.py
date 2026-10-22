@@ -14,12 +14,8 @@ from typing import Any
 import pytest
 
 from catalog_matching.domain.engine import MatchingEngine
-from p2pwatch.adapters.driven.persistence_sqlite.backoff_state_repository import (
-    SqliteBackoffStateRepository,
-)
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_local
-from p2pwatch.application.ports.driven.search_client import SearchClient
 from p2pwatch.application.steps.search_tasks import SearchTaskRunner
 from p2pwatch.application.steps.search_worker import (
     BackoffPolicy,
@@ -30,17 +26,15 @@ from p2pwatch.application.steps.search_worker import (
 from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import ReportedFile
-from p2pwatch.domain.repository_errors import RepositoryError
-from p2pwatch.domain.search.answer import SearchAnswer
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
-from tests.fakes.application.fakes import (
-    FakeEventEmitter,
-    FakeJitterGenerator,
-    FakeLogger,
-    FakeWaker,
-    LoggedLine,
-    make_unreachable,
-)
+from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
+from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
+from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_search_client import make_unreachable
+from tests.fakes.adapters.driven.fake_waker import FakeWaker
+from tests.fakes.adapters.driven.never_suspends import NeverSuspends
+from tests.fakes.adapters.driven.saves_recorded import SavesRecorded
+from tests.fakes.adapters.driven.timed_client import TimedClient
 from tests.support.catalog_rows import observation_node_ids
 from tests.support.virtual_time import EPOCH, LoopMonotonicClock, LoopWallClock, run_virtual
 
@@ -54,54 +48,10 @@ _POLICY = BackoffPolicy(
 )
 
 
-class _TimedClient(SearchClient):
-    """A search takes its channel's duration in loop time; scripted failures come first."""
-
-    def __init__(
-        self,
-        durations: dict[str, float],
-        *,
-        search_failures: list[Exception] | None = None,
-        reported_files: tuple[ReportedFile, ...] = (),
-    ) -> None:
-        self._channels = tuple(durations)
-        self._durations = durations
-        self._search_failures = search_failures or []
-        self._reported_files = reported_files
-        self.searches: list[tuple[float, str, str]] = []
-
-    def channels(self) -> tuple[str, ...]:
-        return self._channels
-
-    async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
-        self.searches.append((asyncio.get_running_loop().time(), keyword, channel))
-        if self._search_failures:
-            raise self._search_failures.pop(0)
-        await asyncio.sleep(self._durations[channel])
-        return SearchAnswer(self._reported_files, 0)
-
-
-class _SavesRecorded(SqliteBackoffStateRepository):
-    """Records each saved backoff map; the first ``failures`` saves raise."""
-
-    failures = 0
-
-    def __init__(self, connection: sqlite3.Connection) -> None:
-        super().__init__(connection)
-        self.saved: list[dict[BackoffKey, BackoffState]] = []
-
-    def save_backoff_states(self, backoff_state_by_key: dict[BackoffKey, BackoffState]) -> None:
-        if self.failures:
-            self.failures -= 1
-            raise RepositoryError("database is locked")
-        super().save_backoff_states(backoff_state_by_key)
-        self.saved.append(backoff_state_by_key)
-
-
 class _Tasks:
     """The tasks' dependencies, with one client named ``amuled``."""
 
-    def __init__(self, deps: WorkerDeps, state: _SavesRecorded) -> None:
+    def __init__(self, deps: WorkerDeps, state: SavesRecorded) -> None:
         self.deps = deps
         self.state = state
         self.resumed = asyncio.Event()
@@ -151,13 +101,13 @@ def tasks(
         logger=FakeLogger(),
         observation_logger=FakeLogger(),
     )
-    yield _Tasks(deps, _SavesRecorded(connection))
+    yield _Tasks(deps, SavesRecorded(connection))
     connection.close()
 
 
 def test_each_channel_and_keyword_searches_in_its_own_task(tasks: _Tasks) -> None:
     # A channel named `x` needs no code: the tasks never test a channel's name.
-    client = _TimedClient({"x": 30.0, "y": 30.0})
+    client = TimedClient({"x": 30.0, "y": 30.0})
     tasks.run_for(100.0, client, ["keroro", "titar", "keroro", ""])
     assert sorted(client.searches) == sorted(
         (start, keyword, channel)
@@ -171,12 +121,12 @@ def test_a_task_records_its_observations_under_the_node_id_the_tasks_run_with(
     tasks: _Tasks, catalog_connection: sqlite3.Connection
 ) -> None:
     reported_file = ReportedFile(FileKey(Network.ED2K, "a" * 32), "keroro.avi", 1, 1, "keroro")
-    tasks.run_for(40.0, _TimedClient({"x": 30.0}, reported_files=(reported_file,)), ["keroro"])
+    tasks.run_for(40.0, TimedClient({"x": 30.0}, reported_files=(reported_file,)), ["keroro"])
     assert observation_node_ids(catalog_connection) == {_NODE}
 
 
 def test_channels_do_not_wait_for_each_other(tasks: _Tasks) -> None:
-    client = _TimedClient({"ed2k": 6.0, "kad": 60.0})
+    client = TimedClient({"ed2k": 6.0, "kad": 60.0})
     tasks.run_for(_HOUR, client, ["keroro"])
     counts = {name: sum(1 for *_, c in client.searches if c == name) for name in client.channels()}
     assert counts["ed2k"] >= 5 * counts["kad"]
@@ -185,7 +135,7 @@ def test_channels_do_not_wait_for_each_other(tasks: _Tasks) -> None:
 def test_a_paused_task_waits_before_its_next_search_and_finishes_the_one_in_flight(
     tasks: _Tasks,
 ) -> None:
-    client = _TimedClient({"kad": 30.0})
+    client = TimedClient({"kad": 30.0})
 
     async def pause_then_resume() -> None:
         await asyncio.sleep(10.0)
@@ -198,20 +148,20 @@ def test_a_paused_task_waits_before_its_next_search_and_finishes_the_one_in_flig
 
 
 def test_a_failed_channel_sleeps_until_its_backoff_ends(tasks: _Tasks) -> None:
-    client = _TimedClient({"kad": 30.0}, search_failures=[SearchFailedError("refused")])
+    client = TimedClient({"kad": 30.0}, search_failures=[SearchFailedError("refused")])
     tasks.run_for(100.0, client, ["keroro"])
     assert [start for start, *_ in client.searches] == [0.0, 60.0, 90.0]
 
 
 def test_an_unreachable_client_sleeps_until_its_backoff_ends(tasks: _Tasks) -> None:
-    client = _TimedClient({"ed2k": 30.0, "kad": 30.0}, search_failures=[make_unreachable()])
+    client = TimedClient({"ed2k": 30.0, "kad": 30.0}, search_failures=[make_unreachable()])
     tasks.run_for(100.0, client, ["keroro"])
     # The first search fails; the other channel's task meets the backoff it set.
     assert [start for start, *_ in client.searches] == [0.0, 60.0, 60.0, 90.0, 90.0]
 
 
 def test_the_backoff_is_saved_at_each_change(tasks: _Tasks) -> None:
-    client = _TimedClient({"kad": 30.0}, search_failures=[SearchFailedError("refused")])
+    client = TimedClient({"kad": 30.0}, search_failures=[SearchFailedError("refused")])
     tasks.run_for(_HOUR, client, ["keroro"])
     assert [set(saved) for saved in tasks.state.saved] == [{BackoffKey("amuled", "kad")}, set()]
     assert tasks.state.read_backoff_states() == {}
@@ -220,7 +170,7 @@ def test_the_backoff_is_saved_at_each_change(tasks: _Tasks) -> None:
 def test_a_failed_save_is_logged_and_retried_after_the_next_search(tasks: _Tasks) -> None:
     tasks.state.failures = 1
     refused: list[Exception] = [SearchFailedError("refused"), SearchFailedError("refused")]
-    client = _TimedClient({"kad": 30.0}, search_failures=refused)
+    client = TimedClient({"kad": 30.0}, search_failures=refused)
     tasks.run_for(100.0, client, ["keroro"])
     assert tasks.logger.lines == [
         LoggedLine("error", "backoff not saved (database is locked): retried after the next search")
@@ -229,27 +179,8 @@ def test_a_failed_save_is_logged_and_retried_after_the_next_search(tasks: _Tasks
     assert tasks.state.saved == [{BackoffKey("amuled", "kad"): second_failure}]
 
 
-class _NeverSuspends(SearchClient):
-    """A search that returns without suspending, and fails if the loop ran nothing else since
-    the previous one."""
-
-    def __init__(self) -> None:
-        self.calls = 0
-        self.ticks = 0  # advanced by a concurrent coroutine
-        self._ticks_seen = -1
-
-    def channels(self) -> tuple[str, ...]:
-        return ("x",)
-
-    async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
-        self.calls += 1
-        assert self.ticks > self._ticks_seen, "the loop is starved"
-        self._ticks_seen = self.ticks
-        return SearchAnswer((), 0)
-
-
 def test_a_search_that_never_suspends_does_not_starve_the_loop(tasks: _Tasks) -> None:
-    client = _NeverSuspends()
+    client = NeverSuspends()
 
     async def main() -> None:
         searching = asyncio.ensure_future(tasks.searching(client, ["keroro"]))

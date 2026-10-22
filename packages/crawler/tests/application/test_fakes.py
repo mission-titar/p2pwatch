@@ -1,13 +1,18 @@
 """``FakeTime``: the clock step the monotonic clock's tests rely on; ``FakeLogger``: its lines;
-``FakeDecisionReader`` and ``FakeObservationReader``: the reads the download loop never makes."""
+``FakeDecisionReader`` and ``FakeObservationReader``: the reads the download loop never makes;
+``NoSetStateStore``: the state change a cycle never makes."""
 
 from datetime import timedelta
 
 import pytest
 
+from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import FileKey, Network
-from tests.fakes.application.download_fakes import FakeDecisionReader, FakeObservationReader
-from tests.fakes.application.fakes import FakeLogger, FakeTime, LoggedLine
+from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
+from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader
+from tests.fakes.adapters.driven.fake_time import FakeTime
+from tests.fakes.adapters.driven.no_set_state_store import NoSetStateStore
 
 
 def test_a_wall_clock_step_leaves_the_monotonic_clock() -> None:
@@ -53,3 +58,8 @@ def test_the_catalog_reads_refuse_what_the_download_loop_never_reads() -> None:
         FakeDecisionReader().read_latest_decisions(file)
     with pytest.raises(AssertionError, match="filenames"):
         FakeObservationReader().read_known_filenames(file)
+
+
+def test_the_store_refuses_the_state_change_a_cycle_never_makes() -> None:
+    with pytest.raises(AssertionError, match="set_state"):
+        NoSetStateStore().set_state(FileKey(Network.ED2K, "a" * 32), DownloadState.FAILED)

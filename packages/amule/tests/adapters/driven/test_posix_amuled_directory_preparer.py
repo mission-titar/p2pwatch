@@ -5,7 +5,7 @@ from pathlib import Path
 from p2pwatch_amule.adapters.driven.posix_amuled_directory_preparer import (
     PosixAmuledDirectoryPreparer,
 )
-from tests.fakes import FakeOwnership
+from tests.fakes.adapters.driven.fake_ownership import FakeOwnership
 
 
 def test_missing_directories_are_created_then_owned(tmp_path: Path) -> None:

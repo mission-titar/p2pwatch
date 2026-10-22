@@ -20,20 +20,20 @@ from p2pwatch.application.ports.driving.node_describer import NodeDescription
 from p2pwatch.application.ports.driving.source_lister import SourceListing
 from p2pwatch.domain.console_query import ConsoleDatabase, QueryAnswer, QueryFailure
 from p2pwatch.domain.node_state import NodeState
-from tests.fakes.application.fakes import (
+from tests.fakes.application.use_cases.fake_console_query_runner import (
     FakeConsoleQueryRunner,
-    FakeCrawlPauser,
-    FakeCrawlResumer,
-    FakeCrawlSummarizer,
-    FakeFileDescriber,
-    FakeFileLister,
-    FakeNodeDescriber,
-    FakeShutdownRequester,
-    FakeSourceDescriber,
-    FakeSourceLister,
-    FakeSourceNameDescriber,
     RunConsoleQueryCall,
 )
+from tests.fakes.application.use_cases.fake_crawl_pauser import FakeCrawlPauser
+from tests.fakes.application.use_cases.fake_crawl_resumer import FakeCrawlResumer
+from tests.fakes.application.use_cases.fake_crawl_summarizer import FakeCrawlSummarizer
+from tests.fakes.application.use_cases.fake_file_describer import FakeFileDescriber
+from tests.fakes.application.use_cases.fake_file_lister import FakeFileLister
+from tests.fakes.application.use_cases.fake_node_describer import FakeNodeDescriber
+from tests.fakes.application.use_cases.fake_shutdown_requester import FakeShutdownRequester
+from tests.fakes.application.use_cases.fake_source_describer import FakeSourceDescriber
+from tests.fakes.application.use_cases.fake_source_lister import FakeSourceLister
+from tests.fakes.application.use_cases.fake_source_name_describer import FakeSourceNameDescriber
 
 _HASH_A = "a" * 32
 _SQL = "SELECT native_id FROM files"

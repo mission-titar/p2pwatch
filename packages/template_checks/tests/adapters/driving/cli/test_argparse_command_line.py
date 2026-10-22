@@ -1,44 +1,16 @@
 """The command line: one subcommand per check, over a templates directory taken under ``cwd``."""
 
-from pathlib import Path, PurePath
+from pathlib import Path
 
 import pytest
 
 from template_checks.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
-from template_checks.application.ports.driving.logic_free_checker import (
-    LogicFreeChecker,
-    LogicFreeReport,
-)
-from template_checks.application.ports.driving.template_attribute_lister import (
-    TemplateAttributeLister,
-    TemplateAttributeListing,
+from tests.fakes.application.use_cases.fake_logic_free_checker import FakeLogicFreeChecker
+from tests.fakes.application.use_cases.fake_template_attribute_lister import (
+    FakeTemplateAttributeLister,
 )
 
 _CWD = Path("/work")
-
-
-class FakeTemplateAttributeLister(TemplateAttributeLister):
-    """Lists the attributes it is given, recording each directory it is asked for."""
-
-    def __init__(self, *template_attributes: str) -> None:
-        self._template_attributes = frozenset(template_attributes)
-        self.templates_directories: list[PurePath] = []
-
-    def list_template_attributes(self, templates_directory: PurePath) -> TemplateAttributeListing:
-        self.templates_directories.append(templates_directory)
-        return TemplateAttributeListing(template_attributes=self._template_attributes)
-
-
-class FakeLogicFreeChecker(LogicFreeChecker):
-    """Reports the problems it is given, recording each directory it is asked for."""
-
-    def __init__(self, *problems: str) -> None:
-        self._problems = problems
-        self.templates_directories: list[PurePath] = []
-
-    def check_logic_free(self, templates_directory: PurePath) -> LogicFreeReport:
-        self.templates_directories.append(templates_directory)
-        return LogicFreeReport(problems=self._problems)
 
 
 def _command_line(

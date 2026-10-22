@@ -2,7 +2,7 @@ from pathlib import PurePath
 
 from template_checks.application.ports.driving.logic_free_checker import LogicFreeReport
 from template_checks.application.use_cases.check_logic_free import CheckLogicFree
-from tests.fakes import FakeTemplateReader
+from tests.fakes.adapters.driven.fake_template_reader import FakeTemplateReader
 
 
 def test_check_logic_free_reports_the_constructs_of_the_directory_s_templates() -> None:

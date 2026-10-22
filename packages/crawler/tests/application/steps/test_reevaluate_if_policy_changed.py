@@ -9,7 +9,8 @@ import pytest
 
 from p2pwatch.application.steps.reevaluate_catalog import ReevaluationSummary
 from p2pwatch.application.steps.reevaluate_if_policy_changed import reevaluate_if_policy_changed
-from tests.fakes.application.fakes import FakeLogger, FakePolicyFingerprintStore, LoggedLine
+from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_policy_fingerprint_store import FakePolicyFingerprintStore
 
 _SUMMARY = ReevaluationSummary(files_evaluated=3, rows_written=1)
 

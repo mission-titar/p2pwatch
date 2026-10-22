@@ -9,14 +9,11 @@ import pytest
 from p2pwatch_amule.application.port_sync_lifecycle import PortSyncLifecycle
 from p2pwatch_amule.domain.conf import with_listen_port
 from p2pwatch_amule.domain.settings import PortSyncSettings
-from tests.fakes import (
-    FakeAmuleConf,
-    FakeForwardedPortReader,
-    FakeLogger,
-    FakeMonotonicClock,
-    FakeServiceSupervisor,
-    LoggedLine,
-)
+from tests.fakes.adapters.driven.fake_amule_conf import FakeAmuleConf
+from tests.fakes.adapters.driven.fake_forwarded_port_reader import FakeForwardedPortReader
+from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_monotonic_clock import FakeMonotonicClock
+from tests.fakes.adapters.driven.fake_service_supervisor import FakeServiceSupervisor
 
 DOWN = "stop amuled"
 UP = "start amuled"

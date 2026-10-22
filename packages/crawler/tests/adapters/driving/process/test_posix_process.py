@@ -6,7 +6,7 @@ import signal
 import pytest
 
 from p2pwatch.adapters.driving.process.posix_process import PosixProcess
-from tests.fakes.application.fakes import FakeShutdownRequester
+from tests.fakes.application.use_cases.fake_shutdown_requester import FakeShutdownRequester
 
 _REQUESTED = (
     "Shutdown requested: finishing in-flight searches, clean close… (Ctrl-C again to force)"

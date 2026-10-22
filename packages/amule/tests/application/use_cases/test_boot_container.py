@@ -8,13 +8,11 @@ import pytest
 from p2pwatch_amule.application.use_cases.boot_container import BootContainer
 from p2pwatch_amule.domain.conf import reconcile_conf
 from p2pwatch_amule.domain.settings_error import SettingsError
-from tests.fakes import (
-    FakeAccountManager,
-    FakeAdminPasswordSetter,
-    FakeAmuleConf,
-    FakeAmuledDirectoryPreparer,
-    FakeServiceSupervisor,
-)
+from tests.fakes.adapters.driven.fake_account_manager import FakeAccountManager
+from tests.fakes.adapters.driven.fake_admin_password_setter import FakeAdminPasswordSetter
+from tests.fakes.adapters.driven.fake_amule_conf import FakeAmuleConf
+from tests.fakes.adapters.driven.fake_amuled_directory_preparer import FakeAmuledDirectoryPreparer
+from tests.fakes.adapters.driven.fake_service_supervisor import FakeServiceSupervisor
 
 DIGEST = hashlib.md5(b"hunter2").hexdigest()
 

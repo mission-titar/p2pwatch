@@ -25,17 +25,16 @@ from p2pwatch.domain.observability.events import (
 )
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
-from tests.fakes.application.fakes import (
-    FakeEventEmitter,
-    FakeJitterGenerator,
-    FakeLogger,
+from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
+from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
+from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_search_client import (
     FakeSearchClient,
-    FakeTime,
-    FakeWaker,
-    LoggedLine,
     make_search_failed,
     make_unreachable,
 )
+from tests.fakes.adapters.driven.fake_time import FakeTime
+from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.support.catalog_rows import (
     count_observations,
     decision_node_ids,

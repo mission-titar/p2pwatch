@@ -51,24 +51,26 @@ from p2pwatch.domain.sharing_period import SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory, SourceNaming
 from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus, StatusReading
-from tests.fakes.application.fakes import (
+from tests.fakes.adapters.driven.fake_time import FakeTime
+from tests.fakes.application.use_cases.fake_console_query_runner import FakeConsoleQueryRunner
+from tests.fakes.application.use_cases.fake_crawl_pauser import FakeCrawlPauser
+from tests.fakes.application.use_cases.fake_crawl_resumer import FakeCrawlResumer
+from tests.fakes.application.use_cases.fake_crawl_summarizer import FakeCrawlSummarizer
+from tests.fakes.application.use_cases.fake_file_describer import (
     DescribeFileCall,
-    DescribeSourceCall,
-    DescribeSourceNameCall,
-    FakeConsoleQueryRunner,
-    FakeCrawlPauser,
-    FakeCrawlResumer,
-    FakeCrawlSummarizer,
     FakeFileDescriber,
-    FakeFileLister,
-    FakeNodeDescriber,
-    FakeShutdownRequester,
+)
+from tests.fakes.application.use_cases.fake_file_lister import FakeFileLister, ListFilesCall
+from tests.fakes.application.use_cases.fake_node_describer import FakeNodeDescriber
+from tests.fakes.application.use_cases.fake_shutdown_requester import FakeShutdownRequester
+from tests.fakes.application.use_cases.fake_source_describer import (
+    DescribeSourceCall,
     FakeSourceDescriber,
-    FakeSourceLister,
+)
+from tests.fakes.application.use_cases.fake_source_lister import FakeSourceLister, ListSourcesCall
+from tests.fakes.application.use_cases.fake_source_name_describer import (
+    DescribeSourceNameCall,
     FakeSourceNameDescriber,
-    FakeTime,
-    ListFilesCall,
-    ListSourcesCall,
 )
 
 # ---------------------------------------------------------------------------
