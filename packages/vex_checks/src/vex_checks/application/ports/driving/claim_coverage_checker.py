@@ -3,16 +3,12 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-
-@dataclass(frozen=True)
-class ClaimCoverageProblem:
-    advisory_id: str
-    message: str
+from vex_checks.domain.claim_problem import ClaimProblem
 
 
 @dataclass(frozen=True)
 class ClaimCoverageReport:
-    problems: tuple[ClaimCoverageProblem, ...]  # in the order of their advisory ids, then messages
+    problems: tuple[ClaimProblem, ...]  # in the order of their advisory ids, then messages
 
 
 class ClaimCoverageChecker(ABC):
