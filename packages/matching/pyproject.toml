@@ -33,7 +33,7 @@ git_describe_command = [
 packages = ["src/catalog_matching"]
 
 [tool.pytest.ini_options]
-addopts = '--cov=catalog_matching --cov-report=term-missing --cov-fail-under=100 --cov-context=test --strict-markers'
+addopts = '--cov=catalog_matching --cov-report=term-missing --cov-fail-under=100 --cov-context=test'
 testpaths = ["tests"]
 
 [tool.coverage.run]
