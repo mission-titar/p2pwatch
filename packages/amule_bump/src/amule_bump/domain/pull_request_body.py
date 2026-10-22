@@ -1,11 +1,13 @@
 import difflib
 import re
 import textwrap
+from collections.abc import Sequence
+from dataclasses import dataclass
 
-from amule_bump.application.ports.driven.upstream_client import UpstreamClient
 from amule_bump.domain.dockerfile import Pin
 from amule_bump.domain.upstream import UPSTREAM
 
+CHANGELOG_PATH = "docs/CHANGELOG.md"
 CHANGELOG_MAX_CHARACTERS = 20_000
 DIFF_MAX_CHARACTERS = 18_000
 WATCHED_FILES = ("cmake/options.cmake", "docs/api/REFERENCE.md")
@@ -22,8 +24,21 @@ CHECKLIST = """## Checklist
 """
 
 
+@dataclass(frozen=True)
+class WatchedFile:
+    """One of the ``WATCHED_FILES``, its text at the old pin's tag and at the new one's."""
+
+    path: str
+    old_text: str
+    new_text: str
+
+
 def build_pull_request_body(
-    upstream_client: UpstreamClient, old: Pin, new: Pin, changelog_width_characters: int
+    old: Pin,
+    new: Pin,
+    changelog: str,
+    watched_files: Sequence[WatchedFile],
+    changelog_width_characters: int,
 ) -> str:
     upstream = f"https://github.com/{UPSTREAM}"
     parts = [
@@ -31,12 +46,12 @@ def build_pull_request_body(
         f" (commit `{new.commit}`). Full upstream diff:"
         f" {upstream}/compare/{old.version}...{new.version}",
         "## Changelog",
-        _changelog_part(upstream_client, new, changelog_width_characters),
+        _changelog_part(changelog, new, changelog_width_characters),
     ]
-    for path in WATCHED_FILES:
+    for watched_file in watched_files:
         parts += [
-            f"## `{path}` ({old.version} to {new.version})",
-            _diff_part(upstream_client, old, new, path),
+            f"## `{watched_file.path}` ({old.version} to {new.version})",
+            _diff_part(old, new, watched_file),
         ]
     parts.append(CHECKLIST.format(version=new.version))
     return "\n\n".join(parts)
@@ -53,11 +68,11 @@ def changelog_section(changelog: str, version: str) -> str:
     return "".join(kept).strip()
 
 
-def tag_diff(upstream_client: UpstreamClient, old: Pin, new: Pin, path: str) -> str:
-    before = upstream_client.read_file(old.version, path).splitlines()
-    after = upstream_client.read_file(new.version, path).splitlines()
-    labels = (f"{old.version}/{path}", f"{new.version}/{path}")
-    diff = difflib.unified_diff(before, after, *labels, lineterm="")
+def tag_diff(old: Pin, new: Pin, watched_file: WatchedFile) -> str:
+    labels = (f"{old.version}/{watched_file.path}", f"{new.version}/{watched_file.path}")
+    diff = difflib.unified_diff(
+        watched_file.old_text.splitlines(), watched_file.new_text.splitlines(), *labels, lineterm=""
+    )
     return "".join(f"{line}\n" for line in diff)
 
 
@@ -83,19 +98,15 @@ def fenced(text: str, language: str) -> str:
     return f"{fence}{language}\n{text.removesuffix('\n')}\n{fence}"
 
 
-def _changelog_part(
-    upstream_client: UpstreamClient, new: Pin, changelog_width_characters: int
-) -> str:
-    section = changelog_section(
-        upstream_client.read_file(new.version, "docs/CHANGELOG.md"), new.version
-    )
+def _changelog_part(changelog: str, new: Pin, changelog_width_characters: int) -> str:
+    section = changelog_section(changelog, new.version)
     if not section:
-        return f"No `## Version {new.version}` section in upstream's docs/CHANGELOG.md."
+        return f"No `## Version {new.version}` section in upstream's {CHANGELOG_PATH}."
     return fenced(clip(wrap(section, changelog_width_characters), CHANGELOG_MAX_CHARACTERS), "text")
 
 
-def _diff_part(upstream_client: UpstreamClient, old: Pin, new: Pin, path: str) -> str:
-    diff = tag_diff(upstream_client, old, new, path)
+def _diff_part(old: Pin, new: Pin, watched_file: WatchedFile) -> str:
+    diff = tag_diff(old, new, watched_file)
     if not diff:
         return "No change between the two tags."
     return fenced(clip(diff, DIFF_MAX_CHARACTERS), "diff")

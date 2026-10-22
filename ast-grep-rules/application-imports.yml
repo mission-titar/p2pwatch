@@ -8,4 +8,4 @@ ignores: ["packages/*/src/*/application/ports/**"]
 rule:
   matches: imported-module
   not:
-    regex: ^(asyncio|collections\.abc|contextlib|dataclasses|datetime|difflib|pathlib|re|textwrap|typing|(amule_bump|catalog_matching|coverage_checks|p2pwatch|p2pwatch_amule|template_checks|vex_checks)(\.\w+)*)$
+    regex: ^(asyncio|collections\.abc|contextlib|dataclasses|datetime|pathlib|re|typing|(amule_bump|catalog_matching|coverage_checks|p2pwatch|p2pwatch_amule|template_checks|vex_checks)(\.\w+)*)$
