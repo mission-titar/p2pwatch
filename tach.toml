@@ -905,11 +905,7 @@ depends_on = []
 [[modules]]
 path = "template_checks.__main__"
 layer = "composition"
-depends_on = [
-  "template_checks.adapters.driven.filesystem_template_reader",
-  "template_checks.adapters.driving.cli",
-  "template_checks.application.use_cases",
-]
+depends_on = ["template_checks.composition"]
 
 [[modules]]
 path = "template_checks.adapters.driven.filesystem_template_reader"
@@ -927,12 +923,21 @@ depends_on = [
 [[modules]]
 path = "template_checks.application.use_cases"
 layer = "use_cases"
-visibility = ["*.__main__", "*.composition"]
+visibility = ["*.composition"]
 depends_on = [
   "template_checks.application.ports.driven.template_reader",
   "template_checks.application.ports.driving.logic_free_checker",
   "template_checks.application.ports.driving.template_attribute_lister",
   "template_checks.domain",
+]
+
+[[modules]]
+path = "template_checks.composition"
+layer = "composition"
+depends_on = [
+  "template_checks.adapters.driven.filesystem_template_reader",
+  "template_checks.adapters.driving.cli",
+  "template_checks.application.use_cases",
 ]
 
 [[modules]]
@@ -958,16 +963,7 @@ depends_on = []
 [[modules]]
 path = "vex_checks.__main__"
 layer = "composition"
-depends_on = [
-  "vex_checks.adapters.driven.filesystem_source_rule_reader",
-  "vex_checks.adapters.driven.grype_vulnerability_scanner",
-  "vex_checks.adapters.driven.json_sarif_writer",
-  "vex_checks.adapters.driven.json_vex_reader",
-  "vex_checks.adapters.driven.syft_sbom_reader",
-  "vex_checks.adapters.driving.cli",
-  "vex_checks.application.use_cases",
-  "vex_checks.domain",
-]
+depends_on = ["vex_checks.composition"]
 
 [[modules]]
 path = "vex_checks.adapters.driven.filesystem_source_rule_reader"
@@ -1007,7 +1003,7 @@ depends_on = [
 [[modules]]
 path = "vex_checks.application.use_cases"
 layer = "use_cases"
-visibility = ["*.__main__", "*.composition"]
+visibility = ["*.composition"]
 depends_on = [
   "vex_checks.application.ports.driven.sarif_writer",
   "vex_checks.application.ports.driven.sbom_reader",
@@ -1017,6 +1013,20 @@ depends_on = [
   "vex_checks.application.ports.driving.claim_coverage_checker",
   "vex_checks.application.ports.driving.image_claims_checker",
   "vex_checks.application.ports.driving.stale_claims_checker",
+  "vex_checks.domain",
+]
+
+[[modules]]
+path = "vex_checks.composition"
+layer = "composition"
+depends_on = [
+  "vex_checks.adapters.driven.filesystem_source_rule_reader",
+  "vex_checks.adapters.driven.grype_vulnerability_scanner",
+  "vex_checks.adapters.driven.json_sarif_writer",
+  "vex_checks.adapters.driven.json_vex_reader",
+  "vex_checks.adapters.driven.syft_sbom_reader",
+  "vex_checks.adapters.driving.cli",
+  "vex_checks.application.use_cases",
   "vex_checks.domain",
 ]
 
