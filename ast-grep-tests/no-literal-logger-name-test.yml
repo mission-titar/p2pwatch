@@ -1,0 +1,19 @@
+id: no-literal-logger-name
+valid:
+  - StdlibLogger(MergeCatalogs.__module__)
+  - StdlibLogger(name)
+  - _logger = logging.getLogger(__name__)
+  - root_logger = logging.getLogger()
+  - self._logger = logging.getLogger(name)
+  - logger.info("store failure")
+invalid:
+  - StdlibLogger("p2pwatch.anything")
+  - StdlibLogger(name="p2pwatch.anything")
+  - logging.getLogger("x")
+  - getLogger("x")
+  - StdlibLogger(f"p2pwatch.{name}")
+  - |
+    StdlibLogger(
+        "p2pwatch.application"
+        ".download_loop"
+    )
