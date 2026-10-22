@@ -45,7 +45,7 @@ does not follow it yet.
   URL, a width) being its constants; `__main__.py` reads the process state (argv, env, cwd, the root logger, the
   temporary directory) and calls `build_command_line(...).run(argv)`. Where the graph a driving port runs depends on
   what the command line has just read, the composition implements that port (`CrawlerComposition`,
-  `PortSyncComposition`). Hard rules, block 66. (Corrected: also where the graph holds a resource for one call,
+  `PortSyncComposition`). Hard rules, block 68 (Corrected: from 66, split at the line bound). (Corrected: also where the graph holds a resource for one call,
   `UnitCoverageComposition` holding coverage.py's `TemporaryDirectory()`, which `build_command_line` cannot clean up.)
 - **C4. Doubles**: one fake per port, except a `<Thing>Writer` and `<Thing>Reader` pair, which share one
   `Fake<Thing>Store`. A fake is an adapter for tests, in the ring of what it replaces, one `Fake*` class per file,
@@ -183,7 +183,8 @@ ignores, the docs) and nothing else; 30 is the fold, which also removes a packag
 | 60 | `refactor/crawler-composition` | `build_command_line` in the crawler; `AGENTS.md`'s "bind fixed in `__main__.py`" (D8) | 250, 7 |
 | 62 | `refactor/amule-composition` | the same for `p2pwatch_amule` (D8) | 350, 7 |
 | 64 | `refactor/vex-template-composition` | the same for `vex_checks` and `template_checks` (D8) | 330, 10 |
-| 66 | `refactor/bump-coverage-composition` | the same for `amule_bump` and `coverage_checks`; C3 in `AGENTS.md` (D8) | 390, 11 |
+| 66 | `refactor/bump-coverage-composition` | the same for `amule_bump` (D8) (Corrected: narrowed to `amule_bump`, split at the line bound) | 390, 11 |
+| 68 | `refactor/coverage-composition` | the same for `coverage_checks`; C3 in `AGENTS.md` (D8) (Corrected: split from 66 at the line bound) | 305, 11 (measured) |
 | 70 | `refactor/fakes-in-their-ring` | **mechanical, exempt**: one file per fake in the ring of what it replaces, the doubles defined in test modules moved there, every package (D5) | 4000, 170 |
 | 72 | `test/fakes-layout` | the test of the doubles' layout; C4 in `AGENTS.md` (D5, D9) | 150, 4 |
 | 90 | `docs/test-tooling-and-layout-wrap` | closing block: the holistic findings, backlog, handoff | |
@@ -191,7 +192,7 @@ ignores, the docs) and nothing else; 30 is the fold, which also removes a packag
 - The tooling comes first so that the layout's renames reach the fakes (D1). The fakes move into their ring (70)
   after the ports have (52), so that no fake moves a third time (30 moves the crawler's, 70 splits every package's);
   the splits (40, 42) come before, since they do not depend on paths.
-- 32 follows 30 (the crawler's measure first); 54 follows 52 (the rules on the moved tree); 60 to 66 follow 52 (the
+- 32 follows 30 (the crawler's measure first); 54 follows 52 (the rules on the moved tree); 60 to 68 follow 52 (the
   renamed compositions); 72 follows 70.
 
 ## Acceptance
@@ -251,6 +252,6 @@ in the lead's scratchpad), recounted by the spec's review (`.reviews/lot-a-spec.
 - `p2pwatch_testing`: 13 files, 1540 lines; 56 importer files. Doubles defined in test modules: 22 `Fake*` classes in
   17 files, plus 7 driving-port fakes.
 - The ledger as one lot: about 67 blocks (tooling 8, layout 13, names 26, design 20). Regrouped with the mechanical
-  exemption: A 17 blocks; B about 12 (one mechanical block of renames, about five normal blocks of names, five of the
+  exemption: A 17 blocks (Corrected: 18, block 66 split at the line bound); B about 12 (one mechanical block of renames, about five normal blocks of names, five of the
   other hexagons, the closing one); C about 16 (the design sizing's 21 with its closing one, less the other hexagons'
   five).
