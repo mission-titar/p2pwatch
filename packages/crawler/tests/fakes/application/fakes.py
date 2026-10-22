@@ -6,7 +6,8 @@
 ``TickingMonotonicClock``: each read a second after the previous one.
 ``FakeJitterGenerator``: FIXED jitter (determinism). ``FakeLogger``: keeps each line it is given.
 ``FakeNodeIdStore`` and ``FakeNodeIdGenerator``: the node id's stored and new values.
-``FakeRunState``: keeps each change; ``FakeCrawlControls``: each control the webui calls.
+``FakeRunState``: keeps each change; ``FakeCrawlPauser``, ``FakeCrawlResumer`` and
+``FakeShutdownRequester``: each control the webui calls.
 ``FakeClientStatusReader``: reads the readings it is given; ``FakeNodeStateReader``, the state.
 ``FakeCrawlSummarizer`` and ``FakeNodeDescriber``: the dashboard's and the node page's use cases.
 ``FakeWaker``: captures woken subjects. The repos are the REAL SQLite repos
@@ -200,8 +201,8 @@ class FakeRunState(RunStateWriter, RunStateReader):
         return self.paused
 
 
-class FakeCrawlControls(CrawlPauser, CrawlResumer, ShutdownRequester):
-    """The three control use cases: keeps each call by its operation's name."""
+class FakeCrawlPauser(CrawlPauser):
+    """Keeps each call by its operation's name."""
 
     def __init__(self) -> None:
         self.calls: list[str] = []
@@ -209,8 +210,22 @@ class FakeCrawlControls(CrawlPauser, CrawlResumer, ShutdownRequester):
     def pause_crawl(self) -> None:
         self.calls.append("pause_crawl")
 
+
+class FakeCrawlResumer(CrawlResumer):
+    """Keeps each call by its operation's name."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
     def resume_crawl(self) -> None:
         self.calls.append("resume_crawl")
+
+
+class FakeShutdownRequester(ShutdownRequester):
+    """Keeps each call by its operation's name."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
 
     def request_shutdown(self) -> None:
         self.calls.append("request_shutdown")

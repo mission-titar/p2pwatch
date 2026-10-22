@@ -1,7 +1,7 @@
 """TDD tests for the Starlette application (adapters/driving/webui/app.py, Task 11)."""
 
 import re
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -56,11 +56,13 @@ from tests.fakes.application.fakes import (
     DescribeSourceCall,
     DescribeSourceNameCall,
     FakeConsoleQueryRunner,
-    FakeCrawlControls,
+    FakeCrawlPauser,
+    FakeCrawlResumer,
     FakeCrawlSummarizer,
     FakeFileDescriber,
     FakeFileLister,
     FakeNodeDescriber,
+    FakeShutdownRequester,
     FakeSourceDescriber,
     FakeSourceLister,
     FakeSourceNameDescriber,
@@ -81,8 +83,21 @@ _FAKE_TIME = FakeTime(datetime(2026, 10, 14, 20, 0, tzinfo=UTC))
 _WALL_CLOCK = _FAKE_TIME.wall
 
 
+@dataclass(frozen=True)
+class _Controls:
+    """The three control use cases' fakes, ``calls`` the operations the routes called on them."""
+
+    pauser: FakeCrawlPauser = field(default_factory=FakeCrawlPauser)
+    resumer: FakeCrawlResumer = field(default_factory=FakeCrawlResumer)
+    shutdown_requester: FakeShutdownRequester = field(default_factory=FakeShutdownRequester)
+
+    @property
+    def calls(self) -> list[str]:
+        return self.pauser.calls + self.resumer.calls + self.shutdown_requester.calls
+
+
 # The read-path fixtures never call the controls, and read the crawl as running.
-_NO_CONTROLS = FakeCrawlControls()
+_NO_CONTROLS = _Controls()
 _NODE_STATE = NodeState(
     node_id="node-test-001",
     created_at=datetime(2024, 1, 1, tzinfo=UTC),
@@ -143,7 +158,7 @@ def _app_on_fakes(
     source_describer: FakeSourceDescriber = _NO_SOURCE_DESCRIBER,
     source_name_describer: FakeSourceNameDescriber = _NO_SOURCE_NAME_DESCRIBER,
     target_segments: tuple[TargetSegment, ...] | None = None,
-    controls: FakeCrawlControls = _NO_CONTROLS,
+    controls: _Controls = _NO_CONTROLS,
     amule_url: str = _AMULE_URL,
 ) -> Starlette:
     import p2pwatch.adapters.driving.webui
@@ -153,9 +168,9 @@ def _app_on_fakes(
         target_segments=_targets() if target_segments is None else target_segments,
         templates_dir=webui_dir / "templates",
         static_dir=webui_dir / "static",
-        crawl_pauser=controls,
-        crawl_resumer=controls,
-        shutdown_requester=controls,
+        crawl_pauser=controls.pauser,
+        crawl_resumer=controls.resumer,
+        shutdown_requester=controls.shutdown_requester,
         crawl_summarizer=FakeCrawlSummarizer(crawl_summary),
         node_describer=FakeNodeDescriber(NodeDescription(node_state)),
         file_lister=file_lister,
@@ -1006,9 +1021,9 @@ async def test_a_template_reading_what_its_context_lacks_raises(
         target_segments=_targets(),
         templates_dir=templates_dir,
         static_dir=Path(p2pwatch.adapters.driving.webui.__file__).parent / "static",
-        crawl_pauser=_NO_CONTROLS,
-        crawl_resumer=_NO_CONTROLS,
-        shutdown_requester=_NO_CONTROLS,
+        crawl_pauser=_NO_CONTROLS.pauser,
+        crawl_resumer=_NO_CONTROLS.resumer,
+        shutdown_requester=_NO_CONTROLS.shutdown_requester,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
         file_lister=_NO_FILE_LISTER,
@@ -1389,15 +1404,15 @@ async def test_files_whole_episode_renders_one_row_with_aggregated_targets() -> 
 
 
 @pytest.fixture
-def controls_app() -> tuple[Starlette, FakeCrawlControls]:
+def controls_app() -> tuple[Starlette, _Controls]:
     """App wired with fake controls, for the runtime-control route tests."""
-    controls = FakeCrawlControls()
+    controls = _Controls()
     return _app_on_fakes(controls=controls), controls
 
 
 @pytest.mark.asyncio
 async def test_dashboard_renders_the_three_action_forms_and_the_running_crawl(
-    controls_app: tuple[Starlette, FakeCrawlControls],
+    controls_app: tuple[Starlette, _Controls],
 ) -> None:
     app, _ = controls_app
     text = await _page(app, "/")
@@ -1415,7 +1430,7 @@ async def test_dashboard_shows_a_paused_crawl() -> None:
 
 @pytest.mark.asyncio
 async def test_the_controls_page_and_its_nav_entry_are_gone(
-    controls_app: tuple[Starlette, FakeCrawlControls],
+    controls_app: tuple[Starlette, _Controls],
 ) -> None:
     app, _ = controls_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -1427,7 +1442,7 @@ async def test_the_controls_page_and_its_nav_entry_are_gone(
 
 @pytest.mark.asyncio
 async def test_dashboard_without_done_shows_no_banner(
-    controls_app: tuple[Starlette, FakeCrawlControls],
+    controls_app: tuple[Starlette, _Controls],
 ) -> None:
     app, _ = controls_app
     assert "control-banner" not in await _page(app, "/")
@@ -1435,7 +1450,7 @@ async def test_dashboard_without_done_shows_no_banner(
 
 @pytest.mark.asyncio
 async def test_dashboard_unknown_done_shows_no_banner(
-    controls_app: tuple[Starlette, FakeCrawlControls],
+    controls_app: tuple[Starlette, _Controls],
 ) -> None:
     app, _ = controls_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -1446,7 +1461,7 @@ async def test_dashboard_unknown_done_shows_no_banner(
 
 @pytest.mark.asyncio
 async def test_there_is_no_force_cycle_control(
-    controls_app: tuple[Starlette, FakeCrawlControls],
+    controls_app: tuple[Starlette, _Controls],
 ) -> None:
     app, controls = controls_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -1465,7 +1480,7 @@ async def test_there_is_no_force_cycle_control(
     ],
 )
 async def test_each_control_dispatches_and_redirects_to_the_dashboard(
-    controls_app: tuple[Starlette, FakeCrawlControls], action: str, call: str, done: str
+    controls_app: tuple[Starlette, _Controls], action: str, call: str, done: str
 ) -> None:
     app, controls = controls_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -1489,7 +1504,7 @@ async def test_each_control_dispatches_and_redirects_to_the_dashboard(
 )
 @pytest.mark.asyncio
 async def test_each_control_followed_lands_on_its_dashboard_banner(
-    controls_app: tuple[Starlette, FakeCrawlControls], action: str, banner: str
+    controls_app: tuple[Starlette, _Controls], action: str, banner: str
 ) -> None:
     app, controls = controls_app
     async with AsyncClient(

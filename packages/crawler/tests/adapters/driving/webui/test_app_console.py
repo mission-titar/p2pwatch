@@ -22,11 +22,13 @@ from p2pwatch.ports.driving.node_describer import NodeDescription
 from p2pwatch.ports.driving.source_lister import SourceListing
 from tests.fakes.application.fakes import (
     FakeConsoleQueryRunner,
-    FakeCrawlControls,
+    FakeCrawlPauser,
+    FakeCrawlResumer,
     FakeCrawlSummarizer,
     FakeFileDescriber,
     FakeFileLister,
     FakeNodeDescriber,
+    FakeShutdownRequester,
     FakeSourceDescriber,
     FakeSourceLister,
     FakeSourceNameDescriber,
@@ -65,15 +67,14 @@ def _build(console_query_runner: FakeConsoleQueryRunner) -> Starlette:
 
     templates_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "templates"
     static_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "static"
-    controls = FakeCrawlControls()  # the console routes never call them
     node_state = NodeState(node_id=None, created_at=None, downloads=(), backoff_state_by_key={})
     return build_app(
         target_segments=_targets(),
         templates_dir=templates_dir,
         static_dir=static_dir,
-        crawl_pauser=controls,
-        crawl_resumer=controls,
-        shutdown_requester=controls,
+        crawl_pauser=FakeCrawlPauser(),  # the console routes never call the controls
+        crawl_resumer=FakeCrawlResumer(),
+        shutdown_requester=FakeShutdownRequester(),
         crawl_summarizer=FakeCrawlSummarizer(CrawlSummary((), False, node_state, ())),
         node_describer=FakeNodeDescriber(NodeDescription(node_state)),
         file_lister=FakeFileLister(FileListing((), False, 0, 0, {})),
