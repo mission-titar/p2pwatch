@@ -88,7 +88,9 @@ Each goes into `AGENTS.md` in the block where the whole tree first follows it.
   change, not a rename: three blocks (10, 12, 14), before the mechanical one so no class is renamed twice; each new
   file takes its final name at once (`test_sqlite_decision_store_latest_decisions.py`, not `..._last_decisions.py`).
 - **D3. `catalog_read.py` splits one file per reader**: `sqlite_coverage_reader.py`, `sqlite_source_reader.py`,
-  `sqlite_catalog_file_reader.py`, the SQL they share in a helper module. Why: an adapter file is its class in snake
+  `sqlite_catalog_file_reader.py`, the SQL they share in a helper module (Corrected: they share no SQL, only
+  `_EPOCH`, `_MICROSECOND` and `_micros`, which each file keeps as the package's other modules do; the seeds the
+  tests share move to `tests/support/catalog_seeds.py`). Why: an adapter file is its class in snake
   case (N2), and 719 lines hold three adapters. Block 16 moves the code verbatim, with its tests (1315 lines): a
   pure move, which takes the size exemption, since no cut under the bounds takes fewer than four blocks.
 - **D4. `SavesRecorded` becomes a `FakeBackoffStateStore`**, a fake of the `BackoffStateWriter` /
