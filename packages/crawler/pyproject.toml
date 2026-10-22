@@ -92,6 +92,7 @@ exclude_also = ["if TYPE_CHECKING:"]
 "tests/application/test_fakes.py" = "the fakes of tests/fakes"
 "tests/composition/test_prod_targets.py" = "deploy/targets.yml"
 "tests/integration/" = "a real daemon or the compose stack: integration suites, deselected by marker"
+"tests/test_port_files.py" = "every hexagon's port files: one port per file"
 "tests/test_workspace_dependencies.py" = "every package's pyproject.toml: hexagon isolation"
 
 [tool.sqlfluff.core]
