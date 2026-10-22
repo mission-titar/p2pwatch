@@ -163,7 +163,6 @@ jobs:
           uv run python -m vex_checks image-claims
           --sbom /tmp/sbom.syft.json
           --vex "$VEX"
-          --format fail
 
       # --- Publish (reached only when every gate above passed) -------------------------------
 

@@ -1,7 +1,7 @@
 """The command line: one subcommand per check, which it calls with typed arguments."""
 
 from collections.abc import Sequence
-from pathlib import Path
+from pathlib import PurePath
 
 import pytest
 
@@ -18,16 +18,12 @@ from vex_checks.adapters.driving.cli.argparse_command_line import ArgparseComman
 from vex_checks.application.ports.driving.claim_coverage_checker import ClaimCoverageProblem
 from vex_checks.domain.violations import Violation
 
-_CWD = Path("/work/repo")
+_CWD = PurePath("/work/repo")
 _IMAGE_COMMANDS = ["image-claims", "stale-claims"]
 _SARIF_OPTIONS = pytest.mark.parametrize(
     ("options", "sarif_output"),
-    [
-        ([], None),
-        (["--format", "sarif", "--output", "o.sarif"], _CWD / "o.sarif"),
-        (["--format", "fail", "--output", "o.sarif"], None),
-    ],
-    ids=["fail-by-default", "sarif-to-the-output", "output-ignored-without-sarif"],
+    [([], None), (["--sarif", "o.sarif"], _CWD / "o.sarif")],
+    ids=["printed-by-default", "sarif-to-its-path"],
 )
 _PROBLEMS = (
     Violation("CVE-A", "dpkg package 'nghttp2' is present", "security/crawler.vex.openvex.json"),
@@ -65,7 +61,7 @@ class _Checks:
 
 @_SARIF_OPTIONS
 def test_image_claims_checks_the_sbom_the_vex_and_its_sarif_output_under_the_cwd(
-    options: list[str], sarif_output: Path | None
+    options: list[str], sarif_output: PurePath | None
 ) -> None:
     checks = _Checks()
 
@@ -80,19 +76,22 @@ def test_image_claims_checks_the_sbom_the_vex_and_its_sarif_output_under_the_cwd
 @pytest.mark.parametrize(
     ("vex", "vex_path"),
     [
-        ("../security/v.json", Path("/work/security/v.json")),
-        ("/tmp/v.json", Path("/tmp/v.json")),
+        ("../security/v.json", PurePath("/work/repo/../security/v.json")),
+        ("/tmp/v.json", PurePath("/tmp/v.json")),
     ],
-    ids=["relative-resolved-under-the-cwd", "absolute-as-given"],
+    ids=["relative-under-the-cwd-unresolved", "absolute-as-given"],
 )
-def test_an_image_check_is_given_the_vex_resolved_under_the_cwd(vex: str, vex_path: Path) -> None:
+def test_an_image_check_is_given_the_vex_under_the_cwd_as_written(
+    vex: str, vex_path: PurePath
+) -> None:
     checks = _Checks()
 
     checks.command_line().run(["image-claims", "--sbom", "/s.json", "--vex", vex])
     checks.command_line().run(["stale-claims", "--sbom", "/s.json", "--vex", vex])
 
-    assert checks.image_claims_checker.checks == [ImageClaimsCheck(Path("/s.json"), vex_path, None)]
-    assert checks.stale_claims_checker.checks == [StaleClaimsCheck(Path("/s.json"), vex_path, None)]
+    sbom_path = PurePath("/s.json")
+    assert checks.image_claims_checker.checks == [ImageClaimsCheck(sbom_path, vex_path, None)]
+    assert checks.stale_claims_checker.checks == [StaleClaimsCheck(sbom_path, vex_path, None)]
 
 
 @pytest.mark.parametrize("command", _IMAGE_COMMANDS)
@@ -129,17 +128,7 @@ def test_an_image_check_asked_for_sarif_prints_nothing_and_returns_zero_despite_
     checks = _Checks(_PROBLEMS)
 
     exit_code = checks.command_line().run(
-        [
-            command,
-            "--sbom",
-            "s.json",
-            "--vex",
-            "v.json",
-            "--format",
-            "sarif",
-            "--output",
-            "o",
-        ]
+        [command, "--sbom", "s.json", "--vex", "v.json", "--sarif", "o"]
     )
 
     assert exit_code == 0
@@ -148,7 +137,7 @@ def test_an_image_check_asked_for_sarif_prints_nothing_and_returns_zero_despite_
 
 @_SARIF_OPTIONS
 def test_stale_claims_checks_the_sbom_the_vex_and_its_sarif_output_under_the_cwd(
-    options: list[str], sarif_output: Path | None
+    options: list[str], sarif_output: PurePath | None
 ) -> None:
     checks = _Checks()
 
@@ -161,20 +150,17 @@ def test_stale_claims_checks_the_sbom_the_vex_and_its_sarif_output_under_the_cwd
 
 
 @pytest.mark.parametrize("command", _IMAGE_COMMANDS)
-def test_the_sarif_format_without_an_output_exits_2_with_the_subcommand_usage(
-    command: str, capsys: pytest.CaptureFixture[str]
+@pytest.mark.parametrize("option", ["--format", "--output"])
+def test_an_image_check_refuses_the_former_format_and_output_options(
+    command: str, option: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     checks = _Checks()
 
     with pytest.raises(SystemExit) as exit_info:
-        checks.command_line().run(
-            [command, "--sbom", "s.json", "--vex", "v.json", "--format", "sarif"]
-        )
+        checks.command_line().run([command, "--sbom", "s.json", "--vex", "v.json", option, "o"])
 
     assert exit_info.value.code == 2
-    err = capsys.readouterr().err
-    assert err.startswith(f"usage: vex_checks {command} ")
-    assert "--output is required with --format sarif" in err
+    assert f"unrecognized arguments: {option} o" in capsys.readouterr().err
     assert checks.ran_none()
 
 
