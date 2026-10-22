@@ -110,7 +110,8 @@ does not follow it yet.
   `_unit-coverage-check` leaves them out, which it already does: it lists modules under `src` and test files as
   `tests/**/test_*.py`, so a double or a helper is neither (prototype: no change to `coverage_checks`). The crawler's
   two test files that test doubles (`test_fakes.py`, `test_api_fakes.py`) keep their `tests_without_unit` entries and
-  follow their doubles. Measured as `--cov=tests` with `tests/**/test_*.py` and `tests/**/conftest.py` omitted:
+  follow their doubles. (Corrected: they keep their entries where they are, since C5 keeps test files out of
+  `tests/fakes/`.) Measured as `--cov=tests` with `tests/**/test_*.py` and `tests/**/conftest.py` omitted:
   `--cov=tests.support` warns in a package where nothing imports it, and the crawler's `tests/integration/conftest.py`
   holds a fixture only the deselected suites run (57 % on `main`).
 - **D5. One fake per port, a Writer/Reader pair sharing a store fake, each in the ring of what it replaces** (C4).
@@ -127,7 +128,9 @@ does not follow it yet.
   Duplicated inline doubles (four `_FakeSourceReader`s, two `_FakeCatalogFileReader`s, ...) become one, in the
   module of doubles of their package until block 70. The layout test checks the place, one double per file named
   after it, and that a fake implementing ports implements one, or one Writer/Reader pair: by test, not by convention.
-  (Corrected: from "one `Fake*` class per file", block 70.)
+  (Corrected: from "one `Fake*` class per file", block 70.) (Corrected: block 90 adds that a pair whose two ports
+  have doubles has one double implementing both, and that no class under `tests/` outside `tests/fakes/` implements
+  a port.)
 - **D6. The rings of `application/`** (C1), in every hexagon: the ports move from their own ring into
   `application/ports/`, as Hombergs and Graça place them, for familiarity (R12); the use cases and the steps are
   kept apart so that tach keeps the use cases away from the lifecycle's stages (R4, R14). The modules that call no
@@ -194,7 +197,8 @@ ignores, the docs) and nothing else; 30 is the fold, which also removes a packag
 | 68 | `refactor/coverage-composition` | the same for `coverage_checks`; C3 in `AGENTS.md` (D8) (Corrected: split from 66 at the line bound) | 305, 11 (measured) |
 | 70 | `refactor/fakes-in-their-ring` | **mechanical, exempt**: one file per fake in the ring of what it replaces, the doubles defined in test modules moved there, every package (D5) | 4000, 170 |
 | 72 | `test/fakes-layout` | the test of the doubles' layout; C4 in `AGENTS.md` (D5, D9) | 150, 4 |
-| 90 | `docs/test-tooling-and-layout-wrap` | closing block: the holistic findings, backlog, handoff | |
+| 90 | `docs/test-tooling-and-layout-wrap` | closing block: the holistic findings, backlog, handoff (Corrected: narrowed to the findings' layout fixes, split at the file bound) | 228, 13 (measured) |
+| 92 | `refactor/pair-fakes-named-store` | closing block, second part: the three pair fakes named `Fake<Thing>Store`, the docs' findings, the spec's corrections, the handoff (Corrected: split from 90 at the file bound) | |
 
 - The tooling comes first so that the layout's renames reach the fakes (D1). The fakes move into their ring (70)
   after the ports have (52), so that no fake moves a third time (30 moves the crawler's, 70 splits every package's);
@@ -226,7 +230,11 @@ ignores, the docs) and nothing else; 30 is the fold, which also removes a packag
    holding two `Fake*` classes, and on a fake implementing two unrelated ports.
 8. **The rename reaches the fakes**: a Serena `rename_symbol` from `RepoReader.read_file` and from
    `VexReader.read_claims`, run on a scratch branch, leaves `git grep -w <old name> -- packages/` empty. On `main` it
-   leaves 3 sites each (9 of 12, 8 of 11 reached).
+   leaves 3 sites each (9 of 12, 8 of 11 reached). (Corrected: met at the top, measured by the lead on 2026-10-22 with
+   a freshly restarted Serena on a scratch branch at `f42c605f`: 9 and 8 sites changed, `git grep -w` empty after
+   each, the fakes included. The baseline on `main` is an accepted limit, not re-measured: a fresh `pyrefly lsp`
+   reached every site on `main`'s configuration (block 10), while `pyrefly check` 1.4.0 from the root on `main`
+   reports `Cannot find module tests.fakes` 23 times.)
 9. **Nothing out of scope changes**: the diff shows no change under `deploy/`, `security/`, the crawler's
    `migrations/`, `packages/amule/docker/`, the Dockerfiles and `.github/workflows/`; CI's integration suites pass on
    both architectures at the top.
@@ -259,6 +267,6 @@ in the lead's scratchpad), recounted by the spec's review (`.reviews/lot-a-spec.
 - `p2pwatch_testing`: 13 files, 1540 lines; 56 importer files. Doubles defined in test modules: 22 `Fake*` classes in
   17 files, plus 7 driving-port fakes.
 - The ledger as one lot: about 67 blocks (tooling 8, layout 13, names 26, design 20). Regrouped with the mechanical
-  exemption: A 17 blocks (Corrected: 18, block 66 split at the line bound); B about 12 (one mechanical block of renames, about five normal blocks of names, five of the
+  exemption: A 17 blocks (Corrected: 18, block 66 split at the line bound; then 19, block 90 split at the file bound); B about 12 (one mechanical block of renames, about five normal blocks of names, five of the
   other hexagons, the closing one); C about 16 (the design sizing's 21 with its closing one, less the other hexagons'
   five).
