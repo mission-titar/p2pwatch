@@ -2,7 +2,7 @@
 
 import random
 
-from p2pwatch.ports.driven.jitter_generator import JitterGenerator
+from p2pwatch.application.ports.driven.jitter_generator import JitterGenerator
 
 
 class RandomJitterGenerator(JitterGenerator):

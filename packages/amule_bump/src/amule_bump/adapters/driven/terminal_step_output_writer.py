@@ -1,6 +1,6 @@
 from pathlib import PurePath
 
-from amule_bump.ports.driven.step_output_writer import StepOutputWriter
+from amule_bump.application.ports.driven.step_output_writer import StepOutputWriter
 
 
 class TerminalStepOutputWriter(StepOutputWriter):

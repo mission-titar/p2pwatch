@@ -4,10 +4,10 @@ import argparse
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
+from vex_checks.application.ports.driving.claim_coverage_checker import ClaimCoverageChecker
+from vex_checks.application.ports.driving.image_claims_checker import ImageClaimsChecker
+from vex_checks.application.ports.driving.stale_claims_checker import StaleClaimsChecker
 from vex_checks.domain.violations import Violation
-from vex_checks.ports.driving.claim_coverage_checker import ClaimCoverageChecker
-from vex_checks.ports.driving.image_claims_checker import ImageClaimsChecker
-from vex_checks.ports.driving.stale_claims_checker import StaleClaimsChecker
 
 
 def _add_image_options(

@@ -1,8 +1,8 @@
 import json
 from pathlib import Path, PurePath
 
+from vex_checks.application.ports.driven.sbom_reader import SbomReader
 from vex_checks.domain.sbom_components import DeclaredComponent, DpkgPackage
-from vex_checks.ports.driven.sbom_reader import SbomReader
 
 
 class SyftSbomReader(SbomReader):

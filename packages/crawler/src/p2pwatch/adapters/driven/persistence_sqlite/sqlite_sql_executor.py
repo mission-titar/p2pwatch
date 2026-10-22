@@ -41,9 +41,9 @@ from datetime import timedelta
 from pathlib import Path
 
 from p2pwatch.adapters.driven.persistence_sqlite.reader import open_reader
+from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
+from p2pwatch.application.ports.driven.sql_executor import SqlExecutor
 from p2pwatch.domain.console_query import QueryAnswer, QueryFailure
-from p2pwatch.ports.driven.monotonic_clock import MonotonicClock
-from p2pwatch.ports.driven.sql_executor import SqlExecutor
 
 # The VM-step granularity of the budget's check.
 _PROGRESS_INSTRUCTIONS = 1000

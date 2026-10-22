@@ -5,8 +5,11 @@ from pathlib import Path, PurePath
 import pytest
 
 from template_checks.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
-from template_checks.ports.driving.logic_free_checker import LogicFreeChecker, LogicFreeReport
-from template_checks.ports.driving.template_attribute_lister import (
+from template_checks.application.ports.driving.logic_free_checker import (
+    LogicFreeChecker,
+    LogicFreeReport,
+)
+from template_checks.application.ports.driving.template_attribute_lister import (
     TemplateAttributeLister,
     TemplateAttributeListing,
 )

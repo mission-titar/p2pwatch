@@ -1,7 +1,7 @@
 from collections.abc import Mapping
 from pathlib import PurePath
 
-from template_checks.ports.driven.template_reader import TemplateReader
+from template_checks.application.ports.driven.template_reader import TemplateReader
 
 
 class FakeTemplateReader(TemplateReader):

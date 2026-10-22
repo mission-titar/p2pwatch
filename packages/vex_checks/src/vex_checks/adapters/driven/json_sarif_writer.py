@@ -2,8 +2,8 @@ import json
 from collections.abc import Sequence
 from pathlib import Path, PurePath
 
+from vex_checks.application.ports.driven.sarif_writer import SarifWriter
 from vex_checks.domain.violations import Violation
-from vex_checks.ports.driven.sarif_writer import SarifWriter
 
 
 class JsonSarifWriter(SarifWriter):

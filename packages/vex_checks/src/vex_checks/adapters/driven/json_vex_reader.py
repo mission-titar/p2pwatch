@@ -1,7 +1,7 @@
 import json
 from pathlib import Path, PurePath
 
-from vex_checks.ports.driven.vex_reader import VexReader
+from vex_checks.application.ports.driven.vex_reader import VexReader
 
 
 class JsonVexReader(VexReader):

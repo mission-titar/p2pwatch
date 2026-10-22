@@ -30,7 +30,7 @@ def human_size(size_bytes: int) -> str:
 
     Unit convention: BINARY (1024-based), matching this codebase's existing ``size_mib``
     convention (the matching engine's ``attr_between`` on ``size_mib`` is computed as
-    ``size_bytes / (1024 * 1024)``, cf. ``application/matching_read.py``: "binary Mio"). The
+    ``size_bytes / (1024 * 1024)``, cf. ``domain/matching_read.py``: "binary Mio"). The
     ``KB``/``MB``/``GB``/``TB`` labels are the familiar (if technically imprecise) ones, not
     ``KiB``/``MiB``/``GiB``/``TiB``. Rounds to the nearest whole unit: an operator-facing
     display, not a precise byte count.

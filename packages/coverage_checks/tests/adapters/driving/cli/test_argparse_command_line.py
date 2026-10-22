@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from coverage_checks.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
-from coverage_checks.ports.driving.unit_coverage_checker import (
+from coverage_checks.application.ports.driving.unit_coverage_checker import (
     NoPerTestCoverage,
     UnitCoverageReport,
 )

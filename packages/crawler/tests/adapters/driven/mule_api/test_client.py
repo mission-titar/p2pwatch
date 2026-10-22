@@ -14,6 +14,8 @@ from p2pwatch.adapters.driven.mule_api.errors import (
     ApiRejectedError,
     ApiUnreachableError,
 )
+from p2pwatch.application.ports.driven.download_client import DownloadClient
+from p2pwatch.application.ports.driven.source_client import SourceClient
 from p2pwatch.domain.client_errors import (
     ClientUnreachableError,
     DownloadRejectedError,
@@ -25,8 +27,6 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.source import SourceRole
 from p2pwatch.domain.status_reading import ChannelStatus
-from p2pwatch.ports.driven.download_client import DownloadClient
-from p2pwatch.ports.driven.source_client import SourceClient
 from tests.fakes.adapters.mule_api.api_fakes import PASSWORD, TOKEN, FakeAmuleApi, error
 
 _HASH = "8b54a3c20fae9e4b9f7e0c2c8c01b6b1"

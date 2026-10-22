@@ -6,13 +6,13 @@ from collections.abc import Sequence
 from pathlib import PurePath
 from typing import assert_never
 
-from amule_bump.domain.bump_error import BumpError
-from amule_bump.ports.driving.amule_bumper import (
+from amule_bump.application.ports.driving.amule_bumper import (
     AmuleBump,
     AmuleBumper,
     PinAheadOfLatest,
     PinIsLatest,
 )
+from amule_bump.domain.bump_error import BumpError
 
 
 class ArgparseCommandLine:

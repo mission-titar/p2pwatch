@@ -2,8 +2,8 @@ import os
 from collections.abc import Callable
 from pathlib import Path
 
-from p2pwatch_amule.ports.driven.amule_conf_reader import AmuleConfReader
-from p2pwatch_amule.ports.driven.amule_conf_writer import AmuleConfWriter
+from p2pwatch_amule.application.ports.driven.amule_conf_reader import AmuleConfReader
+from p2pwatch_amule.application.ports.driven.amule_conf_writer import AmuleConfWriter
 
 
 class PosixAmuleConf(AmuleConfReader, AmuleConfWriter):

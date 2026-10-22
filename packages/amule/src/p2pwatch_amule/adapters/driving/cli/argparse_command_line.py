@@ -5,9 +5,9 @@ import logging
 import sys
 from collections.abc import Mapping, Sequence
 
+from p2pwatch_amule.application.ports.driving.container_booter import ContainerBooter
+from p2pwatch_amule.application.ports.driving.port_sync_loop_runner import PortSyncLoopRunner
 from p2pwatch_amule.domain.settings_error import SettingsError
-from p2pwatch_amule.ports.driving.container_booter import ContainerBooter
-from p2pwatch_amule.ports.driving.port_sync_loop_runner import PortSyncLoopRunner
 
 _LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 

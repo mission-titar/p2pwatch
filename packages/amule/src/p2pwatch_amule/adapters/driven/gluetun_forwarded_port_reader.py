@@ -2,8 +2,8 @@ import http.client
 import json
 from urllib.request import OpenerDirector
 
-from p2pwatch_amule.ports.driven.forwarded_port_reader import ForwardedPortReader
-from p2pwatch_amule.ports.driven.logger import Logger
+from p2pwatch_amule.application.ports.driven.forwarded_port_reader import ForwardedPortReader
+from p2pwatch_amule.application.ports.driven.logger import Logger
 
 
 class GluetunForwardedPortReader(ForwardedPortReader):

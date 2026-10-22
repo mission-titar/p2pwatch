@@ -6,8 +6,8 @@ from pathlib import Path, PurePath
 
 from coverage import Coverage
 
+from coverage_checks.application.ports.driven.test_coverage_reader import TestCoverageReader
 from coverage_checks.domain.test_coverage import Branch, TestCoverage
-from coverage_checks.ports.driven.test_coverage_reader import TestCoverageReader
 
 
 @dataclass(frozen=True)

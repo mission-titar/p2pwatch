@@ -1,7 +1,7 @@
 from pathlib import Path, PurePath
 
-from amule_bump.ports.driven.dockerfile_reader import DockerfileReader
-from amule_bump.ports.driven.dockerfile_writer import DockerfileWriter
+from amule_bump.application.ports.driven.dockerfile_reader import DockerfileReader
+from amule_bump.application.ports.driven.dockerfile_writer import DockerfileWriter
 
 
 class FilesystemDockerfile(DockerfileReader, DockerfileWriter):

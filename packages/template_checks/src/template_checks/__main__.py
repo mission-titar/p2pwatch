@@ -6,8 +6,8 @@ from pathlib import Path
 
 from template_checks.adapters.driven.filesystem_template_reader import FilesystemTemplateReader
 from template_checks.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
-from template_checks.application.check_logic_free import CheckLogicFree
-from template_checks.application.list_template_attributes import ListTemplateAttributes
+from template_checks.application.use_cases.check_logic_free import CheckLogicFree
+from template_checks.application.use_cases.list_template_attributes import ListTemplateAttributes
 
 
 def main(argv: Sequence[str], cwd: Path) -> int:

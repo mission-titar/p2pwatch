@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from pathlib import Path, PurePath
 
 from p2pwatch.adapters.driven.config.crawler_config import load_config
-from p2pwatch.ports.driven.config_checker import ConfigChecker
+from p2pwatch.application.ports.driven.config_checker import ConfigChecker
 
 
 class YamlConfigChecker(ConfigChecker):

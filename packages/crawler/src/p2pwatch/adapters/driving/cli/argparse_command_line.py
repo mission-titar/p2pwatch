@@ -7,11 +7,15 @@ import sys
 from collections.abc import Callable, Sequence
 from pathlib import PurePath
 
+from p2pwatch.application.ports.driving.catalog_merger import (
+    CatalogMerger,
+    ListedSourceCatalog,
+    NewCatalog,
+)
+from p2pwatch.application.ports.driving.config_validator import ConfigValidator
+from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.merge_error import MergeError
-from p2pwatch.ports.driving.catalog_merger import CatalogMerger, ListedSourceCatalog, NewCatalog
-from p2pwatch.ports.driving.config_validator import ConfigValidator
-from p2pwatch.ports.driving.crawler_runner import CrawlerRunner
 
 _LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 

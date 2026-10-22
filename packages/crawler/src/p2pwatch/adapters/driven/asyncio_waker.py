@@ -13,7 +13,7 @@ synchronously on that same loop, no races). No lock needed.
 
 import asyncio
 
-from p2pwatch.ports.driven.waker import Waker
+from p2pwatch.application.ports.driven.waker import Waker
 
 
 class AsyncioWaker(Waker):

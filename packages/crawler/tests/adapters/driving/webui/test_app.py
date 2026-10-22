@@ -28,6 +28,14 @@ from p2pwatch.adapters.driving.webui.app import (
     build_app,
 )
 from p2pwatch.adapters.driving.webui.displays import DecisionCellDisplay, HiddenInputDisplay
+from p2pwatch.application.ports.driving.console_query_runner import ConsoleQueryOutcome
+from p2pwatch.application.ports.driving.crawl_summarizer import ClientSummary, CrawlSummary
+from p2pwatch.application.ports.driving.file_describer import FileDescription
+from p2pwatch.application.ports.driving.file_lister import FileListing
+from p2pwatch.application.ports.driving.node_describer import NodeDescription
+from p2pwatch.application.ports.driving.source_describer import SourceDescription
+from p2pwatch.application.ports.driving.source_lister import SourceListing
+from p2pwatch.application.ports.driving.source_name_describer import SourceNameDescription
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.console_query import QueryFailure
 from p2pwatch.domain.coverage import TargetCoverage
@@ -43,14 +51,6 @@ from p2pwatch.domain.sharing_period import SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory, SourceNaming
 from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus, StatusReading
-from p2pwatch.ports.driving.console_query_runner import ConsoleQueryOutcome
-from p2pwatch.ports.driving.crawl_summarizer import ClientSummary, CrawlSummary
-from p2pwatch.ports.driving.file_describer import FileDescription
-from p2pwatch.ports.driving.file_lister import FileListing
-from p2pwatch.ports.driving.node_describer import NodeDescription
-from p2pwatch.ports.driving.source_describer import SourceDescription
-from p2pwatch.ports.driving.source_lister import SourceListing
-from p2pwatch.ports.driving.source_name_describer import SourceNameDescription
 from tests.fakes.application.fakes import (
     DescribeFileCall,
     DescribeSourceCall,

@@ -2,8 +2,8 @@ import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
-from p2pwatch_amule.ports.driven.logger import Logger
-from p2pwatch_amule.ports.driven.service_supervisor import ServiceSupervisor
+from p2pwatch_amule.application.ports.driven.logger import Logger
+from p2pwatch_amule.application.ports.driven.service_supervisor import ServiceSupervisor
 
 
 class S6ServiceSupervisor(ServiceSupervisor):

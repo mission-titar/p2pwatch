@@ -15,7 +15,7 @@ from amule_bump.adapters.driven.github_repo_reader import GitHubRepoReader
 from amule_bump.adapters.driven.github_step_output_writer import GitHubStepOutputWriter
 from amule_bump.adapters.driven.terminal_step_output_writer import TerminalStepOutputWriter
 from amule_bump.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
-from amule_bump.application.bump_amule import BumpAmule
+from amule_bump.application.use_cases.bump_amule import BumpAmule
 from amule_bump.domain.upstream import UPSTREAM
 
 _CHANGELOG_WIDTH_CHARACTERS = 100

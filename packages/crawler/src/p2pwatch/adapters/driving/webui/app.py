@@ -69,6 +69,17 @@ from p2pwatch.adapters.driving.webui.format import (
     short_timestamp,
     utc_timestamp,
 )
+from p2pwatch.application.ports.driving.console_query_runner import ConsoleQueryRunner
+from p2pwatch.application.ports.driving.crawl_pauser import CrawlPauser
+from p2pwatch.application.ports.driving.crawl_resumer import CrawlResumer
+from p2pwatch.application.ports.driving.crawl_summarizer import ClientSummary, CrawlSummarizer
+from p2pwatch.application.ports.driving.file_describer import FileDescriber
+from p2pwatch.application.ports.driving.file_lister import FileLister
+from p2pwatch.application.ports.driving.node_describer import NodeDescriber
+from p2pwatch.application.ports.driving.shutdown_requester import ShutdownRequester
+from p2pwatch.application.ports.driving.source_describer import SourceDescriber
+from p2pwatch.application.ports.driving.source_lister import SourceLister
+from p2pwatch.application.ports.driving.source_name_describer import SourceNameDescriber
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.console_query import ConsoleDatabase, QueryAnswer, QueryFailure
 from p2pwatch.domain.file_key import Network
@@ -83,17 +94,6 @@ from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.sharing_period import SharingPeriod
 from p2pwatch.domain.source import SourceKey
 from p2pwatch.domain.source_history import SourceNaming
-from p2pwatch.ports.driving.console_query_runner import ConsoleQueryRunner
-from p2pwatch.ports.driving.crawl_pauser import CrawlPauser
-from p2pwatch.ports.driving.crawl_resumer import CrawlResumer
-from p2pwatch.ports.driving.crawl_summarizer import ClientSummary, CrawlSummarizer
-from p2pwatch.ports.driving.file_describer import FileDescriber
-from p2pwatch.ports.driving.file_lister import FileLister
-from p2pwatch.ports.driving.node_describer import NodeDescriber
-from p2pwatch.ports.driving.shutdown_requester import ShutdownRequester
-from p2pwatch.ports.driving.source_describer import SourceDescriber
-from p2pwatch.ports.driving.source_lister import SourceLister
-from p2pwatch.ports.driving.source_name_describer import SourceNameDescriber
 
 # A file's or a source's page path segment: its file_id or source_id as 32 lowercase hex.
 _HEX_ID = re.compile(r"[0-9a-f]{32}")

@@ -2,20 +2,26 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import PurePath
 
-from vex_checks.domain.sbom_components import DeclaredComponent, DpkgPackage
-from vex_checks.domain.violations import Violation
-from vex_checks.ports.driven.sarif_writer import SarifWriter
-from vex_checks.ports.driven.sbom_reader import SbomReader
-from vex_checks.ports.driven.source_rule_reader import SourceRuleReader
-from vex_checks.ports.driven.vex_reader import VexReader
-from vex_checks.ports.driven.vulnerability_scanner import VulnerabilityScanner
-from vex_checks.ports.driving.claim_coverage_checker import (
+from vex_checks.application.ports.driven.sarif_writer import SarifWriter
+from vex_checks.application.ports.driven.sbom_reader import SbomReader
+from vex_checks.application.ports.driven.source_rule_reader import SourceRuleReader
+from vex_checks.application.ports.driven.vex_reader import VexReader
+from vex_checks.application.ports.driven.vulnerability_scanner import VulnerabilityScanner
+from vex_checks.application.ports.driving.claim_coverage_checker import (
     ClaimCoverageChecker,
     ClaimCoverageProblem,
     ClaimCoverageReport,
 )
-from vex_checks.ports.driving.image_claims_checker import ImageClaimsChecker, ImageClaimsReport
-from vex_checks.ports.driving.stale_claims_checker import StaleClaimsChecker, StaleClaimsReport
+from vex_checks.application.ports.driving.image_claims_checker import (
+    ImageClaimsChecker,
+    ImageClaimsReport,
+)
+from vex_checks.application.ports.driving.stale_claims_checker import (
+    StaleClaimsChecker,
+    StaleClaimsReport,
+)
+from vex_checks.domain.sbom_components import DeclaredComponent, DpkgPackage
+from vex_checks.domain.violations import Violation
 
 
 class FakeVexReader(VexReader):

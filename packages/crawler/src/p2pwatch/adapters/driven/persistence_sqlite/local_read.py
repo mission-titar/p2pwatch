@@ -11,11 +11,11 @@ from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
+from p2pwatch.application.ports.driven.node_state_reader import NodeStateReader
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
-from p2pwatch.ports.driven.node_state_reader import NodeStateReader
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 

@@ -1,10 +1,10 @@
 """Lightweight end-to-end: the REAL crawl loop against a REAL amuled (spec §8).
 
 Dedicated run: uv run pytest -m orchestration_integration --no-cov
-Validates that a real ``CrawlerApp`` built from YAML files (real ``AmuleApiClient`` + real SQLite
-DBs) runs ONE full search task against the provided ``amuled`` then stops CLEANLY on a SIGTERM. The
-results may be empty (no guaranteed eD2k network access): it is the LOOP (startup, search,
-cataloging, bounded shutdown) that is validated, not the richness of the results.
+Validates that a real ``CrawlerComposition`` built from YAML files (real ``AmuleApiClient`` + real
+SQLite DBs) runs ONE full search task against the provided ``amuled`` then stops CLEANLY on a
+SIGTERM. The results may be empty (no guaranteed eD2k network access): it is the LOOP (startup,
+search, cataloging, bounded shutdown) that is validated, not the richness of the results.
 """
 
 import asyncio
@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.composition.app import CrawlerApp
+from p2pwatch.composition.crawler_composition import CrawlerComposition
 from tests.integration.conftest import ApiEndpoint
 
 pytestmark = pytest.mark.orchestration_integration
@@ -54,7 +54,7 @@ class _SearchRecordedHandler(logging.Handler):
 async def test_real_loop_runs_one_search_and_stops(amuled: ApiEndpoint, tmp_path: Path) -> None:
     config_path = tmp_path / "crawler.yml"
     config_path.write_text(_CONFIG.format(data=tmp_path), encoding="utf-8")
-    app = CrawlerApp(
+    crawler_composition = CrawlerComposition(
         webui_address=("127.0.0.1", 0),
         amule_api_address=(amuled.host, amuled.port),
         env={"AMULE_API_PASSWORD": amuled.password},
@@ -68,7 +68,7 @@ async def test_real_loop_runs_one_search_and_stops(amuled: ApiEndpoint, tmp_path
     default_sigterm = signal.getsignal(signal.SIGTERM)
     try:
         run = asyncio.create_task(
-            app.crawl(
+            crawler_composition.crawl(
                 config_path=config_path,
                 targets_path=_DEPLOY / "targets.yml",
                 matcher_path=_DEPLOY / "matcher.yml",

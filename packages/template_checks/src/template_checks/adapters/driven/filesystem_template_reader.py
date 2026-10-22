@@ -1,6 +1,6 @@
 from pathlib import Path, PurePath
 
-from template_checks.ports.driven.template_reader import TemplateReader
+from template_checks.application.ports.driven.template_reader import TemplateReader
 
 
 class FilesystemTemplateReader(TemplateReader):
