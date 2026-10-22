@@ -51,19 +51,18 @@ from p2pwatch.adapters.driven.observability.prometheus_metrics_recorder import (
 from p2pwatch.adapters.driven.persistence_sqlite.backoff_state_repository import (
     SqliteBackoffStateRepository,
 )
-from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
-    SqliteCatalogFileReader,
-    SqliteCoverageReader,
-    SqliteSourceReader,
-)
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
 from p2pwatch.adapters.driven.persistence_sqlite.download_repository import SqliteDownloadRepository
 from p2pwatch.adapters.driven.persistence_sqlite.local_read import SqliteNodeStateReader
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driven.persistence_sqlite.source_repository import SqliteSourceRepository
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_file_reader import (
+    SqliteCatalogFileReader,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_scan_reader import (
     SqliteCatalogScanReader,
 )
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_coverage_reader import SqliteCoverageReader
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_node_id_store import SqliteNodeIdStore
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
@@ -72,6 +71,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_policy_fingerprint_store import (
     SqlitePolicyFingerprintStore,
 )
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_reader import SqliteSourceReader
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_sql_executor import SqliteSqlExecutor
 from p2pwatch.adapters.driven.random_jitter_generator import RandomJitterGenerator
 from p2pwatch.adapters.driven.shutil_free_space_meter import ShutilFreeSpaceMeter
