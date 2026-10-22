@@ -8,8 +8,8 @@ from p2pwatch.adapters.driven.config.yaml_loader import YamlLoadError, load_yaml
 def test_load_yaml_reads_mapping(tmp_path: Path) -> None:
     path = tmp_path / "c.yaml"
     path.write_text("tokens:\n  keroro: { keyword: keroro }\n", encoding="utf-8")
-    data = load_yaml(path)
-    assert data == {"tokens": {"keroro": {"keyword": "keroro"}}}
+    document = load_yaml(path)
+    assert document == {"tokens": {"keroro": {"keyword": "keroro"}}}
 
 
 def test_load_yaml_parses_nested_episode_mapping(tmp_path: Path) -> None:
@@ -18,8 +18,8 @@ def test_load_yaml_parses_nested_episode_mapping(tmp_path: Path) -> None:
         "episodes:\n  - { season: 2, seasonal_number: 11, absolute_number: 62 }\n",
         encoding="utf-8",
     )
-    data = load_yaml(path)
-    assert data["episodes"][0]["absolute_number"] == 62
+    document = load_yaml(path)
+    assert document["episodes"][0]["absolute_number"] == 62
 
 
 def test_load_yaml_non_mapping_root_raises(tmp_path: Path) -> None:

@@ -11,7 +11,7 @@ from p2pwatch.domain.store_error import StoreError
 
 
 class FakeTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
-    """In-memory downloads repo (the contract of SqliteTrackedDownloadStore, without SQL).
+    """In-memory tracked download store (the contract of SqliteTrackedDownloadStore, without SQL).
 
     Keyed by ``native_id``; ``failures`` holds the failure reasons, ``queued_at``,
     ``completed_at`` and ``seen_at`` the instants received, and ``latest_seen_at`` what

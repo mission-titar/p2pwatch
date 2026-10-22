@@ -432,7 +432,7 @@ async def run_download_cycle(deps: DownloadDeps, node_id: str) -> None:
       sources step; on the two reads, also a refused read, ``DownloadRejectedError``) = dead
       client → ABORT the iteration ("a dead client makes everything fail"). We skip the rest;
       the next iteration retries.
-    - ``StoreError`` (persistence failure, NO client I/O) → ISOLATED PER STEP: a repo
+    - ``StoreError`` (persistence failure, NO client I/O) → ISOLATED PER STEP: a store
       failure in one step must NOT starve the others. Each step that can raise
       ``StoreError`` is wrapped separately (log + ``continue`` to the next step), and the
       sources step per download. ``_start_unlisted`` re-reads ``read_tracked_states`` FRESHLY, so
@@ -440,7 +440,7 @@ async def run_download_cycle(deps: DownloadDeps, node_id: str) -> None:
       1→2→3→4 order is preserved, each step is best-effort, and step 5, the sources, only
       observes, so it comes last (stage 4, D8).
 
-    The repos are sync → cancellation (shutdown) lands at the network ``await``, never mid-write.
+    The stores are sync → cancellation (shutdown) lands at the network ``await``, never mid-write.
 
     DECISION (audit 2026-06-23 / observability#5): a ``ClientUnreachableError`` here does NOT
     emit ``ClientUnreachable`` (unlike the search tasks). The E-D5 taxonomy files this
@@ -473,7 +473,7 @@ async def run_download_cycle(deps: DownloadDeps, node_id: str) -> None:
     # it, a failure in step 1 left ``states`` frozen/empty → every completed file → ``states.get is
     # None`` → ignored → NO completion recorded the entire cycle. The re-read is also better
     # aligned than ``states={}`` with the nominal case (fresh states), at the cost of one extra
-    # repo call (idempotent). A failure of the re-read itself is caught downstream.
+    # store call (idempotent). A failure of the re-read itself is caught downstream.
     # Steps 2 & 3 - NO client I/O → only StoreError possible, ISOLATED per step (I2):
     # a store failure in one must NOT prevent the other from running.
     try:

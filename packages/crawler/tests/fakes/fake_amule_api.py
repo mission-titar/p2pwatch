@@ -186,7 +186,7 @@ class FakeAmuleApi:
         assert match is not None
         ecid = int(match.group(1))
         rows = [row for listed in self.clients.values() for row in listed if row["ecid"] == ecid]
-        client = {key: value for key, value in rows[0].items() if key not in _FILE_RELATION_KEYS}
+        client = {key: field for key, field in rows[0].items() if key not in _FILE_RELATION_KEYS}
         return httpx.Response(200, json={**client, **self.details.get(ecid, {})})
 
 

@@ -1,6 +1,6 @@
 """Observability dispatcher: routes an ``Event`` to log + metrics + notifications (E-D3/E-D13).
 
-ADAPTER layer. Implements ``EventEmitter``. ``emit``: ``describe`` (pure) → log at the mapped
+ADAPTER ring. Implements ``EventEmitter``. ``emit``: ``describe`` (pure) → log at the mapped
 level + ``MetricsRecorder.apply`` for each metric + ``Notifier.notify`` per audience (the report's
 ``notification_title`` and ``notification_body``, else its message), each notification under
 ``asyncio.wait_for(notification_timeout_seconds)`` with failure/timeout ABSORBED + logged (a

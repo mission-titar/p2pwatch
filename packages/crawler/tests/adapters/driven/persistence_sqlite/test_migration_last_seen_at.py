@@ -21,9 +21,11 @@ def _write_local_db_at_version_4(path: Path) -> None:
     """A local.db stamped at version 4: downloads present, 0005 not applied yet."""
     connection = sqlite3.connect(path, autocommit=True)
     connection.execute("PRAGMA journal_mode=WAL")
-    for entry in sorted(_LOCAL_MIGRATIONS.iterdir(), key=lambda item: item.name):
-        if int(entry.name.partition("_")[0]) <= 4:
-            connection.executescript(entry.read_text(encoding="utf-8"))
+    for script_file in sorted(
+        _LOCAL_MIGRATIONS.iterdir(), key=lambda script_file: script_file.name
+    ):
+        if int(script_file.name.partition("_")[0]) <= 4:
+            connection.executescript(script_file.read_text(encoding="utf-8"))
     connection.execute("PRAGMA user_version = 4")
     connection.execute(
         "INSERT INTO downloads (ed2k_hash, target_id, state, queued_at, size_bytes) "

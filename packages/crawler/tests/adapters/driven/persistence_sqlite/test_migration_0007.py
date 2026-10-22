@@ -63,7 +63,7 @@ def _old_catalog(path: Path, *rows: tuple[object, ...]) -> None:
 
 def _with(row: tuple[object, ...], **changes: object) -> tuple[object, ...]:
     names = [name.strip() for name in _COLUMNS.split(",")]
-    return tuple(changes.get(name, value) for name, value in zip(names, row, strict=True))
+    return tuple(changes.get(name, cell) for name, cell in zip(names, row, strict=True))
 
 
 def test_observations_become_variants_with_their_timestamps_and_nothing_is_lost(
@@ -117,7 +117,7 @@ def test_a_mapped_result_reuses_the_variant_0007_migrated_from_its_old_row(
     tmp_path: Path,
 ) -> None:
     """D11: the mapper's fold and 0007's agree, or every file gets a second variant."""
-    result = {
+    search_result = {
         "hash": _A,
         "name": _NAME,
         "size_bytes": 100,
@@ -131,7 +131,7 @@ def test_a_mapped_result_reuses_the_variant_0007_migrated_from_its_old_row(
     old_meta = '[["rating", "0"], ["status", "mystère"]]'
     path = tmp_path / "catalog.db"
     _old_catalog(path, _with(_FULL, raw_meta=old_meta))
-    (reported_file,), _ = map_search_results([result], "keroro")
+    (reported_file,), _ = map_search_results([search_result], "keroro")
     connection = open_catalog(path)
     try:
         SqliteObservationStore(connection).record_observation(

@@ -1,4 +1,4 @@
-"""TDD tests for matching_read.MatchingExplainer (Task 9 — W-D7).
+"""TDD tests for matching_read.MatchingExplainer (Task 9, W-D7).
 
 Since P4a the explainer takes an ALREADY-PARSED ``MatcherConfig`` + ``targets`` tuple
 (the YAML → config parsing moved up into the caller), so these tests parse the minimal
@@ -55,7 +55,7 @@ rules:
 
 
 # ---------------------------------------------------------------------------
-# Tests — explain()
+# Tests: explain()
 # ---------------------------------------------------------------------------
 
 
@@ -65,16 +65,16 @@ def test_explainer_returns_explanation_on_matching_filename() -> None:
         matcher_config=_minimal_matcher(),
         targets=_minimal_targets(),
     )
-    result = explainer.explain(
+    explanation = explainer.explain(
         filenames=["Keroro_062A_VF.avi"],
         size_bytes=None,
         duration_seconds=None,
         bitrate_kbps=None,
         target_id="062A",
     )
-    assert isinstance(result, Explanation)
-    assert len(result.rules_fired) > 0
-    assert result.target_id == "062A"
+    assert isinstance(explanation, Explanation)
+    assert len(explanation.rules_fired) > 0
+    assert explanation.target_id == "062A"
 
 
 def test_explainer_returns_none_for_unknown_target() -> None:
@@ -83,14 +83,14 @@ def test_explainer_returns_none_for_unknown_target() -> None:
         matcher_config=_minimal_matcher(),
         targets=_minimal_targets(),
     )
-    result = explainer.explain(
+    explanation = explainer.explain(
         filenames=["Keroro_062A_VF.avi"],
         size_bytes=None,
         duration_seconds=None,
         bitrate_kbps=None,
         target_id="S9E999Z",
     )
-    assert result is None
+    assert explanation is None
 
 
 def test_explainer_size_bytes_converted_to_mb() -> None:
@@ -126,15 +126,15 @@ rules:
         targets=_minimal_targets(),
     )
     # 100 * 1024 * 1024 = 104857600 bytes = exactly 100.0 MiB
-    result = explainer.explain(
+    explanation = explainer.explain(
         filenames=["keroro_062a.avi"],
         size_bytes=104857600,
         duration_seconds=None,
         bitrate_kbps=None,
         target_id="062A",
     )
-    assert isinstance(result, Explanation)
-    assert "catalog" in result.rules_fired
+    assert isinstance(explanation, Explanation)
+    assert "catalog" in explanation.rules_fired
 
 
 def test_explainer_media_length_and_bitrate_forwarded() -> None:
@@ -170,15 +170,15 @@ rules:
         matcher_config=matcher_config,
         targets=_minimal_targets(),
     )
-    result = explainer.explain(
+    explanation = explainer.explain(
         filenames=["keroro_062a.avi"],
         size_bytes=None,
         duration_seconds=1350,
         bitrate_kbps=1500,
         target_id="062A",
     )
-    assert isinstance(result, Explanation)
-    assert "catalog" in result.rules_fired
+    assert isinstance(explanation, Explanation)
+    assert "catalog" in explanation.rules_fired
 
 
 def test_explainer_engine_cached_across_calls() -> None:
@@ -187,7 +187,7 @@ def test_explainer_engine_cached_across_calls() -> None:
         matcher_config=_minimal_matcher(),
         targets=_minimal_targets(),
     )
-    # Two successive calls — the engine must be built ONCE (stable private attribute)
+    # Two successive calls: the engine must be built ONCE (stable private attribute)
     r1 = explainer.explain(
         filenames=["keroro_vf.avi"],
         size_bytes=None,
@@ -229,13 +229,13 @@ rules:
         )
     )
     explainer = MatchingExplainer(matcher_config=matcher_config, targets=_minimal_targets())
-    result = explainer.explain(
+    explanation = explainer.explain(
         filenames=["ita.avi", "keroro.avi"],
         size_bytes=100 * 1024 * 1024,
         duration_seconds=None,
         bitrate_kbps=None,
         target_id="062A",
     )
-    assert isinstance(result, Explanation)
-    assert result.vetoes_fired == ("ita",)
-    assert result.rules_fired == ("catalog",)  # the size applies to every name
+    assert isinstance(explanation, Explanation)
+    assert explanation.vetoes_fired == ("ita",)
+    assert explanation.rules_fired == ("catalog",)  # the size applies to every name

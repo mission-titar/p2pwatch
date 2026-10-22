@@ -1,6 +1,6 @@
 """Persistence adapter error hierarchy (data-model spec §7; orchestration §7).
 
-The adapter SIGNALS, it does not decide (same philosophy as the EC adapter): any
+The adapter SIGNALS, it does not decide (same philosophy as the amuleapi adapter): any
 unexpected ``sqlite3.Error`` comes out wrapped as ``PersistenceError``, never bare.
 An append-only trigger that fires is a BUG in the caller code, not a business
 case → the same ``PersistenceError``. ``wrap_sqlite_errors`` is the SINGLE

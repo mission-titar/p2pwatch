@@ -251,7 +251,7 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
     assert (catalog_query.status_code, local_query.status_code) == (200, 200)
     assert _HASH in catalog_query.text and _HASH in local_query.text
     assert '<a href="/targets/062A">062A</a>' in dashboard.text  # catalog.db's coverage
-    assert f"<dd>{api.version['daemon_version']}</dd>" in dashboard.text  # the status board
+    assert f"<dd>{api.version['daemon_version']}</dd>" in dashboard.text  # the status reading store
     assert 'title="Keroro N°062A Les demoiselles cambrioleuses.avi"' in files.text
     assert f"<td>{_HASH}</td>" in node.text  # local.db's tracked download
     elapsed = _CONSOLE_ELAPSED.search(timed_query.text)

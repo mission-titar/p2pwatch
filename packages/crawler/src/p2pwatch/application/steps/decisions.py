@@ -1,6 +1,6 @@
 """Shared decision helper: evaluate → set-diff → record / retract → wake → emit (spec §7).
 
-APPLICATION layer, PURE orchestration (no ``try/except`` here: a ``StoreError`` is a
+APPLICATION ring, PURE orchestration (no ``try/except`` here: a ``StoreError`` is a
 port contract each CALLER absorbs on its own terms, cf. ``record_observation`` and
 ``reevaluate_catalog``). Used by BOTH the per-observation pipeline (``record_observations.py``)
 and the startup catalogue re-evaluation, so the set-diff + retraction + wake logic is written once.

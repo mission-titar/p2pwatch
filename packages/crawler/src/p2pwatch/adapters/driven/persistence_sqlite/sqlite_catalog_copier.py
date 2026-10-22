@@ -7,7 +7,7 @@ we copy its tables in **FK order** (identities first), then ``COMMIT`` and ``DET
 source is never committed; a failed merge is re-run safely.
 
 Idempotence (spec §4):
-- ``files`` (global content PK) → ``INSERT OR IGNORE`` (first sighting
+- ``files`` (global content PK) → ``INSERT OR IGNORE`` (first observation
   wins); NEVER ``OR REPLACE`` (= DELETE + INSERT → collides with the append-only trigger).
 - ``observation_variants`` → ``INSERT OR IGNORE`` on its ``content_hash`` (the output
   numbers its own ``variant_id``), then ``observations`` mapped to the output's variant by

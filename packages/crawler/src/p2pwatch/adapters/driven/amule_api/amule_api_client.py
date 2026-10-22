@@ -221,9 +221,9 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         if request.file.network is not Network.ED2K:
             raise ApiRejectedError(f"aMule downloads ed2k files only, not {request.file.network}")
         link = build_ed2k_link(request.filename, request.size_bytes, request.file.native_id)
-        payload = await self._call("POST", "/downloads", body={"links": [link]})
-        results = payload.get("results")
-        outcome = results[0] if isinstance(results, list) and results else None
+        envelope = await self._call("POST", "/downloads", body={"links": [link]})
+        outcomes = envelope.get("results")
+        outcome = outcomes[0] if isinstance(outcomes, list) and outcomes else None
         if not isinstance(outcome, dict) or outcome.get("ok") is not True:
             raise ApiRejectedError(f"POST /downloads refused the link: {_outcome_reason(outcome)}")
 
@@ -264,16 +264,16 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         return merge_duplicate_sources(readings)
 
     async def _post_search(self, keyword: str, search_type: str) -> int:
-        payload = await self._call("POST", "/search", body={"query": keyword, "type": search_type})
-        search_id = payload.get("search_id")
+        envelope = await self._call("POST", "/search", body={"query": keyword, "type": search_type})
+        search_id = envelope.get("search_id")
         if not isinstance(search_id, int) or isinstance(search_id, bool):
             raise ApiRejectedError("POST /search answered without a search_id")
         return search_id
 
     async def _search_state(self, search_id: int) -> object:
         """``progress.state``, read with zero rows: the envelope travels with the results."""
-        payload = await self._call("GET", f"/search/{search_id}/results", params={"limit": 0})
-        progress = payload.get("progress")
+        envelope = await self._call("GET", f"/search/{search_id}/results", params={"limit": 0})
+        progress = envelope.get("progress")
         return progress.get("state") if isinstance(progress, dict) else None
 
     async def _widen(self, search_id: int) -> bool:
@@ -359,8 +359,8 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         rows: list[Any] = []
         page_params = {**(params or {}), "sort": keyset_column, "limit": _PAGE_SIZE}
         while True:
-            payload = await self._call("GET", path, params=page_params)
-            page = payload.get(list_key)
+            envelope = await self._call("GET", path, params=page_params)
+            page = envelope.get(list_key)
             if not isinstance(page, list):  # an under-report would restart what it hides
                 raise ApiUnreachableError(f"GET {path} answered without its {list_key!r} list")
             rows.extend(page)
@@ -392,10 +392,10 @@ def _decode(response: httpx.Response) -> dict[str, Any]:
     if not response.content:
         return {}
     try:
-        payload = json.loads(response.content)
+        decoded_body = json.loads(response.content)
     except ValueError as failure:  # JSONDecodeError is one
         raise ApiUnreachableError(f"{response.request.url.path}: unreadable body") from failure
-    return payload if isinstance(payload, dict) else {}
+    return decoded_body if isinstance(decoded_body, dict) else {}
 
 
 def _kad_word(keyword: str) -> str | None:

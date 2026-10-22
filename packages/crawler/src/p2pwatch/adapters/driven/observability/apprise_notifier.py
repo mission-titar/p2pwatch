@@ -1,6 +1,6 @@
 """Apprise notifier: routes a notification per AUDIENCE via apprise tags (E-D7).
 
-ADAPTER layer (implements ``Notifier``). On a ``node_id``'s first notification:
+ADAPTER ring (implements ``Notifier``). On a ``node_id``'s first notification:
 ``add(url, tag=audience)`` for each target, into one of two apprise groups: prefixed or bare
 (``node_prefix``). ``notify`` sends the title PREFIXED with the ``node_id`` (distributed network)
 to the first group and as is to the second, since apprise sends one message to every URL of a

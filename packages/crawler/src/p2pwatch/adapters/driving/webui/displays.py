@@ -148,7 +148,8 @@ class CatalogEntryDisplay:
 
     A file usually carries 0, 1, or 2 current decisions (``CatalogEntry.decisions``, already
     excluding retractions and the legacy ``target_id == ""`` sentinel: those never reach
-    this layer). Each current decision becomes one ``DecisionCellDisplay`` in ``decisions_display``:
+    this adapter). Each current decision becomes one ``DecisionCellDisplay`` in
+    ``decisions_display``:
 
     - no decisions at all → ``decisions_display`` is empty and ``tier_display`` is the
       literal ``"·"``.
@@ -395,8 +396,8 @@ class FileHistoryDisplay:
     network: str
     native_id: str
     size_bytes: int
-    timeline: tuple[ObservationDisplay, ...]  # one row per observation, oldest first
-    source_history: tuple[SharingPeriodDisplay, ...]  # one row per source period, newest first
+    observations: tuple[ObservationDisplay, ...]  # one row per observation, oldest first
+    sharing_periods: tuple[SharingPeriodDisplay, ...]  # one row per source period, newest first
     decisions: tuple[DecisionDisplay, ...]  # 0..N elements: for template iteration
     ed2k_link: str  # precomputed from the latest observation
     # Explanation fields (None if no explanation available)

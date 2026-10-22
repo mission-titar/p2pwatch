@@ -57,10 +57,10 @@ class DepthExceededError(MatchingConfigError):
     """The resolution depth exceeds the bound (default 32)."""
 
 
-def _require_mapping(value: Any, error_label: str) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        raise MatchingConfigError(f"{error_label}: mapping expected, got {type(value).__name__}")
-    return value
+def _require_mapping(node: Any, error_label: str) -> dict[str, Any]:
+    if not isinstance(node, dict):
+        raise MatchingConfigError(f"{error_label}: mapping expected, got {type(node).__name__}")
+    return node
 
 
 def _require_key(mapping: dict[str, Any], key: str, error_label: str) -> Any:
@@ -82,15 +82,15 @@ def _parse_operand(raw: Any) -> Operand:
     raise MatchingConfigError(f"operand of invalid type: {type(raw).__name__} ({raw!r})")
 
 
-def _require_unit_fraction(value: float, error_label: str) -> float:
+def _require_unit_fraction(fraction: float, error_label: str) -> float:
     """Validates that a fraction (min_coverage, min_similarity) is in [0, 1] (fail-fast §8.4).
 
     Outside [0, 1], the rule is silently inert (threshold never reached): that is a config
     error (typically a percentage entered for a fraction), rejected at load time.
     """
-    if not 0.0 <= value <= 1.0:
-        raise MatchingConfigError(f"{error_label} must be in [0, 1], got {value}")
-    return value
+    if not 0.0 <= fraction <= 1.0:
+        raise MatchingConfigError(f"{error_label} must be in [0, 1], got {fraction}")
+    return fraction
 
 
 def _refuse_renamed_coverage_keys(mapping: dict[str, Any], error_label: str) -> None:
@@ -146,7 +146,7 @@ def _parse_condition(raw: dict[str, Any]) -> Condition:
         # remains the legitimate internal semantics of the combinators - it is the empty CONFIG
         # that we forbid.
         raise MatchingConfigError(f"'{key}:' requires at least one operand (empty list received)")
-    operands = tuple(_parse_operand(item) for item in body)
+    operands = tuple(_parse_operand(raw_operand) for raw_operand in body)
     if key == "all":
         return AllDefinition(operands=operands)
     return AnyDefinition(operands=operands)
@@ -154,8 +154,8 @@ def _parse_condition(raw: dict[str, Any]) -> Condition:
 
 def _optional_float(mapping: dict[str, Any], key: str) -> float | None:
     """Reads an optional float bound (``None`` if absent)."""
-    value = mapping.get(key)
-    return None if value is None else float(value)
+    bound = mapping.get(key)
+    return None if bound is None else float(bound)
 
 
 def _parse_fragments(raw: Any) -> dict[str, str]:
@@ -436,9 +436,9 @@ def _max_resolution_depth(config: MatcherConfig) -> int:
         if name in memo:
             return memo[name]
         refs = graph.get(name, ())
-        result = 1 if not refs else 1 + max(depth(ref) for ref in refs)
-        memo[name] = result
-        return result
+        token_depth = 1 if not refs else 1 + max(depth(ref) for ref in refs)
+        memo[name] = token_depth
+        return token_depth
 
     return max((depth(name) for name in graph), default=0)
 

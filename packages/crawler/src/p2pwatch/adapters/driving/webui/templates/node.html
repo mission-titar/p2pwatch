@@ -57,12 +57,12 @@
       </tr>
     </thead>
     <tbody>
-      {% for entry in backoff_entries %}
+      {% for backoff_state in backoff_states %}
       <tr>
-        <td>{{ entry.client_name }}</td>
-        <td>{{ entry.channel }}</td>
-        <td>{{ entry.attempts }}</td>
-        <td>{{ entry.retry_at_display }}</td>
+        <td>{{ backoff_state.client_name }}</td>
+        <td>{{ backoff_state.channel }}</td>
+        <td>{{ backoff_state.attempts }}</td>
+        <td>{{ backoff_state.retry_at_display }}</td>
       </tr>
       {% else %}
       <tr><td colspan="4">No backoff.</td></tr>

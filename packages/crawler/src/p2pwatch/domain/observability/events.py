@@ -1,7 +1,7 @@
 """Observability events: PURE business facts (spec Plan E §3-4).
 
-DOMAIN layer (pure). One FROZEN dataclass per salient observable fact; tagged union
-``Event``. Business fields ONLY: no notion of log/metric/notif (that is ``policy.describe``'s
+DOMAIN ring (pure). One FROZEN dataclass per salient observable fact; tagged union
+``Event``. Business fields ONLY: no notion of log/metric/notification (that is ``policy.describe``'s
 job). Recurring failure facts carry ``first_occurrence`` (computed by the application via
 ``EdgeState``) for notification anti-spam (E-D8).
 """

@@ -1,4 +1,4 @@
-"""``StatusReadingReader``: reads the board of the clients' latest status readings."""
+"""``StatusReadingReader``: reads the clients' latest status readings."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping

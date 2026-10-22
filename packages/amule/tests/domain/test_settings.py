@@ -31,13 +31,13 @@ def test_the_boot_variables_give_the_boot_settings() -> None:
 
 
 @pytest.mark.parametrize("name", list(BOOT_ENV))
-@pytest.mark.parametrize("value", [None, ""])
+@pytest.mark.parametrize("setting", [None, ""])
 def test_a_missing_or_empty_boot_variable_is_refused_naming_it(
-    name: str, value: str | None
+    name: str, setting: str | None
 ) -> None:
     env = {key: setting for key, setting in BOOT_ENV.items() if key != name}
-    if value is not None:
-        env[name] = value
+    if setting is not None:
+        env[name] = setting
     with pytest.raises(SettingsError, match=f"^{name} is required$"):
         parse_boot_settings(env)
 
@@ -48,20 +48,20 @@ def test_the_first_missing_boot_variable_is_the_one_named() -> None:
 
 
 @pytest.mark.parametrize("name", ["PUID", "PGID"])
-@pytest.mark.parametrize("value", ["amule", "-1", "1 000", "1_000", "+1000", "١٠٠٠"])
-def test_a_non_numeric_id_is_refused_naming_it(name: str, value: str) -> None:
-    message = f"{name} must be a numeric id, got {value!r}"
+@pytest.mark.parametrize("setting", ["amule", "-1", "1 000", "1_000", "+1000", "١٠٠٠"])
+def test_a_non_numeric_id_is_refused_naming_it(name: str, setting: str) -> None:
+    message = f"{name} must be a numeric id, got {setting!r}"
     with pytest.raises(SettingsError, match=f"^{re.escape(message)}$"):
-        parse_boot_settings({**BOOT_ENV, name: value})
+        parse_boot_settings({**BOOT_ENV, name: setting})
 
 
 @pytest.mark.parametrize("name", ["AMULE_EC_PASSWORD", "AMULE_API_PASSWORD"])
 @pytest.mark.parametrize(
-    "value", ["hunter2\n", "hun\tter2", "\rhunter2", "hunter2\x7f", "hunter2\x85"]
+    "password", ["hunter2\n", "hun\tter2", "\rhunter2", "hunter2\x7f", "hunter2\x85"]
 )
-def test_a_password_with_a_control_character_is_refused_naming_it(name: str, value: str) -> None:
+def test_a_password_with_a_control_character_is_refused_naming_it(name: str, password: str) -> None:
     with pytest.raises(SettingsError, match=f"^{name} must not contain a control character$"):
-        parse_boot_settings({**BOOT_ENV, name: value})
+        parse_boot_settings({**BOOT_ENV, name: password})
 
 
 def test_a_password_may_hold_spaces_and_non_ascii_letters() -> None:
@@ -69,26 +69,26 @@ def test_a_password_may_hold_spaces_and_non_ascii_letters() -> None:
     assert parse_boot_settings(env).api_password == "mot de passé"
 
 
-@pytest.mark.parametrize("value", ["enabled", "yes", "on", "true", "On", "YES", "True"])
-def test_gluetuns_true_values_turn_port_sync_on(value: str) -> None:
-    assert is_port_sync_enabled({"PORT_SYNC": value}) is True
+@pytest.mark.parametrize("port_sync", ["enabled", "yes", "on", "true", "On", "YES", "True"])
+def test_gluetuns_true_values_turn_port_sync_on(port_sync: str) -> None:
+    assert is_port_sync_enabled({"PORT_SYNC": port_sync}) is True
 
 
-@pytest.mark.parametrize("value", ["disabled", "no", "off", "false", "Off", "FALSE", ""])
-def test_gluetuns_false_values_and_an_empty_one_turn_it_off(value: str) -> None:
-    assert is_port_sync_enabled({"PORT_SYNC": value}) is False
+@pytest.mark.parametrize("port_sync", ["disabled", "no", "off", "false", "Off", "FALSE", ""])
+def test_gluetuns_false_values_and_an_empty_one_turn_it_off(port_sync: str) -> None:
+    assert is_port_sync_enabled({"PORT_SYNC": port_sync}) is False
 
 
 def test_an_unset_port_sync_is_off() -> None:
     assert is_port_sync_enabled({}) is False
 
 
-@pytest.mark.parametrize("value", ["maybe", "1", "0", " on"])
-def test_any_other_value_is_refused_naming_port_sync(value: str) -> None:
+@pytest.mark.parametrize("port_sync", ["maybe", "1", "0", " on"])
+def test_any_other_value_is_refused_naming_port_sync(port_sync: str) -> None:
     values = "enabled, yes, on, true, disabled, no, off, false"
-    message = f"PORT_SYNC must be one of {values}, got {value!r}"
+    message = f"PORT_SYNC must be one of {values}, got {port_sync!r}"
     with pytest.raises(SettingsError, match=f"^{re.escape(message)}$"):
-        is_port_sync_enabled({"PORT_SYNC": value})
+        is_port_sync_enabled({"PORT_SYNC": port_sync})
 
 
 def test_no_variable_set_but_the_ids_gives_todays_values() -> None:
@@ -129,23 +129,23 @@ def test_each_variable_overrides_the_domains_value() -> None:
 
 @pytest.mark.parametrize("name", list(IDS))
 def test_port_sync_refuses_a_missing_id_naming_it(name: str) -> None:
-    env = {key: value for key, value in IDS.items() if key != name}
+    env = {key: setting for key, setting in IDS.items() if key != name}
     with pytest.raises(SettingsError, match=f"^{name} is required$"):
         parse_port_sync_settings(env)
 
 
 @pytest.mark.parametrize("name", ["PORT_SYNC_POLL_SECONDS", "PORT_SYNC_RESTART_MIN_SECONDS"])
-@pytest.mark.parametrize("value", ["0", "-1", "1.5", "60s", "1_000", " 60", "١٠"])
+@pytest.mark.parametrize("setting", ["0", "-1", "1.5", "60s", "1_000", " 60", "١٠"])
 def test_a_number_that_is_not_a_positive_integer_is_refused_naming_it(
-    name: str, value: str
+    name: str, setting: str
 ) -> None:
-    message = f"{name} must be a positive integer, got {value!r}"
+    message = f"{name} must be a positive integer, got {setting!r}"
     with pytest.raises(SettingsError, match=f"^{re.escape(message)}$"):
-        parse_port_sync_settings({name: value})
+        parse_port_sync_settings({name: setting})
 
 
 @pytest.mark.parametrize(
-    "value",
+    "url",
     [
         "localhost:8000",
         "ftp://gluetun:8000",
@@ -157,7 +157,7 @@ def test_a_number_that_is_not_a_positive_integer_is_refused_naming_it(
         "http://gluetun:0",
     ],
 )
-def test_a_malformed_url_is_refused_naming_it(value: str) -> None:
-    message = f"GLUETUN_CONTROL_URL must be an http or https URL with a host, got {value!r}"
+def test_a_malformed_url_is_refused_naming_it(url: str) -> None:
+    message = f"GLUETUN_CONTROL_URL must be an http or https URL with a host, got {url!r}"
     with pytest.raises(SettingsError, match=f"^{re.escape(message)}$"):
-        parse_port_sync_settings({"GLUETUN_CONTROL_URL": value})
+        parse_port_sync_settings({"GLUETUN_CONTROL_URL": url})

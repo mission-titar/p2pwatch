@@ -59,7 +59,9 @@ def test_0012_renames_the_two_columns_in_the_schema_and_keeps_every_value(
 
 def test_0012_holds_only_the_two_column_renames() -> None:
     local = resources.files("p2pwatch.adapters.driven.persistence_sqlite") / "migrations" / "local"
-    (script,) = [entry for entry in local.iterdir() if entry.name.startswith("0012_")]
+    (script,) = [
+        script_file for script_file in local.iterdir() if script_file.name.startswith("0012_")
+    ]
     code = "\n".join(
         line
         for line in script.read_text(encoding="utf-8").splitlines()

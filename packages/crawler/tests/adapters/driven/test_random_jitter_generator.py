@@ -4,8 +4,8 @@ from p2pwatch.adapters.driven.random_jitter_generator import RandomJitterGenerat
 def test_random_jitter_generator_jitter_is_within_span() -> None:
     jitter_generator = RandomJitterGenerator(jitter_seed=42)
     for _ in range(20):
-        value = jitter_generator.jitter(10.0)
-        assert 0.0 <= value < 10.0
+        jitter = jitter_generator.jitter(10.0)
+        assert 0.0 <= jitter < 10.0
 
 
 def test_random_jitter_generator_jitter_is_reproducible_for_a_seed() -> None:

@@ -1,6 +1,6 @@
 """Observability policy: ``describe(event) → Report`` (spec Plan E §3, E-D3).
 
-DOMAIN layer (pure). The ONLY place that decides, for each event, severity, message,
+DOMAIN ring (pure). The ONLY place that decides, for each event, severity, message,
 metric(s), audiences. ``describe`` is an EXHAUSTIVE match (``assert_never`` → 100% branch).
 The domain knows nothing of ``logging``, Prometheus or apprise: ``Severity``/``Audience``/
 ``MetricName`` are DOMAIN enums, translated by the adapters (E-D3).
@@ -86,21 +86,21 @@ class MetricInstruction:
     """A metric operation: counter ``inc`` / gauge ``set`` or ``remove``.
 
     ``labels`` = tuple of ordered (key, value) pairs (hashable → usable in a ``Report``
-    equality test). ``value`` = quantity (default 1.0 for ``inc``).
+    equality test). ``amount`` = quantity (default 1.0 for ``inc``).
     """
 
     name: MetricName
     operation: MetricOperation
     labels: tuple[tuple[str, str], ...] = ()
-    value: float = 1.0
+    amount: float = 1.0
 
 
 @dataclass(frozen=True)
 class Report:
-    """How to report an event: severity + message + metric(s) + notif audiences.
+    """How to report an event: severity + message + metric(s) + notification audiences.
 
     ``metrics`` is a TUPLE (one event can feed several metrics: ``ChannelStatusSampled`` sets
-    two gauges). Empty ``audiences`` = no notif.
+    two gauges). Empty ``audiences`` = no notification.
     ``notification_body`` is the notified body when it differs from the logged ``message``;
     ``notification_title`` heads it.
     """
@@ -146,8 +146,8 @@ _RECOVERED_PHRASE_BY_FIELD: dict[ChannelField, str] = {
 }
 
 
-def _yes_no(value: bool | None) -> str:
-    return "unknown" if value is None else "yes" if value else "no"
+def _yes_no(flag: bool | None) -> str:
+    return "unknown" if flag is None else "yes" if flag else "no"
 
 
 def _search_labels(
@@ -157,12 +157,12 @@ def _search_labels(
 
 
 def _channel_gauge(
-    name: MetricName, event: ChannelStatusSampled, value: bool | None
+    name: MetricName, event: ChannelStatusSampled, state: bool | None
 ) -> MetricInstruction:
     labels = (("client", event.client_name), ("channel", event.channel))
-    if value is None:  # an unknown state has no series, never a stale one
+    if state is None:  # an unknown state has no series, never a stale one
         return MetricInstruction(name, "remove", labels)
-    return MetricInstruction(name, "set", labels, float(value))
+    return MetricInstruction(name, "set", labels, float(state))
 
 
 def _channel_alert(

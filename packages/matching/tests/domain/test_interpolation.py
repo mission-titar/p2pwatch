@@ -25,9 +25,9 @@ def test_interpolate_escapes_regex_special_title() -> None:
     target = TargetSegment(
         season=1, seasonal_number=1, absolute_number=1, letter="a", title="C++ (demo)"
     )
-    result = interpolate(r"prefix {title} suffix", target)
-    assert result == r"prefix " + re.escape("C++ (demo)") + r" suffix"
-    assert re.compile(result, re.ASCII).search("prefix C++ (demo) suffix") is not None
+    pattern = interpolate(r"prefix {title} suffix", target)
+    assert pattern == r"prefix " + re.escape("C++ (demo)") + r" suffix"
+    assert re.compile(pattern, re.ASCII).search("prefix C++ (demo) suffix") is not None
 
 
 def test_interpolate_unknown_placeholder_raises() -> None:

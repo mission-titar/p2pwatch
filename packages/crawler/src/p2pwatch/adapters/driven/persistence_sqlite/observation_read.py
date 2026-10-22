@@ -102,7 +102,7 @@ def observation_from_row(row: Any) -> FileObservation:
         keyword=row[5],
         duration_seconds=row[6],
         bitrate_kbps=row[7],
-        raw_metadata=tuple((name, value) for name, value in json.loads(row[8])),
+        raw_metadata=tuple((name, rendered) for name, rendered in json.loads(row[8])),
     )
     return FileObservation(reported_file, _EPOCH + row[9] * _MICROSECOND)
 

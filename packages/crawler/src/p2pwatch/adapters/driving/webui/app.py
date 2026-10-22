@@ -545,9 +545,9 @@ async def _add_security_headers(request: Request, call_next: RequestResponseEndp
     return response
 
 
-# Human status messages shown after a control POST (via the PRG ``?done=<code>`` param). The
-# strings avoid em/en-dashes (project UI rule). A ``done`` code absent from this mapping (or no
-# ``done`` at all) renders NO banner.
+# Human status messages shown after a POST to a ``/controls/*`` route (via the PRG
+# ``?done=<code>`` param). The strings avoid em/en-dashes (project UI rule). A ``done`` code absent
+# from this mapping (or no ``done`` at all) renders NO banner.
 _CONTROL_MESSAGES: dict[str, str] = {
     "paused": (
         "Crawl paused. Searches in flight or already waiting their network slot still run, "
@@ -649,11 +649,11 @@ def _console_db_options(selected: str) -> tuple[DbOptionDisplay, ...]:
     unknown ``selected`` (e.g. a bogus form value echoed back) marks none."""
     return tuple(
         DbOptionDisplay(
-            value=value,
+            value=db,
             label=label,
-            selected_attr="selected" if value == selected else "",
+            selected_attr="selected" if db == selected else "",
         )
-        for value, label in _CONSOLE_DBS
+        for db, label in _CONSOLE_DBS
     )
 
 
@@ -710,11 +710,11 @@ def build_app(
 
     ``target_segments`` arrive ALREADY PARSED from the caller, for their titles.
 
-    Each control POST calls its use case, which returns at once; the webui itself holds no write
-    connection (spec §4/§10). ``crawl_summarizer`` serves the dashboard, ``node_describer`` /node,
-    ``file_lister`` /files and a target's page, ``file_describer`` a file's page, ``source_lister``
-    /sources, ``source_describer`` a source's page, ``source_name_describer`` a name's page,
-    ``console_query_runner`` the console.
+    Each POST to a ``/controls/*`` route calls its use case, which returns at once; the webui
+    itself holds no write connection (spec §4/§10). ``crawl_summarizer`` serves the dashboard,
+    ``node_describer`` /node, ``file_lister`` /files and a target's page, ``file_describer`` a
+    file's page, ``source_lister`` /sources, ``source_describer`` a source's page,
+    ``source_name_describer`` a name's page, ``console_query_runner`` the console.
 
     ``amule_url`` is the base the nav's aMule entry points at (design §9); the caller reads it
     from ``webui.amule_url``."""
@@ -1016,10 +1016,10 @@ def build_app(
             network=file_history.file.network,
             native_id=file_history.file.native_id,
             size_bytes=file_history.size_bytes,
-            timeline=tuple(
+            observations=tuple(
                 _observation_display(observation) for observation in file_history.observations
             ),
-            source_history=tuple(map(_sharing_period_display, description.sharing_periods)),
+            sharing_periods=tuple(map(_sharing_period_display, description.sharing_periods)),
             decisions=tuple(
                 DecisionDisplay(
                     target_id=dated.decision.target_id,
@@ -1087,7 +1087,7 @@ def build_app(
             "node.html",
             {
                 "node_state": _node_state_display(node_state),
-                "backoff_entries": _backoff_state_displays(node_state),
+                "backoff_states": _backoff_state_displays(node_state),
             },
         )
 

@@ -69,7 +69,9 @@ def test_0012_holds_only_the_three_column_renames() -> None:
     catalog = (
         resources.files("p2pwatch.adapters.driven.persistence_sqlite") / "migrations" / "catalog"
     )
-    (script,) = [entry for entry in catalog.iterdir() if entry.name.startswith("0012_")]
+    (script,) = [
+        script_file for script_file in catalog.iterdir() if script_file.name.startswith("0012_")
+    ]
     code = "\n".join(
         line
         for line in script.read_text(encoding="utf-8").splitlines()

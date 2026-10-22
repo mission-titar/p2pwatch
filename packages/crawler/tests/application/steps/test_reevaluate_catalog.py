@@ -1,7 +1,7 @@
-"""Tests for the re-evaluation use-case ``reevaluate_catalog`` (spec §7, plan Task 5).
+"""Tests for the re-evaluation step ``reevaluate_catalog`` (spec §7, plan Task 5).
 
 Real engine + real SQLite stores (same convention as ``test_decisions.py``: "real
-repos on tmp_path"); only ``waker``/``event_emitter``/``wall_clock`` are fakes (``FakeWaker``/
+stores on tmp_path"); only ``waker``/``event_emitter``/``wall_clock`` are fakes (``FakeWaker``/
 ``FakeEventEmitter``/``FakeWallClock``). Each hash under test is seeded via
 ``observation_store.record_observation`` first so it shows up in ``iter_latest_observations``
 (the source the re-evaluation iterates).

@@ -250,8 +250,8 @@ def _split_concat(concat: str | None) -> list[str]:
 class SqliteCatalogFileReader(CatalogFileReader):
     """Reads through the calling thread's read-only connection."""
 
-    def __init__(self, reader_provider: ThreadReadConnections) -> None:
-        self._reader_provider = reader_provider
+    def __init__(self, thread_read_connections: ThreadReadConnections) -> None:
+        self._thread_read_connections = thread_read_connections
 
     def read_matched_and_total_file_counts(
         self,
@@ -265,7 +265,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
         sql = _SQL_COUNT_FILES_BASE + _latest_observation_join(search_text) + _JOIN_DECISIONS
         if clauses:
             sql += "WHERE " + " AND ".join(clauses) + "\n"
-        row = self._reader_provider.connection().execute(sql, params).fetchone()
+        row = self._thread_read_connections.connection().execute(sql, params).fetchone()
         matched: int = row["matched"]
         total: int = row["total"]
         return (matched, total)
@@ -283,7 +283,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
         if clauses:
             sql += "WHERE " + " AND ".join(clauses) + "\n"
         sql += "GROUP BY ld.tier\n"
-        rows = self._reader_provider.connection().execute(sql, params).fetchall()
+        rows = self._thread_read_connections.connection().execute(sql, params).fetchall()
         return {row["tier"]: row["n"] for row in rows}
 
     # ------------------------------------------------------------------
@@ -321,7 +321,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
         params.append(limit)
         params.append(offset)
 
-        rows = self._reader_provider.connection().execute(sql, params).fetchall()
+        rows = self._thread_read_connections.connection().execute(sql, params).fetchall()
         return tuple(
             CatalogEntry(
                 file=FileKey(Network(row["network"]), row["native_id"]),
@@ -344,7 +344,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
     def read_file_history(
         self, file_id: bytes, *, since: datetime, until: datetime
     ) -> FileHistory | None:
-        connection = self._reader_provider.connection()
+        connection = self._thread_read_connections.connection()
         file_row = connection.execute(_SQL_FILE, (file_id,)).fetchone()
         if file_row is None:
             return None

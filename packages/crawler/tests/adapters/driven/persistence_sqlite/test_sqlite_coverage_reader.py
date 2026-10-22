@@ -18,8 +18,8 @@ from tests.support.catalog_seeds import seed, seed_retracted, seed_whole_episode
 
 
 def _read_target_coverage(catalog_db: Path) -> Mapping[str, tuple[str, ...]]:
-    with ThreadReadConnections(catalog_db) as reader_provider:
-        return SqliteCoverageReader(reader_provider).read_target_coverage()
+    with ThreadReadConnections(catalog_db) as thread_read_connections:
+        return SqliteCoverageReader(thread_read_connections).read_target_coverage()
 
 
 def test_target_coverage_groups_by_target(catalog_db: Path) -> None:

@@ -87,7 +87,7 @@ _WALL_CLOCK = _FAKE_TIME.wall
 
 @dataclass(frozen=True)
 class _Controls:
-    """The three control use cases' fakes, ``calls`` the operations the routes called on them."""
+    """The three run state use cases' fakes, ``calls`` the operations the routes called on them."""
 
     pauser: FakeCrawlPauser = field(default_factory=FakeCrawlPauser)
     resumer: FakeCrawlResumer = field(default_factory=FakeCrawlResumer)
@@ -165,11 +165,11 @@ def _app_on_fakes(
 ) -> Starlette:
     import p2pwatch.adapters.driving.webui
 
-    webui_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent
+    webui_directory = Path(p2pwatch.adapters.driving.webui.__file__).parent
     return build_app(
         target_segments=_targets() if target_segments is None else target_segments,
-        templates_directory=webui_dir / "templates",
-        static_directory=webui_dir / "static",
+        templates_directory=webui_directory / "templates",
+        static_directory=webui_directory / "static",
         crawl_pauser=controls.pauser,
         crawl_resumer=controls.resumer,
         shutdown_requester=controls.shutdown_requester,
@@ -391,7 +391,7 @@ async def test_file_page_shows_each_decision_with_its_rule_tier_and_instant() ->
     page = await _file_page(replace(_FILE_DESCRIPTION, file_history=_history(decisions=decisions)))
     for target_id, decided_at in (("072A", SEEN_AT), ("072B", "2026-10-14T20:00:00.000000+00:00")):
         terms = ("Target", target_id), ("Rule", "numero_nu_confirmed"), ("Tier", "download")
-        cells = "".join(f"<dt>{term}</dt><dd>{value}</dd>" for term, value in terms)
+        cells = "".join(f"<dt>{term}</dt><dd>{definition}</dd>" for term, definition in terms)
         assert f"<dl>{cells}<dt>Decided at</dt><dd>{decided_at}</dd></dl>" in page
     assert "No matching decision." not in page
 
@@ -1203,25 +1203,27 @@ def test_resolve_target_display_empty_decisions_is_empty_list() -> None:
 
 
 def test_resolve_target_display_catalog_decision_is_unidentified() -> None:
-    entry = _catalog_entry(decisions=(_decision(target_id="062A", tier="catalog"),))
-    assert _resolve_target_display(entry, _SEGMENT_BY_ID) == [("unidentified", "·")]
+    catalog_entry = _catalog_entry(decisions=(_decision(target_id="062A", tier="catalog"),))
+    assert _resolve_target_display(catalog_entry, _SEGMENT_BY_ID) == [("unidentified", "·")]
 
 
 def test_resolve_target_display_resolvable_id_joins_seasonal_locator_and_title() -> None:
-    entry = _catalog_entry(decisions=(_decision(target_id="062A", tier="download"),))
-    assert _resolve_target_display(entry, _SEGMENT_BY_ID) == [
+    catalog_entry = _catalog_entry(decisions=(_decision(target_id="062A", tier="download"),))
+    assert _resolve_target_display(catalog_entry, _SEGMENT_BY_ID) == [
         ("062A / S02E11A", "La Grenouille Cosmique")
     ]
 
 
 def test_resolve_target_display_unknown_id_falls_back_to_raw_id() -> None:
-    entry = _catalog_entry(decisions=(_decision(target_id="999Z", tier="download"),))
-    assert _resolve_target_display(entry, _SEGMENT_BY_ID) == [("999Z", "·")]
+    catalog_entry = _catalog_entry(decisions=(_decision(target_id="999Z", tier="download"),))
+    assert _resolve_target_display(catalog_entry, _SEGMENT_BY_ID) == [("999Z", "·")]
 
 
 def test_resolve_target_display_two_segments_returns_a_pair_each() -> None:
-    entry = _catalog_entry(decisions=(_decision("062A", "download"), _decision("062B", "download")))
-    assert _resolve_target_display(entry, _SEGMENTS_AB) == [
+    catalog_entry = _catalog_entry(
+        decisions=(_decision("062A", "download"), _decision("062B", "download"))
+    )
+    assert _resolve_target_display(catalog_entry, _SEGMENTS_AB) == [
         ("062A / S02E11A", "La Grenouille Cosmique"),
         ("062B / S02E11B", "Duel Contre Giroro"),
     ]
@@ -1234,8 +1236,10 @@ def test_catalog_entry_displays_empty_decisions_all_dashes() -> None:
 
 
 def test_catalog_entry_displays_two_segments_aggregate_cells_shared_tier() -> None:
-    entry = _catalog_entry(decisions=(_decision("062A", "download"), _decision("062B", "download")))
-    [display] = _catalog_entry_displays([entry], _SEGMENTS_AB)
+    catalog_entry = _catalog_entry(
+        decisions=(_decision("062A", "download"), _decision("062B", "download"))
+    )
+    [display] = _catalog_entry_displays([catalog_entry], _SEGMENTS_AB)
     assert display.decisions_display == (
         DecisionCellDisplay(target="062A / S02E11A", title="La Grenouille Cosmique"),
         DecisionCellDisplay(target="062B / S02E11B", title="Duel Contre Giroro"),
@@ -1244,23 +1248,25 @@ def test_catalog_entry_displays_two_segments_aggregate_cells_shared_tier() -> No
 
 
 def test_catalog_entry_displays_two_segments_differing_tiers_lists_per_target() -> None:
-    entry = _catalog_entry(decisions=(_decision("062A", "download"), _decision("062B", "notify")))
-    [display] = _catalog_entry_displays([entry], _SEGMENTS_AB)
+    catalog_entry = _catalog_entry(
+        decisions=(_decision("062A", "download"), _decision("062B", "notify"))
+    )
+    [display] = _catalog_entry_displays([catalog_entry], _SEGMENTS_AB)
     assert display.tier_display == "062A: download · 062B: notify"
 
 
-def test_catalog_entry_displays_computes_size_and_last_seen_display() -> None:
-    entry = _catalog_entry(
+def test_catalog_entry_displays_computes_size_and_latest_seen_display() -> None:
+    catalog_entry = _catalog_entry(
         decisions=(), observed_at=datetime(2026, 7, 3, 23, 45, 24, 104990, tzinfo=UTC)
     )
-    [display] = _catalog_entry_displays([entry], _SEGMENTS_AB)
+    [display] = _catalog_entry_displays([catalog_entry], _SEGMENTS_AB)
     assert display.size_display == "1 KB"
     assert display.latest_seen_display == "2026-07-03 23:45Z"
 
 
 def test_catalog_entry_displays_shows_a_file_never_seen_with_unknown_sources() -> None:
-    entry = replace(_catalog_entry(decisions=()), latest_observation=None)
-    [display] = _catalog_entry_displays([entry], _SEGMENTS_AB)
+    catalog_entry = replace(_catalog_entry(decisions=()), latest_observation=None)
+    [display] = _catalog_entry_displays([catalog_entry], _SEGMENTS_AB)
     assert (display.filename, display.sources_display, display.latest_seen_display) == (
         "",
         "unknown",

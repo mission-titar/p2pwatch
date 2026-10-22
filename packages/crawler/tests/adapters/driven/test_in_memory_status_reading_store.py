@@ -10,7 +10,7 @@ _READING = StatusReading(datetime(2026, 6, 12, tzinfo=UTC), ClientStatus("3.0.1"
 
 
 def _status_reading_store() -> tuple[StatusReadingWriter, StatusReadingReader]:
-    """The board seen through its two ports."""
+    """The store seen through its two ports."""
     status_reading_store = InMemoryStatusReadingStore(("amuled",))
     return status_reading_store, status_reading_store
 

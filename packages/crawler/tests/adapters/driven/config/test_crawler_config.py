@@ -144,7 +144,7 @@ def test_bool_is_not_accepted_as_a_number() -> None:
         parse_crawler_config(raw, _env())
 
 
-@pytest.mark.parametrize("value", [float("inf"), float("nan")], ids=["inf", "nan"])
+@pytest.mark.parametrize("number", [float("inf"), float("nan")], ids=["inf", "nan"])
 @pytest.mark.parametrize(
     ("section", "key"),
     [
@@ -161,11 +161,11 @@ def test_bool_is_not_accepted_as_a_number() -> None:
     ],
 )
 def test_a_number_that_is_not_finite_is_refused_by_name(
-    section: str | None, key: str, value: float
+    section: str | None, key: str, number: float
 ) -> None:
     # .inf would make a sleep endless and .nan passes every comparison.
     raw = _minimal_raw() | {"download": _full_download_section(), "observability": {}}
-    _section(raw, section)[key] = value
+    _section(raw, section)[key] = number
     with pytest.raises(
         ConfigError, match=rf"^{_printed_path(section, key)}: finite number expected"
     ):
@@ -337,8 +337,8 @@ def test_password_interpolated_from_env() -> None:
     # The domain never reads the environment: the adapter resolves ${NAME} before anything else
     # sees the value (design §6).
     raw = _minimal_raw() | {"amule_api_password": "${AMULE_API_PASSWORD}"}
-    cfg = parse_crawler_config(raw, {"AMULE_API_PASSWORD": "s3cr3t"})
-    assert cfg.amule_api_password == "s3cr3t"
+    config = parse_crawler_config(raw, {"AMULE_API_PASSWORD": "s3cr3t"})
+    assert config.amule_api_password == "s3cr3t"
 
 
 def test_missing_env_var_raises() -> None:
@@ -355,15 +355,15 @@ def test_missing_env_var_raises() -> None:
 
 
 def test_download_absent_is_observer() -> None:
-    cfg = parse_crawler_config(_minimal_raw(), _env())
-    assert cfg.download is None
+    config = parse_crawler_config(_minimal_raw(), _env())
+    assert config.download is None
 
 
 def test_download_enabled_false_is_observer_without_requiring_wiring() -> None:
     # enabled:false ⇒ we do NOT read the rest: a missing poll_interval is NOT an error.
     raw = _minimal_raw() | {"download": {"enabled": False}}
-    cfg = parse_crawler_config(raw, _env())
-    assert cfg.download is None
+    config = parse_crawler_config(raw, _env())
+    assert config.download is None
 
 
 def test_download_section_without_enabled_defaults_to_observer() -> None:
@@ -392,8 +392,8 @@ def test_download_enabled_true_requires_the_poll_interval() -> None:
 
 def test_download_enabled_true_full_is_download_mode() -> None:
     raw = _minimal_raw() | {"download": _full_download_section()}
-    cfg = parse_crawler_config(raw, _env())
-    assert cfg.download == DownloadConfig(
+    config = parse_crawler_config(raw, _env())
+    assert config.download == DownloadConfig(
         poll_interval_seconds=30.0,
         min_free_bytes=1_000_000_000,
         lost_after=timedelta(hours=1),
@@ -406,17 +406,17 @@ def test_download_enabled_true_full_is_download_mode() -> None:
 def test_the_sources_are_read_a_poll_after_their_interval() -> None:
     # The step runs on the first round past its interval (source points spec, D3).
     raw = _minimal_raw() | {"download": _full_download_section()}
-    cfg = parse_crawler_config(raw, _env())
-    assert cfg.download is not None
-    assert cfg.download.time_between_source_reads == timedelta(seconds=150)
+    config = parse_crawler_config(raw, _env())
+    assert config.download is not None
+    assert config.download.time_between_source_reads == timedelta(seconds=150)
 
 
 def test_download_sources_interval_defaults_to_five_minutes() -> None:
     section = _full_download_section()
     del section["sources_interval_seconds"]
-    cfg = parse_crawler_config(_minimal_raw() | {"download": section}, _env())
-    assert cfg.download is not None
-    assert cfg.download.sources_interval == timedelta(seconds=300)
+    config = parse_crawler_config(_minimal_raw() | {"download": section}, _env())
+    assert config.download is not None
+    assert config.download.sources_interval == timedelta(seconds=300)
 
 
 @pytest.mark.parametrize("seconds", [0, -1, float("inf"), float("nan")])
@@ -454,19 +454,19 @@ def test_download_space_and_ttl_knobs_have_defaults() -> None:
     for key in ("min_free_bytes", "lost_after_seconds", "output_dir"):
         del section[key]
     raw = _minimal_raw() | {"download": section}
-    cfg = parse_crawler_config(raw, _env())
-    assert cfg.download is not None
-    assert cfg.download.min_free_bytes == 10_737_418_240  # 10 GiB
-    assert cfg.download.lost_after == timedelta(hours=24)
-    assert cfg.download.output_directory == "/downloads"  # what deploy/compose.yml mounts
+    config = parse_crawler_config(raw, _env())
+    assert config.download is not None
+    assert config.download.min_free_bytes == 10_737_418_240  # 10 GiB
+    assert config.download.lost_after == timedelta(hours=24)
+    assert config.download.output_directory == "/downloads"  # what deploy/compose.yml mounts
 
 
 def test_a_source_reappears_after_12_hours_by_default() -> None:
     section = _full_download_section()
     del section["reappeared_after_seconds"]
-    cfg = parse_crawler_config(_minimal_raw() | {"download": section}, _env())
-    assert cfg.download is not None
-    assert cfg.download.reappeared_after == timedelta(hours=12)
+    config = parse_crawler_config(_minimal_raw() | {"download": section}, _env())
+    assert config.download is not None
+    assert config.download.reappeared_after == timedelta(hours=12)
 
 
 @pytest.mark.parametrize("seconds", [0, -1, float("inf"), float("nan"), 1e15])
@@ -556,8 +556,8 @@ def test_observability_parsed() -> None:
             "notification_timeout_seconds": 3.0,
         }
     }
-    cfg = parse_crawler_config(raw, _env())
-    assert cfg.observability == ObservabilityConfig(
+    config = parse_crawler_config(raw, _env())
+    assert config.observability == ObservabilityConfig(
         log_level="DEBUG",
         metrics=MetricsConfig(enabled=True, port=9100),
         notification_timeout_seconds=3.0,
@@ -567,8 +567,8 @@ def test_observability_parsed() -> None:
 
 def test_observability_metrics_optional() -> None:
     raw = _minimal_raw() | {"observability": {"log_level": "INFO"}}
-    cfg = parse_crawler_config(raw, _env())
-    assert cfg.observability == ObservabilityConfig(
+    config = parse_crawler_config(raw, _env())
+    assert config.observability == ObservabilityConfig(
         log_level="INFO", metrics=None, notification_timeout_seconds=5.0, notifications=()
     )
 
@@ -603,9 +603,9 @@ def test_observability_metrics_enabled_non_bool_rejected() -> None:
 
 def test_notifications_absent_is_empty() -> None:
     raw = _minimal_raw() | {"observability": {"log_level": "INFO"}}
-    cfg = parse_crawler_config(raw, _env())
-    assert cfg.observability is not None
-    assert cfg.observability.notifications == ()
+    config = parse_crawler_config(raw, _env())
+    assert config.observability is not None
+    assert config.observability.notifications == ()
 
 
 def test_notifications_parsed() -> None:
@@ -618,9 +618,9 @@ def test_notifications_parsed() -> None:
             ],
         }
     }
-    cfg = parse_crawler_config(raw, _env())
-    assert cfg.observability is not None
-    assert cfg.observability.notifications == (
+    config = parse_crawler_config(raw, _env())
+    assert config.observability is not None
+    assert config.observability.notifications == (
         NotificationTarget(url="discord://a", audience=Audience.COMMUNITY, node_prefix=False),
         NotificationTarget(url="discord://b", audience=Audience.OPERATIONS, node_prefix=True),
     )
@@ -670,9 +670,9 @@ def test_notification_url_interpolated_substring() -> None:
             "notifications": [{"url": "discord://${WID}/${WTOK}", "audience": "operations"}],
         }
     }
-    cfg = parse_crawler_config(raw, _env() | {"WID": "1", "WTOK": "t"})
-    assert cfg.observability is not None
-    assert cfg.observability.notifications[0].url == "discord://1/t"
+    config = parse_crawler_config(raw, _env() | {"WID": "1", "WTOK": "t"})
+    assert config.observability is not None
+    assert config.observability.notifications[0].url == "discord://1/t"
 
 
 # ------------------------------------------------------------------- webui
@@ -680,9 +680,9 @@ def test_notification_url_interpolated_substring() -> None:
 
 def test_webui_absent_defaults_to_enabled() -> None:
     # No webui section → the in-process webui is ON by default. The bind is fixed at
-    # 0.0.0.0:8080 in the composition layer; it is NOT configurable here.
-    cfg = parse_crawler_config(_minimal_raw(), _env())
-    assert cfg.webui == _webui_of_defaults(enabled=True)
+    # 0.0.0.0:8080 in the composition ring; it is NOT configurable here.
+    config = parse_crawler_config(_minimal_raw(), _env())
+    assert config.webui == _webui_of_defaults(enabled=True)
 
 
 def test_webui_enabled_false_disables_the_surface() -> None:
@@ -694,8 +694,8 @@ def test_webui_host_and_port_are_silently_ignored() -> None:
     # A legacy config still carrying host/port must NOT fail: those keys are simply not read
     # (the bind is fixed in code). The result is `enabled` and the defaults, nothing else.
     raw = _minimal_raw() | {"webui": {"enabled": True, "host": "1.2.3.4", "port": 9999}}
-    cfg = parse_crawler_config(raw, _env())
-    assert cfg.webui == _webui_of_defaults(enabled=True)
+    config = parse_crawler_config(raw, _env())
+    assert config.webui == _webui_of_defaults(enabled=True)
     # the type no longer carries a bind
     assert {field.name for field in dataclasses.fields(WebuiConfig)}.isdisjoint({"host", "port"})
 
@@ -733,8 +733,8 @@ def test_webui_amule_url_is_configurable_for_a_reverse_proxy() -> None:
 
 def test_webui_amule_url_is_interpolated_from_env() -> None:
     raw = _minimal_raw() | {"webui": {"amule_url": "${AMULE_UI_URL}"}}
-    cfg = parse_crawler_config(raw, _env() | {"AMULE_UI_URL": "http://nas.lan:4711"})
-    assert cfg.webui.amule_url == "http://nas.lan:4711"
+    config = parse_crawler_config(raw, _env() | {"AMULE_UI_URL": "http://nas.lan:4711"})
+    assert config.webui.amule_url == "http://nas.lan:4711"
 
 
 @pytest.mark.parametrize("webui", [None, {"enabled": True}], ids=["no-section", "no-key"])
@@ -743,8 +743,8 @@ def test_webui_source_period_gap_defaults_to_the_writers_tolerance_at_the_shippe
 ) -> None:
     # 3 x (300 + 30): three reads' spacing at the shipped intervals (source points spec, D6).
     raw = _minimal_raw() if webui is None else _minimal_raw() | {"webui": webui}
-    cfg = parse_crawler_config(raw, _env())
-    assert cfg.webui.source_period_gap == timedelta(seconds=990)
+    config = parse_crawler_config(raw, _env())
+    assert config.webui.source_period_gap == timedelta(seconds=990)
 
 
 def test_webui_source_period_gap_is_configurable() -> None:

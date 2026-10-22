@@ -93,15 +93,17 @@ _WAITING_STATUSES = {
 }
 
 
-def map_search_results(results: object, keyword: str) -> tuple[tuple[ReportedFile, ...], int]:
+def map_search_results(
+    search_results: object, keyword: str
+) -> tuple[tuple[ReportedFile, ...], int]:
     """The ``results[]`` of a search → ``(reported_files, skipped_result_count)``, counting the
-    results that yield no reported file; a nameless entry beside a named one is not counted."""
+    results that yield no reported file; a nameless name row beside a named one is not counted."""
     reported_files: list[ReportedFile] = []
     skipped_result_count = 0
-    if not isinstance(results, list):
+    if not isinstance(search_results, list):
         return (), 0  # unexpected envelope: tolerated, ignored (not a result set)
-    for result in results:
-        mapped = _map_result(result, keyword)
+    for search_result in search_results:
+        mapped = _map_result(search_result, keyword)
         if not mapped:
             skipped_result_count += 1
         reported_files.extend(mapped)
@@ -238,18 +240,18 @@ def _connectable(detail: dict[str, Any]) -> bool | None:
 
 
 def _source_metadata(fields: dict[str, Any], keys: tuple[str, ...]) -> SourceMetadata:
-    """The ``keys`` the payload carries; an absent one is left out, not read as ``None``."""
+    """The ``keys`` that ``fields`` holds; an absent one is left out, not read as ``None``."""
     return tuple((key, _meta_value(fields[key])) for key in keys if key in fields)
 
 
-def _meta_value(value: object) -> str | int | bool | tuple[str, ...] | None:
+def _meta_value(field: object) -> str | int | bool | tuple[str, ...] | None:
     """A JSON value in a shape ``SourceMetadata`` holds: a list as a tuple of text, anything else
     unforeseen as its JSON text."""
-    if value is None or isinstance(value, str | int | bool):
-        return value
-    if isinstance(value, list):
-        return tuple(_render(item) for item in value)
-    return _render(value)
+    if field is None or isinstance(field, str | int | bool):
+        return field
+    if isinstance(field, list):
+        return tuple(_render(element) for element in field)
+    return _render(field)
 
 
 def _channel(channel: str, channel_json: dict[str, Any], connectable: bool | None) -> ChannelStatus:
@@ -258,22 +260,22 @@ def _channel(channel: str, channel_json: dict[str, Any], connectable: bool | Non
     return ChannelStatus(channel, connected, connectable if connected else None)
 
 
-def _map_result(result: object, keyword: str) -> list[ReportedFile]:
+def _map_result(search_result: object, keyword: str) -> list[ReportedFile]:
     """One result row → one reported file PER FILENAME; none when the row is unusable."""
-    if not isinstance(result, dict):
+    if not isinstance(search_result, dict):
         return []
-    native_id = _hash_hex(result.get("hash"))
-    size_bytes = result.get("size_bytes")
+    native_id = _hash_hex(search_result.get("hash"))
+    size_bytes = search_result.get("size_bytes")
     if native_id is None or not isinstance(size_bytes, int) or isinstance(size_bytes, bool):
         return []
-    media = _as_dict(result.get("media"))
-    raw_metadata = _raw_metadata(result, media)
-    codec, file_type = _string(media.get("codec")), _string(result.get("file_type"))
-    alternates = result.get("alternate_names")
-    entries: list[object] = [result, *(alternates if isinstance(alternates, list) else [])]
+    media = _as_dict(search_result.get("media"))
+    raw_metadata = _raw_metadata(search_result, media)
+    codec, file_type = _string(media.get("codec")), _string(search_result.get("file_type"))
+    alternates = search_result.get("alternate_names")
+    name_rows: list[object] = [search_result, *(alternates if isinstance(alternates, list) else [])]
     reported_files: list[ReportedFile] = []
-    for entry in entries:
-        fields = _as_dict(entry)
+    for name_row in name_rows:
+        fields = _as_dict(name_row)
         name = _string(fields.get("name"))
         if name is None:
             continue
@@ -293,51 +295,55 @@ def _map_result(result: object, keyword: str) -> list[ReportedFile]:
     return reported_files
 
 
-def _raw_metadata(result: dict[str, Any], media: dict[str, Any]) -> tuple[tuple[str, str], ...]:
+def _raw_metadata(
+    search_result: dict[str, Any], media: dict[str, Any]
+) -> tuple[tuple[str, str], ...]:
     """Every unmapped key → ``(key, rendered_value)``, in wire order."""
-    collected = [(key, _render(value)) for key, value in result.items() if key not in _MAPPED_KEYS]
+    collected = [
+        (key, _render(field)) for key, field in search_result.items() if key not in _MAPPED_KEYS
+    ]
     collected += [
-        (f"media.{key}", _render(value))
-        for key, value in media.items()
+        (f"media.{key}", _render(field))
+        for key, field in media.items()
         if key not in _MAPPED_MEDIA_KEYS
     ]
     return tuple(collected)
 
 
-def _render(value: object) -> str:
+def _render(field: object) -> str:
     """Rendering that NEVER raises: text as-is, anything else as JSON."""
-    return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+    return field if isinstance(field, str) else json.dumps(field, ensure_ascii=False)
 
 
-def _as_dict(value: object) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
+def _as_dict(field: object) -> dict[str, Any]:
+    return field if isinstance(field, dict) else {}
 
 
-def _string(value: object) -> str | None:
+def _string(field: object) -> str | None:
     """A blank string reads as absent: an empty name is as unusable as a missing one."""
-    return value if isinstance(value, str) and value else None
+    return field if isinstance(field, str) and field else None
 
 
-def _hash_hex(value: object) -> str | None:
+def _hash_hex(field: object) -> str | None:
     """Lowercased MD4 hash, or ``None``: without it the row has no identifier at all."""
-    if not isinstance(value, str) or len(value) != _HASH_LENGTH:
+    if not isinstance(field, str) or len(field) != _HASH_LENGTH:
         return None
-    lowered = value.lower()
+    lowered = field.lower()
     return lowered if all(character in "0123456789abcdef" for character in lowered) else None
 
 
-def _int_or_zero(value: object) -> int:
+def _int_or_zero(field: object) -> int:
     """Absent or malformed reads as 0, and ``bool`` is not a count though it is an ``int``."""
-    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+    return field if isinstance(field, int) and not isinstance(field, bool) else 0
 
 
-def _optional_int(value: object) -> int | None:
+def _optional_int(field: object) -> int | None:
     """Keeps "the daemon reported nothing" distinct from a reported zero."""
-    return value if isinstance(value, int) and not isinstance(value, bool) else None
+    return field if isinstance(field, int) and not isinstance(field, bool) else None
 
 
-def _source_counts(value: object) -> tuple[int, int]:
-    sources = _as_dict(value)
+def _source_counts(field: object) -> tuple[int, int]:
+    sources = _as_dict(field)
     return _int_or_zero(sources.get("total")), _int_or_zero(sources.get("complete"))
 
 

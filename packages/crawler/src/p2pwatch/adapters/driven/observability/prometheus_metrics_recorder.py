@@ -1,6 +1,6 @@
 """Applies a ``MetricInstruction`` to a DEDICATED Prometheus ``CollectorRegistry`` (E-D9).
 
-ADAPTER layer (implements ``MetricsRecorder``). Catalog declared on the INJECTED registry (never
+ADAPTER ring (implements ``MetricsRecorder``). Catalog declared on the INJECTED registry (never
 the global registry) → testable on a throwaway registry, no shared state. Two HOMOGENEOUS maps
 (counters/gauges) indexed by ``MetricName`` → ``apply`` routes on ``kind``. GOTCHA: counters
 are named WITHOUT ``_total`` (added by the lib at exposition time)."""
@@ -46,21 +46,22 @@ class PrometheusMetricsRecorder(MetricsRecorder):
 
     def __init__(self, registry: CollectorRegistry) -> None:
         self._counters = {
-            name: Counter(name.value, doc, labels, registry=registry)
-            for name, doc, labels in _COUNTERS
+            name: Counter(name.value, documentation, labels, registry=registry)
+            for name, documentation, labels in _COUNTERS
         }
         self._gauges = {
-            name: Gauge(name.value, doc, labels, registry=registry) for name, doc, labels in _GAUGES
+            name: Gauge(name.value, documentation, labels, registry=registry)
+            for name, documentation, labels in _GAUGES
         }
 
     def apply(self, instruction: MetricInstruction) -> None:
         labels = dict(instruction.labels)
         if instruction.operation == "inc":
             counter = self._counters[instruction.name]
-            (counter.labels(**labels) if labels else counter).inc(instruction.value)
+            (counter.labels(**labels) if labels else counter).inc(instruction.amount)
         elif instruction.operation == "set":
             gauge = self._gauges[instruction.name]
-            (gauge.labels(**labels) if labels else gauge).set(instruction.value)
+            (gauge.labels(**labels) if labels else gauge).set(instruction.amount)
         else:
             self._gauges[instruction.name].remove_by_labels(labels)
 

@@ -1,6 +1,6 @@
-"""Re-evaluation use-case: re-evaluate the whole catalogue against the current matcher (spec §7).
+"""Re-evaluation step: re-evaluate the whole catalogue against the current matcher (spec §7).
 
-APPLICATION layer. Iterates every catalogued hash's LATEST observation
+APPLICATION ring. Iterates every catalogued hash's LATEST observation
 (``catalog_scan_reader.iter_latest_observations()``), rebuilds a :class:`FileCandidate` via
 ``ReportedFile.to_candidate`` (the single conversion, spec re-evaluation §6), and delegates to
 the shared ``rejudge_file`` helper (``decisions.py``, which judges the hash on

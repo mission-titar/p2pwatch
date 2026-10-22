@@ -1,4 +1,4 @@
-"""TDD tests for the catalog's file reader: filtered explorer, detail (spec W-D6 / §6)."""
+"""TDD tests for the catalog's file reader: filtered explorer, file history (spec W-D6 / §6)."""
 
 import re
 import sqlite3
@@ -60,8 +60,8 @@ def _entries(
     direction: SortDirection = SortDirection.DESC,
     offset: int = 0,
 ) -> tuple[CatalogEntry, ...]:
-    with ThreadReadConnections(catalog_db) as reader_provider:
-        return SqliteCatalogFileReader(reader_provider).read_catalog_entries(
+    with ThreadReadConnections(catalog_db) as thread_read_connections:
+        return SqliteCatalogFileReader(thread_read_connections).read_catalog_entries(
             target_id=target_id,
             tier=tier,
             search_text=search_text,
@@ -80,8 +80,8 @@ def _counts(
     tier: str | None = None,
     search_text: str | None = None,
 ) -> tuple[int, int]:
-    with ThreadReadConnections(catalog_db) as reader_provider:
-        return SqliteCatalogFileReader(reader_provider).read_matched_and_total_file_counts(
+    with ThreadReadConnections(catalog_db) as thread_read_connections:
+        return SqliteCatalogFileReader(thread_read_connections).read_matched_and_total_file_counts(
             target_id=target_id, tier=tier, search_text=search_text
         )
 
@@ -89,14 +89,14 @@ def _counts(
 def _read_file_count_by_tier(
     catalog_db: Path, *, search_text: str | None = None
 ) -> Mapping[str, int]:
-    with ThreadReadConnections(catalog_db) as reader_provider:
-        return SqliteCatalogFileReader(reader_provider).read_file_count_by_tier(
+    with ThreadReadConnections(catalog_db) as thread_read_connections:
+        return SqliteCatalogFileReader(thread_read_connections).read_file_count_by_tier(
             target_id=None, search_text=search_text
         )
 
 
-def _latest_filename(entry: CatalogEntry) -> str | None:
-    observation = entry.latest_observation
+def _latest_filename(catalog_entry: CatalogEntry) -> str | None:
+    observation = catalog_entry.latest_observation
     return None if observation is None else observation.reported_file.filename
 
 
@@ -193,34 +193,34 @@ def test_read_matched_and_total_file_counts_whole_episode_counts_as_one_file(
 
 
 # ---------------------------------------------------------------------------
-# Tests: detail
+# Tests: file history
 # ---------------------------------------------------------------------------
 
 
 def _history(
     catalog_db: Path, native_id: str, *, since: datetime = _EPOCH, until: datetime = _YEAR_3000
 ) -> FileHistory | None:
-    with ThreadReadConnections(catalog_db) as reader_provider:
-        reader = SqliteCatalogFileReader(reader_provider)
+    with ThreadReadConnections(catalog_db) as thread_read_connections:
+        reader = SqliteCatalogFileReader(thread_read_connections)
         return reader.read_file_history(file_id(native_id), since=since, until=until)
 
 
 def test_file_history_carries_observations_and_dated_decisions(catalog_db: Path) -> None:
     seed(catalog_db)
-    detail = _history(catalog_db, "a" * 32)
-    assert detail is not None
-    assert detail.file == FileKey(Network.ED2K, "a" * 32)
-    assert detail.size_bytes == 100
-    assert detail.decisions == (
+    file_history = _history(catalog_db, "a" * 32)
+    assert file_history is not None
+    assert file_history.file == FileKey(Network.ED2K, "a" * 32)
+    assert file_history.size_bytes == 100
+    assert file_history.decisions == (
         DatedDecision(
             DecisionRecord(target_id="062A", rule_name="id_segment_exact", tier="download"),
             decided_at=datetime(2026, 6, 22, 10, 0, 1, tzinfo=UTC),
             node_id="n1",
         ),
     )
-    assert [o.reported_file.filename for o in detail.observations] == ["keroro_062.avi"]
-    assert detail.latest_observation == detail.observations[0]
-    assert detail.known_filenames == ("keroro_062.avi",)
+    assert [o.reported_file.filename for o in file_history.observations] == ["keroro_062.avi"]
+    assert file_history.latest_observation == file_history.observations[0]
+    assert file_history.known_filenames == ("keroro_062.avi",)
 
 
 def test_file_history_reads_its_observations_in_the_window_and_its_latest_in_any(
@@ -232,18 +232,18 @@ def test_file_history_reads_its_observations_in_the_window_and_its_latest_in_any
             connection, "a" * 32, "older.avi", observed_at="2026-06-21T10:00:00+00:00"
         )
     since, until = datetime(2026, 6, 1, tzinfo=UTC), datetime.fromisoformat(SEEN_AT)
-    detail = _history(catalog_db, "a" * 32, since=since, until=until)
-    assert detail is not None
-    assert [o.reported_file.filename for o in detail.observations] == ["older.avi"]
-    assert detail.latest_observation is not None
-    assert detail.latest_observation.reported_file.filename == "keroro_062.avi"
+    file_history = _history(catalog_db, "a" * 32, since=since, until=until)
+    assert file_history is not None
+    assert [o.reported_file.filename for o in file_history.observations] == ["older.avi"]
+    assert file_history.latest_observation is not None
+    assert file_history.latest_observation.reported_file.filename == "keroro_062.avi"
 
 
 def test_file_history_of_an_unknown_file_id_is_none(catalog_db: Path) -> None:
     seed(catalog_db)
     assert _history(catalog_db, "f" * 32) is None
-    with ThreadReadConnections(catalog_db) as reader_provider:
-        reader = SqliteCatalogFileReader(reader_provider)
+    with ThreadReadConnections(catalog_db) as thread_read_connections:
+        reader = SqliteCatalogFileReader(thread_read_connections)
         by_native_id = reader.read_file_history(
             bytes.fromhex("a" * 32), since=_EPOCH, until=_YEAR_3000
         )
@@ -255,9 +255,9 @@ def test_file_history_retracted_target_is_no_decision(catalog_db: Path) -> None:
     from ``read_file_history``, identical to an unmatched file (spec §9). The earlier
     (pre-retraction) real decision must not leak through."""
     seed_retracted(catalog_db)
-    detail = _history(catalog_db, "c" * 32)
-    assert detail is not None
-    assert detail.decisions == ()
+    file_history = _history(catalog_db, "c" * 32)
+    assert file_history is not None
+    assert file_history.decisions == ()
 
 
 def test_file_history_no_decision(catalog_db: Path) -> None:
@@ -271,17 +271,17 @@ def test_file_history_no_decision(catalog_db: Path) -> None:
             observed_at="2026-06-22T09:00:00.000000+00:00",
             size_bytes=200,
         )
-    detail = _history(catalog_db, "b" * 32)
-    assert detail is not None
-    assert detail.decisions == ()
-    assert detail.size_bytes == 200
+    file_history = _history(catalog_db, "b" * 32)
+    assert file_history is not None
+    assert file_history.decisions == ()
+    assert file_history.size_bytes == 200
 
 
 def test_file_history_whole_episode_lists_both_decisions(catalog_db: Path) -> None:
     seed_whole_episode(catalog_db)
-    detail = _history(catalog_db, "a" * 32)
-    assert detail is not None
-    assert [d.decision.target_id for d in detail.decisions] == ["072A", "072B"]
+    file_history = _history(catalog_db, "a" * 32)
+    assert file_history is not None
+    assert [d.decision.target_id for d in file_history.decisions] == ["072A", "072B"]
 
 
 # ---------------------------------------------------------------------------
@@ -305,17 +305,17 @@ def test_read_catalog_entries_reads_at_most_its_limit_from_its_offset(catalog_db
     second = _entries(
         catalog_db, sort=CatalogEntrySort.SIZE, direction=SortDirection.ASC, offset=_LIMIT
     )
-    assert [entry.size_bytes for entry in first] == list(range(_LIMIT))
-    assert [entry.size_bytes for entry in second] == [_LIMIT, _LIMIT + 1]
+    assert [catalog_entry.size_bytes for catalog_entry in first] == list(range(_LIMIT))
+    assert [catalog_entry.size_bytes for catalog_entry in second] == [_LIMIT, _LIMIT + 1]
 
 
 def test_file_history_observations_include_media_fields_none(catalog_db: Path) -> None:
     """An observation's duration_seconds and bitrate_kbps are None when the network gave none."""
     seed(catalog_db)
-    detail = _history(catalog_db, "a" * 32)
-    assert detail is not None
-    assert len(detail.observations) == 1
-    obs = detail.observations[0].reported_file
+    file_history = _history(catalog_db, "a" * 32)
+    assert file_history is not None
+    assert len(file_history.observations) == 1
+    obs = file_history.observations[0].reported_file
     assert obs.duration_seconds is None
     assert obs.bitrate_kbps is None
 
@@ -334,10 +334,10 @@ def test_file_history_observations_include_media_fields_present(catalog_db: Path
             duration_seconds=1320,
             bitrate_kbps=192,
         )
-    detail = _history(catalog_db, h)
-    assert detail is not None
-    assert len(detail.observations) == 1
-    obs = detail.observations[0].reported_file
+    file_history = _history(catalog_db, h)
+    assert file_history is not None
+    assert len(file_history.observations) == 1
+    obs = file_history.observations[0].reported_file
     assert obs.duration_seconds == 1320
     assert obs.bitrate_kbps == 192
 
@@ -676,9 +676,13 @@ def test_read_catalog_entries_observation_tie_break_on_the_newest_variant(catalo
 
 def test_file_history_of_a_file_never_seen_has_no_observation(catalog_db: Path) -> None:
     h = _seed_file_without_observation(catalog_db)
-    detail = _history(catalog_db, h)
-    assert detail is not None
-    assert (detail.observations, detail.latest_observation, detail.known_filenames) == (
+    file_history = _history(catalog_db, h)
+    assert file_history is not None
+    assert (
+        file_history.observations,
+        file_history.latest_observation,
+        file_history.known_filenames,
+    ) == (
         (),
         None,
         (),
@@ -751,7 +755,7 @@ def test_counters_read_observations_only_for_a_name_filter(
             tables.add(table)
         return sqlite3.SQLITE_OK
 
-    with ThreadReadConnections(catalog_db) as reader_provider:
-        reader_provider.connection().set_authorizer(record)
-        _COUNTERS[counter](SqliteCatalogFileReader(reader_provider), search_text)
+    with ThreadReadConnections(catalog_db) as thread_read_connections:
+        thread_read_connections.connection().set_authorizer(record)
+        _COUNTERS[counter](SqliteCatalogFileReader(thread_read_connections), search_text)
     assert ("observations" in tables) is (search_text is not None)

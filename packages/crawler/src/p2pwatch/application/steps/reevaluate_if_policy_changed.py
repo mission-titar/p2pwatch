@@ -1,6 +1,6 @@
 """Startup gate for the catalogue re-evaluation: skip when the policy is unchanged (spec §7.1).
 
-APPLICATION layer, pure orchestration (no I/O of its own: delegates to the injected
+APPLICATION ring, pure orchestration (no I/O of its own: delegates to the injected
 policy fingerprint ports and the ``reevaluate`` callable, so the composition root decides what
 re-evaluating concretely means, e.g. ``reevaluate_catalog``).
 

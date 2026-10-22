@@ -34,9 +34,11 @@ def _write_legacy_local_db(path: Path) -> None:
     """A local.db stamped at version 3: verification_tasks present, 0004 not applied yet."""
     connection = sqlite3.connect(path, autocommit=True)
     connection.execute("PRAGMA journal_mode=WAL")
-    for entry in sorted(_LOCAL_MIGRATIONS.iterdir(), key=lambda item: item.name):
-        if int(entry.name.partition("_")[0]) <= 3:
-            connection.executescript(entry.read_text(encoding="utf-8"))
+    for script_file in sorted(
+        _LOCAL_MIGRATIONS.iterdir(), key=lambda script_file: script_file.name
+    ):
+        if int(script_file.name.partition("_")[0]) <= 3:
+            connection.executescript(script_file.read_text(encoding="utf-8"))
     connection.execute("PRAGMA user_version = 3")
     connection.close()
 

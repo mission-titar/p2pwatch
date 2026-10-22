@@ -7,7 +7,7 @@ sleep on the next wake. A ``wake`` with NO waiter is harmless (the event stays a
 until the next ``wait``, which consumes it right away), consistent with "a lost wake is
 harmless, the fallback polling is the safety net" (spec §3).
 
-Single-thread/event-loop: all accesses go through the event loop (the repos are called
+Single-thread/event-loop: all accesses go through the event loop (the stores are called
 synchronously on that same loop, no races). No lock needed.
 """
 
