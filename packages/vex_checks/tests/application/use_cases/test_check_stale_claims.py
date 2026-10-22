@@ -8,15 +8,18 @@ from tests.fakes.adapters.driven.fake_code_scanning_reporter import (
 )
 from tests.fakes.adapters.driven.fake_vex_reader import FakeVexReader
 from tests.fakes.adapters.driven.fake_vulnerability_scanner import FakeVulnerabilityScanner
+from vex_checks.application.ports.driving.stale_claims_checker import StaleClaimsReport
 from vex_checks.application.use_cases.check_stale_claims import CheckStaleClaims
-from vex_checks.domain.violations import Violation
+from vex_checks.domain.claim_problem import ClaimProblem
 
 REPOSITORY_ROOT = PurePath("/repo")
 VEX_PATH = REPOSITORY_ROOT / "security" / "crawler.vex.openvex.json"
 SBOM_PATH = PurePath("/tmp/sbom.syft.json")
 CLAIMS = {"CVE-A": "vulnerable_code_not_present", "CVE-B": "vulnerable_code_not_present"}
 
-CVE_B_STALE = Violation("CVE-B", "no longer reported by Grype", "security/crawler.vex.openvex.json")
+VEX_LOCATION = "security/crawler.vex.openvex.json"
+
+CVE_B_STALE = ClaimProblem("CVE-B", "no longer reported by Grype")
 
 
 def _checker(
@@ -38,7 +41,7 @@ def test_a_claim_the_scanner_no_longer_finds_is_a_problem_located_at_the_vex() -
 
     report = checker.check_stale_claims(SBOM_PATH, VEX_PATH, None)
 
-    assert report.problems == (CVE_B_STALE,)
+    assert report == StaleClaimsReport(problems=(CVE_B_STALE,), vex_location=VEX_LOCATION)
 
 
 def test_no_claim_is_stale_while_the_scanner_finds_every_advisory() -> None:
@@ -54,7 +57,7 @@ def test_a_vex_outside_the_repository_is_located_at_its_path_as_given() -> None:
 
     report = checker.check_stale_claims(SBOM_PATH, PurePath("/tmp/vex.openvex.json"), None)
 
-    assert [problem.location for problem in report.problems] == ["/tmp/vex.openvex.json"]
+    assert report.vex_location == "/tmp/vex.openvex.json"
 
 
 def test_the_scanner_is_given_the_sbom() -> None:
@@ -71,14 +74,9 @@ def test_asked_for_sarif_the_problems_are_written_under_the_stale_claims_rule() 
 
     report = checker.check_stale_claims(SBOM_PATH, VEX_PATH, PurePath("/tmp/out.sarif"))
 
-    assert report.problems == (CVE_B_STALE,)
+    assert report == StaleClaimsReport(problems=(CVE_B_STALE,), vex_location=VEX_LOCATION)
     assert code_scanning_reporter.written_sarifs == [
-        WrittenSarif(
-            PurePath("/tmp/out.sarif"),
-            "stale-vex-entry",
-            (CVE_B_STALE,),
-            "security/crawler.vex.openvex.json",
-        )
+        WrittenSarif(PurePath("/tmp/out.sarif"), "stale-vex-entry", (CVE_B_STALE,), VEX_LOCATION)
     ]
 
 
@@ -88,7 +86,7 @@ def test_asked_for_sarif_with_no_stale_claim_an_empty_report_is_written() -> Non
 
     checker.check_stale_claims(SBOM_PATH, VEX_PATH, PurePath("/tmp/out.sarif"))
 
-    assert [written.violations for written in code_scanning_reporter.written_sarifs] == [()]
+    assert [written.claim_problems for written in code_scanning_reporter.written_sarifs] == [()]
 
 
 def test_not_asked_for_sarif_nothing_is_written() -> None:

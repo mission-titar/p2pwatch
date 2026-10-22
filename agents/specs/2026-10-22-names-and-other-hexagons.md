@@ -103,8 +103,9 @@ Each goes into `AGENTS.md` in the block where the whole tree first follows it.
   only asks gluetun whether a port was assigned, and which); `PullRequestBodyWriter` becomes `PullRequestDrafter`,
   `StepOutputWriter` `BumpAnnouncer` (it announces the new version and the body's path to whoever ran it: the
   workflow, or the terminal), and `SarifWriter` `CodeScanningReporter` (block 52, with its new argument, so its method
-  is named once). Their `read_*` methods keep their names. Why: the rule C2 then holds with no exception; one common
-  word (`Publisher`, `Exporter`) was weighed and refused by the operator as less telling than a name per port.
+  is named once; Corrected: block 52 renames it, block 53 gives it `ClaimProblem`). Their `read_*` methods keep
+  their names. Why: the rule C2 then holds with no exception; one common word (`Publisher`, `Exporter`) was weighed
+  and refused by the operator as less telling than a name per port.
 - **D6. Names decided in Discuss** (the operator): `ConsoleQueryRun` (the response model of `RunConsoleQuery`; the
   `QueryAnswer | QueryFailure` union stays unnamed, since `result` is a refused word); `SourceDisplay` (one source
   as a list shows it, built from a `KnownSource` or a `SourceNaming`: `SourceNamingDisplay` and `KnownSourceDisplay`
@@ -170,7 +171,8 @@ Each goes into `AGENTS.md` in the block where the whole tree first follows it.
   problem of a report has the same location, so the field was redundant; a stale claim contradicts no premise, so
   "violation" was wrong for it; and two adapters print the message (the command line and the SARIF), so it is worded
   once, in the domain, rather than typed per kind as R6b does for the two other tools. The glossary's `premise` and
-  `claim` lines follow. Block 52 for `image-claims` and `stale-claims`, 54 for `claim-coverage`.
+  `claim` lines follow. Block 52 for `image-claims` and `stale-claims`, 54 for `claim-coverage` (Corrected: block 53
+  for the two image checks, 54 for `claim-coverage` and the glossary).
 - **D19. Boot's environment is parsed by a composition (H2, H14)**: a `BootComposition` implements `ContainerBooter`,
   parses the variables at call time and builds `BootContainer` with its settings; the command line loses `env`.
   `PosixAmuleConfStore` and `S6ServiceSupervisor` are built once in `build_command_line`, for boot and port-sync,
@@ -204,8 +206,9 @@ rows: 16 moves code verbatim, 20 renames and nothing else, 22 renames local name
 | 40 | `refactor/bump-domain` | `amule_bump`'s pure logic to its domain (D15) | 320, 13 |
 | 42 | `refactor/bump-fixed-values` | `amule_bump`'s timeout, `ARG` line, option defaults (D16) | 150, 10 |
 | 50 | `refactor/vex-root-and-sarif-option` | `vex_checks`' root from `cwd`, its `PurePath` command line, `--sarif`, the workflows (D12, D17) | 300, 13 |
-| 52 | `refactor/vex-claim-problems` | `ClaimProblem` for `image-claims` and `stale-claims`, the location carried once, `CodeScanningReporter` (D5, D18) | 450, 18 |
-| 54 | `refactor/vex-claim-coverage` | `claim-coverage`'s bijection in the domain, on `ClaimProblem`; vex's broken input (D13, D18) | 400, 16 |
+| 52 | `refactor/vex-claim-problems` | `CodeScanningReporter` (Corrected: the rename only, `ClaimProblem` moved to block 53, since the whole measured 24 files) (D5) | 450, 18 |
+| 53 | `refactor/claim-problem-type` | (Corrected: added, split from block 52) `ClaimProblem` for `image-claims` and `stale-claims`, the location carried once (D18) | 190, 19 |
+| 54 | `refactor/vex-claim-coverage` | `claim-coverage`'s bijection in the domain, on `ClaimProblem`; vex's broken input; the glossary's `claim` and `premise` lines (Corrected: from block 52, so block 53 stays under 20 files) (D13, D18) | 400, 16 |
 | 60 | `refactor/amule-boot-composition` | `BootComposition`, the adapters built once, amule's logger names (Corrected: with the ast-grep rule refusing a literal, its rule test and C4, from block 24) (D9, D19) | 400, 17 |
 | 62 | `refactor/run-command` | `run_command` everywhere, the s6 timeout, the missing `amule.conf` branch; C7 (D20) | 160, 13 |
 | 70 | `refactor/template-problems` | the templates' broken input, typed problems, `PurePath` (D13, D17, D21) | 300, 13 |

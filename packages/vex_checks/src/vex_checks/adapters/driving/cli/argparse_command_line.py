@@ -7,7 +7,7 @@ from pathlib import PurePath
 from vex_checks.application.ports.driving.claim_coverage_checker import ClaimCoverageChecker
 from vex_checks.application.ports.driving.image_claims_checker import ImageClaimsChecker
 from vex_checks.application.ports.driving.stale_claims_checker import StaleClaimsChecker
-from vex_checks.domain.violations import Violation
+from vex_checks.domain.claim_problem import ClaimProblem
 
 
 def _add_image_options(
@@ -24,12 +24,14 @@ def _add_image_options(
     )
 
 
-def _print_problems(problems: Sequence[Violation], sarif_output: PurePath | None) -> int:
+def _print_problems(
+    problems: Sequence[ClaimProblem], vex_location: str, sarif_output: PurePath | None
+) -> int:
     """Each problem a GitHub ``::error::`` line and exit 1, or, written as SARIF, exit 0."""
     if sarif_output is not None:
         return 0
     for problem in problems:
-        print(f"::error::{problem.advisory_id}: {problem.message} ({problem.location})")
+        print(f"::error::{problem.advisory_id}: {problem.message} ({vex_location})")
     return 1 if problems else 0
 
 
@@ -79,13 +81,13 @@ class ArgparseCommandLine:
         self, sbom: PurePath, vex: PurePath, sarif_output: PurePath | None
     ) -> int:
         report = self._image_claims_checker.check_image_claims(sbom, vex, sarif_output)
-        return _print_problems(report.problems, sarif_output)
+        return _print_problems(report.problems, report.vex_location, sarif_output)
 
     def _check_stale_claims(
         self, sbom: PurePath, vex: PurePath, sarif_output: PurePath | None
     ) -> int:
         report = self._stale_claims_checker.check_stale_claims(sbom, vex, sarif_output)
-        return _print_problems(report.problems, sarif_output)
+        return _print_problems(report.problems, report.vex_location, sarif_output)
 
     def _check_claim_coverage(self) -> int:
         report = self._claim_coverage_checker.check_claim_coverage()

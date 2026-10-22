@@ -16,7 +16,7 @@ from tests.fakes.application.use_cases.fake_stale_claims_checker import (
 )
 from vex_checks.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from vex_checks.application.ports.driving.claim_coverage_checker import ClaimCoverageProblem
-from vex_checks.domain.violations import Violation
+from vex_checks.domain.claim_problem import ClaimProblem
 
 _CWD = PurePath("/work/repo")
 _IMAGE_COMMANDS = ["image-claims", "stale-claims"]
@@ -26,21 +26,22 @@ _SARIF_OPTIONS = pytest.mark.parametrize(
     ids=["printed-by-default", "sarif-to-its-path"],
 )
 _PROBLEMS = (
-    Violation("CVE-A", "dpkg package 'nghttp2' is present", "security/crawler.vex.openvex.json"),
-    Violation("CVE-B", "declared amule 2.1.1 is below 2.1.2", "/tmp/vex.openvex.json"),
+    ClaimProblem("CVE-A", "dpkg package 'nghttp2' is present"),
+    ClaimProblem("CVE-B", "declared amule 2.1.1 is below 2.1.2"),
 )
+_VEX_LOCATION = "security/crawler.vex.openvex.json"
 
 
 class _Checks:
-    """The two image checkers, answering the same problems, and the claim coverage checker."""
+    """The two image checkers, answering the same report, and the claim coverage checker."""
 
     def __init__(
         self,
-        problems: Sequence[Violation] = (),
+        problems: Sequence[ClaimProblem] = (),
         claim_coverage_problems: Sequence[ClaimCoverageProblem] = (),
     ) -> None:
-        self.image_claims_checker = FakeImageClaimsChecker(problems)
-        self.stale_claims_checker = FakeStaleClaimsChecker(problems)
+        self.image_claims_checker = FakeImageClaimsChecker(problems, _VEX_LOCATION)
+        self.stale_claims_checker = FakeStaleClaimsChecker(problems, _VEX_LOCATION)
         self.claim_coverage_checker = FakeClaimCoverageChecker(claim_coverage_problems)
 
     def command_line(self) -> ArgparseCommandLine:
@@ -105,7 +106,7 @@ def test_an_image_check_prints_each_problem_as_an_error_and_returns_one(
     assert exit_code == 1
     assert capsys.readouterr().out == (
         "::error::CVE-A: dpkg package 'nghttp2' is present (security/crawler.vex.openvex.json)\n"
-        "::error::CVE-B: declared amule 2.1.1 is below 2.1.2 (/tmp/vex.openvex.json)\n"
+        "::error::CVE-B: declared amule 2.1.1 is below 2.1.2 (security/crawler.vex.openvex.json)\n"
     )
 
 

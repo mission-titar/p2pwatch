@@ -5,13 +5,13 @@ from typing import cast
 from vex_checks.adapters.driven.filesystem_code_scanning_reporter import (
     FilesystemCodeScanningReporter,
 )
-from vex_checks.domain.violations import Violation
+from vex_checks.domain.claim_problem import ClaimProblem
 
 _RULE_ID = "vex-consistency-tarfile"
 _VEX_RELPATH = "security/crawler.vex.openvex.json"
 
 
-def test_empty_violations_yields_valid_sarif_with_no_results(tmp_path: Path) -> None:
+def test_no_claim_problem_yields_valid_sarif_with_no_results(tmp_path: Path) -> None:
     sarif_path = tmp_path / "out.sarif"
 
     FilesystemCodeScanningReporter().report_claim_problems(sarif_path, _RULE_ID, [], _VEX_RELPATH)
@@ -34,16 +34,14 @@ def test_empty_violations_yields_valid_sarif_with_no_results(tmp_path: Path) -> 
     assert run["results"] == []
 
 
-def test_one_violation_yields_one_error_result_pointing_at_the_vex_file(tmp_path: Path) -> None:
+def test_one_claim_problem_yields_one_error_result_pointing_at_the_vex_file(
+    tmp_path: Path,
+) -> None:
     sarif_path = tmp_path / "out.sarif"
-    violation = Violation(
-        advisory_id="CVE-2026-11940",
-        message="tarfile is imported at src/p2pwatch/foo.py",
-        location="packages/crawler/src/p2pwatch/foo.py",
-    )
+    claim_problem = ClaimProblem("CVE-2026-11940", "no longer reported by Grype")
 
     FilesystemCodeScanningReporter().report_claim_problems(
-        sarif_path, _RULE_ID, [violation], _VEX_RELPATH
+        sarif_path, _RULE_ID, [claim_problem], _VEX_RELPATH
     )
 
     sarif = json.loads(sarif_path.read_text())
@@ -56,8 +54,7 @@ def test_one_violation_yields_one_error_result_pointing_at_the_vex_file(tmp_path
     assert sarif_result["level"] == "error"
 
     message = cast(dict[str, object], sarif_result["message"])
-    text = cast(str, message["text"])
-    assert violation.advisory_id in text
+    assert message["text"] == "CVE-2026-11940: no longer reported by Grype"
 
     locations = cast(list[dict[str, object]], sarif_result["locations"])
     physical = cast(dict[str, object], locations[0]["physicalLocation"])

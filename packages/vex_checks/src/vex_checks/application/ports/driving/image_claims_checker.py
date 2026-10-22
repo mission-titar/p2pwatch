@@ -4,12 +4,13 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import PurePath
 
-from vex_checks.domain.violations import Violation
+from vex_checks.domain.claim_problem import ClaimProblem
 
 
 @dataclass(frozen=True)
 class ImageClaimsReport:
-    problems: tuple[Violation, ...]  # each located at the VEX
+    problems: tuple[ClaimProblem, ...]
+    vex_location: str  # where every problem points, as `locate_vex` names it
 
 
 class ImageClaimsChecker(ABC):

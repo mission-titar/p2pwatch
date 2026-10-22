@@ -4,6 +4,7 @@ from typing import assert_never
 
 from packaging.version import Version
 
+from vex_checks.domain.claim_problem import ClaimProblem
 from vex_checks.domain.descriptors import (
     DeclaredMinVersion,
     DpkgMinVersion,
@@ -11,7 +12,6 @@ from vex_checks.domain.descriptors import (
     ImagePremise,
 )
 from vex_checks.domain.sbom_components import DeclaredComponent, DpkgPackage
-from vex_checks.domain.violations import Violation
 
 
 def _upstream(version: str) -> str:
@@ -31,39 +31,36 @@ def evaluate_image_premises(
     premises: dict[str, ImagePremise],
     packages: list[DpkgPackage],
     declared_components: list[DeclaredComponent],
-) -> list[Violation]:
+) -> list[ClaimProblem]:
     dpkg_packages_by_name: dict[str, list[DpkgPackage]] = {}
     for dpkg_package in packages:
         dpkg_packages_by_name.setdefault(dpkg_package.name, []).append(dpkg_package)
-    violations: list[Violation] = []
+    problems: list[ClaimProblem] = []
     for advisory_id, premise in premises.items():
         match premise:
             case DpkgPackageAbsent(package):
                 if package in dpkg_packages_by_name:
-                    violations.append(
-                        Violation(advisory_id, f"dpkg package {package!r} is present", "security")
+                    problems.append(
+                        ClaimProblem(advisory_id, f"dpkg package {package!r} is present")
                     )
             case DpkgMinVersion(package, minimum):
                 for dpkg_package in dpkg_packages_by_name.get(package, []):
                     if Version(_upstream(dpkg_package.version)) < Version(minimum):
-                        violations.append(
-                            Violation(
-                                advisory_id,
-                                f"{package} {dpkg_package.version} is below {minimum}",
-                                "security",
+                        problems.append(
+                            ClaimProblem(
+                                advisory_id, f"{package} {dpkg_package.version} is below {minimum}"
                             )
                         )
             case DeclaredMinVersion(component, minimum):
                 for declared_component in (c for c in declared_components if c.name == component):
                     if Version(declared_component.version) < Version(minimum):
-                        violations.append(
-                            Violation(
+                        problems.append(
+                            ClaimProblem(
                                 advisory_id,
                                 f"declared {component} {declared_component.version}"
                                 f" is below {minimum}",
-                                "security",
                             )
                         )
             case _:  # pragma: no cover
                 assert_never(premise)
-    return violations
+    return problems

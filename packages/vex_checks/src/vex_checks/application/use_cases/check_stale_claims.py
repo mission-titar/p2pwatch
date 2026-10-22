@@ -9,8 +9,8 @@ from vex_checks.application.ports.driving.stale_claims_checker import (
     StaleClaimsChecker,
     StaleClaimsReport,
 )
+from vex_checks.domain.claim_problem import ClaimProblem
 from vex_checks.domain.vex_location import locate_vex
-from vex_checks.domain.violations import Violation
 
 _RULE_ID = "stale-vex-entry"
 
@@ -38,7 +38,7 @@ class CheckStaleClaims(StaleClaimsChecker):
         advisory_ids = self._vulnerability_scanner.scan_sbom(sbom_path)
         vex_location = locate_vex(vex_path, self._repository_root)
         problems = tuple(
-            Violation(advisory_id, "no longer reported by Grype", vex_location)
+            ClaimProblem(advisory_id, "no longer reported by Grype")
             for advisory_id in self._vex_reader.read_claims(vex_path)
             if advisory_id not in advisory_ids
         )
@@ -46,4 +46,4 @@ class CheckStaleClaims(StaleClaimsChecker):
             self._code_scanning_reporter.report_claim_problems(
                 sarif_path, _RULE_ID, problems, vex_location
             )
-        return StaleClaimsReport(problems=problems)
+        return StaleClaimsReport(problems=problems, vex_location=vex_location)
