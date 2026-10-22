@@ -7,36 +7,22 @@ from apprise.plugins.discord import USER_ROLE_DETECTION_RE
 
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
 from p2pwatch.domain.observability.policy import Audience, Severity
+from tests.fakes.adapters.driven.fake_apprise import FakeApprise
 
 _NODE = "titar-node-1"
 
 
-class _FakeApprise:
-    def __init__(self, asset: apprise.AppriseAsset) -> None:
-        self.asset = asset
-        self.added: list[tuple[str, str]] = []
-        self.sent: list[dict[str, object]] = []
-
-    def add(self, url: str, tag: str) -> bool:
-        self.added.append((url, tag))
-        return True
-
-    async def async_notify(self, **kwargs: object) -> bool:
-        self.sent.append(kwargs)
-        return True
-
-
-def _notifier() -> tuple[AppriseNotifier, list[_FakeApprise]]:
+def _notifier() -> tuple[AppriseNotifier, list[FakeApprise]]:
     """The notifier and every apprise group it builds, in order."""
     targets = (
         ("discord://x", Audience.COMMUNITY, True),
         ("discord://y", Audience.OPERATIONS, True),
         ("discord://z", Audience.COMMUNITY, False),
     )
-    groups: list[_FakeApprise] = []
+    groups: list[FakeApprise] = []
 
-    def factory(asset: apprise.AppriseAsset) -> _FakeApprise:
-        groups.append(_FakeApprise(asset))
+    def factory(asset: apprise.AppriseAsset) -> FakeApprise:
+        groups.append(FakeApprise(asset))
         return groups[-1]
 
     return AppriseNotifier(targets, apprise_factory=factory), groups

@@ -9,7 +9,8 @@ from coverage_checks.application.ports.driving.unit_coverage_checker import (
 from coverage_checks.application.use_cases.check_unit_coverage import CheckUnitCoverage
 from coverage_checks.domain.package_tree import PackageTree
 from coverage_checks.domain.test_coverage import TestCoverage
-from tests.fakes import FakePackageTreeReader, FakeTestCoverageReader
+from tests.fakes.adapters.driven.fake_package_tree_reader import FakePackageTreeReader
+from tests.fakes.adapters.driven.fake_test_coverage_reader import FakeTestCoverageReader
 
 LONELY = PurePath("src/pkg/lonely.py")
 OTHER = PurePath("src/pkg/other.py")

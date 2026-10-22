@@ -6,7 +6,8 @@ import pytest
 
 from p2pwatch_amule.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from p2pwatch_amule.domain.settings_error import SettingsError
-from tests.fakes import FakeContainerBooter, FakePortSyncLoopRunner
+from tests.fakes.application.use_cases.fake_container_booter import FakeContainerBooter
+from tests.fakes.composition.fake_port_sync_loop_runner import FakePortSyncLoopRunner
 
 ENV = {"PUID": "1000"}
 

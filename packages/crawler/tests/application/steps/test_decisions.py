@@ -25,14 +25,12 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability.events import DecisionChange, DecisionsRecorded
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.retraction import RETRACTED_TIER
-from tests.fakes.application.fakes import (
-    FakeEventEmitter,
-    FakeLogger,
-    FakeTime,
-    FakeWaker,
-    FakeWallClock,
-    TickingWallClock,
-)
+from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
+from tests.fakes.adapters.driven.fake_logger import FakeLogger
+from tests.fakes.adapters.driven.fake_time import FakeTime
+from tests.fakes.adapters.driven.fake_waker import FakeWaker
+from tests.fakes.adapters.driven.fake_wall_clock import FakeWallClock
+from tests.fakes.adapters.driven.ticking_wall_clock import TickingWallClock
 from tests.support.catalog_rows import decision_node_ids, insert_file
 
 _NODE = "n1"

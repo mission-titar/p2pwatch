@@ -1,7 +1,6 @@
 """The command line: one subcommand per driving port, its refusals turned into exit codes."""
 
 import logging
-from collections.abc import Sequence
 from pathlib import PurePath
 
 import pytest
@@ -16,6 +15,9 @@ from p2pwatch.application.ports.driving.config_validator import ConfigValidator
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.merge_error import MergeError
+from tests.fakes.application.use_cases.fake_catalog_merger import FakeCatalogMerger
+from tests.fakes.application.use_cases.fake_config_validator import FakeConfigValidator
+from tests.fakes.composition.fake_crawler_runner import FakeCrawlerRunner
 
 _CWD = PurePath("/srv/node")
 _DEFAULT_PATHS = (
@@ -27,51 +29,6 @@ _GIVEN_PATHS = (PurePath("/etc/p2pwatch/c.yml"), _CWD / "t.yml", _CWD / "m.yml")
 _GIVEN_ARGV = ["--config", "/etc/p2pwatch/c.yml", "--targets", "t.yml", "--matcher", "m.yml"]
 
 
-class _FakeCrawlerRunner(CrawlerRunner):
-    """Records the paths of each crawl, and raises ``failure`` when given one."""
-
-    def __init__(self, failure: Exception | None = None) -> None:
-        self.crawled_paths: list[tuple[PurePath, PurePath, PurePath]] = []
-        self._failure = failure
-
-    async def crawl(
-        self, *, config_path: PurePath, targets_path: PurePath, matcher_path: PurePath
-    ) -> None:
-        self.crawled_paths.append((config_path, targets_path, matcher_path))
-        if self._failure is not None:
-            raise self._failure
-
-
-class _FakeConfigValidator(ConfigValidator):
-    """Records the paths of each validation, and raises ``refusal`` when given one."""
-
-    def __init__(self, refusal: InvalidConfigError | None = None) -> None:
-        self.validated_paths: list[tuple[PurePath, PurePath, PurePath]] = []
-        self._refusal = refusal
-
-    def validate_config(
-        self, *, config_path: PurePath, targets_path: PurePath, matcher_path: PurePath
-    ) -> None:
-        self.validated_paths.append((config_path, targets_path, matcher_path))
-        if self._refusal is not None:
-            raise self._refusal
-
-
-class _FakeCatalogMerger(CatalogMerger):
-    """Records each merge, and raises ``refusal`` when given one."""
-
-    def __init__(self, refusal: MergeError | None = None) -> None:
-        self.merges: list[tuple[list[PurePath], NewCatalog | ListedSourceCatalog]] = []
-        self._refusal = refusal
-
-    def merge_catalogs(
-        self, source_catalogs: Sequence[PurePath], destination: NewCatalog | ListedSourceCatalog
-    ) -> None:
-        self.merges.append((list(source_catalogs), destination))
-        if self._refusal is not None:
-            raise self._refusal
-
-
 def _command_line(
     crawler_runner: CrawlerRunner | None = None,
     config_validator: ConfigValidator | None = None,
@@ -79,16 +36,16 @@ def _command_line(
     root_logger: logging.Logger | None = None,
 ) -> ArgparseCommandLine:
     return ArgparseCommandLine(
-        crawler_runner=crawler_runner or _FakeCrawlerRunner(),
-        config_validator=config_validator or _FakeConfigValidator(),
-        catalog_merger=catalog_merger or _FakeCatalogMerger(),
+        crawler_runner=crawler_runner or FakeCrawlerRunner(),
+        config_validator=config_validator or FakeConfigValidator(),
+        catalog_merger=catalog_merger or FakeCatalogMerger(),
         root_logger=root_logger or logging.Logger("root"),
         cwd=_CWD,
     )
 
 
 def test_crawl_runs_the_crawler_on_the_paths_given_a_relative_one_under_cwd() -> None:
-    crawler_runner = _FakeCrawlerRunner()
+    crawler_runner = FakeCrawlerRunner()
 
     assert _command_line(crawler_runner=crawler_runner).run(["crawl", *_GIVEN_ARGV]) == 0
 
@@ -96,7 +53,7 @@ def test_crawl_runs_the_crawler_on_the_paths_given_a_relative_one_under_cwd() ->
 
 
 def test_crawl_defaults_to_the_deploy_directory_under_the_working_directory_given() -> None:
-    crawler_runner = _FakeCrawlerRunner()
+    crawler_runner = FakeCrawlerRunner()
 
     assert _command_line(crawler_runner=crawler_runner).run(["crawl"]) == 0
 
@@ -104,7 +61,7 @@ def test_crawl_defaults_to_the_deploy_directory_under_the_working_directory_give
 
 
 def test_crawl_refuses_to_start_on_an_invalid_config(capsys: pytest.CaptureFixture[str]) -> None:
-    crawler_runner = _FakeCrawlerRunner(InvalidConfigError("search: section missing"))
+    crawler_runner = FakeCrawlerRunner(InvalidConfigError("search: section missing"))
 
     assert _command_line(crawler_runner=crawler_runner).run(["crawl"]) == 1
 
@@ -115,7 +72,7 @@ def test_crawl_exits_zero_when_the_shutdown_deadline_fires(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     # The bound firing is the crawler keeping its promise not to hang, not a crash.
-    crawler_runner = _FakeCrawlerRunner(TimeoutError())
+    crawler_runner = FakeCrawlerRunner(TimeoutError())
 
     assert _command_line(crawler_runner=crawler_runner).run(["crawl"]) == 0
 
@@ -125,8 +82,8 @@ def test_crawl_exits_zero_when_the_shutdown_deadline_fires(
 def test_validate_config_validates_the_paths_given_under_cwd_and_starts_nothing(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    crawler_runner = _FakeCrawlerRunner()
-    config_validator = _FakeConfigValidator()
+    crawler_runner = FakeCrawlerRunner()
+    config_validator = FakeConfigValidator()
     command_line = _command_line(crawler_runner, config_validator)
 
     assert command_line.run(["validate-config", *_GIVEN_ARGV]) == 0
@@ -139,7 +96,7 @@ def test_validate_config_validates_the_paths_given_under_cwd_and_starts_nothing(
 def test_validate_config_defaults_to_the_deploy_directory_under_the_working_directory_given() -> (
     None
 ):
-    config_validator = _FakeConfigValidator()
+    config_validator = FakeConfigValidator()
 
     assert _command_line(config_validator=config_validator).run(["validate-config"]) == 0
 
@@ -147,7 +104,7 @@ def test_validate_config_defaults_to_the_deploy_directory_under_the_working_dire
 
 
 def test_validate_config_reports_an_invalid_config(capsys: pytest.CaptureFixture[str]) -> None:
-    config_validator = _FakeConfigValidator(InvalidConfigError("'episodes' section: list expected"))
+    config_validator = FakeConfigValidator(InvalidConfigError("'episodes' section: list expected"))
 
     assert _command_line(config_validator=config_validator).run(["validate-config"]) == 1
 
@@ -158,7 +115,7 @@ def test_the_bare_invocation_is_refused_with_a_usage_line(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     # 4.x ran the crawler without a subcommand; v5 names it.
-    crawler_runner = _FakeCrawlerRunner()
+    crawler_runner = FakeCrawlerRunner()
 
     with pytest.raises(SystemExit) as exit_info:
         _command_line(crawler_runner=crawler_runner).run(["--config", "deploy/crawler.yml"])
@@ -221,7 +178,7 @@ _B = PurePath("/data/b.db")
 def test_merge_merges_the_catalogs_given_into_the_destination_given_relative_ones_under_cwd(
     options: list[str], destination: NewCatalog | ListedSourceCatalog
 ) -> None:
-    catalog_merger = _FakeCatalogMerger()
+    catalog_merger = FakeCatalogMerger()
 
     assert (
         _command_line(catalog_merger=catalog_merger).run(["merge", *options, "a.db", "/data/b.db"])
@@ -232,7 +189,7 @@ def test_merge_merges_the_catalogs_given_into_the_destination_given_relative_one
 
 
 def test_merge_refuses_force_with_into(capsys: pytest.CaptureFixture[str]) -> None:
-    catalog_merger = _FakeCatalogMerger()
+    catalog_merger = FakeCatalogMerger()
 
     argv = ["merge", "--into", "a.db", "--force", "a.db", "b.db"]
     assert _command_line(catalog_merger=catalog_merger).run(argv) == 2
@@ -245,7 +202,7 @@ def test_merge_refuses_force_with_into(capsys: pytest.CaptureFixture[str]) -> No
     "options", [["--output", "out.db", "--into", "a.db"], []], ids=["both", "neither"]
 )
 def test_merge_takes_exactly_one_destination(options: list[str]) -> None:
-    catalog_merger = _FakeCatalogMerger()
+    catalog_merger = FakeCatalogMerger()
 
     with pytest.raises(SystemExit) as exit_info:
         _command_line(catalog_merger=catalog_merger).run(["merge", *options, "a.db"])
@@ -255,7 +212,7 @@ def test_merge_takes_exactly_one_destination(options: list[str]) -> None:
 
 
 def test_merge_reports_a_refused_merge(capsys: pytest.CaptureFixture[str]) -> None:
-    catalog_merger = _FakeCatalogMerger(MergeError("source catalog not found: b.db"))
+    catalog_merger = FakeCatalogMerger(MergeError("source catalog not found: b.db"))
 
     argv = ["merge", "--output", "out.db", "a.db", "b.db"]
     assert _command_line(catalog_merger=catalog_merger).run(argv) == 2

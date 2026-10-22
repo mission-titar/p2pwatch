@@ -3,7 +3,9 @@
 from collections.abc import Mapping
 from pathlib import PurePath
 
-from tests.fakes import FakeSarifWriter, FakeSbomReader, FakeVexReader, WrittenSarif
+from tests.fakes.adapters.driven.fake_sarif_writer import FakeSarifWriter, WrittenSarif
+from tests.fakes.adapters.driven.fake_sbom_reader import FakeSbomReader
+from tests.fakes.adapters.driven.fake_vex_reader import FakeVexReader
 from vex_checks.application.use_cases.check_image_claims import CheckImageClaims
 from vex_checks.domain.descriptors import (
     DeclaredMinVersion,

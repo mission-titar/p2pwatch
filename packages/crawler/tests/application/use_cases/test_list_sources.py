@@ -9,7 +9,7 @@ from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.paging import PAGE_SIZE
 from p2pwatch.domain.source import SourceKey
-from tests.fakes.application.fakes import FakeSourceReader
+from tests.fakes.adapters.driven.fake_source_reader import FakeSourceReader
 
 _KNOWN_SOURCE = KnownSource(
     source=SourceKey(Network.ED2K, "1f2e" * 8),

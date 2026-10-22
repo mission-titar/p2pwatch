@@ -10,7 +10,7 @@ import socket
 import threading
 import warnings
 from datetime import timedelta
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import ThreadingHTTPServer
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
@@ -31,11 +31,9 @@ from p2pwatch.adapters.driven.wall_clock_system import SystemWallClock
 from p2pwatch.composition.crawler_composition import CrawlerComposition
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
-from tests.fakes.adapters.mule_api.api_fakes import (
-    PASSWORD,
-    FakeAmuleApi,
-    FakeAmuleApiServer,
-)
+from tests.fakes.fake_amule_api import PASSWORD, FakeAmuleApi
+from tests.fakes.fake_amule_api_server import FakeAmuleApiServer
+from tests.fakes.notification_sink import NotificationSink
 from tests.support.catalog_rows import (
     decision_node_ids,
     insert_file,
@@ -314,27 +312,12 @@ async def test_the_download_loop_records_a_tracked_downloads_sources_under_the_n
     catalog.close()
 
 
-class _NotificationSink(BaseHTTPRequestHandler):
-    """Records each apprise ``json://`` notification: its User-Agent (the app_id) and title."""
-
-    received: list[tuple[str, str]] = []
-
-    def do_POST(self) -> None:  # noqa: N802 (http.server's name)
-        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-        self.received.append((self.headers["User-Agent"], body["title"]))
-        self.send_response(200)
-        self.end_headers()
-
-    def log_message(self, format: str, *args: object) -> None:
-        pass  # stderr stays quiet
-
-
 @pytest.mark.asyncio
 async def test_the_nodes_notifications_carry_its_id_in_their_username_and_title(
     tmp_path: Path,
 ) -> None:
-    sink = ThreadingHTTPServer(("127.0.0.1", 0), _NotificationSink)
-    _NotificationSink.received = []
+    sink = ThreadingHTTPServer(("127.0.0.1", 0), NotificationSink)
+    NotificationSink.received = []
     threading.Thread(target=sink.serve_forever, daemon=True).start()
     notification = {"url": f"json://127.0.0.1:{sink.server_port}/", "audience": "operations"}
     observability = {"log_level": "INFO", "notifications": [notification]}
@@ -354,7 +337,7 @@ async def test_the_nodes_notifications_carry_its_id_in_their_username_and_title(
     sink.shutdown()
     sink.server_close()
 
-    assert ("p2pwatch - wired-node", "[wired-node]") in _NotificationSink.received
+    assert ("p2pwatch - wired-node", "[wired-node]") in NotificationSink.received
 
 
 @pytest.mark.asyncio

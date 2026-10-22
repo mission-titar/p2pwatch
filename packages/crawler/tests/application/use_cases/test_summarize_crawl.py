@@ -3,29 +3,19 @@
 from collections.abc import Mapping
 from datetime import UTC, datetime
 
-from p2pwatch.application.ports.driven.coverage_reader import CoverageReader
 from p2pwatch.application.ports.driving.crawl_summarizer import ClientSummary, CrawlSummary
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.domain.coverage import TargetCoverage
 from p2pwatch.domain.node_state import NodeState
 from p2pwatch.domain.status_reading import READING_FRESH_FOR, PublishedReading, StatusReading
-from tests.fakes.application.fakes import (
-    FakeClientStatusReader,
-    FakeNodeStateReader,
-    FakeRunState,
-    FakeTime,
-)
+from tests.fakes.adapters.driven.fake_client_status_reader import FakeClientStatusReader
+from tests.fakes.adapters.driven.fake_coverage_reader import FakeCoverageReader
+from tests.fakes.adapters.driven.fake_node_state_reader import FakeNodeStateReader
+from tests.fakes.adapters.driven.fake_run_state import FakeRunState
+from tests.fakes.adapters.driven.fake_time import FakeTime
 
 _NODE_STATE = NodeState(node_id="node-1", created_at=None, downloads=(), backoff_state_by_key={})
 _READING = StatusReading(read_at=datetime(2026, 10, 14, tzinfo=UTC), status=None)
-
-
-class _FakeCoverageReader(CoverageReader):
-    def __init__(self, tiers_by_target: Mapping[str, tuple[str, ...]]) -> None:
-        self._tiers_by_target = tiers_by_target
-
-    def read_target_coverage(self) -> Mapping[str, tuple[str, ...]]:
-        return self._tiers_by_target
 
 
 def _summarize(
@@ -38,7 +28,7 @@ def _summarize(
 ) -> CrawlSummary:
     return SummarizeCrawl(
         target_ids=target_ids,
-        coverage_reader=_FakeCoverageReader(tiers_by_target or {}),
+        coverage_reader=FakeCoverageReader(tiers_by_target or {}),
         node_state_reader=FakeNodeStateReader(_NODE_STATE),
         run_state_reader=FakeRunState(paused=paused),
         client_status_reader=FakeClientStatusReader(published_readings or {}),

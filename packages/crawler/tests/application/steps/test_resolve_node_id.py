@@ -3,7 +3,9 @@
 from datetime import UTC, datetime
 
 from p2pwatch.application.steps.resolve_node_id import resolve_node_id
-from tests.fakes.application.fakes import FakeNodeIdGenerator, FakeNodeIdStore, FakeTime
+from tests.fakes.adapters.driven.fake_node_id_generator import FakeNodeIdGenerator
+from tests.fakes.adapters.driven.fake_node_id_store import FakeNodeIdStore
+from tests.fakes.adapters.driven.fake_time import FakeTime
 
 
 def _resolve(

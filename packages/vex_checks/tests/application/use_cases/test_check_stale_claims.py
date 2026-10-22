@@ -2,7 +2,9 @@
 
 from pathlib import PurePath
 
-from tests.fakes import FakeSarifWriter, FakeVexReader, FakeVulnerabilityScanner, WrittenSarif
+from tests.fakes.adapters.driven.fake_sarif_writer import FakeSarifWriter, WrittenSarif
+from tests.fakes.adapters.driven.fake_vex_reader import FakeVexReader
+from tests.fakes.adapters.driven.fake_vulnerability_scanner import FakeVulnerabilityScanner
 from vex_checks.application.use_cases.check_stale_claims import CheckStaleClaims
 from vex_checks.domain.violations import Violation
 

@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from p2pwatch.application.ports.driving.node_describer import NodeDescription
 from p2pwatch.application.use_cases.describe_node import DescribeNode
 from p2pwatch.domain.node_state import NodeState
-from tests.fakes.application.fakes import FakeNodeStateReader
+from tests.fakes.adapters.driven.fake_node_state_reader import FakeNodeStateReader
 
 
 def test_describing_the_node_returns_the_state_it_reads() -> None:

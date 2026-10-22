@@ -8,15 +8,12 @@ import pytest
 from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle
 from p2pwatch.application.steps.reevaluate_catalog import ReevaluationSummary
 from p2pwatch.domain.observability.events import CrawlerStarted
-from tests.fakes.application.fakes import (
-    FakeEventEmitter,
-    FakeLogger,
-    FakeNodeIdGenerator,
-    FakeNodeIdStore,
-    FakePolicyFingerprintStore,
-    FakeTime,
-    LoggedLine,
-)
+from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
+from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_node_id_generator import FakeNodeIdGenerator
+from tests.fakes.adapters.driven.fake_node_id_store import FakeNodeIdStore
+from tests.fakes.adapters.driven.fake_policy_fingerprint_store import FakePolicyFingerprintStore
+from tests.fakes.adapters.driven.fake_time import FakeTime
 
 _FINGERPRINT = "policy-2"
 

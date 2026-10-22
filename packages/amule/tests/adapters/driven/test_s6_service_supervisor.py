@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 
 from p2pwatch_amule.adapters.driven.s6_service_supervisor import S6ServiceSupervisor
-from tests.fakes import FakeCommandRunner, FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_command_runner import FakeCommandRunner
+from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 
 AMULED_SERVICE_DIRECTORY = Path("/run/service/amuled")
 CAPTURED = {"capture_output": True, "text": True}

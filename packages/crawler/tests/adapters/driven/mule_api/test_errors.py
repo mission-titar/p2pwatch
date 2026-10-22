@@ -16,7 +16,7 @@ from p2pwatch.domain.client_errors import (
     DownloadRejectedError,
     SearchFailedError,
 )
-from tests.fakes.adapters.mule_api.api_fakes import error
+from tests.fakes.fake_amule_api import error
 
 
 def _sent(response: httpx.Response) -> httpx.Response:

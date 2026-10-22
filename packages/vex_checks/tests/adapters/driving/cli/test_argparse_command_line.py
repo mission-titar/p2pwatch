@@ -5,11 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from tests.fakes import (
-    FakeClaimCoverageChecker,
+from tests.fakes.application.use_cases.fake_claim_coverage_checker import FakeClaimCoverageChecker
+from tests.fakes.application.use_cases.fake_image_claims_checker import (
     FakeImageClaimsChecker,
-    FakeStaleClaimsChecker,
     ImageClaimsCheck,
+)
+from tests.fakes.application.use_cases.fake_stale_claims_checker import (
+    FakeStaleClaimsChecker,
     StaleClaimsCheck,
 )
 from vex_checks.adapters.driving.cli.argparse_command_line import ArgparseCommandLine

@@ -9,7 +9,7 @@ from coverage_checks.application.ports.driving.unit_coverage_checker import (
     NoPerTestCoverage,
     UnitCoverageReport,
 )
-from tests.fakes import FakeUnitCoverageChecker
+from tests.fakes.composition.fake_unit_coverage_checker import FakeUnitCoverageChecker
 
 _DATA_FILE = Path("/work/packages/pkg/.coverage")
 

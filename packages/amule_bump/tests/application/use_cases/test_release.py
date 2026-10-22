@@ -3,7 +3,7 @@ import pytest
 from amule_bump.application.use_cases.release import is_newer, latest_release_tag, peeled_commit
 from amule_bump.domain.bump_error import BumpError
 from amule_bump.domain.git_object import GitObject, GitObjectKind
-from tests.fakes import FakeRepoReader
+from tests.fakes.adapters.driven.fake_repo_reader import FakeRepoReader
 
 TAG_OBJECT = "6ccbfdf785390c25c8b01652684f5b06fb18e034"
 COMMIT = "909d304d993ee07df6c6f6acf501a6d791d53666"

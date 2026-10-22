@@ -27,7 +27,7 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.source import SourceRole
 from p2pwatch.domain.status_reading import ChannelStatus
-from tests.fakes.adapters.mule_api.api_fakes import PASSWORD, TOKEN, FakeAmuleApi, error
+from tests.fakes.fake_amule_api import PASSWORD, TOKEN, FakeAmuleApi, error
 
 _HASH = "8b54a3c20fae9e4b9f7e0c2c8c01b6b1"
 _KEY = FileKey(Network.ED2K, _HASH)

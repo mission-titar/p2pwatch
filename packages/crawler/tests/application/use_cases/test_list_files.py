@@ -7,7 +7,7 @@ from p2pwatch.application.use_cases.list_files import ListFiles
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.paging import PAGE_SIZE
-from tests.fakes.application.fakes import FakeCatalogFileReader
+from tests.fakes.adapters.driven.fake_catalog_file_reader import FakeCatalogFileReader
 
 _ENTRY = CatalogEntry(
     file=FileKey(Network.ED2K, "a" * 32),

@@ -8,7 +8,7 @@ from amule_bump.application.use_cases.body import (
     wrap,
 )
 from amule_bump.domain.dockerfile import Pin
-from tests.fakes import FakeRepoReader
+from tests.fakes.adapters.driven.fake_repo_reader import FakeRepoReader
 
 GITHUB_BODY_MAX_CHARACTERS = 65536
 CHANGELOG_WIDTH_CHARACTERS = 100

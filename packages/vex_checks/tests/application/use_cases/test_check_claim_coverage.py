@@ -3,7 +3,8 @@
 from collections.abc import Mapping
 from pathlib import PurePath
 
-from tests.fakes import FakeSourceRuleReader, FakeVexReader
+from tests.fakes.adapters.driven.fake_source_rule_reader import FakeSourceRuleReader
+from tests.fakes.adapters.driven.fake_vex_reader import FakeVexReader
 from vex_checks.application.ports.driving.claim_coverage_checker import ClaimCoverageProblem
 from vex_checks.application.use_cases.check_claim_coverage import CheckClaimCoverage
 from vex_checks.domain.descriptors import DpkgPackageAbsent, ImagePremise

@@ -1,6 +1,5 @@
 """The dispatcher: log + metrics always; notification by audience, failure/timeout absorbed."""
 
-import asyncio
 import logging
 
 import pytest
@@ -10,42 +9,11 @@ from p2pwatch.application.ports.driven.metrics_recorder import MetricsRecorder
 from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability import events as ev
-from p2pwatch.domain.observability.policy import Audience, MetricInstruction, Severity
-
-
-class FakeMetricsRecorder(MetricsRecorder):
-    def __init__(self) -> None:
-        self.applied: list[MetricInstruction] = []
-
-    def apply(self, instruction: MetricInstruction) -> None:
-        self.applied.append(instruction)
-
-
-class _RecordingNotifier(Notifier):
-    def __init__(self) -> None:
-        self.calls: list[tuple[Audience, str, str, Severity]] = []
-        self.node_ids: list[str] = []
-
-    async def notify(
-        self, audience: Audience, title: str, body: str, severity: Severity, node_id: str
-    ) -> None:
-        self.calls.append((audience, title, body, severity))
-        self.node_ids.append(node_id)
-
-
-class _RaisingNotifier(Notifier):
-    async def notify(
-        self, audience: Audience, title: str, body: str, severity: Severity, node_id: str
-    ) -> None:
-        raise RuntimeError("canal mort")
-
-
-class _HangingNotifier(Notifier):
-    async def notify(
-        self, audience: Audience, title: str, body: str, severity: Severity, node_id: str
-    ) -> None:
-        await asyncio.sleep(10)  # exceeds the test's short timeout
-
+from p2pwatch.domain.observability.policy import Audience, Severity
+from tests.fakes.adapters.driven.fake_metrics_recorder import FakeMetricsRecorder
+from tests.fakes.adapters.driven.hanging_notifier import HangingNotifier
+from tests.fakes.adapters.driven.raising_notifier import RaisingNotifier
+from tests.fakes.adapters.driven.recording_notifier import RecordingNotifier
 
 _NODE = "titar-node-1"
 _COMPLETED = ev.DownloadCompleted(
@@ -63,7 +31,7 @@ def _dispatcher(
 
 @pytest.mark.asyncio
 async def test_logs_and_applies_metrics_no_audience() -> None:
-    metrics_recorder, notifier = FakeMetricsRecorder(), _RecordingNotifier()
+    metrics_recorder, notifier = FakeMetricsRecorder(), RecordingNotifier()
     await _dispatcher(metrics_recorder, notifier).emit(
         ev.ObservationRecorded(client_name="amuled", channel="ed2k"), _NODE
     )
@@ -73,7 +41,7 @@ async def test_logs_and_applies_metrics_no_audience() -> None:
 
 @pytest.mark.asyncio
 async def test_two_metrics_one_event() -> None:
-    metrics_recorder, notifier = FakeMetricsRecorder(), _RecordingNotifier()
+    metrics_recorder, notifier = FakeMetricsRecorder(), RecordingNotifier()
     await _dispatcher(metrics_recorder, notifier).emit(
         ev.ChannelStatusSampled(
             client_name="amuled", channel="kad", connected=True, connectable=True
@@ -88,7 +56,7 @@ async def test_two_metrics_one_event() -> None:
 
 @pytest.mark.asyncio
 async def test_notifies_the_message_when_there_is_no_separate_body() -> None:
-    metrics_recorder, notifier = FakeMetricsRecorder(), _RecordingNotifier()
+    metrics_recorder, notifier = FakeMetricsRecorder(), RecordingNotifier()
     await _dispatcher(metrics_recorder, notifier).emit(
         ev.CrawlerStarted(download_enabled=True), _NODE
     )
@@ -100,7 +68,7 @@ async def test_notifies_the_message_when_there_is_no_separate_body() -> None:
 
 @pytest.mark.asyncio
 async def test_logs_the_message_but_notifies_the_body(caplog: pytest.LogCaptureFixture) -> None:
-    metrics_recorder, notifier = FakeMetricsRecorder(), _RecordingNotifier()
+    metrics_recorder, notifier = FakeMetricsRecorder(), RecordingNotifier()
     change = ev.DecisionChange("062A", "Les demoiselles cambrioleuses", None, "download")
     with caplog.at_level(logging.INFO, logger="p2pwatch.observability"):
         await _dispatcher(metrics_recorder, notifier).emit(
@@ -117,7 +85,7 @@ async def test_logs_the_message_but_notifies_the_body(caplog: pytest.LogCaptureF
 
 @pytest.mark.asyncio
 async def test_log_level_matches_severity(caplog: pytest.LogCaptureFixture) -> None:
-    metrics_recorder, notifier = FakeMetricsRecorder(), _RecordingNotifier()
+    metrics_recorder, notifier = FakeMetricsRecorder(), RecordingNotifier()
     with caplog.at_level(logging.DEBUG, logger="p2pwatch.observability"):
         await _dispatcher(metrics_recorder, notifier).emit(ev.ClientUnreachable("amuled"), _NODE)
     assert caplog.records[-1].levelno == logging.WARNING
@@ -126,7 +94,7 @@ async def test_log_level_matches_severity(caplog: pytest.LogCaptureFixture) -> N
 @pytest.mark.asyncio
 async def test_a_success_logs_as_info(caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.DEBUG, logger="p2pwatch.observability"):
-        await _dispatcher(FakeMetricsRecorder(), _RecordingNotifier()).emit(_COMPLETED, _NODE)
+        await _dispatcher(FakeMetricsRecorder(), RecordingNotifier()).emit(_COMPLETED, _NODE)
     assert caplog.records[-1].levelno == logging.INFO
 
 
@@ -134,7 +102,7 @@ async def test_a_success_logs_as_info(caplog: pytest.LogCaptureFixture) -> None:
 async def test_notification_failure_is_absorbed(caplog: pytest.LogCaptureFixture) -> None:
     metrics_recorder = FakeMetricsRecorder()
     with caplog.at_level(logging.WARNING, logger="p2pwatch.observability"):
-        await _dispatcher(metrics_recorder, _RaisingNotifier()).emit(_COMPLETED, _NODE)
+        await _dispatcher(metrics_recorder, RaisingNotifier()).emit(_COMPLETED, _NODE)
     assert metrics_recorder.applied  # the metric went through despite the notification failure
     assert any("failed" in r.getMessage() for r in caplog.records)
 
@@ -143,5 +111,5 @@ async def test_notification_failure_is_absorbed(caplog: pytest.LogCaptureFixture
 async def test_notification_timeout_is_absorbed() -> None:
     metrics_recorder = FakeMetricsRecorder()
     # short timeout + hanging notifier → wait_for raises TimeoutError, absorbed.
-    await _dispatcher(metrics_recorder, _HangingNotifier(), timeout=0.01).emit(_COMPLETED, _NODE)
+    await _dispatcher(metrics_recorder, HangingNotifier(), timeout=0.01).emit(_COMPLETED, _NODE)
     assert metrics_recorder.applied

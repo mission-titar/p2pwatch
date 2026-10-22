@@ -4,7 +4,7 @@ from template_checks.application.ports.driving.template_attribute_lister import 
     TemplateAttributeListing,
 )
 from template_checks.application.use_cases.list_template_attributes import ListTemplateAttributes
-from tests.fakes import FakeTemplateReader
+from tests.fakes.adapters.driven.fake_template_reader import FakeTemplateReader
 
 
 def test_list_template_attributes_lists_what_the_directory_s_templates_read() -> None:
