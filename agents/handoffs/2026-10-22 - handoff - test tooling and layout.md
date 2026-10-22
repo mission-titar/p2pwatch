@@ -39,7 +39,7 @@ One stack cut from `main` at `d4180cdf`. Nineteen blocks: the spec's rows 10 to 
 `BACKLOG.md` reconciled in block 92: no entry ships or is dropped by this lot, and none is added; the findings
 left over go to lot B through this handoff.
 
-Nothing of the stack is merged. The lot changes no image (Acceptance 9), so it releases nothing; "A copy before a
+The stack is merged (`bc990263`, 2026-10-22). The lot changes no image (Acceptance 9), so it releases nothing; "A copy before a
 migration that rewrites rows" still ships before the next release.
 
 ## What was built
@@ -255,6 +255,7 @@ From `gh run list --branch <branch>` over blocks 10 to 72 and the lead's ledger,
 
 ## Next
 
-- The operator reviews and merges the stack, after the lead rebases it onto `main` if `main` moved.
-- Lot B's Discuss and spec: the names (R3, R5, R8, N1 to N18, N10 above) and the other hexagons' fixes (H1 to H7,
+- Merged on 2026-10-22 (`bc990263`, #389 to #408); no release, the lot changes no image.
+- Lot B's Discuss and spec, starting from `agents/reference/2026-10-22-post-hexagonal-lots-b-c-sizing.md` (its planned
+  shape and the questions its sizing raised): the names (R3, R5, R8, N1 to N18, N10 above) and the other hexagons' fixes (H1 to H7,
   H10 to H15, R6 and R11 outside the crawler).
