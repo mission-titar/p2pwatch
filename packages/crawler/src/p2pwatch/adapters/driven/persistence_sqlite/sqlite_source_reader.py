@@ -11,7 +11,9 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 
 from p2pwatch.adapters.driven.persistence_sqlite.observation_read import best_observation
-from p2pwatch.adapters.driven.persistence_sqlite.reader import ThreadReadConnections
+from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
+    ThreadReadConnections,
+)
 from p2pwatch.application.ports.driven.source_reader import SourceReader
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.known_source import KnownSource

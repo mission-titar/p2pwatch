@@ -27,8 +27,6 @@ from typing import Literal
 from catalog_matching.domain.models import TargetSegment
 from p2pwatch.application.ports.driven.decision_reader import DecisionReader
 from p2pwatch.application.ports.driven.download_client import DownloadClient
-from p2pwatch.application.ports.driven.download_reader import TrackedDownloadReader
-from p2pwatch.application.ports.driven.download_writer import TrackedDownloadWriter
 from p2pwatch.application.ports.driven.event_emitter import EventEmitter
 from p2pwatch.application.ports.driven.free_space_meter import FreeSpaceMeter
 from p2pwatch.application.ports.driven.logger import Logger
@@ -37,6 +35,8 @@ from p2pwatch.application.ports.driven.observation_reader import ObservationRead
 from p2pwatch.application.ports.driven.source_client import SourceClient
 from p2pwatch.application.ports.driven.source_point_reader import SourcePointReader
 from p2pwatch.application.ports.driven.source_point_writer import SourcePointWriter
+from p2pwatch.application.ports.driven.tracked_download_reader import TrackedDownloadReader
+from p2pwatch.application.ports.driven.tracked_download_writer import TrackedDownloadWriter
 from p2pwatch.application.ports.driven.waker import Waker
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.domain.client_errors import ClientUnreachableError, DownloadRejectedError
@@ -57,9 +57,9 @@ from p2pwatch.domain.observability.events import (
     TargetTitle,
 )
 from p2pwatch.domain.persisted_wait import remaining_wait
-from p2pwatch.domain.repository_errors import StoreError
 from p2pwatch.domain.source import RecordedReading, SourceKey, SourceUsefulness
 from p2pwatch.domain.source_alerts import FirstUseful, source_alert
+from p2pwatch.domain.store_error import StoreError
 
 # Conventional subject of the download wake (DECISION D13). D-download subscribes to THIS
 # subject; the producer side (the pipeline) calls wake("download").

@@ -8,21 +8,21 @@ from p2pwatch.application.steps.run_download_cycle import (
     DownloadLoopDeps,
     download_loop,
 )
-from tests.fakes.adapters.driven.blocking_monotonic_clock import FakeBlockingMonotonicClock
+from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
-from tests.fakes.adapters.driven.fake_download_store import FakeTrackedDownloadStore
 from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
 from tests.fakes.adapters.driven.fake_free_space_meter import FakeFreeSpaceMeter
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader
+from tests.fakes.adapters.driven.fake_shutdown_during_cycle_decision_reader import (
+    FakeShutdownDuringCycleDecisionReader,
+)
 from tests.fakes.adapters.driven.fake_source_client import FakeSourceClient
 from tests.fakes.adapters.driven.fake_source_point_store import FakeSourcePointStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
+from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
-from tests.fakes.adapters.driven.shutdown_during_cycle_catalog import (
-    FakeShutdownDuringCycleDecisionReader,
-)
 
 _NODE = "n1"
 

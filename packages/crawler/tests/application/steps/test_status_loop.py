@@ -6,7 +6,7 @@ from datetime import timedelta
 
 import pytest
 
-from p2pwatch.adapters.driven.mule_api.errors import ApiAuthError, ApiRejectedError
+from p2pwatch.adapters.driven.amule_api.errors import ApiAuthError, ApiRejectedError
 from p2pwatch.application.ports.driven.status_client import StatusClient
 from p2pwatch.application.steps.status_loop import StatusLoopDeps, status_loop
 from p2pwatch.domain.client_errors import ClientError
@@ -17,12 +17,12 @@ from p2pwatch.domain.status_reading import (
     PublishedReading,
     StatusReading,
 )
-from tests.fakes.adapters.driven.fake_client_status_store import FakeStatusReadingStore
 from tests.fakes.adapters.driven.fake_search_client import make_unreachable
+from tests.fakes.adapters.driven.fake_status_client import FakeStatusClient
+from tests.fakes.adapters.driven.fake_status_reading_store import FakeStatusReadingStore
+from tests.fakes.adapters.driven.fake_stepped_status_client import FakeSteppedStatusClient
 from tests.fakes.adapters.driven.fake_time import FakeTime
-from tests.fakes.adapters.driven.scripted_client import FakeStatusClient
-from tests.fakes.adapters.driven.stepped_client import FakeSteppedStatusClient
-from tests.fakes.adapters.driven.timed_event_emitter import FakeTimedEventEmitter
+from tests.fakes.adapters.driven.fake_timed_event_emitter import FakeTimedEventEmitter
 
 type _Reading = ClientStatus | ClientError
 

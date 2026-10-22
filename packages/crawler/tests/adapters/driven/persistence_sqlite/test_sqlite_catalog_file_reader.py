@@ -11,7 +11,6 @@ import pytest
 
 from catalog_matching.domain.config import TIER_RANK
 from catalog_matching.domain.engine import DecisionRecord
-from p2pwatch.adapters.driven.persistence_sqlite.reader import ThreadReadConnections, open_reader
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_file_reader import (
     _JOIN_DECISIONS,
     _JOIN_LATEST_OBSERVATION,
@@ -22,6 +21,10 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_file_reader impo
     SORT_COLUMNS,
     SqliteCatalogFileReader,
     _tier_rank_case,
+)
+from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
+    ThreadReadConnections,
+    open_reader,
 )
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_history import DatedDecision, FileHistory

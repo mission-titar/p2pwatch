@@ -32,12 +32,14 @@ from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStat
 from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
+from tests.fakes.adapters.driven.fake_loop_wall_clock import FakeLoopWallClock
+from tests.fakes.adapters.driven.fake_never_suspending_search_client import (
+    FakeNeverSuspendingSearchClient,
+)
 from tests.fakes.adapters.driven.fake_search_client import make_unreachable
+from tests.fakes.adapters.driven.fake_timed_search_client import FakeTimedSearchClient
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
-from tests.fakes.adapters.driven.loop_monotonic_clock import FakeLoopMonotonicClock
-from tests.fakes.adapters.driven.loop_wall_clock import FakeLoopWallClock
-from tests.fakes.adapters.driven.never_suspends import FakeNeverSuspendingSearchClient
-from tests.fakes.adapters.driven.timed_client import FakeTimedSearchClient
 from tests.support.catalog_rows import observation_node_ids
 from tests.support.virtual_time import EPOCH, run_virtual
 

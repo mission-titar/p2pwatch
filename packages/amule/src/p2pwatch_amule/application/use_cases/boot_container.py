@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 
-from p2pwatch_amule.application.ports.driven.account_manager import AccountProvisioner
+from p2pwatch_amule.application.ports.driven.account_provisioner import AccountProvisioner
 from p2pwatch_amule.application.ports.driven.admin_password_setter import AdminPasswordSetter
 from p2pwatch_amule.application.ports.driven.amule_conf_reader import AmuleConfReader
 from p2pwatch_amule.application.ports.driven.amule_conf_writer import AmuleConfWriter

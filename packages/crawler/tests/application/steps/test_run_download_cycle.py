@@ -7,10 +7,12 @@ import pytest
 
 from catalog_matching.domain.models import TargetSegment
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
-from p2pwatch.adapters.driven.persistence_sqlite.download_repository import (
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store import (
+    SqliteSourcePointStore,
+)
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store import (
     SqliteTrackedDownloadStore,
 )
-from p2pwatch.adapters.driven.persistence_sqlite.source_repository import SqliteSourcePointStore
 from p2pwatch.application.steps.run_download_cycle import DownloadDeps, run_download_cycle
 from p2pwatch.domain.client_errors import ClientUnreachableError, DownloadRejectedError
 from p2pwatch.domain.download.candidate import DownloadCandidate
@@ -35,20 +37,24 @@ from p2pwatch.domain.source import (
     SourceReading,
     SourceRole,
 )
-from tests.fakes.adapters.driven.broken_disk import FakeBrokenFreeSpaceMeter
+from tests.fakes.adapters.driven.fake_broken_free_space_meter import FakeBrokenFreeSpaceMeter
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
-from tests.fakes.adapters.driven.fake_download_store import FakeTrackedDownloadStore
 from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
 from tests.fakes.adapters.driven.fake_free_space_meter import FakeFreeSpaceMeter
+from tests.fakes.adapters.driven.fake_lagging_tracked_download_store import (
+    FakeLaggingTrackedDownloadStore,
+)
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_no_set_state_tracked_download_store import (
+    FakeNoSetStateTrackedDownloadStore,
+)
 from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader
 from tests.fakes.adapters.driven.fake_source_client import FakeSourceClient
 from tests.fakes.adapters.driven.fake_source_point_store import FakeSourcePointStore
+from tests.fakes.adapters.driven.fake_ticking_wall_clock import FakeTickingWallClock
 from tests.fakes.adapters.driven.fake_time import FakeTime
-from tests.fakes.adapters.driven.lagging_download_store import FakeLaggingTrackedDownloadStore
-from tests.fakes.adapters.driven.no_set_state_store import FakeNoSetStateTrackedDownloadStore
-from tests.fakes.adapters.driven.ticking_wall_clock import FakeTickingWallClock
+from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
 from tests.support.catalog_rows import insert_file, source_variant_node_ids
 
 _NODE = "n1"

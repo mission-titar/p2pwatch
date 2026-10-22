@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.driven.mule_api.mapping import map_search_results
+from p2pwatch.adapters.driven.amule_api.mapping import map_search_results
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,

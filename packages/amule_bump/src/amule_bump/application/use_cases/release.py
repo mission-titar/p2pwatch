@@ -1,6 +1,6 @@
 import re
 
-from amule_bump.application.ports.driven.repo_reader import UpstreamClient
+from amule_bump.application.ports.driven.upstream_client import UpstreamClient
 from amule_bump.domain.bump_error import BumpError
 from amule_bump.domain.git_object import GitObjectKind
 

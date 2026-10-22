@@ -2,11 +2,11 @@
 
 from pathlib import PurePath
 
+from amule_bump.application.ports.driven.bump_announcer import BumpAnnouncer
 from amule_bump.application.ports.driven.dockerfile_reader import DockerfileReader
 from amule_bump.application.ports.driven.dockerfile_writer import DockerfileWriter
-from amule_bump.application.ports.driven.pull_request_body_writer import PullRequestDrafter
-from amule_bump.application.ports.driven.repo_reader import UpstreamClient
-from amule_bump.application.ports.driven.step_output_writer import BumpAnnouncer
+from amule_bump.application.ports.driven.pull_request_drafter import PullRequestDrafter
+from amule_bump.application.ports.driven.upstream_client import UpstreamClient
 from amule_bump.application.ports.driving.amule_bumper import (
     AmuleBump,
     AmuleBumper,

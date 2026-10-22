@@ -13,7 +13,7 @@ from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 
 from p2pwatch.adapters.driving.webui.uvicorn_server_thread import UvicornServerThread
-from tests.fakes.adapters.driven.thread_recording_context import FakeServingResource
+from tests.fakes.adapters.driven.fake_serving_resource import FakeServingResource
 
 _LOGGER = "p2pwatch.adapters.driving.webui.uvicorn_server_thread"
 

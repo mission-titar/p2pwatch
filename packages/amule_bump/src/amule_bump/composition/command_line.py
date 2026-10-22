@@ -4,13 +4,13 @@ from collections.abc import Mapping
 from pathlib import Path
 from urllib.request import OpenerDirector, build_opener
 
-from amule_bump.adapters.driven.filesystem_dockerfile import FilesystemDockerfileStore
-from amule_bump.adapters.driven.filesystem_pull_request_body_writer import (
+from amule_bump.adapters.driven.filesystem_dockerfile_store import FilesystemDockerfileStore
+from amule_bump.adapters.driven.filesystem_pull_request_drafter import (
     FilesystemPullRequestDrafter,
 )
-from amule_bump.adapters.driven.github_repo_reader import GithubUpstreamClient
-from amule_bump.adapters.driven.github_step_output_writer import GithubActionsBumpAnnouncer
-from amule_bump.adapters.driven.terminal_step_output_writer import TerminalBumpAnnouncer
+from amule_bump.adapters.driven.github_actions_bump_announcer import GithubActionsBumpAnnouncer
+from amule_bump.adapters.driven.github_upstream_client import GithubUpstreamClient
+from amule_bump.adapters.driven.terminal_bump_announcer import TerminalBumpAnnouncer
 from amule_bump.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from amule_bump.application.use_cases.bump_amule import BumpAmule
 from amule_bump.domain.upstream import UPSTREAM

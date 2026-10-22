@@ -15,7 +15,7 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from p2pwatch.domain.repository_errors import StoreError
+from p2pwatch.domain.store_error import StoreError
 
 
 class PersistenceError(StoreError):

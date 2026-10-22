@@ -2,7 +2,7 @@ id: application-imports
 valid:
   - import asyncio
   - from contextlib import suppress
-  - from amule_bump.application.ports.driven.repo_reader import UpstreamClient
+  - from amule_bump.application.ports.driven.upstream_client import UpstreamClient
 invalid:
   - import shutil
   - from random import Random

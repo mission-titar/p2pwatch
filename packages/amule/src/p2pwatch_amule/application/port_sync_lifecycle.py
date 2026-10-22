@@ -3,7 +3,7 @@ restarting amuled around the write."""
 
 from p2pwatch_amule.application.ports.driven.amule_conf_reader import AmuleConfReader
 from p2pwatch_amule.application.ports.driven.amule_conf_writer import AmuleConfWriter
-from p2pwatch_amule.application.ports.driven.forwarded_port_reader import ForwardedPortClient
+from p2pwatch_amule.application.ports.driven.forwarded_port_client import ForwardedPortClient
 from p2pwatch_amule.application.ports.driven.logger import Logger
 from p2pwatch_amule.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch_amule.application.ports.driven.service_supervisor import ServiceSupervisor

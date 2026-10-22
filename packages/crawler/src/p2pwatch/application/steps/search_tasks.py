@@ -12,8 +12,8 @@ from p2pwatch.application.ports.driven.backoff_state_writer import BackoffStateW
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.steps.search_worker import BackoffRegistry, SearchTask, SearchWorker
-from p2pwatch.domain.repository_errors import StoreError
 from p2pwatch.domain.search.keywords import dedupe_keywords
+from p2pwatch.domain.store_error import StoreError
 
 
 class SearchTaskRunner:

@@ -8,7 +8,7 @@ import pytest
 from p2pwatch_amule.application.use_cases.boot_container import BootContainer
 from p2pwatch_amule.domain.conf import reconcile_conf
 from p2pwatch_amule.domain.settings_error import SettingsError
-from tests.fakes.adapters.driven.fake_account_manager import FakeAccountProvisioner
+from tests.fakes.adapters.driven.fake_account_provisioner import FakeAccountProvisioner
 from tests.fakes.adapters.driven.fake_admin_password_setter import FakeAdminPasswordSetter
 from tests.fakes.adapters.driven.fake_amule_conf_store import FakeAmuleConfStore
 from tests.fakes.adapters.driven.fake_amuled_directory_preparer import FakeAmuledDirectoryPreparer

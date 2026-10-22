@@ -297,7 +297,7 @@ sequenceDiagram
   end
 ```
 
-- Un résultat devient un `ReportedFile` via `adapters/driven/mule_api/mapping.py` (capture
+- Un résultat devient un `ReportedFile` via `adapters/driven/amule_api/mapping.py` (capture
   exhaustive : l'identité du fichier, une `FileKey` dont le hash MD4 est l'identifiant natif sur le
   réseau `ed2k`, le nom, la taille, le nombre de sources, plus chaque clé non mappée).
   **La durée, le débit et le codec arrivent maintenant avec le résultat**, quand le serveur qui
@@ -724,7 +724,7 @@ démon sont
 | Cas d'usage | `application/use_cases/` : les pages (`summarize_crawl.py`, `describe_*.py`, `list_*.py`, `run_console_query.py`), les contrôles (`pause_crawl.py`, `resume_crawl.py`, `request_shutdown.py`), `validate_config.py`, `merge_catalogs.py` |
 | Recherche (pure) | `domain/search/` (`keywords`, `backoff`) |
 | Matching | `packages/matching/src/catalog_matching/` (moteur + politique `deploy/matcher.yml`) |
-| Frontière amuleapi | `adapters/driven/mule_api/` (client / mapping / erreurs) ; ports `application/ports/driven/search_client.py`, `download_client.py`, `source_client.py` |
+| Frontière amuleapi | `adapters/driven/amule_api/` (client / mapping / erreurs) ; ports `application/ports/driven/search_client.py`, `download_client.py`, `source_client.py` |
 | Persistance | `adapters/driven/persistence_sqlite/` (migrations `.sql`, repos) |
 | Observabilité | `domain/observability/`, `adapters/driven/observability/` |
 | WebUI | `adapters/driving/webui/` (in-process, thread dédié) |

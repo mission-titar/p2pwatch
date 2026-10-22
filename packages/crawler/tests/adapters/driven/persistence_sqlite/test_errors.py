@@ -7,7 +7,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.errors import (
     PersistenceError,
     wrap_sqlite_errors,
 )
-from p2pwatch.domain.repository_errors import StoreError
+from p2pwatch.domain.store_error import StoreError
 
 
 def test_persistence_error_satisfies_repository_error_contract() -> None:

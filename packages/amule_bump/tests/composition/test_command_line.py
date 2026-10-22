@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from amule_bump.composition.command_line import build_amule_bumper, build_command_line
-from tests.fakes.fake_git_hub_server import FakeGithubServer
+from tests.fakes.fake_github_server import FakeGithubServer
 
 NEW_COMMIT = "909d304d993ee07df6c6f6acf501a6d791d53666"
 

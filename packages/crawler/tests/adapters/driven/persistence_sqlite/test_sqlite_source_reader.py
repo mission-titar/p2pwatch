@@ -8,8 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.driven.persistence_sqlite.reader import ThreadReadConnections
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_reader import SqliteSourceReader
+from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
+    ThreadReadConnections,
+)
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod

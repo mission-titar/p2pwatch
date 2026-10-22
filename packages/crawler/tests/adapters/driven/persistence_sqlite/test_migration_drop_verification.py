@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
-from p2pwatch.adapters.driven.persistence_sqlite.download_repository import (
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store import (
     SqliteTrackedDownloadStore,
 )
 from p2pwatch.domain.download.states import DownloadState

@@ -8,10 +8,10 @@ from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.domain.coverage import TargetCoverage
 from p2pwatch.domain.node_state import NodeState
 from p2pwatch.domain.status_reading import READING_FRESH_FOR, PublishedReading, StatusReading
-from tests.fakes.adapters.driven.fake_client_status_store import FakeStatusReadingStore
 from tests.fakes.adapters.driven.fake_coverage_reader import FakeCoverageReader
 from tests.fakes.adapters.driven.fake_node_state_reader import FakeNodeStateReader
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
+from tests.fakes.adapters.driven.fake_status_reading_store import FakeStatusReadingStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 
 _NODE_STATE = NodeState(node_id="node-1", created_at=None, downloads=(), backoff_state_by_key={})

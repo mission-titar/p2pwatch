@@ -10,10 +10,10 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Literal
 
-from p2pwatch.application.ports.driven.client_status_writer import StatusReadingWriter
 from p2pwatch.application.ports.driven.event_emitter import EventEmitter
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.status_client import StatusClient
+from p2pwatch.application.ports.driven.status_reading_writer import StatusReadingWriter
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError
 from p2pwatch.domain.monotonic_instant import MonotonicInstant

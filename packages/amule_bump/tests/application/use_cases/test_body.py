@@ -8,7 +8,7 @@ from amule_bump.application.use_cases.body import (
     wrap,
 )
 from amule_bump.domain.dockerfile import Pin
-from tests.fakes.adapters.driven.fake_repo_reader import FakeUpstreamClient
+from tests.fakes.adapters.driven.fake_upstream_client import FakeUpstreamClient
 
 GITHUB_BODY_MAX_CHARACTERS = 65536
 CHANGELOG_WIDTH_CHARACTERS = 100
@@ -148,7 +148,7 @@ def test_build_body_ends_with_the_checklist_naming_the_new_version() -> None:
         " behaviour?\n"
         "- [ ] `options.cmake` diff: a new switch to set explicitly in the Dockerfile's CMake"
         " options?\n"
-        "- [ ] `REFERENCE.md` diff: does the `mule_api` adapter need a change (with its tests"
+        "- [ ] `REFERENCE.md` diff: does the `amule_api` adapter need a change (with its tests"
         " first)?\n"
         "- [ ] `p2pwatch_amule.domain.conf`: does a default we override or rely on change?\n"
         "- [ ] CI green on amd64 and arm64.\n"
