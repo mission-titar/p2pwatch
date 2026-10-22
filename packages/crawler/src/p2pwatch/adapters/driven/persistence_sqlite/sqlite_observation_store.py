@@ -1,4 +1,4 @@
-"""``SqliteCatalogRepository``: ``FileObservation`` → durable rows, and the catalog's scan.
+"""``SqliteObservationStore``: ``FileObservation`` → durable rows, and their reads.
 
 The adapter stores what the domain ignores (data-model spec §3): ``node_id``, given at each write.
 ``raw_meta`` is serialized as a JSON LIST of pairs (``[["0x0308", "0"], …]``), wire order and
@@ -15,12 +15,11 @@ by the ``foreign_keys`` pragma (opaque diagnostic), and a connection without tha
 pragma would commit an ORPHAN observation. The rollback catches ``BaseException``
 (same discipline as ``connection._open``): a NON-sqlite failure at binding (e.g.
 ``UnicodeEncodeError`` on a lone surrogate) must not leave the connection
-``in_transaction``, otherwise the repository would be permanently broken.
+``in_transaction``, otherwise the store would be permanently broken.
 """
 
 import json
 import sqlite3
-from collections.abc import Iterator
 from contextlib import suppress
 
 from p2pwatch.adapters.driven.persistence_sqlite import observation_read
@@ -30,7 +29,6 @@ from p2pwatch.adapters.driven.persistence_sqlite.canonical_native_id import (
 from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
 from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash, iso_to_micros
-from p2pwatch.application.ports.driven.catalog_scan_reader import CatalogScanReader
 from p2pwatch.application.ports.driven.observation_reader import ObservationReader
 from p2pwatch.application.ports.driven.observation_writer import ObservationWriter
 from p2pwatch.domain.file_key import FileKey
@@ -52,11 +50,9 @@ INSERT OR IGNORE INTO observations (variant_id, observed_at, source_count)
 SELECT variant_id, ?, ? FROM observation_variants WHERE content_hash = ?
 """
 
-_COUNT_FILES = "SELECT COUNT(*) FROM files"
 
-
-class SqliteCatalogRepository(ObservationWriter, ObservationReader, CatalogScanReader):
-    """SQLite implementation of the observations' ports and the catalog's scan."""
+class SqliteObservationStore(ObservationWriter, ObservationReader):
+    """SQLite implementation of the observations' ports."""
 
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
@@ -110,14 +106,3 @@ class SqliteCatalogRepository(ObservationWriter, ObservationReader, CatalogScanR
         """Every distinct filename this file was observed under, sorted (read)."""
         with wrap_sqlite_errors():
             return observation_read.known_filenames(self._connection, file)
-
-    def read_file_count(self) -> int:
-        """Number of catalogued files, the re-evaluation progress total (read)."""
-        with wrap_sqlite_errors():
-            row = self._connection.execute(_COUNT_FILES).fetchone()
-        return int(row[0])
-
-    def iter_latest_observations(self) -> Iterator[FileObservation]:
-        """Every seen file's latest observation, streamed (spec re-evaluation §6)."""
-        with wrap_sqlite_errors():
-            yield from observation_read.iter_latest_observations(self._connection)

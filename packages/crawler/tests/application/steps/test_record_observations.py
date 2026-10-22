@@ -5,9 +5,11 @@ from datetime import timedelta
 import pytest
 
 from catalog_matching.domain.engine import MatchingEngine
-from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
+    SqliteObservationStore,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
 from p2pwatch.application.steps.record_observations import record_observation
 from p2pwatch.application.steps.run_download_cycle import DOWNLOAD_WAKE_SUBJECT
@@ -47,7 +49,7 @@ def _reported_file(ed2k_hash: str, filename: str) -> ReportedFile:
 
 @pytest.mark.asyncio
 async def test_observation_is_always_recorded_even_when_discarded(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
@@ -57,8 +59,8 @@ async def test_observation_is_always_recorded_even_when_discarded(
     waker = FakeWaker()
     changed = await record_observation(
         _reported_file(_HASH_DISCARD, "random.txt"),
-        observation_writer=catalog,
-        observation_reader=catalog,
+        observation_writer=observation_store,
+        observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
         engine=engine,
@@ -78,7 +80,7 @@ async def test_observation_is_always_recorded_even_when_discarded(
 
 @pytest.mark.asyncio
 async def test_the_observation_carries_the_clocks_instant(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
@@ -86,8 +88,8 @@ async def test_the_observation_carries_the_clocks_instant(
 ) -> None:
     await record_observation(
         _reported_file(_HASH_DISCARD, "random.txt"),
-        observation_writer=catalog,
-        observation_reader=catalog,
+        observation_writer=observation_store,
+        observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
         engine=engine,
@@ -105,7 +107,7 @@ async def test_the_observation_carries_the_clocks_instant(
 
 @pytest.mark.asyncio
 async def test_new_verdict_is_persisted_and_nudged(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
@@ -115,8 +117,8 @@ async def test_new_verdict_is_persisted_and_nudged(
     waker = FakeWaker()
     changed = await record_observation(
         _reported_file(_HASH_DL, _DL_NAME),
-        observation_writer=catalog,
-        observation_reader=catalog,
+        observation_writer=observation_store,
+        observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
         engine=engine,
@@ -140,7 +142,7 @@ async def test_new_verdict_is_persisted_and_nudged(
 
 @pytest.mark.asyncio
 async def test_unchanged_verdict_is_not_reappended_or_nudged(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
@@ -153,8 +155,8 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
     assert (
         await record_observation(
             reported_file,
-            observation_writer=catalog,
-            observation_reader=catalog,
+            observation_writer=observation_store,
+            observation_reader=observation_store,
             decision_writer=decision_store,
             decision_reader=decision_store,
             engine=engine,
@@ -173,8 +175,8 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
     assert (
         await record_observation(
             reported_file,
-            observation_writer=catalog,
-            observation_reader=catalog,
+            observation_writer=observation_store,
+            observation_reader=observation_store,
             decision_writer=decision_store,
             decision_reader=decision_store,
             engine=engine,
@@ -196,7 +198,7 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
 
 @pytest.mark.asyncio
 async def test_changed_verdict_is_reappended_and_nudged_again(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
@@ -206,8 +208,8 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
     waker = FakeWaker()
     await record_observation(
         _reported_file(_HASH_DL, _NOTIFY_NAME),
-        observation_writer=catalog,
-        observation_reader=catalog,
+        observation_writer=observation_store,
+        observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
         engine=engine,
@@ -222,8 +224,8 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
     # 2nd view of the SAME hash, DOWNLOAD name → verdict changes → re-append + wake.
     changed = await record_observation(
         _reported_file(_HASH_DL, _DL_NAME),
-        observation_writer=catalog,
-        observation_reader=catalog,
+        observation_writer=observation_store,
+        observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
         engine=engine,
@@ -248,7 +250,7 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
 
 @pytest.mark.asyncio
 async def test_persistence_error_is_absorbed_and_cycle_continues(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
@@ -264,8 +266,8 @@ async def test_persistence_error_is_absorbed_and_cycle_continues(
     logger = FakeLogger()
     changed = await record_observation(
         _reported_file(_HASH_DL, _DL_NAME),
-        observation_writer=catalog,
-        observation_reader=catalog,
+        observation_writer=observation_store,
+        observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
         engine=engine,
@@ -290,7 +292,7 @@ async def test_persistence_error_is_absorbed_and_cycle_continues(
 
 @pytest.mark.asyncio
 async def test_signal_consumer_awaits_the_nudge(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
@@ -304,8 +306,8 @@ async def test_signal_consumer_awaits_the_nudge(
     assert not waiter.done()
     await record_observation(
         _reported_file(_HASH_DL, _DL_NAME),
-        observation_writer=catalog,
-        observation_reader=catalog,
+        observation_writer=observation_store,
+        observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
         engine=engine,
@@ -323,7 +325,7 @@ async def test_signal_consumer_awaits_the_nudge(
 
 @pytest.mark.asyncio
 async def test_download_tier_verdict_also_nudges_the_download_subject(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
@@ -333,8 +335,8 @@ async def test_download_tier_verdict_also_nudges_the_download_subject(
     waker = FakeWaker()
     changed = await record_observation(
         _reported_file(_HASH_DL, _DL_NAME),
-        observation_writer=catalog,
-        observation_reader=catalog,
+        observation_writer=observation_store,
+        observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
         engine=engine,
@@ -352,7 +354,7 @@ async def test_download_tier_verdict_also_nudges_the_download_subject(
 
 @pytest.mark.asyncio
 async def test_non_download_tier_verdict_does_not_nudge_the_download_subject(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
@@ -362,8 +364,8 @@ async def test_non_download_tier_verdict_does_not_nudge_the_download_subject(
     waker = FakeWaker()
     changed = await record_observation(
         _reported_file(_HASH_CAT, "keroro something.avi"),
-        observation_writer=catalog,
-        observation_reader=catalog,
+        observation_writer=observation_store,
+        observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
         engine=engine,
@@ -381,7 +383,7 @@ async def test_non_download_tier_verdict_does_not_nudge_the_download_subject(
 
 @pytest.mark.asyncio
 async def test_emits_observation_then_decision_on_change(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
@@ -391,8 +393,8 @@ async def test_emits_observation_then_decision_on_change(
     reported_file = _reported_file(_HASH_DL, _DL_NAME)  # matches at tier=download
     await record_observation(
         reported_file,
-        observation_writer=catalog,
-        observation_reader=catalog,
+        observation_writer=observation_store,
+        observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
         engine=engine,
@@ -411,7 +413,7 @@ async def test_emits_observation_then_decision_on_change(
 
 @pytest.mark.asyncio
 async def test_emits_only_observation_when_discarded(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
@@ -420,8 +422,8 @@ async def test_emits_only_observation_when_discarded(
     reported_file = _reported_file(_HASH_DISCARD, "random.txt")  # discarded by the engine
     await record_observation(
         reported_file,
-        observation_writer=catalog,
-        observation_reader=catalog,
+        observation_writer=observation_store,
+        observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
         engine=engine,
@@ -438,7 +440,7 @@ async def test_emits_only_observation_when_discarded(
 
 @pytest.mark.asyncio
 async def test_multi_segment_observation_records_two_rows(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
@@ -448,8 +450,8 @@ async def test_multi_segment_observation_records_two_rows(
     waker = FakeWaker()
     changed = await record_observation(
         _reported_file(_HASH_DL, "Keroro 062 teletoon.avi"),
-        observation_writer=catalog,
-        observation_reader=catalog,
+        observation_writer=observation_store,
+        observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
         engine=engine,
