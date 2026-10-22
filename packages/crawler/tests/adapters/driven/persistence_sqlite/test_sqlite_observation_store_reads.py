@@ -41,7 +41,7 @@ def observation_store(connection: sqlite3.Connection) -> SqliteObservationStore:
     return SqliteObservationStore(connection)
 
 
-def test_last_observation_returns_the_observation_whole(
+def test_latest_observation_returns_the_observation_whole(
     observation_store: SqliteObservationStore,
 ) -> None:
     observation = FileObservation(_reported_file(_A, name="Keroro 062A.avi", size=4242), _T0)
@@ -49,7 +49,7 @@ def test_last_observation_returns_the_observation_whole(
     assert observation_store.read_latest_observation(_A) == observation
 
 
-def test_last_observation_returns_the_most_recent(
+def test_latest_observation_returns_the_most_recent(
     observation_store: SqliteObservationStore,
 ) -> None:
     observation_store.record_observation(
@@ -60,7 +60,7 @@ def test_last_observation_returns_the_most_recent(
     assert observation_store.read_latest_observation(_A) == newest
 
 
-def test_last_observation_unknown_hash_is_none(observation_store: SqliteObservationStore) -> None:
+def test_latest_observation_unknown_hash_is_none(observation_store: SqliteObservationStore) -> None:
     assert observation_store.read_latest_observation(_A) is None
 
 
