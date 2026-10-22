@@ -256,8 +256,10 @@ rows: 16 moves code verbatim, 20 renames and nothing else, 22 renames local name
 12. **One way to run a command**: `git grep -n "subprocess.run(" -- 'packages/*/src/*/adapters/**'` and `git grep -n
     "run_command: Callable\[\.\.\., object\]" -- 'packages/*/src/**'` print nothing (one and two lines on `main`).
 13. **The doubles and splits**: `SavesRecorded` and `catalog_read.py` no longer exist, and `test_search_tasks.py`
-    opens no SQLite connection (`git grep -n "sqlite\|open_catalog\|open_local" --
-    packages/crawler/tests/application/steps/test_search_tasks.py` prints nothing).
+    opens no `local.db` (`git grep -n "open_local\|SavesRecorded" --
+    packages/crawler/tests/application/steps/test_search_tasks.py` prints nothing); the catalog fixture stays, as in
+    the other step tests. (Corrected: the check named every SQLite connection, which D4 does not decide; operator,
+    block 10.)
 14. **The workflows still run**: before the merge, `gh workflow run grype-scan.yml --ref <top branch>` passes, and
     release's `image-claims` command, run from the root with `--sarif` against a Syft SBOM of the crawler's image,
     exits 0.

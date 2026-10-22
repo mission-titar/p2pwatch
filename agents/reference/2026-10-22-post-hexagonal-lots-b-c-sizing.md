@@ -26,7 +26,9 @@ blocks with the closing one.
     the ports).
   - **N11 crosses operator surfaces**: `last_seen_at` and `last_progress_at` are SQL columns, `last_seen` a template
     key and the files view's `?sort=` key; renaming the columns is a migration, which waits for "A copy before a
-    migration that rewrites rows". A Python-only rename can go in the mechanical block.
+    migration that rewrites rows". A Python-only rename can go in the mechanical block. (Corrected 2026-10-22, lot
+    B's D7: `RENAME COLUMN` rewrites no row, as `catalog/0012` already did, so the columns are renamed in lot B's
+    mechanical block without waiting for that copy; the `?sort=last_seen` value keeps its name.)
   - **N13**: `ed2k_hash` is also a column in 9 migrations; only the Python identifiers move.
   - **N12**: `*Deps`/`deps` is about 340 lines (270 in `run_download_cycle` and its test), `conn` 152; the 8 "repo
     failure" log messages are operator-visible text.
