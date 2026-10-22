@@ -34,13 +34,13 @@ Le projet a **deux niveaux** :
 
    ```bash
    uv run poe check     # le gate complet : lint-all + test (ce que lancent pre-push et la CI)
-   uv run poe test      # les 7 suites unitaires seules, chacune dans son processus
+   uv run poe test      # les 8 suites unitaires seules, chacune dans son processus
    ```
 
    > La tâche `test` reste **par paquet** : elle lance `pytest` avec `cwd = packages/<pkg>` pour
-   > chacun des 7 paquets, dans des processus séparés, afin de garder la coverage isolée. Un simple
+   > chacun des 8 paquets, dans des processus séparés, afin de garder la coverage isolée. Un simple
    > `uv run pytest` depuis la racine du dépôt n'est **pas** le gate (la racine n'a pas de config
-   > pytest, et un `conftest.py` racine neutralise la collecte, donnant `exit 5`). Le huitième
+   > pytest, et un `conftest.py` racine neutralise la collecte, donnant `exit 5`). Le neuvième
    > paquet, `p2pwatch_testing` (les doublures et utilitaires partagés des tests du crawler), n'a
    > pas de suite : celle du crawler mesure sa couverture (`--cov=p2pwatch_testing`), si bien
    > qu'une ligne ou une branche qu'aucun test n'y exécute fait échouer le gate.
@@ -58,8 +58,11 @@ Le projet a **deux niveaux** :
    `[tool.coverage_checks] tests_without_unit` : les tests des migrations SQL, ceux des données de
    `deploy/`, les suites d'intégration.
 
-   La suite du crawler échoue sur une connexion ou une socket laissée ouverte : son `filterwarnings`
-   change en erreurs `ResourceWarning` et `pytest.PytestUnraisableExceptionWarning`. L'avertissement
+   Chaque suite refuse un marker inconnu et échoue sur une connexion ou une socket laissée
+   ouverte : le plugin `pytest_settings` (`packages/pytest_settings/`), que tout lancement de pytest
+   charge par son point d'entrée `pytest11`, y compris à la main, change en erreurs
+   `pytest.PytestUnknownMarkWarning`, `ResourceWarning` et `pytest.PytestUnraisableExceptionWarning`,
+   après les filtres du paquet, si bien qu'aucun ne les lève. L'avertissement
    part du finaliseur de l'objet, quand le ramasse-miettes le collecte, si bien que le test en échec
    n'est pas forcément celui qui a ouvert la connexion. Pour trouver le coupable, relancez avec
    `PYTHONTRACEMALLOC=20` : le rapport donne alors la pile où l'objet a été créé. Ou ajoutez, le
@@ -337,7 +340,7 @@ Déjà en CI :
     dynamiques aux attributs et imports du cœur hors de sa liste refusés par ast-grep, imports
     entre anneaux et entre hexagones vérifiés par tach, code mort par vulture, mypy, imports
     résolus par pyrefly, sqlfluff, vérification des templates) ;
-  - `test` : `uv run poe test` (les 7 suites unitaires par paquet, 100 % de branches chacune, et les tests des règles ast-grep des claims de source de `packages/vex_checks/ast-grep/`, puis `_unit-coverage-check`) ;
+  - `test` : `uv run poe test` (les 8 suites unitaires par paquet, 100 % de branches chacune, et les tests des règles ast-grep des claims de source de `packages/vex_checks/ast-grep/`, puis `_unit-coverage-check`) ;
   - `build-and-verify` : un job **par architecture sur son runner natif** (`amd64` sur
     `ubuntu-latest`, `arm64` sur `ubuntu-24.04-arm`). Chacun construit les **deux images**, le cœur
     et `p2pwatch-amule` (caches `crawler-<arch>` et `amule-<arch>`). Sur l'image d'aMule, il vérifie

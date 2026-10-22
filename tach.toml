@@ -7,6 +7,7 @@ source_roots = [
   "packages/coverage_checks/src",
   "packages/crawler/src",
   "packages/matching/src",
+  "packages/pytest_settings/src",
   "packages/template_checks/src",
   "packages/vex_checks/src",
 ]
@@ -756,6 +757,11 @@ depends_on = []
 [[modules]]
 path = "p2pwatch_amule.ports.driving.port_sync_loop_runner"
 layer = "ports"
+depends_on = []
+
+# Shared test configuration, no hexagon: no ring holds it.
+[[modules]]
+path = "pytest_settings"
 depends_on = []
 
 [[modules]]

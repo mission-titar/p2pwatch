@@ -5,6 +5,7 @@ members = ["packages/*"]
 catalog-matching = { workspace = true }
 p2pwatch = { workspace = true }
 p2pwatch-testing = { workspace = true }
+pytest-settings = { workspace = true }
 
 # The workspace's tools only: `uv sync` installs every member and its own `dev` group.
 [dependency-groups]
@@ -20,6 +21,7 @@ dev = [
   "vulture>=2.16",
   "tach==0.35.3",
   "pyrefly==1.4.0",
+  "pytest-settings",
 ]
 
 [tool.ruff]
@@ -37,6 +39,7 @@ src = [
   "packages/template_checks/src",
   "packages/coverage_checks/src",
   "packages/amule_bump/src",
+  "packages/pytest_settings/src",
 ]
 
 [tool.ruff.lint]
@@ -104,6 +107,7 @@ fix            = { help = "Auto-fix everything mechanical (ruff lint + format + 
 check          = { help = "The full gate: every static check + all unit tests", sequence = ["lint-all", "test"] }
 
 # Every `src`, no tests (code only tests reach is dead), in one run: a package's API serves another.
+# Not `pytest_settings`: test configuration, whose hook pytest calls by name.
 [tool.vulture]
 paths = [
   "packages/crawler/src",
@@ -137,6 +141,8 @@ sequence = [
   { cmd = "deptry --non-dev-dependency-groups dev src tests", cwd = "packages/coverage_checks" },
   { cmd = "deptry src", cwd = "packages/amule_bump" },
   { cmd = "deptry --non-dev-dependency-groups dev src tests", cwd = "packages/amule_bump" },
+  { cmd = "deptry src", cwd = "packages/pytest_settings" },
+  { cmd = "deptry --non-dev-dependency-groups dev src tests", cwd = "packages/pytest_settings" },
 ]
 
 # One mypy run per package, since every package's tests are a package named `tests`.
@@ -151,6 +157,7 @@ sequence = [
   { cmd = "mypy src tests", cwd = "packages/template_checks" },
   { cmd = "mypy src tests", cwd = "packages/coverage_checks" },
   { cmd = "mypy src tests", cwd = "packages/amule_bump" },
+  { cmd = "mypy src tests", cwd = "packages/pytest_settings" },
 ]
 
 # One run per package, each from its own `[tool.pyrefly]`: pyrefly's sub-configs cannot change import paths.
@@ -165,6 +172,7 @@ sequence = [
   { cmd = "pyrefly check", cwd = "packages/template_checks" },
   { cmd = "pyrefly check", cwd = "packages/coverage_checks" },
   { cmd = "pyrefly check", cwd = "packages/amule_bump" },
+  { cmd = "pyrefly check", cwd = "packages/pytest_settings" },
 ]
 
 # `test` runs each package's suite in its own process (cwd) so per-package coverage
@@ -180,6 +188,7 @@ sequence = [
   { cmd = "pytest", cwd = "packages/template_checks" },
   { cmd = "pytest", cwd = "packages/coverage_checks" },
   { cmd = "pytest", cwd = "packages/amule_bump" },
+  { cmd = "pytest", cwd = "packages/pytest_settings" },
   "_unit-coverage-check",
 ]
 
@@ -194,4 +203,5 @@ sequence = [
   { cmd = "python -m coverage_checks unit-coverage", cwd = "packages/template_checks" },
   { cmd = "python -m coverage_checks unit-coverage", cwd = "packages/coverage_checks" },
   { cmd = "python -m coverage_checks unit-coverage", cwd = "packages/amule_bump" },
+  { cmd = "python -m coverage_checks unit-coverage", cwd = "packages/pytest_settings" },
 ]
