@@ -47,7 +47,7 @@ def _result(**overrides: Any) -> dict[str, Any]:
 
 
 def _meta(reported_file: ReportedFile) -> dict[str, object]:
-    return dict(reported_file.raw_meta)
+    return dict(reported_file.raw_metadata)
 
 
 def test_maps_a_result_to_an_observation() -> None:
@@ -62,10 +62,10 @@ def test_maps_a_result_to_an_observation() -> None:
     assert reported_file.keyword == "keroro"
 
 
-def test_the_ed2k_only_fields_are_folded_last_into_raw_meta() -> None:
+def test_the_ed2k_only_fields_are_folded_last_into_raw_metadata() -> None:
     (reported_file,), _ = map_search_results([_result(media={"codec": "H.264"})], "keroro")
 
-    assert reported_file.raw_meta[-3:] == (
+    assert reported_file.raw_metadata[-3:] == (
         ("codec", "H.264"),
         ("file_type", "video"),
         ("complete_source_count", 142),
@@ -92,8 +92,8 @@ def test_media_fills_the_columns_that_ec_never_could() -> None:
     assert reported_file.duration_seconds == 1440
     assert reported_file.bitrate_kbps == 1500
     assert _meta(reported_file)["codec"] == "H.264"
-    # artist/album/title have no column: they survive in raw_meta (spec §4.2).
-    assert ("media.title", "Keroro") in reported_file.raw_meta
+    # artist/album/title have no column: they survive in raw_metadata (spec §4.2).
+    assert ("media.title", "Keroro") in reported_file.raw_metadata
 
 
 def test_a_null_media_leaves_the_media_columns_empty() -> None:
@@ -111,7 +111,7 @@ def test_a_malformed_media_object_is_tolerated() -> None:
     assert reported_file.duration_seconds is None
 
 
-def test_unmapped_keys_land_in_raw_meta() -> None:
+def test_unmapped_keys_land_in_raw_metadata() -> None:
     (reported_file,), _ = map_search_results([_result(rating=3)], "keroro")
 
     raw = _meta(reported_file)
@@ -119,7 +119,7 @@ def test_unmapped_keys_land_in_raw_meta() -> None:
     assert raw["status"] == "new"
     assert raw["already_downloaded"] == "false"
     assert raw["comments"] == "[]"
-    # Mapped keys are NOT duplicated into raw_meta.
+    # Mapped keys are NOT duplicated into raw_metadata.
     assert "hash" not in raw
     assert "alternate_names" not in raw
 
@@ -153,7 +153,7 @@ def test_an_alternate_never_carries_the_volatile_ecid() -> None:
     alternate = {"ecid": 621, "name": "[Keroro].095.avi", "sources": {"total": 40}}
     reported_files, _ = map_search_results([_result(alternate_names=[alternate])], "keroro")
 
-    assert all("621" not in str(value) for _, value in reported_files[1].raw_meta)
+    assert all("621" not in str(value) for _, value in reported_files[1].raw_metadata)
 
 
 def test_a_result_without_a_usable_hash_is_skipped_and_counted() -> None:
@@ -457,7 +457,7 @@ def test_a_source_maps_to_a_reading_of_its_row_and_its_detail() -> None:
         role=SourceRole.QUEUED,
         contact_point="176.103.48.36:4184",
         connectable=True,
-        raw_meta=(
+        raw_metadata=(
             ("ident_state", "identified"),
             ("source_origin", "kad"),
             ("client_mod_name", None),
@@ -605,7 +605,7 @@ def test_a_sparse_row_and_detail_keep_the_meta_keys_they_carry_and_read_unknown(
 
     assert (reading.source_name, reading.software) == (None, None)
     assert (reading.contact_point, reading.connectable) == (None, None)
-    assert reading.raw_meta == (("ident_state", "unknown"),)
+    assert reading.raw_metadata == (("ident_state", "unknown"),)
     assert reading.session_received_bytes == 0
 
 
@@ -622,7 +622,7 @@ def test_a_sparse_row_and_detail_keep_the_meta_keys_they_carry_and_read_unknown(
 def test_a_meta_value_is_kept_in_a_shape_the_catalog_stores(value: object, kept: object) -> None:
     reading = map_source(_client_row(protocol_extensions=value), _client_detail())
 
-    assert dict(reading.raw_meta)["protocol_extensions"] == kept
+    assert dict(reading.raw_metadata)["protocol_extensions"] == kept
 
 
 @pytest.mark.parametrize(
@@ -649,7 +649,7 @@ def test_a_sources_contact_point_is_its_server_as_ip_and_port(
 def test_the_server_name_is_kept_unknown_when_the_server_is() -> None:
     detail = _client_detail(server_ip=None, server_port=None, server_name=None)
 
-    assert dict(map_source(_client_row(), detail).raw_meta)["server_name"] is None
+    assert dict(map_source(_client_row(), detail).raw_metadata)["server_name"] is None
 
 
 @pytest.mark.parametrize(

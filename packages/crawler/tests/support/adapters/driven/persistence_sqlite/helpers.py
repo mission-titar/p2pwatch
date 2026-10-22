@@ -25,7 +25,7 @@ _ROWS_BY_TABLE: Mapping[str, str] = {
     "files": "SELECT native_id, size_bytes FROM files",
     "observations": (
         "SELECT f.native_id, v.filename, v.size_bytes, v.duration_seconds, v.bitrate_kbps,"
-        " v.raw_meta, v.keyword, v.node_id, o.observed_at, o.source_count"
+        " v.raw_metadata, v.keyword, v.node_id, o.observed_at, o.source_count"
         " FROM files AS f JOIN observation_variants AS v USING (file_id)"
         " JOIN observations AS o USING (variant_id)"
     ),
@@ -78,11 +78,11 @@ def make_catalog(path: Path, content: Mapping[str, Sequence[Mapping[str, Any]]])
 def _insert_source_points(
     connection: sqlite3.Connection, rows: Sequence[Mapping[str, Any]]
 ) -> None:
-    """Each row: its variant's ``ed2k_hash``, ``user_hash`` and ``node_id``, then its point's
+    """Each row: its variant's ``native_id``, ``user_hash`` and ``node_id``, then its point's
     arguments."""
     variants: dict[tuple[str, str | None, str], int] = {}
     for row in rows:
-        variant = (row["ed2k_hash"], row["user_hash"], row["node_id"])
+        variant = (row["native_id"], row["user_hash"], row["node_id"])
         if variant not in variants:
             user_hash = variant[1]
             if user_hash is not None and user_hash not in {key[1] for key in variants}:
@@ -91,7 +91,7 @@ def _insert_source_points(
                 connection, variant[0], user_hash, node_id=variant[2]
             )
         point_args = {
-            k: v for k, v in row.items() if k not in ("ed2k_hash", "user_hash", "node_id")
+            k: v for k, v in row.items() if k not in ("native_id", "user_hash", "node_id")
         }
         insert_source_point(connection, variants[variant], **point_args)
 

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from vex_checks.adapters.driven.json_vex_reader import JsonVexReader
+from vex_checks.adapters.driven.json_vex_reader import OpenVexReader
 
 
 def test_read_claims_keeps_the_not_affected_statements_only(tmp_path: Path) -> None:
@@ -16,9 +16,9 @@ def test_read_claims_keeps_the_not_affected_statements_only(tmp_path: Path) -> N
     affected = {"vulnerability": {"name": "CVE-2"}, "status": "affected"}
     vex_path.write_text(json.dumps({"statements": [not_affected, affected]}))
 
-    assert JsonVexReader().read_claims(vex_path) == {"CVE-1": "vulnerable_code_not_present"}
+    assert OpenVexReader().read_claims(vex_path) == {"CVE-1": "vulnerable_code_not_present"}
 
 
 def test_read_claims_of_an_absent_file_raises(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
-        JsonVexReader().read_claims(tmp_path / "absent.vex.openvex.json")
+        OpenVexReader().read_claims(tmp_path / "absent.vex.openvex.json")

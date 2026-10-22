@@ -19,19 +19,19 @@ _RULE_ID = "unsatisfied-image-claim"
 
 
 class CheckImageClaims(ImageClaimsChecker):
-    """Over the registry's premises, naming a VEX inside ``repo_root`` relative to it."""
+    """Over the registry's premises, naming a VEX inside ``repository_root`` relative to it."""
 
     def __init__(
         self,
         *,
         premises: Mapping[str, ImagePremise],
-        repo_root: PurePath,
+        repository_root: PurePath,
         vex_reader: VexReader,
         sbom_reader: SbomReader,
         sarif_writer: SarifWriter,
     ) -> None:
         self._premises = premises
-        self._repo_root = repo_root
+        self._repository_root = repository_root
         self._vex_reader = vex_reader
         self._sbom_reader = sbom_reader
         self._sarif_writer = sarif_writer
@@ -45,7 +45,7 @@ class CheckImageClaims(ImageClaimsChecker):
             for advisory_id, premise in self._premises.items()
             if advisory_id in claims
         }
-        vex_location = locate_vex(vex_path, self._repo_root)
+        vex_location = locate_vex(vex_path, self._repository_root)
         unlocated = evaluate_image_premises(
             premises,
             self._sbom_reader.read_dpkg_packages(sbom_path),

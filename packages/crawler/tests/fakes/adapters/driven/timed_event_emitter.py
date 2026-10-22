@@ -3,7 +3,7 @@ from p2pwatch.domain.observability import events as ev
 from tests.fakes.adapters.driven.fake_time import FakeTime
 
 
-class TimedEventEmitter(EventEmitter):
+class FakeTimedEventEmitter(EventEmitter):
     """Each event with the seconds elapsed on the monotonic clock when it was emitted."""
 
     def __init__(self, fake_time: FakeTime) -> None:

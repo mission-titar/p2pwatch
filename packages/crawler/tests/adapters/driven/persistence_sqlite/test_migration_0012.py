@@ -5,7 +5,6 @@ import sqlite3
 from importlib import resources
 from pathlib import Path
 
-from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
     insert_v11_observation,
     insert_v11_source_point,
@@ -55,7 +54,7 @@ def test_0012_renames_the_three_columns_in_the_schema_and_keeps_every_value(
     schema, rows = _schema(connection), _rows(connection)
     connection.close()
 
-    connection = open_catalog(path)
+    connection = open_catalog_at(path, 12)
     try:
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 12
         assert _schema(connection) == [(kind, name, _renamed(sql)) for kind, name, sql in schema]

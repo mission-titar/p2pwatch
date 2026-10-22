@@ -2,7 +2,7 @@ import json
 from http.server import BaseHTTPRequestHandler
 
 
-class NotificationSink(BaseHTTPRequestHandler):
+class FakeNotificationSink(BaseHTTPRequestHandler):
     """Records each apprise ``json://`` notification: its User-Agent (the app_id) and title."""
 
     received: list[tuple[str, str]] = []

@@ -112,7 +112,7 @@ READERS_BY_ATTR: Mapping[str, Callable[[FileCandidate], float | None]] = {
 }
 
 
-class AttrBetweenMatcher(Matcher):
+class AttributeBetweenMatcher(Matcher):
     """True if the numeric attribute is PRESENT and within ``[min_bound, max_bound]`` (§8.2).
 
     Open bounds when ``min_bound``/``max_bound`` are ``None``. Missing attribute -> false.

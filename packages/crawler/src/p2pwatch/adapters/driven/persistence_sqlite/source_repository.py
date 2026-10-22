@@ -56,7 +56,7 @@ ON CONFLICT DO NOTHING
 
 _INSERT_VARIANT = """
 INSERT INTO source_variants (
-    file_id, source_id, name, software, role, contact_point, connectable, raw_meta,
+    file_id, source_id, name, software, role, contact_point, connectable, raw_metadata,
     node_id, content_hash
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (content_hash) DO NOTHING
@@ -199,7 +199,7 @@ def _micros(moment: datetime) -> int:
 def _variant_columns(
     file: FileKey, reading: SourceReading, role: SourceRole, node_id: str
 ) -> tuple[bytes | str | bool | None, ...]:
-    """The variant's columns in the table's order, ``raw_meta`` a JSON object with sorted keys."""
+    """The variant's columns in table order, ``raw_metadata`` a JSON object with sorted keys."""
     return (
         file.file_id,
         None if reading.source is None else reading.source.source_id,
@@ -208,7 +208,7 @@ def _variant_columns(
         role.value,
         reading.contact_point,
         reading.connectable,
-        json.dumps(dict(reading.raw_meta), ensure_ascii=False, sort_keys=True),
+        json.dumps(dict(reading.raw_metadata), ensure_ascii=False, sort_keys=True),
         node_id,
     )
 

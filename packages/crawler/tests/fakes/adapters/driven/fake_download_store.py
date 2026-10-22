@@ -14,8 +14,8 @@ class FakeTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
     """In-memory downloads repo (the contract of SqliteTrackedDownloadStore, without SQL).
 
     Keyed by ``native_id``; ``failures`` holds the failure reasons, ``queued_at``,
-    ``completed_at`` and ``seen_at`` the instants received, and ``last_seen_at`` what
-    ``read_last_seen_at_by_file`` reads back.
+    ``completed_at`` and ``seen_at`` the instants received, and ``latest_seen_at`` what
+    ``read_latest_seen_at_by_file`` reads back.
     ``fail_set_state_for`` and ``fail_set_completed_for``: hashes for which ``set_state`` or
     ``set_completed`` raises ``StoreError``, to simulate a mid-cycle store failure
     (cf. logic-download#2/error-boundary#2).
@@ -38,7 +38,7 @@ class FakeTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
         self.completed_at: dict[str, datetime] = {}
         self.seen: list[set[str]] = []
         self.seen_at: list[datetime] = []
-        self.last_seen_at: dict[str, datetime] = {}
+        self.latest_seen_at: dict[str, datetime] = {}
         self._fail_record = fail_record
         self._fail_set_state_for = fail_set_state_for or set()
         self._fail_set_completed_for = fail_set_completed_for or set()
@@ -60,7 +60,7 @@ class FakeTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
         self._target_ids[file.native_id] = target_id
         self.sizes[file.native_id] = size_bytes
         self.queued_at[file.native_id] = queued_at
-        self.last_seen_at[file.native_id] = queued_at
+        self.latest_seen_at[file.native_id] = queued_at
         return True
 
     def set_completed(self, file: FileKey, completed_at: datetime) -> None:
@@ -90,12 +90,12 @@ class FakeTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
         statuses = tuple(statuses)
         self.seen.append({status.file.native_id for status in statuses})
         self.seen_at.append(seen_at)
-        self.last_seen_at.update({s.file.native_id: seen_at for s in statuses})
+        self.latest_seen_at.update({s.file.native_id: seen_at for s in statuses})
 
-    def read_last_seen_at_by_file(self) -> dict[FileKey, datetime]:
+    def read_latest_seen_at_by_file(self) -> dict[FileKey, datetime]:
         return {
-            FileKey(Network.ED2K, h): last_seen_at
-            for h, last_seen_at in self.last_seen_at.items()
+            FileKey(Network.ED2K, h): latest_seen_at
+            for h, latest_seen_at in self.latest_seen_at.items()
             if self.states.get(h) in {DownloadState.QUEUED, DownloadState.DOWNLOADING}
         }
 

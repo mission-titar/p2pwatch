@@ -1,4 +1,4 @@
-from catalog_matching.domain.matchers import AttrBetweenMatcher, CoverageMatcher, RegexMatcher
+from catalog_matching.domain.matchers import AttributeBetweenMatcher, CoverageMatcher, RegexMatcher
 from catalog_matching.domain.models import FileCandidate, TargetSegment
 from catalog_matching.domain.resolver import MatcherResolver
 from catalog_matching.domain.validation import parse_matcher_config
@@ -64,7 +64,7 @@ def test_resolve_attr_between_token() -> None:
         {"tokens": {"sz": {"attr_between": "size_mib", "min": 30, "max": 600}}, "rules": []}
     )
     matcher = resolver.resolve_token("sz", _TARGET)
-    assert isinstance(matcher, AttrBetweenMatcher)
+    assert isinstance(matcher, AttributeBetweenMatcher)
     assert matcher.matches(FileCandidate(filename="x.avi", size_mib=120.0)) is True
     assert matcher.matches(FileCandidate(filename="x.avi", size_mib=5.0)) is False
 

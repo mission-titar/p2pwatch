@@ -13,8 +13,8 @@ from tests.support.adapters.driven.persistence_sqlite.helpers import (
     make_catalog,
 )
 
-_REPO_ROOT = Path(__file__).resolve().parents[4]
-_DEPLOY = _REPO_ROOT / "deploy"
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+_DEPLOY = _REPOSITORY_ROOT / "deploy"
 _ENV = {"AMULE_API_PASSWORD": "s3cr3t"}
 
 
@@ -41,7 +41,7 @@ def test_crawl_exits_one_on_a_broken_config(
 def test_validate_config_from_the_repository_root_accepts_the_shipped_config(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert _run(["validate-config"], _REPO_ROOT) == 0
+    assert _run(["validate-config"], _REPOSITORY_ROOT) == 0
 
     assert capsys.readouterr().out == "Config valid\n"
 
@@ -62,7 +62,7 @@ def test_merge_of_two_catalogs_named_under_cwd_into_a_new_one_holds_both(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     for letter, ed2k in (("a", HASH_A), ("b", HASH_B)):
-        make_catalog(tmp_path / f"{letter}.db", {"files": [{"ed2k_hash": ed2k, "size_bytes": 100}]})
+        make_catalog(tmp_path / f"{letter}.db", {"files": [{"native_id": ed2k, "size_bytes": 100}]})
     merged = tmp_path / "merged.db"
 
     with caplog.at_level(logging.INFO):

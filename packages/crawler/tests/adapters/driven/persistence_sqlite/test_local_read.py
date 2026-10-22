@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from p2pwatch.adapters.driven.persistence_sqlite.local_read import SqliteNodeStateReader
-from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
+from p2pwatch.adapters.driven.persistence_sqlite.reader import ThreadReadConnections
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
@@ -21,7 +21,7 @@ _STARTED_AT_MICROS = 1_781_258_400_000_000  # 2026-06-12T10:00:00Z
 
 def _read_node_state(path: Path) -> NodeState:
     """Read local.db through the webui's read-only connection."""
-    with ReaderProvider(path) as reader_provider:
+    with ThreadReadConnections(path) as reader_provider:
         return SqliteNodeStateReader(reader_provider).read_node_state()
 
 
@@ -36,7 +36,7 @@ def test_node_state_populated(local_db: Path) -> None:
     with closing(sqlite3.connect(local_db)) as w, w:
         w.execute(
             "INSERT INTO downloads (file_id, network, native_id, target_id, state, queued_at,"
-            " size_bytes, last_progress_at, waiting_reason, failure_reason)"
+            " size_bytes, latest_progress_at, waiting_reason, failure_reason)"
             " VALUES (x'00', 'ed2k', ?, '062A', 'failed', ?, ?, ?, ?, ?)",
             (
                 "aabbccdd" * 4,
@@ -71,7 +71,7 @@ def test_node_state_populated(local_db: Path) -> None:
             state=DownloadState.FAILED,
             queued_at=datetime(2026, 6, 22, 10, tzinfo=UTC),
             completed_at=None,
-            last_progress_at=datetime(2026, 6, 23, 10, tzinfo=UTC),
+            latest_progress_at=datetime(2026, 6, 23, 10, tzinfo=UTC),
             waiting_reason=WaitingReason.NO_SOURCE,
             failure_reason=FailureReason.ERROR,
         ),
@@ -114,7 +114,7 @@ def test_a_completed_download_reads_its_completion(local_db: Path) -> None:
 
     assert download.state is DownloadState.COMPLETED
     assert download.completed_at == datetime(2026, 6, 24, 10, 0, 0, 250000, tzinfo=UTC)
-    assert download.last_progress_at is None
+    assert download.latest_progress_at is None
 
 
 # ---------------------------------------------------------------------------

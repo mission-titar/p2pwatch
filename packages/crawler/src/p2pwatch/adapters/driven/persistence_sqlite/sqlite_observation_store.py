@@ -1,7 +1,7 @@
 """``SqliteObservationStore``: ``FileObservation`` → durable rows, and their reads.
 
 The adapter stores what the domain ignores (data-model spec §3): ``node_id``, given at each write.
-``raw_meta`` is serialized as a JSON LIST of pairs (``[["0x0308", "0"], …]``), wire order and
+``raw_metadata`` is serialized as a JSON LIST of pairs (``[["0x0308", "0"], …]``), wire order and
 duplicates preserved, ``ensure_ascii=False``, no sorting (spec §3). ``record_observation`` makes
 ONE transaction (spec §4): ``INSERT OR IGNORE`` into ``files`` (first sight wins), into
 ``observation_variants`` (found by its ``content_hash``) and into ``observations``: the
@@ -40,7 +40,7 @@ _INSERT_FILE = (
 
 _INSERT_VARIANT = """
 INSERT OR IGNORE INTO observation_variants (
-    file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_meta, keyword, node_id,
+    file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_metadata, keyword, node_id,
     content_hash
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
@@ -68,7 +68,7 @@ class SqliteObservationStore(ObservationWriter, ObservationReader):
             reported_file.size_bytes,
             reported_file.duration_seconds,
             reported_file.bitrate_kbps,
-            json.dumps(reported_file.raw_meta, ensure_ascii=False),
+            json.dumps(reported_file.raw_metadata, ensure_ascii=False),
             reported_file.keyword,
             node_id,
         )

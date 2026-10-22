@@ -7,11 +7,11 @@ import pytest
 
 from vex_checks.composition.command_line import build_command_line
 
-_REPO_ROOT = Path(__file__).parents[4]
+_REPOSITORY_ROOT = Path(__file__).parents[4]
 
 
 def _run(argv: list[str], env: dict[str, str], cwd: Path) -> int:
-    return build_command_line(repo_root=_REPO_ROOT, env=env, cwd=cwd).run(argv)
+    return build_command_line(repository_root=_REPOSITORY_ROOT, env=env, cwd=cwd).run(argv)
 
 
 def _write(path: Path, document: object) -> Path:
@@ -27,7 +27,7 @@ def test_image_claims_locates_the_problems_at_the_vex_relative_to_the_repository
     sbom = _write(tmp_path / "sbom.syft.json", {"artifacts": artifacts})
     vex = "security/amule.vex.openvex.json"
 
-    assert _run(["image-claims", "--sbom", str(sbom), "--vex", vex], {}, _REPO_ROOT) == 1
+    assert _run(["image-claims", "--sbom", str(sbom), "--vex", vex], {}, _REPOSITORY_ROOT) == 1
 
     assert capsys.readouterr().out == (
         "::error::CVE-2006-2691: declared amule 2.1.1 is below 2.1.2"
@@ -47,7 +47,7 @@ def test_stale_claims_runs_the_grype_found_on_the_path_of_its_environment(
     sbom = _write(tmp_path / "sbom.syft.json", {"artifacts": []})
     argv = ["stale-claims", "--sbom", str(sbom), "--vex", "security/amule.vex.openvex.json"]
 
-    assert _run(argv, {"PATH": str(tmp_path)}, _REPO_ROOT) == 1
+    assert _run(argv, {"PATH": str(tmp_path)}, _REPOSITORY_ROOT) == 1
 
     lines = capsys.readouterr().out.splitlines()
     assert lines

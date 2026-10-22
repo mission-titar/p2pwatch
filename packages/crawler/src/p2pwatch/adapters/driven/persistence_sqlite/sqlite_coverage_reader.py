@@ -8,7 +8,7 @@ sentinel and per-target ``retracted`` rows are excluded.
 All SQL lives in module constants, parameterized (no value interpolation).
 """
 
-from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
+from p2pwatch.adapters.driven.persistence_sqlite.reader import ThreadReadConnections
 from p2pwatch.application.ports.driven.coverage_reader import CoverageReader
 
 # ---------------------------------------------------------------------------
@@ -46,7 +46,7 @@ ORDER BY ld.target_id, ld.file_id
 class SqliteCoverageReader(CoverageReader):
     """Reads through the calling thread's read-only connection."""
 
-    def __init__(self, reader_provider: ReaderProvider) -> None:
+    def __init__(self, reader_provider: ThreadReadConnections) -> None:
         self._reader_provider = reader_provider
 
     def read_target_coverage(self) -> dict[str, tuple[str, ...]]:

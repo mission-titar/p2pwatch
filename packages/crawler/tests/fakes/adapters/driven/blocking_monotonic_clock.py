@@ -5,7 +5,7 @@ from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 
 
-class BlockingMonotonicClock(MonotonicClock):
+class FakeBlockingMonotonicClock(MonotonicClock):
     """Monotonic clock whose ``sleep`` BLOCKS for good (the wake must win and cancel the sleep).
 
     ``now`` is unused by the loop; ``sleep`` never resolves, so the pending sleep_task is cancelled.

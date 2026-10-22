@@ -10,20 +10,20 @@ from p2pwatch.domain.source import SourceKey
 SEEN_AT = "2026-06-22T10:00:00.000000+00:00"
 
 
-def file_id(ed2k_hash: str) -> bytes:
-    return FileKey(Network.ED2K, ed2k_hash).file_id
+def file_id(native_id: str) -> bytes:
+    return FileKey(Network.ED2K, native_id).file_id
 
 
-def insert_file(connection: sqlite3.Connection, ed2k_hash: str, size_bytes: int = 100) -> None:
+def insert_file(connection: sqlite3.Connection, native_id: str, size_bytes: int = 100) -> None:
     connection.execute(
         "INSERT INTO files (file_id, network, native_id, size_bytes) VALUES (?, 'ed2k', ?, ?)",
-        (file_id(ed2k_hash), ed2k_hash, size_bytes),
+        (file_id(native_id), native_id, size_bytes),
     )
 
 
 def insert_observation(
     connection: sqlite3.Connection,
-    ed2k_hash: str,
+    native_id: str,
     filename: str,
     *,
     observed_at: str = SEEN_AT,
@@ -34,7 +34,7 @@ def insert_observation(
     node_id: str = "n1",
 ) -> None:
     variant = (
-        file_id(ed2k_hash),
+        file_id(native_id),
         filename,
         size_bytes,
         duration_seconds,
@@ -46,7 +46,7 @@ def insert_observation(
     key = content_hash(*variant)
     connection.execute(
         "INSERT OR IGNORE INTO observation_variants"
-        " (file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_meta, keyword,"
+        " (file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_metadata, keyword,"
         " node_id, content_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (*variant, key),
     )
@@ -59,7 +59,7 @@ def insert_observation(
 
 def insert_decision(
     connection: sqlite3.Connection,
-    ed2k_hash: str,
+    native_id: str,
     target_id: str,
     tier: str,
     *,
@@ -71,7 +71,7 @@ def insert_decision(
         "INSERT INTO match_decisions"
         " (file_id, target_id, rule_name, tier, decided_at, node_id)"
         " VALUES (?, ?, ?, ?, ?, ?)",
-        (file_id(ed2k_hash), target_id, rule_name, tier, decided_at, node_id),
+        (file_id(native_id), target_id, rule_name, tier, decided_at, node_id),
     )
 
 
@@ -88,7 +88,7 @@ def insert_source(connection: sqlite3.Connection, user_hash: str) -> None:
 
 def insert_source_variant(
     connection: sqlite3.Connection,
-    ed2k_hash: str,
+    native_id: str,
     user_hash: str | None,
     *,
     name: str | None = "AnimuseeFMR",
@@ -100,12 +100,12 @@ def insert_source_variant(
     """The new variant's ``variant_id``; its ``content_hash`` stands in for the writer's."""
     sid = source_id(user_hash) if user_hash is not None else None
     columns = (name, role, contact_point, connectable)
-    key = hashlib.blake2b(repr((ed2k_hash, user_hash, *columns, node_id)).encode(), digest_size=16)
+    key = hashlib.blake2b(repr((native_id, user_hash, *columns, node_id)).encode(), digest_size=16)
     row = connection.execute(
         "INSERT INTO source_variants (file_id, source_id, name, role, contact_point,"
-        " connectable, raw_meta, node_id, content_hash)"
+        " connectable, raw_metadata, node_id, content_hash)"
         " VALUES (?, ?, ?, ?, ?, ?, '{}', ?, ?) RETURNING variant_id",
-        (file_id(ed2k_hash), sid, *columns, node_id, key.digest()),
+        (file_id(native_id), sid, *columns, node_id, key.digest()),
     ).fetchone()
     variant_id: int = row[0]
     return variant_id
@@ -143,7 +143,7 @@ def source_variant_node_ids(connection: sqlite3.Connection) -> set[str]:
 
 
 def decision_tiers(connection: sqlite3.Connection) -> list[tuple[str, str]]:
-    """``(ed2k_hash, tier)`` of every decision, oldest first."""
+    """``(native_id, tier)`` of every decision, oldest first."""
     rows = connection.execute(
         "SELECT f.native_id, d.tier FROM match_decisions AS d"
         " JOIN files AS f USING (file_id) ORDER BY d.id"

@@ -33,7 +33,7 @@ from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.fakes.adapters.driven.fake_wall_clock import FakeWallClock
-from tests.fakes.adapters.driven.ticking_wall_clock import TickingWallClock
+from tests.fakes.adapters.driven.ticking_wall_clock import FakeTickingWallClock
 from tests.support.catalog_rows import decision_node_ids, insert_file
 
 _NODE = "n1"
@@ -53,17 +53,17 @@ _TITLE_A, _TITLE_B = "Les demoiselles cambrioleuses", "Le grand combat sous-mari
 _SIZE = 234_000_000
 
 
-def _key(ed2k_hash: str) -> FileKey:
-    return FileKey(Network.ED2K, ed2k_hash)
+def _key(native_id: str) -> FileKey:
+    return FileKey(Network.ED2K, native_id)
 
 
-def _event(ed2k_hash: str, filename: str, *changes: DecisionChange) -> DecisionsRecorded:
-    return DecisionsRecorded(_key(ed2k_hash), filename, _SIZE, changes)
+def _event(native_id: str, filename: str, *changes: DecisionChange) -> DecisionsRecorded:
+    return DecisionsRecorded(_key(native_id), filename, _SIZE, changes)
 
 
-def _reported_file(ed2k_hash: str, filename: str, sources: int = 3) -> ReportedFile:
+def _reported_file(native_id: str, filename: str, sources: int = 3) -> ReportedFile:
     return ReportedFile(
-        file=FileKey(Network.ED2K, ed2k_hash),
+        file=FileKey(Network.ED2K, native_id),
         filename=filename,
         size_bytes=_SIZE,
         source_count=sources,
@@ -73,7 +73,7 @@ def _reported_file(ed2k_hash: str, filename: str, sources: int = 3) -> ReportedF
 
 def _seed_decision(
     decision_store: SqliteDecisionStore,
-    ed2k_hash: str,
+    native_id: str,
     target_id: str,
     decided_at: datetime,
     node_id: str = _NODE,
@@ -82,7 +82,7 @@ def _seed_decision(
         target_id=target_id, rules_fired=(), tokens_matched=(), coverage_values=()
     )
     decision_store.record_decision(
-        _key(ed2k_hash),
+        _key(native_id),
         MatchDecision(target_id, "title_review", "notify", explanation),
         decided_at,
         node_id,
@@ -90,7 +90,7 @@ def _seed_decision(
 
 
 async def _record(
-    ed2k_hash: str,
+    native_id: str,
     filename: str,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
@@ -100,11 +100,11 @@ async def _record(
     wall_clock: FakeWallClock,
 ) -> int:
     observation_store.record_observation(
-        FileObservation(_reported_file(ed2k_hash, filename), wall_clock.now()), _NODE
+        FileObservation(_reported_file(native_id, filename), wall_clock.now()), _NODE
     )
     return await rejudge_file(
-        _key(ed2k_hash),
-        _reported_file(ed2k_hash, filename).to_candidate(),
+        _key(native_id),
+        _reported_file(native_id, filename).to_candidate(),
         observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
@@ -582,7 +582,7 @@ async def test_each_row_carries_the_instant_read_right_before_its_write(
         engine=engine,
         waker=FakeWaker(),
         event_emitter=FakeEventEmitter(),
-        wall_clock=TickingWallClock(FakeTime(start)),
+        wall_clock=FakeTickingWallClock(FakeTime(start)),
         node_id=_NODE,
     )
     rows = catalog_connection.execute(

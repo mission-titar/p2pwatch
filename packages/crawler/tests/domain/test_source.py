@@ -65,7 +65,7 @@ def test_a_reading_in_a_passing_state_has_no_role_and_may_have_no_identity() -> 
         role=None,
         contact_point=None,
         connectable=None,
-        raw_meta=(("protocol_extensions", ()), ("source_origin", "kad")),
+        raw_metadata=(("protocol_extensions", ()), ("source_origin", "kad")),
         session_received_bytes=0,
     )
     assert reading.source is None

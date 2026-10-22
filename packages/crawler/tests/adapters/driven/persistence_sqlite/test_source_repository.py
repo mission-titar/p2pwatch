@@ -35,11 +35,11 @@ def _points(
     catalog: sqlite3.Connection,
     *moments: datetime,
     role: str = "queued",
-    ed2k_hash: str = _FILE,
+    native_id: str = _FILE,
     user_hash: str = _USER,
     node_id: str = "n1",
 ) -> None:
-    variant_id = insert_source_variant(catalog, ed2k_hash, user_hash, role=role, node_id=node_id)
+    variant_id = insert_source_variant(catalog, native_id, user_hash, role=role, node_id=node_id)
     for moment in moments:
         insert_source_point(catalog, variant_id, _us(moment))
 
@@ -47,8 +47,8 @@ def _points(
 @pytest.fixture
 def catalog(tmp_path: Path) -> Iterator[sqlite3.Connection]:
     connection = open_catalog(tmp_path / "catalog.db")
-    for ed2k_hash in (_FILE, _OTHER_FILE):
-        insert_file(connection, ed2k_hash)
+    for native_id in (_FILE, _OTHER_FILE):
+        insert_file(connection, native_id)
     for user_hash in (_USER, _OTHER_USER):
         insert_source(connection, user_hash)
     yield connection
@@ -77,7 +77,7 @@ def test_earlier_points_read_this_sources_points_on_every_file_of_the_given_node
     source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
     later = _T0 + timedelta(hours=1)
-    _points(catalog, _T0, role="sending", ed2k_hash=_OTHER_FILE)
+    _points(catalog, _T0, role="sending", native_id=_OTHER_FILE)
     _points(catalog, later, user_hash=_OTHER_USER)
     _points(catalog, later, node_id="n2")
     assert source_point_store.read_earlier_points(
@@ -121,7 +121,7 @@ def _steps(connection: sqlite3.Connection, read: Callable[[], object]) -> int:
 def _other_variants(catalog: sqlite3.Connection, numbers: range) -> None:
     """Other peers' variants on this node, which an index on ``node_id`` alone would walk."""
     catalog.executemany(
-        "INSERT INTO source_variants (file_id, name, role, raw_meta, node_id, content_hash)"
+        "INSERT INTO source_variants (file_id, name, role, raw_metadata, node_id, content_hash)"
         " VALUES (?, ?, 'queued', '{}', 'n1', ?)",
         ((file_id(_OTHER_FILE), f"peer {n}", n.to_bytes(16)) for n in numbers),
     )

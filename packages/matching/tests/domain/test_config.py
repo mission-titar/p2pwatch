@@ -6,57 +6,57 @@ from catalog_matching.domain.config import (
     SCOPES,
     TIER_RANK,
     TIERS,
-    AllDef,
-    AnyDef,
-    AttrBetweenDef,
-    CoverageDef,
-    KeywordDef,
+    AllDefinition,
+    AnyDefinition,
+    AttributeBetweenDefinition,
+    CoverageDefinition,
+    KeywordDefinition,
     MatcherConfig,
-    NotDef,
-    RegexDef,
+    NotDefinition,
+    RegexDefinition,
     Rule,
-    TokenRef,
+    TokenReference,
 )
 
 
 def test_keyword_def_holds_phrase() -> None:
-    assert KeywordDef(phrase="keroro").phrase == "keroro"
+    assert KeywordDefinition(phrase="keroro").phrase == "keroro"
 
 
 def test_regex_def_defaults_flags_to_i() -> None:
-    assert RegexDef(pattern="teletoon").flags == "i"
-    assert RegexDef(pattern="teletoon", flags="").flags == ""
+    assert RegexDefinition(pattern="teletoon").flags == "i"
+    assert RegexDefinition(pattern="teletoon", flags="").flags == ""
 
 
 def test_coverage_def_defaults() -> None:
-    cov = CoverageDef(reference="title", min_coverage=0.6)
+    cov = CoverageDefinition(reference="title", min_coverage=0.6)
     assert cov.reference == "title"
     assert cov.min_coverage == 0.6
     assert cov.min_similarity == 0.85
 
 
 def test_attr_between_def_holds_bounds() -> None:
-    ab = AttrBetweenDef(attr="size_mib", min_bound=30.0, max_bound=600.0)
+    ab = AttributeBetweenDefinition(attr="size_mib", min_bound=30.0, max_bound=600.0)
     assert ab.attr == "size_mib"
     assert ab.min_bound == 30.0
     assert ab.max_bound == 600.0
-    assert AttrBetweenDef(attr="size_mib").min_bound is None
-    assert AttrBetweenDef(attr="size_mib").max_bound is None
+    assert AttributeBetweenDefinition(attr="size_mib").min_bound is None
+    assert AttributeBetweenDefinition(attr="size_mib").max_bound is None
 
 
 def test_composite_defs_hold_operands() -> None:
-    comp = AnyDef(operands=("keroro", "titar"))
+    comp = AnyDefinition(operands=("keroro", "titar"))
     assert comp.operands == ("keroro", "titar")
-    assert AllDef(operands=()).operands == ()
-    assert NotDef(operand="keroro").operand == "keroro"
+    assert AllDefinition(operands=()).operands == ()
+    assert NotDefinition(operand="keroro").operand == "keroro"
 
 
 def test_token_ref_overrides_default_to_none() -> None:
-    ref = TokenRef(name="title_hit")
+    ref = TokenReference(name="title_hit")
     assert ref.name == "title_hit"
     assert ref.min_coverage is None
     assert ref.min_similarity is None
-    assert TokenRef(name="title_hit", min_coverage=0.4).min_coverage == 0.4
+    assert TokenReference(name="title_hit", min_coverage=0.4).min_coverage == 0.4
 
 
 def test_rule_holds_name_tier_scope_condition() -> None:
@@ -64,33 +64,33 @@ def test_rule_holds_name_tier_scope_condition() -> None:
         name="keroro_large",
         tier="catalog",
         scope="unattributed",
-        condition=AnyDef(operands=("keroro_titar",)),
+        condition=AnyDefinition(operands=("keroro_titar",)),
     )
     assert rule.name == "keroro_large"
     assert rule.tier == "catalog"
     assert rule.scope == "unattributed"
-    assert isinstance(rule.condition, AnyDef)
+    assert isinstance(rule.condition, AnyDefinition)
 
 
 def test_matcher_config_holds_tokens_and_rules() -> None:
     config = MatcherConfig(
-        tokens={"keroro": KeywordDef(phrase="keroro")},
+        tokens={"keroro": KeywordDefinition(phrase="keroro")},
         rules=(
             Rule(
                 name="r",
                 tier="catalog",
                 scope="unattributed",
-                condition=AnyDef(operands=("keroro",)),
+                condition=AnyDefinition(operands=("keroro",)),
             ),
         ),
     )
-    assert config.tokens["keroro"] == KeywordDef(phrase="keroro")
+    assert config.tokens["keroro"] == KeywordDefinition(phrase="keroro")
     assert len(config.rules) == 1
 
 
 def test_defs_are_frozen() -> None:
     with pytest.raises(dataclasses.FrozenInstanceError):
-        KeywordDef(phrase="x").phrase = "y"  # type: ignore[misc]
+        KeywordDefinition(phrase="x").phrase = "y"  # type: ignore[misc]
 
 
 def test_matcher_config_is_frozen() -> None:

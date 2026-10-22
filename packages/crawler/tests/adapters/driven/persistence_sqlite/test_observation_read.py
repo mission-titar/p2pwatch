@@ -20,8 +20,8 @@ _TIE = "2026-06-01T10:00:00.000000+00:00"
 _YEAR_3000 = 32_503_680_000_000_000
 
 
-def _key(ed2k_hash: str) -> FileKey:
-    return FileKey(Network.ED2K, ed2k_hash)
+def _key(native_id: str) -> FileKey:
+    return FileKey(Network.ED2K, native_id)
 
 
 @pytest.fixture
@@ -33,7 +33,7 @@ def connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 def _raw(
     connection: sqlite3.Connection,
-    ed2k_hash: str,
+    native_id: str,
     name: str,
     at: str,
     *,
@@ -42,7 +42,7 @@ def _raw(
 ) -> None:
     insert_observation(
         connection,
-        ed2k_hash,
+        native_id,
         name,
         observed_at=at,
         source_count=sources,
@@ -52,10 +52,10 @@ def _raw(
 
 
 def _observation(
-    name: str, at: str, *, media: int | None = None, ed2k_hash: str = _A, sources: int = 5
+    name: str, at: str, *, media: int | None = None, native_id: str = _A, sources: int = 5
 ) -> FileObservation:
     reported_file = ReportedFile(
-        file=_key(ed2k_hash),
+        file=_key(native_id),
         filename=name,
         size_bytes=100,
         source_count=sources,
@@ -97,14 +97,14 @@ def test_latest_observation_of_a_file_never_seen_or_unknown_is_none(
 def test_iter_latest_observations_yields_one_per_seen_file_sorted_by_hash(
     connection: sqlite3.Connection,
 ) -> None:
-    for ed2k_hash in (_C, _B, _A):
-        insert_file(connection, ed2k_hash)
+    for native_id in (_C, _B, _A):
+        insert_file(connection, native_id)
     _raw(connection, _C, "c.avi", "2026-05-01T10:00:00.000000+00:00")
     _raw(connection, _A, "old.avi", "2026-06-01T10:00:00.000000+00:00")
     _raw(connection, _A, "new.avi", "2026-06-02T10:00:00.000000+00:00")
     assert list(observation_read.iter_latest_observations(connection)) == [
         _observation("new.avi", "2026-06-02T10:00:00.000000+00:00"),
-        _observation("c.avi", "2026-05-01T10:00:00.000000+00:00", ed2k_hash=_C),
+        _observation("c.avi", "2026-05-01T10:00:00.000000+00:00", native_id=_C),
     ]
 
 

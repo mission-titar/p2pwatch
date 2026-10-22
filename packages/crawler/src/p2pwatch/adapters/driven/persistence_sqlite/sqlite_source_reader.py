@@ -11,7 +11,7 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 
 from p2pwatch.adapters.driven.persistence_sqlite.observation_read import best_observation
-from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
+from p2pwatch.adapters.driven.persistence_sqlite.reader import ThreadReadConnections
 from p2pwatch.application.ports.driven.source_reader import SourceReader
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.known_source import KnownSource
@@ -114,7 +114,7 @@ FROM sources AS s
 JOIN (
     SELECT
         v.source_id,
-        MAX({_SQL_VARIANT_LAST_SEEN}) AS last_seen_at,
+        MAX({_SQL_VARIANT_LAST_SEEN}) AS latest_seen_at,
         COUNT(DISTINCT v.file_id) AS file_count
     FROM source_variants AS v
     GROUP BY v.source_id
@@ -134,7 +134,7 @@ _SQL_LIST_SOURCES_SELECT = f"""\
 SELECT
     s.network,
     s.native_id,
-    seen.last_seen_at,
+    seen.latest_seen_at,
     seen.file_count,
     (
         SELECT v.name
@@ -155,14 +155,14 @@ SELECT
     s.network,
     s.native_id,
     v.name,
-    MAX({_SQL_VARIANT_LAST_SEEN}) AS last_seen_at,
+    MAX({_SQL_VARIANT_LAST_SEEN}) AS latest_seen_at,
     COUNT(DISTINCT v.file_id) AS file_count
 FROM source_variants AS v
 JOIN sources AS s ON s.source_id = v.source_id
 """
 _SQL_PAIRS_END = """\
 GROUP BY v.source_id, v.name
-ORDER BY last_seen_at DESC, v.source_id, v.name
+ORDER BY latest_seen_at DESC, v.source_id, v.name
 LIMIT :limit OFFSET :offset
 """
 
@@ -223,7 +223,7 @@ def _source_namings(
         SourceNaming(
             source=SourceKey(Network(row["network"]), row["native_id"]),
             source_name=row["name"],
-            last_seen_at=_EPOCH + row["last_seen_at"] * _MICROSECOND,
+            latest_seen_at=_EPOCH + row["latest_seen_at"] * _MICROSECOND,
             file_count=row["file_count"],
         )
         for row in connection.execute(_SQL_PAIRS + where + _SQL_PAIRS_END, params)
@@ -245,7 +245,7 @@ def _best_filename_by_file(
 class SqliteSourceReader(SourceReader):
     """Reads through the calling thread's read-only connection."""
 
-    def __init__(self, reader_provider: ReaderProvider) -> None:
+    def __init__(self, reader_provider: ThreadReadConnections) -> None:
         self._reader_provider = reader_provider
 
     def read_known_sources(
@@ -256,14 +256,14 @@ class SqliteSourceReader(SourceReader):
             _SQL_LIST_SOURCES_SELECT
             + _SQL_SOURCES_FROM
             + search
-            + "ORDER BY seen.last_seen_at DESC, s.source_id\nLIMIT ? OFFSET ?\n"
+            + "ORDER BY seen.latest_seen_at DESC, s.source_id\nLIMIT ? OFFSET ?\n"
         )
         rows = self._reader_provider.connection().execute(sql, [*params, limit, offset])
         return tuple(
             KnownSource(
                 source=SourceKey(Network(row["network"]), row["native_id"]),
                 source_name=row["name"],
-                last_seen_at=_EPOCH + row["last_seen_at"] * _MICROSECOND,
+                latest_seen_at=_EPOCH + row["latest_seen_at"] * _MICROSECOND,
                 file_count=row["file_count"],
             )
             for row in rows

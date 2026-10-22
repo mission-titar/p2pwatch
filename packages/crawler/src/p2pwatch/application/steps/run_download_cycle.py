@@ -7,7 +7,7 @@ Three things in it are not obvious:
 - **A completion is the client's own signal, never the bytes** (2026-09-02: 065B was stamped
   complete at 20.1 %). ``DownloadStatus.completed`` carries it.
 - **A download's absence is measured on the monotonic clock** (monotonic clock spec, D7).
-  ``last_seen_at`` only carries it across a restart, clamped by ``remaining_wait``: a wall-clock
+  ``latest_seen_at`` only carries it across a restart, clamped by ``remaining_wait``: a wall-clock
   step fails nothing.
 - **A download the client does not list is started again**, once per round, until it is listed
   or the TTL fails it: a client may forget its transfers on restart.
@@ -224,16 +224,16 @@ def _reconcile_loss_deadlines(
     deps: DownloadDeps, listed_files: frozenset[FileKey], monotonic_now: MonotonicInstant
 ) -> None:
     """Gives each queued or downloading download its loss deadline: ``lost_after`` from now if
-    listed, else the one held, else what its ``last_seen_at`` leaves."""
+    listed, else the one held, else what its ``latest_seen_at`` leaves."""
     deadlines = deps.loss_deadline_by_file
-    last_seen_at_by_file = deps.tracked_download_reader.read_last_seen_at_by_file()
-    for file in deadlines.keys() - last_seen_at_by_file.keys():
+    latest_seen_at_by_file = deps.tracked_download_reader.read_latest_seen_at_by_file()
+    for file in deadlines.keys() - latest_seen_at_by_file.keys():
         del deadlines[file]  # terminal now, or a row the operator deleted for a manual retry
-    for file, last_seen_at in last_seen_at_by_file.items():
+    for file, latest_seen_at in latest_seen_at_by_file.items():
         if file in listed_files:
             deadlines[file] = monotonic_now + deps.lost_after
         elif file not in deadlines:
-            left = remaining_wait(last_seen_at, deps.lost_after, deps.wall_clock.now())
+            left = remaining_wait(latest_seen_at, deps.lost_after, deps.wall_clock.now())
             deadlines[file] = monotonic_now + left
 
 
@@ -481,7 +481,7 @@ async def run_download_cycle(deps: DownloadDeps, node_id: str) -> None:
         await _handle_completions(deps, fresh_states, listed_statuses, node_id)
     except StoreError as error:
         deps.logger.error("download completions store failure (%s): step skipped, continues", error)
-    # Step 2b - PRESENCE + LOSS: ``last_seen_at`` is for the next start; loss is measured here.
+    # Step 2b - PRESENCE + LOSS: ``latest_seen_at`` is for the next start; loss is measured here.
     try:
         deps.tracked_download_writer.set_seen(listed_statuses, deps.wall_clock.now())
         _fail_lost(deps, listed_files)

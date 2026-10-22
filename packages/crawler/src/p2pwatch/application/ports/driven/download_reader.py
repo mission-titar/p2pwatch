@@ -16,7 +16,7 @@ class TrackedDownloadReader(ABC):
         """Whether ``file`` has a row, whatever its state."""
 
     @abstractmethod
-    def read_last_seen_at_by_file(self) -> dict[FileKey, datetime]:
+    def read_latest_seen_at_by_file(self) -> dict[FileKey, datetime]:
         """When the client last listed each queued or downloading download."""
 
     @abstractmethod

@@ -14,7 +14,7 @@ from tests.fakes.adapters.driven.fake_source_reader import FakeSourceReader
 _KNOWN_SOURCE = KnownSource(
     source=SourceKey(Network.ED2K, "1f2e" * 8),
     source_name="AnimuseeFMR",
-    last_seen_at=datetime(2026, 10, 13, 20, tzinfo=UTC),
+    latest_seen_at=datetime(2026, 10, 13, 20, tzinfo=UTC),
     file_count=2,
 )
 

@@ -12,12 +12,12 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_sql_executor import Sqli
 from p2pwatch.domain.console_query import QueryAnswer, QueryFailure
 from p2pwatch.domain.file_key import FileKey, Network
 from tests.fakes.adapters.driven.fake_time import FakeTime
-from tests.fakes.adapters.driven.ticking_monotonic_clock import TickingMonotonicClock
+from tests.fakes.adapters.driven.ticking_monotonic_clock import FakeTickingMonotonicClock
 from tests.support.catalog_rows import insert_file
 
 _HASH_A = "a" * 32
 _TIME_LIMIT = timedelta(seconds=5)
-# A few hundredths of a second of real time, past a 5 s budget on a TickingMonotonicClock.
+# A few hundredths of a second of real time, past a 5 s budget on a FakeTickingMonotonicClock.
 _PAST_BUDGET_SQL = (
     "WITH RECURSIVE r(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM r WHERE i < 100000)"
     " SELECT count(*) FROM r"
@@ -43,7 +43,7 @@ def test_select_returns_columns_and_rows(tmp_path: Path) -> None:
     on the monotonic clock: one tick between its start and its end."""
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
-    query_answer = SqliteSqlExecutor(path, TickingMonotonicClock(FakeTime())).execute(
+    query_answer = SqliteSqlExecutor(path, FakeTickingMonotonicClock(FakeTime())).execute(
         "SELECT native_id, size_bytes FROM files",
         row_cap=1000,
         time_limit=_TIME_LIMIT,
@@ -125,7 +125,7 @@ def test_runaway_is_aborted_by_timeout(tmp_path: Path) -> None:
     distinct from a generic SQL error."""
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
-    query_answer = SqliteSqlExecutor(path, TickingMonotonicClock(FakeTime())).execute(
+    query_answer = SqliteSqlExecutor(path, FakeTickingMonotonicClock(FakeTime())).execute(
         _PAST_BUDGET_SQL,
         row_cap=1000,
         time_limit=_TIME_LIMIT,

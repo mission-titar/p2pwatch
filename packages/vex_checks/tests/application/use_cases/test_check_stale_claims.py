@@ -8,8 +8,8 @@ from tests.fakes.adapters.driven.fake_vulnerability_scanner import FakeVulnerabi
 from vex_checks.application.use_cases.check_stale_claims import CheckStaleClaims
 from vex_checks.domain.violations import Violation
 
-REPO_ROOT = PurePath("/repo")
-VEX_PATH = REPO_ROOT / "security" / "crawler.vex.openvex.json"
+REPOSITORY_ROOT = PurePath("/repo")
+VEX_PATH = REPOSITORY_ROOT / "security" / "crawler.vex.openvex.json"
 SBOM_PATH = PurePath("/tmp/sbom.syft.json")
 CLAIMS = {"CVE-A": "vulnerable_code_not_present", "CVE-B": "vulnerable_code_not_present"}
 
@@ -21,7 +21,7 @@ def _checker(
     sarif_writer: FakeSarifWriter | None = None,
 ) -> CheckStaleClaims:
     return CheckStaleClaims(
-        repo_root=REPO_ROOT,
+        repository_root=REPOSITORY_ROOT,
         vulnerability_scanner=vulnerability_scanner,
         vex_reader=FakeVexReader(CLAIMS),
         sarif_writer=sarif_writer if sarif_writer is not None else FakeSarifWriter(),

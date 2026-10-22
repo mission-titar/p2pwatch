@@ -5,7 +5,7 @@ from p2pwatch.domain.file_key import FileKey
 from tests.fakes.adapters.driven.fake_download_store import FakeTrackedDownloadStore
 
 
-class NoSetStateStore(FakeTrackedDownloadStore):
+class FakeNoSetStateTrackedDownloadStore(FakeTrackedDownloadStore):
     """Fails the test on any state change."""
 
     def set_state(

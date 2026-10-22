@@ -37,7 +37,7 @@ from p2pwatch.domain.config_defaults import (
     DEFAULT_MIN_FREE_BYTES,
     DEFAULT_NODE_PREFIX,
     DEFAULT_NOTIFICATION_TIMEOUT_SECONDS,
-    DEFAULT_OUTPUT_DIR,
+    DEFAULT_OUTPUT_DIRECTORY,
     DEFAULT_REAPPEARED_AFTER,
     DEFAULT_SOURCE_PERIOD_GAP,
     DEFAULT_SOURCES_INTERVAL,
@@ -91,7 +91,7 @@ class DownloadConfig:
     poll_interval_seconds: float
     min_free_bytes: int
     lost_after: timedelta
-    output_dir: str
+    output_directory: str
     reappeared_after: timedelta
     sources_interval: timedelta
 
@@ -365,9 +365,11 @@ def _parse_download(document: dict[str, Any]) -> DownloadConfig | None:
     section = _require_mapping(document.get("download", {}), "section 'download'")
     if not _bool_default(section, "enabled", "download", DEFAULT_DOWNLOAD_ENABLED):
         return None  # laziness: we read/interpolate NOTHING else (no variable required)
-    output_dir = section.get("output_dir", DEFAULT_OUTPUT_DIR)
-    if not isinstance(output_dir, str) or not output_dir:
-        raise ConfigError(f"download.output_dir: non-empty string expected, got {output_dir!r}")
+    output_directory = section.get("output_dir", DEFAULT_OUTPUT_DIRECTORY)
+    if not isinstance(output_directory, str) or not output_directory:
+        raise ConfigError(
+            f"download.output_dir: non-empty string expected, got {output_directory!r}"
+        )
     return DownloadConfig(
         poll_interval_seconds=_seconds(section, "poll_interval_seconds", "download"),
         min_free_bytes=_positive_int_default(
@@ -382,7 +384,7 @@ def _parse_download(document: dict[str, Any]) -> DownloadConfig | None:
                 at_most=_THIRTY_DAYS_SECONDS,
             )
         ),
-        output_dir=output_dir,
+        output_directory=output_directory,
         reappeared_after=timedelta(
             seconds=_seconds(
                 section,

@@ -6,15 +6,15 @@ from pathlib import Path
 import pytest
 
 from amule_bump.composition.command_line import build_amule_bumper, build_command_line
-from tests.fakes.fake_git_hub_server import FakeGitHubServer
+from tests.fakes.fake_git_hub_server import FakeGithubServer
 
 NEW_COMMIT = "909d304d993ee07df6c6f6acf501a6d791d53666"
 
 
 @pytest.fixture
-def github() -> Iterator[FakeGitHubServer]:
+def github() -> Iterator[FakeGithubServer]:
     """amule-org/amule released 3.1.0, a lightweight tag on ``NEW_COMMIT``."""
-    with FakeGitHubServer() as github:
+    with FakeGithubServer() as github:
         github.answer_json("/repos/amule-org/amule/releases/latest", {"tag_name": "3.1.0"})
         github.answer_json(
             "/repos/amule-org/amule/git/ref/tags/3.1.0",
@@ -30,7 +30,7 @@ def write_dockerfile(directory: Path) -> Path:
 
 
 def test_bump_reads_upstream_with_gh_token_and_announces_to_github_output(
-    tmp_path: Path, github: FakeGitHubServer
+    tmp_path: Path, github: FakeGithubServer
 ) -> None:
     dockerfile = write_dockerfile(tmp_path)
     output = tmp_path / "output"
@@ -48,7 +48,7 @@ def test_bump_reads_upstream_with_gh_token_and_announces_to_github_output(
 
 
 def test_bump_outside_actions_prints_its_step_outputs(
-    tmp_path: Path, github: FakeGitHubServer, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, github: FakeGithubServer, capsys: pytest.CaptureFixture[str]
 ) -> None:
     dockerfile = write_dockerfile(tmp_path)
     amule_bumper = build_amule_bumper(

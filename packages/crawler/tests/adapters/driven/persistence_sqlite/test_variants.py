@@ -14,7 +14,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.variants import (
     register_sql_functions,
 )
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.observation import fold_raw_meta
+from p2pwatch.domain.observation import fold_raw_metadata
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 
@@ -65,7 +65,7 @@ def test_fold_raw_meta_sql_function_folds_the_stored_text_as_the_domain_does(
     pairs = (("0x0308", "0"), ("media.title", "Kéroro"))
     stored = json.dumps(pairs, ensure_ascii=False)
     row = connection.execute("SELECT fold_raw_meta(?, 'xvid', NULL, 2)", (stored,)).fetchone()
-    assert row[0] == json.dumps(fold_raw_meta(pairs, "xvid", None, 2), ensure_ascii=False)
+    assert row[0] == json.dumps(fold_raw_metadata(pairs, "xvid", None, 2), ensure_ascii=False)
 
 
 def test_a_memoized_sql_function_calls_its_function_once_per_distinct_arguments() -> None:

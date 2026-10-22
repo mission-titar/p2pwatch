@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from tests.fakes.adapters.driven.fake_wall_clock import FakeWallClock
 
 
-class TickingWallClock(FakeWallClock):
+class FakeTickingWallClock(FakeWallClock):
     """Each ``now()`` a minute after the previous one: a write shows which read it took."""
 
     def now(self) -> datetime:

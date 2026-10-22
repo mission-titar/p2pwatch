@@ -13,7 +13,7 @@ from starlette.applications import Starlette
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_targets
 from p2pwatch.adapters.driving.webui.app import build_app
-from p2pwatch.application.ports.driving.console_query_runner import ConsoleQueryOutcome
+from p2pwatch.application.ports.driving.console_query_runner import ConsoleQueryRun
 from p2pwatch.application.ports.driving.crawl_summarizer import CrawlSummary
 from p2pwatch.application.ports.driving.file_lister import FileListing
 from p2pwatch.application.ports.driving.node_describer import NodeDescription
@@ -38,7 +38,7 @@ from tests.fakes.application.use_cases.fake_source_name_describer import FakeSou
 _HASH_A = "a" * 32
 _SQL = "SELECT native_id FROM files"
 _ANSWER = QueryAnswer(("native_id",), ((_HASH_A,),), timedelta(milliseconds=3), truncated=False)
-_OUTCOME = ConsoleQueryOutcome(_ANSWER, row_cap=1000)
+_OUTCOME = ConsoleQueryRun(_ANSWER, row_cap=1000)
 _UNKNOWN_DB = "Unknown database. Choose catalog.db or local.db."
 
 # ---------------------------------------------------------------------------
@@ -65,13 +65,13 @@ episodes:
 def _build(console_query_runner: FakeConsoleQueryRunner) -> Starlette:
     import p2pwatch.adapters.driving.webui
 
-    templates_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "templates"
-    static_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent / "static"
+    templates_directory = Path(p2pwatch.adapters.driving.webui.__file__).parent / "templates"
+    static_directory = Path(p2pwatch.adapters.driving.webui.__file__).parent / "static"
     node_state = NodeState(node_id=None, created_at=None, downloads=(), backoff_state_by_key={})
     return build_app(
         target_segments=_targets(),
-        templates_dir=templates_dir,
-        static_dir=static_dir,
+        templates_directory=templates_directory,
+        static_directory=static_directory,
         crawl_pauser=FakeCrawlPauser(),  # the console routes never call the controls
         crawl_resumer=FakeCrawlResumer(),
         shutdown_requester=FakeShutdownRequester(),
@@ -94,7 +94,7 @@ async def _get(path: str) -> Response:
 
 
 async def _post(
-    path: str, form: dict[str, str], outcome: ConsoleQueryOutcome = _OUTCOME
+    path: str, form: dict[str, str], outcome: ConsoleQueryRun = _OUTCOME
 ) -> tuple[Response, list[RunConsoleQueryCall]]:
     """The response to ``form`` posted to ``path``, the runner answering ``outcome``, and the
     runner's calls."""
@@ -209,7 +209,7 @@ async def test_post_console_query_failure_shows_error_banner() -> None:
 @pytest.mark.asyncio
 async def test_post_console_truncation_banner_names_the_row_cap() -> None:
     """A truncated answer renders the banner with the cap the outcome carries."""
-    outcome = ConsoleQueryOutcome(replace(_ANSWER, truncated=True), row_cap=1000)
+    outcome = ConsoleQueryRun(replace(_ANSWER, truncated=True), row_cap=1000)
     resp, _ = await _post("/console", {"sql": _SQL, "db": "catalog"}, outcome)
     assert resp.status_code == 200
     assert (

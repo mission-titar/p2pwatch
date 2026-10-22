@@ -6,7 +6,7 @@ from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from tests.support.virtual_time import MONOTONIC_EPOCH
 
 
-class LoopMonotonicClock(MonotonicClock):
+class FakeLoopMonotonicClock(MonotonicClock):
     """The running loop's time as the ``MonotonicClock`` port."""
 
     def now(self) -> MonotonicInstant:

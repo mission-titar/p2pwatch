@@ -35,7 +35,7 @@ from p2pwatch.domain.source import (
     SourceReading,
     SourceRole,
 )
-from tests.fakes.adapters.driven.broken_disk import BrokenDisk
+from tests.fakes.adapters.driven.broken_disk import FakeBrokenFreeSpaceMeter
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_download_store import FakeTrackedDownloadStore
@@ -46,9 +46,9 @@ from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationR
 from tests.fakes.adapters.driven.fake_source_client import FakeSourceClient
 from tests.fakes.adapters.driven.fake_source_point_store import FakeSourcePointStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
-from tests.fakes.adapters.driven.lagging_download_store import LaggingDownloadStore
-from tests.fakes.adapters.driven.no_set_state_store import NoSetStateStore
-from tests.fakes.adapters.driven.ticking_wall_clock import TickingWallClock
+from tests.fakes.adapters.driven.lagging_download_store import FakeLaggingTrackedDownloadStore
+from tests.fakes.adapters.driven.no_set_state_store import FakeNoSetStateTrackedDownloadStore
+from tests.fakes.adapters.driven.ticking_wall_clock import FakeTickingWallClock
 from tests.support.catalog_rows import insert_file, source_variant_node_ids
 
 _NODE = "n1"
@@ -344,7 +344,7 @@ async def test_monitor_does_not_regress_a_completed_queue_entry() -> None:
     # _reconcile_states: a COMPLETED hash present in the amuled queue MUST NOT regress to
     # DOWNLOADING (the completion notification already fired; re-firing it would be noise).
     client = FakeDownloadClient(listed=[(_status(_A, done=3, total=10),)])
-    tracked_download_store = NoSetStateStore()
+    tracked_download_store = FakeNoSetStateTrackedDownloadStore()
     tracked_download_store.states[_A] = DownloadState.COMPLETED
     deps = _deps(client=client, downloads=tracked_download_store)
     await run_download_cycle(deps, _NODE)
@@ -546,7 +546,7 @@ async def test_monitor_no_op_when_state_already_matches() -> None:
     # _reconcile_states: in-progress entry (done=3/full=10) and repo already DOWNLOADING →
     # wanted_state is current → NO set_state (FALSE branch of `if current is not wanted_state`).
     client = FakeDownloadClient(listed=[(_status(_A, done=3, total=10),)])
-    tracked_download_store = NoSetStateStore()
+    tracked_download_store = FakeNoSetStateTrackedDownloadStore()
     tracked_download_store.states[_A] = DownloadState.DOWNLOADING
     deps = _deps(
         client=client,
@@ -987,7 +987,7 @@ async def test_a_download_amuled_no_longer_knows_becomes_failed() -> None:
 
 @pytest.mark.asyncio
 async def test_each_download_write_carries_the_instant_read_right_before_it() -> None:
-    wall_clock = TickingWallClock(FakeTime())
+    wall_clock = FakeTickingWallClock(FakeTime())
     start = wall_clock.now()
     client = FakeDownloadClient(listed=[(_status(_A, completed=True),)])
     downloads = FakeTrackedDownloadStore()
@@ -1072,7 +1072,7 @@ async def test_an_unmeasurable_output_directory_admits_nothing_and_does_not_rais
         observation_reader=observation_reader,
         event_emitter=event_emitter,
     )
-    deps.free_space_meter = BrokenDisk()
+    deps.free_space_meter = FakeBrokenFreeSpaceMeter()
     await run_download_cycle(deps, _NODE)
     assert client.started == []
     assert _A not in downloads.states
@@ -1182,7 +1182,7 @@ async def test_a_wall_clock_step_forward_fails_no_download_absent_from_one_poll(
 
 
 @pytest.mark.asyncio
-async def test_a_last_seen_at_in_the_future_waits_lost_after_no_more(
+async def test_a_latest_seen_at_in_the_future_waits_lost_after_no_more(
     real_downloads: SqliteTrackedDownloadStore,
 ) -> None:
     # Stamped before the wall clock stepped back an hour, while the node was down.
@@ -1242,9 +1242,9 @@ async def test_a_download_the_node_queued_is_lost_after_lost_after_of_monotonic_
 
 
 @pytest.mark.asyncio
-async def test_a_duplicate_queuing_keeps_the_deadline_its_last_seen_at_leaves() -> None:
+async def test_a_duplicate_queuing_keeps_the_deadline_its_latest_seen_at_leaves() -> None:
     fake_time = FakeTime()
-    downloads = LaggingDownloadStore()
+    downloads = FakeLaggingTrackedDownloadStore()
     downloads.record_queued(_key(_A), "062A", 10, fake_time.wall.now() - timedelta(hours=23))
     deps = _deps(
         client=FakeDownloadClient(),
@@ -1334,8 +1334,8 @@ async def test_a_daemon_unavailable_while_reading_sources_ends_the_round_after_t
     client = FakeDownloadClient(listed=[(_status(_A), _status(_B))])
     source_client = FakeSourceClient(source_failures=[failure])
     downloads = FakeTrackedDownloadStore()
-    for ed2k_hash in (_A, _B):
-        downloads.states[ed2k_hash] = DownloadState.DOWNLOADING
+    for native_id in (_A, _B):
+        downloads.states[native_id] = DownloadState.DOWNLOADING
     downloads.states[_C] = DownloadState.QUEUED
     observation_reader = FakeObservationReader(observations={_C: _observation(_C, "c.avi", 1)})
     sources = FakeSourcePointStore()
@@ -1467,8 +1467,8 @@ _PEER, _OTHER_PEER = SourceKey(Network.ED2K, "1f2e3d4c" * 4), SourceKey(Network.
 
 def _tracking(*hashes: str) -> FakeTrackedDownloadStore:
     downloads = FakeTrackedDownloadStore()
-    for ed2k_hash in hashes:
-        downloads.states[ed2k_hash] = DownloadState.DOWNLOADING
+    for native_id in hashes:
+        downloads.states[native_id] = DownloadState.DOWNLOADING
     return downloads
 
 
@@ -1629,8 +1629,8 @@ async def test_the_first_recording_round_is_a_baseline(
 ) -> None:
     # On a real catalog: two queued sources in the node's first round, a third in the next.
     catalog = open_catalog(tmp_path / "catalog.db")
-    for ed2k_hash in order:
-        insert_file(catalog, ed2k_hash)
+    for native_id in order:
+        insert_file(catalog, native_id)
     readings: dict[str, tuple[SourceReading, ...]] = {
         _A: (_peer(_PEER),),
         _B: (_peer(_OTHER_PEER),),

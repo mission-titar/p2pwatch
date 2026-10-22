@@ -20,7 +20,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.observation_read import (
     observation_from_row,
     observations_between,
 )
-from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
+from p2pwatch.adapters.driven.persistence_sqlite.reader import ThreadReadConnections
 from p2pwatch.application.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_history import DatedDecision, FileHistory
@@ -40,7 +40,7 @@ SORT_COLUMNS: dict[CatalogEntrySort, str] = {
     CatalogEntrySort.NAME: "obs.filename",
     CatalogEntrySort.SIZE: "f.size_bytes",
     CatalogEntrySort.SOURCES: "obs.source_count",
-    CatalogEntrySort.LAST_SEEN: "obs.observed_at",
+    CatalogEntrySort.LATEST_SEEN: "obs.observed_at",
     CatalogEntrySort.TIER: "dec.best_tier_rank",
 }
 SORT_DIRECTIONS: dict[SortDirection, str] = {SortDirection.ASC: "ASC", SortDirection.DESC: "DESC"}
@@ -120,7 +120,7 @@ SELECT
     obs.keyword,
     obs.duration_seconds,
     obs.bitrate_kbps,
-    obs.raw_meta,
+    obs.raw_metadata,
     obs.observed_at,
     f.size_bytes AS file_size_bytes,
     dec.target_ids,
@@ -248,7 +248,7 @@ def _split_concat(concat: str | None) -> list[str]:
 class SqliteCatalogFileReader(CatalogFileReader):
     """Reads through the calling thread's read-only connection."""
 
-    def __init__(self, reader_provider: ReaderProvider) -> None:
+    def __init__(self, reader_provider: ThreadReadConnections) -> None:
         self._reader_provider = reader_provider
 
     def read_matched_and_total_file_counts(

@@ -2,7 +2,7 @@ import pytest
 
 from catalog_matching.domain.matchers import (
     READERS_BY_ATTR,
-    AttrBetweenMatcher,
+    AttributeBetweenMatcher,
     CoverageMatcher,
     KeywordMatcher,
     RegexMatcher,
@@ -128,7 +128,7 @@ def test_each_attr_reads_its_candidate_field() -> None:
 
 def test_attr_between_unknown_attr_raises() -> None:
     with pytest.raises(ValueError) as excinfo:
-        AttrBetweenMatcher("codec", min_bound=1.0)
+        AttributeBetweenMatcher("codec", min_bound=1.0)
     message = str(excinfo.value)
     assert "codec" in message
     # the message lists the valid attributes to guide the config author
@@ -138,37 +138,37 @@ def test_attr_between_unknown_attr_raises() -> None:
 
 
 def test_attr_between_absent_value_is_false() -> None:
-    matcher = AttrBetweenMatcher("size_mib", min_bound=30.0, max_bound=600.0)
+    matcher = AttributeBetweenMatcher("size_mib", min_bound=30.0, max_bound=600.0)
     assert matcher.matches(FileCandidate(filename="x.avi")) is False
 
 
 def test_attr_between_in_range_is_true() -> None:
-    matcher = AttrBetweenMatcher("size_mib", min_bound=30.0, max_bound=600.0)
+    matcher = AttributeBetweenMatcher("size_mib", min_bound=30.0, max_bound=600.0)
     assert matcher.matches(FileCandidate(filename="x.avi", size_mib=120.0)) is True
 
 
 def test_attr_between_below_min_is_false() -> None:
-    matcher = AttrBetweenMatcher("size_mib", min_bound=30.0, max_bound=600.0)
+    matcher = AttributeBetweenMatcher("size_mib", min_bound=30.0, max_bound=600.0)
     assert matcher.matches(FileCandidate(filename="x.avi", size_mib=10.0)) is False
 
 
 def test_attr_between_above_max_is_false() -> None:
-    matcher = AttrBetweenMatcher("size_mib", min_bound=30.0, max_bound=600.0)
+    matcher = AttributeBetweenMatcher("size_mib", min_bound=30.0, max_bound=600.0)
     assert matcher.matches(FileCandidate(filename="x.avi", size_mib=900.0)) is False
 
 
 def test_attr_between_open_lower_bound() -> None:
-    matcher = AttrBetweenMatcher("duration_seconds", max_bound=1800.0)
+    matcher = AttributeBetweenMatcher("duration_seconds", max_bound=1800.0)
     assert matcher.matches(FileCandidate(filename="x.avi", duration_seconds=10.0)) is True
     assert matcher.matches(FileCandidate(filename="x.avi", duration_seconds=2000.0)) is False
 
 
 def test_attr_between_open_upper_bound() -> None:
-    matcher = AttrBetweenMatcher("bitrate_kbps", min_bound=500.0)
+    matcher = AttributeBetweenMatcher("bitrate_kbps", min_bound=500.0)
     assert matcher.matches(FileCandidate(filename="x.avi", bitrate_kbps=900.0)) is True
     assert matcher.matches(FileCandidate(filename="x.avi", bitrate_kbps=100.0)) is False
 
 
 def test_attr_between_no_bounds_accepts_any_present_value() -> None:
-    matcher = AttrBetweenMatcher("size_mib")
+    matcher = AttributeBetweenMatcher("size_mib")
     assert matcher.matches(FileCandidate(filename="x.avi", size_mib=1.0)) is True

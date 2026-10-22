@@ -19,9 +19,9 @@ _KEPT = ("files", "sources", "match_decisions", "observation_variants", "observa
 def _catalog_at_10(path: Path) -> None:
     """Stage 4 rows on two files and two sources, one variant without identity."""
     connection = open_catalog_at(path, 10)
-    for ed2k_hash in (_A, _B):
-        insert_file(connection, ed2k_hash)
-        insert_v11_observation(connection, ed2k_hash, f"{ed2k_hash[0]}.avi")
+    for native_id in (_A, _B):
+        insert_file(connection, native_id)
+        insert_v11_observation(connection, native_id, f"{native_id[0]}.avi")
     insert_decision(connection, _A, "062A", "download")
     for user in (_USER, _OTHER):
         insert_source(connection, user)

@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 from functools import cache
 
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.observation import fold_raw_meta
+from p2pwatch.domain.observation import fold_raw_metadata
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _MICROSECOND = timedelta(microseconds=1)
@@ -23,7 +23,7 @@ def content_hash(
     size_bytes: int,
     duration_seconds: int | None,
     bitrate_kbps: int | None,
-    raw_meta: str,
+    raw_metadata: str,
     keyword: str,
     node_id: str,
 ) -> bytes:
@@ -34,7 +34,7 @@ def content_hash(
         size_bytes,
         duration_seconds,
         bitrate_kbps,
-        raw_meta,
+        raw_metadata,
         keyword,
         node_id,
     )
@@ -55,10 +55,13 @@ def file_id(network: str, native_id: str) -> bytes:
 def register_sql_functions(connection: sqlite3.Connection) -> None:
     """Registers ``content_hash``, ``file_id``, ``fold_raw_meta`` and ``iso_to_micros``."""
 
-    # A stored raw_meta, folded and serialized as record_observation serializes it.
-    def fold_stored(raw_meta: str, codec: str | None, file_type: str | None, complete: int) -> str:
+    # A stored raw_metadata, folded and serialized as record_observation serializes it.
+    def fold_stored(
+        raw_metadata: str, codec: str | None, file_type: str | None, complete: int
+    ) -> str:
         return json.dumps(
-            fold_raw_meta(json.loads(raw_meta), codec, file_type, complete), ensure_ascii=False
+            fold_raw_metadata(json.loads(raw_metadata), codec, file_type, complete),
+            ensure_ascii=False,
         )
 
     # Memoized for the connection's life, the crawler's included: one entry per variant 0007 wrote.

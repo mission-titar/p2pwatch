@@ -1,6 +1,6 @@
 """Observation of a file seen on the network. PURE domain.
 
-``raw_meta`` is the per-network catch-all of ``(name, value)`` pairs: no metadata field is lost.
+``raw_metadata`` is the per-network catch-all of ``(name, value)`` pairs: no metadata field is lost.
 """
 
 from dataclasses import dataclass
@@ -9,7 +9,7 @@ from datetime import datetime
 from catalog_matching.domain.models import FileCandidate
 from p2pwatch.domain.file_key import FileKey
 
-RawMeta = tuple[tuple[str, str | int | None], ...]
+RawMetadata = tuple[tuple[str, str | int | None], ...]
 
 # DECISION 8: the "MB" shown by eMule clients are binary (MiB).
 _BYTES_PER_MIB = 1024 * 1024
@@ -36,16 +36,16 @@ def candidate_from_fields(
     )
 
 
-def fold_raw_meta(
-    raw_meta: tuple[tuple[str, str], ...],
+def fold_raw_metadata(
+    raw_metadata: tuple[tuple[str, str], ...],
     codec: str | None,
     file_type: str | None,
     complete_source_count: int,
-) -> RawMeta:
-    """``raw_meta`` with the three eD2k-only fields appended, absent ones as ``None``. The
+) -> RawMetadata:
+    """``raw_metadata`` with the three eD2k-only fields appended, absent ones as ``None``. The
     amuleapi mapper and the catalog migration share it, so both store the same pairs."""
     return (
-        *raw_meta,
+        *raw_metadata,
         ("codec", codec),
         ("file_type", file_type),
         ("complete_source_count", complete_source_count),
@@ -64,7 +64,7 @@ class ReportedFile:
     keyword: str
     duration_seconds: int | None = None
     bitrate_kbps: int | None = None
-    raw_meta: RawMeta = ()
+    raw_metadata: RawMetadata = ()
 
     def to_candidate(self) -> FileCandidate:
         """Bridge to the matching engine (delegates to ``candidate_from_fields``)."""

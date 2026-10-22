@@ -52,8 +52,8 @@ def _full_meta(complete: int) -> str:
 
 def _old_catalog(path: Path, *rows: tuple[object, ...]) -> None:
     connection = open_catalog_at(path, 6)
-    for ed2k_hash in sorted({str(row[0]) for row in rows}):
-        connection.execute("INSERT INTO files (ed2k_hash, size_bytes) VALUES (?, 1)", (ed2k_hash,))
+    for native_id in sorted({str(row[0]) for row in rows}):
+        connection.execute("INSERT INTO files (ed2k_hash, size_bytes) VALUES (?, 1)", (native_id,))
     for row in rows:
         connection.execute(
             f"INSERT INTO file_observations ({_COLUMNS}) VALUES ({', '.join('?' * 13)})", row

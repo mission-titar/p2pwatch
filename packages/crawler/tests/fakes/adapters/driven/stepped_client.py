@@ -4,10 +4,10 @@ from datetime import timedelta
 from p2pwatch.domain.client_errors import ClientError
 from p2pwatch.domain.status_reading import ClientStatus
 from tests.fakes.adapters.driven.fake_time import FakeTime
-from tests.fakes.adapters.driven.scripted_client import ScriptedClient
+from tests.fakes.adapters.driven.scripted_client import FakeStatusClient
 
 
-class SteppedClient(ScriptedClient):
+class FakeSteppedStatusClient(FakeStatusClient):
     """Steps the wall clock forward an hour between its first reading and its second."""
 
     def __init__(

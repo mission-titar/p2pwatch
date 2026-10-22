@@ -2,7 +2,7 @@ from p2pwatch.application.ports.driven.search_client import SearchClient
 from p2pwatch.domain.search.answer import SearchAnswer
 
 
-class NeverSuspends(SearchClient):
+class FakeNeverSuspendingSearchClient(SearchClient):
     """A search that returns without suspending, and fails if the loop ran nothing else since
     the previous one."""
 

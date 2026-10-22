@@ -8,7 +8,7 @@ from types import ModuleType
 import pytest
 from coverage import Coverage
 
-from coverage_checks.adapters.driven.coverage_py_reader import CoveragePyReader
+from coverage_checks.adapters.driven.coverage_py_reader import CoveragePyTestCoverageReader
 
 SIZES = """\
 LIMIT = 10
@@ -60,11 +60,11 @@ def _measure(
     coverage.save()
 
 
-def _reader(package_directory: Path, pyproject: str = "") -> CoveragePyReader:
+def _reader(package_directory: Path, pyproject: str = "") -> CoveragePyTestCoverageReader:
     (package_directory / "pyproject.toml").write_text(pyproject)
     report_directory = package_directory / "report"
     report_directory.mkdir()
-    return CoveragePyReader(
+    return CoveragePyTestCoverageReader(
         package_directory=package_directory,
         data_file=package_directory / ".coverage",
         report_directory=report_directory,

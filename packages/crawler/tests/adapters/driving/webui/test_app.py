@@ -18,17 +18,17 @@ from catalog_matching.domain.engine import DecisionRecord, Explanation
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_targets
 from p2pwatch.adapters.driving.webui.app import (
+    _catalog_entry_displays,
     _normalize_direction,
     _normalize_sort,
     _resolve_target_display,
     _search_bar,
     _sort_headers,
     _tier_facets,
-    _to_display_rows,
     build_app,
 )
 from p2pwatch.adapters.driving.webui.displays import DecisionCellDisplay, HiddenInputDisplay
-from p2pwatch.application.ports.driving.console_query_runner import ConsoleQueryOutcome
+from p2pwatch.application.ports.driving.console_query_runner import ConsoleQueryRun
 from p2pwatch.application.ports.driving.crawl_summarizer import ClientSummary, CrawlSummary
 from p2pwatch.application.ports.driving.file_describer import FileDescription
 from p2pwatch.application.ports.driving.file_lister import FileListing
@@ -121,7 +121,7 @@ _DEFAULT_CALL = ListFilesCall(
     tier=None,
     search_text=None,
     matched_only=True,
-    sort=CatalogEntrySort.LAST_SEEN,
+    sort=CatalogEntrySort.LATEST_SEEN,
     direction=SortDirection.DESC,
     page=1,
 )
@@ -130,7 +130,7 @@ _NO_SOURCE_LISTER = FakeSourceLister(SourceListing((), has_next_page=False, sour
 _NO_SOURCE_DESCRIBER = FakeSourceDescriber(None)
 _NO_SOURCE_NAME_DESCRIBER = FakeSourceNameDescriber(None)
 # These tests run no console query: ``test_app_console.py`` does.
-_NO_CONSOLE_QUERY_RUNNER = FakeConsoleQueryRunner(ConsoleQueryOutcome(QueryFailure(""), 1000))
+_NO_CONSOLE_QUERY_RUNNER = FakeConsoleQueryRunner(ConsoleQueryRun(QueryFailure(""), 1000))
 _FILE = FileKey(Network.ED2K, TEST_HASH)
 _OBSERVATION = FileObservation(
     ReportedFile(_FILE, "keroro_s2e62a_vf.avi", 100_000_000, 5, "keroro"),
@@ -168,8 +168,8 @@ def _app_on_fakes(
     webui_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent
     return build_app(
         target_segments=_targets() if target_segments is None else target_segments,
-        templates_dir=webui_dir / "templates",
-        static_dir=webui_dir / "static",
+        templates_directory=webui_dir / "templates",
+        static_directory=webui_dir / "static",
         crawl_pauser=controls.pauser,
         crawl_resumer=controls.resumer,
         shutdown_requester=controls.shutdown_requester,
@@ -215,8 +215,8 @@ async def _files_page(
     return text, call
 
 
-def _detail_url(ed2k_hash: str) -> str:
-    return f"/files/{FileKey(Network.ED2K, ed2k_hash).file_id.hex()}"
+def _detail_url(native_id: str) -> str:
+    return f"/files/{FileKey(Network.ED2K, native_id).file_id.hex()}"
 
 
 async def _file_response(
@@ -948,7 +948,7 @@ _DOWNLOAD = TrackedDownload(
     state=DownloadState.DOWNLOADING,
     queued_at=datetime(2026, 10, 10, tzinfo=UTC),
     completed_at=None,
-    last_progress_at=None,
+    latest_progress_at=None,
     waiting_reason=None,
     failure_reason=None,
 )
@@ -986,7 +986,7 @@ async def test_node_page_shows_a_downloads_lifecycle() -> None:
     download = replace(
         _DOWNLOAD,
         state=DownloadState.FAILED,
-        last_progress_at=datetime(2026, 10, 11, tzinfo=UTC),
+        latest_progress_at=datetime(2026, 10, 11, tzinfo=UTC),
         waiting_reason=WaitingReason.LOCAL_PROCESSING,
         failure_reason=FailureReason.ERROR,
     )
@@ -1016,13 +1016,13 @@ async def test_a_template_reading_what_its_context_lacks_raises(
     """A renamed context key or field fails the render instead of printing an empty string."""
     import p2pwatch.adapters.driving.webui
 
-    templates_dir = tmp_path / "templates"
-    templates_dir.mkdir()
-    (templates_dir / "404.html").write_text(template, encoding="utf-8")
+    templates_directory = tmp_path / "templates"
+    templates_directory.mkdir()
+    (templates_directory / "404.html").write_text(template, encoding="utf-8")
     app = build_app(
         target_segments=_targets(),
-        templates_dir=templates_dir,
-        static_dir=Path(p2pwatch.adapters.driving.webui.__file__).parent / "static",
+        templates_directory=templates_directory,
+        static_directory=Path(p2pwatch.adapters.driving.webui.__file__).parent / "static",
         crawl_pauser=_NO_CONTROLS.pauser,
         crawl_resumer=_NO_CONTROLS.resumer,
         shutdown_requester=_NO_CONTROLS.shutdown_requester,
@@ -1167,7 +1167,7 @@ async def test_hostile_filename_is_escaped_in_ed2k_link() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Unit tests · _resolve_target_display / _to_display_rows (Task 3 resolution rule)
+# Unit tests · _resolve_target_display / _catalog_entry_displays (Task 3 resolution rule)
 # ---------------------------------------------------------------------------
 
 _SEGMENT_062A = TargetSegment(
@@ -1227,15 +1227,15 @@ def test_resolve_target_display_two_segments_returns_a_pair_each() -> None:
     ]
 
 
-def test_to_display_rows_empty_decisions_all_dashes() -> None:
-    [display] = _to_display_rows([_catalog_entry(decisions=())], _SEGMENTS_AB)
+def test_catalog_entry_displays_empty_decisions_all_dashes() -> None:
+    [display] = _catalog_entry_displays([_catalog_entry(decisions=())], _SEGMENTS_AB)
     assert display.decisions_display == ()
     assert display.tier_display == "·"
 
 
-def test_to_display_rows_two_segments_aggregate_cells_shared_tier() -> None:
+def test_catalog_entry_displays_two_segments_aggregate_cells_shared_tier() -> None:
     entry = _catalog_entry(decisions=(_decision("062A", "download"), _decision("062B", "download")))
-    [display] = _to_display_rows([entry], _SEGMENTS_AB)
+    [display] = _catalog_entry_displays([entry], _SEGMENTS_AB)
     assert display.decisions_display == (
         DecisionCellDisplay(target="062A / S02E11A", title="La Grenouille Cosmique"),
         DecisionCellDisplay(target="062B / S02E11B", title="Duel Contre Giroro"),
@@ -1243,25 +1243,25 @@ def test_to_display_rows_two_segments_aggregate_cells_shared_tier() -> None:
     assert display.tier_display == "download"
 
 
-def test_to_display_rows_two_segments_differing_tiers_lists_per_target() -> None:
+def test_catalog_entry_displays_two_segments_differing_tiers_lists_per_target() -> None:
     entry = _catalog_entry(decisions=(_decision("062A", "download"), _decision("062B", "notify")))
-    [display] = _to_display_rows([entry], _SEGMENTS_AB)
+    [display] = _catalog_entry_displays([entry], _SEGMENTS_AB)
     assert display.tier_display == "062A: download · 062B: notify"
 
 
-def test_to_display_rows_computes_size_and_last_seen_display() -> None:
+def test_catalog_entry_displays_computes_size_and_last_seen_display() -> None:
     entry = _catalog_entry(
         decisions=(), observed_at=datetime(2026, 7, 3, 23, 45, 24, 104990, tzinfo=UTC)
     )
-    [display] = _to_display_rows([entry], _SEGMENTS_AB)
+    [display] = _catalog_entry_displays([entry], _SEGMENTS_AB)
     assert display.size_display == "1 KB"
-    assert display.last_seen_display == "2026-07-03 23:45Z"
+    assert display.latest_seen_display == "2026-07-03 23:45Z"
 
 
-def test_to_display_rows_shows_a_file_never_seen_with_unknown_sources() -> None:
+def test_catalog_entry_displays_shows_a_file_never_seen_with_unknown_sources() -> None:
     entry = replace(_catalog_entry(decisions=()), latest_observation=None)
-    [display] = _to_display_rows([entry], _SEGMENTS_AB)
-    assert (display.filename, display.sources_display, display.last_seen_display) == (
+    [display] = _catalog_entry_displays([entry], _SEGMENTS_AB)
+    assert (display.filename, display.sources_display, display.latest_seen_display) == (
         "",
         "unknown",
         "",
@@ -1351,7 +1351,7 @@ async def test_files_nonobvious_columns_have_header_tooltips() -> None:
 
 @pytest.mark.asyncio
 async def test_target_page_resolves_title_via_segment_mapping() -> None:
-    """/targets/{id} shares _to_display_rows with /files: confirm handle_target ALSO
+    """/targets/{id} shares _catalog_entry_displays with /files: confirm handle_target ALSO
     threads the segment_by_id mapping (both call sites, per the brief)."""
     text, _ = await _files_page("/targets/062A", _one_file(_decision("062A", "download")))
     assert "062A / S02E11A" in text
@@ -1583,9 +1583,9 @@ async def test_dashboard_shows_a_client_not_read_yet() -> None:
 
 def test_normalize_sort_valid_unknown_missing() -> None:
     assert _normalize_sort("size") is CatalogEntrySort.SIZE
-    assert _normalize_sort("bogus") is CatalogEntrySort.LAST_SEEN
-    assert _normalize_sort("size; drop table files") is CatalogEntrySort.LAST_SEEN
-    assert _normalize_sort(None) is CatalogEntrySort.LAST_SEEN
+    assert _normalize_sort("bogus") is CatalogEntrySort.LATEST_SEEN
+    assert _normalize_sort("size; drop table files") is CatalogEntrySort.LATEST_SEEN
+    assert _normalize_sort(None) is CatalogEntrySort.LATEST_SEEN
 
 
 def test_normalize_dir_valid_unknown_missing() -> None:
@@ -1599,8 +1599,8 @@ def test_sort_headers_default_state_no_filters() -> None:
     # active column: last_seen, showing desc; its link flips to asc. sort=last_seen is the
     # DEFAULT sort so it is OMITTED from the URL (the omit-defaults invariant); only direction=asc
     # shows.
-    assert headers.last_seen.indicator == "desc"
-    assert headers.last_seen.url == "/files?direction=asc"
+    assert headers.latest_seen.indicator == "desc"
+    assert headers.latest_seen.url == "/files?direction=asc"
     # inactive columns: no indicator, per-column default direction, sort/dir omitted when default
     assert headers.name.indicator == ""
     assert headers.name.url == "/files?sort=name&direction=asc"  # Name default dir is asc
