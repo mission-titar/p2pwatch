@@ -5,17 +5,15 @@ The tasks share one simulated time, so these tests run on the virtual-time loop.
 
 import asyncio
 import sqlite3
-from collections.abc import Coroutine, Iterator
+from collections.abc import Coroutine
 from contextlib import suppress
 from datetime import timedelta
-from pathlib import Path
 from typing import Any
 
 import pytest
 
 from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
-from p2pwatch.adapters.driven.persistence_sqlite.connection import open_local
 from p2pwatch.application.steps.search_tasks import SearchTaskRunner
 from p2pwatch.application.steps.search_worker import (
     BackoffPolicy,
@@ -27,6 +25,7 @@ from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
+from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
 from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
@@ -35,7 +34,6 @@ from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.fakes.adapters.driven.loop_monotonic_clock import LoopMonotonicClock
 from tests.fakes.adapters.driven.loop_wall_clock import LoopWallClock
 from tests.fakes.adapters.driven.never_suspends import NeverSuspends
-from tests.fakes.adapters.driven.saves_recorded import SavesRecorded
 from tests.fakes.adapters.driven.timed_client import TimedClient
 from tests.support.catalog_rows import observation_node_ids
 from tests.support.virtual_time import EPOCH, run_virtual
@@ -53,7 +51,7 @@ _POLICY = BackoffPolicy(
 class _Tasks:
     """The tasks' dependencies, with one client named ``amuled``."""
 
-    def __init__(self, deps: WorkerDeps, state: SavesRecorded) -> None:
+    def __init__(self, deps: WorkerDeps, state: FakeBackoffStateStore) -> None:
         self.deps = deps
         self.state = state
         self.resumed = asyncio.Event()
@@ -83,10 +81,7 @@ class _Tasks:
 
 
 @pytest.fixture
-def tasks(
-    catalog: SqliteCatalogRepository, engine: MatchingEngine, tmp_path: Path
-) -> Iterator[_Tasks]:
-    connection = open_local(tmp_path / "local.db")
+def tasks(catalog: SqliteCatalogRepository, engine: MatchingEngine) -> _Tasks:
     wall_clock = LoopWallClock()
     backoff = BackoffRegistry(_POLICY, wall_clock, LoopMonotonicClock(), FakeJitterGenerator())
     waker, event_emitter = FakeWaker(), FakeEventEmitter()
@@ -103,8 +98,7 @@ def tasks(
         logger=FakeLogger(),
         observation_logger=FakeLogger(),
     )
-    yield _Tasks(deps, SavesRecorded(connection))
-    connection.close()
+    return _Tasks(deps, FakeBackoffStateStore())
 
 
 def test_each_channel_and_keyword_searches_in_its_own_task(tasks: _Tasks) -> None:
