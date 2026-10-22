@@ -57,8 +57,8 @@ Each goes into `AGENTS.md` in the block where the whole tree first follows it.
   rule refuses any other. Naming, block 80.
 - **C4. A logger is named from the code**: `StdlibLogger(<Class>.__module__)` in the composition,
   `logging.getLogger(__name__)` in an adapter; never a string literal. An ast-grep rule refuses a literal. Hard
-  rules, block 24. (Corrected: block 60, since amule's three literals stay until it derives them and the rule would
-  fail the gate earlier; block 24 derives the crawler's names.)
+  rules, block 24. (Corrected: block 61, since amule's three literals stay until block 60 derives them and the rule
+  would fail the gate earlier; block 24 derives the crawler's names.)
 - **C5. A broken input raises; a problem is a finding on a valid input.** A tool's command line catches its domain's
   input error, prints it on one line naming the file and exits in error. Hard rules, block 72.
 - **C6. A command-line option's default holds no literal**: a value the operator could set and did not is the
@@ -122,7 +122,7 @@ Each goes into `AGENTS.md` in the block where the whole tree first follows it.
 - **D8. `ObservabilityDispatcher` and the `*Deps` bags wait for lot C.** Why: lot C's A1 to A3 reshape them (the
   dispatch becomes a step, the bags lose their `shutdown` event); renamed now, they would be renamed twice.
 - **D9. Logger names derived from the code (R8, C4)**, in block 24 after the renames, so each name changes once;
-  amule's three in block 60, which rebuilds that wiring. `docs/migration-4x.md` and
+  amule's three in block 60, which rebuilds that wiring (Corrected: the rule refusing a literal in block 61). `docs/migration-4x.md` and
   `docs/contributing/architecture.md` follow. Why: a literal drifts from its module at each move: 10 drifted in lot A,
   3 never named a module. `p2pwatch.observability` becomes its module's name now and changes again, by itself, with
   lot C's A3; a release between the two lots would show operators both changes, an accepted cost carried to the
@@ -178,7 +178,9 @@ Each goes into `AGENTS.md` in the block where the whole tree first follows it.
   `PosixAmuleConfStore` and `S6ServiceSupervisor` are built once in `build_command_line`, for boot and port-sync,
   the supervisor logging under its module's name (`docs/migration-4x.md` follows). Why: port-sync's composition
   already parses its own this way; parsing in `build_command_line` would refuse `port-sync` on a bad boot variable.
-  Block 60, with amule's logger names (D9).
+  Block 60, with amule's logger names (D9). (Corrected: port-sync's variables, which the boot refuses before any
+  change, are refused by the domain's `parse_boot_settings`, `BootSettings` gaining `port_sync_enabled`, so the
+  composition calls one function and holds no branch.)
 - **D20. One way to run a command (H7, H12, H6, H15, C7)**: `GrypeVulnerabilityScanner` receives `run_command`, its
   parser private and tested through `scan_sbom`; amule's two `Callable[..., object]` narrow, their calls passing
   `text=True`; the s6 stop timeout becomes a composition constant; port-sync's lifecycle reads a missing
@@ -202,14 +204,15 @@ rows: 16 moves code verbatim, 20 renames and nothing else, 22 renames local name
 | 16 | `refactor/catalog-readers-split` | **exempt, a verbatim move**: `catalog_read.py` one file per reader, with its tests (D3) | 2100, 10 |
 | 20 | `refactor/names` | **mechanical, exempt**: appendix A's renames, the moves they force, the two column migrations; C1 (D1, D5, D6, D7) | 3500, 200 |
 | 22 | `refactor/local-names-and-prose` | **mechanical, exempt**: local names, docstrings, prose (D11) | 800, 45 |
-| 24 | `refactor/logger-names-from-code` | the crawler's logger names from the code, the docs (Corrected: the ast-grep rule, its rule test and C4 move to block 60, since amule's literals would fail it here) (D9) | 150, 17 |
+| 24 | `refactor/logger-names-from-code` | the crawler's logger names from the code, the docs (Corrected: the ast-grep rule, its rule test and C4 move to block 61, since amule's literals would fail it here) (D9) | 150, 17 |
 | 40 | `refactor/bump-domain` | `amule_bump`'s pure logic to its domain (D15) | 320, 13 |
 | 42 | `refactor/bump-fixed-values` | `amule_bump`'s timeout, `ARG` line, option defaults (D16) | 150, 10 |
 | 50 | `refactor/vex-root-and-sarif-option` | `vex_checks`' root from `cwd`, its `PurePath` command line, `--sarif`, the workflows (D12, D17) | 300, 13 |
 | 52 | `refactor/vex-claim-problems` | `CodeScanningReporter` (Corrected: the rename only, `ClaimProblem` moved to block 53, since the whole measured 24 files) (D5) | 450, 18 |
 | 53 | `refactor/claim-problem-type` | (Corrected: added, split from block 52) `ClaimProblem` for `image-claims` and `stale-claims`, the location carried once (D18) | 190, 19 |
 | 54 | `refactor/vex-claim-coverage` | `claim-coverage`'s bijection in the domain, on `ClaimProblem`; vex's broken input; the glossary's `claim` and `premise` lines (Corrected: from block 52, so block 53 stays under 20 files) (D13, D18) | 400, 16 |
-| 60 | `refactor/amule-boot-composition` | `BootComposition`, the adapters built once, amule's logger names (Corrected: with the ast-grep rule refusing a literal, its rule test and C4, from block 24) (D9, D19) | 400, 17 |
+| 60 | `refactor/amule-boot-composition` | `BootComposition`, the adapters built once, amule's logger names (Corrected: measured at 22 files with the rule, which moved to block 61) (D9, D19) | 400, 17 |
+| 61 | `chore/logger-name-rule` | (Corrected: added, split from block 60) the ast-grep rule refusing a literal logger name, its rule test, C4 (D9) | 34, 4 |
 | 62 | `refactor/run-command` | `run_command` everywhere, the s6 timeout, the missing `amule.conf` branch; C7 (D20) | 160, 13 |
 | 70 | `refactor/template-problems` | the templates' broken input, typed problems, `PurePath` (D13, D17, D21) | 300, 13 |
 | 72 | `refactor/coverage-broken-input` | `NoPerTestCoverage` raised, `PurePath`; C5 (D13, D17) | 150, 7 |
