@@ -1074,7 +1074,7 @@ depends_on = []
 [[modules]]
 path = "vex_checks.application.ports.driving.claim_coverage_checker"
 layer = "ports"
-depends_on = []
+depends_on = ["vex_checks.domain"]
 
 [[modules]]
 path = "vex_checks.application.ports.driving.image_claims_checker"

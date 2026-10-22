@@ -15,7 +15,6 @@ from tests.fakes.application.use_cases.fake_stale_claims_checker import (
     StaleClaimsCheck,
 )
 from vex_checks.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
-from vex_checks.application.ports.driving.claim_coverage_checker import ClaimCoverageProblem
 from vex_checks.domain.claim_problem import ClaimProblem
 
 _CWD = PurePath("/work/repo")
@@ -38,7 +37,7 @@ class _Checks:
     def __init__(
         self,
         problems: Sequence[ClaimProblem] = (),
-        claim_coverage_problems: Sequence[ClaimCoverageProblem] = (),
+        claim_coverage_problems: Sequence[ClaimProblem] = (),
     ) -> None:
         self.image_claims_checker = FakeImageClaimsChecker(problems, _VEX_LOCATION)
         self.stale_claims_checker = FakeStaleClaimsChecker(problems, _VEX_LOCATION)
@@ -184,8 +183,8 @@ def test_claim_coverage_prints_each_problem_as_an_error_and_returns_one(
 ) -> None:
     checks = _Checks(
         claim_coverage_problems=[
-            ClaimCoverageProblem("CVE-A", "claim has no premise or source rule"),
-            ClaimCoverageProblem("CVE-B", "premise has no claim"),
+            ClaimProblem("CVE-A", "claim has no premise or source rule"),
+            ClaimProblem("CVE-B", "premise has no claim"),
         ]
     )
 

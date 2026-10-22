@@ -2,15 +2,15 @@ from collections.abc import Sequence
 
 from vex_checks.application.ports.driving.claim_coverage_checker import (
     ClaimCoverageChecker,
-    ClaimCoverageProblem,
     ClaimCoverageReport,
 )
+from vex_checks.domain.claim_problem import ClaimProblem
 
 
 class FakeClaimCoverageChecker(ClaimCoverageChecker):
     """Counts the checks it is asked for, and answers the same problems to each."""
 
-    def __init__(self, problems: Sequence[ClaimCoverageProblem] = ()) -> None:
+    def __init__(self, problems: Sequence[ClaimProblem] = ()) -> None:
         self._problems = tuple(problems)
         self.check_count = 0
 
