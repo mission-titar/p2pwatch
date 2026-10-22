@@ -1,9 +1,11 @@
 import json
+import re
 from pathlib import Path
 
 import pytest
 
 from vex_checks.adapters.driven.open_vex_reader import OpenVexReader
+from vex_checks.domain.broken_input_error import BrokenInputError
 
 
 def test_read_claims_keeps_the_not_affected_statements_only(tmp_path: Path) -> None:
@@ -19,6 +21,8 @@ def test_read_claims_keeps_the_not_affected_statements_only(tmp_path: Path) -> N
     assert OpenVexReader().read_claims(vex_path) == {"CVE-1": "vulnerable_code_not_present"}
 
 
-def test_read_claims_of_an_absent_file_raises(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError):
-        OpenVexReader().read_claims(tmp_path / "absent.vex.openvex.json")
+def test_read_claims_of_an_absent_file_raises_a_broken_input_naming_it(tmp_path: Path) -> None:
+    vex_path = tmp_path / "absent.vex.openvex.json"
+
+    with pytest.raises(BrokenInputError, match=f"^{re.escape(str(vex_path))}: no such file$"):
+        OpenVexReader().read_claims(vex_path)

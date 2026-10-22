@@ -1,7 +1,12 @@
 import json
-from pathlib import Path
+import re
+from collections.abc import Callable
+from pathlib import Path, PurePath
+
+import pytest
 
 from vex_checks.adapters.driven.syft_sbom_reader import SyftSbomReader
+from vex_checks.domain.broken_input_error import BrokenInputError
 from vex_checks.domain.sbom_components import DeclaredComponent, DpkgPackage
 
 
@@ -49,3 +54,17 @@ def test_read_declared_components_keeps_only_generic_purl_artifacts(tmp_path: Pa
         ],
     )
     assert SyftSbomReader().read_declared_components(path) == [DeclaredComponent("amule", "3.1.0")]
+
+
+@pytest.mark.parametrize(
+    "read",
+    [SyftSbomReader().read_dpkg_packages, SyftSbomReader().read_declared_components],
+    ids=["dpkg-packages", "declared-components"],
+)
+def test_reading_an_absent_sbom_raises_a_broken_input_naming_it(
+    read: Callable[[PurePath], object], tmp_path: Path
+) -> None:
+    sbom_path = tmp_path / "absent.syft.json"
+
+    with pytest.raises(BrokenInputError, match=f"^{re.escape(str(sbom_path))}: no such file$"):
+        read(sbom_path)
