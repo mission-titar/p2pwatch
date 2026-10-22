@@ -50,7 +50,7 @@ The crawler is Clean/Hexagonal (Hard rules): `domain/` pure, `application/` its 
 - **The merge** (`python -m p2pwatch merge`) is never called by the crawl and writes only to its destination: a new file (`--output`), or the source named by `--into`, which `open_catalog` first migrates in place to the current schema.
 - **`deploy/` is the operator-owned single source of truth for config**: `deploy/crawler.yml` / `deploy/matcher.yml` / `deploy/targets.yml` stay editable-by-operator deployment config, next to the compose files that mount them; it is **forbidden to canonicalize them as code artifacts** (package data, inline policy dicts, or duplicate test fixtures that shadow them). Every consumer *derives from* `deploy/`, never the reverse: the matcher policy has exactly ONE copy (`deploy/matcher.yml`), read by the matching golden corpus + engine unit tests via `parents[N]`: a test-time path coupling to `deploy/`, deliberately accepted (test-only, not an import; the code DAG is unchanged). Do not reintroduce a `canonical_config.yaml` fixture or an inline `_CANONICAL_RAW` policy dict.
 - **Boundary discipline** absorb failures from external I/O (an apprise notifier, a call to the daemon → degrade), but let in-process 100%-tested code crash loudly (a `PrometheusMetricsRecorder` failure is a bug, not a transient).
-- **A store has no clock**: a repository, or `InMemoryStatusReadingStore`, stores the instants it is given and decides no wait; its caller reads the clock right before each write (`wall_clock.now()` for a row). An adapter other than a store may hold a `MonotonicClock` for a guard of its own I/O: the amuleapi client's start pacing and search deadlines, the SQL console's query budget.
+- **A store has no clock**: a SQLite store, or `InMemoryStatusReadingStore`, stores the instants it is given and decides no wait; its caller reads the clock right before each write (`wall_clock.now()` for a row). An adapter other than a store may hold a `MonotonicClock` for a guard of its own I/O: the amuleapi client's start pacing and search deadlines, the SQL console's query budget.
 
 ## Commands
 
@@ -134,9 +134,13 @@ a function does.
   response model through `<Thing>Display` view models.
 - **A check returns a report**: a `<Thing>Report` response model with a `problems` field (`ImageClaimsReport`),
   which the command line prints; asked for SARIF, the use case writes them through its driven port instead.
-- **An adapter is named by the system it adapts and what it adapts**, not by the Python module it uses:
-  `FilesystemCatalogFinder`, `PosixProcess`, `SqliteCatalogCopier`. A module is the name only when it is the
-  system: `ShutilFreeSpaceMeter`, `StdlibLogger`, `ArgparseCommandLine`, `RandomJitterGenerator`.
+- **An adapter is named by the system, the thing and the role**: `SqliteObservationStore`,
+  `GluetunForwardedPortClient`. The system is what would need another adapter if replaced: a service or a
+  database (`AmuleApi`, `Github`, `Sqlite`, `S6`), a format's producer (`Syft`, `CoveragePy`, `OpenVex`), the OS
+  beyond reading and writing a file (`Posix`: accounts, ownership, signals), else `Filesystem`; never a syntax
+  (`Json`, `Yaml`). A brand keeps its own words' capitals (`Github` is one word, `AmuleApi` two), so its snake
+  case follows them (`github`, `amule_api`). A module is the name only when it is the system:
+  `ShutilFreeSpaceMeter`, `StdlibLogger`, `ArgparseCommandLine`, `RandomJitterGenerator`.
 - **A test double is `Fake` and what it replaces**: `FakeAmuleApiServer`, `FakeSearchClient`; the one of a
   `<Thing>Writer` and `<Thing>Reader` pair is a store, `Fake<Thing>Store` (`FakeTrackedDownloadStore`).
 
@@ -182,7 +186,7 @@ a function does.
 | `wake` | `Waker` wakes the loops waiting on a subject | `signal`, `nudge` |
 | `run state` | whether the crawler searches or idles, and whether its shutdown was requested: `RunStateWriter` changes it, `RunStateReader` reads it | `control` |
 | `store` | one object implementing a `<Thing>Writer` and its `<Thing>Reader` over one state, the reader reading what the writer wrote: a fake's is `Fake<Thing>Store` | a fake for each port of the pair |
-| `status reading` | `StatusReading`, a client's status at one read, its `status` `None` when its API did not answer; a `PublishedReading` is one on the status board, with its `published_at` on the monotonic clock | a source's reading |
+| `status reading` | `StatusReading`, a client's status at one read, its `status` `None` when its API did not answer; a `PublishedReading` is one `InMemoryStatusReadingStore` holds, with its `published_at` on the monotonic clock | a source's reading |
 | `first useful`, `reappeared` | a source's two alerts | `new`, `useful again` |
 | `audience` | who a notification is for: `community`, `operations` | `tag` (apprise's keyword aside), `channel` |
 | `error_label` | the label a parser prints in its errors | `what`, `label`, `field` |

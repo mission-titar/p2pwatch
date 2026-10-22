@@ -131,11 +131,13 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
   lieu de `🟢 instance online (mode full)` ou `(mode observer)`.
 - **Dans `local.db`, la table `backfill_state` devient `reevaluation_state`**, sa colonne
   `policy_sha256` devient `policy_fingerprint`, et la table `scheduler_state` laisse place à
-  `backoff_states`, une ligne par client ou canal en backoff. Adaptez vos requêtes de la console
-  SQL. Un backoff en cours à la mise à niveau est oublié : la recherche qu'il retenait repart
-  aussitôt.
+  `backoff_states`, une ligne par client ou canal en backoff. Les colonnes `last_seen_at` et
+  `last_progress_at` de `downloads` deviennent `latest_seen_at` et `latest_progress_at`. Adaptez
+  vos requêtes de la console SQL. Un backoff en cours à la mise à niveau est oublié : la recherche
+  qu'il retenait repart aussitôt.
 - **Dans le catalogue, la colonne `media_length_sec` devient `duration_seconds`**, désormais dans
-  `observation_variants`. Adaptez vos requêtes de la console SQL.
+  `observation_variants`, et la colonne `raw_meta` de `observation_variants` et de
+  `source_variants` devient `raw_metadata`. Adaptez vos requêtes de la console SQL.
 - **Les paramètres d'URL de `/files` changent de nom** : `q` devient `search`, `target` devient
   `target_id` et `dir` devient `direction`. Les anciens sont ignorés : mettez à jour vos favoris.
   Après un redémarrage depuis le tableau de bord, l'adresse se termine par `?done=restarted` au lieu
@@ -147,7 +149,8 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
   `python -m p2pwatch.merge`, qui n'existe plus. Ses options ne changent pas ; deux refus sont
   reformulés : `destination already exists` et `destination must be one of the source catalogs`.
 - **Quelques lignes de journal et noms de loggers changent**, ceux des modules déplacés ou
-  renommés : filtrez sur le message plutôt que sur le logger. Un catalogue web qui ne démarre pas
+  renommés : filtrez sur le message plutôt que sur le logger. Les échecs d'écriture de la boucle de
+  téléchargement disent `store failure` au lieu de `repo failure`. Un catalogue web qui ne démarre pas
   le dit désormais par `webui degraded`. Les lignes de démarrage `crawler started` et
   `download enabled` journalisent sous `p2pwatch.application.run_crawler`. La recherche ne
   journalise plus `client <nom> connected` ni l'avertissement

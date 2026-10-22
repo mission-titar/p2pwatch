@@ -7,7 +7,7 @@ case → the same ``PersistenceError``. ``wrap_sqlite_errors`` is the SINGLE
 wrapper shared by the connection and the two repositories (chained cause kept).
 
 ``PersistenceError`` INHERITS from the ``StoreError`` contract (``domain/
-repository_errors.py``): the application catches ``StoreError`` (orchestration spec §7,
+store_error.py``): the application catches ``StoreError`` (orchestration spec §7,
 "a failed obs is logged, the cycle continues"), never this adapter class (dependency rule §4).
 """
 
