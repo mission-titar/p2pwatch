@@ -12,7 +12,7 @@ from amule_bump.application.use_cases.bump_amule import BumpAmule
 from amule_bump.domain.bump_error import BumpError
 from amule_bump.domain.dockerfile import Pin
 from amule_bump.domain.git_object import GitObject, GitObjectKind
-from tests.fakes.adapters.driven.fake_dockerfile import FakeDockerfile
+from tests.fakes.adapters.driven.fake_dockerfile_store import FakeDockerfileStore
 from tests.fakes.adapters.driven.fake_pull_request_body_writer import FakePullRequestBodyWriter
 from tests.fakes.adapters.driven.fake_repo_reader import FakeRepoReader
 from tests.fakes.adapters.driven.fake_step_output_writer import FakeStepOutputWriter
@@ -39,8 +39,8 @@ def upstream(latest: str) -> FakeRepoReader:
 class Bump:
     """The bump's driven ports, the Dockerfile at ``DOCKERFILE_PATH`` holding ``DOCKERFILE``."""
 
-    dockerfile: FakeDockerfile = field(
-        default_factory=lambda: FakeDockerfile({DOCKERFILE_PATH: DOCKERFILE})
+    dockerfile: FakeDockerfileStore = field(
+        default_factory=lambda: FakeDockerfileStore({DOCKERFILE_PATH: DOCKERFILE})
     )
     pull_request_body_writer: FakePullRequestBodyWriter = field(
         default_factory=FakePullRequestBodyWriter
@@ -70,7 +70,7 @@ class Bump:
 
 def test_same_version_is_the_pin_is_latest() -> None:
     pinned = DOCKERFILE.replace("3.0.1", "3.1.0")
-    bump = Bump(dockerfile=FakeDockerfile({DOCKERFILE_PATH: pinned}))
+    bump = Bump(dockerfile=FakeDockerfileStore({DOCKERFILE_PATH: pinned}))
     assert bump.run(upstream("3.1.0"), dry_run=False) == PinIsLatest("3.1.0")
     assert bump.wrote_nothing(pinned)
 
@@ -117,12 +117,12 @@ def test_a_dry_run_returns_the_new_pin_and_body_and_writes_nothing() -> None:
 
 
 def test_a_bad_pin_raises_before_reading_upstream() -> None:
-    bump = Bump(dockerfile=FakeDockerfile({DOCKERFILE_PATH: "FROM debian\n"}))
+    bump = Bump(dockerfile=FakeDockerfileStore({DOCKERFILE_PATH: "FROM debian\n"}))
     with pytest.raises(BumpError, match="expected one 'ARG AMULE_VERSION=' line, found 0"):
         bump.run(FakeRepoReader(), dry_run=False)
 
 
 def test_a_missing_dockerfile_raises_before_reading_upstream() -> None:
-    bump = Bump(dockerfile=FakeDockerfile({}))
+    bump = Bump(dockerfile=FakeDockerfileStore({}))
     with pytest.raises(FileNotFoundError, match=f"no Dockerfile at {DOCKERFILE_PATH}"):
         bump.run(FakeRepoReader(), dry_run=False)

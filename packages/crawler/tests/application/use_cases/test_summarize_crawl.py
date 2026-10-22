@@ -11,7 +11,7 @@ from p2pwatch.domain.status_reading import READING_FRESH_FOR, PublishedReading, 
 from tests.fakes.adapters.driven.fake_client_status_store import FakeClientStatusStore
 from tests.fakes.adapters.driven.fake_coverage_reader import FakeCoverageReader
 from tests.fakes.adapters.driven.fake_node_state_reader import FakeNodeStateReader
-from tests.fakes.adapters.driven.fake_run_state import FakeRunState
+from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 
 _NODE_STATE = NodeState(node_id="node-1", created_at=None, downloads=(), backoff_state_by_key={})
@@ -30,7 +30,7 @@ def _summarize(
         target_ids=target_ids,
         coverage_reader=FakeCoverageReader(tiers_by_target or {}),
         node_state_reader=FakeNodeStateReader(_NODE_STATE),
-        run_state_reader=FakeRunState(paused=paused),
+        run_state_reader=FakeRunStateStore(paused=paused),
         client_status_reader=FakeClientStatusStore(published_readings),
         monotonic_clock=(fake_time or FakeTime()).monotonic,
     ).summarize_crawl()

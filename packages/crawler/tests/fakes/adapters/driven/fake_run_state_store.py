@@ -2,7 +2,7 @@ from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
 from p2pwatch.application.ports.driven.run_state_writer import RunStateWriter
 
 
-class FakeRunState(RunStateWriter, RunStateReader):
+class FakeRunStateStore(RunStateWriter, RunStateReader):
     """Keeps each change by its method's name; reads ``paused``, which no change moves."""
 
     def __init__(self, *, paused: bool = False) -> None:

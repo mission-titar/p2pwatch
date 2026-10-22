@@ -4,7 +4,7 @@ from amule_bump.application.ports.driven.dockerfile_reader import DockerfileRead
 from amule_bump.application.ports.driven.dockerfile_writer import DockerfileWriter
 
 
-class FakeDockerfile(DockerfileReader, DockerfileWriter):
+class FakeDockerfileStore(DockerfileReader, DockerfileWriter):
     """Dockerfiles held by path; reading an absent one raises ``FileNotFoundError``."""
 
     def __init__(self, dockerfile_texts_by_path: dict[PurePath, str]) -> None:

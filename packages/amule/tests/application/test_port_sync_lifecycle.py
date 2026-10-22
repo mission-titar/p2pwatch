@@ -9,7 +9,7 @@ import pytest
 from p2pwatch_amule.application.port_sync_lifecycle import PortSyncLifecycle
 from p2pwatch_amule.domain.conf import with_listen_port
 from p2pwatch_amule.domain.settings import PortSyncSettings
-from tests.fakes.adapters.driven.fake_amule_conf import FakeAmuleConf
+from tests.fakes.adapters.driven.fake_amule_conf_store import FakeAmuleConfStore
 from tests.fakes.adapters.driven.fake_forwarded_port_reader import FakeForwardedPortReader
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_monotonic_clock import FakeMonotonicClock
@@ -39,7 +39,7 @@ class Node:
 
     def __init__(self) -> None:
         self.actions: list[str] = []
-        self.amule_conf = FakeAmuleConf(self.actions)
+        self.amule_conf = FakeAmuleConfStore(self.actions)
         self.amule_conf.conf = CONF
         self.forwarded_port_reader = FakeForwardedPortReader()
         self.service_supervisor = FakeServiceSupervisor(self.actions)

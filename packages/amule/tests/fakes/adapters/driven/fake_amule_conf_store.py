@@ -2,7 +2,7 @@ from p2pwatch_amule.application.ports.driven.amule_conf_reader import AmuleConfR
 from p2pwatch_amule.application.ports.driven.amule_conf_writer import AmuleConfWriter
 
 
-class FakeAmuleConf(AmuleConfReader, AmuleConfWriter):
+class FakeAmuleConfStore(AmuleConfReader, AmuleConfWriter):
     """amule.conf held as text, ``None`` when absent; records each read and each write in
     ``actions``, or raises ``write_error`` on a write."""
 
