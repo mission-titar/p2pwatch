@@ -26,8 +26,37 @@ IDS = {"PUID": "1000", "PGID": "1001"}
 
 def test_the_boot_variables_give_the_boot_settings() -> None:
     assert parse_boot_settings(BOOT_ENV) == BootSettings(
-        puid=1000, pgid=1001, ec_password="hunter2", api_password="s3cret"
+        puid=1000,
+        pgid=1001,
+        ec_password="hunter2",
+        api_password="s3cret",
+        port_sync_enabled=False,
     )
+
+
+def test_port_sync_on_is_carried_by_the_boot_settings() -> None:
+    assert parse_boot_settings({**BOOT_ENV, "PORT_SYNC": "on"}).port_sync_enabled is True
+
+
+@pytest.mark.parametrize(
+    ("variables", "message"),
+    [
+        ({"PORT_SYNC": "maybe"}, "PORT_SYNC must be one of "),
+        ({"PORT_SYNC": "on", "PORT_SYNC_POLL_SECONDS": "0"}, "PORT_SYNC_POLL_SECONDS must be "),
+        ({"PORT_SYNC": "yes", "GLUETUN_CONTROL_URL": "gluetun"}, "GLUETUN_CONTROL_URL must be "),
+    ],
+)
+def test_the_boot_refuses_port_syncs_variables_when_it_is_on(
+    variables: dict[str, str], message: str
+) -> None:
+    with pytest.raises(SettingsError, match=f"^{re.escape(message)}"):
+        parse_boot_settings({**BOOT_ENV, **variables})
+
+
+def test_port_sync_off_leaves_its_other_variables_unread() -> None:
+    env = {**BOOT_ENV, "PORT_SYNC": "off", "PORT_SYNC_POLL_SECONDS": "0"}
+
+    assert parse_boot_settings(env).port_sync_enabled is False
 
 
 @pytest.mark.parametrize("name", list(BOOT_ENV))

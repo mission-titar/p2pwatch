@@ -26,6 +26,7 @@ class BootSettings:
     pgid: int
     ec_password: str
     api_password: str
+    port_sync_enabled: bool
 
 
 @dataclass(frozen=True)
@@ -38,13 +39,18 @@ class PortSyncSettings:
 
 
 def parse_boot_settings(env: Mapping[str, str]) -> BootSettings:
-    """Return the boot step's settings from `env`, refusing the first missing or invalid one."""
-    return BootSettings(
+    """Return the boot step's settings from `env`, refusing the first missing or invalid one,
+    port-sync's included when it is on."""
+    boot_settings = BootSettings(
         puid=_required_id(env, "PUID"),
         pgid=_required_id(env, "PGID"),
         ec_password=_password(env, "AMULE_EC_PASSWORD"),
         api_password=_password(env, "AMULE_API_PASSWORD"),
+        port_sync_enabled=is_port_sync_enabled(env),
     )
+    if boot_settings.port_sync_enabled:
+        parse_port_sync_settings(env)
+    return boot_settings
 
 
 def is_port_sync_enabled(env: Mapping[str, str]) -> bool:

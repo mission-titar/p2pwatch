@@ -3,7 +3,7 @@
 import argparse
 import logging
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 
 from p2pwatch_amule.application.ports.driving.container_booter import ContainerBooter
 from p2pwatch_amule.application.ports.driving.port_sync_loop_runner import PortSyncLoopRunner
@@ -13,20 +13,18 @@ _LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 
 
 class ArgparseCommandLine:
-    """``boot`` over ``container_booter`` in ``env``, ``port-sync`` over
-    ``port_sync_loop_runner``; a refused variable is printed."""
+    """``boot`` over ``container_booter``, ``port-sync`` over ``port_sync_loop_runner``; a refused
+    variable is printed."""
 
     def __init__(
         self,
         *,
         container_booter: ContainerBooter,
         port_sync_loop_runner: PortSyncLoopRunner,
-        env: Mapping[str, str],
         root_logger: logging.Logger,
     ) -> None:
         self._container_booter = container_booter
         self._port_sync_loop_runner = port_sync_loop_runner
-        self._env = env
         self._root_logger = root_logger
 
     def run(self, argv: Sequence[str]) -> int:
@@ -43,7 +41,7 @@ class ArgparseCommandLine:
         args = parser.parse_args(argv)
         try:
             if args.command == "boot":
-                self._container_booter.boot_container(self._env)
+                self._container_booter.boot_container()
             else:
                 self._port_sync_loop_runner.run_port_sync_loop()
         except SettingsError as error:

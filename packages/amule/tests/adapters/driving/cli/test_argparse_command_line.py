@@ -6,10 +6,8 @@ import pytest
 
 from p2pwatch_amule.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from p2pwatch_amule.domain.settings_error import SettingsError
-from tests.fakes.application.use_cases.fake_container_booter import FakeContainerBooter
+from tests.fakes.composition.fake_container_booter import FakeContainerBooter
 from tests.fakes.composition.fake_port_sync_loop_runner import FakePortSyncLoopRunner
-
-ENV = {"PUID": "1000"}
 
 
 class _DrivingPorts:
@@ -23,17 +21,16 @@ class _DrivingPorts:
         return ArgparseCommandLine(
             container_booter=self.container_booter,
             port_sync_loop_runner=self.port_sync_loop_runner,
-            env=ENV,
             root_logger=root_logger or logging.Logger("root"),
         )
 
 
-def test_boot_boots_the_container_in_the_environment_given() -> None:
+def test_boot_boots_the_container_only() -> None:
     driving_ports = _DrivingPorts()
 
     assert driving_ports.command_line().run(["boot"]) == 0
 
-    assert driving_ports.container_booter.envs == [ENV]
+    assert driving_ports.container_booter.boots == 1
     assert driving_ports.port_sync_loop_runner.runs == 0
 
 
@@ -43,7 +40,7 @@ def test_port_sync_runs_its_loop_only() -> None:
     assert driving_ports.command_line().run(["port-sync"]) == 0
 
     assert driving_ports.port_sync_loop_runner.runs == 1
-    assert driving_ports.container_booter.envs == []
+    assert driving_ports.container_booter.boots == 0
 
 
 def test_a_variable_the_booter_refuses_is_printed_alone_and_returns_one(

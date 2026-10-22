@@ -199,8 +199,8 @@ flowchart TB
   construit les adaptateurs, les cas d'usage et la ligne de commande ; `__main__.py` lit l'état du
   processus et appelle `build_command_line(...).run(argv)`. La composition construit chaque graphe
   quand ce qu'il lui faut existe : au démarrage, dans `build_command_line` ; pendant un appel, en
-  implémentant le port pilotant qui le fait (`CrawlerComposition`, `PortSyncComposition`,
-  `UnitCoverageComposition`).
+  implémentant le port pilotant qui le fait (`CrawlerComposition`, `BootComposition`,
+  `PortSyncComposition`, `UnitCoverageComposition`).
 - Seul un `__main__.py` lit l'état du processus (`argv`, l'environnement, le répertoire courant, le
   logger racine, le répertoire temporaire) et le passe en valeurs ; un adaptateur reçoit de la composition ce qu'il pilote (un
   répertoire, une URL, un exécutable). Aucun test ne patche un module : `monkeypatch` et
@@ -728,7 +728,7 @@ démon sont
 | Persistance | `adapters/driven/persistence_sqlite/` (migrations `.sql`, repos) |
 | Observabilité | `domain/observability/`, `adapters/driven/observability/` |
 | WebUI | `adapters/driving/webui/` (in-process, thread dédié) |
-| Conteneur d'aMule | `packages/amule/src/p2pwatch_amule/` (câblage : `composition/command_line.py` (`build_command_line`) ; le one-shot : la ligne de commande appelle le port `ContainerBooter`, implémenté par le cas d'usage `application/use_cases/boot_container.py` ; le port-sync : la ligne de commande appelle le port `PortSyncLoopRunner`, implémenté par la composition `composition/port_sync_composition.py` (`PortSyncComposition`), qui assemble `application/port_sync_lifecycle.py`) ; image `packages/amule/Dockerfile`, services s6 sous `packages/amule/docker/services.d/` |
+| Conteneur d'aMule | `packages/amule/src/p2pwatch_amule/` (câblage : `composition/command_line.py` (`build_command_line`) ; le one-shot : la ligne de commande appelle le port `ContainerBooter`, implémenté par la composition `composition/boot_composition.py` (`BootComposition`), qui lit les variables puis lance le cas d'usage `application/use_cases/boot_container.py` ; le port-sync : la ligne de commande appelle le port `PortSyncLoopRunner`, implémenté par la composition `composition/port_sync_composition.py` (`PortSyncComposition`), qui assemble `application/port_sync_lifecycle.py`) ; image `packages/amule/Dockerfile`, services s6 sous `packages/amule/docker/services.d/` |
 | Déploiement | `deploy/compose.yml` (le cœur et un `include:`), `deploy/ed2k/` (`service`, `direct` et `vpn.compose.yml`) |
 
 ## 13. Le healthcheck lit la sortie de s6-svstat, pas son code de retour
