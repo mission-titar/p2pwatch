@@ -1,6 +1,6 @@
 """Shared decision helper: evaluate → set-diff → record / retract → wake → emit (spec §7).
 
-APPLICATION layer, PURE orchestration (no ``try/except`` here: a ``RepositoryError`` is a
+APPLICATION layer, PURE orchestration (no ``try/except`` here: a ``StoreError`` is a
 port contract each CALLER absorbs on its own terms, cf. ``record_observation`` and
 ``reevaluate_catalog``). Used by BOTH the per-observation pipeline (``record_observations.py``)
 and the startup catalogue re-evaluation, so the set-diff + retraction + wake logic is written once.
@@ -47,7 +47,7 @@ async def rejudge_file(
     """Judge the file on all its known filenames for every target, then record what changed
     (``base_candidate`` gives the fields other than the filename).
 
-    Returns the number of rows written (0..N). May propagate ``RepositoryError`` (pure
+    Returns the number of rows written (0..N). May propagate ``StoreError`` (pure
     orchestration; the caller absorbs it)."""
     filenames = observation_reader.read_known_filenames(file)
     fresh = engine.evaluate_file(

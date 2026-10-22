@@ -1,4 +1,4 @@
-"""``SqliteBackoffStateRepository``: the backoff states' ports on ``local.db``'s
+"""``SqliteBackoffStateStore``: the backoff states' ports on ``local.db``'s
 ``backoff_states``, mutable state that no append-only trigger guards."""
 
 import sqlite3
@@ -22,7 +22,7 @@ VALUES (?, ?, ?, ?, ?)
 """
 
 
-class SqliteBackoffStateRepository(BackoffStateReader, BackoffStateWriter):
+class SqliteBackoffStateStore(BackoffStateReader, BackoffStateWriter):
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
 
@@ -38,7 +38,7 @@ class SqliteBackoffStateRepository(BackoffStateReader, BackoffStateWriter):
             for client_name, channel, attempts, started_at_micros, delay_seconds in rows
         }
 
-    def save_backoff_states(self, backoff_state_by_key: dict[BackoffKey, BackoffState]) -> None:
+    def set_backoff_states(self, backoff_state_by_key: dict[BackoffKey, BackoffState]) -> None:
         """Replaces the whole table in one transaction."""
         rows = [
             (

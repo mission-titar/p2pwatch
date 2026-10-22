@@ -52,14 +52,16 @@ _Points = Sequence[tuple[str, int, int]]
 
 
 def _seed_points(db: Path, points: _Points) -> None:
-    with closing(sqlite3.connect(db)) as conn, conn:
-        insert_file(conn, "a" * 32)
-        insert_source(conn, _USER)
+    with closing(sqlite3.connect(db)) as connection, connection:
+        insert_file(connection, "a" * 32)
+        insert_source(connection, _USER)
         variants: dict[str, int] = {}
         for role, observed_at, counter in points:
             if role not in variants:
-                variants[role] = insert_source_variant(conn, "a" * 32, _USER, role=role)
-            insert_source_point(conn, variants[role], observed_at, session_received_bytes=counter)
+                variants[role] = insert_source_variant(connection, "a" * 32, _USER, role=role)
+            insert_source_point(
+                connection, variants[role], observed_at, session_received_bytes=counter
+            )
 
 
 def _periods(db: Path, window: PeriodWindow = _WINDOW) -> list[tuple[str, int, int, int]]:
@@ -133,20 +135,22 @@ def test_only_the_windows_points_are_read(catalog_db: Path) -> None:
 
 
 def test_sharing_periods_join_each_identity_on_each_node_newest_first(catalog_db: Path) -> None:
-    with closing(sqlite3.connect(catalog_db)) as conn, conn:
-        insert_file(conn, "a" * 32)
-        insert_file(conn, "b" * 32)
-        insert_source(conn, _USER)
+    with closing(sqlite3.connect(catalog_db)) as connection, connection:
+        insert_file(connection, "a" * 32)
+        insert_file(connection, "b" * 32)
+        insert_source(connection, _USER)
         queued = insert_source_variant(
-            conn, "a" * 32, _USER, contact_point="198.51.100.7:4661", connectable=False
+            connection, "a" * 32, _USER, contact_point="198.51.100.7:4661", connectable=False
         )
-        elsewhere = insert_source_variant(conn, "a" * 32, _USER, node_id="n2")
-        unnamed = insert_source_variant(conn, "a" * 32, None, name=None, connectable=True)
-        hashless = insert_source_variant(conn, "a" * 32, None, name="Teammate")
+        elsewhere = insert_source_variant(connection, "a" * 32, _USER, node_id="n2")
+        unnamed = insert_source_variant(connection, "a" * 32, None, name=None, connectable=True)
+        hashless = insert_source_variant(connection, "a" * 32, None, name="Teammate")
         for variant, at in ((queued, 0), (elsewhere, 30), (queued, 60), (unnamed, 30)):
-            insert_source_point(conn, variant, at * _S)
-        insert_source_point(conn, hashless, 45 * _S)
-        insert_source_point(conn, insert_source_variant(conn, "b" * 32, _USER), 200 * _S)
+            insert_source_point(connection, variant, at * _S)
+        insert_source_point(connection, hashless, 45 * _S)
+        insert_source_point(
+            connection, insert_source_variant(connection, "b" * 32, _USER), 200 * _S
+        )
     a = FileKey(Network.ED2K, "a" * 32)
     with ReaderProvider(catalog_db) as reader_provider:
         periods = SqliteSourceReader(reader_provider).read_sharing_periods(a, _WINDOW)
@@ -187,11 +191,11 @@ _OTHER = "9c0d" * 8
 
 def _seed_sources(db: Path) -> None:
     """``_USER`` renamed on two files, then read without a name; ``_OTHER``, seen earlier."""
-    with closing(sqlite3.connect(db)) as conn, conn:
-        insert_file(conn, "a" * 32)
-        insert_file(conn, "b" * 32)
-        insert_source(conn, _USER)
-        insert_source(conn, _OTHER)
+    with closing(sqlite3.connect(db)) as connection, connection:
+        insert_file(connection, "a" * 32)
+        insert_file(connection, "b" * 32)
+        insert_source(connection, _USER)
+        insert_source(connection, _OTHER)
         for ed2k_hash, user, name, role, seconds in (
             ("a", _USER, "Shinobu", "queued", (10, 20)),
             ("b", _USER, "AnimuseeFMR", "queued", (30, 40)),
@@ -199,9 +203,9 @@ def _seed_sources(db: Path) -> None:
             ("a", _OTHER, "AnimuseeFMR", "queued", (0, 5)),
             ("a", None, "x", "queued", (70, 80)),
         ):
-            variant = insert_source_variant(conn, ed2k_hash * 32, user, name=name, role=role)
+            variant = insert_source_variant(connection, ed2k_hash * 32, user, name=name, role=role)
             for at in seconds:
-                insert_source_point(conn, variant, at)
+                insert_source_point(connection, variant, at)
 
 
 def _known_sources(db: Path, *, search_text: str | None, offset: int) -> tuple[KnownSource, ...]:
@@ -221,10 +225,12 @@ def test_known_sources_are_each_source_once_by_last_seen_with_its_latest_name(
 
 
 def test_a_source_never_named_is_known_without_a_source_name(catalog_db: Path) -> None:
-    with closing(sqlite3.connect(catalog_db)) as conn, conn:
-        insert_file(conn, "a" * 32)
-        insert_source(conn, _USER)
-        insert_source_point(conn, insert_source_variant(conn, "a" * 32, _USER, name=None), 7)
+    with closing(sqlite3.connect(catalog_db)) as connection, connection:
+        insert_file(connection, "a" * 32)
+        insert_source(connection, _USER)
+        insert_source_point(
+            connection, insert_source_variant(connection, "a" * 32, _USER, name=None), 7
+        )
     assert _known_sources(catalog_db, search_text=None, offset=0) == (
         KnownSource(SourceKey(Network.ED2K, _USER), None, _at(7), 1),
     )
@@ -246,11 +252,13 @@ def test_known_sources_match_a_hash_prefix_or_any_name_the_source_carried(
 
 
 def test_known_sources_read_at_most_their_limit_from_their_offset(catalog_db: Path) -> None:
-    with closing(sqlite3.connect(catalog_db)) as conn, conn:
-        insert_file(conn, "a" * 32)
+    with closing(sqlite3.connect(catalog_db)) as connection, connection:
+        insert_file(connection, "a" * 32)
         for n in range(_LIMIT + 1):
-            insert_source(conn, f"{n:032x}")
-            insert_source_point(conn, insert_source_variant(conn, "a" * 32, f"{n:032x}"), n)
+            insert_source(connection, f"{n:032x}")
+            insert_source_point(
+                connection, insert_source_variant(connection, "a" * 32, f"{n:032x}"), n
+            )
     first = _known_sources(catalog_db, search_text=None, offset=0)
     second = _known_sources(catalog_db, search_text=None, offset=_LIMIT)
     assert (len(first), first[0].last_seen_at) == (_LIMIT, _at(_LIMIT))
@@ -270,14 +278,16 @@ _THIRD = "5a6b" * 8
 def _seed_pages(db: Path) -> None:
     """``_seed_sources``, plus ``Keroro`` on ``_OTHER`` and ``_THIRD``, and a hash-less name."""
     _seed_sources(db)
-    with closing(sqlite3.connect(db)) as conn, conn:
-        insert_observation(conn, "a" * 32, "keroro_062a.avi")
-        insert_source(conn, _THIRD)
+    with closing(sqlite3.connect(db)) as connection, connection:
+        insert_observation(connection, "a" * 32, "keroro_062a.avi")
+        insert_source(connection, _THIRD)
         for user, at in ((_OTHER, 6), (_THIRD, 8)):
-            variant = insert_source_variant(conn, "a" * 32, user, name="Keroro")
-            insert_source_point(conn, variant, at)
-        hashless = insert_source_variant(conn, "b" * 32, None, name="AnimuseeFMR", role="standby")
-        insert_source_point(conn, hashless, 95)
+            variant = insert_source_variant(connection, "a" * 32, user, name="Keroro")
+            insert_source_point(connection, variant, at)
+        hashless = insert_source_variant(
+            connection, "b" * 32, None, name="AnimuseeFMR", role="standby"
+        )
+        insert_source_point(connection, hashless, 95)
 
 
 def _period(
@@ -326,12 +336,12 @@ def test_a_source_history_holds_its_names_its_periods_over_every_file_and_their_
 def test_a_source_history_reads_at_most_its_limit_of_names_from_their_offset_and_every_period(
     catalog_db: Path,
 ) -> None:
-    with closing(sqlite3.connect(catalog_db)) as conn, conn:
-        insert_file(conn, "a" * 32)
-        insert_source(conn, _USER)
+    with closing(sqlite3.connect(catalog_db)) as connection, connection:
+        insert_file(connection, "a" * 32)
+        insert_source(connection, _USER)
         for n in range(3):
-            variant = insert_source_variant(conn, "a" * 32, _USER, name=f"name {n}")
-            insert_source_point(conn, variant, n)
+            variant = insert_source_variant(connection, "a" * 32, _USER, name=f"name {n}")
+            insert_source_point(connection, variant, n)
     source_history = _source_history(catalog_db, _USER, limit=2, offset=1)
     assert source_history is not None
     assert [naming.source_name for naming in source_history.source_namings] == [
@@ -379,13 +389,17 @@ def test_a_source_name_history_holds_its_hashes_and_its_periods_without_one(
 def test_a_source_name_history_reads_at_most_its_limit_of_hashes_from_their_offset_and_every_period(
     catalog_db: Path,
 ) -> None:
-    with closing(sqlite3.connect(catalog_db)) as conn, conn:
-        insert_file(conn, "a" * 32)
-        insert_observation(conn, "a" * 32, "keroro_062a.avi")
+    with closing(sqlite3.connect(catalog_db)) as connection, connection:
+        insert_file(connection, "a" * 32)
+        insert_observation(connection, "a" * 32, "keroro_062a.avi")
         for n, role in enumerate(("standby", "queued", "sending")):
-            insert_source(conn, f"{n:032x}")
-            insert_source_point(conn, insert_source_variant(conn, "a" * 32, f"{n:032x}"), n)
-            insert_source_point(conn, insert_source_variant(conn, "a" * 32, None, role=role), n)
+            insert_source(connection, f"{n:032x}")
+            insert_source_point(
+                connection, insert_source_variant(connection, "a" * 32, f"{n:032x}"), n
+            )
+            insert_source_point(
+                connection, insert_source_variant(connection, "a" * 32, None, role=role), n
+            )
     source_name_history = _source_name_history(catalog_db, "AnimuseeFMR", limit=2, offset=1)
     assert source_name_history is not None
     assert [naming.source.native_id for naming in source_name_history.source_namings] == [

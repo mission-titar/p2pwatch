@@ -1,4 +1,4 @@
-"""``DownloadWriter``: our tracked downloads, in ``local.db``, never merged."""
+"""``TrackedDownloadWriter``: our tracked downloads, in ``local.db``, never merged."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
@@ -10,7 +10,7 @@ from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey
 
 
-class DownloadWriter(ABC):
+class TrackedDownloadWriter(ABC):
     """Writes the tracked downloads' lifecycle."""
 
     @abstractmethod
@@ -20,7 +20,7 @@ class DownloadWriter(ABC):
         """Tracks ``file`` as queued; ``False`` when it is already tracked."""
 
     @abstractmethod
-    def record_completed(self, file: FileKey, completed_at: datetime) -> None:
+    def set_completed(self, file: FileKey, completed_at: datetime) -> None:
         """Marks ``file`` completed."""
 
     @abstractmethod
@@ -33,5 +33,5 @@ class DownloadWriter(ABC):
         """Moves ``file`` to ``state``, with its failure reason."""
 
     @abstractmethod
-    def mark_seen(self, statuses: Iterable[DownloadStatus], seen_at: datetime) -> None:
+    def set_seen(self, statuses: Iterable[DownloadStatus], seen_at: datetime) -> None:
         """Stamps each listed download ``seen_at``, with its waiting reason."""

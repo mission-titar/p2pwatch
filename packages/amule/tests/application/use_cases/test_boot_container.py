@@ -8,7 +8,7 @@ import pytest
 from p2pwatch_amule.application.use_cases.boot_container import BootContainer
 from p2pwatch_amule.domain.conf import reconcile_conf
 from p2pwatch_amule.domain.settings_error import SettingsError
-from tests.fakes.adapters.driven.fake_account_manager import FakeAccountManager
+from tests.fakes.adapters.driven.fake_account_manager import FakeAccountProvisioner
 from tests.fakes.adapters.driven.fake_admin_password_setter import FakeAdminPasswordSetter
 from tests.fakes.adapters.driven.fake_amule_conf_store import FakeAmuleConfStore
 from tests.fakes.adapters.driven.fake_amuled_directory_preparer import FakeAmuledDirectoryPreparer
@@ -31,7 +31,7 @@ class Booter:
         self.actions: list[str] = []
         self.amule_conf = FakeAmuleConfStore(self.actions)
         self.container_booter = BootContainer(
-            account_manager=FakeAccountManager(self.actions),
+            account_provisioner=FakeAccountProvisioner(self.actions),
             amuled_directory_preparer=FakeAmuledDirectoryPreparer(self.actions),
             amule_conf_reader=self.amule_conf,
             amule_conf_writer=self.amule_conf,

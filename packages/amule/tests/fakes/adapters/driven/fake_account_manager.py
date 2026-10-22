@@ -1,7 +1,7 @@
-from p2pwatch_amule.application.ports.driven.account_manager import AccountManager
+from p2pwatch_amule.application.ports.driven.account_manager import AccountProvisioner
 
 
-class FakeAccountManager(AccountManager):
+class FakeAccountProvisioner(AccountProvisioner):
     """Records each account it is asked for in ``actions``."""
 
     def __init__(self, actions: list[str]) -> None:

@@ -17,7 +17,7 @@ from p2pwatch.domain.status_reading import (
     PublishedReading,
     StatusReading,
 )
-from tests.fakes.adapters.driven.fake_client_status_store import FakeClientStatusStore
+from tests.fakes.adapters.driven.fake_client_status_store import FakeStatusReadingStore
 from tests.fakes.adapters.driven.fake_search_client import make_unreachable
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.scripted_client import ScriptedClient
@@ -59,7 +59,7 @@ def _deps(
         fake_time.monotonic,
         event_emitter,
         shutdown,
-        FakeClientStatusStore(),
+        FakeStatusReadingStore(),
     )
 
 
@@ -200,10 +200,10 @@ async def test_each_reading_is_published_with_its_wall_and_monotonic_instants(
 ) -> None:
     fake_time, shutdown = FakeTime(), asyncio.Event()
     fake_time.step_wall(timedelta(hours=1))  # the two clocks part: each instant shows its clock
-    store = FakeClientStatusStore()
+    store = FakeStatusReadingStore()
     client = ScriptedClient([_status(kad=_UP), reading], shutdown)
     deps = _deps("amuled", client, fake_time, TimedEventEmitter(fake_time), shutdown)
-    deps.client_status_writer = store
+    deps.status_reading_writer = store
     await asyncio.wait_for(status_loop(deps, _NODE), timeout=1.0)
     read_at = fake_time.wall.now() - timedelta(seconds=60)  # the loop slept one period after it
     published_at = fake_time.monotonic.now() - timedelta(seconds=60)

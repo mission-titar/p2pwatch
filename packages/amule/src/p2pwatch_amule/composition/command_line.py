@@ -12,8 +12,8 @@ from urllib.request import build_opener
 from p2pwatch_amule.adapters.driven.amule_api_admin_password_setter import (
     AmuleApiAdminPasswordSetter,
 )
-from p2pwatch_amule.adapters.driven.posix_account_manager import PosixAccountManager
-from p2pwatch_amule.adapters.driven.posix_amule_conf import PosixAmuleConf
+from p2pwatch_amule.adapters.driven.posix_account_manager import PosixAccountProvisioner
+from p2pwatch_amule.adapters.driven.posix_amule_conf import PosixAmuleConfStore
 from p2pwatch_amule.adapters.driven.posix_amuled_directory_preparer import (
     PosixAmuledDirectoryPreparer,
 )
@@ -36,9 +36,9 @@ def build_command_line(
     *, env: Mapping[str, str], root_logger: logging.Logger
 ) -> ArgparseCommandLine:
     """The command line run in the environment ``env``, logging through ``root_logger``."""
-    amule_conf = PosixAmuleConf(amule_conf_path=_AMULE_CONF_PATH, change_owner=os.chown)
+    amule_conf = PosixAmuleConfStore(amule_conf_path=_AMULE_CONF_PATH, change_owner=os.chown)
     container_booter = BootContainer(
-        account_manager=PosixAccountManager(
+        account_provisioner=PosixAccountProvisioner(
             home_directory=_HOME_DIRECTORY,
             run_command=subprocess.run,
             find_group=grp.getgrnam,

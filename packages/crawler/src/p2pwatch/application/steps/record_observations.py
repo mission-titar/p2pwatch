@@ -11,7 +11,7 @@ APPLICATION layer (orchestration spec §4): orchestrates PORTS (sync repos + pur
 
 The repos are SYNCHRONOUS, called DIRECTLY (spec §3: sub-ms, no ``to_thread`` in the
 MVP; accepted consequence: DB writes are de facto serialized on the event loop).
-A ``RepositoryError`` (a PORT contract, never an adapter) on ONE observation is
+A ``StoreError`` (a PORT contract, never an adapter) on ONE observation is
 LOGGED and ABSORBED here: the function returns ``0`` and the cycle continues (spec §7) - a
 single corrupt/failed obs does not bring down the whole sweep, but the failure stays
 VISIBLE (``error``-level log, so a persistent failure gets noticed).
@@ -29,7 +29,7 @@ from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.steps.decisions import rejudge_file
 from p2pwatch.domain.observability.events import ObservationRecorded
 from p2pwatch.domain.observation import FileObservation, ReportedFile
-from p2pwatch.domain.repository_errors import RepositoryError
+from p2pwatch.domain.repository_errors import StoreError
 
 
 async def record_observation(
@@ -51,7 +51,7 @@ async def record_observation(
     """Process ONE observation (spec §7). Returns the number of rows written (0..N).
 
     Emits ``ObservationRecorded`` (always) and one ``DecisionsRecorded`` when a row was written.
-    A ``RepositoryError`` is absorbed (log + ``0``), the cycle continues (spec §7)."""
+    A ``StoreError`` is absorbed (log + ``0``), the cycle continues (spec §7)."""
     try:
         observation_writer.record_observation(
             FileObservation(reported_file, wall_clock.now()), node_id
@@ -69,7 +69,7 @@ async def record_observation(
             wall_clock=wall_clock,
             node_id=node_id,
         )
-    except RepositoryError as error:
+    except StoreError as error:
         logger.error(
             "persistence failed on file=%s:%s (%s): observation skipped, cycle continues",
             reported_file.file.network,

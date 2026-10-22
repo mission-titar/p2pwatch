@@ -124,7 +124,7 @@ class ArgparseCommandLine:
     def _crawl(self, args: argparse.Namespace) -> int:
         try:
             asyncio.run(
-                self._crawler_runner.crawl(
+                self._crawler_runner.run_crawler(
                     config_path=args.config, targets_path=args.targets, matcher_path=args.matcher
                 )
             )

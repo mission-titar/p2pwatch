@@ -8,7 +8,7 @@ all its known filenames) so retraction + notify/download wakes happen identicall
 per-observation path (spec §4). Only the counting + per-row error absorption are specific
 to the re-evaluation.
 
-A per-row ``RepositoryError`` is logged (error level) and absorbed here: one bad file must
+A per-row ``StoreError`` is logged (error level) and absorbed here: one bad file must
 not abort the whole sweep (spec §7, same discipline as ``record_observation``).
 """
 
@@ -24,7 +24,7 @@ from p2pwatch.application.ports.driven.observation_reader import ObservationRead
 from p2pwatch.application.ports.driven.waker import Waker
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.steps.decisions import rejudge_file
-from p2pwatch.domain.repository_errors import RepositoryError
+from p2pwatch.domain.repository_errors import StoreError
 
 
 @dataclass(frozen=True)
@@ -56,7 +56,7 @@ async def reevaluate_catalog(
 ) -> ReevaluationSummary:
     """Re-evaluate every catalogued hash's latest observation against ``engine``.
 
-    Per-item isolation (spec §7): a ``RepositoryError`` on one row is logged and the sweep
+    Per-item isolation (spec §7): a ``StoreError`` on one row is logged and the sweep
     continues with the next row.
     """
     total = catalog_scan_reader.read_file_count()
@@ -78,7 +78,7 @@ async def reevaluate_catalog(
                 wall_clock=wall_clock,
                 node_id=node_id,
             )
-        except RepositoryError as error:
+        except StoreError as error:
             logger.error(
                 "persistence failed on file=%s:%s (%s): re-evaluation skipped, sweep continues",
                 reported_file.file.network,

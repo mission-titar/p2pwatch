@@ -4,13 +4,13 @@ from collections.abc import Mapping
 from pathlib import Path
 from urllib.request import OpenerDirector, build_opener
 
-from amule_bump.adapters.driven.filesystem_dockerfile import FilesystemDockerfile
+from amule_bump.adapters.driven.filesystem_dockerfile import FilesystemDockerfileStore
 from amule_bump.adapters.driven.filesystem_pull_request_body_writer import (
-    FilesystemPullRequestBodyWriter,
+    FilesystemPullRequestDrafter,
 )
-from amule_bump.adapters.driven.github_repo_reader import GitHubRepoReader
-from amule_bump.adapters.driven.github_step_output_writer import GitHubStepOutputWriter
-from amule_bump.adapters.driven.terminal_step_output_writer import TerminalStepOutputWriter
+from amule_bump.adapters.driven.github_repo_reader import GithubUpstreamClient
+from amule_bump.adapters.driven.github_step_output_writer import GithubActionsBumpAnnouncer
+from amule_bump.adapters.driven.terminal_step_output_writer import TerminalBumpAnnouncer
 from amule_bump.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from amule_bump.application.use_cases.bump_amule import BumpAmule
 from amule_bump.domain.upstream import UPSTREAM
@@ -39,17 +39,19 @@ def build_amule_bumper(
     *, env: Mapping[str, str], github_api_url: str, url_opener: OpenerDirector
 ) -> BumpAmule:
     """The bump run in the environment ``env``, GitHub at ``github_api_url`` by ``url_opener``."""
-    dockerfile = FilesystemDockerfile()
+    dockerfile = FilesystemDockerfileStore()
     github_output = env.get("GITHUB_OUTPUT")
     return BumpAmule(
-        repo_reader=GitHubRepoReader(github_api_url, UPSTREAM, env.get("GH_TOKEN"), url_opener),
+        upstream_client=GithubUpstreamClient(
+            github_api_url, UPSTREAM, env.get("GH_TOKEN"), url_opener
+        ),
         dockerfile_reader=dockerfile,
         dockerfile_writer=dockerfile,
-        pull_request_body_writer=FilesystemPullRequestBodyWriter(),
-        step_output_writer=(
-            GitHubStepOutputWriter(Path(github_output))
+        pull_request_drafter=FilesystemPullRequestDrafter(),
+        bump_announcer=(
+            GithubActionsBumpAnnouncer(Path(github_output))
             if github_output
-            else TerminalStepOutputWriter()
+            else TerminalBumpAnnouncer()
         ),
         changelog_width_characters=_CHANGELOG_WIDTH_CHARACTERS,
     )

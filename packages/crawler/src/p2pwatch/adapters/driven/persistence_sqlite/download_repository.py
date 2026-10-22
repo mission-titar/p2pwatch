@@ -1,4 +1,4 @@
-"""``SqliteDownloadRepository``: the state of downloads (local.db, download spec §7).
+"""``SqliteTrackedDownloadStore``: the state of downloads (local.db, download spec §7).
 
 Implements persistence of the downloads managed by the crawler. ``downloads`` is NOT
 append-only (mutable state, not the catalog) → UPSERT/UPDATE allowed, no triggers. Same
@@ -8,7 +8,7 @@ connection ``in_transaction``), ``wrap_sqlite_errors``.
 
 Methods take a ``FileKey``; rows are keyed by its ``file_id`` (stage 2 spec D19). Each write
 stores the instant the use-case gives it. ``record_queued`` is dedup-safe (PK = ``file_id``,
-``ON CONFLICT DO NOTHING``); ``record_completed`` stamps ``completed_at``; ``mark_seen`` stamps
+``ON CONFLICT DO NOTHING``); ``set_completed`` stamps ``completed_at``; ``set_seen`` stamps
 ``last_seen_at`` and the lifecycle columns (stage 2 spec D12), which ``read_last_seen_at_by_file``
 reads back for the lost-download detection; ``read_tracked_states`` returns the file→state map
 (the loop reconciles the client's list with it).
@@ -22,8 +22,8 @@ from typing import Literal
 
 from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError, wrap_sqlite_errors
-from p2pwatch.application.ports.driven.download_reader import DownloadReader
-from p2pwatch.application.ports.driven.download_writer import DownloadWriter
+from p2pwatch.application.ports.driven.download_reader import TrackedDownloadReader
+from p2pwatch.application.ports.driven.download_writer import TrackedDownloadWriter
 from p2pwatch.domain.download.states import DownloadState, FailureReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
@@ -65,7 +65,7 @@ WHERE state IN ('queued', 'downloading')
 """
 
 
-class SqliteDownloadRepository(DownloadWriter, DownloadReader):
+class SqliteTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
     """SQLite implementation of the downloads' ports."""
 
     def __init__(self, connection: sqlite3.Connection) -> None:
@@ -116,7 +116,7 @@ class SqliteDownloadRepository(DownloadWriter, DownloadReader):
         if cursor.rowcount != 1:
             raise PersistenceError(f"download {file.native_id} not found (caller bug)")
 
-    def record_completed(self, file: FileKey, completed_at: datetime) -> None:
+    def set_completed(self, file: FileKey, completed_at: datetime) -> None:
         """Marks the download ``completed`` at ``completed_at`` and clears its ``failure_reason``.
 
         Requires an existing download (an unknown file → ``PersistenceError``: caller-code bug).
@@ -135,7 +135,7 @@ class SqliteDownloadRepository(DownloadWriter, DownloadReader):
             row = self._connection.execute(_IS_TRACKED, (file.file_id,)).fetchone()
         return row is not None
 
-    def mark_seen(self, statuses: Iterable[DownloadStatus], seen_at: datetime) -> None:
+    def set_seen(self, statuses: Iterable[DownloadStatus], seen_at: datetime) -> None:
         """Stamps ``last_seen_at`` and the progress of each download the client lists.
 
         ``last_progress_at`` moves only when ``bytes_done`` grows. An unknown file updates

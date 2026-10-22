@@ -1,9 +1,9 @@
-"""PosixAccountManager: groupadd then useradd, each only when its own lookup misses."""
+"""PosixAccountProvisioner: groupadd then useradd, each only when its own lookup misses."""
 
 from collections.abc import Callable
 from pathlib import Path
 
-from p2pwatch_amule.adapters.driven.posix_account_manager import PosixAccountManager
+from p2pwatch_amule.adapters.driven.posix_account_manager import PosixAccountProvisioner
 from tests.fakes.adapters.driven.fake_command_runner import FakeCommandRunner
 
 HOME_DIRECTORY = Path("/home/amule")
@@ -24,10 +24,10 @@ def _lookup(*, is_present: bool) -> Callable[[str], object]:
     return find
 
 
-def _account_manager(
+def _account_provisioner(
     command_runner: FakeCommandRunner, *, has_group: bool, has_user: bool
-) -> PosixAccountManager:
-    return PosixAccountManager(
+) -> PosixAccountProvisioner:
+    return PosixAccountProvisioner(
         home_directory=HOME_DIRECTORY,
         run_command=command_runner.run_command,
         find_group=_lookup(is_present=has_group),
@@ -38,9 +38,9 @@ def _account_manager(
 def test_a_missing_account_is_created_group_first() -> None:
     command_runner = FakeCommandRunner()
 
-    _account_manager(command_runner, has_group=False, has_user=False).find_or_create_amule_account(
-        1000, 1001
-    )
+    _account_provisioner(
+        command_runner, has_group=False, has_user=False
+    ).find_or_create_amule_account(1000, 1001)
 
     assert command_runner.commands == [
         (GROUPADD, {"check": True}),
@@ -51,9 +51,9 @@ def test_a_missing_account_is_created_group_first() -> None:
 def test_an_existing_group_is_kept_and_the_missing_user_created() -> None:
     command_runner = FakeCommandRunner()
 
-    _account_manager(command_runner, has_group=True, has_user=False).find_or_create_amule_account(
-        1000, 1001
-    )
+    _account_provisioner(
+        command_runner, has_group=True, has_user=False
+    ).find_or_create_amule_account(1000, 1001)
 
     assert command_runner.commands == [(USERADD_NOLOGIN, {"check": True})]
 
@@ -61,8 +61,8 @@ def test_an_existing_group_is_kept_and_the_missing_user_created() -> None:
 def test_an_existing_account_is_not_recreated() -> None:
     command_runner = FakeCommandRunner()
 
-    _account_manager(command_runner, has_group=True, has_user=True).find_or_create_amule_account(
-        1000, 1001
-    )
+    _account_provisioner(
+        command_runner, has_group=True, has_user=True
+    ).find_or_create_amule_account(1000, 1001)
 
     assert command_runner.commands == []

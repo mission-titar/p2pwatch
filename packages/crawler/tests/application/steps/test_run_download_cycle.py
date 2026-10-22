@@ -7,8 +7,10 @@ import pytest
 
 from catalog_matching.domain.models import TargetSegment
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
-from p2pwatch.adapters.driven.persistence_sqlite.download_repository import SqliteDownloadRepository
-from p2pwatch.adapters.driven.persistence_sqlite.source_repository import SqliteSourceRepository
+from p2pwatch.adapters.driven.persistence_sqlite.download_repository import (
+    SqliteTrackedDownloadStore,
+)
+from p2pwatch.adapters.driven.persistence_sqlite.source_repository import SqliteSourcePointStore
 from p2pwatch.application.steps.run_download_cycle import DownloadDeps, run_download_cycle
 from p2pwatch.domain.client_errors import ClientUnreachableError, DownloadRejectedError
 from p2pwatch.domain.download.candidate import DownloadCandidate
@@ -36,7 +38,7 @@ from p2pwatch.domain.source import (
 from tests.fakes.adapters.driven.broken_disk import BrokenDisk
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
-from tests.fakes.adapters.driven.fake_download_store import FakeDownloadStore
+from tests.fakes.adapters.driven.fake_download_store import FakeTrackedDownloadStore
 from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
 from tests.fakes.adapters.driven.fake_free_space_meter import FakeFreeSpaceMeter
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
@@ -103,7 +105,7 @@ def _deps(
     *,
     client: FakeDownloadClient,
     source_client: FakeSourceClient | None = None,
-    downloads: FakeDownloadStore | SqliteDownloadRepository,
+    downloads: FakeTrackedDownloadStore | SqliteTrackedDownloadStore,
     decision_reader: FakeDecisionReader | None = None,
     observation_reader: FakeObservationReader | None = None,
     free: int = 1_000_000,
@@ -111,7 +113,7 @@ def _deps(
     lost_after: timedelta = timedelta(days=1),
     event_emitter: FakeEventEmitter | None = None,
     targets: Sequence[TargetSegment] | None = None,
-    sources: FakeSourcePointStore | SqliteSourceRepository | None = None,
+    sources: FakeSourcePointStore | SqliteSourcePointStore | None = None,
     fake_time: FakeTime | None = None,
     sources_interval: timedelta = timedelta(seconds=30),
     logger: FakeLogger | None = None,
@@ -121,8 +123,8 @@ def _deps(
     return DownloadDeps(
         download_client=client,
         source_client=source_client or FakeSourceClient(),
-        download_writer=downloads,
-        download_reader=downloads,
+        tracked_download_writer=downloads,
+        tracked_download_reader=downloads,
         source_point_writer=sources,
         source_point_reader=sources,
         decision_reader=decision_reader or FakeDecisionReader(),
@@ -144,7 +146,7 @@ def _deps(
 @pytest.mark.asyncio
 async def test_new_candidate_is_queued_and_link_added() -> None:
     client = FakeDownloadClient()
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
     observation_reader = FakeObservationReader(
         observations={_A: _observation(_A, "Keroro.avi", 100)}
@@ -163,7 +165,7 @@ async def test_new_candidate_is_queued_and_link_added() -> None:
 @pytest.mark.asyncio
 async def test_already_downloaded_candidate_is_deduped() -> None:
     client = FakeDownloadClient(listed=[(_status(_A),)])
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.states[_A] = DownloadState.DOWNLOADING  # already known
     decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
     observation_reader = FakeObservationReader(observations={_A: _observation(_A, "x", 1)})
@@ -196,7 +198,7 @@ async def test_two_segment_candidates_same_hash_dedup_to_one_download() -> None:
     )
     event_emitter = FakeEventEmitter()
     client = FakeDownloadClient()
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(
         candidates=(_candidate(_A, "062A"), _candidate(_A, "062B"))
     )
@@ -220,7 +222,7 @@ async def test_two_segment_candidates_same_hash_dedup_to_one_download() -> None:
     # both candidates are policy-eligible here, so a SECOND event would only appear if the
     # `is_tracked` continue-guard were removed, unlike the hash-keyed dict observables
     # above (states/started), which stay collapsed regardless thanks to
-    # FakeDownloadStore.record_queued's own idempotency guard.
+    # FakeTrackedDownloadStore.record_queued's own idempotency guard.
     queued_events = [e for e in event_emitter.events if isinstance(e, DownloadQueued)]
     assert len(queued_events) == 1
 
@@ -228,7 +230,7 @@ async def test_two_segment_candidates_same_hash_dedup_to_one_download() -> None:
 @pytest.mark.asyncio
 async def test_complete_target_candidate_is_skipped() -> None:
     client = FakeDownloadClient()
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(
         candidates=(_candidate(_B, "063A"),)  # 063A status=complete
     )
@@ -247,7 +249,7 @@ async def test_complete_target_candidate_is_skipped() -> None:
 @pytest.mark.asyncio
 async def test_a_candidate_that_would_break_the_disk_floor_defers() -> None:
     client = FakeDownloadClient()
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
     observation_reader = FakeObservationReader(observations={_A: _observation(_A, "x", 500)})
     deps = _deps(
@@ -268,7 +270,7 @@ async def test_outstanding_queue_bytes_are_charged_against_the_floor() -> None:
     # Free space alone would admit this candidate; the 900 bytes amuled still has to fetch
     # for a download already running is what refuses it.
     client = FakeDownloadClient(listed=[(_status(_B, done=100, total=1000),)])
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.states[_B] = DownloadState.DOWNLOADING
     decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
     observation_reader = FakeObservationReader(observations={_A: _observation(_A, "x", 200)})
@@ -290,7 +292,7 @@ async def test_a_nascent_queue_entry_commits_nothing() -> None:
     # size_full == 0: amuled does not know the total yet. Charging size_full - size_done would
     # be NEGATIVE and invent free space, so the entry contributes zero and the candidate fits.
     client = FakeDownloadClient(listed=[(_status(_B, done=50, total=0),)])
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.states[_B] = DownloadState.DOWNLOADING
     decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
     observation_reader = FakeObservationReader(observations={_A: _observation(_A, "x", 200)})
@@ -311,7 +313,7 @@ async def test_candidate_without_observation_is_skipped() -> None:
     # a candidate for which no observation survived (edge case) cannot build a link:
     # we skip it (log), never a crash.
     client = FakeDownloadClient()
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
     observation_reader = FakeObservationReader(observations={})
     deps = _deps(
@@ -327,7 +329,7 @@ async def test_candidate_without_observation_is_skipped() -> None:
 @pytest.mark.asyncio
 async def test_monitor_marks_in_progress_when_not_complete() -> None:
     client = FakeDownloadClient(listed=[(_status(_A, done=3, total=10),)])
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.states[_A] = DownloadState.QUEUED
     deps = _deps(
         client=client,
@@ -342,11 +344,11 @@ async def test_monitor_does_not_regress_a_completed_queue_entry() -> None:
     # _reconcile_states: a COMPLETED hash present in the amuled queue MUST NOT regress to
     # DOWNLOADING (the completion notification already fired; re-firing it would be noise).
     client = FakeDownloadClient(listed=[(_status(_A, done=3, total=10),)])
-    repo = NoSetStateStore()
-    repo.states[_A] = DownloadState.COMPLETED
-    deps = _deps(client=client, downloads=repo)
+    tracked_download_store = NoSetStateStore()
+    tracked_download_store.states[_A] = DownloadState.COMPLETED
+    deps = _deps(client=client, downloads=tracked_download_store)
     await run_download_cycle(deps, _NODE)
-    assert repo.states[_A] is DownloadState.COMPLETED  # unchanged
+    assert tracked_download_store.states[_A] is DownloadState.COMPLETED  # unchanged
 
 
 @pytest.mark.asyncio
@@ -354,7 +356,7 @@ async def test_monitor_resurrects_a_failed_download_back_in_the_queue() -> None:
     # amuled is the authority on what it holds: a hash the TTL condemned (or a start
     # amuled rejected) that shows up in the queue is downloading again.
     client = FakeDownloadClient(listed=[(_status(_A, done=3, total=10),)])
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.states[_A] = DownloadState.FAILED
     downloads.failures[_A] = FailureReason.LOST
     deps = _deps(client=client, downloads=downloads)
@@ -367,7 +369,7 @@ async def test_monitor_resurrects_a_failed_download_back_in_the_queue() -> None:
 async def test_monitor_ignores_unknown_queue_entries() -> None:
     # an entry in the amuled queue but unknown to downloads (started outside crawler) is ignored.
     client = FakeDownloadClient(listed=[(_status(_B, done=10, total=10),)])
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     deps = _deps(
         client=client,
         downloads=downloads,
@@ -381,7 +383,7 @@ async def test_every_byte_received_is_not_a_completion() -> None:
     # Field 2026-09-02: 065B was marked COMPLETED while amuled still held it as a partfile. Only
     # the client's own signal completes a download, never a byte count (stage 2, D10).
     client = FakeDownloadClient(listed=[(_status(_A, done=100, total=100),)])
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.states[_A] = DownloadState.DOWNLOADING
     deps = _deps(client=client, downloads=downloads)
     await run_download_cycle(deps, _NODE)
@@ -397,7 +399,7 @@ _UNAVAILABLE = [ClientUnreachableError("daemon down"), DownloadRejectedError("am
 @pytest.mark.parametrize("failure", _UNAVAILABLE, ids=["unreachable", "rejected"])
 async def test_unreachable_client_is_tolerated_and_iteration_skipped(failure: Exception) -> None:
     client = FakeDownloadClient(list_failures=[failure])
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     deps = _deps(
         client=client,
         downloads=downloads,
@@ -410,7 +412,7 @@ async def test_unreachable_client_is_tolerated_and_iteration_skipped(failure: Ex
 @pytest.mark.asyncio
 async def test_repository_error_is_absorbed() -> None:
     client = FakeDownloadClient()
-    downloads = FakeDownloadStore(fail_record=True)  # record_queued raises RepositoryError
+    downloads = FakeTrackedDownloadStore(fail_record=True)  # record_queued raises StoreError
     decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
     observation_reader = FakeObservationReader(observations={_A: _observation(_A, "x", 1)})
     deps = _deps(
@@ -419,12 +421,12 @@ async def test_repository_error_is_absorbed() -> None:
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await run_download_cycle(deps, _NODE)  # does not raise (RepositoryError absorbed)
+    await run_download_cycle(deps, _NODE)  # does not raise (StoreError absorbed)
 
 
 @pytest.mark.asyncio
 async def test_monitor_repo_error_still_promotes_completions_in_same_cycle() -> None:
-    # Regression logic-download#2: if ``_reconcile_states`` raises ``RepositoryError`` (set_state
+    # Regression logic-download#2: if ``_reconcile_states`` raises ``StoreError`` (set_state
     # down on another hash), the old code set ``states={}`` then called ``_handle_completions``
     # → each shared hash → ``states.get(...) is None`` → ignored → NO completion recorded
     # in the whole cycle (latency +1 cycle although we already have the signal). The fix re-reads
@@ -434,7 +436,7 @@ async def test_monitor_repo_error_still_promotes_completions_in_same_cycle() -> 
         # fails its set_state transition.
         listed=[(_status(_B), _status(_A, completed=True))],
     )
-    downloads = FakeDownloadStore(fail_set_state_for={_B})
+    downloads = FakeTrackedDownloadStore(fail_set_state_for={_B})
     # _A already DOWNLOADING (no transition by _reconcile_states); _B QUEUED → it will try
     # set_state(_B, DOWNLOADING) which raises → step 1 crashes, but _A is completed.
     downloads.states[_A] = DownloadState.DOWNLOADING
@@ -450,22 +452,22 @@ async def test_monitor_repo_error_still_promotes_completions_in_same_cycle() -> 
 
 @pytest.mark.asyncio
 async def test_active_states_repo_failure_is_absorbed_at_step_2() -> None:
-    # ``read_tracked_states`` that raises IN A LOOP (persistent repo failure): step 1 absorbs, then
+    # ``read_tracked_states`` that raises IN A LOOP (persistent store failure): step 1 absorbs, then
     # the re-read of step 2 (logic-download#2) absorbs in turn → the cycle ends without
     # crashing the loop (the next cycle will replay). We exercise HERE the branch
-    # ``except RepositoryError`` of step 2 separately from that of step 1.
+    # ``except StoreError`` of step 2 separately from that of step 1.
     client = FakeDownloadClient()
-    downloads = FakeDownloadStore(fail_active_states=True)
+    downloads = FakeTrackedDownloadStore(fail_tracked_states=True)
     deps = _deps(
         client=client,
         downloads=downloads,
     )
-    await run_download_cycle(deps, _NODE)  # does not raise (both RepositoryError are absorbed)
+    await run_download_cycle(deps, _NODE)  # does not raise (both StoreError are absorbed)
 
 
 @pytest.mark.asyncio
 async def test_one_hash_repo_failure_does_not_starve_other_completions() -> None:
-    # Regression error-boundary#2: a ``RepositoryError`` in ``_record_completion`` of hash N
+    # Regression error-boundary#2: a ``StoreError`` in ``_record_completion`` of hash N
     # used to bubble up to the cycle handler, abandoning N+1, N+2 of the same snapshot. The fix
     # isolates PER HASH (try/except around _record_completion), honoring the "isolated per
     # step" intent of the comment (I2).
@@ -477,9 +479,9 @@ async def test_one_hash_repo_failure_does_not_starve_other_completions() -> None
             )
         ],
     )
-    # _A and _B in DOWNLOADING; record_completed(_A, ...) crashes → _record_completion of _A
+    # _A and _B in DOWNLOADING; set_completed(_A, ...) crashes → _record_completion of _A
     # raises; _B must nonetheless be completed (intra-cycle continuity).
-    downloads = FakeDownloadStore(fail_record_completed_for={_A})
+    downloads = FakeTrackedDownloadStore(fail_set_completed_for={_A})
     downloads.states[_A] = DownloadState.DOWNLOADING
     downloads.states[_B] = DownloadState.DOWNLOADING
     deps = _deps(
@@ -496,7 +498,7 @@ async def test_intra_cycle_floor_accounts_for_links_added_this_cycle() -> None:
     # A candidate admitted this cycle is not in amuled's queue yet, so the outstanding term is
     # carried IN MEMORY over the course of the cycle.
     client = FakeDownloadClient()
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(
         candidates=(_candidate(_A, "062A"), _candidate(_B, "062A"))
     )
@@ -523,7 +525,7 @@ async def test_candidate_for_unknown_target_is_treated_as_complete() -> None:
     # _target_status: a candidate whose target_id is ABSENT from _TARGETS → "complete"
     # (conservative) → SKIP_COMPLETE policy → no link, hash not enqueued.
     client = FakeDownloadClient()
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(
         candidates=(_candidate(_A, "S9E999Z"),)  # ghost target, absent from _TARGETS
     )
@@ -544,14 +546,14 @@ async def test_monitor_no_op_when_state_already_matches() -> None:
     # _reconcile_states: in-progress entry (done=3/full=10) and repo already DOWNLOADING →
     # wanted_state is current → NO set_state (FALSE branch of `if current is not wanted_state`).
     client = FakeDownloadClient(listed=[(_status(_A, done=3, total=10),)])
-    repo = NoSetStateStore()
-    repo.states[_A] = DownloadState.DOWNLOADING
+    tracked_download_store = NoSetStateStore()
+    tracked_download_store.states[_A] = DownloadState.DOWNLOADING
     deps = _deps(
         client=client,
-        downloads=repo,
+        downloads=tracked_download_store,
     )
     await run_download_cycle(deps, _NODE)
-    assert repo.states[_A] is DownloadState.DOWNLOADING
+    assert tracked_download_store.states[_A] is DownloadState.DOWNLOADING
 
 
 @pytest.mark.asyncio
@@ -559,7 +561,7 @@ async def test_queued_download_without_observation_emits_no_link() -> None:
     # _start_unlisted: a QUEUED download without observation in the catalog → no start
     # (branch `if observation is None: continue`).
     client = FakeDownloadClient()
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.states[_A] = DownloadState.QUEUED
     downloads.sizes[_A] = 100
     deps = _deps(
@@ -576,7 +578,7 @@ async def test_start_unreachable_keeps_queued_and_is_tolerated() -> None:
     # start raises ClientUnreachableError → tolerated at cycle level; the download stays QUEUED
     # (record_queued already happened) → caught up next round. write-before-network invariant.
     client = FakeDownloadClient(start_failures=[ClientUnreachableError("down")])
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
     observation_reader = FakeObservationReader(observations={_A: _observation(_A, "x", 1)})
     deps = _deps(
@@ -595,7 +597,7 @@ async def test_start_rejected_marks_failed_and_does_not_crash() -> None:
     # start raises DownloadRejectedError (the client refused the download):
     # THIS hash is marked FAILED (spec §9 "failed + log"), the loop continues, does not raise.
     client = FakeDownloadClient(start_failures=[DownloadRejectedError("rejected")])
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
     observation_reader = FakeObservationReader(observations={_A: _observation(_A, "x", 1)})
     deps = _deps(
@@ -615,7 +617,7 @@ async def test_start_rejected_for_one_file_does_not_block_the_next() -> None:
     # start rejected for _A, accepted for _B: _A → FAILED, _B → started and
     # stays QUEUED. The break does not abort the loop (continues to the next hash).
     client = FakeDownloadClient(start_failures=[DownloadRejectedError("rejected")])
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(
         candidates=(_candidate(_A, "062A"), _candidate(_B, "062A"))
     )
@@ -643,7 +645,7 @@ async def test_completion_and_new_candidate_in_the_same_cycle() -> None:
     # _A completed via the SHARED files (recorded this cycle); _B is a new candidate
     # (queued + link).
     client = FakeDownloadClient(listed=[(_status(_A, completed=True),)])
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.states[_A] = DownloadState.DOWNLOADING
     downloads.sizes[_A] = 10
     decision_reader = FakeDecisionReader(candidates=(_candidate(_B, "062A"),))
@@ -664,7 +666,7 @@ async def test_completion_and_new_candidate_in_the_same_cycle() -> None:
 async def test_emits_download_queued() -> None:
     event_emitter = FakeEventEmitter()
     client = FakeDownloadClient()
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
     observation_reader = FakeObservationReader(
         observations={_A: _observation(_A, "Keroro.avi", 100)}
@@ -685,7 +687,7 @@ async def test_emits_download_queued() -> None:
 async def test_emits_download_completed() -> None:
     event_emitter = FakeEventEmitter()
     client = FakeDownloadClient(listed=[(_status(_A, completed=True),)])
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.record_queued(_key(_A), "062A", 100, FakeTime().wall.now())
     downloads.states[_A] = DownloadState.DOWNLOADING
     deps = _deps(
@@ -711,7 +713,7 @@ async def test_a_completion_names_the_clean_file_and_every_download_target_of_th
         ),
     )
     event_emitter = FakeEventEmitter()
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.record_queued(_key(_A), "062A", 100, FakeTime().wall.now())
     downloads.states[_A] = DownloadState.DOWNLOADING
     decision_reader = FakeDecisionReader(
@@ -739,18 +741,18 @@ async def test_a_completion_names_the_clean_file_and_every_download_target_of_th
 
 
 # ---------------------------------------------------------------------------
-# I2: per-STEP error granularity (anti-starvation): a RepositoryError in one
+# I2: per-STEP error granularity (anti-starvation): a StoreError in one
 # step (completions / new candidates) must NOT prevent the OTHER from running.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_completion_repo_failure_does_not_starve_new_candidates() -> None:
-    # _handle_completions raises RepositoryError (record_completed fails on the shared hash _A)
+    # _handle_completions raises StoreError (set_completed fails on the shared hash _A)
     # → _queue_new_candidates AND _start_unlisted run ANYWAY for _B:
-    # a step-2 repo failure does not starve step 3 (anti-starvation, I2).
+    # a step-2 store failure does not starve step 3 (anti-starvation, I2).
     client = FakeDownloadClient(listed=[(_status(_A, completed=True),)])
-    downloads = FakeDownloadStore(fail_record_completed_for={_A})  # step 2 raises RepositoryError
+    downloads = FakeTrackedDownloadStore(fail_set_completed_for={_A})  # step 2 raises StoreError
     downloads.states[_A] = DownloadState.DOWNLOADING  # completed at step 2, which raises
     downloads.sizes[_A] = 10
     decision_reader = FakeDecisionReader(
@@ -767,17 +769,17 @@ async def test_completion_repo_failure_does_not_starve_new_candidates() -> None:
     # Observable effect of step 3: _B enqueued AND its link emitted despite the step-2 failure.
     assert downloads.states[_B] is DownloadState.QUEUED
     assert _B in _started(client)
-    # _A stays DOWNLOADING (the record_completed failure left step 2 incomplete → retry next round).
+    # _A stays DOWNLOADING (the set_completed failure left step 2 incomplete → retry next round).
     assert downloads.states[_A] is DownloadState.DOWNLOADING
 
 
 @pytest.mark.asyncio
 async def test_candidate_repo_failure_does_not_starve_completions() -> None:
-    # Symmetric: _queue_new_candidates raises RepositoryError (record_queued fails) → the
+    # Symmetric: _queue_new_candidates raises StoreError (record_queued fails) → the
     # step-2 completions were recorded ANYWAY (observable effect). The failure of
     # step 3 does not starve step 2.
     client = FakeDownloadClient(listed=[(_status(_A, completed=True),)])
-    downloads = FakeDownloadStore(fail_record=True)  # step 3 raises RepositoryError
+    downloads = FakeTrackedDownloadStore(fail_record=True)  # step 3 raises StoreError
     downloads.states[_A] = DownloadState.DOWNLOADING  # _A shared → completed step 2
     downloads.sizes[_A] = 10
     decision_reader = FakeDecisionReader(
@@ -802,9 +804,9 @@ async def test_candidate_repo_failure_does_not_starve_completions() -> None:
 async def test_monitor_unreachable_aborts_subsequent_steps() -> None:
     # ClientUnreachableError at step 0 (downloads) = dead daemon → ABORT of the iteration:
     # neither the completions (step 2) nor the new candidates (step 3) must run.
-    # (Doctrine "a dead daemon fails everything", distinct from RepositoryError isolation.)
+    # (Doctrine "a dead daemon fails everything", distinct from StoreError isolation.)
     client = FakeDownloadClient(list_failures=[ClientUnreachableError("daemon down")])
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.states[_A] = DownloadState.COMPLETED  # a pending completion (step 2)
     downloads.sizes[_A] = 10
     decision_reader = FakeDecisionReader(
@@ -825,10 +827,10 @@ async def test_monitor_unreachable_aborts_subsequent_steps() -> None:
 
 @pytest.mark.asyncio
 async def test_monitor_repo_failure_is_isolated_and_does_not_starve_candidates() -> None:
-    # _reconcile_states raises RepositoryError (set_state fails during reconciliation) → step 1 is
+    # _reconcile_states raises StoreError (set_state fails during reconciliation) → step 1 is
     # ISOLATED (log + continue), it does NOT starve step 3: _B is enqueued anyway.
     client = FakeDownloadClient(listed=[(_status(_A, done=10, total=10),)])
-    downloads = FakeDownloadStore(fail_set_state_for={_A})
+    downloads = FakeTrackedDownloadStore(fail_set_state_for={_A})
     downloads.states[_A] = DownloadState.QUEUED  # reconciled → set_state(DOWNLOADING) will raise
     decision_reader = FakeDecisionReader(candidates=(_candidate(_B, "062A"),))
     observation_reader = FakeObservationReader(observations={_B: _observation(_B, "b.avi", 100)})
@@ -846,12 +848,12 @@ async def test_monitor_repo_failure_is_isolated_and_does_not_starve_candidates()
 
 @pytest.mark.asyncio
 async def test_start_repo_failure_is_tolerated_and_does_not_raise() -> None:
-    # _start_unlisted raises RepositoryError (set_state fails while marking a rejected start) →
+    # _start_unlisted raises StoreError (set_state fails while marking a rejected start) →
     # tolerated (log), run_download_cycle does not raise. Contract "never raises".
     # start rejected → _start_unlisted tries set_state(FAILED), which raises
-    # RepositoryError.
+    # StoreError.
     client = FakeDownloadClient(start_failures=[DownloadRejectedError("rejected")])
-    downloads = FakeDownloadStore(fail_set_state_for={_A})
+    downloads = FakeTrackedDownloadStore(fail_set_state_for={_A})
     decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
     observation_reader = FakeObservationReader(observations={_A: _observation(_A, "x", 1)})
     deps = _deps(
@@ -860,7 +862,7 @@ async def test_start_repo_failure_is_tolerated_and_does_not_raise() -> None:
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await run_download_cycle(deps, _NODE)  # does NOT raise (step-4 RepositoryError tolerated)
+    await run_download_cycle(deps, _NODE)  # does NOT raise (step-4 StoreError tolerated)
 
 
 # ---------------------------------------------------------------------------
@@ -870,7 +872,7 @@ async def test_start_repo_failure_is_tolerated_and_does_not_raise() -> None:
 
 @pytest.mark.asyncio
 async def test_shared_file_for_tracked_hash_is_completed() -> None:
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.states[_A] = DownloadState.DOWNLOADING
     client = FakeDownloadClient(listed=[(_status(_A, completed=True),)])
     deps = _deps(
@@ -883,7 +885,7 @@ async def test_shared_file_for_tracked_hash_is_completed() -> None:
 
 @pytest.mark.asyncio
 async def test_shared_file_for_untracked_hash_is_ignored() -> None:
-    downloads = FakeDownloadStore()  # _A not tracked by the crawler
+    downloads = FakeTrackedDownloadStore()  # _A not tracked by the crawler
     client = FakeDownloadClient(listed=[(_status(_A, completed=True),)])
     deps = _deps(
         client=client,
@@ -897,7 +899,7 @@ async def test_shared_file_for_untracked_hash_is_ignored() -> None:
 async def test_already_completed_shared_hash_is_not_recompleted() -> None:
     # A completed file stays in amuled's shared list forever. Without the terminal skip, every
     # cycle would re-stamp it and re-fire the community notification.
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.states[_A] = DownloadState.COMPLETED
     event_emitter = FakeEventEmitter()
     client = FakeDownloadClient(listed=[(_status(_A, completed=True),)])
@@ -915,7 +917,7 @@ async def test_already_completed_shared_hash_is_not_recompleted() -> None:
 async def test_failed_shared_hash_is_resurrected_and_notified() -> None:
     # The TTL can condemn a download that had in fact completed and been moved out of
     # IncomingDir. Finding it shared afterwards is amuled saying it exists: complete + notify.
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.states[_A] = DownloadState.FAILED
     event_emitter = FakeEventEmitter()
     client = FakeDownloadClient(listed=[(_status(_A, completed=True),)])
@@ -931,7 +933,7 @@ async def test_failed_shared_hash_is_resurrected_and_notified() -> None:
 
 @pytest.mark.asyncio
 async def test_monitor_moves_queued_to_downloading_not_completed() -> None:
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.states[_A] = DownloadState.QUEUED
     client = FakeDownloadClient(listed=[(_status(_A, done=10, total=10),)])
     deps = _deps(
@@ -948,7 +950,7 @@ async def test_marks_seen_every_listed_download_completed_ones_included() -> Non
     client = FakeDownloadClient(
         listed=[(_status(_A, done=3, total=10), _status(_B, completed=True))]
     )
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.states[_A] = DownloadState.DOWNLOADING
     downloads.states[_B] = DownloadState.COMPLETED
     deps = _deps(client=client, downloads=downloads)
@@ -960,7 +962,7 @@ async def test_marks_seen_every_listed_download_completed_ones_included() -> Non
 async def test_a_download_amuled_no_longer_knows_becomes_failed() -> None:
     client, fake_time = FakeDownloadClient(listed=[(_status(_A),), ()]), FakeTime()
     logger = FakeLogger()
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.record_queued(_key(_A), "062A", 1, fake_time.wall.now())
     observation_reader = FakeObservationReader(observations={_A: _observation(_A, "a", 1)})
     deps = _deps(
@@ -988,7 +990,7 @@ async def test_each_download_write_carries_the_instant_read_right_before_it() ->
     wall_clock = TickingWallClock(FakeTime())
     start = wall_clock.now()
     client = FakeDownloadClient(listed=[(_status(_A, completed=True),)])
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.states[_A] = DownloadState.DOWNLOADING
     decision_reader = FakeDecisionReader(candidates=(_candidate(_B, "062A"),))
     observation_reader = FakeObservationReader(observations={_B: _observation(_B, "b.avi", 100)})
@@ -1010,7 +1012,7 @@ async def test_each_download_write_carries_the_instant_read_right_before_it() ->
 async def test_a_download_the_client_forgot_is_started_once_per_round_until_listed() -> None:
     # slskd drops every transfer on restart (stage 2, D13): absence restarts, a listing stops it.
     client = FakeDownloadClient(listed=[(), (), (_status(_A, done=1, total=9),), ()])
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.states[_A] = DownloadState.DOWNLOADING
     observation_reader = FakeObservationReader(observations={_A: _observation(_A, "a.avi", 9)})
     deps = _deps(client=client, downloads=downloads, observation_reader=observation_reader)
@@ -1026,7 +1028,7 @@ async def test_a_download_the_client_forgot_is_started_once_per_round_until_list
 @pytest.mark.asyncio
 async def test_a_failed_or_completed_download_the_client_forgot_is_not_started() -> None:
     client = FakeDownloadClient()
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.states[_A] = DownloadState.FAILED
     downloads.states[_B] = DownloadState.COMPLETED
     observation_reader = FakeObservationReader(
@@ -1041,7 +1043,7 @@ async def test_a_failed_or_completed_download_the_client_forgot_is_not_started()
 @pytest.mark.asyncio
 async def test_presence_repo_failure_is_absorbed_and_candidates_still_run() -> None:
     client = FakeDownloadClient()
-    downloads = FakeDownloadStore(fail_mark_seen=True)
+    downloads = FakeTrackedDownloadStore(fail_set_seen=True)
     decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
     observation_reader = FakeObservationReader(observations={_A: _observation(_A, "x", 100)})
     deps = _deps(
@@ -1059,7 +1061,7 @@ async def test_an_unmeasurable_output_directory_admits_nothing_and_does_not_rais
     # A missing output mount must not take the crawler down: it also catalogues, which is the
     # primary mission. Refusing every candidate is the conservative degradation.
     client = FakeDownloadClient()
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
     observation_reader = FakeObservationReader(observations={_A: _observation(_A, "x", 100)})
     event_emitter = FakeEventEmitter()
@@ -1082,7 +1084,7 @@ async def test_each_cycle_reports_the_measured_free_space() -> None:
     event_emitter = FakeEventEmitter()
     deps = _deps(
         client=FakeDownloadClient(),
-        downloads=FakeDownloadStore(),
+        downloads=FakeTrackedDownloadStore(),
         free=4_242,
         event_emitter=event_emitter,
     )
@@ -1096,7 +1098,7 @@ async def test_low_disk_warns_once_per_crossing_and_rearms_at_the_floor() -> Non
     free_space_meter = FakeFreeSpaceMeter(500)
     deps = _deps(
         client=FakeDownloadClient(),
-        downloads=FakeDownloadStore(),
+        downloads=FakeTrackedDownloadStore(),
         min_free=600,
         event_emitter=event_emitter,
     )
@@ -1120,7 +1122,7 @@ async def test_a_failure_the_client_reports_stays_failed_round_after_round() -> 
     # flap it back to downloading each round.
     erroneous = _status(_A, done=3, total=10, failure=FailureReason.ERROR)
     client = FakeDownloadClient(listed=[(erroneous,)] * 3)
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.states[_A] = DownloadState.DOWNLOADING
     deps = _deps(client=client, downloads=downloads)
     rounds = []
@@ -1136,7 +1138,7 @@ async def test_waiting_for_sources_is_not_failing_for_a_simulated_year(tmp_path:
     # The real TTL of one day, a month between rounds, the client listing the download each one.
     fake_time = FakeTime()
     connection = open_local(tmp_path / "local.db")
-    downloads = SqliteDownloadRepository(connection)
+    downloads = SqliteTrackedDownloadStore(connection)
     downloads.record_queued(_key(_A), "062A", 10, fake_time.wall.now())
     waiting = _status(_A, total=10, waiting=WaitingReason.NO_SOURCE)
     client = FakeDownloadClient(listed=[(waiting,)] * 12)
@@ -1155,15 +1157,15 @@ async def test_waiting_for_sources_is_not_failing_for_a_simulated_year(tmp_path:
 
 
 @pytest.fixture
-def real_downloads(tmp_path: Path) -> Iterator[SqliteDownloadRepository]:
+def real_downloads(tmp_path: Path) -> Iterator[SqliteTrackedDownloadStore]:
     connection = open_local(tmp_path / "local.db")
-    yield SqliteDownloadRepository(connection)
+    yield SqliteTrackedDownloadStore(connection)
     connection.close()
 
 
 @pytest.mark.asyncio
 async def test_a_wall_clock_step_forward_fails_no_download_absent_from_one_poll(
-    real_downloads: SqliteDownloadRepository,
+    real_downloads: SqliteTrackedDownloadStore,
 ) -> None:
     fake_time = FakeTime()
     real_downloads.record_queued(_key(_A), "062A", 10, fake_time.wall.now())
@@ -1181,7 +1183,7 @@ async def test_a_wall_clock_step_forward_fails_no_download_absent_from_one_poll(
 
 @pytest.mark.asyncio
 async def test_a_last_seen_at_in_the_future_waits_lost_after_no_more(
-    real_downloads: SqliteDownloadRepository,
+    real_downloads: SqliteTrackedDownloadStore,
 ) -> None:
     # Stamped before the wall clock stepped back an hour, while the node was down.
     fake_time = FakeTime()
@@ -1203,7 +1205,7 @@ async def test_a_last_seen_at_in_the_future_waits_lost_after_no_more(
 
 @pytest.mark.asyncio
 async def test_a_download_last_seen_two_days_ago_fails_at_the_first_cycle(
-    real_downloads: SqliteDownloadRepository,
+    real_downloads: SqliteTrackedDownloadStore,
 ) -> None:
     fake_time = FakeTime()
     real_downloads.record_queued(_key(_A), "062A", 10, fake_time.wall.now() - timedelta(days=2))
@@ -1219,7 +1221,7 @@ async def test_a_download_last_seen_two_days_ago_fails_at_the_first_cycle(
 
 @pytest.mark.asyncio
 async def test_a_download_the_node_queued_is_lost_after_lost_after_of_monotonic_time(
-    real_downloads: SqliteDownloadRepository,
+    real_downloads: SqliteTrackedDownloadStore,
 ) -> None:
     fake_time = FakeTime()
     deps = _deps(
@@ -1261,7 +1263,7 @@ async def test_a_duplicate_queuing_keeps_the_deadline_its_last_seen_at_leaves() 
 @pytest.mark.asyncio
 async def test_a_row_the_operator_deleted_leaves_the_loss_deadlines() -> None:
     fake_time = FakeTime()
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.record_queued(_key(_A), "062A", 10, fake_time.wall.now())
     deps = _deps(
         client=FakeDownloadClient(listed=[(_status(_A),), ()]),
@@ -1291,7 +1293,7 @@ async def test_the_sources_of_each_tracked_download_the_client_lists_are_recorde
     listed = (_status(_A), _status(_C), _status(_B))
     client = FakeDownloadClient(listed=[listed])
     source_client = FakeSourceClient(readings=readings, fake_time=fake_time)
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.states[_A] = DownloadState.DOWNLOADING
     downloads.states[_B] = DownloadState.QUEUED
     sources = FakeSourcePointStore()
@@ -1313,7 +1315,7 @@ async def test_the_sources_of_each_tracked_download_the_client_lists_are_recorde
 @pytest.mark.asyncio
 async def test_a_download_the_client_reports_completed_is_not_read() -> None:
     client = FakeDownloadClient(listed=[(_status(_A, completed=True), _status(_B))])
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.states[_A] = DownloadState.DOWNLOADING
     downloads.states[_B] = DownloadState.DOWNLOADING
     source_client = FakeSourceClient()
@@ -1331,7 +1333,7 @@ async def test_a_daemon_unavailable_while_reading_sources_ends_the_round_after_t
     # The sources step only observes: it runs last, so its failure never skips a start.
     client = FakeDownloadClient(listed=[(_status(_A), _status(_B))])
     source_client = FakeSourceClient(source_failures=[failure])
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     for ed2k_hash in (_A, _B):
         downloads.states[ed2k_hash] = DownloadState.DOWNLOADING
     downloads.states[_C] = DownloadState.QUEUED
@@ -1355,7 +1357,7 @@ async def test_a_daemon_unavailable_while_reading_sources_ends_the_round_after_t
 @pytest.mark.asyncio
 async def test_a_repo_failure_on_one_download_skips_its_sources_only() -> None:
     client = FakeDownloadClient(listed=[(_status(_A), _status(_B))])
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.states[_A] = DownloadState.DOWNLOADING
     downloads.states[_B] = DownloadState.DOWNLOADING
     sources = FakeSourcePointStore(fail_for={_A})
@@ -1370,7 +1372,7 @@ async def test_a_repo_failure_on_one_download_skips_its_sources_only() -> None:
 async def test_a_repo_failure_reading_the_tracked_downloads_reads_no_source() -> None:
     client = FakeDownloadClient(listed=[(_status(_A),)])
     source_client = FakeSourceClient()
-    downloads = FakeDownloadStore(fail_active_states=True)
+    downloads = FakeTrackedDownloadStore(fail_tracked_states=True)
     deps = _deps(client=client, source_client=source_client, downloads=downloads)
     await run_download_cycle(deps, _NODE)  # does not raise
     assert source_client.source_reads == []
@@ -1381,7 +1383,7 @@ async def test_a_daemon_unreachable_at_the_start_reads_no_source() -> None:
     client = FakeDownloadClient(
         listed=[(_status(_A),)], start_failures=[ClientUnreachableError("down")]
     )
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.states[_A] = DownloadState.DOWNLOADING
     downloads.states[_C] = DownloadState.QUEUED
     observation_reader = FakeObservationReader(observations={_C: _observation(_C, "c.avi", 1)})
@@ -1463,8 +1465,8 @@ async def test_a_wall_clock_step_back_delays_no_sources_read() -> None:
 _PEER, _OTHER_PEER = SourceKey(Network.ED2K, "1f2e3d4c" * 4), SourceKey(Network.ED2K, "c" * 32)
 
 
-def _tracking(*hashes: str) -> FakeDownloadStore:
-    downloads = FakeDownloadStore()
+def _tracking(*hashes: str) -> FakeTrackedDownloadStore:
+    downloads = FakeTrackedDownloadStore()
     for ed2k_hash in hashes:
         downloads.states[ed2k_hash] = DownloadState.DOWNLOADING
     return downloads
@@ -1515,7 +1517,7 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
         _B: (RecordedReading(_PEER, "AnimuseeFMR", SourceRole.SENDING),),
     }
     sources = FakeSourcePointStore(kept=kept, history=history)
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     downloads.record_queued(_key(_B), "063A", 100, start)  # queued for it, no decision left
     downloads.states.update({_A: DownloadState.DOWNLOADING, _B: DownloadState.DOWNLOADING})
     event_emitter = FakeEventEmitter()
@@ -1641,7 +1643,7 @@ async def test_the_first_recording_round_is_a_baseline(
         client=client,
         source_client=FakeSourceClient(readings=readings, fake_time=fake_time),
         downloads=_tracking(_A, _B),
-        sources=SqliteSourceRepository(catalog, timedelta(seconds=30)),
+        sources=SqliteSourcePointStore(catalog, timedelta(seconds=30)),
         event_emitter=event_emitter,
         fake_time=fake_time,
     )
@@ -1682,7 +1684,7 @@ def _real_deps(
     fake_time: FakeTime,
 ) -> DownloadDeps:
     """``_A`` tracked, its sources written to a real catalog."""
-    sources = SqliteSourceRepository(catalog, timedelta(seconds=30))
+    sources = SqliteSourcePointStore(catalog, timedelta(seconds=30))
     return _deps(
         client=client,
         source_client=source_client,

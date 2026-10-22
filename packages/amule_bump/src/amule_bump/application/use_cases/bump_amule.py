@@ -4,9 +4,9 @@ from pathlib import PurePath
 
 from amule_bump.application.ports.driven.dockerfile_reader import DockerfileReader
 from amule_bump.application.ports.driven.dockerfile_writer import DockerfileWriter
-from amule_bump.application.ports.driven.pull_request_body_writer import PullRequestBodyWriter
-from amule_bump.application.ports.driven.repo_reader import RepoReader
-from amule_bump.application.ports.driven.step_output_writer import StepOutputWriter
+from amule_bump.application.ports.driven.pull_request_body_writer import PullRequestDrafter
+from amule_bump.application.ports.driven.repo_reader import UpstreamClient
+from amule_bump.application.ports.driven.step_output_writer import BumpAnnouncer
 from amule_bump.application.ports.driving.amule_bumper import (
     AmuleBump,
     AmuleBumper,
@@ -24,18 +24,18 @@ class BumpAmule(AmuleBumper):
     def __init__(
         self,
         *,
-        repo_reader: RepoReader,
+        upstream_client: UpstreamClient,
         dockerfile_reader: DockerfileReader,
         dockerfile_writer: DockerfileWriter,
-        pull_request_body_writer: PullRequestBodyWriter,
-        step_output_writer: StepOutputWriter,
+        pull_request_drafter: PullRequestDrafter,
+        bump_announcer: BumpAnnouncer,
         changelog_width_characters: int,
     ) -> None:
-        self._repo_reader = repo_reader
+        self._upstream_client = upstream_client
         self._dockerfile_reader = dockerfile_reader
         self._dockerfile_writer = dockerfile_writer
-        self._pull_request_body_writer = pull_request_body_writer
-        self._step_output_writer = step_output_writer
+        self._pull_request_drafter = pull_request_drafter
+        self._bump_announcer = bump_announcer
         self._changelog_width_characters = changelog_width_characters
 
     def bump_amule(
@@ -43,20 +43,20 @@ class BumpAmule(AmuleBumper):
     ) -> AmuleBump | PinIsLatest | PinAheadOfLatest:
         dockerfile_text = self._dockerfile_reader.read_dockerfile(dockerfile_path)
         old = read_pin(dockerfile_text)
-        latest = latest_release_tag(self._repo_reader)
+        latest = latest_release_tag(self._upstream_client)
         if latest == old.version:
             return PinIsLatest(old.version)
         if not is_newer(latest, old.version):
             return PinAheadOfLatest(pinned_version=old.version, latest_version=latest)
 
-        new = Pin(latest, peeled_commit(self._repo_reader, latest))
+        new = Pin(latest, peeled_commit(self._upstream_client, latest))
         body = build_pull_request_body(
-            self._repo_reader, old, new, self._changelog_width_characters
+            self._upstream_client, old, new, self._changelog_width_characters
         )
         if not dry_run:
-            self._dockerfile_writer.write_dockerfile(
+            self._dockerfile_writer.set_dockerfile(
                 dockerfile_path, rewrite_pin(dockerfile_text, new)
             )
-            self._pull_request_body_writer.write_pull_request_body(body_path, body)
-            self._step_output_writer.write_step_outputs(new.version, body_path)
+            self._pull_request_drafter.draft_pull_request_body(body_path, body)
+            self._bump_announcer.announce_bump(new.version, body_path)
         return AmuleBump(new, body)

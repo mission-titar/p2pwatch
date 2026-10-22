@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 
-class ForwardedPortReader(ABC):
+class ForwardedPortClient(ABC):
     """Reads the port the VPN forwards to the container."""
 
     @abstractmethod

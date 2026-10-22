@@ -11,7 +11,7 @@ from p2pwatch.application.steps.run_download_cycle import (
 from tests.fakes.adapters.driven.blocking_monotonic_clock import BlockingMonotonicClock
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
-from tests.fakes.adapters.driven.fake_download_store import FakeDownloadStore
+from tests.fakes.adapters.driven.fake_download_store import FakeTrackedDownloadStore
 from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
 from tests.fakes.adapters.driven.fake_free_space_meter import FakeFreeSpaceMeter
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
@@ -32,14 +32,14 @@ def _loop_deps(
     poll_interval: float = 30.0,
     fake_time: FakeTime | None = None,
 ) -> DownloadLoopDeps:
-    downloads = FakeDownloadStore()
+    downloads = FakeTrackedDownloadStore()
     sources = FakeSourcePointStore()
     fake_time = fake_time or FakeTime()
     return DownloadLoopDeps(
         download_client=FakeDownloadClient(),
         source_client=FakeSourceClient(),
-        download_writer=downloads,
-        download_reader=downloads,
+        tracked_download_writer=downloads,
+        tracked_download_reader=downloads,
         source_point_writer=sources,
         source_point_reader=sources,
         decision_reader=FakeDecisionReader(),

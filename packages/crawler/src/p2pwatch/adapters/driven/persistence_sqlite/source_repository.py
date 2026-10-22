@@ -1,4 +1,4 @@
-"""``SqliteSourceRepository``: each node's source points in the catalog (source points, D4, D5)."""
+"""``SqliteSourcePointStore``: each node's source points in the catalog (source points, D4, D5)."""
 
 import hashlib
 import json
@@ -90,7 +90,7 @@ SELECT EXISTS (
 """
 
 
-class SqliteSourceRepository(SourcePointWriter, SourcePointReader):
+class SqliteSourcePointStore(SourcePointWriter, SourcePointReader):
     """SQLite implementation of the source points' ports.
 
     ``time_between_reads`` is what the carried role's max age assumes (D3)."""

@@ -2,11 +2,11 @@ import http.client
 import json
 from urllib.request import OpenerDirector
 
-from p2pwatch_amule.application.ports.driven.forwarded_port_reader import ForwardedPortReader
+from p2pwatch_amule.application.ports.driven.forwarded_port_reader import ForwardedPortClient
 from p2pwatch_amule.application.ports.driven.logger import Logger
 
 
-class GluetunForwardedPortReader(ForwardedPortReader):
+class GluetunForwardedPortClient(ForwardedPortClient):
     """``GET <control_url>/v1/portforward`` → ``{"port": N}``, by ``url_opener``; None unless N is
     a TCP port."""
 

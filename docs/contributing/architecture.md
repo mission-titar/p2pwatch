@@ -270,7 +270,7 @@ Points clés en chemin :
   trouver quelque chose là, maintenant ». Une boucle lit le statut de chaque client toutes les
   minutes, par canal (`connected`, `connectable`), et alerte sur un état dégradé qui dure : 5 min
   pour un canal, 2 min pour l'API injoignable, puis envoie son rétablissement.
-- **Résilience** : une `RepositoryError` à l'écriture du backoff est journalisée, et l'écriture
+- **Résilience** : une `StoreError` à l'écriture du backoff est journalisée, et l'écriture
   retentée après la recherche suivante.
 
 ### 5.1 Une tâche de recherche, de bout en bout

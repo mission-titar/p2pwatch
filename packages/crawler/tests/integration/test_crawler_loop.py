@@ -68,7 +68,7 @@ async def test_real_loop_runs_one_search_and_stops(amuled: ApiEndpoint, tmp_path
     default_sigterm = signal.getsignal(signal.SIGTERM)
     try:
         run = asyncio.create_task(
-            crawler_composition.crawl(
+            crawler_composition.run_crawler(
                 config_path=config_path,
                 targets_path=_DEPLOY / "targets.yml",
                 matcher_path=_DEPLOY / "matcher.yml",

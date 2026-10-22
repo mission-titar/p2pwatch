@@ -9,11 +9,11 @@ from tests.support.catalog_rows import insert_decision, insert_file, insert_obse
 
 def seed(db: Path) -> None:
     """Populate the database with a file, an observation, a decision."""
-    with closing(sqlite3.connect(db)) as conn, conn:
-        insert_file(conn, "a" * 32)
-        insert_observation(conn, "a" * 32, "keroro_062.avi", source_count=5)
+    with closing(sqlite3.connect(db)) as connection, connection:
+        insert_file(connection, "a" * 32)
+        insert_observation(connection, "a" * 32, "keroro_062.avi", source_count=5)
         insert_decision(
-            conn,
+            connection,
             "a" * 32,
             "062A",
             "download",
@@ -27,10 +27,10 @@ def seed_whole_episode(db: Path) -> None:
     current decisions at tier ``download``): the core multi-target fixture (spec §9).
     Standalone: never combine with ``seed`` (same hash)."""
     h = "a" * 32
-    with closing(sqlite3.connect(db)) as conn, conn:
-        insert_file(conn, h, 170_000_000)
+    with closing(sqlite3.connect(db)) as connection, connection:
+        insert_file(connection, h, 170_000_000)
         insert_observation(
-            conn,
+            connection,
             h,
             "keroro_072.avi",
             observed_at="2026-07-01T10:00:00.000000+00:00",
@@ -39,7 +39,7 @@ def seed_whole_episode(db: Path) -> None:
         )
         for tid in ("072A", "072B"):
             insert_decision(
-                conn,
+                connection,
                 h,
                 tid,
                 "download",
@@ -54,19 +54,19 @@ def seed_retracted(db: Path) -> None:
     (the new per-target retraction model, spec §6). Its latest 063A row is a retraction, so
     it must be treated as unmatched everywhere."""
     h = "c" * 32
-    with closing(sqlite3.connect(db)) as conn, conn:
-        insert_file(conn, h, 300)
+    with closing(sqlite3.connect(db)) as connection, connection:
+        insert_file(connection, h, 300)
         insert_observation(
-            conn,
+            connection,
             h,
             "keroro_063.avi",
             observed_at="2026-06-22T09:00:00.000000+00:00",
             size_bytes=300,
             source_count=2,
         )
-        insert_decision(conn, h, "063A", "download", rule_name="id_segment_exact")
+        insert_decision(connection, h, "063A", "download", rule_name="id_segment_exact")
         insert_decision(
-            conn,
+            connection,
             h,
             "063A",
             "retracted",

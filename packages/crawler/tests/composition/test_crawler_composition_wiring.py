@@ -21,11 +21,11 @@ import yaml
 
 from p2pwatch.adapters.driven.config.crawler_config import AMULE_CLIENT_NAME
 from p2pwatch.adapters.driven.persistence_sqlite.backoff_state_repository import (
-    SqliteBackoffStateRepository,
+    SqliteBackoffStateStore,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
 from p2pwatch.adapters.driven.persistence_sqlite.download_repository import (
-    SqliteDownloadRepository,
+    SqliteTrackedDownloadStore,
 )
 from p2pwatch.adapters.driven.wall_clock_system import SystemWallClock
 from p2pwatch.composition.crawler_composition import CrawlerComposition
@@ -110,7 +110,7 @@ def _crawl(
         root_logger=root_logger or logging.Logger("root"),
     )
     return asyncio.create_task(
-        crawler_composition.crawl(
+        crawler_composition.run_crawler(
             config_path=config_path, targets_path=targets_path, matcher_path=_MATCHER
         )
     )
@@ -279,7 +279,7 @@ async def test_the_download_loop_records_a_tracked_downloads_sources_under_the_n
     insert_file(catalog, _HASH)
     catalog.close()
     local = open_local(tmp_path / "local.db")
-    SqliteDownloadRepository(local).record_queued(
+    SqliteTrackedDownloadStore(local).record_queued(
         FileKey(Network.ED2K, _HASH), "062A", 10, SystemWallClock().now()
     )
     local.close()
@@ -425,7 +425,7 @@ async def test_a_backoff_the_previous_run_saved_holds_the_ed2k_search(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     local = open_local(tmp_path / "local.db")
-    SqliteBackoffStateRepository(local).save_backoff_states(
+    SqliteBackoffStateStore(local).set_backoff_states(
         {
             BackoffKey(AMULE_CLIENT_NAME, "ed2k"): BackoffState(
                 1, SystemWallClock().now(), timedelta(hours=1)

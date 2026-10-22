@@ -2,5 +2,5 @@
 use it: the SQLite adapter's ``PersistenceError`` inherits it, the application catches it."""
 
 
-class RepositoryError(Exception):
+class StoreError(Exception):
     """Persistence failure reported by a repository (the adapter reports, it does not decide)."""

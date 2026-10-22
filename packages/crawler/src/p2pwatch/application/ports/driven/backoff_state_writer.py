@@ -10,5 +10,5 @@ class BackoffStateWriter(ABC):
     """Saves the search backoff's states."""
 
     @abstractmethod
-    def save_backoff_states(self, backoff_state_by_key: dict[BackoffKey, BackoffState]) -> None:
+    def set_backoff_states(self, backoff_state_by_key: dict[BackoffKey, BackoffState]) -> None:
         """Replaces every state saved before with ``backoff_state_by_key``."""

@@ -1,8 +1,8 @@
-from amule_bump.application.ports.driven.repo_reader import RepoReader
+from amule_bump.application.ports.driven.repo_reader import UpstreamClient
 from amule_bump.domain.git_object import GitObject
 
 
-class FakeRepoReader(RepoReader):
+class FakeUpstreamClient(UpstreamClient):
     """An upstream repo served from dicts; a file absent from them reads as empty."""
 
     def __init__(

@@ -15,7 +15,7 @@ class FakeAmuleConfStore(AmuleConfReader, AmuleConfWriter):
         self.actions.append("read amule.conf")
         return self.conf
 
-    def write_amule_conf(self, conf: str, uid: int, gid: int) -> None:
+    def set_amule_conf(self, conf: str, uid: int, gid: int) -> None:
         if self.write_error is not None:
             raise self.write_error
         self.conf = conf

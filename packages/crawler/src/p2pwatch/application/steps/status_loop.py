@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Literal
 
-from p2pwatch.application.ports.driven.client_status_writer import ClientStatusWriter
+from p2pwatch.application.ports.driven.client_status_writer import StatusReadingWriter
 from p2pwatch.application.ports.driven.event_emitter import EventEmitter
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.status_client import StatusClient
@@ -41,7 +41,7 @@ class StatusLoopDeps:
     monotonic_clock: MonotonicClock
     event_emitter: EventEmitter
     shutdown: asyncio.Event
-    client_status_writer: ClientStatusWriter
+    status_reading_writer: StatusReadingWriter
 
 
 class _AlertTimer:
@@ -71,7 +71,7 @@ class _AlertTimer:
 
 def _publish(deps: StatusLoopDeps, status: ClientStatus | None) -> None:
     reading = StatusReading(deps.wall_clock.now(), status)
-    deps.client_status_writer.publish(deps.client_name, reading, deps.monotonic_clock.now())
+    deps.status_reading_writer.set_reading(deps.client_name, reading, deps.monotonic_clock.now())
 
 
 async def status_loop(deps: StatusLoopDeps, node_id: str) -> None:

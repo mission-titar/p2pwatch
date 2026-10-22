@@ -3,7 +3,7 @@ restarting amuled around the write."""
 
 from p2pwatch_amule.application.ports.driven.amule_conf_reader import AmuleConfReader
 from p2pwatch_amule.application.ports.driven.amule_conf_writer import AmuleConfWriter
-from p2pwatch_amule.application.ports.driven.forwarded_port_reader import ForwardedPortReader
+from p2pwatch_amule.application.ports.driven.forwarded_port_reader import ForwardedPortClient
 from p2pwatch_amule.application.ports.driven.logger import Logger
 from p2pwatch_amule.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch_amule.application.ports.driven.service_supervisor import ServiceSupervisor
@@ -21,7 +21,7 @@ class PortSyncLifecycle:
         self,
         *,
         port_sync_settings: PortSyncSettings,
-        forwarded_port_reader: ForwardedPortReader,
+        forwarded_port_client: ForwardedPortClient,
         amule_conf_reader: AmuleConfReader,
         amule_conf_writer: AmuleConfWriter,
         service_supervisor: ServiceSupervisor,
@@ -29,7 +29,7 @@ class PortSyncLifecycle:
         logger: Logger,
     ) -> None:
         self._port_sync_settings = port_sync_settings
-        self._forwarded_port_reader = forwarded_port_reader
+        self._forwarded_port_client = forwarded_port_client
         self._amule_conf_reader = amule_conf_reader
         self._amule_conf_writer = amule_conf_writer
         self._service_supervisor = service_supervisor
@@ -50,7 +50,7 @@ class PortSyncLifecycle:
         self, latest_restart: MonotonicInstant | None, now: MonotonicInstant
     ) -> MonotonicInstant | None:
         """Run one round; return amuled's latest restart, `now` if this round restarted it."""
-        forwarded_port = self._forwarded_port_reader.read_forwarded_port()
+        forwarded_port = self._forwarded_port_client.read_forwarded_port()
         if forwarded_port is None:
             return latest_restart
         try:
@@ -76,7 +76,7 @@ class PortSyncLifecycle:
         try:
             # amuled flushes its config when it exits: a write while it runs could be overwritten.
             if self._service_supervisor.stop_amuled():
-                self._amule_conf_writer.write_amule_conf(
+                self._amule_conf_writer.set_amule_conf(
                     with_listen_port(self._read_existing_amule_conf(), forwarded_port),
                     self._port_sync_settings.puid,
                     self._port_sync_settings.pgid,

@@ -9,4 +9,4 @@ class NodeIdWriter(ABC):
 
     @abstractmethod
     def record_node_id(self, node_id: str, created_at: datetime) -> None:
-        """Stores ``node_id`` with its creation; a second one is refused (``RepositoryError``)."""
+        """Stores ``node_id`` with its creation; a second one is refused (``StoreError``)."""
