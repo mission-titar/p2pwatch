@@ -73,7 +73,7 @@ d'installation d'une **App GitHub**, limité à ce dépôt et de courte durée.
 ## La liste de vérifications
 
 La PR la porte, en anglais, à cocher avant de fusionner (source :
-`packages/amule_bump/src/amule_bump/application/use_cases/body.py`) :
+`packages/amule_bump/src/amule_bump/domain/pull_request_body.py`) :
 
 - [ ] Read the changelog: anything that changes the daemon's defaults or the network behaviour?
 - [ ] `options.cmake` diff: a new switch to set explicitly in the Dockerfile's CMake options?

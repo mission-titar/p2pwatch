@@ -19,18 +19,28 @@ from tests.fakes.adapters.driven.fake_upstream_client import FakeUpstreamClient
 
 OLD_COMMIT = "02db0d7faecfc377694ff6242bc23346185990ed"
 NEW_COMMIT = "909d304d993ee07df6c6f6acf501a6d791d53666"
+TAG_OBJECT = "6ccbfdf785390c25c8b01652684f5b06fb18e034"
+NEW_COMMIT_OBJECT = GitObject(GitObjectKind.COMMIT, NEW_COMMIT)
 DOCKERFILE = f"FROM debian\nARG AMULE_VERSION=3.0.1\nARG AMULE_COMMIT={OLD_COMMIT}\n"
 DOCKERFILE_PATH = PurePath("/repo/packages/amule/Dockerfile")
 BODY_PATH = PurePath("/tmp/body.md")
 CHANGELOG_LINE = "- amuleapi, " + "word " * 10
 
 
-def upstream(latest: str) -> FakeUpstreamClient:
+def upstream(
+    latest: str,
+    *,
+    tag_target: GitObject = NEW_COMMIT_OBJECT,
+    annotated_tag_targets_by_object_id: dict[str, GitObject] | None = None,
+    watched_texts_by_ref_and_path: dict[tuple[str, str], str] | None = None,
+) -> FakeUpstreamClient:
     return FakeUpstreamClient(
         latest_release_tag=latest,
-        tag_targets_by_tag={latest: GitObject(GitObjectKind.COMMIT, NEW_COMMIT)},
+        tag_targets_by_tag={latest: tag_target},
+        annotated_tag_targets_by_object_id=annotated_tag_targets_by_object_id,
         file_texts_by_ref_and_path={
-            ("3.1.0", "docs/CHANGELOG.md"): f"## Version 3.1.0 - REST\n{CHANGELOG_LINE}\n"
+            ("3.1.0", "docs/CHANGELOG.md"): f"## Version 3.1.0 - REST\n{CHANGELOG_LINE}\n",
+            **(watched_texts_by_ref_and_path or {}),
         },
     )
 
@@ -103,6 +113,47 @@ def test_the_changelog_wraps_at_the_width_the_bump_is_given() -> None:
     amule_bump = Bump().run(upstream("3.1.0"), dry_run=False)
     assert isinstance(amule_bump, AmuleBump)
     assert "- amuleapi, word word word\nword word word word word word\nword\n" in amule_bump.body
+
+
+def test_the_body_carries_each_watched_file_s_diff_between_the_two_tags() -> None:
+    upstream_client = upstream(
+        "3.1.0",
+        watched_texts_by_ref_and_path={
+            ("3.0.1", "cmake/options.cmake"): "option(A)\n",
+            ("3.1.0", "cmake/options.cmake"): "option(B)\n",
+        },
+    )
+    amule_bump = Bump().run(upstream_client, dry_run=True)
+    assert isinstance(amule_bump, AmuleBump)
+    assert "-option(A)\n+option(B)\n" in amule_bump.body
+
+
+def test_an_annotated_tag_is_peeled_to_its_commit() -> None:
+    upstream_client = upstream(
+        "3.1.0",
+        tag_target=GitObject(GitObjectKind.TAG, TAG_OBJECT),
+        annotated_tag_targets_by_object_id={
+            TAG_OBJECT: GitObject(GitObjectKind.COMMIT, NEW_COMMIT)
+        },
+    )
+    amule_bump = Bump().run(upstream_client, dry_run=True)
+    assert isinstance(amule_bump, AmuleBump)
+    assert amule_bump.new_pin == Pin("3.1.0", NEW_COMMIT)
+
+
+def test_a_tag_naming_no_commit_raises_and_writes_nothing() -> None:
+    upstream_client = upstream("3.1.0", tag_target=GitObject(GitObjectKind.TREE, NEW_COMMIT))
+    bump = Bump()
+    with pytest.raises(BumpError, match="tag 3.1.0 points at a tree, not a commit"):
+        bump.run(upstream_client, dry_run=False)
+    assert bump.wrote_nothing(DOCKERFILE)
+
+
+def test_a_release_tag_that_is_not_a_plain_version_raises_and_writes_nothing() -> None:
+    bump = Bump()
+    with pytest.raises(BumpError, match="unexpected upstream release tag 'v3.1.0'"):
+        bump.run(upstream("v3.1.0"), dry_run=False)
+    assert bump.wrote_nothing(DOCKERFILE)
 
 
 def test_a_dry_run_returns_the_new_pin_and_body_and_writes_nothing() -> None:

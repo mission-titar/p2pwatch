@@ -1,5 +1,7 @@
-from amule_bump.application.use_cases.body import (
+from amule_bump.domain.dockerfile import Pin
+from amule_bump.domain.pull_request_body import (
     TRUNCATION_NOTICE,
+    WatchedFile,
     build_pull_request_body,
     changelog_section,
     clip,
@@ -7,8 +9,6 @@ from amule_bump.application.use_cases.body import (
     tag_diff,
     wrap,
 )
-from amule_bump.domain.dockerfile import Pin
-from tests.fakes.adapters.driven.fake_upstream_client import FakeUpstreamClient
 
 GITHUB_BODY_MAX_CHARACTERS = 65536
 CHANGELOG_WIDTH_CHARACTERS = 100
@@ -74,13 +74,8 @@ def test_clip_cuts_at_a_line_boundary_and_says_so() -> None:
 
 
 def test_tag_diff_shows_the_change_between_the_two_tags() -> None:
-    upstream_client = FakeUpstreamClient(
-        file_texts_by_ref_and_path={
-            ("3.0.1", "cmake/options.cmake"): "a\nb\n",
-            ("3.1.0", "cmake/options.cmake"): "a\nc\n",
-        }
-    )
-    assert tag_diff(upstream_client, OLD, NEW, "cmake/options.cmake") == (
+    watched_file = WatchedFile("cmake/options.cmake", old_text="a\nb\n", new_text="a\nc\n")
+    assert tag_diff(OLD, NEW, watched_file) == (
         "--- 3.0.1/cmake/options.cmake\n"
         "+++ 3.1.0/cmake/options.cmake\n"
         "@@ -1,2 +1,2 @@\n"
@@ -91,34 +86,22 @@ def test_tag_diff_shows_the_change_between_the_two_tags() -> None:
 
 
 def test_tag_diff_shows_a_file_absent_at_the_old_tag_as_added() -> None:
-    upstream_client = FakeUpstreamClient(
-        file_texts_by_ref_and_path={("3.1.0", "docs/api/REFERENCE.md"): "# API\n"}
-    )
-    assert tag_diff(upstream_client, OLD, NEW, "docs/api/REFERENCE.md").endswith(
-        "@@ -0,0 +1 @@\n+# API\n"
-    )
+    watched_file = WatchedFile("docs/api/REFERENCE.md", old_text="", new_text="# API\n")
+    assert tag_diff(OLD, NEW, watched_file).endswith("@@ -0,0 +1 @@\n+# API\n")
 
 
 def test_tag_diff_is_empty_when_the_file_did_not_change() -> None:
-    upstream_client = FakeUpstreamClient(
-        file_texts_by_ref_and_path={("3.0.1", "f"): "same\n", ("3.1.0", "f"): "same\n"}
-    )
-    assert tag_diff(upstream_client, OLD, NEW, "f") == ""
+    assert tag_diff(OLD, NEW, WatchedFile("f", old_text="same\n", new_text="same\n")) == ""
 
 
-def full_repo_reader() -> FakeUpstreamClient:
-    return FakeUpstreamClient(
-        file_texts_by_ref_and_path={
-            ("3.1.0", "docs/CHANGELOG.md"): CHANGELOG,
-            ("3.0.1", "cmake/options.cmake"): "option(A)\n",
-            ("3.1.0", "cmake/options.cmake"): "option(A)\noption(B)\n",
-            ("3.1.0", "docs/api/REFERENCE.md"): "# API\n",
-        }
-    )
+WATCHED_FILES = (
+    WatchedFile("cmake/options.cmake", old_text="option(A)\n", new_text="option(A)\noption(B)\n"),
+    WatchedFile("docs/api/REFERENCE.md", old_text="", new_text="# API\n"),
+)
 
 
 def test_build_body_links_the_release_and_the_compare_view() -> None:
-    body = build_pull_request_body(full_repo_reader(), OLD, NEW, CHANGELOG_WIDTH_CHARACTERS)
+    body = build_pull_request_body(OLD, NEW, CHANGELOG, WATCHED_FILES, CHANGELOG_WIDTH_CHARACTERS)
     assert body.startswith(
         "Bumps aMule from 3.0.1 to [3.1.0](https://github.com/amule-org/amule/releases/tag/3.1.0)"
         " (commit `909d304d993ee07df6c6f6acf501a6d791d53666`). Full upstream diff:"
@@ -127,13 +110,13 @@ def test_build_body_links_the_release_and_the_compare_view() -> None:
 
 
 def test_build_body_fences_the_changelog_section() -> None:
-    body = build_pull_request_body(full_repo_reader(), OLD, NEW, CHANGELOG_WIDTH_CHARACTERS)
+    body = build_pull_request_body(OLD, NEW, CHANGELOG, WATCHED_FILES, CHANGELOG_WIDTH_CHARACTERS)
     assert '## Changelog\n\n````text\n## Version 3.1.0 - "REST"\n' in body
     assert "older entry" not in body
 
 
 def test_build_body_carries_both_diffs() -> None:
-    body = build_pull_request_body(full_repo_reader(), OLD, NEW, CHANGELOG_WIDTH_CHARACTERS)
+    body = build_pull_request_body(OLD, NEW, CHANGELOG, WATCHED_FILES, CHANGELOG_WIDTH_CHARACTERS)
     assert "## `cmake/options.cmake` (3.0.1 to 3.1.0)\n\n````diff\n" in body
     assert "+option(B)\n" in body
     assert "## `docs/api/REFERENCE.md` (3.0.1 to 3.1.0)\n\n````diff\n" in body
@@ -141,7 +124,7 @@ def test_build_body_carries_both_diffs() -> None:
 
 
 def test_build_body_ends_with_the_checklist_naming_the_new_version() -> None:
-    body = build_pull_request_body(full_repo_reader(), OLD, NEW, CHANGELOG_WIDTH_CHARACTERS)
+    body = build_pull_request_body(OLD, NEW, CHANGELOG, WATCHED_FILES, CHANGELOG_WIDTH_CHARACTERS)
     assert body.endswith(
         "## Checklist\n\n"
         "- [ ] Read the changelog: anything that changes the daemon's defaults or the network"
@@ -158,20 +141,23 @@ def test_build_body_ends_with_the_checklist_naming_the_new_version() -> None:
 
 
 def test_build_body_says_so_when_the_changelog_or_a_diff_is_empty() -> None:
-    body = build_pull_request_body(FakeUpstreamClient(), OLD, NEW, CHANGELOG_WIDTH_CHARACTERS)
+    unchanged = (
+        WatchedFile("cmake/options.cmake", old_text="", new_text=""),
+        WatchedFile("docs/api/REFERENCE.md", old_text="", new_text=""),
+    )
+    body = build_pull_request_body(OLD, NEW, "", unchanged, CHANGELOG_WIDTH_CHARACTERS)
     assert "No `## Version 3.1.0` section in upstream's docs/CHANGELOG.md.\n" in body
     assert body.count("No change between the two tags.\n") == 2
 
 
 def test_build_body_stays_under_the_github_limit_with_huge_upstream_text() -> None:
     huge = "x" * 99 + "\n"
-    upstream_client = FakeUpstreamClient(
-        file_texts_by_ref_and_path={
-            ("3.1.0", "docs/CHANGELOG.md"): "## Version 3.1.0 - big\n" + huge * 5000,
-            ("3.1.0", "cmake/options.cmake"): huge * 5000,
-            ("3.1.0", "docs/api/REFERENCE.md"): huge * 5000,
-        }
+    huge_files = (
+        WatchedFile("cmake/options.cmake", old_text="", new_text=huge * 5000),
+        WatchedFile("docs/api/REFERENCE.md", old_text="", new_text=huge * 5000),
     )
-    body = build_pull_request_body(upstream_client, OLD, NEW, CHANGELOG_WIDTH_CHARACTERS)
+    body = build_pull_request_body(
+        OLD, NEW, "## Version 3.1.0 - big\n" + huge * 5000, huge_files, CHANGELOG_WIDTH_CHARACTERS
+    )
     assert len(body) < GITHUB_BODY_MAX_CHARACTERS
     assert body.count(TRUNCATION_NOTICE) == 3
