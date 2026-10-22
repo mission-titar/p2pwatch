@@ -144,8 +144,9 @@ Re-run by block 72 on 2026-10-22 at its commit unless noted.
 - MINOR, two definitions of `ring`: one, the four directories, `application/`'s parts being tach's layers inside
   it, in `AGENTS.md`'s rule and glossary and in `architecture.md`.
 - MINOR, `fake_git_hub_server.py`'s spelling: lot B (For lot B).
-- MINOR, `_PORTLESS_RINGS` and `_outermost`'s empty case: PORTLESS_PENDING `_outermost` fixed (a fake of a port
-  nothing in `src` implements is reported by name).
+- MINOR, `_PORTLESS_RINGS` and `_outermost`'s empty case: the portless split an accepted limit, stated in "The
+  layout test's reach" (operator); `_outermost` fixed in block 90 (a fake of a port nothing in `src` implements is
+  reported by name).
 - MINOR, `FakeDecisionReader`'s and `FakeObservationReader`'s refusals: for "Contract tests for the fakes" (For lot
   B and after).
 - MINOR, the handoff's lines: corrected here.
@@ -205,7 +206,9 @@ Re-run by block 72 on 2026-10-22 at its commit unless noted.
 - **`SavesRecorded`** subclasses the real `SqliteBackoffStateRepository` (a spy on an adapter, not a fake of its
   ports); the layout test places it by the ports it inherits.
 - **The layout test's reach**: it follows bases written as a bare name or a `Name[...]` imported by `from x import`,
-  not `module.Port`; a record is a dataclass with no base. PORTLESS_REACH
+  not `module.Port`; a record is a dataclass with no base. A double that implements no port is accepted under
+  `adapters/driven/` or at `tests/fakes/`'s root alike: nothing it inherits tells an outside system's double from
+  what an adapter receives, and an import heuristic would fail on sound doubles (operator, block 90).
 - **For "Contract tests for the fakes"**: `FakeDecisionReader` and `FakeObservationReader`, now the only fakes of
   their ports, still refuse the reads the download loop never makes (`read_latest_decisions`,
   `read_known_filenames` raise `AssertionError`): one consumer's expectation in a shared fake, which a contract
