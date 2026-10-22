@@ -1,66 +1,14 @@
-"""``python -m amule_bump``: hands the bump, reading upstream on GitHub, to the command line."""
+"""``python -m amule_bump``: reads the process state and runs the command line on it."""
 
 import os
 import sys
 import tempfile
-from collections.abc import Mapping, Sequence
 from pathlib import Path
-from urllib.request import OpenerDirector, build_opener
 
-from amule_bump.adapters.driven.filesystem_dockerfile import FilesystemDockerfile
-from amule_bump.adapters.driven.filesystem_pull_request_body_writer import (
-    FilesystemPullRequestBodyWriter,
-)
-from amule_bump.adapters.driven.github_repo_reader import GitHubRepoReader
-from amule_bump.adapters.driven.github_step_output_writer import GitHubStepOutputWriter
-from amule_bump.adapters.driven.terminal_step_output_writer import TerminalStepOutputWriter
-from amule_bump.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
-from amule_bump.application.use_cases.bump_amule import BumpAmule
-from amule_bump.domain.upstream import UPSTREAM
-
-_CHANGELOG_WIDTH_CHARACTERS = 100
-_GITHUB_API_URL = "https://api.github.com"
-
-
-def main(
-    argv: Sequence[str],
-    env: Mapping[str, str],
-    cwd: Path,
-    temporary_directory: Path,
-    github_api_url: str,
-    url_opener: OpenerDirector,
-) -> int:
-    """Runs the subcommand ``argv`` names in ``env``, a relative path under ``cwd``, the PR body
-    by default in ``temporary_directory``, GitHub at ``github_api_url`` by ``url_opener``;
-    returns its exit code."""
-    dockerfile = FilesystemDockerfile()
-    github_output = env.get("GITHUB_OUTPUT")
-    amule_bumper = BumpAmule(
-        repo_reader=GitHubRepoReader(github_api_url, UPSTREAM, env.get("GH_TOKEN"), url_opener),
-        dockerfile_reader=dockerfile,
-        dockerfile_writer=dockerfile,
-        pull_request_body_writer=FilesystemPullRequestBodyWriter(),
-        step_output_writer=(
-            GitHubStepOutputWriter(Path(github_output))
-            if github_output
-            else TerminalStepOutputWriter()
-        ),
-        changelog_width_characters=_CHANGELOG_WIDTH_CHARACTERS,
-    )
-    command_line = ArgparseCommandLine(
-        amule_bumper=amule_bumper, cwd=cwd, temporary_directory=temporary_directory
-    )
-    return command_line.run(argv)
-
+from amule_bump.composition.command_line import build_command_line
 
 if __name__ == "__main__":  # pragma: no cover
-    raise SystemExit(
-        main(
-            sys.argv[1:],
-            os.environ,
-            Path.cwd(),
-            Path(tempfile.gettempdir()),
-            _GITHUB_API_URL,
-            build_opener(),  # the environment's proxies, wanted for GitHub
-        )
+    command_line = build_command_line(
+        env=os.environ, cwd=Path.cwd(), temporary_directory=Path(tempfile.gettempdir())
     )
+    raise SystemExit(command_line.run(sys.argv[1:]))
