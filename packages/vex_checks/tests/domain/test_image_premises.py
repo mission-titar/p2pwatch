@@ -1,3 +1,4 @@
+from vex_checks.domain.claim_problem import ClaimProblem
 from vex_checks.domain.descriptors import (
     DeclaredMinVersion,
     DpkgMinVersion,
@@ -17,10 +18,9 @@ def test_package_absent_passes_when_only_sibling_package_present() -> None:
 def test_package_absent_fails_when_package_present() -> None:
     premises: dict[str, ImagePremise] = {"CVE-2024-0001": DpkgPackageAbsent("libcurl4")}
     packages = [DpkgPackage("libcurl4", "8.14.1-2")]
-    violations = evaluate_image_premises(premises, packages, [])
-    assert len(violations) == 1
-    assert violations[0].advisory_id == "CVE-2024-0001"
-    assert "libcurl4" in violations[0].message
+    assert evaluate_image_premises(premises, packages, []) == [
+        ClaimProblem("CVE-2024-0001", "dpkg package 'libcurl4' is present")
+    ]
 
 
 def test_package_min_version_passes_at_or_above_minimum() -> None:
@@ -32,10 +32,9 @@ def test_package_min_version_passes_at_or_above_minimum() -> None:
 def test_package_min_version_fails_below_minimum() -> None:
     premises: dict[str, ImagePremise] = {"CVE-2016-1405": DpkgMinVersion("curl", "8.0")}
     packages = [DpkgPackage("curl", "7.88.1-10+deb12u5")]
-    violations = evaluate_image_premises(premises, packages, [])
-    assert len(violations) == 1
-    assert violations[0].advisory_id == "CVE-2016-1405"
-    assert "curl" in violations[0].message
+    assert evaluate_image_premises(premises, packages, []) == [
+        ClaimProblem("CVE-2016-1405", "curl 7.88.1-10+deb12u5 is below 8.0")
+    ]
 
 
 def test_package_min_version_compares_the_upstream_part_of_a_debian_version() -> None:
@@ -63,10 +62,9 @@ def test_declared_min_version_passes_at_or_above_minimum() -> None:
 
 def test_declared_min_version_fails_below_minimum() -> None:
     premises: dict[str, ImagePremise] = {"CVE-2006-2691": DeclaredMinVersion("amule", "2.1.2")}
-    violations = evaluate_image_premises(premises, [], [DeclaredComponent("amule", "2.1.1")])
-    assert len(violations) == 1
-    assert violations[0].advisory_id == "CVE-2006-2691"
-    assert violations[0].message == "declared amule 2.1.1 is below 2.1.2"
+    assert evaluate_image_premises(premises, [], [DeclaredComponent("amule", "2.1.1")]) == [
+        ClaimProblem("CVE-2006-2691", "declared amule 2.1.1 is below 2.1.2")
+    ]
 
 
 def test_declared_min_version_ignores_a_dpkg_package_of_the_same_name() -> None:

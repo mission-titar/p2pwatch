@@ -1,6 +1,5 @@
 """Checks a VEX's image claims: the image premises it claims, against a built image's SBOM."""
 
-import dataclasses
 from collections.abc import Mapping
 from pathlib import PurePath
 
@@ -46,16 +45,15 @@ class CheckImageClaims(ImageClaimsChecker):
             if advisory_id in claims
         }
         vex_location = locate_vex(vex_path, self._repository_root)
-        unlocated = evaluate_image_premises(
-            premises,
-            self._sbom_reader.read_dpkg_packages(sbom_path),
-            self._sbom_reader.read_declared_components(sbom_path),
-        )
         problems = tuple(
-            dataclasses.replace(violation, location=vex_location) for violation in unlocated
+            evaluate_image_premises(
+                premises,
+                self._sbom_reader.read_dpkg_packages(sbom_path),
+                self._sbom_reader.read_declared_components(sbom_path),
+            )
         )
         if sarif_path is not None:
             self._code_scanning_reporter.report_claim_problems(
                 sarif_path, _RULE_ID, problems, vex_location
             )
-        return ImageClaimsReport(problems=problems)
+        return ImageClaimsReport(problems=problems, vex_location=vex_location)

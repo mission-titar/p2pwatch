@@ -9,7 +9,9 @@ from tests.fakes.adapters.driven.fake_code_scanning_reporter import (
 )
 from tests.fakes.adapters.driven.fake_sbom_reader import FakeSbomReader
 from tests.fakes.adapters.driven.fake_vex_reader import FakeVexReader
+from vex_checks.application.ports.driving.image_claims_checker import ImageClaimsReport
 from vex_checks.application.use_cases.check_image_claims import CheckImageClaims
+from vex_checks.domain.claim_problem import ClaimProblem
 from vex_checks.domain.descriptors import (
     DeclaredMinVersion,
     DpkgMinVersion,
@@ -18,15 +20,14 @@ from vex_checks.domain.descriptors import (
 )
 from vex_checks.domain.registry import PREMISES
 from vex_checks.domain.sbom_components import DeclaredComponent, DpkgPackage
-from vex_checks.domain.violations import Violation
 
 REPOSITORY_ROOT = PurePath("/repo")
 VEX_PATH = REPOSITORY_ROOT / "security" / "crawler.vex.openvex.json"
 SBOM_PATH = PurePath("/tmp/sbom.syft.json")
 
-NGHTTP2_PRESENT = Violation(
-    "CVE-IMAGE", "dpkg package 'nghttp2' is present", "security/crawler.vex.openvex.json"
-)
+VEX_LOCATION = "security/crawler.vex.openvex.json"
+
+NGHTTP2_PRESENT = ClaimProblem("CVE-IMAGE", "dpkg package 'nghttp2' is present")
 
 
 def _checker(
@@ -56,7 +57,7 @@ def test_a_claimed_image_premise_the_sbom_falsifies_is_a_problem_located_at_the_
 
     report = checker.check_image_claims(SBOM_PATH, VEX_PATH, None)
 
-    assert report.problems == (NGHTTP2_PRESENT,)
+    assert report == ImageClaimsReport(problems=(NGHTTP2_PRESENT,), vex_location=VEX_LOCATION)
 
 
 def test_an_image_premise_the_vex_does_not_claim_is_not_evaluated() -> None:
@@ -81,7 +82,7 @@ def test_a_vex_outside_the_repository_is_located_at_its_path_as_given() -> None:
 
     report = checker.check_image_claims(SBOM_PATH, vex_path, None)
 
-    assert [problem.location for problem in report.problems] == ["/tmp/vex.openvex.json"]
+    assert report.vex_location == "/tmp/vex.openvex.json"
 
 
 def test_the_registry_fails_the_amule_claims_on_an_amule_older_than_the_fix() -> None:
@@ -113,13 +114,10 @@ def test_asked_for_sarif_the_problems_are_written_under_the_image_claims_rule() 
 
     report = checker.check_image_claims(SBOM_PATH, VEX_PATH, PurePath("/tmp/out.sarif"))
 
-    assert report.problems == (NGHTTP2_PRESENT,)
+    assert report == ImageClaimsReport(problems=(NGHTTP2_PRESENT,), vex_location=VEX_LOCATION)
     assert code_scanning_reporter.written_sarifs == [
         WrittenSarif(
-            PurePath("/tmp/out.sarif"),
-            "unsatisfied-image-claim",
-            (NGHTTP2_PRESENT,),
-            "security/crawler.vex.openvex.json",
+            PurePath("/tmp/out.sarif"), "unsatisfied-image-claim", (NGHTTP2_PRESENT,), VEX_LOCATION
         )
     ]
 
