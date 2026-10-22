@@ -180,15 +180,7 @@ depends_on = []
 [[modules]]
 path = "p2pwatch.__main__"
 layer = "composition"
-depends_on = [
-  "p2pwatch.adapters.driven.config",
-  "p2pwatch.adapters.driven.filesystem_catalog_finder",
-  "p2pwatch.adapters.driven.persistence_sqlite",
-  "p2pwatch.adapters.driven.stdlib_logger",
-  "p2pwatch.adapters.driving.cli",
-  "p2pwatch.application.use_cases",
-  "p2pwatch.composition",
-]
+depends_on = ["p2pwatch.composition"]
 
 [[modules]]
 path = "p2pwatch.adapters.driven.asyncio_run_state"
@@ -389,7 +381,7 @@ depends_on = [
 [[modules]]
 path = "p2pwatch.application.use_cases"
 layer = "use_cases"
-visibility = ["*.__main__", "*.composition"]
+visibility = ["*.composition"]
 depends_on = [
   "p2pwatch.application.ports.driven.catalog_copier",
   "p2pwatch.application.ports.driven.catalog_file_reader",
@@ -428,6 +420,7 @@ depends_on = [
   "p2pwatch.adapters.driven.asyncio_run_state",
   "p2pwatch.adapters.driven.asyncio_waker",
   "p2pwatch.adapters.driven.config",
+  "p2pwatch.adapters.driven.filesystem_catalog_finder",
   "p2pwatch.adapters.driven.in_memory_status_board",
   "p2pwatch.adapters.driven.monotonic_clock_asyncio",
   "p2pwatch.adapters.driven.mule_api",
@@ -438,6 +431,7 @@ depends_on = [
   "p2pwatch.adapters.driven.stdlib_logger",
   "p2pwatch.adapters.driven.uuid4_node_id_generator",
   "p2pwatch.adapters.driven.wall_clock_system",
+  "p2pwatch.adapters.driving.cli",
   "p2pwatch.adapters.driving.process",
   "p2pwatch.adapters.driving.webui",
   "p2pwatch.application.crawler_lifecycle",

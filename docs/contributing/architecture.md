@@ -708,7 +708,7 @@ démon sont
 
 | Sous-système | Emplacement (sous `packages/crawler/src/p2pwatch/` sauf mention) |
 |---|---|
-| Câblage | `composition/crawler_composition.py` (`CrawlerComposition`) |
+| Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`) |
 | Démarrage et boucles | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervise_loops.py` |
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
 | Boucles | `application/steps/` : `search_tasks.py`, `status_loop.py`, `run_download_cycle.py` |
