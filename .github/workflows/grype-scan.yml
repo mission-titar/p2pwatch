@@ -81,7 +81,7 @@ jobs:
           uv run python -m vex_checks image-claims
           --sbom /tmp/sbom.syft.json
           --vex "$VEX"
-          --format sarif --output /tmp/image-claims.sarif
+          --sarif /tmp/image-claims.sarif
 
       - name: Upload image-claims SARIF to code scanning
         if: always()
@@ -95,7 +95,7 @@ jobs:
           uv run python -m vex_checks stale-claims
           --sbom /tmp/sbom.syft.json
           --vex "$VEX"
-          --format sarif --output /tmp/stale.sarif
+          --sarif /tmp/stale.sarif
 
       - name: Upload stale-claims SARIF to code scanning
         if: always()

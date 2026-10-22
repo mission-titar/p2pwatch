@@ -7,9 +7,4 @@ from pathlib import Path
 from vex_checks.composition.command_line import build_command_line
 
 if __name__ == "__main__":  # pragma: no cover
-    # Dev tooling, run from the workspace only: the repository is four parents up from here.
-    repository_root = Path(__file__).resolve().parents[4]
-    command_line = build_command_line(
-        repository_root=repository_root, env=os.environ, cwd=Path.cwd()
-    )
-    raise SystemExit(command_line.run(sys.argv[1:]))
+    raise SystemExit(build_command_line(env=os.environ, cwd=Path.cwd()).run(sys.argv[1:]))
