@@ -36,7 +36,7 @@ def build_command_line(
         catalog_merger=MergeCatalogs(
             FilesystemCatalogFinder(),
             SqliteCatalogCopier(),
-            StdlibLogger("p2pwatch.application.merge_catalogs"),
+            StdlibLogger(MergeCatalogs.__module__),
         ),
         root_logger=root_logger,
         cwd=cwd,

@@ -71,4 +71,5 @@ def test_merge_of_two_catalogs_named_under_cwd_into_a_new_one_holds_both(
 
     assert count(merged, "files") == 2
     done = next(record for record in caplog.records if record.getMessage().startswith("merge done"))
-    assert done.name == "p2pwatch.application.merge_catalogs"  # an operator's filters keep it
+    # An operator's filters keep its module's name.
+    assert done.name == "p2pwatch.application.use_cases.merge_catalogs"

@@ -10,7 +10,7 @@ from contextlib import AbstractContextManager, ExitStack
 import uvicorn
 from starlette.applications import Starlette
 
-_logger = logging.getLogger("p2pwatch.adapters.driving.webui.uvicorn_server_thread")
+_logger = logging.getLogger(__name__)
 
 # uvicorn polls ``should_exit`` every 0.1 s, so the join normally returns well within its bound.
 _JOIN_TIMEOUT_SECONDS = 5.0

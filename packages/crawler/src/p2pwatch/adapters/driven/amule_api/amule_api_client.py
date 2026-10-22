@@ -67,7 +67,7 @@ _KAD_SEPARATORS = re.compile(r'[ ()\[\]{}<>,._\-!?:;\\/"]')
 # Kad refuses a Kad word still on its search list: "not yet", someone else holds it.
 _KAD_WORD_HELD = "already on search list"
 
-_logger = logging.getLogger("p2pwatch.adapters.driven.amule_api.amule_api_client")
+_logger = logging.getLogger(__name__)
 
 
 class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):

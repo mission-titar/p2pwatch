@@ -57,7 +57,8 @@ Each goes into `AGENTS.md` in the block where the whole tree first follows it.
   rule refuses any other. Naming, block 80.
 - **C4. A logger is named from the code**: `StdlibLogger(<Class>.__module__)` in the composition,
   `logging.getLogger(__name__)` in an adapter; never a string literal. An ast-grep rule refuses a literal. Hard
-  rules, block 24.
+  rules, block 24. (Corrected: block 60, since amule's three literals stay until it derives them and the rule would
+  fail the gate earlier; block 24 derives the crawler's names.)
 - **C5. A broken input raises; a problem is a finding on a valid input.** A tool's command line catches its domain's
   input error, prints it on one line naming the file and exits in error. Hard rules, block 72.
 - **C6. A command-line option's default holds no literal**: a value the operator could set and did not is the
@@ -199,13 +200,13 @@ rows: 16 moves code verbatim, 20 renames and nothing else, 22 renames local name
 | 16 | `refactor/catalog-readers-split` | **exempt, a verbatim move**: `catalog_read.py` one file per reader, with its tests (D3) | 2100, 10 |
 | 20 | `refactor/names` | **mechanical, exempt**: appendix A's renames, the moves they force, the two column migrations; C1 (D1, D5, D6, D7) | 3500, 200 |
 | 22 | `refactor/local-names-and-prose` | **mechanical, exempt**: local names, docstrings, prose (D11) | 800, 45 |
-| 24 | `refactor/logger-names-from-code` | the crawler's logger names from the code, the ast-grep rule, the docs; C4 (D9) | 150, 17 |
+| 24 | `refactor/logger-names-from-code` | the crawler's logger names from the code, the docs (Corrected: the ast-grep rule, its rule test and C4 move to block 60, since amule's literals would fail it here) (D9) | 150, 17 |
 | 40 | `refactor/bump-domain` | `amule_bump`'s pure logic to its domain (D15) | 320, 13 |
 | 42 | `refactor/bump-fixed-values` | `amule_bump`'s timeout, `ARG` line, option defaults (D16) | 150, 10 |
 | 50 | `refactor/vex-root-and-sarif-option` | `vex_checks`' root from `cwd`, its `PurePath` command line, `--sarif`, the workflows (D12, D17) | 300, 13 |
 | 52 | `refactor/vex-claim-problems` | `ClaimProblem` for `image-claims` and `stale-claims`, the location carried once, `CodeScanningReporter` (D5, D18) | 450, 18 |
 | 54 | `refactor/vex-claim-coverage` | `claim-coverage`'s bijection in the domain, on `ClaimProblem`; vex's broken input (D13, D18) | 400, 16 |
-| 60 | `refactor/amule-boot-composition` | `BootComposition`, the adapters built once, amule's logger names (D9, D19) | 400, 17 |
+| 60 | `refactor/amule-boot-composition` | `BootComposition`, the adapters built once, amule's logger names (Corrected: with the ast-grep rule refusing a literal, its rule test and C4, from block 24) (D9, D19) | 400, 17 |
 | 62 | `refactor/run-command` | `run_command` everywhere, the s6 timeout, the missing `amule.conf` branch; C7 (D20) | 160, 13 |
 | 70 | `refactor/template-problems` | the templates' broken input, typed problems, `PurePath` (D13, D17, D21) | 300, 13 |
 | 72 | `refactor/coverage-broken-input` | `NoPerTestCoverage` raised, `PurePath`; C5 (D13, D17) | 150, 7 |

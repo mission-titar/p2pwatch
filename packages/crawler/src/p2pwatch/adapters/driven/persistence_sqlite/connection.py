@@ -33,7 +33,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.errors import (
 )
 from p2pwatch.adapters.driven.persistence_sqlite.variants import register_sql_functions
 
-_logger = logging.getLogger("p2pwatch.adapters.driven.persistence_sqlite.connection")
+_logger = logging.getLogger(__name__)
 
 _MIGRATIONS = resources.files("p2pwatch.adapters.driven.persistence_sqlite") / "migrations"
 
