@@ -3,9 +3,11 @@
 from collections.abc import Mapping
 from pathlib import Path
 
+from vex_checks.adapters.driven.filesystem_code_scanning_reporter import (
+    FilesystemCodeScanningReporter,
+)
 from vex_checks.adapters.driven.filesystem_source_rule_reader import FilesystemSourceRuleReader
 from vex_checks.adapters.driven.grype_vulnerability_scanner import GrypeVulnerabilityScanner
-from vex_checks.adapters.driven.json_sarif_writer import JsonSarifWriter
 from vex_checks.adapters.driven.open_vex_reader import OpenVexReader
 from vex_checks.adapters.driven.syft_sbom_reader import SyftSbomReader
 from vex_checks.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
@@ -22,14 +24,14 @@ def build_command_line(*, env: Mapping[str, str], cwd: Path) -> ArgparseCommandL
     """The command line checking the repository whose root is ``cwd``, run in the environment
     ``env``."""
     vex_reader = OpenVexReader()
-    sarif_writer = JsonSarifWriter()
+    code_scanning_reporter = FilesystemCodeScanningReporter()
     return ArgparseCommandLine(
         image_claims_checker=CheckImageClaims(
             premises=PREMISES,
             repository_root=cwd,
             vex_reader=vex_reader,
             sbom_reader=SyftSbomReader(),
-            sarif_writer=sarif_writer,
+            code_scanning_reporter=code_scanning_reporter,
         ),
         stale_claims_checker=CheckStaleClaims(
             repository_root=cwd,
@@ -37,7 +39,7 @@ def build_command_line(*, env: Mapping[str, str], cwd: Path) -> ArgparseCommandL
                 grype_executable=_GRYPE_EXECUTABLE, env=env
             ),
             vex_reader=vex_reader,
-            sarif_writer=sarif_writer,
+            code_scanning_reporter=code_scanning_reporter,
         ),
         claim_coverage_checker=CheckClaimCoverage(
             premises=PREMISES,

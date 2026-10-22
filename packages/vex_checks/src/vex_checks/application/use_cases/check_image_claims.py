@@ -4,7 +4,7 @@ import dataclasses
 from collections.abc import Mapping
 from pathlib import PurePath
 
-from vex_checks.application.ports.driven.sarif_writer import SarifWriter
+from vex_checks.application.ports.driven.code_scanning_reporter import CodeScanningReporter
 from vex_checks.application.ports.driven.sbom_reader import SbomReader
 from vex_checks.application.ports.driven.vex_reader import VexReader
 from vex_checks.application.ports.driving.image_claims_checker import (
@@ -28,13 +28,13 @@ class CheckImageClaims(ImageClaimsChecker):
         repository_root: PurePath,
         vex_reader: VexReader,
         sbom_reader: SbomReader,
-        sarif_writer: SarifWriter,
+        code_scanning_reporter: CodeScanningReporter,
     ) -> None:
         self._premises = premises
         self._repository_root = repository_root
         self._vex_reader = vex_reader
         self._sbom_reader = sbom_reader
-        self._sarif_writer = sarif_writer
+        self._code_scanning_reporter = code_scanning_reporter
 
     def check_image_claims(
         self, sbom_path: PurePath, vex_path: PurePath, sarif_path: PurePath | None
@@ -55,5 +55,7 @@ class CheckImageClaims(ImageClaimsChecker):
             dataclasses.replace(violation, location=vex_location) for violation in unlocated
         )
         if sarif_path is not None:
-            self._sarif_writer.write_violations(sarif_path, _RULE_ID, problems, vex_location)
+            self._code_scanning_reporter.report_claim_problems(
+                sarif_path, _RULE_ID, problems, vex_location
+            )
         return ImageClaimsReport(problems=problems)
