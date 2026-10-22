@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from amule_bump.domain.dockerfile import Pin
 from amule_bump.domain.upstream import UPSTREAM
 
+PULL_REQUEST_BODY_FILENAME = "amule-bump-pr-body.md"
 CHANGELOG_PATH = "docs/CHANGELOG.md"
 CHANGELOG_MAX_CHARACTERS = 20_000
 DIFF_MAX_CHARACTERS = 18_000

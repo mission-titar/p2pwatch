@@ -14,7 +14,8 @@ from amule_bump.application.ports.driving.amule_bumper import (
     PinIsLatest,
 )
 from amule_bump.domain.bump_error import BumpError
-from amule_bump.domain.dockerfile import Pin
+from amule_bump.domain.dockerfile import DOCKERFILE_PATH, Pin
+from amule_bump.domain.pull_request_body import PULL_REQUEST_BODY_FILENAME
 from tests.fakes.application.use_cases.fake_amule_bumper import FakeAmuleBumper
 
 CWD = PurePath("/repo")
@@ -37,17 +38,13 @@ def test_bump_passes_its_options_under_the_working_directory() -> None:
     assert amule_bumper.calls == [(CWD / "Dockerfile", PurePath("/abs/body.md"), True)]
 
 
-def test_bump_without_options_bumps_the_amule_image_and_writes_the_body_to_temp() -> None:
+def test_bump_without_options_takes_the_domains_files_under_cwd_and_temp() -> None:
     amule_bumper = FakeAmuleBumper(PinIsLatest("3.1.0"))
 
     command_line(amule_bumper).run(["bump"])
 
     assert amule_bumper.calls == [
-        (
-            CWD / "packages/amule/Dockerfile",
-            TEMPORARY_DIRECTORY / "amule-bump-pr-body.md",
-            False,
-        )
+        (CWD / DOCKERFILE_PATH, TEMPORARY_DIRECTORY / PULL_REQUEST_BODY_FILENAME, False)
     ]
 
 

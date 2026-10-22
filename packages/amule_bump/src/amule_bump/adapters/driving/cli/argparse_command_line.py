@@ -13,6 +13,8 @@ from amule_bump.application.ports.driving.amule_bumper import (
     PinIsLatest,
 )
 from amule_bump.domain.bump_error import BumpError
+from amule_bump.domain.dockerfile import DOCKERFILE_PATH
+from amule_bump.domain.pull_request_body import PULL_REQUEST_BODY_FILENAME
 
 
 class ArgparseCommandLine:
@@ -35,13 +37,11 @@ class ArgparseCommandLine:
         bump = subparsers.add_parser(
             "bump", help="rewrite the Dockerfile's pin and write the PR body, if upstream released"
         )
-        bump.add_argument(
-            "--dockerfile", type=self._under_cwd, default=self._cwd / "packages/amule/Dockerfile"
-        )
+        bump.add_argument("--dockerfile", type=self._under_cwd, default=self._cwd / DOCKERFILE_PATH)
         bump.add_argument(
             "--body-file",
             type=self._under_cwd,
-            default=self._temporary_directory / "amule-bump-pr-body.md",
+            default=self._temporary_directory / PULL_REQUEST_BODY_FILENAME,
         )
         bump.add_argument(
             "--dry-run",

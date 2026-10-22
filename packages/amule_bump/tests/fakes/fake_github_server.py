@@ -2,24 +2,30 @@ import json
 from collections.abc import Mapping
 from email.message import Message
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from threading import Thread
+from threading import Event, Thread
 from typing import Any, Self
 from urllib.request import ProxyHandler, build_opener
 
 
 class FakeGithubServer:
-    """GitHub's REST API on a loopback port: set answers by (request path, Accept), 404 otherwise.
+    """GitHub's REST API on a loopback port: set answers by (request path, Accept), 404 otherwise,
+    or no answer while ``is_holding``.
 
     Records each request's path and headers."""
 
     def __init__(self) -> None:
         self.answers_by_path_and_accept: dict[tuple[str, str], tuple[int, bytes]] = {}
         self.requests: list[tuple[str, Message]] = []
+        self.is_holding = False
+        self._released = Event()
         fake_server = self
 
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:
                 fake_server.requests.append((self.path, self.headers))
+                if fake_server.is_holding:
+                    fake_server._released.wait()
+                    return
                 accept = self.headers["Accept"]
                 status, body = fake_server.answers_by_path_and_accept.get(
                     (self.path, accept), (404, b'{"message": "Not Found"}')
@@ -43,6 +49,7 @@ class FakeGithubServer:
         return self
 
     def __exit__(self, *exc_info: object) -> None:
+        self._released.set()
         self._server.shutdown()
         self._thread.join()
         self._server.server_close()

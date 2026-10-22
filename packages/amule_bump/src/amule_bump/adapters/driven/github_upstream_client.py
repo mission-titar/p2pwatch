@@ -8,15 +8,23 @@ from amule_bump.domain.git_object import GitObject, GitObjectKind
 
 
 class GithubUpstreamClient(UpstreamClient):
-    """Reads the repository ``full_name`` from GitHub's API at ``api_url``, by ``url_opener``."""
+    """Reads the repository ``full_name`` from GitHub's API at ``api_url``, by ``url_opener``,
+    each request failing once unanswered for ``timeout_seconds``."""
 
     def __init__(
-        self, api_url: str, full_name: str, token: str | None, url_opener: OpenerDirector
+        self,
+        api_url: str,
+        full_name: str,
+        token: str | None,
+        url_opener: OpenerDirector,
+        *,
+        timeout_seconds: float,
     ) -> None:
         self._api_url = api_url
         self._full_name = full_name
         self._token = token
         self._url_opener = url_opener
+        self._timeout_seconds = timeout_seconds
 
     def read_latest_release_tag(self) -> str:
         return str(self._get_json("releases/latest")["tag_name"])
@@ -44,7 +52,7 @@ class GithubUpstreamClient(UpstreamClient):
         if self._token:
             headers["Authorization"] = f"Bearer {self._token}"
         request = Request(f"{self._api_url}/repos/{self._full_name}/{path}", headers=headers)
-        with self._url_opener.open(request, timeout=30) as response:
+        with self._url_opener.open(request, timeout=self._timeout_seconds) as response:
             content: bytes = response.read()
         return content
 
