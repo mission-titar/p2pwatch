@@ -14,7 +14,7 @@ from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus, StatusRe
 from p2pwatch.ports.driven.client_errors import ClientError
 from p2pwatch.ports.driven.client_status import ClientStatusWriter, StatusClient
 from p2pwatch.ports.driven.telemetry import EventEmitter
-from p2pwatch_testing.application.fakes import FakeTime, make_unreachable
+from tests.fakes.application.fakes import FakeTime, make_unreachable
 
 type _Reading = ClientStatus | ClientError
 

@@ -1,1 +1,1 @@
-pytest_plugins = ["p2pwatch_testing.adapters.persistence_sqlite.migrated_databases"]
+pytest_plugins = ["tests.support.adapters.driven.persistence_sqlite.migrated_databases"]

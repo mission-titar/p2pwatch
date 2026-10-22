@@ -14,7 +14,7 @@ from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory, SourceNaming
 from p2pwatch.ports.driven.source_reader import SourceReader
 from p2pwatch.ports.driving.source_describer import SourceDescription
-from p2pwatch_testing.application.fakes import FakeTime
+from tests.fakes.application.fakes import FakeTime
 
 _NOW = datetime(2026, 10, 14, 20, 0, 0, 654321, tzinfo=UTC)
 _SECOND_NOW = _NOW.replace(microsecond=0)

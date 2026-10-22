@@ -18,7 +18,7 @@ from p2pwatch.ports.driven.free_space_meter import FreeSpaceMeter
 from p2pwatch.ports.driven.repository_errors import RepositoryError
 from p2pwatch.ports.driven.source_client import SourceClient
 from p2pwatch.ports.driven.source_points import SourcePointReader, SourcePointWriter
-from p2pwatch_testing.application.fakes import FakeTime
+from tests.fakes.application.fakes import FakeTime
 
 
 class FakeDownloadClient(DownloadClient, SourceClient):

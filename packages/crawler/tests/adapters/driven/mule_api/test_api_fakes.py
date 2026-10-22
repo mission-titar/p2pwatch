@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from p2pwatch.adapters.driven.mule_api.client import AmuleApiClient
-from p2pwatch_testing.adapters.mule_api.api_fakes import (
+from tests.fakes.adapters.mule_api.api_fakes import (
     PASSWORD,
     FakeAmuleApi,
     FakeAmuleApiServer,

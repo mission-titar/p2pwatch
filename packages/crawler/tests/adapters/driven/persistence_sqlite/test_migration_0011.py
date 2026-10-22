@@ -3,13 +3,13 @@
 import sqlite3
 from pathlib import Path
 
-from p2pwatch_testing.adapters.persistence_sqlite.older_catalog import (
+from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
     insert_stage4_range,
     insert_stage4_variant,
     insert_v11_observation,
     open_catalog_at,
 )
-from p2pwatch_testing.catalog_rows import insert_decision, insert_file, insert_source
+from tests.support.catalog_rows import insert_decision, insert_file, insert_source
 
 _A, _B = "a" * 32, "b" * 32
 _USER, _OTHER = "1f2e" * 8, "c" * 32

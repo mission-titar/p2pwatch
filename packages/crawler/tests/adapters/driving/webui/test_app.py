@@ -51,7 +51,7 @@ from p2pwatch.ports.driving.node_describer import NodeDescription
 from p2pwatch.ports.driving.source_describer import SourceDescription
 from p2pwatch.ports.driving.source_lister import SourceListing
 from p2pwatch.ports.driving.source_name_describer import SourceNameDescription
-from p2pwatch_testing.application.fakes import (
+from tests.fakes.application.fakes import (
     DescribeFileCall,
     DescribeSourceCall,
     DescribeSourceNameCall,

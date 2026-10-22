@@ -33,7 +33,7 @@ from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory, SourceNaming
-from p2pwatch_testing.catalog_rows import (
+from tests.support.catalog_rows import (
     SEEN_AT,
     file_id,
     insert_decision,

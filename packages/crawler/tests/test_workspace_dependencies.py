@@ -7,11 +7,7 @@ from pathlib import Path
 _PACKAGES_DIR = Path(__file__).parents[2]
 
 # (distribution, its dependency group or "" for the runtime one, the member it depends on).
-_ALLOWED_EDGES = {
-    ("p2pwatch", "", "catalog-matching"),
-    ("p2pwatch", "dev", "p2pwatch-testing"),
-    ("p2pwatch-testing", "", "p2pwatch"),
-}
+_ALLOWED_EDGES = {("p2pwatch", "", "catalog-matching")}
 
 
 def _normalized(requirement: str) -> str:
@@ -40,5 +36,5 @@ def _workspace_edges() -> set[tuple[str, str, str]]:
     return edges
 
 
-def test_only_the_crawler_and_its_test_support_depend_on_a_workspace_member() -> None:
+def test_only_the_crawler_depends_on_a_workspace_member() -> None:
     assert _workspace_edges() == _ALLOWED_EDGES

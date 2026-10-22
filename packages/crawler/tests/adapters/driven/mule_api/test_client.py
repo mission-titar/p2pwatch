@@ -27,7 +27,7 @@ from p2pwatch.ports.driven.client_errors import (
 )
 from p2pwatch.ports.driven.download_client import DownloadClient
 from p2pwatch.ports.driven.source_client import SourceClient
-from p2pwatch_testing.adapters.mule_api.api_fakes import PASSWORD, TOKEN, FakeAmuleApi, error
+from tests.fakes.adapters.mule_api.api_fakes import PASSWORD, TOKEN, FakeAmuleApi, error
 
 _HASH = "8b54a3c20fae9e4b9f7e0c2c8c01b6b1"
 _KEY = FileKey(Network.ED2K, _HASH)

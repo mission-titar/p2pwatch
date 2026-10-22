@@ -4,7 +4,6 @@ severity: error
 message: A port imports only the pure standard library on this list and first-party packages; the dependency checks keep those to its own hexagon.
 note: "A module that needs I/O goes behind a port; a new pure module is a new line here."
 files: ["packages/*/src/*/ports/**/*.py"]
-ignores: ["packages/crawler_testing/**"]
 rule:
   matches: imported-module
   not:

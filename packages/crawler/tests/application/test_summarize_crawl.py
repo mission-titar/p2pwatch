@@ -9,7 +9,7 @@ from p2pwatch.domain.node_state import NodeState
 from p2pwatch.domain.status_reading import READING_FRESH_FOR, PublishedReading, StatusReading
 from p2pwatch.ports.driven.coverage_reader import CoverageReader
 from p2pwatch.ports.driving.crawl_summarizer import ClientSummary, CrawlSummary
-from p2pwatch_testing.application.fakes import (
+from tests.fakes.application.fakes import (
     FakeClientStatusReader,
     FakeNodeStateReader,
     FakeRunState,

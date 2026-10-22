@@ -12,7 +12,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation, ReportedFile
-from p2pwatch_testing.adapters.persistence_sqlite.older_catalog import (
+from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
     open_catalog_at,
     open_catalog_forcing_secure_delete_at,
 )

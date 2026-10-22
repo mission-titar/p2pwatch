@@ -36,21 +36,21 @@ from p2pwatch.domain.source import (
 from p2pwatch.ports.driven.client_errors import ClientUnreachableError, DownloadRejectedError
 from p2pwatch.ports.driven.free_space_meter import FreeSpaceMeter
 from p2pwatch.ports.driven.repository_errors import RepositoryError
-from p2pwatch_testing.application.download_fakes import (
+from tests.fakes.application.download_fakes import (
     FakeCatalogReader,
     FakeDownloadClient,
     FakeDownloadStore,
     FakeFreeSpaceMeter,
     FakeSourcePointStore,
 )
-from p2pwatch_testing.application.fakes import (
+from tests.fakes.application.fakes import (
     FakeEventEmitter,
     FakeLogger,
     FakeTime,
     LoggedLine,
     TickingWallClock,
 )
-from p2pwatch_testing.catalog_rows import insert_file, source_variant_node_ids
+from tests.support.catalog_rows import insert_file, source_variant_node_ids
 
 _NODE = "n1"
 _A = "a" * 32
