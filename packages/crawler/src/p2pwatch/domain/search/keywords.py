@@ -24,9 +24,9 @@ def dedupe_keywords(keywords: Sequence[str]) -> tuple[SearchKeyword, ...]:
     ignored.
     """
     seen: set[str] = set()
-    result: list[SearchKeyword] = []
+    deduplicated: list[SearchKeyword] = []
     for text in keywords:
         if text and text not in seen:
             seen.add(text)
-            result.append(SearchKeyword(text=text))
-    return tuple(result)
+            deduplicated.append(SearchKeyword(text=text))
+    return tuple(deduplicated)

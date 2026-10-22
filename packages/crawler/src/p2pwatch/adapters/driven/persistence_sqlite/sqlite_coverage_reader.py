@@ -48,11 +48,11 @@ ORDER BY ld.target_id, ld.file_id
 class SqliteCoverageReader(CoverageReader):
     """Reads through the calling thread's read-only connection."""
 
-    def __init__(self, reader_provider: ThreadReadConnections) -> None:
-        self._reader_provider = reader_provider
+    def __init__(self, thread_read_connections: ThreadReadConnections) -> None:
+        self._thread_read_connections = thread_read_connections
 
     def read_target_coverage(self) -> dict[str, tuple[str, ...]]:
         tiers_by_target: dict[str, list[str]] = {}
-        for row in self._reader_provider.connection().execute(_SQL_COVERAGE):
+        for row in self._thread_read_connections.connection().execute(_SQL_COVERAGE):
             tiers_by_target.setdefault(row["target_id"], []).append(row["tier"])
         return {target_id: tuple(tiers) for target_id, tiers in tiers_by_target.items()}

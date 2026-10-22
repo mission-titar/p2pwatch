@@ -73,6 +73,6 @@ def _parser() -> _CaseSensitiveParser:
 
 def _written(parser: _CaseSensitiveParser) -> str:
     # aMule writes `Key=value`, not `Key = value`.
-    out = io.StringIO()
-    parser.write(out, space_around_delimiters=False)
-    return out.getvalue()
+    conf_text = io.StringIO()
+    parser.write(conf_text, space_around_delimiters=False)
+    return conf_text.getvalue()

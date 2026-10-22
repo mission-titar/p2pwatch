@@ -67,11 +67,11 @@ def _optional[Reason: StrEnum](reason_type: type[Reason], stored: str | None) ->
 class SqliteNodeStateReader(NodeStateReader):
     """Read-only access to local.db through the calling thread's connection."""
 
-    def __init__(self, reader_provider: ThreadReadConnections) -> None:
-        self._reader_provider = reader_provider
+    def __init__(self, thread_read_connections: ThreadReadConnections) -> None:
+        self._thread_read_connections = thread_read_connections
 
     def read_node_state(self) -> NodeState:
-        connection = self._reader_provider.connection()
+        connection = self._thread_read_connections.connection()
         dl_rows = connection.execute(_SQL_DOWNLOADS).fetchall()
 
         node_id_row = connection.execute(_SQL_NODE_RUNTIME_KEY, ("node_id",)).fetchone()

@@ -1,4 +1,4 @@
-"""``StatusReadingWriter``: publishes to the board of the clients' latest status readings."""
+"""``StatusReadingWriter``: sets each client's latest status reading."""
 
 from abc import ABC, abstractmethod
 

@@ -98,14 +98,14 @@ def _load_scripts(directory: Traversable) -> tuple[Migration, ...]:
     """The ``NNNN_*.sql`` scripts by name; a bad name, a misordered version or an unknown
     directive raises ``MigrationError`` (non-``.sql`` files are ignored, gaps allowed)."""
     scripts: list[Migration] = []
-    for entry in sorted(directory.iterdir(), key=lambda item: item.name):
-        if not entry.name.endswith(".sql"):
+    for script_file in sorted(directory.iterdir(), key=lambda script_file: script_file.name):
+        if not script_file.name.endswith(".sql"):
             continue
-        prefix = entry.name.partition("_")[0]
+        prefix = script_file.name.partition("_")[0]
         if not prefix.isdigit():
-            raise MigrationError(f"invalid script name (NNNN_*.sql expected): {entry.name}")
-        script = entry.read_text(encoding="utf-8")
-        scripts.append(Migration(int(prefix), script, _is_transactional(entry.name, script)))
+            raise MigrationError(f"invalid script name (NNNN_*.sql expected): {script_file.name}")
+        script = script_file.read_text(encoding="utf-8")
+        scripts.append(Migration(int(prefix), script, _is_transactional(script_file.name, script)))
     for left, right in pairwise(script.version for script in scripts):
         if right <= left:
             raise MigrationError(

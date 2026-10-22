@@ -49,12 +49,12 @@ from p2pwatch.domain.console_query import QueryAnswer, QueryFailure
 _PROGRESS_INSTRUCTIONS = 1000
 
 
-def _stringify(value: object) -> str:
+def _stringify(cell: object) -> str:
     """Render a cell for display: ``None`` becomes the literal ``NULL`` (an empty cell would be
     ambiguous), a BLOB its lowercase hex, everything else its ``str``."""
-    if value is None:
+    if cell is None:
         return "NULL"
-    return value.hex() if isinstance(value, bytes) else str(value)
+    return cell.hex() if isinstance(cell, bytes) else str(cell)
 
 
 class SqliteSqlExecutor(SqlExecutor):
@@ -112,7 +112,7 @@ def _run_query(
             kept = fetched[:row_cap]
             description = cursor.description
             columns = tuple(col[0] for col in description) if description is not None else ()
-            rows = tuple(tuple(_stringify(value) for value in row) for row in kept)
+            rows = tuple(tuple(_stringify(cell) for cell in row) for row in kept)
             return QueryAnswer(columns, rows, elapsed, truncated)
         except sqlite3.OperationalError as exc:
             if aborted[0]:

@@ -25,8 +25,8 @@ _STARTED_AT_MICROS = 1_781_258_400_000_000  # 2026-06-12T10:00:00Z
 
 def _read_node_state(path: Path) -> NodeState:
     """Read local.db through the webui's read-only connection."""
-    with ThreadReadConnections(path) as reader_provider:
-        return SqliteNodeStateReader(reader_provider).read_node_state()
+    with ThreadReadConnections(path) as thread_read_connections:
+        return SqliteNodeStateReader(thread_read_connections).read_node_state()
 
 
 # ---------------------------------------------------------------------------

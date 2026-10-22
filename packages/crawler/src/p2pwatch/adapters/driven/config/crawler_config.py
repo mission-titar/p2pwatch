@@ -1,4 +1,4 @@
-"""UNIFIED crawler config (``crawler.yml``, versioned — deploy-simplification design).
+"""UNIFIED crawler config (``crawler.yml``, versioned, deploy-simplification design).
 
 Merges the former POLICY config (cadences, polling budgets, jitter, backoff, shutdown
 deadline) and the former LOCAL config (secrets + DB paths + download wiring). Parsed
@@ -108,7 +108,7 @@ class WebuiConfig:
 
     ``enabled`` gates the WHOLE HTTP surface (``false`` ⇒ headless crawler, no port). The section
     is OPTIONAL (absent ⇒ enabled). The uvicorn bind is FIXED at ``0.0.0.0:8080`` in the
-    composition layer, not configurable here; exposure is governed by the operator's Docker
+    composition ring, not configurable here; exposure is governed by the operator's Docker
     compose (published port + networks), not by an app-level bind address.
 
     ``amule_url`` is where the nav's aMule link points. The two containers each publish a web
@@ -191,10 +191,10 @@ class CrawlerConfig:
     webui: WebuiConfig
 
 
-def _require_mapping(value: Any, error_label: str) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        raise ConfigError(f"{error_label}: mapping expected, got {type(value).__name__}")
-    return value
+def _require_mapping(node: Any, error_label: str) -> dict[str, Any]:
+    if not isinstance(node, dict):
+        raise ConfigError(f"{error_label}: mapping expected, got {type(node).__name__}")
+    return node
 
 
 # The root's error label: crawler.yml has no section around its root keys, so they print bare.
@@ -213,12 +213,12 @@ def _required(section: dict[str, Any], key: str, error_label: str) -> Any:
 
 
 def _number(section: dict[str, Any], key: str, error_label: str) -> float:
-    value = _required(section, key, error_label)
-    if not isinstance(value, int | float) or isinstance(value, bool):
-        raise ConfigError(f"{_key_path(error_label, key)}: number expected, got {value!r}")
-    if not math.isfinite(value):  # .inf makes a sleep endless, .nan passes every comparison
-        raise ConfigError(f"{_key_path(error_label, key)}: finite number expected, got {value!r}")
-    return float(value)
+    setting = _required(section, key, error_label)
+    if not isinstance(setting, int | float) or isinstance(setting, bool):
+        raise ConfigError(f"{_key_path(error_label, key)}: number expected, got {setting!r}")
+    if not math.isfinite(setting):  # .inf makes a sleep endless, .nan passes every comparison
+        raise ConfigError(f"{_key_path(error_label, key)}: finite number expected, got {setting!r}")
+    return float(setting)
 
 
 def _positive(section: dict[str, Any], key: str, error_label: str) -> float:
@@ -239,20 +239,20 @@ def _non_negative(section: dict[str, Any], key: str, error_label: str) -> float:
 
 def _positive_int(section: dict[str, Any], key: str, error_label: str) -> int:
     """Strictly positive integer (bool refused), else ``ConfigError`` (fail-fast §5/§14)."""
-    value = _required(section, key, error_label)
-    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+    setting = _required(section, key, error_label)
+    if not isinstance(setting, int) or isinstance(setting, bool) or setting <= 0:
         raise ConfigError(
-            f"{_key_path(error_label, key)}: strictly positive integer expected, got {value!r}"
+            f"{_key_path(error_label, key)}: strictly positive integer expected, got {setting!r}"
         )
-    return value
+    return setting
 
 
 def _bool(section: dict[str, Any], key: str, error_label: str) -> bool:
     """REQUIRED boolean, else ``ConfigError`` (fail-fast §5/§14)."""
-    value = _required(section, key, error_label)
-    if not isinstance(value, bool):
-        raise ConfigError(f"{_key_path(error_label, key)}: boolean expected, got {value!r}")
-    return value
+    setting = _required(section, key, error_label)
+    if not isinstance(setting, bool):
+        raise ConfigError(f"{_key_path(error_label, key)}: boolean expected, got {setting!r}")
+    return setting
 
 
 # Coherent bounds for a P2P watch: a day for a delay, 30 days for an absence (operator, 2026-10-13).
@@ -290,20 +290,20 @@ def _bool_default(section: dict[str, Any], key: str, error_label: str, default: 
     """OPTIONAL boolean (default ``default``); refuses a non-bool, fail-fast (§5/§14)."""
     if key not in section:
         return default
-    value = section[key]
-    if not isinstance(value, bool):
-        raise ConfigError(f"{_key_path(error_label, key)}: boolean expected, got {value!r}")
-    return value
+    setting = section[key]
+    if not isinstance(setting, bool):
+        raise ConfigError(f"{_key_path(error_label, key)}: boolean expected, got {setting!r}")
+    return setting
 
 
 def _string(section: dict[str, Any], key: str, error_label: str, env: Mapping[str, str]) -> str:
     """Non-empty string, ``${NAME}``-interpolated from ``env`` AFTER reading, BEFORE the non-empty
     check (fail-fast §5/§14). Missing env variable ⇒ ``ConfigError`` (via ``interpolate``)."""
     key_path = _key_path(error_label, key)
-    value = _required(section, key, error_label)
-    if not isinstance(value, str):
-        raise ConfigError(f"{key_path}: non-empty string expected, got {value!r}")
-    interpolated = interpolate(value, env, key_path)
+    setting = _required(section, key, error_label)
+    if not isinstance(setting, str):
+        raise ConfigError(f"{key_path}: non-empty string expected, got {setting!r}")
+    interpolated = interpolate(setting, env, key_path)
     if not interpolated:
         raise ConfigError(f"{key_path}: non-empty string expected, got {interpolated!r}")
     return interpolated
@@ -329,9 +329,9 @@ def _parse_observability(section: dict[str, Any], env: Mapping[str, str]) -> Obs
         DEFAULT_NOTIFICATION_TIMEOUT_SECONDS,
     )
     notifications: list[NotificationTarget] = []
-    for index, entry in enumerate(section.get("notifications", [])):
+    for index, notification_node in enumerate(section.get("notifications", [])):
         error_label = f"observability.notifications[{index}]"
-        notification = _require_mapping(entry, error_label)
+        notification = _require_mapping(notification_node, error_label)
         if "tag" in notification:  # the 4.x name, refused like _MOVED_KEYS
             raise ConfigError(
                 f"{error_label}: key 'tag' was renamed 'audience', rename it in crawler.yml"
@@ -412,10 +412,10 @@ def _parse_search(document: dict[str, Any]) -> SearchConfig:
     if not isinstance(keywords, list) or not keywords:
         raise ConfigError("search.keywords: non-empty list of strings expected")
     parsed_keywords: list[str] = []
-    for entry in keywords:
-        if not isinstance(entry, str) or not entry:
-            raise ConfigError(f"search.keywords: non-empty string expected, got {entry!r}")
-        parsed_keywords.append(entry)
+    for keyword in keywords:
+        if not isinstance(keyword, str) or not keyword:
+            raise ConfigError(f"search.keywords: non-empty string expected, got {keyword!r}")
+        parsed_keywords.append(keyword)
     return SearchConfig(keywords=tuple(parsed_keywords), backoff=_parse_backoff(section))
 
 
@@ -442,7 +442,7 @@ def _parse_backoff(search: dict[str, Any]) -> BackoffConfig:
 def _parse_webui(document: dict[str, Any], env: Mapping[str, str]) -> WebuiConfig:
     """`webui` section (optional): an absent section or key takes the domain's default.
 
-    The bind is FIXED at 0.0.0.0:8080 in the composition layer, so this reads no host/port: an
+    The bind is FIXED at 0.0.0.0:8080 in the composition ring, so this reads no host/port: an
     unknown key (a legacy ``host``/``port``) is ignored silently, no fail-fast."""
     section = _require_mapping(document.get("webui", {}), "section 'webui'")
     enabled = _bool_default(section, "enabled", "webui", DEFAULT_WEBUI_ENABLED)

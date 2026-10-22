@@ -62,7 +62,7 @@ def short_timestamp(iso: str) -> str:
     the input carries microseconds/a timezone offset: only the date and the first 5
     characters after ``T`` (``HH:MM``) are kept; everything after that (seconds,
     microseconds, offset) is dropped, not parsed. Input is assumed UTC (as stored by the
-    persistence layer).
+    persistence adapter).
 
     An empty input formats to an empty string: "no timestamp" must render as nothing, since
     partitioning it would otherwise leave just the ``Z`` marker on the page. A file with no

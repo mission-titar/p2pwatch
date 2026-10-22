@@ -84,7 +84,7 @@
       </tr>
     </thead>
     <tbody>
-      {% for row in file.timeline %}
+      {% for row in file.observations %}
       <tr>
         <td>{{ row.filename }}</td>
         <td>{{ row.size_bytes }}</td>
@@ -118,7 +118,7 @@
       </tr>
     </thead>
     <tbody>
-      {% for row in file.source_history %}
+      {% for row in file.sharing_periods %}
       <tr>
         <td>{% for href in row.name_link %}<a href="{{ href }}">{{ row.source_name }}</a>{% else %}{{ row.source_name }}{% endfor %}</td>
         <td>{% for href in row.source_link %}<a href="{{ href }}">{{ row.short_hash }}</a>{% else %}{{ row.short_hash }}{% endfor %}</td>

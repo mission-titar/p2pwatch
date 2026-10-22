@@ -118,9 +118,9 @@ def _docker_env(caller_env: Mapping[str, str], *extra: Mapping[str, str]) -> dic
     for mapping in extra:
         env.update(mapping)
     for name in _DAEMON_SELECTORS:
-        value = caller_env.get(name)
-        if value is not None:
-            env[name] = value
+        selector = caller_env.get(name)
+        if selector is not None:
+            env[name] = selector
     return env
 
 
@@ -163,15 +163,15 @@ def _down(files: tuple[Path, ...]) -> None:
 
 def _ps_field(service: str, field: str, files: tuple[Path, ...]) -> str:
     """One field of the service's `ps -a --format json` entry (one JSON object per line)."""
-    result = _run("ps", "-a", "--format", "json", service, files=files, timeout=60)
-    for line in result.stdout.splitlines():
+    compose_run = _run("ps", "-a", "--format", "json", service, files=files, timeout=60)
+    for line in compose_run.stdout.splitlines():
         line = line.strip()
         if not line:
             continue
-        obj = json.loads(line)
-        if obj.get("Service") == service:
-            return str(obj.get(field))
-    return f"<absent from `ps`: {result.stdout!r}>"
+        container = json.loads(line)
+        if container.get("Service") == service:
+            return str(container.get(field))
+    return f"<absent from `ps`: {compose_run.stdout!r}>"
 
 
 def _exec(service: str, *command: str, files: tuple[Path, ...]) -> str:
@@ -180,10 +180,10 @@ def _exec(service: str, *command: str, files: tuple[Path, ...]) -> str:
     Tolerant on purpose: every caller is a readiness probe polling for an expected output, and a
     container that is not ready yet fails the exec rather than printing something wrong.
     """
-    result = _run("exec", "-T", service, *command, files=files, timeout=120)
-    if result.returncode != 0:
-        return f"<rc={result.returncode} {result.stderr.strip()}>"
-    return result.stdout.strip()
+    compose_run = _run("exec", "-T", service, *command, files=files, timeout=120)
+    if compose_run.returncode != 0:
+        return f"<rc={compose_run.returncode} {compose_run.stderr.strip()}>"
+    return compose_run.stdout.strip()
 
 
 def _wait_for(
@@ -274,21 +274,21 @@ def test_a_chosen_daemon_that_answers_nothing_fails_the_call() -> None:
     exercising another. Pointing it at a socket nothing listens on must therefore fail.
     """
     caller_env = {**os.environ, "DOCKER_HOST": "unix:///nonexistent/p2pwatch-smoke.sock"}
-    result = _run("ps", files=(_SMOKE,), timeout=120, caller_env=caller_env)
+    compose_run = _run("ps", files=(_SMOKE,), timeout=120, caller_env=caller_env)
 
-    assert result.returncode != 0, result.stdout
-    assert "p2pwatch-smoke.sock" in result.stderr + result.stdout
+    assert compose_run.returncode != 0, compose_run.stdout
+    assert "p2pwatch-smoke.sock" in compose_run.stderr + compose_run.stdout
 
 
 @pytest.mark.skipif(_USES_PREBUILT, reason="image prebuilt in CI - nothing to build")
 def test_build_succeeds(project_files: tuple[Path, ...]) -> None:
-    result = _run("build", files=project_files, timeout=1800)
-    assert result.returncode == 0, result.stderr
+    compose_run = _run("build", files=project_files, timeout=1800)
+    assert compose_run.returncode == 0, compose_run.stderr
 
 
 def _up_until_ed2k_is_healthy(files: tuple[Path, ...]) -> None:
-    result = _run("up", "-d", *_BUILD_FLAGS, files=files, timeout=1800)
-    assert result.returncode == 0, result.stderr
+    compose_run = _run("up", "-d", *_BUILD_FLAGS, files=files, timeout=1800)
+    assert compose_run.returncode == 0, compose_run.stderr
     # The healthcheck tests s6-svstat's OUTPUT, not its exit code (it exits 0 for a stopped
     # service too). `healthy` therefore means amuled really is up under s6.
     _wait_for("health", lambda: _ps_field(_AMULE, "Health", files), "healthy", files)
@@ -447,7 +447,7 @@ def _render(variant: str, tmp_path: Path) -> Any:
     compose.write_text(text.replace(_DIRECT_INCLUDE, f"ed2k/{variant}.compose.yml"))
     (tmp_path / ".env").write_text("".join(f"{k}={v}\n" for k, v in _RENDER_DOTENV.items()))
 
-    result = subprocess.run(
+    compose_run = subprocess.run(
         ["docker", "compose", "-f", str(compose), "config", "--format", "json"],
         cwd=tmp_path,
         env=_docker_env(os.environ),
@@ -455,8 +455,8 @@ def _render(variant: str, tmp_path: Path) -> Any:
         text=True,
         timeout=120,
     )
-    assert result.returncode == 0, result.stderr
-    rendered = json.loads(result.stdout)
+    assert compose_run.returncode == 0, compose_run.stderr
+    rendered = json.loads(compose_run.stdout)
     assert not rendered.get("volumes"), f"named volumes are gone, got {rendered['volumes']}"
     return rendered["services"]
 
@@ -564,9 +564,9 @@ print(row[0], bool(row[1]))
 
 def _exec_python(script: str, *args: str, files: tuple[Path, ...]) -> str:
     """Run `script` with the container's python and return its stdout (fails loudly)."""
-    result = _run("exec", "-T", _CORE, "python", "-c", script, *args, files=files, timeout=120)
-    assert result.returncode == 0, f"{result.stdout}{result.stderr}"
-    return result.stdout.strip()
+    compose_run = _run("exec", "-T", _CORE, "python", "-c", script, *args, files=files, timeout=120)
+    assert compose_run.returncode == 0, f"{compose_run.stdout}{compose_run.stderr}"
+    return compose_run.stdout.strip()
 
 
 def _shared_hashes(files: tuple[Path, ...]) -> frozenset[str] | None:
@@ -589,8 +589,9 @@ def _wait_new_shared_hash(
     """Poll until exactly one hash appeared in amuled's shared list, and return it.
 
     Called right after `s6-svc -r`, so it is the readiness probe for the restart TOO: amuled is
-    still shutting down for the first attempts (EC refuses or resets), then comes back and hashes
-    the IncomingDir asynchronously. A failed EC call is therefore a poll iteration, not a failure.
+    still shutting down for the first attempts (amuleapi refuses or resets), then comes back and
+    hashes the IncomingDir asynchronously. A failed amuleapi call is therefore a poll iteration,
+    not a failure.
     The "exactly one" bound is what identifies OUR file: the smoke amuled shares nothing else at
     that point (its only queue entry has no sources and no bytes, so it is not shared yet).
     """
@@ -623,7 +624,7 @@ def test_a_file_amuled_shares_is_recorded_completed(project_files: tuple[Path, .
     )
 
     before = _shared_hashes(project_files)
-    assert before is not None, "amuled's EC server must answer before the restart"
+    assert before is not None, "amuleapi must answer before the restart"
     drop = _run(
         "exec",
         "-T",

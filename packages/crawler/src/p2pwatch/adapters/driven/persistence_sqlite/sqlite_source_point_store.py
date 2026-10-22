@@ -215,6 +215,6 @@ def _variant_columns(
 
 def _content_hash(variant: tuple[bytes | str | bool | None, ...]) -> bytes:
     """blake2b-128 of the columns as compact JSON, a BLOB written as lowercase hex."""
-    columns = [value.hex() if isinstance(value, bytes) else value for value in variant]
+    columns = [column.hex() if isinstance(column, bytes) else column for column in variant]
     canonical = json.dumps(columns, ensure_ascii=False, separators=(",", ":"))
     return hashlib.blake2b(canonical.encode(), digest_size=16).digest()

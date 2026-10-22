@@ -153,7 +153,7 @@ def test_an_alternate_never_carries_the_volatile_ecid() -> None:
     alternate = {"ecid": 621, "name": "[Keroro].095.avi", "sources": {"total": 40}}
     reported_files, _ = map_search_results([_result(alternate_names=[alternate])], "keroro")
 
-    assert all("621" not in str(value) for _, value in reported_files[1].raw_metadata)
+    assert all("621" not in str(rendered) for _, rendered in reported_files[1].raw_metadata)
 
 
 def test_a_result_without_a_usable_hash_is_skipped_and_counted() -> None:
@@ -436,7 +436,7 @@ def _client_row(**overrides: Any) -> dict[str, Any]:
 
 def _client_detail(**overrides: Any) -> dict[str, Any]:
     """GET /clients/{ecid}: the /clients list object plus its detail-only fields."""
-    detail = {key: value for key, value in _client_row().items() if key not in ("role", "a4af")}
+    detail = {key: field for key, field in _client_row().items() if key not in ("role", "a4af")}
     detail.update(
         ed2k_user_id=3232238090,
         high_id=True,
@@ -485,7 +485,7 @@ def test_no_address_of_the_peer_reaches_the_reading() -> None:
     reading = map_source(row, _client_detail(**addresses))
 
     serialized = json.dumps(dataclasses.asdict(reading))
-    assert [value for value in addresses.values() if str(value) in serialized] == []
+    assert [address for address in addresses.values() if str(address) in serialized] == []
 
 
 @pytest.mark.parametrize(
@@ -610,7 +610,7 @@ def test_a_sparse_row_and_detail_keep_the_meta_keys_they_carry_and_read_unknown(
 
 
 @pytest.mark.parametrize(
-    ("value", "kept"),
+    ("protocol_extensions", "kept"),
     [
         ([], ()),
         (["ipv6", 7], ("ipv6", "7")),
@@ -619,8 +619,10 @@ def test_a_sparse_row_and_detail_keep_the_meta_keys_they_carry_and_read_unknown(
         (None, None),
     ],
 )
-def test_a_meta_value_is_kept_in_a_shape_the_catalog_stores(value: object, kept: object) -> None:
-    reading = map_source(_client_row(protocol_extensions=value), _client_detail())
+def test_a_meta_value_is_kept_in_a_shape_the_catalog_stores(
+    protocol_extensions: object, kept: object
+) -> None:
+    reading = map_source(_client_row(protocol_extensions=protocol_extensions), _client_detail())
 
     assert dict(reading.raw_metadata)["protocol_extensions"] == kept
 

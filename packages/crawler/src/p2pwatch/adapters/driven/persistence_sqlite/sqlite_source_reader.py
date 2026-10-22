@@ -105,7 +105,7 @@ ORDER BY p.first_seen_at DESC, p.variant_id DESC
 """
 
 # A variant's latest point, one seek on the primary key, never an aggregate of every point.
-_SQL_VARIANT_LAST_SEEN = (
+_SQL_VARIANT_LATEST_SEEN = (
     "(SELECT MAX(o.observed_at) FROM source_observations AS o WHERE o.variant_id = v.variant_id)"
 )
 
@@ -116,7 +116,7 @@ FROM sources AS s
 JOIN (
     SELECT
         v.source_id,
-        MAX({_SQL_VARIANT_LAST_SEEN}) AS latest_seen_at,
+        MAX({_SQL_VARIANT_LATEST_SEEN}) AS latest_seen_at,
         COUNT(DISTINCT v.file_id) AS file_count
     FROM source_variants AS v
     GROUP BY v.source_id
@@ -142,7 +142,7 @@ SELECT
         SELECT v.name
         FROM source_variants AS v
         WHERE v.source_id = s.source_id AND v.name IS NOT NULL
-        ORDER BY {_SQL_VARIANT_LAST_SEEN} DESC, v.variant_id DESC
+        ORDER BY {_SQL_VARIANT_LATEST_SEEN} DESC, v.variant_id DESC
         LIMIT 1
     ) AS name
 """
@@ -157,7 +157,7 @@ SELECT
     s.network,
     s.native_id,
     v.name,
-    MAX({_SQL_VARIANT_LAST_SEEN}) AS latest_seen_at,
+    MAX({_SQL_VARIANT_LATEST_SEEN}) AS latest_seen_at,
     COUNT(DISTINCT v.file_id) AS file_count
 FROM source_variants AS v
 JOIN sources AS s ON s.source_id = v.source_id
@@ -247,8 +247,8 @@ def _best_filename_by_file(
 class SqliteSourceReader(SourceReader):
     """Reads through the calling thread's read-only connection."""
 
-    def __init__(self, reader_provider: ThreadReadConnections) -> None:
-        self._reader_provider = reader_provider
+    def __init__(self, thread_read_connections: ThreadReadConnections) -> None:
+        self._thread_read_connections = thread_read_connections
 
     def read_known_sources(
         self, *, search_text: str | None, limit: int, offset: int
@@ -260,7 +260,7 @@ class SqliteSourceReader(SourceReader):
             + search
             + "ORDER BY seen.latest_seen_at DESC, s.source_id\nLIMIT ? OFFSET ?\n"
         )
-        rows = self._reader_provider.connection().execute(sql, [*params, limit, offset])
+        rows = self._thread_read_connections.connection().execute(sql, [*params, limit, offset])
         return tuple(
             KnownSource(
                 source=SourceKey(Network(row["network"]), row["native_id"]),
@@ -274,13 +274,13 @@ class SqliteSourceReader(SourceReader):
     def read_source_count(self, *, search_text: str | None) -> int:
         search, params = _sources_search(search_text)
         sql = "SELECT COUNT(*) AS n\n" + _SQL_SOURCES_FROM + search
-        count: int = self._reader_provider.connection().execute(sql, params).fetchone()["n"]
+        count: int = self._thread_read_connections.connection().execute(sql, params).fetchone()["n"]
         return count
 
     def read_source_history(
         self, source_id: bytes, *, limit: int, offset: int, window: PeriodWindow
     ) -> SourceHistory | None:
-        connection = self._reader_provider.connection()
+        connection = self._thread_read_connections.connection()
         row = connection.execute(_SQL_SOURCE, (source_id,)).fetchone()
         if row is None:
             return None
@@ -299,7 +299,7 @@ class SqliteSourceReader(SourceReader):
     def read_source_name_history(
         self, source_name: str, *, limit: int, offset: int, window: PeriodWindow
     ) -> SourceNameHistory | None:
-        connection = self._reader_provider.connection()
+        connection = self._thread_read_connections.connection()
         if connection.execute(_SQL_NAME_EXISTS, (source_name,)).fetchone() is None:
             return None
         sharing_periods = tuple(
@@ -318,7 +318,7 @@ class SqliteSourceReader(SourceReader):
     def read_sharing_periods(
         self, file: FileKey, window: PeriodWindow
     ) -> tuple[SharingPeriod, ...]:
-        connection = self._reader_provider.connection()
+        connection = self._thread_read_connections.connection()
         return tuple(
             map(_sharing_period, _period_rows(connection, _WHERE_FILE, file.file_id, window))
         )

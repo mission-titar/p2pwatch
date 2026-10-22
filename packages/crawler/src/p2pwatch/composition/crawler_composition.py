@@ -1,6 +1,6 @@
 """Composition root: loads the config, assembles the crawler it describes, then runs it.
 
-COMPOSITION layer (the only one allowed to import adapters AND application). Builds:
+COMPOSITION ring (the only one allowed to import adapters AND application). Builds:
 - ONE ``SqliteObservationStore`` + ``SqliteCatalogScanReader``, ``SqliteDecisionStore``,
   ``SqliteNodeIdStore``, ``SqlitePolicyFingerprintStore`` and ``SqliteBackoffStateStore``
   (single writer, invariant §11), connections opened via ``open_catalog``/``open_local``
@@ -186,17 +186,18 @@ class CrawlerComposition(CrawlerRunner):
         monotonic_clock: MonotonicClock,
     ) -> None:
         """Start the read-only webui on its OWN thread + loop (spec §5). It shares with the crawler
-        the parsed config (immutable), the clocks (stateless), the status board (whole snapshots
-        swapped, never mutated) and the run state (every change scheduled on the crawler's loop).
+        the parsed config (immutable), the clocks (stateless), the status reading store (whole
+        snapshots swapped, never mutated) and the run state (every change scheduled on the
+        crawler's loop).
         It reads through its OWN ``ThreadReadConnections``s, one connection per thread. Its stop is
         registered on ``stack`` so it runs during the normal LIFO unwind, AFTER the loops stop."""
         crawler_config = config.crawler_config
         webui_package_directory = Path(p2pwatch.adapters.driving.webui.__file__).parent
-        local_reader_provider = ThreadReadConnections(crawler_config.local_db_path)
-        node_state_reader = SqliteNodeStateReader(local_reader_provider)
-        catalog_reader_provider = ThreadReadConnections(crawler_config.catalog_db_path)
-        catalog_file_reader = SqliteCatalogFileReader(catalog_reader_provider)
-        source_reader = SqliteSourceReader(catalog_reader_provider)
+        local_read_connections = ThreadReadConnections(crawler_config.local_db_path)
+        node_state_reader = SqliteNodeStateReader(local_read_connections)
+        catalog_read_connections = ThreadReadConnections(crawler_config.catalog_db_path)
+        catalog_file_reader = SqliteCatalogFileReader(catalog_read_connections)
+        source_reader = SqliteSourceReader(catalog_read_connections)
         app = build_webui_app(
             target_segments=config.targets,
             templates_directory=webui_package_directory / "templates",
@@ -206,7 +207,7 @@ class CrawlerComposition(CrawlerRunner):
             shutdown_requester=shutdown_requester,
             crawl_summarizer=SummarizeCrawl(
                 target_ids=tuple(target.target_id for target in config.targets),
-                coverage_reader=SqliteCoverageReader(catalog_reader_provider),
+                coverage_reader=SqliteCoverageReader(catalog_read_connections),
                 node_state_reader=node_state_reader,
                 run_state_reader=run_state,
                 status_reading_reader=status_reading_store,
@@ -250,7 +251,7 @@ class CrawlerComposition(CrawlerRunner):
             app,
             self._webui_address,
             start_timeout_seconds=_WEBUI_START_TIMEOUT_SECONDS,
-            serving_resources=(catalog_reader_provider, local_reader_provider),
+            serving_resources=(catalog_read_connections, local_read_connections),
         )
         stack.push_async_callback(server_thread.stop)
         await server_thread.start()
@@ -282,13 +283,13 @@ class CrawlerComposition(CrawlerRunner):
         run_state = AsyncioRunStateStore(loop=loop, resumed=resumed, shutdown=shutdown)
         shutdown_requester = RequestShutdown(run_state)
         async with PosixProcess(shutdown_requester) as stack:
-            catalog_conn = open_catalog(crawler_config.catalog_db_path)
-            stack.callback(catalog_conn.close)
-            local_conn = open_local(crawler_config.local_db_path)
-            stack.callback(local_conn.close)
+            catalog_connection = open_catalog(crawler_config.catalog_db_path)
+            stack.callback(catalog_connection.close)
+            local_connection = open_local(crawler_config.local_db_path)
+            stack.callback(local_connection.close)
 
-            node_id_store = SqliteNodeIdStore(local_conn)
-            policy_fingerprint_store = SqlitePolicyFingerprintStore(local_conn)
+            node_id_store = SqliteNodeIdStore(local_connection)
+            policy_fingerprint_store = SqlitePolicyFingerprintStore(local_connection)
             observability = crawler_config.observability
             registry = CollectorRegistry()
             notifier = AppriseNotifier(
@@ -303,10 +304,10 @@ class CrawlerComposition(CrawlerRunner):
             stack.callback(
                 start_metrics_server(registry, observability.metrics_port, start_http_server)
             )
-            observation_store = SqliteObservationStore(catalog_conn)
-            catalog_scan_reader = SqliteCatalogScanReader(catalog_conn)
-            decision_store = SqliteDecisionStore(catalog_conn)
-            backoff_states = SqliteBackoffStateStore(local_conn)
+            observation_store = SqliteObservationStore(catalog_connection)
+            catalog_scan_reader = SqliteCatalogScanReader(catalog_connection)
+            decision_store = SqliteDecisionStore(catalog_connection)
+            backoff_state_store = SqliteBackoffStateStore(local_connection)
             engine = MatchingEngine(config.matcher_config, config.targets)
             status_reading_store = InMemoryStatusReadingStore((AMULE_CLIENT_NAME,))
             # In-process webui (spec §5): own thread + loop, started EARLY (before the daemon client
@@ -333,7 +334,7 @@ class CrawlerComposition(CrawlerRunner):
                 monotonic_clock,
                 RandomJitterGenerator(jitter_seed=None),  # seeded by the system's entropy
             )
-            backoff.load_from(backoff_states.read_backoff_states())
+            backoff.load_from(backoff_state_store.read_backoff_states())
             deps = WorkerDeps(
                 observation_writer=observation_store,
                 observation_reader=observation_store,
@@ -367,7 +368,7 @@ class CrawlerComposition(CrawlerRunner):
                 keywords=crawler_config.search.keywords,
                 resumed=resumed,
                 backoff=backoff,
-                backoff_state_writer=backoff_states,
+                backoff_state_writer=backoff_state_store,
                 monotonic_clock=monotonic_clock,
                 logger=StdlibLogger("p2pwatch.application.search_tasks"),
             )
@@ -377,13 +378,13 @@ class CrawlerComposition(CrawlerRunner):
             ]
 
             # Download enabled ⟺ the ``download`` section is present (``enabled: true``). Its loop
-            # shares the catalog's repos and ``local_conn`` (one writer, on the event loop), and
-            # the search session.
+            # shares the catalog's stores and ``local_connection`` (one writer, on the event loop),
+            # and the search session.
             download_config = crawler_config.download
             if download_config is not None:
-                tracked_download_store = SqliteTrackedDownloadStore(local_conn)
+                tracked_download_store = SqliteTrackedDownloadStore(local_connection)
                 source_point_store = SqliteSourcePointStore(
-                    catalog_conn, download_config.time_between_source_reads
+                    catalog_connection, download_config.time_between_source_reads
                 )
                 download_deps = DownloadLoopDeps(
                     download_client=client,

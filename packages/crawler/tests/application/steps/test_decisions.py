@@ -1,6 +1,6 @@
 """Tests for the shared decision helper (spec §7): set diff keyed by (hash, target_id).
 
-Real engine + real SQLite stores (mirrors ``test_record_observations.py``: "real repos
+Real engine + real SQLite stores (mirrors ``test_record_observations.py``: "real stores
 on tmp_path"); only ``waker``/``event_emitter``/``wall_clock`` are fakes. ``_record`` observes the
 name first: the helper judges the file on every name the catalog knows for it.
 """

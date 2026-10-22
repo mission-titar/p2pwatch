@@ -49,14 +49,14 @@ def parse_boot_settings(env: Mapping[str, str]) -> BootSettings:
 
 def is_port_sync_enabled(env: Mapping[str, str]) -> bool:
     """Return whether `PORT_SYNC` turns port-sync on; unset or empty is off."""
-    value = env.get("PORT_SYNC", "")
-    if not value:
+    port_sync = env.get("PORT_SYNC", "")
+    if not port_sync:
         return False
-    if value.lower() in _ON:
+    if port_sync.lower() in _ON:
         return True
-    if value.lower() in _OFF:
+    if port_sync.lower() in _OFF:
         return False
-    raise SettingsError(f"PORT_SYNC must be one of {', '.join(_ON + _OFF)}, got {value!r}")
+    raise SettingsError(f"PORT_SYNC must be one of {', '.join(_ON + _OFF)}, got {port_sync!r}")
 
 
 def parse_port_sync_settings(env: Mapping[str, str]) -> PortSyncSettings:
@@ -85,33 +85,33 @@ def parse_port_sync_settings(env: Mapping[str, str]) -> PortSyncSettings:
 
 
 def _required(env: Mapping[str, str], name: str) -> str:
-    value = env.get(name)
-    if not value:
+    setting = env.get(name)
+    if not setting:
         raise SettingsError(f"{name} is required")
-    return value
+    return setting
 
 
 def _password(env: Mapping[str, str], name: str) -> str:
-    value = _required(env, name)
+    password = _required(env, name)
     # Cc: the C0 and C1 controls and DEL, which no typed password holds.
-    if any(unicodedata.category(char) == "Cc" for char in value):
+    if any(unicodedata.category(char) == "Cc" for char in password):
         raise SettingsError(f"{name} must not contain a control character")
-    return value
+    return password
 
 
 def _required_id(env: Mapping[str, str], name: str) -> int:
-    value = _required(env, name)
+    setting = _required(env, name)
     # isascii + isdigit: int() would also take "-1", "+1", "1_000", " 1" and non-ASCII digits.
-    if not (value.isascii() and value.isdigit()):
-        raise SettingsError(f"{name} must be a numeric id, got {value!r}")
-    return int(value)
+    if not (setting.isascii() and setting.isdigit()):
+        raise SettingsError(f"{name} must be a numeric id, got {setting!r}")
+    return int(setting)
 
 
 def _seconds(env: Mapping[str, str], name: str, default: timedelta) -> timedelta:
-    value = env.get(name)
-    if not value:
+    setting = env.get(name)
+    if not setting:
         return default
     # isascii + isdigit: int() would also take "-1", "+1", "1_000", " 1" and non-ASCII digits.
-    if not (value.isascii() and value.isdigit()) or int(value) == 0:
-        raise SettingsError(f"{name} must be a positive integer, got {value!r}")
-    return timedelta(seconds=int(value))
+    if not (setting.isascii() and setting.isdigit()) or int(setting) == 0:
+        raise SettingsError(f"{name} must be a positive integer, got {setting!r}")
+    return timedelta(seconds=int(setting))

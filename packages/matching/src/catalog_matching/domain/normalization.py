@@ -9,13 +9,13 @@ import unicodedata
 _LIGATURES = {"œ": "oe", "æ": "ae"}
 
 
-def fold(value: str) -> str:
+def fold(text: str) -> str:
     """NFKD -> strip combining diacritics -> casefold -> ligatures; punctuation and digits KEPT.
 
     Used by ``regex`` tokens (so ``teletoon``/``fevrier`` match without accent classes, and
     ``°`` stays for ``n°062a``), and first step of :func:`normalize` (cf. spec §8.1).
     """
-    decomposed = unicodedata.normalize("NFKD", value)
+    decomposed = unicodedata.normalize("NFKD", text)
     without_marks = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
     folded = without_marks.casefold()
     for ligature, replacement in _LIGATURES.items():
@@ -23,16 +23,16 @@ def fold(value: str) -> str:
     return folded
 
 
-def normalize(value: str) -> str:
+def normalize(text: str) -> str:
     """Fold a string for keyword/coverage matching (cf. spec §8.1).
 
     ``fold`` -> non-alphanumerics turned into spaces -> spaces collapsed -> trim.
     """
-    folded = fold(value)
+    folded = fold(text)
     cleaned = "".join(ch if ch.isalnum() else " " for ch in folded)
     return " ".join(cleaned.split())
 
 
-def split_words(value: str) -> list[str]:
+def split_words(text: str) -> list[str]:
     """The words of a string, after normalization."""
-    return normalize(value).split()
+    return normalize(text).split()

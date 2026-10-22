@@ -1,6 +1,6 @@
 """PURE auto-download policy (spec download §6, DECISION D4/D5).
 
-PURE domain: no I/O, no repo. ``decide_download`` returns a
+PURE domain: no I/O, no store. ``decide_download`` returns a
 ``DownloadVerdict`` (enum, not bool → explainability + future metric) from PRIMITIVES:
 the ``target_id → status`` lookup is done by the APPLICATION (from the loaded ``targets``)
 and passed as a bool/string (the domain never imports a port).

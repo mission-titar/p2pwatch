@@ -2,7 +2,7 @@
 
 Implements persistence of the downloads managed by the crawler. ``downloads`` is NOT
 append-only (mutable state, not the catalog) → UPSERT/UPDATE allowed, no triggers. Same
-disciplines as the other repos (data-model spec §7): the given instant formatted BEFORE ``BEGIN``,
+disciplines as the other stores (data-model spec §7): the given instant formatted BEFORE ``BEGIN``,
 ``BEGIN IMMEDIATE`` + rollback on ``BaseException`` (a NON-sqlite failure does not leave the
 connection ``in_transaction``), ``wrap_sqlite_errors``.
 

@@ -14,11 +14,11 @@ def test_empty_violations_yields_valid_sarif_with_no_results(tmp_path: Path) -> 
 
     JsonSarifWriter().write_violations(sarif_path, _RULE_ID, [], _VEX_RELPATH)
 
-    doc = json.loads(sarif_path.read_text())
-    assert doc["$schema"] == "https://json.schemastore.org/sarif-2.1.0.json"
-    assert doc["version"] == "2.1.0"
+    sarif = json.loads(sarif_path.read_text())
+    assert sarif["$schema"] == "https://json.schemastore.org/sarif-2.1.0.json"
+    assert sarif["version"] == "2.1.0"
 
-    runs = cast(list[dict[str, object]], doc["runs"])
+    runs = cast(list[dict[str, object]], sarif["runs"])
     assert len(runs) == 1
     run = runs[0]
 
@@ -42,20 +42,20 @@ def test_one_violation_yields_one_error_result_pointing_at_the_vex_file(tmp_path
 
     JsonSarifWriter().write_violations(sarif_path, _RULE_ID, [violation], _VEX_RELPATH)
 
-    doc = json.loads(sarif_path.read_text())
-    runs = cast(list[dict[str, object]], doc["runs"])
+    sarif = json.loads(sarif_path.read_text())
+    runs = cast(list[dict[str, object]], sarif["runs"])
     results = cast(list[dict[str, object]], runs[0]["results"])
     assert len(results) == 1
-    result = results[0]
+    sarif_result = results[0]
 
-    assert result["ruleId"] == _RULE_ID
-    assert result["level"] == "error"
+    assert sarif_result["ruleId"] == _RULE_ID
+    assert sarif_result["level"] == "error"
 
-    message = cast(dict[str, object], result["message"])
+    message = cast(dict[str, object], sarif_result["message"])
     text = cast(str, message["text"])
     assert violation.advisory_id in text
 
-    locations = cast(list[dict[str, object]], result["locations"])
+    locations = cast(list[dict[str, object]], sarif_result["locations"])
     physical = cast(dict[str, object], locations[0]["physicalLocation"])
     artifact = cast(dict[str, object], physical["artifactLocation"])
     assert artifact["uri"] == _VEX_RELPATH

@@ -13,9 +13,11 @@ _LOCAL_MIGRATIONS = (
 
 def _write_local_db_at_version_5(path: Path) -> None:
     connection = sqlite3.connect(path, autocommit=True)
-    for entry in sorted(_LOCAL_MIGRATIONS.iterdir(), key=lambda item: item.name):
-        if int(entry.name.partition("_")[0]) <= 5:
-            connection.executescript(entry.read_text(encoding="utf-8"))
+    for script_file in sorted(
+        _LOCAL_MIGRATIONS.iterdir(), key=lambda script_file: script_file.name
+    ):
+        if int(script_file.name.partition("_")[0]) <= 5:
+            connection.executescript(script_file.read_text(encoding="utf-8"))
     connection.execute("PRAGMA user_version = 5")
     connection.executemany(
         "INSERT INTO scheduler_state (key, value) VALUES (?, ?)",

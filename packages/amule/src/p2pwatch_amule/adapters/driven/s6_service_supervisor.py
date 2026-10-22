@@ -37,12 +37,12 @@ class S6ServiceSupervisor(ServiceSupervisor):
 
     def _signal_amuled(self, *options: str) -> bool:
         """Run `s6-svc <options>` on amuled; return whether it exited 0, logging why not."""
-        result = self._run_command(
+        s6_svc_run = self._run_command(
             ["s6-svc", *options, str(self._amuled_service_directory)],
             capture_output=True,
             text=True,
         )
-        if result.returncode != 0:
-            command, stderr = " ".join(["s6-svc", *options]), result.stderr.strip()
-            self._logger.error("%s exited %d: %s", command, result.returncode, stderr)
-        return result.returncode == 0
+        if s6_svc_run.returncode != 0:
+            command, stderr = " ".join(["s6-svc", *options]), s6_svc_run.stderr.strip()
+            self._logger.error("%s exited %d: %s", command, s6_svc_run.returncode, stderr)
+        return s6_svc_run.returncode == 0

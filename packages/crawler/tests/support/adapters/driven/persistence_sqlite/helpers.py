@@ -126,7 +126,7 @@ def rows_without_id(path: Path, table: str) -> list[tuple[object, ...]]:
     connection = open_catalog(path)
     try:
         cursor = connection.execute(_ROWS_BY_TABLE[table])
-        return sorted(cursor.fetchall(), key=lambda row: tuple(str(value) for value in row))
+        return sorted(cursor.fetchall(), key=lambda row: tuple(str(cell) for cell in row))
     finally:
         connection.close()
 

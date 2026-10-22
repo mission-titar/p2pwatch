@@ -45,11 +45,11 @@ def _names(*filenames: str) -> list[FileCandidate]:
 
 
 def test_explain_known_target_with_match_returns_explanation() -> None:
-    result = _engine().explain(_names("keroro_062.avi"), "062A")
-    assert isinstance(result, Explanation)
-    assert result.target_id == "062A"
-    assert result.rules_fired == ("keroro_large",)
-    assert result.vetoes_fired == ()
+    explanation = _engine().explain(_names("keroro_062.avi"), "062A")
+    assert isinstance(explanation, Explanation)
+    assert explanation.target_id == "062A"
+    assert explanation.rules_fired == ("keroro_large",)
+    assert explanation.vetoes_fired == ()
 
 
 def test_explain_unknown_target_returns_none() -> None:
@@ -57,46 +57,48 @@ def test_explain_unknown_target_returns_none() -> None:
 
 
 def test_explain_known_target_no_rule_fired_returns_empty_explanation() -> None:
-    result = _engine().explain(_names("random.txt"), "062A")
-    assert isinstance(result, Explanation)
-    assert result.rules_fired == ()
-    assert result.tokens_matched == ()
+    explanation = _engine().explain(_names("random.txt"), "062A")
+    assert isinstance(explanation, Explanation)
+    assert explanation.rules_fired == ()
+    assert explanation.tokens_matched == ()
 
 
 def test_explain_unions_rules_and_tokens_over_every_name() -> None:
-    result = _engine().explain(_names("titar.avi", "keroro.avi"), "062A")
-    assert result is not None
-    assert result.rules_fired == ("keroro_large", "titar_large")  # config order
-    assert result.tokens_matched == ("keroro", "titar")  # sorted
+    explanation = _engine().explain(_names("titar.avi", "keroro.avi"), "062A")
+    assert explanation is not None
+    assert explanation.rules_fired == ("keroro_large", "titar_large")  # config order
+    assert explanation.tokens_matched == ("keroro", "titar")  # sorted
 
 
 def test_explain_lists_the_vetoes_fired_on_any_name_sorted() -> None:
-    result = _engine().explain(_names("keroro ITA.avi", "keroro KOR.avi", "keroro.avi"), "062A")
-    assert result is not None
-    assert result.vetoes_fired == ("ita", "kor")
+    explanation = _engine().explain(
+        _names("keroro ITA.avi", "keroro KOR.avi", "keroro.avi"), "062A"
+    )
+    assert explanation is not None
+    assert explanation.vetoes_fired == ("ita", "kor")
 
 
 def test_explain_keeps_the_best_coverage_over_every_name() -> None:
-    result = _engine().explain(
+    explanation = _engine().explain(
         _names("keroro demoiselles cambrioleuses.avi", "keroro demoiselles.avi"), "062A"
     )
-    assert result is not None
-    assert result.coverage_values == (("title_hit", 1.0),)
+    assert explanation is not None
+    assert explanation.coverage_values == (("title_hit", 1.0),)
 
 
 def test_explain_of_no_name_has_zero_coverage() -> None:
-    result = _engine().explain([], "062A")
-    assert result is not None
-    assert result.coverage_values == (("title_hit", 0.0),)
+    explanation = _engine().explain([], "062A")
+    assert explanation is not None
+    assert explanation.coverage_values == (("title_hit", 0.0),)
 
 
 def test_explain_skips_over_long_names_like_evaluate_all() -> None:
-    result = _engine(max_filename_length=12).explain(
+    explanation = _engine(max_filename_length=12).explain(
         _names("keroro.avi", "keroro ITA titar.avi"), "062A"
     )
-    assert result is not None
-    assert result.rules_fired == ("keroro_large",)
-    assert result.vetoes_fired == ()
+    assert explanation is not None
+    assert explanation.rules_fired == ("keroro_large",)
+    assert explanation.vetoes_fired == ()
 
 
 def test_target_returns_the_known_target_segment() -> None:

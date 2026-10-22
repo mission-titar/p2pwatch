@@ -133,9 +133,9 @@ class AttributeBetweenMatcher(Matcher):
         self._max_bound = max_bound
 
     def matches(self, candidate: FileCandidate) -> bool:
-        value = self._read_attr(candidate)
+        attribute = self._read_attr(candidate)
         return (
-            value is not None
-            and (self._min_bound is None or value >= self._min_bound)
-            and (self._max_bound is None or value <= self._max_bound)
+            attribute is not None
+            and (self._min_bound is None or attribute >= self._min_bound)
+            and (self._max_bound is None or attribute <= self._max_bound)
         )

@@ -549,7 +549,7 @@ async def test_candidate_for_unknown_target_is_treated_as_complete() -> None:
 
 @pytest.mark.asyncio
 async def test_monitor_no_op_when_state_already_matches() -> None:
-    # _reconcile_states: in-progress entry (done=3/full=10) and repo already DOWNLOADING →
+    # _reconcile_states: in-progress entry (done=3/full=10) and store already DOWNLOADING →
     # wanted_state is current → NO set_state (FALSE branch of `if current is not wanted_state`).
     client = FakeDownloadClient(listed=[(_status(_A, done=3, total=10),)])
     tracked_download_store = FakeNoSetStateTrackedDownloadStore()
@@ -872,7 +872,7 @@ async def test_start_repo_failure_is_tolerated_and_does_not_raise() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Completion via the EC SHARED files (positive signal).
+# Completion via amuleapi's SHARED files (positive signal).
 # ---------------------------------------------------------------------------
 
 

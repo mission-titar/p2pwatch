@@ -1,4 +1,4 @@
-"""Shared fixtures for the application tests: real engine + real SQLite repos (spec §8)."""
+"""Shared fixtures for the application tests: real engine + real SQLite stores (spec §8)."""
 
 import sqlite3
 from collections.abc import Iterator

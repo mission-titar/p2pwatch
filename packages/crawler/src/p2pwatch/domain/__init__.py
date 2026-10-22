@@ -1,1 +1,1 @@
-"""Domain layer: pure logic, no I/O."""
+"""Domain ring: pure logic, no I/O."""
