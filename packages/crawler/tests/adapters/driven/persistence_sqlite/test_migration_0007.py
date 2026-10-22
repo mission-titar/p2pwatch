@@ -13,7 +13,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import Sqlit
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
 from p2pwatch.domain.observation import FileObservation
-from p2pwatch_testing.adapters.persistence_sqlite.older_catalog import (
+from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
     open_catalog_at,
     open_catalog_forcing_secure_delete_at,
 )

@@ -18,7 +18,7 @@ import uvicorn
 
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.ports.driven.clock import MonotonicClock
-from p2pwatch_testing.application.fakes import FakeTime
+from tests.fakes.application.fakes import FakeTime
 
 PASSWORD = "s3cret"
 TOKEN = "eyJhbGciOi.fake.token"

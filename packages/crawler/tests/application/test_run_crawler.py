@@ -12,7 +12,7 @@ from p2pwatch.ports.driven.policy_fingerprint import (
     PolicyFingerprintReader,
     PolicyFingerprintWriter,
 )
-from p2pwatch_testing.application.fakes import (
+from tests.fakes.application.fakes import (
     FakeEventEmitter,
     FakeLogger,
     FakeNodeIdGenerator,

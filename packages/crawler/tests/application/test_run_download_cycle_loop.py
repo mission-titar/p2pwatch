@@ -12,14 +12,14 @@ from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.ports.driven.clock import MonotonicClock
 from p2pwatch.ports.driven.waker import Waker
-from p2pwatch_testing.application.download_fakes import (
+from tests.fakes.application.download_fakes import (
     FakeCatalogReader,
     FakeDownloadClient,
     FakeDownloadStore,
     FakeFreeSpaceMeter,
     FakeSourcePointStore,
 )
-from p2pwatch_testing.application.fakes import FakeEventEmitter, FakeLogger, FakeTime
+from tests.fakes.application.fakes import FakeEventEmitter, FakeLogger, FakeTime
 
 _NODE = "n1"
 

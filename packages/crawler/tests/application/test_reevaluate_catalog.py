@@ -25,7 +25,7 @@ from p2pwatch.application.run_download_cycle import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.retraction import RETRACTED_TIER
-from p2pwatch_testing.application.fakes import (
+from tests.fakes.application.fakes import (
     FakeEventEmitter,
     FakeLogger,
     FakeTime,
@@ -33,7 +33,7 @@ from p2pwatch_testing.application.fakes import (
     FakeWallClock,
     LoggedLine,
 )
-from p2pwatch_testing.catalog_rows import decision_node_ids, decision_tiers
+from tests.support.catalog_rows import decision_node_ids, decision_tiers
 
 _NODE = "n1"
 _HASH_DL = "31d6cfe0d16ae931b73c59d7e0c089c0"

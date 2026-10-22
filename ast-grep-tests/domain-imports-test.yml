@@ -16,4 +16,4 @@ invalid:
   - import os.path
   - import json as decoder
   - from collections import abc
-  - from p2pwatch_testing.virtual_time import VirtualTime
+  - from tests.support.virtual_time import VirtualTime

@@ -23,7 +23,7 @@ l'adresse réseau d'un pair.**
 
 ## 2. Vue d'ensemble des sous-systèmes
 
-Un **workspace uv** de neuf paquets, plus des dépendances externes.
+Un **workspace uv** de huit paquets, plus des dépendances externes.
 
 **Contexte : le nœud et le monde extérieur.** Un nœud est **deux conteneurs**, de deux images. Le
 cœur, `p2pwatch`, ne porte que le crawler et sa webui : pas de superviseur, il tourne directement
@@ -108,7 +108,6 @@ flowchart RL
 | `p2pwatch` | `p2pwatch` | **Crawler** : pilote `amuled` par amuleapi, fait tourner les boucles de recherche et de téléchargement, la persistance, l'observabilité. Contient le sous-paquet webui in-process `p2pwatch.adapters.driving.webui` (visualiseur de catalogue en lecture seule). |
 | `p2pwatch_amule` | `p2pwatch-amule` | **Le conteneur d'aMule**, bibliothèque standard seule : son one-shot de démarrage (`python -m p2pwatch_amule boot`) et le port-sync (`python -m p2pwatch_amule port-sync`, §9). |
 | `catalog_matching` | `catalog-matching` | **Moteur de matching** (bibliothèque partagée) : politique déclarative fichier vers épisode. Importé par le crawler et par la webui. |
-| `p2pwatch_testing` | `p2pwatch-testing` | **Support de test du crawler** : ses doublures (fakes), ses lignes de catalogue, sa boucle d'événements à temps virtuel. Importé par les seuls tests du crawler, qui en mesurent la couverture. Jamais livré dans une image de prod. |
 | `pytest_settings` | `pytest-settings` | **Configuration de test partagée**, un seul module et non un hexagone : les réglages de pytest que la suite de chaque paquet applique, chargés par son point d'entrée `pytest11`. Hors de la portée de vulture, comme les tests. Jamais livré dans une image de prod. |
 | `vex_checks` | `vex-checks` | **Outillage dev/CI** : garde honnêtes nos affirmations OpenVEX. Jamais livré dans une image de prod. |
 | `template_checks` | `template-checks` | **Outillage dev/CI** : vérifie que les templates de la webui ne portent aucune logique (`poe template-check`), et liste les noms qu'ils lisent, que `poe dead-code-check` ne doit pas signaler. Jamais livré dans une image de prod. |
@@ -116,8 +115,8 @@ flowchart RL
 | `amule_bump` | `amule-bump` | **Outillage CI** : monte l'épingle d'aMule et rédige la PR ([Mettre à jour aMule](amule-bump.md)). Jamais livré dans une image de prod. |
 
 **Frontières strictes** (invariants) : `catalog_matching` est pur et n'importe jamais `p2pwatch` ;
-`p2pwatch_amule` et `p2pwatch` ne s'importent jamais l'un l'autre ; `p2pwatch_testing`,
-`pytest_settings`, `vex_checks`, `template_checks`, `coverage_checks` et `amule_bump` ne sont jamais
+`p2pwatch_amule` et `p2pwatch` ne s'importent jamais l'un l'autre ; `pytest_settings`,
+`vex_checks`, `template_checks`, `coverage_checks` et `amule_bump` ne sont jamais
 importés par du code livré.
 
 ## 3. Deux modes d'exécution, une seule topologie
@@ -689,8 +688,8 @@ démon sont
 - **Le crawler PROD ne lit jamais les octets et ne touche jamais au répertoire de sortie** ; la
   complétion est un signal positif.
 - **Frontières de paquets** : `catalog_matching` n'importe jamais `p2pwatch` ; `p2pwatch_amule` et
-  `p2pwatch` ne s'importent jamais ; `p2pwatch_testing`, `pytest_settings`, `vex_checks`,
-  `template_checks`, `coverage_checks` et `amule_bump` ne sont jamais importés par du code livré.
+  `p2pwatch` ne s'importent jamais ; `pytest_settings`, `vex_checks`, `template_checks`,
+  `coverage_checks` et `amule_bump` ne sont jamais importés par du code livré.
 - **Deux modes d'exécution** pilotés par la config (téléchargement / catalogue seul), une seule
   topologie compose par variante.
 - **Politique de matching 100 % en YAML** ; le moteur reste fixe et minimal.

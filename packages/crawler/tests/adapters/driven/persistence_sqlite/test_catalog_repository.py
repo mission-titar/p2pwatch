@@ -15,7 +15,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash, i
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation, ReportedFile, fold_raw_meta
 from p2pwatch.domain.retraction import RETRACTED_TIER
-from p2pwatch_testing.catalog_rows import count_observations, insert_file
+from tests.support.catalog_rows import count_observations, insert_file
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _HASH_B = "b" * 32

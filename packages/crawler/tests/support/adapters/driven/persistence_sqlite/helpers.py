@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
-from p2pwatch_testing.catalog_rows import (
+from tests.support.catalog_rows import (
     insert_decision,
     insert_file,
     insert_observation,

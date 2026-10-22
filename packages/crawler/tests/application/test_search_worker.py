@@ -25,7 +25,7 @@ from p2pwatch.domain.observability.events import (
 )
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
-from p2pwatch_testing.application.fakes import (
+from tests.fakes.application.fakes import (
     FakeEventEmitter,
     FakeJitterGenerator,
     FakeLogger,
@@ -36,7 +36,7 @@ from p2pwatch_testing.application.fakes import (
     make_search_failed,
     make_unreachable,
 )
-from p2pwatch_testing.catalog_rows import (
+from tests.support.catalog_rows import (
     count_observations,
     decision_node_ids,
     observation_node_ids,

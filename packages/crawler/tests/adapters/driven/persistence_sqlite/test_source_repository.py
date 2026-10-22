@@ -12,7 +12,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.source_repository import SqliteSourceRepository
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import EarlierPoints, SourceKey, SourceReading, SourceRole
-from p2pwatch_testing.catalog_rows import (
+from tests.support.catalog_rows import (
     file_id,
     insert_file,
     insert_source,

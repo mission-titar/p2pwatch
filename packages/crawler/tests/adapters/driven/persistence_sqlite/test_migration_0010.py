@@ -7,12 +7,12 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.domain.source import SourceRole
-from p2pwatch_testing.adapters.persistence_sqlite.older_catalog import (
+from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
     insert_stage4_range,
     insert_stage4_variant,
     open_catalog_at,
 )
-from p2pwatch_testing.catalog_rows import file_id, insert_file, insert_source
+from tests.support.catalog_rows import file_id, insert_file, insert_source
 
 _FILE, _USER = "a" * 32, "1f2e" * 8
 _GROWS = "source_ranges only grows its latest range"

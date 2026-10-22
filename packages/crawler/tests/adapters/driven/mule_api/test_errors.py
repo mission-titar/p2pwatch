@@ -16,7 +16,7 @@ from p2pwatch.ports.driven.client_errors import (
     DownloadRejectedError,
     SearchFailedError,
 )
-from p2pwatch_testing.adapters.mule_api.api_fakes import error
+from tests.fakes.adapters.mule_api.api_fakes import error
 
 
 def _sent(response: httpx.Response) -> httpx.Response:

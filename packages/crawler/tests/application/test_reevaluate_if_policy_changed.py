@@ -13,7 +13,7 @@ from p2pwatch.ports.driven.policy_fingerprint import (
     PolicyFingerprintReader,
     PolicyFingerprintWriter,
 )
-from p2pwatch_testing.application.fakes import FakeLogger, LoggedLine
+from tests.fakes.application.fakes import FakeLogger, LoggedLine
 
 _SUMMARY = ReevaluationSummary(files_evaluated=3, rows_written=1)
 

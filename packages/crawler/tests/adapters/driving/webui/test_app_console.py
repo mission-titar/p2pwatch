@@ -20,7 +20,7 @@ from p2pwatch.ports.driving.crawl_summarizer import CrawlSummary
 from p2pwatch.ports.driving.file_lister import FileListing
 from p2pwatch.ports.driving.node_describer import NodeDescription
 from p2pwatch.ports.driving.source_lister import SourceListing
-from p2pwatch_testing.application.fakes import (
+from tests.fakes.application.fakes import (
     FakeConsoleQueryRunner,
     FakeCrawlControls,
     FakeCrawlSummarizer,

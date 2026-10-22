@@ -33,7 +33,7 @@ from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from p2pwatch.ports.driven.client_errors import SearchFailedError
 from p2pwatch.ports.driven.repository_errors import RepositoryError
 from p2pwatch.ports.driven.search_client import SearchClient
-from p2pwatch_testing.application.fakes import (
+from tests.fakes.application.fakes import (
     FakeEventEmitter,
     FakeJitterGenerator,
     FakeLogger,
@@ -41,8 +41,8 @@ from p2pwatch_testing.application.fakes import (
     LoggedLine,
     make_unreachable,
 )
-from p2pwatch_testing.catalog_rows import observation_node_ids
-from p2pwatch_testing.virtual_time import EPOCH, LoopMonotonicClock, LoopWallClock, run_virtual
+from tests.support.catalog_rows import observation_node_ids
+from tests.support.virtual_time import EPOCH, LoopMonotonicClock, LoopWallClock, run_virtual
 
 _NODE = "n1"
 _HOUR = 3600.0

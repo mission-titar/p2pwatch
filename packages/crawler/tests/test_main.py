@@ -6,7 +6,12 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.__main__ import main
-from p2pwatch_testing.adapters.persistence_sqlite.helpers import HASH_A, HASH_B, count, make_catalog
+from tests.support.adapters.driven.persistence_sqlite.helpers import (
+    HASH_A,
+    HASH_B,
+    count,
+    make_catalog,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEPLOY = _REPO_ROOT / "deploy"

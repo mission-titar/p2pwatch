@@ -4,7 +4,6 @@ severity: error
 message: The core reaches asyncio, uuid and io by the names on this list only, and pathlib by `PurePath`, since each also holds I/O or entropy.
 note: "Write `import asyncio` then `asyncio.Event`, so that every name it reaches is checked."
 files: ["packages/*/src/*/domain/**/*.py", "packages/*/src/*/ports/**/*.py", "packages/*/src/*/application/**/*.py"]
-ignores: ["packages/crawler_testing/**"]
 rule:
   any:
     - pattern: asyncio.$ASYNCIO

@@ -6,8 +6,8 @@ from datetime import timedelta
 import pytest
 
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch_testing.application.download_fakes import FakeCatalogReader
-from p2pwatch_testing.application.fakes import FakeLogger, FakeTime, LoggedLine
+from tests.fakes.application.download_fakes import FakeCatalogReader
+from tests.fakes.application.fakes import FakeLogger, FakeTime, LoggedLine
 
 
 def test_a_wall_clock_step_leaves_the_monotonic_clock() -> None:

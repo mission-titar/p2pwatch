@@ -5,7 +5,7 @@ from pathlib import Path
 from p2pwatch.adapters.driven.persistence_sqlite.local_state_repository import (
     SqliteLocalStateRepository,
 )
-from p2pwatch_testing.adapters.persistence_sqlite.older_catalog import open_local_at
+from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_local_at
 
 
 def test_0009_renames_the_marker_and_keeps_its_fingerprint(tmp_path: Path) -> None:

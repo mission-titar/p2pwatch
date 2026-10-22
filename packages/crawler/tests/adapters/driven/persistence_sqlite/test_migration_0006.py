@@ -10,7 +10,7 @@ import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError
-from p2pwatch_testing.adapters.persistence_sqlite.older_catalog import open_catalog_at
+from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_catalog_at
 
 _HASH = "a" * 32
 _DEAD_TABLES = ("source_observations", "sources", "file_observation_ranges")
