@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.backoff_state_repository import (
-    SqliteBackoffStateRepository,
+    SqliteBackoffStateStore,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_local
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
@@ -27,29 +27,29 @@ def connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 
 @pytest.fixture
-def repository(connection: sqlite3.Connection) -> SqliteBackoffStateRepository:
-    return SqliteBackoffStateRepository(connection)
+def backoff_state_store(connection: sqlite3.Connection) -> SqliteBackoffStateStore:
+    return SqliteBackoffStateStore(connection)
 
 
 def test_read_backoff_states_is_empty_on_a_fresh_database(
-    repository: SqliteBackoffStateRepository,
+    backoff_state_store: SqliteBackoffStateStore,
 ) -> None:
-    assert repository.read_backoff_states() == {}
+    assert backoff_state_store.read_backoff_states() == {}
 
 
 def test_backoff_states_round_trip_through_a_new_repo_instance(
-    repository: SqliteBackoffStateRepository, connection: sqlite3.Connection
+    backoff_state_store: SqliteBackoffStateStore, connection: sqlite3.Connection
 ) -> None:
     # A new instance has no in-memory state: what it loads survived a restart.
-    repository.save_backoff_states(_BACKOFF)
-    reborn = SqliteBackoffStateRepository(connection)
+    backoff_state_store.set_backoff_states(_BACKOFF)
+    reborn = SqliteBackoffStateStore(connection)
     assert reborn.read_backoff_states() == _BACKOFF
 
 
 def test_a_backoff_state_is_one_row_its_start_in_micros(
-    repository: SqliteBackoffStateRepository, connection: sqlite3.Connection
+    backoff_state_store: SqliteBackoffStateStore, connection: sqlite3.Connection
 ) -> None:
-    repository.save_backoff_states(_BACKOFF)
+    backoff_state_store.set_backoff_states(_BACKOFF)
     rows = connection.execute(
         "SELECT client_name, channel, attempts, started_at, delay_seconds FROM backoff_states"
         " ORDER BY channel"
@@ -61,18 +61,18 @@ def test_a_backoff_state_is_one_row_its_start_in_micros(
     ]
 
 
-def test_save_backoff_states_replaces_the_whole_table(
-    repository: SqliteBackoffStateRepository,
+def test_set_backoff_states_replaces_the_whole_table(
+    backoff_state_store: SqliteBackoffStateStore,
 ) -> None:
-    repository.save_backoff_states(_BACKOFF)
-    repository.save_backoff_states({})  # empty snapshot → replaces everything
-    assert repository.read_backoff_states() == {}
+    backoff_state_store.set_backoff_states(_BACKOFF)
+    backoff_state_store.set_backoff_states({})  # empty snapshot → replaces everything
+    assert backoff_state_store.read_backoff_states() == {}
 
 
-def test_save_backoff_states_is_atomic_on_injected_failure(
-    repository: SqliteBackoffStateRepository, connection: sqlite3.Connection
+def test_set_backoff_states_is_atomic_on_injected_failure(
+    backoff_state_store: SqliteBackoffStateStore, connection: sqlite3.Connection
 ) -> None:
-    repository.save_backoff_states(_BACKOFF)
+    backoff_state_store.set_backoff_states(_BACKOFF)
     connection.execute(
         "CREATE TRIGGER boom BEFORE INSERT ON backoff_states"
         " WHEN NEW.channel = 'ed2k'"
@@ -83,5 +83,5 @@ def test_save_backoff_states_is_atomic_on_injected_failure(
         BackoffKey("amule-1", "ed2k"): BackoffState(1, _STARTED_AT, timedelta(seconds=2)),
     }
     with pytest.raises(PersistenceError, match="injected failure"):
-        repository.save_backoff_states(later)
-    assert repository.read_backoff_states() == _BACKOFF
+        backoff_state_store.set_backoff_states(later)
+    assert backoff_state_store.read_backoff_states() == _BACKOFF

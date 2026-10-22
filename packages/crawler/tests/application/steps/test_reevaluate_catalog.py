@@ -167,7 +167,7 @@ async def test_repository_error_on_one_row_is_absorbed_and_sweep_continues(
     )
     logger = FakeLogger()
     # TEST trigger: makes the match_decisions INSERT fail for ONE hash only -> that row's
-    # helper call raises RepositoryError, the other row must still be processed.
+    # helper call raises StoreError, the other row must still be processed.
     catalog_connection.execute(
         "CREATE TRIGGER boom BEFORE INSERT ON match_decisions"
         f" WHEN NEW.file_id = x'{FileKey(Network.ED2K, _HASH_DL).file_id.hex()}'"

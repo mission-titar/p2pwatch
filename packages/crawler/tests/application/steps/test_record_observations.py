@@ -256,7 +256,7 @@ async def test_persistence_error_is_absorbed_and_cycle_continues(
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    # TEST trigger: makes the observation INSERT fail → RepositoryError absorbed.
+    # TEST trigger: makes the observation INSERT fail → StoreError absorbed.
     catalog_connection.execute(
         "CREATE TRIGGER boom BEFORE INSERT ON observations"
         " BEGIN SELECT RAISE(ABORT, 'injected failure'); END"

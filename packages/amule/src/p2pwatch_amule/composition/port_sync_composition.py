@@ -6,9 +6,9 @@ from pathlib import Path
 from urllib.request import OpenerDirector
 
 from p2pwatch_amule.adapters.driven.gluetun_forwarded_port_reader import (
-    GluetunForwardedPortReader,
+    GluetunForwardedPortClient,
 )
-from p2pwatch_amule.adapters.driven.posix_amule_conf import PosixAmuleConf
+from p2pwatch_amule.adapters.driven.posix_amule_conf import PosixAmuleConfStore
 from p2pwatch_amule.adapters.driven.s6_service_supervisor import S6ServiceSupervisor
 from p2pwatch_amule.adapters.driven.stdlib_logger import StdlibLogger
 from p2pwatch_amule.application.port_sync_lifecycle import PortSyncLifecycle
@@ -48,12 +48,12 @@ class PortSyncComposition(PortSyncLoopRunner):
         port_sync_settings = parse_port_sync_settings(self._env)
         # The two logger names docs/migration-4x.md gives the operator.
         logger = StdlibLogger("p2pwatch_amule.adapters.driving.port_sync")
-        amule_conf = PosixAmuleConf(
+        amule_conf = PosixAmuleConfStore(
             amule_conf_path=self._amule_conf_path, change_owner=self._change_owner
         )
         PortSyncLifecycle(
             port_sync_settings=port_sync_settings,
-            forwarded_port_reader=GluetunForwardedPortReader(
+            forwarded_port_client=GluetunForwardedPortClient(
                 control_url=port_sync_settings.gluetun_control_url,
                 timeout_seconds=_GLUETUN_TIMEOUT_SECONDS,
                 logger=StdlibLogger("p2pwatch_amule.adapters.driven.gluetun"),

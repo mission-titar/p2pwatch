@@ -224,8 +224,10 @@ def test_file_history_reads_its_observations_in_the_window_and_its_latest_in_any
     catalog_db: Path,
 ) -> None:
     seed(catalog_db)
-    with closing(sqlite3.connect(catalog_db)) as conn, conn:
-        insert_observation(conn, "a" * 32, "older.avi", observed_at="2026-06-21T10:00:00+00:00")
+    with closing(sqlite3.connect(catalog_db)) as connection, connection:
+        insert_observation(
+            connection, "a" * 32, "older.avi", observed_at="2026-06-21T10:00:00+00:00"
+        )
     since, until = datetime(2026, 6, 1, tzinfo=UTC), datetime.fromisoformat(SEEN_AT)
     detail = _history(catalog_db, "a" * 32, since=since, until=until)
     assert detail is not None
@@ -257,10 +259,10 @@ def test_file_history_retracted_target_is_no_decision(catalog_db: Path) -> None:
 
 def test_file_history_no_decision(catalog_db: Path) -> None:
     """Detail works even without a decision (unmatched file)."""
-    with closing(sqlite3.connect(catalog_db)) as conn, conn:
-        insert_file(conn, "b" * 32, 200)
+    with closing(sqlite3.connect(catalog_db)) as connection, connection:
+        insert_file(connection, "b" * 32, 200)
         insert_observation(
-            conn,
+            connection,
             "b" * 32,
             "unknown.avi",
             observed_at="2026-06-22T09:00:00.000000+00:00",
@@ -293,9 +295,9 @@ def test_read_catalog_entries_combined_target_and_tier_filters(catalog_db: Path)
 
 
 def test_read_catalog_entries_reads_at_most_its_limit_from_its_offset(catalog_db: Path) -> None:
-    with closing(sqlite3.connect(catalog_db)) as conn, conn:
+    with closing(sqlite3.connect(catalog_db)) as connection, connection:
         for n in range(_LIMIT + 2):
-            insert_file(conn, f"{n:032x}", size_bytes=n)
+            insert_file(connection, f"{n:032x}", size_bytes=n)
     first = _entries(catalog_db, sort=CatalogEntrySort.SIZE, direction=SortDirection.ASC)
     second = _entries(
         catalog_db, sort=CatalogEntrySort.SIZE, direction=SortDirection.ASC, offset=_LIMIT
@@ -318,10 +320,10 @@ def test_file_history_observations_include_media_fields_none(catalog_db: Path) -
 def test_file_history_observations_include_media_fields_present(catalog_db: Path) -> None:
     """An observation's duration_seconds and bitrate_kbps are filled when present."""
     h = "d" * 32
-    with closing(sqlite3.connect(catalog_db)) as conn, conn:
-        insert_file(conn, h, 150)
+    with closing(sqlite3.connect(catalog_db)) as connection, connection:
+        insert_file(connection, h, 150)
         insert_observation(
-            conn,
+            connection,
             h,
             "keroro_media.avi",
             size_bytes=150,
@@ -339,10 +341,10 @@ def test_file_history_observations_include_media_fields_present(catalog_db: Path
 
 def _seed_unmatched(db: Path) -> None:
     """Add a second file (b*32) with an observation but NO match decision."""
-    with closing(sqlite3.connect(db)) as conn, conn:
-        insert_file(conn, "b" * 32, 200)
+    with closing(sqlite3.connect(db)) as connection, connection:
+        insert_file(connection, "b" * 32, 200)
         insert_observation(
-            conn,
+            connection,
             "b" * 32,
             "gallego_ep021.ogm",
             observed_at="2026-06-22T09:00:00.000000+00:00",
@@ -385,17 +387,17 @@ def test_read_catalog_entries_default_includes_unmatched(catalog_db: Path) -> No
 def test_read_catalog_entries_shows_latest_observation(catalog_db: Path) -> None:
     """Same hash with two observations → read_catalog_entries returns the most recent filename."""
     h = "c" * 32
-    with closing(sqlite3.connect(catalog_db)) as conn, conn:
-        insert_file(conn, h, 300)
+    with closing(sqlite3.connect(catalog_db)) as connection, connection:
+        insert_file(connection, h, 300)
         insert_observation(
-            conn,
+            connection,
             h,
             "old_name.avi",
             observed_at="2026-06-22T09:00:00.000000+00:00",
             size_bytes=300,
         )
         insert_observation(
-            conn,
+            connection,
             h,
             "new_name.avi",
             observed_at="2026-06-22T12:00:00.000000+00:00",
@@ -453,17 +455,17 @@ def test_read_matched_and_total_file_counts_empty_catalogue_matched_is_zero_not_
 
 def _seed_catalog_tier_on_001a(db: Path) -> None:
     """A keroro_large catch-all file: its only decision is tier 'catalog' pinned to 001A."""
-    with closing(sqlite3.connect(db)) as conn, conn:
-        insert_file(conn, "b" * 32, 50)
+    with closing(sqlite3.connect(db)) as connection, connection:
+        insert_file(connection, "b" * 32, 50)
         insert_observation(
-            conn,
+            connection,
             "b" * 32,
             "keroro manga.zip",
             observed_at="2026-07-01T10:00:00.000000+00:00",
             size_bytes=50,
         )
         insert_decision(
-            conn,
+            connection,
             "b" * 32,
             "001A",
             "catalog",
@@ -510,13 +512,13 @@ def _seed_sortable(db: Path) -> None:
         ("b" * 32, "alpha.avi", 100, 15, "2026-01-02T10:00:00.000000+00:00", "072A", "download"),
         ("c" * 32, "gamma.avi", 200, 10, "2026-01-03T10:00:00.000000+00:00", "001A", "catalog"),
     ]
-    with closing(sqlite3.connect(db)) as conn, conn:
+    with closing(sqlite3.connect(db)) as connection, connection:
         for h, name, size, sources, seen, tid, tier in rows:
-            insert_file(conn, h, size)
+            insert_file(connection, h, size)
             insert_observation(
-                conn, h, name, observed_at=seen, size_bytes=size, source_count=sources
+                connection, h, name, observed_at=seen, size_bytes=size, source_count=sources
             )
-            insert_decision(conn, h, tid, tier, decided_at="2026-01-04T10:00:00.000000+00:00")
+            insert_decision(connection, h, tid, tier, decided_at="2026-01-04T10:00:00.000000+00:00")
 
 
 def _hashes(rows: tuple[CatalogEntry, ...]) -> list[str]:
@@ -548,10 +550,12 @@ def test_read_catalog_entries_sort_orders(
 
 def test_read_catalog_entries_sort_tiebreak_is_file_id(catalog_db: Path) -> None:
     """Two files with the same sort key keep a deterministic order via the file_id tiebreak."""
-    with closing(sqlite3.connect(catalog_db)) as conn, conn:
+    with closing(sqlite3.connect(catalog_db)) as connection, connection:
         for h in ("a" * 32, "e" * 32):  # inserted a-first on purpose
-            insert_file(conn, h)
-            insert_observation(conn, h, "same.avi", observed_at="2026-01-01T10:00:00.000000+00:00")
+            insert_file(connection, h)
+            insert_observation(
+                connection, h, "same.avi", observed_at="2026-01-01T10:00:00.000000+00:00"
+            )
     rows = _entries(catalog_db, sort=CatalogEntrySort.SIZE, direction=SortDirection.ASC)
     assert _hashes(rows) == ["e" * 32, "a" * 32]  # e's file_id sorts first
 
@@ -577,11 +581,13 @@ def _seed_mixed_tier_file(db: Path) -> None:
     """One file with TWO current decisions in DIFFERENT tiers (download + notify): it must count
     under both facets."""
     h = "d" * 32
-    with closing(sqlite3.connect(db)) as conn, conn:
-        insert_file(conn, h)
-        insert_observation(conn, h, "mixed.avi", observed_at="2026-01-01T10:00:00.000000+00:00")
+    with closing(sqlite3.connect(db)) as connection, connection:
+        insert_file(connection, h)
+        insert_observation(
+            connection, h, "mixed.avi", observed_at="2026-01-01T10:00:00.000000+00:00"
+        )
         for tid, tier in (("062A", "download"), ("062B", "notify")):
-            insert_decision(conn, h, tid, tier, decided_at="2026-01-02T10:00:00.000000+00:00")
+            insert_decision(connection, h, tid, tier, decided_at="2026-01-02T10:00:00.000000+00:00")
 
 
 def test_read_file_count_by_tier_groups_by_tier(catalog_db: Path) -> None:
@@ -617,8 +623,8 @@ def _seed_file_without_observation(db: Path) -> str:
     """A file with NO observation at all (a file row is written before its first observation is
     recorded). Returns its hash."""
     h = "d" * 32
-    with closing(sqlite3.connect(db)) as conn, conn:
-        insert_file(conn, h, 42)
+    with closing(sqlite3.connect(db)) as connection, connection:
+        insert_file(connection, h, 42)
     return h
 
 
@@ -657,10 +663,10 @@ def test_read_catalog_entries_search_text_filter_excludes_file_with_no_observati
 def test_read_catalog_entries_observation_tie_break_on_the_newest_variant(catalog_db: Path) -> None:
     """Two observations at the SAME ``observed_at``: the higher ``variant_id`` wins (D4)."""
     h = "a" * 32
-    with closing(sqlite3.connect(catalog_db)) as conn, conn:
-        insert_file(conn, h)
+    with closing(sqlite3.connect(catalog_db)) as connection, connection:
+        insert_file(connection, h)
         for name in ("first.avi", "second.avi"):  # same instant, ascending variant ids
-            insert_observation(conn, h, name, observed_at="2026-07-03T10:00:00.000000+00:00")
+            insert_observation(connection, h, name, observed_at="2026-07-03T10:00:00.000000+00:00")
     rows = _entries(catalog_db)
     assert _latest_filename(rows[0]) == "second.avi"
 

@@ -13,9 +13,9 @@ from amule_bump.domain.bump_error import BumpError
 from amule_bump.domain.dockerfile import Pin
 from amule_bump.domain.git_object import GitObject, GitObjectKind
 from tests.fakes.adapters.driven.fake_dockerfile_store import FakeDockerfileStore
-from tests.fakes.adapters.driven.fake_pull_request_body_writer import FakePullRequestBodyWriter
-from tests.fakes.adapters.driven.fake_repo_reader import FakeRepoReader
-from tests.fakes.adapters.driven.fake_step_output_writer import FakeStepOutputWriter
+from tests.fakes.adapters.driven.fake_pull_request_body_writer import FakePullRequestDrafter
+from tests.fakes.adapters.driven.fake_repo_reader import FakeUpstreamClient
+from tests.fakes.adapters.driven.fake_step_output_writer import FakeBumpAnnouncer
 
 OLD_COMMIT = "02db0d7faecfc377694ff6242bc23346185990ed"
 NEW_COMMIT = "909d304d993ee07df6c6f6acf501a6d791d53666"
@@ -25,8 +25,8 @@ BODY_PATH = PurePath("/tmp/body.md")
 CHANGELOG_LINE = "- amuleapi, " + "word " * 10
 
 
-def upstream(latest: str) -> FakeRepoReader:
-    return FakeRepoReader(
+def upstream(latest: str) -> FakeUpstreamClient:
+    return FakeUpstreamClient(
         latest_release_tag=latest,
         tag_targets_by_tag={latest: GitObject(GitObjectKind.COMMIT, NEW_COMMIT)},
         file_texts_by_ref_and_path={
@@ -42,20 +42,18 @@ class Bump:
     dockerfile: FakeDockerfileStore = field(
         default_factory=lambda: FakeDockerfileStore({DOCKERFILE_PATH: DOCKERFILE})
     )
-    pull_request_body_writer: FakePullRequestBodyWriter = field(
-        default_factory=FakePullRequestBodyWriter
-    )
-    step_output_writer: FakeStepOutputWriter = field(default_factory=FakeStepOutputWriter)
+    pull_request_drafter: FakePullRequestDrafter = field(default_factory=FakePullRequestDrafter)
+    bump_announcer: FakeBumpAnnouncer = field(default_factory=FakeBumpAnnouncer)
 
     def run(
-        self, repo_reader: FakeRepoReader, *, dry_run: bool
+        self, upstream_client: FakeUpstreamClient, *, dry_run: bool
     ) -> AmuleBump | PinIsLatest | PinAheadOfLatest:
         bump_amule = BumpAmule(
-            repo_reader=repo_reader,
+            upstream_client=upstream_client,
             dockerfile_reader=self.dockerfile,
             dockerfile_writer=self.dockerfile,
-            pull_request_body_writer=self.pull_request_body_writer,
-            step_output_writer=self.step_output_writer,
+            pull_request_drafter=self.pull_request_drafter,
+            bump_announcer=self.bump_announcer,
             changelog_width_characters=30,
         )
         return bump_amule.bump_amule(DOCKERFILE_PATH, BODY_PATH, dry_run=dry_run)
@@ -63,8 +61,8 @@ class Bump:
     def wrote_nothing(self, dockerfile_text: str) -> bool:
         return (
             self.dockerfile.dockerfile_texts_by_path == {DOCKERFILE_PATH: dockerfile_text}
-            and self.pull_request_body_writer.bodies_by_path == {}
-            and self.step_output_writer.step_outputs == []
+            and self.pull_request_drafter.bodies_by_path == {}
+            and self.bump_announcer.step_outputs == []
         )
 
 
@@ -90,7 +88,7 @@ def test_a_new_release_rewrites_the_pin_and_writes_the_body_it_returns() -> None
         DOCKERFILE_PATH: f"FROM debian\nARG AMULE_VERSION=3.1.0\nARG AMULE_COMMIT={NEW_COMMIT}\n"
     }
     assert amule_bump == AmuleBump(
-        Pin("3.1.0", NEW_COMMIT), bump.pull_request_body_writer.bodies_by_path[BODY_PATH]
+        Pin("3.1.0", NEW_COMMIT), bump.pull_request_drafter.bodies_by_path[BODY_PATH]
     )
     assert amule_bump.body.startswith("Bumps aMule from 3.0.1 to [3.1.0]")
 
@@ -98,7 +96,7 @@ def test_a_new_release_rewrites_the_pin_and_writes_the_body_it_returns() -> None
 def test_a_new_release_is_announced_to_the_workflow() -> None:
     bump = Bump()
     bump.run(upstream("3.1.0"), dry_run=False)
-    assert bump.step_output_writer.step_outputs == [("3.1.0", BODY_PATH)]
+    assert bump.bump_announcer.step_outputs == [("3.1.0", BODY_PATH)]
 
 
 def test_the_changelog_wraps_at_the_width_the_bump_is_given() -> None:
@@ -119,10 +117,10 @@ def test_a_dry_run_returns_the_new_pin_and_body_and_writes_nothing() -> None:
 def test_a_bad_pin_raises_before_reading_upstream() -> None:
     bump = Bump(dockerfile=FakeDockerfileStore({DOCKERFILE_PATH: "FROM debian\n"}))
     with pytest.raises(BumpError, match="expected one 'ARG AMULE_VERSION=' line, found 0"):
-        bump.run(FakeRepoReader(), dry_run=False)
+        bump.run(FakeUpstreamClient(), dry_run=False)
 
 
 def test_a_missing_dockerfile_raises_before_reading_upstream() -> None:
     bump = Bump(dockerfile=FakeDockerfileStore({}))
     with pytest.raises(FileNotFoundError, match=f"no Dockerfile at {DOCKERFILE_PATH}"):
-        bump.run(FakeRepoReader(), dry_run=False)
+        bump.run(FakeUpstreamClient(), dry_run=False)

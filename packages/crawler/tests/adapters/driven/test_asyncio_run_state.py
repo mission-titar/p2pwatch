@@ -1,4 +1,4 @@
-"""Tests for ``AsyncioRunState``, the run state the webui changes from its own thread.
+"""Tests for ``AsyncioRunStateStore``, the run state the webui changes from its own thread.
 
 The load-bearing property: every change is HANDED OFF to the crawler loop via
 ``loop.call_soon_threadsafe`` (never applied inline on the caller/webui thread). Two fake loops
@@ -12,7 +12,7 @@ model the two facets:
 
 import asyncio
 
-from p2pwatch.adapters.driven.asyncio_run_state import AsyncioRunState
+from p2pwatch.adapters.driven.asyncio_run_state import AsyncioRunStateStore
 from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
 from p2pwatch.application.ports.driven.run_state_writer import RunStateWriter
 from tests.fakes.adapters.driven.immediate_loop import ImmediateLoop
@@ -25,7 +25,7 @@ def _run_state_with(
     """The run state seen through its two ports, and its two events."""
     resumed = asyncio.Event()
     shutdown = asyncio.Event()
-    run_state = AsyncioRunState(
+    run_state = AsyncioRunStateStore(
         loop=loop,  # type: ignore[arg-type]  # fake loop, only call_soon_threadsafe is used
         resumed=resumed,
         shutdown=shutdown,

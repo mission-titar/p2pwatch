@@ -1,4 +1,4 @@
-"""``AsyncioRunState``: the run state on the crawler loop's events, changed from any thread.
+"""``AsyncioRunStateStore``: the run state on the crawler loop's events, changed from any thread.
 
 The webui handlers run on the webui thread + loop; the crawler owns its ``asyncio.Event``s on its
 MAIN loop. The load-bearing primitive is ``loop.call_soon_threadsafe``:
@@ -14,7 +14,7 @@ from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
 from p2pwatch.application.ports.driven.run_state_writer import RunStateWriter
 
 
-class AsyncioRunState(RunStateWriter, RunStateReader):
+class AsyncioRunStateStore(RunStateWriter, RunStateReader):
     """Forwards each change onto the crawler loop via ``call_soon_threadsafe``.
 
     The two events are the crawler's own (``CrawlerComposition``): ``resumed`` is the pause gate

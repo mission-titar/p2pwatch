@@ -10,7 +10,7 @@ from p2pwatch_amule.application.port_sync_lifecycle import PortSyncLifecycle
 from p2pwatch_amule.domain.conf import with_listen_port
 from p2pwatch_amule.domain.settings import PortSyncSettings
 from tests.fakes.adapters.driven.fake_amule_conf_store import FakeAmuleConfStore
-from tests.fakes.adapters.driven.fake_forwarded_port_reader import FakeForwardedPortReader
+from tests.fakes.adapters.driven.fake_forwarded_port_reader import FakeForwardedPortClient
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_monotonic_clock import FakeMonotonicClock
 from tests.fakes.adapters.driven.fake_service_supervisor import FakeServiceSupervisor
@@ -41,7 +41,7 @@ class Node:
         self.actions: list[str] = []
         self.amule_conf = FakeAmuleConfStore(self.actions)
         self.amule_conf.conf = CONF
-        self.forwarded_port_reader = FakeForwardedPortReader()
+        self.forwarded_port_client = FakeForwardedPortClient()
         self.service_supervisor = FakeServiceSupervisor(self.actions)
         self.between_rounds: Callable[[], None] = lambda: None
         self.monotonic_clock = FakeMonotonicClock()
@@ -53,7 +53,7 @@ class Node:
 
     def move_the_forwarded_port(self) -> None:
         # The first restart wrote 51820; gluetun moving again must wait for the window.
-        self.forwarded_port_reader.forwarded_port = 51821
+        self.forwarded_port_client.forwarded_port = 51821
 
     def run_loop(self, port_sync_settings: PortSyncSettings = SETTINGS, rounds: int = 1) -> None:
         """Runs the loop until its ``rounds``-th sleep."""
@@ -67,7 +67,7 @@ class Node:
         with pytest.raises(_Stop):
             PortSyncLifecycle(
                 port_sync_settings=port_sync_settings,
-                forwarded_port_reader=self.forwarded_port_reader,
+                forwarded_port_client=self.forwarded_port_client,
                 amule_conf_reader=self.amule_conf,
                 amule_conf_writer=self.amule_conf,
                 service_supervisor=self.service_supervisor,
@@ -126,13 +126,13 @@ def test_a_write_that_raises_still_starts_amuled_and_is_logged(
 
 
 def test_the_same_port_asks_the_supervisor_nothing(node: Node) -> None:
-    node.forwarded_port_reader.forwarded_port = 4662
+    node.forwarded_port_client.forwarded_port = 4662
     node.run_loop()
     assert node.actions == [UP, READ]
 
 
 def test_no_forwarded_port_asks_the_supervisor_nothing(node: Node) -> None:
-    node.forwarded_port_reader.forwarded_port = None
+    node.forwarded_port_client.forwarded_port = None
     node.run_loop()
     assert node.actions == [UP]
 
@@ -151,8 +151,8 @@ def test_a_restart_once_the_window_is_over_goes_ahead(node: Node) -> None:
 
 
 def test_the_start_sends_up_before_the_first_round_then_polls_every_60s(node: Node) -> None:
-    node.forwarded_port_reader.forwarded_port = 4662
-    node.forwarded_port_reader.on_read = lambda: node.actions.append("read forwarded port")
+    node.forwarded_port_client.forwarded_port = 4662
+    node.forwarded_port_client.on_read = lambda: node.actions.append("read forwarded port")
     node.run_loop(rounds=2)
     gluetun = "read forwarded port"
     assert node.actions == [UP, gluetun, READ, gluetun, READ]
@@ -160,7 +160,7 @@ def test_the_start_sends_up_before_the_first_round_then_polls_every_60s(node: No
 
 
 def test_the_poll_interval_is_the_settings(node: Node) -> None:
-    node.forwarded_port_reader.forwarded_port = 4662
+    node.forwarded_port_client.forwarded_port = 4662
     node.run_loop(dataclasses.replace(SETTINGS, poll_interval=timedelta(seconds=5)))
     assert node.monotonic_clock.sleeps == [timedelta(seconds=5)]
 

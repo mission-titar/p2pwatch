@@ -1,4 +1,4 @@
-"""GluetunForwardedPortReader: gluetun's port when it reports one, None on any failure."""
+"""GluetunForwardedPortClient: gluetun's port when it reports one, None on any failure."""
 
 import socket
 from collections.abc import Iterator
@@ -6,7 +6,7 @@ from collections.abc import Iterator
 import pytest
 
 from p2pwatch_amule.adapters.driven.gluetun_forwarded_port_reader import (
-    GluetunForwardedPortReader,
+    GluetunForwardedPortClient,
 )
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.fake_gluetun_control_server import FakeGluetunControlServer
@@ -20,8 +20,8 @@ def gluetun() -> Iterator[FakeGluetunControlServer]:
 
 def reader(
     gluetun: FakeGluetunControlServer, logger: FakeLogger, control_url: str | None = None
-) -> GluetunForwardedPortReader:
-    return GluetunForwardedPortReader(
+) -> GluetunForwardedPortClient:
+    return GluetunForwardedPortClient(
         control_url=control_url or gluetun.control_url,
         timeout_seconds=0.2,
         logger=logger,

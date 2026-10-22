@@ -1,5 +1,5 @@
-"""``DownloadReader``: our tracked downloads, in ``local.db``, never merged: their state, their
-target and when the client last listed them."""
+"""``TrackedDownloadReader``: our tracked downloads, in ``local.db``, never merged: their state,
+their target and when the client last listed them."""
 
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -8,7 +8,7 @@ from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import FileKey
 
 
-class DownloadReader(ABC):
+class TrackedDownloadReader(ABC):
     """Reads the tracked downloads."""
 
     @abstractmethod

@@ -14,7 +14,9 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
-from p2pwatch.adapters.driven.persistence_sqlite.download_repository import SqliteDownloadRepository
+from p2pwatch.adapters.driven.persistence_sqlite.download_repository import (
+    SqliteTrackedDownloadStore,
+)
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import FileKey, Network
 
@@ -80,7 +82,7 @@ def test_local_rewrites_a_legacy_quarantined_download_as_completed(tmp_path: Pat
 
     connection = open_local(path)
     try:
-        repository = SqliteDownloadRepository(connection)
+        repository = SqliteTrackedDownloadStore(connection)
         assert repository.read_tracked_states() == {
             FileKey(Network.ED2K, "a1" * 16): DownloadState.COMPLETED
         }

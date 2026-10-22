@@ -167,7 +167,7 @@ class SearchWorker:
 
     async def _record_observations(self, channel: str, answer: SearchAnswer, node_id: str) -> int:
         """Per-obs pipeline; returns the number of CHANGED verdicts (logging). A
-        ``RepositoryError`` per obs is ABSORBED inside ``record_observation`` (spec §7)."""
+        ``StoreError`` per obs is ABSORBED inside ``record_observation`` (spec §7)."""
         await self._deps.event_emitter.emit(
             SearchExecuted(
                 self._client_name, channel, len(answer.reported_files), answer.skipped_result_count

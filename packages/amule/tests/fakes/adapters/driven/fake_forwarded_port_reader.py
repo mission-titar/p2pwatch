@@ -1,9 +1,9 @@
 from collections.abc import Callable
 
-from p2pwatch_amule.application.ports.driven.forwarded_port_reader import ForwardedPortReader
+from p2pwatch_amule.application.ports.driven.forwarded_port_reader import ForwardedPortClient
 
 
-class FakeForwardedPortReader(ForwardedPortReader):
+class FakeForwardedPortClient(ForwardedPortClient):
     """Returns ``forwarded_port``, after calling ``on_read``."""
 
     def __init__(self) -> None:

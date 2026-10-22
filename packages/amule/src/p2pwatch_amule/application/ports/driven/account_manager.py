@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 
-class AccountManager(ABC):
+class AccountProvisioner(ABC):
     """Holds the ``amule`` account amuled and amuleapi run as."""
 
     @abstractmethod

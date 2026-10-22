@@ -1,10 +1,10 @@
 from collections.abc import Callable
 from pathlib import Path
 
-from p2pwatch_amule.application.ports.driven.account_manager import AccountManager
+from p2pwatch_amule.application.ports.driven.account_manager import AccountProvisioner
 
 
-class PosixAccountManager(AccountManager):
+class PosixAccountProvisioner(AccountProvisioner):
     """``groupadd`` and ``useradd``, each run only when its lookup raises ``KeyError``."""
 
     def __init__(

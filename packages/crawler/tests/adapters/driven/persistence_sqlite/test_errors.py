@@ -7,12 +7,12 @@ from p2pwatch.adapters.driven.persistence_sqlite.errors import (
     PersistenceError,
     wrap_sqlite_errors,
 )
-from p2pwatch.domain.repository_errors import RepositoryError
+from p2pwatch.domain.repository_errors import StoreError
 
 
 def test_persistence_error_satisfies_repository_error_contract() -> None:
-    assert issubclass(PersistenceError, RepositoryError)
-    assert issubclass(MigrationError, RepositoryError)  # transitive via PersistenceError
+    assert issubclass(PersistenceError, StoreError)
+    assert issubclass(MigrationError, StoreError)  # transitive via PersistenceError
 
 
 def test_a_sqlite_error_comes_out_as_a_persistence_error_chained_to_it() -> None:

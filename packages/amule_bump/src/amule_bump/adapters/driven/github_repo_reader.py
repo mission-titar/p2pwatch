@@ -3,11 +3,11 @@ from typing import Any
 from urllib.error import HTTPError
 from urllib.request import OpenerDirector, Request
 
-from amule_bump.application.ports.driven.repo_reader import RepoReader
+from amule_bump.application.ports.driven.repo_reader import UpstreamClient
 from amule_bump.domain.git_object import GitObject, GitObjectKind
 
 
-class GitHubRepoReader(RepoReader):
+class GithubUpstreamClient(UpstreamClient):
     """Reads the repository ``full_name`` from GitHub's API at ``api_url``, by ``url_opener``."""
 
     def __init__(

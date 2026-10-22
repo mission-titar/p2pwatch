@@ -8,7 +8,7 @@ class CrawlerRunner(ABC):
     """Crawls with the three config files, until a signal or the webui stops it."""
 
     @abstractmethod
-    async def crawl(
+    async def run_crawler(
         self, *, config_path: PurePath, targets_path: PurePath, matcher_path: PurePath
     ) -> None:
         """Raises ``InvalidConfigError`` on a refused config, ``TimeoutError`` on a fired bound."""

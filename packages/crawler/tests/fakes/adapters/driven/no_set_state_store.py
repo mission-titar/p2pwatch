@@ -2,10 +2,10 @@ from typing import Literal
 
 from p2pwatch.domain.download.states import DownloadState, FailureReason
 from p2pwatch.domain.file_key import FileKey
-from tests.fakes.adapters.driven.fake_download_store import FakeDownloadStore
+from tests.fakes.adapters.driven.fake_download_store import FakeTrackedDownloadStore
 
 
-class NoSetStateStore(FakeDownloadStore):
+class NoSetStateStore(FakeTrackedDownloadStore):
     """Fails the test on any state change."""
 
     def set_state(

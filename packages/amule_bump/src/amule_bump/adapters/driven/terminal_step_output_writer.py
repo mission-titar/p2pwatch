@@ -1,10 +1,10 @@
 from pathlib import PurePath
 
-from amule_bump.application.ports.driven.step_output_writer import StepOutputWriter
+from amule_bump.application.ports.driven.step_output_writer import BumpAnnouncer
 
 
-class TerminalStepOutputWriter(StepOutputWriter):
+class TerminalBumpAnnouncer(BumpAnnouncer):
     """Prints the step outputs, for a bump run by hand outside Actions."""
 
-    def write_step_outputs(self, version: str, body_path: PurePath) -> None:
+    def announce_bump(self, version: str, body_path: PurePath) -> None:
         print(f"version={version}\nbody-path={body_path}")

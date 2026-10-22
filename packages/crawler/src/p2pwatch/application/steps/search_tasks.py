@@ -12,7 +12,7 @@ from p2pwatch.application.ports.driven.backoff_state_writer import BackoffStateW
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.steps.search_worker import BackoffRegistry, SearchTask, SearchWorker
-from p2pwatch.domain.repository_errors import RepositoryError
+from p2pwatch.domain.repository_errors import StoreError
 from p2pwatch.domain.search.keywords import dedupe_keywords
 
 
@@ -67,8 +67,8 @@ class SearchTaskRunner:
         if current == self._saved:
             return
         try:
-            self._backoff_state_writer.save_backoff_states(current)
-        except RepositoryError as error:
+            self._backoff_state_writer.set_backoff_states(current)
+        except StoreError as error:
             self._logger.error("backoff not saved (%s): retried after the next search", error)
             return
         self._saved = current

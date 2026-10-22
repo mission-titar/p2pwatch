@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from amule_bump.domain.git_object import GitObject
 
 
-class RepoReader(ABC):
+class UpstreamClient(ABC):
     """Reads one git repository: its latest release, its tags and its files at a ref."""
 
     @abstractmethod

@@ -1,15 +1,15 @@
-"""``InMemoryStatusBoard``: each client's latest reading, published by its status loop and read
-on the webui's thread."""
+"""``InMemoryStatusReadingStore``: each client's latest reading, published by its status loop and
+read on the webui's thread."""
 
 from collections.abc import Iterable, Mapping
 
-from p2pwatch.application.ports.driven.client_status_reader import ClientStatusReader
-from p2pwatch.application.ports.driven.client_status_writer import ClientStatusWriter
+from p2pwatch.application.ports.driven.client_status_reader import StatusReadingReader
+from p2pwatch.application.ports.driven.client_status_writer import StatusReadingWriter
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.status_reading import PublishedReading, StatusReading
 
 
-class InMemoryStatusBoard(ClientStatusWriter, ClientStatusReader):
+class InMemoryStatusReadingStore(StatusReadingWriter, StatusReadingReader):
     """Holds no clock: each reading comes with the instant it was published at."""
 
     def __init__(self, client_names: Iterable[str]) -> None:
@@ -17,7 +17,7 @@ class InMemoryStatusBoard(ClientStatusWriter, ClientStatusReader):
             client_names
         )
 
-    def publish(
+    def set_reading(
         self, client_name: str, reading: StatusReading, published_at: MonotonicInstant
     ) -> None:
         # A new map, never a mutation: the other thread reads whole snapshots, no lock needed.

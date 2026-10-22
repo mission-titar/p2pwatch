@@ -4,15 +4,15 @@ from datetime import datetime
 from p2pwatch.application.ports.driven.source_point_reader import SourcePointReader
 from p2pwatch.application.ports.driven.source_point_writer import SourcePointWriter
 from p2pwatch.domain.file_key import FileKey
-from p2pwatch.domain.repository_errors import RepositoryError
+from p2pwatch.domain.repository_errors import StoreError
 from p2pwatch.domain.source import EarlierPoints, RecordedReading, SourceKey, SourceReading
 
 
 class FakeSourcePointStore(SourcePointWriter, SourcePointReader):
     """Records each ``record_readings`` call, answering ``kept`` per hash; raises
-    ``RepositoryError`` for ``fail_for``. ``history`` answers ``read_earlier_points`` per source,
+    ``StoreError`` for ``fail_for``. ``history`` answers ``read_earlier_points`` per source,
     never useful by default, and ``baseline`` answers ``has_points_before``, each call noted in
-    ``baselines``, the first ``baseline_failures`` raising ``RepositoryError``."""
+    ``baselines``, the first ``baseline_failures`` raising ``StoreError``."""
 
     def __init__(
         self,
@@ -38,7 +38,7 @@ class FakeSourcePointStore(SourcePointWriter, SourcePointReader):
     ) -> tuple[RecordedReading, ...]:
         self.node_ids.add(node_id)
         if file.native_id in self._fail_for:
-            raise RepositoryError(f"record_readings({file.native_id}) failed")
+            raise StoreError(f"record_readings({file.native_id}) failed")
         self.recorded.append((file.native_id, tuple(readings), read_at))
         return self._kept.get(file.native_id, ())
 
@@ -55,5 +55,5 @@ class FakeSourcePointStore(SourcePointWriter, SourcePointReader):
         self.node_ids.add(node_id)
         self.baselines.append(before)
         if len(self.baselines) <= self._baseline_failures:
-            raise RepositoryError("has_points_before failed")
+            raise StoreError("has_points_before failed")
         return self._baseline

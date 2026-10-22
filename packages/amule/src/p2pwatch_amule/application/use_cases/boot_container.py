@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 
-from p2pwatch_amule.application.ports.driven.account_manager import AccountManager
+from p2pwatch_amule.application.ports.driven.account_manager import AccountProvisioner
 from p2pwatch_amule.application.ports.driven.admin_password_setter import AdminPasswordSetter
 from p2pwatch_amule.application.ports.driven.amule_conf_reader import AmuleConfReader
 from p2pwatch_amule.application.ports.driven.amule_conf_writer import AmuleConfWriter
@@ -25,14 +25,14 @@ class BootContainer(ContainerBooter):
     def __init__(
         self,
         *,
-        account_manager: AccountManager,
+        account_provisioner: AccountProvisioner,
         amuled_directory_preparer: AmuledDirectoryPreparer,
         amule_conf_reader: AmuleConfReader,
         amule_conf_writer: AmuleConfWriter,
         admin_password_setter: AdminPasswordSetter,
         service_supervisor: ServiceSupervisor,
     ) -> None:
-        self._account_manager = account_manager
+        self._account_provisioner = account_provisioner
         self._amuled_directory_preparer = amuled_directory_preparer
         self._amule_conf_reader = amule_conf_reader
         self._amule_conf_writer = amule_conf_writer
@@ -44,7 +44,9 @@ class BootContainer(ContainerBooter):
         port_sync_enabled = is_port_sync_enabled(env)
         if port_sync_enabled:
             parse_port_sync_settings(env)
-        self._account_manager.find_or_create_amule_account(boot_settings.puid, boot_settings.pgid)
+        self._account_provisioner.find_or_create_amule_account(
+            boot_settings.puid, boot_settings.pgid
+        )
         self._amuled_directory_preparer.prepare_amuled_directories(
             boot_settings.puid, boot_settings.pgid
         )
@@ -52,7 +54,7 @@ class BootContainer(ContainerBooter):
             self._amule_conf_reader.read_amule_conf(),
             ec_password_digest(boot_settings.ec_password),
         )
-        self._amule_conf_writer.write_amule_conf(conf, boot_settings.puid, boot_settings.pgid)
+        self._amule_conf_writer.set_amule_conf(conf, boot_settings.puid, boot_settings.pgid)
         self._admin_password_setter.set_admin_password(
             boot_settings.api_password, boot_settings.puid, boot_settings.pgid
         )

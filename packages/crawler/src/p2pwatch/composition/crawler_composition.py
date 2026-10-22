@@ -2,7 +2,7 @@
 
 COMPOSITION layer (the only one allowed to import adapters AND application). Builds:
 - ONE ``SqliteObservationStore`` + ``SqliteCatalogScanReader``, ``SqliteDecisionStore``,
-  ``SqliteNodeIdStore``, ``SqlitePolicyFingerprintStore`` and ``SqliteBackoffStateRepository``
+  ``SqliteNodeIdStore``, ``SqlitePolicyFingerprintStore`` and ``SqliteBackoffStateStore``
   (single writer, invariant §11), connections opened via ``open_catalog``/``open_local``
   (migrations checked at startup, fail-fast §14).
 - the ``MatchingEngine`` (once),
@@ -31,7 +31,7 @@ from prometheus_client import CollectorRegistry, start_http_server
 
 import p2pwatch.adapters.driving.webui
 from catalog_matching.domain.engine import MatchingEngine
-from p2pwatch.adapters.driven.asyncio_run_state import AsyncioRunState
+from p2pwatch.adapters.driven.asyncio_run_state import AsyncioRunStateStore
 from p2pwatch.adapters.driven.asyncio_waker import AsyncioWaker
 from p2pwatch.adapters.driven.config.crawler_config import (
     AMULE_CLIENT_NAME,
@@ -39,7 +39,7 @@ from p2pwatch.adapters.driven.config.crawler_config import (
     LoadedConfig,
     load_config,
 )
-from p2pwatch.adapters.driven.in_memory_status_board import InMemoryStatusBoard
+from p2pwatch.adapters.driven.in_memory_status_board import InMemoryStatusReadingStore
 from p2pwatch.adapters.driven.monotonic_clock_asyncio import AsyncioMonotonicClock
 from p2pwatch.adapters.driven.mule_api.client import AmuleApiClient
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
@@ -49,13 +49,15 @@ from p2pwatch.adapters.driven.observability.prometheus_metrics_recorder import (
     start_metrics_server,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.backoff_state_repository import (
-    SqliteBackoffStateRepository,
+    SqliteBackoffStateStore,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
-from p2pwatch.adapters.driven.persistence_sqlite.download_repository import SqliteDownloadRepository
+from p2pwatch.adapters.driven.persistence_sqlite.download_repository import (
+    SqliteTrackedDownloadStore,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.local_read import SqliteNodeStateReader
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
-from p2pwatch.adapters.driven.persistence_sqlite.source_repository import SqliteSourceRepository
+from p2pwatch.adapters.driven.persistence_sqlite.source_repository import SqliteSourcePointStore
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_file_reader import (
     SqliteCatalogFileReader,
 )
@@ -171,8 +173,8 @@ class CrawlerComposition(CrawlerRunner):
         *,
         config: LoadedConfig,
         stack: AsyncExitStack,
-        status_board: InMemoryStatusBoard,
-        run_state: AsyncioRunState,
+        status_reading_store: InMemoryStatusReadingStore,
+        run_state: AsyncioRunStateStore,
         shutdown_requester: RequestShutdown,
         wall_clock: WallClock,
         monotonic_clock: MonotonicClock,
@@ -201,7 +203,7 @@ class CrawlerComposition(CrawlerRunner):
                 coverage_reader=SqliteCoverageReader(catalog_reader_provider),
                 node_state_reader=node_state_reader,
                 run_state_reader=run_state,
-                client_status_reader=status_board,
+                status_reading_reader=status_reading_store,
                 monotonic_clock=monotonic_clock,
             ),
             node_describer=DescribeNode(node_state_reader),
@@ -247,7 +249,7 @@ class CrawlerComposition(CrawlerRunner):
         stack.push_async_callback(server_thread.stop)
         await server_thread.start()
 
-    async def crawl(
+    async def run_crawler(
         self, *, config_path: PurePath, targets_path: PurePath, matcher_path: PurePath
     ) -> None:
         """Opens the resources under ``PosixProcess``, runs ``CrawlerLifecycle`` to shutdown (§6).
@@ -271,7 +273,7 @@ class CrawlerComposition(CrawlerRunner):
         resumed.set()
         loop = asyncio.get_running_loop()
         # On the crawler's OWN loop + events, so the webui thread changes it thread-safely.
-        run_state = AsyncioRunState(loop=loop, resumed=resumed, shutdown=shutdown)
+        run_state = AsyncioRunStateStore(loop=loop, resumed=resumed, shutdown=shutdown)
         shutdown_requester = RequestShutdown(run_state)
         async with PosixProcess(shutdown_requester) as stack:
             catalog_conn = open_catalog(crawler_config.catalog_db_path)
@@ -298,9 +300,9 @@ class CrawlerComposition(CrawlerRunner):
             observation_store = SqliteObservationStore(catalog_conn)
             catalog_scan_reader = SqliteCatalogScanReader(catalog_conn)
             decision_store = SqliteDecisionStore(catalog_conn)
-            backoff_states = SqliteBackoffStateRepository(local_conn)
+            backoff_states = SqliteBackoffStateStore(local_conn)
             engine = MatchingEngine(config.matcher_config, config.targets)
-            board = InMemoryStatusBoard((AMULE_CLIENT_NAME,))
+            status_reading_store = InMemoryStatusReadingStore((AMULE_CLIENT_NAME,))
             # In-process webui (spec §5): own thread + loop, started EARLY (before the daemon client
             # + startup re-evaluation) so it is up promptly and stays isolated from the crawler's
             # synchronous work. Gated by ``webui.enabled``; a crash degrades (spec §17.1). Its
@@ -310,7 +312,7 @@ class CrawlerComposition(CrawlerRunner):
                 await self._start_webui(
                     config=config,
                     stack=stack,
-                    status_board=board,
+                    status_reading_store=status_reading_store,
                     run_state=run_state,
                     shutdown_requester=shutdown_requester,
                     wall_clock=wall_clock,
@@ -352,7 +354,7 @@ class CrawlerComposition(CrawlerRunner):
                 monotonic_clock,
                 event_emitter,
                 shutdown,
-                board,
+                status_reading_store,
             )
             search_tasks = SearchTaskRunner(
                 workers=workers,
@@ -373,17 +375,17 @@ class CrawlerComposition(CrawlerRunner):
             # the search session.
             download_config = crawler_config.download
             if download_config is not None:
-                download_repo = SqliteDownloadRepository(local_conn)
-                source_repo = SqliteSourceRepository(
+                tracked_download_store = SqliteTrackedDownloadStore(local_conn)
+                source_point_store = SqliteSourcePointStore(
                     catalog_conn, download_config.time_between_source_reads
                 )
                 download_deps = DownloadLoopDeps(
                     download_client=client,
                     source_client=client,
-                    download_writer=download_repo,
-                    download_reader=download_repo,
-                    source_point_writer=source_repo,
-                    source_point_reader=source_repo,
+                    tracked_download_writer=tracked_download_store,
+                    tracked_download_reader=tracked_download_store,
+                    source_point_writer=source_point_store,
+                    source_point_reader=source_point_store,
                     decision_reader=decision_store,
                     observation_reader=observation_store,
                     targets=config.targets,
