@@ -1,7 +1,7 @@
 """Composition root: loads the config, assembles the crawler it describes, then runs it.
 
 COMPOSITION layer (the only one allowed to import adapters AND application). Builds:
-- ONE ``SqliteCatalogRepository`` + ONE ``SqliteLocalStateRepository`` +
+- ONE ``SqliteCatalogRepository`` + ``SqliteNodeIdStore``, ``SqlitePolicyFingerprintStore`` and
   ``SqliteBackoffStateRepository`` (single writer, invariant §11), connections opened
   via ``open_catalog``/``open_local`` (migrations checked at startup, fail-fast §14).
 - the ``MatchingEngine`` (once),
@@ -59,11 +59,12 @@ from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import Sqlit
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
 from p2pwatch.adapters.driven.persistence_sqlite.download_repository import SqliteDownloadRepository
 from p2pwatch.adapters.driven.persistence_sqlite.local_read import SqliteNodeStateReader
-from p2pwatch.adapters.driven.persistence_sqlite.local_state_repository import (
-    SqliteLocalStateRepository,
-)
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driven.persistence_sqlite.source_repository import SqliteSourceRepository
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_node_id_store import SqliteNodeIdStore
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_policy_fingerprint_store import (
+    SqlitePolicyFingerprintStore,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_sql_executor import SqliteSqlExecutor
 from p2pwatch.adapters.driven.random_jitter_generator import RandomJitterGenerator
 from p2pwatch.adapters.driven.shutil_free_space_meter import ShutilFreeSpaceMeter
@@ -271,7 +272,8 @@ class CrawlerComposition(CrawlerRunner):
             local_conn = open_local(crawler_config.local_db_path)
             stack.callback(local_conn.close)
 
-            local_repo = SqliteLocalStateRepository(local_conn)
+            node_id_store = SqliteNodeIdStore(local_conn)
+            policy_fingerprint_store = SqlitePolicyFingerprintStore(local_conn)
             observability = crawler_config.observability
             registry = CollectorRegistry()
             notifier = AppriseNotifier(
@@ -393,14 +395,14 @@ class CrawlerComposition(CrawlerRunner):
 
             crawler_lifecycle = CrawlerLifecycle(
                 configured_node_id=crawler_config.node_id,
-                node_id_reader=local_repo,
-                node_id_writer=local_repo,
+                node_id_reader=node_id_store,
+                node_id_writer=node_id_store,
                 node_id_generator=Uuid4NodeIdGenerator(),
                 wall_clock=wall_clock,
                 event_emitter=event_emitter,
                 policy_fingerprint=config.policy_fingerprint,
-                policy_fingerprint_reader=local_repo,
-                policy_fingerprint_writer=local_repo,
+                policy_fingerprint_reader=policy_fingerprint_store,
+                policy_fingerprint_writer=policy_fingerprint_store,
                 reevaluate=lambda node_id: reevaluate_catalog(
                     observation_reader=catalog_repo,
                     decision_writer=catalog_repo,
