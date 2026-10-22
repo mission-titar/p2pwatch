@@ -10,10 +10,10 @@ from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability import events as ev
 from p2pwatch.domain.observability.policy import Audience, Severity
+from tests.fakes.adapters.driven.fake_hanging_notifier import FakeHangingNotifier
 from tests.fakes.adapters.driven.fake_metrics_recorder import FakeMetricsRecorder
-from tests.fakes.adapters.driven.hanging_notifier import FakeHangingNotifier
-from tests.fakes.adapters.driven.raising_notifier import FakeRaisingNotifier
-from tests.fakes.adapters.driven.recording_notifier import FakeNotifier
+from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
+from tests.fakes.adapters.driven.fake_raising_notifier import FakeRaisingNotifier
 
 _NODE = "titar-node-1"
 _COMPLETED = ev.DownloadCompleted(

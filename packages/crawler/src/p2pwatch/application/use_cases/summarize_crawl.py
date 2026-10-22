@@ -1,10 +1,10 @@
 """Summarizes the crawl from the catalog, local.db, the run state and the clients' readings."""
 
-from p2pwatch.application.ports.driven.client_status_reader import StatusReadingReader
 from p2pwatch.application.ports.driven.coverage_reader import CoverageReader
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.node_state_reader import NodeStateReader
 from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
+from p2pwatch.application.ports.driven.status_reading_reader import StatusReadingReader
 from p2pwatch.application.ports.driving.crawl_summarizer import (
     ClientSummary,
     CrawlSummarizer,

@@ -12,10 +12,10 @@ from amule_bump.application.use_cases.bump_amule import BumpAmule
 from amule_bump.domain.bump_error import BumpError
 from amule_bump.domain.dockerfile import Pin
 from amule_bump.domain.git_object import GitObject, GitObjectKind
+from tests.fakes.adapters.driven.fake_bump_announcer import FakeBumpAnnouncer
 from tests.fakes.adapters.driven.fake_dockerfile_store import FakeDockerfileStore
-from tests.fakes.adapters.driven.fake_pull_request_body_writer import FakePullRequestDrafter
-from tests.fakes.adapters.driven.fake_repo_reader import FakeUpstreamClient
-from tests.fakes.adapters.driven.fake_step_output_writer import FakeBumpAnnouncer
+from tests.fakes.adapters.driven.fake_pull_request_drafter import FakePullRequestDrafter
+from tests.fakes.adapters.driven.fake_upstream_client import FakeUpstreamClient
 
 OLD_COMMIT = "02db0d7faecfc377694ff6242bc23346185990ed"
 NEW_COMMIT = "909d304d993ee07df6c6f6acf501a6d791d53666"

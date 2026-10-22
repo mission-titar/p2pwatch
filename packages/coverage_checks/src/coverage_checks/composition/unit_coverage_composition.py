@@ -3,7 +3,9 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from coverage_checks.adapters.driven.coverage_py_reader import CoveragePyTestCoverageReader
+from coverage_checks.adapters.driven.coverage_py_test_coverage_reader import (
+    CoveragePyTestCoverageReader,
+)
 from coverage_checks.adapters.driven.filesystem_package_tree_reader import (
     FilesystemPackageTreeReader,
 )

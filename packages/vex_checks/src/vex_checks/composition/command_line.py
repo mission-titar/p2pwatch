@@ -6,7 +6,7 @@ from pathlib import Path
 from vex_checks.adapters.driven.filesystem_source_rule_reader import FilesystemSourceRuleReader
 from vex_checks.adapters.driven.grype_vulnerability_scanner import GrypeVulnerabilityScanner
 from vex_checks.adapters.driven.json_sarif_writer import JsonSarifWriter
-from vex_checks.adapters.driven.json_vex_reader import OpenVexReader
+from vex_checks.adapters.driven.open_vex_reader import OpenVexReader
 from vex_checks.adapters.driven.syft_sbom_reader import SyftSbomReader
 from vex_checks.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from vex_checks.application.use_cases.check_claim_coverage import CheckClaimCoverage

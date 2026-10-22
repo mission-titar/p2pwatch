@@ -15,7 +15,7 @@ from p2pwatch.adapters.driven.observability.prometheus_metrics_recorder import (
 from p2pwatch.domain.observability.events import SearchExecuted, SourceFirstUseful
 from p2pwatch.domain.observability.policy import MetricInstruction, MetricName, describe
 from tests.domain.observability.test_policy import CASES
-from tests.fakes.adapters.driven.shut_down_server import FakeMetricsServer
+from tests.fakes.adapters.driven.fake_metrics_server import FakeMetricsServer
 
 
 def test_counter_inc_with_label() -> None:

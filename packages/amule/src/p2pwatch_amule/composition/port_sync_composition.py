@@ -5,10 +5,10 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from urllib.request import OpenerDirector
 
-from p2pwatch_amule.adapters.driven.gluetun_forwarded_port_reader import (
+from p2pwatch_amule.adapters.driven.gluetun_forwarded_port_client import (
     GluetunForwardedPortClient,
 )
-from p2pwatch_amule.adapters.driven.posix_amule_conf import PosixAmuleConfStore
+from p2pwatch_amule.adapters.driven.posix_amule_conf_store import PosixAmuleConfStore
 from p2pwatch_amule.adapters.driven.s6_service_supervisor import S6ServiceSupervisor
 from p2pwatch_amule.adapters.driven.stdlib_logger import StdlibLogger
 from p2pwatch_amule.application.port_sync_lifecycle import PortSyncLifecycle

@@ -10,9 +10,11 @@ from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import FileKey, Network
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_no_set_state_tracked_download_store import (
+    FakeNoSetStateTrackedDownloadStore,
+)
 from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader
 from tests.fakes.adapters.driven.fake_time import FakeTime
-from tests.fakes.adapters.driven.no_set_state_store import FakeNoSetStateTrackedDownloadStore
 
 
 def test_a_wall_clock_step_leaves_the_monotonic_clock() -> None:

@@ -12,8 +12,8 @@ from urllib.request import build_opener
 from p2pwatch_amule.adapters.driven.amule_api_admin_password_setter import (
     AmuleApiAdminPasswordSetter,
 )
-from p2pwatch_amule.adapters.driven.posix_account_manager import PosixAccountProvisioner
-from p2pwatch_amule.adapters.driven.posix_amule_conf import PosixAmuleConfStore
+from p2pwatch_amule.adapters.driven.posix_account_provisioner import PosixAccountProvisioner
+from p2pwatch_amule.adapters.driven.posix_amule_conf_store import PosixAmuleConfStore
 from p2pwatch_amule.adapters.driven.posix_amuled_directory_preparer import (
     PosixAmuledDirectoryPreparer,
 )

@@ -1,7 +1,7 @@
 from p2pwatch.application.ports.driven.backoff_state_reader import BackoffStateReader
 from p2pwatch.application.ports.driven.backoff_state_writer import BackoffStateWriter
-from p2pwatch.domain.repository_errors import StoreError
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
+from p2pwatch.domain.store_error import StoreError
 
 
 class FakeBackoffStateStore(BackoffStateReader, BackoffStateWriter):

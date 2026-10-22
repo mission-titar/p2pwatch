@@ -24,7 +24,7 @@ from p2pwatch.application.ports.driven.observation_reader import ObservationRead
 from p2pwatch.application.ports.driven.waker import Waker
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.steps.decisions import rejudge_file
-from p2pwatch.domain.repository_errors import StoreError
+from p2pwatch.domain.store_error import StoreError
 
 
 @dataclass(frozen=True)

@@ -29,7 +29,7 @@ from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.steps.decisions import rejudge_file
 from p2pwatch.domain.observability.events import ObservationRecorded
 from p2pwatch.domain.observation import FileObservation, ReportedFile
-from p2pwatch.domain.repository_errors import StoreError
+from p2pwatch.domain.store_error import StoreError
 
 
 async def record_observation(

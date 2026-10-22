@@ -11,8 +11,8 @@ from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_sql_executor import SqliteSqlExecutor
 from p2pwatch.domain.console_query import QueryAnswer, QueryFailure
 from p2pwatch.domain.file_key import FileKey, Network
+from tests.fakes.adapters.driven.fake_ticking_monotonic_clock import FakeTickingMonotonicClock
 from tests.fakes.adapters.driven.fake_time import FakeTime
-from tests.fakes.adapters.driven.ticking_monotonic_clock import FakeTickingMonotonicClock
 from tests.support.catalog_rows import insert_file
 
 _HASH_A = "a" * 32

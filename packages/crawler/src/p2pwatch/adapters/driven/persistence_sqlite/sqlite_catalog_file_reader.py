@@ -20,7 +20,9 @@ from p2pwatch.adapters.driven.persistence_sqlite.observation_read import (
     observation_from_row,
     observations_between,
 )
-from p2pwatch.adapters.driven.persistence_sqlite.reader import ThreadReadConnections
+from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
+    ThreadReadConnections,
+)
 from p2pwatch.application.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_history import DatedDecision, FileHistory

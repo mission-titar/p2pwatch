@@ -4,8 +4,8 @@ from datetime import datetime
 from p2pwatch.application.ports.driven.source_point_reader import SourcePointReader
 from p2pwatch.application.ports.driven.source_point_writer import SourcePointWriter
 from p2pwatch.domain.file_key import FileKey
-from p2pwatch.domain.repository_errors import StoreError
 from p2pwatch.domain.source import EarlierPoints, RecordedReading, SourceKey, SourceReading
+from p2pwatch.domain.store_error import StoreError
 
 
 class FakeSourcePointStore(SourcePointWriter, SourcePointReader):

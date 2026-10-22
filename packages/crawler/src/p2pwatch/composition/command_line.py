@@ -4,7 +4,7 @@ import logging
 from collections.abc import Mapping
 from pathlib import Path
 
-from p2pwatch.adapters.driven.config.yaml_config_checker import FilesystemConfigChecker
+from p2pwatch.adapters.driven.config.filesystem_config_checker import FilesystemConfigChecker
 from p2pwatch.adapters.driven.filesystem_catalog_finder import FilesystemCatalogFinder
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier import SqliteCatalogCopier
 from p2pwatch.adapters.driven.stdlib_logger import StdlibLogger
