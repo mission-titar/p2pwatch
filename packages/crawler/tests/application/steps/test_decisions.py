@@ -1,6 +1,6 @@
 """Tests for the shared decision helper (spec §7): set diff keyed by (hash, target_id).
 
-Real engine + real SQLite catalog repo (mirrors ``test_record_observations.py``: "real repos
+Real engine + real SQLite stores (mirrors ``test_record_observations.py``: "real repos
 on tmp_path"); only ``waker``/``event_emitter``/``wall_clock`` are fakes. ``_record`` observes the
 name first: the helper judges the file on every name the catalog knows for it.
 """
@@ -16,9 +16,11 @@ from catalog_matching.domain.engine import (
     MatchDecision,
     MatchingEngine,
 )
-from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
+    SqliteObservationStore,
+)
 from p2pwatch.application.steps.decisions import rejudge_file
 from p2pwatch.application.steps.record_observations import record_observation
 from p2pwatch.application.steps.run_download_cycle import DOWNLOAD_WAKE_SUBJECT
@@ -90,20 +92,20 @@ def _seed_decision(
 async def _record(
     ed2k_hash: str,
     filename: str,
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     waker: FakeWaker,
     event_emitter: FakeEventEmitter,
     wall_clock: FakeWallClock,
 ) -> int:
-    catalog.record_observation(
+    observation_store.record_observation(
         FileObservation(_reported_file(ed2k_hash, filename), wall_clock.now()), _NODE
     )
     return await rejudge_file(
         _key(ed2k_hash),
         _reported_file(ed2k_hash, filename).to_candidate(),
-        observation_reader=catalog,
+        observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
         engine=engine,
@@ -116,7 +118,7 @@ async def _record(
 
 @pytest.mark.asyncio
 async def test_new_decision_is_recorded_emitted_and_nudged(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
@@ -124,7 +126,14 @@ async def test_new_decision_is_recorded_emitted_and_nudged(
 ) -> None:
     event_emitter, waker = FakeEventEmitter(), FakeWaker()
     written = await _record(
-        _HASH_DL, _DL_NAME, catalog, decision_store, engine, waker, event_emitter, wall_clock
+        _HASH_DL,
+        _DL_NAME,
+        observation_store,
+        decision_store,
+        engine,
+        waker,
+        event_emitter,
+        wall_clock,
     )
     assert written == 1
     assert catalog_connection.execute("SELECT target_id, tier FROM match_decisions").fetchone() == (
@@ -141,7 +150,7 @@ async def test_new_decision_is_recorded_emitted_and_nudged(
 
 @pytest.mark.asyncio
 async def test_multi_segment_file_records_both_segments_then_is_idempotent(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
@@ -149,7 +158,14 @@ async def test_multi_segment_file_records_both_segments_then_is_idempotent(
 ) -> None:
     event_emitter, waker = FakeEventEmitter(), FakeWaker()
     written = await _record(
-        _HASH_MULTI, _MULTI_NAME, catalog, decision_store, engine, waker, event_emitter, wall_clock
+        _HASH_MULTI,
+        _MULTI_NAME,
+        observation_store,
+        decision_store,
+        engine,
+        waker,
+        event_emitter,
+        wall_clock,
     )
     assert written == 2
     assert catalog_connection.execute(
@@ -168,7 +184,14 @@ async def test_multi_segment_file_records_both_segments_then_is_idempotent(
     ]
     assert waker.woken_subjects == [DOWNLOAD_WAKE_SUBJECT, DOWNLOAD_WAKE_SUBJECT]
     again = await _record(
-        _HASH_MULTI, _MULTI_NAME, catalog, decision_store, engine, waker, event_emitter, wall_clock
+        _HASH_MULTI,
+        _MULTI_NAME,
+        observation_store,
+        decision_store,
+        engine,
+        waker,
+        event_emitter,
+        wall_clock,
     )
     assert again == 0
     assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 2
@@ -176,7 +199,7 @@ async def test_multi_segment_file_records_both_segments_then_is_idempotent(
 
 @pytest.mark.asyncio
 async def test_changed_decision_is_reappended_emitted_and_nudged(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
@@ -184,10 +207,24 @@ async def test_changed_decision_is_reappended_emitted_and_nudged(
 ) -> None:
     event_emitter, waker = FakeEventEmitter(), FakeWaker()
     await _record(
-        _HASH_DL, _NOTIFY_NAME, catalog, decision_store, engine, waker, event_emitter, wall_clock
+        _HASH_DL,
+        _NOTIFY_NAME,
+        observation_store,
+        decision_store,
+        engine,
+        waker,
+        event_emitter,
+        wall_clock,
     )
     written = await _record(
-        _HASH_DL, _DL_NAME, catalog, decision_store, engine, waker, event_emitter, wall_clock
+        _HASH_DL,
+        _DL_NAME,
+        observation_store,
+        decision_store,
+        engine,
+        waker,
+        event_emitter,
+        wall_clock,
     )
     assert written == 1
     tiers = [
@@ -206,7 +243,7 @@ async def test_changed_decision_is_reappended_emitted_and_nudged(
 
 @pytest.mark.asyncio
 async def test_unchanged_decision_is_not_reappended_emitted_or_signalled(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
@@ -214,10 +251,24 @@ async def test_unchanged_decision_is_not_reappended_emitted_or_signalled(
 ) -> None:
     event_emitter, waker = FakeEventEmitter(), FakeWaker()
     first = await _record(
-        _HASH_CAT, _CAT_NAME, catalog, decision_store, engine, waker, event_emitter, wall_clock
+        _HASH_CAT,
+        _CAT_NAME,
+        observation_store,
+        decision_store,
+        engine,
+        waker,
+        event_emitter,
+        wall_clock,
     )
     second = await _record(
-        _HASH_CAT, _CAT_NAME, catalog, decision_store, engine, waker, event_emitter, wall_clock
+        _HASH_CAT,
+        _CAT_NAME,
+        observation_store,
+        decision_store,
+        engine,
+        waker,
+        event_emitter,
+        wall_clock,
     )
     assert (first, second) == (1, 0)
     assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 1
@@ -227,19 +278,26 @@ async def test_unchanged_decision_is_not_reappended_emitted_or_signalled(
 
 @pytest.mark.asyncio
 async def test_a_target_no_name_supports_is_retracted_without_nudge(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    catalog.record_observation(
+    observation_store.record_observation(
         FileObservation(_reported_file(_HASH_CAT, _DISCARD_NAME), wall_clock.now()), _NODE
     )
     _seed_decision(decision_store, _HASH_CAT, "062A", wall_clock.now(), node_id="seed-node")
     event_emitter, waker = FakeEventEmitter(), FakeWaker()
     written = await _record(
-        _HASH_CAT, _DISCARD_NAME, catalog, decision_store, engine, waker, event_emitter, wall_clock
+        _HASH_CAT,
+        _DISCARD_NAME,
+        observation_store,
+        decision_store,
+        engine,
+        waker,
+        event_emitter,
+        wall_clock,
     )
     assert written == 1
     assert decision_store.read_latest_decisions(_key(_HASH_CAT)) == {
@@ -254,12 +312,12 @@ async def test_a_target_no_name_supports_is_retracted_without_nudge(
 
 @pytest.mark.asyncio
 async def test_every_unsupported_target_is_retracted(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    catalog.record_observation(
+    observation_store.record_observation(
         FileObservation(_reported_file(_HASH_MULTI, _DISCARD_NAME), wall_clock.now()), _NODE
     )
     _seed_decision(decision_store, _HASH_MULTI, "062A", wall_clock.now())
@@ -268,7 +326,7 @@ async def test_every_unsupported_target_is_retracted(
     written = await _record(
         _HASH_MULTI,
         _DISCARD_NAME,
-        catalog,
+        observation_store,
         decision_store,
         engine,
         waker,
@@ -285,19 +343,26 @@ async def test_every_unsupported_target_is_retracted(
 
 @pytest.mark.asyncio
 async def test_already_retracted_then_none_is_a_no_op(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    catalog.record_observation(
+    observation_store.record_observation(
         FileObservation(_reported_file(_HASH_CAT, _DISCARD_NAME), wall_clock.now()), _NODE
     )
     _seed_decision(decision_store, _HASH_CAT, "062A", wall_clock.now())
     decision_store.record_retraction(_key(_HASH_CAT), "062A", wall_clock.now(), _NODE)
     event_emitter, waker = FakeEventEmitter(), FakeWaker()
     written = await _record(
-        _HASH_CAT, _DISCARD_NAME, catalog, decision_store, engine, waker, event_emitter, wall_clock
+        _HASH_CAT,
+        _DISCARD_NAME,
+        observation_store,
+        decision_store,
+        engine,
+        waker,
+        event_emitter,
+        wall_clock,
     )
     assert written == 0
     assert event_emitter.events == []
@@ -305,7 +370,7 @@ async def test_already_retracted_then_none_is_a_no_op(
 
 @pytest.mark.asyncio
 async def test_never_matched_then_none_is_a_no_op(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
@@ -315,7 +380,7 @@ async def test_never_matched_then_none_is_a_no_op(
     written = await _record(
         _HASH_NEVER,
         _DISCARD_NAME,
-        catalog,
+        observation_store,
         decision_store,
         engine,
         waker,
@@ -330,14 +395,21 @@ async def test_never_matched_then_none_is_a_no_op(
 
 @pytest.mark.asyncio
 async def test_non_download_tier_decision_does_not_nudge_the_download_subject(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
     event_emitter, waker = FakeEventEmitter(), FakeWaker()
     written = await _record(
-        _HASH_CAT, _CAT_NAME, catalog, decision_store, engine, waker, event_emitter, wall_clock
+        _HASH_CAT,
+        _CAT_NAME,
+        observation_store,
+        decision_store,
+        engine,
+        waker,
+        event_emitter,
+        wall_clock,
     )
     assert written == 1
     assert waker.woken_subjects == []
@@ -345,7 +417,7 @@ async def test_non_download_tier_decision_does_not_nudge_the_download_subject(
 
 @pytest.mark.asyncio
 async def test_a_second_name_that_matches_nothing_does_not_retract_the_first(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
@@ -355,8 +427,8 @@ async def test_a_second_name_that_matches_nothing_does_not_retract_the_first(
     written = [
         await record_observation(
             _reported_file(_HASH_DL, name),
-            observation_writer=catalog,
-            observation_reader=catalog,
+            observation_writer=observation_store,
+            observation_reader=observation_store,
             decision_writer=decision_store,
             decision_reader=decision_store,
             engine=engine,
@@ -378,7 +450,7 @@ async def test_a_second_name_that_matches_nothing_does_not_retract_the_first(
 
 @pytest.mark.asyncio
 async def test_a_weaker_name_seen_again_does_not_downgrade_the_verdict(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
@@ -386,7 +458,14 @@ async def test_a_weaker_name_seen_again_does_not_downgrade_the_verdict(
     event_emitter, waker = FakeEventEmitter(), FakeWaker()
     written = [
         await _record(
-            _HASH_DL, name, catalog, decision_store, engine, waker, event_emitter, wall_clock
+            _HASH_DL,
+            name,
+            observation_store,
+            decision_store,
+            engine,
+            waker,
+            event_emitter,
+            wall_clock,
         )
         for name in (_NOTIFY_NAME, _DL_NAME, _NOTIFY_NAME, _DL_NAME)
     ]
@@ -396,17 +475,24 @@ async def test_a_weaker_name_seen_again_does_not_downgrade_the_verdict(
 
 @pytest.mark.asyncio
 async def test_the_event_names_the_file_by_its_most_sourced_name(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    catalog.record_observation(
+    observation_store.record_observation(
         FileObservation(_reported_file(_HASH_DL, _DL_NAME, sources=9), wall_clock.now()), _NODE
     )
     event_emitter, waker = FakeEventEmitter(), FakeWaker()
     await _record(
-        _HASH_DL, _NOTIFY_NAME, catalog, decision_store, engine, waker, event_emitter, wall_clock
+        _HASH_DL,
+        _NOTIFY_NAME,
+        observation_store,
+        decision_store,
+        engine,
+        waker,
+        event_emitter,
+        wall_clock,
     )
     assert [e.filename for e in event_emitter.events if isinstance(e, DecisionsRecorded)] == [
         _DL_NAME
@@ -415,18 +501,25 @@ async def test_the_event_names_the_file_by_its_most_sourced_name(
 
 @pytest.mark.asyncio
 async def test_a_retracted_target_gone_from_the_targets_has_no_title(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    catalog.record_observation(
+    observation_store.record_observation(
         FileObservation(_reported_file(_HASH_CAT, _DISCARD_NAME), wall_clock.now()), _NODE
     )
     _seed_decision(decision_store, _HASH_CAT, "999Z", wall_clock.now())
     event_emitter, waker = FakeEventEmitter(), FakeWaker()
     await _record(
-        _HASH_CAT, _DISCARD_NAME, catalog, decision_store, engine, waker, event_emitter, wall_clock
+        _HASH_CAT,
+        _DISCARD_NAME,
+        observation_store,
+        decision_store,
+        engine,
+        waker,
+        event_emitter,
+        wall_clock,
     )
     assert event_emitter.events == [
         _event(_HASH_CAT, _DISCARD_NAME, DecisionChange("999Z", "", "notify", RETRACTED_TIER))
@@ -435,7 +528,7 @@ async def test_a_retracted_target_gone_from_the_targets_has_no_title(
 
 @pytest.mark.asyncio
 async def test_a_file_with_no_name_left_is_named_by_the_candidate(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
@@ -448,7 +541,7 @@ async def test_a_file_with_no_name_left_is_named_by_the_candidate(
     await rejudge_file(
         _key(_HASH_CAT),
         _reported_file(_HASH_CAT, _DISCARD_NAME).to_candidate(),
-        observation_reader=catalog,
+        observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
         engine=engine,
@@ -469,21 +562,21 @@ async def test_a_file_with_no_name_left_is_named_by_the_candidate(
 
 @pytest.mark.asyncio
 async def test_each_row_carries_the_instant_read_right_before_its_write(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
 ) -> None:
     start = datetime(2026, 6, 12, tzinfo=UTC)
     seeded_at = start - timedelta(days=1)
-    catalog.record_observation(
+    observation_store.record_observation(
         FileObservation(_reported_file(_HASH_MULTI, _MULTI_NAME), seeded_at), _NODE
     )
     _seed_decision(decision_store, _HASH_MULTI, "001A", seeded_at)
     await rejudge_file(
         _key(_HASH_MULTI),
         _reported_file(_HASH_MULTI, _MULTI_NAME).to_candidate(),
-        observation_reader=catalog,
+        observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
         engine=engine,

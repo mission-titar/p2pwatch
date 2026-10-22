@@ -1,10 +1,10 @@
 """Tests for the re-evaluation use-case ``reevaluate_catalog`` (spec §7, plan Task 5).
 
-Real engine + real SQLite catalog repo (same convention as ``test_decisions.py``: "real
+Real engine + real SQLite stores (same convention as ``test_decisions.py``: "real
 repos on tmp_path"); only ``waker``/``event_emitter``/``wall_clock`` are fakes (``FakeWaker``/
 ``FakeEventEmitter``/``FakeWallClock``). Each hash under test is seeded via
-``catalog.record_observation`` first so it shows up in ``iter_latest_observations`` (the source the
-re-evaluation iterates).
+``observation_store.record_observation`` first so it shows up in ``iter_latest_observations``
+(the source the re-evaluation iterates).
 """
 
 import sqlite3
@@ -18,9 +18,14 @@ from catalog_matching.domain.engine import (
     MatchDecision,
     MatchingEngine,
 )
-from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_scan_reader import (
+    SqliteCatalogScanReader,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
+    SqliteObservationStore,
+)
 from p2pwatch.application.steps.reevaluate_catalog import ReevaluationSummary, reevaluate_catalog
 from p2pwatch.application.steps.run_download_cycle import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.domain.file_key import FileKey, Network
@@ -65,26 +70,27 @@ def _legacy_row(target_id: str, rule_name: str, tier: str) -> MatchDecision:
 
 @pytest.mark.asyncio
 async def test_two_changed_rows_are_all_evaluated_and_written(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
+    catalog_scan_reader: SqliteCatalogScanReader,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
     # Never decided: both will change.
-    catalog.record_observation(
+    observation_store.record_observation(
         FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now()), _NODE
     )
-    catalog.record_observation(
+    observation_store.record_observation(
         FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now()), _NODE
     )
     event_emitter = FakeEventEmitter()
     waker = FakeWaker()
     summary = await reevaluate_catalog(
-        observation_reader=catalog,
+        observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
-        catalog_scan_reader=catalog,
+        catalog_scan_reader=catalog_scan_reader,
         engine=engine,
         waker=waker,
         event_emitter=event_emitter,
@@ -106,13 +112,14 @@ async def test_two_changed_rows_are_all_evaluated_and_written(
 
 @pytest.mark.asyncio
 async def test_unchanged_row_is_evaluated_but_not_written(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
+    catalog_scan_reader: SqliteCatalogScanReader,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    catalog.record_observation(
+    observation_store.record_observation(
         FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now()), _NODE
     )
     candidate = _reported_file(_HASH_CAT, _CAT_NAME).to_candidate()
@@ -125,10 +132,10 @@ async def test_unchanged_row_is_evaluated_but_not_written(
     event_emitter = FakeEventEmitter()
     waker = FakeWaker()
     summary = await reevaluate_catalog(
-        observation_reader=catalog,
+        observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
-        catalog_scan_reader=catalog,
+        catalog_scan_reader=catalog_scan_reader,
         engine=engine,
         waker=waker,
         event_emitter=event_emitter,
@@ -145,16 +152,17 @@ async def test_unchanged_row_is_evaluated_but_not_written(
 
 @pytest.mark.asyncio
 async def test_repository_error_on_one_row_is_absorbed_and_sweep_continues(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
+    catalog_scan_reader: SqliteCatalogScanReader,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    catalog.record_observation(
+    observation_store.record_observation(
         FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now()), _NODE
     )
-    catalog.record_observation(
+    observation_store.record_observation(
         FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now()), _NODE
     )
     logger = FakeLogger()
@@ -168,10 +176,10 @@ async def test_repository_error_on_one_row_is_absorbed_and_sweep_continues(
     event_emitter = FakeEventEmitter()
     waker = FakeWaker()
     summary = await reevaluate_catalog(
-        observation_reader=catalog,
+        observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
-        catalog_scan_reader=catalog,
+        catalog_scan_reader=catalog_scan_reader,
         engine=engine,
         waker=waker,
         event_emitter=event_emitter,
@@ -194,7 +202,8 @@ async def test_repository_error_on_one_row_is_absorbed_and_sweep_continues(
 
 @pytest.mark.asyncio
 async def test_empty_catalogue_yields_zero_summary(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
+    catalog_scan_reader: SqliteCatalogScanReader,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
@@ -202,10 +211,10 @@ async def test_empty_catalogue_yields_zero_summary(
     event_emitter = FakeEventEmitter()
     waker = FakeWaker()
     summary = await reevaluate_catalog(
-        observation_reader=catalog,
+        observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
-        catalog_scan_reader=catalog,
+        catalog_scan_reader=catalog_scan_reader,
         engine=engine,
         waker=waker,
         event_emitter=event_emitter,
@@ -221,7 +230,8 @@ async def test_empty_catalogue_yields_zero_summary(
 
 @pytest.mark.asyncio
 async def test_backfill_retracts_a_legacy_arbitrary_target_row(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
+    catalog_scan_reader: SqliteCatalogScanReader,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
@@ -229,7 +239,7 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
 ) -> None:
     # §10: an old "unidentified" row under an arbitrary target_id (001A/catalog) is retracted
     # by the set-diff when the file becomes identified (062A + 062B) on the re-evaluation pass.
-    catalog.record_observation(
+    observation_store.record_observation(
         FileObservation(_reported_file(_HASH_MULTI, _MULTI_NAME), wall_clock.now()), _NODE
     )
     decision_store.record_decision(
@@ -240,10 +250,10 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
     )
     event_emitter, waker = FakeEventEmitter(), FakeWaker()
     summary = await reevaluate_catalog(
-        observation_reader=catalog,
+        observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
-        catalog_scan_reader=catalog,
+        catalog_scan_reader=catalog_scan_reader,
         engine=engine,
         waker=waker,
         event_emitter=event_emitter,
@@ -264,14 +274,15 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
 
 @pytest.mark.asyncio
 async def test_backfill_ignores_the_legacy_empty_sentinel(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
+    catalog_scan_reader: SqliteCatalogScanReader,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
     # §10: the old whole-file retraction sentinel (target_id="") is invisible to the set-diff.
-    catalog.record_observation(
+    observation_store.record_observation(
         FileObservation(_reported_file(_HASH_MULTI, _MULTI_NAME), wall_clock.now()), _NODE
     )
     decision_store.record_decision(
@@ -282,10 +293,10 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
     )
     event_emitter, waker = FakeEventEmitter(), FakeWaker()
     summary = await reevaluate_catalog(
-        observation_reader=catalog,
+        observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
-        catalog_scan_reader=catalog,
+        catalog_scan_reader=catalog_scan_reader,
         engine=engine,
         waker=waker,
         event_emitter=event_emitter,
@@ -311,24 +322,25 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
 
 @pytest.mark.asyncio
 async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
+    catalog_scan_reader: SqliteCatalogScanReader,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     fake_time: FakeTime,
     wall_clock: FakeWallClock,
 ) -> None:
-    catalog.record_observation(
+    observation_store.record_observation(
         FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now()), _NODE
     )
     fake_time.advance(timedelta(minutes=1))  # the latest name matches nothing
-    catalog.record_observation(
+    observation_store.record_observation(
         FileObservation(_reported_file(_HASH_DL, "random.txt"), wall_clock.now()), _NODE
     )
     summary = await reevaluate_catalog(
-        observation_reader=catalog,
+        observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
-        catalog_scan_reader=catalog,
+        catalog_scan_reader=catalog_scan_reader,
         engine=engine,
         waker=FakeWaker(),
         event_emitter=FakeEventEmitter(),
@@ -345,26 +357,27 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
 
 @pytest.mark.asyncio
 async def test_progress_is_logged_at_each_multiple_of_the_cadence_only(
-    catalog: SqliteCatalogRepository,
+    observation_store: SqliteObservationStore,
+    catalog_scan_reader: SqliteCatalogScanReader,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
     logger = FakeLogger()
-    catalog.record_observation(
+    observation_store.record_observation(
         FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now()), _NODE
     )
-    catalog.record_observation(
+    observation_store.record_observation(
         FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now()), _NODE
     )
-    catalog.record_observation(
+    observation_store.record_observation(
         FileObservation(_reported_file(_HASH_MULTI, "random.txt"), wall_clock.now()), _NODE
     )
     await reevaluate_catalog(
-        observation_reader=catalog,
+        observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
-        catalog_scan_reader=catalog,
+        catalog_scan_reader=catalog_scan_reader,
         engine=engine,
         waker=FakeWaker(),
         event_emitter=FakeEventEmitter(),

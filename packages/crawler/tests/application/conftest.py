@@ -9,9 +9,14 @@ import pytest
 from catalog_matching.domain.engine import MatchingEngine
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 from p2pwatch.adapters.driven.config.yaml_loader import load_yaml
-from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_scan_reader import (
+    SqliteCatalogScanReader,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
+    SqliteObservationStore,
+)
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_wall_clock import FakeWallClock
 
@@ -38,8 +43,13 @@ def catalog_connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 
 @pytest.fixture
-def catalog(catalog_connection: sqlite3.Connection) -> SqliteCatalogRepository:
-    return SqliteCatalogRepository(catalog_connection)
+def observation_store(catalog_connection: sqlite3.Connection) -> SqliteObservationStore:
+    return SqliteObservationStore(catalog_connection)
+
+
+@pytest.fixture
+def catalog_scan_reader(catalog_connection: sqlite3.Connection) -> SqliteCatalogScanReader:
+    return SqliteCatalogScanReader(catalog_connection)
 
 
 @pytest.fixture

@@ -20,7 +20,7 @@ Idempotence (spec §4):
 - ``sources``, ``source_variants`` and ``source_observations`` as ``files``,
   ``observation_variants`` and ``observations`` (source points spec, D7).
 
-The SQL lives in **Python constants** (consistent with ``catalog_repository.py``; no
+The SQL lives in **Python constants** (consistent with ``sqlite_observation_store.py``; no
 new ``.sql`` for sqlfluff to lint). We NEVER write to the source (only SELECTs).
 """
 

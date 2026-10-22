@@ -7,8 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
+    SqliteObservationStore,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation, ReportedFile
@@ -130,7 +132,7 @@ def test_a_new_observation_reuses_the_variant_0008_rekeyed(tmp_path: Path) -> No
         keyword="keroro",
     )
     try:
-        SqliteCatalogRepository(migrated).record_observation(
+        SqliteObservationStore(migrated).record_observation(
             FileObservation(reported_file, datetime(2026, 6, 12, tzinfo=UTC)), "n1"
         )
         assert migrated.execute("SELECT count(*) FROM observation_variants").fetchone()[0] == 3

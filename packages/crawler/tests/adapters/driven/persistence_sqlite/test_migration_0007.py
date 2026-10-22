@@ -9,8 +9,10 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.adapters.driven.mule_api.mapping import map_search_results
-from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
+    SqliteObservationStore,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
 from p2pwatch.domain.observation import FileObservation
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
@@ -132,7 +134,7 @@ def test_a_mapped_result_reuses_the_variant_0007_migrated_from_its_old_row(
     (reported_file,), _ = map_search_results([result], "keroro")
     connection = open_catalog(path)
     try:
-        SqliteCatalogRepository(connection).record_observation(
+        SqliteObservationStore(connection).record_observation(
             FileObservation(reported_file, datetime(2026, 6, 12, tzinfo=UTC)), "n1"
         )
         assert connection.execute("SELECT count(*) FROM observation_variants").fetchone()[0] == 1

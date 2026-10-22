@@ -1,10 +1,10 @@
 """Composition root: loads the config, assembles the crawler it describes, then runs it.
 
 COMPOSITION layer (the only one allowed to import adapters AND application). Builds:
-- ONE ``SqliteCatalogRepository`` + ``SqliteDecisionStore``, ``SqliteNodeIdStore``,
-  ``SqlitePolicyFingerprintStore`` and ``SqliteBackoffStateRepository`` (single writer,
-  invariant §11), connections opened
-  via ``open_catalog``/``open_local`` (migrations checked at startup, fail-fast §14).
+- ONE ``SqliteObservationStore`` + ``SqliteCatalogScanReader``, ``SqliteDecisionStore``,
+  ``SqliteNodeIdStore``, ``SqlitePolicyFingerprintStore`` and ``SqliteBackoffStateRepository``
+  (single writer, invariant §11), connections opened via ``open_catalog``/``open_local``
+  (migrations checked at startup, fail-fast §14).
 - the ``MatchingEngine`` (once),
 - ONE ``AmuleApiClient`` + ``SearchWorker`` on the one amuled the core drives, whose
   session the status and download loops share.
@@ -56,14 +56,19 @@ from p2pwatch.adapters.driven.persistence_sqlite.catalog_read import (
     SqliteCoverageReader,
     SqliteSourceReader,
 )
-from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
 from p2pwatch.adapters.driven.persistence_sqlite.download_repository import SqliteDownloadRepository
 from p2pwatch.adapters.driven.persistence_sqlite.local_read import SqliteNodeStateReader
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
 from p2pwatch.adapters.driven.persistence_sqlite.source_repository import SqliteSourceRepository
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_scan_reader import (
+    SqliteCatalogScanReader,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_node_id_store import SqliteNodeIdStore
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
+    SqliteObservationStore,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_policy_fingerprint_store import (
     SqlitePolicyFingerprintStore,
 )
@@ -290,7 +295,8 @@ class CrawlerComposition(CrawlerRunner):
             stack.callback(
                 start_metrics_server(registry, observability.metrics_port, start_http_server)
             )
-            catalog_repo = SqliteCatalogRepository(catalog_conn)
+            observation_store = SqliteObservationStore(catalog_conn)
+            catalog_scan_reader = SqliteCatalogScanReader(catalog_conn)
             decision_store = SqliteDecisionStore(catalog_conn)
             backoff_states = SqliteBackoffStateRepository(local_conn)
             engine = MatchingEngine(config.matcher_config, config.targets)
@@ -321,8 +327,8 @@ class CrawlerComposition(CrawlerRunner):
             )
             backoff.load_from(backoff_states.read_backoff_states())
             deps = WorkerDeps(
-                observation_writer=catalog_repo,
-                observation_reader=catalog_repo,
+                observation_writer=observation_store,
+                observation_reader=observation_store,
                 decision_writer=decision_store,
                 decision_reader=decision_store,
                 engine=engine,
@@ -379,7 +385,7 @@ class CrawlerComposition(CrawlerRunner):
                     source_point_writer=source_repo,
                     source_point_reader=source_repo,
                     decision_reader=decision_store,
-                    observation_reader=catalog_repo,
+                    observation_reader=observation_store,
                     targets=config.targets,
                     free_space_meter=ShutilFreeSpaceMeter(download_config.output_dir),
                     min_free_bytes=download_config.min_free_bytes,
@@ -407,10 +413,10 @@ class CrawlerComposition(CrawlerRunner):
                 policy_fingerprint_reader=policy_fingerprint_store,
                 policy_fingerprint_writer=policy_fingerprint_store,
                 reevaluate=lambda node_id: reevaluate_catalog(
-                    observation_reader=catalog_repo,
+                    observation_reader=observation_store,
                     decision_writer=decision_store,
                     decision_reader=decision_store,
-                    catalog_scan_reader=catalog_repo,
+                    catalog_scan_reader=catalog_scan_reader,
                     engine=engine,
                     waker=waker,
                     event_emitter=event_emitter,
