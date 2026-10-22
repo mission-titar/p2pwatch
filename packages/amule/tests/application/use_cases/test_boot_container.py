@@ -1,13 +1,13 @@
-"""BootContainer: every variable refused first, then each step, port-sync's state last."""
+"""BootContainer: each step from the boot settings, port-sync's state last."""
 
 import hashlib
-import re
+from dataclasses import replace
 
 import pytest
 
 from p2pwatch_amule.application.use_cases.boot_container import BootContainer
 from p2pwatch_amule.domain.conf import reconcile_conf
-from p2pwatch_amule.domain.settings_error import SettingsError
+from p2pwatch_amule.domain.settings import BootSettings
 from tests.fakes.adapters.driven.fake_account_provisioner import FakeAccountProvisioner
 from tests.fakes.adapters.driven.fake_admin_password_setter import FakeAdminPasswordSetter
 from tests.fakes.adapters.driven.fake_amule_conf_store import FakeAmuleConfStore
@@ -16,21 +16,19 @@ from tests.fakes.adapters.driven.fake_service_supervisor import FakeServiceSuper
 
 DIGEST = hashlib.md5(b"hunter2").hexdigest()
 
-ENV = {
-    "PUID": "1000",
-    "PGID": "1001",
-    "AMULE_EC_PASSWORD": "hunter2",
-    "AMULE_API_PASSWORD": "s3cret",
-}
+BOOT_SETTINGS = BootSettings(
+    puid=1000, pgid=1001, ec_password="hunter2", api_password="s3cret", port_sync_enabled=False
+)
 
 
 class Booter:
     """A BootContainer over the package's fakes, each recording into one action list."""
 
-    def __init__(self) -> None:
+    def __init__(self, boot_settings: BootSettings = BOOT_SETTINGS) -> None:
         self.actions: list[str] = []
         self.amule_conf = FakeAmuleConfStore(self.actions)
         self.container_booter = BootContainer(
+            boot_settings=boot_settings,
             account_provisioner=FakeAccountProvisioner(self.actions),
             amuled_directory_preparer=FakeAmuledDirectoryPreparer(self.actions),
             amule_conf_reader=self.amule_conf,
@@ -43,7 +41,7 @@ class Booter:
 def test_each_step_runs_as_puid_and_pgid_in_order_port_sync_last() -> None:
     booter = Booter()
 
-    booter.container_booter.boot_container(ENV)
+    booter.container_booter.boot_container()
 
     # The password follows the directories: amuleapi writes under .aMule as PUID:PGID.
     assert booter.actions == [
@@ -59,7 +57,7 @@ def test_each_step_runs_as_puid_and_pgid_in_order_port_sync_last() -> None:
 def test_first_boot_writes_the_minimal_conf() -> None:
     booter = Booter()
 
-    booter.container_booter.boot_container(ENV)
+    booter.container_booter.boot_container()
 
     assert booter.amule_conf.conf == reconcile_conf(None, DIGEST)
 
@@ -69,65 +67,23 @@ def test_an_existing_conf_is_reconciled_not_replaced() -> None:
     existing_conf = "[eMule]\nMaxUpload=42\n\n[ExternalConnect]\nECPassword=dead\n"
     booter.amule_conf.conf = existing_conf
 
-    booter.container_booter.boot_container(ENV)
+    booter.container_booter.boot_container()
 
     assert booter.amule_conf.conf == reconcile_conf(existing_conf, DIGEST)
 
 
 @pytest.mark.parametrize("api_password", ["s3cret", "mot de passé"])
 def test_the_admin_password_is_the_one_given(api_password: str) -> None:
-    booter = Booter()
+    booter = Booter(replace(BOOT_SETTINGS, api_password=api_password))
 
-    booter.container_booter.boot_container({**ENV, "AMULE_API_PASSWORD": api_password})
+    booter.container_booter.boot_container()
 
     assert f"admin password {api_password} as 1000:1001" in booter.actions
 
 
-@pytest.mark.parametrize(
-    ("variables", "message"),
-    [
-        ({"PUID": ""}, "PUID is required"),
-        ({"PGID": "amule"}, "PGID must be a numeric id, got 'amule'"),
-        ({"AMULE_API_PASSWORD": "s3cret\n"}, "AMULE_API_PASSWORD must not contain a control"),
-        ({"PORT_SYNC": "maybe"}, "PORT_SYNC must be one of "),
-        ({"PORT_SYNC": "on", "PORT_SYNC_POLL_SECONDS": "0"}, "PORT_SYNC_POLL_SECONDS must be "),
-        ({"PORT_SYNC": "yes", "GLUETUN_CONTROL_URL": "gluetun"}, "GLUETUN_CONTROL_URL must be "),
-    ],
-)
-def test_a_refused_variable_aborts_the_boot_before_any_change(
-    variables: dict[str, str], message: str
-) -> None:
-    booter = Booter()
+def test_port_sync_on_is_enabled() -> None:
+    booter = Booter(replace(BOOT_SETTINGS, port_sync_enabled=True))
 
-    with pytest.raises(SettingsError, match=f"^{re.escape(message)}"):
-        booter.container_booter.boot_container({**ENV, **variables})
-
-    assert booter.actions == []
-
-
-def test_port_sync_off_leaves_its_other_variables_unread() -> None:
-    booter = Booter()
-    env = {**ENV, "PORT_SYNC": "off", "PORT_SYNC_POLL_SECONDS": "0"}
-
-    booter.container_booter.boot_container(env)
-
-    assert booter.actions[-1] == "disable port-sync"
-
-
-@pytest.mark.parametrize("port_sync", ["off", "", None])
-def test_port_sync_off_or_unset_is_disabled(port_sync: str | None) -> None:
-    booter = Booter()
-    env = ENV if port_sync is None else {**ENV, "PORT_SYNC": port_sync}
-
-    booter.container_booter.boot_container(env)
-
-    assert booter.actions[-1] == "disable port-sync"
-
-
-@pytest.mark.parametrize("port_sync", ["yes", "On"])
-def test_port_sync_on_is_enabled(port_sync: str) -> None:
-    booter = Booter()
-
-    booter.container_booter.boot_container({**ENV, "PORT_SYNC": port_sync})
+    booter.container_booter.boot_container()
 
     assert booter.actions[-1] == "enable port-sync"

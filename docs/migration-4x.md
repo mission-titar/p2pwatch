@@ -159,9 +159,10 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
   `client <nom> unreachable (...): reconnect backoff ...` : la session amuleapi s'ouvre d'elle-même
   au premier appel, et un amuled injoignable reste signalé par
   `client <nom> unreachable (...), client down, backoff ...`. Le port-sync,
-  `mulewatch.application.port_sync_loop` en 4.x, journalise sous
-  `p2pwatch_amule.adapters.driving.port_sync`, et ses échecs à joindre gluetun sous
-  `p2pwatch_amule.adapters.driven.gluetun`.
+  `mulewatch.application.port_sync_loop` en 4.x, journalise lui aussi sous le nom du module qui
+  écrit la ligne : `p2pwatch_amule.application.port_sync_lifecycle`, ses commandes s6 sous
+  `p2pwatch_amule.adapters.driven.s6_service_supervisor` et ses échecs à joindre gluetun sous
+  `p2pwatch_amule.adapters.driven.gluetun_forwarded_port_client`.
 - **La documentation** est désormais sur <https://mission-titar.github.io/p2pwatch/>.
 
 ## Retour arrière

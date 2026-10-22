@@ -1,6 +1,4 @@
-"""Boots the aMule container: refuses its variables, then each step, port-sync's state last."""
-
-from collections.abc import Mapping
+"""Boots the aMule container from its settings: each step, port-sync's state last."""
 
 from p2pwatch_amule.application.ports.driven.account_provisioner import AccountProvisioner
 from p2pwatch_amule.application.ports.driven.admin_password_setter import AdminPasswordSetter
@@ -12,19 +10,16 @@ from p2pwatch_amule.application.ports.driven.amuled_directory_preparer import (
 from p2pwatch_amule.application.ports.driven.service_supervisor import ServiceSupervisor
 from p2pwatch_amule.application.ports.driving.container_booter import ContainerBooter
 from p2pwatch_amule.domain.conf import ec_password_digest, reconcile_conf
-from p2pwatch_amule.domain.settings import (
-    is_port_sync_enabled,
-    parse_boot_settings,
-    parse_port_sync_settings,
-)
+from p2pwatch_amule.domain.settings import BootSettings
 
 
 class BootContainer(ContainerBooter):
-    """Parses every variable, port-sync's included, before the first change."""
+    """Prepares the container from ``boot_settings``, which hold every variable refused first."""
 
     def __init__(
         self,
         *,
+        boot_settings: BootSettings,
         account_provisioner: AccountProvisioner,
         amuled_directory_preparer: AmuledDirectoryPreparer,
         amule_conf_reader: AmuleConfReader,
@@ -32,6 +27,7 @@ class BootContainer(ContainerBooter):
         admin_password_setter: AdminPasswordSetter,
         service_supervisor: ServiceSupervisor,
     ) -> None:
+        self._boot_settings = boot_settings
         self._account_provisioner = account_provisioner
         self._amuled_directory_preparer = amuled_directory_preparer
         self._amule_conf_reader = amule_conf_reader
@@ -39,11 +35,8 @@ class BootContainer(ContainerBooter):
         self._admin_password_setter = admin_password_setter
         self._service_supervisor = service_supervisor
 
-    def boot_container(self, env: Mapping[str, str]) -> None:
-        boot_settings = parse_boot_settings(env)
-        port_sync_enabled = is_port_sync_enabled(env)
-        if port_sync_enabled:
-            parse_port_sync_settings(env)
+    def boot_container(self) -> None:
+        boot_settings = self._boot_settings
         self._account_provisioner.find_or_create_amule_account(
             boot_settings.puid, boot_settings.pgid
         )
@@ -58,7 +51,7 @@ class BootContainer(ContainerBooter):
         self._admin_password_setter.set_admin_password(
             boot_settings.api_password, boot_settings.puid, boot_settings.pgid
         )
-        if port_sync_enabled:
+        if boot_settings.port_sync_enabled:
             self._service_supervisor.enable_port_sync()
         else:
             self._service_supervisor.disable_port_sync()

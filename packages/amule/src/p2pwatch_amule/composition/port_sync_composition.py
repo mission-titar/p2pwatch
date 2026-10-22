@@ -1,18 +1,17 @@
 """Port-sync's composition: parses its variables, then assembles and runs its loop."""
 
-import subprocess
-from collections.abc import Callable, Mapping
-from pathlib import Path
+from collections.abc import Mapping
 from urllib.request import OpenerDirector
 
 from p2pwatch_amule.adapters.driven.gluetun_forwarded_port_client import (
     GluetunForwardedPortClient,
 )
-from p2pwatch_amule.adapters.driven.posix_amule_conf_store import PosixAmuleConfStore
-from p2pwatch_amule.adapters.driven.s6_service_supervisor import S6ServiceSupervisor
 from p2pwatch_amule.adapters.driven.stdlib_logger import StdlibLogger
 from p2pwatch_amule.application.port_sync_lifecycle import PortSyncLifecycle
+from p2pwatch_amule.application.ports.driven.amule_conf_reader import AmuleConfReader
+from p2pwatch_amule.application.ports.driven.amule_conf_writer import AmuleConfWriter
 from p2pwatch_amule.application.ports.driven.monotonic_clock import MonotonicClock
+from p2pwatch_amule.application.ports.driven.service_supervisor import ServiceSupervisor
 from p2pwatch_amule.application.ports.driving.port_sync_loop_runner import PortSyncLoopRunner
 from p2pwatch_amule.domain.settings import parse_port_sync_settings
 
@@ -27,46 +26,32 @@ class PortSyncComposition(PortSyncLoopRunner):
         self,
         *,
         env: Mapping[str, str],
-        amule_conf_path: Path,
-        port_sync_service_directory: Path,
-        amuled_service_directory: Path,
+        amule_conf_reader: AmuleConfReader,
+        amule_conf_writer: AmuleConfWriter,
+        service_supervisor: ServiceSupervisor,
         url_opener: OpenerDirector,
-        run_command: Callable[..., subprocess.CompletedProcess[str]],
-        change_owner: Callable[[Path, int, int], None],
         monotonic_clock: MonotonicClock,
     ) -> None:
         self._env = env
-        self._amule_conf_path = amule_conf_path
-        self._port_sync_service_directory = port_sync_service_directory
-        self._amuled_service_directory = amuled_service_directory
+        self._amule_conf_reader = amule_conf_reader
+        self._amule_conf_writer = amule_conf_writer
+        self._service_supervisor = service_supervisor
         self._url_opener = url_opener
-        self._run_command = run_command
-        self._change_owner = change_owner
         self._monotonic_clock = monotonic_clock
 
     def run_port_sync_loop(self) -> None:
         port_sync_settings = parse_port_sync_settings(self._env)
-        # The two logger names docs/migration-4x.md gives the operator.
-        logger = StdlibLogger("p2pwatch_amule.adapters.driving.port_sync")
-        amule_conf = PosixAmuleConfStore(
-            amule_conf_path=self._amule_conf_path, change_owner=self._change_owner
-        )
         PortSyncLifecycle(
             port_sync_settings=port_sync_settings,
             forwarded_port_client=GluetunForwardedPortClient(
                 control_url=port_sync_settings.gluetun_control_url,
                 timeout_seconds=_GLUETUN_TIMEOUT_SECONDS,
-                logger=StdlibLogger("p2pwatch_amule.adapters.driven.gluetun"),
+                logger=StdlibLogger(GluetunForwardedPortClient.__module__),
                 url_opener=self._url_opener,
             ),
-            amule_conf_reader=amule_conf,
-            amule_conf_writer=amule_conf,
-            service_supervisor=S6ServiceSupervisor(
-                port_sync_service_directory=self._port_sync_service_directory,
-                amuled_service_directory=self._amuled_service_directory,
-                run_command=self._run_command,
-                logger=logger,
-            ),
+            amule_conf_reader=self._amule_conf_reader,
+            amule_conf_writer=self._amule_conf_writer,
+            service_supervisor=self._service_supervisor,
             monotonic_clock=self._monotonic_clock,
-            logger=logger,
+            logger=StdlibLogger(PortSyncLifecycle.__module__),
         ).run()
