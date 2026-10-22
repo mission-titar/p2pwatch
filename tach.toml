@@ -726,19 +726,7 @@ depends_on = ["p2pwatch.domain"]
 [[modules]]
 path = "p2pwatch_amule.__main__"
 layer = "composition"
-depends_on = [
-  "p2pwatch_amule.adapters.driven.amule_api_admin_password_setter",
-  "p2pwatch_amule.adapters.driven.posix_account_manager",
-  "p2pwatch_amule.adapters.driven.posix_amule_conf",
-  "p2pwatch_amule.adapters.driven.posix_amuled_directory_preparer",
-  "p2pwatch_amule.adapters.driven.s6_service_supervisor",
-  "p2pwatch_amule.adapters.driven.stdlib_logger",
-  "p2pwatch_amule.adapters.driven.system_monotonic_clock",
-  "p2pwatch_amule.adapters.driving.cli",
-  "p2pwatch_amule.application.use_cases",
-  "p2pwatch_amule.composition",
-  "p2pwatch_amule.domain",
-]
+depends_on = ["p2pwatch_amule.composition"]
 
 [[modules]]
 path = "p2pwatch_amule.adapters.driven.amule_api_admin_password_setter"
@@ -817,7 +805,7 @@ depends_on = [
 [[modules]]
 path = "p2pwatch_amule.application.use_cases"
 layer = "use_cases"
-visibility = ["*.__main__", "*.composition"]
+visibility = ["*.composition"]
 depends_on = [
   "p2pwatch_amule.application.ports.driven.account_manager",
   "p2pwatch_amule.application.ports.driven.admin_password_setter",
@@ -833,13 +821,19 @@ depends_on = [
 path = "p2pwatch_amule.composition"
 layer = "composition"
 depends_on = [
+  "p2pwatch_amule.adapters.driven.amule_api_admin_password_setter",
   "p2pwatch_amule.adapters.driven.gluetun_forwarded_port_reader",
+  "p2pwatch_amule.adapters.driven.posix_account_manager",
   "p2pwatch_amule.adapters.driven.posix_amule_conf",
+  "p2pwatch_amule.adapters.driven.posix_amuled_directory_preparer",
   "p2pwatch_amule.adapters.driven.s6_service_supervisor",
   "p2pwatch_amule.adapters.driven.stdlib_logger",
+  "p2pwatch_amule.adapters.driven.system_monotonic_clock",
+  "p2pwatch_amule.adapters.driving.cli",
   "p2pwatch_amule.application.port_sync_lifecycle",
   "p2pwatch_amule.application.ports.driven.monotonic_clock",
   "p2pwatch_amule.application.ports.driving.port_sync_loop_runner",
+  "p2pwatch_amule.application.use_cases",
   "p2pwatch_amule.domain",
 ]
 
