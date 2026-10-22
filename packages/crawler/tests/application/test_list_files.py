@@ -1,16 +1,13 @@
 """``ListFiles``: a page of the catalog's files and their counts, in one read."""
 
-from collections.abc import Mapping
-from typing import Any
-
 from catalog_matching.domain.engine import DecisionRecord
 from p2pwatch.application.list_files import ListFiles
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
-from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.paging import PAGE_SIZE
 from p2pwatch.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.ports.driving.file_lister import FileListing
+from tests.fakes.application.fakes import FakeCatalogFileReader
 
 _ENTRY = CatalogEntry(
     file=FileKey(Network.ED2K, "a" * 32),
@@ -20,27 +17,13 @@ _ENTRY = CatalogEntry(
 )
 
 
-class _FakeCatalogFileReader(CatalogFileReader):
-    """Reads ``entry_count`` copies of one entry, and keeps each call's arguments."""
-
-    def __init__(self, entry_count: int = 1) -> None:
-        self._entry_count = entry_count
-        self.calls: list[tuple[str, dict[str, Any]]] = []
-
-    def read_catalog_entries(self, **arguments: Any) -> tuple[CatalogEntry, ...]:
-        self.calls.append(("read_catalog_entries", arguments))
-        return (_ENTRY,) * self._entry_count
-
-    def read_matched_and_total_file_counts(self, **arguments: Any) -> tuple[int, int]:
-        self.calls.append(("read_matched_and_total_file_counts", arguments))
-        return 3, 7
-
-    def read_file_count_by_tier(self, **arguments: Any) -> Mapping[str, int]:
-        self.calls.append(("read_file_count_by_tier", arguments))
-        return {"download": 3}
-
-    def read_file_history(self, file_id: bytes, **arguments: Any) -> FileHistory | None:
-        raise AssertionError("ListFiles reads no file history")
+def _reader(entry_count: int = 1) -> FakeCatalogFileReader:
+    """Reads ``entry_count`` copies of one entry."""
+    return FakeCatalogFileReader(
+        catalog_entries=(_ENTRY,) * entry_count,
+        matched_and_total_file_counts=(3, 7),
+        file_count_by_tier={"download": 3},
+    )
 
 
 def _list_files(reader: CatalogFileReader, *, page: int = 1) -> FileListing:
@@ -56,7 +39,7 @@ def _list_files(reader: CatalogFileReader, *, page: int = 1) -> FileListing:
 
 
 def test_the_listing_holds_the_page_read_and_the_counts_of_the_files_passing_the_filters() -> None:
-    reader = _FakeCatalogFileReader()
+    reader = _reader()
 
     listing = _list_files(reader)
 
@@ -90,7 +73,7 @@ def test_the_listing_holds_the_page_read_and_the_counts_of_the_files_passing_the
 
 
 def test_a_page_starts_after_the_files_of_the_pages_before_it() -> None:
-    reader = _FakeCatalogFileReader()
+    reader = _reader()
 
     _list_files(reader, page=3)
 
@@ -98,5 +81,5 @@ def test_a_page_starts_after_the_files_of_the_pages_before_it() -> None:
 
 
 def test_only_a_full_page_offers_a_next_one() -> None:
-    assert _list_files(_FakeCatalogFileReader(PAGE_SIZE)).has_next_page
-    assert not _list_files(_FakeCatalogFileReader(PAGE_SIZE - 1)).has_next_page
+    assert _list_files(_reader(PAGE_SIZE)).has_next_page
+    assert not _list_files(_reader(PAGE_SIZE - 1)).has_next_page

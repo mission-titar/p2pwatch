@@ -9,33 +9,14 @@ import pytest
 
 from p2pwatch.application.reevaluate_catalog import ReevaluationSummary
 from p2pwatch.application.reevaluate_if_policy_changed import reevaluate_if_policy_changed
-from p2pwatch.ports.driven.policy_fingerprint import (
-    PolicyFingerprintReader,
-    PolicyFingerprintWriter,
-)
-from tests.fakes.application.fakes import FakeLogger, LoggedLine
+from tests.fakes.application.fakes import FakeLogger, FakePolicyFingerprintStore, LoggedLine
 
 _SUMMARY = ReevaluationSummary(files_evaluated=3, rows_written=1)
 
 
-class FakeFingerprintStore(PolicyFingerprintReader, PolicyFingerprintWriter):
-    """Keeps the fingerprint it is given."""
-
-    def __init__(self, *, stored_policy: str | None) -> None:
-        self._stored_policy = stored_policy
-        self.set_calls: list[str] = []
-
-    def read_policy_fingerprint(self) -> str | None:
-        return self._stored_policy
-
-    def set_policy_fingerprint(self, fingerprint: str) -> None:
-        self.set_calls.append(fingerprint)
-        self._stored_policy = fingerprint
-
-
 @pytest.mark.asyncio
 async def test_marker_matches_fingerprint_skips_backfill() -> None:
-    fingerprints = FakeFingerprintStore(stored_policy="abc")
+    fingerprints = FakePolicyFingerprintStore(stored_fingerprint="abc")
     logger = FakeLogger()
     calls = 0
 
@@ -58,7 +39,7 @@ async def test_marker_matches_fingerprint_skips_backfill() -> None:
 
 @pytest.mark.asyncio
 async def test_marker_absent_runs_backfill_then_stores_fingerprint() -> None:
-    fingerprints = FakeFingerprintStore(stored_policy=None)
+    fingerprints = FakePolicyFingerprintStore(stored_fingerprint=None)
     logger = FakeLogger()
     calls = 0
 
@@ -81,7 +62,7 @@ async def test_marker_absent_runs_backfill_then_stores_fingerprint() -> None:
 
 @pytest.mark.asyncio
 async def test_marker_differs_from_fingerprint_runs_backfill() -> None:
-    fingerprints = FakeFingerprintStore(stored_policy="old-fingerprint")
+    fingerprints = FakePolicyFingerprintStore(stored_fingerprint="old-fingerprint")
     calls = 0
 
     async def reevaluate() -> ReevaluationSummary:
@@ -102,7 +83,7 @@ async def test_marker_differs_from_fingerprint_runs_backfill() -> None:
 
 @pytest.mark.asyncio
 async def test_run_backfill_raising_propagates_and_marker_not_set() -> None:
-    fingerprints = FakeFingerprintStore(stored_policy=None)
+    fingerprints = FakePolicyFingerprintStore(stored_fingerprint=None)
 
     async def boom() -> ReevaluationSummary:
         raise RuntimeError("re-evaluation exploded")

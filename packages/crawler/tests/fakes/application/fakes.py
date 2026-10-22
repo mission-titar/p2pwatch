@@ -6,28 +6,35 @@
 ``TickingMonotonicClock``: each read a second after the previous one.
 ``FakeJitterGenerator``: FIXED jitter (determinism). ``FakeLogger``: keeps each line it is given.
 ``FakeNodeIdStore`` and ``FakeNodeIdGenerator``: the node id's stored and new values.
+``FakePolicyFingerprintStore``: keeps the matcher policy's fingerprint.
 ``FakeRunState``: keeps each change; ``FakeCrawlPauser``, ``FakeCrawlResumer`` and
 ``FakeShutdownRequester``: each control the webui calls.
 ``FakeClientStatusReader``: reads the readings it is given; ``FakeNodeStateReader``, the state.
+``FakeCatalogFileReader`` and ``FakeSourceReader``: the webui's reads of the catalog.
 ``FakeCrawlSummarizer`` and ``FakeNodeDescriber``: the dashboard's and the node page's use cases.
-``FakeWaker``: captures woken subjects. The repos are the REAL SQLite repos
-(spec §8: "real repos on tmp_path"): no fakes here.
+``FakeWaker``: captures woken and waited subjects.
 """
 
 import asyncio
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Any, Literal
 
-from p2pwatch.domain.catalog_entry import CatalogEntrySort, SortDirection
+from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.console_query import ConsoleDatabase
+from p2pwatch.domain.file_history import FileHistory
+from p2pwatch.domain.file_key import FileKey
+from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.node_state import NodeState
 from p2pwatch.domain.observability.events import Event
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.search.answer import SearchAnswer
+from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
+from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory
 from p2pwatch.domain.status_reading import PublishedReading
+from p2pwatch.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.ports.driven.client_errors import ClientUnreachableError, SearchFailedError
 from p2pwatch.ports.driven.client_status import ClientStatusReader
 from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
@@ -35,8 +42,13 @@ from p2pwatch.ports.driven.jitter_generator import JitterGenerator
 from p2pwatch.ports.driven.logger import Logger
 from p2pwatch.ports.driven.node_id import NodeIdGenerator, NodeIdReader, NodeIdWriter
 from p2pwatch.ports.driven.node_state_reader import NodeStateReader
+from p2pwatch.ports.driven.policy_fingerprint import (
+    PolicyFingerprintReader,
+    PolicyFingerprintWriter,
+)
 from p2pwatch.ports.driven.run_state import RunStateReader, RunStateWriter
 from p2pwatch.ports.driven.search_client import SearchClient
+from p2pwatch.ports.driven.source_reader import SourceReader
 from p2pwatch.ports.driven.telemetry import EventEmitter
 from p2pwatch.ports.driven.waker import Waker
 from p2pwatch.ports.driving.console_query_runner import ConsoleQueryOutcome, ConsoleQueryRunner
@@ -171,6 +183,21 @@ class FakeNodeIdStore(NodeIdReader, NodeIdWriter):
         self._stored_node_id = node_id
 
 
+class FakePolicyFingerprintStore(PolicyFingerprintReader, PolicyFingerprintWriter):
+    """Keeps the fingerprint it is given, and each one set."""
+
+    def __init__(self, *, stored_fingerprint: str | None) -> None:
+        self.stored_fingerprint = stored_fingerprint
+        self.set_calls: list[str] = []
+
+    def read_policy_fingerprint(self) -> str | None:
+        return self.stored_fingerprint
+
+    def set_policy_fingerprint(self, fingerprint: str) -> None:
+        self.set_calls.append(fingerprint)
+        self.stored_fingerprint = fingerprint
+
+
 class FakeNodeIdGenerator(NodeIdGenerator):
     """Draws the one id it is given."""
 
@@ -222,13 +249,15 @@ class FakeCrawlResumer(CrawlResumer):
 
 
 class FakeShutdownRequester(ShutdownRequester):
-    """Keeps each call by its operation's name."""
+    """Keeps each call by its operation's name, and sets ``requested``, for a test to wait on."""
 
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self.requested = asyncio.Event()
 
     def request_shutdown(self) -> None:
         self.calls.append("request_shutdown")
+        self.requested.set()
 
 
 class FakeClientStatusReader(ClientStatusReader):
@@ -249,6 +278,84 @@ class FakeNodeStateReader(NodeStateReader):
 
     def read_node_state(self) -> NodeState:
         return self._node_state
+
+
+class FakeCatalogFileReader(CatalogFileReader):
+    """Reads what it is given, and keeps each call by its operation's name, with its arguments."""
+
+    def __init__(
+        self,
+        *,
+        catalog_entries: tuple[CatalogEntry, ...] = (),
+        matched_and_total_file_counts: tuple[int, int] = (0, 0),
+        file_count_by_tier: Mapping[str, int] | None = None,
+        file_history: FileHistory | None = None,
+    ) -> None:
+        self._catalog_entries = catalog_entries
+        self._matched_and_total_file_counts = matched_and_total_file_counts
+        self._file_count_by_tier = file_count_by_tier or {}
+        self._file_history = file_history
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+
+    def read_catalog_entries(self, **arguments: Any) -> tuple[CatalogEntry, ...]:
+        self.calls.append(("read_catalog_entries", arguments))
+        return self._catalog_entries
+
+    def read_matched_and_total_file_counts(self, **arguments: Any) -> tuple[int, int]:
+        self.calls.append(("read_matched_and_total_file_counts", arguments))
+        return self._matched_and_total_file_counts
+
+    def read_file_count_by_tier(self, **arguments: Any) -> Mapping[str, int]:
+        self.calls.append(("read_file_count_by_tier", arguments))
+        return self._file_count_by_tier
+
+    def read_file_history(self, file_id: bytes, **arguments: Any) -> FileHistory | None:
+        self.calls.append(("read_file_history", {"file_id": file_id, **arguments}))
+        return self._file_history
+
+
+class FakeSourceReader(SourceReader):
+    """Reads what it is given, and keeps each call by its operation's name, with its arguments."""
+
+    def __init__(
+        self,
+        *,
+        known_sources: tuple[KnownSource, ...] = (),
+        source_count: int = 0,
+        source_history: SourceHistory | None = None,
+        source_name_history: SourceNameHistory | None = None,
+        sharing_periods: tuple[SharingPeriod, ...] = (),
+    ) -> None:
+        self._known_sources = known_sources
+        self._source_count = source_count
+        self._source_history = source_history
+        self._source_name_history = source_name_history
+        self._sharing_periods = sharing_periods
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+
+    def read_known_sources(self, **arguments: Any) -> tuple[KnownSource, ...]:
+        self.calls.append(("read_known_sources", arguments))
+        return self._known_sources
+
+    def read_source_count(self, **arguments: Any) -> int:
+        self.calls.append(("read_source_count", arguments))
+        return self._source_count
+
+    def read_source_history(self, source_id: bytes, **arguments: Any) -> SourceHistory | None:
+        self.calls.append(("read_source_history", {"source_id": source_id, **arguments}))
+        return self._source_history
+
+    def read_source_name_history(
+        self, source_name: str, **arguments: Any
+    ) -> SourceNameHistory | None:
+        self.calls.append(("read_source_name_history", {"source_name": source_name, **arguments}))
+        return self._source_name_history
+
+    def read_sharing_periods(
+        self, file: FileKey, window: PeriodWindow
+    ) -> tuple[SharingPeriod, ...]:
+        self.calls.append(("read_sharing_periods", {"file": file, "window": window}))
+        return self._sharing_periods
 
 
 class FakeCrawlSummarizer(CrawlSummarizer):
@@ -446,10 +553,11 @@ class FakeEventEmitter(EventEmitter):
 
 
 class FakeWaker(Waker):
-    """Waker that RECORDS woken subjects (the test inspects/awaits)."""
+    """Waker that RECORDS woken and waited subjects (the test inspects/awaits)."""
 
     def __init__(self) -> None:
         self.woken_subjects: list[str] = []
+        self.waited_subjects: list[str] = []
         self._events: dict[str, asyncio.Event] = {}
 
     def wake(self, subject: str) -> None:
@@ -457,6 +565,7 @@ class FakeWaker(Waker):
         self._events.setdefault(subject, asyncio.Event()).set()
 
     async def wait(self, subject: str) -> None:
+        self.waited_subjects.append(subject)
         event = self._events.setdefault(subject, asyncio.Event())
         await event.wait()
         event.clear()

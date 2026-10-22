@@ -1,9 +1,7 @@
 """``DescribeFile``: a file's history and sharing periods over the requested interval, and why
 its first decision holds against the current policy."""
 
-from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 import yaml
 
@@ -12,19 +10,16 @@ from catalog_matching.domain.engine import DecisionRecord, Explanation
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 from p2pwatch.application.describe_file import DescribeFile
 from p2pwatch.application.matching_read import MatchingExplainer
-from p2pwatch.domain.catalog_entry import CatalogEntry
 from p2pwatch.domain.file_history import DatedDecision, FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.interval import Interval
-from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceRole
-from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory
 from p2pwatch.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.ports.driven.source_reader import SourceReader
 from p2pwatch.ports.driving.file_describer import FileDescription
-from tests.fakes.application.fakes import FakeTime
+from tests.fakes.application.fakes import FakeCatalogFileReader, FakeSourceReader, FakeTime
 
 _NOW = datetime(2026, 10, 14, 20, 0, 0, 654321, tzinfo=UTC)
 _SECOND_NOW = _NOW.replace(microsecond=0)
@@ -63,50 +58,10 @@ _MATCHER = parse_matcher_config(
 )
 
 
-class _FakeCatalogFileReader(CatalogFileReader):
-    """Reads ``file_history`` for any file id, and keeps each call's arguments."""
-
-    def __init__(self, file_history: FileHistory | None) -> None:
-        self._file_history = file_history
-        self.calls: list[tuple[bytes, dict[str, Any]]] = []
-
-    def read_file_history(self, file_id: bytes, **arguments: Any) -> FileHistory | None:
-        self.calls.append((file_id, arguments))
-        return self._file_history
-
-    def read_catalog_entries(self, **arguments: Any) -> tuple[CatalogEntry, ...]:
-        raise AssertionError("DescribeFile lists no file")
-
-    def read_matched_and_total_file_counts(self, **arguments: Any) -> tuple[int, int]:
-        raise AssertionError("DescribeFile counts no file")
-
-    def read_file_count_by_tier(self, **arguments: Any) -> Mapping[str, int]:
-        raise AssertionError("DescribeFile counts no tier")
-
-
-class _FakeSourceReader(SourceReader):
-    def __init__(self) -> None:
-        self.calls: list[tuple[FileKey, PeriodWindow]] = []
-
-    def read_known_sources(self, **arguments: Any) -> tuple[KnownSource, ...]:
-        raise AssertionError("DescribeFile lists no source")
-
-    def read_source_count(self, **arguments: Any) -> int:
-        raise AssertionError("DescribeFile counts no source")
-
-    def read_source_history(self, source_id: bytes, **arguments: Any) -> SourceHistory | None:
-        raise AssertionError("DescribeFile describes no source")
-
-    def read_source_name_history(
-        self, source_name: str, **arguments: Any
-    ) -> SourceNameHistory | None:
-        raise AssertionError("DescribeFile describes no source name")
-
-    def read_sharing_periods(
-        self, file: FileKey, window: PeriodWindow
-    ) -> tuple[SharingPeriod, ...]:
-        self.calls.append((file, window))
-        return (_PERIOD,)
+def _readers() -> tuple[FakeCatalogFileReader, FakeSourceReader]:
+    """A catalog holding ``_HISTORY``, and the file's one sharing period."""
+    catalog_file_reader = FakeCatalogFileReader(file_history=_HISTORY)
+    return catalog_file_reader, FakeSourceReader(sharing_periods=(_PERIOD,))
 
 
 def _describe(
@@ -119,7 +74,7 @@ def _describe(
 ) -> FileDescription | None:
     describe_file = DescribeFile(
         catalog_file_reader=catalog_file_reader,
-        source_reader=source_reader or _FakeSourceReader(),
+        source_reader=source_reader or FakeSourceReader(),
         explainer=MatchingExplainer(matcher_config=matcher_config, targets=_TARGETS),
         wall_clock=FakeTime(_NOW).wall,
         source_period_gap=_GAP,
@@ -130,25 +85,36 @@ def _describe(
 
 
 def test_a_file_the_catalog_does_not_hold_has_no_description() -> None:
-    assert _describe(_FakeCatalogFileReader(None)) is None
+    assert _describe(FakeCatalogFileReader()) is None
 
 
 def test_the_history_is_read_over_the_last_7_days_ending_now_to_the_second() -> None:
-    reader, source_reader = _FakeCatalogFileReader(_HISTORY), _FakeSourceReader()
+    reader, source_reader = _readers()
     description = _describe(reader, source_reader)
     week = Interval(_SECOND_NOW - timedelta(days=7), _SECOND_NOW)
-    assert reader.calls == [(b"\x01" * 16, {"since": week.since, "until": week.until})]
-    assert source_reader.calls == [(_FILE, PeriodWindow(week.since, week.until, _GAP))]
+    assert reader.calls == [
+        ("read_file_history", {"file_id": b"\x01" * 16, "since": week.since, "until": week.until})
+    ]
+    assert source_reader.calls == [
+        (
+            "read_sharing_periods",
+            {"file": _FILE, "window": PeriodWindow(week.since, week.until, _GAP)},
+        )
+    ]
     assert description is not None
     assert (description.interval, description.now) == (week, _SECOND_NOW)
 
 
 def test_the_sharing_periods_are_read_over_the_requested_interval_with_the_gap() -> None:
     since, until = datetime(2026, 10, 10, tzinfo=UTC), datetime(2026, 10, 12, tzinfo=UTC)
-    reader, source_reader = _FakeCatalogFileReader(_HISTORY), _FakeSourceReader()
+    reader, source_reader = _readers()
     description = _describe(reader, source_reader, requested_since=since, requested_until=until)
-    assert reader.calls == [(b"\x01" * 16, {"since": since, "until": until})]
-    assert source_reader.calls == [(_FILE, PeriodWindow(since, until, _GAP))]
+    assert reader.calls == [
+        ("read_file_history", {"file_id": b"\x01" * 16, "since": since, "until": until})
+    ]
+    assert source_reader.calls == [
+        ("read_sharing_periods", {"file": _FILE, "window": PeriodWindow(since, until, _GAP)})
+    ]
     assert description is not None
     assert (description.file_history, description.sharing_periods) == (_HISTORY, (_PERIOD,))
     assert description.interval == Interval(since, until)
@@ -157,25 +123,33 @@ def test_the_sharing_periods_are_read_over_the_requested_interval_with_the_gap()
 def test_a_request_past_7_days_reads_the_7_ending_at_its_until() -> None:
     since, until = datetime(2026, 9, 1, tzinfo=UTC), datetime(2026, 10, 1, tzinfo=UTC)
     week = Interval(until - timedelta(days=7), until, clamped=True)
-    reader, source_reader = _FakeCatalogFileReader(_HISTORY), _FakeSourceReader()
+    reader, source_reader = _readers()
     description = _describe(reader, source_reader, requested_since=since, requested_until=until)
-    assert reader.calls == [(b"\x01" * 16, {"since": week.since, "until": until})]
-    assert source_reader.calls == [(_FILE, PeriodWindow(week.since, until, _GAP))]
+    assert reader.calls == [
+        ("read_file_history", {"file_id": b"\x01" * 16, "since": week.since, "until": until})
+    ]
+    assert source_reader.calls == [
+        ("read_sharing_periods", {"file": _FILE, "window": PeriodWindow(week.since, until, _GAP)})
+    ]
     assert description is not None and description.interval == week
 
 
 def test_an_inverted_request_reads_the_7_days_ending_at_its_until() -> None:
     since, until = datetime(2026, 10, 12, tzinfo=UTC), datetime(2026, 10, 10, tzinfo=UTC)
     week = Interval(until - timedelta(days=7), until)
-    reader, source_reader = _FakeCatalogFileReader(_HISTORY), _FakeSourceReader()
+    reader, source_reader = _readers()
     description = _describe(reader, source_reader, requested_since=since, requested_until=until)
-    assert reader.calls == [(b"\x01" * 16, {"since": week.since, "until": until})]
-    assert source_reader.calls == [(_FILE, PeriodWindow(week.since, until, _GAP))]
+    assert reader.calls == [
+        ("read_file_history", {"file_id": b"\x01" * 16, "since": week.since, "until": until})
+    ]
+    assert source_reader.calls == [
+        ("read_sharing_periods", {"file": _FILE, "window": PeriodWindow(week.since, until, _GAP)})
+    ]
     assert description is not None and description.interval == week
 
 
 def test_the_first_decision_is_explained_over_every_known_filename() -> None:
-    description = _describe(_FakeCatalogFileReader(_HISTORY))
+    description = _describe(FakeCatalogFileReader(file_history=_HISTORY))
     assert description is not None
     assert description.explanation == Explanation(
         target_id="062A",
@@ -200,7 +174,9 @@ def test_the_explanation_judges_the_latest_observations_duration_and_bitrate() -
             ],
         }
     )
-    description = _describe(_FakeCatalogFileReader(_HISTORY), matcher_config=matcher_config)
+    description = _describe(
+        FakeCatalogFileReader(file_history=_HISTORY), matcher_config=matcher_config
+    )
     assert description is not None
     assert description.explanation is not None
     assert description.explanation.tokens_matched == ("dense", "keroro", "long")
@@ -211,6 +187,6 @@ def test_a_file_without_a_decision_or_never_seen_has_no_explanation() -> None:
         FileHistory(_FILE, 100, (_OBSERVATION,), _OBSERVATION, (), ("keroro.avi",)),
         FileHistory(_FILE, 100, (), None, (_DECISION,), ()),
     ):
-        description = _describe(_FakeCatalogFileReader(file_history))
+        description = _describe(FakeCatalogFileReader(file_history=file_history))
         assert description is not None
         assert description.explanation is None

@@ -8,33 +8,17 @@ import pytest
 from p2pwatch.application.reevaluate_catalog import ReevaluationSummary
 from p2pwatch.application.run_crawler import RunCrawler
 from p2pwatch.domain.observability.events import CrawlerStarted
-from p2pwatch.ports.driven.policy_fingerprint import (
-    PolicyFingerprintReader,
-    PolicyFingerprintWriter,
-)
 from tests.fakes.application.fakes import (
     FakeEventEmitter,
     FakeLogger,
     FakeNodeIdGenerator,
     FakeNodeIdStore,
+    FakePolicyFingerprintStore,
     FakeTime,
     LoggedLine,
 )
 
 _FINGERPRINT = "policy-2"
-
-
-class _FakeFingerprints(PolicyFingerprintReader, PolicyFingerprintWriter):
-    """Keeps the fingerprint it is given."""
-
-    def __init__(self, stored_fingerprint: str | None) -> None:
-        self.stored_fingerprint = stored_fingerprint
-
-    def read_policy_fingerprint(self) -> str | None:
-        return self.stored_fingerprint
-
-    def set_policy_fingerprint(self, fingerprint: str) -> None:
-        self.stored_fingerprint = fingerprint
 
 
 class _Crawl:
@@ -49,7 +33,7 @@ class _Crawl:
     ) -> None:
         self.steps: list[str] = []
         self.event_emitter = FakeEventEmitter()
-        self.fingerprints = _FakeFingerprints(stored_fingerprint)
+        self.fingerprints = FakePolicyFingerprintStore(stored_fingerprint=stored_fingerprint)
         self.logger = FakeLogger()
         self.reevaluation_gate_logger = FakeLogger()
         self.shutdown = asyncio.Event()
