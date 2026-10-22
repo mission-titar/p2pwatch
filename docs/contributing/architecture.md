@@ -170,7 +170,7 @@ le **domaine pur**.
 flowchart TB
   comp["composition/ · __main__.py"]
   drivingAdp["adapters/driving/"]
-  appl["application/"]
+  appl["application/ · cycle de vie, étapes, cas d'usage"]
   ports["application/ports/ · ABC"]
   dom["domain/ · pure"]
   drivenAdp["adapters/driven/ · I/O"]
@@ -187,9 +187,13 @@ flowchart TB
 
 - Un adaptateur n'importe jamais un autre adaptateur ; un adaptateur pilotant ne dépend que des
   ports pilotants, un adaptateur piloté que des ports pilotés qu'il implémente ou consomme.
-- Un cas d'usage implémente un port pilotant sur des ports pilotés. `CrawlerLifecycle` et
-  `PortSyncLifecycle`, les racines des graphes du crawler et du port-sync, n'ont pas de port : la
-  composition les lance une fois qu'elle les a construits.
+- `application/` range ses ports (`ports/`, un port par fichier, nommé d'après lui), ses cas
+  d'usage (`use_cases/`), ses étapes (`steps/`) et au plus un cycle de vie (`<x>_lifecycle.py`).
+  Un cas d'usage est appelé du dehors, par un port pilotant qu'il implémente sur des ports pilotés.
+  Une étape est un stade du graphe du cycle de vie, appelée seulement par lui ou par une autre
+  étape. Le cycle de vie (`CrawlerLifecycle`, `PortSyncLifecycle`) est le programme de son
+  démarrage à son arrêt, que la composition lance ; il n'a pas de port. Cas d'usage et étapes ne
+  s'importent pas entre eux, ni le cycle de vie. Ce qui n'appelle aucun port va au domaine.
 - Seul un `__main__.py` lit l'état du processus (`argv`, l'environnement, le répertoire courant, le
   logger racine) et le passe en valeurs ; un adaptateur reçoit de la composition ce qu'il pilote (un
   répertoire, une URL, un exécutable). Aucun test ne patche un module : `monkeypatch` et

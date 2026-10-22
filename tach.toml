@@ -1,6 +1,7 @@
 # Imports point inward, adapters never import each other (2026-10-18-hexagonal-architecture.md).
 # A deprecated edge is a temporary exception; the comment above names why and the lot removing it.
 # tach check never sees an import across distributions: check-external holds them to each pyproject.
+# No sibling layers in tach: use_cases' visibility keeps the steps from importing a use case.
 source_roots = [
   "packages/amule/src",
   "packages/amule_bump/src",
@@ -17,7 +18,7 @@ forbid_circular_dependencies = true
 ignore_type_checking_imports = false
 layers_explicit_depends_on = true
 root_module = "forbid"
-layers = ["composition", "adapters", "application", "ports", "domain"]
+layers = ["composition", "adapters", "lifecycle", "steps", "use_cases", "ports", "domain"]
 
 [[modules]]
 path = "amule_bump.__main__"
@@ -29,7 +30,7 @@ depends_on = [
   "amule_bump.adapters.driven.github_step_output_writer",
   "amule_bump.adapters.driven.terminal_step_output_writer",
   "amule_bump.adapters.driving.cli",
-  "amule_bump.application",
+  "amule_bump.application.use_cases",
   "amule_bump.domain",
 ]
 
@@ -67,16 +68,17 @@ layer = "adapters"
 depends_on = ["amule_bump.domain", "amule_bump.application.ports.driving.amule_bumper"]
 
 [[modules]]
-path = "amule_bump.application"
-layer = "application"
+path = "amule_bump.application.use_cases"
+layer = "use_cases"
+visibility = ["*.__main__", "*.composition"]
 depends_on = [
-  "amule_bump.domain",
   "amule_bump.application.ports.driven.dockerfile_reader",
   "amule_bump.application.ports.driven.dockerfile_writer",
   "amule_bump.application.ports.driven.pull_request_body_writer",
   "amule_bump.application.ports.driven.repo_reader",
   "amule_bump.application.ports.driven.step_output_writer",
   "amule_bump.application.ports.driving.amule_bumper",
+  "amule_bump.domain",
 ]
 
 [[modules]]
@@ -126,7 +128,7 @@ depends_on = [
   "coverage_checks.adapters.driven.coverage_py_reader",
   "coverage_checks.adapters.driven.filesystem_package_tree_reader",
   "coverage_checks.adapters.driving.cli",
-  "coverage_checks.application",
+  "coverage_checks.application.use_cases",
 ]
 
 [[modules]]
@@ -145,13 +147,14 @@ layer = "adapters"
 depends_on = ["coverage_checks.application.ports.driving.unit_coverage_checker"]
 
 [[modules]]
-path = "coverage_checks.application"
-layer = "application"
+path = "coverage_checks.application.use_cases"
+layer = "use_cases"
+visibility = ["*.__main__", "*.composition"]
 depends_on = [
-  "coverage_checks.domain",
   "coverage_checks.application.ports.driven.package_tree_reader",
   "coverage_checks.application.ports.driven.test_coverage_reader",
   "coverage_checks.application.ports.driving.unit_coverage_checker",
+  "coverage_checks.domain",
 ]
 
 [[modules]]
@@ -183,7 +186,7 @@ depends_on = [
   "p2pwatch.adapters.driven.persistence_sqlite",
   "p2pwatch.adapters.driven.stdlib_logger",
   "p2pwatch.adapters.driving.cli",
-  "p2pwatch.application",
+  "p2pwatch.application.use_cases",
   "p2pwatch.composition",
 ]
 
@@ -334,19 +337,28 @@ depends_on = [
 ]
 
 [[modules]]
-path = "p2pwatch.application"
-layer = "application"
+path = "p2pwatch.application.crawler_lifecycle"
+layer = "lifecycle"
 depends_on = [
+  "p2pwatch.application.ports.driven.event_emitter",
+  "p2pwatch.application.ports.driven.logger",
+  "p2pwatch.application.ports.driven.node_id_generator",
+  "p2pwatch.application.ports.driven.node_id_reader",
+  "p2pwatch.application.ports.driven.node_id_writer",
+  "p2pwatch.application.ports.driven.policy_fingerprint_reader",
+  "p2pwatch.application.ports.driven.policy_fingerprint_writer",
+  "p2pwatch.application.ports.driven.wall_clock",
+  "p2pwatch.application.steps",
   "p2pwatch.domain",
+]
+
+[[modules]]
+path = "p2pwatch.application.steps"
+layer = "steps"
+depends_on = [
   "p2pwatch.application.ports.driven.backoff_state_writer",
-  "p2pwatch.application.ports.driven.catalog_copier",
-  "p2pwatch.application.ports.driven.catalog_file_reader",
-  "p2pwatch.application.ports.driven.catalog_finder",
   "p2pwatch.application.ports.driven.catalog_scan_reader",
-  "p2pwatch.application.ports.driven.client_status_reader",
   "p2pwatch.application.ports.driven.client_status_writer",
-  "p2pwatch.application.ports.driven.config_checker",
-  "p2pwatch.application.ports.driven.coverage_reader",
   "p2pwatch.application.ports.driven.decision_reader",
   "p2pwatch.application.ports.driven.decision_writer",
   "p2pwatch.application.ports.driven.download_client",
@@ -360,21 +372,38 @@ depends_on = [
   "p2pwatch.application.ports.driven.node_id_generator",
   "p2pwatch.application.ports.driven.node_id_reader",
   "p2pwatch.application.ports.driven.node_id_writer",
-  "p2pwatch.application.ports.driven.node_state_reader",
   "p2pwatch.application.ports.driven.observation_reader",
   "p2pwatch.application.ports.driven.observation_writer",
   "p2pwatch.application.ports.driven.policy_fingerprint_reader",
   "p2pwatch.application.ports.driven.policy_fingerprint_writer",
-  "p2pwatch.application.ports.driven.run_state_reader",
-  "p2pwatch.application.ports.driven.run_state_writer",
   "p2pwatch.application.ports.driven.search_client",
   "p2pwatch.application.ports.driven.source_client",
   "p2pwatch.application.ports.driven.source_point_reader",
   "p2pwatch.application.ports.driven.source_point_writer",
-  "p2pwatch.application.ports.driven.source_reader",
-  "p2pwatch.application.ports.driven.sql_executor",
   "p2pwatch.application.ports.driven.status_client",
   "p2pwatch.application.ports.driven.waker",
+  "p2pwatch.application.ports.driven.wall_clock",
+  "p2pwatch.domain",
+]
+
+[[modules]]
+path = "p2pwatch.application.use_cases"
+layer = "use_cases"
+visibility = ["*.__main__", "*.composition"]
+depends_on = [
+  "p2pwatch.application.ports.driven.catalog_copier",
+  "p2pwatch.application.ports.driven.catalog_file_reader",
+  "p2pwatch.application.ports.driven.catalog_finder",
+  "p2pwatch.application.ports.driven.client_status_reader",
+  "p2pwatch.application.ports.driven.config_checker",
+  "p2pwatch.application.ports.driven.coverage_reader",
+  "p2pwatch.application.ports.driven.logger",
+  "p2pwatch.application.ports.driven.monotonic_clock",
+  "p2pwatch.application.ports.driven.node_state_reader",
+  "p2pwatch.application.ports.driven.run_state_reader",
+  "p2pwatch.application.ports.driven.run_state_writer",
+  "p2pwatch.application.ports.driven.source_reader",
+  "p2pwatch.application.ports.driven.sql_executor",
   "p2pwatch.application.ports.driven.wall_clock",
   "p2pwatch.application.ports.driving.catalog_merger",
   "p2pwatch.application.ports.driving.config_validator",
@@ -389,6 +418,7 @@ depends_on = [
   "p2pwatch.application.ports.driving.source_describer",
   "p2pwatch.application.ports.driving.source_lister",
   "p2pwatch.application.ports.driving.source_name_describer",
+  "p2pwatch.domain",
 ]
 
 [[modules]]
@@ -410,11 +440,13 @@ depends_on = [
   "p2pwatch.adapters.driven.wall_clock_system",
   "p2pwatch.adapters.driving.process",
   "p2pwatch.adapters.driving.webui",
-  "p2pwatch.application",
-  "p2pwatch.domain",
+  "p2pwatch.application.crawler_lifecycle",
   "p2pwatch.application.ports.driven.monotonic_clock",
   "p2pwatch.application.ports.driven.wall_clock",
   "p2pwatch.application.ports.driving.crawler_runner",
+  "p2pwatch.application.steps",
+  "p2pwatch.application.use_cases",
+  "p2pwatch.domain",
 ]
 
 [[modules]]
@@ -709,7 +741,7 @@ depends_on = [
   "p2pwatch_amule.adapters.driven.stdlib_logger",
   "p2pwatch_amule.adapters.driven.system_monotonic_clock",
   "p2pwatch_amule.adapters.driving.cli",
-  "p2pwatch_amule.application",
+  "p2pwatch_amule.application.use_cases",
   "p2pwatch_amule.composition",
   "p2pwatch_amule.domain",
 ]
@@ -776,20 +808,31 @@ depends_on = [
 ]
 
 [[modules]]
-path = "p2pwatch_amule.application"
-layer = "application"
+path = "p2pwatch_amule.application.port_sync_lifecycle"
+layer = "lifecycle"
 depends_on = [
+  "p2pwatch_amule.application.ports.driven.amule_conf_reader",
+  "p2pwatch_amule.application.ports.driven.amule_conf_writer",
+  "p2pwatch_amule.application.ports.driven.forwarded_port_reader",
+  "p2pwatch_amule.application.ports.driven.logger",
+  "p2pwatch_amule.application.ports.driven.monotonic_clock",
+  "p2pwatch_amule.application.ports.driven.service_supervisor",
   "p2pwatch_amule.domain",
+]
+
+[[modules]]
+path = "p2pwatch_amule.application.use_cases"
+layer = "use_cases"
+visibility = ["*.__main__", "*.composition"]
+depends_on = [
   "p2pwatch_amule.application.ports.driven.account_manager",
   "p2pwatch_amule.application.ports.driven.admin_password_setter",
   "p2pwatch_amule.application.ports.driven.amule_conf_reader",
   "p2pwatch_amule.application.ports.driven.amule_conf_writer",
   "p2pwatch_amule.application.ports.driven.amuled_directory_preparer",
-  "p2pwatch_amule.application.ports.driven.forwarded_port_reader",
-  "p2pwatch_amule.application.ports.driven.logger",
-  "p2pwatch_amule.application.ports.driven.monotonic_clock",
   "p2pwatch_amule.application.ports.driven.service_supervisor",
   "p2pwatch_amule.application.ports.driving.container_booter",
+  "p2pwatch_amule.domain",
 ]
 
 [[modules]]
@@ -800,10 +843,10 @@ depends_on = [
   "p2pwatch_amule.adapters.driven.posix_amule_conf",
   "p2pwatch_amule.adapters.driven.s6_service_supervisor",
   "p2pwatch_amule.adapters.driven.stdlib_logger",
-  "p2pwatch_amule.application",
-  "p2pwatch_amule.domain",
+  "p2pwatch_amule.application.port_sync_lifecycle",
   "p2pwatch_amule.application.ports.driven.monotonic_clock",
   "p2pwatch_amule.application.ports.driving.port_sync_loop_runner",
+  "p2pwatch_amule.domain",
 ]
 
 [[modules]]
@@ -877,7 +920,7 @@ layer = "composition"
 depends_on = [
   "template_checks.adapters.driven.filesystem_template_reader",
   "template_checks.adapters.driving.cli",
-  "template_checks.application",
+  "template_checks.application.use_cases",
 ]
 
 [[modules]]
@@ -894,13 +937,14 @@ depends_on = [
 ]
 
 [[modules]]
-path = "template_checks.application"
-layer = "application"
+path = "template_checks.application.use_cases"
+layer = "use_cases"
+visibility = ["*.__main__", "*.composition"]
 depends_on = [
-  "template_checks.domain",
   "template_checks.application.ports.driven.template_reader",
   "template_checks.application.ports.driving.logic_free_checker",
   "template_checks.application.ports.driving.template_attribute_lister",
+  "template_checks.domain",
 ]
 
 [[modules]]
@@ -933,7 +977,7 @@ depends_on = [
   "vex_checks.adapters.driven.json_vex_reader",
   "vex_checks.adapters.driven.syft_sbom_reader",
   "vex_checks.adapters.driving.cli",
-  "vex_checks.application",
+  "vex_checks.application.use_cases",
   "vex_checks.domain",
 ]
 
@@ -973,10 +1017,10 @@ depends_on = [
 ]
 
 [[modules]]
-path = "vex_checks.application"
-layer = "application"
+path = "vex_checks.application.use_cases"
+layer = "use_cases"
+visibility = ["*.__main__", "*.composition"]
 depends_on = [
-  "vex_checks.domain",
   "vex_checks.application.ports.driven.sarif_writer",
   "vex_checks.application.ports.driven.sbom_reader",
   "vex_checks.application.ports.driven.source_rule_reader",
@@ -985,6 +1029,7 @@ depends_on = [
   "vex_checks.application.ports.driving.claim_coverage_checker",
   "vex_checks.application.ports.driving.image_claims_checker",
   "vex_checks.application.ports.driving.stale_claims_checker",
+  "vex_checks.domain",
 ]
 
 [[modules]]
