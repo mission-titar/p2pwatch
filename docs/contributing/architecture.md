@@ -195,7 +195,7 @@ flowchart TB
   démarrage à son arrêt, que la composition lance ; il n'a pas de port. Cas d'usage et étapes ne
   s'importent pas entre eux, ni le cycle de vie. Ce qui n'appelle aucun port va au domaine.
 - Seul un `__main__.py` lit l'état du processus (`argv`, l'environnement, le répertoire courant, le
-  logger racine) et le passe en valeurs ; un adaptateur reçoit de la composition ce qu'il pilote (un
+  logger racine, le répertoire temporaire) et le passe en valeurs ; un adaptateur reçoit de la composition ce qu'il pilote (un
   répertoire, une URL, un exécutable). Aucun test ne patche un module : `monkeypatch` et
   `unittest.mock.patch` sont refusés par `code-pattern-check`.
 - Un contrôle rend un rapport, un `<Thing>Report` et ses `problems`, que la ligne de commande

@@ -45,7 +45,8 @@ does not follow it yet.
   URL, a width) being its constants; `__main__.py` reads the process state (argv, env, cwd, the root logger, the
   temporary directory) and calls `build_command_line(...).run(argv)`. Where the graph a driving port runs depends on
   what the command line has just read, the composition implements that port (`CrawlerComposition`,
-  `PortSyncComposition`). Hard rules, block 66.
+  `PortSyncComposition`). Hard rules, block 66. (Corrected: also where the graph holds a resource for one call,
+  `UnitCoverageComposition` holding coverage.py's `TemporaryDirectory()`, which `build_command_line` cannot clean up.)
 - **C4. Doubles**: one fake per port, except a `<Thing>Writer` and `<Thing>Reader` pair, which share one
   `Fake<Thing>Store`. A fake is an adapter for tests, in the ring of what it replaces, one `Fake*` class per file,
   the file named after it: a driven port's fake, or the double of a callable an adapter receives
