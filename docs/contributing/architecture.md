@@ -217,8 +217,8 @@ flowchart TB
   que quoi que ce soit n'atteigne le domaine.
 - **`application/`** orchestre les cas d'usage asynchrones en parlant à des **ports** (des ABC).
   Ses journaux passent eux aussi par un port, `Logger`, que `StdlibLogger` implémente sous le nom
-  que lui donne la composition (`p2pwatch.application.search_worker`, celui de son module avant le
-  lot A, jusqu'à ce que le lot B le dérive du code), celui que filtre un opérateur.
+  que la composition dérive du code qui journalise, celui de son module
+  (`p2pwatch.application.steps.search_worker`), que filtre un opérateur.
 - **`adapters/`** portent toutes les I/O et héritent des ports qu'ils implémentent.
 - **`composition/`** (`CrawlerComposition`) charge la config, que l'adapter de config valide *fail-fast*,
   câble les adapters concrets qu'elle décrit, puis lance `CrawlerLifecycle`

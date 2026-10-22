@@ -225,18 +225,25 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
             restart = await http.post(f"http://{host}:{port}/controls/restart")
         await asyncio.wait_for(run, _WAIT_SECONDS)
 
-    assert f"p2pwatch version {version('p2pwatch')}" in caplog.messages
     named_messages = [(record.name, record.getMessage()) for record in caplog.records]
-    assert (  # each use case logs under its module's name, which an operator's filters read
-        "p2pwatch.application.run_crawler",
+    assert (  # each logs under its module's name, which an operator's filters read
+        "p2pwatch.composition.crawler_composition",
+        f"p2pwatch version {version('p2pwatch')}",
+    ) in named_messages
+    assert any(
+        name == "p2pwatch.application.steps.search_worker" and "verdict(s) changed" in message
+        for name, message in named_messages
+    )
+    assert (
+        "p2pwatch.application.crawler_lifecycle",
         "crawler started: node_id=wired-node",
     ) in named_messages
     assert (
-        "p2pwatch.application.reevaluate_if_policy_changed",
+        "p2pwatch.application.steps.reevaluate_if_policy_changed",
         "catalogue re-evaluated: 0 files, 0 rows written",
     ) in named_messages
     assert (
-        "p2pwatch.application.run_download_cycle",
+        "p2pwatch.application.steps.run_download_cycle",
         f"candidate file={_HASH} queued for download",
     ) in named_messages
     assert "🟢 node online (download on)" in caplog.messages

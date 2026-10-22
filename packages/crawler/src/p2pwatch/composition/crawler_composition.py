@@ -93,7 +93,9 @@ from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
+from p2pwatch.application.steps.record_observations import record_observation
 from p2pwatch.application.steps.reevaluate_catalog import reevaluate_catalog
+from p2pwatch.application.steps.reevaluate_if_policy_changed import reevaluate_if_policy_changed
 from p2pwatch.application.steps.run_download_cycle import (
     DownloadLoopDeps,
     download_loop,
@@ -120,7 +122,7 @@ from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.matching_read import MatchingExplainer
 
-_logger = logging.getLogger("p2pwatch.composition.app")
+_logger = logging.getLogger(__name__)
 
 _AMULE_API_TIMEOUT_SECONDS = 10.0
 _WEBUI_START_TIMEOUT_SECONDS = 5.0
@@ -345,8 +347,8 @@ class CrawlerComposition(CrawlerRunner):
                 backoff=backoff,
                 event_emitter=event_emitter,
                 wall_clock=wall_clock,
-                logger=StdlibLogger("p2pwatch.application.search_worker"),
-                observation_logger=StdlibLogger("p2pwatch.application.record_observations"),
+                logger=StdlibLogger(SearchWorker.__module__),
+                observation_logger=StdlibLogger(record_observation.__module__),
             )
 
             client = self._amule_api_client(crawler_config, monotonic_clock)
@@ -370,7 +372,7 @@ class CrawlerComposition(CrawlerRunner):
                 backoff=backoff,
                 backoff_state_writer=backoff_state_store,
                 monotonic_clock=monotonic_clock,
-                logger=StdlibLogger("p2pwatch.application.search_tasks"),
+                logger=StdlibLogger(SearchTaskRunner.__module__),
             )
             loops: list[Callable[[str], Coroutine[object, object, None]]] = [
                 search_tasks.run,
@@ -405,7 +407,7 @@ class CrawlerComposition(CrawlerRunner):
                     wall_clock=wall_clock,
                     monotonic_clock=monotonic_clock,
                     event_emitter=event_emitter,
-                    logger=StdlibLogger("p2pwatch.application.run_download_cycle"),
+                    logger=StdlibLogger(download_loop.__module__),
                     waker=waker,
                     shutdown=shutdown,
                 )
@@ -430,17 +432,15 @@ class CrawlerComposition(CrawlerRunner):
                     waker=waker,
                     event_emitter=event_emitter,
                     wall_clock=wall_clock,
-                    logger=StdlibLogger("p2pwatch.application.reevaluate_catalog"),
+                    logger=StdlibLogger(reevaluate_catalog.__module__),
                     node_id=node_id,
                     progress_every_files=_REEVALUATION_PROGRESS_EVERY_FILES,
                 ),
                 loops=loops,
                 download_enabled=download_config is not None,
                 shutdown=shutdown,
-                logger=StdlibLogger("p2pwatch.application.run_crawler"),
-                reevaluation_gate_logger=StdlibLogger(
-                    "p2pwatch.application.reevaluate_if_policy_changed"
-                ),
+                logger=StdlibLogger(CrawlerLifecycle.__module__),
+                reevaluation_gate_logger=StdlibLogger(reevaluate_if_policy_changed.__module__),
             )
             # Entered disarmed: the steady state is unbounded, and the run arms it as soon as the
             # shutdown is requested, so the unwind and the close below are bounded.

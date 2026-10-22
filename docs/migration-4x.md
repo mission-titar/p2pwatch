@@ -148,12 +148,14 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
 - **La fusion des catalogues se lance par `python -m p2pwatch merge`**, au lieu de
   `python -m p2pwatch.merge`, qui n'existe plus. Ses options ne changent pas ; deux refus sont
   reformulés : `destination already exists` et `destination must be one of the source catalogs`.
-- **Quelques lignes de journal et noms de loggers changent**, ceux des modules déplacés ou
-  renommés : filtrez sur le message plutôt que sur le logger. Les échecs d'écriture de la boucle de
-  téléchargement disent `store failure` au lieu de `repo failure`. Un catalogue web qui ne démarre pas
-  le dit désormais par `webui degraded`. Les lignes de démarrage `crawler started` et
-  `download enabled` journalisent sous `p2pwatch.application.run_crawler`. La recherche ne
-  journalise plus `client <nom> connected` ni l'avertissement
+- **Quelques lignes de journal et noms de loggers changent** : le crawler journalise sous le nom
+  du module qui écrit la ligne, qui change avec lui ; filtrez sur le message plutôt que sur le
+  logger. Les échecs d'écriture de la boucle de téléchargement disent `store failure` au lieu de
+  `repo failure`. Un catalogue web qui ne démarre pas le dit désormais par `webui degraded`. Les
+  lignes de démarrage `crawler started` et `download enabled` journalisent sous
+  `p2pwatch.application.crawler_lifecycle`, la version au démarrage sous
+  `p2pwatch.composition.crawler_composition` et le dispatcher des événements sous
+  `p2pwatch.adapters.driven.observability.dispatcher`. La recherche ne journalise plus `client <nom> connected` ni l'avertissement
   `client <nom> unreachable (...): reconnect backoff ...` : la session amuleapi s'ouvre d'elle-même
   au premier appel, et un amuled injoignable reste signalé par
   `client <nom> unreachable (...), client down, backoff ...`. Le port-sync,

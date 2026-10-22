@@ -16,7 +16,7 @@ from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.domain.observability.events import Event
 from p2pwatch.domain.observability.policy import Severity, describe
 
-_logger = logging.getLogger("p2pwatch.observability")
+_logger = logging.getLogger(__name__)
 
 _LEVELS: dict[Severity, int] = {
     Severity.DEBUG: logging.DEBUG,

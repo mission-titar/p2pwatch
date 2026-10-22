@@ -32,7 +32,7 @@ local_db_path: {data}/local.db
 webui:
   enabled: false
 """
-_SEARCH_WORKER_LOGGER = "p2pwatch.application.search_worker"
+_SEARCH_WORKER_LOGGER = "p2pwatch.application.steps.search_worker"
 
 
 class _SearchRecordedHandler(logging.Handler):

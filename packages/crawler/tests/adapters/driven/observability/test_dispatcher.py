@@ -15,6 +15,7 @@ from tests.fakes.adapters.driven.fake_metrics_recorder import FakeMetricsRecorde
 from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
 from tests.fakes.adapters.driven.fake_raising_notifier import FakeRaisingNotifier
 
+_LOGGER = "p2pwatch.adapters.driven.observability.dispatcher"
 _NODE = "titar-node-1"
 _COMPLETED = ev.DownloadCompleted(
     FileKey(Network.ED2K, "a" * 32), "Keroro 062.avi", (ev.TargetTitle("062A", "t"),)
@@ -70,7 +71,7 @@ async def test_notifies_the_message_when_there_is_no_separate_body() -> None:
 async def test_logs_the_message_but_notifies_the_body(caplog: pytest.LogCaptureFixture) -> None:
     metrics_recorder, notifier = FakeMetricsRecorder(), FakeNotifier()
     change = ev.DecisionChange("062A", "Les demoiselles cambrioleuses", None, "download")
-    with caplog.at_level(logging.INFO, logger="p2pwatch.observability"):
+    with caplog.at_level(logging.INFO, logger=_LOGGER):
         await _dispatcher(metrics_recorder, notifier).emit(
             ev.DecisionsRecorded(
                 FileKey(Network.ED2K, "a" * 32), "Keroro 062.avi", 1024, (change,)
@@ -86,14 +87,14 @@ async def test_logs_the_message_but_notifies_the_body(caplog: pytest.LogCaptureF
 @pytest.mark.asyncio
 async def test_log_level_matches_severity(caplog: pytest.LogCaptureFixture) -> None:
     metrics_recorder, notifier = FakeMetricsRecorder(), FakeNotifier()
-    with caplog.at_level(logging.DEBUG, logger="p2pwatch.observability"):
+    with caplog.at_level(logging.DEBUG, logger=_LOGGER):
         await _dispatcher(metrics_recorder, notifier).emit(ev.ClientUnreachable("amuled"), _NODE)
     assert caplog.records[-1].levelno == logging.WARNING
 
 
 @pytest.mark.asyncio
 async def test_a_success_logs_as_info(caplog: pytest.LogCaptureFixture) -> None:
-    with caplog.at_level(logging.DEBUG, logger="p2pwatch.observability"):
+    with caplog.at_level(logging.DEBUG, logger=_LOGGER):
         await _dispatcher(FakeMetricsRecorder(), FakeNotifier()).emit(_COMPLETED, _NODE)
     assert caplog.records[-1].levelno == logging.INFO
 
@@ -101,7 +102,7 @@ async def test_a_success_logs_as_info(caplog: pytest.LogCaptureFixture) -> None:
 @pytest.mark.asyncio
 async def test_notification_failure_is_absorbed(caplog: pytest.LogCaptureFixture) -> None:
     metrics_recorder = FakeMetricsRecorder()
-    with caplog.at_level(logging.WARNING, logger="p2pwatch.observability"):
+    with caplog.at_level(logging.WARNING, logger=_LOGGER):
         await _dispatcher(metrics_recorder, FakeRaisingNotifier()).emit(_COMPLETED, _NODE)
     assert metrics_recorder.applied  # the metric went through despite the notification failure
     assert any("failed" in r.getMessage() for r in caplog.records)

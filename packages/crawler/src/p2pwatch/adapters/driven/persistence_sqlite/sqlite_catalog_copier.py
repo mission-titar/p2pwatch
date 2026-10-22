@@ -35,7 +35,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
 from p2pwatch.application.ports.driven.catalog_copier import CatalogCopier
 from p2pwatch.domain.catalog_copy_error import CatalogCopyError
 
-_logger = logging.getLogger("p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier")
+_logger = logging.getLogger(__name__)
 
 # Attach alias of the current source (one at a time → we stay at 1 attached DB
 # whatever N, well under the SQLITE_MAX_ATTACHED cap of 10, spec §8).
