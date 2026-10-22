@@ -9,7 +9,7 @@ rien télécharger, déplacer un port, brancher votre supervision.
 
 ## Cataloguer sans télécharger
 
-Par défaut, un nœud télécharge les candidats qu'il identifie avec certitude. Pour seulement
+Avec le `crawler.yml` livré, un nœud télécharge les candidats qu'il identifie avec certitude (sans section `download:`, il ne fait que cataloguer). Pour seulement
 cataloguer et être notifié, sans qu'aucun fichier n'atterrisse sur votre disque :
 
 1. Dans `crawler.yml`, passez `download.enabled` de `true` à `false`.
@@ -52,7 +52,7 @@ L'exemple de configuration complet est dans
 ## Métriques Prometheus
 
 Le crawler expose un point d'accès Prometheus sur le port réglé par `observability.metrics.port`
-dans `crawler.yml` (`9090` par défaut, actif par défaut). **Ni Prometheus ni Grafana ne sont livrés
+dans `crawler.yml` (`9090`, actif, dans le `crawler.yml` livré ; sans section `observability.metrics`, aucun point d'accès n'est servi). **Ni Prometheus ni Grafana ne sont livrés
 avec la pile** : si vous voulez des tableaux de bord, faites pointer votre propre Prometheus sur le
 nœud.
 

@@ -56,7 +56,8 @@ par digest d'architecture. Le détail de la chaîne et du triage VEX est dans `S
 > suffixe `-crawler` pour `p2pwatch`, `security/amule.vex.openvex.json` et le suffixe `-amule` pour
 > `p2pwatch-amule` (`grype-crawler`, `vex-image-claims-crawler`, `vex-stale-claims-crawler`, et
 > leurs équivalents `-amule`). Renommer une catégorie Code scanning rend ses findings existants
-> orphelins. Seul le *produit* VEX porte le nom de l'image.
+> orphelins. Seul le *produit* VEX porte le nom de l'image. Jusqu'à la sortie de la v5, le scan
+> quotidien ne couvre que l'image unique de la v4, sous le suffixe `-mulewatch`.
 
 ---
 

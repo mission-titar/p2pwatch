@@ -672,7 +672,7 @@ flowchart LR
 Le **domaine** émet des `Event` purs ; une **politique** pure (`describe`) les route vers des
 `Report` (sévérité de log + instructions de métrique + audiences COMMUNITY/OPERATIONS) ; le
 dispatcher **adapter** les applique. Le point d'accès Prometheus est servi par le crawler lui-même
-sur `observability.metrics.port` (`9090` par défaut) ; rien ne le scrape par défaut, donc publiez ce
+sur `observability.metrics.port` (`9090` dans le `crawler.yml` livré) ; rien ne le scrape par défaut, donc publiez ce
 port et pointez-y votre propre Prometheus si vous voulez des tableaux de bord.
 
 **Discipline de frontière (E-D13)** : les échecs de notifieur (apprise) et les échecs d'appel au

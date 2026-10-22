@@ -87,8 +87,8 @@ décision, qui est documentée dans le dépôt.
   réessaie après 5 minutes.
 - **La variante VPN à deux conteneurs**, où le crawler joint aMule par le nom `ed2k`
   d'`ed2k-gluetun`. Seul son rendu par `docker compose config` est vérifié.
-- **`no-new-privileges` combiné à l'abandon de privilèges** des services d'`ed2k`. Cohérent sur le
-  papier, jamais confirmé sur une machine réelle.
+- **`no-new-privileges` combiné à l'abandon de privilèges** des services d'`ed2k`. La pile de smoke
+  le vérifie en CI, sur amd64 et arm64, mais pas encore un nœud en production.
 - **Les plafonds `mem_limit: 2g` et `pids_limit: 512`.** Chaque conteneur garde celui que le crawler
   et aMule partageaient dans un seul conteneur, sans mesure sur un nœud en production. Si un
   conteneur se fait tuer sans raison apparente, ce sont les deux premiers chiffres à regarder.
