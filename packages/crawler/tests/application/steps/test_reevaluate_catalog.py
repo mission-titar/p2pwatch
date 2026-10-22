@@ -20,6 +20,7 @@ from catalog_matching.domain.engine import (
 )
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
 from p2pwatch.application.steps.reevaluate_catalog import ReevaluationSummary, reevaluate_catalog
 from p2pwatch.application.steps.run_download_cycle import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.domain.file_key import FileKey, Network
@@ -65,6 +66,7 @@ def _legacy_row(target_id: str, rule_name: str, tier: str) -> MatchDecision:
 @pytest.mark.asyncio
 async def test_two_changed_rows_are_all_evaluated_and_written(
     catalog: SqliteCatalogRepository,
+    decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
@@ -80,8 +82,8 @@ async def test_two_changed_rows_are_all_evaluated_and_written(
     waker = FakeWaker()
     summary = await reevaluate_catalog(
         observation_reader=catalog,
-        decision_writer=catalog,
-        decision_reader=catalog,
+        decision_writer=decision_store,
+        decision_reader=decision_store,
         catalog_scan_reader=catalog,
         engine=engine,
         waker=waker,
@@ -105,6 +107,7 @@ async def test_two_changed_rows_are_all_evaluated_and_written(
 @pytest.mark.asyncio
 async def test_unchanged_row_is_evaluated_but_not_written(
     catalog: SqliteCatalogRepository,
+    decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
@@ -116,13 +119,15 @@ async def test_unchanged_row_is_evaluated_but_not_written(
     decisions = engine.evaluate_file((candidate,))
     assert decisions  # non-empty
     # pre-seed the "already correct" verdict
-    catalog.record_decision(FileKey(Network.ED2K, _HASH_CAT), decisions[0], wall_clock.now(), _NODE)
+    decision_store.record_decision(
+        FileKey(Network.ED2K, _HASH_CAT), decisions[0], wall_clock.now(), _NODE
+    )
     event_emitter = FakeEventEmitter()
     waker = FakeWaker()
     summary = await reevaluate_catalog(
         observation_reader=catalog,
-        decision_writer=catalog,
-        decision_reader=catalog,
+        decision_writer=decision_store,
+        decision_reader=decision_store,
         catalog_scan_reader=catalog,
         engine=engine,
         waker=waker,
@@ -141,6 +146,7 @@ async def test_unchanged_row_is_evaluated_but_not_written(
 @pytest.mark.asyncio
 async def test_repository_error_on_one_row_is_absorbed_and_sweep_continues(
     catalog: SqliteCatalogRepository,
+    decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
@@ -163,8 +169,8 @@ async def test_repository_error_on_one_row_is_absorbed_and_sweep_continues(
     waker = FakeWaker()
     summary = await reevaluate_catalog(
         observation_reader=catalog,
-        decision_writer=catalog,
-        decision_reader=catalog,
+        decision_writer=decision_store,
+        decision_reader=decision_store,
         catalog_scan_reader=catalog,
         engine=engine,
         waker=waker,
@@ -176,7 +182,7 @@ async def test_repository_error_on_one_row_is_absorbed_and_sweep_continues(
     )
     assert summary == ReevaluationSummary(files_evaluated=2, rows_written=1)
     assert decision_tiers(catalog_connection) == [(_HASH_CAT, "catalog")]
-    assert catalog.read_latest_decisions(FileKey(Network.ED2K, _HASH_DL)) == {}
+    assert decision_store.read_latest_decisions(FileKey(Network.ED2K, _HASH_DL)) == {}
     assert logger.lines == [
         LoggedLine(
             "error",
@@ -188,14 +194,17 @@ async def test_repository_error_on_one_row_is_absorbed_and_sweep_continues(
 
 @pytest.mark.asyncio
 async def test_empty_catalogue_yields_zero_summary(
-    catalog: SqliteCatalogRepository, engine: MatchingEngine, wall_clock: FakeWallClock
+    catalog: SqliteCatalogRepository,
+    decision_store: SqliteDecisionStore,
+    engine: MatchingEngine,
+    wall_clock: FakeWallClock,
 ) -> None:
     event_emitter = FakeEventEmitter()
     waker = FakeWaker()
     summary = await reevaluate_catalog(
         observation_reader=catalog,
-        decision_writer=catalog,
-        decision_reader=catalog,
+        decision_writer=decision_store,
+        decision_reader=decision_store,
         catalog_scan_reader=catalog,
         engine=engine,
         waker=waker,
@@ -213,6 +222,7 @@ async def test_empty_catalogue_yields_zero_summary(
 @pytest.mark.asyncio
 async def test_backfill_retracts_a_legacy_arbitrary_target_row(
     catalog: SqliteCatalogRepository,
+    decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
@@ -222,7 +232,7 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
     catalog.record_observation(
         FileObservation(_reported_file(_HASH_MULTI, _MULTI_NAME), wall_clock.now()), _NODE
     )
-    catalog.record_decision(
+    decision_store.record_decision(
         FileKey(Network.ED2K, _HASH_MULTI),
         _legacy_row("001A", "keroro_large", "catalog"),
         wall_clock.now(),
@@ -231,8 +241,8 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
     event_emitter, waker = FakeEventEmitter(), FakeWaker()
     summary = await reevaluate_catalog(
         observation_reader=catalog,
-        decision_writer=catalog,
-        decision_reader=catalog,
+        decision_writer=decision_store,
+        decision_reader=decision_store,
         catalog_scan_reader=catalog,
         engine=engine,
         waker=waker,
@@ -245,7 +255,7 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
     assert summary == ReevaluationSummary(
         files_evaluated=1, rows_written=3
     )  # 062A + 062B + retract 001A
-    assert catalog.read_latest_decisions(FileKey(Network.ED2K, _HASH_MULTI)) == {
+    assert decision_store.read_latest_decisions(FileKey(Network.ED2K, _HASH_MULTI)) == {
         "062A": DecisionRecord(target_id="062A", rule_name="numero_nu_confirmed", tier="download"),
         "062B": DecisionRecord(target_id="062B", rule_name="numero_nu_confirmed", tier="download"),
         "001A": DecisionRecord(target_id="001A", rule_name="", tier=RETRACTED_TIER),
@@ -255,6 +265,7 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
 @pytest.mark.asyncio
 async def test_backfill_ignores_the_legacy_empty_sentinel(
     catalog: SqliteCatalogRepository,
+    decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
@@ -263,7 +274,7 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
     catalog.record_observation(
         FileObservation(_reported_file(_HASH_MULTI, _MULTI_NAME), wall_clock.now()), _NODE
     )
-    catalog.record_decision(
+    decision_store.record_decision(
         FileKey(Network.ED2K, _HASH_MULTI),
         _legacy_row("", "", RETRACTED_TIER),
         wall_clock.now(),
@@ -272,8 +283,8 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
     event_emitter, waker = FakeEventEmitter(), FakeWaker()
     summary = await reevaluate_catalog(
         observation_reader=catalog,
-        decision_writer=catalog,
-        decision_reader=catalog,
+        decision_writer=decision_store,
+        decision_reader=decision_store,
         catalog_scan_reader=catalog,
         engine=engine,
         waker=waker,
@@ -286,7 +297,7 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
     assert summary == ReevaluationSummary(
         files_evaluated=1, rows_written=2
     )  # only 062A + 062B; "" untouched
-    assert set(catalog.read_latest_decisions(FileKey(Network.ED2K, _HASH_MULTI))) == {
+    assert set(decision_store.read_latest_decisions(FileKey(Network.ED2K, _HASH_MULTI))) == {
         "062A",
         "062B",
     }
@@ -301,6 +312,7 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
 @pytest.mark.asyncio
 async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
     catalog: SqliteCatalogRepository,
+    decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     fake_time: FakeTime,
     wall_clock: FakeWallClock,
@@ -314,8 +326,8 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
     )
     summary = await reevaluate_catalog(
         observation_reader=catalog,
-        decision_writer=catalog,
-        decision_reader=catalog,
+        decision_writer=decision_store,
+        decision_reader=decision_store,
         catalog_scan_reader=catalog,
         engine=engine,
         waker=FakeWaker(),
@@ -326,7 +338,7 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
         progress_every_files=200,
     )
     assert summary == ReevaluationSummary(files_evaluated=1, rows_written=1)
-    assert catalog.read_latest_decisions(FileKey(Network.ED2K, _HASH_DL)) == {
+    assert decision_store.read_latest_decisions(FileKey(Network.ED2K, _HASH_DL)) == {
         "062A": DecisionRecord(target_id="062A", rule_name="id_segment_exact", tier="download")
     }
 
@@ -334,6 +346,7 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
 @pytest.mark.asyncio
 async def test_progress_is_logged_at_each_multiple_of_the_cadence_only(
     catalog: SqliteCatalogRepository,
+    decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
@@ -349,8 +362,8 @@ async def test_progress_is_logged_at_each_multiple_of_the_cadence_only(
     )
     await reevaluate_catalog(
         observation_reader=catalog,
-        decision_writer=catalog,
-        decision_reader=catalog,
+        decision_writer=decision_store,
+        decision_reader=decision_store,
         catalog_scan_reader=catalog,
         engine=engine,
         waker=FakeWaker(),

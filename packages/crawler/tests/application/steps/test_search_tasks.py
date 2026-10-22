@@ -14,6 +14,7 @@ import pytest
 
 from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
 from p2pwatch.application.steps.search_tasks import SearchTaskRunner
 from p2pwatch.application.steps.search_worker import (
     BackoffPolicy,
@@ -81,15 +82,17 @@ class _Tasks:
 
 
 @pytest.fixture
-def tasks(catalog: SqliteCatalogRepository, engine: MatchingEngine) -> _Tasks:
+def tasks(
+    catalog: SqliteCatalogRepository, decision_store: SqliteDecisionStore, engine: MatchingEngine
+) -> _Tasks:
     wall_clock = LoopWallClock()
     backoff = BackoffRegistry(_POLICY, wall_clock, LoopMonotonicClock(), FakeJitterGenerator())
     waker, event_emitter = FakeWaker(), FakeEventEmitter()
     deps = WorkerDeps(
         observation_writer=catalog,
         observation_reader=catalog,
-        decision_writer=catalog,
-        decision_reader=catalog,
+        decision_writer=decision_store,
+        decision_reader=decision_store,
         engine=engine,
         waker=waker,
         backoff=backoff,

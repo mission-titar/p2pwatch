@@ -7,14 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from catalog_matching.domain.engine import DecisionRecord, Explanation, MatchDecision
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash, iso_to_micros
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation, ReportedFile, fold_raw_meta
-from p2pwatch.domain.retraction import RETRACTED_TIER
 from tests.support.catalog_rows import count_observations, insert_file
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
@@ -208,116 +206,13 @@ def test_outer_transaction_survives_record_observation_failure(
     assert connection.execute("SELECT count(*) FROM files").fetchone()[0] == 0
 
 
-def _decision() -> MatchDecision:
-    return MatchDecision(
-        target_id="062A",
-        rule_name="exact_062a",
-        tier="download",
-        explanation=Explanation(
-            target_id="062A",
-            rules_fired=("exact_062a",),
-            tokens_matched=("keroro",),
-            coverage_values=(("titre", 0.91),),
-        ),
-    )
-
-
-def test_record_decision_round_trip(
-    repository: SqliteCatalogRepository, connection: sqlite3.Connection
-) -> None:
-    repository.record_observation(FileObservation(_reported_file(), _T0), _NODE)
-    repository.record_decision(_KEY, _decision(), _T0, _NODE)
-    row = connection.execute(
-        "SELECT file_id, target_id, rule_name, tier, decided_at, node_id FROM match_decisions"
-    ).fetchone()
-    assert row == (_KEY.file_id, "062A", "exact_062a", "download", _T0_ISO, _NODE)
-
-
-def test_explanation_is_never_persisted(
-    repository: SqliteCatalogRepository, connection: sqlite3.Connection
-) -> None:
-    repository.record_observation(FileObservation(_reported_file(), _T0), _NODE)
-    repository.record_decision(_KEY, _decision(), _T0, _NODE)
-    columns = {
-        row[1] for row in connection.execute("PRAGMA table_info(match_decisions)").fetchall()
-    }
-    assert columns == {"id", "file_id", "target_id", "rule_name", "tier", "decided_at", "node_id"}
-
-
-def test_record_decision_for_unknown_file_raises_persistence_error(
-    repository: SqliteCatalogRepository,
-) -> None:
-    # FK violated (file never observed): sqlite3.IntegrityError WRAPPED, never bare.
-    with pytest.raises(PersistenceError, match="FOREIGN KEY"):
-        repository.record_decision(FileKey(Network.ED2K, "0" * 32), _decision(), _T0, _NODE)
-
-
-def test_record_decision_rejects_non_canonical_hash(
-    repository: SqliteCatalogRepository, connection: sqlite3.Connection
-) -> None:
-    # Python validation BEFORE any transaction: an uppercase hash is rejected
-    # with a clear message, no row is written.
-    with pytest.raises(PersistenceError, match="non-canonical eD2k hash"):
-        repository.record_decision(FileKey(Network.ED2K, _HASH.upper()), _decision(), _T0, _NODE)
-    assert connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 0
-
-
-def test_record_retraction_round_trip(
-    repository: SqliteCatalogRepository, connection: sqlite3.Connection
-) -> None:
-    repository.record_observation(FileObservation(_reported_file(), _T0), _NODE)
-    repository.record_retraction(_KEY, "062A", _T0, _NODE)
-    row = connection.execute(
-        "SELECT file_id, target_id, rule_name, tier, decided_at, node_id FROM match_decisions"
-    ).fetchone()
-    assert row == (_KEY.file_id, "062A", "", RETRACTED_TIER, _T0_ISO, _NODE)
-    assert repository.read_latest_decisions(_KEY) == {
-        "062A": DecisionRecord(target_id="062A", rule_name="", tier=RETRACTED_TIER)
-    }
-
-
-def test_each_write_stores_the_node_id_its_call_gives(
+def test_each_observation_stores_the_node_id_its_call_gives(
     repository: SqliteCatalogRepository, connection: sqlite3.Connection
 ) -> None:
     repository.record_observation(FileObservation(_reported_file(), _T0), "n1")
     repository.record_observation(FileObservation(_reported_file(), _T0), "n2")
-    repository.record_decision(_KEY, _decision(), _T0, "n2")
-    repository.record_retraction(_KEY, "062A", _T0, "n3")
     variants = connection.execute("SELECT node_id FROM observation_variants ORDER BY variant_id")
     assert variants.fetchall() == [("n1",), ("n2",)]
-    decisions = connection.execute("SELECT node_id FROM match_decisions ORDER BY id")
-    assert decisions.fetchall() == [("n2",), ("n3",)]
-
-
-def test_record_retraction_rejects_non_canonical_hash(
-    repository: SqliteCatalogRepository, connection: sqlite3.Connection
-) -> None:
-    with pytest.raises(PersistenceError, match="non-canonical eD2k hash"):
-        repository.record_retraction(FileKey(Network.ED2K, "NOTAHASH"), "062A", _T0, _NODE)
-    assert connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 0
-
-
-def test_record_retraction_for_unknown_file_raises_persistence_error(
-    repository: SqliteCatalogRepository,
-) -> None:
-    # FK violated (file never observed): mirrors record_decision's own guard.
-    with pytest.raises(PersistenceError, match="FOREIGN KEY"):
-        repository.record_retraction(FileKey(Network.ED2K, "0" * 32), "062A", _T0, _NODE)
-
-
-def test_record_retraction_row_is_append_only(
-    repository: SqliteCatalogRepository, connection: sqlite3.Connection
-) -> None:
-    repository.record_observation(FileObservation(_reported_file(), _T0), _NODE)
-    repository.record_retraction(_KEY, "062A", _T0, _NODE)
-    with pytest.raises(sqlite3.IntegrityError, match="match_decisions is append-only"):
-        connection.execute("UPDATE match_decisions SET tier = 'catalog'")
-    with pytest.raises(sqlite3.IntegrityError, match="match_decisions is append-only"):
-        connection.execute("DELETE FROM match_decisions")
-    # The retracted row SURVIVED both attempts, untouched.
-    assert repository.read_latest_decisions(_KEY) == {
-        "062A": DecisionRecord(target_id="062A", rule_name="", tier=RETRACTED_TIER)
-    }
 
 
 def test_iter_latest_observations_returns_the_latest_per_hash(

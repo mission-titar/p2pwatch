@@ -7,6 +7,7 @@ import pytest
 from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.adapters.driven.persistence_sqlite.catalog_repository import SqliteCatalogRepository
 from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
 from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
 from p2pwatch.application.steps.search_worker import (
     SEARCH_BUDGET_SECONDS,
@@ -77,6 +78,7 @@ def _registry(
 
 def _deps(
     catalog: SqliteCatalogRepository,
+    decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     backoff: BackoffRegistry,
     fake_time: FakeTime,
@@ -88,8 +90,8 @@ def _deps(
     return WorkerDeps(
         observation_writer=catalog,
         observation_reader=catalog,
-        decision_writer=catalog,
-        decision_reader=catalog,
+        decision_writer=decision_store,
+        decision_reader=decision_store,
         engine=engine,
         waker=FakeWaker(),
         backoff=backoff,
@@ -217,12 +219,12 @@ def test_a_loaded_backoff_keeps_its_attempts() -> None:
 
 
 def test_a_worker_declares_the_channels_of_its_client(
-    catalog: SqliteCatalogRepository, engine: MatchingEngine
+    catalog: SqliteCatalogRepository, decision_store: SqliteDecisionStore, engine: MatchingEngine
 ) -> None:
     fake_time = FakeTime()
     client = FakeSearchClient(channels=("kad",))
     worker = SearchWorker(
-        "amule-1", client, _deps(catalog, engine, _registry(fake_time), fake_time)
+        "amule-1", client, _deps(catalog, decision_store, engine, _registry(fake_time), fake_time)
     )
     assert worker.channels == ("kad",)
 
@@ -233,6 +235,7 @@ def test_a_worker_declares_the_channels_of_its_client(
 )
 def test_a_worker_is_ready_for_a_channel_when_neither_it_nor_the_channel_is_backed_off(
     catalog: SqliteCatalogRepository,
+    decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     failed: tuple[BackoffKey, ...],
     ready_in_seconds: int,
@@ -242,7 +245,7 @@ def test_a_worker_is_ready_for_a_channel_when_neither_it_nor_the_channel_is_back
     for key in failed:
         registry.record_failure(key)
     worker = SearchWorker(
-        "amule-1", FakeSearchClient(), _deps(catalog, engine, registry, fake_time)
+        "amule-1", FakeSearchClient(), _deps(catalog, decision_store, engine, registry, fake_time)
     )
     assert worker.time_until_ready("kad") == timedelta(seconds=ready_in_seconds)
     fake_time.advance(timedelta(seconds=3.0))
@@ -250,7 +253,7 @@ def test_a_worker_is_ready_for_a_channel_when_neither_it_nor_the_channel_is_back
 
 
 def test_a_worker_waits_for_the_later_of_its_two_backoffs(
-    catalog: SqliteCatalogRepository, engine: MatchingEngine
+    catalog: SqliteCatalogRepository, decision_store: SqliteDecisionStore, engine: MatchingEngine
 ) -> None:
     fake_time = FakeTime()
     registry = _registry(fake_time)
@@ -258,7 +261,7 @@ def test_a_worker_waits_for_the_later_of_its_two_backoffs(
     fake_time.advance(timedelta(seconds=1.0))
     registry.record_failure(_CLIENT)
     worker = SearchWorker(
-        "amule-1", FakeSearchClient(), _deps(catalog, engine, registry, fake_time)
+        "amule-1", FakeSearchClient(), _deps(catalog, decision_store, engine, registry, fake_time)
     )
     assert worker.time_until_ready("kad") == timedelta(seconds=2)
     fake_time.advance(timedelta(seconds=1.5))
@@ -272,13 +275,14 @@ def test_a_worker_waits_for_the_later_of_its_two_backoffs(
 @pytest.mark.asyncio
 async def test_successful_task_records_observation(
     catalog: SqliteCatalogRepository,
+    decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
 ) -> None:
     fake_time = FakeTime()
     client = FakeSearchClient(results=[(_reported_file(),)])
     worker = SearchWorker(
-        "amule-1", client, _deps(catalog, engine, _registry(fake_time), fake_time)
+        "amule-1", client, _deps(catalog, decision_store, engine, _registry(fake_time), fake_time)
     )
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"), _NODE)
     assert client.searches == [("keroro", "ed2k")]
@@ -292,6 +296,7 @@ async def test_successful_task_records_observation(
 @pytest.mark.asyncio
 async def test_multiple_observations_some_unchanged_are_all_processed(
     catalog: SqliteCatalogRepository,
+    decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
 ) -> None:
@@ -307,7 +312,7 @@ async def test_multiple_observations_some_unchanged_are_all_processed(
     # changes a verdict. Covers the "if False → next observation" edge.
     client = FakeSearchClient(results=[(discarded, _reported_file())])
     worker = SearchWorker(
-        "amule-1", client, _deps(catalog, engine, _registry(fake_time), fake_time)
+        "amule-1", client, _deps(catalog, decision_store, engine, _registry(fake_time), fake_time)
     )
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"), _NODE)
     assert count_observations(catalog_connection) == 2
@@ -316,13 +321,15 @@ async def test_multiple_observations_some_unchanged_are_all_processed(
 
 @pytest.mark.asyncio
 async def test_backoff_expires_and_item_runs_again(
-    catalog: SqliteCatalogRepository, engine: MatchingEngine
+    catalog: SqliteCatalogRepository, decision_store: SqliteDecisionStore, engine: MatchingEngine
 ) -> None:
     fake_time = FakeTime()
     registry = _registry(fake_time)
     registry.record_failure(_KAD)  # 2.0s
     client = FakeSearchClient(results=[(_reported_file(),)])
-    worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
+    worker = SearchWorker(
+        "amule-1", client, _deps(catalog, decision_store, engine, registry, fake_time)
+    )
     fake_time.advance(timedelta(seconds=3.0))  # the channel is no longer in backoff
     await worker.run_task(SearchTask(keyword="k", channel="kad"), _NODE)
     assert client.searches == [("k", "kad")]
@@ -330,12 +337,14 @@ async def test_backoff_expires_and_item_runs_again(
 
 @pytest.mark.asyncio
 async def test_search_failure_arms_channel_backoff(
-    catalog: SqliteCatalogRepository, engine: MatchingEngine
+    catalog: SqliteCatalogRepository, decision_store: SqliteDecisionStore, engine: MatchingEngine
 ) -> None:
     fake_time = FakeTime()
     registry = _registry(fake_time)
     client = FakeSearchClient(search_failures=[make_search_failed()])
-    worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
+    worker = SearchWorker(
+        "amule-1", client, _deps(catalog, decision_store, engine, registry, fake_time)
+    )
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"), _NODE)
     assert registry.is_in_backoff(_ED2K) is True  # channel in backoff
     assert registry.is_in_backoff(_CLIENT) is False  # but not the whole client
@@ -343,13 +352,15 @@ async def test_search_failure_arms_channel_backoff(
 
 @pytest.mark.asyncio
 async def test_transport_failure_marks_instance_down(
-    catalog: SqliteCatalogRepository, engine: MatchingEngine
+    catalog: SqliteCatalogRepository, decision_store: SqliteDecisionStore, engine: MatchingEngine
 ) -> None:
     fake_time = FakeTime()
     registry = _registry(fake_time)
     # search raises a transport failure (dead stream) → client down + client backoff.
     client = FakeSearchClient(search_failures=[make_unreachable()], results=[(_reported_file(),)])
-    worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
+    worker = SearchWorker(
+        "amule-1", client, _deps(catalog, decision_store, engine, registry, fake_time)
+    )
     await worker.run_task(SearchTask(keyword="k1", channel="ed2k"), _NODE)
     assert registry.is_in_backoff(_CLIENT) is True
     fake_time.advance(timedelta(seconds=3.0))
@@ -359,14 +370,16 @@ async def test_transport_failure_marks_instance_down(
 
 @pytest.mark.asyncio
 async def test_the_client_backoff_grows_until_a_search_succeeds(
-    catalog: SqliteCatalogRepository, engine: MatchingEngine
+    catalog: SqliteCatalogRepository, decision_store: SqliteDecisionStore, engine: MatchingEngine
 ) -> None:
     fake_time = FakeTime()
     registry = _registry(fake_time)
     client = FakeSearchClient(
         search_failures=[make_unreachable()] * 4, results=[(_reported_file(),)]
     )
-    worker = SearchWorker("amule-1", client, _deps(catalog, engine, registry, fake_time))
+    worker = SearchWorker(
+        "amule-1", client, _deps(catalog, decision_store, engine, registry, fake_time)
+    )
     delays = []
     for _ in range(4):
         await worker.run_task(SearchTask(keyword="k", channel="ed2k"), _NODE)
@@ -379,12 +392,12 @@ async def test_the_client_backoff_grows_until_a_search_succeeds(
 
 @pytest.mark.asyncio
 async def test_a_task_is_one_search_given_the_cores_budget(
-    catalog: SqliteCatalogRepository, engine: MatchingEngine
+    catalog: SqliteCatalogRepository, decision_store: SqliteDecisionStore, engine: MatchingEngine
 ) -> None:
     fake_time = FakeTime()
     client = FakeSearchClient(results=[(_reported_file(),)])
     worker = SearchWorker(
-        "amule-1", client, _deps(catalog, engine, _registry(fake_time), fake_time)
+        "amule-1", client, _deps(catalog, decision_store, engine, _registry(fake_time), fake_time)
     )
     await worker.run_task(SearchTask(keyword="keroro", channel="kad"), _NODE)
     assert client.searches == [("keroro", "kad")]
@@ -396,14 +409,21 @@ async def test_a_task_is_one_search_given_the_cores_budget(
 
 @pytest.mark.asyncio
 async def test_successful_search_emits_search_executed_with_network_and_counts(
-    catalog: SqliteCatalogRepository, engine: MatchingEngine
+    catalog: SqliteCatalogRepository, decision_store: SqliteDecisionStore, engine: MatchingEngine
 ) -> None:
     # A successful ed2k search emits SearchExecuted FIRST, labelled with its client,
     # before the per-observation events (ObservationRecorded/DecisionsRecorded).
     fake_time = FakeTime()
     event_emitter = FakeEventEmitter()
     client = FakeSearchClient(results=[(_reported_file(),)], skipped_result_count=2)
-    deps = _deps(catalog, engine, _registry(fake_time), fake_time, event_emitter=event_emitter)
+    deps = _deps(
+        catalog,
+        decision_store,
+        engine,
+        _registry(fake_time),
+        fake_time,
+        event_emitter=event_emitter,
+    )
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"), _NODE)
     assert event_emitter.events[0] == SearchExecuted(
@@ -417,14 +437,21 @@ async def test_successful_search_emits_search_executed_with_network_and_counts(
 
 @pytest.mark.asyncio
 async def test_search_failure_emits_search_failed(
-    catalog: SqliteCatalogRepository, engine: MatchingEngine
+    catalog: SqliteCatalogRepository, decision_store: SqliteDecisionStore, engine: MatchingEngine
 ) -> None:
     # An application-level channel failure (SearchFailedError) emits
     # SearchFailed(client, network).
     fake_time = FakeTime()
     event_emitter = FakeEventEmitter()
     client = FakeSearchClient(search_failures=[make_search_failed()])
-    deps = _deps(catalog, engine, _registry(fake_time), fake_time, event_emitter=event_emitter)
+    deps = _deps(
+        catalog,
+        decision_store,
+        engine,
+        _registry(fake_time),
+        fake_time,
+        event_emitter=event_emitter,
+    )
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"), _NODE)
     assert event_emitter.events == [SearchFailed(client_name="amule-1", channel="ed2k")]
@@ -433,13 +460,20 @@ async def test_search_failure_emits_search_failed(
 
 @pytest.mark.asyncio
 async def test_transport_failure_during_search_emits_instance_unreachable(
-    catalog: SqliteCatalogRepository, engine: MatchingEngine
+    catalog: SqliteCatalogRepository, decision_store: SqliteDecisionStore, engine: MatchingEngine
 ) -> None:
     # A transport failure during search (dead stream) emits ClientUnreachable.
     fake_time = FakeTime()
     event_emitter = FakeEventEmitter()
     client = FakeSearchClient(search_failures=[make_unreachable()], results=[(_reported_file(),)])
-    deps = _deps(catalog, engine, _registry(fake_time), fake_time, event_emitter=event_emitter)
+    deps = _deps(
+        catalog,
+        decision_store,
+        engine,
+        _registry(fake_time),
+        fake_time,
+        event_emitter=event_emitter,
+    )
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"), _NODE)
     assert event_emitter.events == [ClientUnreachable("amule-1")]
@@ -449,6 +483,7 @@ async def test_transport_failure_during_search_emits_instance_unreachable(
 @pytest.mark.asyncio
 async def test_a_search_logs_on_the_worker_logger_and_a_failed_observation_on_its_own(
     catalog: SqliteCatalogRepository,
+    decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
     engine: MatchingEngine,
 ) -> None:
@@ -461,6 +496,7 @@ async def test_a_search_logs_on_the_worker_logger_and_a_failed_observation_on_it
     client = FakeSearchClient(results=[(_reported_file(),)])
     deps = _deps(
         catalog,
+        decision_store,
         engine,
         _registry(fake_time),
         fake_time,
