@@ -1,7 +1,10 @@
 import re
 from dataclasses import dataclass
+from pathlib import PurePath
 
 from amule_bump.domain.bump_error import BumpError
+
+DOCKERFILE_PATH = PurePath("packages/amule/Dockerfile")  # under the repository's root
 
 
 @dataclass(frozen=True)
@@ -10,7 +13,9 @@ class Pin:
     commit: str
 
     def arg_lines(self) -> str:
-        return f"ARG AMULE_VERSION={self.version}\nARG AMULE_COMMIT={self.commit}"
+        return "\n".join(
+            (_arg_line("AMULE_VERSION", self.version), _arg_line("AMULE_COMMIT", self.commit))
+        )
 
 
 def read_pin(dockerfile_text: str) -> Pin:
@@ -21,9 +26,15 @@ def read_pin(dockerfile_text: str) -> Pin:
 
 def rewrite_pin(dockerfile_text: str, pin: Pin) -> str:
     dockerfile_text = _arg_line_pattern("AMULE_VERSION").sub(
-        f"ARG AMULE_VERSION={pin.version}", dockerfile_text
+        _arg_line("AMULE_VERSION", pin.version), dockerfile_text
     )
-    return _arg_line_pattern("AMULE_COMMIT").sub(f"ARG AMULE_COMMIT={pin.commit}", dockerfile_text)
+    return _arg_line_pattern("AMULE_COMMIT").sub(
+        _arg_line("AMULE_COMMIT", pin.commit), dockerfile_text
+    )
+
+
+def _arg_line(name: str, value: str) -> str:
+    return f"ARG {name}={value}"
 
 
 def _arg_value(dockerfile_text: str, name: str) -> str:

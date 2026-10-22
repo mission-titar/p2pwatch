@@ -17,6 +17,7 @@ from amule_bump.domain.upstream import UPSTREAM
 
 _CHANGELOG_WIDTH_CHARACTERS = 100
 _GITHUB_API_URL = "https://api.github.com"
+_GITHUB_TIMEOUT_SECONDS = 30
 
 
 def build_command_line(
@@ -43,7 +44,11 @@ def build_amule_bumper(
     github_output = env.get("GITHUB_OUTPUT")
     return BumpAmule(
         upstream_client=GithubUpstreamClient(
-            github_api_url, UPSTREAM, env.get("GH_TOKEN"), url_opener
+            github_api_url,
+            UPSTREAM,
+            env.get("GH_TOKEN"),
+            url_opener,
+            timeout_seconds=_GITHUB_TIMEOUT_SECONDS,
         ),
         dockerfile_reader=dockerfile,
         dockerfile_writer=dockerfile,

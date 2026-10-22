@@ -1,3 +1,4 @@
+import time
 from collections.abc import Iterator
 from urllib.error import HTTPError
 
@@ -19,7 +20,9 @@ def github() -> Iterator[FakeGithubServer]:
 
 
 def upstream_client(github: FakeGithubServer, token: str | None = None) -> GithubUpstreamClient:
-    return GithubUpstreamClient(github.api_url, "amule-org/amule", token, github.url_opener)
+    return GithubUpstreamClient(
+        github.api_url, "amule-org/amule", token, github.url_opener, timeout_seconds=0.2
+    )
 
 
 def test_latest_release_tag_is_read_from_the_api_url_with_the_token(
@@ -77,3 +80,11 @@ def test_file_lets_any_other_http_error_through(github: FakeGithubServer) -> Non
     github.answer_raw(f"{REPO}/contents/docs/CHANGELOG.md?ref=3.1.0", 403, b"{}")
     with pytest.raises(HTTPError, match="403"):
         upstream_client(github).read_file("3.1.0", "docs/CHANGELOG.md")
+
+
+def test_a_request_unanswered_within_the_timeout_fails(github: FakeGithubServer) -> None:
+    github.is_holding = True
+    started = time.monotonic()
+    with pytest.raises(TimeoutError, match="timed out"):
+        upstream_client(github).read_latest_release_tag()
+    assert time.monotonic() - started < 5  # the 0.2 s given, not a timeout of its own
