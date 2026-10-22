@@ -50,14 +50,18 @@ does not follow it yet.
   missed `UnitCoverageComposition`, holding coverage.py's `TemporaryDirectory()` for one check.) Hard rules, block 68
   (Corrected: from 66, split at the line bound).
 - **C4. Doubles**: one fake per port, except a `<Thing>Writer` and `<Thing>Reader` pair, which share one
-  `Fake<Thing>Store`. A fake is an adapter for tests, in the ring of what it replaces, one `Fake*` class per file,
-  the file named after it: a driven port's fake, or the double of a callable an adapter receives
+  `Fake<Thing>Store`. C4 governs the doubles of the hexagon's boundary (a port's implementation, an outside system,
+  a callable an adapter receives); a stand-in for core code that one test module uses stays in it, like a harness
+  (`_Const`, a domain `Matcher`). A fake is an adapter for tests, in the ring of what it replaces, one double per
+  file, the file named after it: a driven port's fake, or the double of a callable an adapter receives
   (`FakeCommandRunner`), under `tests/fakes/adapters/driven/`; a driving port's fake under
   `tests/fakes/application/use_cases/`, or `tests/fakes/composition/` where the composition implements the port
   (`FakeCrawlerRunner`, `FakePortSyncLoopRunner`); a double of an outside system (`FakeAmuleApiServer`) at
   `tests/fakes/`'s root. A record a fake returns or keeps (`LoggedLine`, `WrittenSarif`) lives in its fake's file.
-  `tests/support/` holds what is no double, at the mirror of the module it serves. A test checks the doubles' layout.
-  Hard rules, Naming and the glossary (`store`), block 72.
+  `tests/support/` holds what is no double, at the mirror of the module it serves. A test checks the doubles' layout,
+  not the `Fake` prefix, which lot B gives the doubles that lack it (N10). (Corrected: from "one `Fake*` class per
+  file", without the boundary's scope; both decided by the operator in block 70.) Hard rules, Naming and the
+  glossary (`store`), block 72.
 - **C5. `tests/fakes/` and `tests/support/` are measured at 100 %** in every package, and left out of
   `_unit-coverage-check`; neither holds a file named `test_*.py`. Hard rules, block 32.
 - **C6. `pytest_settings` is shared test configuration, not a hexagon**: one module, declared in `tach.toml`, holding
@@ -121,8 +125,9 @@ does not follow it yet.
   ports splits: `FakeCatalogReader` (`DecisionReader` and `ObservationReader`), `FakeDownloadClient`
   (`DownloadClient` and `SourceClient`), `FakeCrawlControls` (`CrawlPauser`, `CrawlResumer`, `ShutdownRequester`).
   Duplicated inline doubles (four `_FakeSourceReader`s, two `_FakeCatalogFileReader`s, ...) become one, in the
-  module of doubles of their package until block 70. The layout test checks the place, one `Fake*` class per file,
-  and that a fake implementing ports implements one, or one Writer/Reader pair: by test, not by convention.
+  module of doubles of their package until block 70. The layout test checks the place, one double per file named
+  after it, and that a fake implementing ports implements one, or one Writer/Reader pair: by test, not by convention.
+  (Corrected: from "one `Fake*` class per file", block 70.)
 - **D6. The rings of `application/`** (C1), in every hexagon: the ports move from their own ring into
   `application/ports/`, as Hombergs and Graça place them, for familiarity (R12); the use cases and the steps are
   kept apart so that tach keeps the use cases away from the lifecycle's stages (R4, R14). The modules that call no
