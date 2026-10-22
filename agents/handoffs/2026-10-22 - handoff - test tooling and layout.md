@@ -1,7 +1,7 @@
 # Handoff: the test tooling and the layout, lot A of the post-hexagonal corrections
 
-Drafted by block 72 from the lot's block reports (#389, #390, #392 to #405) and its own; to be corrected by the
-closing block 90 with the holistic review.
+Drafted by block 72 from the lot's block reports (#389, #390, #392 to #406) and its own; corrected by the closing
+blocks 90 and 92 with the holistic review (`.reviews/lot-a-holistic.md`).
 
 ## State
 
@@ -11,8 +11,8 @@ H9, A16, R1, R4 (the pure modules' move only), R9, R10, R12 (item 3), R13, R14, 
 (D5). Lots B (the names, the other hexagons' fixes) and C (the crawler's design fixes) follow, each with its own
 Discuss and spec.
 
-One stack cut from `main` at `d4180cdf`. Eighteen blocks: the spec's rows 10 to 72, row 66 split in Act into 66 and
-68 at the line bound, then the closing block 90.
+One stack cut from `main` at `d4180cdf`. Nineteen blocks: the spec's rows 10 to 72, row 66 split in Act into 66 and
+68 at the line bound, then the closing block, split at the file bound into 90 and 92.
 
 | Block | Pull request | Branch |
 |---|---|---|
@@ -32,8 +32,12 @@ One stack cut from `main` at `d4180cdf`. Eighteen blocks: the spec's rows 10 to 
 | 66 | #403 | `refactor/bump-coverage-composition` |
 | 68 | #404 | `refactor/coverage-composition` |
 | 70 | #405 | `refactor/fakes-in-their-ring` |
-| 72 | to fill | `test/fakes-layout` |
-| 90 | to fill | `docs/test-tooling-and-layout-wrap` |
+| 72 | #406 | `test/fakes-layout` |
+| 90 | the closing one | `docs/test-tooling-and-layout-wrap` |
+| 92 | the closing one | `refactor/pair-fakes-named-store` |
+
+`BACKLOG.md` reconciled in block 92: no entry ships or is dropped by this lot, and none is added; the findings
+left over go to lot B through this handoff.
 
 Nothing of the stack is merged. The lot changes no image (Acceptance 9), so it releases nothing; "A copy before a
 migration that rewrites rows" still ships before the next release.
@@ -42,7 +46,8 @@ migration that rewrites rows" still ships before the next release.
 
 - **pyrefly in the gate** (block 10): `[tool.pyrefly]` in every package (`search-path = ["src", "."]`, import
   errors only), `pyrefly-check` in `lint-all`, pyrefly 1.4.0 a dev dependency (Serena's version).
-- **`pytest_settings`** (blocks 20, 22): a ninth workspace member, one module auto-loaded through its `pytest11`
+- **`pytest_settings`** (blocks 20, 22): a workspace member (the ninth at block 20, one of eight again once block 30 removed
+  `p2pwatch_testing`), one module auto-loaded through its `pytest11`
   entry point, turning `PytestUnknownMarkWarning`, `ResourceWarning` and `PytestUnraisableExceptionWarning` into
   errors in every package's run, the gate's or a hand-run one; the packages' own `--strict-markers` and filters gone.
   Outside vulture's scope, declared in `tach.toml` with no ring (C6).
@@ -65,6 +70,11 @@ migration that rewrites rows" still ships before the next release.
 - **Each double in its file, in its ring** (blocks 70, 72): `tests/fakes/{adapters/driven,application/use_cases,
   composition}/` and the root for outside systems, one double per file named after it; checked by
   `packages/crawler/tests/test_fake_files.py` (C4).
+- **The holistic review's fixes** (blocks 90, 92): the `ClientStatusWriter` / `ClientStatusReader` pair faked by one
+  `FakeClientStatusStore`; `BrokenDisk`, `LoopWallClock` and `LoopMonotonicClock` in `tests/fakes/adapters/driven/`;
+  `FakeRunStateStore`, `FakeAmuleConfStore`, `FakeDockerfileStore`; two more layout checks (a pair whose two ports
+  have doubles has one store; no class under `tests/` outside `tests/fakes/` implements a port); one definition of
+  `ring`, the logger and composition prose corrected.
 - **`AGENTS.md`**: C1 (rings, glossary `ring`, `use case`, `step`, `lifecycle`), C2, C3, C4 (Hard rules, Naming's
   store fake, glossary `store`), C5, C6.
 
@@ -94,18 +104,51 @@ Re-run by block 72 on 2026-10-22 at its commit unless noted.
 7. Block 72: `test_fake_files.py` fails on a copy of `FakeVexReader` under `application/use_cases/` (expected
    `adapters/driven`), on `FakeUnitCoverageChecker` at the root (expected `composition`), on a second class
    `FakeExtra` in `fake_ownership.py`, and on `FakeSourceReader` also inheriting `DecisionReader`; each reported by
-   its own test.
-8. **Not measured.** Block 10's live Serena reached `RepoReader.read_file` in full and `VexReader.read_claims` on its
-   port's line only, from a pyrefly server started before the configuration changed; a fresh `pyrefly lsp` reached
-   every site on this branch and on `main`'s configuration alike, so it does not reproduce the trial's baseline. To
-   measure with a fresh Serena on a clone, on `main` and at the top.
+   its own test. Block 90: `test_a_writer_reader_pair_with_doubles_has_one_store` failed on the tree as it stood
+   (`'ClientStatusWriter, ClientStatusReader'`), `test_no_class_under_tests_outside_its_fakes_implements_a_port`
+   on six classes (`_BrokenDisk`, `LoopWallClock`, `LoopMonotonicClock`, three `FakeDownloadStore` subclasses), and
+   an injected port no `src` class implements, with its fake, is reported by name (`FakeUnimplemented: []`) where
+   it raised `ValueError: min() iterable argument is empty`.
+8. Met at the top, measured by the lead on 2026-10-22 with a freshly restarted Serena on a scratch branch at
+   `f42c605f`: `rename_symbol` from `RepoReader.read_file` changed 9 sites, from `VexReader.read_claims` 8,
+   `git grep -w <old> -- packages/` empty after each, the fakes included (`fake_repo_reader.py`,
+   `fake_vex_reader.py`). The `main` baseline (9 of 12, 8 of 11) is an accepted limit, not re-measured: a fresh
+   `pyrefly lsp` reached every site on `main`'s configuration (block 10), while `pyrefly check` 1.4.0 from the root
+   on `main` reports `Cannot find module tests.fakes [missing-import]` 23 times (amule_bump 5, amule 10, vex_checks
+   4, template_checks 2, coverage_checks 2), which supports D1's mechanism. Recorded in the spec as a
+   `(Corrected: ...)` on Acceptance 8, and in `AGENTS.md`'s gotcha.
 9. `git diff --stat d4180cdf HEAD` over `deploy`, `security`, the crawler's `migrations`, `packages/amule/docker`,
    both Dockerfiles and `.github/workflows` prints nothing.
-10. The gate green at every block (each report); CI green on every block's head up to 70 at writing.
+10. The gate green at every block (each report); CI green on every block's head, 72 included (`f42c605f`).
 
 ## Holistic review
 
-To be written by the closing block from `.reviews/lot-a-holistic.md`.
+`.reviews/lot-a-holistic.md`: 0 critical, 3 major, 9 minor. Each finding's exit, decided by the lead:
+
+- MAJOR, the ClientStatus pair faked by two doubles: fixed in block 90, `FakeClientStatusStore`, and a layout check
+  that a pair whose two ports have doubles has one double implementing both.
+- MAJOR, boundary doubles outside `tests/fakes/`: fixed in block 90. `_BrokenDisk` became `BrokenDisk`, and the
+  loop clocks moved out of `tests/support/virtual_time.py`, all three in `tests/fakes/adapters/driven/`; a layout
+  check refuses a class under `tests/` outside `tests/fakes/` that implements a port. It also found three
+  `FakeDownloadStore` subclasses defined in `test_run_download_cycle.py`, replaced by the fake's own
+  `fail_set_state_for` and by a read of its `completed_at` (class 1). The operator's exception (`_Const`,
+  `_BlockedLoop`) implements no port, so the check needs no list.
+- MAJOR, Acceptance 8 unmeasured: measured by the lead at the top (Acceptance above); the `main` baseline an
+  accepted limit, recorded in the spec and `AGENTS.md`'s gotcha.
+- MINOR, three pair fakes not named `Fake<Thing>Store`: fixed in block 92, `FakeRunStateStore`,
+  `FakeAmuleConfStore`, `FakeDockerfileStore`, their files following.
+- MINOR, the logger prose: fixed in `AGENTS.md` and `docs/contributing/architecture.md`; the literals stay lot B's
+  (R8).
+- MINOR, `architecture.md`'s stale `python -m p2pwatch` sentence and C3's missing bullet: fixed.
+- MINOR, D4's "follow their doubles": a `(Corrected: ...)` on D4.
+- MINOR, two definitions of `ring`: one, the four directories, `application/`'s parts being tach's layers inside
+  it, in `AGENTS.md`'s rule and glossary and in `architecture.md`.
+- MINOR, `fake_git_hub_server.py`'s spelling: lot B (For lot B).
+- MINOR, `_PORTLESS_RINGS` and `_outermost`'s empty case: PORTLESS_PENDING `_outermost` fixed (a fake of a port
+  nothing in `src` implements is reported by name).
+- MINOR, `FakeDecisionReader`'s and `FakeObservationReader`'s refusals: for "Contract tests for the fakes" (For lot
+  B and after).
+- MINOR, the handoff's lines: corrected here.
 
 ## Departures from the spec
 
@@ -129,6 +172,10 @@ To be written by the closing block from `.reviews/lot-a-holistic.md`.
   fix-back.
 - Block 70: `_Const` (matching) and `_BlockedLoop` (crawler) stay in their test modules (operator); a moved private
   double loses its underscore and nothing else.
+- Blocks 90, 92: the closing block split at the file bound (24 files), the layout fixes in 90, the three renames
+  and the docs in 92. The three `FakeDownloadStore` subclasses the new check found were replaced by the fake's own knobs
+  rather than moved (class 1); `test_status_loop.py` reads back what the status loop published through
+  `FakeClientStatusStore.read_readings`. D5 gets a `(Corrected: ...)` for the two new checks.
 - Block 72: C4 corrected in the spec (the boundary's doubles; one double per file, not one `Fake*` class). Where
   both a use case and the composition implement a driving port (`UnitCoverageChecker`), the double sits in the
   outermost ring, the composition: it replaces what the code under test is handed. `snake_case` moved from
@@ -140,26 +187,29 @@ To be written by the closing block from `.reviews/lot-a-holistic.md`.
 `pytest_settings`'s hook, `catalog_copy_error.py`, `merge_error.py`, `crawler_composition.py`,
 `port_sync_composition.py`, `build_amule_bumper`, `UnitCoverageComposition`, `FakePolicyFingerprintStore`,
 `stored_fingerprint`, `waited_subjects`, `FakeCrawlerRunner` (was `_FakeCrawlerRunner`), `test_fake_files.py`,
-`snake_case`.
+`snake_case`, `FakeClientStatusStore`, `BrokenDisk`.
 
-## For lot B and the holistic review
+## For lot B and after
 
-- **The doubles' names (N10)**: 21 doubles lack the `Fake` prefix (`BlockingMonotonicClock`, `HangingNotifier`,
-  `ImmediateLoop`, `LaggingDownloadStore`, `NeverSuspends`, `NoSetStateStore`, `NotificationSink`, `RaisingNotifier`,
-  `RecordingLoop`, `RecordingNotifier`, `RecordingStatusWriter`, `SavesRecorded`, `ScriptedClient`, `ShutDownServer`,
-  `ShutdownDuringCycleCatalog`, `SteppedClient`, `ThreadRecordingContext`, `TickingMonotonicClock`,
-  `TickingWallClock`, `TimedClient`, `TimedEventEmitter`), and three Writer/Reader fakes are not named
-  `Fake<Thing>Store` (`FakeRunState`, `FakeAmuleConf`, `FakeDockerfile`). Each rename moves its file, since the
-  file is named after the class.
-- **The literal logger names** no longer match their moved modules (R8); `AGENTS.md` and
-  `docs/contributing/architecture.md` still say a use case logs "under the module's name".
+- **The doubles' names (N10)**: 23 doubles lack the `Fake` prefix (`BlockingMonotonicClock`, `BrokenDisk`,
+  `HangingNotifier`, `ImmediateLoop`, `LaggingDownloadStore`, `LoopMonotonicClock`, `LoopWallClock`,
+  `NeverSuspends`, `NoSetStateStore`, `NotificationSink`, `RaisingNotifier`, `RecordingLoop`, `RecordingNotifier`,
+  `SavesRecorded`, `ScriptedClient`, `ShutDownServer`, `ShutdownDuringCycleCatalog`, `SteppedClient`,
+  `ThreadRecordingContext`, `TickingMonotonicClock`, `TickingWallClock`, `TimedClient`, `TimedEventEmitter`). Each
+  rename moves its file, since the file is named after the class.
+- **`fake_git_hub_server.py`**: `snake_case` splits `GitHub` into `git_hub`, where every other file of
+  `amule_bump` spells it `github` (`github_repo_reader.py`). Lot B's rename block can name the class
+  `FakeGithubServer`, the file following.
+- **The literal logger names** no longer match their moved modules (R8); the prose now says so.
 - **`vex_checks`' root from `__file__`** in `__main__`, checked only by CI's `poe vex-claim-coverage` (H3).
-- **`_Controls`**, the webui tests' local holder joining the three control fakes' calls (block 40), for the holistic
-  review.
 - **`SavesRecorded`** subclasses the real `SqliteBackoffStateRepository` (a spy on an adapter, not a fake of its
   ports); the layout test places it by the ports it inherits.
 - **The layout test's reach**: it follows bases written as a bare name or a `Name[...]` imported by `from x import`,
-  not `module.Port`; a record is a dataclass with no base.
+  not `module.Port`; a record is a dataclass with no base. PORTLESS_REACH
+- **For "Contract tests for the fakes"**: `FakeDecisionReader` and `FakeObservationReader`, now the only fakes of
+  their ports, still refuse the reads the download loop never makes (`read_latest_decisions`,
+  `read_known_filenames` raise `AssertionError`): one consumer's expectation in a shared fake, which a contract
+  suite will fail on. The refusals can move to a subclass private to the download loop's tests then.
 
 ## Pitfalls
 
@@ -180,27 +230,28 @@ To be written by the closing block from `.reviews/lot-a-holistic.md`.
   missing pathspec stages nothing.
 - **A cut of a module that joins its kept statements loses their spacing** (block 70): keep the original text with
   the moved ranges deleted; a `type` alias statement is not an `Assign`.
+- **Serena needed two restarts during the lot**: its pyrefly index went stale after the `pyproject.toml` changes
+  (block 10), then after block 70's file deletions. Restart Serena after either before trusting a rename.
 - **Host port 4711 is the deployed node's**: never publish it, never touch the `mulewatch-*` containers.
 
 ## Not validated
 
-- Acceptance 8 (above).
+- The `main` baseline of Acceptance 8 (an accepted limit, above).
 - The integration suites locally; CI runs them on both architectures.
-- CI on blocks 72 and 90 at writing.
+- CI on blocks 90 and 92 at writing.
 
 ## Wrap counts
 
-From `gh run list --branch <branch>` over blocks 10 to 70 on 2026-10-22, at writing.
+From `gh run list --branch <branch>` over blocks 10 to 72 and the lead's ledger, 2026-10-22.
 
-- **Runs**: 19 for 16 blocks. Block 68 has two green runs (its fix-back, C3's wording). Block 70 has one green run
-  and two cancelled (`31a49f3d`, and a first run of `2ed0a0c5`).
-- **Fix-backs**: 1 (block 68). **Cascaded rebases**: to count. **Runs they re-triggered**: to count.
-- **Splits**: 1 (block 66 at the line bound). **Exemptions**: 4 (blocks 30, 50, 52, 70), approved on their rows.
-- **Bodies called unreadable**: none at writing.
+- **Fix-backs**: 1 (block 68, C3 reworded by the operator). **Cascaded rebases**: 1 (68 to 70). **Runs they
+  re-triggered**: 2 (#404, #405), fewer than the 19 blocks.
+- **Cancelled runs**: two on block 70 (`31a49f3d`, and a first run of `2ed0a0c5`).
+- **Splits**: 2 (block 66 at the line bound, block 90 at the file bound into 90 and 92). **Exemptions**: 4 (blocks 30, 50, 52, 70), approved on their rows.
+- **Bodies called unreadable**: none.
 
 ## Next
 
-- The holistic review over the stack, then the closing block 90.
 - The operator reviews and merges the stack, after the lead rebases it onto `main` if `main` moved.
 - Lot B's Discuss and spec: the names (R3, R5, R8, N1 to N18, N10 above) and the other hexagons' fixes (H1 to H7,
   H10 to H15, R6 and R11 outside the crawler).

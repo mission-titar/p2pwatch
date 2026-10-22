@@ -160,10 +160,11 @@ développement et en CI, jamais dans une image.
 | `coverage_checks` | `packages/coverage_checks/` | `UnitCoverageChecker` | `.coverage`, l'arbre du paquet et son `pyproject.toml` |
 | `amule_bump` | `packages/amule_bump/` | `AmuleBumper` | l'API GitHub, le Dockerfile, le corps de la pull request, `GITHUB_OUTPUT` |
 
-Chaque hexagone se découpe en **anneaux**, lus dans le chemin : `domain/`, `application/ports/`,
-`application/`, `adapters/` et `composition/`, les ports et `adapters/` séparés en `driving/` (ce qui appelle le
-cœur : la ligne de commande, la webui) et `driven/` (ce que le cœur appelle : SQLite, amuleapi). Un
-`__main__.py` racine appartient à la composition. Le graphe des imports est un DAG qui pointe vers
+Chaque hexagone se découpe en quatre **anneaux**, lus dans le chemin : `domain/`, `application/`,
+`adapters/` et `composition/`, les ports et `adapters/` séparés en `driving/` (ce qui appelle le
+cœur : la ligne de commande, la webui) et `driven/` (ce que le cœur appelle : SQLite, amuleapi). Les
+ports, les cas d'usage, les étapes et le cycle de vie sont les couches de tach dans l'anneau
+`application/`. Un `__main__.py` racine appartient à la composition. Le graphe des imports est un DAG qui pointe vers
 le **domaine pur**.
 
 ```mermaid
@@ -194,6 +195,12 @@ flowchart TB
   étape. Le cycle de vie (`CrawlerLifecycle`, `PortSyncLifecycle`) est le programme de son
   démarrage à son arrêt, que la composition lance ; il n'a pas de port. Cas d'usage et étapes ne
   s'importent pas entre eux, ni le cycle de vie. Ce qui n'appelle aucun port va au domaine.
+- Chaque hexagone expose `build_command_line(...)` dans `composition/command_line.py`, qui
+  construit les adaptateurs, les cas d'usage et la ligne de commande ; `__main__.py` lit l'état du
+  processus et appelle `build_command_line(...).run(argv)`. La composition construit chaque graphe
+  quand ce qu'il lui faut existe : au démarrage, dans `build_command_line` ; pendant un appel, en
+  implémentant le port pilotant qui le fait (`CrawlerComposition`, `PortSyncComposition`,
+  `UnitCoverageComposition`).
 - Seul un `__main__.py` lit l'état du processus (`argv`, l'environnement, le répertoire courant, le
   logger racine, le répertoire temporaire) et le passe en valeurs ; un adaptateur reçoit de la composition ce qu'il pilote (un
   répertoire, une URL, un exécutable). Aucun test ne patche un module : `monkeypatch` et
@@ -210,15 +217,17 @@ flowchart TB
   que quoi que ce soit n'atteigne le domaine.
 - **`application/`** orchestre les cas d'usage asynchrones en parlant à des **ports** (des ABC).
   Ses journaux passent eux aussi par un port, `Logger`, que `StdlibLogger` implémente sous le nom
-  du module (`p2pwatch.application.search_worker`), celui que filtre un opérateur.
+  que lui donne la composition (`p2pwatch.application.search_worker`, celui de son module avant le
+  lot A, jusqu'à ce que le lot B le dérive du code), celui que filtre un opérateur.
 - **`adapters/`** portent toutes les I/O et héritent des ports qu'ils implémentent.
 - **`composition/`** (`CrawlerComposition`) charge la config, que l'adapter de config valide *fail-fast*,
   câble les adapters concrets qu'elle décrit, puis lance `CrawlerLifecycle`
   (`application/crawler_lifecycle.py`), la racine du graphe : il résout le `node_id`, annonce le
   démarrage, réévalue le catalogue si la politique a changé, puis supervise les boucles.
-- **`python -m p2pwatch`** construit les ports `crawl`, `validate-config` et `merge` (le cas
-  d'usage `MergeCatalogs`) et les passe à la ligne de commande, `adapters/driving/cli/`, qui lit
-  la sous-commande et rend son code de sortie.
+- **`composition/command_line.py`** (`build_command_line`) construit les ports `crawl`,
+  `validate-config` et `merge` (le cas d'usage `MergeCatalogs`) et les passe à la ligne de
+  commande, `adapters/driving/cli/`, qui lit la sous-commande et rend son code de sortie ;
+  `python -m p2pwatch` lit l'état du processus et la lance.
 
 ## 5. Les tâches de recherche
 
