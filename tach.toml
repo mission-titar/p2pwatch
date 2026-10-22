@@ -977,6 +977,11 @@ layer = "composition"
 depends_on = ["vex_checks.composition"]
 
 [[modules]]
+path = "vex_checks.adapters.driven.filesystem_code_scanning_reporter"
+layer = "adapters"
+depends_on = ["vex_checks.domain", "vex_checks.application.ports.driven.code_scanning_reporter"]
+
+[[modules]]
 path = "vex_checks.adapters.driven.filesystem_source_rule_reader"
 layer = "adapters"
 depends_on = ["vex_checks.application.ports.driven.source_rule_reader"]
@@ -985,11 +990,6 @@ depends_on = ["vex_checks.application.ports.driven.source_rule_reader"]
 path = "vex_checks.adapters.driven.grype_vulnerability_scanner"
 layer = "adapters"
 depends_on = ["vex_checks.application.ports.driven.vulnerability_scanner"]
-
-[[modules]]
-path = "vex_checks.adapters.driven.json_sarif_writer"
-layer = "adapters"
-depends_on = ["vex_checks.domain", "vex_checks.application.ports.driven.sarif_writer"]
 
 [[modules]]
 path = "vex_checks.adapters.driven.open_vex_reader"
@@ -1016,7 +1016,7 @@ path = "vex_checks.application.use_cases"
 layer = "use_cases"
 visibility = ["*.composition"]
 depends_on = [
-  "vex_checks.application.ports.driven.sarif_writer",
+  "vex_checks.application.ports.driven.code_scanning_reporter",
   "vex_checks.application.ports.driven.sbom_reader",
   "vex_checks.application.ports.driven.source_rule_reader",
   "vex_checks.application.ports.driven.vex_reader",
@@ -1031,9 +1031,9 @@ depends_on = [
 path = "vex_checks.composition"
 layer = "composition"
 depends_on = [
+  "vex_checks.adapters.driven.filesystem_code_scanning_reporter",
   "vex_checks.adapters.driven.filesystem_source_rule_reader",
   "vex_checks.adapters.driven.grype_vulnerability_scanner",
-  "vex_checks.adapters.driven.json_sarif_writer",
   "vex_checks.adapters.driven.open_vex_reader",
   "vex_checks.adapters.driven.syft_sbom_reader",
   "vex_checks.adapters.driving.cli",
@@ -1047,7 +1047,7 @@ layer = "domain"
 depends_on = []
 
 [[modules]]
-path = "vex_checks.application.ports.driven.sarif_writer"
+path = "vex_checks.application.ports.driven.code_scanning_reporter"
 layer = "ports"
 depends_on = ["vex_checks.domain"]
 

@@ -2,7 +2,10 @@
 
 from pathlib import PurePath
 
-from tests.fakes.adapters.driven.fake_sarif_writer import FakeSarifWriter, WrittenSarif
+from tests.fakes.adapters.driven.fake_code_scanning_reporter import (
+    FakeCodeScanningReporter,
+    WrittenSarif,
+)
 from tests.fakes.adapters.driven.fake_vex_reader import FakeVexReader
 from tests.fakes.adapters.driven.fake_vulnerability_scanner import FakeVulnerabilityScanner
 from vex_checks.application.use_cases.check_stale_claims import CheckStaleClaims
@@ -18,13 +21,15 @@ CVE_B_STALE = Violation("CVE-B", "no longer reported by Grype", "security/crawle
 
 def _checker(
     vulnerability_scanner: FakeVulnerabilityScanner,
-    sarif_writer: FakeSarifWriter | None = None,
+    code_scanning_reporter: FakeCodeScanningReporter | None = None,
 ) -> CheckStaleClaims:
     return CheckStaleClaims(
         repository_root=REPOSITORY_ROOT,
         vulnerability_scanner=vulnerability_scanner,
         vex_reader=FakeVexReader(CLAIMS),
-        sarif_writer=sarif_writer if sarif_writer is not None else FakeSarifWriter(),
+        code_scanning_reporter=code_scanning_reporter
+        if code_scanning_reporter is not None
+        else FakeCodeScanningReporter(),
     )
 
 
@@ -61,13 +66,13 @@ def test_the_scanner_is_given_the_sbom() -> None:
 
 
 def test_asked_for_sarif_the_problems_are_written_under_the_stale_claims_rule() -> None:
-    sarif_writer = FakeSarifWriter()
-    checker = _checker(FakeVulnerabilityScanner({"CVE-A"}), sarif_writer)
+    code_scanning_reporter = FakeCodeScanningReporter()
+    checker = _checker(FakeVulnerabilityScanner({"CVE-A"}), code_scanning_reporter)
 
     report = checker.check_stale_claims(SBOM_PATH, VEX_PATH, PurePath("/tmp/out.sarif"))
 
     assert report.problems == (CVE_B_STALE,)
-    assert sarif_writer.written_sarifs == [
+    assert code_scanning_reporter.written_sarifs == [
         WrittenSarif(
             PurePath("/tmp/out.sarif"),
             "stale-vex-entry",
@@ -78,18 +83,18 @@ def test_asked_for_sarif_the_problems_are_written_under_the_stale_claims_rule() 
 
 
 def test_asked_for_sarif_with_no_stale_claim_an_empty_report_is_written() -> None:
-    sarif_writer = FakeSarifWriter()
-    checker = _checker(FakeVulnerabilityScanner({"CVE-A", "CVE-B"}), sarif_writer)
+    code_scanning_reporter = FakeCodeScanningReporter()
+    checker = _checker(FakeVulnerabilityScanner({"CVE-A", "CVE-B"}), code_scanning_reporter)
 
     checker.check_stale_claims(SBOM_PATH, VEX_PATH, PurePath("/tmp/out.sarif"))
 
-    assert [written.violations for written in sarif_writer.written_sarifs] == [()]
+    assert [written.violations for written in code_scanning_reporter.written_sarifs] == [()]
 
 
 def test_not_asked_for_sarif_nothing_is_written() -> None:
-    sarif_writer = FakeSarifWriter()
-    checker = _checker(FakeVulnerabilityScanner({"CVE-A"}), sarif_writer)
+    code_scanning_reporter = FakeCodeScanningReporter()
+    checker = _checker(FakeVulnerabilityScanner({"CVE-A"}), code_scanning_reporter)
 
     checker.check_stale_claims(SBOM_PATH, VEX_PATH, None)
 
-    assert sarif_writer.written_sarifs == []
+    assert code_scanning_reporter.written_sarifs == []

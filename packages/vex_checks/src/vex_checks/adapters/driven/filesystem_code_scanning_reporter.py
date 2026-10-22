@@ -2,14 +2,14 @@ import json
 from collections.abc import Sequence
 from pathlib import Path, PurePath
 
-from vex_checks.application.ports.driven.sarif_writer import SarifWriter
+from vex_checks.application.ports.driven.code_scanning_reporter import CodeScanningReporter
 from vex_checks.domain.violations import Violation
 
 
-class JsonSarifWriter(SarifWriter):
+class FilesystemCodeScanningReporter(CodeScanningReporter):
     """A SARIF 2.1.0 report as a JSON file at the path each call is given."""
 
-    def write_violations(
+    def report_claim_problems(
         self, sarif_path: PurePath, rule_id: str, violations: Sequence[Violation], vex_location: str
     ) -> None:
         Path(sarif_path).write_text(json.dumps(_sarif(rule_id, violations, vex_location)))

@@ -2,7 +2,9 @@ import json
 from pathlib import Path
 from typing import cast
 
-from vex_checks.adapters.driven.json_sarif_writer import JsonSarifWriter
+from vex_checks.adapters.driven.filesystem_code_scanning_reporter import (
+    FilesystemCodeScanningReporter,
+)
 from vex_checks.domain.violations import Violation
 
 _RULE_ID = "vex-consistency-tarfile"
@@ -12,7 +14,7 @@ _VEX_RELPATH = "security/crawler.vex.openvex.json"
 def test_empty_violations_yields_valid_sarif_with_no_results(tmp_path: Path) -> None:
     sarif_path = tmp_path / "out.sarif"
 
-    JsonSarifWriter().write_violations(sarif_path, _RULE_ID, [], _VEX_RELPATH)
+    FilesystemCodeScanningReporter().report_claim_problems(sarif_path, _RULE_ID, [], _VEX_RELPATH)
 
     sarif = json.loads(sarif_path.read_text())
     assert sarif["$schema"] == "https://json.schemastore.org/sarif-2.1.0.json"
@@ -40,7 +42,9 @@ def test_one_violation_yields_one_error_result_pointing_at_the_vex_file(tmp_path
         location="packages/crawler/src/p2pwatch/foo.py",
     )
 
-    JsonSarifWriter().write_violations(sarif_path, _RULE_ID, [violation], _VEX_RELPATH)
+    FilesystemCodeScanningReporter().report_claim_problems(
+        sarif_path, _RULE_ID, [violation], _VEX_RELPATH
+    )
 
     sarif = json.loads(sarif_path.read_text())
     runs = cast(list[dict[str, object]], sarif["runs"])

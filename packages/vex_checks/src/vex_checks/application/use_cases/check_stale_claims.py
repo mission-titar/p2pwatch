@@ -2,7 +2,7 @@
 
 from pathlib import PurePath
 
-from vex_checks.application.ports.driven.sarif_writer import SarifWriter
+from vex_checks.application.ports.driven.code_scanning_reporter import CodeScanningReporter
 from vex_checks.application.ports.driven.vex_reader import VexReader
 from vex_checks.application.ports.driven.vulnerability_scanner import VulnerabilityScanner
 from vex_checks.application.ports.driving.stale_claims_checker import (
@@ -25,12 +25,12 @@ class CheckStaleClaims(StaleClaimsChecker):
         repository_root: PurePath,
         vulnerability_scanner: VulnerabilityScanner,
         vex_reader: VexReader,
-        sarif_writer: SarifWriter,
+        code_scanning_reporter: CodeScanningReporter,
     ) -> None:
         self._repository_root = repository_root
         self._vulnerability_scanner = vulnerability_scanner
         self._vex_reader = vex_reader
-        self._sarif_writer = sarif_writer
+        self._code_scanning_reporter = code_scanning_reporter
 
     def check_stale_claims(
         self, sbom_path: PurePath, vex_path: PurePath, sarif_path: PurePath | None
@@ -43,5 +43,7 @@ class CheckStaleClaims(StaleClaimsChecker):
             if advisory_id not in advisory_ids
         )
         if sarif_path is not None:
-            self._sarif_writer.write_violations(sarif_path, _RULE_ID, problems, vex_location)
+            self._code_scanning_reporter.report_claim_problems(
+                sarif_path, _RULE_ID, problems, vex_location
+            )
         return StaleClaimsReport(problems=problems)
