@@ -129,12 +129,7 @@ depends_on = []
 [[modules]]
 path = "coverage_checks.__main__"
 layer = "composition"
-depends_on = [
-  "coverage_checks.adapters.driven.coverage_py_reader",
-  "coverage_checks.adapters.driven.filesystem_package_tree_reader",
-  "coverage_checks.adapters.driving.cli",
-  "coverage_checks.application.use_cases",
-]
+depends_on = ["coverage_checks.composition"]
 
 [[modules]]
 path = "coverage_checks.adapters.driven.coverage_py_reader"
@@ -154,12 +149,23 @@ depends_on = ["coverage_checks.application.ports.driving.unit_coverage_checker"]
 [[modules]]
 path = "coverage_checks.application.use_cases"
 layer = "use_cases"
-visibility = ["*.__main__", "*.composition"]
+visibility = ["*.composition"]
 depends_on = [
   "coverage_checks.application.ports.driven.package_tree_reader",
   "coverage_checks.application.ports.driven.test_coverage_reader",
   "coverage_checks.application.ports.driving.unit_coverage_checker",
   "coverage_checks.domain",
+]
+
+[[modules]]
+path = "coverage_checks.composition"
+layer = "composition"
+depends_on = [
+  "coverage_checks.adapters.driven.coverage_py_reader",
+  "coverage_checks.adapters.driven.filesystem_package_tree_reader",
+  "coverage_checks.adapters.driving.cli",
+  "coverage_checks.application.ports.driving.unit_coverage_checker",
+  "coverage_checks.application.use_cases",
 ]
 
 [[modules]]
