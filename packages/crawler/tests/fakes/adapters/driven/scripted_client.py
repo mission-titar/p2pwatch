@@ -5,7 +5,7 @@ from p2pwatch.domain.client_errors import ClientError
 from p2pwatch.domain.status_reading import ClientStatus
 
 
-class ScriptedClient(StatusClient):
+class FakeStatusClient(StatusClient):
     """One scripted reading per call; the last one asks for shutdown."""
 
     def __init__(self, readings: list[ClientStatus | ClientError], shutdown: asyncio.Event) -> None:

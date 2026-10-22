@@ -397,7 +397,7 @@ def test_download_enabled_true_full_is_download_mode() -> None:
         poll_interval_seconds=30.0,
         min_free_bytes=1_000_000_000,
         lost_after=timedelta(hours=1),
-        output_dir="/data/out",
+        output_directory="/data/out",
         reappeared_after=timedelta(seconds=5400),
         sources_interval=timedelta(seconds=120),
     )
@@ -458,7 +458,7 @@ def test_download_space_and_ttl_knobs_have_defaults() -> None:
     assert cfg.download is not None
     assert cfg.download.min_free_bytes == 10_737_418_240  # 10 GiB
     assert cfg.download.lost_after == timedelta(hours=24)
-    assert cfg.download.output_dir == "/downloads"  # what deploy/compose.yml mounts
+    assert cfg.download.output_directory == "/downloads"  # what deploy/compose.yml mounts
 
 
 def test_a_source_reappears_after_12_hours_by_default() -> None:

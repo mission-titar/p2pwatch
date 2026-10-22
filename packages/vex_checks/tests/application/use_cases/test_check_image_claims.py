@@ -17,8 +17,8 @@ from vex_checks.domain.registry import PREMISES
 from vex_checks.domain.sbom_components import DeclaredComponent, DpkgPackage
 from vex_checks.domain.violations import Violation
 
-REPO_ROOT = PurePath("/repo")
-VEX_PATH = REPO_ROOT / "security" / "crawler.vex.openvex.json"
+REPOSITORY_ROOT = PurePath("/repo")
+VEX_PATH = REPOSITORY_ROOT / "security" / "crawler.vex.openvex.json"
 SBOM_PATH = PurePath("/tmp/sbom.syft.json")
 
 NGHTTP2_PRESENT = Violation(
@@ -35,7 +35,7 @@ def _checker(
 ) -> CheckImageClaims:
     return CheckImageClaims(
         premises=premises,
-        repo_root=REPO_ROOT,
+        repository_root=REPOSITORY_ROOT,
         vex_reader=FakeVexReader(claims),
         sbom_reader=sbom_reader,
         sarif_writer=sarif_writer if sarif_writer is not None else FakeSarifWriter(),

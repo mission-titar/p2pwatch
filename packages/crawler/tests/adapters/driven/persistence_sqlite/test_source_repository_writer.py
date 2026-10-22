@@ -38,7 +38,7 @@ def _reading(
         role=role,
         contact_point=None,
         connectable=None,
-        raw_meta=(),
+        raw_metadata=(),
         session_received_bytes=counter,
     )
 
@@ -234,16 +234,16 @@ def test_the_variant_and_the_source_are_written_as_d2_states(
         _reading(),
         contact_point="176.103.48.36:4184",
         connectable=True,
-        raw_meta=(("source_origin", "kad"), ("protocol_extensions", ("a", "b"))),
+        raw_metadata=(("source_origin", "kad"), ("protocol_extensions", ("a", "b"))),
     )
     source_point_store.record_readings(_FILE, [reading], _T0, "n1")
-    raw_meta = '{"protocol_extensions": ["a", "b"], "source_origin": "kad"}'
+    raw_metadata = '{"protocol_extensions": ["a", "b"], "source_origin": "kad"}'
     columns: list[object] = [_FILE.file_id.hex(), _KEY.source_id.hex(), "AnimuseeFMR"]
-    columns += ["emule 0.50a", "queued", "176.103.48.36:4184", True, raw_meta, "n1"]
+    columns += ["emule 0.50a", "queued", "176.103.48.36:4184", True, raw_metadata, "n1"]
     canonical = json.dumps(columns, ensure_ascii=False, separators=(",", ":")).encode()
     assert catalog.execute(
         "SELECT file_id, source_id, name, software, role, contact_point, connectable,"
-        " raw_meta, node_id, content_hash FROM source_variants"
+        " raw_metadata, node_id, content_hash FROM source_variants"
     ).fetchall() == [
         (
             _FILE.file_id,
@@ -253,7 +253,7 @@ def test_the_variant_and_the_source_are_written_as_d2_states(
             "queued",
             "176.103.48.36:4184",
             1,
-            raw_meta,
+            raw_metadata,
             "n1",
             hashlib.blake2b(canonical, digest_size=16).digest(),
         )

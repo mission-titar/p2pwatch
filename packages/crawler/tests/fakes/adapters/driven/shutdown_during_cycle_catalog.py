@@ -4,7 +4,7 @@ from p2pwatch.domain.download.candidate import DownloadCandidate
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 
 
-class ShutdownDuringCycleCatalog(FakeDecisionReader):
+class FakeShutdownDuringCycleDecisionReader(FakeDecisionReader):
     """Sets ``shutdown`` on the 1st ``read_download_candidates``, mid-cycle."""
 
     def __init__(self, shutdown: asyncio.Event) -> None:

@@ -56,7 +56,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.download_repository import (
     SqliteTrackedDownloadStore,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.local_read import SqliteNodeStateReader
-from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
+from p2pwatch.adapters.driven.persistence_sqlite.reader import ThreadReadConnections
 from p2pwatch.adapters.driven.persistence_sqlite.source_repository import SqliteSourcePointStore
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_file_reader import (
     SqliteCatalogFileReader,
@@ -182,19 +182,19 @@ class CrawlerComposition(CrawlerRunner):
         """Start the read-only webui on its OWN thread + loop (spec §5). It shares with the crawler
         the parsed config (immutable), the clocks (stateless), the status board (whole snapshots
         swapped, never mutated) and the run state (every change scheduled on the crawler's loop).
-        It reads through its OWN ``ReaderProvider``s, one connection per thread. Its stop is
+        It reads through its OWN ``ThreadReadConnections``s, one connection per thread. Its stop is
         registered on ``stack`` so it runs during the normal LIFO unwind, AFTER the loops stop."""
         crawler_config = config.crawler_config
-        webui_pkg_dir = Path(p2pwatch.adapters.driving.webui.__file__).parent
-        local_reader_provider = ReaderProvider(crawler_config.local_db_path)
+        webui_package_directory = Path(p2pwatch.adapters.driving.webui.__file__).parent
+        local_reader_provider = ThreadReadConnections(crawler_config.local_db_path)
         node_state_reader = SqliteNodeStateReader(local_reader_provider)
-        catalog_reader_provider = ReaderProvider(crawler_config.catalog_db_path)
+        catalog_reader_provider = ThreadReadConnections(crawler_config.catalog_db_path)
         catalog_file_reader = SqliteCatalogFileReader(catalog_reader_provider)
         source_reader = SqliteSourceReader(catalog_reader_provider)
         app = build_webui_app(
             target_segments=config.targets,
-            templates_dir=webui_pkg_dir / "templates",
-            static_dir=webui_pkg_dir / "static",
+            templates_directory=webui_package_directory / "templates",
+            static_directory=webui_package_directory / "static",
             crawl_pauser=PauseCrawl(run_state),
             crawl_resumer=ResumeCrawl(run_state),
             shutdown_requester=shutdown_requester,
@@ -389,7 +389,7 @@ class CrawlerComposition(CrawlerRunner):
                     decision_reader=decision_store,
                     observation_reader=observation_store,
                     targets=config.targets,
-                    free_space_meter=ShutilFreeSpaceMeter(download_config.output_dir),
+                    free_space_meter=ShutilFreeSpaceMeter(download_config.output_directory),
                     min_free_bytes=download_config.min_free_bytes,
                     lost_after=download_config.lost_after,
                     poll_interval_seconds=download_config.poll_interval_seconds,

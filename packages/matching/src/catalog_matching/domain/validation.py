@@ -12,19 +12,19 @@ from typing import Any
 from catalog_matching.domain.config import (
     SCOPES,
     TIERS,
-    AllDef,
-    AnyDef,
-    AttrBetweenDef,
+    AllDefinition,
+    AnyDefinition,
+    AttributeBetweenDefinition,
     Condition,
-    CoverageDef,
-    KeywordDef,
+    CoverageDefinition,
+    KeywordDefinition,
     MatcherConfig,
-    NotDef,
+    NotDefinition,
     Operand,
-    RegexDef,
+    RegexDefinition,
     Rule,
-    TokenDef,
-    TokenRef,
+    TokenDefinition,
+    TokenReference,
 )
 from catalog_matching.domain.interpolation import (
     PLACEHOLDER,
@@ -70,7 +70,7 @@ def _require_key(mapping: dict[str, Any], key: str, error_label: str) -> Any:
 
 
 def _parse_operand(raw: Any) -> Operand:
-    """An operand: bare token name (str), ``{token: …}`` (TokenRef), or inline condition."""
+    """An operand: bare token name (str), ``{token: …}`` (TokenReference), or inline condition."""
     if isinstance(raw, str):
         return raw
     if isinstance(raw, dict):
@@ -101,7 +101,7 @@ def _refuse_renamed_coverage_keys(mapping: dict[str, Any], error_label: str) -> 
             )
 
 
-def _parse_token_ref(raw: dict[str, Any]) -> TokenRef:
+def _parse_token_ref(raw: dict[str, Any]) -> TokenReference:
     name = raw.get("token")
     if not isinstance(name, str):
         raise MatchingConfigError(f"operand {{token: …}} without a valid token name: {raw!r}")
@@ -112,7 +112,7 @@ def _parse_token_ref(raw: dict[str, Any]) -> TokenRef:
     # graph level (validate_config), not here: parsing stays purely structural and independent
     # of the token definition order (forward references allowed). The [0, 1] BOUNDS, on the
     # other hand, are structural → validated here.
-    return TokenRef(
+    return TokenReference(
         name=name,
         min_coverage=(
             None
@@ -136,7 +136,7 @@ def _parse_condition(raw: dict[str, Any]) -> Condition:
     key = present[0]
     body = raw[key]
     if key == "not":
-        return NotDef(operand=_parse_operand(body))
+        return NotDefinition(operand=_parse_operand(body))
     if not isinstance(body, list):
         raise MatchingConfigError(f"'{key}:' expects a list of operands, got {type(body).__name__}")
     if not body:
@@ -148,8 +148,8 @@ def _parse_condition(raw: dict[str, Any]) -> Condition:
         raise MatchingConfigError(f"'{key}:' requires at least one operand (empty list received)")
     operands = tuple(_parse_operand(item) for item in body)
     if key == "all":
-        return AllDef(operands=operands)
-    return AnyDef(operands=operands)
+        return AllDefinition(operands=operands)
+    return AnyDefinition(operands=operands)
 
 
 def _optional_float(mapping: dict[str, Any], key: str) -> float | None:
@@ -177,7 +177,7 @@ def _expand_fragments(pattern: str, fragments: dict[str, str]) -> str:
     return PLACEHOLDER.sub(lambda m: fragments.get(m.group(1), m.group(0)), pattern)
 
 
-def _parse_token_def(token_name: str, raw: Any, fragments: dict[str, str]) -> TokenDef:
+def _parse_token_def(token_name: str, raw: Any, fragments: dict[str, str]) -> TokenDefinition:
     """Dispatch of a token def: composite (all/any/not) or leaf (4 types).
 
     Reads ALL the def's ancillary keys (``flags`` of regex, ``min_coverage``/``min_similarity``
@@ -190,18 +190,18 @@ def _parse_token_def(token_name: str, raw: Any, fragments: dict[str, str]) -> To
     if len(leaf_keys) > 1:
         raise MatchingConfigError(f"a leaf token has exactly one type-key, got {sorted(leaf_keys)}")
     if "keyword" in mapping:
-        return KeywordDef(phrase=str(mapping["keyword"]))
+        return KeywordDefinition(phrase=str(mapping["keyword"]))
     if "regex" in mapping:
         flags = mapping.get("flags", "i")
         pattern = _expand_fragments(str(mapping["regex"]), fragments)
-        return RegexDef(pattern=pattern, flags=str(flags))
+        return RegexDefinition(pattern=pattern, flags=str(flags))
     if "coverage" in mapping:
         _refuse_renamed_coverage_keys(mapping, f"token {token_name!r}")
         min_coverage = _optional_float(mapping, "min_coverage")
         if min_coverage is None:
             raise MatchingConfigError("a coverage token must declare 'min_coverage'")
         min_similarity = _optional_float(mapping, "min_similarity")
-        return CoverageDef(
+        return CoverageDefinition(
             reference=str(mapping["coverage"]),
             min_coverage=_require_unit_fraction(min_coverage, "coverage 'min_coverage'"),
             min_similarity=(
@@ -229,7 +229,7 @@ def _parse_token_def(token_name: str, raw: Any, fragments: dict[str, str]) -> To
             raise MatchingConfigError(
                 f"attr_between {attr!r}: min ({min_bound}) > max ({max_bound}) (empty range)"
             )
-        return AttrBetweenDef(attr=attr, min_bound=min_bound, max_bound=max_bound)
+        return AttributeBetweenDefinition(attr=attr, min_bound=min_bound, max_bound=max_bound)
     raise MatchingConfigError(f"unknown token shape: keys {sorted(mapping)}")
 
 
@@ -264,7 +264,7 @@ def parse_matcher_config(raw: dict[str, Any]) -> MatcherConfig:
     """Builds a validated (schema) :class:`MatcherConfig` from a parsed YAML dict."""
     fragments = _parse_fragments(raw.get("fragments", {}))
     tokens_raw = _require_mapping(raw.get("tokens", {}), "'tokens' section")
-    tokens: dict[str, TokenDef] = {}
+    tokens: dict[str, TokenDefinition] = {}
     for token_name, token_raw in tokens_raw.items():
         tokens[str(token_name)] = _parse_token_def(str(token_name), token_raw, fragments)
     rules_raw = raw.get("rules", [])
@@ -285,7 +285,7 @@ def parse_matcher_config(raw: dict[str, Any]) -> MatcherConfig:
 _DEFAULT_MAX_DEPTH = 32
 
 # Probe target for the compile-check: provides season/seasonal_number/absolute_number/
-# letter/title so that the interpolation of any RegexDef is testable at load time.
+# letter/title so that the interpolation of any RegexDefinition is testable at load time.
 _PROBE_TARGET = TargetSegment(
     season=2,
     seasonal_number=11,
@@ -296,54 +296,54 @@ _PROBE_TARGET = TargetSegment(
 
 
 def _operand_token_names(operand: Operand) -> tuple[str, ...]:
-    """Names of tokens directly referenced by an operand (str, TokenRef or inline)."""
+    """Names of tokens directly referenced by an operand (str, TokenReference or inline)."""
     if isinstance(operand, str):
         return (operand,)
-    if isinstance(operand, TokenRef):
+    if isinstance(operand, TokenReference):
         return (operand.name,)
-    if isinstance(operand, NotDef):
+    if isinstance(operand, NotDefinition):
         return _operand_token_names(operand.operand)
-    # AllDef | AnyDef
+    # AllDefinition | AnyDefinition
     refs: list[str] = []
     for child in operand.operands:
         refs.extend(_operand_token_names(child))
     return tuple(refs)
 
 
-def _def_token_names(token_def: TokenDef) -> tuple[str, ...]:
+def _def_token_names(token_def: TokenDefinition) -> tuple[str, ...]:
     """Names of tokens directly referenced by a def (empty for a leaf)."""
-    if isinstance(token_def, AllDef | AnyDef):
+    if isinstance(token_def, AllDefinition | AnyDefinition):
         refs: list[str] = []
         for child in token_def.operands:
             refs.extend(_operand_token_names(child))
         return tuple(refs)
-    if isinstance(token_def, NotDef):
+    if isinstance(token_def, NotDefinition):
         return _operand_token_names(token_def.operand)
     return ()
 
 
-def _operand_token_refs(operand: Operand) -> tuple[TokenRef, ...]:
+def _operand_token_refs(operand: Operand) -> tuple[TokenReference, ...]:
     """All TokenRefs (with their overrides) reachable from an operand."""
-    if isinstance(operand, TokenRef):
+    if isinstance(operand, TokenReference):
         return (operand,)
-    if isinstance(operand, NotDef):
+    if isinstance(operand, NotDefinition):
         return _operand_token_refs(operand.operand)
-    if isinstance(operand, AllDef | AnyDef):
-        refs: list[TokenRef] = []
+    if isinstance(operand, AllDefinition | AnyDefinition):
+        refs: list[TokenReference] = []
         for child in operand.operands:
             refs.extend(_operand_token_refs(child))
         return tuple(refs)
-    return ()  # str (bare name) -> no TokenRef
+    return ()  # str (bare name) -> no TokenReference
 
 
-def _def_token_refs(token_def: TokenDef) -> tuple[TokenRef, ...]:
+def _definition_token_references(token_def: TokenDefinition) -> tuple[TokenReference, ...]:
     """All TokenRefs of a composite def (empty for a leaf)."""
-    if isinstance(token_def, AllDef | AnyDef):
-        refs: list[TokenRef] = []
+    if isinstance(token_def, AllDefinition | AnyDefinition):
+        refs: list[TokenReference] = []
         for child in token_def.operands:
             refs.extend(_operand_token_refs(child))
         return tuple(refs)
-    if isinstance(token_def, NotDef):
+    if isinstance(token_def, NotDefinition):
         return _operand_token_refs(token_def.operand)
     return ()
 
@@ -354,14 +354,14 @@ def _check_overrides_only_on_coverage(config: MatcherConfig) -> None:
     Checked HERE (not at parsing) so as not to depend on the definition order: a forward
     reference to a coverage token must be accepted.
     """
-    refs: list[TokenRef] = []
+    refs: list[TokenReference] = []
     for token_def in config.tokens.values():
-        refs.extend(_def_token_refs(token_def))
+        refs.extend(_definition_token_references(token_def))
     for rule in config.rules:
         refs.extend(_operand_token_refs(rule.condition))
     for ref in refs:
         if (ref.min_coverage is not None or ref.min_similarity is not None) and not isinstance(
-            config.tokens.get(ref.name), CoverageDef
+            config.tokens.get(ref.name), CoverageDefinition
         ):
             raise MatchingConfigError(
                 f"min_coverage/min_similarity override forbidden on non-coverage token {ref.name!r}"
@@ -444,9 +444,9 @@ def _max_resolution_depth(config: MatcherConfig) -> int:
 
 
 def _check_regexes_compile(config: MatcherConfig) -> None:
-    """Each RegexDef interpolates (known placeholders) and compiles under ``re`` (cf. §8.4)."""
+    """Each RegexDefinition interpolates (known placeholders), compiles under ``re`` (cf. §8.4)."""
     for name, token_def in config.tokens.items():
-        if not isinstance(token_def, RegexDef):
+        if not isinstance(token_def, RegexDefinition):
             continue
         if "segment" in PLACEHOLDER.findall(token_def.pattern):
             raise MatchingConfigError(

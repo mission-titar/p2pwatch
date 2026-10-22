@@ -12,7 +12,7 @@ class CatalogEntrySort(StrEnum):
     NAME = "name"
     SIZE = "size"
     SOURCES = "sources"
-    LAST_SEEN = "last_seen"
+    LATEST_SEEN = "last_seen"
     TIER = "tier"  # the strongest tier of the file's current decisions
 
 

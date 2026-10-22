@@ -28,7 +28,7 @@ def _status(file: FileKey, done: int = 0, waiting: WaitingReason | None = None) 
 def _lifecycle(connection: sqlite3.Connection, file: FileKey) -> tuple[object, ...]:
     return tuple(
         connection.execute(
-            "SELECT bytes_done, last_progress_at, waiting_reason, failure_reason FROM downloads"
+            "SELECT bytes_done, latest_progress_at, waiting_reason, failure_reason FROM downloads"
             " WHERE file_id = ?",
             (file.file_id,),
         ).fetchone()
@@ -156,12 +156,12 @@ def test_get_target_id_is_none_for_unknown_hash(
 
 def _last_seen(connection: sqlite3.Connection, file: FileKey) -> str:
     row = connection.execute(
-        "SELECT last_seen_at FROM downloads WHERE file_id = ?", (file.file_id,)
+        "SELECT latest_seen_at FROM downloads WHERE file_id = ?", (file.file_id,)
     ).fetchone()
     return str(row[0])
 
 
-def test_record_queued_stamps_last_seen_at_with_queued_at(
+def test_record_queued_stamps_latest_seen_at_with_queued_at(
     tracked_download_store: SqliteTrackedDownloadStore, connection: sqlite3.Connection
 ) -> None:
     # A row amuled never picks up must still age out, from its queuing.
@@ -188,33 +188,33 @@ def test_set_seen_ignores_a_hash_it_does_not_know(
     assert tracked_download_store.is_tracked(_A) is False
 
 
-def test_last_seen_at_by_file_reads_when_the_client_last_listed_each_download(
+def test_latest_seen_at_by_file_reads_when_the_client_last_listed_each_download(
     tracked_download_store: SqliteTrackedDownloadStore,
 ) -> None:
     tracked_download_store.record_queued(_A, "062A", 100, _T0)
     tracked_download_store.record_queued(_B, "063A", 200, _T0)
     tracked_download_store.set_state(_B, DownloadState.DOWNLOADING)
     tracked_download_store.set_seen([_status(_B)], _T0 + _DAY)
-    assert tracked_download_store.read_last_seen_at_by_file() == {_A: _T0, _B: _T0 + _DAY}
+    assert tracked_download_store.read_latest_seen_at_by_file() == {_A: _T0, _B: _T0 + _DAY}
 
 
-def test_last_seen_at_by_file_leaves_the_terminal_downloads_out(
+def test_latest_seen_at_by_file_leaves_the_terminal_downloads_out(
     tracked_download_store: SqliteTrackedDownloadStore,
 ) -> None:
     for file in (_A, _B, _C):
         tracked_download_store.record_queued(file, "062A", 100, _T0)
     tracked_download_store.set_completed(_B, _T0)
     tracked_download_store.set_state(_C, DownloadState.FAILED, FailureReason.LOST)
-    assert tracked_download_store.read_last_seen_at_by_file() == {_A: _T0}
+    assert tracked_download_store.read_latest_seen_at_by_file() == {_A: _T0}
 
 
-def test_last_seen_at_by_file_reads_a_row_never_stamped_at_its_queuing(
+def test_latest_seen_at_by_file_reads_a_row_never_stamped_at_its_queuing(
     tracked_download_store: SqliteTrackedDownloadStore, connection: sqlite3.Connection
 ) -> None:
     # Only a row written by hand can hold a NULL: it ages from its queuing, as local 0005 did.
     tracked_download_store.record_queued(_A, "062A", 100, _T0)
-    connection.execute("UPDATE downloads SET last_seen_at = NULL")
-    assert tracked_download_store.read_last_seen_at_by_file() == {_A: _T0}
+    connection.execute("UPDATE downloads SET latest_seen_at = NULL")
+    assert tracked_download_store.read_latest_seen_at_by_file() == {_A: _T0}
 
 
 def test_a_queued_download_starts_at_zero_bytes_with_no_progress(

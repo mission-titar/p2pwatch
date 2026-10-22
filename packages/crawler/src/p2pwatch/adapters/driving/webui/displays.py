@@ -65,7 +65,7 @@ class ClientLineDisplay:
 
 
 @dataclass(frozen=True)
-class TimelineRowDisplay:
+class ObservationDisplay:
     """One observation of a file's timeline, precomputed."""
 
     filename: str
@@ -100,13 +100,13 @@ class TrackedDownloadDisplay:
     state: str
     queued_at: str
     completed_at: str
-    last_progress_at: str
+    latest_progress_at: str
     waiting_reason: str
     failure_reason: str
 
 
 @dataclass(frozen=True)
-class BackoffEntryDisplay:
+class BackoffStateDisplay:
     """One line of /node's backoff section (precomputed for the template)."""
 
     client_name: str
@@ -143,7 +143,7 @@ class DecisionCellDisplay:
 
 
 @dataclass(frozen=True)
-class FileRowDisplay:
+class CatalogEntryDisplay:
     """Row of the paginated file list: all fields precomputed (webui spec W-D8, Task 3/9).
 
     A file usually carries 0, 1, or 2 current decisions (``CatalogEntry.decisions``, already
@@ -170,7 +170,7 @@ class FileRowDisplay:
         DecisionCellDisplay, ...
     ]  # one per current decision, 0..N; () when none
     size_display: str  # human_size(size_bytes)
-    last_seen_display: str  # short_timestamp(last_seen)
+    latest_seen_display: str  # short_timestamp(latest_seen)
     tier_display: str  # shared tier, or "target_id: tier" per decision joined with " · "
 
 
@@ -217,7 +217,7 @@ class SortHeadersDisplay:
     name: SortHeaderDisplay
     size: SortHeaderDisplay
     sources: SortHeaderDisplay
-    last_seen: SortHeaderDisplay
+    latest_seen: SortHeaderDisplay
     tier: SortHeaderDisplay
 
 
@@ -323,7 +323,7 @@ class DbOptionDisplay:
 
 
 @dataclass(frozen=True)
-class SourceHistoryRowDisplay:
+class SharingPeriodDisplay:
     """One line of a file's "Source history" (stage 4 spec, D12), precomputed for the template.
 
     ``name_link`` and ``source_link`` hold 0 or 1 href, empty when the period has no name or no
@@ -353,24 +353,24 @@ class SourceKeyDisplay:
 
 
 @dataclass(frozen=True)
-class SourceListRowDisplay:
-    """One line of ``/sources`` (stage 4 spec, D13), its links as ``SourceHistoryRowDisplay``'s."""
+class SourceDisplay:
+    """One line of ``/sources`` (stage 4 spec, D13), its links as ``SharingPeriodDisplay``'s."""
 
     source_name: str
     name_link: tuple[str, ...]
     short_hash: str
     source_link: tuple[str, ...]
-    last_seen: str
+    latest_seen: str
     files: str
 
 
 @dataclass(frozen=True)
-class SourceFileRowDisplay:
+class FileSharingPeriodDisplay:
     """One period of a source's or a name's page (D13): the file it was read on, then the period."""
 
-    file: str  # the file's best name, its short hash when never seen
+    filename: str  # the file's best name, its short hash when never seen
     file_link: str
-    history: SourceHistoryRowDisplay
+    sharing_period: SharingPeriodDisplay
 
 
 @dataclass(frozen=True)
@@ -395,8 +395,8 @@ class FileHistoryDisplay:
     network: str
     native_id: str
     size_bytes: int
-    timeline: tuple[TimelineRowDisplay, ...]  # one row per observation, oldest first
-    source_history: tuple[SourceHistoryRowDisplay, ...]  # one row per source period, newest first
+    timeline: tuple[ObservationDisplay, ...]  # one row per observation, oldest first
+    source_history: tuple[SharingPeriodDisplay, ...]  # one row per source period, newest first
     decisions: tuple[DecisionDisplay, ...]  # 0..N elements: for template iteration
     ed2k_link: str  # precomputed from the latest observation
     # Explanation fields (None if no explanation available)

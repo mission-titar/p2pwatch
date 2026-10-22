@@ -3,7 +3,7 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from coverage_checks.adapters.driven.coverage_py_reader import CoveragePyReader
+from coverage_checks.adapters.driven.coverage_py_reader import CoveragePyTestCoverageReader
 from coverage_checks.adapters.driven.filesystem_package_tree_reader import (
     FilesystemPackageTreeReader,
 )
@@ -32,7 +32,7 @@ class UnitCoverageComposition(UnitCoverageChecker):
                 package_tree_reader=FilesystemPackageTreeReader(
                     package_directory=self._package_directory
                 ),
-                test_coverage_reader=CoveragePyReader(
+                test_coverage_reader=CoveragePyTestCoverageReader(
                     package_directory=self._package_directory,
                     data_file=self._data_file,
                     report_directory=Path(report_directory),

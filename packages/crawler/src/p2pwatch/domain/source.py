@@ -19,7 +19,7 @@ _NATIVE_IDS = {Network.ED2K: (re.compile("[0-9a-f]{32}"), "32 lowercase hex char
 
 _PORT = re.compile("[1-9][0-9]{0,4}")
 
-SourceMeta = tuple[tuple[str, str | int | bool | tuple[str, ...] | None], ...]
+SourceMetadata = tuple[tuple[str, str | int | bool | tuple[str, ...] | None], ...]
 
 
 @dataclass(frozen=True)
@@ -120,7 +120,7 @@ class SourceReading:
     role: SourceRole | None
     contact_point: str | None
     connectable: bool | None
-    raw_meta: SourceMeta
+    raw_metadata: SourceMetadata
     session_received_bytes: int
 
 

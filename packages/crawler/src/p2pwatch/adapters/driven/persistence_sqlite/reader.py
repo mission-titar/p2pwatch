@@ -17,7 +17,7 @@ The ``MEMORY`` hotfix (461b135) answered a tmpfs ``/tmp`` and ``read_only``, gon
 
 A reader keeps sqlite3's same-thread check: only the thread that opened it may use or close it.
 
-``ReaderProvider`` reuses one connection per thread, warming the SQLite page cache instead of
+``ThreadReadConnections`` reuses one connection per thread, warming the SQLite page cache instead of
 paying a cold open per request.
 """
 
@@ -44,7 +44,7 @@ class ThreadLocalConnection(threading.local):
         self.connection: sqlite3.Connection | None = None
 
 
-class ReaderProvider:
+class ThreadReadConnections:
     """A reused, thread-affine read-only connection source: each calling thread gets its OWN
     connection, opened on first use and reused thereafter (warm page cache)."""
 

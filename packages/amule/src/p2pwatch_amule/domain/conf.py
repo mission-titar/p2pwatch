@@ -4,8 +4,8 @@ import configparser
 import hashlib
 import io
 
-INCOMING_DIR = "/downloads/incoming"
-TEMP_DIR = "/downloads/temp"
+INCOMING_DIRECTORY = "/downloads/incoming"
+TEMP_DIRECTORY = "/downloads/temp"
 # aMule's DEFAULT_TCP_PORT (src/Preferences.cpp), what amuled binds when `Port` is absent.
 DEFAULT_TCP_PORT = 4662
 
@@ -27,7 +27,7 @@ def reconcile_conf(existing_conf: str | None, ec_digest: str) -> str:
     parser = _parser()
     if existing_conf is None:
         # An absent key takes aMule's declared default: only the wrong ones go in (ECPort is fine).
-        parser["eMule"] = {"IncomingDir": INCOMING_DIR, "TempDir": TEMP_DIR}
+        parser["eMule"] = {"IncomingDir": INCOMING_DIRECTORY, "TempDir": TEMP_DIRECTORY}
         parser["ExternalConnect"] = {"AcceptExternalConnections": "1"}
     else:
         parser.read_string(existing_conf)

@@ -50,7 +50,7 @@ _COPY_FILES = (
 
 
 _VARIANT_COLUMNS = (
-    "file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_meta, keyword, node_id,"
+    "file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_metadata, keyword, node_id,"
     " content_hash"
 )
 
@@ -89,7 +89,7 @@ _COPY_SOURCES = (
 )
 
 _SOURCE_VARIANT_COLUMNS = (
-    "file_id, source_id, name, software, role, contact_point, connectable, raw_meta,"
+    "file_id, source_id, name, software, role, contact_point, connectable, raw_metadata,"
     " node_id, content_hash"
 )
 

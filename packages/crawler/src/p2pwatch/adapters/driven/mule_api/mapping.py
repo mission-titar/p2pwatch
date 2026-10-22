@@ -1,7 +1,7 @@
 """Maps the amuleapi payloads onto the ports' DTOs. An unknown key is never an error.
 
 Typed JSON does not preserve the capture-all invariant on its own, so every key of a search
-result no structured field consumes lands in ``raw_meta`` - except ``ecid``, a session-local id
+result no structured field consumes lands in ``raw_metadata`` - except ``ecid``, a session-local id
 we never persist. A source keeps only D7's keys (stage 4 spec).
 """
 
@@ -13,10 +13,10 @@ from typing import Any
 from p2pwatch.domain.download.states import FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.observation import ReportedFile, fold_raw_meta
+from p2pwatch.domain.observation import ReportedFile, fold_raw_metadata
 from p2pwatch.domain.source import (
     SourceKey,
-    SourceMeta,
+    SourceMetadata,
     SourceReading,
     SourceRole,
     is_contact_point,
@@ -74,7 +74,7 @@ _INFORMATIVE_ROLES: tuple[SourceRole | None, ...] = (
     SourceRole.STANDBY,
 )
 
-# Result keys consumed by a structured field, hence EXCLUDED from raw_meta.
+# Result keys consumed by a structured field, hence EXCLUDED from raw_metadata.
 _MAPPED_KEYS = frozenset(
     {"hash", "name", "size_bytes", "sources", "media", "file_type", "alternate_names"}
 )
@@ -182,9 +182,9 @@ def map_source(row: dict[str, Any], detail: dict[str, Any]) -> SourceReading:
         role=_source_role(row.get("download_state")) if asked else SourceRole.STANDBY,
         contact_point=_contact_point(detail),
         connectable=_connectable(detail),
-        raw_meta=(
-            *_source_meta(row, _SOURCE_META_KEYS),
-            *_source_meta(detail, _SOURCE_DETAIL_META_KEYS),
+        raw_metadata=(
+            *_source_metadata(row, _SOURCE_META_KEYS),
+            *_source_metadata(detail, _SOURCE_DETAIL_META_KEYS),
         ),
         session_received_bytes=_int_or_zero(row.get("downloaded_bytes_session")),
     )
@@ -237,13 +237,13 @@ def _connectable(detail: dict[str, Any]) -> bool | None:
     return high_id
 
 
-def _source_meta(fields: dict[str, Any], keys: tuple[str, ...]) -> SourceMeta:
+def _source_metadata(fields: dict[str, Any], keys: tuple[str, ...]) -> SourceMetadata:
     """The ``keys`` the payload carries; an absent one is left out, not read as ``None``."""
     return tuple((key, _meta_value(fields[key])) for key in keys if key in fields)
 
 
 def _meta_value(value: object) -> str | int | bool | tuple[str, ...] | None:
-    """A JSON value in a shape ``SourceMeta`` holds: a list as a tuple of text, anything else
+    """A JSON value in a shape ``SourceMetadata`` holds: a list as a tuple of text, anything else
     unforeseen as its JSON text."""
     if value is None or isinstance(value, str | int | bool):
         return value
@@ -267,7 +267,7 @@ def _map_result(result: object, keyword: str) -> list[ReportedFile]:
     if native_id is None or not isinstance(size_bytes, int) or isinstance(size_bytes, bool):
         return []
     media = _as_dict(result.get("media"))
-    raw_meta = _raw_meta(result, media)
+    raw_metadata = _raw_metadata(result, media)
     codec, file_type = _string(media.get("codec")), _string(result.get("file_type"))
     alternates = result.get("alternate_names")
     entries: list[object] = [result, *(alternates if isinstance(alternates, list) else [])]
@@ -287,13 +287,13 @@ def _map_result(result: object, keyword: str) -> list[ReportedFile]:
                 keyword=keyword,
                 duration_seconds=_optional_int(media.get("duration_seconds")),
                 bitrate_kbps=_optional_int(media.get("bitrate_kilobits_per_second")),
-                raw_meta=fold_raw_meta(raw_meta, codec, file_type, complete),
+                raw_metadata=fold_raw_metadata(raw_metadata, codec, file_type, complete),
             )
         )
     return reported_files
 
 
-def _raw_meta(result: dict[str, Any], media: dict[str, Any]) -> tuple[tuple[str, str], ...]:
+def _raw_metadata(result: dict[str, Any], media: dict[str, Any]) -> tuple[tuple[str, str], ...]:
     """Every unmapped key → ``(key, rendered_value)``, in wire order."""
     collected = [(key, _render(value)) for key, value in result.items() if key not in _MAPPED_KEYS]
     collected += [

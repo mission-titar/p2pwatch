@@ -10,7 +10,7 @@ All SQL lives in module constants, parameterized (no value interpolation).
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
-from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
+from p2pwatch.adapters.driven.persistence_sqlite.reader import ThreadReadConnections
 from p2pwatch.application.ports.driven.node_state_reader import NodeStateReader
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
 from p2pwatch.domain.file_key import FileKey, Network
@@ -31,7 +31,7 @@ SELECT
     state,
     queued_at,
     completed_at,
-    last_progress_at,
+    latest_progress_at,
     waiting_reason,
     failure_reason
 FROM downloads
@@ -65,7 +65,7 @@ def _optional[Reason: StrEnum](reason_type: type[Reason], stored: str | None) ->
 class SqliteNodeStateReader(NodeStateReader):
     """Read-only access to local.db through the calling thread's connection."""
 
-    def __init__(self, reader_provider: ReaderProvider) -> None:
+    def __init__(self, reader_provider: ThreadReadConnections) -> None:
         self._reader_provider = reader_provider
 
     def read_node_state(self) -> NodeState:
@@ -82,7 +82,7 @@ class SqliteNodeStateReader(NodeStateReader):
                 state=DownloadState(row["state"]),
                 queued_at=datetime.fromisoformat(row["queued_at"]),
                 completed_at=_instant(row["completed_at"]),
-                last_progress_at=_instant(row["last_progress_at"]),
+                latest_progress_at=_instant(row["latest_progress_at"]),
                 waiting_reason=_optional(WaitingReason, row["waiting_reason"]),
                 failure_reason=_optional(FailureReason, row["failure_reason"]),
             )

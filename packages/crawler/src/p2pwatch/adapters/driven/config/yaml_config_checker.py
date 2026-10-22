@@ -7,7 +7,7 @@ from p2pwatch.adapters.driven.config.crawler_config import load_config
 from p2pwatch.application.ports.driven.config_checker import ConfigChecker
 
 
-class YamlConfigChecker(ConfigChecker):
+class FilesystemConfigChecker(ConfigChecker):
     """Loads the three files, ``${NAME}`` interpolated from ``env``, and keeps nothing."""
 
     def __init__(self, env: Mapping[str, str]) -> None:

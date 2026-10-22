@@ -16,7 +16,7 @@ class SourceNaming:
 
     source: SourceKey
     source_name: str
-    last_seen_at: datetime
+    latest_seen_at: datetime
     file_count: int
 
 

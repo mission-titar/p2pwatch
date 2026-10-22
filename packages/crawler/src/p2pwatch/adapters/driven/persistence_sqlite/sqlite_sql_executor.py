@@ -5,7 +5,7 @@ it measures time on the ``MonotonicClock`` it is given. It runs an operator-supp
 against a FRESH read-only connection and returns a ``QueryAnswer`` (rows + timing) or a
 ``QueryFailure``.
 
-Why a fresh, dedicated connection per query (not the shared ``ReaderProvider``): the console
+Why a fresh, dedicated connection per query (not the shared ``ThreadReadConnections``): the console
 sets a PER-QUERY progress handler (the monotonic budget's abort) and a runaway query is aborted
 mid-flight; isolating that on its own connection keeps it from disturbing the reused page-serving
 readers. The connection is always closed in a ``finally``.

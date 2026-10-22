@@ -20,11 +20,11 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_wall_clock import FakeWallClock
 
-_REPO_ROOT = Path(__file__).resolve().parents[4]
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 # Matcher: single source of truth = deployment config. Targets: the §7 subset of the golden
 # corpus (matching fixture, distinct from the full prod catalog).
-_MATCHER = _REPO_ROOT / "deploy" / "matcher.yml"
-_FIXTURES = _REPO_ROOT / "packages" / "matching" / "tests" / "fixtures"
+_MATCHER = _REPOSITORY_ROOT / "deploy" / "matcher.yml"
+_FIXTURES = _REPOSITORY_ROOT / "packages" / "matching" / "tests" / "fixtures"
 
 
 @pytest.fixture

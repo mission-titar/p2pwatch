@@ -2,7 +2,7 @@ from p2pwatch.domain.file_key import FileKey
 from tests.fakes.adapters.driven.fake_download_store import FakeTrackedDownloadStore
 
 
-class LaggingDownloadStore(FakeTrackedDownloadStore):
+class FakeLaggingTrackedDownloadStore(FakeTrackedDownloadStore):
     """Untracked whenever asked, as if each row had been queued since by another writer."""
 
     def is_tracked(self, file: FileKey) -> bool:

@@ -17,17 +17,17 @@ _RULE_ID = "stale-vex-entry"
 
 class CheckStaleClaims(StaleClaimsChecker):
     """A claim outlives its subject once the scan stops reporting its advisory: it should be
-    pruned. Names a VEX inside ``repo_root`` relative to it."""
+    pruned. Names a VEX inside ``repository_root`` relative to it."""
 
     def __init__(
         self,
         *,
-        repo_root: PurePath,
+        repository_root: PurePath,
         vulnerability_scanner: VulnerabilityScanner,
         vex_reader: VexReader,
         sarif_writer: SarifWriter,
     ) -> None:
-        self._repo_root = repo_root
+        self._repository_root = repository_root
         self._vulnerability_scanner = vulnerability_scanner
         self._vex_reader = vex_reader
         self._sarif_writer = sarif_writer
@@ -36,7 +36,7 @@ class CheckStaleClaims(StaleClaimsChecker):
         self, sbom_path: PurePath, vex_path: PurePath, sarif_path: PurePath | None
     ) -> StaleClaimsReport:
         advisory_ids = self._vulnerability_scanner.scan_sbom(sbom_path)
-        vex_location = locate_vex(vex_path, self._repo_root)
+        vex_location = locate_vex(vex_path, self._repository_root)
         problems = tuple(
             Violation(advisory_id, "no longer reported by Grype", vex_location)
             for advisory_id in self._vex_reader.read_claims(vex_path)

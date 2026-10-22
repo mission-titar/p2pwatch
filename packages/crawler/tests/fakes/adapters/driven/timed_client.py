@@ -5,7 +5,7 @@ from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.search.answer import SearchAnswer
 
 
-class TimedClient(SearchClient):
+class FakeTimedSearchClient(SearchClient):
     """A search takes its channel's duration in loop time; scripted failures come first."""
 
     def __init__(

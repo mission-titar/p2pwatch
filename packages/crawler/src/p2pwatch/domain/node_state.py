@@ -18,7 +18,7 @@ class TrackedDownload:
     state: DownloadState
     queued_at: datetime
     completed_at: datetime | None
-    last_progress_at: datetime | None  # None until its bytes grow
+    latest_progress_at: datetime | None  # None until its bytes grow
     waiting_reason: WaitingReason | None
     failure_reason: FailureReason | None
 

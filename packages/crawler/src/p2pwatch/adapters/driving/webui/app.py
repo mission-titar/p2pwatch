@@ -28,14 +28,15 @@ from starlette.templating import Jinja2Templates
 from catalog_matching.domain.ed2k_link import build_ed2k_link
 from catalog_matching.domain.models import TargetSegment
 from p2pwatch.adapters.driving.webui.displays import (
-    BackoffEntryDisplay,
+    BackoffStateDisplay,
+    CatalogEntryDisplay,
     ChannelLineDisplay,
     ClientLineDisplay,
     DbOptionDisplay,
     DecisionCellDisplay,
     DecisionDisplay,
     FileHistoryDisplay,
-    FileRowDisplay,
+    FileSharingPeriodDisplay,
     FilesSummaryDisplay,
     FilterBarDisplay,
     HiddenInputDisplay,
@@ -43,19 +44,18 @@ from p2pwatch.adapters.driving.webui.displays import (
     IntervalSelectorDisplay,
     NavItemDisplay,
     NodeStateDisplay,
+    ObservationDisplay,
     PageNavDisplay,
     QueryAnswerDisplay,
     QueryRowDisplay,
     SearchBarDisplay,
+    SharingPeriodDisplay,
     SortHeaderDisplay,
     SortHeadersDisplay,
-    SourceFileRowDisplay,
-    SourceHistoryRowDisplay,
+    SourceDisplay,
     SourceKeyDisplay,
-    SourceListRowDisplay,
     TargetCoverageDisplay,
     TierFacetDisplay,
-    TimelineRowDisplay,
     TokenCoverageDisplay,
     TrackedDownloadDisplay,
 )
@@ -152,7 +152,7 @@ def _resolve_target_display(
     """Per-decision ``(target, title)`` pairs for a catalog entry, in the entry's
     decision order (by target_id). Empty when the file has no current decision. The
     ``catalog → "unidentified"`` mask is applied per decision (``keroro_large`` is the only
-    catalog-tier rule; cf. ``displays.FileRowDisplay``)."""
+    catalog-tier rule; cf. ``displays.CatalogEntryDisplay``)."""
     resolved: list[tuple[str, str]] = []
     for decision in catalog_entry.decisions:
         if decision.tier == "catalog":
@@ -169,11 +169,11 @@ def _resolve_target_display(
     return resolved
 
 
-def _to_display_rows(
+def _catalog_entry_displays(
     catalog_entries: Iterable[CatalogEntry], segment_by_id: Mapping[str, TargetSegment]
-) -> list[FileRowDisplay]:
-    """Convert catalog entries into ``FileRowDisplay`` view-models: one row per file, the file's
-    (usually two) segment decisions surfaced as one ``DecisionCellDisplay`` each in
+) -> list[CatalogEntryDisplay]:
+    """Convert catalog entries into ``CatalogEntryDisplay`` view-models: one row per file, the
+    file's (usually two) segment decisions surfaced as one ``DecisionCellDisplay`` each in
     ``decisions_display`` while ``tier_display`` still aggregates (shared tier, or per-target
     joined with ``" · "``). Shared by ``handle_files`` and ``handle_target``."""
     rows = []
@@ -195,7 +195,7 @@ def _to_display_rows(
             tier_display = "·"
         latest = catalog_entry.latest_observation
         rows.append(
-            FileRowDisplay(
+            CatalogEntryDisplay(
                 file_id=catalog_entry.file.file_id.hex(),
                 short_hash=short_hash(catalog_entry.file.native_id),
                 filename="" if latest is None else latest.reported_file.filename,
@@ -204,7 +204,7 @@ def _to_display_rows(
                 ),
                 decisions_display=decisions_display,
                 size_display=human_size(catalog_entry.size_bytes),
-                last_seen_display=(
+                latest_seen_display=(
                     "" if latest is None else short_timestamp(latest.observed_at.isoformat())
                 ),
                 tier_display=tier_display,
@@ -213,10 +213,10 @@ def _to_display_rows(
     return rows
 
 
-def _timeline_row(observation: FileObservation) -> TimelineRowDisplay:
+def _observation_display(observation: FileObservation) -> ObservationDisplay:
     """An observation as one timeline line, its instant as ``utc_iso`` writes it."""
     reported_file = observation.reported_file
-    return TimelineRowDisplay(
+    return ObservationDisplay(
         filename=reported_file.filename,
         size_bytes=reported_file.size_bytes,
         sources=str(reported_file.source_count),
@@ -237,11 +237,11 @@ def _source_link(source: SourceKey | None) -> tuple[str, ...]:
     return () if source is None else (f"/sources/{source.source_id.hex()}",)
 
 
-def _source_history_row(period: SharingPeriod) -> SourceHistoryRowDisplay:
+def _sharing_period_display(period: SharingPeriod) -> SharingPeriodDisplay:
     """A sharing period as one line; its name links to the name page, its hash to the source
     page."""
     source_name, source = period.source_name, period.source
-    return SourceHistoryRowDisplay(
+    return SharingPeriodDisplay(
         source_name="unknown" if source_name is None else source_name,
         name_link=_name_link(source_name),
         short_hash="unknown" if source is None else short_hash(source.native_id),
@@ -301,37 +301,39 @@ def _interval_selector(
     )
 
 
-def _known_source_row(known_source: KnownSource) -> SourceListRowDisplay:
+def _known_source_display(known_source: KnownSource) -> SourceDisplay:
     """A source as one line of ``/sources``."""
     source_name = known_source.source_name
-    return SourceListRowDisplay(
+    return SourceDisplay(
         source_name="unknown" if source_name is None else source_name,
         name_link=_name_link(source_name),
         short_hash=short_hash(known_source.source.native_id),
         source_link=_source_link(known_source.source),
-        last_seen=utc_timestamp(known_source.last_seen_at),
+        latest_seen=utc_timestamp(known_source.latest_seen_at),
         files=str(known_source.file_count),
     )
 
 
-def _source_naming_row(source_naming: SourceNaming) -> SourceListRowDisplay:
+def _source_naming_display(source_naming: SourceNaming) -> SourceDisplay:
     """A source under one of its names, as one line of a source's or a name's page."""
-    return SourceListRowDisplay(
+    return SourceDisplay(
         source_name=source_naming.source_name,
         name_link=_name_link(source_naming.source_name),
         short_hash=short_hash(source_naming.source.native_id),
         source_link=_source_link(source_naming.source),
-        last_seen=utc_timestamp(source_naming.last_seen_at),
+        latest_seen=utc_timestamp(source_naming.latest_seen_at),
         files=str(source_naming.file_count),
     )
 
 
-def _source_file_row(period: SharingPeriod, best_filename: str | None) -> SourceFileRowDisplay:
+def _file_sharing_period_display(
+    period: SharingPeriod, best_filename: str | None
+) -> FileSharingPeriodDisplay:
     """A period of a source's or a name's page, with the file it was read on."""
-    return SourceFileRowDisplay(
-        file=best_filename or short_hash(period.file.native_id),
+    return FileSharingPeriodDisplay(
+        filename=best_filename or short_hash(period.file.native_id),
         file_link=f"/files/{period.file.file_id.hex()}",
-        history=_source_history_row(period),
+        sharing_period=_sharing_period_display(period),
     )
 
 
@@ -417,7 +419,7 @@ _DEFAULT_DIRECTION_BY_COLUMN: dict[str, str] = {
 _OPPOSITE_BY_DIRECTION: dict[str, str] = {"asc": "desc", "desc": "asc"}
 
 
-_DEFAULT_SORT = CatalogEntrySort.LAST_SEEN
+_DEFAULT_SORT = CatalogEntrySort.LATEST_SEEN
 _DEFAULT_DIRECTION = SortDirection.DESC
 
 
@@ -471,7 +473,7 @@ def _sort_headers(
         name=built["name"],
         size=built["size"],
         sources=built["sources"],
-        last_seen=built["last_seen"],
+        latest_seen=built["last_seen"],
         tier=built["tier"],
     )
 
@@ -608,7 +610,7 @@ def _node_state_display(node_state: NodeState) -> NodeStateDisplay:
                 state=download.state.value,
                 queued_at=download.queued_at.isoformat(timespec="microseconds"),
                 completed_at=_stored_instant(download.completed_at),
-                last_progress_at=_stored_instant(download.last_progress_at),
+                latest_progress_at=_stored_instant(download.latest_progress_at),
                 waiting_reason=_reason_text(download.waiting_reason),
                 failure_reason=_reason_text(download.failure_reason),
             )
@@ -617,10 +619,10 @@ def _node_state_display(node_state: NodeState) -> NodeStateDisplay:
     )
 
 
-def _backoff_entries(node_state: NodeState) -> tuple[BackoffEntryDisplay, ...]:
+def _backoff_state_displays(node_state: NodeState) -> tuple[BackoffStateDisplay, ...]:
     """Each backoff and its planned retry: its start plus its delay."""
     return tuple(
-        BackoffEntryDisplay(
+        BackoffStateDisplay(
             client_name=backoff_key.client_name,
             channel="whole client" if backoff_key.channel is None else backoff_key.channel,
             attempts=backoff_state.attempts,
@@ -689,8 +691,8 @@ def _to_query_answer_display(query_answer: QueryAnswer, row_cap: int) -> QueryAn
 def build_app(
     *,
     target_segments: tuple[TargetSegment, ...],
-    templates_dir: Path,
-    static_dir: Path,
+    templates_directory: Path,
+    static_directory: Path,
     crawl_pauser: CrawlPauser,
     crawl_resumer: CrawlResumer,
     shutdown_requester: ShutdownRequester,
@@ -720,7 +722,7 @@ def build_app(
     # No type checker reads templates: a name missing from the context raises, never prints "".
     templates = Jinja2Templates(
         env=Environment(
-            loader=FileSystemLoader(templates_dir),
+            loader=FileSystemLoader(templates_directory),
             autoescape=select_autoescape(),
             undefined=StrictUndefined,
         ),
@@ -788,7 +790,7 @@ def build_app(
             page=page,
         )
 
-        display_rows = _to_display_rows(file_listing.catalog_entries, _segment_by_id)
+        display_rows = _catalog_entry_displays(file_listing.catalog_entries, _segment_by_id)
         # Active, non-default params (page excluded). Every URL derives from these two ordered
         # dicts, so param order is deterministic. ``filter_params`` is what a re-sort keeps;
         # ``sort_params`` is what a filter/toggle/page keeps.
@@ -865,7 +867,7 @@ def build_app(
             request,
             "sources.html",
             {
-                "rows": tuple(map(_known_source_row, source_listing.known_sources)),
+                "rows": tuple(map(_known_source_display, source_listing.known_sources)),
                 "nav": _page_nav(page, source_listing.has_next_page, "/sources", kept_params),
                 "summary": (
                     f"Sources recorded: {count:,}."
@@ -901,9 +903,9 @@ def build_app(
                 "source": SourceKeyDisplay(
                     str(source_history.source.network), source_history.source.native_id
                 ),
-                "names": tuple(map(_source_naming_row, source_history.source_namings)),
+                "names": tuple(map(_source_naming_display, source_history.source_namings)),
                 "periods": tuple(
-                    _source_file_row(period, best_filename_by_file.get(period.file))
+                    _file_sharing_period_display(period, best_filename_by_file.get(period.file))
                     for period in source_history.sharing_periods
                 ),
                 "nav": _page_nav(page, description.has_next_page, path, _interval_params(request)),
@@ -938,9 +940,9 @@ def build_app(
             "source_name.html",
             {
                 "source_name": source_name_history.source_name,
-                "sources": tuple(map(_source_naming_row, source_name_history.source_namings)),
+                "sources": tuple(map(_source_naming_display, source_name_history.source_namings)),
                 "periods": tuple(
-                    _source_file_row(period, best_filename_by_file.get(period.file))
+                    _file_sharing_period_display(period, best_filename_by_file.get(period.file))
                     for period in source_name_history.sharing_periods
                 ),
                 "nav": _page_nav(
@@ -1014,8 +1016,10 @@ def build_app(
             network=file_history.file.network,
             native_id=file_history.file.native_id,
             size_bytes=file_history.size_bytes,
-            timeline=tuple(_timeline_row(observation) for observation in file_history.observations),
-            source_history=tuple(map(_source_history_row, description.sharing_periods)),
+            timeline=tuple(
+                _observation_display(observation) for observation in file_history.observations
+            ),
+            source_history=tuple(map(_sharing_period_display, description.sharing_periods)),
             decisions=tuple(
                 DecisionDisplay(
                     target_id=dated.decision.target_id,
@@ -1057,7 +1061,7 @@ def build_app(
             page=1,
         )
 
-        display_rows = _to_display_rows(file_listing.catalog_entries, _segment_by_id)
+        display_rows = _catalog_entry_displays(file_listing.catalog_entries, _segment_by_id)
         # No pagination here (target view: we expect few). Empty nav.
         nav = PageNavDisplay(page=1, prev_urls=(), next_urls=())
         # files.html is shared with /files, whose matched/all summary line and filter bar are
@@ -1083,7 +1087,7 @@ def build_app(
             "node.html",
             {
                 "node_state": _node_state_display(node_state),
-                "backoff_entries": _backoff_entries(node_state),
+                "backoff_entries": _backoff_state_displays(node_state),
             },
         )
 
@@ -1204,7 +1208,7 @@ def build_app(
             Route("/console", handle_console),
             Route("/console", handle_console_run, methods=["POST"]),
             Route("/console.csv", handle_console_csv, methods=["POST"]),
-            Mount("/static", StaticFiles(directory=static_dir)),
+            Mount("/static", StaticFiles(directory=static_directory)),
         ],
         middleware=[Middleware(BaseHTTPMiddleware, dispatch=_add_security_headers)],
     )

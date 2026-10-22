@@ -37,9 +37,9 @@ _DL_NAME = "Keroro N°062A Les demoiselles cambrioleuses.avi"
 _NOTIFY_NAME = "Keroro Les demoiselles cambrioleuses.avi"
 
 
-def _reported_file(ed2k_hash: str, filename: str) -> ReportedFile:
+def _reported_file(native_id: str, filename: str) -> ReportedFile:
     return ReportedFile(
-        file=FileKey(Network.ED2K, ed2k_hash),
+        file=FileKey(Network.ED2K, native_id),
         filename=filename,
         size_bytes=234_000_000,
         source_count=3,

@@ -47,9 +47,9 @@ _CAT_NAME = "keroro something.avi"
 _MULTI_NAME = "Keroro 062 teletoon.avi"  # → 062A + 062B download (post-fan-out)
 
 
-def _reported_file(ed2k_hash: str, filename: str) -> ReportedFile:
+def _reported_file(native_id: str, filename: str) -> ReportedFile:
     return ReportedFile(
-        file=FileKey(Network.ED2K, ed2k_hash),
+        file=FileKey(Network.ED2K, native_id),
         filename=filename,
         size_bytes=234_000_000,
         source_count=3,

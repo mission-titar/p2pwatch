@@ -7,7 +7,7 @@ from typing import Any, Self
 from urllib.request import ProxyHandler, build_opener
 
 
-class FakeGitHubServer:
+class FakeGithubServer:
     """GitHub's REST API on a loopback port: set answers by (request path, Accept), 404 otherwise.
 
     Records each request's path and headers."""

@@ -23,7 +23,7 @@ from p2pwatch_amule.adapters.driven.system_monotonic_clock import SystemMonotoni
 from p2pwatch_amule.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from p2pwatch_amule.application.use_cases.boot_container import BootContainer
 from p2pwatch_amule.composition.port_sync_composition import PortSyncComposition
-from p2pwatch_amule.domain.conf import INCOMING_DIR, TEMP_DIR
+from p2pwatch_amule.domain.conf import INCOMING_DIRECTORY, TEMP_DIRECTORY
 
 _HOME_DIRECTORY = Path("/home/amule")
 _CONFIG_DIRECTORY = _HOME_DIRECTORY / ".aMule"
@@ -49,8 +49,8 @@ def build_command_line(
             owned_directories=[
                 _HOME_DIRECTORY,
                 _CONFIG_DIRECTORY,
-                Path(INCOMING_DIR),
-                Path(TEMP_DIR),
+                Path(INCOMING_DIRECTORY),
+                Path(TEMP_DIRECTORY),
             ],
             change_owner=os.chown,
         ),

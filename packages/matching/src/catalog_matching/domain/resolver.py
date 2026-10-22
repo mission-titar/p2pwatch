@@ -18,22 +18,22 @@ from catalog_matching.domain.combinators import (
     NotMatcher,
 )
 from catalog_matching.domain.config import (
-    AllDef,
-    AnyDef,
-    AttrBetweenDef,
-    CoverageDef,
-    KeywordDef,
+    AllDefinition,
+    AnyDefinition,
+    AttributeBetweenDefinition,
+    CoverageDefinition,
+    KeywordDefinition,
     MatcherConfig,
-    NotDef,
+    NotDefinition,
     Operand,
-    RegexDef,
+    RegexDefinition,
     Rule,
-    TokenDef,
-    TokenRef,
+    TokenDefinition,
+    TokenReference,
 )
 from catalog_matching.domain.interpolation import interpolate
 from catalog_matching.domain.matchers import (
-    AttrBetweenMatcher,
+    AttributeBetweenMatcher,
     CoverageMatcher,
     KeywordMatcher,
     RegexMatcher,
@@ -90,7 +90,7 @@ class MatcherResolver:
     ) -> Matcher:
         if isinstance(operand, str):
             return self.resolve_token(operand, target)
-        if isinstance(operand, TokenRef):
+        if isinstance(operand, TokenReference):
             return self.resolve_token(
                 operand.name, target, operand.min_coverage, operand.min_similarity
             )
@@ -98,17 +98,17 @@ class MatcherResolver:
 
     def _build_def(
         self,
-        token_def: TokenDef,
+        token_def: TokenDefinition,
         target: TargetSegment,
         min_coverage_override: float | None,
         min_similarity_override: float | None,
     ) -> Matcher:
         match token_def:
-            case KeywordDef(phrase=phrase):
+            case KeywordDefinition(phrase=phrase):
                 return KeywordMatcher(phrase)
-            case RegexDef(pattern=pattern, flags=flags):
+            case RegexDefinition(pattern=pattern, flags=flags):
                 return RegexMatcher(interpolate(pattern, target), flags=flags)
-            case CoverageDef(
+            case CoverageDefinition(
                 reference=reference, min_coverage=min_coverage, min_similarity=min_similarity
             ):
                 reference_text = target.title if reference == _TITLE_KEYWORD else reference
@@ -123,13 +123,13 @@ class MatcherResolver:
                         else min_similarity_override
                     ),
                 )
-            case AttrBetweenDef(attr=attr, min_bound=min_bound, max_bound=max_bound):
-                return AttrBetweenMatcher(attr, min_bound=min_bound, max_bound=max_bound)
-            case AllDef(operands=operands):
+            case AttributeBetweenDefinition(attr=attr, min_bound=min_bound, max_bound=max_bound):
+                return AttributeBetweenMatcher(attr, min_bound=min_bound, max_bound=max_bound)
+            case AllDefinition(operands=operands):
                 return AllMatcher(tuple(self._build_operand(op, target) for op in operands))
-            case AnyDef(operands=operands):
+            case AnyDefinition(operands=operands):
                 return AnyMatcher(tuple(self._build_operand(op, target) for op in operands))
-            case NotDef(operand=operand):
+            case NotDefinition(operand=operand):
                 return NotMatcher(self._build_operand(operand, target))
             case _:  # pragma: no cover - exhaustive (mypy proves it via assert_never)
                 assert_never(token_def)

@@ -12,14 +12,14 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
-class KeywordDef:
+class KeywordDefinition:
     """``{ keyword: "mission titar" }``: phrase searched as a contiguous subsequence."""
 
     phrase: str
 
 
 @dataclass(frozen=True)
-class RegexDef:
+class RegexDefinition:
     """``{ regex: "...", flags: "i" }``: fragments expanded at parse, interpolated per target."""
 
     pattern: str
@@ -27,7 +27,7 @@ class RegexDef:
 
 
 @dataclass(frozen=True)
-class CoverageDef:
+class CoverageDefinition:
     """``{ coverage: title, min_coverage: 0.6, min_similarity: 0.85 }``: fuzzy word coverage.
 
     ``reference`` is the config keyword (``title`` = the target's title); bound to
@@ -41,7 +41,7 @@ class CoverageDef:
 
 
 @dataclass(frozen=True)
-class AttrBetweenDef:
+class AttributeBetweenDefinition:
     """``{ attr_between: size_mib, min: 30, max: 600 }``: bound on a numeric attribute."""
 
     attr: str
@@ -51,37 +51,37 @@ class AttrBetweenDef:
 
 # --- COMPOSITE defs / conditions (cf. spec §8.3: all/any/not) ---
 # Reused in three contexts: named composite token, rule body, inline condition
-# `{condition}`. Operands mix bare names, TokenRef, and inline conditions.
+# `{condition}`. Operands mix bare names, TokenReference, and inline conditions.
 
-# PEP 695 type alias (`type ...`), lazily evaluated: referencing
-# TokenRef/AllDef/AnyDef/NotDef (defined below and mutually recursive) is therefore
-# valid, and mypy --strict resolves the recursion.
-type Operand = str | TokenRef | AllDef | AnyDef | NotDef
+# PEP 695 type alias (`type ...`), lazily evaluated: referencing TokenReference, AllDefinition,
+# AnyDefinition and NotDefinition (defined below and mutually recursive) is therefore valid,
+# and mypy --strict resolves the recursion.
+type Operand = str | TokenReference | AllDefinition | AnyDefinition | NotDefinition
 
 
 @dataclass(frozen=True)
-class AllDef:
+class AllDefinition:
     """``all: [operand, ...]``: conjunction."""
 
     operands: tuple[Operand, ...]
 
 
 @dataclass(frozen=True)
-class AnyDef:
+class AnyDefinition:
     """``any: [operand, ...]``: disjunction."""
 
     operands: tuple[Operand, ...]
 
 
 @dataclass(frozen=True)
-class NotDef:
+class NotDefinition:
     """``not: operand``: negation of a single operand."""
 
     operand: Operand
 
 
 @dataclass(frozen=True)
-class TokenRef:
+class TokenReference:
     """Operand at point of use ``{ token: name, min_coverage?, min_similarity? }`` (EBNF §8.3).
 
     References a named token; non-null ``min_coverage``/``min_similarity`` override the ones of a
@@ -94,10 +94,18 @@ class TokenRef:
 
 
 # Union of token defs nameable in the `tokens` table.
-TokenDef = KeywordDef | RegexDef | CoverageDef | AttrBetweenDef | AllDef | AnyDef | NotDef
+TokenDefinition = (
+    KeywordDefinition
+    | RegexDefinition
+    | CoverageDefinition
+    | AttributeBetweenDefinition
+    | AllDefinition
+    | AnyDefinition
+    | NotDefinition
+)
 
 # A rule body / inline operand `{condition}` is a composite condition.
-Condition = AllDef | AnyDef | NotDef
+Condition = AllDefinition | AnyDefinition | NotDefinition
 
 # Closed set of tiers (cf. spec §8.3 EBNF: tier).
 TIERS: frozenset[str] = frozenset({"catalog", "notify", "download"})
@@ -129,6 +137,6 @@ class Rule:
 class MatcherConfig:
     """Validated matcher config: named tokens, file-level vetoes (token names), ordered rules."""
 
-    tokens: Mapping[str, TokenDef] = field(default_factory=dict)
+    tokens: Mapping[str, TokenDefinition] = field(default_factory=dict)
     rules: tuple[Rule, ...] = ()
     vetoes: tuple[str, ...] = ()

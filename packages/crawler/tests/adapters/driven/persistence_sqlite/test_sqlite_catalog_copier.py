@@ -26,7 +26,7 @@ from tests.support.adapters.driven.persistence_sqlite.helpers import (
 
 # The current catalog schema version = the last catalog migration's number.
 # open_catalog stamps the output to it; the guard rejects any source that is not at it.
-_CURRENT_SCHEMA_VERSION = 12
+_CURRENT_SCHEMA_VERSION = 13
 _T1 = "2026-06-11T12:00:00.000000+00:00"
 _T2 = "2026-06-11T13:00:00.000000+00:00"
 _COPIER_LOGGER = "p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier"
@@ -40,10 +40,10 @@ def _copy_catalogs(
     )
 
 
-def _file_observation(ed2k_hash: str, *, node_id: str, observed_at: str) -> dict[str, object]:
+def _file_observation(native_id: str, *, node_id: str, observed_at: str) -> dict[str, object]:
     """An observation with no media metadata (its nullable columns left NULL)."""
     return {
-        "ed2k_hash": ed2k_hash,
+        "native_id": native_id,
         "filename": "keroro.avi",
         "source_count": 3,
         "observed_at": observed_at,
@@ -55,11 +55,11 @@ def _full_catalog(letter: str, *, node_id: str) -> dict[str, list[dict[str, obje
     """A consistent catalog: 1 file, 1 row in each of the 2 journals, 1 source point."""
     ed2k = hash_for(letter)
     return {
-        "files": [{"ed2k_hash": ed2k, "size_bytes": 100}],
+        "files": [{"native_id": ed2k, "size_bytes": 100}],
         "observations": [_file_observation(ed2k, node_id=node_id, observed_at=_T1)],
         "match_decisions": [
             {
-                "ed2k_hash": ed2k,
+                "native_id": ed2k,
                 "target_id": "062A",
                 "rule_name": "r",
                 "tier": "download",
@@ -68,7 +68,7 @@ def _full_catalog(letter: str, *, node_id: str) -> dict[str, list[dict[str, obje
             }
         ],
         "source_observations": [
-            {"ed2k_hash": ed2k, "user_hash": ed2k, "node_id": node_id, "observed_at": 10}
+            {"native_id": ed2k, "user_hash": ed2k, "node_id": node_id, "observed_at": 10}
         ],
     }
 
@@ -89,10 +89,10 @@ def _source_points(
 ) -> dict[str, list[dict[str, object]]]:
     """One source on one file, one variant, a point per moment; its counter grows with time."""
     return {
-        "files": [{"ed2k_hash": HASH_A, "size_bytes": 100}],
+        "files": [{"native_id": HASH_A, "size_bytes": 100}],
         "source_observations": [
             {
-                "ed2k_hash": HASH_A,
+                "native_id": HASH_A,
                 "user_hash": user_hash,
                 "node_id": "n1",
                 "observed_at": moment,
@@ -125,9 +125,9 @@ def test_t1_merge_two_distinct_catalogs(tmp_path: Path) -> None:
 
 
 def test_t2_merge_overlapping_identity_files_or_ignore(tmp_path: Path) -> None:
-    # Both sources share the SAME ed2k_hash (content-identity).
-    src_a = make_catalog(tmp_path / "a.db", {"files": [{"ed2k_hash": HASH_A, "size_bytes": 100}]})
-    src_b = make_catalog(tmp_path / "b.db", {"files": [{"ed2k_hash": HASH_A, "size_bytes": 100}]})
+    # Both sources share the SAME native_id (content-identity).
+    src_a = make_catalog(tmp_path / "a.db", {"files": [{"native_id": HASH_A, "size_bytes": 100}]})
+    src_b = make_catalog(tmp_path / "b.db", {"files": [{"native_id": HASH_A, "size_bytes": 100}]})
     out = tmp_path / "out.db"
 
     _copy_catalogs(out, [src_a, src_b])
@@ -156,11 +156,11 @@ def test_t4_journal_dedup_identical_rows_including_nulls(tmp_path: Path) -> None
     obs = _file_observation(HASH_A, node_id="node", observed_at=_T1)
     src_a = make_catalog(
         tmp_path / "a.db",
-        {"files": [{"ed2k_hash": HASH_A, "size_bytes": 100}], "observations": [obs]},
+        {"files": [{"native_id": HASH_A, "size_bytes": 100}], "observations": [obs]},
     )
     src_b = make_catalog(
         tmp_path / "b.db",
-        {"files": [{"ed2k_hash": HASH_A, "size_bytes": 100}], "observations": [obs]},
+        {"files": [{"native_id": HASH_A, "size_bytes": 100}], "observations": [obs]},
     )
     out = tmp_path / "out.db"
 
@@ -177,14 +177,14 @@ def test_t4_journal_distinct_observed_at_keeps_both(tmp_path: Path) -> None:
     src_a = make_catalog(
         tmp_path / "a.db",
         {
-            "files": [{"ed2k_hash": HASH_A, "size_bytes": 100}],
+            "files": [{"native_id": HASH_A, "size_bytes": 100}],
             "observations": [_file_observation(HASH_A, node_id="node", observed_at=_T1)],
         },
     )
     src_b = make_catalog(
         tmp_path / "b.db",
         {
-            "files": [{"ed2k_hash": HASH_A, "size_bytes": 100}],
+            "files": [{"native_id": HASH_A, "size_bytes": 100}],
             "observations": [_file_observation(HASH_A, node_id="node", observed_at=_T2)],
         },
     )
@@ -199,10 +199,10 @@ def test_t4_journal_distinct_observed_at_keeps_both(tmp_path: Path) -> None:
 def _decided(decided_at: str) -> dict[str, list[dict[str, object]]]:
     """A catalog of one file and one decision on it, made at ``decided_at``."""
     return {
-        "files": [{"ed2k_hash": HASH_A, "size_bytes": 100}],
+        "files": [{"native_id": HASH_A, "size_bytes": 100}],
         "match_decisions": [
             {
-                "ed2k_hash": HASH_A,
+                "native_id": HASH_A,
                 "target_id": "062A",
                 "rule_name": "r",
                 "tier": "download",
@@ -240,14 +240,14 @@ def test_t5_variant_ids_are_reassigned(tmp_path: Path) -> None:
     src_a = make_catalog(
         tmp_path / "a.db",
         {
-            "files": [{"ed2k_hash": HASH_A, "size_bytes": 100}],
+            "files": [{"native_id": HASH_A, "size_bytes": 100}],
             "observations": [_file_observation(HASH_A, node_id="node-a", observed_at=_T1)],
         },
     )
     src_b = make_catalog(
         tmp_path / "b.db",
         {
-            "files": [{"ed2k_hash": HASH_B, "size_bytes": 200}],
+            "files": [{"native_id": HASH_B, "size_bytes": 200}],
             "observations": [_file_observation(HASH_B, node_id="node-b", observed_at=_T2)],
         },
     )
@@ -276,8 +276,8 @@ def test_t6_fk_order_inserts_identity_first(tmp_path: Path) -> None:
 
 def test_t14_files_first_sight_wins(tmp_path: Path) -> None:
     # The same file with two sizes: the first source merged keeps its row (§6 rule frozen).
-    src_a = make_catalog(tmp_path / "a.db", {"files": [{"ed2k_hash": HASH_A, "size_bytes": 100}]})
-    src_b = make_catalog(tmp_path / "b.db", {"files": [{"ed2k_hash": HASH_A, "size_bytes": 200}]})
+    src_a = make_catalog(tmp_path / "a.db", {"files": [{"native_id": HASH_A, "size_bytes": 100}]})
+    src_b = make_catalog(tmp_path / "b.db", {"files": [{"native_id": HASH_A, "size_bytes": 200}]})
     out = tmp_path / "out.db"
 
     _copy_catalogs(out, [src_b, src_a])
@@ -286,7 +286,7 @@ def test_t14_files_first_sight_wins(tmp_path: Path) -> None:
 
 
 def test_t15_append_only_triggers_present_on_output(tmp_path: Path) -> None:
-    src = make_catalog(tmp_path / "a.db", {"files": [{"ed2k_hash": HASH_A, "size_bytes": 100}]})
+    src = make_catalog(tmp_path / "a.db", {"files": [{"native_id": HASH_A, "size_bytes": 100}]})
     out = tmp_path / "out.db"
     _copy_catalogs(out, [src])
 

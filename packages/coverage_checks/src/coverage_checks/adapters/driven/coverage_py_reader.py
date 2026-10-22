@@ -23,7 +23,7 @@ class _Analysis:
 _NOTHING_RUN = _Analysis(frozenset(), frozenset(), frozenset(), frozenset())
 
 
-class CoveragePyReader(TestCoverageReader):
+class CoveragePyTestCoverageReader(TestCoverageReader):
     """A coverage.py data file of one context per test, `tests/a/test_b.py::test_c|run` as
     pytest-cov's `--cov-context=test` names them, analysed under the package's `pyproject.toml`."""
 

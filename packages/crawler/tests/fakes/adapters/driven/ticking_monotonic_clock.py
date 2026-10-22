@@ -4,7 +4,7 @@ from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from tests.fakes.adapters.driven.fake_monotonic_clock import FakeMonotonicClock
 
 
-class TickingMonotonicClock(FakeMonotonicClock):
+class FakeTickingMonotonicClock(FakeMonotonicClock):
     """Each ``now()`` a second after the previous one: a query's every check sees time pass."""
 
     def now(self) -> MonotonicInstant:

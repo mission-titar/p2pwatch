@@ -33,7 +33,7 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.fakes.fake_amule_api import PASSWORD, FakeAmuleApi
 from tests.fakes.fake_amule_api_server import FakeAmuleApiServer
-from tests.fakes.notification_sink import NotificationSink
+from tests.fakes.notification_sink import FakeNotificationSink
 from tests.support.catalog_rows import (
     decision_node_ids,
     insert_file,
@@ -316,8 +316,8 @@ async def test_the_download_loop_records_a_tracked_downloads_sources_under_the_n
 async def test_the_nodes_notifications_carry_its_id_in_their_username_and_title(
     tmp_path: Path,
 ) -> None:
-    sink = ThreadingHTTPServer(("127.0.0.1", 0), NotificationSink)
-    NotificationSink.received = []
+    sink = ThreadingHTTPServer(("127.0.0.1", 0), FakeNotificationSink)
+    FakeNotificationSink.received = []
     threading.Thread(target=sink.serve_forever, daemon=True).start()
     notification = {"url": f"json://127.0.0.1:{sink.server_port}/", "audience": "operations"}
     observability = {"log_level": "INFO", "notifications": [notification]}
@@ -337,7 +337,7 @@ async def test_the_nodes_notifications_carry_its_id_in_their_username_and_title(
     sink.shutdown()
     sink.server_close()
 
-    assert ("p2pwatch - wired-node", "[wired-node]") in NotificationSink.received
+    assert ("p2pwatch - wired-node", "[wired-node]") in FakeNotificationSink.received
 
 
 @pytest.mark.asyncio

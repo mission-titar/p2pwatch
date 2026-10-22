@@ -13,7 +13,7 @@ from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 
 from p2pwatch.adapters.driving.webui.uvicorn_server_thread import UvicornServerThread
-from tests.fakes.adapters.driven.thread_recording_context import ThreadRecordingContext
+from tests.fakes.adapters.driven.thread_recording_context import FakeServingResource
 
 _LOGGER = "p2pwatch.adapters.driving.webui.uvicorn_server_thread"
 
@@ -117,7 +117,7 @@ async def test_a_failing_lifespan_degrades_the_webui_without_raising(
 
 @pytest.mark.asyncio
 async def test_the_serving_resources_are_held_by_the_webui_thread_while_it_serves() -> None:
-    resource = ThreadRecordingContext()
+    resource = FakeServingResource()
     server_thread = UvicornServerThread(
         Starlette(), ("127.0.0.1", 0), start_timeout_seconds=5.0, serving_resources=(resource,)
     )
@@ -130,7 +130,7 @@ async def test_the_serving_resources_are_held_by_the_webui_thread_while_it_serve
 
 @pytest.mark.asyncio
 async def test_the_serving_resources_are_left_when_serving_fails() -> None:
-    resource = ThreadRecordingContext()
+    resource = FakeServingResource()
     with socket.socket() as holder:
         holder.bind(("127.0.0.1", 0))
         holder.listen()

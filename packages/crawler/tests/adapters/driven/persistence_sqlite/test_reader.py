@@ -14,8 +14,8 @@ import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.reader import (
-    ReaderProvider,
     ThreadLocalConnection,
+    ThreadReadConnections,
     open_reader,
 )
 from tests.support.catalog_rows import insert_file
@@ -89,7 +89,7 @@ def test_open_reader_refuses_use_from_another_thread(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# ReaderProvider (reused per-thread connection)
+# ThreadReadConnections (reused per-thread connection)
 # ---------------------------------------------------------------------------
 
 
@@ -113,7 +113,7 @@ def test_provider_reuses_the_same_connection_within_one_thread(tmp_path: Path) -
     """Repeated ``connection()`` calls from one thread return the SAME object (warm cache)."""
     path = tmp_path / "catalog.db"
     _seed(path)
-    provider = ReaderProvider(path)
+    provider = ThreadReadConnections(path)
     first = provider.connection()
     try:
         assert provider.connection() is first
@@ -125,7 +125,7 @@ def test_provider_gives_a_distinct_connection_per_thread(tmp_path: Path) -> None
     """Two different threads each get their OWN connection (thread affinity)."""
     path = tmp_path / "catalog.db"
     _seed(path)
-    provider = ReaderProvider(path)
+    provider = ThreadReadConnections(path)
     connections: dict[str, sqlite3.Connection] = {}
 
     def worker(name: str) -> None:
@@ -148,7 +148,7 @@ def test_reused_connection_sees_data_committed_after_first_handout(tmp_path: Pat
     see the current committed snapshot, proving reuse is correct, not a stale snapshot."""
     path = tmp_path / "catalog.db"
     _seed(path)  # one row so far
-    provider = ReaderProvider(path)
+    provider = ThreadReadConnections(path)
     writer = open_catalog(path)
     reader = provider.connection()
     try:
@@ -165,7 +165,7 @@ def test_reused_connection_sees_data_committed_after_first_handout(tmp_path: Pat
 def test_leaving_the_provider_closes_the_calling_threads_connection(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
     _seed(path)
-    with ReaderProvider(path) as provider:
+    with ThreadReadConnections(path) as provider:
         first = provider.connection()
     with pytest.raises(sqlite3.ProgrammingError, match="closed"):
         first.execute("SELECT 1")
@@ -177,6 +177,6 @@ def test_leaving_the_provider_closes_the_calling_threads_connection(tmp_path: Pa
 
 
 def test_leaving_the_provider_unused_opens_nothing(tmp_path: Path) -> None:
-    with ReaderProvider(tmp_path / "never-opened.db"):
+    with ThreadReadConnections(tmp_path / "never-opened.db"):
         pass
     assert not (tmp_path / "never-opened.db").exists()

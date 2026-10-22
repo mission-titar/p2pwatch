@@ -9,9 +9,9 @@ connection ``in_transaction``), ``wrap_sqlite_errors``.
 Methods take a ``FileKey``; rows are keyed by its ``file_id`` (stage 2 spec D19). Each write
 stores the instant the use-case gives it. ``record_queued`` is dedup-safe (PK = ``file_id``,
 ``ON CONFLICT DO NOTHING``); ``set_completed`` stamps ``completed_at``; ``set_seen`` stamps
-``last_seen_at`` and the lifecycle columns (stage 2 spec D12), which ``read_last_seen_at_by_file``
-reads back for the lost-download detection; ``read_tracked_states`` returns the file→state map
-(the loop reconciles the client's list with it).
+``latest_seen_at`` and the lifecycle columns (stage 2 spec D12), which
+``read_latest_seen_at_by_file`` reads back for the lost-download detection;
+``read_tracked_states`` returns the file→state map (the loop reconciles the client's list with it).
 """
 
 import sqlite3
@@ -30,7 +30,7 @@ from p2pwatch.domain.file_key import FileKey, Network
 
 _INSERT_QUEUED = """
 INSERT INTO downloads
-    (file_id, network, native_id, target_id, state, queued_at, size_bytes, last_seen_at,
+    (file_id, network, native_id, target_id, state, queued_at, size_bytes, latest_seen_at,
      bytes_done)
 VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, 0)
 ON CONFLICT (file_id) DO NOTHING
@@ -51,16 +51,17 @@ _QUEUED_TARGET_ID = "SELECT target_id FROM downloads WHERE file_id = ?"
 # Every right-hand side reads the row as it was, so the CASE compares against the old bytes.
 _MARK_SEEN = """
 UPDATE downloads SET
-    last_seen_at = :seen_at,
-    last_progress_at = CASE WHEN :bytes_done > bytes_done THEN :seen_at ELSE last_progress_at END,
+    latest_seen_at = :seen_at,
+    latest_progress_at =
+        CASE WHEN :bytes_done > bytes_done THEN :seen_at ELSE latest_progress_at END,
     bytes_done = :bytes_done,
     waiting_reason = :waiting_reason
 WHERE file_id = :file_id
 """
 
 # The non-terminal states listed here MUST stay synchronized with _TERMINAL_STATES (states.py).
-_LAST_SEEN_AT_BY_FILE = """
-SELECT network, native_id, COALESCE(last_seen_at, queued_at) FROM downloads
+_LATEST_SEEN_AT_BY_FILE = """
+SELECT network, native_id, COALESCE(latest_seen_at, queued_at) FROM downloads
 WHERE state IN ('queued', 'downloading')
 """
 
@@ -136,9 +137,9 @@ class SqliteTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
         return row is not None
 
     def set_seen(self, statuses: Iterable[DownloadStatus], seen_at: datetime) -> None:
-        """Stamps ``last_seen_at`` and the progress of each download the client lists.
+        """Stamps ``latest_seen_at`` and the progress of each download the client lists.
 
-        ``last_progress_at`` moves only when ``bytes_done`` grows. An unknown file updates
+        ``latest_progress_at`` moves only when ``bytes_done`` grows. An unknown file updates
         nothing (a shared file the crawler never queued): no error.
         """
         seen_at_iso = utc_iso(seen_at)
@@ -156,11 +157,11 @@ class SqliteTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
                 ],
             )
 
-    def read_last_seen_at_by_file(self) -> dict[FileKey, datetime]:
-        """Each ``queued`` or ``downloading`` download's ``last_seen_at``: when the client last
+    def read_latest_seen_at_by_file(self) -> dict[FileKey, datetime]:
+        """Each ``queued`` or ``downloading`` download's ``latest_seen_at``: when the client last
         listed it, else when it was queued."""
         with wrap_sqlite_errors():
-            rows = self._connection.execute(_LAST_SEEN_AT_BY_FILE).fetchall()
+            rows = self._connection.execute(_LATEST_SEEN_AT_BY_FILE).fetchall()
         return {FileKey(Network(row[0]), row[1]): datetime.fromisoformat(row[2]) for row in rows}
 
     def read_tracked_states(self) -> dict[FileKey, DownloadState]:

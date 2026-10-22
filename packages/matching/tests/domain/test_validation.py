@@ -3,14 +3,14 @@ import re
 import pytest
 
 from catalog_matching.domain.config import (
-    AllDef,
-    AnyDef,
-    AttrBetweenDef,
-    CoverageDef,
-    KeywordDef,
-    NotDef,
-    RegexDef,
-    TokenRef,
+    AllDefinition,
+    AnyDefinition,
+    AttributeBetweenDefinition,
+    CoverageDefinition,
+    KeywordDefinition,
+    NotDefinition,
+    RegexDefinition,
+    TokenReference,
 )
 from catalog_matching.domain.validation import (
     CycleError,
@@ -36,13 +36,13 @@ def test_parse_leaf_token_defs() -> None:
             "rules": [],
         }
     )
-    assert config.tokens["keroro"] == KeywordDef(phrase="keroro")
-    assert config.tokens["teletoon"] == RegexDef(pattern="t[eé]l[eé]toon", flags="i")
-    assert config.tokens["video"] == RegexDef(pattern="\\.(avi|mkv)$", flags="")
-    assert config.tokens["title_hit"] == CoverageDef(
+    assert config.tokens["keroro"] == KeywordDefinition(phrase="keroro")
+    assert config.tokens["teletoon"] == RegexDefinition(pattern="t[eé]l[eé]toon", flags="i")
+    assert config.tokens["video"] == RegexDefinition(pattern="\\.(avi|mkv)$", flags="")
+    assert config.tokens["title_hit"] == CoverageDefinition(
         reference="title", min_coverage=0.6, min_similarity=0.9
     )
-    assert config.tokens["small"] == AttrBetweenDef(
+    assert config.tokens["small"] == AttributeBetweenDefinition(
         attr="size_mib", min_bound=30.0, max_bound=600.0
     )
 
@@ -58,14 +58,14 @@ def test_parse_composite_token_def() -> None:
             "rules": [],
         }
     )
-    assert config.tokens["kt"] == AnyDef(operands=("keroro", "titar"))
+    assert config.tokens["kt"] == AnyDefinition(operands=("keroro", "titar"))
 
 
 def test_parse_not_token_def() -> None:
     config = parse_matcher_config(
         {"tokens": {"keroro": {"keyword": "keroro"}, "nk": {"not": "keroro"}}, "rules": []}
     )
-    assert config.tokens["nk"] == NotDef(operand="keroro")
+    assert config.tokens["nk"] == NotDefinition(operand="keroro")
 
 
 def test_parse_rule_with_inline_token_ref_and_condition() -> None:
@@ -88,7 +88,9 @@ def test_parse_rule_with_inline_token_ref_and_condition() -> None:
     rule = config.rules[0]
     assert rule.name == "numero_titre"
     assert rule.tier == "notify"
-    assert rule.condition == AllDef(operands=("seg", TokenRef(name="title_hit", min_coverage=0.5)))
+    assert rule.condition == AllDefinition(
+        operands=("seg", TokenReference(name="title_hit", min_coverage=0.5))
+    )
 
 
 def test_parse_rule_with_nested_inline_condition() -> None:
@@ -105,7 +107,9 @@ def test_parse_rule_with_nested_inline_condition() -> None:
             ],
         }
     )
-    assert config.rules[0].condition == NotDef(operand=AnyDef(operands=("keroro", "titar")))
+    assert config.rules[0].condition == NotDefinition(
+        operand=AnyDefinition(operands=("keroro", "titar"))
+    )
 
 
 def test_unknown_tier_raises_and_names_it() -> None:
@@ -251,7 +255,7 @@ def test_coverage_fuzz_out_of_unit_range_is_rejected() -> None:
 
 
 def test_coverage_override_min_out_of_unit_range_is_rejected() -> None:
-    # Same bound for a min_coverage/min_similarity override on a TokenRef (coverage).
+    # Same bound for a min_coverage/min_similarity override on a TokenReference (coverage).
     with pytest.raises(MatchingConfigError, match=r"\[0, 1\]"):
         parse_matcher_config(
             {
@@ -588,7 +592,7 @@ def test_rules_non_list_raises() -> None:
 
 
 def test_token_ref_with_coverage_token_no_override_ok() -> None:
-    """TokenRef on a coverage without an override: valid, no error."""
+    """TokenReference on a coverage without an override: valid, no error."""
     config = parse_matcher_config(
         {
             "tokens": {"title_hit": {"coverage": "title", "min_coverage": 0.6}},
@@ -769,14 +773,16 @@ def test_fragment_is_expanded_into_regex_tokens_at_parse_time() -> None:
             "tokens": {"explicit": {"regex": "{marker}\\d|\\b{marker}x{2,3}"}},
         }
     )
-    assert config.tokens["explicit"] == RegexDef(pattern="(?:n°|#)\\s*\\d|\\b(?:n°|#)\\s*x{2,3}")
+    assert config.tokens["explicit"] == RegexDefinition(
+        pattern="(?:n°|#)\\s*\\d|\\b(?:n°|#)\\s*x{2,3}"
+    )
 
 
 def test_fragment_keeps_its_target_placeholders_for_per_target_interpolation() -> None:
     config = parse_matcher_config(
         {"fragments": {"own": "0*{absolute_number}"}, "tokens": {"id": {"regex": "n°{own}"}}}
     )
-    assert config.tokens["id"] == RegexDef(pattern="n°0*{absolute_number}")
+    assert config.tokens["id"] == RegexDefinition(pattern="n°0*{absolute_number}")
 
 
 @pytest.mark.parametrize(

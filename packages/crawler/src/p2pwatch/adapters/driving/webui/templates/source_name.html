@@ -25,7 +25,7 @@
       {% for row in sources %}
       <tr>
         <td>{% for href in row.source_link %}<a href="{{ href }}">{{ row.short_hash }}</a>{% endfor %}</td>
-        <td>{{ row.last_seen }}</td>
+        <td>{{ row.latest_seen }}</td>
         <td>{{ row.files }}</td>
       </tr>
       {% else %}
@@ -65,15 +65,15 @@
     <tbody>
       {% for row in periods %}
       <tr>
-        <td><a href="{{ row.file_link }}">{{ row.file }}</a></td>
-        <td>{{ row.history.role }}</td>
-        <td>{{ row.history.contact_point }}</td>
-        <td>{{ row.history.connectable }}</td>
-        <td>{{ row.history.first_seen }}</td>
-        <td>{{ row.history.last_seen }}</td>
-        <td>{{ row.history.received }}</td>
-        <td>{{ row.history.rate }}</td>
-        <td>{{ row.history.node }}</td>
+        <td><a href="{{ row.file_link }}">{{ row.filename }}</a></td>
+        <td>{{ row.sharing_period.role }}</td>
+        <td>{{ row.sharing_period.contact_point }}</td>
+        <td>{{ row.sharing_period.connectable }}</td>
+        <td>{{ row.sharing_period.first_seen }}</td>
+        <td>{{ row.sharing_period.last_seen }}</td>
+        <td>{{ row.sharing_period.received }}</td>
+        <td>{{ row.sharing_period.rate }}</td>
+        <td>{{ row.sharing_period.node }}</td>
       </tr>
       {% else %}
       <tr><td colspan="9">No period in this interval.</td></tr>

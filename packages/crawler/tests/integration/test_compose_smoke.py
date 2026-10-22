@@ -22,9 +22,9 @@ the run can be pointed at another engine.
 
 Mechanics established EMPIRICALLY (compose v5, Docker 29):
   * The compose file's relative paths are resolved against the project-directory. We PIN it
-    explicitly to `_REPO_ROOT` via `--project-directory` (cf. `_run`): `./tests/smoke/...` and
+    explicitly to `_REPOSITORY_ROOT` via `--project-directory` (cf. `_run`): `./tests/smoke/...` and
     `context: .` resolve deterministically, without depending on the default (cwd vs the `-f`
-    file's directory). The `subprocess.run` calls also run `cwd=_REPO_ROOT`.
+    file's directory). The `subprocess.run` calls also run `cwd=_REPOSITORY_ROOT`.
   * State lives in BIND MOUNTS under `SMOKE_STATE`, like the real stacks: named volumes are
     gone. The test creates the three subdirectories as the invoking user and passes its own
     uid/gid as PUID/PGID, so the smoke exercises the real ownership path: the aMule container's
@@ -52,8 +52,8 @@ import pytest
 
 pytestmark = pytest.mark.compose_integration
 
-_REPO_ROOT = Path(__file__).resolve().parents[4]
-_SMOKE = _REPO_ROOT / "tests/smoke/compose.yaml"
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+_SMOKE = _REPOSITORY_ROOT / "tests/smoke/compose.yaml"
 
 _CORE = "p2pwatch"
 _AMULE = "ed2k"
@@ -64,7 +64,7 @@ _IMAGE_TAG = os.environ.get("IMAGE_TAG")
 _USES_PREBUILT = _IMAGE_TAG is not None
 _BUILD_FLAGS: tuple[str, ...] = () if _USES_PREBUILT else ("--build",)
 
-_DEPLOY = _REPO_ROOT / "deploy"
+_DEPLOY = _REPOSITORY_ROOT / "deploy"
 # The include line an operator edits to switch variant.
 _DIRECT_INCLUDE = "ed2k/direct.compose.yml"
 _VARIANTS = ("direct", "vpn")
@@ -140,13 +140,13 @@ def _run(
         "-p",
         _PROJECT,
         "--project-directory",
-        str(_REPO_ROOT),
+        str(_REPOSITORY_ROOT),
         *file_flags,
         *args,
     ]
     return subprocess.run(
         command,
-        cwd=_REPO_ROOT,
+        cwd=_REPOSITORY_ROOT,
         env=_docker_env(
             caller_env, _SMOKE_ENV, {"IMAGE_TAG": _IMAGE_TAG} if _IMAGE_TAG is not None else {}
         ),
@@ -545,7 +545,7 @@ file = FileKey(Network.ED2K, sys.argv[1])
 connection = sqlite3.connect("/data/local.db", timeout=30)
 connection.execute(
     "INSERT INTO downloads"
-    " (file_id, network, native_id, target_id, state, queued_at, size_bytes, last_seen_at)"
+    " (file_id, network, native_id, target_id, state, queued_at, size_bytes, latest_seen_at)"
     " VALUES (?, ?, ?, {_SEEDED_TARGET!r}, 'downloading', ?, {_SEEDED_SIZE}, ?)",
     (file.file_id, file.network, file.native_id, now, now),
 )
@@ -647,13 +647,13 @@ def test_a_file_amuled_shares_is_recorded_completed(project_files: tuple[Path, .
         timeout=60,
     )
     assert restart.returncode == 0, f"{restart.stdout}{restart.stderr}"
-    ed2k_hash = _wait_new_shared_hash(before, project_files)
+    native_id = _wait_new_shared_hash(before, project_files)
 
     # The file is shared and was never in the download queue: the completion signal is complete.
-    _exec_python(_SEED_ROW, ed2k_hash, files=project_files)
+    _exec_python(_SEED_ROW, native_id, files=project_files)
     _wait_for(
-        f"download {ed2k_hash}",
-        lambda: _exec(_CORE, "python", "-c", _READ_ROW, ed2k_hash, files=project_files),
+        f"download {native_id}",
+        lambda: _exec(_CORE, "python", "-c", _READ_ROW, native_id, files=project_files),
         "completed True",
         project_files,
     )

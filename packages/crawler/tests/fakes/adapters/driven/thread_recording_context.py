@@ -2,7 +2,7 @@ import threading
 from contextlib import AbstractContextManager
 
 
-class ThreadRecordingContext(AbstractContextManager[None]):
+class FakeServingResource(AbstractContextManager[None]):
     """Records the thread that enters it and the one that leaves it."""
 
     def __init__(self) -> None:

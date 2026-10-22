@@ -36,7 +36,7 @@
           <p>Number of peers seen sharing this file on the eMule network (from the latest observation).</p>
         </div>
       </th>
-      <th>{% for h in sort_headers %}<a href="{{ h.last_seen.url }}" data-sort="{{ h.last_seen.indicator }}">Last seen</a>{% else %}Last seen{% endfor %}</th>
+      <th>{% for h in sort_headers %}<a href="{{ h.latest_seen.url }}" data-sort="{{ h.latest_seen.indicator }}">Last seen</a>{% else %}Last seen{% endfor %}</th>
       <th class="th-tip-host">Target
         <button type="button" class="th-help" aria-label="What Target means" aria-describedby="tip-target">?</button>
         <div id="tip-target" role="tooltip" class="th-tip">
@@ -67,7 +67,7 @@
       <td><span class="cell-name" title="{{ row.filename }}">{{ row.filename }}</span></td>
       <td>{{ row.size_display }}</td>
       <td>{{ row.sources_display }}</td>
-      <td>{{ row.last_seen_display }}</td>
+      <td>{{ row.latest_seen_display }}</td>
       <td>{% for d in row.decisions_display %}<div class="cell-line">{{ d.target }}</div>{% else %}·{% endfor %}</td>
       <td>{% for d in row.decisions_display %}<div class="cell-line cell-title" title="{{ d.title }}">{{ d.title }}</div>{% else %}·{% endfor %}</td>
       <td>{{ row.tier_display }}</td>

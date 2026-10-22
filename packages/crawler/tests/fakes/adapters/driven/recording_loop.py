@@ -1,7 +1,7 @@
 from collections.abc import Callable
 
 
-class RecordingLoop:
+class FakeRecordingEventLoop:
     """Fake loop that RECORDS scheduled callbacks WITHOUT running them (deferral proof)."""
 
     def __init__(self) -> None:

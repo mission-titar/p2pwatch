@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from contextlib import closing
 from pathlib import Path
 
-from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
+from p2pwatch.adapters.driven.persistence_sqlite.reader import ThreadReadConnections
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_coverage_reader import SqliteCoverageReader
 from tests.support.catalog_rows import insert_decision, insert_file
 from tests.support.catalog_seeds import seed, seed_retracted, seed_whole_episode
@@ -16,7 +16,7 @@ from tests.support.catalog_seeds import seed, seed_retracted, seed_whole_episode
 
 
 def _read_target_coverage(catalog_db: Path) -> Mapping[str, tuple[str, ...]]:
-    with ReaderProvider(catalog_db) as reader_provider:
+    with ThreadReadConnections(catalog_db) as reader_provider:
         return SqliteCoverageReader(reader_provider).read_target_coverage()
 
 

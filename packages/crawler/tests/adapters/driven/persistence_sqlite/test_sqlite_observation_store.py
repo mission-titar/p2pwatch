@@ -14,7 +14,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
 )
 from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash, iso_to_micros
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.observation import FileObservation, ReportedFile, fold_raw_meta
+from p2pwatch.domain.observation import FileObservation, ReportedFile, fold_raw_metadata
 from tests.support.catalog_rows import count_observations, insert_file
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
@@ -32,7 +32,7 @@ def _reported_file(
     duration_seconds: int | None = None,
     bitrate_kbps: int | None = None,
 ) -> ReportedFile:
-    # raw_meta with a DUPLICATE, wire order, non-ASCII and the fold's native types.
+    # raw_metadata with a DUPLICATE, wire order, non-ASCII and the fold's native types.
     return ReportedFile(
         file=_KEY,
         filename=filename,
@@ -41,7 +41,7 @@ def _reported_file(
         keyword="keroro",
         duration_seconds=duration_seconds,
         bitrate_kbps=bitrate_kbps,
-        raw_meta=fold_raw_meta(
+        raw_metadata=fold_raw_metadata(
             (("0x0308", "0"), ("0x0308", "0"), ("0x0999", "mystère")), None, None, 2
         ),
     )
@@ -77,7 +77,7 @@ def test_record_observation_round_trip(
         _NODE,
     )
     row = connection.execute(
-        "SELECT file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_meta,"
+        "SELECT file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_metadata,"
         " keyword, node_id, content_hash FROM observation_variants"
     ).fetchone()
     assert row == (*variant, content_hash(*variant))
@@ -85,11 +85,11 @@ def test_record_observation_round_trip(
     assert observation.fetchall() == [(iso_to_micros(_T0_ISO), 5)]
 
 
-def test_raw_meta_preserves_order_duplicates_and_non_ascii(
+def test_raw_metadata_preserves_order_duplicates_and_non_ascii(
     observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
     observation_store.record_observation(FileObservation(_reported_file(), _T0), _NODE)
-    stored = connection.execute("SELECT raw_meta FROM observation_variants").fetchone()[0]
+    stored = connection.execute("SELECT raw_metadata FROM observation_variants").fetchone()[0]
     assert "mystère" in stored  # ensure_ascii=False: the accent is stored AS IS
     assert json.loads(stored)[:3] == [["0x0308", "0"], ["0x0308", "0"], ["0x0999", "mystère"]]
 

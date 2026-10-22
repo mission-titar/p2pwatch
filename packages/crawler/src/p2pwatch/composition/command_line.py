@@ -4,7 +4,7 @@ import logging
 from collections.abc import Mapping
 from pathlib import Path
 
-from p2pwatch.adapters.driven.config.yaml_config_checker import YamlConfigChecker
+from p2pwatch.adapters.driven.config.yaml_config_checker import FilesystemConfigChecker
 from p2pwatch.adapters.driven.filesystem_catalog_finder import FilesystemCatalogFinder
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier import SqliteCatalogCopier
 from p2pwatch.adapters.driven.stdlib_logger import StdlibLogger
@@ -32,7 +32,7 @@ def build_command_line(
             env=env,
             root_logger=root_logger,
         ),
-        config_validator=ValidateConfig(YamlConfigChecker(env)),
+        config_validator=ValidateConfig(FilesystemConfigChecker(env)),
         catalog_merger=MergeCatalogs(
             FilesystemCatalogFinder(),
             SqliteCatalogCopier(),

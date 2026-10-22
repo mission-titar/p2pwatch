@@ -4,7 +4,7 @@ from typing import Any
 import pytest
 import yaml
 
-from catalog_matching.domain.config import RegexDef
+from catalog_matching.domain.config import RegexDefinition
 from catalog_matching.domain.engine import MatchingEngine
 from catalog_matching.domain.matchers import RegexMatcher
 from catalog_matching.domain.models import FileCandidate
@@ -93,7 +93,7 @@ def test_corpus_has_a_multi_decision_fan_out_case() -> None:
 def _is_archive_matcher() -> RegexMatcher:
     config = parse_matcher_config(yaml.safe_load(_MATCHER.read_text(encoding="utf-8")))
     token = config.tokens["is_archive"]
-    assert isinstance(token, RegexDef)  # the shipped is_archive is a plain regex token
+    assert isinstance(token, RegexDefinition)  # the shipped is_archive is a plain regex token
     return RegexMatcher(token.pattern, token.flags)
 
 
@@ -110,7 +110,7 @@ def test_is_archive_rejects_comic_book_formats(filename: str) -> None:
 
 
 # --- single-catalog-rule invariant (cross-package: relied on by p2pwatch's webui) -------
-# p2pwatch.adapters.driving.webui.displays.FileRowDisplay documents that ANY decision with
+# p2pwatch.adapters.driving.webui.displays.CatalogEntryDisplay documents that ANY decision with
 # tier=="catalog" is displayed as "unidentified" (DecisionCellDisplay.target) / "·"
 # (DecisionCellDisplay.title),
 # and it relies on the prod policy having exactly ONE catalog-tier rule, the target-agnostic
@@ -142,7 +142,7 @@ def test_prod_policy_has_exactly_one_catalog_tier_rule_named_keroro_large() -> N
 def _episode_number_matcher() -> RegexMatcher:
     config = parse_matcher_config(yaml.safe_load(_MATCHER.read_text(encoding="utf-8")))
     token = config.tokens["episode_number"]
-    assert isinstance(token, RegexDef)
+    assert isinstance(token, RegexDefinition)
     return RegexMatcher(token.pattern, token.flags)
 
 
@@ -172,7 +172,7 @@ def test_episode_number_ignores_non_episode_numbers(filename: str) -> None:
 def _shipped_token(name: str) -> RegexMatcher:
     config = parse_matcher_config(yaml.safe_load(_MATCHER.read_text(encoding="utf-8")))
     token = config.tokens[name]
-    assert isinstance(token, RegexDef)
+    assert isinstance(token, RegexDefinition)
     return RegexMatcher(token.pattern, token.flags)
 
 
