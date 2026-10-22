@@ -5,13 +5,14 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .coverage
+.coverage.*
 coverage.xml
 htmlcov/
 dist/
 *.db
 *.db-wal
 *.db-shm
-# Secrets de déploiement (EC password, clé VPN) — JAMAIS versionnés.
+# Secrets de déploiement (EC password, clé VPN) : JAMAIS versionnés.
 # Seul deploy/.env.example est versionné ; deploy/.env (et tout .env) est ignoré.
 .env
 deploy/data/*
