@@ -8,8 +8,8 @@ released since; a release still waits for the backlog's "A copy before a migrati
 After it, on 2026-10-21 and 2026-10-22, the lead ran an audit of the inconsistencies left: four Opus agents (the
 crawler hexagon's architecture, naming across the eight packages, the five other hexagons, the guidance and docs
 against the tree) and one Sonnet agent (the hexagonal literature), then a Discuss with the operator that arbitrated
-every finding. The ledger, one row per finding with its decision and exit, is `.reviews/post-hexagonal-audit.md`
-(gitignored, on the operator's machine only): 0 rows left open.
+every finding. The ledger, one row per finding with its decision and exit, is
+`agents/reference/2026-10-22-post-hexagonal-audit.md`: 0 rows left open.
 
 This tier Direct lot (branch `docs/docs-follow-the-tree`, one pull request) fixes the ledger's D rows: the docs and
 guidance that no longer said what the tree does. Everything else the ledger decided is code, for the lots below.
