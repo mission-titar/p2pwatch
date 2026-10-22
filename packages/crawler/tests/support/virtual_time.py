@@ -4,11 +4,9 @@ instead of sleeping, so concurrent tasks share one simulated time."""
 import asyncio
 import selectors
 from collections.abc import Coroutine
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
-from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
-from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 
 # The instants the loop's time zero reads on each clock.
@@ -37,23 +35,6 @@ class _VirtualLoop(asyncio.SelectorEventLoop):
 
     def time(self) -> float:
         return self._virtual.time
-
-
-class LoopWallClock(WallClock):
-    """The running loop's time as the ``WallClock`` port."""
-
-    def now(self) -> datetime:
-        return EPOCH + timedelta(seconds=asyncio.get_running_loop().time())
-
-
-class LoopMonotonicClock(MonotonicClock):
-    """The running loop's time as the ``MonotonicClock`` port."""
-
-    def now(self) -> MonotonicInstant:
-        return MONOTONIC_EPOCH + timedelta(seconds=asyncio.get_running_loop().time())
-
-    async def sleep(self, duration: timedelta) -> None:
-        await asyncio.sleep(duration.total_seconds())
 
 
 def run_virtual[T](main: Coroutine[Any, Any, T]) -> T:

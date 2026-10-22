@@ -32,11 +32,13 @@ from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerato
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_search_client import make_unreachable
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
+from tests.fakes.adapters.driven.loop_monotonic_clock import LoopMonotonicClock
+from tests.fakes.adapters.driven.loop_wall_clock import LoopWallClock
 from tests.fakes.adapters.driven.never_suspends import NeverSuspends
 from tests.fakes.adapters.driven.saves_recorded import SavesRecorded
 from tests.fakes.adapters.driven.timed_client import TimedClient
 from tests.support.catalog_rows import observation_node_ids
-from tests.support.virtual_time import EPOCH, LoopMonotonicClock, LoopWallClock, run_virtual
+from tests.support.virtual_time import EPOCH, run_virtual
 
 _NODE = "n1"
 _HOUR = 3600.0

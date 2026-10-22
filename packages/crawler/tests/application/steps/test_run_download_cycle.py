@@ -2,7 +2,6 @@ import sqlite3
 from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Literal
 
 import pytest
 
@@ -10,7 +9,6 @@ from catalog_matching.domain.models import TargetSegment
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
 from p2pwatch.adapters.driven.persistence_sqlite.download_repository import SqliteDownloadRepository
 from p2pwatch.adapters.driven.persistence_sqlite.source_repository import SqliteSourceRepository
-from p2pwatch.application.ports.driven.free_space_meter import FreeSpaceMeter
 from p2pwatch.application.steps.run_download_cycle import DownloadDeps, run_download_cycle
 from p2pwatch.domain.client_errors import ClientUnreachableError, DownloadRejectedError
 from p2pwatch.domain.download.candidate import DownloadCandidate
@@ -28,7 +26,6 @@ from p2pwatch.domain.observability.events import (
     TargetTitle,
 )
 from p2pwatch.domain.observation import FileObservation, ReportedFile
-from p2pwatch.domain.repository_errors import RepositoryError
 from p2pwatch.domain.source import (
     EarlierPoints,
     RecordedReading,
@@ -36,6 +33,7 @@ from p2pwatch.domain.source import (
     SourceReading,
     SourceRole,
 )
+from tests.fakes.adapters.driven.broken_disk import BrokenDisk
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_download_store import FakeDownloadStore
@@ -829,17 +827,8 @@ async def test_monitor_unreachable_aborts_subsequent_steps() -> None:
 async def test_monitor_repo_failure_is_isolated_and_does_not_starve_candidates() -> None:
     # _reconcile_states raises RepositoryError (set_state fails during reconciliation) → step 1 is
     # ISOLATED (log + continue), it does NOT starve step 3: _B is enqueued anyway.
-    class _MonitorFailStore(FakeDownloadStore):
-        def set_state(
-            self,
-            file: FileKey,
-            state: Literal[DownloadState.DOWNLOADING, DownloadState.FAILED],
-            failure_reason: FailureReason | None = None,
-        ) -> None:
-            raise RepositoryError("set_state monitor failed")
-
     client = FakeDownloadClient(listed=[(_status(_A, done=10, total=10),)])
-    downloads = _MonitorFailStore()
+    downloads = FakeDownloadStore(fail_set_state_for={_A})
     downloads.states[_A] = DownloadState.QUEUED  # reconciled → set_state(DOWNLOADING) will raise
     decision_reader = FakeDecisionReader(candidates=(_candidate(_B, "062A"),))
     observation_reader = FakeObservationReader(observations={_B: _observation(_B, "b.avi", 100)})
@@ -859,21 +848,10 @@ async def test_monitor_repo_failure_is_isolated_and_does_not_starve_candidates()
 async def test_start_repo_failure_is_tolerated_and_does_not_raise() -> None:
     # _start_unlisted raises RepositoryError (set_state fails while marking a rejected start) →
     # tolerated (log), run_download_cycle does not raise. Contract "never raises".
-    class _AddLinkSetStateFailStore(FakeDownloadStore):
-        def set_state(
-            self,
-            file: FileKey,
-            state: Literal[DownloadState.DOWNLOADING, DownloadState.FAILED],
-            failure_reason: FailureReason | None = None,
-        ) -> None:
-            if state is DownloadState.FAILED:
-                raise RepositoryError("set_state(FAILED) failed")
-            super().set_state(file, state, failure_reason)
-
     # start rejected → _start_unlisted tries set_state(FAILED), which raises
     # RepositoryError.
     client = FakeDownloadClient(start_failures=[DownloadRejectedError("rejected")])
-    downloads = _AddLinkSetStateFailStore()
+    downloads = FakeDownloadStore(fail_set_state_for={_A})
     decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
     observation_reader = FakeObservationReader(observations={_A: _observation(_A, "x", 1)})
     deps = _deps(
@@ -919,11 +897,7 @@ async def test_shared_file_for_untracked_hash_is_ignored() -> None:
 async def test_already_completed_shared_hash_is_not_recompleted() -> None:
     # A completed file stays in amuled's shared list forever. Without the terminal skip, every
     # cycle would re-stamp it and re-fire the community notification.
-    class _NoRecordCompletedStore(FakeDownloadStore):
-        def record_completed(self, file: FileKey, completed_at: datetime) -> None:
-            raise AssertionError("must not re-stamp an already completed download")
-
-    downloads = _NoRecordCompletedStore()
+    downloads = FakeDownloadStore()
     downloads.states[_A] = DownloadState.COMPLETED
     event_emitter = FakeEventEmitter()
     client = FakeDownloadClient(listed=[(_status(_A, completed=True),)])
@@ -933,6 +907,7 @@ async def test_already_completed_shared_hash_is_not_recompleted() -> None:
         event_emitter=event_emitter,
     )
     await run_download_cycle(deps, _NODE)
+    assert downloads.completed_at == {}
     assert not any(isinstance(e, DownloadCompleted) for e in event_emitter.events)
 
 
@@ -1083,10 +1058,6 @@ async def test_presence_repo_failure_is_absorbed_and_candidates_still_run() -> N
 async def test_an_unmeasurable_output_directory_admits_nothing_and_does_not_raise() -> None:
     # A missing output mount must not take the crawler down: it also catalogues, which is the
     # primary mission. Refusing every candidate is the conservative degradation.
-    class _BrokenDisk(FreeSpaceMeter):
-        def free_bytes(self) -> int:
-            raise FileNotFoundError("/data/downloads")
-
     client = FakeDownloadClient()
     downloads = FakeDownloadStore()
     decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
@@ -1099,7 +1070,7 @@ async def test_an_unmeasurable_output_directory_admits_nothing_and_does_not_rais
         observation_reader=observation_reader,
         event_emitter=event_emitter,
     )
-    deps.free_space_meter = _BrokenDisk()
+    deps.free_space_meter = BrokenDisk()
     await run_download_cycle(deps, _NODE)
     assert client.started == []
     assert _A not in downloads.states

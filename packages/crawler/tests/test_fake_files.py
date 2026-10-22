@@ -58,35 +58,47 @@ def _is_port(definition: _ClassDefinition) -> bool:
     return file.is_relative_to(_package_dir(file) / "src") and _source_ring(file) == _PORTS_RING
 
 
-def _first_party_bases(definition: _ClassDefinition) -> list[_ClassDefinition]:
-    module = _parsed(definition.file)
+def _class_def(definition: _ClassDefinition) -> ast.ClassDef:
+    return next(
+        node
+        for node in ast.walk(_parsed(definition.file))
+        if isinstance(node, ast.ClassDef) and node.name == definition.name
+    )
+
+
+def _first_party_bases(file: Path, class_def: ast.ClassDef) -> list[_ClassDefinition]:
+    module = _parsed(file)
     imported_by_name = {
         alias.asname or alias.name: (node.module, alias.name)
         for node in ast.walk(module)
         if isinstance(node, ast.ImportFrom) and node.module is not None
         for alias in node.names
     }
-    class_defs_by_name = {node.name: node for node in module.body if isinstance(node, ast.ClassDef)}
+    class_names = {node.name for node in module.body if isinstance(node, ast.ClassDef)}
     bases: list[_ClassDefinition] = []
-    for base in class_defs_by_name[definition.name].bases:
+    for base in class_def.bases:
         base_name = base.value if isinstance(base, ast.Subscript) else base
         if not isinstance(base_name, ast.Name):
             continue
-        if base_name.id in class_defs_by_name:
-            bases.append(_ClassDefinition(definition.file, base_name.id))
+        if base_name.id in class_names:
+            bases.append(_ClassDefinition(file, base_name.id))
         elif base_name.id in imported_by_name:
             module_name, class_name = imported_by_name[base_name.id]
-            file = _module_file(module_name, _package_dir(definition.file))
-            if file is not None:
-                bases.append(_ClassDefinition(file, class_name))
+            base_file = _module_file(module_name, _package_dir(file))
+            if base_file is not None:
+                bases.append(_ClassDefinition(base_file, class_name))
     return bases
 
 
-def _ports(definition: _ClassDefinition) -> set[_ClassDefinition]:
+def _implemented_ports(file: Path, class_def: ast.ClassDef) -> set[_ClassDefinition]:
     """The ports the class implements, through any first-party base."""
+    return {port for base in _first_party_bases(file, class_def) for port in _ports(base)}
+
+
+def _ports(definition: _ClassDefinition) -> set[_ClassDefinition]:
     if _is_port(definition):
         return {definition}
-    return {port for base in _first_party_bases(definition) for port in _ports(base)}
+    return _implemented_ports(definition.file, _class_def(definition))
 
 
 def _class_definitions(file: Path) -> list[_ClassDefinition]:
@@ -99,11 +111,7 @@ def _class_definitions(file: Path) -> list[_ClassDefinition]:
 
 def _is_record(definition: _ClassDefinition) -> bool:
     """A dataclass a double returns or keeps, which lives in its double's file."""
-    class_def = next(
-        node
-        for node in _parsed(definition.file).body
-        if isinstance(node, ast.ClassDef) and node.name == definition.name
-    )
+    class_def = _class_def(definition)
     decorators = [ast.unparse(decorator) for decorator in class_def.decorator_list]
     return not class_def.bases and any(
         decorator.startswith("dataclass") for decorator in decorators
@@ -132,8 +140,9 @@ def _source_rings_by_port() -> dict[_ClassDefinition, set[tuple[str, ...]]]:
     return rings_by_port
 
 
-def _outermost(rings: set[tuple[str, ...]]) -> tuple[str, ...]:
-    return min(rings, key=lambda ring: _RINGS_OUTERMOST_FIRST.index(ring[0]))
+def _outermost(rings: set[tuple[str, ...]]) -> set[tuple[str, ...]]:
+    """The outermost of `rings`, none when nothing in `src` implements the port."""
+    return {min(rings, key=lambda ring: _RINGS_OUTERMOST_FIRST.index(ring[0]))} if rings else set()
 
 
 def _writer_reader_pair(reader_name: str) -> list[str]:
@@ -165,7 +174,7 @@ def test_each_double_sits_in_the_ring_of_what_it_replaces() -> None:
         for double in doubles:
             ports = _ports(double)
             expected_rings = (
-                {_outermost({source_ring for port in ports for source_ring in rings_by_port[port]})}
+                _outermost({source_ring for port in ports for source_ring in rings_by_port[port]})
                 if ports
                 else _PORTLESS_RINGS
             )
@@ -189,3 +198,33 @@ def test_each_double_implements_one_port_or_one_writer_reader_pair() -> None:
     }
     assert {1, 2} <= {len(port_names) for port_names in port_names_by_double.values()}
     assert port_names_by_mixing_double == {}
+
+
+def test_a_writer_reader_pair_with_doubles_has_one_store() -> None:
+    port_sets = [_ports(double) for doubles in _doubles_by_file().values() for double in doubles]
+    faked_ports = set().union(*port_sets)
+    faked_pairs = [
+        (writer, reader)
+        for writer in faked_ports
+        for reader in faked_ports
+        if _writer_reader_pair(reader.name) == [reader.name, writer.name]
+        and _package_dir(writer.file) == _package_dir(reader.file)
+    ]
+    split_pairs = sorted(
+        f"{writer.name}, {reader.name}"
+        for writer, reader in faked_pairs
+        if {writer, reader} not in port_sets
+    )
+    assert faked_pairs
+    assert split_pairs == []
+
+
+def test_no_class_under_tests_outside_its_fakes_implements_a_port() -> None:
+    port_names_by_stray_class = {
+        f"{file.relative_to(_PACKAGES_DIR)}::{node.name}": sorted(port.name for port in ports)
+        for file in sorted(_PACKAGES_DIR.glob("*/tests/**/*.py"))
+        if not file.is_relative_to(_package_dir(file) / "tests" / "fakes")
+        for node in ast.walk(_parsed(file))
+        if isinstance(node, ast.ClassDef) and (ports := _implemented_ports(file, node))
+    }
+    assert port_names_by_stray_class == {}

@@ -17,8 +17,9 @@ from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.search.answer import SearchAnswer
 from tests.fakes.adapters.driven.fake_time import FakeTime
+from tests.fakes.adapters.driven.loop_monotonic_clock import LoopMonotonicClock
 from tests.fakes.fake_amule_api import PASSWORD, FakeAmuleApi, error
-from tests.support.virtual_time import MONOTONIC_EPOCH, LoopMonotonicClock, run_virtual
+from tests.support.virtual_time import MONOTONIC_EPOCH, run_virtual
 
 _HOUR = 3600.0
 _BUDGET = 120.0
