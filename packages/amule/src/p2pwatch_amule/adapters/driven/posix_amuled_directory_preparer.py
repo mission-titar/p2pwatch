@@ -1,7 +1,9 @@
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-from p2pwatch_amule.ports.driven.amuled_directory_preparer import AmuledDirectoryPreparer
+from p2pwatch_amule.application.ports.driven.amuled_directory_preparer import (
+    AmuledDirectoryPreparer,
+)
 
 
 class PosixAmuledDirectoryPreparer(AmuledDirectoryPreparer):

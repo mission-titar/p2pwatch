@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from pathlib import Path
 
-from p2pwatch_amule.ports.driven.account_manager import AccountManager
+from p2pwatch_amule.application.ports.driven.account_manager import AccountManager
 
 
 class PosixAccountManager(AccountManager):

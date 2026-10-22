@@ -3,7 +3,7 @@
 from pathlib import Path
 from shutil import disk_usage
 
-from p2pwatch.ports.driven.free_space_meter import FreeSpaceMeter
+from p2pwatch.application.ports.driven.free_space_meter import FreeSpaceMeter
 
 
 class ShutilFreeSpaceMeter(FreeSpaceMeter):

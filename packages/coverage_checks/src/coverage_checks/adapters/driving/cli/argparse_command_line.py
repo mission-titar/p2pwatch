@@ -5,7 +5,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from coverage_checks.ports.driving.unit_coverage_checker import (
+from coverage_checks.application.ports.driving.unit_coverage_checker import (
     NoPerTestCoverage,
     UnitCoverageChecker,
 )

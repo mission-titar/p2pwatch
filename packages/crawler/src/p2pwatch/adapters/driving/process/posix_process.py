@@ -5,7 +5,7 @@ import signal
 import sys
 from contextlib import AsyncExitStack, suppress
 
-from p2pwatch.ports.driving.shutdown_requester import ShutdownRequester
+from p2pwatch.application.ports.driving.shutdown_requester import ShutdownRequester
 
 _SIGNALS = (signal.SIGINT, signal.SIGTERM)
 

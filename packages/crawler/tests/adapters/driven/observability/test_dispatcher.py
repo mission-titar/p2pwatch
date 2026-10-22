@@ -6,11 +6,11 @@ import logging
 import pytest
 
 from p2pwatch.adapters.driven.observability.dispatcher import ObservabilityDispatcher
+from p2pwatch.application.ports.driven.metrics_recorder import MetricsRecorder
+from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability import events as ev
 from p2pwatch.domain.observability.policy import Audience, MetricInstruction, Severity
-from p2pwatch.ports.driven.metrics_recorder import MetricsRecorder
-from p2pwatch.ports.driven.notifier import Notifier
 
 
 class FakeMetricsRecorder(MetricsRecorder):

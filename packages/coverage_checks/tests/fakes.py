@@ -1,15 +1,15 @@
 from collections.abc import Mapping, Sequence
 from pathlib import PurePath
 
-from coverage_checks.domain.package_tree import PackageTree
-from coverage_checks.domain.test_coverage import TestCoverage
-from coverage_checks.ports.driven.package_tree_reader import PackageTreeReader
-from coverage_checks.ports.driven.test_coverage_reader import TestCoverageReader
-from coverage_checks.ports.driving.unit_coverage_checker import (
+from coverage_checks.application.ports.driven.package_tree_reader import PackageTreeReader
+from coverage_checks.application.ports.driven.test_coverage_reader import TestCoverageReader
+from coverage_checks.application.ports.driving.unit_coverage_checker import (
     NoPerTestCoverage,
     UnitCoverageChecker,
     UnitCoverageReport,
 )
+from coverage_checks.domain.package_tree import PackageTree
+from coverage_checks.domain.test_coverage import TestCoverage
 
 
 class FakePackageTreeReader(PackageTreeReader):

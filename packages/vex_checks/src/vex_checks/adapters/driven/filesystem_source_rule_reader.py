@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from vex_checks.ports.driven.source_rule_reader import SourceRuleReader
+from vex_checks.application.ports.driven.source_rule_reader import SourceRuleReader
 
 
 class FilesystemSourceRuleReader(SourceRuleReader):

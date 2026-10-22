@@ -8,19 +8,21 @@ from threading import Event, Thread
 from typing import Any, Literal, Self
 from urllib.request import ProxyHandler, build_opener
 
+from p2pwatch_amule.application.ports.driven.account_manager import AccountManager
+from p2pwatch_amule.application.ports.driven.admin_password_setter import AdminPasswordSetter
+from p2pwatch_amule.application.ports.driven.amule_conf_reader import AmuleConfReader
+from p2pwatch_amule.application.ports.driven.amule_conf_writer import AmuleConfWriter
+from p2pwatch_amule.application.ports.driven.amuled_directory_preparer import (
+    AmuledDirectoryPreparer,
+)
+from p2pwatch_amule.application.ports.driven.forwarded_port_reader import ForwardedPortReader
+from p2pwatch_amule.application.ports.driven.logger import Logger
+from p2pwatch_amule.application.ports.driven.monotonic_clock import MonotonicClock
+from p2pwatch_amule.application.ports.driven.service_supervisor import ServiceSupervisor
+from p2pwatch_amule.application.ports.driving.container_booter import ContainerBooter
+from p2pwatch_amule.application.ports.driving.port_sync_loop_runner import PortSyncLoopRunner
 from p2pwatch_amule.domain.monotonic_instant import MonotonicInstant
 from p2pwatch_amule.domain.settings_error import SettingsError
-from p2pwatch_amule.ports.driven.account_manager import AccountManager
-from p2pwatch_amule.ports.driven.admin_password_setter import AdminPasswordSetter
-from p2pwatch_amule.ports.driven.amule_conf_reader import AmuleConfReader
-from p2pwatch_amule.ports.driven.amule_conf_writer import AmuleConfWriter
-from p2pwatch_amule.ports.driven.amuled_directory_preparer import AmuledDirectoryPreparer
-from p2pwatch_amule.ports.driven.forwarded_port_reader import ForwardedPortReader
-from p2pwatch_amule.ports.driven.logger import Logger
-from p2pwatch_amule.ports.driven.monotonic_clock import MonotonicClock
-from p2pwatch_amule.ports.driven.service_supervisor import ServiceSupervisor
-from p2pwatch_amule.ports.driving.container_booter import ContainerBooter
-from p2pwatch_amule.ports.driving.port_sync_loop_runner import PortSyncLoopRunner
 
 
 class FakeAccountManager(AccountManager):

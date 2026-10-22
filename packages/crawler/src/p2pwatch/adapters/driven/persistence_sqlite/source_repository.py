@@ -10,6 +10,8 @@ from datetime import UTC, datetime, timedelta
 from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError, wrap_sqlite_errors
 from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
+from p2pwatch.application.ports.driven.source_point_reader import SourcePointReader
+from p2pwatch.application.ports.driven.source_point_writer import SourcePointWriter
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.source import (
     EarlierPoints,
@@ -22,8 +24,6 @@ from p2pwatch.domain.source import (
     carried_role_max_age,
     is_contact_point,
 )
-from p2pwatch.ports.driven.source_point_reader import SourcePointReader
-from p2pwatch.ports.driven.source_point_writer import SourcePointWriter
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _MICROSECOND = timedelta(microseconds=1)

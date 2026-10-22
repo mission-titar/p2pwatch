@@ -32,6 +32,9 @@ from p2pwatch.adapters.driven.persistence_sqlite.observation_read import (
     observations_between,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.reader import ReaderProvider
+from p2pwatch.application.ports.driven.catalog_file_reader import CatalogFileReader
+from p2pwatch.application.ports.driven.coverage_reader import CoverageReader
+from p2pwatch.application.ports.driven.source_reader import SourceReader
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_history import DatedDecision, FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
@@ -39,9 +42,6 @@ from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory, SourceNaming
-from p2pwatch.ports.driven.catalog_file_reader import CatalogFileReader
-from p2pwatch.ports.driven.coverage_reader import CoverageReader
-from p2pwatch.ports.driven.source_reader import SourceReader
 
 # ---------------------------------------------------------------------------
 # Constants

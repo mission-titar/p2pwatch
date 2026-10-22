@@ -4,8 +4,10 @@ import argparse
 from collections.abc import Sequence
 from pathlib import Path
 
-from template_checks.ports.driving.logic_free_checker import LogicFreeChecker
-from template_checks.ports.driving.template_attribute_lister import TemplateAttributeLister
+from template_checks.application.ports.driving.logic_free_checker import LogicFreeChecker
+from template_checks.application.ports.driving.template_attribute_lister import (
+    TemplateAttributeLister,
+)
 
 
 class ArgparseCommandLine:

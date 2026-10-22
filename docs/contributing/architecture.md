@@ -160,8 +160,8 @@ développement et en CI, jamais dans une image.
 | `coverage_checks` | `packages/coverage_checks/` | `UnitCoverageChecker` | `.coverage`, l'arbre du paquet et son `pyproject.toml` |
 | `amule_bump` | `packages/amule_bump/` | `AmuleBumper` | l'API GitHub, le Dockerfile, le corps de la pull request, `GITHUB_OUTPUT` |
 
-Chaque hexagone se découpe en **anneaux**, lus dans le chemin : `domain/`, `ports/`, `application/`,
-`adapters/` et `composition/`, `ports/` et `adapters/` séparés en `driving/` (ce qui appelle le
+Chaque hexagone se découpe en **anneaux**, lus dans le chemin : `domain/`, `application/ports/`,
+`application/`, `adapters/` et `composition/`, les ports et `adapters/` séparés en `driving/` (ce qui appelle le
 cœur : la ligne de commande, la webui) et `driven/` (ce que le cœur appelle : SQLite, amuleapi). Un
 `__main__.py` racine appartient à la composition. Le graphe des imports est un DAG qui pointe vers
 le **domaine pur**.
@@ -171,7 +171,7 @@ flowchart TB
   comp["composition/ · __main__.py"]
   drivingAdp["adapters/driving/"]
   appl["application/"]
-  ports["ports/ · ABC"]
+  ports["application/ports/ · ABC"]
   dom["domain/ · pure"]
   drivenAdp["adapters/driven/ · I/O"]
 
@@ -187,8 +187,8 @@ flowchart TB
 
 - Un adaptateur n'importe jamais un autre adaptateur ; un adaptateur pilotant ne dépend que des
   ports pilotants, un adaptateur piloté que des ports pilotés qu'il implémente ou consomme.
-- Un cas d'usage implémente un port pilotant sur des ports pilotés. `RunCrawler` et
-  `RunPortSyncLoop`, les racines des graphes du crawler et du port-sync, n'ont pas de port : la
+- Un cas d'usage implémente un port pilotant sur des ports pilotés. `CrawlerLifecycle` et
+  `PortSyncLifecycle`, les racines des graphes du crawler et du port-sync, n'ont pas de port : la
   composition les lance une fois qu'elle les a construits.
 - Seul un `__main__.py` lit l'état du processus (`argv`, l'environnement, le répertoire courant, le
   logger racine) et le passe en valeurs ; un adaptateur reçoit de la composition ce qu'il pilote (un
@@ -208,9 +208,9 @@ flowchart TB
   Ses journaux passent eux aussi par un port, `Logger`, que `StdlibLogger` implémente sous le nom
   du module (`p2pwatch.application.search_worker`), celui que filtre un opérateur.
 - **`adapters/`** portent toutes les I/O et héritent des ports qu'ils implémentent.
-- **`composition/`** (`CrawlerApp`) charge la config, que l'adapter de config valide *fail-fast*,
-  câble les adapters concrets qu'elle décrit, puis lance `RunCrawler`
-  (`application/run_crawler.py`), la racine du graphe : il résout le `node_id`, annonce le
+- **`composition/`** (`CrawlerComposition`) charge la config, que l'adapter de config valide *fail-fast*,
+  câble les adapters concrets qu'elle décrit, puis lance `CrawlerLifecycle`
+  (`application/crawler_lifecycle.py`), la racine du graphe : il résout le `node_id`, annonce le
   démarrage, réévalue le catalogue si la politique a changé, puis supervise les boucles.
 - **`python -m p2pwatch`** construit les ports `crawl`, `validate-config` et `merge` (le cas
   d'usage `MergeCatalogs`) et les passe à la ligne de commande, `adapters/driving/cli/`, qui lit
@@ -220,7 +220,7 @@ flowchart TB
 
 C'est le cœur du système et sa raison d'être : **être là 24/7** pour attraper un fichier rare à
 l'instant où une source le partage. Une tâche par *(client, canal, mot-clé)* cherche en boucle,
-toutes en même temps (`application/search_tasks.py`).
+toutes en même temps (`application/steps/search_tasks.py`).
 
 ```mermaid
 flowchart TD
@@ -295,7 +295,7 @@ sequenceDiagram
   hash, sans taille exploitable, sans aucun nom ou qui n'est pas un objet est écarté et compté : la
   `SearchAnswer` porte ce compte jusqu'à `SearchExecuted`, qui l'ajoute à
   `p2pwatch_search_results_skipped`.
-- amuleapi ne date pas ses résultats : `record_observation` (`application/record_observations.py`)
+- amuleapi ne date pas ses résultats : `record_observation` (`application/steps/record_observations.py`)
   fait de chaque `ReportedFile` un `FileObservation` daté par `wall_clock.now()` juste avant
   l'écriture, l'instant où le crawler a appris l'existence du fichier.
 - `search()` rend la main quand amuled signale la fin de la recherche, au plus tard 120 s
@@ -704,18 +704,18 @@ démon sont
 
 | Sous-système | Emplacement (sous `packages/crawler/src/p2pwatch/` sauf mention) |
 |---|---|
-| Câblage | `composition/app.py` (`CrawlerApp`) |
-| Démarrage et boucles | `application/run_crawler.py` (`RunCrawler`), `supervise_loops.py` |
+| Câblage | `composition/crawler_composition.py` (`CrawlerComposition`) |
+| Démarrage et boucles | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervise_loops.py` |
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
-| Boucles | `application/search_tasks.py`, `status_loop.py`, `run_download_cycle.py` |
-| Cas d'usage | `application/` : les pages (`summarize_crawl.py`, `describe_*.py`, `list_*.py`, `run_console_query.py`), les contrôles (`pause_crawl.py`, `resume_crawl.py`, `request_shutdown.py`), `validate_config.py`, `merge_catalogs.py` |
+| Boucles | `application/steps/` : `search_tasks.py`, `status_loop.py`, `run_download_cycle.py` |
+| Cas d'usage | `application/use_cases/` : les pages (`summarize_crawl.py`, `describe_*.py`, `list_*.py`, `run_console_query.py`), les contrôles (`pause_crawl.py`, `resume_crawl.py`, `request_shutdown.py`), `validate_config.py`, `merge_catalogs.py` |
 | Recherche (pure) | `domain/search/` (`keywords`, `backoff`) |
 | Matching | `packages/matching/src/catalog_matching/` (moteur + politique `deploy/matcher.yml`) |
-| Frontière amuleapi | `adapters/driven/mule_api/` (client / mapping / erreurs) ; ports `ports/driven/search_client.py`, `download_client.py`, `source_client.py` |
+| Frontière amuleapi | `adapters/driven/mule_api/` (client / mapping / erreurs) ; ports `application/ports/driven/search_client.py`, `download_client.py`, `source_client.py` |
 | Persistance | `adapters/driven/persistence_sqlite/` (migrations `.sql`, repos) |
 | Observabilité | `domain/observability/`, `adapters/driven/observability/` |
 | WebUI | `adapters/driving/webui/` (in-process, thread dédié) |
-| Conteneur d'aMule | `packages/amule/src/p2pwatch_amule/` (le one-shot : la ligne de commande appelle le port `ContainerBooter`, implémenté par le cas d'usage `application/boot_container.py` ; le port-sync : la ligne de commande appelle le port `PortSyncLoopRunner`, implémenté par la composition `composition/port_sync_app.py` (`PortSyncApp`), qui assemble le cas d'usage `application/run_port_sync_loop.py`) ; image `packages/amule/Dockerfile`, services s6 sous `packages/amule/docker/services.d/` |
+| Conteneur d'aMule | `packages/amule/src/p2pwatch_amule/` (le one-shot : la ligne de commande appelle le port `ContainerBooter`, implémenté par le cas d'usage `application/use_cases/boot_container.py` ; le port-sync : la ligne de commande appelle le port `PortSyncLoopRunner`, implémenté par la composition `composition/port_sync_composition.py` (`PortSyncComposition`), qui assemble `application/port_sync_lifecycle.py`) ; image `packages/amule/Dockerfile`, services s6 sous `packages/amule/docker/services.d/` |
 | Déploiement | `deploy/compose.yml` (le cœur et un `include:`), `deploy/ed2k/` (`service`, `direct` et `vpn.compose.yml`) |
 
 ## 13. Le healthcheck lit la sortie de s6-svstat, pas son code de retour

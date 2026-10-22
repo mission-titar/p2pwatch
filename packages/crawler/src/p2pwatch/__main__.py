@@ -11,9 +11,9 @@ from p2pwatch.adapters.driven.filesystem_catalog_finder import FilesystemCatalog
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier import SqliteCatalogCopier
 from p2pwatch.adapters.driven.stdlib_logger import StdlibLogger
 from p2pwatch.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
-from p2pwatch.application.merge_catalogs import MergeCatalogs
-from p2pwatch.application.validate_config import ValidateConfig
-from p2pwatch.composition.app import CrawlerApp
+from p2pwatch.application.use_cases.merge_catalogs import MergeCatalogs
+from p2pwatch.application.use_cases.validate_config import ValidateConfig
+from p2pwatch.composition.crawler_composition import CrawlerComposition
 
 # 0.0.0.0: Docker cannot route a published port to the container's loopback. 8080, not 80: an
 # unprivileged process cannot bind a port below 1024 under ``cap_drop: ALL``.
@@ -27,7 +27,7 @@ def main(argv: Sequence[str], env: Mapping[str, str], cwd: Path) -> int:
     returns its exit code."""
     root_logger = logging.getLogger()
     command_line = ArgparseCommandLine(
-        crawler_runner=CrawlerApp(
+        crawler_runner=CrawlerComposition(
             webui_address=_WEBUI_ADDRESS,
             amule_api_address=_AMULE_API_ADDRESS,
             env=env,

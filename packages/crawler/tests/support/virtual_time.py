@@ -7,9 +7,9 @@ from collections.abc import Coroutine
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
+from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
-from p2pwatch.ports.driven.monotonic_clock import MonotonicClock
-from p2pwatch.ports.driven.wall_clock import WallClock
 
 # The instants the loop's time zero reads on each clock.
 EPOCH = datetime(2026, 10, 9, tzinfo=UTC)

@@ -4,7 +4,7 @@ PURE domain: no I/O, no global ``random``, no clock. ``backoff_delay`` computes 
 NOMINAL delay (exponential bounded by ``cap``); the JITTER is applied by the caller (it
 needs the ``JitterGenerator`` port / a draw): separating the deterministic computation from the draw
 keeps this module trivially testable and the jitter replayable. Used by
-``application/search_worker.py`` for the PER (client, channel) backoff (spec §3).
+``application/steps/search_worker.py`` for the PER (client, channel) backoff (spec §3).
 """
 
 from dataclasses import dataclass

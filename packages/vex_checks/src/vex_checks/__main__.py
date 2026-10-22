@@ -11,9 +11,9 @@ from vex_checks.adapters.driven.json_sarif_writer import JsonSarifWriter
 from vex_checks.adapters.driven.json_vex_reader import JsonVexReader
 from vex_checks.adapters.driven.syft_sbom_reader import SyftSbomReader
 from vex_checks.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
-from vex_checks.application.check_claim_coverage import CheckClaimCoverage
-from vex_checks.application.check_image_claims import CheckImageClaims
-from vex_checks.application.check_stale_claims import CheckStaleClaims
+from vex_checks.application.use_cases.check_claim_coverage import CheckClaimCoverage
+from vex_checks.application.use_cases.check_image_claims import CheckImageClaims
+from vex_checks.application.use_cases.check_stale_claims import CheckStaleClaims
 from vex_checks.domain.registry import PREMISES
 
 # Bare, so that the environment's PATH finds it where the workflow installs it.

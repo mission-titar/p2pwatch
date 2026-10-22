@@ -1,8 +1,8 @@
 import tomllib
 from pathlib import Path, PurePath
 
+from coverage_checks.application.ports.driven.package_tree_reader import PackageTreeReader
 from coverage_checks.domain.package_tree import PackageTree
-from coverage_checks.ports.driven.package_tree_reader import PackageTreeReader
 
 
 class FilesystemPackageTreeReader(PackageTreeReader):

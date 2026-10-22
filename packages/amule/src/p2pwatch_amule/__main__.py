@@ -22,8 +22,8 @@ from p2pwatch_amule.adapters.driven.s6_service_supervisor import S6ServiceSuperv
 from p2pwatch_amule.adapters.driven.stdlib_logger import StdlibLogger
 from p2pwatch_amule.adapters.driven.system_monotonic_clock import SystemMonotonicClock
 from p2pwatch_amule.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
-from p2pwatch_amule.application.boot_container import BootContainer
-from p2pwatch_amule.composition.port_sync_app import PortSyncApp
+from p2pwatch_amule.application.use_cases.boot_container import BootContainer
+from p2pwatch_amule.composition.port_sync_composition import PortSyncComposition
 from p2pwatch_amule.domain.conf import INCOMING_DIR, TEMP_DIR
 
 _HOME_DIRECTORY = Path("/home/amule")
@@ -71,7 +71,7 @@ def main(argv: Sequence[str], env: Mapping[str, str], url_opener: OpenerDirector
     )
     command_line = ArgparseCommandLine(
         container_booter=container_booter,
-        port_sync_loop_runner=PortSyncApp(
+        port_sync_loop_runner=PortSyncComposition(
             env=env,
             amule_conf_path=_AMULE_CONF_PATH,
             port_sync_service_directory=_PORT_SYNC_SERVICE_DIRECTORY,

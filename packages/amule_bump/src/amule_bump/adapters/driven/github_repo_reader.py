@@ -3,8 +3,8 @@ from typing import Any
 from urllib.error import HTTPError
 from urllib.request import OpenerDirector, Request
 
+from amule_bump.application.ports.driven.repo_reader import RepoReader
 from amule_bump.domain.git_object import GitObject, GitObjectKind
-from amule_bump.ports.driven.repo_reader import RepoReader
 
 
 class GitHubRepoReader(RepoReader):

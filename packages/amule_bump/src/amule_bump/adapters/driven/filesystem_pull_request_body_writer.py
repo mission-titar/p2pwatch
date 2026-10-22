@@ -1,6 +1,6 @@
 from pathlib import Path, PurePath
 
-from amule_bump.ports.driven.pull_request_body_writer import PullRequestBodyWriter
+from amule_bump.application.ports.driven.pull_request_body_writer import PullRequestBodyWriter
 
 
 class FilesystemPullRequestBodyWriter(PullRequestBodyWriter):

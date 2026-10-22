@@ -2,7 +2,7 @@
 
 from pathlib import Path, PurePath
 
-from p2pwatch.ports.driven.catalog_finder import CatalogFinder
+from p2pwatch.application.ports.driven.catalog_finder import CatalogFinder
 
 
 class FilesystemCatalogFinder(CatalogFinder):

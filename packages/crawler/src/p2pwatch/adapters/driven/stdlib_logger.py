@@ -2,7 +2,7 @@
 
 import logging
 
-from p2pwatch.ports.driven.logger import Logger
+from p2pwatch.application.ports.driven.logger import Logger
 
 # The caller of info(), not this module, is the record's location.
 _CALLER = 2

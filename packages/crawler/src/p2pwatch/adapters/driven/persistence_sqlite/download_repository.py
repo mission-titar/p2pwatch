@@ -22,11 +22,11 @@ from typing import Literal
 
 from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError, wrap_sqlite_errors
+from p2pwatch.application.ports.driven.download_reader import DownloadReader
+from p2pwatch.application.ports.driven.download_writer import DownloadWriter
 from p2pwatch.domain.download.states import DownloadState, FailureReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.ports.driven.download_reader import DownloadReader
-from p2pwatch.ports.driven.download_writer import DownloadWriter
 
 _INSERT_QUEUED = """
 INSERT INTO downloads

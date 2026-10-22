@@ -7,12 +7,12 @@ from threading import Thread
 from typing import Any, Self
 from urllib.request import ProxyHandler, build_opener
 
+from amule_bump.application.ports.driven.dockerfile_reader import DockerfileReader
+from amule_bump.application.ports.driven.dockerfile_writer import DockerfileWriter
+from amule_bump.application.ports.driven.pull_request_body_writer import PullRequestBodyWriter
+from amule_bump.application.ports.driven.repo_reader import RepoReader
+from amule_bump.application.ports.driven.step_output_writer import StepOutputWriter
 from amule_bump.domain.git_object import GitObject
-from amule_bump.ports.driven.dockerfile_reader import DockerfileReader
-from amule_bump.ports.driven.dockerfile_writer import DockerfileWriter
-from amule_bump.ports.driven.pull_request_body_writer import PullRequestBodyWriter
-from amule_bump.ports.driven.repo_reader import RepoReader
-from amule_bump.ports.driven.step_output_writer import StepOutputWriter
 
 
 class FakeRepoReader(RepoReader):

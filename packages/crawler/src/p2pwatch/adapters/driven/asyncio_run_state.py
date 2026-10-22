@@ -10,15 +10,15 @@ change happens on the next crawler loop tick.
 
 import asyncio
 
-from p2pwatch.ports.driven.run_state_reader import RunStateReader
-from p2pwatch.ports.driven.run_state_writer import RunStateWriter
+from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
+from p2pwatch.application.ports.driven.run_state_writer import RunStateWriter
 
 
 class AsyncioRunState(RunStateWriter, RunStateReader):
     """Forwards each change onto the crawler loop via ``call_soon_threadsafe``.
 
-    The two events are the crawler's own (``CrawlerApp``): ``resumed`` is the pause gate (set =
-    running, clear = paused), and ``shutdown`` is the graceful-shutdown signal.
+    The two events are the crawler's own (``CrawlerComposition``): ``resumed`` is the pause gate
+    (set = running, clear = paused), and ``shutdown`` is the graceful-shutdown signal.
     """
 
     def __init__(

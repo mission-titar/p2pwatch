@@ -1,7 +1,7 @@
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
-from p2pwatch_amule.ports.driven.admin_password_setter import AdminPasswordSetter
+from p2pwatch_amule.application.ports.driven.admin_password_setter import AdminPasswordSetter
 
 
 class AmuleApiAdminPasswordSetter(AdminPasswordSetter):

@@ -27,7 +27,7 @@ def test_short_hash_short_input_is_unchanged() -> None:
 
 # ---------------------------------------------------------------------------
 # human_size: binary (1024-based) units, matching this codebase's existing
-# ``size_mib`` convention (see application/matching_read.py: "binary Mio").
+# ``size_mib`` convention (see domain/matching_read.py: "binary Mio").
 # ---------------------------------------------------------------------------
 
 

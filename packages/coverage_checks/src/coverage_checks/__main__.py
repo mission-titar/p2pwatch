@@ -10,7 +10,7 @@ from coverage_checks.adapters.driven.filesystem_package_tree_reader import (
     FilesystemPackageTreeReader,
 )
 from coverage_checks.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
-from coverage_checks.application.check_unit_coverage import CheckUnitCoverage
+from coverage_checks.application.use_cases.check_unit_coverage import CheckUnitCoverage
 
 
 def main(argv: Sequence[str], cwd: Path, report_directory: Path) -> int:

@@ -4,6 +4,15 @@ from collections.abc import Iterable, Sequence
 from datetime import datetime, timedelta
 from typing import Literal, NoReturn
 
+from p2pwatch.application.ports.driven.decision_reader import DecisionReader
+from p2pwatch.application.ports.driven.download_client import DownloadClient
+from p2pwatch.application.ports.driven.download_reader import DownloadReader
+from p2pwatch.application.ports.driven.download_writer import DownloadWriter
+from p2pwatch.application.ports.driven.free_space_meter import FreeSpaceMeter
+from p2pwatch.application.ports.driven.observation_reader import ObservationReader
+from p2pwatch.application.ports.driven.source_client import SourceClient
+from p2pwatch.application.ports.driven.source_point_reader import SourcePointReader
+from p2pwatch.application.ports.driven.source_point_writer import SourcePointWriter
 from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.states import DownloadState, FailureReason
@@ -12,15 +21,6 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.repository_errors import RepositoryError
 from p2pwatch.domain.source import EarlierPoints, RecordedReading, SourceKey, SourceReading
-from p2pwatch.ports.driven.decision_reader import DecisionReader
-from p2pwatch.ports.driven.download_client import DownloadClient
-from p2pwatch.ports.driven.download_reader import DownloadReader
-from p2pwatch.ports.driven.download_writer import DownloadWriter
-from p2pwatch.ports.driven.free_space_meter import FreeSpaceMeter
-from p2pwatch.ports.driven.observation_reader import ObservationReader
-from p2pwatch.ports.driven.source_client import SourceClient
-from p2pwatch.ports.driven.source_point_reader import SourcePointReader
-from p2pwatch.ports.driven.source_point_writer import SourcePointWriter
 from tests.fakes.application.fakes import FakeTime
 
 

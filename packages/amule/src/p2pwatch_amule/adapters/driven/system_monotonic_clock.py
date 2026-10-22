@@ -1,8 +1,8 @@
 import time
 from datetime import timedelta
 
+from p2pwatch_amule.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch_amule.domain.monotonic_instant import MonotonicInstant
-from p2pwatch_amule.ports.driven.monotonic_clock import MonotonicClock
 
 
 class SystemMonotonicClock(MonotonicClock):

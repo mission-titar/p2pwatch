@@ -13,8 +13,8 @@ from tests.fakes import (
     StaleClaimsCheck,
 )
 from vex_checks.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
+from vex_checks.application.ports.driving.claim_coverage_checker import ClaimCoverageProblem
 from vex_checks.domain.violations import Violation
-from vex_checks.ports.driving.claim_coverage_checker import ClaimCoverageProblem
 
 _CWD = Path("/work/repo")
 _IMAGE_COMMANDS = ["image-claims", "stale-claims"]

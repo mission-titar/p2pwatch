@@ -7,14 +7,14 @@ from urllib.error import HTTPError
 import pytest
 
 from amule_bump.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
-from amule_bump.domain.bump_error import BumpError
-from amule_bump.domain.dockerfile import Pin
-from amule_bump.ports.driving.amule_bumper import (
+from amule_bump.application.ports.driving.amule_bumper import (
     AmuleBump,
     AmuleBumper,
     PinAheadOfLatest,
     PinIsLatest,
 )
+from amule_bump.domain.bump_error import BumpError
+from amule_bump.domain.dockerfile import Pin
 
 CWD = PurePath("/repo")
 TEMPORARY_DIRECTORY = PurePath("/scratch")

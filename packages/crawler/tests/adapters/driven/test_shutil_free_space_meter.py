@@ -2,7 +2,7 @@ import shutil
 from pathlib import Path
 
 from p2pwatch.adapters.driven.shutil_free_space_meter import ShutilFreeSpaceMeter
-from p2pwatch.ports.driven.free_space_meter import FreeSpaceMeter
+from p2pwatch.application.ports.driven.free_space_meter import FreeSpaceMeter
 
 
 def test_reports_the_free_bytes_of_the_filesystem_holding_the_path(tmp_path: Path) -> None:

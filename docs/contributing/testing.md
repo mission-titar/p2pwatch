@@ -201,7 +201,7 @@ atteignable (pas de sources eD2k) : seul le cycle start, liste, statut est valid
 
 ### 3.3 `orchestration_integration` (crawler, **Docker requis**)
 
-**Ce que ça prouve.** Une vraie `CrawlerApp` (vrai `AmuleApiClient` + vraies bases SQLite sur
+**Ce que ça prouve.** Une vraie `CrawlerComposition` (vrai `AmuleApiClient` + vraies bases SQLite sur
 `tmp_path`) déroule **une recherche complète** face à l'`amuled` fourni puis **s'arrête
 proprement** dans un `wait_for` de 180 s. L'assertion clé : une recherche est revenue, et l'arrêt
 n'est demandé que quand sa tâche revient chercher, une fois cette recherche enregistrée. Un démon

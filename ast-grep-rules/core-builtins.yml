@@ -3,7 +3,7 @@ language: python
 severity: error
 message: The core calls no builtin that does I/O or imports a module.
 note: "A module that needs I/O goes behind a port."
-files: ["packages/*/src/*/domain/**/*.py", "packages/*/src/*/ports/**/*.py", "packages/*/src/*/application/**/*.py"]
+files: ["packages/*/src/*/domain/**/*.py", "packages/*/src/*/application/**/*.py"]
 rule:
   kind: call
   has: { field: function, kind: identifier, regex: ^(__import__|eval|exec|input|open|print)$ }

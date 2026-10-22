@@ -37,46 +37,46 @@ depends_on = [
 path = "amule_bump.adapters.driven.filesystem_dockerfile"
 layer = "adapters"
 depends_on = [
-  "amule_bump.ports.driven.dockerfile_reader",
-  "amule_bump.ports.driven.dockerfile_writer",
+  "amule_bump.application.ports.driven.dockerfile_reader",
+  "amule_bump.application.ports.driven.dockerfile_writer",
 ]
 
 [[modules]]
 path = "amule_bump.adapters.driven.filesystem_pull_request_body_writer"
 layer = "adapters"
-depends_on = ["amule_bump.ports.driven.pull_request_body_writer"]
+depends_on = ["amule_bump.application.ports.driven.pull_request_body_writer"]
 
 [[modules]]
 path = "amule_bump.adapters.driven.github_repo_reader"
 layer = "adapters"
-depends_on = ["amule_bump.domain", "amule_bump.ports.driven.repo_reader"]
+depends_on = ["amule_bump.domain", "amule_bump.application.ports.driven.repo_reader"]
 
 [[modules]]
 path = "amule_bump.adapters.driven.github_step_output_writer"
 layer = "adapters"
-depends_on = ["amule_bump.ports.driven.step_output_writer"]
+depends_on = ["amule_bump.application.ports.driven.step_output_writer"]
 
 [[modules]]
 path = "amule_bump.adapters.driven.terminal_step_output_writer"
 layer = "adapters"
-depends_on = ["amule_bump.ports.driven.step_output_writer"]
+depends_on = ["amule_bump.application.ports.driven.step_output_writer"]
 
 [[modules]]
 path = "amule_bump.adapters.driving.cli"
 layer = "adapters"
-depends_on = ["amule_bump.domain", "amule_bump.ports.driving.amule_bumper"]
+depends_on = ["amule_bump.domain", "amule_bump.application.ports.driving.amule_bumper"]
 
 [[modules]]
 path = "amule_bump.application"
 layer = "application"
 depends_on = [
   "amule_bump.domain",
-  "amule_bump.ports.driven.dockerfile_reader",
-  "amule_bump.ports.driven.dockerfile_writer",
-  "amule_bump.ports.driven.pull_request_body_writer",
-  "amule_bump.ports.driven.repo_reader",
-  "amule_bump.ports.driven.step_output_writer",
-  "amule_bump.ports.driving.amule_bumper",
+  "amule_bump.application.ports.driven.dockerfile_reader",
+  "amule_bump.application.ports.driven.dockerfile_writer",
+  "amule_bump.application.ports.driven.pull_request_body_writer",
+  "amule_bump.application.ports.driven.repo_reader",
+  "amule_bump.application.ports.driven.step_output_writer",
+  "amule_bump.application.ports.driving.amule_bumper",
 ]
 
 [[modules]]
@@ -85,32 +85,32 @@ layer = "domain"
 depends_on = []
 
 [[modules]]
-path = "amule_bump.ports.driven.dockerfile_reader"
+path = "amule_bump.application.ports.driven.dockerfile_reader"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "amule_bump.ports.driven.dockerfile_writer"
+path = "amule_bump.application.ports.driven.dockerfile_writer"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "amule_bump.ports.driven.pull_request_body_writer"
+path = "amule_bump.application.ports.driven.pull_request_body_writer"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "amule_bump.ports.driven.repo_reader"
+path = "amule_bump.application.ports.driven.repo_reader"
 layer = "ports"
 depends_on = ["amule_bump.domain"]
 
 [[modules]]
-path = "amule_bump.ports.driven.step_output_writer"
+path = "amule_bump.application.ports.driven.step_output_writer"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "amule_bump.ports.driving.amule_bumper"
+path = "amule_bump.application.ports.driving.amule_bumper"
 layer = "ports"
 depends_on = ["amule_bump.domain"]
 
@@ -132,26 +132,26 @@ depends_on = [
 [[modules]]
 path = "coverage_checks.adapters.driven.coverage_py_reader"
 layer = "adapters"
-depends_on = ["coverage_checks.domain", "coverage_checks.ports.driven.test_coverage_reader"]
+depends_on = ["coverage_checks.domain", "coverage_checks.application.ports.driven.test_coverage_reader"]
 
 [[modules]]
 path = "coverage_checks.adapters.driven.filesystem_package_tree_reader"
 layer = "adapters"
-depends_on = ["coverage_checks.domain", "coverage_checks.ports.driven.package_tree_reader"]
+depends_on = ["coverage_checks.domain", "coverage_checks.application.ports.driven.package_tree_reader"]
 
 [[modules]]
 path = "coverage_checks.adapters.driving.cli"
 layer = "adapters"
-depends_on = ["coverage_checks.ports.driving.unit_coverage_checker"]
+depends_on = ["coverage_checks.application.ports.driving.unit_coverage_checker"]
 
 [[modules]]
 path = "coverage_checks.application"
 layer = "application"
 depends_on = [
   "coverage_checks.domain",
-  "coverage_checks.ports.driven.package_tree_reader",
-  "coverage_checks.ports.driven.test_coverage_reader",
-  "coverage_checks.ports.driving.unit_coverage_checker",
+  "coverage_checks.application.ports.driven.package_tree_reader",
+  "coverage_checks.application.ports.driven.test_coverage_reader",
+  "coverage_checks.application.ports.driving.unit_coverage_checker",
 ]
 
 [[modules]]
@@ -160,17 +160,17 @@ layer = "domain"
 depends_on = []
 
 [[modules]]
-path = "coverage_checks.ports.driven.package_tree_reader"
+path = "coverage_checks.application.ports.driven.package_tree_reader"
 layer = "ports"
 depends_on = ["coverage_checks.domain"]
 
 [[modules]]
-path = "coverage_checks.ports.driven.test_coverage_reader"
+path = "coverage_checks.application.ports.driven.test_coverage_reader"
 layer = "ports"
 depends_on = ["coverage_checks.domain"]
 
 [[modules]]
-path = "coverage_checks.ports.driving.unit_coverage_checker"
+path = "coverage_checks.application.ports.driving.unit_coverage_checker"
 layer = "ports"
 depends_on = []
 
@@ -190,20 +190,20 @@ depends_on = [
 [[modules]]
 path = "p2pwatch.adapters.driven.asyncio_run_state"
 layer = "adapters"
-depends_on = ["p2pwatch.ports.driven.run_state_reader", "p2pwatch.ports.driven.run_state_writer"]
+depends_on = ["p2pwatch.application.ports.driven.run_state_reader", "p2pwatch.application.ports.driven.run_state_writer"]
 
 [[modules]]
 path = "p2pwatch.adapters.driven.asyncio_waker"
 layer = "adapters"
-depends_on = ["p2pwatch.ports.driven.waker"]
+depends_on = ["p2pwatch.application.ports.driven.waker"]
 
 [[modules]]
 path = "p2pwatch.adapters.driven.in_memory_status_board"
 layer = "adapters"
 depends_on = [
   "p2pwatch.domain",
-  "p2pwatch.ports.driven.client_status_reader",
-  "p2pwatch.ports.driven.client_status_writer",
+  "p2pwatch.application.ports.driven.client_status_reader",
+  "p2pwatch.application.ports.driven.client_status_writer",
 ]
 
 [[modules]]
@@ -211,24 +211,24 @@ path = "p2pwatch.adapters.driven.config"
 layer = "adapters"
 depends_on = [
   "p2pwatch.domain",
-  "p2pwatch.ports.driven.config_checker",
+  "p2pwatch.application.ports.driven.config_checker",
 ]
 
 [[modules]]
 path = "p2pwatch.adapters.driven.monotonic_clock_asyncio"
 layer = "adapters"
-depends_on = ["p2pwatch.domain", "p2pwatch.ports.driven.monotonic_clock"]
+depends_on = ["p2pwatch.domain", "p2pwatch.application.ports.driven.monotonic_clock"]
 
 [[modules]]
 path = "p2pwatch.adapters.driven.mule_api"
 layer = "adapters"
 depends_on = [
   "p2pwatch.domain",
-  "p2pwatch.ports.driven.download_client",
-  "p2pwatch.ports.driven.monotonic_clock",
-  "p2pwatch.ports.driven.search_client",
-  "p2pwatch.ports.driven.source_client",
-  "p2pwatch.ports.driven.status_client",
+  "p2pwatch.application.ports.driven.download_client",
+  "p2pwatch.application.ports.driven.monotonic_clock",
+  "p2pwatch.application.ports.driven.search_client",
+  "p2pwatch.application.ports.driven.source_client",
+  "p2pwatch.application.ports.driven.status_client",
 ]
 
 [[modules]]
@@ -236,101 +236,101 @@ path = "p2pwatch.adapters.driven.observability"
 layer = "adapters"
 depends_on = [
   "p2pwatch.domain",
-  "p2pwatch.ports.driven.event_emitter",
-  "p2pwatch.ports.driven.metrics_recorder",
-  "p2pwatch.ports.driven.notifier",
+  "p2pwatch.application.ports.driven.event_emitter",
+  "p2pwatch.application.ports.driven.metrics_recorder",
+  "p2pwatch.application.ports.driven.notifier",
 ]
 
 [[modules]]
 path = "p2pwatch.adapters.driven.filesystem_catalog_finder"
 layer = "adapters"
-depends_on = ["p2pwatch.ports.driven.catalog_finder"]
+depends_on = ["p2pwatch.application.ports.driven.catalog_finder"]
 
 [[modules]]
 path = "p2pwatch.adapters.driven.persistence_sqlite"
 layer = "adapters"
 depends_on = [
   "p2pwatch.domain",
-  "p2pwatch.ports.driven.backoff_state_reader",
-  "p2pwatch.ports.driven.backoff_state_writer",
-  "p2pwatch.ports.driven.catalog_copier",
-  "p2pwatch.ports.driven.catalog_file_reader",
-  "p2pwatch.ports.driven.catalog_scan_reader",
-  "p2pwatch.ports.driven.coverage_reader",
-  "p2pwatch.ports.driven.decision_reader",
-  "p2pwatch.ports.driven.decision_writer",
-  "p2pwatch.ports.driven.download_reader",
-  "p2pwatch.ports.driven.download_writer",
-  "p2pwatch.ports.driven.monotonic_clock",
-  "p2pwatch.ports.driven.node_id_reader",
-  "p2pwatch.ports.driven.node_id_writer",
-  "p2pwatch.ports.driven.node_state_reader",
-  "p2pwatch.ports.driven.observation_reader",
-  "p2pwatch.ports.driven.observation_writer",
-  "p2pwatch.ports.driven.policy_fingerprint_reader",
-  "p2pwatch.ports.driven.policy_fingerprint_writer",
-  "p2pwatch.ports.driven.source_point_reader",
-  "p2pwatch.ports.driven.source_point_writer",
-  "p2pwatch.ports.driven.source_reader",
-  "p2pwatch.ports.driven.sql_executor",
+  "p2pwatch.application.ports.driven.backoff_state_reader",
+  "p2pwatch.application.ports.driven.backoff_state_writer",
+  "p2pwatch.application.ports.driven.catalog_copier",
+  "p2pwatch.application.ports.driven.catalog_file_reader",
+  "p2pwatch.application.ports.driven.catalog_scan_reader",
+  "p2pwatch.application.ports.driven.coverage_reader",
+  "p2pwatch.application.ports.driven.decision_reader",
+  "p2pwatch.application.ports.driven.decision_writer",
+  "p2pwatch.application.ports.driven.download_reader",
+  "p2pwatch.application.ports.driven.download_writer",
+  "p2pwatch.application.ports.driven.monotonic_clock",
+  "p2pwatch.application.ports.driven.node_id_reader",
+  "p2pwatch.application.ports.driven.node_id_writer",
+  "p2pwatch.application.ports.driven.node_state_reader",
+  "p2pwatch.application.ports.driven.observation_reader",
+  "p2pwatch.application.ports.driven.observation_writer",
+  "p2pwatch.application.ports.driven.policy_fingerprint_reader",
+  "p2pwatch.application.ports.driven.policy_fingerprint_writer",
+  "p2pwatch.application.ports.driven.source_point_reader",
+  "p2pwatch.application.ports.driven.source_point_writer",
+  "p2pwatch.application.ports.driven.source_reader",
+  "p2pwatch.application.ports.driven.sql_executor",
 ]
 
 [[modules]]
 path = "p2pwatch.adapters.driven.random_jitter_generator"
 layer = "adapters"
-depends_on = ["p2pwatch.ports.driven.jitter_generator"]
+depends_on = ["p2pwatch.application.ports.driven.jitter_generator"]
 
 [[modules]]
 path = "p2pwatch.adapters.driven.shutil_free_space_meter"
 layer = "adapters"
-depends_on = ["p2pwatch.ports.driven.free_space_meter"]
+depends_on = ["p2pwatch.application.ports.driven.free_space_meter"]
 
 [[modules]]
 path = "p2pwatch.adapters.driven.stdlib_logger"
 layer = "adapters"
-depends_on = ["p2pwatch.ports.driven.logger"]
+depends_on = ["p2pwatch.application.ports.driven.logger"]
 
 [[modules]]
 path = "p2pwatch.adapters.driven.uuid4_node_id_generator"
 layer = "adapters"
-depends_on = ["p2pwatch.ports.driven.node_id_generator"]
+depends_on = ["p2pwatch.application.ports.driven.node_id_generator"]
 
 [[modules]]
 path = "p2pwatch.adapters.driven.wall_clock_system"
 layer = "adapters"
-depends_on = ["p2pwatch.ports.driven.wall_clock"]
+depends_on = ["p2pwatch.application.ports.driven.wall_clock"]
 
 [[modules]]
 path = "p2pwatch.adapters.driving.cli"
 layer = "adapters"
 depends_on = [
   "p2pwatch.domain",
-  "p2pwatch.ports.driving.catalog_merger",
-  "p2pwatch.ports.driving.config_validator",
-  "p2pwatch.ports.driving.crawler_runner",
+  "p2pwatch.application.ports.driving.catalog_merger",
+  "p2pwatch.application.ports.driving.config_validator",
+  "p2pwatch.application.ports.driving.crawler_runner",
 ]
 
 [[modules]]
 path = "p2pwatch.adapters.driving.process"
 layer = "adapters"
-depends_on = ["p2pwatch.ports.driving.shutdown_requester"]
+depends_on = ["p2pwatch.application.ports.driving.shutdown_requester"]
 
 [[modules]]
 path = "p2pwatch.adapters.driving.webui"
 layer = "adapters"
 depends_on = [
   "p2pwatch.domain",
-  "p2pwatch.ports.driving.console_query_runner",
-  "p2pwatch.ports.driving.crawl_pauser",
-  "p2pwatch.ports.driving.crawl_resumer",
-  "p2pwatch.ports.driving.crawl_summarizer",
-  "p2pwatch.ports.driving.file_describer",
-  "p2pwatch.ports.driving.file_lister",
-  "p2pwatch.ports.driving.node_describer",
-  "p2pwatch.ports.driving.shutdown_requester",
-  "p2pwatch.ports.driving.source_describer",
-  "p2pwatch.ports.driving.source_lister",
-  "p2pwatch.ports.driving.source_name_describer",
+  "p2pwatch.application.ports.driving.console_query_runner",
+  "p2pwatch.application.ports.driving.crawl_pauser",
+  "p2pwatch.application.ports.driving.crawl_resumer",
+  "p2pwatch.application.ports.driving.crawl_summarizer",
+  "p2pwatch.application.ports.driving.file_describer",
+  "p2pwatch.application.ports.driving.file_lister",
+  "p2pwatch.application.ports.driving.node_describer",
+  "p2pwatch.application.ports.driving.shutdown_requester",
+  "p2pwatch.application.ports.driving.source_describer",
+  "p2pwatch.application.ports.driving.source_lister",
+  "p2pwatch.application.ports.driving.source_name_describer",
 ]
 
 [[modules]]
@@ -338,57 +338,57 @@ path = "p2pwatch.application"
 layer = "application"
 depends_on = [
   "p2pwatch.domain",
-  "p2pwatch.ports.driven.backoff_state_writer",
-  "p2pwatch.ports.driven.catalog_copier",
-  "p2pwatch.ports.driven.catalog_file_reader",
-  "p2pwatch.ports.driven.catalog_finder",
-  "p2pwatch.ports.driven.catalog_scan_reader",
-  "p2pwatch.ports.driven.client_status_reader",
-  "p2pwatch.ports.driven.client_status_writer",
-  "p2pwatch.ports.driven.config_checker",
-  "p2pwatch.ports.driven.coverage_reader",
-  "p2pwatch.ports.driven.decision_reader",
-  "p2pwatch.ports.driven.decision_writer",
-  "p2pwatch.ports.driven.download_client",
-  "p2pwatch.ports.driven.download_reader",
-  "p2pwatch.ports.driven.download_writer",
-  "p2pwatch.ports.driven.event_emitter",
-  "p2pwatch.ports.driven.free_space_meter",
-  "p2pwatch.ports.driven.jitter_generator",
-  "p2pwatch.ports.driven.logger",
-  "p2pwatch.ports.driven.monotonic_clock",
-  "p2pwatch.ports.driven.node_id_generator",
-  "p2pwatch.ports.driven.node_id_reader",
-  "p2pwatch.ports.driven.node_id_writer",
-  "p2pwatch.ports.driven.node_state_reader",
-  "p2pwatch.ports.driven.observation_reader",
-  "p2pwatch.ports.driven.observation_writer",
-  "p2pwatch.ports.driven.policy_fingerprint_reader",
-  "p2pwatch.ports.driven.policy_fingerprint_writer",
-  "p2pwatch.ports.driven.run_state_reader",
-  "p2pwatch.ports.driven.run_state_writer",
-  "p2pwatch.ports.driven.search_client",
-  "p2pwatch.ports.driven.source_client",
-  "p2pwatch.ports.driven.source_point_reader",
-  "p2pwatch.ports.driven.source_point_writer",
-  "p2pwatch.ports.driven.source_reader",
-  "p2pwatch.ports.driven.sql_executor",
-  "p2pwatch.ports.driven.status_client",
-  "p2pwatch.ports.driven.waker",
-  "p2pwatch.ports.driven.wall_clock",
-  "p2pwatch.ports.driving.catalog_merger",
-  "p2pwatch.ports.driving.config_validator",
-  "p2pwatch.ports.driving.console_query_runner",
-  "p2pwatch.ports.driving.crawl_pauser",
-  "p2pwatch.ports.driving.crawl_resumer",
-  "p2pwatch.ports.driving.crawl_summarizer",
-  "p2pwatch.ports.driving.file_describer",
-  "p2pwatch.ports.driving.file_lister",
-  "p2pwatch.ports.driving.node_describer",
-  "p2pwatch.ports.driving.shutdown_requester",
-  "p2pwatch.ports.driving.source_describer",
-  "p2pwatch.ports.driving.source_lister",
-  "p2pwatch.ports.driving.source_name_describer",
+  "p2pwatch.application.ports.driven.backoff_state_writer",
+  "p2pwatch.application.ports.driven.catalog_copier",
+  "p2pwatch.application.ports.driven.catalog_file_reader",
+  "p2pwatch.application.ports.driven.catalog_finder",
+  "p2pwatch.application.ports.driven.catalog_scan_reader",
+  "p2pwatch.application.ports.driven.client_status_reader",
+  "p2pwatch.application.ports.driven.client_status_writer",
+  "p2pwatch.application.ports.driven.config_checker",
+  "p2pwatch.application.ports.driven.coverage_reader",
+  "p2pwatch.application.ports.driven.decision_reader",
+  "p2pwatch.application.ports.driven.decision_writer",
+  "p2pwatch.application.ports.driven.download_client",
+  "p2pwatch.application.ports.driven.download_reader",
+  "p2pwatch.application.ports.driven.download_writer",
+  "p2pwatch.application.ports.driven.event_emitter",
+  "p2pwatch.application.ports.driven.free_space_meter",
+  "p2pwatch.application.ports.driven.jitter_generator",
+  "p2pwatch.application.ports.driven.logger",
+  "p2pwatch.application.ports.driven.monotonic_clock",
+  "p2pwatch.application.ports.driven.node_id_generator",
+  "p2pwatch.application.ports.driven.node_id_reader",
+  "p2pwatch.application.ports.driven.node_id_writer",
+  "p2pwatch.application.ports.driven.node_state_reader",
+  "p2pwatch.application.ports.driven.observation_reader",
+  "p2pwatch.application.ports.driven.observation_writer",
+  "p2pwatch.application.ports.driven.policy_fingerprint_reader",
+  "p2pwatch.application.ports.driven.policy_fingerprint_writer",
+  "p2pwatch.application.ports.driven.run_state_reader",
+  "p2pwatch.application.ports.driven.run_state_writer",
+  "p2pwatch.application.ports.driven.search_client",
+  "p2pwatch.application.ports.driven.source_client",
+  "p2pwatch.application.ports.driven.source_point_reader",
+  "p2pwatch.application.ports.driven.source_point_writer",
+  "p2pwatch.application.ports.driven.source_reader",
+  "p2pwatch.application.ports.driven.sql_executor",
+  "p2pwatch.application.ports.driven.status_client",
+  "p2pwatch.application.ports.driven.waker",
+  "p2pwatch.application.ports.driven.wall_clock",
+  "p2pwatch.application.ports.driving.catalog_merger",
+  "p2pwatch.application.ports.driving.config_validator",
+  "p2pwatch.application.ports.driving.console_query_runner",
+  "p2pwatch.application.ports.driving.crawl_pauser",
+  "p2pwatch.application.ports.driving.crawl_resumer",
+  "p2pwatch.application.ports.driving.crawl_summarizer",
+  "p2pwatch.application.ports.driving.file_describer",
+  "p2pwatch.application.ports.driving.file_lister",
+  "p2pwatch.application.ports.driving.node_describer",
+  "p2pwatch.application.ports.driving.shutdown_requester",
+  "p2pwatch.application.ports.driving.source_describer",
+  "p2pwatch.application.ports.driving.source_lister",
+  "p2pwatch.application.ports.driving.source_name_describer",
 ]
 
 [[modules]]
@@ -412,9 +412,9 @@ depends_on = [
   "p2pwatch.adapters.driving.webui",
   "p2pwatch.application",
   "p2pwatch.domain",
-  "p2pwatch.ports.driven.monotonic_clock",
-  "p2pwatch.ports.driven.wall_clock",
-  "p2pwatch.ports.driving.crawler_runner",
+  "p2pwatch.application.ports.driven.monotonic_clock",
+  "p2pwatch.application.ports.driven.wall_clock",
+  "p2pwatch.application.ports.driving.crawler_runner",
 ]
 
 [[modules]]
@@ -423,277 +423,277 @@ layer = "domain"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driven.backoff_state_reader"
+path = "p2pwatch.application.ports.driven.backoff_state_reader"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.backoff_state_writer"
+path = "p2pwatch.application.ports.driven.backoff_state_writer"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.catalog_copier"
+path = "p2pwatch.application.ports.driven.catalog_copier"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driven.catalog_file_reader"
+path = "p2pwatch.application.ports.driven.catalog_file_reader"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.catalog_finder"
+path = "p2pwatch.application.ports.driven.catalog_finder"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driven.catalog_scan_reader"
+path = "p2pwatch.application.ports.driven.catalog_scan_reader"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.client_status_reader"
+path = "p2pwatch.application.ports.driven.client_status_reader"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.client_status_writer"
+path = "p2pwatch.application.ports.driven.client_status_writer"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.config_checker"
+path = "p2pwatch.application.ports.driven.config_checker"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driven.coverage_reader"
+path = "p2pwatch.application.ports.driven.coverage_reader"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driven.decision_reader"
+path = "p2pwatch.application.ports.driven.decision_reader"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.decision_writer"
+path = "p2pwatch.application.ports.driven.decision_writer"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.download_client"
+path = "p2pwatch.application.ports.driven.download_client"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.download_reader"
+path = "p2pwatch.application.ports.driven.download_reader"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.download_writer"
+path = "p2pwatch.application.ports.driven.download_writer"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.event_emitter"
+path = "p2pwatch.application.ports.driven.event_emitter"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.free_space_meter"
+path = "p2pwatch.application.ports.driven.free_space_meter"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driven.jitter_generator"
+path = "p2pwatch.application.ports.driven.jitter_generator"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driven.logger"
+path = "p2pwatch.application.ports.driven.logger"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driven.metrics_recorder"
+path = "p2pwatch.application.ports.driven.metrics_recorder"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.monotonic_clock"
+path = "p2pwatch.application.ports.driven.monotonic_clock"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.node_id_generator"
+path = "p2pwatch.application.ports.driven.node_id_generator"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driven.node_id_reader"
+path = "p2pwatch.application.ports.driven.node_id_reader"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driven.node_id_writer"
+path = "p2pwatch.application.ports.driven.node_id_writer"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driven.node_state_reader"
+path = "p2pwatch.application.ports.driven.node_state_reader"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.notifier"
+path = "p2pwatch.application.ports.driven.notifier"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.observation_reader"
+path = "p2pwatch.application.ports.driven.observation_reader"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.observation_writer"
+path = "p2pwatch.application.ports.driven.observation_writer"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.policy_fingerprint_reader"
+path = "p2pwatch.application.ports.driven.policy_fingerprint_reader"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driven.policy_fingerprint_writer"
+path = "p2pwatch.application.ports.driven.policy_fingerprint_writer"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driven.run_state_reader"
+path = "p2pwatch.application.ports.driven.run_state_reader"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driven.run_state_writer"
+path = "p2pwatch.application.ports.driven.run_state_writer"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driven.search_client"
+path = "p2pwatch.application.ports.driven.search_client"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.source_client"
+path = "p2pwatch.application.ports.driven.source_client"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.source_point_reader"
+path = "p2pwatch.application.ports.driven.source_point_reader"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.source_point_writer"
+path = "p2pwatch.application.ports.driven.source_point_writer"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.source_reader"
+path = "p2pwatch.application.ports.driven.source_reader"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.sql_executor"
+path = "p2pwatch.application.ports.driven.sql_executor"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.status_client"
+path = "p2pwatch.application.ports.driven.status_client"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driven.waker"
+path = "p2pwatch.application.ports.driven.waker"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driven.wall_clock"
+path = "p2pwatch.application.ports.driven.wall_clock"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driving.catalog_merger"
+path = "p2pwatch.application.ports.driving.catalog_merger"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driving.config_validator"
+path = "p2pwatch.application.ports.driving.config_validator"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driving.console_query_runner"
+path = "p2pwatch.application.ports.driving.console_query_runner"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driving.crawl_pauser"
+path = "p2pwatch.application.ports.driving.crawl_pauser"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driving.crawl_resumer"
+path = "p2pwatch.application.ports.driving.crawl_resumer"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driving.crawler_runner"
+path = "p2pwatch.application.ports.driving.crawler_runner"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driving.crawl_summarizer"
+path = "p2pwatch.application.ports.driving.crawl_summarizer"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driving.file_describer"
+path = "p2pwatch.application.ports.driving.file_describer"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driving.file_lister"
+path = "p2pwatch.application.ports.driving.file_lister"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driving.node_describer"
+path = "p2pwatch.application.ports.driving.node_describer"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driving.shutdown_requester"
+path = "p2pwatch.application.ports.driving.shutdown_requester"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch.ports.driving.source_describer"
+path = "p2pwatch.application.ports.driving.source_describer"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driving.source_lister"
+path = "p2pwatch.application.ports.driving.source_lister"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
 [[modules]]
-path = "p2pwatch.ports.driving.source_name_describer"
+path = "p2pwatch.application.ports.driving.source_name_describer"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
@@ -717,53 +717,53 @@ depends_on = [
 [[modules]]
 path = "p2pwatch_amule.adapters.driven.amule_api_admin_password_setter"
 layer = "adapters"
-depends_on = ["p2pwatch_amule.ports.driven.admin_password_setter"]
+depends_on = ["p2pwatch_amule.application.ports.driven.admin_password_setter"]
 
 [[modules]]
 path = "p2pwatch_amule.adapters.driven.gluetun_forwarded_port_reader"
 layer = "adapters"
 depends_on = [
-  "p2pwatch_amule.ports.driven.forwarded_port_reader",
-  "p2pwatch_amule.ports.driven.logger",
+  "p2pwatch_amule.application.ports.driven.forwarded_port_reader",
+  "p2pwatch_amule.application.ports.driven.logger",
 ]
 
 [[modules]]
 path = "p2pwatch_amule.adapters.driven.posix_account_manager"
 layer = "adapters"
-depends_on = ["p2pwatch_amule.ports.driven.account_manager"]
+depends_on = ["p2pwatch_amule.application.ports.driven.account_manager"]
 
 [[modules]]
 path = "p2pwatch_amule.adapters.driven.posix_amule_conf"
 layer = "adapters"
 depends_on = [
-  "p2pwatch_amule.ports.driven.amule_conf_reader",
-  "p2pwatch_amule.ports.driven.amule_conf_writer",
+  "p2pwatch_amule.application.ports.driven.amule_conf_reader",
+  "p2pwatch_amule.application.ports.driven.amule_conf_writer",
 ]
 
 [[modules]]
 path = "p2pwatch_amule.adapters.driven.posix_amuled_directory_preparer"
 layer = "adapters"
-depends_on = ["p2pwatch_amule.ports.driven.amuled_directory_preparer"]
+depends_on = ["p2pwatch_amule.application.ports.driven.amuled_directory_preparer"]
 
 [[modules]]
 path = "p2pwatch_amule.adapters.driven.s6_service_supervisor"
 layer = "adapters"
 depends_on = [
-  "p2pwatch_amule.ports.driven.logger",
-  "p2pwatch_amule.ports.driven.service_supervisor",
+  "p2pwatch_amule.application.ports.driven.logger",
+  "p2pwatch_amule.application.ports.driven.service_supervisor",
 ]
 
 [[modules]]
 path = "p2pwatch_amule.adapters.driven.stdlib_logger"
 layer = "adapters"
-depends_on = ["p2pwatch_amule.ports.driven.logger"]
+depends_on = ["p2pwatch_amule.application.ports.driven.logger"]
 
 [[modules]]
 path = "p2pwatch_amule.adapters.driven.system_monotonic_clock"
 layer = "adapters"
 depends_on = [
   "p2pwatch_amule.domain",
-  "p2pwatch_amule.ports.driven.monotonic_clock",
+  "p2pwatch_amule.application.ports.driven.monotonic_clock",
 ]
 
 [[modules]]
@@ -771,8 +771,8 @@ path = "p2pwatch_amule.adapters.driving.cli"
 layer = "adapters"
 depends_on = [
   "p2pwatch_amule.domain",
-  "p2pwatch_amule.ports.driving.container_booter",
-  "p2pwatch_amule.ports.driving.port_sync_loop_runner",
+  "p2pwatch_amule.application.ports.driving.container_booter",
+  "p2pwatch_amule.application.ports.driving.port_sync_loop_runner",
 ]
 
 [[modules]]
@@ -780,16 +780,16 @@ path = "p2pwatch_amule.application"
 layer = "application"
 depends_on = [
   "p2pwatch_amule.domain",
-  "p2pwatch_amule.ports.driven.account_manager",
-  "p2pwatch_amule.ports.driven.admin_password_setter",
-  "p2pwatch_amule.ports.driven.amule_conf_reader",
-  "p2pwatch_amule.ports.driven.amule_conf_writer",
-  "p2pwatch_amule.ports.driven.amuled_directory_preparer",
-  "p2pwatch_amule.ports.driven.forwarded_port_reader",
-  "p2pwatch_amule.ports.driven.logger",
-  "p2pwatch_amule.ports.driven.monotonic_clock",
-  "p2pwatch_amule.ports.driven.service_supervisor",
-  "p2pwatch_amule.ports.driving.container_booter",
+  "p2pwatch_amule.application.ports.driven.account_manager",
+  "p2pwatch_amule.application.ports.driven.admin_password_setter",
+  "p2pwatch_amule.application.ports.driven.amule_conf_reader",
+  "p2pwatch_amule.application.ports.driven.amule_conf_writer",
+  "p2pwatch_amule.application.ports.driven.amuled_directory_preparer",
+  "p2pwatch_amule.application.ports.driven.forwarded_port_reader",
+  "p2pwatch_amule.application.ports.driven.logger",
+  "p2pwatch_amule.application.ports.driven.monotonic_clock",
+  "p2pwatch_amule.application.ports.driven.service_supervisor",
+  "p2pwatch_amule.application.ports.driving.container_booter",
 ]
 
 [[modules]]
@@ -802,8 +802,8 @@ depends_on = [
   "p2pwatch_amule.adapters.driven.stdlib_logger",
   "p2pwatch_amule.application",
   "p2pwatch_amule.domain",
-  "p2pwatch_amule.ports.driven.monotonic_clock",
-  "p2pwatch_amule.ports.driving.port_sync_loop_runner",
+  "p2pwatch_amule.application.ports.driven.monotonic_clock",
+  "p2pwatch_amule.application.ports.driving.port_sync_loop_runner",
 ]
 
 [[modules]]
@@ -812,57 +812,57 @@ layer = "domain"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch_amule.ports.driven.account_manager"
+path = "p2pwatch_amule.application.ports.driven.account_manager"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch_amule.ports.driven.admin_password_setter"
+path = "p2pwatch_amule.application.ports.driven.admin_password_setter"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch_amule.ports.driven.amule_conf_reader"
+path = "p2pwatch_amule.application.ports.driven.amule_conf_reader"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch_amule.ports.driven.amule_conf_writer"
+path = "p2pwatch_amule.application.ports.driven.amule_conf_writer"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch_amule.ports.driven.amuled_directory_preparer"
+path = "p2pwatch_amule.application.ports.driven.amuled_directory_preparer"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch_amule.ports.driven.forwarded_port_reader"
+path = "p2pwatch_amule.application.ports.driven.forwarded_port_reader"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch_amule.ports.driven.logger"
+path = "p2pwatch_amule.application.ports.driven.logger"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch_amule.ports.driven.monotonic_clock"
+path = "p2pwatch_amule.application.ports.driven.monotonic_clock"
 layer = "ports"
 depends_on = ["p2pwatch_amule.domain"]
 
 [[modules]]
-path = "p2pwatch_amule.ports.driven.service_supervisor"
+path = "p2pwatch_amule.application.ports.driven.service_supervisor"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch_amule.ports.driving.container_booter"
+path = "p2pwatch_amule.application.ports.driving.container_booter"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "p2pwatch_amule.ports.driving.port_sync_loop_runner"
+path = "p2pwatch_amule.application.ports.driving.port_sync_loop_runner"
 layer = "ports"
 depends_on = []
 
@@ -883,14 +883,14 @@ depends_on = [
 [[modules]]
 path = "template_checks.adapters.driven.filesystem_template_reader"
 layer = "adapters"
-depends_on = ["template_checks.ports.driven.template_reader"]
+depends_on = ["template_checks.application.ports.driven.template_reader"]
 
 [[modules]]
 path = "template_checks.adapters.driving.cli"
 layer = "adapters"
 depends_on = [
-  "template_checks.ports.driving.logic_free_checker",
-  "template_checks.ports.driving.template_attribute_lister",
+  "template_checks.application.ports.driving.logic_free_checker",
+  "template_checks.application.ports.driving.template_attribute_lister",
 ]
 
 [[modules]]
@@ -898,9 +898,9 @@ path = "template_checks.application"
 layer = "application"
 depends_on = [
   "template_checks.domain",
-  "template_checks.ports.driven.template_reader",
-  "template_checks.ports.driving.logic_free_checker",
-  "template_checks.ports.driving.template_attribute_lister",
+  "template_checks.application.ports.driven.template_reader",
+  "template_checks.application.ports.driving.logic_free_checker",
+  "template_checks.application.ports.driving.template_attribute_lister",
 ]
 
 [[modules]]
@@ -909,17 +909,17 @@ layer = "domain"
 depends_on = []
 
 [[modules]]
-path = "template_checks.ports.driven.template_reader"
+path = "template_checks.application.ports.driven.template_reader"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "template_checks.ports.driving.logic_free_checker"
+path = "template_checks.application.ports.driving.logic_free_checker"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "template_checks.ports.driving.template_attribute_lister"
+path = "template_checks.application.ports.driving.template_attribute_lister"
 layer = "ports"
 depends_on = []
 
@@ -940,36 +940,36 @@ depends_on = [
 [[modules]]
 path = "vex_checks.adapters.driven.filesystem_source_rule_reader"
 layer = "adapters"
-depends_on = ["vex_checks.ports.driven.source_rule_reader"]
+depends_on = ["vex_checks.application.ports.driven.source_rule_reader"]
 
 [[modules]]
 path = "vex_checks.adapters.driven.grype_vulnerability_scanner"
 layer = "adapters"
-depends_on = ["vex_checks.ports.driven.vulnerability_scanner"]
+depends_on = ["vex_checks.application.ports.driven.vulnerability_scanner"]
 
 [[modules]]
 path = "vex_checks.adapters.driven.json_sarif_writer"
 layer = "adapters"
-depends_on = ["vex_checks.domain", "vex_checks.ports.driven.sarif_writer"]
+depends_on = ["vex_checks.domain", "vex_checks.application.ports.driven.sarif_writer"]
 
 [[modules]]
 path = "vex_checks.adapters.driven.json_vex_reader"
 layer = "adapters"
-depends_on = ["vex_checks.ports.driven.vex_reader"]
+depends_on = ["vex_checks.application.ports.driven.vex_reader"]
 
 [[modules]]
 path = "vex_checks.adapters.driven.syft_sbom_reader"
 layer = "adapters"
-depends_on = ["vex_checks.domain", "vex_checks.ports.driven.sbom_reader"]
+depends_on = ["vex_checks.domain", "vex_checks.application.ports.driven.sbom_reader"]
 
 [[modules]]
 path = "vex_checks.adapters.driving.cli"
 layer = "adapters"
 depends_on = [
   "vex_checks.domain",
-  "vex_checks.ports.driving.claim_coverage_checker",
-  "vex_checks.ports.driving.image_claims_checker",
-  "vex_checks.ports.driving.stale_claims_checker",
+  "vex_checks.application.ports.driving.claim_coverage_checker",
+  "vex_checks.application.ports.driving.image_claims_checker",
+  "vex_checks.application.ports.driving.stale_claims_checker",
 ]
 
 [[modules]]
@@ -977,14 +977,14 @@ path = "vex_checks.application"
 layer = "application"
 depends_on = [
   "vex_checks.domain",
-  "vex_checks.ports.driven.sarif_writer",
-  "vex_checks.ports.driven.sbom_reader",
-  "vex_checks.ports.driven.source_rule_reader",
-  "vex_checks.ports.driven.vex_reader",
-  "vex_checks.ports.driven.vulnerability_scanner",
-  "vex_checks.ports.driving.claim_coverage_checker",
-  "vex_checks.ports.driving.image_claims_checker",
-  "vex_checks.ports.driving.stale_claims_checker",
+  "vex_checks.application.ports.driven.sarif_writer",
+  "vex_checks.application.ports.driven.sbom_reader",
+  "vex_checks.application.ports.driven.source_rule_reader",
+  "vex_checks.application.ports.driven.vex_reader",
+  "vex_checks.application.ports.driven.vulnerability_scanner",
+  "vex_checks.application.ports.driving.claim_coverage_checker",
+  "vex_checks.application.ports.driving.image_claims_checker",
+  "vex_checks.application.ports.driving.stale_claims_checker",
 ]
 
 [[modules]]
@@ -993,41 +993,41 @@ layer = "domain"
 depends_on = []
 
 [[modules]]
-path = "vex_checks.ports.driven.sarif_writer"
+path = "vex_checks.application.ports.driven.sarif_writer"
 layer = "ports"
 depends_on = ["vex_checks.domain"]
 
 [[modules]]
-path = "vex_checks.ports.driven.sbom_reader"
+path = "vex_checks.application.ports.driven.sbom_reader"
 layer = "ports"
 depends_on = ["vex_checks.domain"]
 
 [[modules]]
-path = "vex_checks.ports.driven.source_rule_reader"
+path = "vex_checks.application.ports.driven.source_rule_reader"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "vex_checks.ports.driven.vex_reader"
+path = "vex_checks.application.ports.driven.vex_reader"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "vex_checks.ports.driven.vulnerability_scanner"
+path = "vex_checks.application.ports.driven.vulnerability_scanner"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "vex_checks.ports.driving.claim_coverage_checker"
+path = "vex_checks.application.ports.driving.claim_coverage_checker"
 layer = "ports"
 depends_on = []
 
 [[modules]]
-path = "vex_checks.ports.driving.image_claims_checker"
+path = "vex_checks.application.ports.driving.image_claims_checker"
 layer = "ports"
 depends_on = ["vex_checks.domain"]
 
 [[modules]]
-path = "vex_checks.ports.driving.stale_claims_checker"
+path = "vex_checks.application.ports.driving.stale_claims_checker"
 layer = "ports"
 depends_on = ["vex_checks.domain"]

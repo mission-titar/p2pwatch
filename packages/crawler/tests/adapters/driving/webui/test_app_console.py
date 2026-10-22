@@ -13,13 +13,13 @@ from starlette.applications import Starlette
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_targets
 from p2pwatch.adapters.driving.webui.app import build_app
+from p2pwatch.application.ports.driving.console_query_runner import ConsoleQueryOutcome
+from p2pwatch.application.ports.driving.crawl_summarizer import CrawlSummary
+from p2pwatch.application.ports.driving.file_lister import FileListing
+from p2pwatch.application.ports.driving.node_describer import NodeDescription
+from p2pwatch.application.ports.driving.source_lister import SourceListing
 from p2pwatch.domain.console_query import ConsoleDatabase, QueryAnswer, QueryFailure
 from p2pwatch.domain.node_state import NodeState
-from p2pwatch.ports.driving.console_query_runner import ConsoleQueryOutcome
-from p2pwatch.ports.driving.crawl_summarizer import CrawlSummary
-from p2pwatch.ports.driving.file_lister import FileListing
-from p2pwatch.ports.driving.node_describer import NodeDescription
-from p2pwatch.ports.driving.source_lister import SourceListing
 from tests.fakes.application.fakes import (
     FakeConsoleQueryRunner,
     FakeCrawlPauser,
