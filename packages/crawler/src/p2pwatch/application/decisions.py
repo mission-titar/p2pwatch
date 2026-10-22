@@ -23,10 +23,12 @@ from p2pwatch.application.run_download_cycle import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.observability.events import DecisionChange, DecisionsRecorded
 from p2pwatch.domain.retraction import RETRACTED_TIER
-from p2pwatch.ports.driven.catalog import DecisionReader, DecisionWriter, ObservationReader
-from p2pwatch.ports.driven.clock import WallClock
-from p2pwatch.ports.driven.telemetry import EventEmitter
+from p2pwatch.ports.driven.decision_reader import DecisionReader
+from p2pwatch.ports.driven.decision_writer import DecisionWriter
+from p2pwatch.ports.driven.event_emitter import EventEmitter
+from p2pwatch.ports.driven.observation_reader import ObservationReader
 from p2pwatch.ports.driven.waker import Waker
+from p2pwatch.ports.driven.wall_clock import WallClock
 
 
 async def rejudge_file(

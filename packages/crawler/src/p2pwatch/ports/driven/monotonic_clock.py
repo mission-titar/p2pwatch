@@ -1,18 +1,9 @@
-"""Time, injectable: ``WallClock`` stamps, ``MonotonicClock`` measures every interval and deadline
-kept in memory."""
+"""Time, injectable: ``MonotonicClock`` measures every interval and deadline kept in memory."""
 
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
-
-
-class WallClock(ABC):
-    """The UTC time of day, aware: every stamp a row, an event or a display carries."""
-
-    @abstractmethod
-    def now(self) -> datetime:
-        """The current UTC time, aware."""
 
 
 class MonotonicClock(ABC):

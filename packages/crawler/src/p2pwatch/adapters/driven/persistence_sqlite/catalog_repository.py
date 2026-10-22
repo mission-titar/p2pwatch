@@ -35,13 +35,11 @@ from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.retraction import RETRACTED_TIER
-from p2pwatch.ports.driven.catalog import (
-    CatalogScanReader,
-    DecisionReader,
-    DecisionWriter,
-    ObservationReader,
-    ObservationWriter,
-)
+from p2pwatch.ports.driven.catalog_scan_reader import CatalogScanReader
+from p2pwatch.ports.driven.decision_reader import DecisionReader
+from p2pwatch.ports.driven.decision_writer import DecisionWriter
+from p2pwatch.ports.driven.observation_reader import ObservationReader
+from p2pwatch.ports.driven.observation_writer import ObservationWriter
 
 _CANONICAL_HASH_RE = re.compile(r"[0-9a-f]{32}\Z")
 

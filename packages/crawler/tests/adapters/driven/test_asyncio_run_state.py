@@ -14,7 +14,8 @@ import asyncio
 from collections.abc import Callable
 
 from p2pwatch.adapters.driven.asyncio_run_state import AsyncioRunState
-from p2pwatch.ports.driven.run_state import RunStateReader, RunStateWriter
+from p2pwatch.ports.driven.run_state_reader import RunStateReader
+from p2pwatch.ports.driven.run_state_writer import RunStateWriter
 
 
 class _ImmediateLoop:

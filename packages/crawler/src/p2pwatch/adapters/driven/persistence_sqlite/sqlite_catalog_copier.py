@@ -32,7 +32,8 @@ from pathlib import Path, PurePath
 
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
-from p2pwatch.ports.driven.catalog_copier import CatalogCopier, CatalogCopyError
+from p2pwatch.domain.catalog_copy_error import CatalogCopyError
+from p2pwatch.ports.driven.catalog_copier import CatalogCopier
 
 _logger = logging.getLogger("p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier")
 

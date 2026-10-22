@@ -11,6 +11,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog,
 from p2pwatch.adapters.driven.persistence_sqlite.download_repository import SqliteDownloadRepository
 from p2pwatch.adapters.driven.persistence_sqlite.source_repository import SqliteSourceRepository
 from p2pwatch.application.run_download_cycle import DownloadDeps, run_download_cycle
+from p2pwatch.domain.client_errors import ClientUnreachableError, DownloadRejectedError
 from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
@@ -26,6 +27,7 @@ from p2pwatch.domain.observability.events import (
     TargetTitle,
 )
 from p2pwatch.domain.observation import FileObservation, ReportedFile
+from p2pwatch.domain.repository_errors import RepositoryError
 from p2pwatch.domain.source import (
     EarlierPoints,
     RecordedReading,
@@ -33,9 +35,7 @@ from p2pwatch.domain.source import (
     SourceReading,
     SourceRole,
 )
-from p2pwatch.ports.driven.client_errors import ClientUnreachableError, DownloadRejectedError
 from p2pwatch.ports.driven.free_space_meter import FreeSpaceMeter
-from p2pwatch.ports.driven.repository_errors import RepositoryError
 from tests.fakes.application.download_fakes import (
     FakeDecisionReader,
     FakeDownloadClient,

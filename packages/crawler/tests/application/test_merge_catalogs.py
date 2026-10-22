@@ -6,9 +6,11 @@ from pathlib import PurePath
 import pytest
 
 from p2pwatch.application.merge_catalogs import MergeCatalogs
-from p2pwatch.ports.driven.catalog_copier import CatalogCopier, CatalogCopyError
+from p2pwatch.domain.catalog_copy_error import CatalogCopyError
+from p2pwatch.domain.merge_error import MergeError
+from p2pwatch.ports.driven.catalog_copier import CatalogCopier
 from p2pwatch.ports.driven.catalog_finder import CatalogFinder
-from p2pwatch.ports.driving.catalog_merger import ListedSourceCatalog, MergeError, NewCatalog
+from p2pwatch.ports.driving.catalog_merger import ListedSourceCatalog, NewCatalog
 from tests.fakes.application.fakes import FakeLogger, LoggedLine
 
 _A = PurePath("a.db")

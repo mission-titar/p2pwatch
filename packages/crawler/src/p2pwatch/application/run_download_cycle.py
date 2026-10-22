@@ -27,6 +27,7 @@ from typing import Literal
 from catalog_matching.domain.models import TargetSegment
 from p2pwatch.application.edge_state import EdgeState
 from p2pwatch.application.source_alerts import FirstUseful, source_alert
+from p2pwatch.domain.client_errors import ClientUnreachableError, DownloadRejectedError
 from p2pwatch.domain.download.policy import DownloadVerdict, decide_download
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.states import DownloadState, FailureReason
@@ -43,19 +44,22 @@ from p2pwatch.domain.observability.events import (
     TargetTitle,
 )
 from p2pwatch.domain.persisted_wait import remaining_wait
+from p2pwatch.domain.repository_errors import RepositoryError
 from p2pwatch.domain.source import RecordedReading, SourceKey, SourceUsefulness
-from p2pwatch.ports.driven.catalog import DecisionReader, ObservationReader
-from p2pwatch.ports.driven.client_errors import ClientUnreachableError, DownloadRejectedError
-from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
+from p2pwatch.ports.driven.decision_reader import DecisionReader
 from p2pwatch.ports.driven.download_client import DownloadClient
-from p2pwatch.ports.driven.downloads import DownloadReader, DownloadWriter
+from p2pwatch.ports.driven.download_reader import DownloadReader
+from p2pwatch.ports.driven.download_writer import DownloadWriter
+from p2pwatch.ports.driven.event_emitter import EventEmitter
 from p2pwatch.ports.driven.free_space_meter import FreeSpaceMeter
 from p2pwatch.ports.driven.logger import Logger
-from p2pwatch.ports.driven.repository_errors import RepositoryError
+from p2pwatch.ports.driven.monotonic_clock import MonotonicClock
+from p2pwatch.ports.driven.observation_reader import ObservationReader
 from p2pwatch.ports.driven.source_client import SourceClient
-from p2pwatch.ports.driven.source_points import SourcePointReader, SourcePointWriter
-from p2pwatch.ports.driven.telemetry import EventEmitter
+from p2pwatch.ports.driven.source_point_reader import SourcePointReader
+from p2pwatch.ports.driven.source_point_writer import SourcePointWriter
 from p2pwatch.ports.driven.waker import Waker
+from p2pwatch.ports.driven.wall_clock import WallClock
 
 # Conventional subject of the download wake (DECISION D13). D-download subscribes to THIS
 # subject; the producer side (the pipeline) calls wake("download").

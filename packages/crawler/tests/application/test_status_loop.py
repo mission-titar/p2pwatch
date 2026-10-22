@@ -8,12 +8,13 @@ import pytest
 
 from p2pwatch.adapters.driven.mule_api.errors import ApiAuthError, ApiRejectedError
 from p2pwatch.application.status_loop import StatusLoopDeps, status_loop
+from p2pwatch.domain.client_errors import ClientError
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.observability import events as ev
 from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus, StatusReading
-from p2pwatch.ports.driven.client_errors import ClientError
-from p2pwatch.ports.driven.client_status import ClientStatusWriter, StatusClient
-from p2pwatch.ports.driven.telemetry import EventEmitter
+from p2pwatch.ports.driven.client_status_writer import ClientStatusWriter
+from p2pwatch.ports.driven.event_emitter import EventEmitter
+from p2pwatch.ports.driven.status_client import StatusClient
 from tests.fakes.application.fakes import FakeTime, make_unreachable
 
 type _Reading = ClientStatus | ClientError

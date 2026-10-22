@@ -2,11 +2,11 @@
 
 from p2pwatch.domain.coverage import coverage_of
 from p2pwatch.domain.status_reading import is_reading_fresh
-from p2pwatch.ports.driven.client_status import ClientStatusReader
-from p2pwatch.ports.driven.clock import MonotonicClock
+from p2pwatch.ports.driven.client_status_reader import ClientStatusReader
 from p2pwatch.ports.driven.coverage_reader import CoverageReader
+from p2pwatch.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.ports.driven.node_state_reader import NodeStateReader
-from p2pwatch.ports.driven.run_state import RunStateReader
+from p2pwatch.ports.driven.run_state_reader import RunStateReader
 from p2pwatch.ports.driving.crawl_summarizer import ClientSummary, CrawlSummarizer, CrawlSummary
 
 

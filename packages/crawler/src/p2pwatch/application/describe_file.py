@@ -7,8 +7,8 @@ from p2pwatch.application.matching_read import MatchingExplainer
 from p2pwatch.domain.interval import requested_interval
 from p2pwatch.domain.sharing_period import PeriodWindow
 from p2pwatch.ports.driven.catalog_file_reader import CatalogFileReader
-from p2pwatch.ports.driven.clock import WallClock
 from p2pwatch.ports.driven.source_reader import SourceReader
+from p2pwatch.ports.driven.wall_clock import WallClock
 from p2pwatch.ports.driving.file_describer import FileDescriber, FileDescription
 
 

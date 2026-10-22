@@ -22,7 +22,7 @@ from collections.abc import Callable, Sequence
 import apprise
 
 from p2pwatch.domain.observability.policy import Audience, Severity
-from p2pwatch.ports.driven.telemetry import Notifier
+from p2pwatch.ports.driven.notifier import Notifier
 
 # (url, audience, node_prefix), from the config's ``observability.notifications``.
 AppriseTargets = Sequence[tuple[str, Audience, bool]]

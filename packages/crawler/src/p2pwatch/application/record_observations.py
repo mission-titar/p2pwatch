@@ -21,17 +21,15 @@ from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.application.decisions import rejudge_file
 from p2pwatch.domain.observability.events import ObservationRecorded
 from p2pwatch.domain.observation import FileObservation, ReportedFile
-from p2pwatch.ports.driven.catalog import (
-    DecisionReader,
-    DecisionWriter,
-    ObservationReader,
-    ObservationWriter,
-)
-from p2pwatch.ports.driven.clock import WallClock
+from p2pwatch.domain.repository_errors import RepositoryError
+from p2pwatch.ports.driven.decision_reader import DecisionReader
+from p2pwatch.ports.driven.decision_writer import DecisionWriter
+from p2pwatch.ports.driven.event_emitter import EventEmitter
 from p2pwatch.ports.driven.logger import Logger
-from p2pwatch.ports.driven.repository_errors import RepositoryError
-from p2pwatch.ports.driven.telemetry import EventEmitter
+from p2pwatch.ports.driven.observation_reader import ObservationReader
+from p2pwatch.ports.driven.observation_writer import ObservationWriter
 from p2pwatch.ports.driven.waker import Waker
+from p2pwatch.ports.driven.wall_clock import WallClock
 
 
 async def record_observation(

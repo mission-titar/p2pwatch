@@ -8,14 +8,14 @@ from p2pwatch.application.reevaluate_if_policy_changed import reevaluate_if_poli
 from p2pwatch.application.resolve_node_id import resolve_node_id
 from p2pwatch.application.supervise_loops import supervise_loops
 from p2pwatch.domain.observability.events import CrawlerStarted
-from p2pwatch.ports.driven.clock import WallClock
+from p2pwatch.ports.driven.event_emitter import EventEmitter
 from p2pwatch.ports.driven.logger import Logger
-from p2pwatch.ports.driven.node_id import NodeIdGenerator, NodeIdReader, NodeIdWriter
-from p2pwatch.ports.driven.policy_fingerprint import (
-    PolicyFingerprintReader,
-    PolicyFingerprintWriter,
-)
-from p2pwatch.ports.driven.telemetry import EventEmitter
+from p2pwatch.ports.driven.node_id_generator import NodeIdGenerator
+from p2pwatch.ports.driven.node_id_reader import NodeIdReader
+from p2pwatch.ports.driven.node_id_writer import NodeIdWriter
+from p2pwatch.ports.driven.policy_fingerprint_reader import PolicyFingerprintReader
+from p2pwatch.ports.driven.policy_fingerprint_writer import PolicyFingerprintWriter
+from p2pwatch.ports.driven.wall_clock import WallClock
 
 
 class RunCrawler:

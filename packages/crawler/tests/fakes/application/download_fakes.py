@@ -10,14 +10,17 @@ from p2pwatch.domain.download.states import DownloadState, FailureReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation
+from p2pwatch.domain.repository_errors import RepositoryError
 from p2pwatch.domain.source import EarlierPoints, RecordedReading, SourceKey, SourceReading
-from p2pwatch.ports.driven.catalog import DecisionReader, ObservationReader
+from p2pwatch.ports.driven.decision_reader import DecisionReader
 from p2pwatch.ports.driven.download_client import DownloadClient
-from p2pwatch.ports.driven.downloads import DownloadReader, DownloadWriter
+from p2pwatch.ports.driven.download_reader import DownloadReader
+from p2pwatch.ports.driven.download_writer import DownloadWriter
 from p2pwatch.ports.driven.free_space_meter import FreeSpaceMeter
-from p2pwatch.ports.driven.repository_errors import RepositoryError
+from p2pwatch.ports.driven.observation_reader import ObservationReader
 from p2pwatch.ports.driven.source_client import SourceClient
-from p2pwatch.ports.driven.source_points import SourcePointReader, SourcePointWriter
+from p2pwatch.ports.driven.source_point_reader import SourcePointReader
+from p2pwatch.ports.driven.source_point_writer import SourcePointWriter
 from tests.fakes.application.fakes import FakeTime
 
 

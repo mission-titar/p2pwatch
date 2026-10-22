@@ -5,7 +5,8 @@ from p2pwatch_amule.domain.amuled_restart import is_amuled_restart_due
 from p2pwatch_amule.domain.conf import tcp_listen_port, with_listen_port
 from p2pwatch_amule.domain.monotonic_instant import MonotonicInstant
 from p2pwatch_amule.domain.settings import PortSyncSettings
-from p2pwatch_amule.ports.driven.amule_conf import AmuleConfReader, AmuleConfWriter
+from p2pwatch_amule.ports.driven.amule_conf_reader import AmuleConfReader
+from p2pwatch_amule.ports.driven.amule_conf_writer import AmuleConfWriter
 from p2pwatch_amule.ports.driven.forwarded_port_reader import ForwardedPortReader
 from p2pwatch_amule.ports.driven.logger import Logger
 from p2pwatch_amule.ports.driven.monotonic_clock import MonotonicClock

@@ -6,17 +6,16 @@ An append-only trigger that fires is a BUG in the caller code, not a business
 case → the same ``PersistenceError``. ``wrap_sqlite_errors`` is the SINGLE
 wrapper shared by the connection and the two repositories (chained cause kept).
 
-``PersistenceError`` INHERITS from the ``RepositoryError`` port contract (``ports/
+``PersistenceError`` INHERITS from the ``RepositoryError`` contract (``domain/
 repository_errors.py``): the application catches ``RepositoryError`` (orchestration spec §7,
-"a failed obs is logged, the cycle continues"), never this adapter class — dependency
-rule §4. adapter→port dependency, allowed.
+"a failed obs is logged, the cycle continues"), never this adapter class (dependency rule §4).
 """
 
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from p2pwatch.ports.driven.repository_errors import RepositoryError
+from p2pwatch.domain.repository_errors import RepositoryError
 
 
 class PersistenceError(RepositoryError):

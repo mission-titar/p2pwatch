@@ -10,7 +10,8 @@ change happens on the next crawler loop tick.
 
 import asyncio
 
-from p2pwatch.ports.driven.run_state import RunStateReader, RunStateWriter
+from p2pwatch.ports.driven.run_state_reader import RunStateReader
+from p2pwatch.ports.driven.run_state_writer import RunStateWriter
 
 
 class AsyncioRunState(RunStateWriter, RunStateReader):

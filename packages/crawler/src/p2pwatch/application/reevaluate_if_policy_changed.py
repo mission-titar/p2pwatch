@@ -13,10 +13,8 @@ from collections.abc import Awaitable, Callable
 
 from p2pwatch.application.reevaluate_catalog import ReevaluationSummary
 from p2pwatch.ports.driven.logger import Logger
-from p2pwatch.ports.driven.policy_fingerprint import (
-    PolicyFingerprintReader,
-    PolicyFingerprintWriter,
-)
+from p2pwatch.ports.driven.policy_fingerprint_reader import PolicyFingerprintReader
+from p2pwatch.ports.driven.policy_fingerprint_writer import PolicyFingerprintWriter
 
 
 async def reevaluate_if_policy_changed(

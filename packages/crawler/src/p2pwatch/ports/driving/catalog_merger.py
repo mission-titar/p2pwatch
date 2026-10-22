@@ -6,10 +6,6 @@ from dataclasses import dataclass
 from pathlib import PurePath
 
 
-class MergeError(Exception):
-    """A merge refused before copying, or a copy that failed: each source is copied whole or not."""
-
-
 @dataclass(frozen=True)
 class NewCatalog:
     """A destination outside the sources, refused if it exists unless ``force``."""

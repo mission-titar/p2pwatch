@@ -10,7 +10,7 @@ from p2pwatch.application.run_download_cycle import (
 )
 from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
-from p2pwatch.ports.driven.clock import MonotonicClock
+from p2pwatch.ports.driven.monotonic_clock import MonotonicClock
 from tests.fakes.application.download_fakes import (
     FakeDecisionReader,
     FakeDownloadClient,

@@ -1,4 +1,4 @@
-from p2pwatch.ports.driven.client_errors import (
+from p2pwatch.domain.client_errors import (
     ClientError,
     ClientUnreachableError,
     DownloadRejectedError,

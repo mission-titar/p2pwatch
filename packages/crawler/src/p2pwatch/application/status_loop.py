@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Literal
 
+from p2pwatch.domain.client_errors import ClientAuthError, ClientError
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.observability.events import (
     ChannelDegraded,
@@ -22,10 +23,11 @@ from p2pwatch.domain.observability.events import (
     Event,
 )
 from p2pwatch.domain.status_reading import STATUS_PERIOD, ClientStatus, StatusReading
-from p2pwatch.ports.driven.client_errors import ClientAuthError, ClientError
-from p2pwatch.ports.driven.client_status import ClientStatusWriter, StatusClient
-from p2pwatch.ports.driven.clock import MonotonicClock, WallClock
-from p2pwatch.ports.driven.telemetry import EventEmitter
+from p2pwatch.ports.driven.client_status_writer import ClientStatusWriter
+from p2pwatch.ports.driven.event_emitter import EventEmitter
+from p2pwatch.ports.driven.monotonic_clock import MonotonicClock
+from p2pwatch.ports.driven.status_client import StatusClient
+from p2pwatch.ports.driven.wall_clock import WallClock
 
 CHANNEL_ALERT_AFTER = timedelta(minutes=5)
 UNREACHABLE_ALERT_AFTER = timedelta(minutes=2)

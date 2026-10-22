@@ -4,15 +4,12 @@ from collections.abc import Sequence
 from pathlib import PurePath
 from typing import assert_never
 
-from p2pwatch.ports.driven.catalog_copier import CatalogCopier, CatalogCopyError
+from p2pwatch.domain.catalog_copy_error import CatalogCopyError
+from p2pwatch.domain.merge_error import MergeError
+from p2pwatch.ports.driven.catalog_copier import CatalogCopier
 from p2pwatch.ports.driven.catalog_finder import CatalogFinder
 from p2pwatch.ports.driven.logger import Logger
-from p2pwatch.ports.driving.catalog_merger import (
-    CatalogMerger,
-    ListedSourceCatalog,
-    MergeError,
-    NewCatalog,
-)
+from p2pwatch.ports.driving.catalog_merger import CatalogMerger, ListedSourceCatalog, NewCatalog
 
 
 class MergeCatalogs(CatalogMerger):
