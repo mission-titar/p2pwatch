@@ -20,8 +20,10 @@ Un nœud est **deux conteneurs**, deux services compose :
 - `ed2k`, le client eMule. Dedans, le superviseur s6 fait tourner deux services : `amuled`, qui
   démarre à son tour `amuleapi`, l'interface web d'aMule, et le port-sync, arrêté hors de la
   [variante VPN](vpn.md). Au démarrage, le conteneur crée l'utilisateur `amule` à partir de `PUID`
-  et `PGID`, prend possession des dossiers montés, puis écrit un `amule.conf` **seulement s'il n'y
-  en a pas**.
+  et `PGID`, prend possession des dossiers montés, puis réconcilie `amule.conf` : il le crée s'il n'existe
+  pas, et réécrit **à chaque démarrage** le mot de passe EC et la section `[AmuleApi]` (`Enabled`,
+  `BindAddress`, `HttpPort`). Les autres clés sont gardées, mais les commentaires du fichier sont
+  perdus à la réécriture.
 
 Le crawler joint aMule par le nom `ed2k`, dans les deux variantes.
 
@@ -355,8 +357,8 @@ compose qui gouverne l'accès.
 
 | Réglage | Où | Valeur par défaut | Rôle |
 |---|---|---|---|
-| `catalog_db_path` | `crawler.yml` | `/data/catalog.db` | Base catalogue, lue en lecture seule (= `data/catalog.db` côté hôte) |
-| `local_db_path` | `crawler.yml` | `/data/local.db` | Base état local, lue en lecture seule (= `data/local.db` côté hôte) |
+| `catalog_db_path` | `crawler.yml` | aucune : clé obligatoire, `/data/catalog.db` dans le `crawler.yml` livré | Base catalogue, lue en lecture seule (= `data/catalog.db` côté hôte) |
+| `local_db_path` | `crawler.yml` | aucune : clé obligatoire, `/data/local.db` dans le `crawler.yml` livré | Base état local, lue en lecture seule (= `data/local.db` côté hôte) |
 | `webui.amule_url` | `crawler.yml` | `http://localhost:4711` | Cible du lien « aMule » dans la navigation. À changer uniquement derrière un reverse proxy : c'est le navigateur qui résout cette URL, pas le conteneur. |
 | port publié du catalogue | `compose.yml` (`ports:`) | `8080` | Dans le mapping `"8080:8080"`, changez le nombre de gauche pour publier ailleurs. Ne change pas le port d'écoute interne. |
 | port publié d'amuleapi | `ed2k/direct.compose.yml` (`ports:`) | `4711` | Idem pour amuleapi. Sous la variante VPN, il est porté par le service `ed2k-gluetun`, dans `ed2k/vpn.compose.yml`. |

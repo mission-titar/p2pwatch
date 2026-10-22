@@ -8,4 +8,4 @@ ignores: ["packages/crawler_testing/**"]
 rule:
   matches: imported-module
   not:
-    regex: ^(abc|collections\.abc|dataclasses|datetime|enum|pathlib|typing|(amule_bump|catalog_matching|coverage_checks|p2pwatch|p2pwatch_amule|template_checks|vex_checks)(\.\w+)*)$
+    regex: ^(abc|collections\.abc|dataclasses|datetime|pathlib|typing|(amule_bump|catalog_matching|coverage_checks|p2pwatch|p2pwatch_amule|template_checks|vex_checks)(\.\w+)*)$

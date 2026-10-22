@@ -66,9 +66,9 @@ Le projet a **deux niveaux** :
    temps de la recherche, une fixture `autouse` qui appelle `gc.collect()` après chaque test :
    l'échec tombe alors sur le test fautif.
 
-   L'`addopts` de chaque paquet **désélectionne** tous les markers d'intégration
-   (`-m "not api_integration and not …"`), si bien que le gate ne les lance jamais, et ils sont exclus
-   de la mesure de coverage.
+   L'`addopts` du crawler, le seul paquet qui a des markers d'intégration, les **désélectionne**
+   (`-m "not api_integration and not …"`), si bien que `poe check` ne les lance jamais, et ils sont
+   exclus de la mesure de coverage. La CI les lance à part (section 5).
 
 2. **Les suites d'intégration** (désélectionnées par défaut, lancées **à la demande**). Chacune porte
    un **marker** pytest. Lancez-les une à la fois avec `--no-cov` (sinon le seuil de 100 % valable
@@ -332,7 +332,7 @@ Pour pouvoir lancer **toutes** les suites :
 Déjà en CI :
 
 - `.github/workflows/validate.yml` est le **gate** réutilisable, appelé par `pr.yml` (sur les pull
-  requests) et par `release.yml` (sur un push de tag). Ses jobs :
+  requests) et par `release.yml` (à chaque push sur `main` et de tag). Ses jobs :
   - `lint` : `uv run poe lint-all` (ruff, format, dépendances déclarées par deptry, accès
     dynamiques aux attributs et imports du cœur hors de sa liste refusés par ast-grep, imports
     entre anneaux et entre hexagones vérifiés par tach, code mort par vulture, mypy, sqlfluff,
@@ -352,11 +352,11 @@ Déjà en CI :
   - `gate` : l'unique check d'agrégation exigé par la protection de branche.
 - `.github/workflows/pr.yml` lance aussi le job `vex-checks` (`poe vex-source-claims` +
   `poe vex-claim-coverage`).
-- `.github/workflows/grype-scan.yml` scanne quotidiennement les deux images publiées, chacune avec
-  sa VEX, et remonte dans Code scanning.
+- `.github/workflows/grype-scan.yml` scanne quotidiennement une image publiée avec sa VEX attestée,
+  et remonte dans Code scanning : l'image unique de la v4, `mulewatch`, jusqu'à la sortie de la v5,
+  puis chacune des deux images.
 
-Tous les markers tournent désormais en CI. Les seules suites encore absentes sont celles appartenant
-aux autres paquets (voir leurs sections ci-dessus).
+Les quatre markers tournent en CI, dans `build-and-verify`, sur les deux architectures.
 
 Ces trois suites tournent désormais sur **les deux arches**, puisqu'elles vivent dans
 `build-and-verify` : amuleapi n'existant que dans notre image, le démon qu'elles interrogent est

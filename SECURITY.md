@@ -25,10 +25,11 @@ l'authenticité d'une image") for how to verify a pulled image.
 
 ## Vulnerability scanning
 
-A [Grype](https://github.com/anchore/grype) scan runs daily against each image's attested
-Syft-JSON SBOM (`.github/workflows/grype-scan.yml`), applying that image's VEX. Results
-appear in the repository's **Security > Code scanning** tab as SARIF findings, under the
-`grype-crawler` and `grype-amule` categories. The scan never fails the workflow: findings are triaged through VEX.
+A [Grype](https://github.com/anchore/grype) scan runs daily against an image's attested
+Syft-JSON SBOM (`.github/workflows/grype-scan.yml`), applying that image's attested VEX. Until v5
+ships it scans v4's single image, `ghcr.io/mission-titar/mulewatch`, under the `grype-mulewatch`
+category; from v5 it scans each image, under the `grype-crawler` and `grype-amule` categories.
+Results appear in the repository's **Security > Code scanning** tab as SARIF findings. The scan never fails the workflow: findings are triaged through VEX.
 
 ### A misnamed or undeclared component stops matching, silently
 
@@ -65,7 +66,7 @@ if either of its SBOMs lacks it. Every other declared or renamed component is on
 this deployment context, so they are filtered out of scan results automatically. They live in
 `security/<package>.vex.openvex.json`, one file per image (`crawler`, `amule`), versioned here (the
 source of truth) and attached to their released image as a signed OpenVEX attestation: the daily
-scan pulls each **from its image**. For a local run, point Grype at the file explicitly, for
+scan pulls the VEX **from the image it scans** (v4's `mulewatch` until v5 ships). For a local run, point Grype at the file explicitly, for
 example `--vex security/crawler.vex.openvex.json`.
 
 ### Statements are image-scoped, and the scan reads the Syft-JSON SBOM
