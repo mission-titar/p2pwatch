@@ -37,10 +37,12 @@ from p2pwatch.ports.driven.client_errors import ClientUnreachableError, Download
 from p2pwatch.ports.driven.free_space_meter import FreeSpaceMeter
 from p2pwatch.ports.driven.repository_errors import RepositoryError
 from tests.fakes.application.download_fakes import (
-    FakeCatalogReader,
+    FakeDecisionReader,
     FakeDownloadClient,
     FakeDownloadStore,
     FakeFreeSpaceMeter,
+    FakeObservationReader,
+    FakeSourceClient,
     FakeSourcePointStore,
 )
 from tests.fakes.application.fakes import (
@@ -105,8 +107,10 @@ def _started(client: FakeDownloadClient) -> list[str]:
 def _deps(
     *,
     client: FakeDownloadClient,
+    source_client: FakeSourceClient | None = None,
     downloads: FakeDownloadStore | SqliteDownloadRepository,
-    catalog: FakeCatalogReader,
+    decision_reader: FakeDecisionReader | None = None,
+    observation_reader: FakeObservationReader | None = None,
     free: int = 1_000_000,
     min_free: int = 0,
     lost_after: timedelta = timedelta(days=1),
@@ -121,13 +125,13 @@ def _deps(
     sources = sources or FakeSourcePointStore()
     return DownloadDeps(
         download_client=client,
-        source_client=client,
+        source_client=source_client or FakeSourceClient(),
         download_writer=downloads,
         download_reader=downloads,
         source_point_writer=sources,
         source_point_reader=sources,
-        decision_reader=catalog,
-        observation_reader=catalog,
+        decision_reader=decision_reader or FakeDecisionReader(),
+        observation_reader=observation_reader or FakeObservationReader(),
         targets=targets if targets is not None else _TARGETS,
         free_space_meter=FakeFreeSpaceMeter(free),
         min_free_bytes=min_free,
@@ -146,14 +150,15 @@ def _deps(
 async def test_new_candidate_is_queued_and_link_added() -> None:
     client = FakeDownloadClient()
     downloads = FakeDownloadStore()
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_A, "062A"),),
-        observations={_A: _observation(_A, "Keroro.avi", 100)},
+    decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
+    observation_reader = FakeObservationReader(
+        observations={_A: _observation(_A, "Keroro.avi", 100)}
     )
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=catalog,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
     )
     await run_download_cycle(deps, _NODE)
     assert downloads.states[_A] is DownloadState.QUEUED
@@ -165,14 +170,13 @@ async def test_already_downloaded_candidate_is_deduped() -> None:
     client = FakeDownloadClient(listed=[(_status(_A),)])
     downloads = FakeDownloadStore()
     downloads.states[_A] = DownloadState.DOWNLOADING  # already known
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_A, "062A"),),
-        observations={_A: _observation(_A, "x", 1)},
-    )
+    decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
+    observation_reader = FakeObservationReader(observations={_A: _observation(_A, "x", 1)})
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=catalog,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
     )
     await run_download_cycle(deps, _NODE)
     assert client.started == []  # dedup: no new link
@@ -198,14 +202,17 @@ async def test_two_segment_candidates_same_hash_dedup_to_one_download() -> None:
     event_emitter = FakeEventEmitter()
     client = FakeDownloadClient()
     downloads = FakeDownloadStore()
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_A, "062A"), _candidate(_A, "062B")),
-        observations={_A: _observation(_A, "Keroro 062.avi", 100)},
+    decision_reader = FakeDecisionReader(
+        candidates=(_candidate(_A, "062A"), _candidate(_A, "062B"))
+    )
+    observation_reader = FakeObservationReader(
+        observations={_A: _observation(_A, "Keroro 062.avi", 100)}
     )
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=catalog,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
         event_emitter=event_emitter,
         targets=targets,
     )
@@ -227,14 +234,15 @@ async def test_two_segment_candidates_same_hash_dedup_to_one_download() -> None:
 async def test_complete_target_candidate_is_skipped() -> None:
     client = FakeDownloadClient()
     downloads = FakeDownloadStore()
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_B, "063A"),),  # 063A status=complete
-        observations={_B: _observation(_B, "x", 1)},
+    decision_reader = FakeDecisionReader(
+        candidates=(_candidate(_B, "063A"),)  # 063A status=complete
     )
+    observation_reader = FakeObservationReader(observations={_B: _observation(_B, "x", 1)})
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=catalog,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
     )
     await run_download_cycle(deps, _NODE)
     assert client.started == []
@@ -245,14 +253,13 @@ async def test_complete_target_candidate_is_skipped() -> None:
 async def test_a_candidate_that_would_break_the_disk_floor_defers() -> None:
     client = FakeDownloadClient()
     downloads = FakeDownloadStore()
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_A, "062A"),),
-        observations={_A: _observation(_A, "x", 500)},
-    )
+    decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
+    observation_reader = FakeObservationReader(observations={_A: _observation(_A, "x", 500)})
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=catalog,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
         free=1_000,
         min_free=600,  # 1000 - 500 < 600 → defers
     )
@@ -268,11 +275,16 @@ async def test_outstanding_queue_bytes_are_charged_against_the_floor() -> None:
     client = FakeDownloadClient(listed=[(_status(_B, done=100, total=1000),)])
     downloads = FakeDownloadStore()
     downloads.states[_B] = DownloadState.DOWNLOADING
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_A, "062A"),),
-        observations={_A: _observation(_A, "x", 200)},
+    decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
+    observation_reader = FakeObservationReader(observations={_A: _observation(_A, "x", 200)})
+    deps = _deps(
+        client=client,
+        downloads=downloads,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
+        free=1_000,
+        min_free=0,
     )
-    deps = _deps(client=client, downloads=downloads, catalog=catalog, free=1_000, min_free=0)
     await run_download_cycle(deps, _NODE)
     assert client.started == []
     assert _A not in downloads.states
@@ -285,11 +297,16 @@ async def test_a_nascent_queue_entry_commits_nothing() -> None:
     client = FakeDownloadClient(listed=[(_status(_B, done=50, total=0),)])
     downloads = FakeDownloadStore()
     downloads.states[_B] = DownloadState.DOWNLOADING
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_A, "062A"),),
-        observations={_A: _observation(_A, "x", 200)},
+    decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
+    observation_reader = FakeObservationReader(observations={_A: _observation(_A, "x", 200)})
+    deps = _deps(
+        client=client,
+        downloads=downloads,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
+        free=1_000,
+        min_free=800,
     )
-    deps = _deps(client=client, downloads=downloads, catalog=catalog, free=1_000, min_free=800)
     await run_download_cycle(deps, _NODE)
     assert downloads.states[_A] is DownloadState.QUEUED
 
@@ -300,11 +317,13 @@ async def test_candidate_without_observation_is_skipped() -> None:
     # we skip it (log), never a crash.
     client = FakeDownloadClient()
     downloads = FakeDownloadStore()
-    catalog = FakeCatalogReader(candidates=(_candidate(_A, "062A"),), observations={})
+    decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
+    observation_reader = FakeObservationReader(observations={})
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=catalog,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
     )
     await run_download_cycle(deps, _NODE)
     assert client.started == []
@@ -318,7 +337,6 @@ async def test_monitor_marks_in_progress_when_not_complete() -> None:
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=FakeCatalogReader(),
     )
     await run_download_cycle(deps, _NODE)
     assert downloads.states[_A] is DownloadState.DOWNLOADING
@@ -340,7 +358,7 @@ async def test_monitor_does_not_regress_a_completed_queue_entry() -> None:
     client = FakeDownloadClient(listed=[(_status(_A, done=3, total=10),)])
     repo = _NoSetStateStore()
     repo.states[_A] = DownloadState.COMPLETED
-    deps = _deps(client=client, downloads=repo, catalog=FakeCatalogReader())
+    deps = _deps(client=client, downloads=repo)
     await run_download_cycle(deps, _NODE)
     assert repo.states[_A] is DownloadState.COMPLETED  # unchanged
 
@@ -353,7 +371,7 @@ async def test_monitor_resurrects_a_failed_download_back_in_the_queue() -> None:
     downloads = FakeDownloadStore()
     downloads.states[_A] = DownloadState.FAILED
     downloads.failures[_A] = FailureReason.LOST
-    deps = _deps(client=client, downloads=downloads, catalog=FakeCatalogReader())
+    deps = _deps(client=client, downloads=downloads)
     await run_download_cycle(deps, _NODE)
     assert downloads.states[_A] is DownloadState.DOWNLOADING
     assert downloads.failures[_A] is None
@@ -367,7 +385,6 @@ async def test_monitor_ignores_unknown_queue_entries() -> None:
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=FakeCatalogReader(),
     )
     await run_download_cycle(deps, _NODE)
     assert _B not in downloads.states
@@ -380,7 +397,7 @@ async def test_every_byte_received_is_not_a_completion() -> None:
     client = FakeDownloadClient(listed=[(_status(_A, done=100, total=100),)])
     downloads = FakeDownloadStore()
     downloads.states[_A] = DownloadState.DOWNLOADING
-    deps = _deps(client=client, downloads=downloads, catalog=FakeCatalogReader())
+    deps = _deps(client=client, downloads=downloads)
     await run_download_cycle(deps, _NODE)
     assert downloads.states[_A] is DownloadState.DOWNLOADING  # NOT flipped to COMPLETED
 
@@ -398,7 +415,7 @@ async def test_unreachable_client_is_tolerated_and_iteration_skipped(failure: Ex
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=FakeCatalogReader(candidates=(_candidate(_A, "062A"),)),
+        decision_reader=FakeDecisionReader(candidates=(_candidate(_A, "062A"),)),
     )
     await run_download_cycle(deps, _NODE)  # does not raise
     assert client.started == []  # iteration skipped (no candidates processed)
@@ -408,14 +425,13 @@ async def test_unreachable_client_is_tolerated_and_iteration_skipped(failure: Ex
 async def test_repository_error_is_absorbed() -> None:
     client = FakeDownloadClient()
     downloads = FakeDownloadStore(fail_record=True)  # record_queued raises RepositoryError
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_A, "062A"),),
-        observations={_A: _observation(_A, "x", 1)},
-    )
+    decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
+    observation_reader = FakeObservationReader(observations={_A: _observation(_A, "x", 1)})
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=catalog,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
     )
     await run_download_cycle(deps, _NODE)  # does not raise (RepositoryError absorbed)
 
@@ -440,7 +456,6 @@ async def test_monitor_repo_error_still_promotes_completions_in_same_cycle() -> 
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=FakeCatalogReader(),
     )
     await run_download_cycle(deps, _NODE)
     # _A's completion is recorded despite the failure of _reconcile_states on _B
@@ -458,7 +473,6 @@ async def test_active_states_repo_failure_is_absorbed_at_step_2() -> None:
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=FakeCatalogReader(),
     )
     await run_download_cycle(deps, _NODE)  # does not raise (both RepositoryError are absorbed)
 
@@ -485,7 +499,6 @@ async def test_one_hash_repo_failure_does_not_starve_other_completions() -> None
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=FakeCatalogReader(),
     )
     await run_download_cycle(deps, _NODE)
     assert downloads.states[_B] is DownloadState.COMPLETED  # despite the failure on _A
@@ -498,17 +511,20 @@ async def test_intra_cycle_floor_accounts_for_links_added_this_cycle() -> None:
     # carried IN MEMORY over the course of the cycle.
     client = FakeDownloadClient()
     downloads = FakeDownloadStore()
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_A, "062A"), _candidate(_B, "062A")),
+    decision_reader = FakeDecisionReader(
+        candidates=(_candidate(_A, "062A"), _candidate(_B, "062A"))
+    )
+    observation_reader = FakeObservationReader(
         observations={
             _A: _observation(_A, "a", 600),
             _B: _observation(_B, "b", 600),
-        },
+        }
     )
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=catalog,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
         free=1000,
         min_free=0,
     )
@@ -522,14 +538,15 @@ async def test_candidate_for_unknown_target_is_treated_as_complete() -> None:
     # (conservative) → SKIP_COMPLETE policy → no link, hash not enqueued.
     client = FakeDownloadClient()
     downloads = FakeDownloadStore()
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_A, "S9E999Z"),),  # ghost target, absent from _TARGETS
-        observations={_A: _observation(_A, "x", 1)},
+    decision_reader = FakeDecisionReader(
+        candidates=(_candidate(_A, "S9E999Z"),)  # ghost target, absent from _TARGETS
     )
+    observation_reader = FakeObservationReader(observations={_A: _observation(_A, "x", 1)})
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=catalog,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
     )
     await run_download_cycle(deps, _NODE)
     assert client.started == []
@@ -558,7 +575,6 @@ async def test_monitor_no_op_when_state_already_matches() -> None:
     deps = _deps(
         client=client,
         downloads=repo,
-        catalog=FakeCatalogReader(),
     )
     await run_download_cycle(deps, _NODE)
     assert repo.states[_A] is DownloadState.DOWNLOADING
@@ -575,7 +591,7 @@ async def test_queued_download_without_observation_emits_no_link() -> None:
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=FakeCatalogReader(observations={}),  # no observation
+        observation_reader=FakeObservationReader(observations={}),  # no observation
     )
     await run_download_cycle(deps, _NODE)
     assert client.started == []
@@ -587,14 +603,13 @@ async def test_start_unreachable_keeps_queued_and_is_tolerated() -> None:
     # (record_queued already happened) → caught up next round. write-before-network invariant.
     client = FakeDownloadClient(start_failures=[ClientUnreachableError("down")])
     downloads = FakeDownloadStore()
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_A, "062A"),),
-        observations={_A: _observation(_A, "x", 1)},
-    )
+    decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
+    observation_reader = FakeObservationReader(observations={_A: _observation(_A, "x", 1)})
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=catalog,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
     )
     await run_download_cycle(deps, _NODE)  # does not raise
     assert downloads.states[_A] is DownloadState.QUEUED  # stays queued → caught up
@@ -607,14 +622,13 @@ async def test_start_rejected_marks_failed_and_does_not_crash() -> None:
     # THIS hash is marked FAILED (spec §9 "failed + log"), the loop continues, does not raise.
     client = FakeDownloadClient(start_failures=[DownloadRejectedError("rejected")])
     downloads = FakeDownloadStore()
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_A, "062A"),),
-        observations={_A: _observation(_A, "x", 1)},
-    )
+    decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
+    observation_reader = FakeObservationReader(observations={_A: _observation(_A, "x", 1)})
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=catalog,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
     )
     await run_download_cycle(deps, _NODE)  # does not raise (application failure tolerated per hash)
     assert downloads.states[_A] is DownloadState.FAILED  # link rejected → marked failed
@@ -628,17 +642,20 @@ async def test_start_rejected_for_one_file_does_not_block_the_next() -> None:
     # stays QUEUED. The break does not abort the loop (continues to the next hash).
     client = FakeDownloadClient(start_failures=[DownloadRejectedError("rejected")])
     downloads = FakeDownloadStore()
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_A, "062A"), _candidate(_B, "062A")),
+    decision_reader = FakeDecisionReader(
+        candidates=(_candidate(_A, "062A"), _candidate(_B, "062A"))
+    )
+    observation_reader = FakeObservationReader(
         observations={
             _A: _observation(_A, "a", 1),
             _B: _observation(_B, "b", 1),
-        },
+        }
     )
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=catalog,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
     )
     await run_download_cycle(deps, _NODE)
     assert downloads.states[_A] is DownloadState.FAILED  # rejected
@@ -655,14 +672,13 @@ async def test_completion_and_new_candidate_in_the_same_cycle() -> None:
     downloads = FakeDownloadStore()
     downloads.states[_A] = DownloadState.DOWNLOADING
     downloads.sizes[_A] = 10
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_B, "062A"),),
-        observations={_B: _observation(_B, "b.avi", 100)},
-    )
+    decision_reader = FakeDecisionReader(candidates=(_candidate(_B, "062A"),))
+    observation_reader = FakeObservationReader(observations={_B: _observation(_B, "b.avi", 100)})
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=catalog,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
     )
     await run_download_cycle(deps, _NODE)
     assert downloads.states[_A] is DownloadState.COMPLETED  # shared and out of the queue
@@ -675,14 +691,15 @@ async def test_emits_download_queued() -> None:
     event_emitter = FakeEventEmitter()
     client = FakeDownloadClient()
     downloads = FakeDownloadStore()
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_A, "062A"),),
-        observations={_A: _observation(_A, "Keroro.avi", 100)},
+    decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
+    observation_reader = FakeObservationReader(
+        observations={_A: _observation(_A, "Keroro.avi", 100)}
     )
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=catalog,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
         event_emitter=event_emitter,
     )
     await run_download_cycle(deps, _NODE)
@@ -700,7 +717,6 @@ async def test_emits_download_completed() -> None:
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=FakeCatalogReader(),
         event_emitter=event_emitter,
     )
     await run_download_cycle(deps, _NODE)
@@ -724,15 +740,18 @@ async def test_a_completion_names_the_clean_file_and_every_download_target_of_th
     downloads = FakeDownloadStore()
     downloads.record_queued(_key(_A), "062A", 100, FakeTime().wall.now())
     downloads.states[_A] = DownloadState.DOWNLOADING
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_A, "062A"), _candidate(_A, "062B"), _candidate(_B, "063A")),
+    decision_reader = FakeDecisionReader(
+        candidates=(_candidate(_A, "062A"), _candidate(_A, "062B"), _candidate(_B, "063A"))
+    )
+    observation_reader = FakeObservationReader(
         observations={_A: _observation(_A, "Keroro Ã©.avi", 100)},
         best={_A: _observation(_A, "Keroro é.avi", 100)},
     )
     deps = _deps(
         client=FakeDownloadClient(listed=[(_status(_A, completed=True),)]),
         downloads=downloads,
-        catalog=catalog,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
         event_emitter=event_emitter,
         targets=targets,
     )
@@ -760,14 +779,15 @@ async def test_completion_repo_failure_does_not_starve_new_candidates() -> None:
     downloads = FakeDownloadStore(fail_record_completed_for={_A})  # step 2 raises RepositoryError
     downloads.states[_A] = DownloadState.DOWNLOADING  # completed at step 2, which raises
     downloads.sizes[_A] = 10
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_B, "062A"),),  # new candidate step 3
-        observations={_B: _observation(_B, "b.avi", 100)},
+    decision_reader = FakeDecisionReader(
+        candidates=(_candidate(_B, "062A"),)  # new candidate step 3
     )
+    observation_reader = FakeObservationReader(observations={_B: _observation(_B, "b.avi", 100)})
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=catalog,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
     )
     await run_download_cycle(deps, _NODE)  # does not raise
     # Observable effect of step 3: _B enqueued AND its link emitted despite the step-2 failure.
@@ -786,14 +806,15 @@ async def test_candidate_repo_failure_does_not_starve_completions() -> None:
     downloads = FakeDownloadStore(fail_record=True)  # step 3 raises RepositoryError
     downloads.states[_A] = DownloadState.DOWNLOADING  # _A shared → completed step 2
     downloads.sizes[_A] = 10
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_B, "062A"),),  # new candidate → record_queued will raise
-        observations={_B: _observation(_B, "b.avi", 100)},
+    decision_reader = FakeDecisionReader(
+        candidates=(_candidate(_B, "062A"),)  # new candidate → record_queued will raise
     )
+    observation_reader = FakeObservationReader(observations={_B: _observation(_B, "b.avi", 100)})
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=catalog,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
     )
     await run_download_cycle(deps, _NODE)  # does not raise
     # Observable effect of step 2: _A completed despite the step-3 failure.
@@ -812,14 +833,15 @@ async def test_monitor_unreachable_aborts_subsequent_steps() -> None:
     downloads = FakeDownloadStore()
     downloads.states[_A] = DownloadState.COMPLETED  # a pending completion (step 2)
     downloads.sizes[_A] = 10
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_B, "062A"),),  # a candidate (step 3)
-        observations={_B: _observation(_B, "b.avi", 100)},
+    decision_reader = FakeDecisionReader(
+        candidates=(_candidate(_B, "062A"),)  # a candidate (step 3)
     )
+    observation_reader = FakeObservationReader(observations={_B: _observation(_B, "b.avi", 100)})
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=catalog,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
     )
     await run_download_cycle(deps, _NODE)  # does not raise (tolerated) but EVERYTHING is skipped
     assert downloads.states[_A] is DownloadState.COMPLETED  # unchanged
@@ -843,14 +865,13 @@ async def test_monitor_repo_failure_is_isolated_and_does_not_starve_candidates()
     client = FakeDownloadClient(listed=[(_status(_A, done=10, total=10),)])
     downloads = _MonitorFailStore()
     downloads.states[_A] = DownloadState.QUEUED  # reconciled → set_state(DOWNLOADING) will raise
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_B, "062A"),),
-        observations={_B: _observation(_B, "b.avi", 100)},
-    )
+    decision_reader = FakeDecisionReader(candidates=(_candidate(_B, "062A"),))
+    observation_reader = FakeObservationReader(observations={_B: _observation(_B, "b.avi", 100)})
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=catalog,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
     )
     await run_download_cycle(deps, _NODE)  # does not raise
     # Step 3 ran despite the step-1 failure: _B enqueued + link emitted.
@@ -877,14 +898,13 @@ async def test_start_repo_failure_is_tolerated_and_does_not_raise() -> None:
     # RepositoryError.
     client = FakeDownloadClient(start_failures=[DownloadRejectedError("rejected")])
     downloads = _AddLinkSetStateFailStore()
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_A, "062A"),),
-        observations={_A: _observation(_A, "x", 1)},
-    )
+    decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
+    observation_reader = FakeObservationReader(observations={_A: _observation(_A, "x", 1)})
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=catalog,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
     )
     await run_download_cycle(deps, _NODE)  # does NOT raise (step-4 RepositoryError tolerated)
 
@@ -902,7 +922,6 @@ async def test_shared_file_for_tracked_hash_is_completed() -> None:
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=FakeCatalogReader(),
     )
     await run_download_cycle(deps, _NODE)
     assert downloads.states[_A] is DownloadState.COMPLETED
@@ -915,7 +934,6 @@ async def test_shared_file_for_untracked_hash_is_ignored() -> None:
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=FakeCatalogReader(),
     )
     await run_download_cycle(deps, _NODE)
     assert _A not in downloads.states
@@ -936,7 +954,6 @@ async def test_already_completed_shared_hash_is_not_recompleted() -> None:
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=FakeCatalogReader(),
         event_emitter=event_emitter,
     )
     await run_download_cycle(deps, _NODE)
@@ -954,7 +971,6 @@ async def test_failed_shared_hash_is_resurrected_and_notified() -> None:
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=FakeCatalogReader(),
         event_emitter=event_emitter,
     )
     await run_download_cycle(deps, _NODE)
@@ -970,7 +986,6 @@ async def test_monitor_moves_queued_to_downloading_not_completed() -> None:
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=FakeCatalogReader(),
     )
     await run_download_cycle(deps, _NODE)
     assert downloads.states[_A] is DownloadState.DOWNLOADING  # NOT completed (bytes ignored)
@@ -985,7 +1000,7 @@ async def test_marks_seen_every_listed_download_completed_ones_included() -> Non
     downloads = FakeDownloadStore()
     downloads.states[_A] = DownloadState.DOWNLOADING
     downloads.states[_B] = DownloadState.COMPLETED
-    deps = _deps(client=client, downloads=downloads, catalog=FakeCatalogReader())
+    deps = _deps(client=client, downloads=downloads)
     await run_download_cycle(deps, _NODE)
     assert downloads.seen == [{_A, _B}]
 
@@ -996,11 +1011,11 @@ async def test_a_download_amuled_no_longer_knows_becomes_failed() -> None:
     logger = FakeLogger()
     downloads = FakeDownloadStore()
     downloads.record_queued(_key(_A), "062A", 1, fake_time.wall.now())
-    catalog = FakeCatalogReader(observations={_A: _observation(_A, "a", 1)})
+    observation_reader = FakeObservationReader(observations={_A: _observation(_A, "a", 1)})
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=catalog,
+        observation_reader=observation_reader,
         lost_after=timedelta(hours=1),
         fake_time=fake_time,
         logger=logger,
@@ -1024,11 +1039,14 @@ async def test_each_download_write_carries_the_instant_read_right_before_it() ->
     client = FakeDownloadClient(listed=[(_status(_A, completed=True),)])
     downloads = FakeDownloadStore()
     downloads.states[_A] = DownloadState.DOWNLOADING
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_B, "062A"),),
-        observations={_B: _observation(_B, "b.avi", 100)},
+    decision_reader = FakeDecisionReader(candidates=(_candidate(_B, "062A"),))
+    observation_reader = FakeObservationReader(observations={_B: _observation(_B, "b.avi", 100)})
+    deps = _deps(
+        client=client,
+        downloads=downloads,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
     )
-    deps = _deps(client=client, downloads=downloads, catalog=catalog)
     deps.wall_clock = wall_clock
     await run_download_cycle(deps, _NODE)
     minute = timedelta(minutes=1)
@@ -1043,8 +1061,8 @@ async def test_a_download_the_client_forgot_is_started_once_per_round_until_list
     client = FakeDownloadClient(listed=[(), (), (_status(_A, done=1, total=9),), ()])
     downloads = FakeDownloadStore()
     downloads.states[_A] = DownloadState.DOWNLOADING
-    catalog = FakeCatalogReader(observations={_A: _observation(_A, "a.avi", 9)})
-    deps = _deps(client=client, downloads=downloads, catalog=catalog)
+    observation_reader = FakeObservationReader(observations={_A: _observation(_A, "a.avi", 9)})
+    deps = _deps(client=client, downloads=downloads, observation_reader=observation_reader)
     rounds = []
     for _ in range(4):
         await run_download_cycle(deps, _NODE)
@@ -1060,10 +1078,12 @@ async def test_a_failed_or_completed_download_the_client_forgot_is_not_started()
     downloads = FakeDownloadStore()
     downloads.states[_A] = DownloadState.FAILED
     downloads.states[_B] = DownloadState.COMPLETED
-    catalog = FakeCatalogReader(
+    observation_reader = FakeObservationReader(
         observations={_A: _observation(_A, "x", 1), _B: _observation(_B, "x", 1)}
     )
-    await run_download_cycle(_deps(client=client, downloads=downloads, catalog=catalog), _NODE)
+    await run_download_cycle(
+        _deps(client=client, downloads=downloads, observation_reader=observation_reader), _NODE
+    )
     assert client.started == []
 
 
@@ -1071,11 +1091,14 @@ async def test_a_failed_or_completed_download_the_client_forgot_is_not_started()
 async def test_presence_repo_failure_is_absorbed_and_candidates_still_run() -> None:
     client = FakeDownloadClient()
     downloads = FakeDownloadStore(fail_mark_seen=True)
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_A, "062A"),),
-        observations={_A: _observation(_A, "x", 100)},
+    decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
+    observation_reader = FakeObservationReader(observations={_A: _observation(_A, "x", 100)})
+    deps = _deps(
+        client=client,
+        downloads=downloads,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
     )
-    deps = _deps(client=client, downloads=downloads, catalog=catalog)
     await run_download_cycle(deps, _NODE)  # does not raise
     assert downloads.states[_A] is DownloadState.QUEUED
 
@@ -1090,12 +1113,16 @@ async def test_an_unmeasurable_output_directory_admits_nothing_and_does_not_rais
 
     client = FakeDownloadClient()
     downloads = FakeDownloadStore()
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_A, "062A"),),
-        observations={_A: _observation(_A, "x", 100)},
-    )
+    decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
+    observation_reader = FakeObservationReader(observations={_A: _observation(_A, "x", 100)})
     event_emitter = FakeEventEmitter()
-    deps = _deps(client=client, downloads=downloads, catalog=catalog, event_emitter=event_emitter)
+    deps = _deps(
+        client=client,
+        downloads=downloads,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
+        event_emitter=event_emitter,
+    )
     deps.free_space_meter = _BrokenDisk()
     await run_download_cycle(deps, _NODE)
     assert client.started == []
@@ -1109,7 +1136,6 @@ async def test_each_cycle_reports_the_measured_free_space() -> None:
     deps = _deps(
         client=FakeDownloadClient(),
         downloads=FakeDownloadStore(),
-        catalog=FakeCatalogReader(),
         free=4_242,
         event_emitter=event_emitter,
     )
@@ -1124,7 +1150,6 @@ async def test_low_disk_warns_once_per_crossing_and_rearms_at_the_floor() -> Non
     deps = _deps(
         client=FakeDownloadClient(),
         downloads=FakeDownloadStore(),
-        catalog=FakeCatalogReader(),
         min_free=600,
         event_emitter=event_emitter,
     )
@@ -1150,7 +1175,7 @@ async def test_a_failure_the_client_reports_stays_failed_round_after_round() -> 
     client = FakeDownloadClient(listed=[(erroneous,)] * 3)
     downloads = FakeDownloadStore()
     downloads.states[_A] = DownloadState.DOWNLOADING
-    deps = _deps(client=client, downloads=downloads, catalog=FakeCatalogReader())
+    deps = _deps(client=client, downloads=downloads)
     rounds = []
     for _ in range(3):
         await run_download_cycle(deps, _NODE)
@@ -1171,7 +1196,6 @@ async def test_waiting_for_sources_is_not_failing_for_a_simulated_year(tmp_path:
     deps = _deps(
         client=client,
         downloads=downloads,
-        catalog=FakeCatalogReader(),
         lost_after=timedelta(days=1),
         fake_time=fake_time,
     )
@@ -1199,7 +1223,6 @@ async def test_a_wall_clock_step_forward_fails_no_download_absent_from_one_poll(
     deps = _deps(
         client=FakeDownloadClient(listed=[(_status(_A, total=10),), ()]),
         downloads=real_downloads,
-        catalog=FakeCatalogReader(),
         lost_after=timedelta(days=1),
         fake_time=fake_time,
     )
@@ -1219,7 +1242,6 @@ async def test_a_last_seen_at_in_the_future_waits_lost_after_no_more(
     deps = _deps(
         client=FakeDownloadClient(),
         downloads=real_downloads,
-        catalog=FakeCatalogReader(),
         lost_after=timedelta(days=1),
         fake_time=fake_time,
     )
@@ -1241,7 +1263,6 @@ async def test_a_download_last_seen_two_days_ago_fails_at_the_first_cycle(
     deps = _deps(
         client=FakeDownloadClient(),
         downloads=real_downloads,
-        catalog=FakeCatalogReader(),
         lost_after=timedelta(days=1),
         fake_time=fake_time,
     )
@@ -1257,10 +1278,8 @@ async def test_a_download_the_node_queued_is_lost_after_lost_after_of_monotonic_
     deps = _deps(
         client=FakeDownloadClient(),  # never lists it
         downloads=real_downloads,
-        catalog=FakeCatalogReader(
-            candidates=(_candidate(_A, "062A"),),
-            observations={_A: _observation(_A, "a.avi", 10)},
-        ),
+        decision_reader=FakeDecisionReader(candidates=(_candidate(_A, "062A"),)),
+        observation_reader=FakeObservationReader(observations={_A: _observation(_A, "a.avi", 10)}),
         lost_after=timedelta(days=1),
         fake_time=fake_time,
     )
@@ -1288,10 +1307,8 @@ async def test_a_duplicate_queuing_keeps_the_deadline_its_last_seen_at_leaves() 
     deps = _deps(
         client=FakeDownloadClient(),
         downloads=downloads,
-        catalog=FakeCatalogReader(
-            candidates=(_candidate(_A, "062A"),),
-            observations={_A: _observation(_A, "a.avi", 10)},
-        ),
+        decision_reader=FakeDecisionReader(candidates=(_candidate(_A, "062A"),)),
+        observation_reader=FakeObservationReader(observations={_A: _observation(_A, "a.avi", 10)}),
         lost_after=timedelta(days=1),
         fake_time=fake_time,
     )
@@ -1309,7 +1326,6 @@ async def test_a_row_the_operator_deleted_leaves_the_loss_deadlines() -> None:
     deps = _deps(
         client=FakeDownloadClient(listed=[(_status(_A),), ()]),
         downloads=downloads,
-        catalog=FakeCatalogReader(),
         fake_time=fake_time,
     )
     await run_download_cycle(deps, _NODE)
@@ -1333,20 +1349,21 @@ async def test_the_sources_of_each_tracked_download_the_client_lists_are_recorde
         _B: (_reading("peer B", None),),
     }
     listed = (_status(_A), _status(_C), _status(_B))
-    client = FakeDownloadClient(listed=[listed], readings=readings, fake_time=fake_time)
+    client = FakeDownloadClient(listed=[listed])
+    source_client = FakeSourceClient(readings=readings, fake_time=fake_time)
     downloads = FakeDownloadStore()
     downloads.states[_A] = DownloadState.DOWNLOADING
     downloads.states[_B] = DownloadState.QUEUED
     sources = FakeSourcePointStore()
     deps = _deps(
         client=client,
+        source_client=source_client,
         downloads=downloads,
-        catalog=FakeCatalogReader(),
         sources=sources,
         fake_time=fake_time,
     )
     await run_download_cycle(deps, _NODE)
-    assert client.source_reads == [_A, _B]
+    assert source_client.source_reads == [_A, _B]
     assert sources.recorded == [
         (_A, readings[_A], start),
         (_B, readings[_B], start + timedelta(seconds=1)),
@@ -1359,10 +1376,11 @@ async def test_a_download_the_client_reports_completed_is_not_read() -> None:
     downloads = FakeDownloadStore()
     downloads.states[_A] = DownloadState.DOWNLOADING
     downloads.states[_B] = DownloadState.DOWNLOADING
+    source_client = FakeSourceClient()
     await run_download_cycle(
-        _deps(client=client, downloads=downloads, catalog=FakeCatalogReader()), _NODE
+        _deps(client=client, source_client=source_client, downloads=downloads), _NODE
     )
-    assert client.source_reads == [_B]
+    assert source_client.source_reads == [_B]
 
 
 @pytest.mark.asyncio
@@ -1371,18 +1389,26 @@ async def test_a_daemon_unavailable_while_reading_sources_ends_the_round_after_t
     failure: Exception,
 ) -> None:
     # The sources step only observes: it runs last, so its failure never skips a start.
-    client = FakeDownloadClient(listed=[(_status(_A), _status(_B))], source_failures=[failure])
+    client = FakeDownloadClient(listed=[(_status(_A), _status(_B))])
+    source_client = FakeSourceClient(source_failures=[failure])
     downloads = FakeDownloadStore()
     for ed2k_hash in (_A, _B):
         downloads.states[ed2k_hash] = DownloadState.DOWNLOADING
     downloads.states[_C] = DownloadState.QUEUED
-    catalog = FakeCatalogReader(observations={_C: _observation(_C, "c.avi", 1)})
+    observation_reader = FakeObservationReader(observations={_C: _observation(_C, "c.avi", 1)})
     sources = FakeSourcePointStore()
     await run_download_cycle(
-        _deps(client=client, downloads=downloads, catalog=catalog, sources=sources), _NODE
+        _deps(
+            client=client,
+            source_client=source_client,
+            downloads=downloads,
+            observation_reader=observation_reader,
+            sources=sources,
+        ),
+        _NODE,
     )  # does not raise
     assert _started(client) == [_C]
-    assert client.source_reads == [_A]
+    assert source_client.source_reads == [_A]
     assert sources.recorded == []
 
 
@@ -1394,7 +1420,7 @@ async def test_a_repo_failure_on_one_download_skips_its_sources_only() -> None:
     downloads.states[_B] = DownloadState.DOWNLOADING
     sources = FakeSourcePointStore(fail_for={_A})
     await run_download_cycle(
-        _deps(client=client, downloads=downloads, catalog=FakeCatalogReader(), sources=sources),
+        _deps(client=client, downloads=downloads, sources=sources),
         _NODE,
     )
     assert [file for file, *_ in sources.recorded] == [_B]
@@ -1403,11 +1429,11 @@ async def test_a_repo_failure_on_one_download_skips_its_sources_only() -> None:
 @pytest.mark.asyncio
 async def test_a_repo_failure_reading_the_tracked_downloads_reads_no_source() -> None:
     client = FakeDownloadClient(listed=[(_status(_A),)])
+    source_client = FakeSourceClient()
     downloads = FakeDownloadStore(fail_active_states=True)
-    await run_download_cycle(
-        _deps(client=client, downloads=downloads, catalog=FakeCatalogReader()), _NODE
-    )  # does not raise
-    assert client.source_reads == []
+    deps = _deps(client=client, source_client=source_client, downloads=downloads)
+    await run_download_cycle(deps, _NODE)  # does not raise
+    assert source_client.source_reads == []
 
 
 @pytest.mark.asyncio
@@ -1418,9 +1444,16 @@ async def test_a_daemon_unreachable_at_the_start_reads_no_source() -> None:
     downloads = FakeDownloadStore()
     downloads.states[_A] = DownloadState.DOWNLOADING
     downloads.states[_C] = DownloadState.QUEUED
-    catalog = FakeCatalogReader(observations={_C: _observation(_C, "c.avi", 1)})
-    await run_download_cycle(_deps(client=client, downloads=downloads, catalog=catalog), _NODE)
-    assert client.source_reads == []
+    observation_reader = FakeObservationReader(observations={_C: _observation(_C, "c.avi", 1)})
+    source_client = FakeSourceClient()
+    deps = _deps(
+        client=client,
+        source_client=source_client,
+        downloads=downloads,
+        observation_reader=observation_reader,
+    )
+    await run_download_cycle(deps, _NODE)
+    assert source_client.source_reads == []
 
 
 @pytest.mark.asyncio
@@ -1433,7 +1466,6 @@ async def test_sources_are_read_once_per_interval_however_often_the_cycle_runs()
     deps = _deps(
         client=client,
         downloads=_tracking(_A),
-        catalog=FakeCatalogReader(),
         sources=sources,
         fake_time=fake_time,
         sources_interval=timedelta(seconds=300),
@@ -1451,33 +1483,33 @@ async def test_sources_are_read_once_per_interval_however_often_the_cycle_runs()
 async def test_a_sources_read_the_daemon_failed_waits_for_the_next_interval() -> None:
     # The step's time is taken when it starts, so an unreachable client is not retried each poll.
     fake_time = FakeTime()
-    client = FakeDownloadClient(
-        listed=[(_status(_A),)] * 3, source_failures=[ClientUnreachableError("down")]
-    )
+    client = FakeDownloadClient(listed=[(_status(_A),)] * 3)
+    source_client = FakeSourceClient(source_failures=[ClientUnreachableError("down")])
     deps = _deps(
         client=client,
+        source_client=source_client,
         downloads=_tracking(_A),
-        catalog=FakeCatalogReader(),
         fake_time=fake_time,
         sources_interval=timedelta(seconds=300),
     )
     await run_download_cycle(deps, _NODE)
     fake_time.advance(timedelta(seconds=30))
     await run_download_cycle(deps, _NODE)
-    assert client.source_reads == [_A]
+    assert source_client.source_reads == [_A]
     fake_time.advance(timedelta(seconds=270))
     await run_download_cycle(deps, _NODE)
-    assert client.source_reads == [_A, _A]
+    assert source_client.source_reads == [_A, _A]
 
 
 @pytest.mark.asyncio
 async def test_a_wall_clock_step_back_delays_no_sources_read() -> None:
     fake_time = FakeTime()
     client = FakeDownloadClient(listed=[(_status(_A),)] * 2)
+    source_client = FakeSourceClient()
     deps = _deps(
         client=client,
+        source_client=source_client,
         downloads=_tracking(_A),
-        catalog=FakeCatalogReader(),
         fake_time=fake_time,
         sources_interval=timedelta(seconds=300),
     )
@@ -1485,7 +1517,7 @@ async def test_a_wall_clock_step_back_delays_no_sources_read() -> None:
     fake_time.step_wall(timedelta(hours=-1))
     fake_time.advance(timedelta(seconds=300))
     await run_download_cycle(deps, _NODE)
-    assert client.source_reads == [_A, _A]
+    assert source_client.source_reads == [_A, _A]
 
 
 _PEER, _OTHER_PEER = SourceKey(Network.ED2K, "1f2e3d4c" * 4), SourceKey(Network.ED2K, "c" * 32)
@@ -1503,16 +1535,15 @@ async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
     # Stage 4, D9: the first file's event, named after its decision and best name.
     queued = (RecordedReading(_PEER, "AnimuseeFMR", SourceRole.QUEUED),)
     sources = FakeSourcePointStore(kept={_A: queued, _B: queued})
-    catalog = FakeCatalogReader(
-        candidates=(_candidate(_A, "062A"),),
-        best={_A: _observation(_A, "Keroro 062.avi", 1)},
-    )
+    decision_reader = FakeDecisionReader(candidates=(_candidate(_A, "062A"),))
+    observation_reader = FakeObservationReader(best={_A: _observation(_A, "Keroro 062.avi", 1)})
     event_emitter = FakeEventEmitter()
     client = FakeDownloadClient(listed=[(_status(_A), _status(_B))])
     deps = _deps(
         client=client,
         downloads=_tracking(_A, _B),
-        catalog=catalog,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
         sources=sources,
         event_emitter=event_emitter,
     )
@@ -1548,11 +1579,11 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
     downloads.record_queued(_key(_B), "063A", 100, start)  # queued for it, no decision left
     downloads.states.update({_A: DownloadState.DOWNLOADING, _B: DownloadState.DOWNLOADING})
     event_emitter = FakeEventEmitter()
-    client = FakeDownloadClient(listed=[(_status(_A), _status(_B))], fake_time=fake_time)
+    client = FakeDownloadClient(listed=[(_status(_A), _status(_B))])
     deps = _deps(
         client=client,
+        source_client=FakeSourceClient(fake_time=fake_time),
         downloads=downloads,
-        catalog=FakeCatalogReader(),
         sources=sources,
         event_emitter=event_emitter,
         fake_time=fake_time,
@@ -1576,7 +1607,6 @@ async def test_a_reading_without_a_source_id_raises_nothing() -> None:
     deps = _deps(
         client=client,
         downloads=_tracking(_A),
-        catalog=FakeCatalogReader(),
         sources=sources,
         event_emitter=event_emitter,
     )
@@ -1602,9 +1632,7 @@ async def test_a_round_without_a_useful_reading_with_a_source_id_never_asks_for_
 ) -> None:
     sources = FakeSourcePointStore(kept={_A: kept})
     client = FakeDownloadClient(listed=[(_status(_A),)])
-    deps = _deps(
-        client=client, downloads=_tracking(_A), catalog=FakeCatalogReader(), sources=sources
-    )
+    deps = _deps(client=client, downloads=_tracking(_A), sources=sources)
     await run_download_cycle(deps, _NODE)
     assert sources.baselines == []
 
@@ -1619,13 +1647,11 @@ async def test_the_baseline_is_asked_once_per_round_against_its_start() -> None:
         _C: (RecordedReading(_OTHER_PEER, None, SourceRole.SENDING),),
     }
     sources = FakeSourcePointStore(kept=kept)
-    client = FakeDownloadClient(
-        listed=[(_status(_A), _status(_B), _status(_C))], fake_time=fake_time
-    )
+    client = FakeDownloadClient(listed=[(_status(_A), _status(_B), _status(_C))])
     deps = _deps(
         client=client,
+        source_client=FakeSourceClient(fake_time=fake_time),
         downloads=_tracking(_A, _B, _C),
-        catalog=FakeCatalogReader(),
         sources=sources,
         fake_time=fake_time,
     )
@@ -1642,7 +1668,6 @@ async def test_a_repo_failure_asking_the_baseline_skips_that_downloads_alerts_on
     deps = _deps(
         client=client,
         downloads=_tracking(_A, _B),
-        catalog=FakeCatalogReader(),
         sources=sources,
         event_emitter=event_emitter,
     )
@@ -1670,12 +1695,12 @@ async def test_the_first_recording_round_is_a_baseline(
     }
     fake_time = FakeTime()
     rounds = [tuple(_status(h) for h in order)] * 2
-    client = FakeDownloadClient(listed=rounds, readings=readings, fake_time=fake_time)
+    client = FakeDownloadClient(listed=rounds)
     event_emitter = FakeEventEmitter()
     deps = _deps(
         client=client,
+        source_client=FakeSourceClient(readings=readings, fake_time=fake_time),
         downloads=_tracking(_A, _B),
-        catalog=FakeCatalogReader(),
         sources=SqliteSourceRepository(catalog, timedelta(seconds=30)),
         event_emitter=event_emitter,
         fake_time=fake_time,
@@ -1712,6 +1737,7 @@ def real_catalog(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 def _real_deps(
     catalog: sqlite3.Connection,
     client: FakeDownloadClient,
+    source_client: FakeSourceClient,
     event_emitter: FakeEventEmitter,
     fake_time: FakeTime,
 ) -> DownloadDeps:
@@ -1719,8 +1745,8 @@ def _real_deps(
     sources = SqliteSourceRepository(catalog, timedelta(seconds=30))
     return _deps(
         client=client,
+        source_client=source_client,
         downloads=_tracking(_A),
-        catalog=FakeCatalogReader(),
         sources=sources,
         event_emitter=event_emitter,
         fake_time=fake_time,
@@ -1738,8 +1764,9 @@ async def test_a_source_useful_at_three_consecutive_reads_is_new_once(
     # From its second read on, its earlier useful point is recent: no event (D5).
     readings: dict[str, tuple[SourceReading, ...]] = {_A: (_peer(_OTHER_PEER),)}
     fake_time, event_emitter = FakeTime(), FakeEventEmitter()
-    client = FakeDownloadClient(listed=[(_status(_A),)] * 4, readings=readings, fake_time=fake_time)
-    deps = _real_deps(real_catalog, client, event_emitter, fake_time)
+    client = FakeDownloadClient(listed=[(_status(_A),)] * 4)
+    source_client = FakeSourceClient(readings=readings, fake_time=fake_time)
+    deps = _real_deps(real_catalog, client, source_client, event_emitter, fake_time)
     await run_download_cycle(deps, _NODE)  # the node's first round, a baseline
     readings[_A] = (_peer(_OTHER_PEER), _peer(_PEER))
     for _ in range(3):
@@ -1755,8 +1782,9 @@ async def test_a_source_back_after_13_hours_through_an_undetermined_read_reappea
     # An unknown point does not end an absence (stage 4, D9).
     readings: dict[str, tuple[SourceReading, ...]] = {_A: (_peer(_PEER),)}
     fake_time, event_emitter = FakeTime(), FakeEventEmitter()
-    client = FakeDownloadClient(listed=[(_status(_A),)] * 3, readings=readings, fake_time=fake_time)
-    deps = _real_deps(real_catalog, client, event_emitter, fake_time)
+    client = FakeDownloadClient(listed=[(_status(_A),)] * 3)
+    source_client = FakeSourceClient(readings=readings, fake_time=fake_time)
+    deps = _real_deps(real_catalog, client, source_client, event_emitter, fake_time)
     last_useful = fake_time.wall.now()
     await run_download_cycle(deps, _NODE)
     fake_time.advance(timedelta(hours=13))

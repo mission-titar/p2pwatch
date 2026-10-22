@@ -21,12 +21,8 @@ from p2pwatch.ports.driven.source_points import SourcePointReader, SourcePointWr
 from tests.fakes.application.fakes import FakeTime
 
 
-class FakeDownloadClient(DownloadClient, SourceClient):
-    """Scripted DownloadClient: SCRIPTED ``downloads()`` snapshots, captures the started requests.
-
-    It is the SourceClient too, as the real adapter is: ``readings`` per hash, ``source_reads``
-    the hashes read, each read advancing ``fake_time`` by a second when one is given.
-    """
+class FakeDownloadClient(DownloadClient):
+    """SCRIPTED ``downloads()`` snapshots, captures the started requests."""
 
     def __init__(
         self,
@@ -34,18 +30,11 @@ class FakeDownloadClient(DownloadClient, SourceClient):
         listed: list[tuple[DownloadStatus, ...]] | None = None,
         list_failures: list[Exception] | None = None,
         start_failures: list[Exception] | None = None,
-        source_failures: list[Exception] | None = None,
-        readings: dict[str, tuple[SourceReading, ...]] | None = None,
-        fake_time: FakeTime | None = None,
     ) -> None:
         self._listed = list(listed or [()])
         self._list_failures = list(list_failures or [])
         self._start_failures = list(start_failures or [])
-        self._source_failures = list(source_failures or [])
-        self._readings = readings or {}
-        self._fake_time = fake_time
         self.started: list[DownloadRequest] = []
-        self.source_reads: list[str] = []
 
     async def start(self, request: DownloadRequest) -> None:
         if self._start_failures:
@@ -56,6 +45,23 @@ class FakeDownloadClient(DownloadClient, SourceClient):
         if self._list_failures:
             raise self._list_failures.pop(0)
         return self._listed.pop(0) if self._listed else ()
+
+
+class FakeSourceClient(SourceClient):
+    """``readings`` per hash, ``source_reads`` the hashes read, each read advancing ``fake_time``
+    by a second when one is given."""
+
+    def __init__(
+        self,
+        *,
+        source_failures: list[Exception] | None = None,
+        readings: dict[str, tuple[SourceReading, ...]] | None = None,
+        fake_time: FakeTime | None = None,
+    ) -> None:
+        self._source_failures = list(source_failures or [])
+        self._readings = readings or {}
+        self._fake_time = fake_time
+        self.source_reads: list[str] = []
 
     async def sources(self, file: FileKey) -> tuple[SourceReading, ...]:
         self.source_reads.append(file.native_id)
@@ -212,25 +218,30 @@ class FakeDownloadStore(DownloadWriter, DownloadReader):
         return {FileKey(Network.ED2K, h): state for h, state in self.states.items()}
 
 
-class FakeCatalogReader(DecisionReader, ObservationReader):
-    """The download loop's catalog reads, scripted: its candidates, latest and best observations."""
+class FakeDecisionReader(DecisionReader):
+    """The download loop's decision reads, scripted: its candidates."""
 
-    def __init__(
-        self,
-        *,
-        candidates: tuple[DownloadCandidate, ...] = (),
-        observations: dict[str, FileObservation] | None = None,
-        best: dict[str, FileObservation] | None = None,
-    ) -> None:
+    def __init__(self, *, candidates: tuple[DownloadCandidate, ...] = ()) -> None:
         self._candidates = candidates
-        self._observations = observations or {}
-        self._best = best or {}
 
     def read_latest_decisions(self, file: FileKey) -> NoReturn:
         raise AssertionError("the download loop reads no file's decisions")
 
     def read_download_candidates(self) -> tuple[DownloadCandidate, ...]:
         return self._candidates
+
+
+class FakeObservationReader(ObservationReader):
+    """The download loop's observation reads, scripted: its latest and best observations."""
+
+    def __init__(
+        self,
+        *,
+        observations: dict[str, FileObservation] | None = None,
+        best: dict[str, FileObservation] | None = None,
+    ) -> None:
+        self._observations = observations or {}
+        self._best = best or {}
 
     def read_latest_observation(self, file: FileKey) -> FileObservation | None:
         return self._observations.get(file.native_id)

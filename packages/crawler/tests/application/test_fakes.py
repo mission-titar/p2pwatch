@@ -1,12 +1,12 @@
 """``FakeTime``: the clock step the monotonic clock's tests rely on; ``FakeLogger``: its lines;
-``FakeCatalogReader``: the reads the download loop never makes."""
+``FakeDecisionReader`` and ``FakeObservationReader``: the reads the download loop never makes."""
 
 from datetime import timedelta
 
 import pytest
 
 from p2pwatch.domain.file_key import FileKey, Network
-from tests.fakes.application.download_fakes import FakeCatalogReader
+from tests.fakes.application.download_fakes import FakeDecisionReader, FakeObservationReader
 from tests.fakes.application.fakes import FakeLogger, FakeTime, LoggedLine
 
 
@@ -47,10 +47,9 @@ def test_a_logged_line_keeps_its_level_and_its_formatted_message() -> None:
 
 
 def test_the_catalog_reads_refuse_what_the_download_loop_never_reads() -> None:
-    catalog = FakeCatalogReader()
     file = FileKey(Network.ED2K, "a" * 32)
 
     with pytest.raises(AssertionError, match="decisions"):
-        catalog.read_latest_decisions(file)
+        FakeDecisionReader().read_latest_decisions(file)
     with pytest.raises(AssertionError, match="filenames"):
-        catalog.read_known_filenames(file)
+        FakeObservationReader().read_known_filenames(file)
