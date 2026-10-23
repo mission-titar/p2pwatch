@@ -185,7 +185,7 @@ def _catalog_entry_displays(
             )
             tier_values = {decision.tier for decision in catalog_entry.decisions}
             if len(tier_values) == 1:
-                tier_display = catalog_entry.decisions[0].tier
+                tier_display = str(catalog_entry.decisions[0].tier)
             else:
                 tier_display = " · ".join(
                     f"{decision.target_id}: {decision.tier}" for decision in catalog_entry.decisions

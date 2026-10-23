@@ -66,7 +66,7 @@ class DecisionRecord:
 
     target_id: str
     rule_name: str
-    tier: str
+    tier: DecisionTier
 
 
 def to_record(decision: MatchDecision) -> DecisionRecord:

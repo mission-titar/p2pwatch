@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 import yaml
 
 from catalog_matching.domain.config import MatcherConfig
+from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord, Explanation, MatchingEngine
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 from p2pwatch.application.ports.driven.catalog_file_reader import CatalogFileReader
@@ -31,7 +32,7 @@ _OBSERVATION = FileObservation(
     ReportedFile(_FILE, "keroro_062a.avi", 100, 5, "keroro", 1300, 900, ()),
     _NOW - timedelta(hours=1),
 )
-_DECISION = DatedDecision(DecisionRecord("062A", "catalog", "catalog"), _NOW, "n1")
+_DECISION = DatedDecision(DecisionRecord("062A", "catalog", DecisionTier.CATALOG), _NOW, "n1")
 _HISTORY = FileHistory(
     _FILE, 100, (_OBSERVATION,), _OBSERVATION, (_DECISION,), ("Keroro 62a ITA.avi", "keroro.avi")
 )
