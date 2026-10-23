@@ -11,8 +11,8 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
     SqliteObservationStore,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
+from p2pwatch.application.steps.download_loop import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.application.steps.record_observations import record_observation
-from p2pwatch.application.steps.run_download_cycle import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability.events import ObservationRecorded
 from p2pwatch.domain.observation import ReportedFile

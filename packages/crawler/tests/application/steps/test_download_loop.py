@@ -3,7 +3,7 @@ from datetime import timedelta
 
 import pytest
 
-from p2pwatch.application.steps.run_download_cycle import (
+from p2pwatch.application.steps.download_loop import (
     DOWNLOAD_WAKE_SUBJECT,
     DownloadLoopDeps,
     download_loop,

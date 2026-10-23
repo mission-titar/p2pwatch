@@ -26,8 +26,8 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import Sq
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
 )
+from p2pwatch.application.steps.download_loop import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.application.steps.reevaluate_catalog import ReevaluationSummary, reevaluate_catalog
-from p2pwatch.application.steps.run_download_cycle import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.retraction import RETRACTED_TIER
