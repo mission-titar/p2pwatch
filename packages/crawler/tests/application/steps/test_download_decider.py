@@ -4,13 +4,13 @@ from catalog_matching.domain.models import TargetSegment
 from p2pwatch.application.steps.download_cycle import run_download_cycle
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.states import DownloadState
-from p2pwatch.domain.observability.events import DiskSpaceLow, DownloadQueued, FreeSpaceSampled
+from p2pwatch.domain.observability.policy import MetricInstruction, MetricName
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_free_space_meter import FakeFreeSpaceMeter
+from tests.fakes.adapters.driven.fake_logger import LoggedLine
 from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
-from tests.fakes.application.steps.fake_event_emitter import FakeEventEmitter
 from tests.support.application.steps.download_deps import (
     HASH_A,
     HASH_B,
@@ -22,6 +22,7 @@ from tests.support.application.steps.download_deps import (
     started,
     status,
 )
+from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
 
 @pytest.mark.asyncio
@@ -77,7 +78,7 @@ async def test_two_segment_candidates_same_hash_dedup_to_one_download() -> None:
             season=2, seasonal_number=12, absolute_number=62, letter="B", title="t", status="lost"
         ),
     )
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     client = FakeDownloadClient()
     tracked_download_store = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(
@@ -91,20 +92,20 @@ async def test_two_segment_candidates_same_hash_dedup_to_one_download() -> None:
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
         targets=targets,
     )
     await run_download_cycle(deps, NODE)
     assert list(tracked_download_store.states) == [HASH_A]
     assert tracked_download_store.states[HASH_A] is DownloadState.QUEUED
     assert started(client) == [HASH_A]
-    # Load-bearing assertion: exactly ONE DownloadQueued event. queue_new_candidates
-    # emits one per NON-skipped candidate (download_decider.py, end of the loop body);
-    # both candidates are policy-eligible here, so a SECOND event would only appear if the
+    # Load-bearing assertion: exactly ONE DownloadQueued line. queue_new_candidates
+    # dispatches one per NON-skipped candidate (download_decider.py, end of the loop body);
+    # both candidates are policy-eligible here, so a SECOND line would only appear if the
     # `is_tracked` continue-guard were removed, unlike the hash-keyed dict observables
     # above (states/started), which stay collapsed regardless.
-    queued_events = [e for e in event_emitter.events if isinstance(e, DownloadQueued)]
-    assert len(queued_events) == 1
+    queued_lines = [line for line in observability.logger.lines if "queued" in line.message]
+    assert queued_lines == [LoggedLine("info", "download queued: 062A")]
 
 
 @pytest.mark.asyncio
@@ -256,8 +257,8 @@ async def test_candidate_for_unknown_target_is_treated_as_complete() -> None:
 
 
 @pytest.mark.asyncio
-async def test_emits_download_queued() -> None:
-    event_emitter = FakeEventEmitter()
+async def test_dispatches_download_queued() -> None:
+    observability = ObservabilityOverFakes()
     client = FakeDownloadClient()
     tracked_download_store = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
@@ -269,45 +270,48 @@ async def test_emits_download_queued() -> None:
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
     )
     await run_download_cycle(deps, NODE)
-    assert any(type(e).__name__ == "DownloadQueued" for e in event_emitter.events)
-    assert event_emitter.node_ids == {NODE}
+    assert LoggedLine("info", "download queued: 062A") in observability.logger.lines
+    assert MetricInstruction(MetricName.DOWNLOADS_QUEUED, "inc") in (
+        observability.metrics_recorder.applied
+    )
 
 
 @pytest.mark.asyncio
 async def test_each_cycle_reports_the_measured_free_space() -> None:
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     deps = build_deps(
         client=FakeDownloadClient(),
         tracked_download_store=FakeTrackedDownloadStore(),
         free=4_242,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
     )
     await run_download_cycle(deps, NODE)
-    assert FreeSpaceSampled(free_bytes=4_242) in event_emitter.events
+    assert observability.metrics_recorder.applied == [
+        MetricInstruction(MetricName.DISK_FREE_BYTES, "set", (), 4_242.0)
+    ]
 
 
 @pytest.mark.asyncio
 async def test_low_disk_warns_once_per_crossing_and_rearms_at_the_floor() -> None:
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     free_space_meter = FakeFreeSpaceMeter(500)
     deps = build_deps(
         client=FakeDownloadClient(),
         tracked_download_store=FakeTrackedDownloadStore(),
         min_free=600,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
     )
     deps.free_space_meter = free_space_meter
     warnings_per_cycle: list[int] = []
     for free in (500, 400, 600, 599):  # cross down, stay low, back AT the floor, cross again
         free_space_meter.free = free
-        before = len(event_emitter.events)
+        before = len(observability.notifier.calls)
         await run_download_cycle(deps, NODE)
-        warnings_per_cycle.append(
-            sum(isinstance(e, DiskSpaceLow) for e in event_emitter.events[before:])
-        )
+        warnings_per_cycle.append(len(observability.notifier.calls) - before)
     assert warnings_per_cycle == [1, 0, 0, 1]
-    assert DiskSpaceLow(free_bytes=500, min_free_bytes=600) in event_emitter.events
-    assert event_emitter.node_ids == {NODE}
+    low = "download disk low: 0.0 GiB free, under the 0.0 GiB floor (no new download)"
+    assert [body for _, _, body, _ in observability.notifier.calls] == [low, low]
+    assert observability.notifier.node_ids == [NODE, NODE]

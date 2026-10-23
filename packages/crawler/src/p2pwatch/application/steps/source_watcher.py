@@ -102,7 +102,7 @@ async def _alert_sources(
                 source, source_name, file, filename, titles, alert.absent_for.total_seconds()
             )
         )
-        await deps.event_emitter.emit(event, node_id)
+        await deps.observability_dispatcher.dispatch(event, node_id)
 
 
 async def record_sources(

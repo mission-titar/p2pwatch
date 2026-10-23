@@ -7,7 +7,6 @@ from p2pwatch.domain.client_errors import (
     ReadRejectedError,
 )
 from p2pwatch.domain.download.states import DownloadState
-from p2pwatch.domain.observability.events import DiskSpaceLow, FreeSpaceSampled
 from tests.fakes.adapters.driven.fake_broken_free_space_meter import FakeBrokenFreeSpaceMeter
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
@@ -15,7 +14,6 @@ from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationR
 from tests.fakes.adapters.driven.fake_source_client import FakeSourceClient
 from tests.fakes.adapters.driven.fake_source_point_store import FakeSourcePointStore
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
-from tests.fakes.application.steps.fake_event_emitter import FakeEventEmitter
 from tests.support.application.steps.download_deps import (
     HASH_A,
     HASH_B,
@@ -27,6 +25,7 @@ from tests.support.application.steps.download_deps import (
     started,
     status,
 )
+from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
 # A refused read is the daemon unavailable, not a download refused.
 _UNAVAILABLE = [ClientUnreachableError("daemon down"), ReadRejectedError("amuled_rejected")]
@@ -307,19 +306,20 @@ async def test_an_unmeasurable_output_directory_admits_nothing_and_does_not_rais
     tracked_download_store = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
     observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "x", 100)})
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     deps = build_deps(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
     )
     deps.free_space_meter = FakeBrokenFreeSpaceMeter()
     await run_download_cycle(deps, NODE)
     assert client.started == []
     assert HASH_A not in tracked_download_store.states
-    assert not [e for e in event_emitter.events if isinstance(e, FreeSpaceSampled | DiskSpaceLow)]
+    assert observability.logger.lines == []
+    assert observability.metrics_recorder.applied == []
 
 
 @pytest.mark.asyncio
