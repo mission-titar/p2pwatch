@@ -16,11 +16,17 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store impor
     SqliteSourcePointStore,
 )
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.source import RecordedReading, SourceKey, SourceReading, SourceRole
+from p2pwatch.domain.source import (
+    ContactPoint,
+    RecordedReading,
+    SourceKey,
+    SourceReading,
+    SourceRole,
+)
 from tests.support.catalog_rows import insert_file
 
 _FILE, _OTHER_FILE = FileKey(Network.ED2K, "a" * 32), FileKey(Network.ED2K, "b" * 32)
-_KEY, _OTHER_KEY = SourceKey(Network.ED2K, "1f2e" * 8), SourceKey(Network.ED2K, "c" * 32)
+_KEY = SourceKey(Network.ED2K, "1f2e" * 8)
 _T0 = datetime(2026, 10, 13, 20, 0, tzinfo=UTC)
 _T0_US = int(_T0.timestamp()) * 1_000_000
 _POLL = timedelta(seconds=30)
@@ -234,7 +240,7 @@ def test_the_variant_and_the_source_are_written_as_d2_states(
 ) -> None:
     reading = dataclasses.replace(
         _reading(),
-        contact_point="176.103.48.36:4184",
+        contact_point=ContactPoint(Network.ED2K, "176.103.48.36:4184"),
         connectable=True,
         raw_metadata=(("source_origin", "kad"), ("protocol_extensions", ("a", "b"))),
     )
@@ -263,15 +269,6 @@ def test_the_variant_and_the_source_are_written_as_d2_states(
     assert catalog.execute("SELECT * FROM sources").fetchall() == [
         (_KEY.source_id, "ed2k", _KEY.native_id)
     ]
-
-
-def test_a_contact_point_that_is_not_the_files_networks_writes_nothing(
-    source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
-) -> None:
-    bad = dataclasses.replace(_reading(key=_OTHER_KEY), contact_point="server.example:4184")
-    with pytest.raises(PersistenceError, match="server.example:4184"):
-        source_point_store.record_readings(_FILE, [_reading(), bad], _T0, "n1")
-    assert _points(catalog) == []
 
 
 def test_a_failed_write_rolls_back_the_whole_call(

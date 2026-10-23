@@ -15,11 +15,12 @@ from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import ReportedFile, fold_raw_metadata
 from p2pwatch.domain.source import (
+    ContactPoint,
     SourceKey,
     SourceMetadata,
     SourceReading,
     SourceRole,
-    is_contact_point,
+    parse_contact_point,
 )
 from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus
 
@@ -224,11 +225,12 @@ def _source_role(state: object) -> SourceRole | None:
     return _SOURCE_ROLES.get(state, SourceRole.UNDETERMINED)
 
 
-def _contact_point(detail: dict[str, Any]) -> str | None:
-    """The eD2k server the source connects through, as ``ip:port``, the one form the writer
-    accepts (D3); ``None`` for anything else, an unknown server's ``null`` included."""
-    contact_point = f"{detail.get('server_ip')}:{detail.get('server_port')}"
-    return contact_point if is_contact_point(Network.ED2K, contact_point) else None
+def _contact_point(detail: dict[str, Any]) -> ContactPoint | None:
+    """The eD2k server the source connects through (D3); ``None`` when ``ip:port`` names none, an
+    unknown server's ``null`` included."""
+    return parse_contact_point(
+        Network.ED2K, f"{detail.get('server_ip')}:{detail.get('server_port')}"
+    )
 
 
 def _connectable(detail: dict[str, Any]) -> bool | None:

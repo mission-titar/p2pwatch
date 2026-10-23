@@ -23,7 +23,7 @@ from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
-from p2pwatch.domain.source import SourceRole
+from p2pwatch.domain.source import ContactPoint, SourceRole
 from p2pwatch.domain.status_reading import ChannelStatus
 from tests.fakes.fake_amule_api import PASSWORD, TOKEN, FakeAmuleApi, error
 
@@ -924,7 +924,7 @@ async def test_sources_ask_the_detail_of_only_the_rows_that_offer_us_the_file() 
         (reading.source_name, reading.role, reading.contact_point, reading.connectable)
         for reading in readings
     ] == [
-        ("peer 1", SourceRole.QUEUED, "176.103.48.36:4184", False),
+        ("peer 1", SourceRole.QUEUED, ContactPoint(Network.ED2K, "176.103.48.36:4184"), False),
         ("peer 3", SourceRole.STANDBY, None, None),
     ]
     asked = [r.url.path for r in api.requests if r.url.path.startswith("/api/v1/clients/")]

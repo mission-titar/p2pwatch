@@ -8,7 +8,7 @@ from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 
 from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
-from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError, wrap_sqlite_errors
+from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
 from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
 from p2pwatch.application.ports.driven.source_point_reader import SourcePointReader
 from p2pwatch.application.ports.driven.source_point_writer import SourcePointWriter
@@ -22,7 +22,6 @@ from p2pwatch.domain.source import (
     SourceUsefulness,
     carried_role,
     carried_role_max_age,
-    is_contact_point,
 )
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
@@ -103,10 +102,6 @@ class SqliteSourcePointStore(SourcePointWriter, SourcePointReader):
         self, file: FileKey, readings: Sequence[SourceReading], read_at: datetime, node_id: str
     ) -> tuple[RecordedReading, ...]:
         """ONE transaction; each reading kept, with its role, a carried one included."""
-        for reading in readings:
-            contact_point = reading.contact_point
-            if contact_point is not None and not is_contact_point(file.network, contact_point):
-                raise PersistenceError(f"not a {file.network} contact point: {contact_point!r}")
         read_at_micros = _micros(read_at)
         recorded: list[RecordedReading] = []
         with wrap_sqlite_errors():
@@ -206,7 +201,7 @@ def _variant_columns(
         reading.source_name,
         reading.software,
         role.value,
-        reading.contact_point,
+        None if reading.contact_point is None else reading.contact_point.server,
         reading.connectable,
         json.dumps(dict(reading.raw_metadata), ensure_ascii=False, sort_keys=True),
         node_id,
