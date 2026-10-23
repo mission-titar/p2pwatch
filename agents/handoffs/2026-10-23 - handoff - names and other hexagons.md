@@ -13,9 +13,9 @@ N18's `ObservabilityDispatcher`, D8), and, outside the crawler, H1 to H7, H10 to
 reaches the crawler's three option defaults (D14). Lot C (the crawler's design fixes) follows with its own Discuss and
 spec.
 
-One stack cut from `main` at `5adea19e`. Twenty-one blocks as the table stands, the closing one included: the spec's
-nineteen, block 52 split in Act into 52 and 53 (file bound), block 60 into 60 and 61 (file bound). The closing block's
-three commits measure 1082 lines in 75 files together, so the lead cuts it into parts (below, "Wrap counts").
+One stack cut from `main` at `5adea19e`. Twenty-three blocks, the closing ones included: the spec's nineteen, block 52
+split in Act into 52 and 53 (file bound), block 60 into 60 and 61 (file bound), the closing block cut by the lead into
+90, 92 and 94 (its commits measured 1082 lines in 75 files together).
 
 | Block | Pull request | Branch |
 |---|---|---|
@@ -39,7 +39,9 @@ three commits measure 1082 lines in 75 files together, so the lead cuts it into 
 | 72 | #428 | `refactor/coverage-broken-input` |
 | 74 | #429 | `refactor/coverage-problems` |
 | 80 | #430 | `chore/naming-and-defaults-rules` |
-| 90 | the closing one | `docs/names-and-other-hexagons-wrap` |
+| 90 | closing, part 1 | `docs/names-and-other-hexagons-wrap` |
+| 92 | closing, part 2 | `fix/broken-inputs-one-line` |
+| 94 | closing, part 3 | `refactor/review-findings` |
 
 Not merged at writing. The lot changes the image's code (the logger names, the columns, the log lines), so a release
 may follow, after "A copy before a migration that rewrites rows" ships ("Backlog", below).
@@ -138,8 +140,8 @@ From the block reports, re-run where noted.
 ## Holistic review
 
 `.reviews/lot-b-holistic.md`: 0 critical, 3 major, 17 minor; its two sub-reviews (stores, renames) add the minors
-of `.reviews/lot-b-holistic-subreviews.md`. Every finding is fixed in the closing block (the default exit), but
-Acceptance 14, the lead's, and the s6 supervisor's logger name (below). Exits, finding by finding:
+of `.reviews/lot-b-holistic-subreviews.md`. Every finding is fixed in the closing blocks 90 to 94 (the default exit), but
+Acceptance 14, the lead's. Exits, finding by finding:
 
 - **C5 gaps** (major): fixed. The three vex readers refuse a directory, an unreadable file, a file not in UTF-8, not
   JSON or not of their format; Grype's non-zero exit names the SBOM (`grype exited with status N`), and so does an
@@ -174,7 +176,9 @@ Acceptance 14, the lead's, and the s6 supervisor's logger name (below). Exits, f
 - **The logger names a wrong class would pass**: the re-evaluation's is tested, a wiring test seeding 200 files to
   read its progress line under `p2pwatch.application.steps.reevaluate_catalog` (mutated to
   `reevaluate_if_policy_changed.__module__`, it failed). `SearchTaskRunner` and `record_observation` log only on a
-  `StoreError`, which no wiring test can provoke: "Not validated". The s6 supervisor's: see "Not validated".
+  `StoreError`, which no wiring test can provoke: "Not validated". The s6 supervisor's (operator: "A"): it logs
+  through `logging.getLogger(__name__)`, its `Logger` parameter gone, so no wiring can give it another name; its
+  tests read the record's name (`TypeError: ... missing 1 required keyword-only argument: 'logger'` first).
 - **`docs/migration-4x.md`'s long line**: fixed.
 - **The names that did not follow their class** (D1): fixed, from the symbols with Serena (the functions, the module
   constants, the test names) and the locals with a token-level script, each batch checked with `git diff
@@ -277,6 +281,9 @@ written where the decision lives (`AGENTS.md`), and the logger names left untest
   the waits on the resume and the shutdown.
 - **For "Contract tests for the fakes"**: `FakeRunStateStore` now reads back at once what the real store applies on
   the crawler's next loop tick.
+- **amule's adapters and C4's adapter form**: `S6ServiceSupervisor` logs through `logging.getLogger(__name__)` (block
+  94), while amule's other adapters still receive the `Logger` port from the composition, named
+  `StdlibLogger(<Class>.__module__)`; a departure to weigh when lot C settles the loggers.
 - **The ast-grep rule tests bound to their rules** (Backlog): `ast-grep test` silently skips a test whose rule does
   not exist, so a test written first does not fail (blocks 61, 80).
 
@@ -322,8 +329,6 @@ written where the decision lives (`AGENTS.md`), and the logger names left untest
 - The spec's "17 sites on `main`" of Acceptance 4 (block 61).
 - The logger names of `SearchTaskRunner` and `record_observation`, which log only on a `StoreError` no wiring test
   can provoke; only `no-literal-logger-name` keeps them from a literal, not from a wrong class.
-- The s6 supervisor's logger name: built in `build_command_line` with `subprocess.run`, it logs only when `s6-svc`
-  fails, which no unit test can reach without `s6-svc` (the lead's decision pending at writing).
 - Block 70's unreadable-subdirectory test is skipped when run as root.
 
 ## Wrap counts
@@ -331,11 +336,10 @@ written where the decision lives (`AGENTS.md`), and the logger names left untest
 From `gh run list --branch <branch>` over blocks 10 to 74 (2026-10-23) and the lead's count.
 
 - **Fix-backs**: 0. **Cascaded rebases**: 0. **Runs re-triggered by them**: 0; one run per block, all green.
-- **Splits**: 2 (block 52 into 52 and 53, block 60 into 60 and 61, both at the file bound), and the closing block's,
-  cut by the lead from its commits: `fb1317a9` (the names and the prose, mechanical: 596 lines, 49 files),
-  `6c4970ad` (C5: 297 lines, 11 files), `4fc8110a` (the other fixes: 189 lines, 16 files), and the spec and handoff
-  commit, outside both counts.
-- **Exemptions**: 5 (blocks 12, 14, 16, 20, 22: 16, 20 and 22 on their rows, 12 and 14 approved in Act).
+- **Splits**: 3 (block 52 into 52 and 53, block 60 into 60 and 61, both at the file bound; the closing block into 90,
+  92 and 94 at both bounds, cut by the lead at its commits: 90 at `fb1317a9`, 92 at `6c4970ad`, 94 on top).
+- **Exemptions**: 6 (blocks 12, 14, 16, 20, 22 and 90: 16, 20 and 22 on their rows, 12, 14 and 90 approved in Act;
+  90 measured 596 lines, 49 files, the names and the prose).
 - **Bodies called unreadable**: none known at writing.
 
 ## Next

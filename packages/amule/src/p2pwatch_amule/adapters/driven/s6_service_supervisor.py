@@ -1,9 +1,12 @@
+import logging
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
-from p2pwatch_amule.application.ports.driven.logger import Logger
 from p2pwatch_amule.application.ports.driven.service_supervisor import ServiceSupervisor
+
+# Under its module's name, so no wiring can give it another (docs/migration-4x.md cites it).
+_logger = logging.getLogger(__name__)
 
 
 class S6ServiceSupervisor(ServiceSupervisor):
@@ -17,13 +20,11 @@ class S6ServiceSupervisor(ServiceSupervisor):
         amuled_service_directory: Path,
         stop_timeout_seconds: int,
         run_command: Callable[..., subprocess.CompletedProcess[str]],
-        logger: Logger,
     ) -> None:
         self._port_sync_down_file = port_sync_service_directory / "down"
         self._amuled_service_directory = amuled_service_directory
         self._stop_timeout_seconds = stop_timeout_seconds
         self._run_command = run_command
-        self._logger = logger
 
     def enable_port_sync(self) -> None:
         self._port_sync_down_file.unlink(missing_ok=True)
@@ -47,5 +48,5 @@ class S6ServiceSupervisor(ServiceSupervisor):
         )
         if s6_svc_run.returncode != 0:
             command, stderr = " ".join(["s6-svc", *options]), s6_svc_run.stderr.strip()
-            self._logger.error("%s exited %d: %s", command, s6_svc_run.returncode, stderr)
+            _logger.error("%s exited %d: %s", command, s6_svc_run.returncode, stderr)
         return s6_svc_run.returncode == 0

@@ -222,10 +222,13 @@ rows: 16 moves code verbatim, 20 renames and nothing else, 22 renames local name
 | 72 | `refactor/coverage-broken-input` | `NoPerTestCoverage` raised, `PurePath`; C5 (D13, D17) | 150, 7 |
 | 74 | `refactor/coverage-problems` | coverage's typed problems (D21) | 400, 12 |
 | 80 | `chore/naming-and-defaults-rules` | the crawler's three defaults; the run state's verbs; the option defaults' rule, the Writers' verb rule, the two pairing tests; C2, C3, C6 and the glossary (D10, D14) | 480, 16 |
-| 90 | `docs/names-and-other-hexagons-wrap` | closing block: the holistic findings, backlog, handoff | 200, 6 |
+| 90 | `docs/names-and-other-hexagons-wrap` | closing block: the holistic findings, backlog, handoff (Corrected: cut in three by the lead, this part **mechanical, exempt** (measured at 596 lines, 49 files; the operator approved the exemption in Act): the names and the prose the renames left behind) | 200, 6 |
+| 92 | `fix/broken-inputs-one-line` | (Corrected: added, split from block 90) every broken input of `vex_checks` and `coverage_checks` on one line (C5) | 297, 11 |
+| 94 | `refactor/review-findings` | (Corrected: added, split from block 90) the holistic review's other fixes, the s6 supervisor's logger, the spec's corrections, the handoff | 230, 19 |
 
 - Nineteen blocks; the operator allows splits in Act up to 25 for this lot, past which the lead asks again.
-  (Corrected: twenty-one with the closing block, 52 and 60 split in Act.)
+  (Corrected: twenty-three with the closing block, 52 and 60 split in Act, the closing block cut into 90, 92
+  and 94.)
 - The store splits (10 to 16) come before the renames, so no class is renamed twice. The logger names (24, 60)
   follow every module rename. The rules (80) come once the tree follows them: after 20 and 52 rename the Writers,
   42 and 50 fix `amule_bump`'s and `vex_checks`' defaults.
