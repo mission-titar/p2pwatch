@@ -4,6 +4,8 @@ Dedicated run: uv run pytest -m api_integration --no-cov
 Without eD2k access the results are empty: what is validated is the cycle, not their richness.
 """
 
+from datetime import timedelta
+
 import httpx
 import pytest
 
@@ -23,6 +25,8 @@ async def test_real_login_succeeds(amuled: ApiEndpoint) -> None:
         amuled.port,
         amuled.password,
         timeout_seconds=30.0,
+        page_size=500,
+        progress_poll_interval=timedelta(seconds=5),
         monotonic_clock=AsyncioMonotonicClock(),
         transport_factory=httpx.AsyncHTTPTransport,
     )
@@ -37,6 +41,8 @@ async def test_real_login_fails_with_wrong_password(amuled: ApiEndpoint) -> None
         amuled.port,
         "wrong-password",
         timeout_seconds=30.0,
+        page_size=500,
+        progress_poll_interval=timedelta(seconds=5),
         monotonic_clock=AsyncioMonotonicClock(),
         transport_factory=httpx.AsyncHTTPTransport,
     )
@@ -51,6 +57,8 @@ async def test_real_status(amuled: ApiEndpoint) -> None:
         amuled.port,
         amuled.password,
         timeout_seconds=30.0,
+        page_size=500,
+        progress_poll_interval=timedelta(seconds=5),
         monotonic_clock=AsyncioMonotonicClock(),
         transport_factory=httpx.AsyncHTTPTransport,
     )
@@ -68,6 +76,8 @@ async def test_real_search(amuled: ApiEndpoint) -> None:
         amuled.port,
         amuled.password,
         timeout_seconds=30.0,
+        page_size=500,
+        progress_poll_interval=timedelta(seconds=5),
         monotonic_clock=AsyncioMonotonicClock(),
         transport_factory=httpx.AsyncHTTPTransport,
     )

@@ -54,13 +54,6 @@ from p2pwatch.domain.search.answer import SearchAnswer
 from p2pwatch.domain.source import SourceReading
 from p2pwatch.domain.status_reading import ClientStatus
 
-# Rows asked for per list request. Every list route caps at 100 when `limit` is omitted, which
-# would silently truncate the shared-file sweep completion detection depends on (§7.5).
-_PAGE_SIZE = 500
-
-# How often search() reads a search's progress: local traffic with our own daemon.
-_POLL_INTERVAL = timedelta(seconds=5)
-
 _SEARCH_TYPES = {"ed2k": "global", "kad": "kad"}
 
 # Least time between two ed2k starts, and between two Kad starts on one Kad word (spec stage 2,
@@ -84,12 +77,16 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         password: str,
         *,
         timeout_seconds: float,
+        page_size: int,
+        progress_poll_interval: timedelta,
         monotonic_clock: MonotonicClock,
         transport_factory: Callable[[], httpx.AsyncBaseTransport],
     ) -> None:
         self._base_url = f"http://{host}:{port}/api/v1"
         self._password = password
         self._timeout_seconds = timeout_seconds
+        self._page_size = page_size
+        self._progress_poll_interval = progress_poll_interval
         # One transport per session: closing a session closes its transport.
         self._transport_factory = transport_factory
         self._monotonic_clock = monotonic_clock
@@ -194,7 +191,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
                 remaining = give_up_at - self._monotonic_clock.now()
                 if _KAD_WORD_HELD not in str(refusal) or remaining <= timedelta(0):
                     raise
-                await self._monotonic_clock.sleep(min(_POLL_INTERVAL, remaining))
+                await self._monotonic_clock.sleep(min(self._progress_poll_interval, remaining))
 
     async def _sleep_until(self, moment: MonotonicInstant) -> None:
         delay = moment - self._monotonic_clock.now()
@@ -212,7 +209,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
             if widen and polls:  # first poll: Kad has queried nobody yet, a reask is wasted
                 widen = await self._widen(search_id)
             polls += 1
-            await self._monotonic_clock.sleep(min(_POLL_INTERVAL, remaining))
+            await self._monotonic_clock.sleep(min(self._progress_poll_interval, remaining))
 
     async def status(self) -> ClientStatus:
         """Raises unreachable unless amuleapi reaches amuled: otherwise it answers from its cache,
@@ -372,14 +369,14 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         ``after`` accepts. Never ``offset``: it is a position, so a row deleted below the cursor
         is skipped and then reported by nothing."""
         rows: list[Any] = []
-        page_params = {**(params or {}), "sort": keyset_column, "limit": _PAGE_SIZE}
+        page_params = {**(params or {}), "sort": keyset_column, "limit": self._page_size}
         while True:
             envelope = await self._call("GET", path, params=page_params)
             page = envelope.get(list_key)
             if not isinstance(page, list):  # an under-report would restart what it hides
                 raise ApiUnreachableError(f"GET {path} answered without its {list_key!r} list")
             rows.extend(page)
-            if len(page) < _PAGE_SIZE:
+            if len(page) < self._page_size:
                 return rows
             anchor = page[-1].get(keyset_column) if isinstance(page[-1], dict) else None
             if not isinstance(anchor, str | int):
