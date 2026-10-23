@@ -9,7 +9,7 @@ import pytest
 from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle
 from p2pwatch.application.steps.reevaluate_catalog import ReevaluationSummary
 from p2pwatch.application.steps.search_worker import BackoffPolicy, BackoffRegistry
-from p2pwatch.domain.observability.events import CrawlerStarted
+from p2pwatch.domain.observability.policy import Audience, Severity
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
@@ -19,7 +19,7 @@ from tests.fakes.adapters.driven.fake_node_id_store import FakeNodeIdStore
 from tests.fakes.adapters.driven.fake_policy_fingerprint_store import FakePolicyFingerprintStore
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
-from tests.fakes.application.steps.fake_event_emitter import FakeEventEmitter
+from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
 _FINGERPRINT = "policy-2"
 _KAD = BackoffKey("amuled", "kad")
@@ -38,7 +38,7 @@ class _Crawl:
     ) -> None:
         self.steps: list[str] = []
         self.backoff_states_seen_by_loops: list[dict[BackoffKey, BackoffState]] = []
-        self.event_emitter = FakeEventEmitter()
+        self.observability = ObservabilityOverFakes()
         self.fingerprints = FakePolicyFingerprintStore(stored_fingerprint=stored_fingerprint)
         self.logger = FakeLogger()
         self.reevaluation_gate_logger = FakeLogger()
@@ -56,7 +56,7 @@ class _Crawl:
             node_id_writer=FakeNodeIdStore(stored_node_id=None),
             node_id_generator=FakeNodeIdGenerator("new-node"),
             wall_clock=fake_time.wall,
-            event_emitter=self.event_emitter,
+            observability_dispatcher=self.observability.dispatcher,
             policy_fingerprint=_FINGERPRINT,
             policy_fingerprint_reader=self.fingerprints,
             policy_fingerprint_writer=self.fingerprints,
@@ -72,7 +72,7 @@ class _Crawl:
 
     async def _reevaluate(self, node_id: str) -> ReevaluationSummary:
         self.steps.append(
-            f"reevaluated under {node_id}, {len(self.event_emitter.events)} event(s) out"
+            f"reevaluated under {node_id}, {len(self.observability.logger.lines)} event(s) out"
         )
         return ReevaluationSummary(files_evaluated=3, rows_written=1)
 
@@ -103,8 +103,10 @@ async def test_the_crawler_starts_under_the_stored_node_id_and_runs_each_loop_wi
     await crawl.run_until_both_loops_start_then_stop()
 
     assert crawl.logger.lines == [LoggedLine("info", "crawler started: node_id=stored-node")]
-    assert crawl.event_emitter.events == [CrawlerStarted(download_enabled=False)]
-    assert crawl.event_emitter.node_ids == {"stored-node"}
+    assert crawl.observability.notifier.calls == [
+        (Audience.OPERATIONS, "", "🟢 node online (download off)", Severity.INFO)
+    ]
+    assert crawl.observability.notifier.node_ids == ["stored-node"]
     assert crawl.steps == ["search under stored-node", "status under stored-node", "bound armed"]
 
 
@@ -118,8 +120,10 @@ async def test_a_configured_node_id_and_the_download_loop_show_in_the_start() ->
         LoggedLine("info", "crawler started: node_id=forced-node"),
         LoggedLine("info", "download enabled: download loop armed"),
     ]
-    assert crawl.event_emitter.events == [CrawlerStarted(download_enabled=True)]
-    assert crawl.event_emitter.node_ids == {"forced-node"}
+    assert crawl.observability.notifier.calls == [
+        (Audience.OPERATIONS, "", "🟢 node online (download on)", Severity.INFO)
+    ]
+    assert crawl.observability.notifier.node_ids == ["forced-node"]
 
 
 @pytest.mark.asyncio

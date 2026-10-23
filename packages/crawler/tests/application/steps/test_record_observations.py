@@ -13,14 +13,14 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
 from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
 from p2pwatch.application.steps.record_observations import record_observation
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.observability.events import ObservationRecorded
+from p2pwatch.domain.observability.policy import MetricInstruction, MetricName
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.wake_subject import WakeSubject
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.fakes.adapters.driven.fake_wall_clock import FakeWallClock
-from tests.fakes.application.steps.fake_event_emitter import FakeEventEmitter
+from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 from tests.support.catalog_rows import (
     count_observations,
     decision_node_ids,
@@ -55,7 +55,7 @@ async def test_observation_is_always_recorded_even_when_discarded(
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     waker = FakeWaker()
     changed = await record_observation(
         _reported_file(_HASH_DISCARD, "random.txt"),
@@ -65,7 +65,7 @@ async def test_observation_is_always_recorded_even_when_discarded(
         decision_reader=decision_store,
         engine=engine,
         waker=waker,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
@@ -94,7 +94,7 @@ async def test_the_observation_carries_the_clocks_instant(
         decision_reader=decision_store,
         engine=engine,
         waker=FakeWaker(),
-        event_emitter=FakeEventEmitter(),
+        observability_dispatcher=ObservabilityOverFakes().dispatcher,
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
@@ -113,7 +113,7 @@ async def test_new_verdict_is_persisted_and_nudged(
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     waker = FakeWaker()
     changed = await record_observation(
         _reported_file(_HASH_DL, _DL_NAME),
@@ -123,7 +123,7 @@ async def test_new_verdict_is_persisted_and_nudged(
         decision_reader=decision_store,
         engine=engine,
         waker=waker,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
@@ -136,7 +136,7 @@ async def test_new_verdict_is_persisted_and_nudged(
     )
     assert observation_node_ids(catalog_connection) == decision_node_ids(catalog_connection)
     assert decision_node_ids(catalog_connection) == {_NODE}
-    assert event_emitter.node_ids == {_NODE}
+    assert observability.notifier.node_ids == [_NODE]
     assert waker.woken_subjects == [WakeSubject.DOWNLOAD]
 
 
@@ -149,7 +149,7 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
     fake_time: FakeTime,
     wall_clock: FakeWallClock,
 ) -> None:
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     waker = FakeWaker()
     reported_file = _reported_file(_HASH_CAT, "keroro something.avi")
     assert (
@@ -161,7 +161,7 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
             decision_reader=decision_store,
             engine=engine,
             waker=waker,
-            event_emitter=event_emitter,
+            observability_dispatcher=observability.dispatcher,
             wall_clock=wall_clock,
             client_name="amuled",
             channel="ed2k",
@@ -181,7 +181,7 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
             decision_reader=decision_store,
             engine=engine,
             waker=waker,
-            event_emitter=event_emitter,
+            observability_dispatcher=observability.dispatcher,
             wall_clock=wall_clock,
             client_name="amuled",
             channel="ed2k",
@@ -204,7 +204,7 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     waker = FakeWaker()
     await record_observation(
         _reported_file(_HASH_DL, _NOTIFY_NAME),
@@ -214,7 +214,7 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
         decision_reader=decision_store,
         engine=engine,
         waker=waker,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
@@ -230,7 +230,7 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
         decision_reader=decision_store,
         engine=engine,
         waker=waker,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
@@ -261,7 +261,7 @@ async def test_persistence_error_is_absorbed_and_cycle_continues(
         "CREATE TRIGGER boom BEFORE INSERT ON observations"
         " BEGIN SELECT RAISE(ABORT, 'injected failure'); END"
     )
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     waker = FakeWaker()
     logger = FakeLogger()
     changed = await record_observation(
@@ -272,7 +272,7 @@ async def test_persistence_error_is_absorbed_and_cycle_continues(
         decision_reader=decision_store,
         engine=engine,
         waker=waker,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
@@ -299,7 +299,7 @@ async def test_signal_consumer_awaits_the_nudge(
 ) -> None:
     # The hub IS consumed by an await (not dead code, DECISION 9): a consumer sleeps
     # on the subject and is woken by the post-commit wake.
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     waker = FakeWaker()
     waiter = asyncio.create_task(waker.wait(WakeSubject.DOWNLOAD))
     await asyncio.sleep(0)
@@ -312,7 +312,7 @@ async def test_signal_consumer_awaits_the_nudge(
         decision_reader=decision_store,
         engine=engine,
         waker=waker,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
@@ -331,7 +331,7 @@ async def test_download_tier_verdict_also_nudges_the_download_subject(
     wall_clock: FakeWallClock,
 ) -> None:
     # a NEW "download"-tier verdict wakes the "download" subject (the download loop, DECISION DV9).
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     waker = FakeWaker()
     changed = await record_observation(
         _reported_file(_HASH_DL, _DL_NAME),
@@ -341,7 +341,7 @@ async def test_download_tier_verdict_also_nudges_the_download_subject(
         decision_reader=decision_store,
         engine=engine,
         waker=waker,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
@@ -360,7 +360,7 @@ async def test_non_download_tier_verdict_does_not_nudge_the_download_subject(
     wall_clock: FakeWallClock,
 ) -> None:
     # a "catalog"-tier verdict NEVER wakes the "download" subject.
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     waker = FakeWaker()
     changed = await record_observation(
         _reported_file(_HASH_CAT, "keroro something.avi"),
@@ -370,7 +370,7 @@ async def test_non_download_tier_verdict_does_not_nudge_the_download_subject(
         decision_reader=decision_store,
         engine=engine,
         waker=waker,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
@@ -388,7 +388,7 @@ async def test_emits_observation_then_decision_on_change(
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     waker = FakeWaker()
     reported_file = _reported_file(_HASH_DL, _DL_NAME)  # matches at tier=download
     await record_observation(
@@ -399,16 +399,20 @@ async def test_emits_observation_then_decision_on_change(
         decision_reader=decision_store,
         engine=engine,
         waker=waker,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",
         logger=FakeLogger(),
         node_id=_NODE,
     )
-    kinds = [type(e).__name__ for e in event_emitter.events]
-    assert kinds == ["ObservationRecorded", "DecisionsRecorded"]
-    assert event_emitter.events[0] == ObservationRecorded(client_name="amuled", channel="ed2k")
+    assert observability.logger.lines == [
+        LoggedLine("debug", "observation recorded (ed2k)"),
+        LoggedLine("info", f"decisions for {_DL_NAME} ({_HASH_DL}): 062A none → download"),
+    ]
+    assert observability.metrics_recorder.applied[0] == MetricInstruction(
+        MetricName.OBSERVATIONS, "inc", (("client", "amuled"), ("channel", "ed2k"))
+    )
 
 
 @pytest.mark.asyncio
@@ -418,7 +422,7 @@ async def test_emits_only_observation_when_discarded(
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     reported_file = _reported_file(_HASH_DISCARD, "random.txt")  # discarded by the engine
     await record_observation(
         reported_file,
@@ -428,14 +432,14 @@ async def test_emits_only_observation_when_discarded(
         decision_reader=decision_store,
         engine=engine,
         waker=FakeWaker(),
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
         wall_clock=wall_clock,
         client_name="amuled",
         channel="kad",
         logger=FakeLogger(),
         node_id=_NODE,
     )
-    assert [type(e).__name__ for e in event_emitter.events] == ["ObservationRecorded"]
+    assert observability.logger.lines == [LoggedLine("debug", "observation recorded (kad)")]
 
 
 @pytest.mark.asyncio
@@ -446,7 +450,7 @@ async def test_multi_segment_observation_records_two_rows(
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     waker = FakeWaker()
     changed = await record_observation(
         _reported_file(_HASH_DL, "Keroro 062 teletoon.avi"),
@@ -456,7 +460,7 @@ async def test_multi_segment_observation_records_two_rows(
         decision_reader=decision_store,
         engine=engine,
         waker=waker,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
         wall_clock=wall_clock,
         client_name="amuled",
         channel="ed2k",

@@ -11,6 +11,8 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
     SqliteObservationStore,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
+from p2pwatch.application.ports.driven.event_emitter import EventEmitter
+from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.search_worker import (
     SEARCH_BUDGET_SECONDS,
     BackoffPolicy,
@@ -22,10 +24,9 @@ from p2pwatch.application.steps.search_worker import (
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability.events import (
     ClientUnreachable,
-    ObservationRecorded,
-    SearchExecuted,
     SearchFailed,
 )
+from p2pwatch.domain.observability.policy import MetricInstruction, MetricName
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
@@ -38,6 +39,7 @@ from tests.fakes.adapters.driven.fake_search_client import (
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.fakes.application.steps.fake_event_emitter import FakeEventEmitter
+from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 from tests.support.catalog_rows import (
     count_observations,
     decision_node_ids,
@@ -85,7 +87,8 @@ def _deps(
     backoff: BackoffRegistry,
     fake_time: FakeTime,
     *,
-    event_emitter: FakeEventEmitter | None = None,
+    event_emitter: EventEmitter | None = None,
+    observability_dispatcher: ObservabilityDispatcher | None = None,
     logger: FakeLogger | None = None,
     observation_logger: FakeLogger | None = None,
 ) -> WorkerDeps:
@@ -98,6 +101,7 @@ def _deps(
         waker=FakeWaker(),
         backoff=backoff,
         event_emitter=event_emitter or FakeEventEmitter(),
+        observability_dispatcher=observability_dispatcher or ObservabilityOverFakes().dispatcher,
         wall_clock=fake_time.wall,
         logger=logger or FakeLogger(),
         observation_logger=observation_logger or FakeLogger(),
@@ -441,10 +445,10 @@ async def test_successful_search_emits_search_executed_with_network_and_counts(
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
 ) -> None:
-    # A successful ed2k search emits SearchExecuted FIRST, labelled with its client,
-    # before the per-observation events (ObservationRecorded/DecisionsRecorded).
+    # A successful ed2k search dispatches SearchExecuted FIRST, labelled with its client,
+    # before the per-observation events (ObservationRecorded, DecisionsRecorded).
     fake_time = FakeTime()
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     client = FakeSearchClient(results=[(_reported_file(),)], skipped_result_count=2)
     deps = _deps(
         observation_store,
@@ -452,17 +456,23 @@ async def test_successful_search_emits_search_executed_with_network_and_counts(
         engine,
         _registry(fake_time),
         fake_time,
-        event_emitter=event_emitter,
+        event_emitter=observability.dispatcher,
+        observability_dispatcher=observability.dispatcher,
     )
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"), _NODE)
-    assert event_emitter.events[0] == SearchExecuted(
-        client_name="amule-1", channel="ed2k", observation_count=1, skipped_result_count=2
-    )
-    kinds = [type(e).__name__ for e in event_emitter.events]
-    assert kinds == ["SearchExecuted", "ObservationRecorded", "DecisionsRecorded"]
-    assert event_emitter.events[1] == ObservationRecorded(client_name="amule-1", channel="ed2k")
-    assert event_emitter.node_ids == {_NODE}
+    assert observability.logger.lines == [
+        LoggedLine("debug", "search ed2k: 1 observation(s)"),
+        LoggedLine("debug", "observation recorded (ed2k)"),
+        LoggedLine("info", f"decisions for {_DL_NAME} ({_HASH}): 062A none → download"),
+    ]
+    labels = (("client", "amule-1"), ("channel", "ed2k"))
+    assert observability.metrics_recorder.applied[:3] == [
+        MetricInstruction(MetricName.SEARCHES, "inc", labels),
+        MetricInstruction(MetricName.SEARCH_RESULTS_SKIPPED, "inc", labels, 2.0),
+        MetricInstruction(MetricName.OBSERVATIONS, "inc", labels),
+    ]
+    assert observability.notifier.node_ids == [_NODE]
 
 
 @pytest.mark.asyncio
