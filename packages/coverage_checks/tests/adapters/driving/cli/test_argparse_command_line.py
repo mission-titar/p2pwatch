@@ -1,14 +1,29 @@
 """The command line: one subcommand, which prints the unit coverage report of the package."""
 
+from pathlib import PurePath
+
 import pytest
 
 from coverage_checks.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
-from coverage_checks.application.ports.driving.unit_coverage_checker import UnitCoverageReport
+from coverage_checks.application.ports.driving.unit_coverage_checker import (
+    UnitCoverageProblem,
+    UnitCoverageReport,
+)
 from coverage_checks.domain.broken_input_error import BrokenInputError
+from coverage_checks.domain.own_tests import (
+    ListedTestOfModule,
+    ListingWithoutReason,
+    StaleListing,
+    UnitNameCollision,
+    UnmappedTestFile,
+)
+from coverage_checks.domain.shortfall import Shortfall
 from tests.fakes.composition.fake_unit_coverage_checker import FakeUnitCoverageChecker
 
+SIZES = PurePath("src/pkg/sizes.py")
 
-def _report(*problems: str) -> UnitCoverageReport:
+
+def _report(*problems: UnitCoverageProblem) -> UnitCoverageReport:
     return UnitCoverageReport(
         problems=problems,
         module_count=3,
@@ -26,17 +41,77 @@ def _command_line(unit_coverage_checker: FakeUnitCoverageChecker) -> ArgparseCom
 def test_unit_coverage_prints_each_problem_then_the_package_s_summary_and_fails(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    unit_coverage_checker = FakeUnitCoverageChecker(_report("problem one", "problem two"))
+    unit_coverage_checker = FakeUnitCoverageChecker(
+        _report(StaleListing("tests/gone/"), StaleListing("tests/test_gone.py"))
+    )
 
     assert _command_line(unit_coverage_checker).run(["unit-coverage"]) == 1
 
     assert capsys.readouterr().out == (
-        "problem one\n"
-        "problem two\n"
+        "tests/gone/: listed in tests_without_unit, but names no test file\n"
+        "tests/test_gone.py: listed in tests_without_unit, but names no test file\n"
         "pkg: 4 test files map to 2 of 3 modules, 1 are listed without a unit;"
         " 2 of 3 modules short of their own tests\n"
     )
     assert unit_coverage_checker.check_count == 1
+
+
+@pytest.mark.parametrize(
+    ("problem", "problem_line"),
+    [
+        (
+            ListingWithoutReason("tests/test_sql.py"),
+            "tests/test_sql.py: listed in tests_without_unit without its reason",
+        ),
+        (
+            UnitNameCollision(PurePath("src/pkg/main.py")),
+            "src/pkg/main.py: its tests would be named like those of __main__.py beside it;"
+            " rename it",
+        ),
+        (
+            ListedTestOfModule(PurePath("tests/test_sizes.py"), SIZES),
+            "tests/test_sizes.py: listed in tests_without_unit, but tests src/pkg/sizes.py",
+        ),
+        (
+            UnmappedTestFile(PurePath("tests/test_nothing.py")),
+            "tests/test_nothing.py: tests no module of src; name it after the module it tests,"
+            " or list it in [tool.coverage_checks] tests_without_unit with its reason",
+        ),
+        (
+            StaleListing("tests/test_gone.py"),
+            "tests/test_gone.py: listed in tests_without_unit, but names no test file",
+        ),
+        (
+            Shortfall(
+                SIZES,
+                own_test_files=(PurePath("tests/test_sizes.py"), PurePath("tests/test_sizes_x.py")),
+                unrun_statements=(5, 6, 7),
+                unrun_branches=((5, 6), (5, 7)),
+            ),
+            "src/pkg/sizes.py: statements 5, 6, 7 and branches 5->6, 5->7 run by none of its own"
+            " tests (tests/test_sizes.py, tests/test_sizes_x.py)",
+        ),
+        (
+            Shortfall(SIZES, own_test_files=(), unrun_statements=(7,), unrun_branches=()),
+            "src/pkg/sizes.py: statements 7 run by none of its own tests (it has none)",
+        ),
+        (
+            Shortfall(
+                SIZES,
+                own_test_files=(PurePath("tests/test_sizes.py"),),
+                unrun_statements=(),
+                unrun_branches=((2, -1),),
+            ),
+            "src/pkg/sizes.py: branches 2->exit run by none of its own tests (tests/test_sizes.py)",
+        ),
+    ],
+)
+def test_unit_coverage_words_each_kind_of_problem_on_a_line_of_its_own(
+    problem: UnitCoverageProblem, problem_line: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert _command_line(FakeUnitCoverageChecker(_report(problem))).run(["unit-coverage"]) == 1
+
+    assert capsys.readouterr().out.splitlines()[0] == problem_line
 
 
 def test_unit_coverage_without_a_problem_prints_the_summary_and_passes(

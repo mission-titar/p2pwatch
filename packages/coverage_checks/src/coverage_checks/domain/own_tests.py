@@ -13,13 +13,54 @@ _UNIT_NAMES_BY_DUNDER = {"__init__": "init", "__main__": "main"}
 
 
 @dataclass(frozen=True)
+class ListingWithoutReason:
+    """An entry of `tests_without_unit` whose reason is no text, or blank."""
+
+    listed_path: str
+
+
+@dataclass(frozen=True)
+class UnitNameCollision:
+    """A module named `main` or `init` beside the dunder module whose tests' names it would take."""
+
+    module: PurePath
+
+
+@dataclass(frozen=True)
+class ListedTestOfModule:
+    """A test file listed in `tests_without_unit`, though it tests a module."""
+
+    test_file: PurePath
+    module: PurePath
+
+
+@dataclass(frozen=True)
+class UnmappedTestFile:
+    """A test file that tests no module, and is not listed in `tests_without_unit`."""
+
+    test_file: PurePath
+
+
+@dataclass(frozen=True)
+class StaleListing:
+    """An entry of `tests_without_unit` that names no test file."""
+
+    listed_path: str
+
+
+type TreeProblem = (
+    ListingWithoutReason | UnitNameCollision | ListedTestOfModule | UnmappedTestFile | StaleListing
+)
+
+
+@dataclass(frozen=True)
 class OwnTests:
     """Each module's own test files, the counts of test files mapped and listed, what is wrong."""
 
     test_files_by_module: Mapping[PurePath, tuple[PurePath, ...]]
     mapped_test_count: int
     listed_test_count: int
-    problems: tuple[str, ...]
+    problems: tuple[TreeProblem, ...]
 
 
 def find_own_tests(package_tree: PackageTree) -> OwnTests:
@@ -27,14 +68,13 @@ def find_own_tests(package_tree: PackageTree) -> OwnTests:
     modules = sorted(package_tree.modules)
     test_files = sorted(package_tree.test_files)
     tests_without_unit = package_tree.tests_without_unit
-    problems = [
-        f"{listed_path}: listed in tests_without_unit without its reason"
+    problems: list[TreeProblem] = [
+        ListingWithoutReason(listed_path)
         for listed_path, reason in tests_without_unit.items()
         if not isinstance(reason, str) or not reason.strip()
     ]
     problems += [
-        f"{module}: its tests would be named like those of __{module.stem}__.py beside it;"
-        " rename it"
+        UnitNameCollision(module)
         for module in modules
         if module.stem in _UNIT_NAMES_BY_DUNDER.values()
         and module.with_name(f"__{module.stem}__.py") in modules
@@ -45,18 +85,15 @@ def find_own_tests(package_tree: PackageTree) -> OwnTests:
         module = _tested_module(test_file, modules)
         is_listed = any(_lists(listed_path, test_file) for listed_path in tests_without_unit)
         if module is not None and is_listed:
-            problems.append(f"{test_file}: listed in tests_without_unit, but tests {module}")
+            problems.append(ListedTestOfModule(test_file, module))
         elif module is not None:
             test_files_by_module[module].append(test_file)
         elif is_listed:
             listed_test_count += 1
         else:
-            problems.append(
-                f"{test_file}: tests no module of src; name it after the module it tests, or list"
-                " it in [tool.coverage_checks] tests_without_unit with its reason"
-            )
+            problems.append(UnmappedTestFile(test_file))
     problems += [
-        f"{listed_path}: listed in tests_without_unit, but names no test file"
+        StaleListing(listed_path)
         for listed_path in tests_without_unit
         if not any(_lists(listed_path, test_file) for test_file in test_files)
     ]

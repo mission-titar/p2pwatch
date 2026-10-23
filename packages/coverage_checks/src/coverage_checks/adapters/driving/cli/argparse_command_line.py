@@ -3,9 +3,21 @@
 import argparse
 import sys
 from collections.abc import Sequence
+from typing import assert_never
 
-from coverage_checks.application.ports.driving.unit_coverage_checker import UnitCoverageChecker
+from coverage_checks.application.ports.driving.unit_coverage_checker import (
+    UnitCoverageChecker,
+    UnitCoverageProblem,
+)
 from coverage_checks.domain.broken_input_error import BrokenInputError
+from coverage_checks.domain.own_tests import (
+    ListedTestOfModule,
+    ListingWithoutReason,
+    StaleListing,
+    UnitNameCollision,
+    UnmappedTestFile,
+)
+from coverage_checks.domain.shortfall import Shortfall
 
 
 class ArgparseCommandLine:
@@ -36,7 +48,7 @@ class ArgparseCommandLine:
             print(f"error: {error}", file=sys.stderr)
             return 1
         for problem in report.problems:
-            print(problem)
+            print(_problem_line(problem))
         print(
             f"{self._package_name}: {report.mapped_test_count} test files map to"
             f" {report.tested_module_count} of {report.module_count} modules,"
@@ -44,3 +56,56 @@ class ArgparseCommandLine:
             f" {report.module_count} modules short of their own tests"
         )
         return 1 if report.problems else 0
+
+
+def _problem_line(problem: UnitCoverageProblem) -> str:
+    """The line naming *problem*'s file and what is wrong with it."""
+    match problem:
+        case ListingWithoutReason(listed_path):
+            return f"{listed_path}: listed in tests_without_unit without its reason"
+        case UnitNameCollision(module):
+            return (
+                f"{module.as_posix()}: its tests would be named like those of"
+                f" __{module.stem}__.py beside it; rename it"
+            )
+        case ListedTestOfModule(test_file, module):
+            return (
+                f"{test_file.as_posix()}: listed in tests_without_unit, but tests"
+                f" {module.as_posix()}"
+            )
+        case UnmappedTestFile(test_file):
+            return (
+                f"{test_file.as_posix()}: tests no module of src; name it after the module it"
+                " tests, or list it in [tool.coverage_checks] tests_without_unit with its reason"
+            )
+        case StaleListing(listed_path):
+            return f"{listed_path}: listed in tests_without_unit, but names no test file"
+        case Shortfall():
+            return _shortfall_line(problem)
+        case _:  # pragma: no cover
+            assert_never(problem)
+
+
+def _shortfall_line(shortfall: Shortfall) -> str:
+    """The line naming the module, what its own tests leave unrun, and those own tests."""
+    unrun = [
+        f"{kind} {', '.join(labels)}"
+        for kind, labels in (
+            ("statements", [str(statement) for statement in shortfall.unrun_statements]),
+            (
+                "branches",
+                [
+                    f"{start}->{end if end > 0 else 'exit'}"
+                    for start, end in shortfall.unrun_branches
+                ],
+            ),
+        )
+        if labels
+    ]
+    own_test_names = (
+        ", ".join(test_file.as_posix() for test_file in shortfall.own_test_files) or "it has none"
+    )
+    return (
+        f"{shortfall.module.as_posix()}: {' and '.join(unrun)} run by none of its own tests"
+        f" ({own_test_names})"
+    )

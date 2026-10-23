@@ -5,7 +5,14 @@ from pathlib import PurePath
 
 import pytest
 
-from coverage_checks.domain.own_tests import find_own_tests
+from coverage_checks.domain.own_tests import (
+    ListedTestOfModule,
+    ListingWithoutReason,
+    StaleListing,
+    UnitNameCollision,
+    UnmappedTestFile,
+    find_own_tests,
+)
 from coverage_checks.domain.package_tree import PackageTree
 
 
@@ -67,10 +74,7 @@ def test_a_dunder_module_drops_its_underscores() -> None:
 )
 def test_a_test_file_mapping_to_no_module_fails(test_file: str) -> None:
     own_tests = find_own_tests(_tree("src/pkg/a/b.py", test_file))
-    assert own_tests.problems == (
-        f"{test_file}: tests no module of src; name it after the module it tests, or list it in"
-        " [tool.coverage_checks] tests_without_unit with its reason",
-    )
+    assert own_tests.problems == (UnmappedTestFile(PurePath(test_file)),)
     assert own_tests.mapped_test_count == 0
 
 
@@ -105,7 +109,7 @@ def test_a_listed_test_file_that_tests_a_module_fails() -> None:
         _tree("src/pkg/b.py", "tests/test_b.py", tests_without_unit={"tests/test_b.py": "listed"})
     )
     assert own_tests.problems == (
-        "tests/test_b.py: listed in tests_without_unit, but tests src/pkg/b.py",
+        ListedTestOfModule(PurePath("tests/test_b.py"), PurePath("src/pkg/b.py")),
     )
     assert own_tests.test_files_by_module == {PurePath("src/pkg/b.py"): ()}
 
@@ -115,9 +119,7 @@ def test_an_entry_listing_no_test_file_fails(listed_path: str) -> None:
     own_tests = find_own_tests(
         _tree("src/pkg/b.py", "tests/test_b.py", tests_without_unit={listed_path: "deleted"})
     )
-    assert own_tests.problems == (
-        f"{listed_path}: listed in tests_without_unit, but names no test file",
-    )
+    assert own_tests.problems == (StaleListing(listed_path),)
 
 
 @pytest.mark.parametrize("reason", ["", "  ", 3])
@@ -128,16 +130,13 @@ def test_an_entry_without_its_reason_fails(reason: object) -> None:
             tests_without_unit={"tests/test_migration_0002.py": reason},
         )
     )
-    assert own_tests.problems == (
-        "tests/test_migration_0002.py: listed in tests_without_unit without its reason",
-    )
+    assert own_tests.problems == (ListingWithoutReason("tests/test_migration_0002.py"),)
 
 
 @pytest.mark.parametrize("stem", ["main", "init"])
 def test_a_module_named_like_a_dunder_beside_it_fails(stem: str) -> None:
     assert find_own_tests(_tree(f"src/pkg/__{stem}__.py", f"src/pkg/{stem}.py")).problems == (
-        f"src/pkg/{stem}.py: its tests would be named like those of __{stem}__.py beside it;"
-        " rename it",
+        UnitNameCollision(PurePath(f"src/pkg/{stem}.py")),
     )
 
 

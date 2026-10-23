@@ -3,12 +3,17 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+from coverage_checks.domain.own_tests import TreeProblem
+from coverage_checks.domain.shortfall import Shortfall
+
+type UnitCoverageProblem = TreeProblem | Shortfall
+
 
 @dataclass(frozen=True)
 class UnitCoverageReport:
     """What is wrong, the tree's problems first, and the counts of the package's summary."""
 
-    problems: tuple[str, ...]
+    problems: tuple[UnitCoverageProblem, ...]
     module_count: int
     tested_module_count: int  # the modules with at least one own test file
     mapped_test_count: int

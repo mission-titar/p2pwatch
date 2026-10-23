@@ -186,7 +186,7 @@ depends_on = ["coverage_checks.domain"]
 [[modules]]
 path = "coverage_checks.application.ports.driving.unit_coverage_checker"
 layer = "ports"
-depends_on = []
+depends_on = ["coverage_checks.domain"]
 
 [[modules]]
 path = "p2pwatch.__main__"
