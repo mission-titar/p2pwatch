@@ -1,29 +1,20 @@
-"""Adapter errors, inheriting the port contract so the application never imports this adapter.
-
-A refused operation fails the search or the download, anything else marks the daemon
-unreachable, and a refused login stays outside both: it is a config problem, the crawler fails
-fast on it.
+"""Adapter errors. A refusal stays inside the adapter, each method raising its operation's port
+error; anything else marks the daemon unreachable, and a refused login is a config problem.
 """
 
 import json
 
 import httpx
 
-from p2pwatch.domain.client_errors import (
-    ClientAuthError,
-    ClientError,
-    ClientUnreachableError,
-    DownloadRejectedError,
-    SearchFailedError,
-)
+from p2pwatch.domain.client_errors import ClientAuthError, ClientUnreachableError
 
 # Error codes that report a failed OPERATION rather than a failed daemon: the request is dead,
 # the transport is not. `not_found` is the search evicted from amuled's 20-entry ring (§7.2).
 _OPERATION_CODES = frozenset({"amuled_rejected", "not_found"})
 
 
-class ApiError(ClientError):
-    """Base of all amuleapi adapter errors (under the port contract)."""
+class ApiError(Exception):
+    """Base of all amuleapi adapter errors."""
 
 
 class ApiUnreachableError(ApiError, ClientUnreachableError):
@@ -34,7 +25,7 @@ class ApiAuthError(ApiError, ClientAuthError):
     """Login refused (wrong admin password) - not a loop case, a config one."""
 
 
-class ApiRejectedError(ApiError, SearchFailedError, DownloadRejectedError):
+class ApiRejectedError(ApiError):
     """The daemon refused the operation and said so cleanly; carries its message."""
 
 

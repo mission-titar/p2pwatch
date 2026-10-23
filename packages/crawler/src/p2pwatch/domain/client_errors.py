@@ -17,5 +17,9 @@ class DownloadRejectedError(ClientError):
     """The client refused a download: that download fails."""
 
 
+class ReadRejectedError(ClientError):
+    """The client refused a read of its downloads, their sources or its status."""
+
+
 class ClientAuthError(ClientError):
     """The client refused our credentials: a config problem, the crawler fails fast."""

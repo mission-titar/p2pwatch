@@ -1,15 +1,9 @@
-"""TDD tests for matching_read.MatchingExplainer (Task 9, W-D7).
-
-Since P4a the explainer takes an ALREADY-PARSED ``MatcherConfig`` + ``targets`` tuple
-(the YAML → config parsing moved up into the caller), so these tests parse the minimal
-fixtures with the canonical ``parse_matcher_config`` / ``parse_targets`` and pass the parsed
-objects.
-"""
+"""``MatchingExplainer``: a file's explanation over every filename, from the engine it is given."""
 
 import yaml
 
 from catalog_matching.domain.config import MatcherConfig
-from catalog_matching.domain.engine import Explanation
+from catalog_matching.domain.engine import Explanation, MatchingEngine
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 from p2pwatch.domain.matching_read import MatchingExplainer
@@ -61,10 +55,7 @@ rules:
 
 def test_explainer_returns_explanation_on_matching_filename() -> None:
     """Filename containing 'keroro' → Explanation with non-empty rules_fired."""
-    explainer = MatchingExplainer(
-        matcher_config=_minimal_matcher(),
-        targets=_minimal_targets(),
-    )
+    explainer = MatchingExplainer(engine=MatchingEngine(_minimal_matcher(), _minimal_targets()))
     explanation = explainer.explain(
         filenames=["Keroro_062A_VF.avi"],
         size_bytes=None,
@@ -79,10 +70,7 @@ def test_explainer_returns_explanation_on_matching_filename() -> None:
 
 def test_explainer_returns_none_for_unknown_target() -> None:
     """target_id unknown to the config → None."""
-    explainer = MatchingExplainer(
-        matcher_config=_minimal_matcher(),
-        targets=_minimal_targets(),
-    )
+    explainer = MatchingExplainer(engine=MatchingEngine(_minimal_matcher(), _minimal_targets()))
     explanation = explainer.explain(
         filenames=["Keroro_062A_VF.avi"],
         size_bytes=None,
@@ -121,10 +109,7 @@ rules:
         )
     )
 
-    explainer = MatchingExplainer(
-        matcher_config=matcher_config,
-        targets=_minimal_targets(),
-    )
+    explainer = MatchingExplainer(engine=MatchingEngine(matcher_config, _minimal_targets()))
     # 100 * 1024 * 1024 = 104857600 bytes = exactly 100.0 MiB
     explanation = explainer.explain(
         filenames=["keroro_062a.avi"],
@@ -166,10 +151,7 @@ rules:
         )
     )
 
-    explainer = MatchingExplainer(
-        matcher_config=matcher_config,
-        targets=_minimal_targets(),
-    )
+    explainer = MatchingExplainer(engine=MatchingEngine(matcher_config, _minimal_targets()))
     explanation = explainer.explain(
         filenames=["keroro_062a.avi"],
         size_bytes=None,
@@ -179,31 +161,6 @@ rules:
     )
     assert isinstance(explanation, Explanation)
     assert "catalog" in explanation.rules_fired
-
-
-def test_explainer_engine_cached_across_calls() -> None:
-    """Multiple explain() calls reuse the same engine (identical object)."""
-    explainer = MatchingExplainer(
-        matcher_config=_minimal_matcher(),
-        targets=_minimal_targets(),
-    )
-    # Two successive calls: the engine must be built ONCE (stable private attribute)
-    r1 = explainer.explain(
-        filenames=["keroro_vf.avi"],
-        size_bytes=None,
-        duration_seconds=None,
-        bitrate_kbps=None,
-        target_id="062A",
-    )
-    r2 = explainer.explain(
-        filenames=["keroro_vf.avi"],
-        size_bytes=None,
-        duration_seconds=None,
-        bitrate_kbps=None,
-        target_id="062A",
-    )
-    # Both results are identical (stable engine)
-    assert r1 == r2
 
 
 def test_explainer_judges_every_name_and_lists_the_vetoes_fired() -> None:
@@ -228,7 +185,7 @@ rules:
 """
         )
     )
-    explainer = MatchingExplainer(matcher_config=matcher_config, targets=_minimal_targets())
+    explainer = MatchingExplainer(engine=MatchingEngine(matcher_config, _minimal_targets()))
     explanation = explainer.explain(
         filenames=["ita.avi", "keroro.avi"],
         size_bytes=100 * 1024 * 1024,

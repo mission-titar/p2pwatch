@@ -8,8 +8,9 @@ import httpx
 import pytest
 
 from p2pwatch.adapters.driven.amule_api.amule_api_client import AmuleApiClient
-from p2pwatch.adapters.driven.amule_api.errors import ApiAuthError, ApiRejectedError
+from p2pwatch.adapters.driven.amule_api.errors import ApiAuthError
 from p2pwatch.adapters.driven.asyncio_monotonic_clock import AsyncioMonotonicClock
+from p2pwatch.domain.client_errors import SearchFailedError
 from tests.integration.conftest import ApiEndpoint
 
 pytestmark = pytest.mark.api_integration
@@ -73,7 +74,7 @@ async def test_real_search(amuled: ApiEndpoint) -> None:
     try:
         try:
             answer = await client.search("keroro", "ed2k", 30.0)
-        except ApiRejectedError as exc:
+        except SearchFailedError as exc:
             # The daemon refused the search cleanly (no eD2k server reachable from the
             # container): the request/response cycle IS validated, with its own message.
             assert str(exc)

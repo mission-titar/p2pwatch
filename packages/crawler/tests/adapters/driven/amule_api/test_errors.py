@@ -29,11 +29,9 @@ def test_transport_failures_are_unreachable() -> None:
     assert issubclass(ApiUnreachableError, ClientUnreachableError)
 
 
-def test_a_refused_operation_fails_the_search_or_the_download_not_the_client() -> None:
-    # amuleapi answers a refused search and a refused link with the same code.
-    assert issubclass(ApiRejectedError, SearchFailedError)
-    assert issubclass(ApiRejectedError, DownloadRejectedError)
-    assert not issubclass(ApiRejectedError, ClientUnreachableError)
+def test_a_refusal_inherits_no_port_error() -> None:
+    # amuleapi answers every refused operation with one code: each method names its own refusal.
+    assert not issubclass(ApiRejectedError, ClientError)
 
 
 def test_auth_error_is_not_a_loop_error() -> None:
