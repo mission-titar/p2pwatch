@@ -83,11 +83,6 @@ _CARRIED = {
 _TOLERATED_READS = 3
 
 
-def carried_role(previous: SourceRole | None) -> SourceRole:
-    """The role of a reading in a passing state, from its latest point's, ``None`` without one."""
-    return SourceRole.UNDETERMINED if previous is None else _CARRIED[previous.usefulness]
-
-
 def carried_role_max_age(time_between_reads: timedelta) -> timedelta:
     """The longest gap over which the writer carries a role (source points spec, D4)."""
     return _TOLERATED_READS * time_between_reads
@@ -156,6 +151,14 @@ class LatestPoint:
     role: SourceRole
     observed_at: datetime
     session_received_bytes: int
+
+
+def carried_role(latest: LatestPoint | None, reading: SourceReading) -> SourceRole:
+    """The role of ``reading``, in a passing state, from its source's latest point: none once aMule
+    recreated the client, which restarts its session's received bytes."""
+    if latest is None or latest.session_received_bytes > reading.session_received_bytes:
+        return SourceRole.UNDETERMINED
+    return _CARRIED[latest.role.usefulness]
 
 
 @dataclass(frozen=True)
