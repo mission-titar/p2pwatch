@@ -1,3 +1,4 @@
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
@@ -11,7 +12,7 @@ class PosixAccountProvisioner(AccountProvisioner):
         self,
         *,
         home_directory: Path,
-        run_command: Callable[..., object],
+        run_command: Callable[..., subprocess.CompletedProcess[str]],
         find_group: Callable[[str], object],
         find_user: Callable[[str], object],
     ) -> None:
@@ -24,7 +25,7 @@ class PosixAccountProvisioner(AccountProvisioner):
         # -o tolerates a uid/gid a Debian system account already holds: PUID/PGID only have to
         # match the host's ownership of the bind mounts.
         if _is_missing(self._find_group):
-            self._run_command(["groupadd", "-o", "-g", str(gid), "amule"], check=True)
+            self._run_command(["groupadd", "-o", "-g", str(gid), "amule"], check=True, text=True)
         if _is_missing(self._find_user):
             useradd = [
                 "useradd",
@@ -37,7 +38,7 @@ class PosixAccountProvisioner(AccountProvisioner):
                 "-d",
                 str(self._home_directory),
             ]
-            self._run_command([*useradd, "-s", "/usr/sbin/nologin", "amule"], check=True)
+            self._run_command([*useradd, "-s", "/usr/sbin/nologin", "amule"], check=True, text=True)
 
 
 def _is_missing(find: Callable[[str], object]) -> bool:

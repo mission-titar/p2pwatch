@@ -110,19 +110,27 @@ def test_a_down_wait_that_fails_writes_nothing_and_still_starts_amuled(node: Nod
     assert node.logger.lines[1:] == []
 
 
-@pytest.mark.parametrize("conf", ["[eMule]\nPort=4662\n", None])
-def test_a_write_that_raises_still_starts_amuled_and_is_logged(
-    node: Node, conf: str | None
-) -> None:
-    def flush() -> None:
-        node.amule_conf.conf = conf
-
+def test_a_write_that_raises_still_starts_amuled_and_is_logged(node: Node) -> None:
     node.amule_conf.write_error = OSError("No space left on device")
-    node.service_supervisor.on_stop_amuled = flush
     node.run_loop()
     assert node.actions == [UP, READ, DOWN, READ, UP]
-    reason = "No space left on device" if conf else "amule.conf does not exist"
-    assert node.logger.lines[1:] == [LoggedLine("error", f"amule.conf was not written ({reason})")]
+    assert node.logger.lines[1:] == [
+        LoggedLine("error", "amule.conf was not written (No space left on device)")
+    ]
+
+
+def test_an_amule_conf_gone_once_amuled_stopped_writes_nothing_and_still_starts_amuled(
+    node: Node,
+) -> None:
+    def remove() -> None:
+        node.amule_conf.conf = None
+
+    node.service_supervisor.on_stop_amuled = remove
+    node.run_loop()
+    assert node.actions == [UP, READ, DOWN, READ, UP]
+    assert node.logger.lines[1:] == [
+        LoggedLine("error", "amule.conf no longer exists once amuled stopped, nothing written")
+    ]
 
 
 def test_the_same_port_asks_the_supervisor_nothing(node: Node) -> None:
@@ -165,9 +173,9 @@ def test_the_poll_interval_is_the_settings(node: Node) -> None:
     assert node.monotonic_clock.sleeps == [timedelta(seconds=5)]
 
 
-@pytest.mark.parametrize("conf", ["[eMule]\nPort=4662x\n", "Port=4662\n", None])
+@pytest.mark.parametrize("conf", ["[eMule]\nPort=4662x\n", "Port=4662\n"])
 def test_an_unreadable_amule_conf_asks_the_supervisor_nothing_and_is_logged(
-    node: Node, conf: str | None
+    node: Node, conf: str
 ) -> None:
     node.amule_conf.conf = conf
     node.run_loop()
@@ -176,3 +184,12 @@ def test_an_unreadable_amule_conf_asks_the_supervisor_nothing_and_is_logged(
     assert node.logger.lines[0].message.startswith(
         "amule.conf's port is unreadable, amuled left as is ("
     )
+
+
+def test_a_missing_amule_conf_asks_the_supervisor_nothing_and_is_logged(node: Node) -> None:
+    node.amule_conf.conf = None
+    node.run_loop()
+    assert node.actions == [UP, READ]
+    assert node.logger.lines == [
+        LoggedLine("error", "amule.conf does not exist, amuled left as is")
+    ]

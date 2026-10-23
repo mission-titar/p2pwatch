@@ -1,3 +1,4 @@
+import subprocess
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
@@ -13,7 +14,7 @@ class AmuleApiAdminPasswordSetter(AdminPasswordSetter):
         config_directory: Path,
         home_directory: Path,
         env: Mapping[str, str],
-        run_command: Callable[..., object],
+        run_command: Callable[..., subprocess.CompletedProcess[str]],
     ) -> None:
         self._config_directory = config_directory
         self._home_directory = home_directory
@@ -34,4 +35,5 @@ class AmuleApiAdminPasswordSetter(AdminPasswordSetter):
             extra_groups=[],
             env={**self._env, "HOME": str(self._home_directory)},
             check=True,
+            text=True,
         )

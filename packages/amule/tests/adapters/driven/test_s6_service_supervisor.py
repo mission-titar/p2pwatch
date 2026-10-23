@@ -10,6 +10,8 @@ from tests.fakes.adapters.driven.fake_command_runner import FakeCommandRunner
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 
 AMULED_SERVICE_DIRECTORY = Path("/run/service/amuled")
+# Not the composition's 60, so the test sees the parameter.
+STOP_TIMEOUT_SECONDS = 42
 CAPTURED = {"capture_output": True, "text": True}
 
 
@@ -28,6 +30,7 @@ def _supervisor(
     return S6ServiceSupervisor(
         port_sync_service_directory=port_sync_service_directory,
         amuled_service_directory=AMULED_SERVICE_DIRECTORY,
+        stop_timeout_seconds=STOP_TIMEOUT_SECONDS,
         run_command=(command_runner or FakeCommandRunner()).run_command,
         logger=logger or FakeLogger(),
     )
@@ -63,7 +66,7 @@ def test_stopping_amuled_waits_until_it_is_down(port_sync_service_directory: Pat
     assert _supervisor(port_sync_service_directory, command_runner, logger).stop_amuled() is True
 
     assert command_runner.commands == [
-        (["s6-svc", "-wD", "-T", "60000", "-d", "/run/service/amuled"], CAPTURED)
+        (["s6-svc", "-wD", "-T", "42000", "-d", "/run/service/amuled"], CAPTURED)
     ]
     assert logger.lines == []
 
@@ -74,7 +77,7 @@ def test_a_stop_that_fails_is_logged(port_sync_service_directory: Path) -> None:
 
     assert _supervisor(port_sync_service_directory, command_runner, logger).stop_amuled() is False
 
-    assert logger.lines == [LoggedLine("error", "s6-svc -wD -T 60000 -d exited 99: timed out")]
+    assert logger.lines == [LoggedLine("error", "s6-svc -wD -T 42000 -d exited 99: timed out")]
 
 
 def test_starting_amuled_sends_up(port_sync_service_directory: Path) -> None:

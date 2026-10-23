@@ -10,6 +10,7 @@ HOME_DIRECTORY = Path("/home/amule")
 GROUPADD = ["groupadd", "-o", "-g", "1001", "amule"]
 USERADD = ["useradd", "-o", "-u", "1000", "-g", "1001", "-M", "-d", "/home/amule"]
 USERADD_NOLOGIN = [*USERADD, "-s", "/usr/sbin/nologin", "amule"]
+CHECKED = {"check": True, "text": True}
 
 
 def _lookup(*, is_present: bool) -> Callable[[str], object]:
@@ -43,8 +44,8 @@ def test_a_missing_account_is_created_group_first() -> None:
     ).find_or_create_amule_account(1000, 1001)
 
     assert command_runner.commands == [
-        (GROUPADD, {"check": True}),
-        (USERADD_NOLOGIN, {"check": True}),
+        (GROUPADD, CHECKED),
+        (USERADD_NOLOGIN, CHECKED),
     ]
 
 
@@ -55,7 +56,7 @@ def test_an_existing_group_is_kept_and_the_missing_user_created() -> None:
         command_runner, has_group=True, has_user=False
     ).find_or_create_amule_account(1000, 1001)
 
-    assert command_runner.commands == [(USERADD_NOLOGIN, {"check": True})]
+    assert command_runner.commands == [(USERADD_NOLOGIN, CHECKED)]
 
 
 def test_an_existing_account_is_not_recreated() -> None:
