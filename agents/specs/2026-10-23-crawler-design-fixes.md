@@ -151,8 +151,8 @@ Strict TDD in every block, as `AGENTS.md` states it. Full contents, estimate sou
 | 120 | `refactor/coverage-tiers-and-records-to-write` | coverage tiers; `records_to_write` (D15, D16) | 200, 11 |
 | 130 | `refactor/contact-point` | `ContactPoint` (D17) | 200, 12 |
 | 140 | `refactor/earlier-points-in-domain` | earlier points reduced in the domain (D18) | 200, 9 |
-| 150 | `refactor/source-roles-in-domain` | source roles decided in the domain (D18) | 400, 14 |
-| 155 | `refactor/source-point-node` | the source point carries its node (D18, D26) | 110, 9 |
+| 150 | `refactor/source-roles-in-domain` | source roles decided in the domain (D18) (Corrected: its reader side only, the block reaching 556 lines) | 211, 8 (measured) |
+| 155 | `refactor/source-point-node` | the source point carries its node (D18, D26) (Corrected: opens with block 150's writer side, `SourcePoint` and `record_points`, 394 lines, 14 files) | 110, 9 |
 | 160 | `refactor/run-state-waits` | run state predicates and waits; `reader-verbs` (D20) | 210, 17 |
 | 170 | `refactor/observability-plan` | `ObservabilityPlan`, `Logger.debug` (D22, D23) | 170, 9 |
 | 180 | `refactor/dispatch-step` | the dispatch step (D21) | 330, 12 |
