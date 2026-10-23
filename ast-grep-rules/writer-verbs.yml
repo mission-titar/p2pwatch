@@ -1,0 +1,13 @@
+id: writer-verbs
+language: python
+severity: error
+message: A Writer's method starts with `record_` or `set_`.
+note: "`record_` adds a fact and leaves the earlier ones, `set_` replaces a current value."
+files: ["packages/*/src/*/application/ports/driven/*.py"]
+rule:
+  kind: function_definition
+  not: { has: { field: name, regex: '^(record|set)_' } }
+  inside:
+    kind: class_definition
+    has: { field: name, regex: 'Writer$' }
+    stopBy: end

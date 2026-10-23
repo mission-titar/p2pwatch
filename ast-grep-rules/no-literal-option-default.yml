@@ -1,0 +1,25 @@
+id: no-literal-option-default
+language: python
+severity: error
+message: A command-line option's default holds no literal.
+note: "A value the operator could set and did not is the domain's; a fixed value no option sets is the composition's."
+files: ["packages/*/src/**/*.py"]
+rule:
+  kind: keyword_argument
+  all:
+    - has: { field: name, regex: ^default$ }
+    # A string or a number, alone or anywhere in the expression (`cwd / "y"`, `-1`, `[1, 2]`).
+    - has:
+        field: value
+        any:
+          - kind: string
+          - kind: integer
+          - kind: float
+          - has: { kind: string, stopBy: end }
+          - has: { kind: integer, stopBy: end }
+          - has: { kind: float, stopBy: end }
+  inside:
+    kind: argument_list
+    inside:
+      kind: call
+      has: { field: function, regex: '(^|\.)add_argument$' }
