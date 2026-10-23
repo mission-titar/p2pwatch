@@ -14,6 +14,11 @@ from p2pwatch.application.ports.driving.catalog_merger import (
 )
 from p2pwatch.application.ports.driving.config_validator import ConfigValidator
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
+from p2pwatch.domain.config_defaults import (
+    DEFAULT_CONFIG_PATH,
+    DEFAULT_MATCHER_PATH,
+    DEFAULT_TARGETS_PATH,
+)
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.merge_error import MergeError
 
@@ -21,12 +26,11 @@ _LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 
 
 def _add_config_options(
-    parser: argparse.ArgumentParser, under_cwd: Callable[[str], PurePath]
+    parser: argparse.ArgumentParser, under_cwd: Callable[[str | PurePath], PurePath]
 ) -> None:
-    deploy = under_cwd("deploy")
-    parser.add_argument("--config", type=under_cwd, default=deploy / "crawler.yml")
-    parser.add_argument("--targets", type=under_cwd, default=deploy / "targets.yml")
-    parser.add_argument("--matcher", type=under_cwd, default=deploy / "matcher.yml")
+    parser.add_argument("--config", type=under_cwd, default=under_cwd(DEFAULT_CONFIG_PATH))
+    parser.add_argument("--targets", type=under_cwd, default=under_cwd(DEFAULT_TARGETS_PATH))
+    parser.add_argument("--matcher", type=under_cwd, default=under_cwd(DEFAULT_MATCHER_PATH))
 
 
 def _configure_logging(root_logger: logging.Logger) -> None:
@@ -117,7 +121,7 @@ class ArgparseCommandLine:
             return self._validate_config(args)
         return self._merge(args)
 
-    def _under_cwd(self, path: str) -> PurePath:
+    def _under_cwd(self, path: str | PurePath) -> PurePath:
         """``path`` under ``cwd``, or as it is when absolute."""
         return self._cwd / path
 

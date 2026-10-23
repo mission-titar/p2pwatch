@@ -1,6 +1,12 @@
-"""The values the crawler takes for a key ``crawler.yml`` leaves out."""
+"""What the crawler takes when the operator sets nothing: a key of ``crawler.yml``, an option."""
 
 from datetime import timedelta
+from pathlib import PurePath
+
+# The config files a command reads when no option names them, under the working directory.
+DEFAULT_CONFIG_PATH = PurePath("deploy/crawler.yml")
+DEFAULT_TARGETS_PATH = PurePath("deploy/targets.yml")
+DEFAULT_MATCHER_PATH = PurePath("deploy/matcher.yml")
 
 DEFAULT_LOG_LEVEL = "INFO"
 DEFAULT_NOTIFICATION_TIMEOUT_SECONDS = 5.0
