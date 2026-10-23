@@ -7,35 +7,46 @@ from datetime import timedelta
 import pytest
 
 from p2pwatch.application.ports.driven.status_client import StatusClient
+from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.status_loop import StatusLoopDeps, status_loop
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError, ReadRejectedError
-from p2pwatch.domain.observability import events as ev
 from p2pwatch.domain.status_reading import (
     ChannelStatus,
     ClientStatus,
     PublishedReading,
     StatusReading,
 )
+from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_metrics_recorder import FakeMetricsRecorder
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_search_client import make_unreachable
 from tests.fakes.adapters.driven.fake_status_client import FakeStatusClient
 from tests.fakes.adapters.driven.fake_status_reading_store import FakeStatusReadingStore
 from tests.fakes.adapters.driven.fake_stepped_status_client import FakeSteppedStatusClient
 from tests.fakes.adapters.driven.fake_time import FakeTime
-from tests.fakes.application.steps.fake_timed_event_emitter import FakeTimedEventEmitter
+from tests.fakes.adapters.driven.fake_timed_notifier import FakeTimedNotifier
 
 type _Reading = ClientStatus | ClientError
 
-_ALERTS = (
-    ev.ChannelDegraded,
-    ev.ChannelRecovered,
-    ev.ClientUnreachableLasting,
-    ev.ClientReachableAgain,
-)
 _UP = (True, True)
 _LOW_ID = (True, False)  # on the network, not connectable
 _DOWN = make_unreachable()
 _NODE = "titar-node-1"
+_NOTIFICATION_TIMEOUT_SECONDS = 5.0
+
+
+class _Observability:
+    """The dispatch step over fakes, each notification timed: an alert is one."""
+
+    def __init__(self, fake_time: FakeTime) -> None:
+        self.logger = FakeLogger()
+        self.notifier = FakeTimedNotifier(fake_time)
+        self.dispatcher = ObservabilityDispatcher(
+            logger=self.logger,
+            metrics_recorder=FakeMetricsRecorder(),
+            notifier=self.notifier,
+            notification_timeout_seconds=_NOTIFICATION_TIMEOUT_SECONDS,
+        )
 
 
 def _status(**channels: tuple[bool, bool | None]) -> ClientStatus:
@@ -49,7 +60,7 @@ def _deps(
     client_name: str,
     client: StatusClient,
     fake_time: FakeTime,
-    event_emitter: FakeTimedEventEmitter,
+    observability: _Observability,
     run_state: FakeRunStateStore,
 ) -> StatusLoopDeps:
     return StatusLoopDeps(
@@ -57,49 +68,41 @@ def _deps(
         client,
         fake_time.wall,
         fake_time.monotonic,
-        event_emitter,
+        observability.dispatcher,
         run_state,
         FakeStatusReadingStore(),
     )
 
 
-async def _run(*readings: _Reading, client: str = "amuled") -> list[tuple[float, ev.Event]]:
+async def _run(*readings: _Reading, client: str = "amuled") -> _Observability:
     fake_time, run_state = FakeTime(), FakeRunStateStore()
-    event_emitter = FakeTimedEventEmitter(fake_time)
+    observability = _Observability(fake_time)
     scripted = FakeStatusClient(list(readings), run_state)
     await asyncio.wait_for(
-        status_loop(_deps(client, scripted, fake_time, event_emitter, run_state), _NODE),
+        status_loop(_deps(client, scripted, fake_time, observability, run_state), _NODE),
         timeout=1.0,
     )
-    return event_emitter.events
+    return observability
 
 
 @pytest.mark.asyncio
-async def test_every_event_is_emitted_under_the_node_id_the_loop_runs_with() -> None:
-    fake_time, run_state = FakeTime(), FakeRunStateStore()
-    event_emitter = FakeTimedEventEmitter(fake_time)
-    readings: list[_Reading] = [_DOWN, _DOWN, _DOWN, _status(ed2k=_UP)]
-    client = FakeStatusClient(readings, run_state)
-    await asyncio.wait_for(
-        status_loop(_deps("amuled", client, fake_time, event_emitter, run_state), _NODE),
-        timeout=1.0,
-    )
-    assert any(isinstance(event, _ALERTS) for _, event in event_emitter.events)
-    assert event_emitter.node_ids == {_NODE}
+async def test_every_alert_is_notified_under_the_node_id_the_loop_runs_with() -> None:
+    observability = await _run(_DOWN, _DOWN, _DOWN, _status(ed2k=_UP))
+    assert observability.notifier.bodies
+    assert observability.notifier.node_ids == {_NODE}
 
 
-async def _alerts(*readings: _Reading) -> list[tuple[float, ev.Event]]:
-    return [(at, event) for at, event in await _run(*readings) if isinstance(event, _ALERTS)]
+async def _alerts(*readings: _Reading) -> list[tuple[float, str]]:
+    return (await _run(*readings)).notifier.bodies
 
 
-def _degraded(channel: str, field: ev.ChannelField) -> ev.ChannelDegraded:
-    return ev.ChannelDegraded("amuled", channel, field, 300.0)
+_NOT_CONNECTABLE = "not connectable for 5 min"
 
 
 @pytest.mark.asyncio
 async def test_not_connectable_from_the_first_reading_alerts_at_five_minutes_once() -> None:
     alerts = await _alerts(*[_status(ed2k=_LOW_ID)] * 10)
-    assert alerts == [(300.0, _degraded("ed2k", "connectable"))]
+    assert alerts == [(300.0, f"amuled ed2k: {_NOT_CONNECTABLE}")]
 
 
 @pytest.mark.asyncio
@@ -110,18 +113,16 @@ async def test_a_degraded_state_lasting_four_minutes_never_alerts_nor_recovers()
 
 @pytest.mark.asyncio
 async def test_off_the_network_alerts_whatever_the_client_and_channel() -> None:
-    events = await _run(*[_status(x=(False, None))] * 6, client="fake")
-    assert [e for _, e in events if isinstance(e, _ALERTS)] == [
-        ev.ChannelDegraded("fake", "x", "connected", 300.0)
-    ]
+    observability = await _run(*[_status(x=(False, None))] * 6, client="fake")
+    assert observability.notifier.bodies == [(300.0, "fake x: off its network for 5 min")]
 
 
 @pytest.mark.asyncio
 async def test_a_good_reading_after_an_alert_recovers() -> None:
     alerts = await _alerts(*[_status(kad=_LOW_ID)] * 6, _status(kad=_UP))
     assert alerts == [
-        (300.0, _degraded("kad", "connectable")),
-        (360.0, ev.ChannelRecovered("amuled", "kad", "connectable")),
+        (300.0, f"amuled kad: {_NOT_CONNECTABLE}"),
+        (360.0, "amuled kad: connectable again"),
     ]
 
 
@@ -129,7 +130,7 @@ async def test_a_good_reading_after_an_alert_recovers() -> None:
 async def test_unknown_between_two_degraded_readings_restarts_the_clock() -> None:
     unknown = _status(kad=(True, None))
     alerts = await _alerts(*[_status(kad=_LOW_ID)] * 3, unknown, *[_status(kad=_LOW_ID)] * 6)
-    assert alerts == [(540.0, _degraded("kad", "connectable"))]
+    assert alerts == [(540.0, f"amuled kad: {_NOT_CONNECTABLE}")]
 
 
 @pytest.mark.asyncio
@@ -137,27 +138,27 @@ async def test_unknown_after_an_alert_is_no_recovery() -> None:
     unknown = _status(kad=(True, None))
     alerts = await _alerts(*[_status(kad=_LOW_ID)] * 6, unknown, _status(kad=_UP))
     assert alerts == [
-        (300.0, _degraded("kad", "connectable")),
-        (420.0, ev.ChannelRecovered("amuled", "kad", "connectable")),
+        (300.0, f"amuled kad: {_NOT_CONNECTABLE}"),
+        (420.0, "amuled kad: connectable again"),
     ]
 
 
 @pytest.mark.asyncio
 async def test_unreachable_alerts_at_two_minutes_and_recovers_when_it_answers() -> None:
-    events = await _run(_DOWN, _DOWN, _DOWN, _status(ed2k=_UP))
-    assert [(at, e) for at, e in events if isinstance(e, _ALERTS)] == [
-        (120.0, ev.ClientUnreachableLasting("amuled", 120.0)),
-        (180.0, ev.ClientReachableAgain("amuled")),
+    observability = await _run(_DOWN, _DOWN, _DOWN, _status(ed2k=_UP))
+    assert observability.notifier.bodies == [
+        (120.0, "amuled unreachable for 2 min"),
+        (180.0, "amuled reachable again"),
     ]
-    assert [e for _, e in events].count(ev.ClientUnreachable("amuled")) == 3
+    assert observability.logger.lines.count(LoggedLine("warning", "amuled unreachable")) == 3
 
 
 @pytest.mark.asyncio
 async def test_an_operation_the_api_refuses_reads_as_unreachable() -> None:
     # A route a weekly aMule bump renamed: /version answers 404 not_found.
     refused = ReadRejectedError("GET /api/v1/version: 404 not_found: no route")
-    events = await _run(refused, refused, refused)
-    assert (120.0, ev.ClientUnreachableLasting("amuled", 120.0)) in events
+    alerts = await _alerts(refused, refused, refused)
+    assert alerts == [(120.0, "amuled unreachable for 2 min")]
 
 
 @pytest.mark.asyncio
@@ -176,20 +177,22 @@ async def test_while_unreachable_only_the_api_alerts_and_channel_clocks_restart(
     low = _status(ed2k=_LOW_ID)
     alerts = await _alerts(*[low] * 4, *[_DOWN] * 5, *[low] * 6)
     assert alerts == [
-        (360.0, ev.ClientUnreachableLasting("amuled", 120.0)),
-        (540.0, ev.ClientReachableAgain("amuled")),
-        (840.0, _degraded("ed2k", "connectable")),
+        (360.0, "amuled unreachable for 2 min"),
+        (540.0, "amuled reachable again"),
+        (840.0, f"amuled ed2k: {_NOT_CONNECTABLE}"),
     ]
 
 
 @pytest.mark.asyncio
 async def test_each_reading_samples_every_channel_and_unreachable_makes_them_unknown() -> None:
-    events = await _run(_DOWN, _status(ed2k=_UP, kad=(False, None)), _DOWN)
-    assert [(at, e) for at, e in events if isinstance(e, ev.ChannelStatusSampled)] == [
-        (60.0, ev.ChannelStatusSampled("amuled", "ed2k", True, True)),
-        (60.0, ev.ChannelStatusSampled("amuled", "kad", False, None)),
-        (120.0, ev.ChannelStatusSampled("amuled", "ed2k", None, None)),
-        (120.0, ev.ChannelStatusSampled("amuled", "kad", None, None)),
+    observability = await _run(_DOWN, _status(ed2k=_UP, kad=(False, None)), _DOWN)
+    assert observability.logger.lines == [
+        LoggedLine("warning", "amuled unreachable"),
+        LoggedLine("debug", "status amuled ed2k: connected yes, connectable yes"),
+        LoggedLine("debug", "status amuled kad: connected no, connectable unknown"),
+        LoggedLine("warning", "amuled unreachable"),
+        LoggedLine("debug", "status amuled ed2k: connected unknown, connectable unknown"),
+        LoggedLine("debug", "status amuled kad: connected unknown, connectable unknown"),
     ]
 
 
@@ -204,7 +207,7 @@ async def test_each_reading_is_published_with_its_wall_and_monotonic_instants(
     fake_time.step_wall(timedelta(hours=1))  # the two clocks part: each instant shows its clock
     status_reading_store = FakeStatusReadingStore()
     client = FakeStatusClient([_status(kad=_UP), reading], run_state)
-    deps = _deps("amuled", client, fake_time, FakeTimedEventEmitter(fake_time), run_state)
+    deps = _deps("amuled", client, fake_time, _Observability(fake_time), run_state)
     deps.status_reading_writer = status_reading_store
     await asyncio.wait_for(status_loop(deps, _NODE), timeout=1.0)
     read_at = fake_time.wall.now() - timedelta(seconds=60)  # the loop slept one period after it
@@ -218,10 +221,10 @@ async def test_each_reading_is_published_with_its_wall_and_monotonic_instants(
 async def test_a_wall_clock_step_forward_raises_no_alert_before_its_delay() -> None:
     # Degraded for four minutes of monotonic time, an hour and four minutes of wall clock.
     fake_time, run_state = FakeTime(), FakeRunStateStore()
-    event_emitter = FakeTimedEventEmitter(fake_time)
+    observability = _Observability(fake_time)
     client = FakeSteppedStatusClient([_status(ed2k=_LOW_ID)] * 5, run_state, fake_time)
     await asyncio.wait_for(
-        status_loop(_deps("amuled", client, fake_time, event_emitter, run_state), _NODE),
+        status_loop(_deps("amuled", client, fake_time, observability, run_state), _NODE),
         timeout=1.0,
     )
-    assert [e for _, e in event_emitter.events if isinstance(e, _ALERTS)] == []
+    assert observability.notifier.bodies == []

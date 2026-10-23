@@ -375,7 +375,6 @@ class CrawlerComposition(CrawlerRunner):
                 engine=engine,
                 waker=waker,
                 backoff=backoff,
-                event_emitter=observability_dispatcher,
                 observability_dispatcher=observability_dispatcher,
                 wall_clock=wall_clock,
                 logger=StdlibLogger(SearchWorker.__module__),

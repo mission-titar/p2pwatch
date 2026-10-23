@@ -9,12 +9,12 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Literal
 
-from p2pwatch.application.ports.driven.event_emitter import EventEmitter
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
 from p2pwatch.application.ports.driven.status_client import StatusClient
 from p2pwatch.application.ports.driven.status_reading_writer import StatusReadingWriter
 from p2pwatch.application.ports.driven.wall_clock import WallClock
+from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.observability.events import (
@@ -39,7 +39,7 @@ class StatusLoopDeps:
     client: StatusClient
     wall_clock: WallClock
     monotonic_clock: MonotonicClock
-    event_emitter: EventEmitter
+    observability_dispatcher: ObservabilityDispatcher
     run_state_reader: RunStateReader
     status_reading_writer: StatusReadingWriter
 
@@ -75,7 +75,7 @@ def _publish(deps: StatusLoopDeps, status: ClientStatus | None) -> None:
 
 
 async def status_loop(deps: StatusLoopDeps, node_id: str) -> None:
-    """Reads the status every period until shutdown, emitting under ``node_id``."""
+    """Reads the status every period until shutdown, dispatching under ``node_id``."""
     api_timer = _AlertTimer(UNREACHABLE_ALERT_AFTER)
     channel_timers: dict[tuple[str, ChannelField], _AlertTimer] = {}
 
@@ -84,7 +84,9 @@ async def status_loop(deps: StatusLoopDeps, node_id: str) -> None:
     ) -> None:
         change = timer.observe(healthy, deps.monotonic_clock.now())
         if change is not None:
-            await deps.event_emitter.emit(alert if change == "alert" else recovery, node_id)
+            await deps.observability_dispatcher.dispatch(
+                alert if change == "alert" else recovery, node_id
+            )
 
     while not deps.run_state_reader.is_shutdown_requested():
         try:
@@ -93,7 +95,9 @@ async def status_loop(deps: StatusLoopDeps, node_id: str) -> None:
             raise  # a wrong password is config, not an outage
         except ClientError:  # a refused route too: a renamed /version must not end the crawler
             _publish(deps, None)
-            await deps.event_emitter.emit(ClientUnreachable(deps.client_name), node_id)
+            await deps.observability_dispatcher.dispatch(
+                ClientUnreachable(deps.client_name), node_id
+            )
             # Every channel is unknown while the API is: only the API's own alert can fire.
             readings: list[tuple[str, bool | None, bool | None]] = [
                 (channel, None, None) for channel in dict.fromkeys(c for c, _ in channel_timers)
@@ -110,7 +114,7 @@ async def status_loop(deps: StatusLoopDeps, node_id: str) -> None:
             ClientReachableAgain(deps.client_name),
         )
         for channel, connected, connectable in readings:
-            await deps.event_emitter.emit(
+            await deps.observability_dispatcher.dispatch(
                 ChannelStatusSampled(deps.client_name, channel, connected, connectable),
                 node_id,
             )

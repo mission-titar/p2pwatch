@@ -11,7 +11,6 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
     SqliteObservationStore,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
-from p2pwatch.application.ports.driven.event_emitter import EventEmitter
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.search_worker import (
     SEARCH_BUDGET_SECONDS,
@@ -22,10 +21,6 @@ from p2pwatch.application.steps.search_worker import (
     WorkerDeps,
 )
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.observability.events import (
-    ClientUnreachable,
-    SearchFailed,
-)
 from p2pwatch.domain.observability.policy import MetricInstruction, MetricName
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
@@ -38,7 +33,6 @@ from tests.fakes.adapters.driven.fake_search_client import (
 )
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
-from tests.fakes.application.steps.fake_event_emitter import FakeEventEmitter
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 from tests.support.catalog_rows import (
     count_observations,
@@ -87,7 +81,6 @@ def _deps(
     backoff: BackoffRegistry,
     fake_time: FakeTime,
     *,
-    event_emitter: EventEmitter | None = None,
     observability_dispatcher: ObservabilityDispatcher | None = None,
     logger: FakeLogger | None = None,
     observation_logger: FakeLogger | None = None,
@@ -100,7 +93,6 @@ def _deps(
         engine=engine,
         waker=FakeWaker(),
         backoff=backoff,
-        event_emitter=event_emitter or FakeEventEmitter(),
         observability_dispatcher=observability_dispatcher or ObservabilityOverFakes().dispatcher,
         wall_clock=fake_time.wall,
         logger=logger or FakeLogger(),
@@ -436,7 +428,7 @@ async def test_a_task_is_one_search_given_the_cores_budget(
     assert client.budgets == [SEARCH_BUDGET_SECONDS] == [120.0]
 
 
-# --- observability event emission (Plan E.2) ---
+# --- observability event dispatch (Plan E.2) ---
 
 
 @pytest.mark.asyncio
@@ -456,7 +448,6 @@ async def test_successful_search_emits_search_executed_with_network_and_counts(
         engine,
         _registry(fake_time),
         fake_time,
-        event_emitter=observability.dispatcher,
         observability_dispatcher=observability.dispatcher,
     )
     worker = SearchWorker("amule-1", client, deps)
@@ -476,15 +467,15 @@ async def test_successful_search_emits_search_executed_with_network_and_counts(
 
 
 @pytest.mark.asyncio
-async def test_search_failure_emits_search_failed(
+async def test_search_failure_dispatches_search_failed(
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
 ) -> None:
-    # An application-level channel failure (SearchFailedError) emits
-    # SearchFailed(client, network).
+    # An application-level channel failure (SearchFailedError) dispatches
+    # SearchFailed(client, channel).
     fake_time = FakeTime()
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     client = FakeSearchClient(search_failures=[make_search_failed()])
     deps = _deps(
         observation_store,
@@ -492,23 +483,27 @@ async def test_search_failure_emits_search_failed(
         engine,
         _registry(fake_time),
         fake_time,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
     )
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"), _NODE)
-    assert event_emitter.events == [SearchFailed(client_name="amule-1", channel="ed2k")]
-    assert event_emitter.node_ids == {_NODE}
+    assert observability.logger.lines == [LoggedLine("warning", "search failed on ed2k")]
+    assert observability.metrics_recorder.applied == [
+        MetricInstruction(
+            MetricName.SEARCH_FAILURES, "inc", (("client", "amule-1"), ("channel", "ed2k"))
+        )
+    ]
 
 
 @pytest.mark.asyncio
-async def test_transport_failure_during_search_emits_instance_unreachable(
+async def test_transport_failure_during_search_dispatches_client_unreachable(
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
 ) -> None:
-    # A transport failure during search (dead stream) emits ClientUnreachable.
+    # A transport failure during search (dead stream) dispatches ClientUnreachable.
     fake_time = FakeTime()
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     client = FakeSearchClient(search_failures=[make_unreachable()], results=[(_reported_file(),)])
     deps = _deps(
         observation_store,
@@ -516,12 +511,14 @@ async def test_transport_failure_during_search_emits_instance_unreachable(
         engine,
         _registry(fake_time),
         fake_time,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
     )
     worker = SearchWorker("amule-1", client, deps)
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"), _NODE)
-    assert event_emitter.events == [ClientUnreachable("amule-1")]
-    assert event_emitter.node_ids == {_NODE}
+    assert observability.logger.lines == [LoggedLine("warning", "amule-1 unreachable")]
+    assert observability.metrics_recorder.applied == [
+        MetricInstruction(MetricName.CLIENT_UNREACHABLE, "inc", (("client", "amule-1"),))
+    ]
 
 
 @pytest.mark.asyncio
