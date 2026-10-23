@@ -5,6 +5,7 @@ import pytest
 import yaml
 
 from catalog_matching.domain.config import MatcherConfig
+from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import (
     Explanation,
     MatchDecision,
@@ -44,16 +45,16 @@ def test_match_decision_is_frozen_and_holds_persisted_columns_plus_explanation()
     decision = MatchDecision(
         target_id="062A",
         rule_name="id_segment_exact",
-        tier="download",
+        tier=DecisionTier.DOWNLOAD,
         explanation=explanation,
     )
     # The three columns that match_decisions will persist (spec §11).
     assert decision.target_id == "062A"
     assert decision.rule_name == "id_segment_exact"
-    assert decision.tier == "download"
+    assert decision.tier is DecisionTier.DOWNLOAD
     assert decision.explanation is explanation
     with pytest.raises(dataclasses.FrozenInstanceError):
-        decision.tier = "notify"  # type: ignore[misc]
+        decision.tier = DecisionTier.NOTIFY  # type: ignore[misc]
 
 
 _TARGET_62A = TargetSegment(
@@ -135,7 +136,7 @@ def _canonical_engine() -> MatchingEngine:
 def test_evaluate_real_62a_is_download_via_first_rule_on_62a() -> None:
     decisions = _canonical_engine().evaluate_file((FileCandidate(filename=_REAL_62A_FILENAME),))
     assert len(decisions) == 1
-    assert decisions[0].tier == "download"
+    assert decisions[0].tier is DecisionTier.DOWNLOAD
     assert decisions[0].rule_name == "id_segment_exact"
     assert decisions[0].target_id == "062A"
 
@@ -161,7 +162,7 @@ def test_evaluate_highest_tier_comes_from_a_different_target() -> None:
     # (id_segment_exact). Only 62B is attributable -> the sole emitted decision is 62B.
     decisions = _canonical_engine().evaluate_file((FileCandidate(filename="keroro N°062B.avi"),))
     assert len(decisions) == 1
-    assert decisions[0].tier == "download"
+    assert decisions[0].tier is DecisionTier.DOWNLOAD
     assert decisions[0].rule_name == "id_segment_exact"
     assert decisions[0].target_id == "062B"
 
@@ -171,7 +172,7 @@ def test_evaluate_notify_tier_via_title_review() -> None:
     candidate = FileCandidate(filename="KERORO Les demoiselles cambrioleuses.avi")
     decisions = _canonical_engine().evaluate_file((candidate,))
     assert len(decisions) == 1
-    assert decisions[0].tier == "notify"
+    assert decisions[0].tier is DecisionTier.NOTIFY
     assert decisions[0].rule_name == "title_review"
     assert decisions[0].target_id == "062A"
 
@@ -183,7 +184,7 @@ def test_evaluate_tiebreak_same_tier_lowest_target_id_wins() -> None:
         (FileCandidate(filename="Keroro rediffusion.mkv"),)
     )
     assert len(decisions) == 1
-    assert decisions[0].tier == "catalog"
+    assert decisions[0].tier is DecisionTier.CATALOG
     assert decisions[0].rule_name == "keroro_large"
     assert decisions[0].target_id == "062A"
 
@@ -252,7 +253,7 @@ def test_evaluate_accepts_filename_at_or_below_max_length() -> None:
     engine = MatchingEngine(config, (_TARGET_62A,), max_filename_length=4096)
     decisions = engine.evaluate_file((FileCandidate(filename="Keroro N°062A.avi"),))
     assert len(decisions) == 1
-    assert decisions[0].tier == "download"
+    assert decisions[0].tier is DecisionTier.DOWNLOAD
 
 
 def test_engine_resolves_each_target_once_at_construction() -> None:

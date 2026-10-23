@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import (
     DecisionRecord,
     Explanation,
@@ -83,7 +84,7 @@ def _seed_decision(
     )
     decision_store.record_decision(
         _key(native_id),
-        MatchDecision(target_id, "title_review", "notify", explanation),
+        MatchDecision(target_id, "title_review", DecisionTier.NOTIFY, explanation),
         decided_at,
         node_id,
     )

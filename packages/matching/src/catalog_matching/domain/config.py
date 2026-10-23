@@ -8,6 +8,8 @@ rules). PURE domain: no I/O, no YAML library import. Construction from parsed YA
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
+from catalog_matching.domain.decision_tier import DecisionTier
+
 # --- LEAF token definitions (4 types, cf. spec §8.2) ---
 
 
@@ -107,18 +109,6 @@ TokenDefinition = (
 # A rule body / inline operand `{condition}` is a composite condition.
 Condition = AllDefinition | AnyDefinition | NotDefinition
 
-# Closed set of tiers (cf. spec §8.3 EBNF: tier).
-TIERS: frozenset[str] = frozenset({"catalog", "notify", "download"})
-
-# Tier rank (spec §8.5: "highest tier, download>notify>catalog"). Higher integer =
-# STRONGER tier. Source of truth shared by ``engine.MatchingEngine`` (best-decision
-# selection) AND ``p2pwatch.domain.coverage`` (display: strongest tier → best
-# coverage). Without this sharing, the webui reinvented its own rank with a divergent
-# convention: a 4th tier or a rename would have silently skewed the display.
-# Tested invariant: ``set(TIER_RANK) == TIERS``.
-TIER_RANK: dict[str, int] = {"catalog": 0, "notify": 1, "download": 2}
-
-
 # Closed set of rule scopes: what a rule's win pins (one segment, the whole episode, nothing).
 SCOPES: frozenset[str] = frozenset({"segment", "episode", "unattributed"})
 
@@ -128,7 +118,7 @@ class Rule:
     """Ordered rule: ``{ name, tier, scope, <condition> }`` (cf. spec §8.3)."""
 
     name: str
-    tier: str
+    tier: DecisionTier
     scope: str
     condition: Condition
 

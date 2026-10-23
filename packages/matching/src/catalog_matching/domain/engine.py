@@ -13,7 +13,8 @@ from dataclasses import dataclass
 from typing import NamedTuple
 
 from catalog_matching.domain.combinators import Matcher
-from catalog_matching.domain.config import TIER_RANK, MatcherConfig
+from catalog_matching.domain.config import MatcherConfig
+from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.matchers import CoverageMatcher
 from catalog_matching.domain.models import FileCandidate, TargetSegment
 from catalog_matching.domain.resolver import MatcherResolver, ResolvedTarget
@@ -48,7 +49,7 @@ class MatchDecision:
 
     target_id: str
     rule_name: str
-    tier: str
+    tier: DecisionTier
     explanation: Explanation
 
 
@@ -85,7 +86,7 @@ class _RuleHit(NamedTuple):
     resolved: ResolvedTarget
     rule_index: int
     rule_name: str
-    tier: str
+    tier: DecisionTier
     candidate: FileCandidate
 
 
@@ -93,7 +94,7 @@ def _first_matching_rule(
     config: MatcherConfig,
     resolved: ResolvedTarget,
     candidate: FileCandidate,
-) -> tuple[int, str, str] | None:
+) -> tuple[int, str, DecisionTier] | None:
     """1st rule true for (candidate, resolved target) → ``(index, name, tier)`` (§8.5).
 
     Walks ``config.rules`` IN ORDER (index = position = priority); for each rule, evaluates
@@ -206,8 +207,8 @@ class MatchingEngine:
                 index, rule_name, tier = outcome
                 target_id = resolved.target.target_id
                 current = best_by_target_id.get(target_id)
-                if current is None or (-TIER_RANK[tier], index) < (
-                    -TIER_RANK[current.tier],
+                if current is None or (-tier.rank, index) < (
+                    -current.tier.rank,
                     current.rule_index,
                 ):
                     best_by_target_id[target_id] = _RuleHit(
@@ -258,7 +259,7 @@ class MatchingEngine:
         best_key: tuple[int, int, str] | None = None
         best_hit: _RuleHit | None = None
         for hit in hits:
-            key = (-TIER_RANK[hit.tier], hit.rule_index, hit.resolved.target.target_id)
+            key = (-hit.tier.rank, hit.rule_index, hit.resolved.target.target_id)
             if best_key is None or key < best_key:
                 best_key = key
                 best_hit = hit

@@ -11,7 +11,7 @@ All SQL lives in module constants, parameterized (no value interpolation).
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 
-from catalog_matching.domain.config import TIER_RANK
+from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord
 from p2pwatch.adapters.driven.persistence_sqlite.observation_read import (
     LATEST_OBSERVATION_CTE,
@@ -37,7 +37,7 @@ _MICROSECOND = timedelta(microseconds=1)
 
 # Sort allowlist (webui spec §3.1): a sort maps to a FIXED ORDER BY expression; no param value is
 # ever interpolated into SQL. ``tier`` sorts by the file's strongest tier rank
-# (``dec.best_tier_rank``, MAX of the TIER_RANK CASE). Direction maps through a fixed set too.
+# (``dec.best_tier_rank``, MAX of the tier rank CASE). Direction maps through a fixed set too.
 SORT_COLUMNS: dict[CatalogEntrySort, str] = {
     CatalogEntrySort.NAME: "obs.filename",
     CatalogEntrySort.SIZE: "f.size_bytes",
@@ -49,11 +49,9 @@ SORT_DIRECTIONS: dict[SortDirection, str] = {SortDirection.ASC: "ASC", SortDirec
 
 
 def _tier_rank_case(column: str) -> str:
-    """Generate a SQL CASE mapping a tier column to its ``TIER_RANK`` integer, from the trusted
-    constant. ``TIER_RANK`` keys are the closed ``TIERS`` enum and its values are ints, so
-    interpolating them is safe (no user input); this keeps ONE source of truth for tier order
-    (the file's strongest tier = ``MAX`` of this expression)."""
-    whens = " ".join(f"WHEN '{tier}' THEN {rank}" for tier, rank in TIER_RANK.items())
+    """Generate a SQL CASE mapping a tier column to its ``DecisionTier.rank``, from the closed
+    enum (no user input, safe to interpolate): the file's strongest tier is its ``MAX``."""
+    whens = " ".join(f"WHEN '{tier}' THEN {tier.rank}" for tier in DecisionTier)
     return f"CASE {column} {whens} END"
 
 

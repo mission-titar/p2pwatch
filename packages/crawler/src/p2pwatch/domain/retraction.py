@@ -8,9 +8,8 @@ Retraction is PER TARGET: a whole-episode file can retract ``(hash, 072A)`` whil
 ``(hash, 072B)`` intact. (The legacy ``target_id=""`` sentinel — a whole-file retraction —
 is no longer written; it survives in old catalogs and is simply ignored by the read side.)
 
-``RETRACTED_TIER`` is deliberately NOT a member of ``catalog_matching.domain.config.TIERS``
-(``{"catalog", "notify", "download"}``): the matching engine never produces it — it is
-synthesized by the crawler alone, on the "matched → no longer matched" transition.
+``RETRACTED_TIER`` is deliberately NOT a ``DecisionTier``: the matching engine never produces
+it, the crawler synthesizes it alone, on the "matched → no longer matched" transition.
 """
 
 RETRACTED_TIER = "retracted"
