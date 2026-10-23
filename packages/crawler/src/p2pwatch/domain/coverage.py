@@ -1,14 +1,12 @@
 """Pure derivation of a target's coverage status (webui spec §5). No I/O.
 
-The tier order comes from ``catalog_matching.domain.config.TIER_RANK`` (source of truth shared
-with the matching engine). Without this sharing, the webui reinvented its own divergent
-table: a 4th tier or a rename would have silently skewed the coverage.
+The tier order comes from ``DecisionTier.rank``, the matching engine's own.
 """
 
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from catalog_matching.domain.config import TIER_RANK
+from catalog_matching.domain.decision_tier import DecisionTier
 
 
 @dataclass(frozen=True)
@@ -31,8 +29,7 @@ def coverage_of(target_id: str, tiers: Sequence[str]) -> TargetCoverage:
     identified = [tier for tier in tiers if tier != "catalog"]
     if not identified:
         return TargetCoverage(target_id, status="none", best_tier=None, file_count=0)
-    # TIER_RANK: increasing integer = stronger tier (download > notify); an unknown tier falls
-    # back to ``-1`` (below the weakest), neutral with respect to the choice.
-    best = max(identified, key=lambda tier: TIER_RANK.get(tier, -1))
+    # An unknown tier ranks ``-1``, below the weakest, neutral with respect to the choice.
+    best = max(identified, key=lambda tier: DecisionTier(tier).rank if tier in DecisionTier else -1)
     status = "found" if best == "download" else "partial"
     return TargetCoverage(target_id, status=status, best_tier=best, file_count=len(identified))

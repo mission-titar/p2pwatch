@@ -4,8 +4,6 @@ import pytest
 
 from catalog_matching.domain.config import (
     SCOPES,
-    TIER_RANK,
-    TIERS,
     AllDefinition,
     AnyDefinition,
     AttributeBetweenDefinition,
@@ -17,6 +15,7 @@ from catalog_matching.domain.config import (
     Rule,
     TokenReference,
 )
+from catalog_matching.domain.decision_tier import DecisionTier
 
 
 def test_keyword_definition_holds_phrase() -> None:
@@ -62,12 +61,12 @@ def test_token_reference_overrides_default_to_none() -> None:
 def test_rule_holds_name_tier_scope_condition() -> None:
     rule = Rule(
         name="keroro_large",
-        tier="catalog",
+        tier=DecisionTier.CATALOG,
         scope="unattributed",
         condition=AnyDefinition(operands=("keroro_titar",)),
     )
     assert rule.name == "keroro_large"
-    assert rule.tier == "catalog"
+    assert rule.tier is DecisionTier.CATALOG
     assert rule.scope == "unattributed"
     assert isinstance(rule.condition, AnyDefinition)
 
@@ -78,7 +77,7 @@ def test_matcher_config_holds_tokens_and_rules() -> None:
         rules=(
             Rule(
                 name="r",
-                tier="catalog",
+                tier=DecisionTier.CATALOG,
                 scope="unattributed",
                 condition=AnyDefinition(operands=("keroro",)),
             ),
@@ -101,21 +100,6 @@ def test_matcher_config_is_frozen() -> None:
 
 def test_scopes_is_the_closed_segment_episode_unattributed_set() -> None:
     assert frozenset({"segment", "episode", "unattributed"}) == SCOPES
-
-
-def test_tier_rank_orders_download_above_notify_above_catalog() -> None:
-    assert TIER_RANK["download"] > TIER_RANK["notify"]
-    assert TIER_RANK["notify"] > TIER_RANK["catalog"]
-
-
-def test_tier_rank_catalog_is_lowest() -> None:
-    assert TIER_RANK["catalog"] < TIER_RANK["download"]
-    assert TIER_RANK["catalog"] < TIER_RANK["notify"]
-
-
-def test_tier_rank_covers_exactly_the_valid_tiers() -> None:
-    # Consistency: every licit tier (TIERS) has a rank, and no orphan rank.
-    assert set(TIER_RANK) == TIERS
 
 
 def test_matcher_config_has_no_vetoes_by_default() -> None:

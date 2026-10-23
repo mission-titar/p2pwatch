@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from catalog_matching.domain.config import TIER_RANK
+from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_file_reader import (
     _JOIN_DECISIONS,
@@ -568,11 +568,10 @@ def test_read_catalog_entries_sort_tiebreak_is_file_id(catalog_db: Path) -> None
 
 
 def test_tier_rank_case_matches_tier_rank() -> None:
-    """The generated CASE maps every tier to its TIER_RANK integer (single-source guard: red if
-    the CASE and the dict diverge)."""
+    """The generated CASE maps every tier to its ``DecisionTier.rank``."""
     sql = _tier_rank_case("ld.tier")
-    for tier, rank in TIER_RANK.items():
-        assert f"WHEN '{tier}' THEN {rank}" in sql
+    for tier in DecisionTier:
+        assert f"WHEN '{tier}' THEN {tier.rank}" in sql
 
 
 def test_every_sort_has_its_column() -> None:

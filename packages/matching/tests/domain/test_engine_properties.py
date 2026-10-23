@@ -1,6 +1,5 @@
 import random
 
-from catalog_matching.domain.config import TIER_RANK
 from catalog_matching.domain.engine import MatchDecision, MatchingEngine
 from catalog_matching.domain.models import FileCandidate, TargetSegment
 from catalog_matching.domain.validation import parse_matcher_config
@@ -117,7 +116,7 @@ def test_property_decision_invariant_under_target_reordering() -> None:
 
 
 def _max_tier(decisions: list[MatchDecision]) -> int | None:
-    return max((TIER_RANK[d.tier] for d in decisions), default=None)
+    return max((d.tier.rank for d in decisions), default=None)
 
 
 def test_property_higher_priority_rule_never_lowers_tier() -> None:
