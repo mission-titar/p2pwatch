@@ -25,9 +25,9 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
 from p2pwatch.application.steps.decisions import rejudge_file
 from p2pwatch.application.steps.record_observations import record_observation
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.file_target_decision import Retraction
 from p2pwatch.domain.observability.events import DecisionChange, DecisionsRecorded
 from p2pwatch.domain.observation import FileObservation, ReportedFile
-from p2pwatch.domain.retraction import RETRACTED_TIER
 from p2pwatch.domain.wake_subject import WakeSubject
 from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
@@ -52,6 +52,7 @@ _MULTI_NAME = "Keroro 062 teletoon.avi"  # bare number + source marker → 062A 
 _NOTIFY_NAME = "Keroro Les demoiselles cambrioleuses.avi"
 _TITLE_A, _TITLE_B = "Les demoiselles cambrioleuses", "Le grand combat sous-marin"
 _SIZE = 234_000_000
+_ID_SEGMENT_DOWNLOAD = DecisionRecord("062A", "id_segment_exact", DecisionTier.DOWNLOAD)
 
 
 def _key(native_id: str) -> FileKey:
@@ -60,6 +61,15 @@ def _key(native_id: str) -> FileKey:
 
 def _event(native_id: str, filename: str, *changes: DecisionChange) -> DecisionsRecorded:
     return DecisionsRecorded(_key(native_id), filename, _SIZE, changes)
+
+
+def _numero_nu_download(target_id: str) -> DecisionRecord:
+    return DecisionRecord(target_id, "numero_nu_confirmed", DecisionTier.DOWNLOAD)
+
+
+def _seeded(target_id: str) -> DecisionRecord:
+    """The record ``_seed_decision`` writes."""
+    return DecisionRecord(target_id, "title_review", DecisionTier.NOTIFY)
 
 
 def _reported_file(native_id: str, filename: str, sources: int = 3) -> ReportedFile:
@@ -143,7 +153,7 @@ async def test_new_decision_is_recorded_emitted_and_nudged(
     )
     assert decision_node_ids(catalog_connection) == {_NODE}
     assert event_emitter.events == [
-        _event(_HASH_DL, _DL_NAME, DecisionChange("062A", _TITLE_A, None, "download"))
+        _event(_HASH_DL, _DL_NAME, DecisionChange("062A", _TITLE_A, None, _ID_SEGMENT_DOWNLOAD))
     ]
     assert event_emitter.node_ids == {_NODE}
     assert waker.woken_subjects == [WakeSubject.DOWNLOAD]
@@ -179,8 +189,8 @@ async def test_multi_segment_file_records_both_segments_then_is_idempotent(
         _event(
             _HASH_MULTI,
             _MULTI_NAME,
-            DecisionChange("062A", _TITLE_A, None, "download"),
-            DecisionChange("062B", _TITLE_B, None, "download"),
+            DecisionChange("062A", _TITLE_A, None, _numero_nu_download("062A")),
+            DecisionChange("062B", _TITLE_B, None, _numero_nu_download("062B")),
         )
     ]
     assert waker.woken_subjects == [WakeSubject.DOWNLOAD, WakeSubject.DOWNLOAD]
@@ -236,8 +246,8 @@ async def test_changed_decision_is_reappended_emitted_and_nudged(
     ]
     assert tiers == ["notify", "download"]
     assert [e.changes for e in event_emitter.events if isinstance(e, DecisionsRecorded)] == [
-        (DecisionChange("062A", _TITLE_A, None, "notify"),),
-        (DecisionChange("062A", _TITLE_A, "notify", "download"),),
+        (DecisionChange("062A", _TITLE_A, None, _seeded("062A")),),
+        (DecisionChange("062A", _TITLE_A, _seeded("062A"), _ID_SEGMENT_DOWNLOAD),),
     ]
     assert waker.woken_subjects == [WakeSubject.DOWNLOAD]
 
@@ -301,12 +311,14 @@ async def test_a_target_no_name_supports_is_retracted_without_nudge(
         wall_clock,
     )
     assert written == 1
-    assert decision_store.read_latest_decisions(_key(_HASH_CAT)) == {
-        "062A": DecisionRecord(target_id="062A", rule_name="", tier=RETRACTED_TIER)
-    }
+    assert decision_store.read_latest_decisions(_key(_HASH_CAT)) == {"062A": Retraction("062A")}
     assert decision_node_ids(catalog_connection) == {"seed-node", _NODE}
     assert event_emitter.events == [
-        _event(_HASH_CAT, _DISCARD_NAME, DecisionChange("062A", _TITLE_A, "notify", RETRACTED_TIER))
+        _event(
+            _HASH_CAT,
+            _DISCARD_NAME,
+            DecisionChange("062A", _TITLE_A, _seeded("062A"), Retraction("062A")),
+        )
     ]
     assert waker.woken_subjects == []
 
@@ -336,8 +348,8 @@ async def test_every_unsupported_target_is_retracted(
     )
     assert written == 2
     assert decision_store.read_latest_decisions(_key(_HASH_MULTI)) == {
-        "062A": DecisionRecord(target_id="062A", rule_name="", tier=RETRACTED_TIER),
-        "062B": DecisionRecord(target_id="062B", rule_name="", tier=RETRACTED_TIER),
+        "062A": Retraction("062A"),
+        "062B": Retraction("062B"),
     }
     assert len(event_emitter.events) == 1
 
@@ -444,9 +456,7 @@ async def test_a_second_name_that_matches_nothing_does_not_retract_the_first(
         for name in (_DL_NAME, _DISCARD_NAME, _DL_NAME, _DISCARD_NAME)
     ]
     assert written == [1, 0, 0, 0]
-    assert decision_store.read_latest_decisions(_key(_HASH_DL)) == {
-        "062A": DecisionRecord(target_id="062A", rule_name="id_segment_exact", tier="download")
-    }
+    assert decision_store.read_latest_decisions(_key(_HASH_DL)) == {"062A": _ID_SEGMENT_DOWNLOAD}
 
 
 @pytest.mark.asyncio
@@ -471,7 +481,7 @@ async def test_a_weaker_name_seen_again_does_not_downgrade_the_verdict(
         for name in (_NOTIFY_NAME, _DL_NAME, _NOTIFY_NAME, _DL_NAME)
     ]
     assert written == [1, 1, 0, 0]
-    assert decision_store.read_latest_decisions(_key(_HASH_DL))["062A"].tier == "download"
+    assert decision_store.read_latest_decisions(_key(_HASH_DL))["062A"] == _ID_SEGMENT_DOWNLOAD
 
 
 @pytest.mark.asyncio
@@ -523,7 +533,11 @@ async def test_a_retracted_target_gone_from_the_targets_has_no_title(
         wall_clock,
     )
     assert event_emitter.events == [
-        _event(_HASH_CAT, _DISCARD_NAME, DecisionChange("999Z", "", "notify", RETRACTED_TIER))
+        _event(
+            _HASH_CAT,
+            _DISCARD_NAME,
+            DecisionChange("999Z", "", _seeded("999Z"), Retraction("999Z")),
+        )
     ]
 
 
@@ -556,7 +570,7 @@ async def test_a_file_with_no_name_left_is_named_by_the_candidate(
             _key(_HASH_CAT),
             _DISCARD_NAME,
             0,
-            (DecisionChange("062A", _TITLE_A, "notify", RETRACTED_TIER),),
+            (DecisionChange("062A", _TITLE_A, _seeded("062A"), Retraction("062A")),),
         )
     ]
 
@@ -593,5 +607,5 @@ async def test_each_row_carries_the_instant_read_right_before_its_write(
         ("001A", "notify", utc_iso(seeded_at)),
         ("062A", "download", utc_iso(start)),
         ("062B", "download", utc_iso(start + timedelta(minutes=1))),
-        ("001A", RETRACTED_TIER, utc_iso(start + timedelta(minutes=2))),
+        ("001A", "retracted", utc_iso(start + timedelta(minutes=2))),
     ]

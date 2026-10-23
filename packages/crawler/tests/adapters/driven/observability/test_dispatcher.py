@@ -4,6 +4,8 @@ import logging
 
 import pytest
 
+from catalog_matching.domain.decision_tier import DecisionTier
+from catalog_matching.domain.engine import DecisionRecord
 from p2pwatch.adapters.driven.observability.dispatcher import ObservabilityDispatcher
 from p2pwatch.application.ports.driven.metrics_recorder import MetricsRecorder
 from p2pwatch.application.ports.driven.notifier import Notifier
@@ -70,7 +72,8 @@ async def test_notifies_the_message_when_there_is_no_separate_body() -> None:
 @pytest.mark.asyncio
 async def test_logs_the_message_but_notifies_the_body(caplog: pytest.LogCaptureFixture) -> None:
     metrics_recorder, notifier = FakeMetricsRecorder(), FakeNotifier()
-    change = ev.DecisionChange("062A", "Les demoiselles cambrioleuses", None, "download")
+    download = DecisionRecord("062A", "rule", DecisionTier.DOWNLOAD)
+    change = ev.DecisionChange("062A", "Les demoiselles cambrioleuses", None, download)
     with caplog.at_level(logging.INFO, logger=_LOGGER):
         await _dispatcher(metrics_recorder, notifier).emit(
             ev.DecisionsRecorded(

@@ -8,8 +8,8 @@ and the startup catalogue re-evaluation, so the set-diff + retraction + wake log
 Set diff keyed by ``(file, target_id)`` (spec §7). The file is judged on EVERY filename the
 catalog knows for it (``engine.evaluate_file``, spec amuleapi-migration §8.4), so its filenames
 no longer retract each other. A fresh decision is persisted (a download one also wakes the
-download loop) only when it differs from the file's LATEST persisted :class:`DecisionRecord`
-for THAT target; a target that dropped out of the fresh set is retracted, unless it is already
+download loop) only when it differs from the file's LATEST persisted decision for THAT
+target; a target that dropped out of the fresh set is retracted, unless it is already
 retracted (no-op). Returns the number of rows written (0..N; a decision OR a retraction each
 counts as one). The rows written are emitted once, as one ``DecisionsRecorded`` for the file
 (spec researcher-notifications §2).
@@ -17,6 +17,7 @@ counts as one). The rows written are emitted once, as one ``DecisionsRecorded`` 
 
 from dataclasses import replace
 
+from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import MatchingEngine, to_record
 from catalog_matching.domain.models import FileCandidate
 from p2pwatch.application.ports.driven.decision_reader import DecisionReader
@@ -26,8 +27,8 @@ from p2pwatch.application.ports.driven.observation_reader import ObservationRead
 from p2pwatch.application.ports.driven.waker import Waker
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.domain.file_key import FileKey
+from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction
 from p2pwatch.domain.observability.events import DecisionChange, DecisionsRecorded
-from p2pwatch.domain.retraction import RETRACTED_TIER
 from p2pwatch.domain.wake_subject import WakeSubject
 
 
@@ -56,30 +57,30 @@ async def rejudge_file(
     persisted = decision_reader.read_latest_decisions(file)
     changes: list[DecisionChange] = []
 
-    def change(target_id: str, new_tier: str) -> DecisionChange:
+    def change(target_id: str, new_decision: FileTargetDecision) -> DecisionChange:
         target = engine.target(target_id)
-        previous_record = persisted.get(target_id)
         return DecisionChange(
             target_id,
             "" if target is None else target.title,
-            None if previous_record is None else previous_record.tier,
-            new_tier,
+            persisted.get(target_id),
+            new_decision,
         )
 
     fresh_ids: set[str] = set()
     for decision in fresh:
         fresh_ids.add(decision.target_id)
-        if persisted.get(decision.target_id) == to_record(decision):
+        record = to_record(decision)
+        if persisted.get(decision.target_id) == record:
             continue
         decision_writer.record_decision(file, decision, wall_clock.now(), node_id)
-        changes.append(change(decision.target_id, decision.tier))
-        if decision.tier == "download":
+        changes.append(change(decision.target_id, record))
+        if decision.tier is DecisionTier.DOWNLOAD:
             waker.wake(WakeSubject.DOWNLOAD)
     for target_id in sorted(persisted):
-        if persisted[target_id].tier == RETRACTED_TIER or target_id in fresh_ids:
+        if isinstance(persisted[target_id], Retraction) or target_id in fresh_ids:
             continue
         decision_writer.record_retraction(file, target_id, wall_clock.now(), node_id)
-        changes.append(change(target_id, RETRACTED_TIER))
+        changes.append(change(target_id, Retraction(target_id)))
     if changes:
         # No filename left means only retractions were written, which are never notified.
         best = observation_reader.read_best_observation(file)
