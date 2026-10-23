@@ -54,7 +54,11 @@ class PortSyncLifecycle:
         if forwarded_port is None:
             return latest_restart
         try:
-            listen_port = tcp_listen_port(self._read_existing_amule_conf())
+            amule_conf = self._amule_conf_reader.read_amule_conf()
+            if amule_conf is None:
+                self._logger.error("amule.conf does not exist, amuled left as is")
+                return latest_restart
+            listen_port = tcp_listen_port(amule_conf)
         except (OSError, ValueError) as error:
             # The operator's file: a crash would only make s6 respawn port-sync every second.
             self._logger.error("amule.conf's port is unreadable, amuled left as is (%s)", error)
@@ -76,12 +80,7 @@ class PortSyncLifecycle:
         try:
             # amuled flushes its config when it exits: a write while it runs could be overwritten.
             if self._service_supervisor.stop_amuled():
-                self._amule_conf_writer.set_amule_conf(
-                    with_listen_port(self._read_existing_amule_conf(), forwarded_port),
-                    self._port_sync_settings.puid,
-                    self._port_sync_settings.pgid,
-                )
-                self._logger.info("amule.conf now sets Port and UDPPort to %d", forwarded_port)
+                self._write_listen_port(forwarded_port)
         except OSError as error:
             self._logger.error("amule.conf was not written (%s)", error)
         finally:
@@ -89,8 +88,15 @@ class PortSyncLifecycle:
             self._service_supervisor.start_amuled()
         return now
 
-    def _read_existing_amule_conf(self) -> str:
+    def _write_listen_port(self, forwarded_port: int) -> None:
+        """Write ``forwarded_port`` into amule.conf as amuled left it on exit."""
         amule_conf = self._amule_conf_reader.read_amule_conf()
         if amule_conf is None:
-            raise FileNotFoundError("amule.conf does not exist")
-        return amule_conf
+            self._logger.error("amule.conf no longer exists once amuled stopped, nothing written")
+            return
+        self._amule_conf_writer.set_amule_conf(
+            with_listen_port(amule_conf, forwarded_port),
+            self._port_sync_settings.puid,
+            self._port_sync_settings.pgid,
+        )
+        self._logger.info("amule.conf now sets Port and UDPPort to %d", forwarded_port)

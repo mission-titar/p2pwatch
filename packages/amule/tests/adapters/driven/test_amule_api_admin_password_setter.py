@@ -36,6 +36,7 @@ def test_amuleapi_sets_the_password_as_the_uid_and_gid_alone() -> None:
                 "extra_groups": [],
                 "env": {**ENV, "HOME": "/home/amule"},
                 "check": True,
+                "text": True,
             },
         )
     ]

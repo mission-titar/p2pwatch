@@ -30,6 +30,7 @@ _CONFIG_DIRECTORY = _HOME_DIRECTORY / ".aMule"
 _AMULE_CONF_PATH = _CONFIG_DIRECTORY / "amule.conf"
 _PORT_SYNC_SERVICE_DIRECTORY = Path("/etc/services.d/port-sync")
 _AMULED_SERVICE_DIRECTORY = Path("/etc/services.d/amuled")
+_AMULED_STOP_TIMEOUT_SECONDS = 60
 
 
 def build_command_line(
@@ -40,6 +41,7 @@ def build_command_line(
     service_supervisor = S6ServiceSupervisor(
         port_sync_service_directory=_PORT_SYNC_SERVICE_DIRECTORY,
         amuled_service_directory=_AMULED_SERVICE_DIRECTORY,
+        stop_timeout_seconds=_AMULED_STOP_TIMEOUT_SECONDS,
         run_command=subprocess.run,
         logger=StdlibLogger(S6ServiceSupervisor.__module__),
     )

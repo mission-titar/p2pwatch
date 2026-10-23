@@ -15,11 +15,13 @@ class S6ServiceSupervisor(ServiceSupervisor):
         *,
         port_sync_service_directory: Path,
         amuled_service_directory: Path,
+        stop_timeout_seconds: int,
         run_command: Callable[..., subprocess.CompletedProcess[str]],
         logger: Logger,
     ) -> None:
         self._port_sync_down_file = port_sync_service_directory / "down"
         self._amuled_service_directory = amuled_service_directory
+        self._stop_timeout_seconds = stop_timeout_seconds
         self._run_command = run_command
         self._logger = logger
 
@@ -30,7 +32,8 @@ class S6ServiceSupervisor(ServiceSupervisor):
         self._port_sync_down_file.touch()
 
     def stop_amuled(self) -> bool:
-        return self._signal_amuled("-wD", "-T", "60000", "-d")
+        stop_timeout_ms = str(self._stop_timeout_seconds * 1000)
+        return self._signal_amuled("-wD", "-T", stop_timeout_ms, "-d")
 
     def start_amuled(self) -> None:
         self._signal_amuled("-u")

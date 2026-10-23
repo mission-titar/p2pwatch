@@ -1,5 +1,6 @@
 """The command line of ``python -m vex_checks``, on the checks."""
 
+import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -36,7 +37,7 @@ def build_command_line(*, env: Mapping[str, str], cwd: Path) -> ArgparseCommandL
         stale_claims_checker=CheckStaleClaims(
             repository_root=cwd,
             vulnerability_scanner=GrypeVulnerabilityScanner(
-                grype_executable=_GRYPE_EXECUTABLE, env=env
+                grype_executable=_GRYPE_EXECUTABLE, env=env, run_command=subprocess.run
             ),
             vex_reader=vex_reader,
             code_scanning_reporter=code_scanning_reporter,

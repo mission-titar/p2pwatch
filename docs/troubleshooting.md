@@ -256,6 +256,10 @@ Le port-sync tourne dans le conteneur `ed2k` et écrit chacune de ses actions et
 - **`amule.conf` illisible.** `amule.conf's port is unreadable, amuled left as is (...)` : la ligne
   `Port=` de la section `[eMule]` de `ed2k/amule/amule.conf` n'est pas un nombre, ou le fichier est
   abîmé. Le port-sync ne touche à rien tant que vous ne l'avez pas corrigé.
+- **`amule.conf` absent.** `amule.conf does not exist, amuled left as is` (ou
+  `amule.conf no longer exists once amuled stopped, nothing written`, si le fichier a disparu
+  pendant le redémarrage) : `ed2k/amule/amule.conf` a été supprimé. Redémarrez le conteneur
+  (`docker compose restart ed2k`) : son étape de démarrage le recrée.
 
 Un changement réussi s'annonce par `gluetun forwards <N>, amuled listens on <M>: restarting
 amuled`. Si la ligne revient toutes les minutes avec un port différent, voyez
