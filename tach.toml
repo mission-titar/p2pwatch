@@ -749,7 +749,6 @@ path = "p2pwatch_amule.adapters.driven.gluetun_forwarded_port_client"
 layer = "adapters"
 depends_on = [
   "p2pwatch_amule.application.ports.driven.forwarded_port_client",
-  "p2pwatch_amule.application.ports.driven.logger",
 ]
 
 [[modules]]

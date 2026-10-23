@@ -17,8 +17,5 @@ class StdlibLogger(Logger):
     def info(self, message: str, *args: object) -> None:
         self._logger.info(message, *args, stacklevel=_CALLER)
 
-    def warning(self, message: str, *args: object) -> None:
-        self._logger.warning(message, *args, stacklevel=_CALLER)
-
     def error(self, message: str, *args: object) -> None:
         self._logger.error(message, *args, stacklevel=_CALLER)
