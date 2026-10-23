@@ -21,6 +21,7 @@ import logging
 import sys
 from collections.abc import Callable, Coroutine, Mapping
 from contextlib import AsyncExitStack
+from datetime import timedelta
 from functools import partial
 from importlib.metadata import version
 from pathlib import Path, PurePath
@@ -119,6 +120,11 @@ from p2pwatch.domain.matching_read import MatchingExplainer
 _logger = logging.getLogger(__name__)
 
 _AMULE_API_TIMEOUT_SECONDS = 10.0
+# Rows asked for per list request. Every list route caps at 100 when `limit` is omitted, which
+# would silently truncate the shared-file sweep completion detection depends on (§7.5).
+_AMULE_API_PAGE_SIZE = 500
+# How often a search's progress is read: local traffic with our own daemon.
+_AMULE_API_PROGRESS_POLL_INTERVAL = timedelta(seconds=5)
 _WEBUI_START_TIMEOUT_SECONDS = 5.0
 # One INFO progress line per this many files, so a long sweep visibly advances.
 _REEVALUATION_PROGRESS_EVERY_FILES = 200
@@ -166,6 +172,8 @@ class CrawlerComposition(CrawlerRunner):
             port,
             crawler_config.amule_api_password,
             timeout_seconds=_AMULE_API_TIMEOUT_SECONDS,
+            page_size=_AMULE_API_PAGE_SIZE,
+            progress_poll_interval=_AMULE_API_PROGRESS_POLL_INTERVAL,
             monotonic_clock=monotonic_clock,
             transport_factory=httpx.AsyncHTTPTransport,
         )

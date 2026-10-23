@@ -39,6 +39,8 @@ async def _connected(api: FakeAmuleApi) -> AmuleApiClient:
         4711,
         PASSWORD,
         timeout_seconds=10.0,
+        page_size=500,
+        progress_poll_interval=timedelta(seconds=5),
         transport_factory=api.transport,
         monotonic_clock=api.monotonic_clock,
     )

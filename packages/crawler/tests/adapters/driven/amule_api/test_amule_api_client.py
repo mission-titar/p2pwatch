@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+from datetime import timedelta
 from typing import cast
 
 import httpx
@@ -30,19 +31,36 @@ _HASH = "8b54a3c20fae9e4b9f7e0c2c8c01b6b1"
 _KEY = FileKey(Network.ED2K, _HASH)
 
 
-def _client(api: FakeAmuleApi, *, password: str = PASSWORD) -> AmuleApiClient:
+_PAGE_SIZE = 500
+_PROGRESS_POLL_INTERVAL = timedelta(seconds=5)
+
+
+def _client(
+    api: FakeAmuleApi,
+    *,
+    password: str = PASSWORD,
+    page_size: int = _PAGE_SIZE,
+    progress_poll_interval: timedelta = _PROGRESS_POLL_INTERVAL,
+) -> AmuleApiClient:
     return AmuleApiClient(
         "amuled.test",
         4711,
         password,
         timeout_seconds=10.0,
+        page_size=page_size,
+        progress_poll_interval=progress_poll_interval,
         transport_factory=api.transport,
         monotonic_clock=api.monotonic_clock,
     )
 
 
-async def _connected(api: FakeAmuleApi) -> AmuleApiClient:
-    client = _client(api)
+async def _connected(
+    api: FakeAmuleApi,
+    *,
+    page_size: int = _PAGE_SIZE,
+    progress_poll_interval: timedelta = _PROGRESS_POLL_INTERVAL,
+) -> AmuleApiClient:
+    client = _client(api, page_size=page_size, progress_poll_interval=progress_poll_interval)
     await client.open()
     return client
 
@@ -118,6 +136,8 @@ def _yielding_client(api: FakeAmuleApi) -> AmuleApiClient:
         4711,
         PASSWORD,
         timeout_seconds=10.0,
+        page_size=_PAGE_SIZE,
+        progress_poll_interval=_PROGRESS_POLL_INTERVAL,
         transport_factory=lambda: transport,
         monotonic_clock=api.monotonic_clock,
     )
@@ -229,6 +249,8 @@ async def test_a_close_during_a_login_revokes_the_session_it_opened() -> None:
         4711,
         PASSWORD,
         timeout_seconds=10.0,
+        page_size=_PAGE_SIZE,
+        progress_poll_interval=_PROGRESS_POLL_INTERVAL,
         transport_factory=lambda: transport,
         monotonic_clock=api.monotonic_clock,
     )
@@ -264,6 +286,8 @@ async def test_a_401_answered_during_close_logs_in_no_more() -> None:
         4711,
         PASSWORD,
         timeout_seconds=10.0,
+        page_size=_PAGE_SIZE,
+        progress_poll_interval=_PROGRESS_POLL_INTERVAL,
         transport_factory=lambda: transport,
         monotonic_clock=api.monotonic_clock,
     )
@@ -334,6 +358,8 @@ async def test_a_session_opened_after_a_failed_login_gets_a_transport_of_its_own
         4711,
         PASSWORD,
         timeout_seconds=10.0,
+        page_size=_PAGE_SIZE,
+        progress_poll_interval=_PROGRESS_POLL_INTERVAL,
         transport_factory=transport_factory,
         monotonic_clock=api.monotonic_clock,
     )
@@ -465,6 +491,17 @@ async def test_search_returns_as_soon_as_amuled_reports_it_finished() -> None:
     await client.close()
 
     assert _progress_polls(api) == [0, 5, 10, 15]
+
+
+@pytest.mark.asyncio
+async def test_search_reads_its_progress_at_the_poll_interval_it_was_given() -> None:
+    api = FakeAmuleApi(search_seconds={"keroro": 7})
+    client = await _connected(api, progress_poll_interval=timedelta(seconds=3))
+
+    await client.search("keroro", "ed2k", 120)
+    await client.close()
+
+    assert _progress_polls(api) == [0, 3, 6, 9]
 
 
 @pytest.mark.asyncio
@@ -671,6 +708,20 @@ async def test_downloads_pages_the_shared_files_past_the_first_hundred() -> None
     sweep = _paths(api, "/api/v1/shared")
     assert all(url.params.get("offset") is None for url in sweep)
     assert sweep[-1].params.get("after") == f"{499:032x}"
+
+
+@pytest.mark.asyncio
+async def test_downloads_asks_pages_of_the_size_it_was_given() -> None:
+    rows = [{"hash": f"{index:032x}", "name": f"{index}.avi"} for index in range(5)]
+    api = FakeAmuleApi(shared=rows)
+    client = await _connected(api, page_size=2)
+
+    shared = await client.downloads()
+    await client.close()
+
+    assert len(shared) == 5
+    sweep = _paths(api, "/api/v1/shared")
+    assert [url.params.get("limit") for url in sweep] == ["2", "2", "2"]
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,7 @@
 """``FakeAmuleApiServer``: the amuleapi fake served on a loopback socket."""
 
 import threading
+from datetime import timedelta
 
 import httpx
 import pytest
@@ -20,6 +21,8 @@ async def test_the_real_client_logs_in_and_out_over_the_socket() -> None:
             server.port,
             PASSWORD,
             timeout_seconds=10.0,
+            page_size=500,
+            progress_poll_interval=timedelta(seconds=5),
             transport_factory=httpx.AsyncHTTPTransport,
             monotonic_clock=api.monotonic_clock,
         )
