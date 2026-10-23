@@ -4,7 +4,7 @@ import logging
 
 from p2pwatch.application.ports.driven.logger import Logger
 
-# The caller of info(), not this module, is the record's location.
+# The caller of debug() or info(), not this module, is the record's location.
 _CALLER = 2
 
 
@@ -13,6 +13,9 @@ class StdlibLogger(Logger):
 
     def __init__(self, name: str) -> None:
         self._logger = logging.getLogger(name)
+
+    def debug(self, message: str, *args: object) -> None:
+        self._logger.debug(message, *args, stacklevel=_CALLER)
 
     def info(self, message: str, *args: object) -> None:
         self._logger.info(message, *args, stacklevel=_CALLER)

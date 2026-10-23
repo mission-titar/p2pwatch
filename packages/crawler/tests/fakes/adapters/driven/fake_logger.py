@@ -6,7 +6,7 @@ from p2pwatch.application.ports.driven.logger import Logger
 
 @dataclass(frozen=True)
 class LoggedLine:
-    level: Literal["info", "warning", "error"]
+    level: Literal["debug", "info", "warning", "error"]
     message: str
 
 
@@ -15,6 +15,9 @@ class FakeLogger(Logger):
 
     def __init__(self) -> None:
         self.lines: list[LoggedLine] = []
+
+    def debug(self, message: str, *args: object) -> None:
+        self.lines.append(LoggedLine("debug", _formatted(message, args)))
 
     def info(self, message: str, *args: object) -> None:
         self.lines.append(LoggedLine("info", _formatted(message, args)))
