@@ -8,7 +8,16 @@ from p2pwatch.application.steps.download_file_reads import best_filename, target
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.observability.events import SourceFirstUseful, SourceReappeared
-from p2pwatch.domain.source import EarlierPoints, RecordedReading, SourceKey, SourceUsefulness
+from p2pwatch.domain.source import (
+    EarlierPoints,
+    SourceKey,
+    SourcePoint,
+    SourceReading,
+    SourceRole,
+    SourceUsefulness,
+    carried_role,
+    carried_role_max_age,
+)
 from p2pwatch.domain.source_alerts import FirstUseful, source_alert
 from p2pwatch.domain.store_error import StoreError
 
@@ -23,17 +32,48 @@ class _AlertRound:
     alerts_allowed: bool | None = None
 
 
+def _source_points(
+    deps: DownloadDeps,
+    file: FileKey,
+    readings: tuple[SourceReading, ...],
+    read_at: datetime,
+    node_id: str,
+) -> tuple[SourcePoint, ...]:
+    """Each reading a source or a name tells apart, with its role, a carried one included (D4).
+    Reads every latest point before the write, with no ``await`` between."""
+    since = read_at - carried_role_max_age(deps.time_between_source_reads)
+    return tuple(
+        SourcePoint(file, reading, _role(deps, file, reading, since, read_at, node_id), read_at)
+        for reading in readings
+        if reading.source is not None or reading.source_name is not None
+    )
+
+
+def _role(
+    deps: DownloadDeps,
+    file: FileKey,
+    reading: SourceReading,
+    since: datetime,
+    read_at: datetime,
+    node_id: str,
+) -> SourceRole:
+    if reading.role is not None:
+        return reading.role
+    latest = deps.source_point_reader.read_latest_point(file, reading, since, read_at, node_id)
+    return carried_role(latest, reading)
+
+
 async def _alert_sources(
     deps: DownloadDeps,
     file: FileKey,
-    recorded: tuple[RecordedReading, ...],
+    points: tuple[SourcePoint, ...],
     round_: _AlertRound,
     node_id: str,
 ) -> None:
-    """Emits D5's alerts for the useful readings of a committed write, once per source per round."""
-    for reading in recorded:
-        source = reading.source
-        if source is None or reading.role.usefulness is not SourceUsefulness.USEFUL:
+    """Emits D5's alerts for the useful points of a committed write, once per source per round."""
+    for point in points:
+        source = point.reading.source
+        if source is None or point.role.usefulness is not SourceUsefulness.USEFUL:
             continue  # a name alone is too weak to carry an event
         if source in round_.decided:
             continue  # one event per source per round
@@ -47,11 +87,11 @@ async def _alert_sources(
         earlier_points = EarlierPoints.of(
             deps.source_point_reader.read_earlier_points(source, round_.started_at, node_id)
         )
-        alert = source_alert(reading.role, earlier_points, round_.started_at, deps.reappeared_after)
+        alert = source_alert(point.role, earlier_points, round_.started_at, deps.reappeared_after)
         round_.decided.add(source)
         if alert is None:
             continue
-        source_name, filename = reading.source_name, best_filename(deps, file)
+        source_name, filename = point.reading.source_name, best_filename(deps, file)
         titles = target_titles(deps, file)
         event: SourceFirstUseful | SourceReappeared = (
             SourceFirstUseful(source, source_name, file, filename, titles)
@@ -85,10 +125,9 @@ async def record_sources(
         read_at = deps.wall_clock.now()
         readings = await deps.source_client.sources(status.file)
         try:
-            recorded = deps.source_point_writer.record_readings(
-                status.file, readings, read_at, node_id
-            )
-            await _alert_sources(deps, status.file, recorded, round_, node_id)
+            points = _source_points(deps, status.file, readings, read_at, node_id)
+            deps.source_point_writer.record_points(points, node_id)
+            await _alert_sources(deps, status.file, points, round_, node_id)
         except StoreError as error:
             deps.logger.error(
                 "sources file=%s store failure (%s): file skipped, continues",

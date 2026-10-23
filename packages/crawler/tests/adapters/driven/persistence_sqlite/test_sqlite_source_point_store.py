@@ -64,7 +64,7 @@ def catalog(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 @pytest.fixture
 def source_point_store(catalog: sqlite3.Connection) -> SqliteSourcePointStore:
-    return SqliteSourcePointStore(catalog, timedelta(seconds=30))
+    return SqliteSourcePointStore(catalog)
 
 
 def _passing(key: SourceKey | None = _KEY, name: str = "AnimuseeFMR") -> SourceReading:
@@ -204,7 +204,7 @@ def test_earlier_points_seek_once_per_variant_whatever_the_history(
                 "INSERT INTO source_observations VALUES (?, ?, 0)",
                 ((variant_id, _us(_T0) + n * 300_000_000) for n in range(count // 2)),
             )
-    source_point_store = SqliteSourcePointStore(catalog, timedelta(seconds=30))
+    source_point_store = SqliteSourcePointStore(catalog)
     source_point_store.read_earlier_points(
         _KEY, before, "n1"
     )  # the first call prepares the statement

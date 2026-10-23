@@ -52,6 +52,7 @@ def _loop_deps(
         lost_after=timedelta(days=1),
         reappeared_after=timedelta(hours=12),
         sources_interval=timedelta(minutes=5),
+        time_between_source_reads=timedelta(minutes=5, seconds=30),
         wall_clock=fake_time.wall,
         monotonic_clock=fake_time.monotonic,
         event_emitter=FakeEventEmitter(),

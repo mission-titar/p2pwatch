@@ -47,6 +47,7 @@ class DownloadDeps:
     poll_interval_seconds: float
     reappeared_after: timedelta
     sources_interval: timedelta
+    time_between_source_reads: timedelta
     wall_clock: WallClock
     monotonic_clock: MonotonicClock
     event_emitter: EventEmitter

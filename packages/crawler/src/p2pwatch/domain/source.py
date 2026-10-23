@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 
-from p2pwatch.domain.file_key import Network
+from p2pwatch.domain.file_key import FileKey, Network
 
 # Its own namespace, so that a source_id never equals a file_id (stage 4 spec, D2).
 _NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "https://mission-titar.github.io/p2pwatch/source")
@@ -84,7 +84,7 @@ _TOLERATED_READS = 3
 
 
 def carried_role_max_age(time_between_reads: timedelta) -> timedelta:
-    """The longest gap over which the writer carries a role (source points spec, D4)."""
+    """The longest gap over which a role is carried (source points spec, D4)."""
     return _TOLERATED_READS * time_between_reads
 
 
@@ -122,7 +122,7 @@ _CONTACT_POINTS = {Network.ED2K: (_is_ed2k_server, "an IPv4 address and a port")
 @dataclass(frozen=True)
 class SourceReading:
     """One source of one download at one read. ``role`` is ``None`` in a passing state, whose
-    role the writer carries from the source's latest point (D3)."""
+    role ``carried_role`` carries from the source's latest point (D3)."""
 
     source: SourceKey | None
     source_name: str | None
@@ -132,15 +132,6 @@ class SourceReading:
     connectable: bool | None
     raw_metadata: SourceMetadata
     session_received_bytes: int
-
-
-@dataclass(frozen=True)
-class RecordedReading:
-    """A reading ``record_readings`` kept, with its role, a carried one included."""
-
-    source: SourceKey | None
-    source_name: str | None
-    role: SourceRole
 
 
 @dataclass(frozen=True)
@@ -159,6 +150,16 @@ def carried_role(latest: LatestPoint | None, reading: SourceReading) -> SourceRo
     if latest is None or latest.session_received_bytes > reading.session_received_bytes:
         return SourceRole.UNDETERMINED
     return _CARRIED[latest.role.usefulness]
+
+
+@dataclass(frozen=True)
+class SourcePoint:
+    """One reading of one of our downloads' sources, with its role, a carried one included."""
+
+    file: FileKey
+    reading: SourceReading
+    role: SourceRole
+    observed_at: datetime
 
 
 @dataclass(frozen=True)
