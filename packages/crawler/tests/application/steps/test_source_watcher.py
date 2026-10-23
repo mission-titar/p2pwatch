@@ -4,6 +4,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
+from p2pwatch.domain.observability.notification import TextNotification
 
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store import (
@@ -464,7 +465,11 @@ def _real_deps(
 
 def _alerts(observability: ObservabilityOverFakes) -> list[str]:
     """The bodies of the source alerts, the only notifications of a round without completion."""
-    return [body for _, _, body, _ in observability.notifier.calls]
+    bodies = []
+    for _, notification in observability.notifier.calls:
+        assert isinstance(notification, TextNotification)
+        bodies.append(notification.body)
+    return bodies
 
 
 @pytest.mark.asyncio

@@ -201,6 +201,7 @@ a function does.
 | `status reading` | `StatusReading`, a client's status at one read, its `status` `None` when its API did not answer; a `PublishedReading` is one `InMemoryStatusReadingStore` holds, with its `published_at` on the monotonic clock | a source's reading |
 | `first useful`, `reappeared` | a source's two alerts | `new`, `useful again` |
 | `audience` | who a notification is for: `community`, `operations` | `tag` (apprise's keyword aside), `channel` |
+| `notification` | `Notification`, what a `Notifier` sends an audience, carrying its node: a `RelayedLogLine` relays an event's log line unchanged, a `TextNotification` has its own title and body | a log line, which an operations notification only relays |
 | `error_label` | the label a parser prints in its errors | `what`, `label`, `field` |
 | `wall clock` | `WallClock`, the UTC time of day: every stamp a row, an event or a display carries | an interval or a deadline kept in memory |
 | `monotonic clock` | `MonotonicClock`, its `MonotonicInstant`s: every interval and deadline kept in memory | a stamp, anything persisted |

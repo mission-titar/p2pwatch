@@ -3,6 +3,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
+from p2pwatch.domain.observability.notification import TextNotification
 
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_local
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store import (
@@ -200,7 +201,9 @@ async def test_failed_shared_hash_is_resurrected_and_notified() -> None:
     )
     await run_download_cycle(deps, NODE)
     assert tracked_download_store.states[HASH_A] is DownloadState.COMPLETED
-    assert [title for _, title, _, _ in observability.notifier.calls] == ["✅ Downloaded"]
+    [(_, notification)] = observability.notifier.calls
+    assert isinstance(notification, TextNotification)
+    assert notification.title == "✅ Downloaded"
 
 
 @pytest.mark.asyncio
