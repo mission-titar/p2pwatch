@@ -37,6 +37,7 @@ from tests.fakes.adapters.driven.fake_loop_wall_clock import FakeLoopWallClock
 from tests.fakes.adapters.driven.fake_never_suspending_search_client import (
     FakeNeverSuspendingSearchClient,
 )
+from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_search_client import make_unreachable
 from tests.fakes.adapters.driven.fake_timed_search_client import FakeTimedSearchClient
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
@@ -59,15 +60,14 @@ class _Tasks:
     def __init__(self, deps: WorkerDeps, state: FakeBackoffStateStore) -> None:
         self.deps = deps
         self.state = state
-        self.resumed = asyncio.Event()
-        self.resumed.set()
+        self.run_state = FakeRunStateStore()
         self.logger = FakeLogger()
 
     def searching(self, client: Any, keywords: list[str]) -> Coroutine[Any, Any, None]:
         return SearchTaskRunner(
             workers=[SearchWorker("amuled", client, self.deps)],
             keywords=keywords,
-            resumed=self.resumed,
+            run_state_reader=self.run_state,
             backoff=self.deps.backoff,
             backoff_state_writer=self.state,
             monotonic_clock=FakeLoopMonotonicClock(),
@@ -146,9 +146,9 @@ def test_a_paused_task_waits_before_its_next_search_and_finishes_the_one_in_flig
 
     async def pause_then_resume() -> None:
         await asyncio.sleep(10.0)
-        tasks.resumed.clear()
+        tasks.run_state.set_paused(True)
         await asyncio.sleep(990.0)
-        tasks.resumed.set()
+        tasks.run_state.set_paused(False)
 
     tasks.run_for(1040.0, client, ["keroro"], pause_then_resume())
     assert [start for start, *_ in client.searches] == [0.0, 1000.0, 1030.0]
