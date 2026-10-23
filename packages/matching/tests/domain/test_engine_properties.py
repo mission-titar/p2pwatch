@@ -5,6 +5,8 @@ from catalog_matching.domain.engine import MatchDecision, MatchingEngine
 from catalog_matching.domain.models import FileCandidate, TargetSegment
 from catalog_matching.domain.validation import parse_matcher_config
 
+_MAX_FILENAME_LENGTH = 4096
+
 # CONSTANT seed: every run is identical (zero flakiness, cf. spec §16).
 _SEED = 20260610
 
@@ -99,14 +101,18 @@ def test_property_decision_invariant_under_target_reordering() -> None:
     config = parse_matcher_config(_CANONICAL_RAW)
     rng = random.Random(_SEED)
     base_targets = _targets()
-    reference_engine = MatchingEngine(config, base_targets)
+    reference_engine = MatchingEngine(
+        config, base_targets, max_filename_length=_MAX_FILENAME_LENGTH
+    )
     for filename in _FILENAMES:
         candidate = FileCandidate(filename=filename)
         expected = reference_engine.evaluate_file((candidate,))
         for _ in range(20):  # 20 seeded permutations per file (deterministic)
             shuffled = base_targets[:]
             rng.shuffle(shuffled)
-            got = MatchingEngine(config, shuffled).evaluate_file((candidate,))
+            got = MatchingEngine(
+                config, shuffled, max_filename_length=_MAX_FILENAME_LENGTH
+            ).evaluate_file((candidate,))
             assert got == expected, f"decision depends on target order for {filename!r}"
 
 
@@ -132,8 +138,10 @@ def test_property_higher_priority_rule_never_lowers_tier() -> None:
     }
     config_boosted = parse_matcher_config(raw_boosted)
     targets = _targets()
-    engine_base = MatchingEngine(config_base, targets)
-    engine_boosted = MatchingEngine(config_boosted, targets)
+    engine_base = MatchingEngine(config_base, targets, max_filename_length=_MAX_FILENAME_LENGTH)
+    engine_boosted = MatchingEngine(
+        config_boosted, targets, max_filename_length=_MAX_FILENAME_LENGTH
+    )
     for filename in _FILENAMES:
         candidate = FileCandidate(filename=filename)
         base_tier = _max_tier(engine_base.evaluate_file((candidate,)))
