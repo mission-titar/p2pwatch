@@ -19,11 +19,11 @@ already impossible, so these are the real risks, spec §11/§12):
 - **Single statement**: ``Connection.execute`` runs exactly one statement and rejects a second
   ("SELECT 1; SELECT 2") with ``sqlite3.ProgrammingError`` ("You can only execute one statement at
   a time"), mapped to a single-statement error.
-- **Monotonic timeout**: a ``set_progress_handler`` callback fires every ``_PROGRESS_INSTRUCTIONS``
-  VM steps and returns non-zero once the time elapsed on the monotonic clock exceeds the budget,
-  which aborts the query with ``sqlite3.OperationalError`` ("interrupted"). A mutable flag records
-  the abort so the handler can be distinguished from an unrelated ``OperationalError`` (e.g. a
-  syntax error).
+- **Monotonic timeout**: a ``set_progress_handler`` callback fires every
+  ``budget_check_instructions`` VM steps and returns non-zero once the time elapsed on the
+  monotonic clock exceeds the budget, which aborts the query with ``sqlite3.OperationalError``
+  ("interrupted"). A mutable flag records the abort so the handler can be distinguished from an
+  unrelated ``OperationalError`` (e.g. a syntax error).
 - **Row cap**: at most ``row_cap`` rows are returned; one extra row is fetched to detect (and flag)
   truncation.
 
@@ -45,9 +45,6 @@ from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.sql_executor import SqlExecutor
 from p2pwatch.domain.console_query import QueryAnswer, QueryFailure
 
-# The VM-step granularity of the budget's check.
-_PROGRESS_INSTRUCTIONS = 1000
-
 
 def _stringify(cell: object) -> str:
     """Render a cell for display: ``None`` becomes the literal ``NULL`` (an empty cell would be
@@ -59,11 +56,14 @@ def _stringify(cell: object) -> str:
 
 class SqliteSqlExecutor(SqlExecutor):
     """Runs the console's SQL on the SQLite database at ``db_path``, its budget measured on
-    ``monotonic_clock``."""
+    ``monotonic_clock`` every ``budget_check_instructions`` VM steps."""
 
-    def __init__(self, db_path: Path, monotonic_clock: MonotonicClock) -> None:
+    def __init__(
+        self, db_path: Path, monotonic_clock: MonotonicClock, *, budget_check_instructions: int
+    ) -> None:
         self._db_path = db_path
         self._monotonic_clock = monotonic_clock
+        self._budget_check_instructions = budget_check_instructions
 
     def execute(
         self, sql: str, *, row_cap: int, time_limit: timedelta
@@ -74,6 +74,7 @@ class SqliteSqlExecutor(SqlExecutor):
             row_cap=row_cap,
             budget=time_limit,
             monotonic_clock=self._monotonic_clock,
+            budget_check_instructions=self._budget_check_instructions,
         )
 
 
@@ -84,6 +85,7 @@ def _run_query(
     row_cap: int,
     budget: timedelta,
     monotonic_clock: MonotonicClock,
+    budget_check_instructions: int,
 ) -> QueryAnswer | QueryFailure:
     """Run ``sql`` read-only against ``db_path``.
 
@@ -103,7 +105,7 @@ def _run_query(
                 return 1
             return 0
 
-        connection.set_progress_handler(_progress, _PROGRESS_INSTRUCTIONS)
+        connection.set_progress_handler(_progress, budget_check_instructions)
         try:
             cursor = connection.execute(sql)
             fetched = cursor.fetchmany(row_cap + 1)
