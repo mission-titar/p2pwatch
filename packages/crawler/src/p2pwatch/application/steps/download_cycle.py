@@ -26,11 +26,11 @@ from p2pwatch.application.steps.download_tracker import (
     reconcile_states,
 )
 from p2pwatch.application.steps.source_watcher import record_sources
-from p2pwatch.domain.client_errors import ClientUnreachableError, DownloadRejectedError
+from p2pwatch.domain.client_errors import ClientUnreachableError, ReadRejectedError
 from p2pwatch.domain.store_error import StoreError
 
-# A read the client refuses (amuleapi's ``amuled_rejected``) is the daemon unavailable.
-_UNAVAILABLE = (ClientUnreachableError, DownloadRejectedError)
+# A read the client refuses is the daemon unavailable.
+_UNAVAILABLE = (ClientUnreachableError, ReadRejectedError)
 
 
 async def run_download_cycle(deps: DownloadDeps, node_id: str) -> None:
@@ -39,7 +39,7 @@ async def run_download_cycle(deps: DownloadDeps, node_id: str) -> None:
     Two distinct error DOCTRINES (item I2 - anti-starvation):
 
     - An unavailable client (``ClientUnreachableError`` from step 0, ``start_unlisted`` or the
-      sources step; on the two reads, also a refused read, ``DownloadRejectedError``) = dead
+      sources step; on the two reads, also a refused read, ``ReadRejectedError``) = dead
       client → ABORT the iteration ("a dead client makes everything fail"). We skip the rest;
       the next iteration retries.
     - ``StoreError`` (persistence failure, NO client I/O) → ISOLATED PER STEP: a store

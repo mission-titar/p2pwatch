@@ -10,8 +10,8 @@ import httpx
 import pytest
 
 from p2pwatch.adapters.driven.amule_api.amule_api_client import AmuleApiClient
-from p2pwatch.adapters.driven.amule_api.errors import ApiRejectedError
 from p2pwatch.adapters.driven.asyncio_monotonic_clock import AsyncioMonotonicClock
+from p2pwatch.domain.client_errors import DownloadRejectedError
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.file_key import FileKey, Network
 from tests.integration.conftest import ApiEndpoint
@@ -39,7 +39,7 @@ async def test_start_then_appears_in_downloads(amuled: ApiEndpoint) -> None:
         file = FileKey(Network.ED2K, _HASH)
         try:
             await client.start(DownloadRequest(file, "probe-download.bin", _SIZE))
-        except ApiRejectedError as exc:
+        except DownloadRejectedError as exc:
             # The daemon refused the link cleanly, per item in the bulk envelope: the
             # request/response cycle IS validated, with its message. Tolerable here.
             assert str(exc)

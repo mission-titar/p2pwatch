@@ -1,7 +1,11 @@
 import pytest
 
 from p2pwatch.application.steps.download_cycle import run_download_cycle
-from p2pwatch.domain.client_errors import ClientUnreachableError, DownloadRejectedError
+from p2pwatch.domain.client_errors import (
+    ClientUnreachableError,
+    DownloadRejectedError,
+    ReadRejectedError,
+)
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.observability.events import DiskSpaceLow, FreeSpaceSampled
 from tests.fakes.adapters.driven.fake_broken_free_space_meter import FakeBrokenFreeSpaceMeter
@@ -24,9 +28,8 @@ from tests.support.application.steps.download_deps import (
     status,
 )
 
-# amuleapi refuses a read with ``amuled_rejected``, a DownloadRejectedError: on a read, the
-# daemon is unavailable, not a download refused.
-_UNAVAILABLE = [ClientUnreachableError("daemon down"), DownloadRejectedError("amuled_rejected")]
+# A refused read is the daemon unavailable, not a download refused.
+_UNAVAILABLE = [ClientUnreachableError("daemon down"), ReadRejectedError("amuled_rejected")]
 
 
 @pytest.mark.asyncio
