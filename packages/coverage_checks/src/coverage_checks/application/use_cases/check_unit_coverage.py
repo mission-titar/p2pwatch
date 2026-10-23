@@ -21,6 +21,10 @@ class CheckUnitCoverage(UnitCoverageChecker):
 
     def check_unit_coverage(self) -> UnitCoverageReport:
         own_tests = find_own_tests(self._package_tree_reader.read_package_tree())
+        # Read even with no module, so that a broken run is refused whatever the package holds.
+        test_coverage_by_module = self._test_coverage_reader.read_test_coverage_by_module(
+            own_tests.test_files_by_module
+        )
         shortfalls = [
             shortfall
             for module, test_files in own_tests.test_files_by_module.items()
@@ -28,7 +32,7 @@ class CheckUnitCoverage(UnitCoverageChecker):
                 shortfall := find_shortfall(
                     module,
                     test_files,
-                    self._test_coverage_reader.read_test_coverage(module, test_files),
+                    test_coverage_by_module[module],
                     self._package_tree_reader.read_module_source(module),
                 )
             )

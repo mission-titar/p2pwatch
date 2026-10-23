@@ -95,9 +95,9 @@ def test_read_test_coverage_reads_what_the_run_and_the_own_tests_ran(tmp_path: P
         },
     )
 
-    test_coverage = _reader(tmp_path).read_test_coverage(
-        PurePath("src/pkg/sizes.py"), (PurePath("tests/test_sizes.py"),)
-    )
+    test_coverage = _reader(tmp_path).read_test_coverage_by_module(
+        {PurePath("src/pkg/sizes.py"): (PurePath("tests/test_sizes.py"),)}
+    )[PurePath("src/pkg/sizes.py")]
 
     assert test_coverage.statements == test_coverage.statements_run == {1, 4, 5, 6, 7}
     assert test_coverage.branches == test_coverage.branches_run == {(5, 6), (5, 7)}
@@ -112,7 +112,9 @@ def test_a_module_without_own_test_files_has_nothing_run_by_them(tmp_path: Path)
         {"tests/test_other.py::test_short|run": lambda modules: modules["sizes"].is_short(3)},
     )
 
-    test_coverage = _reader(tmp_path).read_test_coverage(PurePath("src/pkg/sizes.py"), ())
+    test_coverage = _reader(tmp_path).read_test_coverage_by_module(
+        {PurePath("src/pkg/sizes.py"): ()}
+    )[PurePath("src/pkg/sizes.py")]
 
     assert test_coverage.statements_run == {1, 4, 5, 6}
     assert test_coverage.statements_run_by_own_tests == set()
@@ -137,9 +139,9 @@ def first(names):
     )
     reader = _reader(tmp_path, '[tool.coverage.report]\nexclude_also = ["if DEBUG:"]\n')
 
-    test_coverage = reader.read_test_coverage(
-        PurePath("src/pkg/guarded.py"), (PurePath("tests/test_guarded.py"),)
-    )
+    test_coverage = reader.read_test_coverage_by_module(
+        {PurePath("src/pkg/guarded.py"): (PurePath("tests/test_guarded.py"),)}
+    )[PurePath("src/pkg/guarded.py")]
 
     assert test_coverage.statements == {1, 7, 8}
 
@@ -162,14 +164,16 @@ def test_a_run_without_per_test_branches_is_a_broken_input_naming_the_data_file(
     with pytest.raises(
         BrokenInputError, match=f"^{re.escape(_no_per_test_coverage_message(tmp_path))}$"
     ):
-        _reader(tmp_path).read_test_coverage(PurePath("src/pkg/sizes.py"), ())
+        _reader(tmp_path).read_test_coverage_by_module({PurePath("src/pkg/sizes.py"): ()})
 
 
-def test_an_absent_data_file_is_a_broken_input_naming_it(tmp_path: Path) -> None:
+def test_an_absent_data_file_is_a_broken_input_naming_it_even_with_no_module_to_read(
+    tmp_path: Path,
+) -> None:
     with pytest.raises(
         BrokenInputError, match=f"^{re.escape(_no_per_test_coverage_message(tmp_path))}$"
     ):
-        _reader(tmp_path).read_test_coverage(PurePath("src/pkg/sizes.py"), ())
+        _reader(tmp_path).read_test_coverage_by_module({})
 
 
 def test_a_data_file_that_is_no_coverage_database_is_a_broken_input_naming_it(
@@ -181,7 +185,7 @@ def test_a_data_file_that_is_no_coverage_database_is_a_broken_input_naming_it(
     with pytest.raises(
         BrokenInputError, match=f"^Couldn't use data file {data_file}: file is not a database$"
     ):
-        _reader(tmp_path).read_test_coverage(PurePath("src/pkg/sizes.py"), ())
+        _reader(tmp_path).read_test_coverage_by_module({PurePath("src/pkg/sizes.py"): ()})
     gc.collect()  # a connection left open warns as it is collected, failing this test
 
 
@@ -193,7 +197,7 @@ def test_a_coverage_config_coverage_py_refuses_is_a_broken_input_naming_the_pypr
     pyproject = re.escape(str(tmp_path / "pyproject.toml"))
 
     with pytest.raises(BrokenInputError, match=f"^Couldn't read config file {pyproject}: "):
-        reader.read_test_coverage(PurePath("src/pkg/sizes.py"), ())
+        reader.read_test_coverage_by_module({PurePath("src/pkg/sizes.py"): ()})
 
 
 def test_a_module_that_is_not_python_is_a_broken_input_naming_it(tmp_path: Path) -> None:
@@ -206,4 +210,4 @@ def test_a_module_that_is_not_python_is_a_broken_input_naming_it(tmp_path: Path)
     module = re.escape(repr(str(tmp_path / "src/pkg/broken.py")))
 
     with pytest.raises(BrokenInputError, match=f"^Couldn't parse {module} as Python source: "):
-        _reader(tmp_path).read_test_coverage(PurePath("src/pkg/broken.py"), ())
+        _reader(tmp_path).read_test_coverage_by_module({PurePath("src/pkg/broken.py"): ()})
