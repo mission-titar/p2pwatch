@@ -68,3 +68,64 @@ def test_reading_an_absent_sbom_raises_a_broken_input_naming_it(
 
     with pytest.raises(BrokenInputError, match=f"^{re.escape(str(sbom_path))}: no such file$"):
         read(sbom_path)
+
+
+_READS = pytest.mark.parametrize(
+    "read",
+    [SyftSbomReader().read_dpkg_packages, SyftSbomReader().read_declared_components],
+    ids=["dpkg-packages", "declared-components"],
+)
+
+
+@_READS
+def test_reading_a_directory_raises_a_broken_input_naming_it(
+    read: Callable[[PurePath], object], tmp_path: Path
+) -> None:
+    with pytest.raises(BrokenInputError, match=f"^{re.escape(str(tmp_path))}: Is a directory$"):
+        read(tmp_path)
+
+
+@_READS
+def test_reading_an_sbom_not_in_utf_8_raises_a_broken_input_naming_it(
+    read: Callable[[PurePath], object], tmp_path: Path
+) -> None:
+    sbom_path = tmp_path / "sbom.syft.json"
+    sbom_path.write_bytes(b'{"artifacts": "\xe9"}')
+
+    with pytest.raises(BrokenInputError, match=f"^{re.escape(str(sbom_path))}: not UTF-8$"):
+        read(sbom_path)
+
+
+@_READS
+def test_reading_an_sbom_not_in_json_raises_a_broken_input_naming_it(
+    read: Callable[[PurePath], object], tmp_path: Path
+) -> None:
+    sbom_path = tmp_path / "sbom.syft.json"
+    sbom_path.write_text("{")
+
+    with pytest.raises(BrokenInputError, match=f"^{re.escape(str(sbom_path))}: not JSON$"):
+        read(sbom_path)
+
+
+@_READS
+@pytest.mark.parametrize(
+    "document",
+    [
+        {},
+        {"artifacts": 3},
+        {"artifacts": ["amule"]},
+        {"artifacts": [{"type": "deb", "name": "zlib1g"}]},
+        {"artifacts": [{"type": "deb", "name": "zlib1g", "version": "1", "purl": 3}]},
+    ],
+    ids=["no-artifacts", "artifacts-not-a-list", "artifact-not-an-object", "no-version", "purl"],
+)
+def test_reading_a_json_not_a_syft_sbom_raises_a_broken_input_naming_it(
+    read: Callable[[PurePath], object], document: object, tmp_path: Path
+) -> None:
+    sbom_path = tmp_path / "sbom.syft.json"
+    sbom_path.write_text(json.dumps(document))
+
+    with pytest.raises(
+        BrokenInputError, match=f"^{re.escape(str(sbom_path))}: not a Syft JSON SBOM$"
+    ):
+        read(sbom_path)

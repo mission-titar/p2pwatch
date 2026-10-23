@@ -16,8 +16,19 @@ class FilesystemSourceRuleReader(SourceRuleReader):
             rule_paths = [path for path in self._rules_directory.iterdir() if path.suffix == ".yml"]
         except FileNotFoundError as error:
             raise BrokenInputError(f"{self._rules_directory}: no such directory") from error
+        except OSError as error:
+            raise BrokenInputError(f"{self._rules_directory}: {error.strerror}") from error
         for rule_path in rule_paths:
             # ast-grep reports the id inside the file: refuse one that is not its file's name.
-            if f"id: {rule_path.stem}" not in rule_path.read_text().splitlines():
+            if f"id: {rule_path.stem}" not in _read_rule(rule_path).splitlines():
                 raise BrokenInputError(f"{rule_path}: its id is not {rule_path.stem}")
         return {rule_path.stem for rule_path in rule_paths}
+
+
+def _read_rule(rule_path: Path) -> str:
+    try:
+        return rule_path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise BrokenInputError(f"{rule_path}: {error.strerror}") from error
+    except UnicodeDecodeError as error:
+        raise BrokenInputError(f"{rule_path}: not UTF-8") from error

@@ -18,8 +18,8 @@ class FilesystemPackageTreeReader(PackageTreeReader):
             pyproject = tomllib.loads(_read_text(pyproject_path))
         except tomllib.TOMLDecodeError as error:
             raise BrokenInputError(f"{pyproject_path}: {error}") from error
-        tests_without_unit: dict[str, object] = (
-            pyproject.get("tool", {}).get("coverage_checks", {}).get("tests_without_unit", {})
+        tests_without_unit = _read_table(
+            pyproject_path, pyproject, ("tool", "coverage_checks", "tests_without_unit")
         )
         return PackageTree(
             modules=self._list("src/*/**/*.py"),
@@ -45,3 +45,16 @@ def _read_text(path: Path) -> str:
         raise BrokenInputError(f"{path}: {error.strerror}") from error
     except UnicodeDecodeError as error:
         raise BrokenInputError(f"{path}: not UTF-8") from error
+
+
+def _read_table(
+    pyproject_path: Path, pyproject: dict[str, object], keys: tuple[str, ...]
+) -> dict[str, object]:
+    """The table at *keys*, empty when absent, or a broken input naming the key that is no table."""
+    table = pyproject
+    for depth, key in enumerate(keys, start=1):
+        value = table.get(key, {})
+        if not isinstance(value, dict):
+            raise BrokenInputError(f"{pyproject_path}: {'.'.join(keys[:depth])} is not a table")
+        table = value
+    return table

@@ -51,3 +51,36 @@ def test_read_source_rule_ids_of_an_absent_directory_raises_a_broken_input_namin
         BrokenInputError, match=f"^{re.escape(str(rules_directory))}: no such directory$"
     ):
         reader.read_source_rule_ids()
+
+
+def test_read_source_rule_ids_of_a_file_raises_a_broken_input_naming_it(tmp_path: Path) -> None:
+    rules_directory = tmp_path / "rules"
+    rules_directory.write_text("")
+    reader = FilesystemSourceRuleReader(rules_directory=rules_directory)
+
+    with pytest.raises(
+        BrokenInputError, match=f"^{re.escape(str(rules_directory))}: Not a directory$"
+    ):
+        reader.read_source_rule_ids()
+
+
+def test_read_source_rule_ids_of_an_unreadable_rule_raises_a_broken_input_naming_it(
+    tmp_path: Path,
+) -> None:
+    rule_path = tmp_path / "CVE-2025-15366.yml"
+    rule_path.mkdir()
+    reader = FilesystemSourceRuleReader(rules_directory=tmp_path)
+
+    with pytest.raises(BrokenInputError, match=f"^{re.escape(str(rule_path))}: Is a directory$"):
+        reader.read_source_rule_ids()
+
+
+def test_read_source_rule_ids_of_a_rule_not_in_utf_8_raises_a_broken_input_naming_it(
+    tmp_path: Path,
+) -> None:
+    rule_path = tmp_path / "CVE-2025-15366.yml"
+    rule_path.write_bytes(b"id: CVE-2025-15366\nnote: \xe9\n")
+    reader = FilesystemSourceRuleReader(rules_directory=tmp_path)
+
+    with pytest.raises(BrokenInputError, match=f"^{re.escape(str(rule_path))}: not UTF-8$"):
+        reader.read_source_rule_ids()
