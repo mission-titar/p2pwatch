@@ -1,4 +1,4 @@
-"""``describe`` is an exhaustive match: one case per event + each conditional branch
+"""``plan_observability`` is an exhaustive match: one case per event + each conditional branch
 (a rise or not, first_occurrence true/false)."""
 
 from dataclasses import replace
@@ -14,9 +14,9 @@ from p2pwatch.domain.observability.policy import (
     Audience,
     MetricInstruction,
     MetricName,
-    Report,
+    ObservabilityPlan,
     Severity,
-    describe,
+    plan_observability,
 )
 from p2pwatch.domain.source import SourceKey
 
@@ -31,12 +31,12 @@ _FILE = FileKey(Network.ED2K, "8f3a1c0b9e7d44a2b6c1f0e9d8a7b6c5")
 _062A = (ev.TargetTitle("062A", "Les demoiselles cambrioleuses"),)
 
 
-CASES: list[tuple[ev.Event, Report]] = [
+CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
     (
         ev.SearchExecuted(
             client_name="amuled", channel="ed2k", observation_count=7, skipped_result_count=2
         ),
-        Report(
+        ObservabilityPlan(
             Severity.DEBUG,
             "search ed2k: 7 observation(s)",
             (
@@ -47,7 +47,7 @@ CASES: list[tuple[ev.Event, Report]] = [
     ),
     (
         ev.ClientUnreachable(client_name="slskd"),
-        Report(
+        ObservabilityPlan(
             Severity.WARNING,
             "slskd unreachable",
             (MetricInstruction(MetricName.CLIENT_UNREACHABLE, "inc", (("client", "slskd"),)),),
@@ -55,7 +55,7 @@ CASES: list[tuple[ev.Event, Report]] = [
     ),
     (
         ev.SearchFailed(client_name="amuled", channel="kad"),
-        Report(
+        ObservabilityPlan(
             Severity.WARNING,
             "search failed on kad",
             (MetricInstruction(MetricName.SEARCH_FAILURES, "inc", _AMULED_KAD),),
@@ -63,7 +63,7 @@ CASES: list[tuple[ev.Event, Report]] = [
     ),
     (
         ev.ObservationRecorded(client_name="amuled", channel="kad"),
-        Report(
+        ObservabilityPlan(
             Severity.DEBUG,
             "observation recorded (kad)",
             (MetricInstruction(MetricName.OBSERVATIONS, "inc", _AMULED_KAD),),
@@ -71,7 +71,7 @@ CASES: list[tuple[ev.Event, Report]] = [
     ),
     (
         ev.DownloadQueued(target_id="062A"),
-        Report(
+        ObservabilityPlan(
             Severity.INFO,
             "download queued: 062A",
             (MetricInstruction(MetricName.DOWNLOADS_QUEUED, "inc"),),
@@ -81,7 +81,7 @@ CASES: list[tuple[ev.Event, Report]] = [
         ev.ChannelStatusSampled(
             client_name="amuled", channel="kad", connected=True, connectable=False
         ),
-        Report(
+        ObservabilityPlan(
             Severity.DEBUG,
             "status amuled kad: connected yes, connectable no",
             (
@@ -94,7 +94,7 @@ CASES: list[tuple[ev.Event, Report]] = [
         ev.ChannelStatusSampled(
             client_name="amuled", channel="kad", connected=None, connectable=None
         ),
-        Report(
+        ObservabilityPlan(
             Severity.DEBUG,
             "status amuled kad: connected unknown, connectable unknown",
             (
@@ -107,33 +107,37 @@ CASES: list[tuple[ev.Event, Report]] = [
         ev.ChannelDegraded(
             client_name="amuled", channel="ed2k", field="connected", degraded_for_seconds=300.0
         ),
-        Report(Severity.WARNING, "amuled ed2k: off its network for 5 min", (), _OPERATIONS),
+        ObservabilityPlan(
+            Severity.WARNING, "amuled ed2k: off its network for 5 min", (), _OPERATIONS
+        ),
     ),
     (
         ev.ChannelDegraded(
             client_name="amuled", channel="kad", field="connectable", degraded_for_seconds=300.0
         ),
-        Report(Severity.WARNING, "amuled kad: not connectable for 5 min", (), _OPERATIONS),
+        ObservabilityPlan(
+            Severity.WARNING, "amuled kad: not connectable for 5 min", (), _OPERATIONS
+        ),
     ),
     (
         ev.ChannelRecovered(client_name="amuled", channel="ed2k", field="connected"),
-        Report(Severity.INFO, "amuled ed2k: back on its network", (), _OPERATIONS),
+        ObservabilityPlan(Severity.INFO, "amuled ed2k: back on its network", (), _OPERATIONS),
     ),
     (
         ev.ChannelRecovered(client_name="amuled", channel="kad", field="connectable"),
-        Report(Severity.INFO, "amuled kad: connectable again", (), _OPERATIONS),
+        ObservabilityPlan(Severity.INFO, "amuled kad: connectable again", (), _OPERATIONS),
     ),
     (
         ev.ClientUnreachableLasting(client_name="amuled", unreachable_for_seconds=120.0),
-        Report(Severity.WARNING, "amuled unreachable for 2 min", (), _OPERATIONS),
+        ObservabilityPlan(Severity.WARNING, "amuled unreachable for 2 min", (), _OPERATIONS),
     ),
     (
         ev.ClientReachableAgain(client_name="amuled"),
-        Report(Severity.INFO, "amuled reachable again", (), _OPERATIONS),
+        ObservabilityPlan(Severity.INFO, "amuled reachable again", (), _OPERATIONS),
     ),
     (
         ev.FreeSpaceSampled(free_bytes=5_000),
-        Report(
+        ObservabilityPlan(
             Severity.DEBUG,
             "download disk free: 5000 bytes",
             (MetricInstruction(MetricName.DISK_FREE_BYTES, "set", (), 5_000.0),),
@@ -141,7 +145,7 @@ CASES: list[tuple[ev.Event, Report]] = [
     ),
     (
         ev.DiskSpaceLow(free_bytes=3 * 2**29, min_free_bytes=10 * 2**30),
-        Report(
+        ObservabilityPlan(
             Severity.WARNING,
             "download disk low: 1.5 GiB free, under the 10.0 GiB floor (no new download)",
             (),
@@ -150,7 +154,7 @@ CASES: list[tuple[ev.Event, Report]] = [
     ),
     (
         ev.CrawlerStarted(download_enabled=True),
-        Report(
+        ObservabilityPlan(
             Severity.INFO,
             "🟢 node online (download on)",
             (MetricInstruction(MetricName.CRAWLER_UP, "set", (), 1.0),),
@@ -159,7 +163,7 @@ CASES: list[tuple[ev.Event, Report]] = [
     ),
     (
         ev.CrawlerStarted(download_enabled=False),
-        Report(
+        ObservabilityPlan(
             Severity.INFO,
             "🟢 node online (download off)",
             (MetricInstruction(MetricName.CRAWLER_UP, "set", (), 1.0),),
@@ -168,7 +172,7 @@ CASES: list[tuple[ev.Event, Report]] = [
     ),
     (
         ev.SourceFirstUseful(_SOURCE, "AnimuseeFMR", _FILE, "Keroro 062.avi", _062A),
-        Report(
+        ObservabilityPlan(
             Severity.INFO,
             "source 1f2e3d4c… useful for the first time: Keroro 062.avi",
             (MetricInstruction(MetricName.SOURCE_ALERTS, "inc", _ED2K_FIRST_USEFUL),),
@@ -181,7 +185,7 @@ CASES: list[tuple[ev.Event, Report]] = [
     ),
     (
         ev.SourceReappeared(_SOURCE, "AnimuseeFMR", _FILE, "Keroro 062.avi", _062A, 93_600.0),
-        Report(
+        ObservabilityPlan(
             Severity.INFO,
             "source 1f2e3d4c… reappeared after 26 h: Keroro 062.avi",
             (MetricInstruction(MetricName.SOURCE_ALERTS, "inc", _ED2K_REAPPEARED),),
@@ -195,9 +199,9 @@ CASES: list[tuple[ev.Event, Report]] = [
 ]
 
 
-def test_describe_maps_every_event() -> None:
+def test_plan_observability_maps_every_event() -> None:
     for event, expected in CASES:
-        assert describe(event) == expected, f"wrong Report for {event!r}"
+        assert plan_observability(event) == expected, f"wrong ObservabilityPlan for {event!r}"
 
 
 _HASH = "8f3a1c0b9e7d44a2b6c1f0e9d8a7b6c5"
@@ -245,17 +249,17 @@ def _change(target_id: str, before: str | None, after: str) -> ev.DecisionChange
 def test_only_a_rise_to_notify_or_download_reaches_the_community(
     before: str | None, after: str, notified: bool
 ) -> None:
-    report = describe(_decisions(_change("062A", before, after)))
-    assert report.audiences == (_COMMUNITY if notified else frozenset())
-    assert report.metrics == (MetricInstruction(MetricName.DECISIONS, "inc", (("tier", after),)),)
+    plan = plan_observability(_decisions(_change("062A", before, after)))
+    assert plan.audiences == (_COMMUNITY if notified else frozenset())
+    assert plan.metrics == (MetricInstruction(MetricName.DECISIONS, "inc", (("tier", after),)),)
 
 
 def test_a_file_with_risen_targets_is_one_message_naming_the_file_and_targets() -> None:
-    report = describe(
+    plan = plan_observability(
         _decisions(_change("062A", None, "download"), _change("062B", None, "notify"))
     )
-    assert report.notification_title == "📥 Download"
-    assert report.notification_body == (
+    assert plan.notification_title == "📥 Download"
+    assert plan.notification_body == (
         "**Targets**\n"
         "062A - Les demoiselles cambrioleuses\n"
         "062B - Le grand combat sous-marin\n"
@@ -266,43 +270,43 @@ def test_a_file_with_risen_targets_is_one_message_naming_the_file_and_targets() 
         "**ed2k**\n"
         f"`ed2k://|file|Keroro%20062.avi|367185920|{_HASH}|/`"
     )
-    assert report.metrics == (
+    assert plan.metrics == (
         MetricInstruction(MetricName.DECISIONS, "inc", (("tier", "download"),)),
         MetricInstruction(MetricName.DECISIONS, "inc", (("tier", "notify"),)),
     )
 
 
 def test_the_message_lists_only_the_risen_targets_under_their_highest_tier() -> None:
-    report = describe(
+    plan = plan_observability(
         _decisions(_change("062A", "catalog", "notify"), _change("062B", "notify", "retracted"))
     )
-    assert report.notification_title == "🔎 Notify"
-    assert report.notification_body.startswith(
+    assert plan.notification_title == "🔎 Notify"
+    assert plan.notification_body.startswith(
         "**Targets**\n062A - Les demoiselles cambrioleuses\n\n"
     )
 
 
 def test_decisions_log_one_line_listing_every_change() -> None:
-    report = describe(
+    plan = plan_observability(
         _decisions(_change("062A", None, "download"), _change("062B", "notify", "retracted"))
     )
-    assert report.severity == Severity.INFO
-    assert report.message == (
+    assert plan.severity == Severity.INFO
+    assert plan.message == (
         f"decisions for Keroro 062.avi ({_HASH}): 062A none → download, 062B notify → retracted"
     )
 
 
 def test_a_change_without_a_rise_has_no_notification_body() -> None:
-    report = describe(_decisions(_change("062A", "download", "notify")))
-    assert (report.notification_title, report.notification_body) == ("", "")
+    plan = plan_observability(_decisions(_change("062A", "download", "notify")))
+    assert (plan.notification_title, plan.notification_body) == ("", "")
 
 
 def test_a_backtick_in_the_name_cannot_close_its_code_span() -> None:
     # Discord pings a mention outside code: a name must not escape its span.
     event = replace(_decisions(_change("062A", None, "download")), filename="a`@everyone`b.avi")
-    report = describe(event)
-    assert "\n350.2 MiB - `a'@everyone'b.avi`\n" in report.notification_body
-    assert "`ed2k://|file|a%60%40everyone%60b.avi|" in report.notification_body
+    plan = plan_observability(event)
+    assert "\n350.2 MiB - `a'@everyone'b.avi`\n" in plan.notification_body
+    assert "`ed2k://|file|a%60%40everyone%60b.avi|" in plan.notification_body
 
 
 def _completed(*target_titles: ev.TargetTitle) -> ev.DownloadCompleted:
@@ -310,13 +314,13 @@ def _completed(*target_titles: ev.TargetTitle) -> ev.DownloadCompleted:
 
 
 def test_a_completed_download_is_a_green_message_naming_its_targets_and_file() -> None:
-    report = describe(
+    plan = plan_observability(
         _completed(
             ev.TargetTitle("062A", "Les demoiselles cambrioleuses"),
             ev.TargetTitle("062B", "Le grand combat sous-marin"),
         )
     )
-    assert report == Report(
+    assert plan == ObservabilityPlan(
         Severity.SUCCESS,
         "✅ download completed: 062A, 062B",
         (MetricInstruction(MetricName.DOWNLOADS_COMPLETED, "inc"),),
@@ -334,15 +338,15 @@ def test_a_completed_download_is_a_green_message_naming_its_targets_and_file() -
 
 
 def test_a_source_without_a_name_or_a_target_names_its_hash_and_its_file() -> None:
-    report = describe(ev.SourceFirstUseful(_SOURCE, None, _FILE, "Keroro 062.avi", ()))
-    assert report.notification_body == (
+    plan = plan_observability(ev.SourceFirstUseful(_SOURCE, None, _FILE, "Keroro 062.avi", ()))
+    assert plan.notification_body == (
         "**Source**\n1f2e3d4c…, useful for the first time\n\n**File**\n`Keroro 062.avi`"
     )
 
 
 def test_a_backtick_in_a_source_name_cannot_close_its_code_span() -> None:
     event = ev.SourceReappeared(_SOURCE, "a`@everyone`b", _FILE, "x.avi", (), 43_200.000001)
-    report = describe(event)
-    assert report.notification_body.startswith(
+    plan = plan_observability(event)
+    assert plan.notification_body.startswith(
         "**Source**\n`a'@everyone'b` 1f2e3d4c…, reappeared after 12 h\n"
     )
