@@ -10,7 +10,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store i
 )
 from p2pwatch.application.steps.download_cycle import run_download_cycle
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
-from p2pwatch.domain.observability.notification import TextNotification
+from p2pwatch.domain.observability.notification import CompletedDownload
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
@@ -202,8 +202,7 @@ async def test_failed_shared_hash_is_resurrected_and_notified() -> None:
     await run_download_cycle(deps, NODE)
     assert tracked_download_store.states[HASH_A] is DownloadState.COMPLETED
     [(_, notification)] = observability.notifier.calls
-    assert isinstance(notification, TextNotification)
-    assert notification.title == "✅ Downloaded"
+    assert isinstance(notification, CompletedDownload)
 
 
 @pytest.mark.asyncio

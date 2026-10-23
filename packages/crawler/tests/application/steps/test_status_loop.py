@@ -11,7 +11,7 @@ from p2pwatch.application.steps.observability_dispatcher import ObservabilityDis
 from p2pwatch.application.steps.status_loop import StatusLoopDeps, status_loop
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError, ReadRejectedError
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
-from p2pwatch.domain.observability.policy import Severity
+from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.status_reading import (
     ChannelStatus,
     ClientStatus,

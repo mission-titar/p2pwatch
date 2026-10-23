@@ -673,7 +673,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  uc["use-case<br/>emit(Event, node_id)"]
+  uc["étape<br/>dispatch(Event, node_id)"]
   desc["plan_observability()<br/>→ ObservabilityPlan"]
   disp["Dispatcher"]
   log["logs"]
@@ -689,6 +689,9 @@ flowchart LR
 Le **domaine** émet des `Event` purs ; une **politique** pure (`plan_observability`) les route vers des
 `ObservabilityPlan` (sévérité de log + instructions de métrique + audiences COMMUNITY/OPERATIONS) ;
 l'**étape** `ObservabilityDispatcher` (`application/steps/observability_dispatcher.py`) les applique.
+Une notification à la communauté y est une valeur typée (`TierRise`, `SourceAlert`,
+`CompletedDownload`) : le domaine n'écrit que du texte brut, l'adaptateur `AppriseNotifier` en écrit
+le Markdown.
 Le point d'accès Prometheus est servi par le crawler lui-même
 sur `observability.metrics.port` (`9090` dans le `crawler.yml` livré) ; rien ne le scrape par défaut, donc publiez ce
 port et pointez-y votre propre Prometheus si vous voulez des tableaux de bord.

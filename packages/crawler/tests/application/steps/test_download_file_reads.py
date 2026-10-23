@@ -3,8 +3,9 @@ import pytest
 from catalog_matching.domain.models import TargetSegment
 from p2pwatch.application.steps.download_cycle import run_download_cycle
 from p2pwatch.domain.download.states import DownloadState
-from p2pwatch.domain.observability.notification import TextNotification
-from p2pwatch.domain.observability.policy import Audience, Severity
+from p2pwatch.domain.observability.events import TargetTitle
+from p2pwatch.domain.observability.notification import CompletedDownload
+from p2pwatch.domain.observability.policy import Audience
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader
@@ -40,12 +41,7 @@ async def test_dispatches_download_completed() -> None:
     assert observability.notifier.calls == [
         (
             Audience.COMMUNITY,
-            TextNotification(
-                "✅ Downloaded",
-                f"**Targets**\n062A - t\n\n**File**\n`{HASH_A}`",
-                Severity.SUCCESS,
-                NODE,
-            ),
+            CompletedDownload((TargetTitle("062A", "t"),), HASH_A, NODE),
         )
     ]
 
@@ -81,5 +77,6 @@ async def test_a_completion_names_the_clean_file_and_every_download_target_of_th
     )
     await run_download_cycle(deps, NODE)
     [(_, notification)] = observability.notifier.calls
-    assert isinstance(notification, TextNotification)
-    assert notification.body == "**Targets**\n062A - ta\n062B - tb\n\n**File**\n`Keroro é.avi`"
+    assert notification == CompletedDownload(
+        (TargetTitle("062A", "ta"), TargetTitle("062B", "tb")), "Keroro é.avi", NODE
+    )
