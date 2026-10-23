@@ -130,7 +130,8 @@ From the block reports, re-run where noted.
 13. Block 10: as corrected (operator, "B"), `open_local\|SavesRecorded` prints nothing in `test_search_tasks.py`.
 14. Block 50, local half: release's `image-claims` from the root exits 0 on a Syft SBOM of
     `ghcr.io/mission-titar/p2pwatch:main`, with and without `--sarif`. The lead's, after the top is pushed:
-    `gh workflow run grype-scan.yml --ref <top branch>`: (to be filled by the lead: run id and conclusion).
+    `gh workflow run grype-scan.yml --ref refactor/review-findings` (lead, 2026-10-23): run 39921816786, success; its
+    `image-claims` and `stale-claims` steps ran with `--sarif` from the root.
 15. Block 80, at `77aa8b67`: `git diff --stat 5adea19e` over `deploy`, `security`, `packages/amule/docker` and both
     Dockerfiles prints nothing; `.github/workflows/` changes only the `--sarif` lines; the migrations gain only
     `catalog/0013_raw_metadata.sql` and `local/0012_latest_columns.sql`.
@@ -140,8 +141,7 @@ From the block reports, re-run where noted.
 ## Holistic review
 
 `.reviews/lot-b-holistic.md`: 0 critical, 3 major, 17 minor; its two sub-reviews (stores, renames) add the minors
-of `.reviews/lot-b-holistic-subreviews.md`. Every finding is fixed in the closing blocks 90 to 94 (the default exit), but
-Acceptance 14, the lead's. Exits, finding by finding:
+of `.reviews/lot-b-holistic-subreviews.md`. Every finding is fixed in the closing blocks 90 to 94 (the default exit), Acceptance 14 by the lead's run. Exits, finding by finding:
 
 - **C5 gaps** (major): fixed. The three vex readers refuse a directory, an unreadable file, a file not in UTF-8, not
   JSON or not of their format; Grype's non-zero exit names the SBOM (`grype exited with status N`), and so does an
@@ -151,7 +151,7 @@ Acceptance 14, the lead's. Exits, finding by finding:
   object has no attribute 'get'` and the others).
 - **The docs naming the old columns** (major): fixed, `docs/troubleshooting.md` and `docs/contributing/architecture.md`
   name `latest_seen_at` and `raw_metadata`; the history of `local/0005` and `catalog/0007` keeps the old names.
-- **Acceptance 14** (major): the lead's, after the top is pushed (Acceptance, above).
+- **Acceptance 14** (major): met by the lead on the top branch, run 39921816786 (Acceptance, above).
 - **The ast-grep rules see a literal in the call only**: fixed as decided. `no-literal-option-default` also refuses a
   literal in `set_defaults` (its test failed first, `FAIL no-literal-option-default ..............MM`); both rules'
   notes and `AGENTS.md` say an indirection is a review matter.
@@ -325,7 +325,7 @@ written where the decision lives (`AGENTS.md`), and the logger names left untest
 - The integration suites locally; CI runs them on both architectures, the compose smoke's insert into
   `downloads.latest_seen_at` included.
 - The amule image neither built nor run: the s6 command line checked by the unit tests only (block 62).
-- The two workflows on GitHub: the Grype scan on dispatch (Acceptance 14), the release on a tag.
+- The release workflow on GitHub, which runs on a tag only (the Grype scan ran on dispatch, Acceptance 14).
 - The spec's "17 sites on `main`" of Acceptance 4 (block 61).
 - The logger names of `SearchTaskRunner` and `record_observation`, which log only on a `StoreError` no wiring test
   can provoke; only `no-literal-logger-name` keeps them from a literal, not from a wrong class.
@@ -345,6 +345,6 @@ From `gh run list --branch <branch>` over blocks 10 to 74 (2026-10-23) and the l
 
 ## Next
 
-- The lead: dispatch `grype-scan.yml` on the top branch and fill Acceptance 14; the operator reads the stack.
+- The operator reads the stack and merges it (`gh stack merge --rebase`).
 - After the merge: "A copy before a migration that rewrites rows" before any release; then lot C's Discuss and spec
   (A1 to A3 and the crawler's other design rows of the ledger).
