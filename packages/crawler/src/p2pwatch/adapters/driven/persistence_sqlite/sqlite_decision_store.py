@@ -7,6 +7,7 @@ by the caller at each write.
 import sqlite3
 from datetime import datetime
 
+from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord, MatchDecision
 from p2pwatch.adapters.driven.persistence_sqlite.canonical_native_id import (
     require_canonical_native_id,
@@ -17,7 +18,10 @@ from p2pwatch.application.ports.driven.decision_reader import DecisionReader
 from p2pwatch.application.ports.driven.decision_writer import DecisionWriter
 from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.retraction import RETRACTED_TIER
+from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction
+
+# The tier column's value on a retraction's row.
+_RETRACTED_TIER = "retracted"
 
 _INSERT_DECISION = """
 INSERT INTO match_decisions (file_id, target_id, rule_name, tier, decided_at, node_id)
@@ -94,7 +98,7 @@ class SqliteDecisionStore(DecisionWriter, DecisionReader):
 
         Mirrors ``record_decision`` (same canonical-hash guard, same autocommit ``INSERT``): a
         file that no longer matches ``target_id`` gets an appended
-        ``(target_id, rule_name="", tier=RETRACTED_TIER)`` row instead of a mutation, per the
+        ``(target_id, rule_name="", tier=_RETRACTED_TIER)`` row instead of a mutation, per the
         append-only invariant. Retracting one target leaves the file's other targets intact.
         Unknown file → FK violated → ``PersistenceError``.
         """
@@ -106,25 +110,23 @@ class SqliteDecisionStore(DecisionWriter, DecisionReader):
                     file.file_id,
                     target_id,
                     "",
-                    RETRACTED_TIER,
+                    _RETRACTED_TIER,
                     utc_iso(decided_at),
                     node_id,
                 ),
             )
 
-    def read_latest_decisions(self, file: FileKey) -> dict[str, DecisionRecord]:
+    def read_latest_decisions(self, file: FileKey) -> dict[str, FileTargetDecision]:
         """Latest verdict per target for this file (set-diff anti-redundancy, spec §7), READ.
 
-        Maps ``target_id`` → its latest :class:`DecisionRecord`. INCLUDES a target whose latest
-        tier is ``retracted`` (the application's set-diff skips re-retracting it); EXCLUDES the
+        Maps ``target_id`` → its latest decision. INCLUDES a target whose latest decision is a
+        :class:`Retraction` (the application's set-diff skips re-retracting it); EXCLUDES the
         legacy ``target_id=""`` sentinel. The hash is NOT validated canonical (harmless read: a
         non-canonical hash matches nothing → ``{}``).
         """
         with wrap_sqlite_errors():
             rows = self._connection.execute(_SELECT_LATEST_DECISIONS, (file.file_id,)).fetchall()
-        return {
-            row[0]: DecisionRecord(target_id=row[0], rule_name=row[1], tier=row[2]) for row in rows
-        }
+        return {row[0]: _file_target_decision(*row) for row in rows}
 
     def read_download_candidates(self) -> tuple[DownloadCandidate, ...]:
         """``(file, target_id)`` whose LATEST verdict is tier=download, to replay (download §5).
@@ -138,3 +140,9 @@ class SqliteDecisionStore(DecisionWriter, DecisionReader):
             DownloadCandidate(file=FileKey(Network(row[0]), row[1]), target_id=row[2])
             for row in rows
         )
+
+
+def _file_target_decision(target_id: str, rule_name: str, tier: str) -> FileTargetDecision:
+    if tier == _RETRACTED_TIER:
+        return Retraction(target_id)
+    return DecisionRecord(target_id, rule_name, DecisionTier(tier))

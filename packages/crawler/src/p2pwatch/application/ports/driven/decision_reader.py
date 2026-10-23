@@ -3,18 +3,18 @@
 
 from abc import ABC, abstractmethod
 
-from catalog_matching.domain.engine import DecisionRecord
 from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.file_key import FileKey
+from p2pwatch.domain.file_target_decision import FileTargetDecision
 
 
 class DecisionReader(ABC):
     """Reads the latest verdicts."""
 
     @abstractmethod
-    def read_latest_decisions(self, file: FileKey) -> dict[str, DecisionRecord]:
-        """The latest :class:`DecisionRecord` per target (spec §7), a ``retracted`` one included,
-        the legacy ``target_id=""`` sentinel excluded."""
+    def read_latest_decisions(self, file: FileKey) -> dict[str, FileTargetDecision]:
+        """The latest decision per target (spec §7), a :class:`Retraction` included, the legacy
+        ``target_id=""`` sentinel excluded."""
 
     @abstractmethod
     def read_download_candidates(self) -> tuple[DownloadCandidate, ...]:

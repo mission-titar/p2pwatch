@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from p2pwatch.domain.file_key import FileKey
+from p2pwatch.domain.file_target_decision import FileTargetDecision
 from p2pwatch.domain.source import SourceKey
 
 
@@ -42,8 +43,8 @@ class ObservationRecorded:
 class DecisionChange:
     target_id: str
     title: str
-    previous_tier: str | None  # the persisted tier, None for a target never judged
-    new_tier: str  # the fresh tier, or "retracted"
+    previous_decision: FileTargetDecision | None  # None for a target never judged
+    new_decision: FileTargetDecision
 
 
 @dataclass(frozen=True)

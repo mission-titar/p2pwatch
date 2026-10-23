@@ -17,7 +17,9 @@ from typing import Literal, assert_never
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.ed2k_link import build_ed2k_link
+from catalog_matching.domain.engine import DecisionRecord
 from p2pwatch.domain.file_key import Network
+from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction
 from p2pwatch.domain.observability.events import (
     ChannelDegraded,
     ChannelField,
@@ -114,17 +116,30 @@ class Report:
 
 
 # The tiers a rise announces, with the heading of the message.
-_RISE_HEADINGS = {"download": "📥 Download", "notify": "🔎 Notify"}
+_RISE_HEADINGS = {DecisionTier.DOWNLOAD: "📥 Download", DecisionTier.NOTIFY: "🔎 Notify"}
 
 
-def _rank(tier: str | None) -> int:
-    """``DecisionTier.rank``, where none and ``retracted`` rank below every tier."""
-    return DecisionTier(tier).rank if tier is not None and tier in DecisionTier else -1
+def _rank(decision: FileTargetDecision | None) -> int:
+    """``DecisionTier.rank``, where none and a retraction rank below every tier."""
+    return DecisionTier(decision.tier).rank if isinstance(decision, DecisionRecord) else -1
 
 
-def _is_rise(change: DecisionChange) -> bool:
-    new_tier, previous_tier = change.new_tier, change.previous_tier
-    return new_tier in _RISE_HEADINGS and _rank(new_tier) > _rank(previous_tier)
+def _risen_tier(change: DecisionChange) -> DecisionTier | None:
+    """The tier ``change`` rises to, if it announces one."""
+    new = change.new_decision
+    if not isinstance(new, DecisionRecord) or new.tier not in _RISE_HEADINGS:
+        return None
+    tier = DecisionTier(new.tier)
+    return tier if tier.rank > _rank(change.previous_decision) else None
+
+
+def _label(decision: FileTargetDecision | None) -> str:
+    """How a log line and a metric label name a decision."""
+    if decision is None:
+        return "none"
+    if isinstance(decision, Retraction):
+        return "retracted"
+    return decision.tier
 
 
 def _targets_section(target_titles: Iterable[TargetTitle]) -> str:
@@ -178,20 +193,21 @@ def _channel_alert(
 
 def _describe_decisions(event: DecisionsRecorded) -> Report:
     changes = ", ".join(
-        f"{c.target_id} {c.previous_tier or 'none'} → {c.new_tier}" for c in event.changes
+        f"{c.target_id} {_label(c.previous_decision)} → {_label(c.new_decision)}"
+        for c in event.changes
     )
     report = Report(
         Severity.INFO,
         f"decisions for {event.filename} ({event.file.native_id}): {changes}",
         tuple(
-            MetricInstruction(MetricName.DECISIONS, "inc", (("tier", c.new_tier),))
+            MetricInstruction(MetricName.DECISIONS, "inc", (("tier", _label(c.new_decision)),))
             for c in event.changes
         ),
     )
-    risen = [c for c in event.changes if _is_rise(c)]
+    risen = [(c, tier) for c in event.changes if (tier := _risen_tier(c)) is not None]
     if not risen:
         return report
-    top = max((c.new_tier for c in risen), key=_rank)
+    top = max((tier for _, tier in risen), key=lambda tier: tier.rank)
     match event.file.network:
         case Network.ED2K:
             link = build_ed2k_link(event.filename, event.size_bytes, event.file.native_id)
@@ -201,7 +217,7 @@ def _describe_decisions(event: DecisionsRecorded) -> Report:
         report,
         audiences=frozenset({Audience.COMMUNITY}),
         notification_body=(
-            _targets_section(TargetTitle(c.target_id, c.title) for c in risen)
+            _targets_section(TargetTitle(c.target_id, c.title) for c, _ in risen)
             + f"\n\n**File**\n{event.size_bytes / 2**20:.1f} MiB - {_code_name(event.filename)}"
             + f"\n\n**ed2k**\n`{link}`"
         ),

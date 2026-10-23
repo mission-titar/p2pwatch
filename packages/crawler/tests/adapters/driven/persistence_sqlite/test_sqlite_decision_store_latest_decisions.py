@@ -10,7 +10,7 @@ from catalog_matching.domain.engine import DecisionRecord, Explanation, MatchDec
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.retraction import RETRACTED_TIER
+from p2pwatch.domain.file_target_decision import Retraction
 from tests.support.catalog_rows import insert_file
 
 _A = FileKey(Network.ED2K, "a" * 32)
@@ -63,9 +63,22 @@ def test_latest_decisions_returns_the_latest_record_per_target(
         _A, _decision("numero_nu", DecisionTier.NOTIFY, "062B"), _T0, _NODE
     )
     assert decision_store.read_latest_decisions(_A) == {
-        "062A": DecisionRecord(target_id="062A", rule_name="id_segment_exact", tier="download"),
-        "062B": DecisionRecord(target_id="062B", rule_name="numero_nu", tier="notify"),
+        "062A": DecisionRecord(
+            target_id="062A", rule_name="id_segment_exact", tier=DecisionTier.DOWNLOAD
+        ),
+        "062B": DecisionRecord(target_id="062B", rule_name="numero_nu", tier=DecisionTier.NOTIFY),
     }
+
+
+def test_latest_decisions_reads_each_tier_as_the_type(
+    decision_store: SqliteDecisionStore,
+) -> None:
+    decision_store.record_decision(
+        _A, _decision("numero_nu", DecisionTier.NOTIFY, "062A"), _T0, _NODE
+    )
+    latest = decision_store.read_latest_decisions(_A)["062A"]
+    assert isinstance(latest, DecisionRecord)
+    assert latest.tier is DecisionTier.NOTIFY
 
 
 def test_latest_decisions_includes_a_target_whose_latest_tier_is_retracted(
@@ -75,9 +88,7 @@ def test_latest_decisions_includes_a_target_whose_latest_tier_is_retracted(
         _A, _decision("id_segment_exact", DecisionTier.DOWNLOAD, "062A"), _T0, _NODE
     )
     decision_store.record_retraction(_A, "062A", _T1, _NODE)
-    assert decision_store.read_latest_decisions(_A) == {
-        "062A": DecisionRecord(target_id="062A", rule_name="", tier=RETRACTED_TIER)
-    }
+    assert decision_store.read_latest_decisions(_A) == {"062A": Retraction("062A")}
 
 
 def test_latest_decisions_excludes_the_legacy_empty_sentinel(
@@ -88,7 +99,7 @@ def test_latest_decisions_excludes_the_legacy_empty_sentinel(
     )
     decision_store.record_retraction(_A, "", _T1, _NODE)  # legacy target_id=""
     assert decision_store.read_latest_decisions(_A) == {
-        "062A": DecisionRecord(target_id="062A", rule_name="numero_nu", tier="notify")
+        "062A": DecisionRecord(target_id="062A", rule_name="numero_nu", tier=DecisionTier.NOTIFY)
     }
 
 
