@@ -159,7 +159,7 @@ Strict TDD in every block, as `AGENTS.md` states it. Full contents, estimate sou
 | 190 | `refactor/dispatch-from-lifecycle-and-decisions` | the lifecycle and decision steps call `dispatch` (D21) (Corrected: the search worker and the status loop too, from block 200, which reached 26 files) | 409, 18 (measured) |
 | 200 | `refactor/dispatch-from-loops` | the loops call `dispatch`; `EventEmitter` goes (D21) (Corrected: the download stages only) | 192, 19 (measured) |
 | 210 | `refactor/relayed-log-line` | the notifier's new signature, `RelayedLogLine` (D25) | 330, 9 |
-| 220 | `refactor/typed-notifications` | typed community notifications, Markdown in apprise (D24) | 410, 10 |
+| 220 | `refactor/typed-notifications` | typed community notifications, Markdown in apprise (D24) (Corrected: 600 lines, about 200 of them moved verbatim, kept whole by the operator) | 600, 18 (measured) |
 | 230 | `refactor/observation-node` | observations carry their node (D26) | 250, 19 |
 | 240 | `refactor/dated-decision-writes` | decisions written as a `DatedDecision` (D26) | 280, 16 |
 | 250 | `refactor/community-events-carry-node` | community events carry their node (D26) | 230, 13 |
