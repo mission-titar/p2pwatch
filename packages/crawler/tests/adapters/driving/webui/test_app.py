@@ -138,6 +138,7 @@ _FILE = FileKey(Network.ED2K, TEST_HASH)
 _OBSERVATION = FileObservation(
     ReportedFile(_FILE, "keroro_s2e62a_vf.avi", 100_000_000, 5, "keroro"),
     datetime.fromisoformat(SEEN_AT),
+    "n1",
 )
 _DECISION = DatedDecision(
     DecisionRecord("062A", "catalog", DecisionTier.CATALOG), datetime.fromisoformat(SEEN_AT), "n1"
@@ -1174,7 +1175,7 @@ async def test_hostile_filename_is_escaped_in_ed2k_link() -> None:
     # (%7C). Without this escaping, the link would have 6 ``|`` (instead of 5 structural
     # separators) and size/hash would be shifted → unusable file / pointing elsewhere.
     reported_file = replace(_OBSERVATION.reported_file, filename="weird|name.avi")
-    hostile = FileObservation(reported_file, _OBSERVATION.observed_at)
+    hostile = replace(_OBSERVATION, reported_file=reported_file)
     text = await _file_page(
         replace(_FILE_DESCRIPTION, file_history=_history(latest_observation=hostile))
     )
@@ -1213,7 +1214,7 @@ def _catalog_entry(
     return CatalogEntry(
         file=reported_file.file,
         size_bytes=1024,
-        latest_observation=FileObservation(reported_file, observed_at),
+        latest_observation=FileObservation(reported_file, observed_at, "n1"),
         decisions=decisions,
     )
 

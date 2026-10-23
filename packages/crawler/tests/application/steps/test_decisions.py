@@ -104,7 +104,7 @@ async def _record(
     wall_clock: FakeWallClock,
 ) -> int:
     observation_store.record_observation(
-        FileObservation(_reported_file(native_id, filename), wall_clock.now()), _NODE
+        FileObservation(_reported_file(native_id, filename), wall_clock.now(), _NODE)
     )
     return await rejudge_file(
         _key(native_id),
@@ -290,7 +290,7 @@ async def test_a_target_no_name_supports_is_retracted_without_nudge(
     wall_clock: FakeWallClock,
 ) -> None:
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_CAT, _DISCARD_NAME), wall_clock.now()), _NODE
+        FileObservation(_reported_file(_HASH_CAT, _DISCARD_NAME), wall_clock.now(), _NODE)
     )
     _seed_decision(decision_store, _HASH_CAT, "062A", wall_clock.now(), node_id="seed-node")
     observability, waker = ObservabilityOverFakes(), FakeWaker()
@@ -322,7 +322,7 @@ async def test_every_unsupported_target_is_retracted(
     wall_clock: FakeWallClock,
 ) -> None:
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_MULTI, _DISCARD_NAME), wall_clock.now()), _NODE
+        FileObservation(_reported_file(_HASH_MULTI, _DISCARD_NAME), wall_clock.now(), _NODE)
     )
     _seed_decision(decision_store, _HASH_MULTI, "062A", wall_clock.now())
     _seed_decision(decision_store, _HASH_MULTI, "062B", wall_clock.now())
@@ -357,7 +357,7 @@ async def test_already_retracted_then_none_is_a_no_op(
     wall_clock: FakeWallClock,
 ) -> None:
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_CAT, _DISCARD_NAME), wall_clock.now()), _NODE
+        FileObservation(_reported_file(_HASH_CAT, _DISCARD_NAME), wall_clock.now(), _NODE)
     )
     _seed_decision(decision_store, _HASH_CAT, "062A", wall_clock.now())
     decision_store.record_retraction(_key(_HASH_CAT), "062A", wall_clock.now(), _NODE)
@@ -487,7 +487,7 @@ async def test_the_event_names_the_file_by_its_most_sourced_name(
     wall_clock: FakeWallClock,
 ) -> None:
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_DL, _DL_NAME, sources=9), wall_clock.now()), _NODE
+        FileObservation(_reported_file(_HASH_DL, _DL_NAME, sources=9), wall_clock.now(), _NODE)
     )
     observability, waker = ObservabilityOverFakes(), FakeWaker()
     await _record(
@@ -513,7 +513,7 @@ async def test_a_target_gone_from_the_targets_is_retracted(
     wall_clock: FakeWallClock,
 ) -> None:
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_CAT, _DISCARD_NAME), wall_clock.now()), _NODE
+        FileObservation(_reported_file(_HASH_CAT, _DISCARD_NAME), wall_clock.now(), _NODE)
     )
     _seed_decision(decision_store, _HASH_CAT, "999Z", wall_clock.now())
     observability, waker = ObservabilityOverFakes(), FakeWaker()
@@ -571,7 +571,7 @@ async def test_each_row_carries_the_instant_read_right_before_its_write(
     start = datetime(2026, 6, 12, tzinfo=UTC)
     seeded_at = start - timedelta(days=1)
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_MULTI, _MULTI_NAME), seeded_at), _NODE
+        FileObservation(_reported_file(_HASH_MULTI, _MULTI_NAME), seeded_at, _NODE)
     )
     _seed_decision(decision_store, _HASH_MULTI, "001A", seeded_at)
     await rejudge_file(

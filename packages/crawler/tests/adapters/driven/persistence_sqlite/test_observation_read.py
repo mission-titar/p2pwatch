@@ -39,6 +39,7 @@ def _raw(
     *,
     sources: int = 5,
     media: int | None = None,
+    node_id: str = "n1",
 ) -> None:
     insert_observation(
         connection,
@@ -48,11 +49,18 @@ def _raw(
         source_count=sources,
         duration_seconds=media,
         bitrate_kbps=None if media is None else 900,
+        node_id=node_id,
     )
 
 
 def _observation(
-    name: str, at: str, *, media: int | None = None, native_id: str = _A, sources: int = 5
+    name: str,
+    at: str,
+    *,
+    media: int | None = None,
+    native_id: str = _A,
+    sources: int = 5,
+    node_id: str = "n1",
 ) -> FileObservation:
     reported_file = ReportedFile(
         file=_key(native_id),
@@ -63,7 +71,19 @@ def _observation(
         duration_seconds=media,
         bitrate_kbps=None if media is None else 900,
     )
-    return FileObservation(reported_file, datetime.fromisoformat(at))
+    return FileObservation(reported_file, datetime.fromisoformat(at), node_id)
+
+
+def test_every_read_carries_the_node_of_its_observation(connection: sqlite3.Connection) -> None:
+    insert_file(connection, _A)
+    _raw(connection, _A, "keroro.avi", _TIE, node_id="n2")
+    observation = _observation("keroro.avi", _TIE, node_id="n2")
+    assert observation_read.latest_observation(connection, _key(_A)) == observation
+    assert list(observation_read.iter_latest_observations(connection)) == [observation]
+    assert observation_read.best_observation(connection, _key(_A)) == observation
+    assert observation_read.observations_between(connection, _key(_A), 0, _YEAR_3000) == (
+        observation,
+    )
 
 
 def test_latest_observation_is_the_latest_raw_observation(connection: sqlite3.Connection) -> None:

@@ -133,7 +133,7 @@ def test_a_new_observation_reuses_the_variant_0008_rekeyed(tmp_path: Path) -> No
     )
     try:
         SqliteObservationStore(migrated).record_observation(
-            FileObservation(reported_file, datetime(2026, 6, 12, tzinfo=UTC)), "n1"
+            FileObservation(reported_file, datetime(2026, 6, 12, tzinfo=UTC), "n1")
         )
         assert migrated.execute("SELECT count(*) FROM observation_variants").fetchone()[0] == 3
         assert migrated.execute("SELECT count(*) FROM observations").fetchone()[0] == 5

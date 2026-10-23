@@ -121,6 +121,7 @@ def test_read_catalog_entries_no_filter_returns_all(catalog_db: Path) -> None:
                     FileKey(Network.ED2K, "a" * 32), "keroro_062.avi", 100, 5, keyword="keroro"
                 ),
                 observed_at=datetime(2026, 6, 22, 10, tzinfo=UTC),
+                node_id="n1",
             ),
             decisions=(DecisionRecord("062A", "id_segment_exact", DecisionTier.DOWNLOAD),),
         ),

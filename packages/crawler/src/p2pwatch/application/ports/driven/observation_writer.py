@@ -10,5 +10,5 @@ class ObservationWriter(ABC):
     """Appends what the network reported of a file."""
 
     @abstractmethod
-    def record_observation(self, observation: FileObservation, node_id: str) -> None:
-        """Appends ``observation``, as ``node_id`` observed it."""
+    def record_observation(self, observation: FileObservation) -> None:
+        """Appends ``observation``."""

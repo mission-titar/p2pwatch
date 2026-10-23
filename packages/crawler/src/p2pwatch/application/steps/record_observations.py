@@ -54,7 +54,7 @@ async def record_observation(
     A ``StoreError`` is absorbed (log + ``0``), the cycle continues (spec §7)."""
     try:
         observation_writer.record_observation(
-            FileObservation(reported_file, wall_clock.now()), node_id
+            FileObservation(reported_file, wall_clock.now(), node_id)
         )
         await observability_dispatcher.dispatch(ObservationRecorded(client_name, channel), node_id)
         return await rejudge_file(

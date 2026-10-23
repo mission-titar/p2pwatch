@@ -57,7 +57,7 @@ class SqliteObservationStore(ObservationWriter, ObservationReader):
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
 
-    def record_observation(self, observation: FileObservation, node_id: str) -> None:
+    def record_observation(self, observation: FileObservation) -> None:
         """ONE transaction: file (first sight wins), its variant, the stamped observation."""
         reported_file = observation.reported_file
         file = reported_file.file
@@ -70,7 +70,7 @@ class SqliteObservationStore(ObservationWriter, ObservationReader):
             reported_file.bitrate_kbps,
             json.dumps(reported_file.raw_metadata, ensure_ascii=False),
             reported_file.keyword,
-            node_id,
+            observation.node_id,
         )
         variant_content_hash = content_hash(*variant)
         observed_at_micros = iso_to_micros(utc_iso(observation.observed_at))

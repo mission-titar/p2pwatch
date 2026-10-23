@@ -55,7 +55,7 @@ def key(hash_hex: str) -> FileKey:
 
 def observation(hash_hex: str, filename: str, size_bytes: int) -> FileObservation:
     reported_file = ReportedFile(key(hash_hex), filename, size_bytes, 1, "keroro")
-    return FileObservation(reported_file, SEEN_AT)
+    return FileObservation(reported_file, SEEN_AT, NODE)
 
 
 def candidate(hash_hex: str, target_id: str) -> DownloadCandidate:
