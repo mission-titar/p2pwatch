@@ -1,10 +1,14 @@
-"""``Logger``: the operator's diagnostic lines, at the three levels the use cases write."""
+"""``Logger``: the operator's diagnostic lines, at the four levels the core writes."""
 
 from abc import ABC, abstractmethod
 
 
 class Logger(ABC):
     """Writes one line per call, ``message`` %-formatted with ``args`` as ``logging`` does."""
+
+    @abstractmethod
+    def debug(self, message: str, *args: object) -> None:
+        """A detail the operator turns on to trace a run."""
 
     @abstractmethod
     def info(self, message: str, *args: object) -> None:
