@@ -11,8 +11,13 @@ from p2pwatch.application.ports.driving.catalog_merger import (
     ListedSourceCatalog,
     NewCatalog,
 )
-from p2pwatch.application.ports.driving.config_validator import ConfigValidator
+from p2pwatch.application.ports.driving.config_validator import (
+    ConfigProblem,
+    ConfigReport,
+    ConfigValidator,
+)
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
+from p2pwatch.domain.broken_input_error import BrokenInputError
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.merge_error import MergeError
 from tests.fakes.application.use_cases.fake_catalog_merger import FakeCatalogMerger
@@ -103,14 +108,37 @@ def test_validate_config_defaults_to_the_deploy_directory_under_the_working_dire
     assert config_validator.validated_paths == [_DEFAULT_PATHS]
 
 
-def test_validate_config_reports_an_invalid_config(capsys: pytest.CaptureFixture[str]) -> None:
+@pytest.mark.parametrize(
+    ("key", "line"),
+    [
+        ("search.keywords", "Invalid config: /srv/c.yml: search.keywords: list expected\n"),
+        (None, "Invalid config: /srv/c.yml: list expected\n"),
+    ],
+    ids=["key", "no-key"],
+)
+def test_validate_config_words_the_problem_of_a_wrong_config(
+    capsys: pytest.CaptureFixture[str], key: str | None, line: str
+) -> None:
+    config_report = ConfigReport(
+        problems=(ConfigProblem(PurePath("/srv/c.yml"), key, "list expected"),)
+    )
+    config_validator = FakeConfigValidator(config_report)
+
+    assert _command_line(config_validator=config_validator).run(["validate-config"]) == 1
+
+    assert capsys.readouterr() == ("", line)
+
+
+def test_validate_config_prints_a_broken_file_on_one_line(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     config_validator = FakeConfigValidator(
-        InvalidConfigError(None, "'episodes' section: list expected")
+        BrokenInputError("/srv/c.yml: No such file or directory")
     )
 
     assert _command_line(config_validator=config_validator).run(["validate-config"]) == 1
 
-    assert capsys.readouterr().err == "Invalid config: 'episodes' section: list expected\n"
+    assert capsys.readouterr() == ("", "error: /srv/c.yml: No such file or directory\n")
 
 
 def test_the_bare_invocation_is_refused_with_a_usage_line(
