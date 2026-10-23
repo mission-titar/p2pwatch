@@ -14,6 +14,7 @@ from jinja2 import Environment, FileSystemLoader, UndefinedError, meta
 from starlette.applications import Starlette
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord, Explanation
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_targets
@@ -137,7 +138,7 @@ _OBSERVATION = FileObservation(
     datetime.fromisoformat(SEEN_AT),
 )
 _DECISION = DatedDecision(
-    DecisionRecord("062A", "catalog", "catalog"), datetime.fromisoformat(SEEN_AT), "n1"
+    DecisionRecord("062A", "catalog", DecisionTier.CATALOG), datetime.fromisoformat(SEEN_AT), "n1"
 )
 _WEEK = Interval(_WALL_CLOCK.now() - timedelta(days=7), _WALL_CLOCK.now())
 # One file seen once under one name, decided on 062A, with no source and no explanation.
@@ -385,7 +386,9 @@ async def test_file_page_shows_the_network_the_native_id_and_the_ed2k_link() -> 
 @pytest.mark.asyncio
 async def test_file_page_shows_each_decision_with_its_rule_tier_and_instant() -> None:
     decisions = tuple(
-        DatedDecision(DecisionRecord(target_id, "numero_nu_confirmed", "download"), at, "n1")
+        DatedDecision(
+            DecisionRecord(target_id, "numero_nu_confirmed", DecisionTier.DOWNLOAD), at, "n1"
+        )
         for target_id, at in (("072A", _OBSERVATION.observed_at), ("072B", _WALL_CLOCK.now()))
     )
     page = await _file_page(replace(_FILE_DESCRIPTION, file_history=_history(decisions=decisions)))
@@ -887,7 +890,9 @@ async def test_file_page_without_a_decision_says_so() -> None:
 @pytest.mark.asyncio
 async def test_file_page_with_a_decision_but_no_explanation_says_so() -> None:
     # The explainer has none for a target the current config does not know.
-    unknown = replace(_DECISION, decision=DecisionRecord("S9E999Z", "catalog", "catalog"))
+    unknown = replace(
+        _DECISION, decision=DecisionRecord("S9E999Z", "catalog", DecisionTier.CATALOG)
+    )
     page = await _file_page(replace(_FILE_DESCRIPTION, file_history=_history(decisions=(unknown,))))
     assert "<dt>Target</dt><dd>S9E999Z</dd>" in page
     assert "<p>No explanation available.</p>" in page
@@ -1195,7 +1200,7 @@ def _catalog_entry(
 
 
 def _decision(target_id: str, tier: str) -> DecisionRecord:
-    return DecisionRecord(target_id, "rule", tier)
+    return DecisionRecord(target_id, "rule", DecisionTier(tier))
 
 
 def test_resolve_target_display_empty_decisions_is_empty_list() -> None:

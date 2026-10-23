@@ -327,7 +327,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
                 # A file with no observation LEFT JOINs to NULLs.
                 latest_observation=None if row["filename"] is None else observation_from_row(row),
                 decisions=tuple(
-                    DecisionRecord(target_id=t, rule_name=r, tier=ti)
+                    DecisionRecord(target_id=t, rule_name=r, tier=DecisionTier(ti))
                     for t, r, ti in zip(
                         _split_concat(row["target_ids"]),
                         _split_concat(row["rule_names"]),
@@ -353,7 +353,9 @@ class SqliteCatalogFileReader(CatalogFileReader):
         decisions = tuple(
             DatedDecision(
                 DecisionRecord(
-                    target_id=row["target_id"], rule_name=row["rule_name"], tier=row["tier"]
+                    target_id=row["target_id"],
+                    rule_name=row["rule_name"],
+                    tier=DecisionTier(row["tier"]),
                 ),
                 decided_at=datetime.fromisoformat(row["decided_at"]),
                 node_id=row["node_id"],
