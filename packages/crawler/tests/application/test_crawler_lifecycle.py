@@ -12,7 +12,6 @@ from p2pwatch.application.steps.search_worker import BackoffPolicy, BackoffRegis
 from p2pwatch.domain.observability.events import CrawlerStarted
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
-from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_node_id_generator import FakeNodeIdGenerator
@@ -20,6 +19,7 @@ from tests.fakes.adapters.driven.fake_node_id_store import FakeNodeIdStore
 from tests.fakes.adapters.driven.fake_policy_fingerprint_store import FakePolicyFingerprintStore
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
+from tests.fakes.application.steps.fake_event_emitter import FakeEventEmitter
 
 _FINGERPRINT = "policy-2"
 _KAD = BackoffKey("amuled", "kad")

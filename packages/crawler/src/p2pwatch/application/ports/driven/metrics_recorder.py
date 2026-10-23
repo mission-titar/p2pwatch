@@ -1,4 +1,4 @@
-"""``MetricsRecorder``: fed by the ``EventEmitter``'s dispatcher (spec Plan E §3)."""
+"""``MetricsRecorder``: fed by the dispatch step, ``ObservabilityDispatcher`` (spec Plan E §3)."""
 
 from abc import ABC, abstractmethod
 

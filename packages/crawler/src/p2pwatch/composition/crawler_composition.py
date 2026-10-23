@@ -39,7 +39,6 @@ from p2pwatch.adapters.driven.asyncio_waker import AsyncioWaker
 from p2pwatch.adapters.driven.config.crawler_config import load_config
 from p2pwatch.adapters.driven.in_memory_status_reading_store import InMemoryStatusReadingStore
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
-from p2pwatch.adapters.driven.observability.dispatcher import ObservabilityDispatcher
 from p2pwatch.adapters.driven.observability.prometheus_metrics_recorder import (
     PrometheusMetricsRecorder,
     start_metrics_server,
@@ -90,6 +89,7 @@ from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
 from p2pwatch.application.steps.download_loop import DownloadLoopDeps, download_loop
+from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.record_observations import record_observation
 from p2pwatch.application.steps.reevaluate_catalog import reevaluate_catalog
 from p2pwatch.application.steps.reevaluate_if_policy_changed import reevaluate_if_policy_changed
@@ -321,6 +321,7 @@ class CrawlerComposition(CrawlerRunner):
                 apprise_factory=apprise.Apprise,
             )
             event_emitter = ObservabilityDispatcher(
+                logger=StdlibLogger(ObservabilityDispatcher.__module__),
                 metrics_recorder=PrometheusMetricsRecorder(registry),
                 notifier=notifier,
                 notification_timeout_seconds=observability.notification_timeout_seconds,

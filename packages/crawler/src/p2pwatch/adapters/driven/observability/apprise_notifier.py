@@ -7,7 +7,7 @@ to the first group and as is to the second, since apprise sends one message to e
 tag. Every message is markdown (a Discord embed) with every ``@`` neutralised, and both groups
 share an asset naming the node (spec discord-embed-notifications §4). No URL → natural no-op
 (apprise with no service returns ``None``). ``apprise_factory`` builds a group: ``apprise.Apprise``
-from the composition. The timeout/error absorption live in the dispatcher (E-D13).
+from the composition. The timeout/error absorption live in the dispatch step (E-D13).
 
 DECISION (audit 2026-06-23 / security-network#2): the apprise egress (Slack, Discord, SMTP,
 etc. webhooks) traverses the crawler's HOST network, not the VPN. The packaging spec accepts this
