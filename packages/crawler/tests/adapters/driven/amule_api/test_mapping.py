@@ -19,7 +19,7 @@ from p2pwatch.domain.download.states import FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import ReportedFile
-from p2pwatch.domain.source import SourceKey, SourceReading, SourceRole
+from p2pwatch.domain.source import ContactPoint, SourceKey, SourceReading, SourceRole
 from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus
 
 _HASH = "8b54a3c20fae9e4b9f7e0c2c8c01b6b1"
@@ -457,7 +457,7 @@ def test_a_source_maps_to_a_reading_of_its_row_and_its_detail() -> None:
         source_name="AnimuseeFMR",
         software="emule 0.50a",
         role=SourceRole.QUEUED,
-        contact_point="176.103.48.36:4184",
+        contact_point=ContactPoint(Network.ED2K, "176.103.48.36:4184"),
         connectable=True,
         raw_metadata=(
             ("ident_state", "identified"),
@@ -632,7 +632,7 @@ def test_a_meta_value_is_kept_in_a_shape_the_catalog_stores(
 @pytest.mark.parametrize(
     ("server_ip", "server_port", "contact_point"),
     [
-        ("176.103.48.36", 4184, "176.103.48.36:4184"),
+        ("176.103.48.36", 4184, ContactPoint(Network.ED2K, "176.103.48.36:4184")),
         (None, None, None),
         ("176.103.48.36", None, None),
         (None, 4184, None),
@@ -642,9 +642,9 @@ def test_a_meta_value_is_kept_in_a_shape_the_catalog_stores(
     ],
 )
 def test_a_sources_contact_point_is_its_server_as_ip_and_port(
-    server_ip: str | None, server_port: object, contact_point: str | None
+    server_ip: str | None, server_port: object, contact_point: ContactPoint | None
 ) -> None:
-    """D3: anything but an eD2k ``ip:port`` reads unknown, since the writer refuses it."""
+    """D3: anything but an eD2k ``ip:port`` reads unknown."""
     detail = _client_detail(server_ip=server_ip, server_port=server_port)
 
     assert map_source(_client_row(), detail).contact_point == contact_point
