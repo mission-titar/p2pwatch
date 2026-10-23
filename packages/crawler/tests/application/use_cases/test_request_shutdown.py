@@ -9,5 +9,5 @@ def test_a_shutdown_request_reaches_the_run_state() -> None:
 
     RequestShutdown(run_state).request_shutdown()
 
-    assert run_state.shutdown_requested
+    assert run_state.is_shutdown_requested()
     assert not run_state.is_paused()

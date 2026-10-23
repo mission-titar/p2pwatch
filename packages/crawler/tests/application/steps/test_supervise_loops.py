@@ -5,6 +5,7 @@ import asyncio
 import pytest
 
 from p2pwatch.application.steps.supervise_loops import supervise_loops
+from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 
 
 class _BlockedLoop:
@@ -31,19 +32,19 @@ async def _fails() -> None:
 @pytest.mark.asyncio
 async def test_a_stop_without_a_signal_arms_the_bound_before_cancelling_every_loop() -> None:
     events: list[str] = []
-    shutdown = asyncio.Event()
+    run_state = FakeRunStateStore()
     search, status = _BlockedLoop("search", events), _BlockedLoop("status", events)
     supervision = asyncio.create_task(
         supervise_loops(
             [search.run, status.run],
-            shutdown=shutdown,
+            run_state_reader=run_state,
             arm_shutdown_bound=lambda: events.append("armed"),
         )
     )
     await search.started.wait()
     await status.started.wait()
 
-    shutdown.set()  # as the webui's restart button does: no signal involved
+    run_state.set_shutdown_requested()  # as the webui's restart button does: no signal involved
     await asyncio.wait_for(supervision, 1.0)
 
     assert events[0] == "armed"
@@ -53,7 +54,7 @@ async def test_a_stop_without_a_signal_arms_the_bound_before_cancelling_every_lo
 @pytest.mark.asyncio
 async def test_a_loop_that_ends_neither_stops_the_others_nor_arms_the_bound() -> None:
     events: list[str] = []
-    shutdown = asyncio.Event()
+    run_state = FakeRunStateStore()
     status = _BlockedLoop("status", events)
     ended = asyncio.Event()
 
@@ -63,7 +64,7 @@ async def test_a_loop_that_ends_neither_stops_the_others_nor_arms_the_bound() ->
     supervision = asyncio.create_task(
         supervise_loops(
             [end_at_once, status.run],
-            shutdown=shutdown,
+            run_state_reader=run_state,
             arm_shutdown_bound=lambda: events.append("armed"),
         )
     )
@@ -72,7 +73,7 @@ async def test_a_loop_that_ends_neither_stops_the_others_nor_arms_the_bound() ->
 
     assert not supervision.done()
     assert events == []
-    shutdown.set()
+    run_state.set_shutdown_requested()
     await asyncio.wait_for(supervision, 1.0)
     assert events == ["armed", "status cancelled"]
 
@@ -85,7 +86,7 @@ async def test_a_failing_loop_escapes_as_an_exception_group_without_arming_the_b
     with pytest.RaisesGroup(pytest.RaisesExc(ValueError, match="a worker crashed")):
         await supervise_loops(
             [status.run, _fails],
-            shutdown=asyncio.Event(),
+            run_state_reader=FakeRunStateStore(),
             arm_shutdown_bound=lambda: events.append("armed"),
         )
 

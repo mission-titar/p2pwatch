@@ -1,6 +1,6 @@
-import asyncio
 from datetime import timedelta
 
+from p2pwatch.application.ports.driven.run_state_writer import RunStateWriter
 from p2pwatch.domain.client_errors import ClientError
 from p2pwatch.domain.status_reading import ClientStatus
 from tests.fakes.adapters.driven.fake_status_client import FakeStatusClient
@@ -13,10 +13,10 @@ class FakeSteppedStatusClient(FakeStatusClient):
     def __init__(
         self,
         readings: list[ClientStatus | ClientError],
-        shutdown: asyncio.Event,
+        run_state: RunStateWriter,
         fake_time: FakeTime,
     ) -> None:
-        super().__init__(readings, shutdown)
+        super().__init__(readings, run_state)
         self._fake_time = fake_time
         self._calls = 0
 
