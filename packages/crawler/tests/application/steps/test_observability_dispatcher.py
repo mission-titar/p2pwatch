@@ -47,7 +47,7 @@ def _dispatcher(
 async def test_logs_and_applies_metrics_no_audience() -> None:
     metrics_recorder, notifier = FakeMetricsRecorder(), FakeNotifier()
     await _dispatcher(metrics_recorder, notifier).dispatch(
-        ev.ObservationRecorded(client_name="amuled", channel="ed2k"), _NODE
+        ev.ObservationRecorded(client_name="amuled", channel="ed2k")
     )
     assert [m.name.value for m in metrics_recorder.applied] == ["p2pwatch_observations"]
     assert notifier.calls == []  # ObservationRecorded has no audience
@@ -59,8 +59,7 @@ async def test_two_metrics_one_event() -> None:
     await _dispatcher(metrics_recorder, notifier).dispatch(
         ev.ChannelStatusSampled(
             client_name="amuled", channel="kad", connected=True, connectable=True
-        ),
-        _NODE,
+        )
     )
     assert [m.name.value for m in metrics_recorder.applied] == [
         "p2pwatch_channel_connected",
@@ -69,10 +68,10 @@ async def test_two_metrics_one_event() -> None:
 
 
 @pytest.mark.asyncio
-async def test_relays_the_log_line_when_there_is_no_separate_body() -> None:
+async def test_relays_the_log_line_under_the_events_node() -> None:
     metrics_recorder, notifier = FakeMetricsRecorder(), FakeNotifier()
     await _dispatcher(metrics_recorder, notifier).dispatch(
-        ev.CrawlerStarted(download_enabled=True), _NODE
+        ev.CrawlerStarted(download_enabled=True, node_id=_NODE)
     )
     assert notifier.calls == [
         (Audience.OPERATIONS, RelayedLogLine("🟢 node online (download on)", Severity.INFO, _NODE))
@@ -87,8 +86,7 @@ async def test_logs_the_message_but_notifies_the_plans_notification() -> None:
     await _dispatcher(FakeMetricsRecorder(), notifier, logger).dispatch(
         ev.DecisionsRecorded(
             FileKey(Network.ED2K, "a" * 32), "Keroro 062.avi", 1024, (change,), _NODE
-        ),
-        _NODE,
+        )
     )
     assert logger.lines[-1].message.startswith("decisions for Keroro 062.avi")
     assert notifier.calls == [
@@ -110,7 +108,7 @@ async def test_logs_the_message_but_notifies_the_plans_notification() -> None:
 async def test_log_level_matches_severity() -> None:
     logger = FakeLogger()
     await _dispatcher(FakeMetricsRecorder(), FakeNotifier(), logger).dispatch(
-        ev.ClientUnreachable("amuled"), _NODE
+        ev.ClientUnreachable("amuled")
     )
     assert [line.level for line in logger.lines] == ["warning"]
 
@@ -136,7 +134,7 @@ def test_each_severity_logs_at_its_level(
 @pytest.mark.asyncio
 async def test_notification_failure_is_absorbed() -> None:
     logger, metrics_recorder = FakeLogger(), FakeMetricsRecorder()
-    await _dispatcher(metrics_recorder, FakeRaisingNotifier(), logger).dispatch(_COMPLETED, _NODE)
+    await _dispatcher(metrics_recorder, FakeRaisingNotifier(), logger).dispatch(_COMPLETED)
     assert metrics_recorder.applied  # the metric went through despite the notification failure
     assert logger.lines[-1] == LoggedLine("warning", "notification community failed (canal mort)")
 
@@ -145,7 +143,5 @@ async def test_notification_failure_is_absorbed() -> None:
 async def test_notification_timeout_is_absorbed() -> None:
     metrics_recorder = FakeMetricsRecorder()
     # short timeout + hanging notifier → wait_for raises TimeoutError, absorbed.
-    await _dispatcher(metrics_recorder, FakeHangingNotifier(), timeout=0.01).dispatch(
-        _COMPLETED, _NODE
-    )
+    await _dispatcher(metrics_recorder, FakeHangingNotifier(), timeout=0.01).dispatch(_COMPLETED)
     assert metrics_recorder.applied

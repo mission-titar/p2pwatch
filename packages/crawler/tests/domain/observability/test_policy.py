@@ -12,6 +12,7 @@ from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction
 from p2pwatch.domain.observability import events as ev
 from p2pwatch.domain.observability.notification import (
     CompletedDownload,
+    RelayedLogLine,
     SourceAlert,
     SourceAlertKind,
     TierRise,
@@ -36,6 +37,15 @@ _SOURCE = SourceKey(Network.ED2K, "1f2e3d4c" * 4)
 _FILE = FileKey(Network.ED2K, "8f3a1c0b9e7d44a2b6c1f0e9d8a7b6c5")
 _062A = (ev.TargetTitle("062A", "Les demoiselles cambrioleuses"),)
 _NODE = "titar-node-1"
+
+
+def _relayed(
+    severity: Severity, message: str, metrics: tuple[MetricInstruction, ...] = ()
+) -> ObservabilityPlan:
+    """An operations plan: its log line relayed under the event's node."""
+    return ObservabilityPlan(
+        severity, message, metrics, _OPERATIONS, RelayedLogLine(message, severity, _NODE)
+    )
 
 
 CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
@@ -112,35 +122,43 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
     ),
     (
         ev.ChannelDegraded(
-            client_name="amuled", channel="ed2k", field="connected", degraded_for_seconds=300.0
+            client_name="amuled",
+            channel="ed2k",
+            field="connected",
+            degraded_for_seconds=300.0,
+            node_id=_NODE,
         ),
-        ObservabilityPlan(
-            Severity.WARNING, "amuled ed2k: off its network for 5 min", (), _OPERATIONS
-        ),
+        _relayed(Severity.WARNING, "amuled ed2k: off its network for 5 min"),
     ),
     (
         ev.ChannelDegraded(
-            client_name="amuled", channel="kad", field="connectable", degraded_for_seconds=300.0
+            client_name="amuled",
+            channel="kad",
+            field="connectable",
+            degraded_for_seconds=300.0,
+            node_id=_NODE,
         ),
-        ObservabilityPlan(
-            Severity.WARNING, "amuled kad: not connectable for 5 min", (), _OPERATIONS
+        _relayed(Severity.WARNING, "amuled kad: not connectable for 5 min"),
+    ),
+    (
+        ev.ChannelRecovered(client_name="amuled", channel="ed2k", field="connected", node_id=_NODE),
+        _relayed(Severity.INFO, "amuled ed2k: back on its network"),
+    ),
+    (
+        ev.ChannelRecovered(
+            client_name="amuled", channel="kad", field="connectable", node_id=_NODE
         ),
+        _relayed(Severity.INFO, "amuled kad: connectable again"),
     ),
     (
-        ev.ChannelRecovered(client_name="amuled", channel="ed2k", field="connected"),
-        ObservabilityPlan(Severity.INFO, "amuled ed2k: back on its network", (), _OPERATIONS),
+        ev.ClientUnreachableLasting(
+            client_name="amuled", unreachable_for_seconds=120.0, node_id=_NODE
+        ),
+        _relayed(Severity.WARNING, "amuled unreachable for 2 min"),
     ),
     (
-        ev.ChannelRecovered(client_name="amuled", channel="kad", field="connectable"),
-        ObservabilityPlan(Severity.INFO, "amuled kad: connectable again", (), _OPERATIONS),
-    ),
-    (
-        ev.ClientUnreachableLasting(client_name="amuled", unreachable_for_seconds=120.0),
-        ObservabilityPlan(Severity.WARNING, "amuled unreachable for 2 min", (), _OPERATIONS),
-    ),
-    (
-        ev.ClientReachableAgain(client_name="amuled"),
-        ObservabilityPlan(Severity.INFO, "amuled reachable again", (), _OPERATIONS),
+        ev.ClientReachableAgain(client_name="amuled", node_id=_NODE),
+        _relayed(Severity.INFO, "amuled reachable again"),
     ),
     (
         ev.FreeSpaceSampled(free_bytes=5_000),
@@ -151,30 +169,26 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ),
     ),
     (
-        ev.DiskSpaceLow(free_bytes=3 * 2**29, min_free_bytes=10 * 2**30),
-        ObservabilityPlan(
+        ev.DiskSpaceLow(free_bytes=3 * 2**29, min_free_bytes=10 * 2**30, node_id=_NODE),
+        _relayed(
             Severity.WARNING,
             "download disk low: 1.5 GiB free, under the 10.0 GiB floor (no new download)",
-            (),
-            _OPERATIONS,
         ),
     ),
     (
-        ev.CrawlerStarted(download_enabled=True),
-        ObservabilityPlan(
+        ev.CrawlerStarted(download_enabled=True, node_id=_NODE),
+        _relayed(
             Severity.INFO,
             "🟢 node online (download on)",
             (MetricInstruction(MetricName.CRAWLER_UP, "set", (), 1.0),),
-            _OPERATIONS,
         ),
     ),
     (
-        ev.CrawlerStarted(download_enabled=False),
-        ObservabilityPlan(
+        ev.CrawlerStarted(download_enabled=False, node_id=_NODE),
+        _relayed(
             Severity.INFO,
             "🟢 node online (download off)",
             (MetricInstruction(MetricName.CRAWLER_UP, "set", (), 1.0),),
-            _OPERATIONS,
         ),
     ),
     (

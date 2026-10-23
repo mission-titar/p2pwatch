@@ -62,6 +62,4 @@ class RelayedLogLine:
     node_id: str
 
 
-type CommunityNotification = TierRise | SourceAlert | CompletedDownload
-
-type Notification = CommunityNotification | RelayedLogLine
+type Notification = TierRise | SourceAlert | CompletedDownload | RelayedLogLine

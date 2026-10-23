@@ -56,8 +56,7 @@ async def _record_completion(
             best_filename(deps, file),
             target_titles(deps, file) or (TargetTitle("unknown", ""),),
             node_id,
-        ),
-        node_id,
+        )
     )
     deps.logger.info("file=%s completed", file.native_id)
 

@@ -8,8 +8,7 @@ from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.metrics_recorder import MetricsRecorder
 from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.domain.observability.events import Event
-from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
-from p2pwatch.domain.observability.policy import ObservabilityPlan, plan_observability
+from p2pwatch.domain.observability.policy import plan_observability
 from p2pwatch.domain.observability.severity import Severity
 
 
@@ -28,13 +27,6 @@ def log_at_severity(logger: Logger, severity: Severity, message: str) -> None:
             assert_never(severity)
 
 
-def _notification(plan: ObservabilityPlan, node_id: str) -> Notification:
-    """The plan's community notification, else its log line relayed."""
-    if plan.notification is not None:
-        return plan.notification
-    return RelayedLogLine(plan.message, plan.severity, node_id)
-
-
 class ObservabilityDispatcher:
     """One dispatch point, three outputs: the log line, the metrics, the notifications."""
 
@@ -51,15 +43,17 @@ class ObservabilityDispatcher:
         self._notifier = notifier
         self._notification_timeout_seconds = notification_timeout_seconds
 
-    async def dispatch(self, event: Event, node_id: str) -> None:
+    async def dispatch(self, event: Event) -> None:
         plan = plan_observability(event)
         log_at_severity(self._logger, plan.severity, plan.message)
         for instruction in plan.metrics:
             self._metrics_recorder.apply(instruction)
+        if plan.notification is None:
+            return
         for audience in plan.audiences:
             try:
                 await asyncio.wait_for(
-                    self._notifier.notify(audience, _notification(plan, node_id)),
+                    self._notifier.notify(audience, plan.notification),
                     timeout=self._notification_timeout_seconds,
                 )
             except Exception as error:  # noqa: BLE001 (notifications NEVER break the crawl, E-D13)
