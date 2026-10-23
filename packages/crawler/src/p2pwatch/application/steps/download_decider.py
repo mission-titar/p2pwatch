@@ -62,7 +62,7 @@ async def queue_new_candidates(deps: DownloadDeps, outstanding_bytes: int, node_
         deps.tracked_download_writer.record_queued(
             candidate.file, candidate.target_id, size_bytes, deps.wall_clock.now()
         )
-        deps.loss_deadline_by_file[candidate.file] = deps.monotonic_clock.now() + deps.lost_after
+        deps.download_tracker.reset_loss_deadline(candidate.file)
         outstanding_bytes += size_bytes  # the client does not list it yet
         deps.logger.info("candidate file=%s queued for download", candidate.file.native_id)
         await deps.observability_dispatcher.dispatch(DownloadQueued(target_id=candidate.target_id))

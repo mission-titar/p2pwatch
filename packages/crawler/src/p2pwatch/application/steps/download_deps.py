@@ -17,9 +17,9 @@ from p2pwatch.application.ports.driven.source_point_writer import SourcePointWri
 from p2pwatch.application.ports.driven.tracked_download_reader import TrackedDownloadReader
 from p2pwatch.application.ports.driven.tracked_download_writer import TrackedDownloadWriter
 from p2pwatch.application.ports.driven.wall_clock import WallClock
+from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.edge_state import EdgeState
-from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 
 
@@ -43,7 +43,6 @@ class DownloadDeps:
     targets: Sequence[TargetSegment]
     free_space_meter: FreeSpaceMeter
     min_free_bytes: int
-    lost_after: timedelta
     poll_interval_seconds: float
     reappeared_after: timedelta
     sources_interval: timedelta
@@ -52,10 +51,7 @@ class DownloadDeps:
     monotonic_clock: MonotonicClock
     observability_dispatcher: ObservabilityDispatcher
     logger: Logger
+    download_tracker: DownloadTracker
     disk_low_edge: EdgeState = field(default_factory=EdgeState, kw_only=True)  # low-disk warning
     # The sources step's last start.
     sources_read_at: MonotonicInstant | None = field(default=None, kw_only=True)
-    # Each queued or downloading download's instant from which it counts as lost.
-    loss_deadline_by_file: dict[FileKey, MonotonicInstant] = field(
-        default_factory=dict, kw_only=True
-    )

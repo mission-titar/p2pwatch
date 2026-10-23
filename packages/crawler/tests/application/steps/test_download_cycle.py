@@ -63,47 +63,6 @@ async def test_store_error_is_absorbed() -> None:
 
 
 @pytest.mark.asyncio
-async def test_monitor_store_error_still_promotes_completions_in_same_cycle() -> None:
-    # Regression logic-download#2: if ``reconcile_states`` raises ``StoreError`` (set_state
-    # down on another hash), the old code set ``states={}`` then called ``handle_completions``
-    # → each shared hash → ``states.get(...) is None`` → ignored → NO completion recorded
-    # in the whole cycle (latency +1 cycle although we already have the signal). The fix re-reads
-    # ``read_tracked_states()`` BEFORE ``handle_completions`` so the completions are seen.
-    client = FakeDownloadClient(
-        # HASH_A completed: the completion must be recorded in this very cycle. HASH_B is listed and
-        # fails its set_state transition.
-        listed=[(status(HASH_B), status(HASH_A, completed=True))],
-    )
-    tracked_download_store = FakeTrackedDownloadStore(fail_set_state_for={HASH_B})
-    # HASH_A already DOWNLOADING (no transition by reconcile_states); HASH_B QUEUED → it will try
-    # set_state(HASH_B, DOWNLOADING) which raises → step 1 crashes, but HASH_A is completed.
-    tracked_download_store.states[HASH_A] = DownloadState.DOWNLOADING
-    tracked_download_store.states[HASH_B] = DownloadState.QUEUED
-    deps = build_deps(
-        client=client,
-        tracked_download_store=tracked_download_store,
-    )
-    await run_download_cycle(deps, NODE)
-    # HASH_A's completion is recorded despite the failure of reconcile_states on HASH_B
-    assert tracked_download_store.states[HASH_A] is DownloadState.COMPLETED
-
-
-@pytest.mark.asyncio
-async def test_tracked_states_store_failure_is_absorbed_at_step_2() -> None:
-    # ``read_tracked_states`` that raises IN A LOOP (persistent store failure): step 1 absorbs, then
-    # the re-read of step 2 (logic-download#2) absorbs in turn → the cycle ends without
-    # crashing the loop (the next cycle will replay). We exercise HERE the branch
-    # ``except StoreError`` of step 2 separately from that of step 1.
-    client = FakeDownloadClient()
-    tracked_download_store = FakeTrackedDownloadStore(fail_tracked_states=True)
-    deps = build_deps(
-        client=client,
-        tracked_download_store=tracked_download_store,
-    )
-    await run_download_cycle(deps, NODE)  # does not raise (both StoreError are absorbed)
-
-
-@pytest.mark.asyncio
 async def test_start_unreachable_keeps_queued_and_is_tolerated() -> None:
     # start raises ClientUnreachableError → tolerated at cycle level; the download stays QUEUED
     # (record_queued already happened) → caught up next round. write-before-network invariant.
@@ -280,22 +239,6 @@ async def test_start_store_failure_is_tolerated_and_does_not_raise() -> None:
         observation_reader=observation_reader,
     )
     await run_download_cycle(deps, NODE)  # does NOT raise (step-4 StoreError tolerated)
-
-
-@pytest.mark.asyncio
-async def test_presence_store_failure_is_absorbed_and_candidates_still_run() -> None:
-    client = FakeDownloadClient()
-    tracked_download_store = FakeTrackedDownloadStore(fail_set_seen=True)
-    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
-    observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "x", 100)})
-    deps = build_deps(
-        client=client,
-        tracked_download_store=tracked_download_store,
-        decision_reader=decision_reader,
-        observation_reader=observation_reader,
-    )
-    await run_download_cycle(deps, NODE)  # does not raise
-    assert tracked_download_store.states[HASH_A] is DownloadState.QUEUED
 
 
 @pytest.mark.asyncio

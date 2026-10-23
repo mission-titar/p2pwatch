@@ -20,11 +20,6 @@ abandoned.
 from p2pwatch.application.steps.download_decider import queue_new_candidates
 from p2pwatch.application.steps.download_deps import DownloadDeps
 from p2pwatch.application.steps.download_starter import start_unlisted
-from p2pwatch.application.steps.download_tracker import (
-    fail_lost,
-    handle_completions,
-    reconcile_states,
-)
 from p2pwatch.application.steps.source_watcher import record_sources
 from p2pwatch.domain.client_errors import ClientUnreachableError, ReadRejectedError
 from p2pwatch.domain.store_error import StoreError
@@ -70,33 +65,9 @@ async def run_download_cycle(deps: DownloadDeps, node_id: str) -> None:
     outstanding_bytes = sum(
         max(status.size_bytes - status.bytes_done, 0) for status in listed_statuses
     )
-    # Step 1 - RECONCILE: NO client I/O left (the list came from step 0) → only StoreError.
-    # Every step shares that ONE snapshot: a second read could only contradict the first.
-    try:
-        states = deps.tracked_download_reader.read_tracked_states()
-        await reconcile_states(deps, states, listed_statuses)
-    except StoreError as error:
-        deps.logger.error(
-            "download reconciliation store failure (%s): step skipped, continues", error
-        )
-    # Step 2 - COMPLETIONS: we RE-READ ``read_tracked_states`` FRESHLY (logic-download#2). Without
-    # it, a failure in step 1 left ``states`` frozen/empty → every completed file → ``states.get is
-    # None`` → ignored → NO completion recorded the entire cycle. The re-read is also better
-    # aligned than ``states={}`` with the nominal case (fresh states), at the cost of one extra
-    # store call (idempotent). A failure of the re-read itself is caught downstream.
-    # Steps 2 & 3 - NO client I/O → only StoreError possible, ISOLATED per step (I2):
-    # a store failure in one must NOT prevent the other from running.
-    try:
-        fresh_states = deps.tracked_download_reader.read_tracked_states()
-        await handle_completions(deps, fresh_states, listed_statuses, node_id)
-    except StoreError as error:
-        deps.logger.error("download completions store failure (%s): step skipped, continues", error)
-    # Step 2b - PRESENCE + LOSS: ``latest_seen_at`` is for the next start; loss is measured here.
-    try:
-        deps.tracked_download_writer.set_seen(listed_statuses, deps.wall_clock.now())
-        fail_lost(deps, listed_files)
-    except StoreError as error:
-        deps.logger.error("download presence store failure (%s): step skipped, continues", error)
+    # Steps 1, 2 and 2b - STATES, COMPLETIONS, PRESENCE + LOSS: only StoreError, isolated inside.
+    await deps.download_tracker.track(listed_statuses, node_id)
+    # Step 3 - CANDIDATES: NO client I/O → a StoreError or the disk's OSError, isolated (I2).
     try:
         await queue_new_candidates(deps, outstanding_bytes, node_id)
     except StoreError as error:

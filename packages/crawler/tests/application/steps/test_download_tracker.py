@@ -254,7 +254,6 @@ async def test_a_download_amuled_no_longer_knows_becomes_failed() -> None:
     await run_download_cycle(deps, NODE)
     assert tracked_download_store.states[HASH_A] is DownloadState.FAILED
     assert tracked_download_store.failures[HASH_A] is FailureReason.LOST
-    assert deps.loss_deadline_by_file == {}
     assert client.started == []  # failed by the TTL: never started again
     assert (
         LoggedLine("warning", f"file={HASH_A} unseen by the client for 3600.0s: marked failed")
@@ -278,8 +277,8 @@ async def test_each_download_write_carries_the_instant_read_right_before_it() ->
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
+        wall_clock=wall_clock,
     )
-    deps.wall_clock = wall_clock
     await run_download_cycle(deps, NODE)
     minute = timedelta(minutes=1)
     assert tracked_download_store.completed_at == {HASH_A: start + minute}
@@ -423,19 +422,77 @@ async def test_a_download_the_node_queued_is_lost_after_lost_after_of_monotonic_
 
 
 @pytest.mark.asyncio
-async def test_a_row_the_operator_deleted_leaves_the_loss_deadlines() -> None:
+async def test_a_row_the_operator_deleted_then_queued_again_waits_lost_after_anew() -> None:
     fake_time = FakeTime()
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.record_queued(key(HASH_A), "062A", 10, fake_time.wall.now())
     deps = build_deps(
-        client=FakeDownloadClient(listed=[(status(HASH_A),), ()]),
+        client=FakeDownloadClient(listed=[(status(HASH_A),)]),
         tracked_download_store=tracked_download_store,
         fake_time=fake_time,
     )
-    await run_download_cycle(deps, NODE)
-    assert deps.loss_deadline_by_file == {
-        key(HASH_A): fake_time.monotonic.now() + timedelta(days=1)
-    }
+    await run_download_cycle(deps, NODE)  # listed: lost a day from now
     del tracked_download_store.states[HASH_A]  # for a manual retry
     await run_download_cycle(deps, NODE)
-    assert deps.loss_deadline_by_file == {}
+    fake_time.advance(timedelta(hours=12))
+    tracked_download_store.record_queued(key(HASH_A), "062A", 10, fake_time.wall.now())
+    fake_time.advance(timedelta(hours=12))
+    await run_download_cycle(deps, NODE)
+    assert tracked_download_store.states[HASH_A] is DownloadState.QUEUED
+
+
+@pytest.mark.asyncio
+async def test_monitor_store_error_still_promotes_completions_in_same_cycle() -> None:
+    # Regression logic-download#2: if ``reconcile_states`` raises ``StoreError`` (set_state
+    # down on another hash), the old code set ``states={}`` then called ``handle_completions``
+    # → each shared hash → ``states.get(...) is None`` → ignored → NO completion recorded
+    # in the whole cycle (latency +1 cycle although we already have the signal). The fix re-reads
+    # ``read_tracked_states()`` BEFORE ``handle_completions`` so the completions are seen.
+    client = FakeDownloadClient(
+        # HASH_A completed: the completion must be recorded in this very cycle. HASH_B is listed and
+        # fails its set_state transition.
+        listed=[(status(HASH_B), status(HASH_A, completed=True))],
+    )
+    tracked_download_store = FakeTrackedDownloadStore(fail_set_state_for={HASH_B})
+    # HASH_A already DOWNLOADING (no transition by reconcile_states); HASH_B QUEUED → it will try
+    # set_state(HASH_B, DOWNLOADING) which raises → step 1 crashes, but HASH_A is completed.
+    tracked_download_store.states[HASH_A] = DownloadState.DOWNLOADING
+    tracked_download_store.states[HASH_B] = DownloadState.QUEUED
+    deps = build_deps(
+        client=client,
+        tracked_download_store=tracked_download_store,
+    )
+    await run_download_cycle(deps, NODE)
+    # HASH_A's completion is recorded despite the failure of reconcile_states on HASH_B
+    assert tracked_download_store.states[HASH_A] is DownloadState.COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_tracked_states_store_failure_is_absorbed_at_step_2() -> None:
+    # ``read_tracked_states`` that raises IN A LOOP (persistent store failure): step 1 absorbs, then
+    # the re-read of step 2 (logic-download#2) absorbs in turn → the cycle ends without
+    # crashing the loop (the next cycle will replay). We exercise HERE the branch
+    # ``except StoreError`` of step 2 separately from that of step 1.
+    client = FakeDownloadClient()
+    tracked_download_store = FakeTrackedDownloadStore(fail_tracked_states=True)
+    deps = build_deps(
+        client=client,
+        tracked_download_store=tracked_download_store,
+    )
+    await run_download_cycle(deps, NODE)  # does not raise (both StoreError are absorbed)
+
+
+@pytest.mark.asyncio
+async def test_presence_store_failure_is_absorbed_and_candidates_still_run() -> None:
+    client = FakeDownloadClient()
+    tracked_download_store = FakeTrackedDownloadStore(fail_set_seen=True)
+    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
+    observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "x", 100)})
+    deps = build_deps(
+        client=client,
+        tracked_download_store=tracked_download_store,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
+    )
+    await run_download_cycle(deps, NODE)  # does not raise
+    assert tracked_download_store.states[HASH_A] is DownloadState.QUEUED
