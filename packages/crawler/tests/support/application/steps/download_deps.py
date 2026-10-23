@@ -92,6 +92,7 @@ def build_deps(
     sources: FakeSourcePointStore | SqliteSourcePointStore | None = None,
     fake_time: FakeTime | None = None,
     sources_interval: timedelta = timedelta(seconds=30),
+    time_between_source_reads: timedelta = timedelta(seconds=60),
     logger: FakeLogger | None = None,
 ) -> DownloadDeps:
     fake_time = fake_time or FakeTime()
@@ -112,6 +113,7 @@ def build_deps(
         poll_interval_seconds=30.0,
         reappeared_after=timedelta(hours=12),
         sources_interval=sources_interval,
+        time_between_source_reads=time_between_source_reads,
         wall_clock=fake_time.wall,
         monotonic_clock=fake_time.monotonic,
         event_emitter=event_emitter or FakeEventEmitter(),

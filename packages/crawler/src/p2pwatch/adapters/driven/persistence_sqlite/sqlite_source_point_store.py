@@ -13,15 +13,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
 from p2pwatch.application.ports.driven.source_point_reader import SourcePointReader
 from p2pwatch.application.ports.driven.source_point_writer import SourcePointWriter
 from p2pwatch.domain.file_key import FileKey
-from p2pwatch.domain.source import (
-    LatestPoint,
-    RecordedReading,
-    SourceKey,
-    SourceReading,
-    SourceRole,
-    carried_role,
-    carried_role_max_age,
-)
+from p2pwatch.domain.source import LatestPoint, SourceKey, SourcePoint, SourceReading, SourceRole
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _MICROSECOND = timedelta(microseconds=1)
@@ -90,44 +82,28 @@ SELECT EXISTS (
 
 
 class SqliteSourcePointStore(SourcePointWriter, SourcePointReader):
-    """SQLite implementation of the source points' ports.
+    """SQLite implementation of the source points' ports."""
 
-    ``time_between_reads`` is what the carried role's max age assumes (D3)."""
-
-    def __init__(self, connection: sqlite3.Connection, time_between_reads: timedelta) -> None:
+    def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
-        self._carried_role_max_age = carried_role_max_age(time_between_reads)
 
-    def record_readings(
-        self, file: FileKey, readings: Sequence[SourceReading], read_at: datetime, node_id: str
-    ) -> tuple[RecordedReading, ...]:
-        """ONE transaction; each reading kept, with its role, a carried one included."""
-        recorded: list[RecordedReading] = []
+    def record_points(self, points: Sequence[SourcePoint], node_id: str) -> None:
+        """ONE transaction."""
         with wrap_sqlite_errors():
             self._connection.execute("BEGIN IMMEDIATE")
             try:
-                for reading in readings:
-                    if reading.source is None and reading.source_name is None:
-                        continue  # nothing could tell it from the next one (D4)
-                    role = self._record(file, reading, read_at, node_id)
-                    recorded.append(RecordedReading(reading.source, reading.source_name, role))
+                for point in points:
+                    self._record(point, node_id)
                 self._connection.execute("COMMIT")
             except BaseException:
                 with suppress(sqlite3.Error):
                     self._connection.execute("ROLLBACK")
                 raise
-        return tuple(recorded)
 
-    def _record(
-        self, file: FileKey, reading: SourceReading, read_at: datetime, node_id: str
-    ) -> SourceRole:
-        """Writes the reading's variant and point; its role, a carried one included."""
-        role = reading.role
-        if role is None:
-            since = read_at - self._carried_role_max_age
-            latest = self.read_latest_point(file, reading, since, read_at, node_id)
-            role = carried_role(latest, reading)
-        variant = _variant_columns(file, reading, role, node_id)
+    def _record(self, point: SourcePoint, node_id: str) -> None:
+        """Writes the point's variant and the point."""
+        reading = point.reading
+        variant = _variant_columns(point, node_id)
         variant_content_hash = _content_hash(variant)
         if reading.source is not None:
             source = reading.source
@@ -137,9 +113,8 @@ class SqliteSourcePointStore(SourcePointWriter, SourcePointReader):
         self._connection.execute(_INSERT_VARIANT, (*variant, variant_content_hash))
         self._connection.execute(
             _INSERT_POINT,
-            (_micros(read_at), reading.session_received_bytes, variant_content_hash),
+            (_micros(point.observed_at), reading.session_received_bytes, variant_content_hash),
         )
-        return role
 
     def read_latest_point(
         self,
@@ -194,16 +169,15 @@ def _latest_point(role: str, observed_at: int, session_received_bytes: int) -> L
     )
 
 
-def _variant_columns(
-    file: FileKey, reading: SourceReading, role: SourceRole, node_id: str
-) -> tuple[bytes | str | bool | None, ...]:
+def _variant_columns(point: SourcePoint, node_id: str) -> tuple[bytes | str | bool | None, ...]:
     """The variant's columns in table order, ``raw_metadata`` a JSON object with sorted keys."""
+    reading = point.reading
     return (
-        file.file_id,
+        point.file.file_id,
         None if reading.source is None else reading.source.source_id,
         reading.source_name,
         reading.software,
-        role.value,
+        point.role.value,
         None if reading.contact_point is None else reading.contact_point.server,
         reading.connectable,
         json.dumps(dict(reading.raw_metadata), ensure_ascii=False, sort_keys=True),

@@ -418,9 +418,7 @@ class CrawlerComposition(CrawlerRunner):
             download_config = crawler_config.download
             if download_config is not None:
                 tracked_download_store = SqliteTrackedDownloadStore(local_connection)
-                source_point_store = SqliteSourcePointStore(
-                    catalog_connection, download_config.time_between_source_reads
-                )
+                source_point_store = SqliteSourcePointStore(catalog_connection)
                 download_deps = DownloadLoopDeps(
                     download_client=client,
                     source_client=client,
@@ -437,6 +435,7 @@ class CrawlerComposition(CrawlerRunner):
                     poll_interval_seconds=download_config.poll_interval_seconds,
                     reappeared_after=download_config.reappeared_after,
                     sources_interval=download_config.sources_interval,
+                    time_between_source_reads=download_config.time_between_source_reads,
                     wall_clock=wall_clock,
                     monotonic_clock=monotonic_clock,
                     event_emitter=event_emitter,
