@@ -213,7 +213,7 @@ flowchart TB
 ### Le crawler
 
 - **`domain/`** est **pur** : pas d'I/O, pas de `yaml`/DB/réseau/horloge/logging, aucune lecture
-  d'env. L'interpolation `${VAR}` dans `crawler.yml` est résolue par l'adapter de config **avant**
+  d'env. L'adapter de config résout `${VAR}` dans toute valeur texte de `crawler.yml` **avant**
   que quoi que ce soit n'atteigne le domaine.
 - **`application/`** orchestre les cas d'usage asynchrones en parlant à des **ports** (des ABC).
   Ses journaux passent eux aussi par un port, `Logger`, que `StdlibLogger` implémente sous le nom

@@ -36,7 +36,6 @@ from p2pwatch.adapters.driven.asyncio_monotonic_clock import AsyncioMonotonicClo
 from p2pwatch.adapters.driven.asyncio_run_state_store import AsyncioRunStateStore
 from p2pwatch.adapters.driven.asyncio_waker import AsyncioWaker
 from p2pwatch.adapters.driven.config.crawler_config import (
-    AMULE_CLIENT_NAME,
     CrawlerConfig,
     LoadedConfig,
     load_config,
@@ -116,6 +115,7 @@ from p2pwatch.application.use_cases.request_shutdown import RequestShutdown
 from p2pwatch.application.use_cases.resume_crawl import ResumeCrawl
 from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
+from p2pwatch.domain.config_defaults import AMULE_CLIENT_NAME
 from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.matching_read import MatchingExplainer
 

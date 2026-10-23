@@ -2,25 +2,44 @@
 
 import re
 from collections.abc import Mapping
+from typing import Any
 
 from p2pwatch.adapters.driven.config.errors import ConfigError
 
 _ENV_REFERENCE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 
-def interpolate(text: str, env: Mapping[str, str], error_label: str) -> str:
-    """Substitute each ``${NAME}`` in ``text`` with ``env[NAME]``.
+def interpolate_document(document: dict[str, Any], env: Mapping[str, str]) -> dict[str, Any]:
+    """``document`` with each ``${NAME}`` of every string value replaced by ``env[NAME]``.
 
-    Missing variable ⇒ ``ConfigError`` prefixed by ``error_label`` (spec D1).
-    No match ⇒ ``text`` returned as-is (lone ``$`` are left untouched).
+    The keys are left as they are: they name the schema. A lone ``$`` is left untouched.
     """
+    return {key: _interpolate_node(node, env, str(key)) for key, node in document.items()}
 
+
+def _interpolate_node(node: Any, env: Mapping[str, str], key_path: str) -> Any:
+    match node:
+        case str():
+            return _interpolate_text(node, env, key_path)
+        case dict():
+            return {
+                key: _interpolate_node(child, env, f"{key_path}.{key}")
+                for key, child in node.items()
+            }
+        case list():
+            return [
+                _interpolate_node(child, env, f"{key_path}[{index}]")
+                for index, child in enumerate(node)
+            ]
+        case _:
+            return node
+
+
+def _interpolate_text(text: str, env: Mapping[str, str], key_path: str) -> str:
     def _replace(match: re.Match[str]) -> str:
         name = match.group(1)
         if name not in env:
-            raise ConfigError(
-                f"{error_label}: environment variable {name!r} referenced but not set"
-            )
+            raise ConfigError(key_path, f"environment variable {name!r} referenced but not set")
         return env[name]
 
     return _ENV_REFERENCE.sub(_replace, text)
