@@ -2,6 +2,7 @@ from pathlib import PurePath
 
 from template_checks.application.ports.driving.logic_free_checker import LogicFreeReport
 from template_checks.application.use_cases.check_logic_free import CheckLogicFree
+from template_checks.domain.logic_constructs import RefusedNode
 from tests.fakes.adapters.driven.fake_template_reader import FakeTemplateReader
 
 
@@ -20,7 +21,10 @@ def test_check_logic_free_reports_the_constructs_of_the_directory_s_templates() 
     )
 
     assert logic_free_report == LogicFreeReport(
-        problems=("base.html:1: Or is not logic-free", "pages/node.html:1: If is not logic-free")
+        problems=(
+            RefusedNode(PurePath("base.html"), 1, "Or"),
+            RefusedNode(PurePath("pages/node.html"), 1, "If"),
+        )
     )
 
 

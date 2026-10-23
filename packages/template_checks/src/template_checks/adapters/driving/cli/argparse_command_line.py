@@ -1,13 +1,16 @@
 """The command line: parses a subcommand, calls its check, returns the exit code."""
 
 import argparse
+import sys
 from collections.abc import Sequence
-from pathlib import Path
+from pathlib import PurePath
 
 from template_checks.application.ports.driving.logic_free_checker import LogicFreeChecker
 from template_checks.application.ports.driving.template_attribute_lister import (
     TemplateAttributeLister,
 )
+from template_checks.domain.broken_input_error import BrokenInputError
+from template_checks.domain.logic_constructs import FilteredLoop, LogicConstruct
 
 
 class ArgparseCommandLine:
@@ -19,7 +22,7 @@ class ArgparseCommandLine:
         *,
         logic_free_checker: LogicFreeChecker,
         template_attribute_lister: TemplateAttributeLister,
-        cwd: Path,
+        cwd: PurePath,
     ) -> None:
         self._logic_free_checker = logic_free_checker
         self._template_attribute_lister = template_attribute_lister
@@ -42,18 +45,22 @@ class ArgparseCommandLine:
                 "templates_directory", type=self._under_cwd, help="the templates directory"
             )
         args = parser.parse_args(argv)
-        if args.command == "logic-free":
-            return self._check_logic_free(args.templates_directory)
-        return self._list_template_attributes(args.templates_directory)
+        try:
+            if args.command == "logic-free":
+                return self._check_logic_free(args.templates_directory)
+            return self._list_template_attributes(args.templates_directory)
+        except BrokenInputError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
 
-    def _check_logic_free(self, templates_directory: Path) -> int:
+    def _check_logic_free(self, templates_directory: PurePath) -> int:
         """Prints each problem of the report, returns 1 on any problem."""
         logic_free_report = self._logic_free_checker.check_logic_free(templates_directory)
         for problem in logic_free_report.problems:
-            print(problem)
+            print(_problem_line(problem))
         return 1 if logic_free_report.problems else 0
 
-    def _list_template_attributes(self, templates_directory: Path) -> int:
+    def _list_template_attributes(self, templates_directory: PurePath) -> int:
         """Prints the attribute names the templates read, sorted and comma-joined."""
         template_attribute_listing = self._template_attribute_lister.list_template_attributes(
             templates_directory
@@ -61,6 +68,17 @@ class ArgparseCommandLine:
         print(",".join(sorted(template_attribute_listing.template_attributes)))
         return 0
 
-    def _under_cwd(self, path: str) -> Path:
+    def _under_cwd(self, path: str) -> PurePath:
         """``path`` under ``cwd``, or as it is when absolute."""
         return self._cwd / path
+
+
+def _problem_line(logic_construct: LogicConstruct) -> str:
+    """The line naming *logic_construct*'s template, its line and the construct."""
+    construct = (
+        "For with an if filter"
+        if isinstance(logic_construct, FilteredLoop)
+        else logic_construct.node_type
+    )
+    location = f"{logic_construct.template_path.as_posix()}:{logic_construct.line_number}"
+    return f"{location}: {construct} is not logic-free"

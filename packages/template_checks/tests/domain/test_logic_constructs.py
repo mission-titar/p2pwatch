@@ -4,7 +4,12 @@ from pathlib import PurePath
 
 import pytest
 
-from template_checks.domain.logic_constructs import find_logic_constructs
+from template_checks.domain.broken_input_error import BrokenInputError
+from template_checks.domain.logic_constructs import (
+    FilteredLoop,
+    RefusedNode,
+    find_logic_constructs,
+)
 
 _PAGE = PurePath("page.html")
 
@@ -28,7 +33,7 @@ def test_a_logic_free_template_holds_no_logic_construct(template_text: str) -> N
 
 
 @pytest.mark.parametrize(
-    "template_text,construct",
+    "template_text,node_type",
     [
         ("{{ a ~ b }}", "Concat"),
         ("{{ a if b else c }}", "CondExpr"),
@@ -37,7 +42,6 @@ def test_a_logic_free_template_holds_no_logic_construct(template_text: str) -> N
         ("{{ a is defined }}", "Test"),
         ("{% with x = y %}{{ x }}{% endwith %}", "With"),
         ("{% call m() %}x{% endcall %}", "CallBlock"),
-        ("{% for f in files if f %}{% endfor %}", "For with an if filter"),
         ("{% if x %}a{% endif %}", "If"),
         ("{% set y = x %}", "Assign"),
         ("{% macro m() %}{% endmacro %}", "Macro"),
@@ -50,18 +54,22 @@ def test_a_logic_free_template_holds_no_logic_construct(template_text: str) -> N
         ("{% include ['a.html', 'b.html'] %}", "List"),
     ],
 )
-def test_each_logic_construct_is_found_first_with_its_line(
-    template_text: str, construct: str
-) -> None:
-    problems = find_logic_constructs({_PAGE: f"<p>\n{template_text}"})
+def test_each_refused_node_is_found_first_with_its_line(template_text: str, node_type: str) -> None:
+    logic_constructs = find_logic_constructs({_PAGE: f"<p>\n{template_text}"})
 
-    assert problems[0] == f"page.html:2: {construct} is not logic-free"
+    assert logic_constructs[0] == RefusedNode(_PAGE, 2, node_type)
+
+
+def test_a_loop_with_an_if_filter_is_found_with_its_line() -> None:
+    logic_constructs = find_logic_constructs({_PAGE: "<p>\n{% for f in files if f %}{% endfor %}"})
+
+    assert logic_constructs == (FilteredLoop(_PAGE, 2),)
 
 
 def test_a_construct_inside_another_is_found_too() -> None:
     assert find_logic_constructs({_PAGE: "{% if x %}{{ a|upper }}{% endif %}"}) == (
-        "page.html:1: If is not logic-free",
-        "page.html:1: Filter is not logic-free",
+        RefusedNode(_PAGE, 1, "If"),
+        RefusedNode(_PAGE, 1, "Filter"),
     )
 
 
@@ -73,12 +81,11 @@ def test_the_constructs_of_every_template_are_found_under_their_relative_paths()
     }
 
     assert find_logic_constructs(templates_by_path) == (
-        "base.html:1: Or is not logic-free",
-        "pages/node.html:1: Neg is not logic-free",
+        RefusedNode(PurePath("base.html"), 1, "Or"),
+        RefusedNode(PurePath("pages/node.html"), 1, "Neg"),
     )
 
 
-def test_a_template_jinja_cannot_parse_is_a_problem_naming_its_error() -> None:
-    assert find_logic_constructs({_PAGE: "<p>\n{% elif x %}a"}) == (
-        "page.html:2: Encountered unknown tag 'elif'.",
-    )
+def test_a_template_jinja_cannot_parse_raises_a_broken_input_naming_it() -> None:
+    with pytest.raises(BrokenInputError, match=r"^page\.html:2: "):
+        find_logic_constructs({_PAGE: "<p>\n{% elif x %}a"})

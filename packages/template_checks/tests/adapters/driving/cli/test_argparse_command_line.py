@@ -1,16 +1,18 @@
 """The command line: one subcommand per check, over a templates directory taken under ``cwd``."""
 
-from pathlib import Path
+from pathlib import PurePath
 
 import pytest
 
 from template_checks.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
+from template_checks.domain.broken_input_error import BrokenInputError
+from template_checks.domain.logic_constructs import FilteredLoop, RefusedNode
 from tests.fakes.application.use_cases.fake_logic_free_checker import FakeLogicFreeChecker
 from tests.fakes.application.use_cases.fake_template_attribute_lister import (
     FakeTemplateAttributeLister,
 )
 
-_CWD = Path("/work")
+_CWD = PurePath("/work")
 
 
 def _command_line(
@@ -28,16 +30,17 @@ def test_logic_free_prints_each_problem_and_exits_1(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     logic_free_checker = FakeLogicFreeChecker(
-        "base.html:1: Or is not logic-free", "node.html:4: If is not logic-free"
+        RefusedNode(PurePath("base.html"), 1, "Or"), FilteredLoop(PurePath("pages/node.html"), 4)
     )
     command_line = _command_line(logic_free_checker=logic_free_checker)
 
     assert command_line.run(["logic-free", "templates"]) == 1
 
     assert capsys.readouterr().out == (
-        "base.html:1: Or is not logic-free\nnode.html:4: If is not logic-free\n"
+        "base.html:1: Or is not logic-free\n"
+        "pages/node.html:4: For with an if filter is not logic-free\n"
     )
-    assert logic_free_checker.templates_directories == [Path("/work/templates")]
+    assert logic_free_checker.templates_directories == [PurePath("/work/templates")]
 
 
 def test_logic_free_on_logic_free_templates_prints_nothing_and_exits_0(
@@ -57,7 +60,22 @@ def test_template_attributes_prints_the_attributes_sorted_and_comma_joined_and_e
     assert command_line.run(["template-attributes", "templates"]) == 0
 
     assert capsys.readouterr().out == "filename,size_mib\n"
-    assert template_attribute_lister.templates_directories == [Path("/work/templates")]
+    assert template_attribute_lister.templates_directories == [PurePath("/work/templates")]
+
+
+@pytest.mark.parametrize("command", ["logic-free", "template-attributes"])
+def test_a_broken_input_prints_its_error_on_one_line_and_exits_1(
+    command: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    broken_input = BrokenInputError("page.html:2: Encountered unknown tag 'elif'.")
+    command_line = _command_line(
+        FakeLogicFreeChecker(broken_input=broken_input),
+        FakeTemplateAttributeLister(broken_input=broken_input),
+    )
+
+    assert command_line.run([command, "templates"]) == 1
+
+    assert capsys.readouterr() == ("", "error: page.html:2: Encountered unknown tag 'elif'.\n")
 
 
 def test_an_absolute_templates_directory_is_taken_as_it_is() -> None:
@@ -66,7 +84,7 @@ def test_an_absolute_templates_directory_is_taken_as_it_is() -> None:
 
     command_line.run(["template-attributes", "/srv/templates"])
 
-    assert template_attribute_lister.templates_directories == [Path("/srv/templates")]
+    assert template_attribute_lister.templates_directories == [PurePath("/srv/templates")]
 
 
 @pytest.mark.parametrize("command", ["logic-free", "template-attributes"])
