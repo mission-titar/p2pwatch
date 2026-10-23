@@ -178,13 +178,14 @@ class CrawlerComposition(CrawlerRunner):
         status_reading_store: InMemoryStatusReadingStore,
         run_state_store: AsyncioRunStateStore,
         shutdown_requester: RequestShutdown,
+        engine: MatchingEngine,
         wall_clock: WallClock,
         monotonic_clock: MonotonicClock,
     ) -> None:
         """Start the read-only webui on its OWN thread + loop (spec §5). It shares with the crawler
-        the parsed config (immutable), the clocks (stateless), the status reading store (whole
-        snapshots swapped, never mutated) and the run state (every change scheduled on the
-        crawler's loop).
+        the parsed config (immutable), the engine and the clocks (no state after their
+        construction), the status reading store (whole snapshots swapped, never mutated) and the
+        run state (every change scheduled on the crawler's loop).
         It reads through its OWN ``ThreadReadConnections``, one connection per thread. Its stop is
         registered on ``stack`` so it runs during the normal LIFO unwind, AFTER the loops stop."""
         crawler_config = config.crawler_config
@@ -214,9 +215,7 @@ class CrawlerComposition(CrawlerRunner):
             file_describer=DescribeFile(
                 catalog_file_reader=catalog_file_reader,
                 source_reader=source_reader,
-                explainer=MatchingExplainer(
-                    matcher_config=config.matcher_config, targets=config.targets
-                ),
+                explainer=MatchingExplainer(engine=engine),
                 wall_clock=wall_clock,
                 source_period_gap=crawler_config.webui.source_period_gap,
             ),
@@ -318,6 +317,7 @@ class CrawlerComposition(CrawlerRunner):
                     status_reading_store=status_reading_store,
                     run_state_store=run_state_store,
                     shutdown_requester=shutdown_requester,
+                    engine=engine,
                     wall_clock=wall_clock,
                     monotonic_clock=monotonic_clock,
                 )
