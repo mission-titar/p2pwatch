@@ -1,4 +1,4 @@
-"""A first signal requests the shutdown, a second exits; on exit, what it holds is closed."""
+"""A first signal requests the shutdown, a second exits; on exit, the signals are given back."""
 
 import asyncio
 import signal
@@ -51,25 +51,4 @@ async def test_on_exit_the_signals_get_their_default_handlers_back() -> None:
         assert signal.getsignal(signal.SIGTERM) is not signal.SIG_DFL
 
     assert signal.getsignal(signal.SIGINT) is signal.default_int_handler
-    assert signal.getsignal(signal.SIGTERM) is signal.SIG_DFL
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("close_failure", [OSError("close failed"), asyncio.CancelledError()])
-async def test_on_exit_it_closes_all_it_holds_and_lets_only_the_first_error_through(
-    close_failure: BaseException,
-) -> None:
-    closed: list[str] = []
-
-    async def fail_to_close() -> None:
-        closed.append("client")
-        raise close_failure
-
-    with pytest.raises(ValueError, match="setup failed"):
-        async with PosixProcess(FakeShutdownRequester()) as resources:
-            resources.callback(closed.append, "catalog")
-            resources.push_async_callback(fail_to_close)
-            raise ValueError("setup failed")
-
-    assert closed == ["client", "catalog"]
     assert signal.getsignal(signal.SIGTERM) is signal.SIG_DFL

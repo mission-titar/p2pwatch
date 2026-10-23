@@ -46,7 +46,6 @@ class PortSyncComposition(PortSyncLoopRunner):
             forwarded_port_client=GluetunForwardedPortClient(
                 control_url=port_sync_settings.gluetun_control_url,
                 timeout_seconds=_GLUETUN_TIMEOUT_SECONDS,
-                logger=StdlibLogger(GluetunForwardedPortClient.__module__),
                 url_opener=self._url_opener,
             ),
             amule_conf_reader=self._amule_conf_reader,

@@ -6,7 +6,7 @@ from p2pwatch_amule.application.ports.driven.logger import Logger
 
 @dataclass(frozen=True)
 class LoggedLine:
-    level: Literal["info", "warning", "error"]
+    level: Literal["info", "error"]
     message: str
 
 
@@ -18,9 +18,6 @@ class FakeLogger(Logger):
 
     def info(self, message: str, *args: object) -> None:
         self.lines.append(LoggedLine("info", message % args))
-
-    def warning(self, message: str, *args: object) -> None:
-        self.lines.append(LoggedLine("warning", message % args))
 
     def error(self, message: str, *args: object) -> None:
         self.lines.append(LoggedLine("error", message % args))

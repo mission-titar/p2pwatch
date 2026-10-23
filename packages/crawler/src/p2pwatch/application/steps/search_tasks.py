@@ -12,6 +12,7 @@ from p2pwatch.application.ports.driven.backoff_state_writer import BackoffStateW
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.steps.search_worker import BackoffRegistry, SearchTask, SearchWorker
+from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.domain.store_error import StoreError
 
@@ -37,10 +38,12 @@ class SearchTaskRunner:
         self._backoff_state_writer = backoff_state_writer
         self._monotonic_clock = monotonic_clock
         self._logger = logger
-        self._saved = backoff.snapshot()
+        self._saved: dict[BackoffKey, BackoffState] = {}
 
     async def run(self, node_id: str) -> None:
         """Runs every task until cancelled, recording what they find under ``node_id``."""
+        # Taken here, once the lifecycle resumed the backoff, so no search rewrites what it read.
+        self._saved = self._backoff.snapshot()
         texts = [keyword.text for keyword in dedupe_keywords(self._keywords)]
         async with asyncio.TaskGroup() as group:
             for worker in self._workers:
