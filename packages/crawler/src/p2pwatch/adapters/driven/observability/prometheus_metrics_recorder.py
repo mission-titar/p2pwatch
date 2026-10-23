@@ -14,9 +14,6 @@ from prometheus_client import CollectorRegistry, Counter, Gauge
 from p2pwatch.application.ports.driven.metrics_recorder import MetricsRecorder
 from p2pwatch.domain.observability.policy import MetricInstruction, MetricName
 
-# The stop runs on the event loop, where no shutdown deadline can cut a blocking call.
-_JOIN_TIMEOUT_SECONDS = 1.0
-
 # (name, doc, labels) of the counters.
 _COUNTERS: tuple[tuple[MetricName, str, tuple[str, ...]], ...] = (
     (MetricName.SEARCHES, "Searches performed", ("client", "channel")),
@@ -70,6 +67,8 @@ def start_metrics_server(
     registry: CollectorRegistry,
     port: int | None,
     start_http_server: Callable[..., tuple[BaseServer, Thread]],
+    *,
+    join_timeout_seconds: float,
 ) -> Callable[[], None]:
     """Serves ``registry`` on ``/metrics`` from the daemon thread ``start_http_server`` starts,
     or nothing when ``port`` is ``None``; returns what stops it."""
@@ -80,6 +79,6 @@ def start_metrics_server(
     def stop() -> None:
         server.shutdown()
         server.server_close()
-        thread.join(_JOIN_TIMEOUT_SECONDS)
+        thread.join(join_timeout_seconds)
 
     return stop

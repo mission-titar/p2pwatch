@@ -34,6 +34,7 @@ async def test_start_serves_the_app_on_the_port_bound_and_stop_ends_the_thread(
         Starlette(routes=[Route("/", _ok)]),
         ("127.0.0.1", 0),
         start_timeout_seconds=5.0,
+        join_timeout_seconds=5.0,
         serving_resources=(),
     )
     with caplog.at_level(logging.INFO, logger=_LOGGER):
@@ -58,7 +59,11 @@ async def test_a_port_already_bound_degrades_the_webui_without_raising(
         holder.bind(("127.0.0.1", 0))
         holder.listen()
         server_thread = UvicornServerThread(
-            Starlette(), holder.getsockname(), start_timeout_seconds=5.0, serving_resources=()
+            Starlette(),
+            holder.getsockname(),
+            start_timeout_seconds=5.0,
+            join_timeout_seconds=5.0,
+            serving_resources=(),
         )
         with caplog.at_level(logging.INFO, logger=_LOGGER):
             await server_thread.start()
@@ -83,6 +88,7 @@ async def test_a_server_that_does_not_start_in_time_degrades_the_webui(
         Starlette(lifespan=held_startup),
         ("127.0.0.1", 0),
         start_timeout_seconds=0.05,
+        join_timeout_seconds=5.0,
         serving_resources=(),
     )
     with caplog.at_level(logging.INFO, logger=_LOGGER):
@@ -91,6 +97,31 @@ async def test_a_server_that_does_not_start_in_time_degrades_the_webui(
     await server_thread.stop()
     assert caplog.messages == ["webui degraded: uvicorn did not start within 0.05 s"]
     assert _webui_threads() == []
+
+
+@pytest.mark.asyncio
+async def test_stop_gives_up_on_a_server_that_does_not_end_within_its_join_timeout() -> None:
+    released = threading.Event()
+
+    @asynccontextmanager
+    async def held_shutdown(app: Starlette) -> AsyncIterator[None]:
+        yield
+        await asyncio.to_thread(released.wait)
+
+    server_thread = UvicornServerThread(
+        Starlette(lifespan=held_shutdown),
+        ("127.0.0.1", 0),
+        start_timeout_seconds=5.0,
+        join_timeout_seconds=0.05,
+        serving_resources=(),
+    )
+    await server_thread.start()
+    await server_thread.stop()
+    still_serving = _webui_threads()
+    released.set()
+    for thread in still_serving:
+        thread.join(timeout=5.0)
+    assert len(still_serving) == 1
 
 
 @pytest.mark.asyncio
@@ -106,6 +137,7 @@ async def test_a_failing_lifespan_degrades_the_webui_without_raising(
         Starlette(lifespan=failing_startup),
         ("127.0.0.1", 0),
         start_timeout_seconds=5.0,
+        join_timeout_seconds=5.0,
         serving_resources=(),
     )
     with caplog.at_level(logging.INFO, logger=_LOGGER):
@@ -119,7 +151,11 @@ async def test_a_failing_lifespan_degrades_the_webui_without_raising(
 async def test_the_serving_resources_are_held_by_the_webui_thread_while_it_serves() -> None:
     resource = FakeServingResource()
     server_thread = UvicornServerThread(
-        Starlette(), ("127.0.0.1", 0), start_timeout_seconds=5.0, serving_resources=(resource,)
+        Starlette(),
+        ("127.0.0.1", 0),
+        start_timeout_seconds=5.0,
+        join_timeout_seconds=5.0,
+        serving_resources=(resource,),
     )
     await server_thread.start()
     entered = list(resource.threads)
@@ -138,6 +174,7 @@ async def test_the_serving_resources_are_left_when_serving_fails() -> None:
             Starlette(),
             holder.getsockname(),
             start_timeout_seconds=5.0,
+            join_timeout_seconds=5.0,
             serving_resources=(resource,),
         )
         await server_thread.start()

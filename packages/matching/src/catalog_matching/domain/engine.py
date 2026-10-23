@@ -157,7 +157,7 @@ class MatchingEngine:
         config: MatcherConfig,
         targets: Sequence[TargetSegment],
         *,
-        max_filename_length: int = 4096,
+        max_filename_length: int,
     ) -> None:
         self._config = config
         self._max_filename_length = max_filename_length

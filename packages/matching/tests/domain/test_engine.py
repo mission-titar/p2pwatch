@@ -15,6 +15,8 @@ from catalog_matching.domain.models import FileCandidate, TargetSegment
 from catalog_matching.domain.resolver import MatcherResolver, ResolvedTarget
 from catalog_matching.domain.validation import parse_matcher_config
 
+_MAX_FILENAME_LENGTH = 4096
+
 
 def test_explanation_is_frozen_and_holds_fields() -> None:
     explanation = Explanation(
@@ -125,7 +127,9 @@ _REAL_62A_FILENAME = (
 
 def _canonical_engine() -> MatchingEngine:
     config = parse_matcher_config(_CANONICAL_RAW)
-    return MatchingEngine(config, (_TARGET_62A, _TARGET_62B))
+    return MatchingEngine(
+        config, (_TARGET_62A, _TARGET_62B), max_filename_length=_MAX_FILENAME_LENGTH
+    )
 
 
 def test_evaluate_real_62a_is_download_via_first_rule_on_62a() -> None:
@@ -224,7 +228,9 @@ def test_evaluate_tiebreak_same_tier_lowest_rule_index_wins_over_target_id() -> 
         letter="a",
         title="Les demoiselles cambrioleuses",
     )
-    engine = MatchingEngine(config, (target_low, target_high))
+    engine = MatchingEngine(
+        config, (target_low, target_high), max_filename_length=_MAX_FILENAME_LENGTH
+    )
     candidate = FileCandidate(filename="N°099Z Les demoiselles cambrioleuses.avi")
     # by_segment / by_title are NOT attributable rule names -> single-winner fallback.
     # Index 0 (by_segment on 099Z) prevails over index 1 (by_title on 001A), DESPITE
@@ -252,7 +258,9 @@ def test_evaluate_accepts_filename_at_or_below_max_length() -> None:
 def test_engine_resolves_each_target_once_at_construction() -> None:
     # Pre-resolution happens at construction: evaluate_file does not rebuild a tree.
     config = parse_matcher_config(_CANONICAL_RAW)
-    engine = MatchingEngine(config, (_TARGET_62A, _TARGET_62B))
+    engine = MatchingEngine(
+        config, (_TARGET_62A, _TARGET_62B), max_filename_length=_MAX_FILENAME_LENGTH
+    )
     assert len(engine._resolved) == 2
     assert {rt.target.target_id for rt in engine._resolved} == {"062A", "062B"}
 
@@ -304,7 +312,9 @@ def test_explanation_single_rule_fired_and_no_coverage_token() -> None:
             }
         ],
     }
-    engine = MatchingEngine(parse_matcher_config(raw), (_TARGET_62A,))
+    engine = MatchingEngine(
+        parse_matcher_config(raw), (_TARGET_62A,), max_filename_length=_MAX_FILENAME_LENGTH
+    )
     decisions = engine.evaluate_file((FileCandidate(filename="N°062A.avi"),))
     assert len(decisions) == 1
     assert decisions[0].explanation.rules_fired == ("only",)
@@ -326,7 +336,9 @@ def _fanout_engine() -> MatchingEngine:
     # Canonical prod policy over a bi-segment episode (62A/62B) plus a mono episode (94A):
     # enough to exercise every §3/§11 fan-out branch against the shipped matcher.yml.
     config = parse_matcher_config(_CANONICAL_RAW)
-    return MatchingEngine(config, (_TARGET_62A, _TARGET_62B, _TARGET_94A))
+    return MatchingEngine(
+        config, (_TARGET_62A, _TARGET_62B, _TARGET_94A), max_filename_length=_MAX_FILENAME_LENGTH
+    )
 
 
 def _triples(decisions: list[MatchDecision]) -> list[tuple[str, str, str]]:
@@ -477,7 +489,11 @@ _SCOPE_RAW: dict[str, object] = {
 
 
 def _scope_triples(filename: str) -> list[tuple[str, str, str]]:
-    engine = MatchingEngine(parse_matcher_config(_SCOPE_RAW), (_TARGET_62A, _TARGET_62B))
+    engine = MatchingEngine(
+        parse_matcher_config(_SCOPE_RAW),
+        (_TARGET_62A, _TARGET_62B),
+        max_filename_length=_MAX_FILENAME_LENGTH,
+    )
     return _triples(engine.evaluate_file((FileCandidate(filename=filename),)))
 
 

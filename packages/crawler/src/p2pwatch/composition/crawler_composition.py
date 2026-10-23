@@ -126,6 +126,14 @@ _AMULE_API_PAGE_SIZE = 500
 # How often a search's progress is read: local traffic with our own daemon.
 _AMULE_API_PROGRESS_POLL_INTERVAL = timedelta(seconds=5)
 _WEBUI_START_TIMEOUT_SECONDS = 5.0
+# uvicorn polls ``should_exit`` every 0.1 s, so the join normally returns well within its bound.
+_WEBUI_JOIN_TIMEOUT_SECONDS = 5.0
+# The metrics server stops on the event loop, where no shutdown deadline can cut a blocking call.
+_METRICS_SERVER_JOIN_TIMEOUT_SECONDS = 1.0
+# How many SQLite VM steps the SQL console runs between two checks of its query budget.
+_CONSOLE_BUDGET_CHECK_INSTRUCTIONS = 1000
+# A longer filename is never matched: it bounds the matching's cost on what a peer advertises.
+_MAX_FILENAME_LENGTH = 4096
 # One INFO progress line per this many files, so a long sweep visibly advances.
 _REEVALUATION_PROGRESS_EVERY_FILES = 200
 
@@ -241,10 +249,14 @@ class CrawlerComposition(CrawlerRunner):
             console_query_runner=RunConsoleQuery(
                 {
                     ConsoleDatabase.CATALOG: SqliteSqlExecutor(
-                        Path(crawler_config.catalog_db_path), monotonic_clock
+                        Path(crawler_config.catalog_db_path),
+                        monotonic_clock,
+                        budget_check_instructions=_CONSOLE_BUDGET_CHECK_INSTRUCTIONS,
                     ),
                     ConsoleDatabase.LOCAL: SqliteSqlExecutor(
-                        Path(crawler_config.local_db_path), monotonic_clock
+                        Path(crawler_config.local_db_path),
+                        monotonic_clock,
+                        budget_check_instructions=_CONSOLE_BUDGET_CHECK_INSTRUCTIONS,
                     ),
                 }
             ),
@@ -254,6 +266,7 @@ class CrawlerComposition(CrawlerRunner):
             app,
             self._webui_address,
             start_timeout_seconds=_WEBUI_START_TIMEOUT_SECONDS,
+            join_timeout_seconds=_WEBUI_JOIN_TIMEOUT_SECONDS,
             serving_resources=(catalog_read_connections, local_read_connections),
         )
         stack.push_async_callback(server_thread.stop)
@@ -305,13 +318,20 @@ class CrawlerComposition(CrawlerRunner):
                 notification_timeout_seconds=observability.notification_timeout_seconds,
             )
             stack.callback(
-                start_metrics_server(registry, observability.metrics_port, start_http_server)
+                start_metrics_server(
+                    registry,
+                    observability.metrics_port,
+                    start_http_server,
+                    join_timeout_seconds=_METRICS_SERVER_JOIN_TIMEOUT_SECONDS,
+                )
             )
             observation_store = SqliteObservationStore(catalog_connection)
             catalog_scan_reader = SqliteCatalogScanReader(catalog_connection)
             decision_store = SqliteDecisionStore(catalog_connection)
             backoff_state_store = SqliteBackoffStateStore(local_connection)
-            engine = MatchingEngine(config.matcher_config, config.targets)
+            engine = MatchingEngine(
+                config.matcher_config, config.targets, max_filename_length=_MAX_FILENAME_LENGTH
+            )
             status_reading_store = InMemoryStatusReadingStore((AMULE_CLIENT_NAME,))
             # In-process webui (spec §5): own thread + loop, started EARLY (before the daemon client
             # + startup re-evaluation) so it is up promptly and stays isolated from the crawler's

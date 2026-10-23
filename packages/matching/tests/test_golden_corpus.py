@@ -10,6 +10,8 @@ from catalog_matching.domain.matchers import RegexMatcher
 from catalog_matching.domain.models import FileCandidate
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 
+_MAX_FILENAME_LENGTH = 4096
+
 _FIXTURES = Path(__file__).resolve().parent / "fixtures"
 # The matcher policy has a single source of truth: the deployment config (operator-
 # editable). So the golden corpus validates the policy ACTUALLY shipped, not a copy.
@@ -21,7 +23,7 @@ def _engine() -> MatchingEngine:
     targets = parse_targets(
         yaml.safe_load((_FIXTURES / "golden_targets.yaml").read_text(encoding="utf-8"))
     )
-    return MatchingEngine(config, targets)
+    return MatchingEngine(config, targets, max_filename_length=_MAX_FILENAME_LENGTH)
 
 
 def _corpus_cases() -> list[dict[str, Any]]:

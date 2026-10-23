@@ -20,6 +20,8 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_wall_clock import FakeWallClock
 
+_MAX_FILENAME_LENGTH = 4096
+
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 # Matcher: single source of truth = deployment config. Targets: the §7 subset of the golden
 # corpus (matching fixture, distinct from the full prod catalog).
@@ -32,7 +34,7 @@ def engine() -> MatchingEngine:
     """REAL engine: deployment matcher + golden-corpus targets (shared fixtures)."""
     config = parse_matcher_config(load_yaml(_MATCHER))
     targets = parse_targets(load_yaml(_FIXTURES / "golden_targets.yaml"))
-    return MatchingEngine(config, targets)
+    return MatchingEngine(config, targets, max_filename_length=_MAX_FILENAME_LENGTH)
 
 
 @pytest.fixture

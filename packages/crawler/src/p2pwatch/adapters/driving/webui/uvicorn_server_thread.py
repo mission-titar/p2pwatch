@@ -12,9 +12,6 @@ from starlette.applications import Starlette
 
 _logger = logging.getLogger(__name__)
 
-# uvicorn polls ``should_exit`` every 0.1 s, so the join normally returns well within its bound.
-_JOIN_TIMEOUT_SECONDS = 5.0
-
 
 class _StartReportingServer(uvicorn.Server):
     """A ``uvicorn.Server`` that sets ``settled`` once its socket is bound."""
@@ -37,6 +34,7 @@ class UvicornServerThread:
         address: tuple[str, int],
         *,
         start_timeout_seconds: float,
+        join_timeout_seconds: float,
         serving_resources: Iterable[AbstractContextManager[object]],
     ) -> None:
         host, port = address
@@ -47,6 +45,7 @@ class UvicornServerThread:
         )
         self._thread = threading.Thread(target=self._serve, name="webui", daemon=True)
         self._start_timeout_seconds = start_timeout_seconds
+        self._join_timeout_seconds = join_timeout_seconds
 
     @property
     def bound_address(self) -> tuple[str, int]:
@@ -67,7 +66,7 @@ class UvicornServerThread:
     async def stop(self) -> None:
         """Asks uvicorn to exit, then joins off the event loop so a shutdown deadline can cancel."""
         self._server.should_exit = True
-        await asyncio.to_thread(self._thread.join, _JOIN_TIMEOUT_SECONDS)
+        await asyncio.to_thread(self._thread.join, self._join_timeout_seconds)
 
     def _serve(self) -> None:
         # uvicorn ends a failed bind with ``sys.exit``, whose traceback chains the ``OSError``.

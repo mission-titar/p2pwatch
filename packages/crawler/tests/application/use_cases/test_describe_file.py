@@ -49,6 +49,8 @@ episodes:
 """
     )
 )
+
+_MAX_FILENAME_LENGTH = 4096
 _MATCHER = parse_matcher_config(
     {
         "tokens": {"keroro": {"keyword": "keroro"}, "ita": {"regex": r"\bITA\b"}},
@@ -77,7 +79,11 @@ def _describe(
     describe_file = DescribeFile(
         catalog_file_reader=catalog_file_reader,
         source_reader=source_reader or FakeSourceReader(),
-        explainer=MatchingExplainer(engine=MatchingEngine(matcher_config, _TARGETS)),
+        explainer=MatchingExplainer(
+            engine=MatchingEngine(
+                matcher_config, _TARGETS, max_filename_length=_MAX_FILENAME_LENGTH
+            )
+        ),
         wall_clock=FakeTime(_NOW).wall,
         source_period_gap=_GAP,
     )

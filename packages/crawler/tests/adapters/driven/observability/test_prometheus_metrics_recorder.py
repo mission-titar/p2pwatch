@@ -169,7 +169,7 @@ def test_the_metrics_server_serves_the_registry_on_its_port_until_stopped() -> N
     )
     port = _free_port()
 
-    stop = start_metrics_server(registry, port, start_http_server)
+    stop = start_metrics_server(registry, port, start_http_server, join_timeout_seconds=1.0)
     try:
         page = httpx.get(f"http://127.0.0.1:{port}/metrics").text
     finally:
@@ -183,22 +183,29 @@ def test_the_metrics_server_serves_the_registry_on_its_port_until_stopped() -> N
 def test_no_metrics_server_without_a_port() -> None:
     threads = threading.enumerate()
 
-    stop = start_metrics_server(CollectorRegistry(), None, start_http_server)
+    stop = start_metrics_server(
+        CollectorRegistry(), None, start_http_server, join_timeout_seconds=1.0
+    )
     stop()
 
     assert threading.enumerate() == threads
 
 
-def test_the_stop_gives_up_on_a_server_thread_that_does_not_end() -> None:
+def test_the_stop_gives_up_on_a_server_thread_that_does_not_end_within_its_join_timeout() -> None:
     released = threading.Event()
     stuck = threading.Thread(target=released.wait, daemon=True)
     stuck.start()
     server = FakeMetricsServer(("127.0.0.1", 9090), socketserver.BaseRequestHandler)
-    stop = start_metrics_server(CollectorRegistry(), 9090, lambda port, registry: (server, stuck))
+    stop = start_metrics_server(
+        CollectorRegistry(),
+        9090,
+        lambda port, registry: (server, stuck),
+        join_timeout_seconds=0.05,
+    )
 
     stopping = threading.Thread(target=stop)
     stopping.start()
-    stopping.join(timeout=5.0)
+    stopping.join(timeout=1.0)
     stopped = not stopping.is_alive()
     released.set()
 
