@@ -132,7 +132,9 @@ a function does.
   reads what it wrote, and one adapter implements the pair (`test_port_files.py`). A `Writer`'s method starts with
   `record_`, which adds a fact and leaves the earlier ones, or `set_`, which replaces a current value; a `Reader`'s
   says what it gives back: `read_` a value, `iter_` an iterator, `is_` or `has_` a predicate, `wait_until_` a state
-  reached (`code-pattern-check` holds both).
+  reached (`code-pattern-check` holds both). A domain object carries who produced it, so a `Writer` takes the object
+  only (`record_observation(observation)`, `record_decision(dated_decision)`, `record_points(points)`), and an
+  event that notifies carries its `node_id`; `node_id` is a parameter only as a read's filter.
 - **A port to an outside system or a service keeps a capability name**: `DownloadClient`, `MonotonicClock`,
   `Logger`, `UpstreamClient`; a port handing an output to an outside consumer is named after what it does
   (`CodeScanningReporter`, `PullRequestDrafter`, `BumpAnnouncer`). A later consumer that needs part of a port

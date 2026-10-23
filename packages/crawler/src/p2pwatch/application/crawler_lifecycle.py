@@ -78,7 +78,7 @@ class CrawlerLifecycle:
         if self._download_enabled:
             self._logger.info("download enabled: download loop armed")
         await self._observability_dispatcher.dispatch(
-            CrawlerStarted(download_enabled=self._download_enabled), node_id
+            CrawlerStarted(download_enabled=self._download_enabled, node_id=node_id)
         )
         # Before the loops, so the first search's tier actions (download wake, notify) see the
         # current policy. A comment-only edit of matcher.yml or targets.yml still runs one pass.

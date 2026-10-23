@@ -46,8 +46,9 @@ from p2pwatch.domain.observability.events import (
     TargetTitle,
 )
 from p2pwatch.domain.observability.notification import (
-    CommunityNotification,
     CompletedDownload,
+    Notification,
+    RelayedLogLine,
     SourceAlert,
     SourceAlertKind,
     TierRise,
@@ -102,15 +103,15 @@ class ObservabilityPlan:
     """What one event produces: severity + message + metric(s) + notification audiences.
 
     ``metrics`` is a TUPLE (one event can feed several metrics: ``ChannelStatusSampled`` sets
-    two gauges). Empty ``audiences`` = no notification. ``notification`` is what the community
-    is sent; without it, an audience is sent the log line.
+    two gauges). Empty ``audiences`` = no notification. ``notification`` is what each audience is
+    sent: a community kind, or the log line relayed to the operations.
     """
 
     severity: Severity
     message: str
     metrics: tuple[MetricInstruction, ...] = ()
     audiences: frozenset[Audience] = frozenset()
-    notification: CommunityNotification | None = None
+    notification: Notification | None = None
 
 
 def _rank(decision: FileTargetDecision | None) -> int:
@@ -164,15 +165,23 @@ def _channel_gauge(
     return MetricInstruction(name, "set", labels, float(state))
 
 
+def _relayed(
+    severity: Severity, message: str, node_id: str, metrics: tuple[MetricInstruction, ...] = ()
+) -> ObservabilityPlan:
+    """An operations plan: its log line relayed under ``node_id``."""
+    return ObservabilityPlan(
+        severity,
+        message,
+        metrics,
+        frozenset({Audience.OPERATIONS}),
+        RelayedLogLine(message, severity, node_id),
+    )
+
+
 def _channel_alert(
     severity: Severity, event: ChannelDegraded | ChannelRecovered, state_phrase: str
 ) -> ObservabilityPlan:
-    return ObservabilityPlan(
-        severity,
-        f"{event.client_name} {event.channel}: {state_phrase}",
-        (),
-        frozenset({Audience.OPERATIONS}),
-    )
+    return _relayed(severity, f"{event.client_name} {event.channel}: {state_phrase}", event.node_id)
 
 
 def _plan_decisions(event: DecisionsRecorded) -> ObservabilityPlan:
@@ -233,7 +242,7 @@ def _plan_source(
 
 
 def plan_observability(event: Event) -> ObservabilityPlan:
-    """Map an event to its ``ObservabilityPlan`` (EXHAUSTIVE match → 100% branch); a community
+    """Map an event to its ``ObservabilityPlan`` (EXHAUSTIVE match → 100% branch); a
     notification carries its event's node."""
     match event:
         case SearchExecuted():
@@ -309,19 +318,13 @@ def plan_observability(event: Event) -> ObservabilityPlan:
         case ChannelRecovered():
             return _channel_alert(Severity.INFO, event, _RECOVERED_PHRASE_BY_FIELD[event.field])
         case ClientUnreachableLasting():
-            return ObservabilityPlan(
+            return _relayed(
                 Severity.WARNING,
                 f"{event.client_name} unreachable for {event.unreachable_for_seconds / 60:.0f} min",
-                (),
-                frozenset({Audience.OPERATIONS}),
+                event.node_id,
             )
         case ClientReachableAgain():
-            return ObservabilityPlan(
-                Severity.INFO,
-                f"{event.client_name} reachable again",
-                (),
-                frozenset({Audience.OPERATIONS}),
-            )
+            return _relayed(Severity.INFO, f"{event.client_name} reachable again", event.node_id)
         case FreeSpaceSampled():
             return ObservabilityPlan(
                 Severity.DEBUG,
@@ -333,12 +336,11 @@ def plan_observability(event: Event) -> ObservabilityPlan:
                 ),
             )
         case DiskSpaceLow():
-            return ObservabilityPlan(
+            return _relayed(
                 Severity.WARNING,
                 f"download disk low: {event.free_bytes / 2**30:.1f} GiB free, "
                 f"under the {event.min_free_bytes / 2**30:.1f} GiB floor (no new download)",
-                (),
-                frozenset({Audience.OPERATIONS}),
+                event.node_id,
             )
         case SourceFirstUseful():
             return _plan_source(
@@ -352,11 +354,11 @@ def plan_observability(event: Event) -> ObservabilityPlan:
                 f"reappeared after {event.absent_for_seconds / 3600:.0f} h",
             )
         case CrawlerStarted():
-            return ObservabilityPlan(
+            return _relayed(
                 Severity.INFO,
                 f"🟢 node online (download {'on' if event.download_enabled else 'off'})",
+                event.node_id,
                 (MetricInstruction(MetricName.CRAWLER_UP, "set", (), 1.0),),
-                frozenset({Audience.OPERATIONS}),
             )
         case _:  # pragma: no cover
             assert_never(event)

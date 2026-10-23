@@ -75,7 +75,7 @@ def _publish(deps: StatusLoopDeps, status: ClientStatus | None) -> None:
 
 
 async def status_loop(deps: StatusLoopDeps, node_id: str) -> None:
-    """Reads the status every period until shutdown, dispatching under ``node_id``."""
+    """Reads the status every period until shutdown, its alerts carrying ``node_id``."""
     api_timer = _AlertTimer(UNREACHABLE_ALERT_AFTER)
     channel_timers: dict[tuple[str, ChannelField], _AlertTimer] = {}
 
@@ -84,9 +84,7 @@ async def status_loop(deps: StatusLoopDeps, node_id: str) -> None:
     ) -> None:
         change = timer.observe(healthy, deps.monotonic_clock.now())
         if change is not None:
-            await deps.observability_dispatcher.dispatch(
-                alert if change == "alert" else recovery, node_id
-            )
+            await deps.observability_dispatcher.dispatch(alert if change == "alert" else recovery)
 
     while not deps.run_state_reader.is_shutdown_requested():
         try:
@@ -95,9 +93,7 @@ async def status_loop(deps: StatusLoopDeps, node_id: str) -> None:
             raise  # a wrong password is config, not an outage
         except ClientError:  # a refused route too: a renamed /version must not end the crawler
             _publish(deps, None)
-            await deps.observability_dispatcher.dispatch(
-                ClientUnreachable(deps.client_name), node_id
-            )
+            await deps.observability_dispatcher.dispatch(ClientUnreachable(deps.client_name))
             # Every channel is unknown while the API is: only the API's own alert can fire.
             readings: list[tuple[str, bool | None, bool | None]] = [
                 (channel, None, None) for channel in dict.fromkeys(c for c, _ in channel_timers)
@@ -110,13 +106,14 @@ async def status_loop(deps: StatusLoopDeps, node_id: str) -> None:
         await _observe(
             api_timer,
             reachable,
-            ClientUnreachableLasting(deps.client_name, UNREACHABLE_ALERT_AFTER.total_seconds()),
-            ClientReachableAgain(deps.client_name),
+            ClientUnreachableLasting(
+                deps.client_name, UNREACHABLE_ALERT_AFTER.total_seconds(), node_id
+            ),
+            ClientReachableAgain(deps.client_name, node_id),
         )
         for channel, connected, connectable in readings:
             await deps.observability_dispatcher.dispatch(
-                ChannelStatusSampled(deps.client_name, channel, connected, connectable),
-                node_id,
+                ChannelStatusSampled(deps.client_name, channel, connected, connectable)
             )
             fields: tuple[tuple[ChannelField, bool | None], ...] = (
                 ("connected", connected),
@@ -127,8 +124,12 @@ async def status_loop(deps: StatusLoopDeps, node_id: str) -> None:
                     channel_timers.setdefault((channel, field), _AlertTimer(CHANNEL_ALERT_AFTER)),
                     healthy,
                     ChannelDegraded(
-                        deps.client_name, channel, field, CHANNEL_ALERT_AFTER.total_seconds()
+                        deps.client_name,
+                        channel,
+                        field,
+                        CHANNEL_ALERT_AFTER.total_seconds(),
+                        node_id,
                     ),
-                    ChannelRecovered(deps.client_name, channel, field),
+                    ChannelRecovered(deps.client_name, channel, field, node_id),
                 )
         await deps.monotonic_clock.sleep(STATUS_PERIOD)

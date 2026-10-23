@@ -56,7 +56,7 @@ async def record_observation(
         observation_writer.record_observation(
             FileObservation(reported_file, wall_clock.now(), node_id)
         )
-        await observability_dispatcher.dispatch(ObservationRecorded(client_name, channel), node_id)
+        await observability_dispatcher.dispatch(ObservationRecorded(client_name, channel))
         return await rejudge_file(
             reported_file.file,
             reported_file.to_candidate(),
