@@ -13,7 +13,7 @@ as-is.
 
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
-from enum import Enum, StrEnum, auto
+from enum import Enum, StrEnum
 from typing import Literal, assert_never
 
 from catalog_matching.domain.decision_tier import DecisionTier
@@ -44,16 +44,7 @@ from p2pwatch.domain.observability.events import (
     SourceReappeared,
     TargetTitle,
 )
-
-
-class Severity(Enum):
-    """DOMAIN severity of a fact (translated to a ``logging`` level by the adapter)."""
-
-    DEBUG = auto()
-    INFO = auto()
-    SUCCESS = auto()
-    WARNING = auto()
-    ERROR = auto()
+from p2pwatch.domain.observability.severity import Severity
 
 
 class Audience(Enum):

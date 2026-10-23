@@ -8,7 +8,8 @@ from apprise.plugins.discord import USER_ROLE_DETECTION_RE
 
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
 from p2pwatch.domain.observability.notification import RelayedLogLine, TextNotification
-from p2pwatch.domain.observability.policy import Audience, Severity
+from p2pwatch.domain.observability.policy import Audience
+from p2pwatch.domain.observability.severity import Severity
 from tests.fakes.adapters.driven.fake_apprise import FakeApprise
 
 _NODE = "titar-node-1"

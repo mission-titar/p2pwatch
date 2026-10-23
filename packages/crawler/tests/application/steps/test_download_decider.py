@@ -5,12 +5,8 @@ from p2pwatch.application.steps.download_cycle import run_download_cycle
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.observability.notification import RelayedLogLine
-from p2pwatch.domain.observability.policy import (
-    Audience,
-    MetricInstruction,
-    MetricName,
-    Severity,
-)
+from p2pwatch.domain.observability.policy import Audience, MetricInstruction, MetricName
+from p2pwatch.domain.observability.severity import Severity
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_free_space_meter import FakeFreeSpaceMeter

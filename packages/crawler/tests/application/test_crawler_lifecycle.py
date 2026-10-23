@@ -10,7 +10,8 @@ from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle
 from p2pwatch.application.steps.reevaluate_catalog import ReevaluationSummary
 from p2pwatch.application.steps.search_worker import BackoffPolicy, BackoffRegistry
 from p2pwatch.domain.observability.notification import RelayedLogLine
-from p2pwatch.domain.observability.policy import Audience, Severity
+from p2pwatch.domain.observability.policy import Audience
+from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator

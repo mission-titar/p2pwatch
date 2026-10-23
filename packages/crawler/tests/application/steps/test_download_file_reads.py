@@ -4,7 +4,8 @@ from catalog_matching.domain.models import TargetSegment
 from p2pwatch.application.steps.download_cycle import run_download_cycle
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.observability.notification import TextNotification
-from p2pwatch.domain.observability.policy import Audience, Severity
+from p2pwatch.domain.observability.policy import Audience
+from p2pwatch.domain.observability.severity import Severity
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader
