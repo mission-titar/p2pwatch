@@ -41,6 +41,7 @@ from tests.fakes.adapters.driven.fake_search_client import make_unreachable
 from tests.fakes.adapters.driven.fake_timed_search_client import FakeTimedSearchClient
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.fakes.application.steps.fake_event_emitter import FakeEventEmitter
+from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 from tests.support.catalog_rows import observation_node_ids
 from tests.support.virtual_time import EPOCH, run_virtual
 
@@ -103,6 +104,7 @@ def tasks(
         waker=waker,
         backoff=backoff,
         event_emitter=event_emitter,
+        observability_dispatcher=ObservabilityOverFakes().dispatcher,
         wall_clock=wall_clock,
         logger=FakeLogger(),
         observation_logger=FakeLogger(),

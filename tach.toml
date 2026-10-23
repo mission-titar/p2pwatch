@@ -343,7 +343,6 @@ path = "p2pwatch.application.crawler_lifecycle"
 layer = "lifecycle"
 depends_on = [
   "p2pwatch.application.ports.driven.backoff_state_reader",
-  "p2pwatch.application.ports.driven.event_emitter",
   "p2pwatch.application.ports.driven.logger",
   "p2pwatch.application.ports.driven.node_id_generator",
   "p2pwatch.application.ports.driven.node_id_reader",

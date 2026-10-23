@@ -5,9 +5,9 @@ APPLICATION ring (orchestration spec §4): orchestrates PORTS (synchronous store
 
 1. ``record_observation`` ALWAYS (periodic re-observation is the goal, spec §3/§6).
 2. ``rejudge_file`` (``decisions.py``) does the rest: evaluate via the pure
-   engine, compare against the latest known verdict, and append (or retract) + emit + wake
+   engine, compare against the latest known verdict, and append (or retract) + dispatch + wake
    only on a genuine change. Identical verdict, or a file that was never matched and still
-   isn't → no write, no emit, no wake.
+   isn't → no write, no dispatch, no wake.
 
 The stores are SYNCHRONOUS, called DIRECTLY (spec §3: sub-ms, no ``to_thread`` in the
 MVP; accepted consequence: DB writes are de facto serialized on the event loop).
@@ -20,13 +20,13 @@ VISIBLE (``error``-level log, so a persistent failure gets noticed).
 from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.application.ports.driven.decision_reader import DecisionReader
 from p2pwatch.application.ports.driven.decision_writer import DecisionWriter
-from p2pwatch.application.ports.driven.event_emitter import EventEmitter
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.observation_reader import ObservationReader
 from p2pwatch.application.ports.driven.observation_writer import ObservationWriter
 from p2pwatch.application.ports.driven.waker import Waker
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.steps.decisions import rejudge_file
+from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.observability.events import ObservationRecorded
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.store_error import StoreError
@@ -41,7 +41,7 @@ async def record_observation(
     decision_reader: DecisionReader,
     engine: MatchingEngine,
     waker: Waker,
-    event_emitter: EventEmitter,
+    observability_dispatcher: ObservabilityDispatcher,
     wall_clock: WallClock,
     client_name: str,
     channel: str,
@@ -50,13 +50,13 @@ async def record_observation(
 ) -> int:
     """Process ONE observation (spec §7). Returns the number of rows written (0..N).
 
-    Emits ``ObservationRecorded`` (always) and one ``DecisionsRecorded`` when a row was written.
+    Dispatches ``ObservationRecorded`` (always), one ``DecisionsRecorded`` when a row was written.
     A ``StoreError`` is absorbed (log + ``0``), the cycle continues (spec §7)."""
     try:
         observation_writer.record_observation(
             FileObservation(reported_file, wall_clock.now()), node_id
         )
-        await event_emitter.emit(ObservationRecorded(client_name, channel), node_id)
+        await observability_dispatcher.dispatch(ObservationRecorded(client_name, channel), node_id)
         return await rejudge_file(
             reported_file.file,
             reported_file.to_candidate(),
@@ -65,7 +65,7 @@ async def record_observation(
             decision_reader=decision_reader,
             engine=engine,
             waker=waker,
-            event_emitter=event_emitter,
+            observability_dispatcher=observability_dispatcher,
             wall_clock=wall_clock,
             node_id=node_id,
         )

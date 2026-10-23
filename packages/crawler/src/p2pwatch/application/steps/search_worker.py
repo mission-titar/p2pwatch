@@ -16,6 +16,7 @@ from p2pwatch.application.ports.driven.observation_writer import ObservationWrit
 from p2pwatch.application.ports.driven.search_client import SearchClient
 from p2pwatch.application.ports.driven.waker import Waker
 from p2pwatch.application.ports.driven.wall_clock import WallClock
+from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.record_observations import record_observation
 from p2pwatch.domain.client_errors import ClientUnreachableError, SearchFailedError
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
@@ -138,6 +139,7 @@ class WorkerDeps:
     waker: Waker
     backoff: "BackoffRegistry"
     event_emitter: EventEmitter
+    observability_dispatcher: ObservabilityDispatcher  # record_observation's
     wall_clock: WallClock
     logger: Logger
     observation_logger: Logger  # record_observation's
@@ -184,7 +186,7 @@ class SearchWorker:
                 decision_reader=self._deps.decision_reader,
                 engine=self._deps.engine,
                 waker=self._deps.waker,
-                event_emitter=self._deps.event_emitter,
+                observability_dispatcher=self._deps.observability_dispatcher,
                 wall_clock=self._deps.wall_clock,
                 client_name=self._client_name,
                 channel=channel,

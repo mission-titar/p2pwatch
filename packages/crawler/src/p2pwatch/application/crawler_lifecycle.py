@@ -3,7 +3,6 @@
 from collections.abc import Awaitable, Callable, Coroutine, Sequence
 
 from p2pwatch.application.ports.driven.backoff_state_reader import BackoffStateReader
-from p2pwatch.application.ports.driven.event_emitter import EventEmitter
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.node_id_generator import NodeIdGenerator
 from p2pwatch.application.ports.driven.node_id_reader import NodeIdReader
@@ -12,6 +11,7 @@ from p2pwatch.application.ports.driven.policy_fingerprint_reader import PolicyFi
 from p2pwatch.application.ports.driven.policy_fingerprint_writer import PolicyFingerprintWriter
 from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
 from p2pwatch.application.ports.driven.wall_clock import WallClock
+from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.reevaluate_catalog import ReevaluationSummary
 from p2pwatch.application.steps.reevaluate_if_policy_changed import reevaluate_if_policy_changed
 from p2pwatch.application.steps.resolve_node_id import resolve_node_id
@@ -33,7 +33,7 @@ class CrawlerLifecycle:
         node_id_writer: NodeIdWriter,
         node_id_generator: NodeIdGenerator,
         wall_clock: WallClock,
-        event_emitter: EventEmitter,
+        observability_dispatcher: ObservabilityDispatcher,
         policy_fingerprint: str,
         policy_fingerprint_reader: PolicyFingerprintReader,
         policy_fingerprint_writer: PolicyFingerprintWriter,
@@ -51,7 +51,7 @@ class CrawlerLifecycle:
         self._node_id_writer = node_id_writer
         self._node_id_generator = node_id_generator
         self._wall_clock = wall_clock
-        self._event_emitter = event_emitter
+        self._observability_dispatcher = observability_dispatcher
         self._policy_fingerprint = policy_fingerprint
         self._policy_fingerprint_reader = policy_fingerprint_reader
         self._policy_fingerprint_writer = policy_fingerprint_writer
@@ -77,7 +77,7 @@ class CrawlerLifecycle:
         self._logger.info("crawler started: node_id=%s", node_id)
         if self._download_enabled:
             self._logger.info("download enabled: download loop armed")
-        await self._event_emitter.emit(
+        await self._observability_dispatcher.dispatch(
             CrawlerStarted(download_enabled=self._download_enabled), node_id
         )
         # Before the loops, so the first search's tier actions (download wake, notify) see the

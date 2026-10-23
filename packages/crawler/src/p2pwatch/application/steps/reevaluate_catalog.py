@@ -18,12 +18,12 @@ from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.application.ports.driven.catalog_scan_reader import CatalogScanReader
 from p2pwatch.application.ports.driven.decision_reader import DecisionReader
 from p2pwatch.application.ports.driven.decision_writer import DecisionWriter
-from p2pwatch.application.ports.driven.event_emitter import EventEmitter
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.observation_reader import ObservationReader
 from p2pwatch.application.ports.driven.waker import Waker
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.steps.decisions import rejudge_file
+from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.store_error import StoreError
 
 
@@ -48,7 +48,7 @@ async def reevaluate_catalog(
     catalog_scan_reader: CatalogScanReader,
     engine: MatchingEngine,
     waker: Waker,
-    event_emitter: EventEmitter,
+    observability_dispatcher: ObservabilityDispatcher,
     wall_clock: WallClock,
     logger: Logger,
     node_id: str,
@@ -74,7 +74,7 @@ async def reevaluate_catalog(
                 decision_reader=decision_reader,
                 engine=engine,
                 waker=waker,
-                event_emitter=event_emitter,
+                observability_dispatcher=observability_dispatcher,
                 wall_clock=wall_clock,
                 node_id=node_id,
             )
