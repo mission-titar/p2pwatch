@@ -5,8 +5,10 @@ from dataclasses import dataclass
 from pathlib import Path, PurePath
 
 from coverage import Coverage
+from coverage.exceptions import CoverageException
 
 from coverage_checks.application.ports.driven.test_coverage_reader import TestCoverageReader
+from coverage_checks.domain.broken_input_error import BrokenInputError
 from coverage_checks.domain.test_coverage import Branch, TestCoverage
 
 
@@ -33,10 +35,6 @@ class CoveragePyTestCoverageReader(TestCoverageReader):
         self._report_file = report_directory / "coverage.json"
         self._coverage: Coverage | None = None
 
-    def has_per_test_branch_coverage(self) -> bool:
-        coverage_data = self._load().get_data()
-        return coverage_data.has_arcs() and bool(coverage_data.measured_contexts() - {""})
-
     def read_test_coverage(
         self, module: PurePath, own_test_files: Sequence[PurePath]
     ) -> TestCoverage:
@@ -54,21 +52,41 @@ class CoveragePyTestCoverageReader(TestCoverageReader):
         )
 
     def _load(self) -> Coverage:
+        """The run's coverage, once it holds branches and each test apart."""
         if self._coverage is None:
-            self._coverage = Coverage(
-                data_file=str(self._data_file),
-                config_file=str(self._package_directory / "pyproject.toml"),
-            )
-            self._coverage.load()
+            # coverage.py's errors name the file they could not use.
+            try:
+                coverage = Coverage(
+                    data_file=str(self._data_file),
+                    config_file=str(self._package_directory / "pyproject.toml"),
+                )
+            except CoverageException as error:
+                raise BrokenInputError(str(error)) from error
+            try:
+                coverage.load()
+            except CoverageException as error:
+                coverage.get_data().close(force=True)  # coverage.py leaves a non-database open
+                raise BrokenInputError(str(error)) from error
+            coverage_data = coverage.get_data()
+            if not coverage_data.has_arcs() or not coverage_data.measured_contexts() - {""}:
+                raise BrokenInputError(
+                    f"{self._data_file}: no per-test branch coverage; run this package's pytest"
+                    " first, with branch coverage and --cov-context=test"
+                )
+            self._coverage = coverage
         return self._coverage
 
     def _analyze(self, module: PurePath, contexts: list[str] | None) -> _Analysis:
         """coverage.py's own analysis of *module*, restricted to the tests matching *contexts*."""
-        self._load().json_report(
-            morfs=[str(self._package_directory / module)],
-            outfile=str(self._report_file),
-            contexts=contexts,
-        )
+        coverage = self._load()
+        try:
+            coverage.json_report(
+                morfs=[str(self._package_directory / module)],
+                outfile=str(self._report_file),
+                contexts=contexts,
+            )
+        except CoverageException as error:
+            raise BrokenInputError(str(error)) from error
         (measured,) = json.loads(self._report_file.read_text(encoding="utf-8"))["files"].values()
         return _Analysis(
             statements=frozenset(measured["executed_lines"] + measured["missing_lines"]),

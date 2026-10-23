@@ -144,7 +144,7 @@ depends_on = ["coverage_checks.domain", "coverage_checks.application.ports.drive
 [[modules]]
 path = "coverage_checks.adapters.driving.cli"
 layer = "adapters"
-depends_on = ["coverage_checks.application.ports.driving.unit_coverage_checker"]
+depends_on = ["coverage_checks.domain", "coverage_checks.application.ports.driving.unit_coverage_checker"]
 
 [[modules]]
 path = "coverage_checks.application.use_cases"

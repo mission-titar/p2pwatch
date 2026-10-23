@@ -3,7 +3,6 @@
 from coverage_checks.application.ports.driven.package_tree_reader import PackageTreeReader
 from coverage_checks.application.ports.driven.test_coverage_reader import TestCoverageReader
 from coverage_checks.application.ports.driving.unit_coverage_checker import (
-    NoPerTestCoverage,
     UnitCoverageChecker,
     UnitCoverageReport,
 )
@@ -20,9 +19,7 @@ class CheckUnitCoverage(UnitCoverageChecker):
         self._package_tree_reader = package_tree_reader
         self._test_coverage_reader = test_coverage_reader
 
-    def check_unit_coverage(self) -> UnitCoverageReport | NoPerTestCoverage:
-        if not self._test_coverage_reader.has_per_test_branch_coverage():
-            return NoPerTestCoverage()
+    def check_unit_coverage(self) -> UnitCoverageReport:
         own_tests = find_own_tests(self._package_tree_reader.read_package_tree())
         shortfalls = [
             shortfall

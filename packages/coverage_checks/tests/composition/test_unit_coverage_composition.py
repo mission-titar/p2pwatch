@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from coverage_checks.application.ports.driving.unit_coverage_checker import NoPerTestCoverage
 from coverage_checks.composition.unit_coverage_composition import UnitCoverageComposition
+from coverage_checks.domain.broken_input_error import BrokenInputError
 
 
 def _checker(package_directory: Path, temporary_directory: Path) -> UnitCoverageComposition:
@@ -17,11 +17,16 @@ def _checker(package_directory: Path, temporary_directory: Path) -> UnitCoverage
     )
 
 
-def test_check_leaves_the_temporary_directory_as_it_found_it(tmp_path: Path) -> None:
+def test_check_leaves_the_temporary_directory_as_it_found_it_even_when_it_raises(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "src" / "pkg").mkdir(parents=True)
+    (tmp_path / "src" / "pkg" / "sizes.py").write_text("LIMIT = 10\n")
     temporary_directory = tmp_path / "tmp"
     temporary_directory.mkdir()
 
-    assert _checker(tmp_path, temporary_directory).check_unit_coverage() == NoPerTestCoverage()
+    with pytest.raises(BrokenInputError):
+        _checker(tmp_path, temporary_directory).check_unit_coverage()
 
     assert list(temporary_directory.iterdir()) == []
 

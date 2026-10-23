@@ -71,14 +71,31 @@ def test_unit_coverage_checks_the_package_in_the_cwd_and_names_it_in_the_summary
     assert list(temporary_directory.iterdir()) == []  # coverage.py's report gone with its directory
 
 
-def test_unit_coverage_without_recorded_coverage_names_the_cwd_s_data_file(
+def test_unit_coverage_without_recorded_coverage_ends_in_one_error_line_naming_the_data_file(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    (tmp_path / "src" / "pkg").mkdir(parents=True)
+    (tmp_path / "src" / "pkg" / "sizes.py").write_text(SIZES)
     (tmp_path / "pyproject.toml").write_text('[project]\nname = "pkg"\n')
     command_line = build_command_line(cwd=tmp_path, temporary_directory=tmp_path)
 
     assert command_line.run(["unit-coverage"]) == 1
 
-    assert capsys.readouterr().err.startswith(
-        f"no per-test branch coverage in {tmp_path / '.coverage'}: run this package's pytest"
+    assert capsys.readouterr() == (
+        "",
+        f"error: {tmp_path / '.coverage'}: no per-test branch coverage; run this package's"
+        " pytest first, with branch coverage and --cov-context=test\n",
+    )
+
+
+def test_unit_coverage_outside_a_package_ends_in_one_error_line_naming_its_pyproject(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    command_line = build_command_line(cwd=tmp_path, temporary_directory=tmp_path)
+
+    assert command_line.run(["unit-coverage"]) == 1
+
+    assert capsys.readouterr() == (
+        "",
+        f"error: {tmp_path / 'pyproject.toml'}: No such file or directory\n",
     )

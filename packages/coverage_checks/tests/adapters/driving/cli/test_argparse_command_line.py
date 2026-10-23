@@ -1,17 +1,11 @@
 """The command line: one subcommand, which prints the unit coverage report of the package."""
 
-from pathlib import Path
-
 import pytest
 
 from coverage_checks.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
-from coverage_checks.application.ports.driving.unit_coverage_checker import (
-    NoPerTestCoverage,
-    UnitCoverageReport,
-)
+from coverage_checks.application.ports.driving.unit_coverage_checker import UnitCoverageReport
+from coverage_checks.domain.broken_input_error import BrokenInputError
 from tests.fakes.composition.fake_unit_coverage_checker import FakeUnitCoverageChecker
-
-_DATA_FILE = Path("/work/packages/pkg/.coverage")
 
 
 def _report(*problems: str) -> UnitCoverageReport:
@@ -26,9 +20,7 @@ def _report(*problems: str) -> UnitCoverageReport:
 
 
 def _command_line(unit_coverage_checker: FakeUnitCoverageChecker) -> ArgparseCommandLine:
-    return ArgparseCommandLine(
-        unit_coverage_checker=unit_coverage_checker, package_name="pkg", data_file=_DATA_FILE
-    )
+    return ArgparseCommandLine(unit_coverage_checker=unit_coverage_checker, package_name="pkg")
 
 
 def test_unit_coverage_prints_each_problem_then_the_package_s_summary_and_fails(
@@ -58,18 +50,17 @@ def test_unit_coverage_without_a_problem_prints_the_summary_and_passes(
     )
 
 
-def test_unit_coverage_without_per_test_coverage_says_how_to_record_it_and_fails(
+def test_unit_coverage_on_a_broken_input_prints_its_error_on_one_line_and_fails(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    command_line = _command_line(FakeUnitCoverageChecker(NoPerTestCoverage()))
+    broken_input = BrokenInputError("/work/packages/pkg/.coverage: no per-test branch coverage")
+    command_line = _command_line(FakeUnitCoverageChecker(_report(), broken_input=broken_input))
 
     assert command_line.run(["unit-coverage"]) == 1
 
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    assert captured.err == (
-        "no per-test branch coverage in /work/packages/pkg/.coverage: run this package's pytest"
-        " first, with branch coverage and --cov-context=test\n"
+    assert capsys.readouterr() == (
+        "",
+        "error: /work/packages/pkg/.coverage: no per-test branch coverage\n",
     )
 
 
