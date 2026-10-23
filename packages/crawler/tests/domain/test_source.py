@@ -1,12 +1,14 @@
 import dataclasses
 import uuid
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import (
     ContactPoint,
+    EarlierPoints,
+    LatestPoint,
     SourceKey,
     SourceReading,
     SourceRole,
@@ -17,6 +19,7 @@ from p2pwatch.domain.source import (
 )
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
+_T0 = datetime(2026, 10, 13, 20, 0, tzinfo=UTC)
 
 
 def test_source_key_is_frozen() -> None:
@@ -104,6 +107,30 @@ def test_a_passing_state_carries_the_group_of_the_latest_point(
 
 def test_the_tolerance_lets_one_read_be_missed() -> None:
     assert carried_role_max_age(timedelta(seconds=330)) == timedelta(seconds=990)
+
+
+def test_earlier_points_of_no_point_tell_nothing() -> None:
+    assert EarlierPoints.of(()) == EarlierPoints(has_useful_point=False, latest_known_at=None)
+
+
+def test_earlier_points_leave_unknown_points_out_of_the_latest_known_one() -> None:
+    points = (
+        LatestPoint(SourceRole.NOTHING_NEW, _T0, 0),
+        LatestPoint(SourceRole.STANDBY, _T0 + timedelta(hours=1), 0),
+        LatestPoint(SourceRole.UNDETERMINED, _T0 + timedelta(hours=2), 0),
+    )
+    assert EarlierPoints.of(points) == EarlierPoints(has_useful_point=False, latest_known_at=_T0)
+
+
+def test_earlier_points_tell_a_useful_point_and_the_latest_known_one() -> None:
+    points = (
+        LatestPoint(SourceRole.QUEUED, _T0 + timedelta(hours=1), 0),
+        LatestPoint(SourceRole.NOTHING_NEW, _T0, 0),
+        LatestPoint(SourceRole.STANDBY, _T0 + timedelta(hours=2), 0),
+    )
+    assert EarlierPoints.of(points) == EarlierPoints(
+        has_useful_point=True, latest_known_at=_T0 + timedelta(hours=1)
+    )
 
 
 @pytest.mark.parametrize("server", ["176.103.48.36:4184", "0.0.0.0:1", "1.2.3.4:65535"])

@@ -4,14 +4,14 @@ from datetime import datetime
 from p2pwatch.application.ports.driven.source_point_reader import SourcePointReader
 from p2pwatch.application.ports.driven.source_point_writer import SourcePointWriter
 from p2pwatch.domain.file_key import FileKey
-from p2pwatch.domain.source import EarlierPoints, RecordedReading, SourceKey, SourceReading
+from p2pwatch.domain.source import LatestPoint, RecordedReading, SourceKey, SourceReading
 from p2pwatch.domain.store_error import StoreError
 
 
 class FakeSourcePointStore(SourcePointWriter, SourcePointReader):
     """Records each ``record_readings`` call, answering ``kept`` per hash; raises
     ``StoreError`` for ``fail_for``. ``history`` answers ``read_earlier_points`` per source,
-    never useful by default, and ``baseline`` answers ``has_points_before``, each call noted in
+    no point by default, and ``baseline`` answers ``has_points_before``, each call noted in
     ``baselines``, the first ``baseline_failures`` raising ``StoreError``."""
 
     def __init__(
@@ -19,7 +19,7 @@ class FakeSourcePointStore(SourcePointWriter, SourcePointReader):
         *,
         fail_for: set[str] | None = None,
         kept: dict[str, tuple[RecordedReading, ...]] | None = None,
-        history: dict[SourceKey, EarlierPoints] | None = None,
+        history: dict[SourceKey, tuple[LatestPoint, ...]] | None = None,
         baseline: bool = True,
         baseline_failures: int = 0,
     ) -> None:
@@ -44,12 +44,10 @@ class FakeSourcePointStore(SourcePointWriter, SourcePointReader):
 
     def read_earlier_points(
         self, source: SourceKey, before: datetime, node_id: str
-    ) -> EarlierPoints:
+    ) -> tuple[LatestPoint, ...]:
         self.node_ids.add(node_id)
         self.asked.append((source, before))
-        return self._history.get(
-            source, EarlierPoints(has_useful_point=False, latest_known_at=None)
-        )
+        return self._history.get(source, ())
 
     def has_points_before(self, before: datetime, node_id: str) -> bool:
         self.node_ids.add(node_id)

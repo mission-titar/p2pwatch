@@ -14,12 +14,11 @@ from p2pwatch.application.ports.driven.source_point_reader import SourcePointRea
 from p2pwatch.application.ports.driven.source_point_writer import SourcePointWriter
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.source import (
-    EarlierPoints,
+    LatestPoint,
     RecordedReading,
     SourceKey,
     SourceReading,
     SourceRole,
-    SourceUsefulness,
     carried_role,
     carried_role_max_age,
 )
@@ -70,14 +69,16 @@ ON CONFLICT (variant_id, observed_at) DO NOTHING
 
 # Each variant's latest point before the round, one seek each (D5's reason); + as in _LATEST_POINT.
 _EARLIER_POINTS = """
-SELECT
-    v.role,
-    (
-        SELECT MAX(o.observed_at) FROM source_observations AS o
-        WHERE o.variant_id = v.variant_id AND o.observed_at < ?
-    )
+SELECT v.role, o.observed_at, o.session_received_bytes
 FROM source_variants AS v
-WHERE v.source_id = ? AND +v.node_id = ?
+INNER JOIN source_observations AS o ON v.variant_id = o.variant_id
+WHERE
+    v.source_id = :source_id
+    AND +v.node_id = :node_id
+    AND o.observed_at = (
+        SELECT MAX(p.observed_at) FROM source_observations AS p
+        WHERE p.variant_id = v.variant_id AND p.observed_at < :before
+    )
 """
 
 _HAS_POINTS_BEFORE = """
@@ -161,21 +162,18 @@ class SqliteSourcePointStore(SourcePointWriter, SourcePointReader):
 
     def read_earlier_points(
         self, source: SourceKey, before: datetime, node_id: str
-    ) -> EarlierPoints:
-        """Whether a useful point exists, and the latest useful or not-useful one."""
+    ) -> tuple[LatestPoint, ...]:
+        """The latest point of each of ``source``'s variants that has one before ``before``."""
         with wrap_sqlite_errors():
             rows = self._connection.execute(
-                _EARLIER_POINTS, (_micros(before), source.source_id, node_id)
+                _EARLIER_POINTS,
+                {"source_id": source.source_id, "node_id": node_id, "before": _micros(before)},
             ).fetchall()
-        seen = [
-            (SourceRole(role).usefulness, latest) for role, latest in rows if latest is not None
-        ]
-        known = [
-            latest for usefulness, latest in seen if usefulness is not SourceUsefulness.UNKNOWN
-        ]
-        return EarlierPoints(
-            has_useful_point=any(usefulness is SourceUsefulness.USEFUL for usefulness, _ in seen),
-            latest_known_at=_EPOCH + max(known) * _MICROSECOND if known else None,
+        return tuple(
+            LatestPoint(
+                SourceRole(role), _EPOCH + observed_at * _MICROSECOND, session_received_bytes
+            )
+            for role, observed_at, session_received_bytes in rows
         )
 
     def has_points_before(self, before: datetime, node_id: str) -> bool:

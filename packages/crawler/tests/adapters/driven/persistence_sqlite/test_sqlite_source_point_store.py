@@ -13,7 +13,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store impor
     SqliteSourcePointStore,
 )
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.source import EarlierPoints, SourceKey, SourceReading, SourceRole
+from p2pwatch.domain.source import LatestPoint, SourceKey, SourceReading, SourceRole
 from tests.support.catalog_rows import (
     file_id,
     insert_file,
@@ -40,10 +40,13 @@ def _points(
     native_id: str = _FILE,
     user_hash: str = _USER,
     node_id: str = "n1",
+    session_received_bytes: int = 0,
 ) -> None:
     variant_id = insert_source_variant(catalog, native_id, user_hash, role=role, node_id=node_id)
     for moment in moments:
-        insert_source_point(catalog, variant_id, _us(moment))
+        insert_source_point(
+            catalog, variant_id, _us(moment), session_received_bytes=session_received_bytes
+        )
 
 
 @pytest.fixture
@@ -62,17 +65,17 @@ def source_point_store(catalog: sqlite3.Connection) -> SqliteSourcePointStore:
     return SqliteSourcePointStore(catalog, timedelta(seconds=30))
 
 
-def test_earlier_points_count_neither_the_rounds_points_nor_unknown_ones(
+def test_earlier_points_are_each_variants_latest_point_before_the_round(
     source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
     round_started_at = _T0 + timedelta(hours=3)
     _points(catalog, _T0, _T0 + timedelta(seconds=30), role="nothing_new")
-    _points(catalog, _T0 + timedelta(hours=1), role="standby")
-    _points(catalog, _T0 + timedelta(hours=2), role="undetermined")
+    _points(catalog, _T0 + timedelta(hours=1), role="standby", session_received_bytes=9_728)
     _points(catalog, round_started_at, round_started_at + timedelta(seconds=30))
-    assert source_point_store.read_earlier_points(_KEY, round_started_at, "n1") == EarlierPoints(
-        has_useful_point=False, latest_known_at=_T0 + timedelta(seconds=30)
-    )
+    assert set(source_point_store.read_earlier_points(_KEY, round_started_at, "n1")) == {
+        LatestPoint(SourceRole.NOTHING_NEW, _T0 + timedelta(seconds=30), 0),
+        LatestPoint(SourceRole.STANDBY, _T0 + timedelta(hours=1), 9_728),
+    }
 
 
 def test_earlier_points_read_this_sources_points_on_every_file_of_the_given_node_only(
@@ -82,15 +85,13 @@ def test_earlier_points_read_this_sources_points_on_every_file_of_the_given_node
     _points(catalog, _T0, role="sending", native_id=_OTHER_FILE)
     _points(catalog, later, user_hash=_OTHER_USER)
     _points(catalog, later, node_id="n2")
-    assert source_point_store.read_earlier_points(
-        _KEY, later + timedelta(seconds=30), "n1"
-    ) == EarlierPoints(has_useful_point=True, latest_known_at=_T0)
-    assert source_point_store.read_earlier_points(_OTHER_KEY, later, "n1") == EarlierPoints(
-        False, None
+    assert source_point_store.read_earlier_points(_KEY, later + timedelta(seconds=30), "n1") == (
+        LatestPoint(SourceRole.SENDING, _T0, 0),
     )
-    assert source_point_store.read_earlier_points(
-        _KEY, later + timedelta(seconds=30), "n2"
-    ) == EarlierPoints(has_useful_point=True, latest_known_at=later)
+    assert source_point_store.read_earlier_points(_OTHER_KEY, later, "n1") == ()
+    assert source_point_store.read_earlier_points(_KEY, later + timedelta(seconds=30), "n2") == (
+        LatestPoint(SourceRole.QUEUED, later, 0),
+    )
 
 
 def test_has_points_before_reads_only_the_given_nodes_points_before(
@@ -142,6 +143,9 @@ def test_earlier_points_seek_once_per_variant_whatever_the_history(
                 ((variant_id, _us(_T0) + n * 300_000_000) for n in range(count // 2)),
             )
     source_point_store = SqliteSourcePointStore(catalog, timedelta(seconds=30))
+    source_point_store.read_earlier_points(
+        _KEY, before, "n1"
+    )  # the first call prepares the statement
     small = _steps(catalog, lambda: source_point_store.read_earlier_points(_KEY, before, "n1"))
     large = _steps(
         catalog, lambda: source_point_store.read_earlier_points(_OTHER_KEY, before, "n1")
