@@ -50,7 +50,7 @@ def tracked_download_store(connection: sqlite3.Connection) -> SqliteTrackedDownl
 def test_record_queued_inserts_a_new_download(
     tracked_download_store: SqliteTrackedDownloadStore,
 ) -> None:
-    assert tracked_download_store.record_queued(_A, "062A", 100, _T0) is True
+    tracked_download_store.record_queued(_A, "062A", 100, _T0)
     assert tracked_download_store.is_tracked(_A) is True
 
 
@@ -63,11 +63,14 @@ def test_record_queued_keys_the_row_by_file_id_and_keeps_the_file_key(
     ]
 
 
-def test_record_queued_is_dedup_safe(tracked_download_store: SqliteTrackedDownloadStore) -> None:
-    assert tracked_download_store.record_queued(_A, "062A", 100, _T0) is True
-    assert (
-        tracked_download_store.record_queued(_A, "062A", 100, _T0 + _DAY) is False
-    )  # duplicate ignored
+def test_record_queued_is_dedup_safe(
+    tracked_download_store: SqliteTrackedDownloadStore, connection: sqlite3.Connection
+) -> None:
+    tracked_download_store.record_queued(_A, "062A", 100, _T0)
+    tracked_download_store.record_queued(_A, "063A", 200, _T0 + _DAY)  # duplicate ignored
+    assert connection.execute(
+        "SELECT target_id, size_bytes, queued_at FROM downloads"
+    ).fetchall() == [("062A", 100, utc_iso(_T0))]
 
 
 def test_is_downloaded_is_false_for_unknown_hash(

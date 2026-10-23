@@ -8,10 +8,7 @@ from datetime import timedelta
 from p2pwatch.application.ports.driven.waker import Waker
 from p2pwatch.application.steps.download_cycle import run_download_cycle
 from p2pwatch.application.steps.download_deps import DownloadDeps
-
-# Conventional subject of the download wake (DECISION D13). D-download subscribes to THIS
-# subject; the producer side (the pipeline) calls wake("download").
-DOWNLOAD_WAKE_SUBJECT = "download"
+from p2pwatch.domain.wake_subject import WakeSubject
 
 
 @dataclass
@@ -31,7 +28,7 @@ async def _sleep_or_wake(deps: DownloadLoopDeps) -> None:
     """
     poll_interval = timedelta(seconds=deps.poll_interval_seconds)
     sleep_task = asyncio.ensure_future(deps.monotonic_clock.sleep(poll_interval))
-    wake_task = asyncio.ensure_future(deps.waker.wait(DOWNLOAD_WAKE_SUBJECT))
+    wake_task = asyncio.ensure_future(deps.waker.wait(WakeSubject.DOWNLOAD))
     try:
         await asyncio.wait({sleep_task, wake_task}, return_when=asyncio.FIRST_COMPLETED)
     finally:

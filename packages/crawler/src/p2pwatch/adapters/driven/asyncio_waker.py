@@ -14,22 +14,23 @@ synchronously on that same loop, no races). No lock needed.
 import asyncio
 
 from p2pwatch.application.ports.driven.waker import Waker
+from p2pwatch.domain.wake_subject import WakeSubject
 
 
 class AsyncioWaker(Waker):
     """In-process waker (one ``asyncio.Event`` per subject, created on demand)."""
 
     def __init__(self) -> None:
-        self._events: dict[str, asyncio.Event] = {}
+        self._events: dict[WakeSubject, asyncio.Event] = {}
 
-    def _event(self, subject: str) -> asyncio.Event:
+    def _event(self, subject: WakeSubject) -> asyncio.Event:
         return self._events.setdefault(subject, asyncio.Event())
 
-    def wake(self, subject: str) -> None:
+    def wake(self, subject: WakeSubject) -> None:
         """Wakes the subject's ``wait`` calls (synchronous: called post-commit, does not block)."""
         self._event(subject).set()
 
-    async def wait(self, subject: str) -> None:
+    async def wait(self, subject: WakeSubject) -> None:
         """Sleeps until the subject's next ``wake``, then re-arms for the following one."""
         event = self._event(subject)
         await event.wait()

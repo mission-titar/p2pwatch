@@ -201,7 +201,7 @@ depends_on = ["p2pwatch.application.ports.driven.run_state_reader", "p2pwatch.ap
 [[modules]]
 path = "p2pwatch.adapters.driven.asyncio_waker"
 layer = "adapters"
-depends_on = ["p2pwatch.application.ports.driven.waker"]
+depends_on = ["p2pwatch.domain", "p2pwatch.application.ports.driven.waker"]
 
 [[modules]]
 path = "p2pwatch.adapters.driven.in_memory_status_reading_store"
@@ -659,7 +659,7 @@ depends_on = ["p2pwatch.domain"]
 [[modules]]
 path = "p2pwatch.application.ports.driven.waker"
 layer = "ports"
-depends_on = []
+depends_on = ["p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.application.ports.driven.wall_clock"

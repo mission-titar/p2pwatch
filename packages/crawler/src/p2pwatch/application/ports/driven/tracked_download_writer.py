@@ -16,8 +16,8 @@ class TrackedDownloadWriter(ABC):
     @abstractmethod
     def record_queued(
         self, file: FileKey, target_id: str, size_bytes: int, queued_at: datetime
-    ) -> bool:
-        """Tracks ``file`` as queued; ``False`` when it is already tracked."""
+    ) -> None:
+        """Tracks ``file`` as queued; a file already tracked keeps its row."""
 
     @abstractmethod
     def set_completed(self, file: FileKey, completed_at: datetime) -> None:

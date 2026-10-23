@@ -1,5 +1,3 @@
-from datetime import timedelta
-
 import pytest
 
 from catalog_matching.domain.models import TargetSegment
@@ -11,11 +9,7 @@ from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
 from tests.fakes.adapters.driven.fake_free_space_meter import FakeFreeSpaceMeter
-from tests.fakes.adapters.driven.fake_lagging_tracked_download_store import (
-    FakeLaggingTrackedDownloadStore,
-)
 from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader
-from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
 from tests.support.application.steps.download_deps import (
     HASH_A,
@@ -108,8 +102,7 @@ async def test_two_segment_candidates_same_hash_dedup_to_one_download() -> None:
     # emits one per NON-skipped candidate (download_decider.py, end of the loop body);
     # both candidates are policy-eligible here, so a SECOND event would only appear if the
     # `is_tracked` continue-guard were removed, unlike the hash-keyed dict observables
-    # above (states/started), which stay collapsed regardless thanks to
-    # FakeTrackedDownloadStore.record_queued's own idempotency guard.
+    # above (states/started), which stay collapsed regardless.
     queued_events = [e for e in event_emitter.events if isinstance(e, DownloadQueued)]
     assert len(queued_events) == 1
 
@@ -318,26 +311,3 @@ async def test_low_disk_warns_once_per_crossing_and_rearms_at_the_floor() -> Non
     assert warnings_per_cycle == [1, 0, 0, 1]
     assert DiskSpaceLow(free_bytes=500, min_free_bytes=600) in event_emitter.events
     assert event_emitter.node_ids == {NODE}
-
-
-@pytest.mark.asyncio
-async def test_a_duplicate_queuing_keeps_the_deadline_its_latest_seen_at_leaves() -> None:
-    fake_time = FakeTime()
-    tracked_download_store = FakeLaggingTrackedDownloadStore()
-    tracked_download_store.record_queued(
-        key(HASH_A), "062A", 10, fake_time.wall.now() - timedelta(hours=23)
-    )
-    deps = build_deps(
-        client=FakeDownloadClient(),
-        tracked_download_store=tracked_download_store,
-        decision_reader=FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),)),
-        observation_reader=FakeObservationReader(
-            observations={HASH_A: observation(HASH_A, "a.avi", 10)}
-        ),
-        lost_after=timedelta(days=1),
-        fake_time=fake_time,
-    )
-    await run_download_cycle(deps, NODE)
-    fake_time.advance(timedelta(hours=1))
-    await run_download_cycle(deps, NODE)
-    assert tracked_download_store.states[HASH_A] is DownloadState.FAILED

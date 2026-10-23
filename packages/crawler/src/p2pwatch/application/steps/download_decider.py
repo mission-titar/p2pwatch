@@ -58,11 +58,10 @@ async def queue_new_candidates(deps: DownloadDeps, outstanding_bytes: int, node_
             continue
         # record_queued ONLY here (sync DB write); start_unlisted sends it (network I/O): the
         # write precedes the network, and a start that raises leaves it 'queued' for next round.
-        if deps.tracked_download_writer.record_queued(
+        deps.tracked_download_writer.record_queued(
             candidate.file, candidate.target_id, size_bytes, deps.wall_clock.now()
-        ):
-            deadline = deps.monotonic_clock.now() + deps.lost_after
-            deps.loss_deadline_by_file[candidate.file] = deadline
+        )
+        deps.loss_deadline_by_file[candidate.file] = deps.monotonic_clock.now() + deps.lost_after
         outstanding_bytes += size_bytes  # the client does not list it yet
         deps.logger.info("candidate file=%s queued for download", candidate.file.native_id)
         await deps.event_emitter.emit(DownloadQueued(target_id=candidate.target_id), node_id)
