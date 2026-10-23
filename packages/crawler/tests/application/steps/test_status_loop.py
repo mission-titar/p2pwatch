@@ -5,12 +5,12 @@ import asyncio
 from datetime import timedelta
 
 import pytest
-from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 
 from p2pwatch.application.ports.driven.status_client import StatusClient
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.status_loop import StatusLoopDeps, status_loop
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError, ReadRejectedError
+from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.policy import Severity
 from p2pwatch.domain.status_reading import (
     ChannelStatus,
