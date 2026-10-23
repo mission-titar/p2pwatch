@@ -12,6 +12,7 @@ from datetime import timedelta
 
 import pytest
 
+from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import (
     DecisionRecord,
     Explanation,
@@ -57,7 +58,7 @@ def _reported_file(native_id: str, filename: str) -> ReportedFile:
     )
 
 
-def _legacy_row(target_id: str, rule_name: str, tier: str) -> MatchDecision:
+def _legacy_row(target_id: str, rule_name: str, tier: DecisionTier) -> MatchDecision:
     return MatchDecision(
         target_id=target_id,
         rule_name=rule_name,
@@ -244,7 +245,7 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
     )
     decision_store.record_decision(
         FileKey(Network.ED2K, _HASH_MULTI),
-        _legacy_row("001A", "keroro_large", "catalog"),
+        _legacy_row("001A", "keroro_large", DecisionTier.CATALOG),
         wall_clock.now(),
         _NODE,
     )
@@ -285,11 +286,8 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
     observation_store.record_observation(
         FileObservation(_reported_file(_HASH_MULTI, _MULTI_NAME), wall_clock.now()), _NODE
     )
-    decision_store.record_decision(
-        FileKey(Network.ED2K, _HASH_MULTI),
-        _legacy_row("", "", RETRACTED_TIER),
-        wall_clock.now(),
-        _NODE,
+    decision_store.record_retraction(
+        FileKey(Network.ED2K, _HASH_MULTI), "", wall_clock.now(), _NODE
     )
     event_emitter, waker = FakeEventEmitter(), FakeWaker()
     summary = await reevaluate_catalog(

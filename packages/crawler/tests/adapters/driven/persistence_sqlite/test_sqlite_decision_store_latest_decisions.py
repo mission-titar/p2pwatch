@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord, Explanation, MatchDecision
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
@@ -19,7 +20,7 @@ _T0 = datetime(2026, 6, 12, tzinfo=UTC)
 _T1 = _T0 + timedelta(minutes=1)
 
 
-def _decision(rule_name: str, tier: str, target_id: str = "062A") -> MatchDecision:
+def _decision(rule_name: str, tier: DecisionTier, target_id: str = "062A") -> MatchDecision:
     return MatchDecision(
         target_id=target_id,
         rule_name=rule_name,
@@ -52,11 +53,15 @@ def test_latest_decisions_is_empty_when_never_decided(
 def test_latest_decisions_returns_the_latest_record_per_target(
     decision_store: SqliteDecisionStore,
 ) -> None:
-    decision_store.record_decision(_A, _decision("keroro_large", "catalog", "062A"), _T0, _NODE)
     decision_store.record_decision(
-        _A, _decision("id_segment_exact", "download", "062A"), _T1, _NODE
+        _A, _decision("keroro_large", DecisionTier.CATALOG, "062A"), _T0, _NODE
+    )
+    decision_store.record_decision(
+        _A, _decision("id_segment_exact", DecisionTier.DOWNLOAD, "062A"), _T1, _NODE
     )  # newer
-    decision_store.record_decision(_A, _decision("numero_nu", "notify", "062B"), _T0, _NODE)
+    decision_store.record_decision(
+        _A, _decision("numero_nu", DecisionTier.NOTIFY, "062B"), _T0, _NODE
+    )
     assert decision_store.read_latest_decisions(_A) == {
         "062A": DecisionRecord(target_id="062A", rule_name="id_segment_exact", tier="download"),
         "062B": DecisionRecord(target_id="062B", rule_name="numero_nu", tier="notify"),
@@ -67,9 +72,9 @@ def test_latest_decisions_includes_a_target_whose_latest_tier_is_retracted(
     decision_store: SqliteDecisionStore,
 ) -> None:
     decision_store.record_decision(
-        _A, _decision("id_segment_exact", "download", "062A"), _T0, _NODE
+        _A, _decision("id_segment_exact", DecisionTier.DOWNLOAD, "062A"), _T0, _NODE
     )
-    decision_store.record_decision(_A, _decision("", RETRACTED_TIER, "062A"), _T1, _NODE)
+    decision_store.record_retraction(_A, "062A", _T1, _NODE)
     assert decision_store.read_latest_decisions(_A) == {
         "062A": DecisionRecord(target_id="062A", rule_name="", tier=RETRACTED_TIER)
     }
@@ -78,10 +83,10 @@ def test_latest_decisions_includes_a_target_whose_latest_tier_is_retracted(
 def test_latest_decisions_excludes_the_legacy_empty_sentinel(
     decision_store: SqliteDecisionStore,
 ) -> None:
-    decision_store.record_decision(_A, _decision("numero_nu", "notify", "062A"), _T0, _NODE)
     decision_store.record_decision(
-        _A, _decision("", RETRACTED_TIER, ""), _T1, _NODE
-    )  # legacy target_id=""
+        _A, _decision("numero_nu", DecisionTier.NOTIFY, "062A"), _T0, _NODE
+    )
+    decision_store.record_retraction(_A, "", _T1, _NODE)  # legacy target_id=""
     assert decision_store.read_latest_decisions(_A) == {
         "062A": DecisionRecord(target_id="062A", rule_name="numero_nu", tier="notify")
     }

@@ -15,7 +15,7 @@ from dataclasses import dataclass, replace
 from enum import Enum, StrEnum, auto
 from typing import Literal, assert_never
 
-from catalog_matching.domain.config import TIER_RANK
+from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.ed2k_link import build_ed2k_link
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.observability.events import (
@@ -118,8 +118,8 @@ _RISE_HEADINGS = {"download": "📥 Download", "notify": "🔎 Notify"}
 
 
 def _rank(tier: str | None) -> int:
-    """``TIER_RANK``, where none and ``retracted`` rank below every tier."""
-    return TIER_RANK.get(tier or "", -1)
+    """``DecisionTier.rank``, where none and ``retracted`` rank below every tier."""
+    return DecisionTier(tier).rank if tier is not None and tier in DecisionTier else -1
 
 
 def _is_rise(change: DecisionChange) -> bool:

@@ -1,3 +1,4 @@
+from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import (
     DecisionRecord,
     Explanation,
@@ -6,7 +7,7 @@ from catalog_matching.domain.engine import (
 )
 
 
-def _decision(tier: str = "download") -> MatchDecision:
+def _decision(tier: DecisionTier = DecisionTier.DOWNLOAD) -> MatchDecision:
     return MatchDecision(
         target_id="062A",
         rule_name="id_segment_exact",
@@ -33,5 +34,5 @@ def test_decision_record_is_frozen_and_equal_by_value() -> None:
 
 
 def test_records_differ_when_any_field_differs() -> None:
-    base = to_record(_decision(tier="download"))
-    assert base != to_record(_decision(tier="notify"))
+    base = to_record(_decision(tier=DecisionTier.DOWNLOAD))
+    assert base != to_record(_decision(tier=DecisionTier.NOTIFY))

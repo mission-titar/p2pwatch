@@ -11,7 +11,6 @@ from typing import Any
 
 from catalog_matching.domain.config import (
     SCOPES,
-    TIERS,
     AllDefinition,
     AnyDefinition,
     AttributeBetweenDefinition,
@@ -26,6 +25,7 @@ from catalog_matching.domain.config import (
     TokenDefinition,
     TokenReference,
 )
+from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.interpolation import (
     PLACEHOLDER,
     TARGET_PLACEHOLDERS,
@@ -262,9 +262,10 @@ def _parse_rule(raw: Any) -> Rule:
     if not name:
         raise MatchingConfigError(f"rule without 'name': {raw!r}")
     tier = mapping.get("tier")
-    if tier not in TIERS:
+    if tier not in DecisionTier:
+        known_tiers = sorted(member.value for member in DecisionTier)
         raise MatchingConfigError(
-            f"unknown tier for rule {name!r}: {tier!r} (expected {sorted(TIERS)})"
+            f"unknown tier for rule {name!r}: {tier!r} (expected {known_tiers})"
         )
     if "scope" not in mapping:
         raise MatchingConfigError(
@@ -280,7 +281,12 @@ def _parse_rule(raw: Any) -> Rule:
         raise MatchingConfigError(f"rule {name!r} without a condition (all/any/not)")
     if len(present) != 1:
         raise MatchingConfigError(f"rule {name!r}: exactly one condition expected, got {present!r}")
-    return Rule(name=name, tier=str(tier), scope=str(scope), condition=_parse_condition(mapping))
+    return Rule(
+        name=name,
+        tier=DecisionTier(str(tier)),
+        scope=str(scope),
+        condition=_parse_condition(mapping),
+    )
 
 
 def parse_matcher_config(raw: dict[str, Any]) -> MatcherConfig:

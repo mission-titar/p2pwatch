@@ -12,6 +12,7 @@ from catalog_matching.domain.config import (
     RegexDefinition,
     TokenReference,
 )
+from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.validation import (
     CycleError,
     DepthExceededError,
@@ -87,7 +88,7 @@ def test_parse_rule_with_inline_token_reference_and_condition() -> None:
     )
     rule = config.rules[0]
     assert rule.name == "numero_titre"
-    assert rule.tier == "notify"
+    assert rule.tier is DecisionTier.NOTIFY
     assert rule.condition == AllDefinition(
         operands=("seg", TokenReference(name="title_hit", min_coverage=0.5))
     )
