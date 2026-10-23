@@ -1,8 +1,12 @@
+import re
 from pathlib import Path, PurePath
+
+import pytest
 
 from coverage_checks.adapters.driven.filesystem_package_tree_reader import (
     FilesystemPackageTreeReader,
 )
+from coverage_checks.domain.broken_input_error import BrokenInputError
 
 
 def _touch(package_directory: Path, *paths: str) -> None:
@@ -53,3 +57,45 @@ def test_read_module_source_reads_a_module_under_the_directory(tmp_path: Path) -
     reader = FilesystemPackageTreeReader(package_directory=tmp_path)
 
     assert reader.read_module_source(PurePath("src/pkg/sizes.py")) == "LIMIT = 10  # « pas plus »\n"
+
+
+def test_read_package_tree_without_a_pyproject_raises_a_broken_input_naming_it(
+    tmp_path: Path,
+) -> None:
+    pyproject = re.escape(str(tmp_path / "pyproject.toml"))
+
+    with pytest.raises(BrokenInputError, match=f"^{pyproject}: No such file or directory$"):
+        FilesystemPackageTreeReader(package_directory=tmp_path).read_package_tree()
+
+
+def test_read_package_tree_of_a_pyproject_not_in_utf_8_raises_a_broken_input_naming_it(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "pyproject.toml").write_bytes('[project]\nname = "é"\n'.encode("latin-1"))
+    pyproject = re.escape(str(tmp_path / "pyproject.toml"))
+
+    with pytest.raises(BrokenInputError, match=f"^{pyproject}: not UTF-8$"):
+        FilesystemPackageTreeReader(package_directory=tmp_path).read_package_tree()
+
+
+def test_read_package_tree_of_a_pyproject_not_in_toml_raises_a_broken_input_naming_it(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "pyproject.toml").write_text("[project\n")
+    pyproject = re.escape(str(tmp_path / "pyproject.toml"))
+
+    with pytest.raises(
+        BrokenInputError, match=f"^{pyproject}: Expected ']' at the end of a table declaration "
+    ):
+        FilesystemPackageTreeReader(package_directory=tmp_path).read_package_tree()
+
+
+def test_read_module_source_of_an_absent_module_raises_a_broken_input_naming_it(
+    tmp_path: Path,
+) -> None:
+    module = re.escape(str(tmp_path / "src/pkg/sizes.py"))
+
+    with pytest.raises(BrokenInputError, match=f"^{module}: No such file or directory$"):
+        FilesystemPackageTreeReader(package_directory=tmp_path).read_module_source(
+            PurePath("src/pkg/sizes.py")
+        )

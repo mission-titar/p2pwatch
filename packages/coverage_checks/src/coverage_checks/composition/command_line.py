@@ -15,5 +15,4 @@ def build_command_line(*, cwd: Path, temporary_directory: Path) -> ArgparseComma
             package_directory=cwd, data_file=data_file, temporary_directory=temporary_directory
         ),
         package_name=cwd.name,
-        data_file=data_file,
     )

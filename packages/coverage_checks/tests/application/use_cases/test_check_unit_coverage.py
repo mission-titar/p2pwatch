@@ -2,10 +2,7 @@
 
 from pathlib import PurePath
 
-from coverage_checks.application.ports.driving.unit_coverage_checker import (
-    NoPerTestCoverage,
-    UnitCoverageReport,
-)
+from coverage_checks.application.ports.driving.unit_coverage_checker import UnitCoverageReport
 from coverage_checks.application.use_cases.check_unit_coverage import CheckUnitCoverage
 from coverage_checks.domain.package_tree import PackageTree
 from coverage_checks.domain.test_coverage import TestCoverage
@@ -102,12 +99,3 @@ def test_a_package_whose_modules_their_own_tests_run_whole_has_no_problem() -> N
         listed_test_count=1,
         short_module_count=0,
     )
-
-
-def test_a_run_without_per_test_branch_coverage_reads_no_module() -> None:
-    test_coverage_reader = FakeTestCoverageReader({}, has_per_test_branch_coverage=False)
-
-    report = _checker((SIZES_TESTS,), test_coverage_reader).check_unit_coverage()
-
-    assert report == NoPerTestCoverage()
-    assert test_coverage_reader.own_test_files_by_module == {}

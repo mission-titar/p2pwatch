@@ -3,23 +3,17 @@
 import argparse
 import sys
 from collections.abc import Sequence
-from pathlib import Path
 
-from coverage_checks.application.ports.driving.unit_coverage_checker import (
-    NoPerTestCoverage,
-    UnitCoverageChecker,
-)
+from coverage_checks.application.ports.driving.unit_coverage_checker import UnitCoverageChecker
+from coverage_checks.domain.broken_input_error import BrokenInputError
 
 
 class ArgparseCommandLine:
-    """``unit-coverage``, run once the package's pytest has recorded coverage in ``data_file``."""
+    """``unit-coverage``, run once the package's pytest has recorded its coverage."""
 
-    def __init__(
-        self, *, unit_coverage_checker: UnitCoverageChecker, package_name: str, data_file: Path
-    ) -> None:
+    def __init__(self, *, unit_coverage_checker: UnitCoverageChecker, package_name: str) -> None:
         self._unit_coverage_checker = unit_coverage_checker
         self._package_name = package_name
-        self._data_file = data_file
 
     def run(self, argv: Sequence[str]) -> int:
         """Runs the subcommand ``argv`` names, returns its exit code."""
@@ -34,14 +28,12 @@ class ArgparseCommandLine:
         return self._check_unit_coverage()
 
     def _check_unit_coverage(self) -> int:
-        """Prints each problem and the package's summary, returns 1 on any problem."""
-        report = self._unit_coverage_checker.check_unit_coverage()
-        if isinstance(report, NoPerTestCoverage):
-            print(
-                f"no per-test branch coverage in {self._data_file}: run this package's pytest"
-                " first, with branch coverage and --cov-context=test",
-                file=sys.stderr,
-            )
+        """Prints each problem and the package's summary, returns 1 on any problem or a broken
+        input."""
+        try:
+            report = self._unit_coverage_checker.check_unit_coverage()
+        except BrokenInputError as error:
+            print(f"error: {error}", file=sys.stderr)
             return 1
         for problem in report.problems:
             print(problem)

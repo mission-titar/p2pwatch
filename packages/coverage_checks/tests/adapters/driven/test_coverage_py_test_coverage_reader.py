@@ -1,6 +1,8 @@
 """Tests for the reader of a package's `.coverage`, recorded here as pytest-cov records it."""
 
+import gc
 import importlib.util
+import re
 from collections.abc import Callable, Mapping
 from pathlib import Path, PurePath
 from types import ModuleType
@@ -11,6 +13,7 @@ from coverage import Coverage
 from coverage_checks.adapters.driven.coverage_py_test_coverage_reader import (
     CoveragePyTestCoverageReader,
 )
+from coverage_checks.domain.broken_input_error import BrokenInputError
 
 SIZES = """\
 LIMIT = 10
@@ -23,6 +26,13 @@ def is_short(size):
 """
 
 type Call = Callable[[Mapping[str, ModuleType]], object]
+
+
+def _no_per_test_coverage_message(package_directory: Path) -> str:
+    return (
+        f"{package_directory / '.coverage'}: no per-test branch coverage; run this package's"
+        " pytest first, with branch coverage and --cov-context=test"
+    )
 
 
 def _measure(
@@ -135,16 +145,12 @@ def first(names):
 
 
 @pytest.mark.parametrize(
-    "branch,contexts,has_per_test_branch_coverage",
-    [
-        (True, ["tests/test_sizes.py::test_short|run"], True),
-        (True, [], False),
-        (False, ["tests/test_sizes.py::test_short|run"], False),
-    ],
-    ids=["per-test-branches", "no-test-context", "no-branch"],
+    "branch,contexts",
+    [(True, []), (False, ["tests/test_sizes.py::test_short|run"])],
+    ids=["no-test-context", "no-branch"],
 )
-def test_has_per_test_branch_coverage_needs_branches_and_a_test_s_context(
-    tmp_path: Path, branch: bool, contexts: list[str], has_per_test_branch_coverage: bool
+def test_a_run_without_per_test_branches_is_a_broken_input_naming_the_data_file(
+    tmp_path: Path, branch: bool, contexts: list[str]
 ) -> None:
     _measure(
         tmp_path,
@@ -153,8 +159,51 @@ def test_has_per_test_branch_coverage_needs_branches_and_a_test_s_context(
         branch=branch,
     )
 
-    assert _reader(tmp_path).has_per_test_branch_coverage() is has_per_test_branch_coverage
+    with pytest.raises(
+        BrokenInputError, match=f"^{re.escape(_no_per_test_coverage_message(tmp_path))}$"
+    ):
+        _reader(tmp_path).read_test_coverage(PurePath("src/pkg/sizes.py"), ())
 
 
-def test_a_missing_data_file_has_no_per_test_branch_coverage(tmp_path: Path) -> None:
-    assert _reader(tmp_path).has_per_test_branch_coverage() is False
+def test_an_absent_data_file_is_a_broken_input_naming_it(tmp_path: Path) -> None:
+    with pytest.raises(
+        BrokenInputError, match=f"^{re.escape(_no_per_test_coverage_message(tmp_path))}$"
+    ):
+        _reader(tmp_path).read_test_coverage(PurePath("src/pkg/sizes.py"), ())
+
+
+def test_a_data_file_that_is_no_coverage_database_is_a_broken_input_naming_it(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".coverage").write_text("not a database\n")
+    data_file = re.escape(repr(str(tmp_path / ".coverage")))
+
+    with pytest.raises(
+        BrokenInputError, match=f"^Couldn't use data file {data_file}: file is not a database$"
+    ):
+        _reader(tmp_path).read_test_coverage(PurePath("src/pkg/sizes.py"), ())
+    gc.collect()  # a connection left open warns as it is collected, failing this test
+
+
+def test_a_coverage_config_coverage_py_refuses_is_a_broken_input_naming_the_pyproject(
+    tmp_path: Path,
+) -> None:
+    _measure(tmp_path, {"src/pkg/sizes.py": SIZES}, {})
+    reader = _reader(tmp_path, '[tool.coverage.run]\nbranch = "sometimes"\n')
+    pyproject = re.escape(str(tmp_path / "pyproject.toml"))
+
+    with pytest.raises(BrokenInputError, match=f"^Couldn't read config file {pyproject}: "):
+        reader.read_test_coverage(PurePath("src/pkg/sizes.py"), ())
+
+
+def test_a_module_that_is_not_python_is_a_broken_input_naming_it(tmp_path: Path) -> None:
+    _measure(
+        tmp_path,
+        {"src/pkg/sizes.py": SIZES},
+        {"tests/test_sizes.py::test_short|run": lambda modules: modules["sizes"].is_short(3)},
+    )
+    (tmp_path / "src/pkg/broken.py").write_text("def is_short(:\n")
+    module = re.escape(repr(str(tmp_path / "src/pkg/broken.py")))
+
+    with pytest.raises(BrokenInputError, match=f"^Couldn't parse {module} as Python source: "):
+        _reader(tmp_path).read_test_coverage(PurePath("src/pkg/broken.py"), ())

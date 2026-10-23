@@ -10,7 +10,6 @@ from coverage_checks.adapters.driven.filesystem_package_tree_reader import (
     FilesystemPackageTreeReader,
 )
 from coverage_checks.application.ports.driving.unit_coverage_checker import (
-    NoPerTestCoverage,
     UnitCoverageChecker,
     UnitCoverageReport,
 )
@@ -28,7 +27,7 @@ class UnitCoverageComposition(UnitCoverageChecker):
         self._data_file = data_file
         self._temporary_directory = temporary_directory
 
-    def check_unit_coverage(self) -> UnitCoverageReport | NoPerTestCoverage:
+    def check_unit_coverage(self) -> UnitCoverageReport:
         with TemporaryDirectory(dir=self._temporary_directory) as report_directory:
             return CheckUnitCoverage(
                 package_tree_reader=FilesystemPackageTreeReader(

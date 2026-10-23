@@ -11,11 +11,8 @@ class TestCoverageReader(ABC):
     __test__ = False  # not a test class, where a test module imports it
 
     @abstractmethod
-    def has_per_test_branch_coverage(self) -> bool:
-        """Whether the run recorded branches, and each test apart."""
-
-    @abstractmethod
     def read_test_coverage(
         self, module: PurePath, own_test_files: Sequence[PurePath]
     ) -> TestCoverage:
-        """*module*'s test coverage, its own tests being those of *own_test_files*."""
+        """*module*'s test coverage, its own tests being those of *own_test_files*; a run that
+        recorded no branches, or no test apart, is a broken input."""

@@ -16,15 +16,10 @@ class UnitCoverageReport:
     short_module_count: int
 
 
-@dataclass(frozen=True)
-class NoPerTestCoverage:
-    """The run recorded no branches, or no test apart: there is nothing to check."""
-
-
 class UnitCoverageChecker(ABC):
     """Checks the package's modules against the coverage its pytest recorded, test by test."""
 
     @abstractmethod
-    def check_unit_coverage(self) -> UnitCoverageReport | NoPerTestCoverage:
+    def check_unit_coverage(self) -> UnitCoverageReport:
         """The test files that test no module, and what of each module its own tests leave
         unrun but what its import ran."""
