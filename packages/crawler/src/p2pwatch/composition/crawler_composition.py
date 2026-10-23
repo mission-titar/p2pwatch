@@ -361,16 +361,15 @@ class CrawlerComposition(CrawlerRunner):
                     wall_clock=wall_clock,
                     monotonic_clock=monotonic_clock,
                 )
-            # SHARED backoff registry: built ONCE, RELOADED from backoff_states
-            # (backoff survives restart, spec §3/§7), injected into ALL workers
-            # + passed to the search tasks that persist it. Single writer on the event loop.
+            # SHARED backoff registry: built ONCE, resumed by the lifecycle at its start (backoff
+            # survives restart, spec §3/§7), injected into ALL workers + passed to the search tasks
+            # that persist it. Single writer on the event loop.
             backoff = BackoffRegistry(
                 _backoff_policy(crawler_config),
                 wall_clock,
                 monotonic_clock,
                 RandomJitterGenerator(jitter_seed=None),  # seeded by the system's entropy
             )
-            backoff.load_from(backoff_state_store.read_backoff_states())
             deps = WorkerDeps(
                 observation_writer=observation_store,
                 observation_reader=observation_store,
@@ -470,6 +469,8 @@ class CrawlerComposition(CrawlerRunner):
                     node_id=node_id,
                     progress_every_files=_REEVALUATION_PROGRESS_EVERY_FILES,
                 ),
+                backoff=backoff,
+                backoff_state_reader=backoff_state_store,
                 loops=loops,
                 download_enabled=download_config is not None,
                 shutdown=shutdown,

@@ -25,4 +25,3 @@ async def test_on_exit_it_closes_all_it_holds_and_lets_only_the_first_error_thro
             raise ValueError("setup failed")
 
     assert closed == ["client", "catalog"]
-
