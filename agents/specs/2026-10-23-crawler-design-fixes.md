@@ -141,7 +141,8 @@ Strict TDD in every block, as `AGENTS.md` states it. Full contents, estimate sou
 | 40 | `refactor/validate-config-report` | `validate-config`'s report (D3) (Corrected: split at 24 files, merge's rule to 45) | 361, 18 (measured) |
 | 45 | `refactor/merge-rule-and-config-error-keys` | merge's same-catalog rule; every config error's key apart; matching's numbers refused without a traceback (D3, D4) (Corrected: added in Act) | |
 | 50 | `refactor/client-read-errors` | client errors per operation; the explainer's engine (D5, D6) | 270, 15 |
-| 60 | `refactor/fixed-values-to-composition` | `PAGE_SIZE`; fixed values to the composition (D7, D8) | 90, 18 |
+| 60 | `refactor/fixed-values-to-composition` | `PAGE_SIZE`; amuleapi's fixed values to the composition (D7, D8) (Corrected: split at 23 files) | 114, 17 (measured) |
+| 65 | `refactor/fixed-values-servers-and-console` | the servers' and the console's fixed values; `max_filename_length` with no default (D8) (Corrected: added in Act) | |
 | 70 | `refactor/composition-resource-stack` | the resource stack; backoff at start; gluetun's logger (D9, D10, D31) | 230, 13 |
 | 80 | `refactor/wake-subject` | `WakeSubject`; `record_queued` returns nothing (D11, D19) | 150, 16 |
 | 90 | `refactor/decision-tier` | `DecisionTier` in `catalog_matching` (D12) | 150, 10 |
@@ -447,7 +448,8 @@ exemptions of blocks 10 and 30 on their rows.
 | 30 | the config's checks and types to the domain, `ConfigError` replaced by `InvalidConfigError` | |
 | 40 | `ConfigReport`, `BrokenInputError`, C6; merge's same-catalog rule | |
 | 50 | `ReadRejectedError`; the explainer receives the engine | |
-| 60 | `PAGE_SIZE`; the adapters' fixed values, `max_filename_length` | |
+| 60 | `PAGE_SIZE`; amuleapi's page size and progress poll interval | |
+| 65 | the join timeouts, the console's budget check step; `MatchingEngine`'s `max_filename_length` loses its default, the composition's constant its one value (Corrected: added in Act) | |
 | 70 | the resource stack; the backoff waits resumed by the lifecycle; `GluetunForwardedPortClient` logs through `getLogger(__name__)` | D31 adds about 40 lines, 3 files to the estimate |
 | 80 | `WakeSubject`; `record_queued` returns nothing | |
 | 90 | `DecisionTier` in `catalog_matching` | |
