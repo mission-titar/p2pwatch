@@ -1,7 +1,7 @@
 """``plan_observability`` is an exhaustive match: one case per event + each conditional branch
 (a rise or not, first_occurrence true/false)."""
 
-from dataclasses import replace
+from datetime import timedelta
 
 import pytest
 
@@ -10,6 +10,12 @@ from catalog_matching.domain.engine import DecisionRecord
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction
 from p2pwatch.domain.observability import events as ev
+from p2pwatch.domain.observability.notification import (
+    CompletedDownload,
+    SourceAlert,
+    SourceAlertKind,
+    TierRise,
+)
 from p2pwatch.domain.observability.policy import (
     Audience,
     MetricInstruction,
@@ -29,6 +35,7 @@ _ED2K_REAPPEARED = (("network", "ed2k"), ("kind", "reappeared"))
 _SOURCE = SourceKey(Network.ED2K, "1f2e3d4c" * 4)
 _FILE = FileKey(Network.ED2K, "8f3a1c0b9e7d44a2b6c1f0e9d8a7b6c5")
 _062A = (ev.TargetTitle("062A", "Les demoiselles cambrioleuses"),)
+_NODE = "titar-node-1"
 
 
 CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
@@ -177,10 +184,15 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
             "source 1f2e3d4c… useful for the first time: Keroro 062.avi",
             (MetricInstruction(MetricName.SOURCE_ALERTS, "inc", _ED2K_FIRST_USEFUL),),
             _COMMUNITY,
-            "**Source**\n`AnimuseeFMR` 1f2e3d4c…, useful for the first time\n\n"
-            "**Targets**\n062A - Les demoiselles cambrioleuses\n\n"
-            "**File**\n`Keroro 062.avi`",
-            "📥 Source useful for the first time",
+            SourceAlert(
+                SourceAlertKind.FIRST_USEFUL,
+                _SOURCE,
+                "AnimuseeFMR",
+                None,
+                _062A,
+                "Keroro 062.avi",
+                _NODE,
+            ),
         ),
     ),
     (
@@ -190,10 +202,15 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
             "source 1f2e3d4c… reappeared after 26 h: Keroro 062.avi",
             (MetricInstruction(MetricName.SOURCE_ALERTS, "inc", _ED2K_REAPPEARED),),
             _COMMUNITY,
-            "**Source**\n`AnimuseeFMR` 1f2e3d4c…, reappeared after 26 h\n\n"
-            "**Targets**\n062A - Les demoiselles cambrioleuses\n\n"
-            "**File**\n`Keroro 062.avi`",
-            "🔁 Source reappeared",
+            SourceAlert(
+                SourceAlertKind.REAPPEARED,
+                _SOURCE,
+                "AnimuseeFMR",
+                timedelta(hours=26),
+                _062A,
+                "Keroro 062.avi",
+                _NODE,
+            ),
         ),
     ),
 ]
@@ -201,7 +218,9 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
 
 def test_plan_observability_maps_every_event() -> None:
     for event, expected in CASES:
-        assert plan_observability(event) == expected, f"wrong ObservabilityPlan for {event!r}"
+        assert plan_observability(event, _NODE) == expected, (
+            f"wrong ObservabilityPlan for {event!r}"
+        )
 
 
 _HASH = "8f3a1c0b9e7d44a2b6c1f0e9d8a7b6c5"
@@ -249,26 +268,28 @@ def _change(target_id: str, before: str | None, after: str) -> ev.DecisionChange
 def test_only_a_rise_to_notify_or_download_reaches_the_community(
     before: str | None, after: str, notified: bool
 ) -> None:
-    plan = plan_observability(_decisions(_change("062A", before, after)))
+    plan = plan_observability(_decisions(_change("062A", before, after)), _NODE)
     assert plan.audiences == (_COMMUNITY if notified else frozenset())
     assert plan.metrics == (MetricInstruction(MetricName.DECISIONS, "inc", (("tier", after),)),)
 
 
-def test_a_file_with_risen_targets_is_one_message_naming_the_file_and_targets() -> None:
+_062A_062B = (
+    ev.TargetTitle("062A", "Les demoiselles cambrioleuses"),
+    ev.TargetTitle("062B", "Le grand combat sous-marin"),
+)
+
+
+def test_a_file_with_risen_targets_is_one_rise_naming_the_file_and_targets() -> None:
     plan = plan_observability(
-        _decisions(_change("062A", None, "download"), _change("062B", None, "notify"))
+        _decisions(_change("062A", None, "download"), _change("062B", None, "notify")), _NODE
     )
-    assert plan.notification_title == "📥 Download"
-    assert plan.notification_body == (
-        "**Targets**\n"
-        "062A - Les demoiselles cambrioleuses\n"
-        "062B - Le grand combat sous-marin\n"
-        "\n"
-        "**File**\n"
-        "350.2 MiB - `Keroro 062.avi`\n"
-        "\n"
-        "**ed2k**\n"
-        f"`ed2k://|file|Keroro%20062.avi|367185920|{_HASH}|/`"
+    assert plan.notification == TierRise(
+        DecisionTier.DOWNLOAD,
+        _062A_062B,
+        "Keroro 062.avi",
+        367_185_920,
+        f"ed2k://|file|Keroro%20062.avi|367185920|{_HASH}|/",
+        _NODE,
     )
     assert plan.metrics == (
         MetricInstruction(MetricName.DECISIONS, "inc", (("tier", "download"),)),
@@ -276,19 +297,22 @@ def test_a_file_with_risen_targets_is_one_message_naming_the_file_and_targets() 
     )
 
 
-def test_the_message_lists_only_the_risen_targets_under_their_highest_tier() -> None:
+def test_the_rise_lists_only_the_risen_targets_under_their_highest_tier() -> None:
     plan = plan_observability(
-        _decisions(_change("062A", "catalog", "notify"), _change("062B", "notify", "retracted"))
+        _decisions(_change("062A", "catalog", "notify"), _change("062B", "notify", "retracted")),
+        _NODE,
     )
-    assert plan.notification_title == "🔎 Notify"
-    assert plan.notification_body.startswith(
-        "**Targets**\n062A - Les demoiselles cambrioleuses\n\n"
+    assert isinstance(plan.notification, TierRise)
+    assert (plan.notification.tier, plan.notification.target_titles) == (
+        DecisionTier.NOTIFY,
+        (ev.TargetTitle("062A", "Les demoiselles cambrioleuses"),),
     )
 
 
 def test_decisions_log_one_line_listing_every_change() -> None:
     plan = plan_observability(
-        _decisions(_change("062A", None, "download"), _change("062B", "notify", "retracted"))
+        _decisions(_change("062A", None, "download"), _change("062B", "notify", "retracted")),
+        _NODE,
     )
     assert plan.severity == Severity.INFO
     assert plan.message == (
@@ -296,57 +320,28 @@ def test_decisions_log_one_line_listing_every_change() -> None:
     )
 
 
-def test_a_change_without_a_rise_has_no_notification_body() -> None:
-    plan = plan_observability(_decisions(_change("062A", "download", "notify")))
-    assert (plan.notification_title, plan.notification_body) == ("", "")
+def test_a_change_without_a_rise_has_no_notification() -> None:
+    plan = plan_observability(_decisions(_change("062A", "download", "notify")), _NODE)
+    assert plan.notification is None
 
 
-def test_a_backtick_in_the_name_cannot_close_its_code_span() -> None:
-    # Discord pings a mention outside code: a name must not escape its span.
-    event = replace(_decisions(_change("062A", None, "download")), filename="a`@everyone`b.avi")
-    plan = plan_observability(event)
-    assert "\n350.2 MiB - `a'@everyone'b.avi`\n" in plan.notification_body
-    assert "`ed2k://|file|a%60%40everyone%60b.avi|" in plan.notification_body
-
-
-def _completed(*target_titles: ev.TargetTitle) -> ev.DownloadCompleted:
-    return ev.DownloadCompleted(FileKey(Network.ED2K, _HASH), "Keroro `062`.avi", target_titles)
-
-
-def test_a_completed_download_is_a_green_message_naming_its_targets_and_file() -> None:
+def test_a_completed_download_notifies_its_targets_and_file() -> None:
     plan = plan_observability(
-        _completed(
-            ev.TargetTitle("062A", "Les demoiselles cambrioleuses"),
-            ev.TargetTitle("062B", "Le grand combat sous-marin"),
-        )
+        ev.DownloadCompleted(FileKey(Network.ED2K, _HASH), "Keroro `062`.avi", _062A_062B), _NODE
     )
     assert plan == ObservabilityPlan(
         Severity.SUCCESS,
         "✅ download completed: 062A, 062B",
         (MetricInstruction(MetricName.DOWNLOADS_COMPLETED, "inc"),),
         _COMMUNITY,
-        notification_body=(
-            "**Targets**\n"
-            "062A - Les demoiselles cambrioleuses\n"
-            "062B - Le grand combat sous-marin\n"
-            "\n"
-            "**File**\n"
-            "`Keroro '062'.avi`"
-        ),
-        notification_title="✅ Downloaded",
+        CompletedDownload(_062A_062B, "Keroro `062`.avi", _NODE),
     )
 
 
-def test_a_source_without_a_name_or_a_target_names_its_hash_and_its_file() -> None:
-    plan = plan_observability(ev.SourceFirstUseful(_SOURCE, None, _FILE, "Keroro 062.avi", ()))
-    assert plan.notification_body == (
-        "**Source**\n1f2e3d4c…, useful for the first time\n\n**File**\n`Keroro 062.avi`"
+def test_a_source_without_a_name_or_a_target_is_alerted_without_them() -> None:
+    plan = plan_observability(
+        ev.SourceFirstUseful(_SOURCE, None, _FILE, "Keroro 062.avi", ()), _NODE
     )
-
-
-def test_a_backtick_in_a_source_name_cannot_close_its_code_span() -> None:
-    event = ev.SourceReappeared(_SOURCE, "a`@everyone`b", _FILE, "x.avi", (), 43_200.000001)
-    plan = plan_observability(event)
-    assert plan.notification_body.startswith(
-        "**Source**\n`a'@everyone'b` 1f2e3d4c…, reappeared after 12 h\n"
+    assert plan.notification == SourceAlert(
+        SourceAlertKind.FIRST_USEFUL, _SOURCE, None, None, (), "Keroro 062.avi", _NODE
     )

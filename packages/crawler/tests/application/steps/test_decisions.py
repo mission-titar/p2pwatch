@@ -26,7 +26,8 @@ from p2pwatch.application.steps.decisions import rejudge_file
 from p2pwatch.application.steps.record_observations import record_observation
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import Retraction
-from p2pwatch.domain.observability.notification import TextNotification
+from p2pwatch.domain.observability.events import TargetTitle
+from p2pwatch.domain.observability.notification import TierRise
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.wake_subject import WakeSubject
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
@@ -181,9 +182,11 @@ async def test_multi_segment_file_records_both_segments_then_is_idempotent(
         _decisions_line(_HASH_MULTI, _MULTI_NAME, "062A none → download, 062B none → download")
     ]
     [(_, notification)] = observability.notifier.calls
-    assert isinstance(notification, TextNotification)
-    assert notification.title == "📥 Download"
-    assert notification.body.startswith(f"**Targets**\n062A - {_TITLE_A}\n062B - {_TITLE_B}\n\n")
+    assert isinstance(notification, TierRise)
+    assert (notification.tier, notification.target_titles) == (
+        DecisionTier.DOWNLOAD,
+        (TargetTitle("062A", _TITLE_A), TargetTitle("062B", _TITLE_B)),
+    )
     assert waker.woken_subjects == [WakeSubject.DOWNLOAD, WakeSubject.DOWNLOAD]
     again = await _record(
         _HASH_MULTI,
