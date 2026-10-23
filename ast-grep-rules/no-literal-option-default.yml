@@ -2,12 +2,11 @@ id: no-literal-option-default
 language: python
 severity: error
 message: A command-line option's default holds no literal.
-note: "A value the operator could set and did not is the domain's; a fixed value no option sets is the composition's."
+note: "A value the operator could set and did not is the domain's; a fixed value no option sets is the composition's. The rule sees a literal written in the call only: one behind a name is a review matter."
 files: ["packages/*/src/**/*.py"]
 rule:
   kind: keyword_argument
   all:
-    - has: { field: name, regex: ^default$ }
     # A string or a number, alone or anywhere in the expression (`cwd / "y"`, `-1`, `[1, 2]`).
     - has:
         field: value
@@ -18,8 +17,17 @@ rule:
           - has: { kind: string, stopBy: end }
           - has: { kind: integer, stopBy: end }
           - has: { kind: float, stopBy: end }
-  inside:
-    kind: argument_list
-    inside:
-      kind: call
-      has: { field: function, regex: '(^|\.)add_argument$' }
+    - any:
+        # `add_argument`'s `default=`, or any keyword of `set_defaults`, which sets defaults too.
+        - all:
+            - has: { field: name, regex: ^default$ }
+            - inside:
+                kind: argument_list
+                inside:
+                  kind: call
+                  has: { field: function, regex: '(^|\.)add_argument$' }
+        - inside:
+            kind: argument_list
+            inside:
+              kind: call
+              has: { field: function, regex: '(^|\.)set_defaults$' }

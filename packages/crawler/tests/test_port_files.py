@@ -92,3 +92,26 @@ def test_a_class_implements_the_writer_and_reader_ports_of_one_thing_at_most() -
     }
     assert any(len(things) == 1 for things in things_by_class.values())
     assert things_by_mixing_class == {}
+
+
+def test_a_class_implementing_a_writer_port_implements_its_reader_port_too() -> None:
+    writer_names_by_class: dict[str, list[str]] = {}
+    for file in sorted(_PACKAGES_DIR.glob("*/src/**/*.py")):
+        module = ast.parse(file.read_text())
+        port_names = _imported_port_names(module)
+        for node in module.body:
+            if isinstance(node, ast.ClassDef):
+                base_names = {ast.unparse(base) for base in node.bases} & port_names
+                writer_names_by_class[f"{file.relative_to(_PACKAGES_DIR)}::{node.name}"] = sorted(
+                    name
+                    for name in base_names
+                    if name.endswith("Writer")
+                    and f"{name.removesuffix('Writer')}Reader" not in base_names
+                )
+    writer_names_by_half_store = {
+        class_name: writer_names
+        for class_name, writer_names in writer_names_by_class.items()
+        if writer_names
+    }
+    assert writer_names_by_class
+    assert writer_names_by_half_store == {}

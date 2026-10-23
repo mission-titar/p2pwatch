@@ -1,6 +1,6 @@
 import os
 import re
-from pathlib import Path, PurePath
+from pathlib import Path
 
 import pytest
 
@@ -8,9 +8,10 @@ from template_checks.adapters.driven.filesystem_template_reader import Filesyste
 from template_checks.domain.broken_input_error import BrokenInputError
 
 
-def test_read_templates_reads_every_html_under_the_directory_by_its_relative_path(
+def test_read_templates_reads_every_html_under_the_directory_by_its_path_under_it(
     tmp_path: Path,
 ) -> None:
+    # The path joins the directory as given, so every line of the tool names a file the same way.
     (tmp_path / "partials").mkdir()
     (tmp_path / "partials" / "row.html").write_text("{{ row.filename }}", encoding="utf-8")
     (tmp_path / "base.html").write_text("<p>« {{ title }} »</p>", encoding="utf-8")
@@ -19,8 +20,8 @@ def test_read_templates_reads_every_html_under_the_directory_by_its_relative_pat
     text_by_template_path = FilesystemTemplateReader().read_templates(tmp_path)
 
     assert list(text_by_template_path.items()) == [
-        (PurePath("base.html"), "<p>« {{ title }} »</p>"),
-        (PurePath("partials/row.html"), "{{ row.filename }}"),
+        (tmp_path / "base.html", "<p>« {{ title }} »</p>"),
+        (tmp_path / "partials/row.html", "{{ row.filename }}"),
     ]
 
 

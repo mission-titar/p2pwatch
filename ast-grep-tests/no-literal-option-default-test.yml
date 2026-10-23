@@ -6,6 +6,7 @@ valid:
   - 'parser.add_argument("--x", type=lambda text: max(text, default=0))'
   - x = max(xs, default=0)
   - field(default=None, kw_only=True)
+  - parser.set_defaults(handler=self._run)
 invalid:
   - parser.add_argument("--x", default=cwd / "y")
   - parser.add_argument("--format", choices=("fail", "sarif"), default="fail")
@@ -14,3 +15,5 @@ invalid:
   - parser.add_argument("--ratio", default=0.5)
   - parser.add_argument("--w", default=[1, 2])
   - parser.add_argument("--name", default=f"{prefix}.yml")
+  - parser.set_defaults(x="y")
+  - subparser.set_defaults(retries=3)

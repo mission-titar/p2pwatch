@@ -7,5 +7,5 @@ class TemplateReader(ABC):
 
     @abstractmethod
     def read_templates(self, templates_directory: PurePath) -> dict[PurePath, str]:
-        """The text of every `*.html` under *templates_directory*, by its path relative to it,
-        in path order."""
+        """The text of every `*.html` under *templates_directory*, by its path under it, in path
+        order."""
