@@ -6,13 +6,14 @@ import pytest
 
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import (
+    ContactPoint,
     SourceKey,
     SourceReading,
     SourceRole,
     SourceUsefulness,
     carried_role,
     carried_role_max_age,
-    is_contact_point,
+    parse_contact_point,
 )
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
@@ -105,13 +106,13 @@ def test_the_tolerance_lets_one_read_be_missed() -> None:
     assert carried_role_max_age(timedelta(seconds=330)) == timedelta(seconds=990)
 
 
-@pytest.mark.parametrize("contact_point", ["176.103.48.36:4184", "0.0.0.0:1", "1.2.3.4:65535"])
-def test_an_ed2k_contact_point_is_an_ipv4_address_and_a_port(contact_point: str) -> None:
-    assert is_contact_point(Network.ED2K, contact_point)
+@pytest.mark.parametrize("server", ["176.103.48.36:4184", "0.0.0.0:1", "1.2.3.4:65535"])
+def test_an_ed2k_contact_point_is_an_ipv4_address_and_a_port(server: str) -> None:
+    assert parse_contact_point(Network.ED2K, server) == ContactPoint(Network.ED2K, server)
 
 
 @pytest.mark.parametrize(
-    "contact_point",
+    "server",
     [
         "176.103.48.36",
         "176.103.48.36:",
@@ -127,5 +128,7 @@ def test_an_ed2k_contact_point_is_an_ipv4_address_and_a_port(contact_point: str)
         "176.103.48.36:\u0664\u0661",
     ],
 )
-def test_anything_else_is_not_an_ed2k_contact_point(contact_point: str) -> None:
-    assert not is_contact_point(Network.ED2K, contact_point)
+def test_anything_else_is_not_an_ed2k_contact_point(server: str) -> None:
+    assert parse_contact_point(Network.ED2K, server) is None
+    with pytest.raises(ValueError, match="a ed2k contact point is an IPv4 address and a port"):
+        ContactPoint(Network.ED2K, server)

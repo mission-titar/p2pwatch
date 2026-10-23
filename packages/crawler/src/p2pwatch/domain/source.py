@@ -92,13 +92,27 @@ def carried_role_max_age(time_between_reads: timedelta) -> timedelta:
     return _TOLERATED_READS * time_between_reads
 
 
-def is_contact_point(network: Network, contact_point: str) -> bool:
-    """Whether ``contact_point`` is a server as ``network`` names one: on eD2k, ``ip:port``."""
-    return _CONTACT_POINTS[network](contact_point)
+@dataclass(frozen=True)
+class ContactPoint:
+    """The server a source connects through, as its network names one: for ``ED2K``, ``ip:port``."""
+
+    network: Network
+    server: str
+
+    def __post_init__(self) -> None:
+        is_server, shape = _CONTACT_POINTS[self.network]
+        if not is_server(self.server):
+            raise ValueError(f"a {self.network} contact point is {shape}")
 
 
-def _is_ed2k_server(contact_point: str) -> bool:
-    host, _, port = contact_point.rpartition(":")
+def parse_contact_point(network: Network, server: str) -> ContactPoint | None:
+    """``server`` as ``network``'s contact point, ``None`` when it names none."""
+    is_server, _ = _CONTACT_POINTS[network]
+    return ContactPoint(network, server) if is_server(server) else None
+
+
+def _is_ed2k_server(server: str) -> bool:
+    host, _, port = server.rpartition(":")
     try:
         ipaddress.IPv4Address(host)
     except ValueError:
@@ -106,7 +120,7 @@ def _is_ed2k_server(contact_point: str) -> bool:
     return _PORT.fullmatch(port) is not None and int(port) <= 65535
 
 
-_CONTACT_POINTS = {Network.ED2K: _is_ed2k_server}
+_CONTACT_POINTS = {Network.ED2K: (_is_ed2k_server, "an IPv4 address and a port")}
 
 
 @dataclass(frozen=True)
@@ -118,7 +132,7 @@ class SourceReading:
     source_name: str | None
     software: str | None
     role: SourceRole | None
-    contact_point: str | None
+    contact_point: ContactPoint | None
     connectable: bool | None
     raw_metadata: SourceMetadata
     session_received_bytes: int
