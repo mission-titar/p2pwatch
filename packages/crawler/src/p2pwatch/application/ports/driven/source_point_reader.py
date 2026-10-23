@@ -1,14 +1,27 @@
-"""``SourcePointReader``: our downloads' sources as points (source points spec, D5);
+"""``SourcePointReader``: our downloads' sources as points (source points spec, D4, D5);
 synchronous, as the catalog's ports. Every point read is the ``node_id``'s the call gives."""
 
 from abc import ABC, abstractmethod
 from datetime import datetime
 
-from p2pwatch.domain.source import LatestPoint, SourceKey
+from p2pwatch.domain.file_key import FileKey
+from p2pwatch.domain.source import LatestPoint, SourceKey, SourceReading
 
 
 class SourcePointReader(ABC):
     """Reads the points observed before ``before``."""
+
+    @abstractmethod
+    def read_latest_point(
+        self,
+        file: FileKey,
+        reading: SourceReading,
+        since: datetime,
+        before: datetime,
+        node_id: str,
+    ) -> LatestPoint | None:
+        """The latest point of ``reading``'s source on ``file`` from ``since`` to ``before``,
+        a source without identity being its name among those without one (D4)."""
 
     @abstractmethod
     def read_earlier_points(

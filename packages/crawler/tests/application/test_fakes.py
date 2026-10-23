@@ -1,20 +1,25 @@
 """``FakeTime``: the clock step the monotonic clock's tests rely on; ``FakeLogger``: its lines;
 ``FakeDecisionReader`` and ``FakeObservationReader``: the reads the download loop never makes;
-``FakeNoSetStateTrackedDownloadStore``: the state change a cycle never makes."""
+``FakeNoSetStateTrackedDownloadStore``: the state change a cycle never makes;
+``FakeSourcePointStore``: the latest point the step never reads."""
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.source import SourceReading
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_no_set_state_tracked_download_store import (
     FakeNoSetStateTrackedDownloadStore,
 )
 from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader
+from tests.fakes.adapters.driven.fake_source_point_store import FakeSourcePointStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
+
+_T0 = datetime(2026, 10, 13, 20, 0, tzinfo=UTC)
 
 
 def test_a_wall_clock_step_leaves_the_monotonic_clock() -> None:
@@ -67,3 +72,10 @@ def test_the_store_refuses_the_state_change_a_cycle_never_makes() -> None:
         FakeNoSetStateTrackedDownloadStore().set_state(
             FileKey(Network.ED2K, "a" * 32), DownloadState.FAILED
         )
+
+
+def test_the_source_point_store_refuses_the_latest_point_the_step_never_reads() -> None:
+    file = FileKey(Network.ED2K, "a" * 32)
+    reading = SourceReading(None, "peer", None, None, None, None, (), 0)
+    with pytest.raises(AssertionError, match="latest point"):
+        FakeSourcePointStore().read_latest_point(file, reading, _T0, _T0, "n1")
