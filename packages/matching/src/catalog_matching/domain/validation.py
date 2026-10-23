@@ -82,6 +82,20 @@ def _parse_operand(raw: Any) -> Operand:
     raise MatchingConfigError(f"operand of invalid type: {type(raw).__name__} ({raw!r})")
 
 
+def _number(raw: Any, error_label: str) -> float:
+    try:
+        return float(raw)
+    except (TypeError, ValueError) as error:
+        raise MatchingConfigError(f"{error_label}: number expected, got {raw!r}") from error
+
+
+def _integer(raw: Any, error_label: str) -> int:
+    try:
+        return int(raw)
+    except (TypeError, ValueError) as error:
+        raise MatchingConfigError(f"{error_label}: integer expected, got {raw!r}") from error
+
+
 def _require_unit_fraction(fraction: float, error_label: str) -> float:
     """Validates that a fraction (min_coverage, min_similarity) is in [0, 1] (fail-fast §8.4).
 
@@ -117,13 +131,17 @@ def _parse_token_reference(raw: dict[str, Any]) -> TokenReference:
         min_coverage=(
             None
             if min_coverage is None
-            else _require_unit_fraction(float(min_coverage), f"'min_coverage' override of {name!r}")
+            else _require_unit_fraction(
+                _number(min_coverage, f"'min_coverage' override of {name!r}"),
+                f"'min_coverage' override of {name!r}",
+            )
         ),
         min_similarity=(
             None
             if min_similarity is None
             else _require_unit_fraction(
-                float(min_similarity), f"'min_similarity' override of {name!r}"
+                _number(min_similarity, f"'min_similarity' override of {name!r}"),
+                f"'min_similarity' override of {name!r}",
             )
         ),
     )
@@ -152,10 +170,10 @@ def _parse_condition(raw: dict[str, Any]) -> Condition:
     return AnyDefinition(operands=operands)
 
 
-def _optional_float(mapping: dict[str, Any], key: str) -> float | None:
+def _optional_float(mapping: dict[str, Any], key: str, error_label: str) -> float | None:
     """Reads an optional float bound (``None`` if absent)."""
     bound = mapping.get(key)
-    return None if bound is None else float(bound)
+    return None if bound is None else _number(bound, f"{error_label}: key {key!r}")
 
 
 def _parse_fragments(raw: Any) -> dict[str, str]:
@@ -202,10 +220,10 @@ def _parse_token_definition(
         return RegexDefinition(pattern=pattern, flags=str(flags))
     if "coverage" in mapping:
         _refuse_renamed_coverage_keys(mapping, f"token {token_name!r}")
-        min_coverage = _optional_float(mapping, "min_coverage")
+        min_coverage = _optional_float(mapping, "min_coverage", f"token {token_name!r}")
         if min_coverage is None:
             raise MatchingConfigError("a coverage token must declare 'min_coverage'")
-        min_similarity = _optional_float(mapping, "min_similarity")
+        min_similarity = _optional_float(mapping, "min_similarity", f"token {token_name!r}")
         return CoverageDefinition(
             reference=str(mapping["coverage"]),
             min_coverage=_require_unit_fraction(min_coverage, "coverage 'min_coverage'"),
@@ -226,8 +244,8 @@ def _parse_token_definition(
             raise MatchingConfigError(
                 f"unknown attr_between: {attr!r} (expected one of {sorted(READERS_BY_ATTR)})"
             )
-        min_bound = _optional_float(mapping, "min")
-        max_bound = _optional_float(mapping, "max")
+        min_bound = _optional_float(mapping, "min", f"token {token_name!r}")
+        max_bound = _optional_float(mapping, "max", f"token {token_name!r}")
         # Open bounds (min only / max only / none) are legitimate; only an explicit inverted
         # range min > max is an EMPTY range (rule mute forever) → fail-fast §8.4.
         if min_bound is not None and max_bound is not None and min_bound > max_bound:
@@ -507,9 +525,10 @@ def parse_targets(raw: dict[str, Any]) -> tuple[TargetSegment, ...]:
     segments: list[TargetSegment] = []
     for episode in episodes:
         episode_mapping = _require_mapping(episode, "episode")
-        season = int(_require_key(episode_mapping, "season", "episode"))
-        seasonal_number = int(_require_key(episode_mapping, "seasonal_number", "episode"))
-        absolute_number = int(_require_key(episode_mapping, "absolute_number", "episode"))
+        season, seasonal_number, absolute_number = (
+            _integer(_require_key(episode_mapping, key, "episode"), f"episode: key {key!r}")
+            for key in ("season", "seasonal_number", "absolute_number")
+        )
         segment_entries = episode_mapping.get("segments", [])
         for segment_entry in segment_entries:
             segment_mapping = _require_mapping(segment_entry, "segment")

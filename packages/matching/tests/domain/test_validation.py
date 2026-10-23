@@ -842,3 +842,62 @@ def test_duplicate_veto_is_rejected() -> None:
 def test_vetoes_section_must_be_a_list() -> None:
     with pytest.raises(MatchingConfigError, match="'vetoes' section: list expected"):
         parse_matcher_config({"tokens": {"a": {"keyword": "a"}}, "vetoes": "a"})
+
+
+@pytest.mark.parametrize(
+    ("token", "message"),
+    [
+        (
+            {"coverage": "title", "min_coverage": "abc"},
+            "token 't': key 'min_coverage': number expected, got 'abc'",
+        ),
+        (
+            {"coverage": "title", "min_coverage": 0.5, "min_similarity": [1]},
+            "token 't': key 'min_similarity': number expected, got [1]",
+        ),
+        (
+            {"attr_between": "size_mib", "min": "big"},
+            "token 't': key 'min': number expected, got 'big'",
+        ),
+        ({"attr_between": "size_mib", "max": {}}, "token 't': key 'max': number expected, got {}"),
+    ],
+    ids=["min_coverage", "min_similarity", "min", "max"],
+)
+def test_a_token_number_that_is_no_number_raises_and_names_its_key(
+    token: dict[str, object], message: str
+) -> None:
+    with pytest.raises(MatchingConfigError) as raised:
+        parse_matcher_config({"tokens": {"t": token}, "rules": []})
+    assert str(raised.value) == message
+
+
+@pytest.mark.parametrize("override_key", ["min_coverage", "min_similarity"])
+def test_an_override_that_is_no_number_raises_and_names_it(override_key: str) -> None:
+    rule = {
+        "name": "r",
+        "tier": "catalog",
+        "scope": "unattributed",
+        "all": [{"token": "cov", override_key: "x"}],
+    }
+    with pytest.raises(MatchingConfigError) as raised:
+        parse_matcher_config(
+            {"tokens": {"cov": {"coverage": "title", "min_coverage": 0.5}}, "rules": [rule]}
+        )
+    assert str(raised.value) == f"'{override_key}' override of 'cov': number expected, got 'x'"
+
+
+@pytest.mark.parametrize(
+    ("key", "number", "shown"),
+    [
+        ("season", "abc", "'abc'"),
+        ("seasonal_number", None, "None"),
+        ("absolute_number", [1], "[1]"),
+    ],
+)
+def test_an_episode_number_that_is_no_integer_raises_and_names_its_key(
+    key: str, number: object, shown: str
+) -> None:
+    episode = {"season": 1, "seasonal_number": 1, "absolute_number": 1} | {key: number}
+    with pytest.raises(MatchingConfigError) as raised:
+        parse_targets({"episodes": [episode]})
+    assert str(raised.value) == f"episode: key '{key}': integer expected, got {shown}"
