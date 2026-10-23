@@ -17,7 +17,8 @@ from p2pwatch.domain.merge_error import MergeError
 
 
 class MergeCatalogs(CatalogMerger):
-    """Sources must exist; a new catalog must not, unless forced; a listed one must be a source."""
+    """Sources must exist; a new catalog must be no source, nor exist unless forced; a listed one
+    must be a source, which receives the others."""
 
     def __init__(
         self, catalog_finder: CatalogFinder, catalog_copier: CatalogCopier, logger: Logger
@@ -30,24 +31,31 @@ class MergeCatalogs(CatalogMerger):
         self, source_catalogs: Sequence[PurePath], destination: NewCatalog | ListedSourceCatalog
     ) -> None:
         found_sources = [self._find_source(source_catalog) for source_catalog in source_catalogs]
+        found_destination = self._catalog_finder.find_catalog(destination.path)
         match destination:
             case NewCatalog(path=path, force=force):
-                if not force and self._catalog_finder.find_catalog(path) is not None:
+                if found_destination in found_sources:
+                    raise MergeError(
+                        f"output is one of the source catalogs: {path} (merge into it instead)"
+                    )
+                if not force and found_destination is not None:
                     raise MergeError(
                         f"destination already exists: {path} (force the merge to append to it)"
                     )
-                destination_is_source = False
             case ListedSourceCatalog(path=path):
-                if self._catalog_finder.find_catalog(path) not in found_sources:
+                if found_destination not in found_sources:
                     raise MergeError(f"destination must be one of the source catalogs: {path}")
-                destination_is_source = True
             case _:  # pragma: no cover
                 assert_never(destination)
         self._logger.info("merge → %s (%d source catalog(s))", path, len(source_catalogs))
+        catalogs_to_copy = []
+        for source_catalog, found_source in zip(source_catalogs, found_sources, strict=True):
+            if found_source == found_destination:
+                self._logger.info("%s skipped: it is the output", source_catalog)
+            else:
+                catalogs_to_copy.append(source_catalog)
         try:
-            self._catalog_copier.copy_catalogs(
-                path, source_catalogs, destination_is_source=destination_is_source
-            )
+            self._catalog_copier.copy_catalogs(path, catalogs_to_copy)
         except CatalogCopyError as error:
             raise MergeError(str(error)) from error
         self._logger.info("merge done: %s", path)

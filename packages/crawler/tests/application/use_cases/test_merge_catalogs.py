@@ -31,7 +31,7 @@ def test_a_new_catalog_receives_every_source() -> None:
         [_A, _B], NewCatalog(_OUT, force=False)
     )
 
-    assert catalog_copier.copies == [(_OUT, [_A, _B], False)]
+    assert catalog_copier.copies == [(_OUT, [_A, _B])]
 
 
 def test_a_missing_source_is_refused_before_anything_is_copied() -> None:
@@ -65,7 +65,7 @@ def test_a_forced_merge_appends_to_the_existing_catalog() -> None:
         FakeCatalogFinder({_A: _A, _OUT: _OUT}), catalog_copier, FakeLogger()
     ).merge_catalogs([_A], NewCatalog(_OUT, force=True))
 
-    assert catalog_copier.copies == [(_OUT, [_A], False)]
+    assert catalog_copier.copies == [(_OUT, [_A])]
 
 
 def test_a_listed_source_receives_the_others_under_any_spelling() -> None:
@@ -79,7 +79,26 @@ def test_a_listed_source_receives_the_others_under_any_spelling() -> None:
         [_A, _B], ListedSourceCatalog(spelled_otherwise)
     )
 
-    assert catalog_copier.copies == [(spelled_otherwise, [_A, _B], True)]
+    assert catalog_copier.copies == [(spelled_otherwise, [_B])]
+
+
+@pytest.mark.parametrize("force", [False, True])
+def test_an_output_that_is_also_a_source_is_refused_forced_or_not(force: bool) -> None:
+    spelled_otherwise = PurePath("./a.db")
+    catalog_finder = FakeCatalogFinder(
+        {**_SOURCES_RESOLVED, spelled_otherwise: PurePath("/data/a.db")}
+    )
+    catalog_copier = FakeCatalogCopier()
+
+    with pytest.raises(
+        MergeError,
+        match=rf"^output is one of the source catalogs: {spelled_otherwise} \(merge into it ",
+    ):
+        MergeCatalogs(catalog_finder, catalog_copier, FakeLogger()).merge_catalogs(
+            [_A, _B], NewCatalog(spelled_otherwise, force=force)
+        )
+
+    assert catalog_copier.copies == []
 
 
 def test_a_destination_that_is_not_a_listed_source_is_refused() -> None:
@@ -118,4 +137,18 @@ def test_the_merge_logs_its_destination_before_and_after_the_copy() -> None:
     assert logger.lines == [
         LoggedLine("info", f"merge → {_OUT} (2 source catalog(s))"),
         LoggedLine("info", f"merge done: {_OUT}"),
+    ]
+
+
+def test_a_listed_source_is_logged_as_skipped_before_the_copy() -> None:
+    logger = FakeLogger()
+
+    MergeCatalogs(_sources_found(), FakeCatalogCopier(), logger).merge_catalogs(
+        [_A, _B], ListedSourceCatalog(_A)
+    )
+
+    assert logger.lines == [
+        LoggedLine("info", f"merge → {_A} (2 source catalog(s))"),
+        LoggedLine("info", f"{_A} skipped: it is the output"),
+        LoggedLine("info", f"merge done: {_A}"),
     ]

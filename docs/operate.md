@@ -139,7 +139,8 @@ docker compose run --rm p2pwatch python -m p2pwatch validate-config \
 
 **Fusionner des catalogues**, pour consolider ceux de plusieurs chercheurs en un seul. La fusion est
 idempotente et n'écrase rien sans `--force` ; `--into <catalogue>` fusionne dans un catalogue
-existant. Elle réunit l'[historique des sources](#historique-des-sources) comme le reste, par
+existant. Une sortie `--output` qui est aussi l'une des sources est refusée avant toute écriture,
+même avec `--force` : fusionnez dans ce catalogue par `--into`. Elle réunit l'[historique des sources](#historique-des-sources) comme le reste, par
 l'union des lignes : deux copies du catalogue d'un même nœud se fusionnent toujours, même quand
 l'une a été restaurée d'une sauvegarde ou remplacée par un catalogue fusionné entre-temps.
 Le cycle de partage est décrit sur la [page d'accueil](index.md#partage).
