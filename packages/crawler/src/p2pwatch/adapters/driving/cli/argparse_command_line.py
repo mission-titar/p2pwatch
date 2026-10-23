@@ -12,8 +12,9 @@ from p2pwatch.application.ports.driving.catalog_merger import (
     ListedSourceCatalog,
     NewCatalog,
 )
-from p2pwatch.application.ports.driving.config_validator import ConfigValidator
+from p2pwatch.application.ports.driving.config_validator import ConfigProblem, ConfigValidator
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
+from p2pwatch.domain.broken_input_error import BrokenInputError
 from p2pwatch.domain.config_defaults import (
     DEFAULT_CONFIG_PATH,
     DEFAULT_MATCHER_PATH,
@@ -70,6 +71,13 @@ def _add_merge_options(
         action="store_true",
         help="Allow an existing --output (idempotent append, never truncate).",
     )
+
+
+def _problem_line(problem: ConfigProblem) -> str:
+    """``<file>: <key>: <message>``, or ``<file>: <message>`` for a problem naming no key."""
+    if problem.key is None:
+        return f"{problem.file_path}: {problem.message}"
+    return f"{problem.file_path}: {problem.key}: {problem.message}"
 
 
 class ArgparseCommandLine:
@@ -147,11 +155,15 @@ class ArgparseCommandLine:
 
     def _validate_config(self, args: argparse.Namespace) -> int:
         try:
-            self._config_validator.validate_config(
+            config_report = self._config_validator.validate_config(
                 config_path=args.config, targets_path=args.targets, matcher_path=args.matcher
             )
-        except InvalidConfigError as error:
-            print(f"Invalid config: {error}", file=sys.stderr, flush=True)
+        except BrokenInputError as error:
+            print(f"error: {error}", file=sys.stderr, flush=True)
+            return 1
+        for problem in config_report.problems:
+            print(f"Invalid config: {_problem_line(problem)}", file=sys.stderr, flush=True)
+        if config_report.problems:
             return 1
         print("Config valid", flush=True)
         return 0

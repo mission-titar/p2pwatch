@@ -153,6 +153,11 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
 - **La fusion des catalogues se lance par `python -m p2pwatch merge`**, au lieu de
   `python -m p2pwatch.merge`, qui n'existe plus. Ses options ne changent pas ; deux refus sont
   reformulés : `destination already exists` et `destination must be one of the source catalogs`.
+- **`validate-config` nomme le fichier en cause** : `Invalid config: <fichier>: <clé>: <message>`
+  pour un contenu faux, `error: <fichier>: <raison>` sur une ligne pour un fichier absent,
+  illisible ou qui n'est pas du YAML, les deux en code 1. Au démarrage, un tel fichier se lit
+  `Invalid config, refusing to start: <fichier>: <raison>` au lieu de
+  `unreadable YAML file: <fichier> (...)`.
 - **Quelques lignes de journal et noms de loggers changent** : le crawler journalise sous le nom
   du module qui écrit la ligne, qui change avec lui ; filtrez sur le message plutôt que sur le
   logger. Les échecs d'écriture de la boucle de téléchargement disent `store failure` au lieu de

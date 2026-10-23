@@ -81,15 +81,17 @@ def test_an_unset_variable_under_any_key_is_an_invalid_config_naming_its_key_pat
 
 
 @pytest.mark.parametrize(
-    ("broken_file", "text"),
+    ("broken_file", "text", "key", "message"),
     [
-        ("crawler.yml", "search: [unclosed\n"),  # a YAML that does not load
-        ("crawler.yml", "catalog_db_path: c\n"),  # a key that does not parse
-        ("targets.yml", "episodes: nope\n"),  # the matching's own error
-        ("matcher.yml", "tokens: {}\nrules: {}\n"),
+        ("crawler.yml", "search: [unclosed\n", None, "{path}: invalid YAML: "),  # a broken file
+        ("crawler.yml", "search: {}\n", "search", "key 'keywords' missing"),
+        ("targets.yml", "episodes: nope\n", None, "'episodes' section: list expected"),
+        ("matcher.yml", "tokens: {}\nrules: {}\n", None, "'rules' section: list expected"),
     ],
 )
-def test_an_invalid_file_is_an_invalid_config(tmp_path: Path, broken_file: str, text: str) -> None:
+def test_an_invalid_file_is_an_invalid_config(
+    tmp_path: Path, broken_file: str, text: str, key: str | None, message: str
+) -> None:
     paths = {
         "crawler.yml": _write_crawler_config(tmp_path),
         "targets.yml": _DEPLOY / "targets.yml",
@@ -98,5 +100,8 @@ def test_an_invalid_file_is_an_invalid_config(tmp_path: Path, broken_file: str, 
     paths[broken_file] = tmp_path / f"broken-{broken_file}"
     paths[broken_file].write_text(text, encoding="utf-8")
 
-    with pytest.raises(InvalidConfigError):
+    with pytest.raises(InvalidConfigError) as raised:
         load_config(paths["crawler.yml"], paths["targets.yml"], paths["matcher.yml"], _env())
+
+    assert raised.value.key == key
+    assert raised.value.message.startswith(message.format(path=paths[broken_file]))

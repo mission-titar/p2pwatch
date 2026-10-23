@@ -125,8 +125,11 @@ identifier le coupable, puis faites le ménage dans `ed2k/downloads/incoming`.
 Ces deux outils sont ponctuels et jamais déclenchés par le crawler. La fusion **n'écrit que dans sa
 destination** : un fichier neuf (`--output`), ou le catalogue que vous désignez par `--into`.
 
-**Valider la configuration**, sans rien démarrer. À lancer avant un déploiement. Sort en erreur si
-l'un des trois fichiers de config est invalide.
+**Valider la configuration**, sans rien démarrer. À lancer avant un déploiement. Affiche
+`Config valid` si les trois fichiers sont valides. Sinon elle sort en erreur (code 1) : un fichier
+absent, illisible ou qui n'est pas du YAML donne `error: <fichier>: <raison>`, un fichier lisible au
+contenu faux donne `Invalid config: <fichier>: <clé>: <message>` (sans clé pour `targets.yml` et
+`matcher.yml`).
 
 ```bash
 docker compose run --rm p2pwatch python -m p2pwatch validate-config \
