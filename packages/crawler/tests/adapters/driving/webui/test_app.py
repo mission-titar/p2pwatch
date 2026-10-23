@@ -1685,7 +1685,7 @@ async def test_sort_header_links_preserve_target_and_tier_filters() -> None:
     """An active target + tier filter is carried into every sort-header link (the ordered
     ``filters`` dict is threaded into each header URL, then sort/dir override for that column)."""
     text, call = await _files_page("/files?target_id=062A&tier=download")
-    assert call == replace(_DEFAULT_CALL, target_id="062A", tier="download")
+    assert call == replace(_DEFAULT_CALL, target_id="062A", tier=DecisionTier.DOWNLOAD)
     # the Name header keeps both filters (autoescaped & -> &amp;) then adds its own sort + dir
     assert "target_id=062A&amp;tier=download&amp;sort=name&amp;direction=asc" in text
 
@@ -1698,7 +1698,11 @@ async def test_sort_header_links_preserve_target_and_tier_filters() -> None:
 
 def test_tier_facets_all_reset_and_masks_catalog() -> None:
     facets = _tier_facets(
-        file_count_by_tier={"download": 1, "notify": 2, "catalog": 5},
+        file_count_by_tier={
+            DecisionTier.DOWNLOAD: 1,
+            DecisionTier.NOTIFY: 2,
+            DecisionTier.CATALOG: 5,
+        },
         active_tier=None,
         kept_params={},
     )
@@ -1713,7 +1717,7 @@ def test_tier_facets_all_reset_and_masks_catalog() -> None:
 
 def test_tier_facets_selected_and_preserves_base() -> None:
     facets = _tier_facets(
-        file_count_by_tier={"download": 1, "notify": 2},
+        file_count_by_tier={DecisionTier.DOWNLOAD: 1, DecisionTier.NOTIFY: 2},
         active_tier=DecisionTier.NOTIFY,
         kept_params={"search": "keroro", "sort": "size"},
     )
@@ -1724,7 +1728,9 @@ def test_tier_facets_selected_and_preserves_base() -> None:
 
 
 def test_tier_facets_only_present_tiers_appear() -> None:
-    facets = _tier_facets(file_count_by_tier={"notify": 3}, active_tier=None, kept_params={})
+    facets = _tier_facets(
+        file_count_by_tier={DecisionTier.NOTIFY: 3}, active_tier=None, kept_params={}
+    )
     assert [f.label for f in facets] == ["all", "notify"]
 
 
@@ -1745,7 +1751,7 @@ def test_search_bar_no_search_text_is_empty_string() -> None:
 
 @pytest.mark.asyncio
 async def test_files_renders_search_prefill_and_facet() -> None:
-    listing = replace(_listing(), file_count_by_tier={"catalog": 1})
+    listing = replace(_listing(), file_count_by_tier={DecisionTier.CATALOG: 1})
     text, call = await _files_page("/files?search=keroro&show_unmatched=1", listing)
     assert call == replace(_DEFAULT_CALL, search_text="keroro", matched_only=False)
     assert 'name="search"' in text
