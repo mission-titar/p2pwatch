@@ -18,7 +18,6 @@ from p2pwatch_amule.adapters.driven.posix_amuled_directory_preparer import (
     PosixAmuledDirectoryPreparer,
 )
 from p2pwatch_amule.adapters.driven.s6_service_supervisor import S6ServiceSupervisor
-from p2pwatch_amule.adapters.driven.stdlib_logger import StdlibLogger
 from p2pwatch_amule.adapters.driven.system_monotonic_clock import SystemMonotonicClock
 from p2pwatch_amule.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from p2pwatch_amule.composition.boot_composition import BootComposition
@@ -43,7 +42,6 @@ def build_command_line(
         amuled_service_directory=_AMULED_SERVICE_DIRECTORY,
         stop_timeout_seconds=_AMULED_STOP_TIMEOUT_SECONDS,
         run_command=subprocess.run,
-        logger=StdlibLogger(S6ServiceSupervisor.__module__),
     )
     return ArgparseCommandLine(
         container_booter=BootComposition(
