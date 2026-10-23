@@ -8,7 +8,7 @@ from p2pwatch.application.steps.download_file_reads import best_filename, target
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.observability.events import SourceFirstUseful, SourceReappeared
-from p2pwatch.domain.source import RecordedReading, SourceKey, SourceUsefulness
+from p2pwatch.domain.source import EarlierPoints, RecordedReading, SourceKey, SourceUsefulness
 from p2pwatch.domain.source_alerts import FirstUseful, source_alert
 from p2pwatch.domain.store_error import StoreError
 
@@ -44,8 +44,8 @@ async def _alert_sources(
             )
         if not round_.alerts_allowed:
             return  # the node's first recording round is a baseline, not news
-        earlier_points = deps.source_point_reader.read_earlier_points(
-            source, round_.started_at, node_id
+        earlier_points = EarlierPoints.of(
+            deps.source_point_reader.read_earlier_points(source, round_.started_at, node_id)
         )
         alert = source_alert(reading.role, earlier_points, round_.started_at, deps.reappeared_after)
         round_.decided.add(source)
