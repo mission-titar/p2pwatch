@@ -351,6 +351,7 @@ depends_on = [
   "p2pwatch.application.ports.driven.node_id_writer",
   "p2pwatch.application.ports.driven.policy_fingerprint_reader",
   "p2pwatch.application.ports.driven.policy_fingerprint_writer",
+  "p2pwatch.application.ports.driven.run_state_reader",
   "p2pwatch.application.ports.driven.wall_clock",
   "p2pwatch.application.steps",
   "p2pwatch.domain",

@@ -16,6 +16,7 @@ from p2pwatch.domain.status_reading import (
     PublishedReading,
     StatusReading,
 )
+from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_search_client import make_unreachable
 from tests.fakes.adapters.driven.fake_status_client import FakeStatusClient
 from tests.fakes.adapters.driven.fake_status_reading_store import FakeStatusReadingStore
@@ -49,7 +50,7 @@ def _deps(
     client: StatusClient,
     fake_time: FakeTime,
     event_emitter: FakeTimedEventEmitter,
-    shutdown: asyncio.Event,
+    run_state: FakeRunStateStore,
 ) -> StatusLoopDeps:
     return StatusLoopDeps(
         client_name,
@@ -57,29 +58,31 @@ def _deps(
         fake_time.wall,
         fake_time.monotonic,
         event_emitter,
-        shutdown,
+        run_state,
         FakeStatusReadingStore(),
     )
 
 
 async def _run(*readings: _Reading, client: str = "amuled") -> list[tuple[float, ev.Event]]:
-    fake_time, shutdown = FakeTime(), asyncio.Event()
+    fake_time, run_state = FakeTime(), FakeRunStateStore()
     event_emitter = FakeTimedEventEmitter(fake_time)
-    scripted = FakeStatusClient(list(readings), shutdown)
+    scripted = FakeStatusClient(list(readings), run_state)
     await asyncio.wait_for(
-        status_loop(_deps(client, scripted, fake_time, event_emitter, shutdown), _NODE), timeout=1.0
+        status_loop(_deps(client, scripted, fake_time, event_emitter, run_state), _NODE),
+        timeout=1.0,
     )
     return event_emitter.events
 
 
 @pytest.mark.asyncio
 async def test_every_event_is_emitted_under_the_node_id_the_loop_runs_with() -> None:
-    fake_time, shutdown = FakeTime(), asyncio.Event()
+    fake_time, run_state = FakeTime(), FakeRunStateStore()
     event_emitter = FakeTimedEventEmitter(fake_time)
     readings: list[_Reading] = [_DOWN, _DOWN, _DOWN, _status(ed2k=_UP)]
-    client = FakeStatusClient(readings, shutdown)
+    client = FakeStatusClient(readings, run_state)
     await asyncio.wait_for(
-        status_loop(_deps("amuled", client, fake_time, event_emitter, shutdown), _NODE), timeout=1.0
+        status_loop(_deps("amuled", client, fake_time, event_emitter, run_state), _NODE),
+        timeout=1.0,
     )
     assert any(isinstance(event, _ALERTS) for _, event in event_emitter.events)
     assert event_emitter.node_ids == {_NODE}
@@ -197,11 +200,11 @@ async def test_each_reading_samples_every_channel_and_unreachable_makes_them_unk
 async def test_each_reading_is_published_with_its_wall_and_monotonic_instants(
     reading: _Reading, published: ClientStatus | None
 ) -> None:
-    fake_time, shutdown = FakeTime(), asyncio.Event()
+    fake_time, run_state = FakeTime(), FakeRunStateStore()
     fake_time.step_wall(timedelta(hours=1))  # the two clocks part: each instant shows its clock
     status_reading_store = FakeStatusReadingStore()
-    client = FakeStatusClient([_status(kad=_UP), reading], shutdown)
-    deps = _deps("amuled", client, fake_time, FakeTimedEventEmitter(fake_time), shutdown)
+    client = FakeStatusClient([_status(kad=_UP), reading], run_state)
+    deps = _deps("amuled", client, fake_time, FakeTimedEventEmitter(fake_time), run_state)
     deps.status_reading_writer = status_reading_store
     await asyncio.wait_for(status_loop(deps, _NODE), timeout=1.0)
     read_at = fake_time.wall.now() - timedelta(seconds=60)  # the loop slept one period after it
@@ -214,11 +217,11 @@ async def test_each_reading_is_published_with_its_wall_and_monotonic_instants(
 @pytest.mark.asyncio
 async def test_a_wall_clock_step_forward_raises_no_alert_before_its_delay() -> None:
     # Degraded for four minutes of monotonic time, an hour and four minutes of wall clock.
-    fake_time, shutdown = FakeTime(), asyncio.Event()
+    fake_time, run_state = FakeTime(), FakeRunStateStore()
     event_emitter = FakeTimedEventEmitter(fake_time)
-    client = FakeSteppedStatusClient([_status(ed2k=_LOW_ID)] * 5, shutdown, fake_time)
+    client = FakeSteppedStatusClient([_status(ed2k=_LOW_ID)] * 5, run_state, fake_time)
     await asyncio.wait_for(
-        status_loop(_deps("amuled", client, fake_time, event_emitter, shutdown), _NODE),
+        status_loop(_deps("amuled", client, fake_time, event_emitter, run_state), _NODE),
         timeout=1.0,
     )
     assert [e for _, e in event_emitter.events if isinstance(e, _ALERTS)] == []

@@ -5,6 +5,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from datetime import timedelta
 
+from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
 from p2pwatch.application.ports.driven.waker import Waker
 from p2pwatch.application.steps.download_cycle import run_download_cycle
 from p2pwatch.application.steps.download_deps import DownloadDeps
@@ -13,10 +14,10 @@ from p2pwatch.domain.wake_subject import WakeSubject
 
 @dataclass
 class DownloadLoopDeps(DownloadDeps):
-    """``DownloadDeps`` + what it takes to REPEAT (waker, shutdown) - DECISION D12."""
+    """``DownloadDeps`` + what it takes to REPEAT (waker, run state) - DECISION D12."""
 
     waker: Waker
-    shutdown: asyncio.Event
+    run_state_reader: RunStateReader
 
 
 async def _sleep_or_wake(deps: DownloadLoopDeps) -> None:
@@ -45,8 +46,8 @@ async def download_loop(deps: DownloadLoopDeps, node_id: str) -> None:
     Launched by ``CrawlerLifecycle`` through ``supervise_loops``; cancellation (shutdown) lands
     at the next ``await`` (a poll or the sleep/wake wait), never mid DB write.
     """
-    while not deps.shutdown.is_set():
+    while not deps.run_state_reader.is_shutdown_requested():
         await run_download_cycle(deps, node_id)
-        if deps.shutdown.is_set():
+        if deps.run_state_reader.is_shutdown_requested():
             break
         await _sleep_or_wake(deps)

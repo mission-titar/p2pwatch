@@ -10,4 +10,4 @@ def test_pausing_the_crawl_pauses_the_run_state() -> None:
     PauseCrawl(run_state).pause_crawl()
 
     assert run_state.is_paused()
-    assert not run_state.shutdown_requested
+    assert not run_state.is_shutdown_requested()
