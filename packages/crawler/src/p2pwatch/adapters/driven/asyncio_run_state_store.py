@@ -41,3 +41,6 @@ class AsyncioRunStateStore(RunStateWriter, RunStateReader):
     def is_paused(self) -> bool:
         """A read, safe from another thread: ``is_set`` only returns a flag."""
         return not self._resumed.is_set()
+
+    async def wait_until_resumed(self) -> None:
+        await self._resumed.wait()

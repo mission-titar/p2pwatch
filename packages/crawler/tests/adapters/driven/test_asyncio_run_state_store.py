@@ -12,6 +12,8 @@ model the two facets:
 
 import asyncio
 
+import pytest
+
 from p2pwatch.adapters.driven.asyncio_run_state_store import AsyncioRunStateStore
 from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
 from p2pwatch.application.ports.driven.run_state_writer import RunStateWriter
@@ -75,3 +77,13 @@ def test_is_paused_reads_the_pause_gate() -> None:
     assert reader.is_paused()
     resumed.set()
     assert not reader.is_paused()
+
+
+@pytest.mark.asyncio
+async def test_waiting_until_resumed_returns_once_the_crawler_loop_resumes() -> None:
+    writer, reader, _resumed, _shutdown = _run_state_with(asyncio.get_running_loop())
+    waiting = asyncio.create_task(reader.wait_until_resumed())
+    await asyncio.sleep(0)
+    assert not waiting.done()
+    writer.set_paused(False)
+    await asyncio.wait_for(waiting, 1.0)

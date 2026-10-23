@@ -401,7 +401,7 @@ class CrawlerComposition(CrawlerRunner):
             search_tasks = SearchTaskRunner(
                 workers=workers,
                 keywords=crawler_config.search.keywords,
-                resumed=resumed,
+                run_state_reader=run_state_store,
                 backoff=backoff,
                 backoff_state_writer=backoff_state_store,
                 monotonic_clock=monotonic_clock,
