@@ -5,9 +5,9 @@ a relayed log line sent untitled."""
 import apprise
 import pytest
 from apprise.plugins.discord import USER_ROLE_DETECTION_RE
-from p2pwatch.domain.observability.notification import RelayedLogLine, TextNotification
 
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
+from p2pwatch.domain.observability.notification import RelayedLogLine, TextNotification
 from p2pwatch.domain.observability.policy import Audience, Severity
 from tests.fakes.adapters.driven.fake_apprise import FakeApprise
 

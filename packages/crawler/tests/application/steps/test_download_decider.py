@@ -1,10 +1,10 @@
 import pytest
-from p2pwatch.domain.observability.notification import RelayedLogLine
 
 from catalog_matching.domain.models import TargetSegment
 from p2pwatch.application.steps.download_cycle import run_download_cycle
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.states import DownloadState
+from p2pwatch.domain.observability.notification import RelayedLogLine
 from p2pwatch.domain.observability.policy import (
     Audience,
     MetricInstruction,
