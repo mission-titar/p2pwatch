@@ -96,10 +96,16 @@ async def _alert_sources(
         source_name, filename = point.reading.source_name, best_filename(deps, file)
         titles = target_titles(deps, file)
         event: SourceFirstUseful | SourceReappeared = (
-            SourceFirstUseful(source, source_name, file, filename, titles)
+            SourceFirstUseful(source, source_name, file, filename, titles, node_id)
             if isinstance(alert, FirstUseful)
             else SourceReappeared(
-                source, source_name, file, filename, titles, alert.absent_for.total_seconds()
+                source,
+                source_name,
+                file,
+                filename,
+                titles,
+                alert.absent_for.total_seconds(),
+                node_id,
             )
         )
         await deps.observability_dispatcher.dispatch(event, node_id)

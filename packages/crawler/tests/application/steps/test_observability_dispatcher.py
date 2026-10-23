@@ -25,7 +25,7 @@ from tests.fakes.adapters.driven.fake_raising_notifier import FakeRaisingNotifie
 
 _NODE = "titar-node-1"
 _COMPLETED = ev.DownloadCompleted(
-    FileKey(Network.ED2K, "a" * 32), "Keroro 062.avi", (ev.TargetTitle("062A", "t"),)
+    FileKey(Network.ED2K, "a" * 32), "Keroro 062.avi", (ev.TargetTitle("062A", "t"),), _NODE
 )
 
 
@@ -85,7 +85,9 @@ async def test_logs_the_message_but_notifies_the_plans_notification() -> None:
     download = DecisionRecord("062A", "rule", DecisionTier.DOWNLOAD)
     change = ev.DecisionChange("062A", "Les demoiselles cambrioleuses", None, download)
     await _dispatcher(FakeMetricsRecorder(), notifier, logger).dispatch(
-        ev.DecisionsRecorded(FileKey(Network.ED2K, "a" * 32), "Keroro 062.avi", 1024, (change,)),
+        ev.DecisionsRecorded(
+            FileKey(Network.ED2K, "a" * 32), "Keroro 062.avi", 1024, (change,), _NODE
+        ),
         _NODE,
     )
     assert logger.lines[-1].message.startswith("decisions for Keroro 062.avi")

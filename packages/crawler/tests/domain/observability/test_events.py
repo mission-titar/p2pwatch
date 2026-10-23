@@ -22,6 +22,7 @@ def test_event_is_frozen() -> None:
         file=FileKey(Network.ED2K, "a" * 32),
         filename="x.avi",
         target_titles=(TargetTitle("062A", "t"),),
+        node_id="titar-node-1",
     )
     with pytest.raises(dataclasses.FrozenInstanceError):
         event.filename = "y.avi"  # type: ignore[misc]
