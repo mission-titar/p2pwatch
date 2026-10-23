@@ -1,5 +1,5 @@
 """``SourcePointWriter``: our downloads' sources as points (source points spec, D4);
-synchronous, as the catalog's ports. Every point written is the ``node_id``'s the call gives."""
+synchronous, as the catalog's ports."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
@@ -11,5 +11,5 @@ class SourcePointWriter(ABC):
     """Writes the points of our downloads' sources."""
 
     @abstractmethod
-    def record_points(self, points: Sequence[SourcePoint], node_id: str) -> None:
+    def record_points(self, points: Sequence[SourcePoint]) -> None:
         """Writes ``points`` (D4) in one transaction."""

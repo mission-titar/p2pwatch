@@ -28,15 +28,15 @@ class FakeSourcePointStore(SourcePointWriter, SourcePointReader):
         self.latest_asked: list[tuple[str, SourceReading, datetime, datetime]] = []
         self.asked: list[tuple[SourceKey, datetime]] = []
         self.baselines: list[datetime] = []
-        self.node_ids: set[str] = set()  # every call's
+        self.node_ids: set[str] = set()  # every read's and every point's
         self._fail_for = fail_for or set()
         self._latest = latest
         self._history = history or {}
         self._baseline = baseline
         self._baseline_failures = baseline_failures
 
-    def record_points(self, points: Sequence[SourcePoint], node_id: str) -> None:
-        self.node_ids.add(node_id)
+    def record_points(self, points: Sequence[SourcePoint]) -> None:
+        self.node_ids.update(point.node_id for point in points)
         if any(point.file.native_id in self._fail_for for point in points):
             raise StoreError("record_points failed")
         self.recorded += points

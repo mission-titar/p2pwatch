@@ -154,12 +154,14 @@ def carried_role(latest: LatestPoint | None, reading: SourceReading) -> SourceRo
 
 @dataclass(frozen=True)
 class SourcePoint:
-    """One reading of one of our downloads' sources, with its role, a carried one included."""
+    """One reading of one of our downloads' sources, with its role, a carried one included, by the
+    node ``node_id``."""
 
     file: FileKey
     reading: SourceReading
     role: SourceRole
     observed_at: datetime
+    node_id: str
 
 
 @dataclass(frozen=True)
