@@ -4,7 +4,6 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
-from p2pwatch.domain.observability.notification import TextNotification
 
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store import (
@@ -15,6 +14,7 @@ from p2pwatch.application.steps.download_deps import DownloadDeps
 from p2pwatch.domain.client_errors import ClientUnreachableError
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import Network
+from p2pwatch.domain.observability.notification import TextNotification
 from p2pwatch.domain.source import (
     LatestPoint,
     SourceKey,

@@ -9,7 +9,6 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from p2pwatch.domain.observability.notification import TextNotification
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import (
@@ -27,6 +26,7 @@ from p2pwatch.application.steps.decisions import rejudge_file
 from p2pwatch.application.steps.record_observations import record_observation
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import Retraction
+from p2pwatch.domain.observability.notification import TextNotification
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.wake_subject import WakeSubject
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
