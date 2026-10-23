@@ -14,7 +14,8 @@ from p2pwatch.application.steps.download_deps import DownloadDeps
 from p2pwatch.domain.client_errors import ClientUnreachableError
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import Network
-from p2pwatch.domain.observability.notification import TextNotification
+from p2pwatch.domain.observability.events import TargetTitle
+from p2pwatch.domain.observability.notification import SourceAlert, SourceAlertKind
 from p2pwatch.domain.source import (
     LatestPoint,
     SourceKey,
@@ -263,8 +264,7 @@ async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
     )
     await run_download_cycle(deps, NODE)
     assert _alerts(observability) == [
-        "**Source**\n`AnimuseeFMR` 1f2e3d4c…, useful for the first time"
-        "\n\n**Targets**\n062A - t\n\n**File**\n`Keroro 062.avi`"
+        _alert(_PEER, "AnimuseeFMR", None, "Keroro 062.avi", (TargetTitle("062A", "t"),))
     ]
     assert observability.notifier.node_ids == [NODE]
 
@@ -304,8 +304,7 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
     assert sources.asked == [(_OTHER_PEER, start), (_PEER, start)]
     assert sources.node_ids == {NODE}  # the round writes and reads the cycle's node's points
     assert _alerts(observability) == [
-        "**Source**\n`AnimuseeFMR` 1f2e3d4c…, reappeared after 13 h"
-        f"\n\n**Targets**\n063A - t2\n\n**File**\n`{HASH_B}`"
+        _alert(_PEER, "AnimuseeFMR", timedelta(hours=13), HASH_B, (TargetTitle("063A", "t2"),))
     ]
 
 
@@ -389,9 +388,7 @@ async def test_a_store_failure_asking_the_baseline_skips_that_downloads_alerts_o
     await run_download_cycle(deps, NODE)
     assert [point.file.native_id for point in sources.recorded] == [HASH_A, HASH_B]
     assert len(sources.baselines) == 2
-    assert _alerts(observability) == [
-        f"**Source**\n`AnimuseeFMR` 1f2e3d4c…, useful for the first time\n\n**File**\n`{HASH_B}`"
-    ]
+    assert _alerts(observability) == [_alert(_PEER, "AnimuseeFMR", None, HASH_B)]
 
 
 @pytest.mark.asyncio
@@ -426,9 +423,7 @@ async def test_the_first_recording_round_is_a_baseline(
     third = SourceKey(Network.ED2K, "d" * 32)
     readings[HASH_A] = (_peer(_PEER), _peer(third))
     await run_download_cycle(deps, NODE)
-    assert _alerts(observability) == [
-        f"**Source**\n`peer` dddddddd…, useful for the first time\n\n**File**\n`{HASH_A}`"
-    ]
+    assert _alerts(observability) == [_alert(third, "peer", None, HASH_A)]
     catalog.close()
 
 
@@ -463,13 +458,25 @@ def _real_deps(
     )
 
 
-def _alerts(observability: ObservabilityOverFakes) -> list[str]:
-    """The bodies of the source alerts, the only notifications of a round without completion."""
-    bodies = []
+def _alerts(observability: ObservabilityOverFakes) -> list[SourceAlert]:
+    """The source alerts, the only notifications of a round without completion."""
+    alerts = []
     for _, notification in observability.notifier.calls:
-        assert isinstance(notification, TextNotification)
-        bodies.append(notification.body)
-    return bodies
+        assert isinstance(notification, SourceAlert)
+        alerts.append(notification)
+    return alerts
+
+
+def _alert(
+    source: SourceKey,
+    source_name: str,
+    absent_for: timedelta | None,
+    filename: str,
+    target_titles: tuple[TargetTitle, ...] = (),
+) -> SourceAlert:
+    """The cycle's node's alert: a first useful source, or one ``absent_for`` that long."""
+    kind = SourceAlertKind.FIRST_USEFUL if absent_for is None else SourceAlertKind.REAPPEARED
+    return SourceAlert(kind, source, source_name, absent_for, target_titles, filename, NODE)
 
 
 @pytest.mark.asyncio
@@ -487,9 +494,7 @@ async def test_a_source_useful_at_three_consecutive_reads_is_new_once(
     for _ in range(3):
         fake_time.advance(timedelta(seconds=30))
         await run_download_cycle(deps, NODE)
-    assert _alerts(observability) == [
-        f"**Source**\n`peer` 1f2e3d4c…, useful for the first time\n\n**File**\n`{HASH_A}`"
-    ]
+    assert _alerts(observability) == [_alert(_PEER, "peer", None, HASH_A)]
 
 
 @pytest.mark.asyncio
@@ -509,6 +514,7 @@ async def test_a_source_back_after_13_hours_through_an_undetermined_read_reappea
     fake_time.advance(timedelta(seconds=30))
     readings[HASH_A] = (_peer(_PEER),)
     await run_download_cycle(deps, NODE)
+    # The third round starts 13 h 30 s after the first, plus the 1 s each earlier read took.
     assert _alerts(observability) == [
-        f"**Source**\n`peer` 1f2e3d4c…, reappeared after 13 h\n\n**File**\n`{HASH_A}`"
+        _alert(_PEER, "peer", timedelta(hours=13, seconds=32), HASH_A)
     ]

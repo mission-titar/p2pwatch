@@ -14,7 +14,7 @@ from p2pwatch.application.steps.observability_dispatcher import (
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability import events as ev
-from p2pwatch.domain.observability.notification import RelayedLogLine, TextNotification
+from p2pwatch.domain.observability.notification import RelayedLogLine, TierRise
 from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.observability.severity import Severity
 from tests.fakes.adapters.driven.fake_hanging_notifier import FakeHangingNotifier
@@ -80,7 +80,7 @@ async def test_relays_the_log_line_when_there_is_no_separate_body() -> None:
 
 
 @pytest.mark.asyncio
-async def test_logs_the_message_but_notifies_the_body() -> None:
+async def test_logs_the_message_but_notifies_the_plans_notification() -> None:
     logger, notifier = FakeLogger(), FakeNotifier()
     download = DecisionRecord("062A", "rule", DecisionTier.DOWNLOAD)
     change = ev.DecisionChange("062A", "Les demoiselles cambrioleuses", None, download)
@@ -89,15 +89,19 @@ async def test_logs_the_message_but_notifies_the_body() -> None:
         _NODE,
     )
     assert logger.lines[-1].message.startswith("decisions for Keroro 062.avi")
-    [(audience, notification)] = notifier.calls
-    assert audience == Audience.COMMUNITY
-    assert isinstance(notification, TextNotification)
-    assert (notification.title, notification.severity, notification.node_id) == (
-        "📥 Download",
-        Severity.INFO,
-        _NODE,
-    )
-    assert notification.body.startswith("**Targets**")
+    assert notifier.calls == [
+        (
+            Audience.COMMUNITY,
+            TierRise(
+                DecisionTier.DOWNLOAD,
+                (ev.TargetTitle("062A", "Les demoiselles cambrioleuses"),),
+                "Keroro 062.avi",
+                1024,
+                f"ed2k://|file|Keroro%20062.avi|1024|{'a' * 32}|/",
+                _NODE,
+            ),
+        )
+    ]
 
 
 @pytest.mark.asyncio

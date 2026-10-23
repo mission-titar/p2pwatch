@@ -8,11 +8,7 @@ from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.metrics_recorder import MetricsRecorder
 from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.domain.observability.events import Event
-from p2pwatch.domain.observability.notification import (
-    Notification,
-    RelayedLogLine,
-    TextNotification,
-)
+from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.policy import ObservabilityPlan, plan_observability
 from p2pwatch.domain.observability.severity import Severity
 
@@ -33,11 +29,9 @@ def log_at_severity(logger: Logger, severity: Severity, message: str) -> None:
 
 
 def _notification(plan: ObservabilityPlan, node_id: str) -> Notification:
-    """The plan's own title and body if it has a body, else its log line relayed."""
-    if plan.notification_body:
-        return TextNotification(
-            plan.notification_title, plan.notification_body, plan.severity, node_id
-        )
+    """The plan's community notification, else its log line relayed."""
+    if plan.notification is not None:
+        return plan.notification
     return RelayedLogLine(plan.message, plan.severity, node_id)
 
 
@@ -58,7 +52,7 @@ class ObservabilityDispatcher:
         self._notification_timeout_seconds = notification_timeout_seconds
 
     async def dispatch(self, event: Event, node_id: str) -> None:
-        plan = plan_observability(event)
+        plan = plan_observability(event, node_id)
         log_at_severity(self._logger, plan.severity, plan.message)
         for instruction in plan.metrics:
             self._metrics_recorder.apply(instruction)
