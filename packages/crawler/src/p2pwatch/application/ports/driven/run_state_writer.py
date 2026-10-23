@@ -8,13 +8,9 @@ class RunStateWriter(ABC):
     """Changes the run state from any thread: each call returns at once, its change follows."""
 
     @abstractmethod
-    def pause(self) -> None:
-        """Searches in flight finish, then the crawler idles."""
+    def set_paused(self, paused: bool) -> None:
+        """Paused, searches in flight finish, then the crawler idles; else it searches again."""
 
     @abstractmethod
-    def resume(self) -> None:
-        """The crawler searches again."""
-
-    @abstractmethod
-    def shut_down(self) -> None:
+    def set_shutdown_requested(self) -> None:
         """The crawler shuts down gracefully, and the container restarts it."""
