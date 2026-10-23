@@ -5,7 +5,10 @@ from dataclasses import replace
 
 import pytest
 
+from catalog_matching.domain.decision_tier import DecisionTier
+from catalog_matching.domain.engine import DecisionRecord
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction
 from p2pwatch.domain.observability import events as ev
 from p2pwatch.domain.observability.policy import (
     Audience,
@@ -209,9 +212,17 @@ def _decisions(*changes: ev.DecisionChange) -> ev.DecisionsRecorded:
     )
 
 
+def _decision(target_id: str, label: str) -> FileTargetDecision:
+    """The decision a log line names ``label``: a tier, or ``retracted``."""
+    if label == "retracted":
+        return Retraction(target_id)
+    return DecisionRecord(target_id, "rule", DecisionTier(label))
+
+
 def _change(target_id: str, before: str | None, after: str) -> ev.DecisionChange:
     title = {"062A": "Les demoiselles cambrioleuses", "062B": "Le grand combat sous-marin"}
-    return ev.DecisionChange(target_id, title[target_id], before, after)
+    previous = None if before is None else _decision(target_id, before)
+    return ev.DecisionChange(target_id, title[target_id], previous, _decision(target_id, after))
 
 
 @pytest.mark.parametrize(

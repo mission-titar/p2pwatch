@@ -170,7 +170,8 @@ a function does.
 | `observation` | `FileObservation`, a reported file and its `observed_at`, the instant the crawler learned of it, stamped right before the write; every catalog read returns it whole | a reported file, `sighting` |
 | `candidate` | a `FileCandidate`, one name of a file and its metadata, the matcher's input; a `DownloadCandidate` is a file with a download-tier decision | `names` |
 | `target` | an episode segment to recover: `target_id`, `TargetSegment`, its `letter` | `segment` for the letter; Kad's keyword target, which is a `kad_word` |
-| `tier` | a decision's strength: `catalog`, `notify`, `download` | `before`, `after` |
+| `tier` | `DecisionTier`, a decision's strength: `catalog`, `notify`, `download`, its `rank` their order | `before`, `after`; `retracted`, which is a retraction |
+| `retraction` | `Retraction`, a file that no longer matches a target, appended since the catalog has no delete; a file's latest decision for a target, `FileTargetDecision`, is a `DecisionRecord` or a retraction | a fourth tier |
 | `coverage` | `TargetCoverage`, how far a target is recovered: its status, its best tier and its file count, catalog-tier decisions left out | `progress` |
 | `test coverage` | `TestCoverage`, a module's statements and branches, those its package's test run ran and those its own tests ran: `TestCoverageReader` reads it from `.coverage` | a bare `coverage`, which is a target's |
 | `file history` | `FileHistory`, a file as its page shows it: its observations over an interval, its latest one, its known filenames, its current decisions | `file detail` |

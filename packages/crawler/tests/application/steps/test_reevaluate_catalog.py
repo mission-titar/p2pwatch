@@ -29,8 +29,8 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
 )
 from p2pwatch.application.steps.reevaluate_catalog import ReevaluationSummary, reevaluate_catalog
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.file_target_decision import Retraction
 from p2pwatch.domain.observation import FileObservation, ReportedFile
-from p2pwatch.domain.retraction import RETRACTED_TIER
 from p2pwatch.domain.wake_subject import WakeSubject
 from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
@@ -267,9 +267,13 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
         files_evaluated=1, rows_written=3
     )  # 062A + 062B + retract 001A
     assert decision_store.read_latest_decisions(FileKey(Network.ED2K, _HASH_MULTI)) == {
-        "062A": DecisionRecord(target_id="062A", rule_name="numero_nu_confirmed", tier="download"),
-        "062B": DecisionRecord(target_id="062B", rule_name="numero_nu_confirmed", tier="download"),
-        "001A": DecisionRecord(target_id="001A", rule_name="", tier=RETRACTED_TIER),
+        "062A": DecisionRecord(
+            target_id="062A", rule_name="numero_nu_confirmed", tier=DecisionTier.DOWNLOAD
+        ),
+        "062B": DecisionRecord(
+            target_id="062B", rule_name="numero_nu_confirmed", tier=DecisionTier.DOWNLOAD
+        ),
+        "001A": Retraction("001A"),
     }
 
 
@@ -349,7 +353,9 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
     )
     assert summary == ReevaluationSummary(files_evaluated=1, rows_written=1)
     assert decision_store.read_latest_decisions(FileKey(Network.ED2K, _HASH_DL)) == {
-        "062A": DecisionRecord(target_id="062A", rule_name="id_segment_exact", tier="download")
+        "062A": DecisionRecord(
+            target_id="062A", rule_name="id_segment_exact", tier=DecisionTier.DOWNLOAD
+        )
     }
 
 

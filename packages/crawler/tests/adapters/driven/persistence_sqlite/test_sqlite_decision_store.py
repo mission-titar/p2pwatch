@@ -6,13 +6,13 @@ from pathlib import Path
 import pytest
 
 from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.engine import DecisionRecord, Explanation, MatchDecision
+from catalog_matching.domain.engine import Explanation, MatchDecision
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
 from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.retraction import RETRACTED_TIER
+from p2pwatch.domain.file_target_decision import Retraction
 from tests.support.catalog_rows import insert_file
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
@@ -100,10 +100,8 @@ def test_record_retraction_round_trip(
     row = connection.execute(
         "SELECT file_id, target_id, rule_name, tier, decided_at, node_id FROM match_decisions"
     ).fetchone()
-    assert row == (_KEY.file_id, "062A", "", RETRACTED_TIER, _T0_ISO, _NODE)
-    assert decision_store.read_latest_decisions(_KEY) == {
-        "062A": DecisionRecord(target_id="062A", rule_name="", tier=RETRACTED_TIER)
-    }
+    assert row == (_KEY.file_id, "062A", "", "retracted", _T0_ISO, _NODE)
+    assert decision_store.read_latest_decisions(_KEY) == {"062A": Retraction("062A")}
 
 
 def test_each_write_stores_the_node_id_its_call_gives(
@@ -140,9 +138,7 @@ def test_record_retraction_row_is_append_only(
     with pytest.raises(sqlite3.IntegrityError, match="match_decisions is append-only"):
         connection.execute("DELETE FROM match_decisions")
     # The retracted row SURVIVED both attempts, untouched.
-    assert decision_store.read_latest_decisions(_KEY) == {
-        "062A": DecisionRecord(target_id="062A", rule_name="", tier=RETRACTED_TIER)
-    }
+    assert decision_store.read_latest_decisions(_KEY) == {"062A": Retraction("062A")}
 
 
 def test_download_candidates_include_a_file_whose_latest_verdict_is_download(
