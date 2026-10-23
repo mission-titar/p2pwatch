@@ -27,7 +27,8 @@ LATEST_OBSERVATION_CTE = """latest_observation AS (
         v.duration_seconds AS duration_seconds,
         v.bitrate_kbps AS bitrate_kbps,
         v.raw_metadata AS raw_metadata,
-        o.observed_at AS observed_at
+        o.observed_at AS observed_at,
+        v.node_id AS node_id
     FROM files AS f
     LEFT JOIN observation_variants AS v ON v.variant_id = (
         SELECT v2.variant_id FROM observation_variants AS v2
@@ -49,7 +50,7 @@ LATEST_OBSERVATION_CTE = """latest_observation AS (
 # Every query below returns these columns in this order, for ``observation_from_row``.
 _COLUMNS = (
     "network, native_id, filename, size_bytes, source_count, keyword, duration_seconds,"
-    " bitrate_kbps, raw_metadata, observed_at"
+    " bitrate_kbps, raw_metadata, observed_at, node_id"
 )
 
 SELECT_LATEST_OBSERVATION = f"""WITH {LATEST_OBSERVATION_CTE}
@@ -62,7 +63,7 @@ SELECT {_COLUMNS} FROM latest_observation WHERE filename IS NOT NULL ORDER BY ne
 
 _FROM_OBSERVATIONS = """
 SELECT f.network, f.native_id, v.filename, v.size_bytes, o.source_count, v.keyword,
-    v.duration_seconds, v.bitrate_kbps, v.raw_metadata, o.observed_at
+    v.duration_seconds, v.bitrate_kbps, v.raw_metadata, o.observed_at, v.node_id
 FROM files AS f
 JOIN observation_variants AS v ON v.file_id = f.file_id
 JOIN observations AS o ON o.variant_id = v.variant_id
@@ -104,7 +105,7 @@ def observation_from_row(row: Any) -> FileObservation:
         bitrate_kbps=row[7],
         raw_metadata=tuple((name, rendered) for name, rendered in json.loads(row[8])),
     )
-    return FileObservation(reported_file, _EPOCH + row[9] * _MICROSECOND)
+    return FileObservation(reported_file, _EPOCH + row[9] * _MICROSECOND, row[10])
 
 
 def latest_observation(connection: sqlite3.Connection, file: FileKey) -> FileObservation | None:

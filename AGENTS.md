@@ -169,7 +169,7 @@ a function does.
 | `contact point` | `ContactPoint`, the server a source connects through, as its network names one (`ip:port` on eD2k), built only valid: `parse_contact_point` gives `None` for any other text | a peer's address, which the catalog never stores |
 | `latest point` | `LatestPoint`, a source's latest point under one of its variants: its role, its instant, its session's received bytes; `carried_role` carries its role to a reading in a passing state, `EarlierPoints.of` reduces a source's earlier ones | `last point` |
 | `reported file` | `ReportedFile`, what the network reports of a file, with no instant: the mapper builds it, a `SearchAnswer` carries it | `observation` |
-| `observation` | `FileObservation`, a reported file and its `observed_at`, the instant the crawler learned of it, stamped right before the write; every catalog read returns it whole | a reported file, `sighting` |
+| `observation` | `FileObservation`, a reported file, its `observed_at`, the instant the crawler learned of it, stamped right before the write, and its node; every catalog read returns it whole | a reported file, `sighting` |
 | `candidate` | a `FileCandidate`, one name of a file and its metadata, the matcher's input; a `DownloadCandidate` is a file with a download-tier decision | `names` |
 | `target` | an episode segment to recover: `target_id`, `TargetSegment`, its `letter` | `segment` for the letter; Kad's keyword target, which is a `kad_word` |
 | `tier` | `DecisionTier`, a decision's strength: `catalog`, `notify`, `download`, its `rank` their order, `identifies_target` false for `catalog` alone | `before`, `after`; `retracted`, which is a retraction |

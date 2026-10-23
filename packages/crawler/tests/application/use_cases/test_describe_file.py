@@ -31,6 +31,7 @@ _GAP = timedelta(seconds=90)
 _OBSERVATION = FileObservation(
     ReportedFile(_FILE, "keroro_062a.avi", 100, 5, "keroro", 1300, 900, ()),
     _NOW - timedelta(hours=1),
+    "n1",
 )
 _DECISION = DatedDecision(DecisionRecord("062A", "catalog", DecisionTier.CATALOG), _NOW, "n1")
 _HISTORY = FileHistory(

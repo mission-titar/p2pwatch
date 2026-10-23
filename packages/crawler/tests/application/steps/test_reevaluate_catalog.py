@@ -80,10 +80,10 @@ async def test_two_changed_rows_are_all_evaluated_and_written(
 ) -> None:
     # Never decided: both will change.
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now()), _NODE
+        FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now(), _NODE)
     )
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now()), _NODE
+        FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now(), _NODE)
     )
     observability = ObservabilityOverFakes()
     waker = FakeWaker()
@@ -124,7 +124,7 @@ async def test_unchanged_row_is_evaluated_but_not_written(
     wall_clock: FakeWallClock,
 ) -> None:
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now()), _NODE
+        FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now(), _NODE)
     )
     candidate = _reported_file(_HASH_CAT, _CAT_NAME).to_candidate()
     decisions = engine.evaluate_file((candidate,))
@@ -164,10 +164,10 @@ async def test_store_error_on_one_row_is_absorbed_and_sweep_continues(
     wall_clock: FakeWallClock,
 ) -> None:
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now()), _NODE
+        FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now(), _NODE)
     )
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now()), _NODE
+        FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now(), _NODE)
     )
     logger = FakeLogger()
     # TEST trigger: makes the match_decisions INSERT fail for ONE hash only -> that row's
@@ -244,7 +244,7 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
     # §10: an old "unidentified" row under an arbitrary target_id (001A/catalog) is retracted
     # by the set-diff when the file becomes identified (062A + 062B) on the re-evaluation pass.
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_MULTI, _MULTI_NAME), wall_clock.now()), _NODE
+        FileObservation(_reported_file(_HASH_MULTI, _MULTI_NAME), wall_clock.now(), _NODE)
     )
     decision_store.record_decision(
         FileKey(Network.ED2K, _HASH_MULTI),
@@ -291,7 +291,7 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
 ) -> None:
     # §10: the old whole-file retraction sentinel (target_id="") is invisible to the set-diff.
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_MULTI, _MULTI_NAME), wall_clock.now()), _NODE
+        FileObservation(_reported_file(_HASH_MULTI, _MULTI_NAME), wall_clock.now(), _NODE)
     )
     decision_store.record_retraction(
         FileKey(Network.ED2K, _HASH_MULTI), "", wall_clock.now(), _NODE
@@ -335,11 +335,11 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
     wall_clock: FakeWallClock,
 ) -> None:
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now()), _NODE
+        FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now(), _NODE)
     )
     fake_time.advance(timedelta(minutes=1))  # the latest name matches nothing
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_DL, "random.txt"), wall_clock.now()), _NODE
+        FileObservation(_reported_file(_HASH_DL, "random.txt"), wall_clock.now(), _NODE)
     )
     summary = await reevaluate_catalog(
         observation_reader=observation_store,
@@ -372,13 +372,13 @@ async def test_progress_is_logged_at_each_multiple_of_the_cadence_only(
 ) -> None:
     logger = FakeLogger()
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now()), _NODE
+        FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now(), _NODE)
     )
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now()), _NODE
+        FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now(), _NODE)
     )
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_MULTI, "random.txt"), wall_clock.now()), _NODE
+        FileObservation(_reported_file(_HASH_MULTI, "random.txt"), wall_clock.now(), _NODE)
     )
     await reevaluate_catalog(
         observation_reader=observation_store,

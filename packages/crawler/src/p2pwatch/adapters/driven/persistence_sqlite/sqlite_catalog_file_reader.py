@@ -124,6 +124,7 @@ SELECT
     obs.bitrate_kbps,
     obs.raw_metadata,
     obs.observed_at,
+    obs.node_id,
     f.size_bytes AS file_size_bytes,
     dec.target_ids,
     dec.rule_names,

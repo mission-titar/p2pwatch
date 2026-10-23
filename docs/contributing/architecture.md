@@ -311,7 +311,8 @@ sequenceDiagram
   `p2pwatch_search_results_skipped`.
 - amuleapi ne date pas ses résultats : `record_observation` (`application/steps/record_observations.py`)
   fait de chaque `ReportedFile` un `FileObservation` daté par `wall_clock.now()` juste avant
-  l'écriture, l'instant où le crawler a appris l'existence du fichier.
+  l'écriture, l'instant où le crawler a appris l'existence du fichier, et marqué du nœud qui
+  l'observe.
 - `search()` rend la main quand amuled signale la fin de la recherche, au plus tard 120 s
   (le budget, constante du cœur) après son départ réseau. Attendre est l'affaire de l'adaptateur.
 - Dans l'adaptateur, une recherche **Kad** est élargie à chaque tour de sondage à partir du deuxième

@@ -75,7 +75,9 @@ class ReportedFile:
 
 @dataclass(frozen=True)
 class FileObservation:
-    """A reported file and the instant the crawler learned of it, which the network never dates."""
+    """A reported file and the instant the crawler learned of it, which the network never dates,
+    by the node ``node_id``."""
 
     reported_file: ReportedFile
     observed_at: datetime
+    node_id: str
