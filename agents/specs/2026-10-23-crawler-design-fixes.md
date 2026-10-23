@@ -138,7 +138,8 @@ Strict TDD in every block, as `AGENTS.md` states it. Full contents, estimate sou
 | 10 | `refactor/download-cycle-split` | **mechanical, exempt**: this spec; the cycle split (D28) | 4942, 26 (measured) |
 | 20 | `refactor/config-interpolation-walk` | the `${NAME}` walk (D1) | 260, 8 |
 | 30 | `refactor/config-to-domain` | **mechanical, exempt**: the config to the domain (D2) | 150 to 2900, 14 |
-| 40 | `refactor/validate-config-report` | `validate-config`'s report; merge's same-catalog rule (D3, D4) | 330, 16 |
+| 40 | `refactor/validate-config-report` | `validate-config`'s report (D3) (Corrected: split at 24 files, merge's rule to 45) | 361, 18 (measured) |
+| 45 | `refactor/merge-rule-and-config-error-keys` | merge's same-catalog rule; every config error's key apart; matching's numbers refused without a traceback (D3, D4) (Corrected: added in Act) | |
 | 50 | `refactor/client-read-errors` | client errors per operation; the explainer's engine (D5, D6) | 270, 15 |
 | 60 | `refactor/fixed-values-to-composition` | `PAGE_SIZE`; fixed values to the composition (D7, D8) | 90, 18 |
 | 70 | `refactor/composition-resource-stack` | the resource stack; backoff at start; gluetun's logger (D9, D10, D31) | 230, 13 |
