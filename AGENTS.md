@@ -165,7 +165,7 @@ a function does.
 | `native_id` | the network's own file id (MD4 on eD2k) | `ed2k_hash` past the mapper |
 | `filename` | a file's name, a string: `latest_filename`, `best_filename`, `known_filenames` | `name`, `file_name` |
 | `source` | a peer sharing a file, `SourceKey`; `source_name` its advertised name | a bare `name` beside a filename |
-| `source point` | one source's reading of one of our downloads, kept in catalog.db with its role: `RecordedReading` is one the writer kept, `EarlierPoints` what this node's earlier points tell of a source | a sharing period, which spans consecutive ones |
+| `source point` | `SourcePoint`, one source's reading of one of our downloads with its role, a carried one included, and its node, kept in catalog.db; `EarlierPoints` what this node's earlier points tell of a source | a sharing period, which spans consecutive ones |
 | `contact point` | `ContactPoint`, the server a source connects through, as its network names one (`ip:port` on eD2k), built only valid: `parse_contact_point` gives `None` for any other text | a peer's address, which the catalog never stores |
 | `latest point` | `LatestPoint`, a source's latest point under one of its variants: its role, its instant, its session's received bytes; `carried_role` carries its role to a reading in a passing state, `EarlierPoints.of` reduces a source's earlier ones | `last point` |
 | `reported file` | `ReportedFile`, what the network reports of a file, with no instant: the mapper builds it, a `SearchAnswer` carries it | `observation` |

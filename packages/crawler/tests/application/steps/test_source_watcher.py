@@ -17,8 +17,8 @@ from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.observability.events import SourceFirstUseful, SourceReappeared, TargetTitle
 from p2pwatch.domain.source import (
     LatestPoint,
-    RecordedReading,
     SourceKey,
+    SourcePoint,
     SourceReading,
     SourceRole,
 )
@@ -74,9 +74,53 @@ async def test_the_sources_of_each_tracked_download_the_client_lists_are_recorde
     await run_download_cycle(deps, NODE)
     assert source_client.source_reads == [HASH_A, HASH_B]
     assert sources.recorded == [
-        (HASH_A, readings[HASH_A], start),
-        (HASH_B, readings[HASH_B], start + timedelta(seconds=1)),
+        SourcePoint(key(HASH_A), readings[HASH_A][0], SourceRole.QUEUED, start, NODE),
+        SourcePoint(
+            key(HASH_B),
+            readings[HASH_B][0],
+            SourceRole.UNDETERMINED,
+            start + timedelta(seconds=1),
+            NODE,
+        ),
     ]
+
+
+@pytest.mark.asyncio
+async def test_a_passing_reading_carries_its_latest_points_role_from_the_window_before_it() -> None:
+    # The window spans three times between reads (source points spec, D4).
+    fake_time = FakeTime()
+    start = fake_time.wall.now()
+    passing = _reading("peer", None)
+    readings: dict[str, tuple[SourceReading, ...]] = {HASH_A: (_reading("peer"), passing)}
+    sources = FakeSourcePointStore(latest=LatestPoint(SourceRole.SENDING, start, 0))
+    deps = build_deps(
+        client=FakeDownloadClient(listed=[(status(HASH_A),)]),
+        source_client=FakeSourceClient(readings=readings),
+        tracked_download_store=_tracking(HASH_A),
+        sources=sources,
+        fake_time=fake_time,
+        time_between_source_reads=timedelta(minutes=5),
+    )
+    await run_download_cycle(deps, NODE)
+    assert sources.latest_asked == [(HASH_A, passing, start - timedelta(minutes=15), start)]
+    assert [point.role for point in sources.recorded] == [SourceRole.QUEUED] * 2
+
+
+@pytest.mark.asyncio
+async def test_a_reading_with_neither_source_nor_name_is_dropped() -> None:
+    # Nothing could tell it from the next one (source points spec, D4).
+    nameless = SourceReading(None, None, None, None, None, None, (), 0)
+    readings: dict[str, tuple[SourceReading, ...]] = {HASH_A: (nameless, _reading("peer"))}
+    sources = FakeSourcePointStore()
+    deps = build_deps(
+        client=FakeDownloadClient(listed=[(status(HASH_A),)]),
+        source_client=FakeSourceClient(readings=readings),
+        tracked_download_store=_tracking(HASH_A),
+        sources=sources,
+    )
+    await run_download_cycle(deps, NODE)
+    assert sources.latest_asked == []
+    assert [point.reading for point in sources.recorded] == [_reading("peer")]
 
 
 @pytest.mark.asyncio
@@ -104,11 +148,17 @@ async def test_a_store_failure_on_one_download_skips_its_sources_only() -> None:
     tracked_download_store.states[HASH_A] = DownloadState.DOWNLOADING
     tracked_download_store.states[HASH_B] = DownloadState.DOWNLOADING
     sources = FakeSourcePointStore(fail_for={HASH_A})
+    source_client = FakeSourceClient(readings={HASH_A: (_reading("a"),), HASH_B: (_reading("b"),)})
     await run_download_cycle(
-        build_deps(client=client, tracked_download_store=tracked_download_store, sources=sources),
+        build_deps(
+            client=client,
+            source_client=source_client,
+            tracked_download_store=tracked_download_store,
+            sources=sources,
+        ),
         NODE,
     )
-    assert [file for file, *_ in sources.recorded] == [HASH_B]
+    assert [point.file.native_id for point in sources.recorded] == [HASH_B]
 
 
 @pytest.mark.asyncio
@@ -120,6 +170,7 @@ async def test_sources_are_read_once_per_interval_however_often_the_cycle_runs()
     sources = FakeSourcePointStore()
     deps = build_deps(
         client=client,
+        source_client=FakeSourceClient(readings={HASH_A: (_reading("peer"),)}),
         tracked_download_store=_tracking(HASH_A),
         sources=sources,
         fake_time=fake_time,
@@ -128,7 +179,7 @@ async def test_sources_are_read_once_per_interval_however_often_the_cycle_runs()
     for _ in range(11):
         await run_download_cycle(deps, NODE)
         fake_time.advance(timedelta(seconds=30))
-    assert [read_at for _, _, read_at in sources.recorded] == [
+    assert [point.observed_at for point in sources.recorded] == [
         start,
         start + timedelta(seconds=300),
     ]
@@ -178,6 +229,12 @@ async def test_a_wall_clock_step_back_delays_no_sources_read() -> None:
 _PEER, _OTHER_PEER = SourceKey(Network.ED2K, "1f2e3d4c" * 4), SourceKey(Network.ED2K, "c" * 32)
 
 
+def _read(
+    source: SourceKey | None, source_name: str | None, role: SourceRole = SourceRole.QUEUED
+) -> SourceReading:
+    return SourceReading(source, source_name, None, role, None, None, (), 0)
+
+
 def _tracking(*hashes: str) -> FakeTrackedDownloadStore:
     tracked_download_store = FakeTrackedDownloadStore()
     for native_id in hashes:
@@ -188,8 +245,8 @@ def _tracking(*hashes: str) -> FakeTrackedDownloadStore:
 @pytest.mark.asyncio
 async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
     # Stage 4, D9: the first file's event, named after its decision and best name.
-    queued = (RecordedReading(_PEER, "AnimuseeFMR", SourceRole.QUEUED),)
-    sources = FakeSourcePointStore(kept={HASH_A: queued, HASH_B: queued})
+    queued = (_read(_PEER, "AnimuseeFMR"),)
+    source_client = FakeSourceClient(readings={HASH_A: queued, HASH_B: queued})
     decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
     observation_reader = FakeObservationReader(
         best={HASH_A: observation(HASH_A, "Keroro 062.avi", 1)}
@@ -198,10 +255,10 @@ async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
     client = FakeDownloadClient(listed=[(status(HASH_A), status(HASH_B))])
     deps = build_deps(
         client=client,
+        source_client=source_client,
         tracked_download_store=_tracking(HASH_A, HASH_B),
         decision_reader=decision_reader,
         observation_reader=observation_reader,
-        sources=sources,
         event_emitter=event_emitter,
     )
     await run_download_cycle(deps, NODE)
@@ -225,11 +282,11 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
         _PEER: (LatestPoint(SourceRole.QUEUED, start - timedelta(hours=13), 0),),
         _OTHER_PEER: (LatestPoint(SourceRole.QUEUED, start - timedelta(seconds=30), 0),),
     }
-    kept: dict[str, tuple[RecordedReading, ...]] = {
-        HASH_A: (RecordedReading(_OTHER_PEER, None, SourceRole.QUEUED),),
-        HASH_B: (RecordedReading(_PEER, "AnimuseeFMR", SourceRole.SENDING),),
+    readings: dict[str, tuple[SourceReading, ...]] = {
+        HASH_A: (_read(_OTHER_PEER, None),),
+        HASH_B: (_read(_PEER, "AnimuseeFMR", SourceRole.SENDING),),
     }
-    sources = FakeSourcePointStore(kept=kept, history=history)
+    sources = FakeSourcePointStore(history=history)
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.record_queued(
         key(HASH_B), "063A", 100, start
@@ -241,7 +298,7 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
     client = FakeDownloadClient(listed=[(status(HASH_A), status(HASH_B))])
     deps = build_deps(
         client=client,
-        source_client=FakeSourceClient(fake_time=fake_time),
+        source_client=FakeSourceClient(readings=readings, fake_time=fake_time),
         tracked_download_store=tracked_download_store,
         sources=sources,
         event_emitter=event_emitter,
@@ -262,13 +319,12 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
 
 @pytest.mark.asyncio
 async def test_a_reading_without_a_source_id_raises_nothing() -> None:
-    sources = FakeSourcePointStore(
-        kept={HASH_A: (RecordedReading(None, "peer", SourceRole.QUEUED),)}
-    )
+    sources = FakeSourcePointStore()
     event_emitter = FakeEventEmitter()
     client = FakeDownloadClient(listed=[(status(HASH_A),)])
     deps = build_deps(
         client=client,
+        source_client=FakeSourceClient(readings={HASH_A: (_read(None, "peer"),)}),
         tracked_download_store=_tracking(HASH_A),
         sources=sources,
         event_emitter=event_emitter,
@@ -282,20 +338,25 @@ async def test_a_reading_without_a_source_id_raises_nothing() -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "kept",
+    "readings",
     [
         (),
-        (RecordedReading(None, "peer", SourceRole.QUEUED),),
-        (RecordedReading(_PEER, "peer", SourceRole.NOTHING_NEW),),
+        (_read(None, "peer"),),
+        (_read(_PEER, "peer", SourceRole.NOTHING_NEW),),
     ],
     ids=["none", "no-source-id", "not-useful"],
 )
 async def test_a_round_without_a_useful_reading_with_a_source_id_never_asks_for_the_baseline(
-    kept: tuple[RecordedReading, ...],
+    readings: tuple[SourceReading, ...],
 ) -> None:
-    sources = FakeSourcePointStore(kept={HASH_A: kept})
+    sources = FakeSourcePointStore()
     client = FakeDownloadClient(listed=[(status(HASH_A),)])
-    deps = build_deps(client=client, tracked_download_store=_tracking(HASH_A), sources=sources)
+    deps = build_deps(
+        client=client,
+        source_client=FakeSourceClient(readings={HASH_A: readings}),
+        tracked_download_store=_tracking(HASH_A),
+        sources=sources,
+    )
     await run_download_cycle(deps, NODE)
     assert sources.baselines == []
 
@@ -304,16 +365,16 @@ async def test_a_round_without_a_useful_reading_with_a_source_id_never_asks_for_
 async def test_the_baseline_is_asked_once_per_round_against_its_start() -> None:
     fake_time = FakeTime()
     start = fake_time.wall.now()
-    kept: dict[str, tuple[RecordedReading, ...]] = {
-        HASH_A: (RecordedReading(None, "peer", SourceRole.QUEUED),),
-        HASH_B: (RecordedReading(_PEER, "AnimuseeFMR", SourceRole.QUEUED),),
-        HASH_C: (RecordedReading(_OTHER_PEER, None, SourceRole.SENDING),),
+    readings: dict[str, tuple[SourceReading, ...]] = {
+        HASH_A: (_read(None, "peer"),),
+        HASH_B: (_read(_PEER, "AnimuseeFMR"),),
+        HASH_C: (_read(_OTHER_PEER, None, SourceRole.SENDING),),
     }
-    sources = FakeSourcePointStore(kept=kept)
+    sources = FakeSourcePointStore()
     client = FakeDownloadClient(listed=[(status(HASH_A), status(HASH_B), status(HASH_C))])
     deps = build_deps(
         client=client,
-        source_client=FakeSourceClient(fake_time=fake_time),
+        source_client=FakeSourceClient(readings=readings, fake_time=fake_time),
         tracked_download_store=_tracking(HASH_A, HASH_B, HASH_C),
         sources=sources,
         fake_time=fake_time,
@@ -324,18 +385,19 @@ async def test_the_baseline_is_asked_once_per_round_against_its_start() -> None:
 
 @pytest.mark.asyncio
 async def test_a_store_failure_asking_the_baseline_skips_that_downloads_alerts_only() -> None:
-    queued = (RecordedReading(_PEER, "AnimuseeFMR", SourceRole.QUEUED),)
-    sources = FakeSourcePointStore(kept={HASH_A: queued, HASH_B: queued}, baseline_failures=1)
+    queued = (_read(_PEER, "AnimuseeFMR"),)
+    sources = FakeSourcePointStore(baseline_failures=1)
     event_emitter = FakeEventEmitter()
     client = FakeDownloadClient(listed=[(status(HASH_A), status(HASH_B))])
     deps = build_deps(
         client=client,
+        source_client=FakeSourceClient(readings={HASH_A: queued, HASH_B: queued}),
         tracked_download_store=_tracking(HASH_A, HASH_B),
         sources=sources,
         event_emitter=event_emitter,
     )
     await run_download_cycle(deps, NODE)
-    assert [file for file, *_ in sources.recorded] == [HASH_A, HASH_B]
+    assert [point.file.native_id for point in sources.recorded] == [HASH_A, HASH_B]
     assert len(sources.baselines) == 2
     alerts = [
         e for e in event_emitter.events if isinstance(e, SourceFirstUseful | SourceReappeared)
@@ -364,7 +426,7 @@ async def test_the_first_recording_round_is_a_baseline(
         client=client,
         source_client=FakeSourceClient(readings=readings, fake_time=fake_time),
         tracked_download_store=_tracking(HASH_A, HASH_B),
-        sources=SqliteSourcePointStore(catalog, timedelta(seconds=30)),
+        sources=SqliteSourcePointStore(catalog),
         event_emitter=event_emitter,
         fake_time=fake_time,
     )
@@ -405,7 +467,7 @@ def _real_deps(
     fake_time: FakeTime,
 ) -> DownloadDeps:
     """``HASH_A`` tracked, its sources written to a real catalog."""
-    sources = SqliteSourcePointStore(catalog, timedelta(seconds=30))
+    sources = SqliteSourcePointStore(catalog)
     return build_deps(
         client=client,
         source_client=source_client,
