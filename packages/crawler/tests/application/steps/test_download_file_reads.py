@@ -3,13 +3,12 @@ import pytest
 from catalog_matching.domain.models import TargetSegment
 from p2pwatch.application.steps.download_cycle import run_download_cycle
 from p2pwatch.domain.download.states import DownloadState
-from p2pwatch.domain.observability.events import DownloadCompleted, TargetTitle
+from p2pwatch.domain.observability.policy import Audience, Severity
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
-from tests.fakes.application.steps.fake_event_emitter import FakeEventEmitter
 from tests.support.application.steps.download_deps import (
     HASH_A,
     HASH_B,
@@ -20,11 +19,12 @@ from tests.support.application.steps.download_deps import (
     observation,
     status,
 )
+from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
 
 @pytest.mark.asyncio
-async def test_emits_download_completed() -> None:
-    event_emitter = FakeEventEmitter()
+async def test_dispatches_download_completed() -> None:
+    observability = ObservabilityOverFakes()
     client = FakeDownloadClient(listed=[(status(HASH_A, completed=True),)])
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.record_queued(key(HASH_A), "062A", 100, FakeTime().wall.now())
@@ -32,13 +32,19 @@ async def test_emits_download_completed() -> None:
     deps = build_deps(
         client=client,
         tracked_download_store=tracked_download_store,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
     )
     await run_download_cycle(deps, NODE)
-    completed = [e for e in event_emitter.events if isinstance(e, DownloadCompleted)]
     # No observation, no decision left: the hash names the file, the queued row its target.
-    assert completed == [DownloadCompleted(key(HASH_A), HASH_A, (TargetTitle("062A", "t"),))]
-    assert event_emitter.node_ids == {NODE}
+    assert observability.notifier.calls == [
+        (
+            Audience.COMMUNITY,
+            "✅ Downloaded",
+            f"**Targets**\n062A - t\n\n**File**\n`{HASH_A}`",
+            Severity.SUCCESS,
+        )
+    ]
+    assert observability.notifier.node_ids == [NODE]
 
 
 @pytest.mark.asyncio
@@ -51,7 +57,7 @@ async def test_a_completion_names_the_clean_file_and_every_download_target_of_th
             season=2, seasonal_number=12, absolute_number=62, letter="B", title="tb", status="lost"
         ),
     )
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.record_queued(key(HASH_A), "062A", 100, FakeTime().wall.now())
     tracked_download_store.states[HASH_A] = DownloadState.DOWNLOADING
@@ -67,13 +73,10 @@ async def test_a_completion_names_the_clean_file_and_every_download_target_of_th
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
         targets=targets,
     )
     await run_download_cycle(deps, NODE)
-    completed = [e for e in event_emitter.events if isinstance(e, DownloadCompleted)]
-    assert completed == [
-        DownloadCompleted(
-            key(HASH_A), "Keroro é.avi", (TargetTitle("062A", "ta"), TargetTitle("062B", "tb"))
-        )
+    assert [body for _, _, body, _ in observability.notifier.calls] == [
+        "**Targets**\n062A - ta\n062B - tb\n\n**File**\n`Keroro é.avi`"
     ]

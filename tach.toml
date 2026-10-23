@@ -368,7 +368,6 @@ depends_on = [
   "p2pwatch.application.ports.driven.download_client",
   "p2pwatch.application.ports.driven.tracked_download_reader",
   "p2pwatch.application.ports.driven.tracked_download_writer",
-  "p2pwatch.application.ports.driven.event_emitter",
   "p2pwatch.application.ports.driven.free_space_meter",
   "p2pwatch.application.ports.driven.jitter_generator",
   "p2pwatch.application.ports.driven.logger",
@@ -535,11 +534,6 @@ depends_on = ["p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.application.ports.driven.tracked_download_writer"
-layer = "ports"
-depends_on = ["p2pwatch.domain"]
-
-[[modules]]
-path = "p2pwatch.application.ports.driven.event_emitter"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 

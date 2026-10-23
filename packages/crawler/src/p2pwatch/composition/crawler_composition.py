@@ -435,7 +435,7 @@ class CrawlerComposition(CrawlerRunner):
                     time_between_source_reads=download_config.time_between_source_reads,
                     wall_clock=wall_clock,
                     monotonic_clock=monotonic_clock,
-                    event_emitter=observability_dispatcher,
+                    observability_dispatcher=observability_dispatcher,
                     logger=StdlibLogger(download_loop.__module__),
                     waker=waker,
                     run_state_reader=run_state_store,

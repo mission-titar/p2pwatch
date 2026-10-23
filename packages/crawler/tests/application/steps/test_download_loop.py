@@ -23,7 +23,7 @@ from tests.fakes.adapters.driven.fake_source_point_store import FakeSourcePointS
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
-from tests.fakes.application.steps.fake_event_emitter import FakeEventEmitter
+from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
 _NODE = "n1"
 
@@ -56,7 +56,7 @@ def _loop_deps(
         time_between_source_reads=timedelta(minutes=5, seconds=30),
         wall_clock=fake_time.wall,
         monotonic_clock=fake_time.monotonic,
-        event_emitter=FakeEventEmitter(),
+        observability_dispatcher=ObservabilityOverFakes().dispatcher,
         logger=FakeLogger(),
         waker=waker,
         poll_interval_seconds=poll_interval,

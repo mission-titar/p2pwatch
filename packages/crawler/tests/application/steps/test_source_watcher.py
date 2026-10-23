@@ -14,7 +14,6 @@ from p2pwatch.application.steps.download_deps import DownloadDeps
 from p2pwatch.domain.client_errors import ClientUnreachableError
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import Network
-from p2pwatch.domain.observability.events import SourceFirstUseful, SourceReappeared, TargetTitle
 from p2pwatch.domain.source import (
     LatestPoint,
     SourceKey,
@@ -29,7 +28,6 @@ from tests.fakes.adapters.driven.fake_source_client import FakeSourceClient
 from tests.fakes.adapters.driven.fake_source_point_store import FakeSourcePointStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
-from tests.fakes.application.steps.fake_event_emitter import FakeEventEmitter
 from tests.support.application.steps.download_deps import (
     HASH_A,
     HASH_B,
@@ -41,6 +39,7 @@ from tests.support.application.steps.download_deps import (
     observation,
     status,
 )
+from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 from tests.support.catalog_rows import insert_file, source_variant_node_ids
 
 
@@ -251,7 +250,7 @@ async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
     observation_reader = FakeObservationReader(
         best={HASH_A: observation(HASH_A, "Keroro 062.avi", 1)}
     )
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     client = FakeDownloadClient(listed=[(status(HASH_A), status(HASH_B))])
     deps = build_deps(
         client=client,
@@ -259,18 +258,14 @@ async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
         tracked_download_store=_tracking(HASH_A, HASH_B),
         decision_reader=decision_reader,
         observation_reader=observation_reader,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
     )
     await run_download_cycle(deps, NODE)
-    alerts = [
-        e for e in event_emitter.events if isinstance(e, SourceFirstUseful | SourceReappeared)
+    assert _alerts(observability) == [
+        "**Source**\n`AnimuseeFMR` 1f2e3d4c…, useful for the first time"
+        "\n\n**Targets**\n062A - t\n\n**File**\n`Keroro 062.avi`"
     ]
-    assert alerts == [
-        SourceFirstUseful(
-            _PEER, "AnimuseeFMR", key(HASH_A), "Keroro 062.avi", (TargetTitle("062A", "t"),)
-        )
-    ]
-    assert event_emitter.node_ids == {NODE}
+    assert observability.notifier.node_ids == [NODE]
 
 
 @pytest.mark.asyncio
@@ -294,46 +289,40 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
     tracked_download_store.states.update(
         {HASH_A: DownloadState.DOWNLOADING, HASH_B: DownloadState.DOWNLOADING}
     )
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     client = FakeDownloadClient(listed=[(status(HASH_A), status(HASH_B))])
     deps = build_deps(
         client=client,
         source_client=FakeSourceClient(readings=readings, fake_time=fake_time),
         tracked_download_store=tracked_download_store,
         sources=sources,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
         fake_time=fake_time,
     )
     await run_download_cycle(deps, NODE)
     assert sources.asked == [(_OTHER_PEER, start), (_PEER, start)]
     assert sources.node_ids == {NODE}  # the round writes and reads the cycle's node's points
-    alerts = [
-        e for e in event_emitter.events if isinstance(e, SourceFirstUseful | SourceReappeared)
-    ]
-    assert alerts == [
-        SourceReappeared(
-            _PEER, "AnimuseeFMR", key(HASH_B), HASH_B, (TargetTitle("063A", "t2"),), 46800.0
-        )
+    assert _alerts(observability) == [
+        "**Source**\n`AnimuseeFMR` 1f2e3d4c…, reappeared after 13 h"
+        f"\n\n**Targets**\n063A - t2\n\n**File**\n`{HASH_B}`"
     ]
 
 
 @pytest.mark.asyncio
 async def test_a_reading_without_a_source_id_raises_nothing() -> None:
     sources = FakeSourcePointStore()
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     client = FakeDownloadClient(listed=[(status(HASH_A),)])
     deps = build_deps(
         client=client,
         source_client=FakeSourceClient(readings={HASH_A: (_read(None, "peer"),)}),
         tracked_download_store=_tracking(HASH_A),
         sources=sources,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
     )
     await run_download_cycle(deps, NODE)
     assert sources.asked == []
-    assert not any(
-        isinstance(e, SourceFirstUseful | SourceReappeared) for e in event_emitter.events
-    )
+    assert _alerts(observability) == []
 
 
 @pytest.mark.asyncio
@@ -387,22 +376,21 @@ async def test_the_baseline_is_asked_once_per_round_against_its_start() -> None:
 async def test_a_store_failure_asking_the_baseline_skips_that_downloads_alerts_only() -> None:
     queued = (_read(_PEER, "AnimuseeFMR"),)
     sources = FakeSourcePointStore(baseline_failures=1)
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     client = FakeDownloadClient(listed=[(status(HASH_A), status(HASH_B))])
     deps = build_deps(
         client=client,
         source_client=FakeSourceClient(readings={HASH_A: queued, HASH_B: queued}),
         tracked_download_store=_tracking(HASH_A, HASH_B),
         sources=sources,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
     )
     await run_download_cycle(deps, NODE)
     assert [point.file.native_id for point in sources.recorded] == [HASH_A, HASH_B]
     assert len(sources.baselines) == 2
-    alerts = [
-        e for e in event_emitter.events if isinstance(e, SourceFirstUseful | SourceReappeared)
+    assert _alerts(observability) == [
+        f"**Source**\n`AnimuseeFMR` 1f2e3d4c…, useful for the first time\n\n**File**\n`{HASH_B}`"
     ]
-    assert alerts == [SourceFirstUseful(_PEER, "AnimuseeFMR", key(HASH_B), HASH_B, ())]
 
 
 @pytest.mark.asyncio
@@ -421,29 +409,25 @@ async def test_the_first_recording_round_is_a_baseline(
     fake_time = FakeTime()
     rounds = [tuple(status(h) for h in order)] * 2
     client = FakeDownloadClient(listed=rounds)
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     deps = build_deps(
         client=client,
         source_client=FakeSourceClient(readings=readings, fake_time=fake_time),
         tracked_download_store=_tracking(HASH_A, HASH_B),
         sources=SqliteSourcePointStore(catalog),
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
         fake_time=fake_time,
     )
     await run_download_cycle(deps, NODE)
-    alerts = [
-        e for e in event_emitter.events if isinstance(e, SourceFirstUseful | SourceReappeared)
-    ]
-    assert alerts == []
+    assert _alerts(observability) == []
     assert source_variant_node_ids(catalog) == {NODE}
     fake_time.advance(timedelta(seconds=30))
     third = SourceKey(Network.ED2K, "d" * 32)
     readings[HASH_A] = (_peer(_PEER), _peer(third))
     await run_download_cycle(deps, NODE)
-    alerts = [
-        e for e in event_emitter.events if isinstance(e, SourceFirstUseful | SourceReappeared)
+    assert _alerts(observability) == [
+        f"**Source**\n`peer` dddddddd…, useful for the first time\n\n**File**\n`{HASH_A}`"
     ]
-    assert alerts == [SourceFirstUseful(third, "peer", key(HASH_A), HASH_A, ())]
     catalog.close()
 
 
@@ -463,7 +447,7 @@ def _real_deps(
     catalog: sqlite3.Connection,
     client: FakeDownloadClient,
     source_client: FakeSourceClient,
-    event_emitter: FakeEventEmitter,
+    observability: ObservabilityOverFakes,
     fake_time: FakeTime,
 ) -> DownloadDeps:
     """``HASH_A`` tracked, its sources written to a real catalog."""
@@ -473,13 +457,14 @@ def _real_deps(
         source_client=source_client,
         tracked_download_store=_tracking(HASH_A),
         sources=sources,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
         fake_time=fake_time,
     )
 
 
-def _alerts(event_emitter: FakeEventEmitter) -> list[object]:
-    return [e for e in event_emitter.events if isinstance(e, SourceFirstUseful | SourceReappeared)]
+def _alerts(observability: ObservabilityOverFakes) -> list[str]:
+    """The bodies of the source alerts, the only notifications of a round without completion."""
+    return [body for _, _, body, _ in observability.notifier.calls]
 
 
 @pytest.mark.asyncio
@@ -488,16 +473,18 @@ async def test_a_source_useful_at_three_consecutive_reads_is_new_once(
 ) -> None:
     # From its second read on, its earlier useful point is recent: no event (D5).
     readings: dict[str, tuple[SourceReading, ...]] = {HASH_A: (_peer(_OTHER_PEER),)}
-    fake_time, event_emitter = FakeTime(), FakeEventEmitter()
+    fake_time, observability = FakeTime(), ObservabilityOverFakes()
     client = FakeDownloadClient(listed=[(status(HASH_A),)] * 4)
     source_client = FakeSourceClient(readings=readings, fake_time=fake_time)
-    deps = _real_deps(real_catalog, client, source_client, event_emitter, fake_time)
+    deps = _real_deps(real_catalog, client, source_client, observability, fake_time)
     await run_download_cycle(deps, NODE)  # the node's first round, a baseline
     readings[HASH_A] = (_peer(_OTHER_PEER), _peer(_PEER))
     for _ in range(3):
         fake_time.advance(timedelta(seconds=30))
         await run_download_cycle(deps, NODE)
-    assert _alerts(event_emitter) == [SourceFirstUseful(_PEER, "peer", key(HASH_A), HASH_A, ())]
+    assert _alerts(observability) == [
+        f"**Source**\n`peer` 1f2e3d4c…, useful for the first time\n\n**File**\n`{HASH_A}`"
+    ]
 
 
 @pytest.mark.asyncio
@@ -506,19 +493,17 @@ async def test_a_source_back_after_13_hours_through_an_undetermined_read_reappea
 ) -> None:
     # An unknown point does not end an absence (stage 4, D9).
     readings: dict[str, tuple[SourceReading, ...]] = {HASH_A: (_peer(_PEER),)}
-    fake_time, event_emitter = FakeTime(), FakeEventEmitter()
+    fake_time, observability = FakeTime(), ObservabilityOverFakes()
     client = FakeDownloadClient(listed=[(status(HASH_A),)] * 3)
     source_client = FakeSourceClient(readings=readings, fake_time=fake_time)
-    deps = _real_deps(real_catalog, client, source_client, event_emitter, fake_time)
-    last_useful = fake_time.wall.now()
+    deps = _real_deps(real_catalog, client, source_client, observability, fake_time)
     await run_download_cycle(deps, NODE)
     fake_time.advance(timedelta(hours=13))
     readings[HASH_A] = (_peer(_PEER, SourceRole.UNDETERMINED),)
     await run_download_cycle(deps, NODE)
     fake_time.advance(timedelta(seconds=30))
     readings[HASH_A] = (_peer(_PEER),)
-    absent = (fake_time.wall.now() - last_useful).total_seconds()
     await run_download_cycle(deps, NODE)
-    assert _alerts(event_emitter) == [
-        SourceReappeared(_PEER, "peer", key(HASH_A), HASH_A, (), absent)
+    assert _alerts(observability) == [
+        f"**Source**\n`peer` 1f2e3d4c…, reappeared after 13 h\n\n**File**\n`{HASH_A}`"
     ]

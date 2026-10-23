@@ -4,7 +4,6 @@ A notification failing or timing out is absorbed and logged: it never breaks the
 import asyncio
 from typing import assert_never
 
-from p2pwatch.application.ports.driven.event_emitter import EventEmitter
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.metrics_recorder import MetricsRecorder
 from p2pwatch.application.ports.driven.notifier import Notifier
@@ -27,7 +26,7 @@ def log_at_severity(logger: Logger, severity: Severity, message: str) -> None:
             assert_never(severity)
 
 
-class ObservabilityDispatcher(EventEmitter):
+class ObservabilityDispatcher:
     """One dispatch point, three outputs: the log line, the metrics, the notifications."""
 
     def __init__(
@@ -42,9 +41,6 @@ class ObservabilityDispatcher(EventEmitter):
         self._metrics_recorder = metrics_recorder
         self._notifier = notifier
         self._notification_timeout_seconds = notification_timeout_seconds
-
-    async def emit(self, event: Event, node_id: str) -> None:
-        await self.dispatch(event, node_id)
 
     async def dispatch(self, event: Event, node_id: str) -> None:
         plan = plan_observability(event)
