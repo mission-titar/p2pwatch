@@ -19,7 +19,7 @@ from p2pwatch.application.ports.driving.config_validator import (
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
 from p2pwatch.domain.broken_input_error import BrokenInputError
 from p2pwatch.domain.invalid_config import InvalidConfigError
-from p2pwatch.domain.merge_error import MergeError
+from p2pwatch.domain.merge_error import MergeError, OutputIsSourceError
 from tests.fakes.application.use_cases.fake_catalog_merger import FakeCatalogMerger
 from tests.fakes.application.use_cases.fake_config_validator import FakeConfigValidator
 from tests.fakes.composition.fake_crawler_runner import FakeCrawlerRunner
@@ -248,6 +248,19 @@ def test_merge_reports_a_refused_merge(capsys: pytest.CaptureFixture[str]) -> No
     assert _command_line(catalog_merger=catalog_merger).run(argv) == 2
 
     assert capsys.readouterr().err == "Merge failed: source catalog not found: b.db\n"
+
+
+def test_merge_points_an_output_that_is_a_source_at_into(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    catalog_merger = FakeCatalogMerger(OutputIsSourceError(_A))
+
+    argv = ["merge", "--output", "a.db", "a.db", "b.db"]
+    assert _command_line(catalog_merger=catalog_merger).run(argv) == 2
+
+    assert capsys.readouterr().err == (
+        f"Merge failed: output is one of the source catalogs: {_A} (merge into it with --into)\n"
+    )
 
 
 def test_merge_help_names_the_catalogs_and_keeps_them_append_only(

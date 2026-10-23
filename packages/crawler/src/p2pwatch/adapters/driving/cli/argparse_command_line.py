@@ -21,7 +21,7 @@ from p2pwatch.domain.config_defaults import (
     DEFAULT_TARGETS_PATH,
 )
 from p2pwatch.domain.invalid_config import InvalidConfigError
-from p2pwatch.domain.merge_error import MergeError
+from p2pwatch.domain.merge_error import MergeError, OutputIsSourceError
 
 _LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 
@@ -179,6 +179,14 @@ class ArgparseCommandLine:
             destination = ListedSourceCatalog(args.into)
         try:
             self._catalog_merger.merge_catalogs(args.source_catalogs, destination)
+        except OutputIsSourceError as error:
+            print(
+                f"Merge failed: output is one of the source catalogs: {error.output}"
+                " (merge into it with --into)",
+                file=sys.stderr,
+                flush=True,
+            )
+            return 2
         except MergeError as error:
             print(f"Merge failed: {error}", file=sys.stderr, flush=True)
             return 2

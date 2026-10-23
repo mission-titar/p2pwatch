@@ -32,12 +32,8 @@ _T2 = "2026-06-11T13:00:00.000000+00:00"
 _COPIER_LOGGER = "p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier"
 
 
-def _copy_catalogs(
-    destination: Path, source_catalogs: list[Path], *, destination_is_source: bool = False
-) -> None:
-    SqliteCatalogCopier().copy_catalogs(
-        destination, source_catalogs, destination_is_source=destination_is_source
-    )
+def _copy_catalogs(destination: Path, source_catalogs: list[Path]) -> None:
+    SqliteCatalogCopier().copy_catalogs(destination, source_catalogs)
 
 
 def _file_observation(native_id: str, *, node_id: str, observed_at: str) -> dict[str, object]:
@@ -323,7 +319,7 @@ def test_t16_merger_wraps_source_copy_in_a_transaction(tmp_path: Path) -> None:
     _copy_catalogs(destination, [good])  # the good source first, in its own successful merge.
 
     with pytest.raises(CatalogCopyError, match="copy of .* failed"):
-        _copy_catalogs(destination, [broken], destination_is_source=False)
+        _copy_catalogs(destination, [broken])
 
     # files (1st table) may have been copied BEFORE the failure on observation_variants (missing
     # table); the ROLLBACK must have undone it → the output still has ONLY the content of `good`.
@@ -351,17 +347,15 @@ def test_t17_single_source_merge(tmp_path: Path) -> None:
         assert rows_without_id(destination, table) == rows_without_id(src, table)
 
 
-def test_a_source_that_is_the_output_is_skipped_and_says_so(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
-    destination = make_catalog(tmp_path / "a.db", _full_catalog("a", node_id="node-a"))
-    src = make_catalog(tmp_path / "b.db", _full_catalog("b", node_id="node-b"))
+def test_each_source_copied_says_so(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    src_a = make_catalog(tmp_path / "a.db", _full_catalog("a", node_id="node-a"))
+    src_b = make_catalog(tmp_path / "b.db", _full_catalog("b", node_id="node-b"))
     caplog.set_level("INFO", logger=_COPIER_LOGGER)
 
-    _copy_catalogs(destination, [destination, src], destination_is_source=True)
+    _copy_catalogs(tmp_path / "out.db", [src_a, src_b])
 
     copier_messages = [r.getMessage() for r in caplog.records if r.name == _COPIER_LOGGER]
-    assert copier_messages == [f"{destination} skipped: it is the output", f"{src} merged"]
+    assert copier_messages == [f"{src_a} merged", f"{src_b} merged"]
 
 
 def test_rejects_source_with_older_schema_version(tmp_path: Path) -> None:

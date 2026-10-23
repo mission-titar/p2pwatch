@@ -121,27 +121,15 @@ _COPY_STATEMENTS = (
 class SqliteCatalogCopier(CatalogCopier):
     """Copies through ``ATTACH``, one source and one transaction at a time."""
 
-    def copy_catalogs(
-        self,
-        destination: PurePath,
-        source_catalogs: Sequence[PurePath],
-        *,
-        destination_is_source: bool,
-    ) -> None:
-        _copy_catalogs(Path(destination), source_catalogs, destination_is_source)
+    def copy_catalogs(self, destination: PurePath, source_catalogs: Sequence[PurePath]) -> None:
+        _copy_catalogs(Path(destination), source_catalogs)
 
 
-def _copy_catalogs(
-    destination: Path, source_catalogs: Sequence[PurePath], destination_is_source: bool
-) -> None:
+def _copy_catalogs(destination: Path, source_catalogs: Sequence[PurePath]) -> None:
     """Copies ``source_catalogs`` into ``destination``, idempotent.
 
     ``destination`` is opened via ``open_catalog``: a new file gets the schema + the triggers, an
     existing older catalog is first migrated in place, and the copy APPENDS (never a truncate).
-
-    ``destination_is_source`` (``--into`` mode): the destination is itself one of the
-    ``source_catalogs``; we do not re-attach to ourselves (idempotence guarantees we duplicate
-    nothing there), so we skip the source catalog whose path resolves to ``destination``.
 
     Any ``sqlite3.Error`` (corrupt source, incompatible schema, FK…), and ``open_catalog``'s
     ``PersistenceError`` on the destination, is wrapped in ``CatalogCopyError``; ``ROLLBACK`` is
@@ -159,13 +147,9 @@ def _copy_catalogs(
         # The current schema version = whatever open_catalog stamped on the output; we read
         # it back rather than hardcode it, so this tracks the migration set automatically.
         expected_version = int(connection.execute("PRAGMA user_version").fetchone()[0])
-        destination_resolved = destination.resolve()
         for source_catalog in source_catalogs:
-            if destination_is_source and Path(source_catalog).resolve() == destination_resolved:
-                _logger.info("%s skipped: it is the output", source_catalog)
-            else:
-                _copy_catalog(connection, source_catalog, expected_version)
-                _logger.info("%s merged", source_catalog)
+            _copy_catalog(connection, source_catalog, expected_version)
+            _logger.info("%s merged", source_catalog)
     finally:
         connection.close()
 
@@ -183,8 +167,6 @@ def _copy_catalog(
     ``CatalogCopyError``: the output keeps no partial copy of this source.
     """
     try:
-        # RESOLVED path (consistent with the --into skip that compares ``Path.resolve()``):
-        # avoids a self-attach if the same DB is passed under two path forms.
         connection.execute(f"ATTACH DATABASE ? AS {_SRC}", (str(Path(source_catalog).resolve()),))
     except sqlite3.Error as error:
         raise CatalogCopyError(f"cannot attach source catalog {source_catalog}: {error}") from error

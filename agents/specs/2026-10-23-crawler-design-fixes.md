@@ -138,7 +138,8 @@ Strict TDD in every block, as `AGENTS.md` states it. Full contents, estimate sou
 | 10 | `refactor/download-cycle-split` | **mechanical, exempt**: this spec; the cycle split (D28) | 4942, 26 (measured) |
 | 20 | `refactor/config-interpolation-walk` | the `${NAME}` walk (D1) | 260, 8 |
 | 30 | `refactor/config-to-domain` | **mechanical, exempt**: the config to the domain (D2) | 150 to 2900, 14 |
-| 40 | `refactor/validate-config-report` | `validate-config`'s report; merge's same-catalog rule (D3, D4) | 330, 16 |
+| 40 | `refactor/validate-config-report` | `validate-config`'s report (D3) (Corrected: split at 24 files, merge's rule to 45) | 361, 18 (measured) |
+| 45 | `refactor/merge-rule-and-config-error-keys` | merge's same-catalog rule; every config error's key apart; matching's numbers refused without a traceback (D3, D4) (Corrected: added in Act) | |
 | 50 | `refactor/client-read-errors` | client errors per operation; the explainer's engine (D5, D6) | 270, 15 |
 | 60 | `refactor/fixed-values-to-composition` | `PAGE_SIZE`; fixed values to the composition (D7, D8) | 90, 18 |
 | 70 | `refactor/composition-resource-stack` | the resource stack; backoff at start; gluetun's logger (D9, D10, D31) | 230, 13 |
@@ -255,10 +256,11 @@ exemptions of blocks 10 and 30 on their rows.
   its text staying `<key>: <message>` so the crawl's line is unchanged; the use case adds the `file` it checked.
   `ConfigProblem.key` is `str | None`: `None` for a matching problem, which keeps its whole text as its message,
   since the crawler's 23 config errors name a key path but 39 of the matching's name none apart (`reference cycle:
-  a -> b`, `rule 'x' without a condition`), and rewording them is outside this lot. (Corrected: 6 of the crawler's
-  errors name their key inside their text, a removed or moved key, a missing root key, a section that is no
-  mapping, the backoff's factor and its cap below its base; they carry `key=None` too, so the crawl's line stays
-  unchanged.)
+  a -> b`, `rule 'x' without a condition`), and rewording them is outside this lot. (Corrected: the crawler's 6
+  errors that named their key inside their text, a removed or moved key, a missing root key, a section that is no
+  mapping, the backoff's factor and its cap below its base, carry their key apart from block 40, by the operator's
+  choice, so every crawler config error reads `<key>: <message>`; their text changes, which
+  `docs/migration-4x.md` says.)
 
 ### Merge, errors, fixed values, composition
 
@@ -566,7 +568,7 @@ Each check names what it prints on `main`, so it can fail.
 11. **`${NAME}` everywhere (A13)**: with `c.yml` a copy of `deploy/crawler.yml` whose `keywords` read
     `["${P2PWATCH_UNSET}"]`, `AMULE_API_PASSWORD=x uv run python -m p2pwatch validate-config --config c.yml
     --targets deploy/targets.yml --matcher deploy/matcher.yml` prints `Invalid config: c.yml: search.keywords[0]:
-    environment variable 'P2PWATCH_UNSET' referenced but not set`, exit 1 (`Config valid` on `main`);
+    environment variable 'P2PWATCH_UNSET' referenced but not set`, exit 1 (`Config valid` on `main`) (Corrected: the file prints as the absolute path the command line resolved, `<cwd>/c.yml`);
     `adapters/driven/config/errors.py` no longer exists.
 12. **The wake subject (A14)**: `git grep -n "DOWNLOAD_WAKE_SUBJECT\|wake(\"" -- packages/crawler` prints nothing
     (32 lines on `main`).

@@ -37,11 +37,11 @@ mv amule downloads ed2k/
 entière, et ces six clés de la racine : `cycle_interval_seconds`, `decision_poll_interval_seconds`,
 `search_poll_budget_seconds`, `search_poll_interval_seconds`, `keyword_pause_min_seconds` et
 `keyword_pause_max_seconds`. Tant que l'une reste, le crawler refuse de démarrer en la nommant :
-`key 'port_sync' was removed, delete it from crawler.yml`.
+`port_sync: was removed, delete it from crawler.yml`.
 
 Déplacez ensuite la section `backoff:` sous `search:`, à côté de `keywords`, que la 5.0 rend
 obligatoire. Laissée à la racine, elle est refusée de même :
-`key 'backoff' moved to 'search.backoff', move it in crawler.yml`.
+`backoff: moved to 'search.backoff', move it in crawler.yml`.
 
 ```yaml
 search:
@@ -153,11 +153,19 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
 - **La fusion des catalogues se lance par `python -m p2pwatch merge`**, au lieu de
   `python -m p2pwatch.merge`, qui n'existe plus. Ses options ne changent pas ; deux refus sont
   reformulés : `destination already exists` et `destination must be one of the source catalogs`.
+  Une sortie `--output` qui est aussi l'une des sources est refusée (code 2) avant toute écriture,
+  même avec `--force`, qui la fusionnait en elle-même : fusionnez dans ce catalogue par `--into`.
 - **`validate-config` nomme le fichier en cause** : `Invalid config: <fichier>: <clé>: <message>`
   pour un contenu faux, `error: <fichier>: <raison>` sur une ligne pour un fichier absent,
   illisible ou qui n'est pas du YAML, les deux en code 1. Au démarrage, un tel fichier se lit
   `Invalid config, refusing to start: <fichier>: <raison>` au lieu de
   `unreadable YAML file: <fichier> (...)`.
+- **Toute erreur de `crawler.yml` commence par sa clé**, `<clé>: <message>`. Six refus changent
+  donc un peu de texte : une clé retirée ou déplacée (`port_sync: was removed, ...`), une clé de la
+  racine absente (`catalog_db_path: missing` au lieu de `key 'catalog_db_path' missing`), une
+  section qui n'est pas un dictionnaire (`search.backoff: mapping expected, got list` au lieu de
+  `section 'search.backoff': ...`), `search.backoff.factor: must be ≥ 1 (growth), got 0.5` et
+  `search.backoff.cap_seconds: 1.0 < base_seconds (10.0): cap below floor`.
 - **Quelques lignes de journal et noms de loggers changent** : le crawler journalise sous le nom
   du module qui écrit la ligne, qui change avec lui ; filtrez sur le message plutôt que sur le
   logger. Les échecs d'écriture de la boucle de téléchargement disent `store failure` au lieu de
