@@ -8,7 +8,12 @@ from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.metrics_recorder import MetricsRecorder
 from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.domain.observability.events import Event
-from p2pwatch.domain.observability.policy import Severity, plan_observability
+from p2pwatch.domain.observability.notification import (
+    Notification,
+    RelayedLogLine,
+    TextNotification,
+)
+from p2pwatch.domain.observability.policy import ObservabilityPlan, Severity, plan_observability
 
 
 def log_at_severity(logger: Logger, severity: Severity, message: str) -> None:
@@ -24,6 +29,15 @@ def log_at_severity(logger: Logger, severity: Severity, message: str) -> None:
             logger.error(message)
         case _:  # pragma: no cover
             assert_never(severity)
+
+
+def _notification(plan: ObservabilityPlan, node_id: str) -> Notification:
+    """The plan's own title and body if it has a body, else its log line relayed."""
+    if plan.notification_body:
+        return TextNotification(
+            plan.notification_title, plan.notification_body, plan.severity, node_id
+        )
+    return RelayedLogLine(plan.message, plan.severity, node_id)
 
 
 class ObservabilityDispatcher:
@@ -50,13 +64,7 @@ class ObservabilityDispatcher:
         for audience in plan.audiences:
             try:
                 await asyncio.wait_for(
-                    self._notifier.notify(
-                        audience,
-                        plan.notification_title,
-                        plan.notification_body or plan.message,
-                        plan.severity,
-                        node_id,
-                    ),
+                    self._notifier.notify(audience, _notification(plan, node_id)),
                     timeout=self._notification_timeout_seconds,
                 )
             except Exception as error:  # noqa: BLE001 (notifications NEVER break the crawl, E-D13)

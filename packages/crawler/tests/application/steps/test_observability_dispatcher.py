@@ -3,6 +3,7 @@
 from typing import Literal
 
 import pytest
+from p2pwatch.domain.observability.notification import RelayedLogLine, TextNotification
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord
@@ -67,15 +68,14 @@ async def test_two_metrics_one_event() -> None:
 
 
 @pytest.mark.asyncio
-async def test_notifies_the_message_when_there_is_no_separate_body() -> None:
+async def test_relays_the_log_line_when_there_is_no_separate_body() -> None:
     metrics_recorder, notifier = FakeMetricsRecorder(), FakeNotifier()
     await _dispatcher(metrics_recorder, notifier).dispatch(
         ev.CrawlerStarted(download_enabled=True), _NODE
     )
     assert notifier.calls == [
-        (Audience.OPERATIONS, "", "🟢 node online (download on)", Severity.INFO)
+        (Audience.OPERATIONS, RelayedLogLine("🟢 node online (download on)", Severity.INFO, _NODE))
     ]
-    assert notifier.node_ids == [_NODE]
 
 
 @pytest.mark.asyncio
@@ -88,9 +88,15 @@ async def test_logs_the_message_but_notifies_the_body() -> None:
         _NODE,
     )
     assert logger.lines[-1].message.startswith("decisions for Keroro 062.avi")
-    assert [(a, t, b.splitlines()[0]) for a, t, b, _ in notifier.calls] == [
-        (Audience.COMMUNITY, "📥 Download", "**Targets**")
-    ]
+    [(audience, notification)] = notifier.calls
+    assert audience == Audience.COMMUNITY
+    assert isinstance(notification, TextNotification)
+    assert (notification.title, notification.severity, notification.node_id) == (
+        "📥 Download",
+        Severity.INFO,
+        _NODE,
+    )
+    assert notification.body.startswith("**Targets**")
 
 
 @pytest.mark.asyncio

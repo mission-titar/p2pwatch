@@ -1,10 +1,16 @@
 import pytest
+from p2pwatch.domain.observability.notification import RelayedLogLine
 
 from catalog_matching.domain.models import TargetSegment
 from p2pwatch.application.steps.download_cycle import run_download_cycle
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.states import DownloadState
-from p2pwatch.domain.observability.policy import MetricInstruction, MetricName
+from p2pwatch.domain.observability.policy import (
+    Audience,
+    MetricInstruction,
+    MetricName,
+    Severity,
+)
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_free_space_meter import FakeFreeSpaceMeter
@@ -313,5 +319,5 @@ async def test_low_disk_warns_once_per_crossing_and_rearms_at_the_floor() -> Non
         warnings_per_cycle.append(len(observability.notifier.calls) - before)
     assert warnings_per_cycle == [1, 0, 0, 1]
     low = "download disk low: 0.0 GiB free, under the 0.0 GiB floor (no new download)"
-    assert [body for _, _, body, _ in observability.notifier.calls] == [low, low]
-    assert observability.notifier.node_ids == [NODE, NODE]
+    relayed = (Audience.OPERATIONS, RelayedLogLine(low, Severity.WARNING, NODE))
+    assert observability.notifier.calls == [relayed, relayed]

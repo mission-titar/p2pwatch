@@ -18,10 +18,16 @@ their host's IP to Slack, not their P2P traffic). This is a DELIBERATE choice, n
 No apprise stubs → targeted ``# type: ignore`` (mypy override, Task 9)."""
 
 from collections.abc import Callable, Sequence
+from typing import assert_never
 
 import apprise
 
 from p2pwatch.application.ports.driven.notifier import Notifier
+from p2pwatch.domain.observability.notification import (
+    Notification,
+    RelayedLogLine,
+    TextNotification,
+)
 from p2pwatch.domain.observability.policy import Audience, Severity
 
 # (url, audience, node_prefix), from the config's ``observability.notifications``.
@@ -71,9 +77,15 @@ class AppriseNotifier(Notifier):
         self._groups_by_node_id[node_id] = (prefixed_group, bare_group)
         return prefixed_group, bare_group
 
-    async def notify(
-        self, audience: Audience, title: str, body: str, severity: Severity, node_id: str
-    ) -> None:
+    async def notify(self, audience: Audience, notification: Notification) -> None:
+        match notification:
+            case TextNotification():
+                title, body = notification.title, notification.body
+            case RelayedLogLine():  # untitled: the log line is the whole message
+                title, body = "", notification.message
+            case _:  # pragma: no cover
+                assert_never(notification)
+        node_id = notification.node_id
         prefixed_group, bare_group = self._groups(node_id)
         prefixed = f"[{node_id}] {title}".rstrip()
         for group, heading in ((prefixed_group, prefixed), (bare_group, title)):
@@ -81,6 +93,6 @@ class AppriseNotifier(Notifier):
                 title=heading.replace("@", _NO_MENTION),
                 body=body.replace("@", _NO_MENTION),
                 body_format=apprise.NotifyFormat.MARKDOWN,
-                notify_type=_NOTIFY_TYPES[severity],
+                notify_type=_NOTIFY_TYPES[notification.severity],
                 tag=audience.value,
             )

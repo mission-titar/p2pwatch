@@ -1,4 +1,5 @@
 import pytest
+from p2pwatch.domain.observability.notification import TextNotification
 
 from catalog_matching.domain.models import TargetSegment
 from p2pwatch.application.steps.download_cycle import run_download_cycle
@@ -39,12 +40,14 @@ async def test_dispatches_download_completed() -> None:
     assert observability.notifier.calls == [
         (
             Audience.COMMUNITY,
-            "✅ Downloaded",
-            f"**Targets**\n062A - t\n\n**File**\n`{HASH_A}`",
-            Severity.SUCCESS,
+            TextNotification(
+                "✅ Downloaded",
+                f"**Targets**\n062A - t\n\n**File**\n`{HASH_A}`",
+                Severity.SUCCESS,
+                NODE,
+            ),
         )
     ]
-    assert observability.notifier.node_ids == [NODE]
 
 
 @pytest.mark.asyncio
@@ -77,6 +80,6 @@ async def test_a_completion_names_the_clean_file_and_every_download_target_of_th
         targets=targets,
     )
     await run_download_cycle(deps, NODE)
-    assert [body for _, _, body, _ in observability.notifier.calls] == [
-        "**Targets**\n062A - ta\n062B - tb\n\n**File**\n`Keroro é.avi`"
-    ]
+    [(_, notification)] = observability.notifier.calls
+    assert isinstance(notification, TextNotification)
+    assert notification.body == "**Targets**\n062A - ta\n062B - tb\n\n**File**\n`Keroro é.avi`"
