@@ -26,18 +26,14 @@ class TargetCoverage:
     file_count: int
 
 
-def coverage_of(target_id: str, tiers: Sequence[str]) -> TargetCoverage:
+def coverage_of(target_id: str, tiers: Sequence[DecisionTier]) -> TargetCoverage:
     """``tiers``: the tier of each file's latest decision for this target.
 
     Catalog-tier decisions are the ``keroro_large`` catch-all: any keroro file with no numeric
     token resolves to the smallest ``target_id`` (``001A``) via the engine tie-break, so counting
     them would make one episode look partially recovered while the catalog has identified nothing.
     """
-    identified = [
-        decision_tier
-        for decision_tier in map(DecisionTier, tiers)
-        if decision_tier.identifies_target
-    ]
+    identified = [tier for tier in tiers if tier.identifies_target]
     if not identified:
         return TargetCoverage(
             target_id, status=TargetCoverageStatus.NONE, best_tier=None, file_count=0

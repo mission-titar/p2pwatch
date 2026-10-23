@@ -492,7 +492,7 @@ def _facet_label(tier: DecisionTier) -> str:
 
 def _tier_facets(
     *,
-    file_count_by_tier: Mapping[str, int],
+    file_count_by_tier: Mapping[DecisionTier, int],
     active_tier: DecisionTier | None,
     kept_params: dict[str, str],
 ) -> tuple[TierFacetDisplay, ...]:

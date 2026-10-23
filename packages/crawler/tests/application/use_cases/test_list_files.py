@@ -23,14 +23,14 @@ def _reader(entry_count: int = 1) -> FakeCatalogFileReader:
     return FakeCatalogFileReader(
         catalog_entries=(_ENTRY,) * entry_count,
         matched_and_total_file_counts=(3, 7),
-        file_count_by_tier={"download": 3},
+        file_count_by_tier={DecisionTier.DOWNLOAD: 3},
     )
 
 
 def _list_files(reader: CatalogFileReader, *, page: int = 1) -> FileListing:
     return ListFiles(reader).list_files(
         target_id="062A",
-        tier="download",
+        tier=DecisionTier.DOWNLOAD,
         search_text="keroro",
         matched_only=True,
         sort=CatalogEntrySort.SIZE,
@@ -49,14 +49,14 @@ def test_the_listing_holds_the_page_read_and_the_counts_of_the_files_passing_the
         has_next_page=False,
         matched_file_count=3,
         total_file_count=7,
-        file_count_by_tier={"download": 3},
+        file_count_by_tier={DecisionTier.DOWNLOAD: 3},
     )
     assert reader.calls == [
         (
             "read_catalog_entries",
             {
                 "target_id": "062A",
-                "tier": "download",
+                "tier": DecisionTier.DOWNLOAD,
                 "search_text": "keroro",
                 "matched_only": True,
                 "sort": CatalogEntrySort.SIZE,
@@ -67,7 +67,7 @@ def test_the_listing_holds_the_page_read_and_the_counts_of_the_files_passing_the
         ),
         (
             "read_matched_and_total_file_counts",
-            {"target_id": "062A", "tier": "download", "search_text": "keroro"},
+            {"target_id": "062A", "tier": DecisionTier.DOWNLOAD, "search_text": "keroro"},
         ),
         ("read_file_count_by_tier", {"target_id": "062A", "search_text": "keroro"}),
     ]

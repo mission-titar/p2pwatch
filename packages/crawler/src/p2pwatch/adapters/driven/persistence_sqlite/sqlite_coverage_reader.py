@@ -8,6 +8,7 @@ sentinel and per-target ``retracted`` rows are excluded.
 All SQL lives in module constants, parameterized (no value interpolation).
 """
 
+from catalog_matching.domain.decision_tier import DecisionTier
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadReadConnections,
 )
@@ -51,8 +52,8 @@ class SqliteCoverageReader(CoverageReader):
     def __init__(self, thread_read_connections: ThreadReadConnections) -> None:
         self._thread_read_connections = thread_read_connections
 
-    def read_target_coverage(self) -> dict[str, tuple[str, ...]]:
-        tiers_by_target: dict[str, list[str]] = {}
+    def read_target_coverage(self) -> dict[str, tuple[DecisionTier, ...]]:
+        tiers_by_target: dict[str, list[DecisionTier]] = {}
         for row in self._thread_read_connections.connection().execute(_SQL_COVERAGE):
-            tiers_by_target.setdefault(row["target_id"], []).append(row["tier"])
+            tiers_by_target.setdefault(row["target_id"], []).append(DecisionTier(row["tier"]))
         return {target_id: tuple(tiers) for target_id, tiers in tiers_by_target.items()}

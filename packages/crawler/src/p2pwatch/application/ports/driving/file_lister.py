@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from catalog_matching.domain.decision_tier import DecisionTier
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 
 
@@ -13,7 +14,7 @@ class FileListing:
     has_next_page: bool  # the page is full, so the next one may hold more
     matched_file_count: int  # without ``matched_only``, as the two counts below
     total_file_count: int
-    file_count_by_tier: Mapping[str, int]  # without the ``tier`` filter
+    file_count_by_tier: Mapping[DecisionTier, int]  # without the ``tier`` filter
 
 
 class FileLister(ABC):
@@ -24,7 +25,7 @@ class FileLister(ABC):
         self,
         *,
         target_id: str | None,
-        tier: str | None,
+        tier: DecisionTier | None,
         search_text: str | None,
         matched_only: bool,
         sort: CatalogEntrySort,

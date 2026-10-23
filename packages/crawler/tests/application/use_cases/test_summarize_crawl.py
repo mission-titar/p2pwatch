@@ -22,7 +22,7 @@ _READING = StatusReading(read_at=datetime(2026, 10, 14, tzinfo=UTC), status=None
 def _summarize(
     *,
     target_ids: tuple[str, ...] = (),
-    tiers_by_target: Mapping[str, tuple[str, ...]] | None = None,
+    tiers_by_target: Mapping[str, tuple[DecisionTier, ...]] | None = None,
     published_readings: Mapping[str, PublishedReading | None] | None = None,
     paused: bool = False,
     fake_time: FakeTime | None = None,
@@ -40,7 +40,7 @@ def _summarize(
 def test_each_configured_target_has_its_coverage_in_their_order() -> None:
     summary = _summarize(
         target_ids=("062B", "062A"),
-        tiers_by_target={"062A": ("download",), "999Z": ("notify",)},
+        tiers_by_target={"062A": (DecisionTier.DOWNLOAD,), "999Z": (DecisionTier.NOTIFY,)},
     )
 
     assert summary.target_coverages == (

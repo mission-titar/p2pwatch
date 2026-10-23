@@ -57,7 +57,7 @@ def _entries(
     catalog_db: Path,
     *,
     target_id: str | None = None,
-    tier: str | None = None,
+    tier: DecisionTier | None = None,
     search_text: str | None = None,
     matched_only: bool = False,
     sort: CatalogEntrySort = CatalogEntrySort.LATEST_SEEN,
@@ -81,7 +81,7 @@ def _counts(
     catalog_db: Path,
     *,
     target_id: str | None = None,
-    tier: str | None = None,
+    tier: DecisionTier | None = None,
     search_text: str | None = None,
 ) -> tuple[int, int]:
     with ThreadReadConnections(catalog_db) as thread_read_connections:
@@ -92,7 +92,7 @@ def _counts(
 
 def _read_file_count_by_tier(
     catalog_db: Path, *, search_text: str | None = None
-) -> Mapping[str, int]:
+) -> Mapping[DecisionTier, int]:
     with ThreadReadConnections(catalog_db) as thread_read_connections:
         return SqliteCatalogFileReader(thread_read_connections).read_file_count_by_tier(
             target_id=None, search_text=search_text
@@ -137,8 +137,8 @@ def test_read_catalog_entries_filter_by_target(catalog_db: Path) -> None:
 
 def test_read_catalog_entries_filter_by_tier(catalog_db: Path) -> None:
     seed(catalog_db)
-    hit = _entries(catalog_db, tier="download")
-    miss = _entries(catalog_db, tier="notify")
+    hit = _entries(catalog_db, tier=DecisionTier.DOWNLOAD)
+    miss = _entries(catalog_db, tier=DecisionTier.NOTIFY)
     assert len(hit) == 1
     assert miss == ()
 
@@ -299,8 +299,8 @@ def test_file_history_whole_episode_lists_both_decisions(catalog_db: Path) -> No
 
 def test_read_catalog_entries_combined_target_and_tier_filters(catalog_db: Path) -> None:
     seed(catalog_db)
-    hit = _entries(catalog_db, target_id="062A", tier="download")
-    miss = _entries(catalog_db, target_id="062A", tier="notify")
+    hit = _entries(catalog_db, target_id="062A", tier=DecisionTier.DOWNLOAD)
+    miss = _entries(catalog_db, target_id="062A", tier=DecisionTier.NOTIFY)
     assert len(hit) == 1
     assert miss == ()
 
@@ -603,7 +603,12 @@ def _seed_mixed_tier_file(db: Path) -> None:
 def test_read_file_count_by_tier_groups_by_tier(catalog_db: Path) -> None:
     _seed_sortable(catalog_db)  # one file per tier
     counts = _read_file_count_by_tier(catalog_db)
-    assert counts == {"download": 1, "notify": 1, "catalog": 1}
+    assert counts == {DecisionTier.DOWNLOAD: 1, DecisionTier.NOTIFY: 1, DecisionTier.CATALOG: 1}
+
+
+def test_read_file_count_by_tier_keys_each_count_by_the_type(catalog_db: Path) -> None:
+    _seed_sortable(catalog_db)
+    assert {type(tier) for tier in _read_file_count_by_tier(catalog_db)} == {DecisionTier}
 
 
 def test_read_file_count_by_tier_empty_catalogue_is_empty(catalog_db: Path) -> None:
@@ -614,14 +619,14 @@ def test_read_file_count_by_tier_empty_catalogue_is_empty(catalog_db: Path) -> N
 def test_read_file_count_by_tier_multi_tier_file_counts_in_both(catalog_db: Path) -> None:
     _seed_mixed_tier_file(catalog_db)
     counts = _read_file_count_by_tier(catalog_db)
-    assert counts == {"download": 1, "notify": 1}
+    assert counts == {DecisionTier.DOWNLOAD: 1, DecisionTier.NOTIFY: 1}
 
 
 def test_read_file_count_by_tier_respects_search_text(catalog_db: Path) -> None:
     """The facet honours the OTHER filters (here ``search_text``): only alpha.avi matches."""
     _seed_sortable(catalog_db)
     counts = _read_file_count_by_tier(catalog_db, search_text="alpha")
-    assert counts == {"download": 1}
+    assert counts == {DecisionTier.DOWNLOAD: 1}
 
 
 # ---------------------------------------------------------------------------
