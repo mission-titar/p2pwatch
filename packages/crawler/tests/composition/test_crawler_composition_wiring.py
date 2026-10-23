@@ -37,6 +37,7 @@ from tests.fakes.fake_notification_sink import FakeNotificationSink
 from tests.support.catalog_rows import (
     decision_node_ids,
     insert_file,
+    insert_observation,
     observation_node_ids,
     source_variant_node_ids,
 )
@@ -519,3 +520,26 @@ async def test_a_restart_re_evaluates_the_catalogue_only_once_a_policy_file_chan
         "policy unchanged: catalogue re-evaluation skipped",
         "catalogue re-evaluated: 0 files, 0 rows written",
     ]
+
+
+@pytest.mark.asyncio
+async def test_a_re_evaluation_logs_its_progress_under_its_module_s_name(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    catalog = open_catalog(tmp_path / "catalog.db")
+    for index in range(200):  # the composition's progress interval
+        native_id = f"{index:032x}"
+        insert_file(catalog, native_id)
+        insert_observation(catalog, native_id, f"unrelated_{index}.avi")
+    catalog.close()
+    config_path = _write(tmp_path / "crawler.yml", _config(tmp_path))
+    targets_path = tmp_path / "targets.yml"
+    targets_path.write_text(_TARGET_062A, encoding="utf-8")
+
+    with caplog.at_level(logging.INFO):
+        await _crawl_until_a_search_is_read(config_path, targets_path)
+
+    assert (
+        "p2pwatch.application.steps.reevaluate_catalog",
+        "catalogue re-evaluation: 200/200 files, 0 rows written",
+    ) in [(record.name, record.getMessage()) for record in caplog.records]

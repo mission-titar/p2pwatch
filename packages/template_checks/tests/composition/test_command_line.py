@@ -14,7 +14,7 @@ def test_logic_free_runs_the_logic_check(
 
     assert build_command_line(cwd=tmp_path).run(["logic-free", str(tmp_path)]) == 1
 
-    assert capsys.readouterr().out == "bad.html:1: If is not logic-free\n"
+    assert capsys.readouterr().out == f"{tmp_path / 'bad.html'}:1: If is not logic-free\n"
 
 
 def test_template_attributes_prints_the_attributes_of_the_templates_under_the_cwd(
@@ -39,7 +39,8 @@ def test_a_template_jinja_cannot_parse_ends_in_one_error_line_naming_it(
 
     assert capsys.readouterr() == (
         "",
-        "error: page.html:2: Expected an expression, got 'end of statement block'\n",
+        f"error: {tmp_path / 'templates/page.html'}:2: Expected an expression, got 'end of"
+        " statement block'\n",
     )
 
 

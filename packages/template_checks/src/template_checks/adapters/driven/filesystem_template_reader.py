@@ -5,7 +5,8 @@ from template_checks.domain.broken_input_error import BrokenInputError
 
 
 class FilesystemTemplateReader(TemplateReader):
-    """The `*.html` files under the directory each call is given, at any depth."""
+    """The `*.html` files under the directory each call is given, at any depth, by their path under
+    it as given."""
 
     def read_templates(self, templates_directory: PurePath) -> dict[PurePath, str]:
         directory = Path(templates_directory)
@@ -16,10 +17,7 @@ class FilesystemTemplateReader(TemplateReader):
             for filename in filenames
             if filename.endswith(".html")
         )
-        return {
-            template_path.relative_to(directory): _read_template(template_path)
-            for template_path in template_paths
-        }
+        return {template_path: _read_template(template_path) for template_path in template_paths}
 
 
 def _raise_broken_input(error: OSError) -> None:

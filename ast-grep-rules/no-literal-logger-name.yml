@@ -2,7 +2,7 @@ id: no-literal-logger-name
 language: python
 severity: error
 message: A logger is named from the code, never by a string literal.
-note: "`StdlibLogger(<Class>.__module__)` in the composition, `logging.getLogger(__name__)` in an adapter: a literal drifts from its module at each move."
+note: "`StdlibLogger(<Class>.__module__)` in the composition, `logging.getLogger(__name__)` in an adapter: a literal drifts from its module at each move. The rule sees a literal written in the call only: one behind a name, or a renamed import, is a review matter."
 files: ["packages/*/src/**/*.py"]
 rule:
   kind: call
