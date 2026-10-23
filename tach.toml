@@ -242,7 +242,6 @@ path = "p2pwatch.adapters.driven.observability"
 layer = "adapters"
 depends_on = [
   "p2pwatch.domain",
-  "p2pwatch.application.ports.driven.event_emitter",
   "p2pwatch.application.ports.driven.metrics_recorder",
   "p2pwatch.application.ports.driven.notifier",
 ]
@@ -374,10 +373,12 @@ depends_on = [
   "p2pwatch.application.ports.driven.free_space_meter",
   "p2pwatch.application.ports.driven.jitter_generator",
   "p2pwatch.application.ports.driven.logger",
+  "p2pwatch.application.ports.driven.metrics_recorder",
   "p2pwatch.application.ports.driven.monotonic_clock",
   "p2pwatch.application.ports.driven.node_id_generator",
   "p2pwatch.application.ports.driven.node_id_reader",
   "p2pwatch.application.ports.driven.node_id_writer",
+  "p2pwatch.application.ports.driven.notifier",
   "p2pwatch.application.ports.driven.observation_reader",
   "p2pwatch.application.ports.driven.observation_writer",
   "p2pwatch.application.ports.driven.policy_fingerprint_reader",

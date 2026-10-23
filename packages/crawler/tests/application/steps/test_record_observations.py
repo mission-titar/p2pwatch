@@ -16,11 +16,11 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability.events import ObservationRecorded
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.wake_subject import WakeSubject
-from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.fakes.adapters.driven.fake_wall_clock import FakeWallClock
+from tests.fakes.application.steps.fake_event_emitter import FakeEventEmitter
 from tests.support.catalog_rows import (
     count_observations,
     decision_node_ids,

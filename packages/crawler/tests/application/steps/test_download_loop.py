@@ -11,7 +11,6 @@ from p2pwatch.domain.wake_subject import WakeSubject
 from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
-from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
 from tests.fakes.adapters.driven.fake_free_space_meter import FakeFreeSpaceMeter
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader
@@ -24,6 +23,7 @@ from tests.fakes.adapters.driven.fake_source_point_store import FakeSourcePointS
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
+from tests.fakes.application.steps.fake_event_emitter import FakeEventEmitter
 
 _NODE = "n1"
 

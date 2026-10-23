@@ -22,7 +22,7 @@ from tests.fakes.adapters.driven.fake_status_client import FakeStatusClient
 from tests.fakes.adapters.driven.fake_status_reading_store import FakeStatusReadingStore
 from tests.fakes.adapters.driven.fake_stepped_status_client import FakeSteppedStatusClient
 from tests.fakes.adapters.driven.fake_time import FakeTime
-from tests.fakes.adapters.driven.fake_timed_event_emitter import FakeTimedEventEmitter
+from tests.fakes.application.steps.fake_timed_event_emitter import FakeTimedEventEmitter
 
 type _Reading = ClientStatus | ClientError
 
