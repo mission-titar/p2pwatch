@@ -35,11 +35,7 @@ from p2pwatch.adapters.driven.amule_api.amule_api_client import AmuleApiClient
 from p2pwatch.adapters.driven.asyncio_monotonic_clock import AsyncioMonotonicClock
 from p2pwatch.adapters.driven.asyncio_run_state_store import AsyncioRunStateStore
 from p2pwatch.adapters.driven.asyncio_waker import AsyncioWaker
-from p2pwatch.adapters.driven.config.crawler_config import (
-    CrawlerConfig,
-    LoadedConfig,
-    load_config,
-)
+from p2pwatch.adapters.driven.config.crawler_config import load_config
 from p2pwatch.adapters.driven.in_memory_status_reading_store import InMemoryStatusReadingStore
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
 from p2pwatch.adapters.driven.observability.dispatcher import ObservabilityDispatcher
@@ -117,6 +113,7 @@ from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.domain.config_defaults import AMULE_CLIENT_NAME
 from p2pwatch.domain.console_query import ConsoleDatabase
+from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
 from p2pwatch.domain.matching_read import MatchingExplainer
 
 _logger = logging.getLogger(__name__)

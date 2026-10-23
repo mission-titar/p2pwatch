@@ -7,4 +7,4 @@ files: ["packages/*/src/*/domain/**/*.py"]
 rule:
   matches: imported-module
   not:
-    regex: ^(abc|ast|collections\.abc|configparser|dataclasses|datetime|difflib|enum|hashlib|io|ipaddress|jinja2|packaging\.version|pathlib|rapidfuzz|re|textwrap|typing|unicodedata|urllib\.parse|uuid|(amule_bump|catalog_matching|coverage_checks|p2pwatch|p2pwatch_amule|template_checks|vex_checks)(\.\w+)*)$
+    regex: ^(abc|ast|collections\.abc|configparser|dataclasses|datetime|difflib|enum|hashlib|io|ipaddress|jinja2|math|packaging\.version|pathlib|rapidfuzz|re|textwrap|typing|unicodedata|urllib\.parse|uuid|(amule_bump|catalog_matching|coverage_checks|p2pwatch|p2pwatch_amule|template_checks|vex_checks)(\.\w+)*)$
