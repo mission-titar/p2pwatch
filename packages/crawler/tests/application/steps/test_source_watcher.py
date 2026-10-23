@@ -16,7 +16,7 @@ from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.observability.events import SourceFirstUseful, SourceReappeared, TargetTitle
 from p2pwatch.domain.source import (
-    EarlierPoints,
+    LatestPoint,
     RecordedReading,
     SourceKey,
     SourceReading,
@@ -221,11 +221,9 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
     # Each file asks the history before the round's start, not before its own read.
     fake_time = FakeTime()
     start = fake_time.wall.now()
-    history = {
-        _PEER: EarlierPoints(has_useful_point=True, latest_known_at=start - timedelta(hours=13)),
-        _OTHER_PEER: EarlierPoints(
-            has_useful_point=True, latest_known_at=start - timedelta(seconds=30)
-        ),
+    history: dict[SourceKey, tuple[LatestPoint, ...]] = {
+        _PEER: (LatestPoint(SourceRole.QUEUED, start - timedelta(hours=13), 0),),
+        _OTHER_PEER: (LatestPoint(SourceRole.QUEUED, start - timedelta(seconds=30), 0),),
     }
     kept: dict[str, tuple[RecordedReading, ...]] = {
         HASH_A: (RecordedReading(_OTHER_PEER, None, SourceRole.QUEUED),),

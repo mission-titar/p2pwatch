@@ -4,7 +4,7 @@ synchronous, as the catalog's ports. Every point read is the ``node_id``'s the c
 from abc import ABC, abstractmethod
 from datetime import datetime
 
-from p2pwatch.domain.source import EarlierPoints, SourceKey
+from p2pwatch.domain.source import LatestPoint, SourceKey
 
 
 class SourcePointReader(ABC):
@@ -13,8 +13,8 @@ class SourcePointReader(ABC):
     @abstractmethod
     def read_earlier_points(
         self, source: SourceKey, before: datetime, node_id: str
-    ) -> EarlierPoints:
-        """D5's two answers for ``source``."""
+    ) -> tuple[LatestPoint, ...]:
+        """The latest point of each of ``source``'s variants that has one before ``before``."""
 
     @abstractmethod
     def has_points_before(self, before: datetime, node_id: str) -> bool:

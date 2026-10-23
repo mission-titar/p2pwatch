@@ -6,6 +6,7 @@ PURE domain. Never a network address of the peer (stage 4 spec, D2, D3 and D7).
 import ipaddress
 import re
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -148,8 +149,27 @@ class RecordedReading:
 
 
 @dataclass(frozen=True)
+class LatestPoint:
+    """A source's latest point under one of its variants: its role, its instant, its session's
+    received bytes."""
+
+    role: SourceRole
+    observed_at: datetime
+    session_received_bytes: int
+
+
+@dataclass(frozen=True)
 class EarlierPoints:
     """D5's two answers: a useful point exists, and when the latest useful or not-useful one was."""
 
     has_useful_point: bool
     latest_known_at: datetime | None
+
+    @classmethod
+    def of(cls, points: Sequence[LatestPoint]) -> "EarlierPoints":
+        """The two answers from the latest point of each of a source's variants."""
+        known = [p.observed_at for p in points if p.role.usefulness is not SourceUsefulness.UNKNOWN]
+        return cls(
+            has_useful_point=any(p.role.usefulness is SourceUsefulness.USEFUL for p in points),
+            latest_known_at=max(known, default=None),
+        )
