@@ -1,19 +1,29 @@
 from pathlib import PurePath
 
 from p2pwatch.application.ports.driven.config_checker import ConfigChecker
+from p2pwatch.domain.broken_input_error import BrokenInputError
 from p2pwatch.domain.invalid_config import InvalidConfigError
 
 
 class FakeConfigChecker(ConfigChecker):
-    """Records the paths of each check, and raises ``refusal`` when given one."""
+    """Records each check with its file's role, and raises the refusal given for its path."""
 
-    def __init__(self, refusal: InvalidConfigError | None = None) -> None:
-        self.checked_paths: list[tuple[PurePath, PurePath, PurePath]] = []
-        self._refusal = refusal
-
-    def check_config(
-        self, *, config_path: PurePath, targets_path: PurePath, matcher_path: PurePath
+    def __init__(
+        self, refusals_by_path: dict[PurePath, InvalidConfigError | BrokenInputError] | None = None
     ) -> None:
-        self.checked_paths.append((config_path, targets_path, matcher_path))
-        if self._refusal is not None:
-            raise self._refusal
+        self.checked_files: list[tuple[str, PurePath]] = []
+        self._refusals_by_path = refusals_by_path or {}
+
+    def check_crawler_config(self, config_path: PurePath) -> None:
+        self._check("crawler_config", config_path)
+
+    def check_targets(self, targets_path: PurePath) -> None:
+        self._check("targets", targets_path)
+
+    def check_matcher_config(self, matcher_path: PurePath) -> None:
+        self._check("matcher_config", matcher_path)
+
+    def _check(self, role: str, path: PurePath) -> None:
+        self.checked_files.append((role, path))
+        if path in self._refusals_by_path:
+            raise self._refusals_by_path[path]

@@ -3,18 +3,31 @@
 from pathlib import PurePath
 
 from p2pwatch.application.ports.driven.config_checker import ConfigChecker
-from p2pwatch.application.ports.driving.config_validator import ConfigValidator
+from p2pwatch.application.ports.driving.config_validator import (
+    ConfigProblem,
+    ConfigReport,
+    ConfigValidator,
+)
+from p2pwatch.domain.invalid_config import InvalidConfigError
 
 
 class ValidateConfig(ConfigValidator):
-    """The config is valid when its checker accepts the three files."""
+    """Checks each file in the crawl's order and reports the first wrong one."""
 
     def __init__(self, config_checker: ConfigChecker) -> None:
         self._config_checker = config_checker
 
     def validate_config(
         self, *, config_path: PurePath, targets_path: PurePath, matcher_path: PurePath
-    ) -> None:
-        self._config_checker.check_config(
-            config_path=config_path, targets_path=targets_path, matcher_path=matcher_path
+    ) -> ConfigReport:
+        checks = (
+            (config_path, self._config_checker.check_crawler_config),
+            (targets_path, self._config_checker.check_targets),
+            (matcher_path, self._config_checker.check_matcher_config),
         )
+        for file_path, check in checks:
+            try:
+                check(file_path)
+            except InvalidConfigError as error:
+                return ConfigReport(problems=(ConfigProblem(file_path, error.key, error.message),))
+        return ConfigReport(problems=())
