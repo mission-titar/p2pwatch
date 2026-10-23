@@ -9,6 +9,7 @@ import pytest
 from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle
 from p2pwatch.application.steps.reevaluate_catalog import ReevaluationSummary
 from p2pwatch.application.steps.search_worker import BackoffPolicy, BackoffRegistry
+from p2pwatch.domain.observability.notification import RelayedLogLine
 from p2pwatch.domain.observability.policy import Audience, Severity
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
@@ -104,9 +105,11 @@ async def test_the_crawler_starts_under_the_stored_node_id_and_runs_each_loop_wi
 
     assert crawl.logger.lines == [LoggedLine("info", "crawler started: node_id=stored-node")]
     assert crawl.observability.notifier.calls == [
-        (Audience.OPERATIONS, "", "🟢 node online (download off)", Severity.INFO)
+        (
+            Audience.OPERATIONS,
+            RelayedLogLine("🟢 node online (download off)", Severity.INFO, "stored-node"),
+        )
     ]
-    assert crawl.observability.notifier.node_ids == ["stored-node"]
     assert crawl.steps == ["search under stored-node", "status under stored-node", "bound armed"]
 
 
@@ -121,9 +124,11 @@ async def test_a_configured_node_id_and_the_download_loop_show_in_the_start() ->
         LoggedLine("info", "download enabled: download loop armed"),
     ]
     assert crawl.observability.notifier.calls == [
-        (Audience.OPERATIONS, "", "🟢 node online (download on)", Severity.INFO)
+        (
+            Audience.OPERATIONS,
+            RelayedLogLine("🟢 node online (download on)", Severity.INFO, "forced-node"),
+        )
     ]
-    assert crawl.observability.notifier.node_ids == ["forced-node"]
 
 
 @pytest.mark.asyncio

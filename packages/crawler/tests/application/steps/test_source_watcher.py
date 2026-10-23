@@ -14,6 +14,7 @@ from p2pwatch.application.steps.download_deps import DownloadDeps
 from p2pwatch.domain.client_errors import ClientUnreachableError
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import Network
+from p2pwatch.domain.observability.notification import TextNotification
 from p2pwatch.domain.source import (
     LatestPoint,
     SourceKey,
@@ -464,7 +465,11 @@ def _real_deps(
 
 def _alerts(observability: ObservabilityOverFakes) -> list[str]:
     """The bodies of the source alerts, the only notifications of a round without completion."""
-    return [body for _, _, body, _ in observability.notifier.calls]
+    bodies = []
+    for _, notification in observability.notifier.calls:
+        assert isinstance(notification, TextNotification)
+        bodies.append(notification.body)
+    return bodies
 
 
 @pytest.mark.asyncio
