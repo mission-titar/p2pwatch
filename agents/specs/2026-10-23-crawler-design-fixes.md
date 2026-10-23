@@ -240,7 +240,7 @@ exemptions of blocks 10 and 30 on their rows.
   The operator's choice is A13's option a; resolving everywhere is its price, named in appendix B. In block 20 the
   checks also stop calling `interpolate` and carry their key path apart from their message.
 - **D2.** `domain/crawler_config.py` holds `CrawlerConfig`, `LoadedConfig` and the checks; `AMULE_CLIENT_NAME` joins
-  `config_defaults.py`; `time_between_source_reads` moves with `DownloadConfig`, so A2's "time between reads
+  `config_defaults.py` in block 20 (Corrected: in block 20, as appendix A's row says, not 30); `time_between_source_reads` moves with `DownloadConfig`, so A2's "time between reads
   computed by the domain" is met here; `math` joins `domain-imports.yml`. The matching parses `matcher.yml` in its
   domain the same way (A13). This supersedes the ledger's A9 config half ("`ConfigError` internal to the config
   adapter, no change"): once the domain builds the config, it raises its own error, and two types for one refusal
@@ -255,7 +255,10 @@ exemptions of blocks 10 and 30 on their rows.
   its text staying `<key>: <message>` so the crawl's line is unchanged; the use case adds the `file` it checked.
   `ConfigProblem.key` is `str | None`: `None` for a matching problem, which keeps its whole text as its message,
   since the crawler's 23 config errors name a key path but 39 of the matching's name none apart (`reference cycle:
-  a -> b`, `rule 'x' without a condition`), and rewording them is outside this lot.
+  a -> b`, `rule 'x' without a condition`), and rewording them is outside this lot. (Corrected: 6 of the crawler's
+  errors name their key inside their text, a removed or moved key, a missing root key, a section that is no
+  mapping, the backoff's factor and its cap below its base; they carry `key=None` too, so the crawl's line stays
+  unchanged.)
 
 ### Merge, errors, fixed values, composition
 
