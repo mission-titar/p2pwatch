@@ -337,7 +337,8 @@ From `gh run list --branch <branch>` over blocks 10 to 74 (2026-10-23) and the l
 
 - **Fix-backs**: 0. **Cascaded rebases**: 0. **Runs re-triggered by them**: 0; one run per block, all green.
 - **Splits**: 3 (block 52 into 52 and 53, block 60 into 60 and 61, both at the file bound; the closing block into 90,
-  92 and 94 at both bounds, cut by the lead at its commits: 90 at `fb1317a9`, 92 at `6c4970ad`, 94 on top).
+  92 and 94 at both bounds, cut by the lead at its commits: 90 at `fb1317a9` (596 lines, 49 files), 92 at
+  `5f755775` (C5 and the package with no module: 395 lines, 17 files), 94 on top (140 lines, 14 files)).
 - **Exemptions**: 6 (blocks 12, 14, 16, 20, 22 and 90: 16, 20 and 22 on their rows, 12, 14 and 90 approved in Act;
   90 measured 596 lines, 49 files, the names and the prose).
 - **Bodies called unreadable**: none known at writing.
