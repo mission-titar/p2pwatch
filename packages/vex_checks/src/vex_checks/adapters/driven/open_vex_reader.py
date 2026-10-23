@@ -10,11 +10,20 @@ class OpenVexReader(VexReader):
 
     def read_claims(self, vex_path: PurePath) -> dict[str, str]:
         try:
-            document = json.loads(Path(vex_path).read_text())
+            document = json.loads(Path(vex_path).read_text(encoding="utf-8"))
         except FileNotFoundError as error:
             raise BrokenInputError(f"{vex_path}: no such file") from error
-        return {
-            statement["vulnerability"]["name"]: statement["justification"]
-            for statement in document["statements"]
-            if statement["status"] == "not_affected"
-        }
+        except OSError as error:
+            raise BrokenInputError(f"{vex_path}: {error.strerror}") from error
+        except UnicodeDecodeError as error:
+            raise BrokenInputError(f"{vex_path}: not UTF-8") from error
+        except json.JSONDecodeError as error:
+            raise BrokenInputError(f"{vex_path}: not JSON") from error
+        try:
+            return {
+                statement["vulnerability"]["name"]: statement["justification"]
+                for statement in document["statements"]
+                if statement["status"] == "not_affected"
+            }
+        except (KeyError, TypeError) as error:
+            raise BrokenInputError(f"{vex_path}: not an OpenVEX document") from error
