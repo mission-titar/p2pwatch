@@ -1,7 +1,8 @@
-"""Observability policy: ``describe(event) → Report`` (spec Plan E §3, E-D3).
+"""Observability policy: ``plan_observability(event) → ObservabilityPlan`` (spec Plan E §3, E-D3).
 
 DOMAIN ring (pure). The ONLY place that decides, for each event, severity, message,
-metric(s), audiences. ``describe`` is an EXHAUSTIVE match (``assert_never`` → 100% branch).
+metric(s), audiences. ``plan_observability`` is an EXHAUSTIVE match (``assert_never`` → 100%
+branch).
 The domain knows nothing of ``logging``, Prometheus or apprise: ``Severity``/``Audience``/
 ``MetricName`` are DOMAIN enums, translated by the adapters (E-D3).
 
@@ -87,7 +88,7 @@ MetricOperation = Literal["inc", "set", "remove"]
 class MetricInstruction:
     """A metric operation: counter ``inc`` / gauge ``set`` or ``remove``.
 
-    ``labels`` = tuple of ordered (key, value) pairs (hashable → usable in a ``Report``
+    ``labels`` = tuple of ordered (key, value) pairs (hashable → usable in an ``ObservabilityPlan``
     equality test). ``amount`` = quantity (default 1.0 for ``inc``).
     """
 
@@ -98,8 +99,8 @@ class MetricInstruction:
 
 
 @dataclass(frozen=True)
-class Report:
-    """How to report an event: severity + message + metric(s) + notification audiences.
+class ObservabilityPlan:
+    """What one event produces: severity + message + metric(s) + notification audiences.
 
     ``metrics`` is a TUPLE (one event can feed several metrics: ``ChannelStatusSampled`` sets
     two gauges). Empty ``audiences`` = no notification.
@@ -181,8 +182,8 @@ def _channel_gauge(
 
 def _channel_alert(
     severity: Severity, event: ChannelDegraded | ChannelRecovered, state_phrase: str
-) -> Report:
-    return Report(
+) -> ObservabilityPlan:
+    return ObservabilityPlan(
         severity,
         f"{event.client_name} {event.channel}: {state_phrase}",
         (),
@@ -190,12 +191,12 @@ def _channel_alert(
     )
 
 
-def _describe_decisions(event: DecisionsRecorded) -> Report:
+def _plan_decisions(event: DecisionsRecorded) -> ObservabilityPlan:
     changes = ", ".join(
         f"{c.target_id} {_label(c.previous_decision)} → {_label(c.new_decision)}"
         for c in event.changes
     )
-    report = Report(
+    plan = ObservabilityPlan(
         Severity.INFO,
         f"decisions for {event.filename} ({event.file.native_id}): {changes}",
         tuple(
@@ -205,7 +206,7 @@ def _describe_decisions(event: DecisionsRecorded) -> Report:
     )
     risen = [(c, tier) for c in event.changes if (tier := _risen_tier(c)) is not None]
     if not risen:
-        return report
+        return plan
     top = max((tier for _, tier in risen), key=lambda tier: tier.rank)
     match event.file.network:
         case Network.ED2K:
@@ -213,7 +214,7 @@ def _describe_decisions(event: DecisionsRecorded) -> Report:
         case _:  # pragma: no cover
             assert_never(event.file.network)
     return replace(
-        report,
+        plan,
         audiences=frozenset({Audience.COMMUNITY}),
         notification_body=(
             _targets_section(TargetTitle(c.target_id, c.title) for c, _ in risen)
@@ -224,12 +225,12 @@ def _describe_decisions(event: DecisionsRecorded) -> Report:
     )
 
 
-def _describe_source(
+def _plan_source(
     event: SourceFirstUseful | SourceReappeared,
     alert_kind: str,
     state_phrase: str,
     notification_title: str,
-) -> Report:
+) -> ObservabilityPlan:
     short = f"{event.source.native_id[:8]}…"  # as the webui shortens a hash
     named = f"{_code_name(event.source_name)} " if event.source_name else ""
     sections = [f"**Source**\n{named}{short}, {state_phrase}"]
@@ -237,7 +238,7 @@ def _describe_source(
         sections.append(_targets_section(event.target_titles))
     sections.append(f"**File**\n{_code_name(event.filename)}")
     labels = (("network", event.source.network.value), ("kind", alert_kind))
-    return Report(
+    return ObservabilityPlan(
         Severity.INFO,
         f"source {short} {state_phrase}: {event.filename}",
         (MetricInstruction(MetricName.SOURCE_ALERTS, "inc", labels),),
@@ -247,11 +248,11 @@ def _describe_source(
     )
 
 
-def describe(event: Event) -> Report:
-    """Map an event to its ``Report`` (EXHAUSTIVE match → 100% branch)."""
+def plan_observability(event: Event) -> ObservabilityPlan:
+    """Map an event to its ``ObservabilityPlan`` (EXHAUSTIVE match → 100% branch)."""
     match event:
         case SearchExecuted():
-            return Report(
+            return ObservabilityPlan(
                 Severity.DEBUG,
                 f"search {event.channel}: {event.observation_count} observation(s)",
                 (
@@ -266,7 +267,7 @@ def describe(event: Event) -> Report:
                 ),
             )
         case ClientUnreachable():
-            return Report(
+            return ObservabilityPlan(
                 Severity.WARNING,
                 f"{event.client_name} unreachable",
                 (
@@ -276,27 +277,27 @@ def describe(event: Event) -> Report:
                 ),
             )
         case SearchFailed():
-            return Report(
+            return ObservabilityPlan(
                 Severity.WARNING,
                 f"search failed on {event.channel}",
                 (MetricInstruction(MetricName.SEARCH_FAILURES, "inc", _search_labels(event)),),
             )
         case ObservationRecorded():
-            return Report(
+            return ObservabilityPlan(
                 Severity.DEBUG,
                 f"observation recorded ({event.channel})",
                 (MetricInstruction(MetricName.OBSERVATIONS, "inc", _search_labels(event)),),
             )
         case DecisionsRecorded():
-            return _describe_decisions(event)
+            return _plan_decisions(event)
         case DownloadQueued():
-            return Report(
+            return ObservabilityPlan(
                 Severity.INFO,
                 f"download queued: {event.target_id}",
                 (MetricInstruction(MetricName.DOWNLOADS_QUEUED, "inc"),),
             )
         case DownloadCompleted():
-            return Report(
+            return ObservabilityPlan(
                 Severity.SUCCESS,
                 f"✅ download completed: {', '.join(t.target_id for t in event.target_titles)}",
                 (MetricInstruction(MetricName.DOWNLOADS_COMPLETED, "inc"),),
@@ -306,7 +307,7 @@ def describe(event: Event) -> Report:
                 "✅ Downloaded",
             )
         case ChannelStatusSampled():
-            return Report(
+            return ObservabilityPlan(
                 Severity.DEBUG,
                 f"status {event.client_name} {event.channel}: "
                 f"connected {_yes_no(event.connected)}, connectable {_yes_no(event.connectable)}",
@@ -325,21 +326,21 @@ def describe(event: Event) -> Report:
         case ChannelRecovered():
             return _channel_alert(Severity.INFO, event, _RECOVERED_PHRASE_BY_FIELD[event.field])
         case ClientUnreachableLasting():
-            return Report(
+            return ObservabilityPlan(
                 Severity.WARNING,
                 f"{event.client_name} unreachable for {event.unreachable_for_seconds / 60:.0f} min",
                 (),
                 frozenset({Audience.OPERATIONS}),
             )
         case ClientReachableAgain():
-            return Report(
+            return ObservabilityPlan(
                 Severity.INFO,
                 f"{event.client_name} reachable again",
                 (),
                 frozenset({Audience.OPERATIONS}),
             )
         case FreeSpaceSampled():
-            return Report(
+            return ObservabilityPlan(
                 Severity.DEBUG,
                 f"download disk free: {event.free_bytes} bytes",
                 (
@@ -349,7 +350,7 @@ def describe(event: Event) -> Report:
                 ),
             )
         case DiskSpaceLow():
-            return Report(
+            return ObservabilityPlan(
                 Severity.WARNING,
                 f"download disk low: {event.free_bytes / 2**30:.1f} GiB free, "
                 f"under the {event.min_free_bytes / 2**30:.1f} GiB floor (no new download)",
@@ -357,21 +358,21 @@ def describe(event: Event) -> Report:
                 frozenset({Audience.OPERATIONS}),
             )
         case SourceFirstUseful():
-            return _describe_source(
+            return _plan_source(
                 event,
                 "first_useful",
                 "useful for the first time",
                 "📥 Source useful for the first time",
             )
         case SourceReappeared():
-            return _describe_source(
+            return _plan_source(
                 event,
                 "reappeared",
                 f"reappeared after {event.absent_for_seconds / 3600:.0f} h",
                 "🔁 Source reappeared",
             )
         case CrawlerStarted():
-            return Report(
+            return ObservabilityPlan(
                 Severity.INFO,
                 f"🟢 node online (download {'on' if event.download_enabled else 'off'})",
                 (MetricInstruction(MetricName.CRAWLER_UP, "set", (), 1.0),),

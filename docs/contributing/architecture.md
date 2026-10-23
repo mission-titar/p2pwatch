@@ -674,7 +674,7 @@ flowchart LR
 ```mermaid
 flowchart LR
   uc["use-case<br/>emit(Event, node_id)"]
-  desc["describe()<br/>→ Report"]
+  desc["plan_observability()<br/>→ ObservabilityPlan"]
   disp["Dispatcher"]
   log["logs"]
   prom["/metrics"]
@@ -686,8 +686,8 @@ flowchart LR
   disp -->|best-effort| notif
 ```
 
-Le **domaine** émet des `Event` purs ; une **politique** pure (`describe`) les route vers des
-`Report` (sévérité de log + instructions de métrique + audiences COMMUNITY/OPERATIONS) ; le
+Le **domaine** émet des `Event` purs ; une **politique** pure (`plan_observability`) les route vers des
+`ObservabilityPlan` (sévérité de log + instructions de métrique + audiences COMMUNITY/OPERATIONS) ; le
 dispatcher **adapter** les applique. Le point d'accès Prometheus est servi par le crawler lui-même
 sur `observability.metrics.port` (`9090` dans le `crawler.yml` livré) ; rien ne le scrape par défaut, donc publiez ce
 port et pointez-y votre propre Prometheus si vous voulez des tableaux de bord.
