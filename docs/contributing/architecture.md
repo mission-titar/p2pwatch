@@ -431,7 +431,7 @@ Invariants porteurs (à ne pas violer) :
   ses téléchargements à travers un redémarrage, slskd non. amuled ne refuse jamais un fichier qu'il
   détient encore, donc relancer coûte une requête. Au-delà de `download.lost_after_seconds` (24 h par
   défaut) sans apparaître, la ligne devient `failed` avec la raison `lost`. L'absence se mesure en
-  mémoire, sur l'horloge monotone : `DownloadDeps.loss_deadline_by_file` tient l'échéance de chaque
+  mémoire, sur l'horloge monotone : `DownloadTracker` tient l'échéance de chaque
   téléchargement `queued` ou `downloading`, repoussée à chaque cycle où le client le liste. Chaque
   cycle estampille aussi `latest_seen_at` pour chaque fichier que `downloads()` liste, en file
   **ou** partagé : au démarrage suivant, l'échéance repart de cette date, le temps écoulé borné à
