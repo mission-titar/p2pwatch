@@ -102,3 +102,19 @@ def test_a_package_whose_modules_their_own_tests_run_whole_has_no_problem() -> N
         listed_test_count=1,
         short_module_count=0,
     )
+
+
+def test_a_package_without_a_module_still_reads_its_run_s_coverage() -> None:
+    test_coverage_reader = FakeTestCoverageReader({})
+    checker = CheckUnitCoverage(
+        package_tree_reader=FakePackageTreeReader(
+            PackageTree(modules=(), test_files=(), tests_without_unit={}), {}
+        ),
+        test_coverage_reader=test_coverage_reader,
+    )
+
+    report = checker.check_unit_coverage()
+
+    assert report.module_count == 0
+    # Read with no module to read, the run's coverage is refused when broken (the reader's tests).
+    assert test_coverage_reader.own_test_files_by_module == {}

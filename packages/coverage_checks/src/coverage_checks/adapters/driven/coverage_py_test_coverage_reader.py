@@ -1,6 +1,6 @@
 import json
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePath
 
@@ -33,15 +33,25 @@ class CoveragePyTestCoverageReader(TestCoverageReader):
         self._package_directory = package_directory
         self._data_file = data_file
         self._report_file = report_directory / "coverage.json"
-        self._coverage: Coverage | None = None
 
-    def read_test_coverage(
-        self, module: PurePath, own_test_files: Sequence[PurePath]
+    def read_test_coverage_by_module(
+        self, own_test_files_by_module: Mapping[PurePath, Sequence[PurePath]]
+    ) -> dict[PurePath, TestCoverage]:
+        coverage = self._load()
+        return {
+            module: self._read_test_coverage(coverage, module, own_test_files)
+            for module, own_test_files in own_test_files_by_module.items()
+        }
+
+    def _read_test_coverage(
+        self, coverage: Coverage, module: PurePath, own_test_files: Sequence[PurePath]
     ) -> TestCoverage:
-        run = self._analyze(module, contexts=None)
+        run = self._analyze(coverage, module, contexts=None)
         own_contexts = [f"^{re.escape(test_file.as_posix())}::" for test_file in own_test_files]
         # An empty list of contexts would select every test.
-        run_by_own_tests = self._analyze(module, own_contexts) if own_contexts else _NOTHING_RUN
+        run_by_own_tests = (
+            self._analyze(coverage, module, own_contexts) if own_contexts else _NOTHING_RUN
+        )
         return TestCoverage(
             statements=run.statements,
             branches=run.branches,
@@ -53,32 +63,31 @@ class CoveragePyTestCoverageReader(TestCoverageReader):
 
     def _load(self) -> Coverage:
         """The run's coverage, once it holds branches and each test apart."""
-        if self._coverage is None:
-            # coverage.py's errors name the file they could not use.
-            try:
-                coverage = Coverage(
-                    data_file=str(self._data_file),
-                    config_file=str(self._package_directory / "pyproject.toml"),
-                )
-            except CoverageException as error:
-                raise BrokenInputError(str(error)) from error
-            try:
-                coverage.load()
-            except CoverageException as error:
-                coverage.get_data().close(force=True)  # coverage.py leaves a non-database open
-                raise BrokenInputError(str(error)) from error
-            coverage_data = coverage.get_data()
-            if not coverage_data.has_arcs() or not coverage_data.measured_contexts() - {""}:
-                raise BrokenInputError(
-                    f"{self._data_file}: no per-test branch coverage; run this package's pytest"
-                    " first, with branch coverage and --cov-context=test"
-                )
-            self._coverage = coverage
-        return self._coverage
+        # coverage.py's errors name the file they could not use.
+        try:
+            coverage = Coverage(
+                data_file=str(self._data_file),
+                config_file=str(self._package_directory / "pyproject.toml"),
+            )
+        except CoverageException as error:
+            raise BrokenInputError(str(error)) from error
+        try:
+            coverage.load()
+        except CoverageException as error:
+            coverage.get_data().close(force=True)  # coverage.py leaves a non-database open
+            raise BrokenInputError(str(error)) from error
+        coverage_data = coverage.get_data()
+        if not coverage_data.has_arcs() or not coverage_data.measured_contexts() - {""}:
+            raise BrokenInputError(
+                f"{self._data_file}: no per-test branch coverage; run this package's pytest"
+                " first, with branch coverage and --cov-context=test"
+            )
+        return coverage
 
-    def _analyze(self, module: PurePath, contexts: list[str] | None) -> _Analysis:
+    def _analyze(
+        self, coverage: Coverage, module: PurePath, contexts: list[str] | None
+    ) -> _Analysis:
         """coverage.py's own analysis of *module*, restricted to the tests matching *contexts*."""
-        coverage = self._load()
         try:
             coverage.json_report(
                 morfs=[str(self._package_directory / module)],
