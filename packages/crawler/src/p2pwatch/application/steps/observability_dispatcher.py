@@ -1,49 +1,54 @@
-"""Observability dispatcher: routes an ``Event`` to log + metrics + notifications (E-D3/E-D13).
-
-ADAPTER ring. Implements ``EventEmitter``. ``emit``: ``plan_observability`` (pure) → log at the
-mapped level + ``MetricsRecorder.apply`` for each metric + ``Notifier.notify`` per audience (the
-plan's ``notification_title`` and ``notification_body``, else its message), each notification under
-``asyncio.wait_for(notification_timeout_seconds)`` with failure/timeout ABSORBED + logged (a
-broken notification target NEVER breaks the crawl, E-D13). No state (the edge-trigger lives in
-the application, E-D8)."""
+"""The dispatch step: plans an ``Event``, logs it, applies its metrics and notifies its audiences.
+A notification failing or timing out is absorbed and logged: it never breaks the crawl (E-D13)."""
 
 import asyncio
-import logging
+from typing import assert_never
 
 from p2pwatch.application.ports.driven.event_emitter import EventEmitter
+from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.metrics_recorder import MetricsRecorder
 from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.domain.observability.events import Event
 from p2pwatch.domain.observability.policy import Severity, plan_observability
 
-_logger = logging.getLogger(__name__)
 
-_LEVELS: dict[Severity, int] = {
-    Severity.DEBUG: logging.DEBUG,
-    Severity.INFO: logging.INFO,
-    Severity.SUCCESS: logging.INFO,
-    Severity.WARNING: logging.WARNING,
-    Severity.ERROR: logging.ERROR,
-}
+def log_at_severity(logger: Logger, severity: Severity, message: str) -> None:
+    """Writes ``message`` at the level ``severity`` maps to, a success being an info."""
+    match severity:
+        case Severity.DEBUG:
+            logger.debug(message)
+        case Severity.INFO | Severity.SUCCESS:
+            logger.info(message)
+        case Severity.WARNING:
+            logger.warning(message)
+        case Severity.ERROR:
+            logger.error(message)
+        case _:  # pragma: no cover
+            assert_never(severity)
 
 
 class ObservabilityDispatcher(EventEmitter):
-    """``EventEmitter`` adapter: one emission point, three outputs (log/metric/notification)."""
+    """One dispatch point, three outputs: the log line, the metrics, the notifications."""
 
     def __init__(
         self,
         *,
+        logger: Logger,
         metrics_recorder: MetricsRecorder,
         notifier: Notifier,
         notification_timeout_seconds: float,
     ) -> None:
+        self._logger = logger
         self._metrics_recorder = metrics_recorder
         self._notifier = notifier
         self._notification_timeout_seconds = notification_timeout_seconds
 
     async def emit(self, event: Event, node_id: str) -> None:
+        await self.dispatch(event, node_id)
+
+    async def dispatch(self, event: Event, node_id: str) -> None:
         plan = plan_observability(event)
-        _logger.log(_LEVELS[plan.severity], plan.message)
+        log_at_severity(self._logger, plan.severity, plan.message)
         for instruction in plan.metrics:
             self._metrics_recorder.apply(instruction)
         for audience in plan.audiences:
@@ -59,4 +64,4 @@ class ObservabilityDispatcher(EventEmitter):
                     timeout=self._notification_timeout_seconds,
                 )
             except Exception as error:  # noqa: BLE001 (notifications NEVER break the crawl, E-D13)
-                _logger.warning("notification %s failed (%s)", audience.value, error)
+                self._logger.warning("notification %s failed (%s)", audience.value, error)

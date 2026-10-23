@@ -13,7 +13,6 @@ from p2pwatch.domain.download.states import DownloadState, FailureReason, Waitin
 from p2pwatch.domain.observability.events import DownloadCompleted
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
-from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_no_set_state_tracked_download_store import (
     FakeNoSetStateTrackedDownloadStore,
@@ -22,6 +21,7 @@ from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationR
 from tests.fakes.adapters.driven.fake_ticking_wall_clock import FakeTickingWallClock
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
+from tests.fakes.application.steps.fake_event_emitter import FakeEventEmitter
 from tests.support.application.steps.download_deps import (
     HASH_A,
     HASH_B,
