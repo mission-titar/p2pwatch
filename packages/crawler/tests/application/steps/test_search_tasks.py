@@ -22,7 +22,6 @@ from p2pwatch.application.steps.search_worker import (
     BackoffPolicy,
     BackoffRegistry,
     SearchWorker,
-    WorkerDeps,
 )
 from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.file_key import FileKey, Network
@@ -57,18 +56,44 @@ _POLICY = BackoffPolicy(
 class _Tasks:
     """The tasks' dependencies, with one client named ``amuled``."""
 
-    def __init__(self, deps: WorkerDeps, state: FakeBackoffStateStore) -> None:
-        self.deps = deps
-        self.state = state
+    def __init__(
+        self,
+        observation_store: SqliteObservationStore,
+        decision_store: SqliteDecisionStore,
+        engine: MatchingEngine,
+    ) -> None:
+        self.observation_store = observation_store
+        self.decision_store = decision_store
+        self.engine = engine
+        self.wall_clock = FakeLoopWallClock()
+        self.backoff = BackoffRegistry(
+            _POLICY, self.wall_clock, FakeLoopMonotonicClock(), FakeJitterGenerator()
+        )
+        self.state = FakeBackoffStateStore()
         self.run_state = FakeRunStateStore()
         self.logger = FakeLogger()
 
     def searching(self, client: Any, keywords: list[str]) -> Coroutine[Any, Any, None]:
+        worker = SearchWorker(
+            client_name="amuled",
+            client=client,
+            backoff=self.backoff,
+            observation_writer=self.observation_store,
+            observation_reader=self.observation_store,
+            decision_writer=self.decision_store,
+            decision_reader=self.decision_store,
+            engine=self.engine,
+            waker=FakeWaker(),
+            observability_dispatcher=ObservabilityOverFakes().dispatcher,
+            wall_clock=self.wall_clock,
+            logger=FakeLogger(),
+            observation_logger=FakeLogger(),
+        )
         return SearchTaskRunner(
-            workers=[SearchWorker("amuled", client, self.deps)],
+            workers=[worker],
             keywords=keywords,
             run_state_reader=self.run_state,
-            backoff=self.deps.backoff,
+            backoff=self.backoff,
             backoff_state_writer=self.state,
             monotonic_clock=FakeLoopMonotonicClock(),
             logger=self.logger,
@@ -91,23 +116,7 @@ def tasks(
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
 ) -> _Tasks:
-    wall_clock = FakeLoopWallClock()
-    backoff = BackoffRegistry(_POLICY, wall_clock, FakeLoopMonotonicClock(), FakeJitterGenerator())
-    waker = FakeWaker()
-    deps = WorkerDeps(
-        observation_writer=observation_store,
-        observation_reader=observation_store,
-        decision_writer=decision_store,
-        decision_reader=decision_store,
-        engine=engine,
-        waker=waker,
-        backoff=backoff,
-        observability_dispatcher=ObservabilityOverFakes().dispatcher,
-        wall_clock=wall_clock,
-        logger=FakeLogger(),
-        observation_logger=FakeLogger(),
-    )
-    return _Tasks(deps, FakeBackoffStateStore())
+    return _Tasks(observation_store, decision_store, engine)
 
 
 def test_each_channel_and_keyword_searches_in_its_own_task(tasks: _Tasks) -> None:
@@ -183,7 +192,7 @@ def test_the_backoff_resumed_after_the_tasks_were_built_is_not_saved_again(
 
     async def resume_once_built() -> None:
         searching = tasks.searching(FakeTimedSearchClient({"kad": 30.0}), ["keroro"])
-        tasks.deps.backoff.load_from(resumed)
+        tasks.backoff.load_from(resumed)
         with suppress(TimeoutError):
             async with asyncio.timeout(100.0):
                 await searching
