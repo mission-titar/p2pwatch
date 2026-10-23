@@ -13,7 +13,7 @@ from p2pwatch.application.ports.driving.catalog_merger import (
     NewCatalog,
 )
 from p2pwatch.domain.catalog_copy_error import CatalogCopyError
-from p2pwatch.domain.merge_error import MergeError
+from p2pwatch.domain.merge_error import MergeError, OutputIsSourceError
 
 
 class MergeCatalogs(CatalogMerger):
@@ -35,9 +35,7 @@ class MergeCatalogs(CatalogMerger):
         match destination:
             case NewCatalog(path=path, force=force):
                 if found_destination in found_sources:
-                    raise MergeError(
-                        f"output is one of the source catalogs: {path} (merge into it instead)"
-                    )
+                    raise OutputIsSourceError(path)
                 if not force and found_destination is not None:
                     raise MergeError(
                         f"destination already exists: {path} (force the merge to append to it)"
