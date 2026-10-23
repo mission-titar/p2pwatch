@@ -26,11 +26,11 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import Sq
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
 )
-from p2pwatch.application.steps.download_loop import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.application.steps.reevaluate_catalog import ReevaluationSummary, reevaluate_catalog
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.retraction import RETRACTED_TIER
+from p2pwatch.domain.wake_subject import WakeSubject
 from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_time import FakeTime
@@ -107,7 +107,7 @@ async def test_two_changed_rows_are_all_evaluated_and_written(
     assert decided_at.fetchall() == [(utc_iso(wall_clock.now()),)]
     assert len(event_emitter.events) == 2
     # Iteration is ORDER BY native_id: "31d6..." sorts before "aaaa..." (ASCII '3' < 'a').
-    assert waker.woken_subjects == [DOWNLOAD_WAKE_SUBJECT]
+    assert waker.woken_subjects == [WakeSubject.DOWNLOAD]
 
 
 @pytest.mark.asyncio
