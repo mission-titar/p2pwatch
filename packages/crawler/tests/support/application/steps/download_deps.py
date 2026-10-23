@@ -10,7 +10,9 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store impor
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store import (
     SqliteTrackedDownloadStore,
 )
+from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.steps.download_deps import DownloadDeps
+from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.download.states import FailureReason, WaitingReason
@@ -95,9 +97,16 @@ def build_deps(
     sources_interval: timedelta = timedelta(seconds=30),
     time_between_source_reads: timedelta = timedelta(seconds=60),
     logger: FakeLogger | None = None,
+    wall_clock: WallClock | None = None,
 ) -> DownloadDeps:
     fake_time = fake_time or FakeTime()
+    wall_clock = wall_clock or fake_time.wall
     sources = sources or FakeSourcePointStore()
+    decision_reader = decision_reader or FakeDecisionReader()
+    observation_reader = observation_reader or FakeObservationReader()
+    targets = targets if targets is not None else TARGETS
+    observability_dispatcher = observability_dispatcher or ObservabilityOverFakes().dispatcher
+    logger = logger or FakeLogger()
     return DownloadDeps(
         download_client=client,
         source_client=source_client or FakeSourceClient(),
@@ -105,18 +114,29 @@ def build_deps(
         tracked_download_reader=tracked_download_store,
         source_point_writer=sources,
         source_point_reader=sources,
-        decision_reader=decision_reader or FakeDecisionReader(),
-        observation_reader=observation_reader or FakeObservationReader(),
-        targets=targets if targets is not None else TARGETS,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
+        targets=targets,
         free_space_meter=FakeFreeSpaceMeter(free),
         min_free_bytes=min_free,
-        lost_after=lost_after,
         poll_interval_seconds=30.0,
         reappeared_after=timedelta(hours=12),
         sources_interval=sources_interval,
         time_between_source_reads=time_between_source_reads,
-        wall_clock=fake_time.wall,
+        wall_clock=wall_clock,
         monotonic_clock=fake_time.monotonic,
-        observability_dispatcher=observability_dispatcher or ObservabilityOverFakes().dispatcher,
-        logger=logger or FakeLogger(),
+        observability_dispatcher=observability_dispatcher,
+        logger=logger,
+        download_tracker=DownloadTracker(
+            tracked_download_writer=tracked_download_store,
+            tracked_download_reader=tracked_download_store,
+            decision_reader=decision_reader,
+            observation_reader=observation_reader,
+            targets=targets,
+            lost_after=lost_after,
+            wall_clock=wall_clock,
+            monotonic_clock=fake_time.monotonic,
+            observability_dispatcher=observability_dispatcher,
+            logger=logger,
+        ),
     )
