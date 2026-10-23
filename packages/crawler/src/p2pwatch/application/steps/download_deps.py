@@ -7,7 +7,6 @@ from datetime import timedelta
 from catalog_matching.domain.models import TargetSegment
 from p2pwatch.application.ports.driven.decision_reader import DecisionReader
 from p2pwatch.application.ports.driven.download_client import DownloadClient
-from p2pwatch.application.ports.driven.event_emitter import EventEmitter
 from p2pwatch.application.ports.driven.free_space_meter import FreeSpaceMeter
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
@@ -18,6 +17,7 @@ from p2pwatch.application.ports.driven.source_point_writer import SourcePointWri
 from p2pwatch.application.ports.driven.tracked_download_reader import TrackedDownloadReader
 from p2pwatch.application.ports.driven.tracked_download_writer import TrackedDownloadWriter
 from p2pwatch.application.ports.driven.wall_clock import WallClock
+from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.edge_state import EdgeState
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
@@ -50,7 +50,7 @@ class DownloadDeps:
     time_between_source_reads: timedelta
     wall_clock: WallClock
     monotonic_clock: MonotonicClock
-    event_emitter: EventEmitter
+    observability_dispatcher: ObservabilityDispatcher
     logger: Logger
     disk_low_edge: EdgeState = field(default_factory=EdgeState, kw_only=True)  # low-disk warning
     # The sources step's last start.

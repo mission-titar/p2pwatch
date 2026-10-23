@@ -25,11 +25,11 @@ async def queue_new_candidates(deps: DownloadDeps, outstanding_bytes: int, node_
     snapshot; ``free_bytes`` is read once here. Both are MEASURED, never declared.
     """
     free_bytes = deps.free_space_meter.free_bytes()
-    await deps.event_emitter.emit(FreeSpaceSampled(free_bytes=free_bytes), node_id)
+    await deps.observability_dispatcher.dispatch(FreeSpaceSampled(free_bytes=free_bytes), node_id)
     if free_bytes >= deps.min_free_bytes:
         deps.disk_low_edge.leave("disk_low")
     elif deps.disk_low_edge.enter("disk_low"):
-        await deps.event_emitter.emit(
+        await deps.observability_dispatcher.dispatch(
             DiskSpaceLow(free_bytes=free_bytes, min_free_bytes=deps.min_free_bytes), node_id
         )
     for candidate in deps.decision_reader.read_download_candidates():
@@ -65,4 +65,6 @@ async def queue_new_candidates(deps: DownloadDeps, outstanding_bytes: int, node_
         deps.loss_deadline_by_file[candidate.file] = deps.monotonic_clock.now() + deps.lost_after
         outstanding_bytes += size_bytes  # the client does not list it yet
         deps.logger.info("candidate file=%s queued for download", candidate.file.native_id)
-        await deps.event_emitter.emit(DownloadQueued(target_id=candidate.target_id), node_id)
+        await deps.observability_dispatcher.dispatch(
+            DownloadQueued(target_id=candidate.target_id), node_id
+        )

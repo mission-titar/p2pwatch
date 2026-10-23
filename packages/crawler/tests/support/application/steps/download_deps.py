@@ -11,6 +11,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store i
     SqliteTrackedDownloadStore,
 )
 from p2pwatch.application.steps.download_deps import DownloadDeps
+from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.download.states import FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
@@ -25,7 +26,7 @@ from tests.fakes.adapters.driven.fake_source_client import FakeSourceClient
 from tests.fakes.adapters.driven.fake_source_point_store import FakeSourcePointStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
-from tests.fakes.application.steps.fake_event_emitter import FakeEventEmitter
+from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
 NODE = "n1"
 HASH_A = "a" * 32
@@ -87,7 +88,7 @@ def build_deps(
     free: int = 1_000_000,
     min_free: int = 0,
     lost_after: timedelta = timedelta(days=1),
-    event_emitter: FakeEventEmitter | None = None,
+    observability_dispatcher: ObservabilityDispatcher | None = None,
     targets: Sequence[TargetSegment] | None = None,
     sources: FakeSourcePointStore | SqliteSourcePointStore | None = None,
     fake_time: FakeTime | None = None,
@@ -116,6 +117,6 @@ def build_deps(
         time_between_source_reads=time_between_source_reads,
         wall_clock=fake_time.wall,
         monotonic_clock=fake_time.monotonic,
-        event_emitter=event_emitter or FakeEventEmitter(),
+        observability_dispatcher=observability_dispatcher or ObservabilityOverFakes().dispatcher,
         logger=logger or FakeLogger(),
     )

@@ -136,10 +136,3 @@ async def test_notification_timeout_is_absorbed() -> None:
         _COMPLETED, _NODE
     )
     assert metrics_recorder.applied
-
-
-@pytest.mark.asyncio
-async def test_emit_dispatches_the_event() -> None:
-    metrics_recorder = FakeMetricsRecorder()
-    await _dispatcher(metrics_recorder, FakeNotifier()).emit(_COMPLETED, _NODE)
-    assert metrics_recorder.applied

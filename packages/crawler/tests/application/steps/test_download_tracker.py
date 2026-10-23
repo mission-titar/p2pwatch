@@ -10,7 +10,6 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store i
 )
 from p2pwatch.application.steps.download_cycle import run_download_cycle
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
-from p2pwatch.domain.observability.events import DownloadCompleted
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
@@ -21,7 +20,6 @@ from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationR
 from tests.fakes.adapters.driven.fake_ticking_wall_clock import FakeTickingWallClock
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
-from tests.fakes.application.steps.fake_event_emitter import FakeEventEmitter
 from tests.support.application.steps.download_deps import (
     HASH_A,
     HASH_B,
@@ -32,6 +30,7 @@ from tests.support.application.steps.download_deps import (
     observation,
     status,
 )
+from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
 
 @pytest.mark.asyncio
@@ -174,16 +173,16 @@ async def test_already_completed_shared_hash_is_not_recompleted() -> None:
     # cycle would re-stamp it and re-fire the community notification.
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.states[HASH_A] = DownloadState.COMPLETED
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     client = FakeDownloadClient(listed=[(status(HASH_A, completed=True),)])
     deps = build_deps(
         client=client,
         tracked_download_store=tracked_download_store,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
     )
     await run_download_cycle(deps, NODE)
     assert tracked_download_store.completed_at == {}
-    assert not any(isinstance(e, DownloadCompleted) for e in event_emitter.events)
+    assert observability.notifier.calls == []
 
 
 @pytest.mark.asyncio
@@ -192,16 +191,16 @@ async def test_failed_shared_hash_is_resurrected_and_notified() -> None:
     # IncomingDir. Finding it shared afterwards is amuled saying it exists: complete + notify.
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.states[HASH_A] = DownloadState.FAILED
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     client = FakeDownloadClient(listed=[(status(HASH_A, completed=True),)])
     deps = build_deps(
         client=client,
         tracked_download_store=tracked_download_store,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
     )
     await run_download_cycle(deps, NODE)
     assert tracked_download_store.states[HASH_A] is DownloadState.COMPLETED
-    assert any(isinstance(event, DownloadCompleted) for event in event_emitter.events)
+    assert [title for _, title, _, _ in observability.notifier.calls] == ["✅ Downloaded"]
 
 
 @pytest.mark.asyncio

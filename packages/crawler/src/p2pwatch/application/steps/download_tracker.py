@@ -50,7 +50,7 @@ async def _record_completion(
     """
     deps.tracked_download_writer.set_completed(file, deps.wall_clock.now())
     states[file] = DownloadState.COMPLETED
-    await deps.event_emitter.emit(
+    await deps.observability_dispatcher.dispatch(
         DownloadCompleted(
             file,
             best_filename(deps, file),
