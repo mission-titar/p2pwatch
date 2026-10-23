@@ -567,7 +567,7 @@ Each check names what it prints on `main`, so it can fail.
 11. **`${NAME}` everywhere (A13)**: with `c.yml` a copy of `deploy/crawler.yml` whose `keywords` read
     `["${P2PWATCH_UNSET}"]`, `AMULE_API_PASSWORD=x uv run python -m p2pwatch validate-config --config c.yml
     --targets deploy/targets.yml --matcher deploy/matcher.yml` prints `Invalid config: c.yml: search.keywords[0]:
-    environment variable 'P2PWATCH_UNSET' referenced but not set`, exit 1 (`Config valid` on `main`);
+    environment variable 'P2PWATCH_UNSET' referenced but not set`, exit 1 (`Config valid` on `main`) (Corrected: the file prints as the absolute path the command line resolved, `<cwd>/c.yml`);
     `adapters/driven/config/errors.py` no longer exists.
 12. **The wake subject (A14)**: `git grep -n "DOWNLOAD_WAKE_SUBJECT\|wake(\"" -- packages/crawler` prints nothing
     (32 lines on `main`).
