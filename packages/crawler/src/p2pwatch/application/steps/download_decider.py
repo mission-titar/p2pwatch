@@ -2,6 +2,7 @@
 
 from collections.abc import Sequence
 
+from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.models import TargetSegment
 from p2pwatch.application.steps.download_deps import DownloadDeps
 from p2pwatch.domain.download.policy import DownloadVerdict, decide_download
@@ -43,7 +44,7 @@ async def queue_new_candidates(deps: DownloadDeps, outstanding_bytes: int, node_
             continue
         size_bytes = observation.reported_file.size_bytes
         verdict = decide_download(
-            tier="download",
+            tier=DecisionTier.DOWNLOAD,
             target_status=_target_status(deps.targets, candidate.target_id),
             already_tracked=False,
             free_bytes=free_bytes,

@@ -56,6 +56,8 @@ def _tier_rank_case(column: str) -> str:
 
 
 _TIER_RANK_CASE = _tier_rank_case("ld.tier")
+# The tiers that identify a target, from the closed enum too: ``catalog`` is left out.
+_IDENTIFYING_TIERS = ", ".join(f"'{tier}'" for tier in DecisionTier if tier.identifies_target)
 
 # The "latest per group" CTEs shared by the explorer list + counter, each folding an
 # append-only table to its current rows (latest wins, tie-break on id).
@@ -201,16 +203,16 @@ def _filter_clauses(
 
     ``target_id``/``tier`` match a file if ANY of its current decisions matches (EXISTS over the
     ``latest_dec`` CTE), so a whole-episode file appears under each of its targets. The
-    ``target_id`` clause additionally excludes ``catalog``-tier rows (they are pinned to ``001A``),
-    consistent with ``coverage_of``. The matched-only clause and LIMIT/OFFSET are list-specific
-    and are NOT built here.
+    ``target_id`` clause keeps only the tiers that identify a target (``catalog`` rows are pinned
+    to ``001A``), consistent with ``coverage_of``. The matched-only clause and LIMIT/OFFSET are
+    list-specific and are NOT built here.
     """
     clauses: list[str] = []
     params: list[str] = []
     if target_id is not None:
         clauses.append(
-            "EXISTS (SELECT 1 FROM latest_dec AS fdt"
-            " WHERE fdt.file_id = f.file_id AND fdt.target_id = ? AND fdt.tier != 'catalog')"
+            "EXISTS (SELECT 1 FROM latest_dec AS fdt WHERE fdt.file_id = f.file_id"
+            f" AND fdt.target_id = ? AND fdt.tier IN ({_IDENTIFYING_TIERS}))"
         )
         params.append(target_id)
     if tier is not None:

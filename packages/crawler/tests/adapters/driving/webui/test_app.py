@@ -39,7 +39,7 @@ from p2pwatch.application.ports.driving.source_lister import SourceListing
 from p2pwatch.application.ports.driving.source_name_describer import SourceNameDescription
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.console_query import QueryFailure
-from p2pwatch.domain.coverage import TargetCoverage
+from p2pwatch.domain.coverage import TargetCoverage, TargetCoverageStatus
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
 from p2pwatch.domain.file_history import DatedDecision, FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
@@ -111,7 +111,9 @@ _CRAWL_SUMMARY = CrawlSummary(
     client_summaries=(),
     is_paused=False,
     node_state=_NODE_STATE,
-    target_coverages=(TargetCoverage("062A", status="none", best_tier=None, file_count=0),),
+    target_coverages=(
+        TargetCoverage("062A", status=TargetCoverageStatus.NONE, best_tier=None, file_count=0),
+    ),
 )
 _SUMMARIZER = FakeCrawlSummarizer(_CRAWL_SUMMARY)
 _DESCRIBER = FakeNodeDescriber(NodeDescription(_NODE_STATE))
@@ -297,7 +299,9 @@ async def _coverage_cells(coverage: TargetCoverage) -> list[str]:
 
 @pytest.mark.asyncio
 async def test_dashboard_shows_each_target_coverage_with_its_title() -> None:
-    coverage = TargetCoverage("062A", status="found", best_tier="download", file_count=2)
+    coverage = TargetCoverage(
+        "062A", status=TargetCoverageStatus.FOUND, best_tier=DecisionTier.DOWNLOAD, file_count=2
+    )
     assert await _coverage_cells(coverage) == [
         '<a href="/targets/062A">062A</a>',
         *("La Grenouille Cosmique", "found", "download", "2"),
@@ -306,7 +310,9 @@ async def test_dashboard_shows_each_target_coverage_with_its_title() -> None:
 
 @pytest.mark.asyncio
 async def test_dashboard_shows_a_target_without_a_best_tier_as_a_dot() -> None:
-    coverage = TargetCoverage("062A", status="none", best_tier=None, file_count=0)
+    coverage = TargetCoverage(
+        "062A", status=TargetCoverageStatus.NONE, best_tier=None, file_count=0
+    )
     assert (await _coverage_cells(coverage))[2:] == ["none", "·", "0"]
 
 
@@ -1116,6 +1122,19 @@ async def test_empty_filter_param_does_not_silently_zero_results() -> None:
 
 
 @pytest.mark.asyncio
+async def test_unknown_tier_filter_is_ignored_and_lists_every_file() -> None:
+    # As an unknown ``sort`` or ``direction`` falls back to its default.
+    _, call = await _files_page("/files?tier=bogus")
+    assert call == _DEFAULT_CALL
+
+
+@pytest.mark.asyncio
+async def test_tier_filter_reaches_the_lister_as_the_type() -> None:
+    _, call = await _files_page("/files?tier=notify")
+    assert call.tier is DecisionTier.NOTIFY
+
+
+@pytest.mark.asyncio
 async def test_page_zero_is_clamped_to_first_page() -> None:
     # webui-security#2 regression: ``?page=0`` → OFFSET=-50 (SQLite returned page 1 by
     # luck). Now ``max(1, page)`` clamps.
@@ -1695,7 +1714,7 @@ def test_tier_facets_all_reset_and_masks_catalog() -> None:
 def test_tier_facets_selected_and_preserves_base() -> None:
     facets = _tier_facets(
         file_count_by_tier={"download": 1, "notify": 2},
-        active_tier="notify",
+        active_tier=DecisionTier.NOTIFY,
         kept_params={"search": "keroro", "sort": "size"},
     )
     notify = next(f for f in facets if f.label == "notify")
