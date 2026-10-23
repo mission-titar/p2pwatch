@@ -183,15 +183,6 @@ def _require_mapping(node: Any, key_path: str) -> dict[str, Any]:
     return node
 
 
-def _require_section(node: Any, key_path: str) -> dict[str, Any]:
-    """A section's mapping; its error keeps the wording ``section '<path>': ...``, no key apart."""
-    if not isinstance(node, dict):
-        raise InvalidConfigError(
-            None, f"section {key_path!r}: mapping expected, got {type(node).__name__}"
-        )
-    return node
-
-
 # The root's error label: crawler.yml has no section around its root keys, so they print bare.
 _ROOT = ""
 
@@ -203,7 +194,9 @@ def _key_path(error_label: str, key: str) -> str:
 def _required(section: dict[str, Any], key: str, error_label: str) -> Any:
     if key in section:
         return section[key]
-    raise InvalidConfigError(error_label or None, f"key {key!r} missing")
+    if not error_label:
+        raise InvalidConfigError(key, "missing")
+    raise InvalidConfigError(error_label, f"key {key!r} missing")
 
 
 def _number(section: dict[str, Any], key: str, error_label: str) -> float:
@@ -355,7 +348,7 @@ def _parse_observability(section: dict[str, Any]) -> ObservabilityConfig:
 
 
 def _parse_download(document: dict[str, Any]) -> DownloadConfig | None:
-    section = _require_section(document.get("download", {}), "download")
+    section = _require_mapping(document.get("download", {}), "download")
     if not _bool_default(section, "enabled", "download", DEFAULT_DOWNLOAD_ENABLED):
         return None  # laziness: we read NOTHING else (no wiring required)
     output_directory = section.get("output_dir", DEFAULT_OUTPUT_DIRECTORY)
@@ -400,7 +393,7 @@ def _parse_download(document: dict[str, Any]) -> DownloadConfig | None:
 
 def _parse_search(document: dict[str, Any]) -> SearchConfig:
     """`search` section, required: its non-empty keywords and its backoff."""
-    section = _require_section(document.get("search", {}), "search")
+    section = _require_mapping(document.get("search", {}), "search")
     keywords = _required(section, "keywords", "search")
     if not isinstance(keywords, list) or not keywords:
         raise InvalidConfigError("search.keywords", "non-empty list of strings expected")
@@ -416,10 +409,10 @@ def _parse_search(document: dict[str, Any]) -> SearchConfig:
 
 def _parse_backoff(search: dict[str, Any]) -> BackoffConfig:
     """`search.backoff`, required: a factor that grows, a cap at least the base."""
-    section = _require_section(search.get("backoff", {}), "search.backoff")
+    section = _require_mapping(search.get("backoff", {}), "search.backoff")
     factor = _positive(section, "factor", "search.backoff")
     if factor < 1:
-        raise InvalidConfigError(None, f"search.backoff.factor must be ≥ 1 (growth), got {factor}")
+        raise InvalidConfigError("search.backoff.factor", f"must be ≥ 1 (growth), got {factor}")
     backoff = BackoffConfig(
         base_seconds=_seconds(section, "base_seconds", "search.backoff"),
         cap_seconds=_seconds(section, "cap_seconds", "search.backoff"),
@@ -428,9 +421,8 @@ def _parse_backoff(search: dict[str, Any]) -> BackoffConfig:
     )
     if backoff.cap_seconds < backoff.base_seconds:
         raise InvalidConfigError(
-            None,
-            f"search.backoff.cap_seconds ({backoff.cap_seconds}) < base_seconds "
-            f"({backoff.base_seconds}): cap below floor",
+            "search.backoff.cap_seconds",
+            f"{backoff.cap_seconds} < base_seconds ({backoff.base_seconds}): cap below floor",
         )
     return backoff
 
@@ -440,7 +432,7 @@ def _parse_webui(document: dict[str, Any]) -> WebuiConfig:
 
     The bind is FIXED at 0.0.0.0:8080 in the composition ring, so this reads no host/port: an
     unknown key (a legacy ``host``/``port``) is ignored silently, no fail-fast."""
-    section = _require_section(document.get("webui", {}), "webui")
+    section = _require_mapping(document.get("webui", {}), "webui")
     enabled = _bool_default(section, "enabled", "webui", DEFAULT_WEBUI_ENABLED)
     gap = timedelta(
         seconds=_seconds(
@@ -461,19 +453,17 @@ def parse_crawler_config(document: dict[str, Any]) -> CrawlerConfig:
     resolved. Fail-fast §5/§14: any inconsistency → ``InvalidConfigError``."""
     for key in _REMOVED_KEYS:
         if key in document:
-            raise InvalidConfigError(None, f"key '{key}' was removed, delete it from crawler.yml")
+            raise InvalidConfigError(key, "was removed, delete it from crawler.yml")
     for key, new_path in _MOVED_KEYS.items():
         if key in document:
-            raise InvalidConfigError(
-                None, f"key '{key}' moved to '{new_path}', move it in crawler.yml"
-            )
+            raise InvalidConfigError(key, f"moved to '{new_path}', move it in crawler.yml")
     node_id_raw = document.get("node_id")
     if node_id_raw is not None and (not isinstance(node_id_raw, str) or not node_id_raw):
         raise InvalidConfigError(
             "node_id", f"non-empty string or absent expected, got {node_id_raw!r}"
         )
     observability = _parse_observability(
-        _require_section(document.get("observability", {}), "observability")
+        _require_mapping(document.get("observability", {}), "observability")
     )
     return CrawlerConfig(
         search=_parse_search(document),

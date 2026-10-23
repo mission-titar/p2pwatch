@@ -113,7 +113,7 @@ def test_negative_jitter_ratio_is_fatal() -> None:
 def test_missing_key_is_fatal() -> None:
     raw = _minimal_raw()
     del raw["shutdown_deadline_seconds"]
-    with pytest.raises(InvalidConfigError, match=r"^key 'shutdown_deadline_seconds' missing$"):
+    with pytest.raises(InvalidConfigError, match=r"^shutdown_deadline_seconds: missing$"):
         parse_crawler_config(raw)
 
 
@@ -218,19 +218,22 @@ def test_non_positive_value_is_fatal() -> None:
 )
 def test_a_removed_key_is_refused_by_name(key: str) -> None:
     raw = _minimal_raw() | {key: 5.0}
-    with pytest.raises(
-        InvalidConfigError, match=rf"^key '{key}' was removed, delete it from crawler\.yml$"
-    ):
+    with pytest.raises(InvalidConfigError) as raised:
         parse_crawler_config(raw)
+    assert (raised.value.key, raised.value.message) == (
+        key,
+        "was removed, delete it from crawler.yml",
+    )
 
 
 def test_the_root_backoff_is_refused_with_its_new_place() -> None:
     raw = _minimal_raw() | {"backoff": _minimal_raw()["search"]["backoff"]}
-    with pytest.raises(
-        InvalidConfigError,
-        match=r"^key 'backoff' moved to 'search\.backoff', move it in crawler\.yml$",
-    ):
+    with pytest.raises(InvalidConfigError) as raised:
         parse_crawler_config(raw)
+    assert (raised.value.key, raised.value.message) == (
+        "backoff",
+        "moved to 'search.backoff', move it in crawler.yml",
+    )
 
 
 def test_a_missing_backoff_is_fatal() -> None:
@@ -243,25 +246,35 @@ def test_a_missing_backoff_is_fatal() -> None:
 def test_backoff_section_must_be_a_mapping() -> None:
     raw = _minimal_raw()
     raw["search"]["backoff"] = [1, 2, 3]
-    with pytest.raises(InvalidConfigError, match=r"section 'search\.backoff'"):
+    with pytest.raises(InvalidConfigError) as raised:
         parse_crawler_config(raw)
+    assert (raised.value.key, raised.value.message) == (
+        "search.backoff",
+        "mapping expected, got list",
+    )
 
 
 def test_backoff_factor_below_one_is_fatal() -> None:
     raw = _minimal_raw()
     raw["search"]["backoff"]["factor"] = 0.5
-    with pytest.raises(InvalidConfigError, match=r"search\.backoff\.factor must be ≥ 1"):
+    with pytest.raises(InvalidConfigError) as raised:
         parse_crawler_config(raw)
+    assert (raised.value.key, raised.value.message) == (
+        "search.backoff.factor",
+        "must be ≥ 1 (growth), got 0.5",
+    )
 
 
 def test_backoff_cap_below_base_is_fatal() -> None:
     raw = _minimal_raw()
     raw["search"]["backoff"]["cap_seconds"] = 1.0
     raw["search"]["backoff"]["base_seconds"] = 10.0
-    with pytest.raises(
-        InvalidConfigError, match=r"search\.backoff\.cap_seconds .* cap below floor"
-    ):
+    with pytest.raises(InvalidConfigError) as raised:
         parse_crawler_config(raw)
+    assert (raised.value.key, raised.value.message) == (
+        "search.backoff.cap_seconds",
+        "1.0 < base_seconds (10.0): cap below floor",
+    )
 
 
 # ------------------------------------------------------------------------- the single amuled
@@ -276,7 +289,7 @@ def test_node_id_override_is_kept() -> None:
 def test_missing_amule_api_password_is_fatal() -> None:
     raw = _minimal_raw()
     del raw["amule_api_password"]
-    with pytest.raises(InvalidConfigError, match=r"^key 'amule_api_password' missing$"):
+    with pytest.raises(InvalidConfigError, match=r"^amule_api_password: missing$"):
         parse_crawler_config(raw)
 
 
@@ -308,7 +321,7 @@ def test_leftover_pool_keys_are_ignored() -> None:
 def test_missing_db_path_is_fatal() -> None:
     raw = _minimal_raw()
     del raw["catalog_db_path"]
-    with pytest.raises(InvalidConfigError, match=r"^key 'catalog_db_path' missing$"):
+    with pytest.raises(InvalidConfigError, match=r"^catalog_db_path: missing$"):
         parse_crawler_config(raw)
 
 
@@ -341,18 +354,6 @@ def test_a_notification_that_is_no_mapping_is_refused_under_its_key_path() -> No
     assert error.value.key == "observability.notifications[0]"
 
 
-def test_a_removed_key_names_no_key_path_apart() -> None:
-    with pytest.raises(InvalidConfigError) as error:
-        parse_crawler_config(_minimal_raw() | {"port_sync": {}})
-    assert error.value.key is None
-
-
-def test_a_section_that_is_no_mapping_names_no_key_path_apart() -> None:
-    with pytest.raises(InvalidConfigError) as error:
-        parse_crawler_config(_minimal_raw() | {"search": []})
-    assert error.value.key is None
-
-
 # ----------------------------------------------------------------- download
 
 
@@ -382,7 +383,7 @@ def test_download_enabled_non_bool_is_fatal() -> None:
 
 def test_download_section_must_be_a_mapping() -> None:
     raw = _minimal_raw() | {"download": [1, 2]}
-    with pytest.raises(InvalidConfigError, match="section 'download'"):
+    with pytest.raises(InvalidConfigError, match=r"^download: mapping expected, got list$"):
         parse_crawler_config(raw)
 
 
@@ -706,7 +707,7 @@ def test_webui_enabled_defaults_true_when_key_absent_in_section() -> None:
 
 def test_webui_section_must_be_a_mapping() -> None:
     raw = _minimal_raw() | {"webui": [1, 2]}
-    with pytest.raises(InvalidConfigError, match="section 'webui'"):
+    with pytest.raises(InvalidConfigError, match=r"^webui: mapping expected, got list$"):
         parse_crawler_config(raw)
 
 

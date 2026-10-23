@@ -256,10 +256,11 @@ exemptions of blocks 10 and 30 on their rows.
   its text staying `<key>: <message>` so the crawl's line is unchanged; the use case adds the `file` it checked.
   `ConfigProblem.key` is `str | None`: `None` for a matching problem, which keeps its whole text as its message,
   since the crawler's 23 config errors name a key path but 39 of the matching's name none apart (`reference cycle:
-  a -> b`, `rule 'x' without a condition`), and rewording them is outside this lot. (Corrected: 6 of the crawler's
-  errors name their key inside their text, a removed or moved key, a missing root key, a section that is no
-  mapping, the backoff's factor and its cap below its base; they carry `key=None` too, so the crawl's line stays
-  unchanged.)
+  a -> b`, `rule 'x' without a condition`), and rewording them is outside this lot. (Corrected: the crawler's 6
+  errors that named their key inside their text, a removed or moved key, a missing root key, a section that is no
+  mapping, the backoff's factor and its cap below its base, carry their key apart from block 40, by the operator's
+  choice, so every crawler config error reads `<key>: <message>`; their text changes, which
+  `docs/migration-4x.md` says.)
 
 ### Merge, errors, fixed values, composition
 
