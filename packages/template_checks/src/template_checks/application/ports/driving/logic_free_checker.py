@@ -4,12 +4,14 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import PurePath
 
+from template_checks.domain.logic_constructs import LogicConstruct
+
 
 @dataclass(frozen=True)
 class LogicFreeReport:
-    """Each logic construct a directory's templates hold, or why one does not parse."""
+    """Each logic construct a directory's templates hold."""
 
-    problems: tuple[str, ...]
+    problems: tuple[LogicConstruct, ...]
 
 
 class LogicFreeChecker(ABC):

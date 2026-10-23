@@ -928,12 +928,13 @@ depends_on = ["template_checks.composition"]
 [[modules]]
 path = "template_checks.adapters.driven.filesystem_template_reader"
 layer = "adapters"
-depends_on = ["template_checks.application.ports.driven.template_reader"]
+depends_on = ["template_checks.domain", "template_checks.application.ports.driven.template_reader"]
 
 [[modules]]
 path = "template_checks.adapters.driving.cli"
 layer = "adapters"
 depends_on = [
+  "template_checks.domain",
   "template_checks.application.ports.driving.logic_free_checker",
   "template_checks.application.ports.driving.template_attribute_lister",
 ]
@@ -971,7 +972,7 @@ depends_on = []
 [[modules]]
 path = "template_checks.application.ports.driving.logic_free_checker"
 layer = "ports"
-depends_on = []
+depends_on = ["template_checks.domain"]
 
 [[modules]]
 path = "template_checks.application.ports.driving.template_attribute_lister"

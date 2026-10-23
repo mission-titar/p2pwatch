@@ -17,7 +17,7 @@ class ListTemplateAttributes(TemplateAttributeLister):
         self._template_reader = template_reader
 
     def list_template_attributes(self, templates_directory: PurePath) -> TemplateAttributeListing:
-        template_texts = self._template_reader.read_templates(templates_directory).values()
+        templates_by_path = self._template_reader.read_templates(templates_directory)
         return TemplateAttributeListing(
-            template_attributes=find_template_attributes(template_texts)
+            template_attributes=find_template_attributes(templates_by_path)
         )

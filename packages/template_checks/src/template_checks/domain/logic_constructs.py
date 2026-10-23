@@ -1,9 +1,12 @@
 """The logic a template holds, read from Jinja's syntax tree: what a logic-free one refuses."""
 
 from collections.abc import Iterator, Mapping
+from dataclasses import dataclass
 from pathlib import PurePath
 
-from jinja2 import Environment, TemplateSyntaxError, nodes
+from jinja2 import nodes
+
+from template_checks.domain.template_parsing import parse_template
 
 # Text, names, attributes at any depth, and the structure; `For` and `Const` are allowed apart.
 _ALLOWED_NODE_TYPES: frozenset[type[nodes.Node]] = frozenset(
@@ -20,34 +23,51 @@ _ALLOWED_NODE_TYPES: frozenset[type[nodes.Node]] = frozenset(
 )
 
 
-def find_logic_constructs(templates_by_path: Mapping[PurePath, str]) -> tuple[str, ...]:
-    """The problem naming each logic construct of *templates_by_path*, or why one does not
-    parse, in path order."""
-    environment = Environment()
-    problems: list[str] = []
-    for template_path, template_text in templates_by_path.items():
-        try:
-            template = environment.parse(template_text)
-        except TemplateSyntaxError as error:
-            problems.append(f"{template_path.as_posix()}:{error.lineno}: {error.message}")
-            continue
-        problems.extend(
-            f"{template_path.as_posix()}:{node.lineno}: {construct} is not logic-free"
-            for node, construct in _find_refused_nodes(template)
+@dataclass(frozen=True)
+class RefusedNode:
+    """A node of a type a logic-free template refuses, by the name of its type."""
+
+    template_path: PurePath
+    line_number: int
+    node_type: str
+
+
+@dataclass(frozen=True)
+class FilteredLoop:
+    """A `for` with an `if` filter, refused though a bare `for` is allowed."""
+
+    template_path: PurePath
+    line_number: int
+
+
+type LogicConstruct = RefusedNode | FilteredLoop
+
+
+def find_logic_constructs(
+    templates_by_path: Mapping[PurePath, str],
+) -> tuple[LogicConstruct, ...]:
+    """Each logic construct of *templates_by_path*, in path order."""
+    return tuple(
+        logic_construct
+        for template_path, template_text in templates_by_path.items()
+        for logic_construct in _find_logic_constructs_under(
+            template_path, parse_template(template_path, template_text)
         )
-    return tuple(problems)
+    )
 
 
-def _find_refused_nodes(node: nodes.Node) -> Iterator[tuple[nodes.Node, str]]:
-    """Each node under *node* a logic-free template refuses, with its construct's name."""
+def _find_logic_constructs_under(
+    template_path: PurePath, node: nodes.Node
+) -> Iterator[LogicConstruct]:
+    """Each logic construct under *node*, *node* included."""
     if isinstance(node, nodes.For):
         if node.test is not None:
-            yield node, "For with an if filter"
+            yield FilteredLoop(template_path, node.lineno)
     elif type(node) not in _ALLOWED_NODE_TYPES:
-        yield node, type(node).__name__
+        yield RefusedNode(template_path, node.lineno, type(node).__name__)
     for child in node.iter_child_nodes():
         if not _is_template_name(node, child):
-            yield from _find_refused_nodes(child)
+            yield from _find_logic_constructs_under(template_path, child)
 
 
 def _is_template_name(node: nodes.Node, child: nodes.Node) -> bool:
