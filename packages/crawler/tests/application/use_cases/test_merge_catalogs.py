@@ -7,7 +7,7 @@ import pytest
 from p2pwatch.application.ports.driving.catalog_merger import ListedSourceCatalog, NewCatalog
 from p2pwatch.application.use_cases.merge_catalogs import MergeCatalogs
 from p2pwatch.domain.catalog_copy_error import CatalogCopyError
-from p2pwatch.domain.merge_error import MergeError
+from p2pwatch.domain.merge_error import MergeError, OutputIsSourceError
 from tests.fakes.adapters.driven.fake_catalog_copier import FakeCatalogCopier
 from tests.fakes.adapters.driven.fake_catalog_finder import FakeCatalogFinder
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
@@ -90,14 +90,12 @@ def test_an_output_that_is_also_a_source_is_refused_forced_or_not(force: bool) -
     )
     catalog_copier = FakeCatalogCopier()
 
-    with pytest.raises(
-        MergeError,
-        match=rf"^output is one of the source catalogs: {spelled_otherwise} \(merge into it ",
-    ):
+    with pytest.raises(OutputIsSourceError) as raised:
         MergeCatalogs(catalog_finder, catalog_copier, FakeLogger()).merge_catalogs(
             [_A, _B], NewCatalog(spelled_otherwise, force=force)
         )
 
+    assert raised.value.output == spelled_otherwise
     assert catalog_copier.copies == []
 
 
