@@ -8,6 +8,9 @@ DEFAULT_CONFIG_PATH = PurePath("deploy/crawler.yml")
 DEFAULT_TARGETS_PATH = PurePath("deploy/targets.yml")
 DEFAULT_MATCHER_PATH = PurePath("deploy/matcher.yml")
 
+# The label of the one client a node drives: crawler.yml has no key to name it.
+AMULE_CLIENT_NAME = "amuled"
+
 DEFAULT_LOG_LEVEL = "INFO"
 DEFAULT_NOTIFICATION_TIMEOUT_SECONDS = 5.0
 DEFAULT_NODE_PREFIX = True
