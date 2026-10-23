@@ -22,12 +22,12 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
     SqliteObservationStore,
 )
 from p2pwatch.application.steps.decisions import rejudge_file
-from p2pwatch.application.steps.download_loop import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.application.steps.record_observations import record_observation
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability.events import DecisionChange, DecisionsRecorded
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.retraction import RETRACTED_TIER
+from p2pwatch.domain.wake_subject import WakeSubject
 from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_ticking_wall_clock import FakeTickingWallClock
@@ -145,7 +145,7 @@ async def test_new_decision_is_recorded_emitted_and_nudged(
         _event(_HASH_DL, _DL_NAME, DecisionChange("062A", _TITLE_A, None, "download"))
     ]
     assert event_emitter.node_ids == {_NODE}
-    assert waker.woken_subjects == [DOWNLOAD_WAKE_SUBJECT]
+    assert waker.woken_subjects == [WakeSubject.DOWNLOAD]
 
 
 @pytest.mark.asyncio
@@ -182,7 +182,7 @@ async def test_multi_segment_file_records_both_segments_then_is_idempotent(
             DecisionChange("062B", _TITLE_B, None, "download"),
         )
     ]
-    assert waker.woken_subjects == [DOWNLOAD_WAKE_SUBJECT, DOWNLOAD_WAKE_SUBJECT]
+    assert waker.woken_subjects == [WakeSubject.DOWNLOAD, WakeSubject.DOWNLOAD]
     again = await _record(
         _HASH_MULTI,
         _MULTI_NAME,
@@ -238,7 +238,7 @@ async def test_changed_decision_is_reappended_emitted_and_nudged(
         (DecisionChange("062A", _TITLE_A, None, "notify"),),
         (DecisionChange("062A", _TITLE_A, "notify", "download"),),
     ]
-    assert waker.woken_subjects == [DOWNLOAD_WAKE_SUBJECT]
+    assert waker.woken_subjects == [WakeSubject.DOWNLOAD]
 
 
 @pytest.mark.asyncio

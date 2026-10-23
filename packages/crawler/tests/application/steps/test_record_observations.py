@@ -11,11 +11,11 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
     SqliteObservationStore,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
-from p2pwatch.application.steps.download_loop import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.application.steps.record_observations import record_observation
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability.events import ObservationRecorded
 from p2pwatch.domain.observation import ReportedFile
+from p2pwatch.domain.wake_subject import WakeSubject
 from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_time import FakeTime
@@ -137,7 +137,7 @@ async def test_new_verdict_is_persisted_and_nudged(
     assert observation_node_ids(catalog_connection) == decision_node_ids(catalog_connection)
     assert decision_node_ids(catalog_connection) == {_NODE}
     assert event_emitter.node_ids == {_NODE}
-    assert waker.woken_subjects == [DOWNLOAD_WAKE_SUBJECT]
+    assert waker.woken_subjects == [WakeSubject.DOWNLOAD]
 
 
 @pytest.mark.asyncio
@@ -245,7 +245,7 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
         ).fetchall()
     ]
     assert tiers == ["notify", "download"]
-    assert waker.woken_subjects == [DOWNLOAD_WAKE_SUBJECT]
+    assert waker.woken_subjects == [WakeSubject.DOWNLOAD]
 
 
 @pytest.mark.asyncio
@@ -301,7 +301,7 @@ async def test_signal_consumer_awaits_the_nudge(
     # on the subject and is woken by the post-commit wake.
     event_emitter = FakeEventEmitter()
     waker = FakeWaker()
-    waiter = asyncio.create_task(waker.wait(DOWNLOAD_WAKE_SUBJECT))
+    waiter = asyncio.create_task(waker.wait(WakeSubject.DOWNLOAD))
     await asyncio.sleep(0)
     assert not waiter.done()
     await record_observation(
@@ -349,7 +349,7 @@ async def test_download_tier_verdict_also_nudges_the_download_subject(
         node_id=_NODE,
     )
     assert changed == 1
-    assert waker.woken_subjects == [DOWNLOAD_WAKE_SUBJECT]
+    assert waker.woken_subjects == [WakeSubject.DOWNLOAD]
 
 
 @pytest.mark.asyncio

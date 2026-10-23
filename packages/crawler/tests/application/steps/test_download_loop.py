@@ -4,10 +4,10 @@ from datetime import timedelta
 import pytest
 
 from p2pwatch.application.steps.download_loop import (
-    DOWNLOAD_WAKE_SUBJECT,
     DownloadLoopDeps,
     download_loop,
 )
+from p2pwatch.domain.wake_subject import WakeSubject
 from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
@@ -82,7 +82,7 @@ async def test_loop_runs_a_cycle_then_sleeps_then_stops() -> None:
         while not fake_time.sleeps:
             await asyncio.sleep(0)
         shutdown.set()
-        waker.wake(DOWNLOAD_WAKE_SUBJECT)
+        waker.wake(WakeSubject.DOWNLOAD)
 
     await asyncio.gather(
         asyncio.wait_for(download_loop(deps, _NODE), timeout=2.0), stop_after_first_sleep()
@@ -97,15 +97,15 @@ async def test_nudge_wakes_the_loop_before_poll_expires() -> None:
     deps = _loop_deps(waker=waker, shutdown=shutdown, poll_interval=999.0)
 
     async def wake_then_stop() -> None:
-        while DOWNLOAD_WAKE_SUBJECT not in waker.waited_subjects:
+        while WakeSubject.DOWNLOAD not in waker.waited_subjects:
             await asyncio.sleep(0)
         shutdown.set()
-        waker.wake(DOWNLOAD_WAKE_SUBJECT)  # wakes the wait before the 999 s poll
+        waker.wake(WakeSubject.DOWNLOAD)  # wakes the wait before the 999 s poll
 
     await asyncio.gather(
         asyncio.wait_for(download_loop(deps, _NODE), timeout=2.0), wake_then_stop()
     )
-    assert DOWNLOAD_WAKE_SUBJECT in waker.waited_subjects
+    assert WakeSubject.DOWNLOAD in waker.waited_subjects
 
 
 @pytest.mark.asyncio
@@ -128,18 +128,18 @@ async def test_nudge_wins_and_cancels_the_pending_sleep() -> None:
     waker = FakeWaker()
     deps = _loop_deps(waker=waker, shutdown=shutdown)
     deps.monotonic_clock = FakeBlockingMonotonicClock()
-    waker.wake(DOWNLOAD_WAKE_SUBJECT)  # wake already armed → wait() returns at once
+    waker.wake(WakeSubject.DOWNLOAD)  # wake already armed → wait() returns at once
 
     async def stop_when_waited() -> None:
-        while DOWNLOAD_WAKE_SUBJECT not in waker.waited_subjects:
+        while WakeSubject.DOWNLOAD not in waker.waited_subjects:
             await asyncio.sleep(0)
         shutdown.set()
-        waker.wake(DOWNLOAD_WAKE_SUBJECT)
+        waker.wake(WakeSubject.DOWNLOAD)
 
     await asyncio.gather(
         asyncio.wait_for(download_loop(deps, _NODE), timeout=2.0), stop_when_waited()
     )
-    assert DOWNLOAD_WAKE_SUBJECT in waker.waited_subjects
+    assert WakeSubject.DOWNLOAD in waker.waited_subjects
 
 
 @pytest.mark.asyncio
@@ -154,7 +154,7 @@ async def test_loop_cancelled_mid_wait_propagates_cleanly() -> None:
     deps.monotonic_clock = FakeBlockingMonotonicClock()
     task = asyncio.ensure_future(download_loop(deps, _NODE))
     # wait until the loop is parked in _sleep_or_wake (wake_task has called wait())
-    while DOWNLOAD_WAKE_SUBJECT not in waker.waited_subjects:
+    while WakeSubject.DOWNLOAD not in waker.waited_subjects:
         await asyncio.sleep(0)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):

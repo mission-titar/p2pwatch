@@ -25,10 +25,10 @@ from p2pwatch.application.ports.driven.event_emitter import EventEmitter
 from p2pwatch.application.ports.driven.observation_reader import ObservationReader
 from p2pwatch.application.ports.driven.waker import Waker
 from p2pwatch.application.ports.driven.wall_clock import WallClock
-from p2pwatch.application.steps.download_loop import DOWNLOAD_WAKE_SUBJECT
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.observability.events import DecisionChange, DecisionsRecorded
 from p2pwatch.domain.retraction import RETRACTED_TIER
+from p2pwatch.domain.wake_subject import WakeSubject
 
 
 async def rejudge_file(
@@ -74,7 +74,7 @@ async def rejudge_file(
         decision_writer.record_decision(file, decision, wall_clock.now(), node_id)
         changes.append(change(decision.target_id, decision.tier))
         if decision.tier == "download":
-            waker.wake(DOWNLOAD_WAKE_SUBJECT)
+            waker.wake(WakeSubject.DOWNLOAD)
     for target_id in sorted(persisted):
         if persisted[target_id].tier == RETRACTED_TIER or target_id in fresh_ids:
             continue

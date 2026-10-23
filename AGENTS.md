@@ -192,7 +192,7 @@ a function does.
 | `query answer` | `QueryAnswer`, a console query's columns and first rows, each cell as text; `QueryFailure` when it gave none | `result` |
 | `response model` | what a driving port returns, named from its use case's verb: `FileListing`, `NodeDescription` | `result`, `view` |
 | `display` | a `<Thing>Display`, the view model a webui template renders, its values already text | `view` |
-| `wake` | `Waker` wakes the loops waiting on a subject | `signal`, `nudge` |
+| `wake` | `Waker` wakes the loop waiting on a `WakeSubject` | `signal`, `nudge`, a string subject |
 | `run state` | whether the crawler searches or idles, and whether its shutdown was requested: `RunStateWriter` sets it, `RunStateReader` reads whether it idles | `control` |
 | `store` | one object implementing a `<Thing>Writer` and its `<Thing>Reader` over one state, the reader reading what the writer wrote: a fake's is `Fake<Thing>Store` | a fake for each port of the pair |
 | `record`, `set` | a `Writer`'s two verbs: `record_` adds a fact and leaves the earlier ones (an observation, a decision, the node id written once), `set_` replaces a current value | `write_`, `save_`, `mark_`, `publish` |
