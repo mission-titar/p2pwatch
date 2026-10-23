@@ -19,8 +19,8 @@ the loops (no worker can write anymore), all within ``shutdown_deadline_seconds`
 import asyncio
 import logging
 import sys
-from collections.abc import Callable, Coroutine, Mapping
-from contextlib import AsyncExitStack
+from collections.abc import AsyncIterator, Callable, Coroutine, Mapping
+from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from datetime import timedelta
 from functools import partial
 from importlib.metadata import version
@@ -141,6 +141,18 @@ _REEVALUATION_PROGRESS_EVERY_FILES = 200
 def _print_progress(message: str) -> None:
     """Human shutdown line on stderr (spec §6: observable progress, outside logging)."""
     print(message, file=sys.stderr, flush=True)
+
+
+@asynccontextmanager
+async def resource_stack() -> AsyncIterator[AsyncExitStack]:
+    """The stack of the resources the crawler holds, closed on exit."""
+    resources = AsyncExitStack()
+    try:
+        yield resources
+    finally:
+        # Best effort after a fired deadline or a failed setup: its failures never mask the first.
+        with suppress(BaseException):
+            await resources.aclose()
 
 
 def _backoff_policy(config: CrawlerConfig) -> BackoffPolicy:
@@ -277,8 +289,8 @@ class CrawlerComposition(CrawlerRunner):
     ) -> None:
         """Opens the resources under ``PosixProcess``, runs ``CrawlerLifecycle`` to shutdown (§6).
 
-        Only the shutdown is bounded: an overrun raises ``TimeoutError``, and ``PosixProcess``
-        then closes what is left.
+        Only the shutdown is bounded: an overrun raises ``TimeoutError``, and the resource stack
+        then closes what is left, before ``PosixProcess`` gives the signals back.
         """
         config = load_config(Path(config_path), Path(targets_path), Path(matcher_path), self._env)
         crawler_config = config.crawler_config
@@ -298,7 +310,7 @@ class CrawlerComposition(CrawlerRunner):
         # On the crawler's OWN loop + events, so the webui thread changes it thread-safely.
         run_state_store = AsyncioRunStateStore(loop=loop, resumed=resumed, shutdown=shutdown)
         shutdown_requester = RequestShutdown(run_state_store)
-        async with PosixProcess(shutdown_requester) as stack:
+        async with PosixProcess(shutdown_requester), resource_stack() as stack:
             catalog_connection = open_catalog(crawler_config.catalog_db_path)
             stack.callback(catalog_connection.close)
             local_connection = open_local(crawler_config.local_db_path)
