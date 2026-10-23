@@ -74,13 +74,13 @@ class SqliteTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
 
     def record_queued(
         self, file: FileKey, target_id: str, size_bytes: int, queued_at: datetime
-    ) -> bool:
-        """INSERT of a ``queued`` download (dedup-safe). ``True`` if new, ``False`` if duplicate."""
+    ) -> None:
+        """INSERT of a ``queued`` download (dedup-safe: a duplicate is ignored)."""
         queued_at_iso = utc_iso(queued_at)
         with wrap_sqlite_errors():
             self._connection.execute("BEGIN IMMEDIATE")
             try:
-                cursor = self._connection.execute(
+                self._connection.execute(
                     _INSERT_QUEUED,
                     (
                         file.file_id,
@@ -97,7 +97,6 @@ class SqliteTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
                 with suppress(sqlite3.Error):
                     self._connection.execute("ROLLBACK")
                 raise
-        return cursor.rowcount == 1
 
     def set_state(
         self,

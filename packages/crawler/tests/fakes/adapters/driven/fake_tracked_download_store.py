@@ -51,17 +51,14 @@ class FakeTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
 
     def record_queued(
         self, file: FileKey, target_id: str, size_bytes: int, queued_at: datetime
-    ) -> bool:
+    ) -> None:
         if self._fail_record:
             raise StoreError("downloads write failed")
-        if file.native_id in self.states:
-            return False
         self.states[file.native_id] = DownloadState.QUEUED
         self._target_ids[file.native_id] = target_id
         self.sizes[file.native_id] = size_bytes
         self.queued_at[file.native_id] = queued_at
         self.latest_seen_at[file.native_id] = queued_at
-        return True
 
     def set_completed(self, file: FileKey, completed_at: datetime) -> None:
         if file.native_id in self._fail_set_completed_for:
