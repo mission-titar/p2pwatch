@@ -121,7 +121,7 @@ def test_resolve_rule_condition() -> None:
     assert matcher.matches(FileCandidate(filename="keroro seul.avi")) is False
 
 
-def test_token_ref_override_applies_min() -> None:
+def test_token_reference_override_applies_min() -> None:
     # significant title = {demoiselles, cambrioleuses} (2 words, "les" is a stopword).
     # "demoiselles" alone covers 1/2 = 0.5: 0.34 <= 0.5 (match) but 0.6 > 0.5 (no match).
     resolver = _resolver_from(
@@ -145,7 +145,7 @@ def test_token_ref_override_applies_min() -> None:
     assert strict.matches(candidate) is False
 
 
-def test_token_ref_override_applies_fuzz() -> None:
+def test_token_reference_override_applies_fuzz() -> None:
     # min_similarity override 0.99 via {token: title_hit, min_similarity: 0.99}: a typo
     # 'demoiseles'
     # (ratio ~0.95 vs 'demoiselles') is no longer counted as covered, so
@@ -171,7 +171,7 @@ def test_token_ref_override_applies_fuzz() -> None:
     assert lax.matches(typo) is True
 
 
-def test_token_ref_without_override_resolves_token_as_is() -> None:
+def test_token_reference_without_override_resolves_token_as_is() -> None:
     resolver = _resolver_from(
         {
             "tokens": {"title_hit": {"coverage": "title", "min_coverage": 0.6}},

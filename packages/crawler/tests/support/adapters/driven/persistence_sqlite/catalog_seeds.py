@@ -26,12 +26,12 @@ def seed_whole_episode(db: Path) -> None:
     """A single whole-episode file (hash a*32) satisfying BOTH segments 072A + 072B (two
     current decisions at tier ``download``): the core multi-target fixture (spec §9).
     Standalone: never combine with ``seed`` (same hash)."""
-    h = "a" * 32
+    native_id = "a" * 32
     with closing(sqlite3.connect(db)) as connection, connection:
-        insert_file(connection, h, 170_000_000)
+        insert_file(connection, native_id, 170_000_000)
         insert_observation(
             connection,
-            h,
+            native_id,
             "keroro_072.avi",
             observed_at="2026-07-01T10:00:00.000000+00:00",
             size_bytes=170_000_000,
@@ -40,7 +40,7 @@ def seed_whole_episode(db: Path) -> None:
         for tid in ("072A", "072B"):
             insert_decision(
                 connection,
-                h,
+                native_id,
                 tid,
                 "download",
                 rule_name="numero_nu_confirmed",
@@ -53,21 +53,21 @@ def seed_retracted(db: Path) -> None:
     per-target: a ``(hash, 063A, tier="retracted")`` marker appended after the real decision
     (the new per-target retraction model, spec §6). Its latest 063A row is a retraction, so
     it must be treated as unmatched everywhere."""
-    h = "c" * 32
+    native_id = "c" * 32
     with closing(sqlite3.connect(db)) as connection, connection:
-        insert_file(connection, h, 300)
+        insert_file(connection, native_id, 300)
         insert_observation(
             connection,
-            h,
+            native_id,
             "keroro_063.avi",
             observed_at="2026-06-22T09:00:00.000000+00:00",
             size_bytes=300,
             source_count=2,
         )
-        insert_decision(connection, h, "063A", "download", rule_name="id_segment_exact")
+        insert_decision(connection, native_id, "063A", "download", rule_name="id_segment_exact")
         insert_decision(
             connection,
-            h,
+            native_id,
             "063A",
             "retracted",
             rule_name="",

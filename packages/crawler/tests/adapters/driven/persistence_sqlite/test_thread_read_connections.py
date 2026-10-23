@@ -1,7 +1,7 @@
-"""Tests for the read-only connection provider (monolith-consolidation spec §7).
+"""Tests for ``ThreadReadConnections`` (monolith-consolidation spec §7).
 
 Folds the assertions of the deleted webui ``test_webui_db.py`` (RO-refuses-writes,
-``temp_store``, ``row_factory`` dict access, reads rows) plus the provider's
+``temp_store``, ``row_factory`` dict access, reads rows) plus its
 per-thread reuse and thread affinity.
 """
 
@@ -109,27 +109,27 @@ def test_thread_local_connection_is_none_in_a_thread_that_never_set_it() -> None
         connection.close()
 
 
-def test_provider_reuses_the_same_connection_within_one_thread(tmp_path: Path) -> None:
+def test_the_same_connection_is_reused_within_one_thread(tmp_path: Path) -> None:
     """Repeated ``connection()`` calls from one thread return the SAME object (warm cache)."""
     path = tmp_path / "catalog.db"
     _seed(path)
-    provider = ThreadReadConnections(path)
-    first = provider.connection()
+    thread_read_connections = ThreadReadConnections(path)
+    first = thread_read_connections.connection()
     try:
-        assert provider.connection() is first
+        assert thread_read_connections.connection() is first
     finally:
         first.close()
 
 
-def test_provider_gives_a_distinct_connection_per_thread(tmp_path: Path) -> None:
+def test_each_thread_gets_a_distinct_connection(tmp_path: Path) -> None:
     """Two different threads each get their OWN connection (thread affinity)."""
     path = tmp_path / "catalog.db"
     _seed(path)
-    provider = ThreadReadConnections(path)
+    thread_read_connections = ThreadReadConnections(path)
     connections: dict[str, sqlite3.Connection] = {}
 
     def worker(name: str) -> None:
-        connection = provider.connection()
+        connection = thread_read_connections.connection()
         connections[name] = connection
         connection.close()  # only its own thread may close it
 
@@ -148,13 +148,13 @@ def test_reused_connection_sees_data_committed_after_first_handout(tmp_path: Pat
     see the current committed snapshot, proving reuse is correct, not a stale snapshot."""
     path = tmp_path / "catalog.db"
     _seed(path)  # one row so far
-    provider = ThreadReadConnections(path)
+    thread_read_connections = ThreadReadConnections(path)
     writer = open_catalog(path)
-    reader = provider.connection()
+    reader = thread_read_connections.connection()
     try:
         assert reader.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 1
         insert_file(writer, _HASH_B, 20)
-        reused = provider.connection()
+        reused = thread_read_connections.connection()
         assert reused is reader
         assert reused.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 2
     finally:
@@ -162,21 +162,21 @@ def test_reused_connection_sees_data_committed_after_first_handout(tmp_path: Pat
         reader.close()
 
 
-def test_leaving_the_provider_closes_the_calling_threads_connection(tmp_path: Path) -> None:
+def test_leaving_the_context_closes_the_calling_threads_connection(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
     _seed(path)
-    with ThreadReadConnections(path) as provider:
-        first = provider.connection()
+    with ThreadReadConnections(path) as thread_read_connections:
+        first = thread_read_connections.connection()
     with pytest.raises(sqlite3.ProgrammingError, match="closed"):
         first.execute("SELECT 1")
-    reopened = provider.connection()  # a later read opens a fresh one
+    reopened = thread_read_connections.connection()  # a later read opens a fresh one
     try:
         assert reopened is not first
     finally:
         reopened.close()
 
 
-def test_leaving_the_provider_unused_opens_nothing(tmp_path: Path) -> None:
+def test_leaving_the_context_unused_opens_nothing(tmp_path: Path) -> None:
     with ThreadReadConnections(tmp_path / "never-opened.db"):
         pass
     assert not (tmp_path / "never-opened.db").exists()

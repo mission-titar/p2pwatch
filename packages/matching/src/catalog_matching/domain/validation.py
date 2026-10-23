@@ -76,9 +76,9 @@ def _parse_operand(raw: Any) -> Operand:
     if isinstance(raw, dict):
         if any(key in raw for key in _CONDITION_KEYS):
             return _parse_condition(raw)
-        # Treated as a token-ref (with or without the "token" key) - _parse_token_ref
+        # Treated as a token reference (with or without the "token" key): _parse_token_reference
         # will raise MatchingConfigError if the "token" key is missing or invalid.
-        return _parse_token_ref(raw)
+        return _parse_token_reference(raw)
     raise MatchingConfigError(f"operand of invalid type: {type(raw).__name__} ({raw!r})")
 
 
@@ -101,7 +101,7 @@ def _refuse_renamed_coverage_keys(mapping: dict[str, Any], error_label: str) -> 
             )
 
 
-def _parse_token_ref(raw: dict[str, Any]) -> TokenReference:
+def _parse_token_reference(raw: dict[str, Any]) -> TokenReference:
     name = raw.get("token")
     if not isinstance(name, str):
         raise MatchingConfigError(f"operand {{token: …}} without a valid token name: {raw!r}")
@@ -166,9 +166,11 @@ def _parse_fragments(raw: Any) -> dict[str, str]:
     for name, text in fragments.items():
         if name in TARGET_PLACEHOLDERS:
             raise MatchingConfigError(f"fragment {name!r} collides with a target placeholder")
-        for ref in PLACEHOLDER.findall(text):
-            if ref in fragments:
-                raise MatchingConfigError(f"fragment {name!r} references fragment {ref!r}")
+        for fragment_name in PLACEHOLDER.findall(text):
+            if fragment_name in fragments:
+                raise MatchingConfigError(
+                    f"fragment {name!r} references fragment {fragment_name!r}"
+                )
     return fragments
 
 
@@ -177,11 +179,14 @@ def _expand_fragments(pattern: str, fragments: dict[str, str]) -> str:
     return PLACEHOLDER.sub(lambda m: fragments.get(m.group(1), m.group(0)), pattern)
 
 
-def _parse_token_def(token_name: str, raw: Any, fragments: dict[str, str]) -> TokenDefinition:
-    """Dispatch of a token def: composite (all/any/not) or leaf (4 types).
+def _parse_token_definition(
+    token_name: str, raw: Any, fragments: dict[str, str]
+) -> TokenDefinition:
+    """Dispatch of a token definition: composite (all/any/not) or leaf (4 types).
 
-    Reads ALL the def's ancillary keys (``flags`` of regex, ``min_coverage``/``min_similarity``
-    of coverage, ``min``/``max`` of attr_between), not only the type-key.
+    Reads ALL the definition's ancillary keys (``flags`` of regex,
+    ``min_coverage``/``min_similarity`` of coverage, ``min``/``max`` of attr_between), not only
+    the type-key.
     """
     mapping = _require_mapping(raw, "token definition")
     if any(key in mapping for key in _CONDITION_KEYS):
@@ -266,7 +271,7 @@ def parse_matcher_config(raw: dict[str, Any]) -> MatcherConfig:
     tokens_raw = _require_mapping(raw.get("tokens", {}), "'tokens' section")
     tokens: dict[str, TokenDefinition] = {}
     for token_name, token_raw in tokens_raw.items():
-        tokens[str(token_name)] = _parse_token_def(str(token_name), token_raw, fragments)
+        tokens[str(token_name)] = _parse_token_definition(str(token_name), token_raw, fragments)
     rules_raw = raw.get("rules", [])
     if not isinstance(rules_raw, list):
         raise MatchingConfigError(f"'rules' section: list expected, got {type(rules_raw).__name__}")
@@ -304,47 +309,47 @@ def _operand_token_names(operand: Operand) -> tuple[str, ...]:
     if isinstance(operand, NotDefinition):
         return _operand_token_names(operand.operand)
     # AllDefinition | AnyDefinition
-    refs: list[str] = []
+    token_names: list[str] = []
     for child in operand.operands:
-        refs.extend(_operand_token_names(child))
-    return tuple(refs)
+        token_names.extend(_operand_token_names(child))
+    return tuple(token_names)
 
 
-def _def_token_names(token_def: TokenDefinition) -> tuple[str, ...]:
-    """Names of tokens directly referenced by a def (empty for a leaf)."""
-    if isinstance(token_def, AllDefinition | AnyDefinition):
-        refs: list[str] = []
-        for child in token_def.operands:
-            refs.extend(_operand_token_names(child))
-        return tuple(refs)
-    if isinstance(token_def, NotDefinition):
-        return _operand_token_names(token_def.operand)
+def _definition_token_names(token_definition: TokenDefinition) -> tuple[str, ...]:
+    """Names of tokens directly referenced by a definition (empty for a leaf)."""
+    if isinstance(token_definition, AllDefinition | AnyDefinition):
+        token_names: list[str] = []
+        for child in token_definition.operands:
+            token_names.extend(_operand_token_names(child))
+        return tuple(token_names)
+    if isinstance(token_definition, NotDefinition):
+        return _operand_token_names(token_definition.operand)
     return ()
 
 
-def _operand_token_refs(operand: Operand) -> tuple[TokenReference, ...]:
-    """All TokenRefs (with their overrides) reachable from an operand."""
+def _operand_token_references(operand: Operand) -> tuple[TokenReference, ...]:
+    """All TokenReferences (with their overrides) reachable from an operand."""
     if isinstance(operand, TokenReference):
         return (operand,)
     if isinstance(operand, NotDefinition):
-        return _operand_token_refs(operand.operand)
+        return _operand_token_references(operand.operand)
     if isinstance(operand, AllDefinition | AnyDefinition):
-        refs: list[TokenReference] = []
+        token_references: list[TokenReference] = []
         for child in operand.operands:
-            refs.extend(_operand_token_refs(child))
-        return tuple(refs)
+            token_references.extend(_operand_token_references(child))
+        return tuple(token_references)
     return ()  # str (bare name) -> no TokenReference
 
 
-def _definition_token_references(token_def: TokenDefinition) -> tuple[TokenReference, ...]:
-    """All TokenRefs of a composite def (empty for a leaf)."""
-    if isinstance(token_def, AllDefinition | AnyDefinition):
-        refs: list[TokenReference] = []
-        for child in token_def.operands:
-            refs.extend(_operand_token_refs(child))
-        return tuple(refs)
-    if isinstance(token_def, NotDefinition):
-        return _operand_token_refs(token_def.operand)
+def _definition_token_references(token_definition: TokenDefinition) -> tuple[TokenReference, ...]:
+    """All TokenReferences of a composite definition (empty for a leaf)."""
+    if isinstance(token_definition, AllDefinition | AnyDefinition):
+        token_references: list[TokenReference] = []
+        for child in token_definition.operands:
+            token_references.extend(_operand_token_references(child))
+        return tuple(token_references)
+    if isinstance(token_definition, NotDefinition):
+        return _operand_token_references(token_definition.operand)
     return ()
 
 
@@ -354,32 +359,33 @@ def _check_overrides_only_on_coverage(config: MatcherConfig) -> None:
     Checked HERE (not at parsing) so as not to depend on the definition order: a forward
     reference to a coverage token must be accepted.
     """
-    refs: list[TokenReference] = []
-    for token_def in config.tokens.values():
-        refs.extend(_definition_token_references(token_def))
+    token_references: list[TokenReference] = []
+    for token_definition in config.tokens.values():
+        token_references.extend(_definition_token_references(token_definition))
     for rule in config.rules:
-        refs.extend(_operand_token_refs(rule.condition))
-    for ref in refs:
-        if (ref.min_coverage is not None or ref.min_similarity is not None) and not isinstance(
-            config.tokens.get(ref.name), CoverageDefinition
-        ):
+        token_references.extend(_operand_token_references(rule.condition))
+    for token_reference in token_references:
+        if (
+            token_reference.min_coverage is not None or token_reference.min_similarity is not None
+        ) and not isinstance(config.tokens.get(token_reference.name), CoverageDefinition):
             raise MatchingConfigError(
-                f"min_coverage/min_similarity override forbidden on non-coverage token {ref.name!r}"
+                "min_coverage/min_similarity override forbidden on non-coverage token "
+                f"{token_reference.name!r}"
             )
 
 
 def _check_references_exist(config: MatcherConfig) -> None:
     """Every reference (in a composite token OR a rule) must exist."""
     known = set(config.tokens)
-    for token_def in config.tokens.values():
-        for ref in _def_token_names(token_def):
-            if ref not in known:
-                raise UnknownTokenError(f"reference to an unknown token: {ref!r}")
+    for token_definition in config.tokens.values():
+        for token_name in _definition_token_names(token_definition):
+            if token_name not in known:
+                raise UnknownTokenError(f"reference to an unknown token: {token_name!r}")
     for rule in config.rules:
-        for ref in _operand_token_names(rule.condition):
-            if ref not in known:
+        for token_name in _operand_token_names(rule.condition):
+            if token_name not in known:
                 raise UnknownTokenError(
-                    f"rule {rule.name!r}: reference to an unknown token: {ref!r}"
+                    f"rule {rule.name!r}: reference to an unknown token: {token_name!r}"
                 )
 
 
@@ -401,7 +407,10 @@ def _check_acyclic(config: MatcherConfig, max_depth: int) -> None:
     ``max_depth`` is already a depth violation, raised cleanly here (avoids a Python
     ``RecursionError`` on a pathological chain).
     """
-    graph = {name: _def_token_names(token_def) for name, token_def in config.tokens.items()}
+    graph = {
+        name: _definition_token_names(token_definition)
+        for name, token_definition in config.tokens.items()
+    }
     visiting: set[str] = set()
     done: set[str] = set()
     stack: list[str] = []
@@ -417,8 +426,10 @@ def _check_acyclic(config: MatcherConfig, max_depth: int) -> None:
             raise DepthExceededError(f"resolution depth > {max_depth} (chain: … -> {tail})")
         visiting.add(name)
         stack.append(name)
-        for ref in graph.get(name, ()):  # ref exists (checked by _check_references_exist)
-            walk(ref)
+        for token_name in graph.get(
+            name, ()
+        ):  # token_name exists (checked by _check_references_exist)
+            walk(token_name)
         stack.pop()
         visiting.discard(name)
         done.add(name)
@@ -429,14 +440,19 @@ def _check_acyclic(config: MatcherConfig, max_depth: int) -> None:
 
 def _max_resolution_depth(config: MatcherConfig) -> int:
     """Maximum depth of a token (leaf = 1). Assumes the graph is acyclic."""
-    graph = {name: _def_token_names(token_def) for name, token_def in config.tokens.items()}
+    graph = {
+        name: _definition_token_names(token_definition)
+        for name, token_definition in config.tokens.items()
+    }
     memo: dict[str, int] = {}
 
     def depth(name: str) -> int:
         if name in memo:
             return memo[name]
-        refs = graph.get(name, ())
-        token_depth = 1 if not refs else 1 + max(depth(ref) for ref in refs)
+        token_names = graph.get(name, ())
+        token_depth = (
+            1 if not token_names else 1 + max(depth(token_name) for token_name in token_names)
+        )
         memo[name] = token_depth
         return token_depth
 
@@ -445,19 +461,19 @@ def _max_resolution_depth(config: MatcherConfig) -> int:
 
 def _check_regexes_compile(config: MatcherConfig) -> None:
     """Each RegexDefinition interpolates (known placeholders), compiles under ``re`` (cf. §8.4)."""
-    for name, token_def in config.tokens.items():
-        if not isinstance(token_def, RegexDefinition):
+    for name, token_definition in config.tokens.items():
+        if not isinstance(token_definition, RegexDefinition):
             continue
-        if "segment" in PLACEHOLDER.findall(token_def.pattern):
+        if "segment" in PLACEHOLDER.findall(token_definition.pattern):
             raise MatchingConfigError(
                 f"token {name!r}: placeholder '{{segment}}' was renamed '{{letter}}', "
                 "rename it in matcher.yml"
             )
         try:
-            pattern = interpolate(token_def.pattern, _PROBE_TARGET)
+            pattern = interpolate(token_definition.pattern, _PROBE_TARGET)
         except InterpolationError as exc:
             raise MatchingConfigError(f"token {name!r}: invalid interpolation: {exc}") from exc
-        if "i" in token_def.flags:
+        if "i" in token_definition.flags:
             pattern = "(?i)" + pattern
         try:
             re.compile(pattern, re.ASCII)

@@ -2,7 +2,7 @@
 
 Each connection is opened in REAL autocommit (``autocommit=True``, Python ≥ 3.12):
 transactions are EXPLICIT (``BEGIN``/``COMMIT``/``ROLLBACK`` written by the
-repositories), no implicit isolation. Opening PRAGMAs (spec §3):
+stores), no implicit isolation. Opening PRAGMAs (spec §3):
 ``journal_mode=WAL`` - REQUIRED: ``:memory:`` does not carry it (it answers ``memory``)
 and is therefore refused outright; the tests use real files (spec §8) -
 ``foreign_keys=ON``, and ``recursive_triggers=ON`` (without which ``INSERT OR REPLACE``
@@ -11,7 +11,7 @@ crosses the append-only triggers, spec §3 post-review amendment).
 The migration runner applies the ``NNNN_*.sql`` scripts embedded in the package and tracks
 them in ``PRAGMA user_version`` (see ``_apply_migrations``).
 
-This module also carries the repositories' timestamp format (``utc_iso``): ISO-8601 UTC as
+This module also carries the stores' timestamp format (``utc_iso``): ISO-8601 UTC as
 TEXT (spec §3), FIXED microseconds so that lexicographic order IS chronological order (the FIFO
 claim sorts on ``enqueued_at``).
 """

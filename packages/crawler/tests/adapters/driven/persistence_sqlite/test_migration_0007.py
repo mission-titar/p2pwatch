@@ -127,7 +127,7 @@ def test_a_mapped_result_reuses_the_variant_0007_migrated_from_its_old_row(
         "media": {"duration_seconds": 1474, "bitrate_kilobits_per_second": 1200, "codec": "xvid"},
         "status": "mystère",
     }
-    # The same values as the pre-0007 mapper and repository stored them.
+    # The same values as the pre-0007 mapper and store stored them.
     old_meta = '[["rating", "0"], ["status", "mystère"]]'
     path = tmp_path / "catalog.db"
     _old_catalog(path, _with(_FULL, raw_meta=old_meta))

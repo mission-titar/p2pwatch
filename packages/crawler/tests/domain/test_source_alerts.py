@@ -22,7 +22,7 @@ def _useful_until(before_round: timedelta) -> EarlierPoints:
 def test_a_source_never_useful_turning_useful_is_useful_for_the_first_time(
     role: SourceRole,
 ) -> None:
-    # No earlier point, or only unknown ones: the repository answers the same (D5).
+    # No earlier point, or only unknown ones: the store answers the same (D5).
     assert source_alert(role, _NEVER, _ROUND, _AFTER) == FirstUseful()
 
 
@@ -54,6 +54,6 @@ def test_a_source_known_for_the_last_time_exactly_at_the_threshold_raises_nothin
 
 
 def test_a_useful_history_without_an_end_raises_nothing() -> None:
-    # The repository never answers so; the decision stays silent rather than guess an absence.
+    # The store never answers so; the decision stays silent rather than guess an absence.
     earlier = EarlierPoints(has_useful_point=True, latest_known_at=None)
     assert source_alert(SourceRole.QUEUED, earlier, _ROUND, _AFTER) is None

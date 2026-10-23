@@ -19,23 +19,23 @@ from catalog_matching.domain.config import (
 )
 
 
-def test_keyword_def_holds_phrase() -> None:
+def test_keyword_definition_holds_phrase() -> None:
     assert KeywordDefinition(phrase="keroro").phrase == "keroro"
 
 
-def test_regex_def_defaults_flags_to_i() -> None:
+def test_regex_definition_defaults_flags_to_i() -> None:
     assert RegexDefinition(pattern="teletoon").flags == "i"
     assert RegexDefinition(pattern="teletoon", flags="").flags == ""
 
 
-def test_coverage_def_defaults() -> None:
+def test_coverage_definition_defaults() -> None:
     cov = CoverageDefinition(reference="title", min_coverage=0.6)
     assert cov.reference == "title"
     assert cov.min_coverage == 0.6
     assert cov.min_similarity == 0.85
 
 
-def test_attr_between_def_holds_bounds() -> None:
+def test_attribute_between_definition_holds_bounds() -> None:
     ab = AttributeBetweenDefinition(attr="size_mib", min_bound=30.0, max_bound=600.0)
     assert ab.attr == "size_mib"
     assert ab.min_bound == 30.0
@@ -51,7 +51,7 @@ def test_composite_defs_hold_operands() -> None:
     assert NotDefinition(operand="keroro").operand == "keroro"
 
 
-def test_token_ref_overrides_default_to_none() -> None:
+def test_token_reference_overrides_default_to_none() -> None:
     ref = TokenReference(name="title_hit")
     assert ref.name == "title_hit"
     assert ref.min_coverage is None

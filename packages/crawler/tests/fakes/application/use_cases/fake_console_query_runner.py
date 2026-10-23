@@ -16,12 +16,12 @@ class RunConsoleQueryCall:
 
 
 class FakeConsoleQueryRunner(ConsoleQueryRunner):
-    """Answers any query with the outcome it is given, and keeps each call's arguments."""
+    """Answers any query with the run it is given, and keeps each call's arguments."""
 
-    def __init__(self, console_query_outcome: ConsoleQueryRun) -> None:
-        self._console_query_outcome = console_query_outcome
+    def __init__(self, console_query_run: ConsoleQueryRun) -> None:
+        self._console_query_run = console_query_run
         self.calls: list[RunConsoleQueryCall] = []
 
     def run_console_query(self, database: ConsoleDatabase, sql: str) -> ConsoleQueryRun:
         self.calls.append(RunConsoleQueryCall(database, sql))
-        return self._console_query_outcome
+        return self._console_query_run

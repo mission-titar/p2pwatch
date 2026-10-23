@@ -66,6 +66,7 @@ def register_sql_functions(connection: sqlite3.Connection) -> None:
 
     # Memoized for the connection's life, the crawler's included: one entry per variant 0007 wrote.
     create_memoized_function(connection, "content_hash", 8, content_hash)
+    # The SQL name keeps its old spelling: migration catalog/0007, which never changes, calls it.
     create_memoized_function(connection, "fold_raw_meta", 4, fold_stored)
     connection.create_function("file_id", 2, file_id, deterministic=True)
     # Never memoized: every observation has its own stamp, the memo would hold them all.

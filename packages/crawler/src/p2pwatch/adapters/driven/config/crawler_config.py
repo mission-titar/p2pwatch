@@ -85,7 +85,7 @@ class NotificationTarget:
 
 @dataclass(frozen=True)
 class DownloadConfig:
-    """Download policy and wiring, present ⟺ ``enabled``. ``output_dir`` is measured with
+    """Download policy and wiring, present ⟺ ``enabled``. ``output_directory`` is measured with
     ``statvfs`` and never opened: amuled writes the finished file, nothing here touches it."""
 
     poll_interval_seconds: float

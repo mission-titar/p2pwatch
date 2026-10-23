@@ -155,7 +155,8 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
   lignes de démarrage `crawler started` et `download enabled` journalisent sous
   `p2pwatch.application.crawler_lifecycle`, la version au démarrage sous
   `p2pwatch.composition.crawler_composition` et le dispatcher des événements sous
-  `p2pwatch.adapters.driven.observability.dispatcher`. La recherche ne journalise plus `client <nom> connected` ni l'avertissement
+  `p2pwatch.adapters.driven.observability.dispatcher`. La recherche ne journalise plus
+  `client <nom> connected` ni l'avertissement
   `client <nom> unreachable (...): reconnect backoff ...` : la session amuleapi s'ouvre d'elle-même
   au premier appel, et un amuled injoignable reste signalé par
   `client <nom> unreachable (...), client down, backoff ...`. Le port-sync,

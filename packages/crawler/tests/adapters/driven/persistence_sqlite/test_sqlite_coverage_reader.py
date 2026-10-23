@@ -9,8 +9,12 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_coverage_reader import S
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadReadConnections,
 )
+from tests.support.adapters.driven.persistence_sqlite.catalog_seeds import (
+    seed,
+    seed_retracted,
+    seed_whole_episode,
+)
 from tests.support.catalog_rows import insert_decision, insert_file
-from tests.support.catalog_seeds import seed, seed_retracted, seed_whole_episode
 
 # ---------------------------------------------------------------------------
 # Tests: coverage

@@ -8,7 +8,7 @@ rules). PURE domain: no I/O, no YAML library import. Construction from parsed YA
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
-# --- LEAF token defs (4 types, cf. spec §8.2) ---
+# --- LEAF token definitions (4 types, cf. spec §8.2) ---
 
 
 @dataclass(frozen=True)
@@ -93,7 +93,7 @@ class TokenReference:
     min_similarity: float | None = None
 
 
-# Union of token defs nameable in the `tokens` table.
+# Union of token definitions nameable in the `tokens` table.
 TokenDefinition = (
     KeywordDefinition
     | RegexDefinition

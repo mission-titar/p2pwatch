@@ -182,7 +182,7 @@ class CrawlerComposition(CrawlerRunner):
         config: LoadedConfig,
         stack: AsyncExitStack,
         status_reading_store: InMemoryStatusReadingStore,
-        run_state: AsyncioRunStateStore,
+        run_state_store: AsyncioRunStateStore,
         shutdown_requester: RequestShutdown,
         wall_clock: WallClock,
         monotonic_clock: MonotonicClock,
@@ -191,7 +191,7 @@ class CrawlerComposition(CrawlerRunner):
         the parsed config (immutable), the clocks (stateless), the status reading store (whole
         snapshots swapped, never mutated) and the run state (every change scheduled on the
         crawler's loop).
-        It reads through its OWN ``ThreadReadConnections``s, one connection per thread. Its stop is
+        It reads through its OWN ``ThreadReadConnections``, one connection per thread. Its stop is
         registered on ``stack`` so it runs during the normal LIFO unwind, AFTER the loops stop."""
         crawler_config = config.crawler_config
         webui_package_directory = Path(p2pwatch.adapters.driving.webui.__file__).parent
@@ -204,14 +204,14 @@ class CrawlerComposition(CrawlerRunner):
             target_segments=config.targets,
             templates_directory=webui_package_directory / "templates",
             static_directory=webui_package_directory / "static",
-            crawl_pauser=PauseCrawl(run_state),
-            crawl_resumer=ResumeCrawl(run_state),
+            crawl_pauser=PauseCrawl(run_state_store),
+            crawl_resumer=ResumeCrawl(run_state_store),
             shutdown_requester=shutdown_requester,
             crawl_summarizer=SummarizeCrawl(
                 target_ids=tuple(target.target_id for target in config.targets),
                 coverage_reader=SqliteCoverageReader(catalog_read_connections),
                 node_state_reader=node_state_reader,
-                run_state_reader=run_state,
+                run_state_reader=run_state_store,
                 status_reading_reader=status_reading_store,
                 monotonic_clock=monotonic_clock,
             ),
@@ -282,8 +282,8 @@ class CrawlerComposition(CrawlerRunner):
         resumed.set()
         loop = asyncio.get_running_loop()
         # On the crawler's OWN loop + events, so the webui thread changes it thread-safely.
-        run_state = AsyncioRunStateStore(loop=loop, resumed=resumed, shutdown=shutdown)
-        shutdown_requester = RequestShutdown(run_state)
+        run_state_store = AsyncioRunStateStore(loop=loop, resumed=resumed, shutdown=shutdown)
+        shutdown_requester = RequestShutdown(run_state_store)
         async with PosixProcess(shutdown_requester) as stack:
             catalog_connection = open_catalog(crawler_config.catalog_db_path)
             stack.callback(catalog_connection.close)
@@ -315,14 +315,14 @@ class CrawlerComposition(CrawlerRunner):
             # In-process webui (spec §5): own thread + loop, started EARLY (before the daemon client
             # + startup re-evaluation) so it is up promptly and stays isolated from the crawler's
             # synchronous work. Gated by ``webui.enabled``; a crash degrades (spec §17.1). Its
-            # graceful stop is on ``stack`` → runs at the normal shutdown unwind (after DB conns
-            # are pushed, so it stops the thread before those close during LIFO teardown).
+            # graceful stop is on ``stack`` → runs at the normal shutdown unwind (after the database
+            # connections are pushed, so it stops the thread before those close in LIFO teardown).
             if crawler_config.webui.enabled:
                 await self._start_webui(
                     config=config,
                     stack=stack,
                     status_reading_store=status_reading_store,
-                    run_state=run_state,
+                    run_state_store=run_state_store,
                     shutdown_requester=shutdown_requester,
                     wall_clock=wall_clock,
                     monotonic_clock=monotonic_clock,

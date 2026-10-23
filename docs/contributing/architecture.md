@@ -431,8 +431,8 @@ Invariants porteurs (à ne pas violer) :
   défaut) sans apparaître, la ligne devient `failed` avec la raison `lost`. L'absence se mesure en
   mémoire, sur l'horloge monotone : `DownloadDeps.loss_deadline_by_file` tient l'échéance de chaque
   téléchargement `queued` ou `downloading`, repoussée à chaque cycle où le client le liste. Chaque
-  cycle estampille aussi `last_seen_at` pour chaque fichier que `downloads()` liste, en file **ou**
-  partagé : au démarrage suivant, l'échéance repart de cette date, le temps écoulé borné à
+  cycle estampille aussi `latest_seen_at` pour chaque fichier que `downloads()` liste, en file
+  **ou** partagé : au démarrage suivant, l'échéance repart de cette date, le temps écoulé borné à
   `[0, lost_after]` par `remaining_wait` (`domain/persisted_wait.py`), si bien qu'une horloge
   reculée pendant l'arrêt n'allonge jamais l'attente au-delà de sa durée. C'est sûr parce
   qu'une entrée reste dans la file d'amuled même avec zéro source : une absence signifie vraiment
@@ -509,7 +509,10 @@ la carte des backoffs, désormais `backoff_states`, et la raison d'attente d'un 
 vérifie ou alloue, désormais `local_processing`. `local/0011` remplace `scheduler_state` par la
 table `backoff_states`, `STRICT`, une ligne par client ou canal en backoff : ses tentatives, le
 début de son attente en microsecondes et son délai. Les attentes en cours à la mise à niveau sont
-perdues, et chaque backoff repart de sa base.
+perdues, et chaque backoff repart de sa base. `catalog/0013` renomme `raw_meta` en `raw_metadata`
+dans `observation_variants` et `source_variants`, `local/0012` `downloads.last_seen_at` et
+`last_progress_at` en `latest_seen_at` et `latest_progress_at` : des `RENAME COLUMN`, comme
+`catalog/0012`, qui ne réécrivent aucune ligne.
 
 ### 8.1 Écrire une migration
 
@@ -587,7 +590,7 @@ l'intervalle, plus un tour au plus.
 
 ```mermaid
 flowchart LR
-  s["sources<br/>network, native_id"] --> v["source_variants<br/>file_id, name, software, role,<br/>contact_point, connectable,<br/>raw_meta, node_id"]
+  s["sources<br/>network, native_id"] --> v["source_variants<br/>file_id, name, software, role,<br/>contact_point, connectable,<br/>raw_metadata, node_id"]
   v --> o["source_observations<br/>observed_at, session_received_bytes"]
 ```
 
@@ -596,8 +599,8 @@ flowchart LR
   hash de 32 zéros, celui d'un pair qui ne l'a pas encore envoyé, ne fait pas une identité.
 - **`source_variants`**, un jeu de propriétés qu'un nœud a vu sur un fichier, `node_id` compris,
   dédupliqué par `content_hash`, comme `observation_variants`. `source_id` est `NULL` sans user
-  hash. `raw_meta` ne garde que les clés stables que l'adaptateur choisit : une vitesse, un rang de
-  file ou un compteur ferait une variante à chaque lecture. Aucune colonne ne porte l'adresse d'un
+  hash. `raw_metadata` ne garde que les clés stables que l'adaptateur choisit : une vitesse, un rang
+  de file ou un compteur ferait une variante à chaque lecture. Aucune colonne ne porte l'adresse d'un
   pair ; `contact_point` est celle du serveur eD2k de la source.
 - **`source_observations`**, un point par variante et par lecture, en microsecondes, avec
   `session_received_bytes`, le compteur d'octets qu'aMule tient pour ce client (reçus de lui tous
@@ -725,7 +728,7 @@ démon sont
 | Recherche (pure) | `domain/search/` (`keywords`, `backoff`) |
 | Matching | `packages/matching/src/catalog_matching/` (moteur + politique `deploy/matcher.yml`) |
 | Frontière amuleapi | `adapters/driven/amule_api/` (client / mapping / erreurs) ; ports `application/ports/driven/search_client.py`, `download_client.py`, `source_client.py` |
-| Persistance | `adapters/driven/persistence_sqlite/` (migrations `.sql`, repos) |
+| Persistance | `adapters/driven/persistence_sqlite/` (migrations `.sql`, magasins et lecteurs) |
 | Observabilité | `domain/observability/`, `adapters/driven/observability/` |
 | WebUI | `adapters/driving/webui/` (in-process, thread dédié) |
 | Conteneur d'aMule | `packages/amule/src/p2pwatch_amule/` (câblage : `composition/command_line.py` (`build_command_line`) ; le one-shot : la ligne de commande appelle le port `ContainerBooter`, implémenté par la composition `composition/boot_composition.py` (`BootComposition`), qui lit les variables puis lance le cas d'usage `application/use_cases/boot_container.py` ; le port-sync : la ligne de commande appelle le port `PortSyncLoopRunner`, implémenté par la composition `composition/port_sync_composition.py` (`PortSyncComposition`), qui assemble `application/port_sync_lifecycle.py`) ; image `packages/amule/Dockerfile`, services s6 sous `packages/amule/docker/services.d/` |

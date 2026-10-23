@@ -151,7 +151,7 @@ async def test_unchanged_row_is_evaluated_but_not_written(
 
 
 @pytest.mark.asyncio
-async def test_repository_error_on_one_row_is_absorbed_and_sweep_continues(
+async def test_store_error_on_one_row_is_absorbed_and_sweep_continues(
     observation_store: SqliteObservationStore,
     catalog_scan_reader: SqliteCatalogScanReader,
     decision_store: SqliteDecisionStore,
