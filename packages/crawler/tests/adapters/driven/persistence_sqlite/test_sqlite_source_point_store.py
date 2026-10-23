@@ -1,6 +1,5 @@
 """D4's and D5's reads of a source's history on a real catalog (source points spec, section 7)."""
 
-import dataclasses
 import sqlite3
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
@@ -38,11 +37,14 @@ def _points(
     *moments: datetime,
     role: str = "queued",
     native_id: str = _FILE,
-    user_hash: str = _USER,
+    user_hash: str | None = _USER,
+    name: str = "AnimuseeFMR",
     node_id: str = "n1",
     session_received_bytes: int = 0,
 ) -> None:
-    variant_id = insert_source_variant(catalog, native_id, user_hash, role=role, node_id=node_id)
+    variant_id = insert_source_variant(
+        catalog, native_id, user_hash, name=name, role=role, node_id=node_id
+    )
     for moment in moments:
         insert_source_point(
             catalog, variant_id, _us(moment), session_received_bytes=session_received_bytes
@@ -63,6 +65,66 @@ def catalog(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 @pytest.fixture
 def source_point_store(catalog: sqlite3.Connection) -> SqliteSourcePointStore:
     return SqliteSourcePointStore(catalog, timedelta(seconds=30))
+
+
+def _passing(key: SourceKey | None = _KEY, name: str = "AnimuseeFMR") -> SourceReading:
+    return SourceReading(key, name, None, None, None, None, (), 0)
+
+
+def _latest(
+    source_point_store: SqliteSourcePointStore,
+    reading: SourceReading,
+    since: datetime,
+    before: datetime,
+    *,
+    native_id: str = _FILE,
+    node_id: str = "n1",
+) -> LatestPoint | None:
+    file = FileKey(Network.ED2K, native_id)
+    return source_point_store.read_latest_point(file, reading, since, before, node_id)
+
+
+def test_the_latest_point_is_the_latest_since_the_window_opens_before_it_closes(
+    source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
+) -> None:
+    later = _T0 + timedelta(seconds=30)
+    _points(catalog, _T0, role="nothing_new", session_received_bytes=5)
+    _points(catalog, later, role="sending", session_received_bytes=7)
+    assert _latest(source_point_store, _passing(), _T0, later) == LatestPoint(
+        SourceRole.NOTHING_NEW, _T0, 5
+    )
+    assert _latest(source_point_store, _passing(), _T0 + timedelta(microseconds=1), later) is None
+    assert _latest(source_point_store, _passing(), _T0, later + timedelta(seconds=1)) == (
+        LatestPoint(SourceRole.SENDING, later, 7)
+    )
+
+
+def test_a_reading_without_identity_reads_only_its_name_without_identity(
+    source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
+) -> None:
+    before = _T0 + timedelta(seconds=30)
+    _points(catalog, _T0, role="nothing_new")
+    _points(catalog, _T0, role="sending", user_hash=None)
+    _points(catalog, _T0, role="standby", user_hash=None, name="Teammate")
+    assert _latest(source_point_store, _passing(_KEY, "Renamed"), _T0, before) == LatestPoint(
+        SourceRole.NOTHING_NEW, _T0, 0
+    )
+    assert _latest(source_point_store, _passing(None), _T0, before) == LatestPoint(
+        SourceRole.SENDING, _T0, 0
+    )
+    assert _latest(source_point_store, _passing(None, "Nobody"), _T0, before) is None
+
+
+def test_the_latest_point_reads_this_file_on_the_given_node_only(
+    source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
+) -> None:
+    before = _T0 + timedelta(seconds=30)
+    _points(catalog, _T0, role="sending", native_id=_OTHER_FILE)
+    _points(catalog, _T0, role="nothing_new", node_id="n2")
+    assert _latest(source_point_store, _passing(), _T0, before) is None
+    assert _latest(source_point_store, _passing(), _T0, before, node_id="n2") == LatestPoint(
+        SourceRole.NOTHING_NEW, _T0, 0
+    )
 
 
 def test_earlier_points_are_each_variants_latest_point_before_the_round(
@@ -171,27 +233,14 @@ def test_earlier_points_seek_this_sources_variants_whatever_the_node_holds(
     assert abs(large - small) <= small // 10
 
 
-def test_a_passing_state_seeks_this_sources_variants_whatever_the_node_holds(
+def test_the_latest_point_seeks_this_sources_variants_whatever_the_node_holds(
     source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
-    file = FileKey(Network.ED2K, _FILE)
-    reading = SourceReading(_KEY, "AnimuseeFMR", None, SourceRole.QUEUED, None, None, (), 0)
-    passing = dataclasses.replace(reading, role=None)
-    source_point_store.record_readings(file, [reading], _T0, "n1")
+    _points(catalog, _T0)
     _other_variants(catalog, range(100))
-    # The first passing call prepares the statements.
-    source_point_store.record_readings(file, [passing], _T0 + timedelta(seconds=30), "n1")
-    small = _steps(
-        catalog,
-        lambda: source_point_store.record_readings(
-            file, [passing], _T0 + timedelta(seconds=60), "n1"
-        ),
-    )
+    since, before = _T0, _T0 + timedelta(seconds=30)
+    _latest(source_point_store, _passing(), since, before)  # the first call prepares the statement
+    small = _steps(catalog, lambda: _latest(source_point_store, _passing(), since, before))
     _other_variants(catalog, range(100, 10_000))
-    large = _steps(
-        catalog,
-        lambda: source_point_store.record_readings(
-            file, [passing], _T0 + timedelta(seconds=90), "n1"
-        ),
-    )
+    large = _steps(catalog, lambda: _latest(source_point_store, _passing(), since, before))
     assert abs(large - small) <= small // 10

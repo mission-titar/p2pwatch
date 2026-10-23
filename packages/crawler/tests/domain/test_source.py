@@ -88,6 +88,10 @@ def test_each_role_belongs_to_its_group() -> None:
     }
 
 
+def _passing(session_received_bytes: int) -> SourceReading:
+    return SourceReading(None, "AnimuseeFMR", None, None, None, None, (), session_received_bytes)
+
+
 @pytest.mark.parametrize(
     ("previous", "carried"),
     [
@@ -96,13 +100,29 @@ def test_each_role_belongs_to_its_group() -> None:
         (SourceRole.NOTHING_NEW, SourceRole.NOTHING_NEW),
         (SourceRole.STANDBY, SourceRole.UNDETERMINED),
         (SourceRole.UNDETERMINED, SourceRole.UNDETERMINED),
-        (None, SourceRole.UNDETERMINED),
     ],
 )
 def test_a_passing_state_carries_the_group_of_the_latest_point(
-    previous: SourceRole | None, carried: SourceRole
+    previous: SourceRole, carried: SourceRole
 ) -> None:
-    assert carried_role(previous) is carried
+    assert carried_role(LatestPoint(previous, _T0, 5), _passing(5)) is carried
+
+
+def test_a_passing_state_without_a_latest_point_is_undetermined() -> None:
+    assert carried_role(None, _passing(0)) is SourceRole.UNDETERMINED
+
+
+@pytest.mark.parametrize(
+    ("session_received_bytes", "carried"),
+    [(9, SourceRole.QUEUED), (4, SourceRole.UNDETERMINED)],
+    ids=["a-higher-counter", "a-lower-counter"],
+)
+def test_a_passing_state_carries_nothing_once_its_client_was_recreated(
+    session_received_bytes: int, carried: SourceRole
+) -> None:
+    # aMule recreating the client restarts its session's received bytes.
+    latest = LatestPoint(SourceRole.QUEUED, _T0, 5)
+    assert carried_role(latest, _passing(session_received_bytes)) is carried
 
 
 def test_the_tolerance_lets_one_read_be_missed() -> None:

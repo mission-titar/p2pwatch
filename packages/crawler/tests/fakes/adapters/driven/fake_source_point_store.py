@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import datetime
+from typing import NoReturn
 
 from p2pwatch.application.ports.driven.source_point_reader import SourcePointReader
 from p2pwatch.application.ports.driven.source_point_writer import SourcePointWriter
@@ -41,6 +42,16 @@ class FakeSourcePointStore(SourcePointWriter, SourcePointReader):
             raise StoreError(f"record_readings({file.native_id}) failed")
         self.recorded.append((file.native_id, tuple(readings), read_at))
         return self._kept.get(file.native_id, ())
+
+    def read_latest_point(
+        self,
+        file: FileKey,
+        reading: SourceReading,
+        since: datetime,
+        before: datetime,
+        node_id: str,
+    ) -> NoReturn:
+        raise AssertionError("the step reads no latest point: the store carries the role")
 
     def read_earlier_points(
         self, source: SourceKey, before: datetime, node_id: str
