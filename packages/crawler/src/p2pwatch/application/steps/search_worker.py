@@ -122,35 +122,43 @@ class BackoffRegistry:
         self._deadline_by_key.pop(backoff_key, None)
 
 
-@dataclass
-class WorkerDeps:
-    """A worker's shared dependencies (composition assembles them once).
+class SearchWorker:
+    """Runs one client's search tasks; never closes the client, which composition owns.
 
-    ``backoff`` is the SHARED registry (same instance for all workers + the search tasks,
-    which persist it). Single writer on the event loop → no race (spec §3).
+    ``backoff`` is the registry every worker and the search tasks share.
     """
 
-    observation_writer: ObservationWriter
-    observation_reader: ObservationReader
-    decision_writer: DecisionWriter
-    decision_reader: DecisionReader
-    engine: MatchingEngine
-    waker: Waker
-    backoff: "BackoffRegistry"
-    observability_dispatcher: ObservabilityDispatcher
-    wall_clock: WallClock
-    logger: Logger
-    observation_logger: Logger  # record_observation's
-
-
-class SearchWorker:
-    """Runs one client's search tasks; never closes the client, which composition owns."""
-
-    def __init__(self, client_name: str, client: SearchClient, deps: WorkerDeps) -> None:
+    def __init__(
+        self,
+        *,
+        client_name: str,
+        client: SearchClient,
+        backoff: BackoffRegistry,
+        observation_writer: ObservationWriter,
+        observation_reader: ObservationReader,
+        decision_writer: DecisionWriter,
+        decision_reader: DecisionReader,
+        engine: MatchingEngine,
+        waker: Waker,
+        observability_dispatcher: ObservabilityDispatcher,
+        wall_clock: WallClock,
+        logger: Logger,
+        observation_logger: Logger,
+    ) -> None:
         self._client_name = client_name
         self._client_backoff_key = BackoffKey(client_name, None)
         self._client = client
-        self._deps = deps
+        self._backoff = backoff
+        self._observation_writer = observation_writer
+        self._observation_reader = observation_reader
+        self._decision_writer = decision_writer
+        self._decision_reader = decision_reader
+        self._engine = engine
+        self._waker = waker
+        self._observability_dispatcher = observability_dispatcher
+        self._wall_clock = wall_clock
+        self._logger = logger
+        self._observation_logger = observation_logger  # record_observation's
 
     @property
     def channels(self) -> tuple[str, ...]:
@@ -159,16 +167,15 @@ class SearchWorker:
 
     def time_until_ready(self, channel: str) -> timedelta:
         """How long until neither the client nor ``channel`` is backed off."""
-        backoff = self._deps.backoff
         return max(
-            backoff.time_until_retry(self._client_backoff_key),
-            backoff.time_until_retry(BackoffKey(self._client_name, channel)),
+            self._backoff.time_until_retry(self._client_backoff_key),
+            self._backoff.time_until_retry(BackoffKey(self._client_name, channel)),
         )
 
     async def _record_observations(self, channel: str, answer: SearchAnswer, node_id: str) -> int:
         """Per-obs pipeline; returns the number of CHANGED verdicts (logging). A
         ``StoreError`` per obs is ABSORBED inside ``record_observation`` (spec §7)."""
-        await self._deps.observability_dispatcher.dispatch(
+        await self._observability_dispatcher.dispatch(
             SearchExecuted(
                 self._client_name, channel, len(answer.reported_files), answer.skipped_result_count
             )
@@ -177,17 +184,17 @@ class SearchWorker:
         for reported_file in answer.reported_files:
             if await record_observation(
                 reported_file,
-                observation_writer=self._deps.observation_writer,
-                observation_reader=self._deps.observation_reader,
-                decision_writer=self._deps.decision_writer,
-                decision_reader=self._deps.decision_reader,
-                engine=self._deps.engine,
-                waker=self._deps.waker,
-                observability_dispatcher=self._deps.observability_dispatcher,
-                wall_clock=self._deps.wall_clock,
+                observation_writer=self._observation_writer,
+                observation_reader=self._observation_reader,
+                decision_writer=self._decision_writer,
+                decision_reader=self._decision_reader,
+                engine=self._engine,
+                waker=self._waker,
+                observability_dispatcher=self._observability_dispatcher,
+                wall_clock=self._wall_clock,
                 client_name=self._client_name,
                 channel=channel,
-                logger=self._deps.observation_logger,
+                logger=self._observation_logger,
                 node_id=node_id,
             ):
                 changed += 1
@@ -199,32 +206,32 @@ class SearchWorker:
         try:
             answer = await self._client.search(task.keyword, task.channel, SEARCH_BUDGET_SECONDS)
         except SearchFailedError as error:
-            delay = self._deps.backoff.record_failure(channel_backoff_key)
-            self._deps.logger.warning(
+            delay = self._backoff.record_failure(channel_backoff_key)
+            self._logger.warning(
                 "client %s channel %s failed (%s): backoff %.1fs",
                 self._client_name,
                 task.channel,
                 error,
                 delay.total_seconds(),
             )
-            await self._deps.observability_dispatcher.dispatch(
+            await self._observability_dispatcher.dispatch(
                 SearchFailed(self._client_name, task.channel)
             )
             return
         except ClientUnreachableError as error:
-            delay = self._deps.backoff.record_failure(self._client_backoff_key)
-            self._deps.logger.warning(
+            delay = self._backoff.record_failure(self._client_backoff_key)
+            self._logger.warning(
                 "client %s unreachable (%s), client down, backoff %.1fs",
                 self._client_name,
                 error,
                 delay.total_seconds(),
             )
-            await self._deps.observability_dispatcher.dispatch(ClientUnreachable(self._client_name))
+            await self._observability_dispatcher.dispatch(ClientUnreachable(self._client_name))
             return
         changed = await self._record_observations(task.channel, answer, node_id)
-        self._deps.backoff.reset(channel_backoff_key)
-        self._deps.backoff.reset(self._client_backoff_key)
-        self._deps.logger.info(
+        self._backoff.reset(channel_backoff_key)
+        self._backoff.reset(self._client_backoff_key)
+        self._logger.info(
             "client %s: '%s'/%s → %d verdict(s) changed",
             self._client_name,
             task.keyword,

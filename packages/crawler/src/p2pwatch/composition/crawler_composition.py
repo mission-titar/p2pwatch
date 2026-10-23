@@ -98,7 +98,6 @@ from p2pwatch.application.steps.search_worker import (
     BackoffPolicy,
     BackoffRegistry,
     SearchWorker,
-    WorkerDeps,
 )
 from p2pwatch.application.steps.status_loop import StatusLoopDeps, status_loop
 from p2pwatch.application.use_cases.describe_file import DescribeFile
@@ -367,24 +366,26 @@ class CrawlerComposition(CrawlerRunner):
                 monotonic_clock,
                 RandomJitterGenerator(jitter_seed=None),  # seeded by the system's entropy
             )
-            deps = WorkerDeps(
-                observation_writer=observation_store,
-                observation_reader=observation_store,
-                decision_writer=decision_store,
-                decision_reader=decision_store,
-                engine=engine,
-                waker=waker,
-                backoff=backoff,
-                observability_dispatcher=observability_dispatcher,
-                wall_clock=wall_clock,
-                logger=StdlibLogger(SearchWorker.__module__),
-                observation_logger=StdlibLogger(record_observation.__module__),
-            )
-
             client = self._amule_api_client(crawler_config, monotonic_clock)
             stack.push_async_callback(client.close)
             await client.open()
-            workers = [SearchWorker(AMULE_CLIENT_NAME, client, deps)]
+            workers = [
+                SearchWorker(
+                    client_name=AMULE_CLIENT_NAME,
+                    client=client,
+                    backoff=backoff,
+                    observation_writer=observation_store,
+                    observation_reader=observation_store,
+                    decision_writer=decision_store,
+                    decision_reader=decision_store,
+                    engine=engine,
+                    waker=waker,
+                    observability_dispatcher=observability_dispatcher,
+                    wall_clock=wall_clock,
+                    logger=StdlibLogger(SearchWorker.__module__),
+                    observation_logger=StdlibLogger(record_observation.__module__),
+                )
+            ]
             # The status and download loops share the search session: one session per node.
             status_deps = StatusLoopDeps(
                 AMULE_CLIENT_NAME,
