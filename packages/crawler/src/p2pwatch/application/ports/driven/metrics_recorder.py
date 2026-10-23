@@ -6,7 +6,7 @@ from p2pwatch.domain.observability.policy import MetricInstruction
 
 
 class MetricsRecorder(ABC):
-    """Records the metrics an event's report names."""
+    """Records the metrics an event's observability plan names."""
 
     @abstractmethod
     def apply(self, instruction: MetricInstruction) -> None:

@@ -12,6 +12,7 @@ invalid:
   - token = uuid.uuid4()
   - io.open("conf")
   - from asyncio import Event
+  - shutdown = asyncio.Event()
   - from uuid import uuid5
   - import pathlib
   - from pathlib import Path

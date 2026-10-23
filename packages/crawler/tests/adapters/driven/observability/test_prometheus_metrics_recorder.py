@@ -13,7 +13,7 @@ from p2pwatch.adapters.driven.observability.prometheus_metrics_recorder import (
     start_metrics_server,
 )
 from p2pwatch.domain.observability.events import SearchExecuted, SourceFirstUseful
-from p2pwatch.domain.observability.policy import MetricInstruction, MetricName, describe
+from p2pwatch.domain.observability.policy import MetricInstruction, MetricName, plan_observability
 from tests.domain.observability.test_policy import CASES
 from tests.fakes.adapters.driven.fake_metrics_server import FakeMetricsServer
 
@@ -82,14 +82,14 @@ def test_removing_a_series_never_set_is_a_no_op() -> None:
 
 
 def test_every_emitted_metric_is_declared_in_the_metrics_recorder() -> None:
-    """STRUCTURAL guardrail: every metric that ``describe`` emits for EACH variant of the
+    """STRUCTURAL guardrail: every metric that ``plan_observability`` emits for EACH variant of the
     ``Event`` union must be declared in the metrics recorder (otherwise ``apply`` raises
     ``KeyError``). Closes the policy→recorder loop, which no pure test covered: a future event
     adding an undeclared metric makes this test fail."""
     registry = CollectorRegistry()
     metrics_recorder = PrometheusMetricsRecorder(registry)
     for event, _ in CASES:
-        for instruction in describe(event).metrics:
+        for instruction in plan_observability(event).metrics:
             metrics_recorder.apply(instruction)  # must NEVER raise (declared metric)
 
 
@@ -117,7 +117,7 @@ def test_a_search_adds_its_skipped_results_under_its_client_and_channel() -> Non
     metrics_recorder = PrometheusMetricsRecorder(registry)
     for channel, skipped_result_count in (("ed2k", 1), ("kad", 0)):
         event = SearchExecuted("amuled", channel, 3, skipped_result_count)
-        for instruction in describe(event).metrics:
+        for instruction in plan_observability(event).metrics:
             metrics_recorder.apply(instruction)
     sample = "p2pwatch_search_results_skipped_total"
     assert registry.get_sample_value(sample, {"client": "amuled", "channel": "ed2k"}) == 1.0
@@ -149,7 +149,7 @@ def test_a_first_useful_alert_counts_under_its_network_and_kind() -> None:
     registry = CollectorRegistry()
     metrics_recorder = PrometheusMetricsRecorder(registry)
     event = next(event for event, _ in CASES if isinstance(event, SourceFirstUseful))
-    for instruction in describe(event).metrics:
+    for instruction in plan_observability(event).metrics:
         metrics_recorder.apply(instruction)
     labels = {"network": "ed2k", "kind": "first_useful"}
     assert registry.get_sample_value("p2pwatch_source_alerts_total", labels) == 1.0
