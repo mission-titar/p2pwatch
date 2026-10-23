@@ -78,6 +78,6 @@ async def rejudge_file(
         else:
             filename, size_bytes = best.reported_file.filename, best.reported_file.size_bytes
         await observability_dispatcher.dispatch(
-            DecisionsRecorded(file, filename, size_bytes, tuple(changes)), node_id
+            DecisionsRecorded(file, filename, size_bytes, tuple(changes), node_id), node_id
         )
     return len(changes)

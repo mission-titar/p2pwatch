@@ -178,7 +178,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ),
     ),
     (
-        ev.SourceFirstUseful(_SOURCE, "AnimuseeFMR", _FILE, "Keroro 062.avi", _062A),
+        ev.SourceFirstUseful(_SOURCE, "AnimuseeFMR", _FILE, "Keroro 062.avi", _062A, _NODE),
         ObservabilityPlan(
             Severity.INFO,
             "source 1f2e3d4c… useful for the first time: Keroro 062.avi",
@@ -196,7 +196,9 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ),
     ),
     (
-        ev.SourceReappeared(_SOURCE, "AnimuseeFMR", _FILE, "Keroro 062.avi", _062A, 93_600.0),
+        ev.SourceReappeared(
+            _SOURCE, "AnimuseeFMR", _FILE, "Keroro 062.avi", _062A, 93_600.0, _NODE
+        ),
         ObservabilityPlan(
             Severity.INFO,
             "source 1f2e3d4c… reappeared after 26 h: Keroro 062.avi",
@@ -218,9 +220,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
 
 def test_plan_observability_maps_every_event() -> None:
     for event, expected in CASES:
-        assert plan_observability(event, _NODE) == expected, (
-            f"wrong ObservabilityPlan for {event!r}"
-        )
+        assert plan_observability(event) == expected, f"wrong ObservabilityPlan for {event!r}"
 
 
 _HASH = "8f3a1c0b9e7d44a2b6c1f0e9d8a7b6c5"
@@ -232,6 +232,7 @@ def _decisions(*changes: ev.DecisionChange) -> ev.DecisionsRecorded:
         filename="Keroro 062.avi",
         size_bytes=367_185_920,
         changes=changes,
+        node_id=_NODE,
     )
 
 
@@ -268,7 +269,7 @@ def _change(target_id: str, before: str | None, after: str) -> ev.DecisionChange
 def test_only_a_rise_to_notify_or_download_reaches_the_community(
     before: str | None, after: str, notified: bool
 ) -> None:
-    plan = plan_observability(_decisions(_change("062A", before, after)), _NODE)
+    plan = plan_observability(_decisions(_change("062A", before, after)))
     assert plan.audiences == (_COMMUNITY if notified else frozenset())
     assert plan.metrics == (MetricInstruction(MetricName.DECISIONS, "inc", (("tier", after),)),)
 
@@ -281,7 +282,7 @@ _062A_062B = (
 
 def test_a_file_with_risen_targets_is_one_rise_naming_the_file_and_targets() -> None:
     plan = plan_observability(
-        _decisions(_change("062A", None, "download"), _change("062B", None, "notify")), _NODE
+        _decisions(_change("062A", None, "download"), _change("062B", None, "notify"))
     )
     assert plan.notification == TierRise(
         DecisionTier.DOWNLOAD,
@@ -299,8 +300,7 @@ def test_a_file_with_risen_targets_is_one_rise_naming_the_file_and_targets() -> 
 
 def test_the_rise_lists_only_the_risen_targets_under_their_highest_tier() -> None:
     plan = plan_observability(
-        _decisions(_change("062A", "catalog", "notify"), _change("062B", "notify", "retracted")),
-        _NODE,
+        _decisions(_change("062A", "catalog", "notify"), _change("062B", "notify", "retracted"))
     )
     assert isinstance(plan.notification, TierRise)
     assert (plan.notification.tier, plan.notification.target_titles) == (
@@ -311,8 +311,7 @@ def test_the_rise_lists_only_the_risen_targets_under_their_highest_tier() -> Non
 
 def test_decisions_log_one_line_listing_every_change() -> None:
     plan = plan_observability(
-        _decisions(_change("062A", None, "download"), _change("062B", "notify", "retracted")),
-        _NODE,
+        _decisions(_change("062A", None, "download"), _change("062B", "notify", "retracted"))
     )
     assert plan.severity == Severity.INFO
     assert plan.message == (
@@ -321,13 +320,13 @@ def test_decisions_log_one_line_listing_every_change() -> None:
 
 
 def test_a_change_without_a_rise_has_no_notification() -> None:
-    plan = plan_observability(_decisions(_change("062A", "download", "notify")), _NODE)
+    plan = plan_observability(_decisions(_change("062A", "download", "notify")))
     assert plan.notification is None
 
 
 def test_a_completed_download_notifies_its_targets_and_file() -> None:
     plan = plan_observability(
-        ev.DownloadCompleted(FileKey(Network.ED2K, _HASH), "Keroro `062`.avi", _062A_062B), _NODE
+        ev.DownloadCompleted(FileKey(Network.ED2K, _HASH), "Keroro `062`.avi", _062A_062B, _NODE)
     )
     assert plan == ObservabilityPlan(
         Severity.SUCCESS,
@@ -340,7 +339,7 @@ def test_a_completed_download_notifies_its_targets_and_file() -> None:
 
 def test_a_source_without_a_name_or_a_target_is_alerted_without_them() -> None:
     plan = plan_observability(
-        ev.SourceFirstUseful(_SOURCE, None, _FILE, "Keroro 062.avi", ()), _NODE
+        ev.SourceFirstUseful(_SOURCE, None, _FILE, "Keroro 062.avi", (), _NODE)
     )
     assert plan.notification == SourceAlert(
         SourceAlertKind.FIRST_USEFUL, _SOURCE, None, None, (), "Keroro 062.avi", _NODE
