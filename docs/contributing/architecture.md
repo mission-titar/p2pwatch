@@ -687,8 +687,9 @@ flowchart LR
 ```
 
 Le **domaine** émet des `Event` purs ; une **politique** pure (`plan_observability`) les route vers des
-`ObservabilityPlan` (sévérité de log + instructions de métrique + audiences COMMUNITY/OPERATIONS) ; le
-dispatcher **adapter** les applique. Le point d'accès Prometheus est servi par le crawler lui-même
+`ObservabilityPlan` (sévérité de log + instructions de métrique + audiences COMMUNITY/OPERATIONS) ;
+l'**étape** `ObservabilityDispatcher` (`application/steps/observability_dispatcher.py`) les applique.
+Le point d'accès Prometheus est servi par le crawler lui-même
 sur `observability.metrics.port` (`9090` dans le `crawler.yml` livré) ; rien ne le scrape par défaut, donc publiez ce
 port et pointez-y votre propre Prometheus si vous voulez des tableaux de bord.
 
@@ -731,7 +732,7 @@ démon sont
 | Matching | `packages/matching/src/catalog_matching/` (moteur + politique `deploy/matcher.yml`) |
 | Frontière amuleapi | `adapters/driven/amule_api/` (client / mapping / erreurs) ; ports `application/ports/driven/search_client.py`, `download_client.py`, `source_client.py` |
 | Persistance | `adapters/driven/persistence_sqlite/` (migrations `.sql`, magasins et lecteurs) |
-| Observabilité | `domain/observability/`, `adapters/driven/observability/` |
+| Observabilité | `domain/observability/`, `application/steps/observability_dispatcher.py`, `adapters/driven/observability/` |
 | WebUI | `adapters/driving/webui/` (in-process, thread dédié) |
 | Conteneur d'aMule | `packages/amule/src/p2pwatch_amule/` (câblage : `composition/command_line.py` (`build_command_line`) ; le one-shot : la ligne de commande appelle le port `ContainerBooter`, implémenté par la composition `composition/boot_composition.py` (`BootComposition`), qui lit les variables puis lance le cas d'usage `application/use_cases/boot_container.py` ; le port-sync : la ligne de commande appelle le port `PortSyncLoopRunner`, implémenté par la composition `composition/port_sync_composition.py` (`PortSyncComposition`), qui assemble `application/port_sync_lifecycle.py`) ; image `packages/amule/Dockerfile`, services s6 sous `packages/amule/docker/services.d/` |
 | Déploiement | `deploy/compose.yml` (le cœur et un `include:`), `deploy/ed2k/` (`service`, `direct` et `vpn.compose.yml`) |
