@@ -24,7 +24,7 @@ def test_validate_config_checks_each_path_once_in_its_role() -> None:
 
 
 def test_an_invalid_config_raises_the_checkers_refusal() -> None:
-    refusal = InvalidConfigError("'episodes' section: list expected")
+    refusal = InvalidConfigError(None, "'episodes' section: list expected")
 
     with pytest.raises(InvalidConfigError) as raised:
         ValidateConfig(FakeConfigChecker(refusal)).validate_config(
