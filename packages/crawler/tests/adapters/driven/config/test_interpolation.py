@@ -3,8 +3,8 @@ from typing import Any
 
 import pytest
 
-from p2pwatch.adapters.driven.config.errors import ConfigError
 from p2pwatch.adapters.driven.config.interpolation import interpolate_document
+from p2pwatch.domain.invalid_config import InvalidConfigError
 
 
 def test_a_string_without_a_reference_is_unchanged() -> None:
@@ -63,7 +63,7 @@ def test_a_value_that_is_no_string_is_unchanged() -> None:
 def test_an_unset_variable_is_refused_under_its_key_path(
     document: dict[str, Any], key_path: str
 ) -> None:
-    with pytest.raises(ConfigError) as error:
+    with pytest.raises(InvalidConfigError) as error:
         interpolate_document(document, {"SET": "x"})
     assert error.value.key == key_path
     assert error.value.message == "environment variable 'UNSET' referenced but not set"
