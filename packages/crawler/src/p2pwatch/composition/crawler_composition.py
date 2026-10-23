@@ -126,6 +126,10 @@ _AMULE_API_PAGE_SIZE = 500
 # How often a search's progress is read: local traffic with our own daemon.
 _AMULE_API_PROGRESS_POLL_INTERVAL = timedelta(seconds=5)
 _WEBUI_START_TIMEOUT_SECONDS = 5.0
+# uvicorn polls ``should_exit`` every 0.1 s, so the join normally returns well within its bound.
+_WEBUI_JOIN_TIMEOUT_SECONDS = 5.0
+# The metrics server stops on the event loop, where no shutdown deadline can cut a blocking call.
+_METRICS_SERVER_JOIN_TIMEOUT_SECONDS = 1.0
 # One INFO progress line per this many files, so a long sweep visibly advances.
 _REEVALUATION_PROGRESS_EVERY_FILES = 200
 
@@ -254,6 +258,7 @@ class CrawlerComposition(CrawlerRunner):
             app,
             self._webui_address,
             start_timeout_seconds=_WEBUI_START_TIMEOUT_SECONDS,
+            join_timeout_seconds=_WEBUI_JOIN_TIMEOUT_SECONDS,
             serving_resources=(catalog_read_connections, local_read_connections),
         )
         stack.push_async_callback(server_thread.stop)
@@ -305,7 +310,12 @@ class CrawlerComposition(CrawlerRunner):
                 notification_timeout_seconds=observability.notification_timeout_seconds,
             )
             stack.callback(
-                start_metrics_server(registry, observability.metrics_port, start_http_server)
+                start_metrics_server(
+                    registry,
+                    observability.metrics_port,
+                    start_http_server,
+                    join_timeout_seconds=_METRICS_SERVER_JOIN_TIMEOUT_SECONDS,
+                )
             )
             observation_store = SqliteObservationStore(catalog_connection)
             catalog_scan_reader = SqliteCatalogScanReader(catalog_connection)
