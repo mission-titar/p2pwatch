@@ -1,8 +1,8 @@
 """Tests for the re-evaluation step ``reevaluate_catalog`` (spec §7, plan Task 5).
 
 Real engine + real SQLite stores (same convention as ``test_decisions.py``: "real
-stores on tmp_path"); only ``waker``/``event_emitter``/``wall_clock`` are fakes (``FakeWaker``/
-``FakeEventEmitter``/``FakeWallClock``). Each hash under test is seeded via
+stores on tmp_path"); the dispatch step is real, over fakes; ``waker`` and ``wall_clock`` are fakes
+(``FakeWaker``, ``FakeWallClock``). Each hash under test is seeded via
 ``observation_store.record_observation`` first so it shows up in ``iter_latest_observations``
 (the source the re-evaluation iterates).
 """
@@ -36,7 +36,7 @@ from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.fakes.adapters.driven.fake_wall_clock import FakeWallClock
-from tests.fakes.application.steps.fake_event_emitter import FakeEventEmitter
+from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 from tests.support.catalog_rows import decision_node_ids, decision_tiers
 
 _NODE = "n1"
@@ -85,7 +85,7 @@ async def test_two_changed_rows_are_all_evaluated_and_written(
     observation_store.record_observation(
         FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now()), _NODE
     )
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     waker = FakeWaker()
     summary = await reevaluate_catalog(
         observation_reader=observation_store,
@@ -94,7 +94,7 @@ async def test_two_changed_rows_are_all_evaluated_and_written(
         catalog_scan_reader=catalog_scan_reader,
         engine=engine,
         waker=waker,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
         wall_clock=wall_clock,
         logger=FakeLogger(),
         node_id=_NODE,
@@ -106,8 +106,11 @@ async def test_two_changed_rows_are_all_evaluated_and_written(
     assert decision_node_ids(catalog_connection) == {_NODE}
     decided_at = catalog_connection.execute("SELECT DISTINCT decided_at FROM match_decisions")
     assert decided_at.fetchall() == [(utc_iso(wall_clock.now()),)]
-    assert len(event_emitter.events) == 2
     # Iteration is ORDER BY native_id: "31d6..." sorts before "aaaa..." (ASCII '3' < 'a').
+    assert [line.message for line in observability.logger.lines] == [
+        f"decisions for {_DL_NAME} ({_HASH_DL}): 062A none → download",
+        f"decisions for {_CAT_NAME} ({_HASH_CAT}): 001A none → catalog",
+    ]
     assert waker.woken_subjects == [WakeSubject.DOWNLOAD]
 
 
@@ -130,7 +133,7 @@ async def test_unchanged_row_is_evaluated_but_not_written(
     decision_store.record_decision(
         FileKey(Network.ED2K, _HASH_CAT), decisions[0], wall_clock.now(), _NODE
     )
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     waker = FakeWaker()
     summary = await reevaluate_catalog(
         observation_reader=observation_store,
@@ -139,7 +142,7 @@ async def test_unchanged_row_is_evaluated_but_not_written(
         catalog_scan_reader=catalog_scan_reader,
         engine=engine,
         waker=waker,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
         wall_clock=wall_clock,
         logger=FakeLogger(),
         node_id=_NODE,
@@ -147,7 +150,7 @@ async def test_unchanged_row_is_evaluated_but_not_written(
     )
     assert summary == ReevaluationSummary(files_evaluated=1, rows_written=0)
     assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 1
-    assert event_emitter.events == []
+    assert observability.logger.lines == []
     assert waker.woken_subjects == []
 
 
@@ -174,7 +177,7 @@ async def test_store_error_on_one_row_is_absorbed_and_sweep_continues(
         f" WHEN NEW.file_id = x'{FileKey(Network.ED2K, _HASH_DL).file_id.hex()}'"
         " BEGIN SELECT RAISE(ABORT, 'injected failure'); END"
     )
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     waker = FakeWaker()
     summary = await reevaluate_catalog(
         observation_reader=observation_store,
@@ -183,7 +186,7 @@ async def test_store_error_on_one_row_is_absorbed_and_sweep_continues(
         catalog_scan_reader=catalog_scan_reader,
         engine=engine,
         waker=waker,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
         wall_clock=wall_clock,
         logger=logger,
         node_id=_NODE,
@@ -209,7 +212,7 @@ async def test_empty_catalogue_yields_zero_summary(
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    event_emitter = FakeEventEmitter()
+    observability = ObservabilityOverFakes()
     waker = FakeWaker()
     summary = await reevaluate_catalog(
         observation_reader=observation_store,
@@ -218,14 +221,14 @@ async def test_empty_catalogue_yields_zero_summary(
         catalog_scan_reader=catalog_scan_reader,
         engine=engine,
         waker=waker,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
         wall_clock=wall_clock,
         logger=FakeLogger(),
         node_id=_NODE,
         progress_every_files=200,
     )
     assert summary == ReevaluationSummary(files_evaluated=0, rows_written=0)
-    assert event_emitter.events == []
+    assert observability.logger.lines == []
     assert waker.woken_subjects == []
 
 
@@ -249,7 +252,7 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
         wall_clock.now(),
         _NODE,
     )
-    event_emitter, waker = FakeEventEmitter(), FakeWaker()
+    observability, waker = ObservabilityOverFakes(), FakeWaker()
     summary = await reevaluate_catalog(
         observation_reader=observation_store,
         decision_writer=decision_store,
@@ -257,7 +260,7 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
         catalog_scan_reader=catalog_scan_reader,
         engine=engine,
         waker=waker,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
         wall_clock=wall_clock,
         logger=FakeLogger(),
         node_id=_NODE,
@@ -293,7 +296,7 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
     decision_store.record_retraction(
         FileKey(Network.ED2K, _HASH_MULTI), "", wall_clock.now(), _NODE
     )
-    event_emitter, waker = FakeEventEmitter(), FakeWaker()
+    observability, waker = ObservabilityOverFakes(), FakeWaker()
     summary = await reevaluate_catalog(
         observation_reader=observation_store,
         decision_writer=decision_store,
@@ -301,7 +304,7 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
         catalog_scan_reader=catalog_scan_reader,
         engine=engine,
         waker=waker,
-        event_emitter=event_emitter,
+        observability_dispatcher=observability.dispatcher,
         wall_clock=wall_clock,
         logger=FakeLogger(),
         node_id=_NODE,
@@ -345,7 +348,7 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
         catalog_scan_reader=catalog_scan_reader,
         engine=engine,
         waker=FakeWaker(),
-        event_emitter=FakeEventEmitter(),
+        observability_dispatcher=ObservabilityOverFakes().dispatcher,
         wall_clock=wall_clock,
         logger=FakeLogger(),
         node_id=_NODE,
@@ -384,7 +387,7 @@ async def test_progress_is_logged_at_each_multiple_of_the_cadence_only(
         catalog_scan_reader=catalog_scan_reader,
         engine=engine,
         waker=FakeWaker(),
-        event_emitter=FakeEventEmitter(),
+        observability_dispatcher=ObservabilityOverFakes().dispatcher,
         wall_clock=wall_clock,
         logger=logger,
         node_id=_NODE,

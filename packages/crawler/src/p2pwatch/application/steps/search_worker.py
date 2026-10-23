@@ -7,7 +7,6 @@ from datetime import timedelta
 from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.application.ports.driven.decision_reader import DecisionReader
 from p2pwatch.application.ports.driven.decision_writer import DecisionWriter
-from p2pwatch.application.ports.driven.event_emitter import EventEmitter
 from p2pwatch.application.ports.driven.jitter_generator import JitterGenerator
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
@@ -16,6 +15,7 @@ from p2pwatch.application.ports.driven.observation_writer import ObservationWrit
 from p2pwatch.application.ports.driven.search_client import SearchClient
 from p2pwatch.application.ports.driven.waker import Waker
 from p2pwatch.application.ports.driven.wall_clock import WallClock
+from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.record_observations import record_observation
 from p2pwatch.domain.client_errors import ClientUnreachableError, SearchFailedError
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
@@ -137,7 +137,7 @@ class WorkerDeps:
     engine: MatchingEngine
     waker: Waker
     backoff: "BackoffRegistry"
-    event_emitter: EventEmitter
+    observability_dispatcher: ObservabilityDispatcher
     wall_clock: WallClock
     logger: Logger
     observation_logger: Logger  # record_observation's
@@ -168,7 +168,7 @@ class SearchWorker:
     async def _record_observations(self, channel: str, answer: SearchAnswer, node_id: str) -> int:
         """Per-obs pipeline; returns the number of CHANGED verdicts (logging). A
         ``StoreError`` per obs is ABSORBED inside ``record_observation`` (spec §7)."""
-        await self._deps.event_emitter.emit(
+        await self._deps.observability_dispatcher.dispatch(
             SearchExecuted(
                 self._client_name, channel, len(answer.reported_files), answer.skipped_result_count
             ),
@@ -184,7 +184,7 @@ class SearchWorker:
                 decision_reader=self._deps.decision_reader,
                 engine=self._deps.engine,
                 waker=self._deps.waker,
-                event_emitter=self._deps.event_emitter,
+                observability_dispatcher=self._deps.observability_dispatcher,
                 wall_clock=self._deps.wall_clock,
                 client_name=self._client_name,
                 channel=channel,
@@ -208,7 +208,7 @@ class SearchWorker:
                 error,
                 delay.total_seconds(),
             )
-            await self._deps.event_emitter.emit(
+            await self._deps.observability_dispatcher.dispatch(
                 SearchFailed(self._client_name, task.channel), node_id
             )
             return
@@ -220,7 +220,9 @@ class SearchWorker:
                 error,
                 delay.total_seconds(),
             )
-            await self._deps.event_emitter.emit(ClientUnreachable(self._client_name), node_id)
+            await self._deps.observability_dispatcher.dispatch(
+                ClientUnreachable(self._client_name), node_id
+            )
             return
         changed = await self._record_observations(task.channel, answer, node_id)
         self._deps.backoff.reset(channel_backoff_key)
