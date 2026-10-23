@@ -1,0 +1,16 @@
+id: no-literal-option-default
+valid:
+  - parser.add_argument("--dockerfile", type=self._under_cwd, default=self._cwd / DOCKERFILE_PATH)
+  - parser.add_argument("--body-file", default=self._default_body_file)
+  - parser.add_argument("--y", default=None)
+  - 'parser.add_argument("--x", type=lambda text: max(text, default=0))'
+  - x = max(xs, default=0)
+  - field(default=None, kw_only=True)
+invalid:
+  - parser.add_argument("--x", default=cwd / "y")
+  - parser.add_argument("--format", choices=("fail", "sarif"), default="fail")
+  - group.add_argument("--n", default=3)
+  - parser.add_argument("--n", default=-1)
+  - parser.add_argument("--ratio", default=0.5)
+  - parser.add_argument("--w", default=[1, 2])
+  - parser.add_argument("--name", default=f"{prefix}.yml")

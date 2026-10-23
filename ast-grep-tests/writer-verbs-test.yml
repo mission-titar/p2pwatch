@@ -1,0 +1,24 @@
+id: writer-verbs
+valid:
+  - |
+    class ObservationWriter(ABC):
+        @abstractmethod
+        def record_observation(self, observation: FileObservation) -> None:
+            """Adds one."""
+  - |
+    class RunStateWriter(ABC):
+        def set_paused(self, paused: bool) -> None: ...
+  - |
+    class ObservationReader(ABC):
+        def read_known_filenames(self) -> list[str]: ...
+invalid:
+  - |
+    class XWriter(ABC):
+        @abstractmethod
+        def write_x(self) -> None: ...
+  - |
+    class RunStateWriter(ABC):
+        def pause(self) -> None: ...
+  - |
+    class TrackedDownloadWriter(ABC):
+        def mark_seen(self) -> None: ...
