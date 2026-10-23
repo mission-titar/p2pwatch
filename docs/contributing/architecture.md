@@ -292,7 +292,7 @@ sequenceDiagram
     W->>E: evaluate_file(candidates)
     E-->>W: list[MatchDecision]
     loop each changed decision
-      W->>C: record_decision(target_id, tier, rule)
+      W->>C: record_decision(DatedDecision)
       W-)D: wake (if download tier)
     end
   end

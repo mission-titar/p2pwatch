@@ -27,8 +27,9 @@ from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import 
     open_reader,
 )
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
-from p2pwatch.domain.file_history import DatedDecision, FileHistory
+from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.file_target_decision import DatedDecision
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from tests.support.adapters.driven.persistence_sqlite.catalog_seeds import (
     seed,
@@ -219,6 +220,7 @@ def test_file_history_carries_observations_and_dated_decisions(catalog_db: Path)
     assert file_history.size_bytes == 100
     assert file_history.decisions == (
         DatedDecision(
+            FileKey(Network.ED2K, "a" * 32),
             DecisionRecord(
                 target_id="062A", rule_name="id_segment_exact", tier=DecisionTier.DOWNLOAD
             ),

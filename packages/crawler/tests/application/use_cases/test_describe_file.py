@@ -13,8 +13,9 @@ from p2pwatch.application.ports.driven.catalog_file_reader import CatalogFileRea
 from p2pwatch.application.ports.driven.source_reader import SourceReader
 from p2pwatch.application.ports.driving.file_describer import FileDescription
 from p2pwatch.application.use_cases.describe_file import DescribeFile
-from p2pwatch.domain.file_history import DatedDecision, FileHistory
+from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.file_target_decision import DatedDecision
 from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.matching_read import MatchingExplainer
 from p2pwatch.domain.observation import FileObservation, ReportedFile
@@ -33,7 +34,9 @@ _OBSERVATION = FileObservation(
     _NOW - timedelta(hours=1),
     "n1",
 )
-_DECISION = DatedDecision(DecisionRecord("062A", "catalog", DecisionTier.CATALOG), _NOW, "n1")
+_DECISION = DatedDecision(
+    _FILE, DecisionRecord("062A", "catalog", DecisionTier.CATALOG), _NOW, "n1"
+)
 _HISTORY = FileHistory(
     _FILE, 100, (_OBSERVATION,), _OBSERVATION, (_DECISION,), ("Keroro 62a ITA.avi", "keroro.avi")
 )

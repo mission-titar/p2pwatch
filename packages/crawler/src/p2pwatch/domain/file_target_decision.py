@@ -1,9 +1,11 @@
-"""A file's latest decision for one target: the matcher's record, or its retraction (spec §7)."""
+"""A file's decision for one target: the matcher's record, or its retraction (spec §7)."""
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 
 from catalog_matching.domain.engine import DecisionRecord
+from p2pwatch.domain.file_key import FileKey
 
 
 @dataclass(frozen=True)
@@ -15,6 +17,17 @@ class Retraction:
 
 
 type FileTargetDecision = DecisionRecord | Retraction
+
+
+@dataclass(frozen=True)
+class DatedDecision[Decision: FileTargetDecision]:
+    """A file's decision, the instant it was made and the node that made it; apart from the
+    decision, whose equality the anti-redundancy compares."""
+
+    file: FileKey
+    decision: Decision
+    decided_at: datetime
+    node_id: str
 
 
 def records_to_write(
