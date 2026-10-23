@@ -17,6 +17,7 @@ from tests.support.catalog_rows import insert_file
 
 _HASH_A = "a" * 32
 _TIME_LIMIT = timedelta(seconds=5)
+_BUDGET_CHECK_INSTRUCTIONS = 1000
 # A few hundredths of a second of real time, past a 5 s budget on a FakeTickingMonotonicClock.
 _PAST_BUDGET_SQL = (
     "WITH RECURSIVE r(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM r WHERE i < 100000)"
@@ -43,7 +44,11 @@ def test_select_returns_columns_and_rows(tmp_path: Path) -> None:
     on the monotonic clock: one tick between its start and its end."""
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
-    query_answer = SqliteSqlExecutor(path, FakeTickingMonotonicClock(FakeTime())).execute(
+    query_answer = SqliteSqlExecutor(
+        path,
+        FakeTickingMonotonicClock(FakeTime()),
+        budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
+    ).execute(
         "SELECT native_id, size_bytes FROM files",
         row_cap=1000,
         time_limit=_TIME_LIMIT,
@@ -57,7 +62,9 @@ def test_renders_none_cell_as_null_literal(tmp_path: Path) -> None:
     """A NULL cell is rendered as the literal string ``NULL`` (not an empty cell)."""
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
-    query_answer = SqliteSqlExecutor(path, FakeTime().monotonic).execute(
+    query_answer = SqliteSqlExecutor(
+        path, FakeTime().monotonic, budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS
+    ).execute(
         "SELECT NULL AS missing FROM files",
         row_cap=1000,
         time_limit=_TIME_LIMIT,
@@ -70,7 +77,9 @@ def test_renders_a_blob_cell_as_lowercase_hex(tmp_path: Path) -> None:
     """A ``file_id`` reads as the hex its detail page's URL takes, not as a Python repr."""
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
-    query_answer = SqliteSqlExecutor(path, FakeTime().monotonic).execute(
+    query_answer = SqliteSqlExecutor(
+        path, FakeTime().monotonic, budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS
+    ).execute(
         "SELECT file_id FROM files",
         row_cap=1000,
         time_limit=_TIME_LIMIT,
@@ -83,7 +92,9 @@ def test_write_is_rejected_read_only(tmp_path: Path) -> None:
     """A write statement is structurally impossible (mode=ro + query_only) -> read-only error."""
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
-    query_answer = SqliteSqlExecutor(path, FakeTime().monotonic).execute(
+    query_answer = SqliteSqlExecutor(
+        path, FakeTime().monotonic, budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS
+    ).execute(
         "INSERT INTO files (native_id, size_bytes) VALUES ('b', 1)",
         row_cap=1000,
         time_limit=_TIME_LIMIT,
@@ -97,7 +108,9 @@ def test_multi_statement_is_rejected(tmp_path: Path) -> None:
     """Two statements in one input -> single-statement error (sqlite3.ProgrammingError)."""
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
-    query_answer = SqliteSqlExecutor(path, FakeTime().monotonic).execute(
+    query_answer = SqliteSqlExecutor(
+        path, FakeTime().monotonic, budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS
+    ).execute(
         "SELECT 1; SELECT 2",
         row_cap=1000,
         time_limit=_TIME_LIMIT,
@@ -109,7 +122,9 @@ def test_row_cap_truncates_and_flags(tmp_path: Path) -> None:
     """More rows than the cap: keep the first ``row_cap`` and flag truncation."""
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
-    query_answer = SqliteSqlExecutor(path, FakeTime().monotonic).execute(
+    query_answer = SqliteSqlExecutor(
+        path, FakeTime().monotonic, budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS
+    ).execute(
         "WITH RECURSIVE r(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM r WHERE x < 5)"
         " SELECT x FROM r",
         row_cap=2,
@@ -125,7 +140,11 @@ def test_runaway_is_aborted_by_timeout(tmp_path: Path) -> None:
     distinct from a generic SQL error."""
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
-    query_answer = SqliteSqlExecutor(path, FakeTickingMonotonicClock(FakeTime())).execute(
+    query_answer = SqliteSqlExecutor(
+        path,
+        FakeTickingMonotonicClock(FakeTime()),
+        budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
+    ).execute(
         _PAST_BUDGET_SQL,
         row_cap=1000,
         time_limit=_TIME_LIMIT,
@@ -133,12 +152,26 @@ def test_runaway_is_aborted_by_timeout(tmp_path: Path) -> None:
     assert query_answer == QueryFailure("Query aborted: it exceeded the 5 second time limit.")
 
 
+def test_the_budget_is_checked_only_at_its_step_of_instructions(tmp_path: Path) -> None:
+    """A step longer than the whole query never checks the budget, so nothing aborts it."""
+    path = tmp_path / "catalog.db"
+    _seed_catalog(path)
+    query_answer = SqliteSqlExecutor(
+        path, FakeTickingMonotonicClock(FakeTime()), budget_check_instructions=10**9
+    ).execute(_PAST_BUDGET_SQL, row_cap=1000, time_limit=_TIME_LIMIT)
+    assert query_answer == QueryAnswer(
+        ("count(*)",), (("100001",),), timedelta(seconds=1), truncated=False
+    )
+
+
 def test_malformed_sql_yields_error_not_exception(tmp_path: Path) -> None:
     """A syntax error is absorbed into an error result (not raised) - the read-only console
     boundary absorbs arbitrary operator SQL."""
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
-    query_answer = SqliteSqlExecutor(path, FakeTime().monotonic).execute(
+    query_answer = SqliteSqlExecutor(
+        path, FakeTime().monotonic, budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS
+    ).execute(
         "SELECT FROM",
         row_cap=1000,
         time_limit=_TIME_LIMIT,
@@ -151,7 +184,9 @@ def test_other_sqlite_error_is_absorbed(tmp_path: Path) -> None:
     caught by the console catch-all and absorbed into an error result."""
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
-    query_answer = SqliteSqlExecutor(path, FakeTime().monotonic).execute(
+    query_answer = SqliteSqlExecutor(
+        path, FakeTime().monotonic, budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS
+    ).execute(
         "SELECT length(zeroblob(1000000000000))",
         row_cap=1000,
         time_limit=_TIME_LIMIT,
@@ -164,7 +199,9 @@ def test_statement_without_result_columns_is_safe(tmp_path: Path) -> None:
     comment-only input) yields empty columns/rows, never a crash."""
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
-    query_answer = SqliteSqlExecutor(path, FakeTime().monotonic).execute(
+    query_answer = SqliteSqlExecutor(
+        path, FakeTime().monotonic, budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS
+    ).execute(
         "-- just a comment",
         row_cap=1000,
         time_limit=_TIME_LIMIT,

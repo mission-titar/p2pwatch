@@ -130,6 +130,8 @@ _WEBUI_START_TIMEOUT_SECONDS = 5.0
 _WEBUI_JOIN_TIMEOUT_SECONDS = 5.0
 # The metrics server stops on the event loop, where no shutdown deadline can cut a blocking call.
 _METRICS_SERVER_JOIN_TIMEOUT_SECONDS = 1.0
+# How many SQLite VM steps the SQL console runs between two checks of its query budget.
+_CONSOLE_BUDGET_CHECK_INSTRUCTIONS = 1000
 # One INFO progress line per this many files, so a long sweep visibly advances.
 _REEVALUATION_PROGRESS_EVERY_FILES = 200
 
@@ -245,10 +247,14 @@ class CrawlerComposition(CrawlerRunner):
             console_query_runner=RunConsoleQuery(
                 {
                     ConsoleDatabase.CATALOG: SqliteSqlExecutor(
-                        Path(crawler_config.catalog_db_path), monotonic_clock
+                        Path(crawler_config.catalog_db_path),
+                        monotonic_clock,
+                        budget_check_instructions=_CONSOLE_BUDGET_CHECK_INSTRUCTIONS,
                     ),
                     ConsoleDatabase.LOCAL: SqliteSqlExecutor(
-                        Path(crawler_config.local_db_path), monotonic_clock
+                        Path(crawler_config.local_db_path),
+                        monotonic_clock,
+                        budget_check_instructions=_CONSOLE_BUDGET_CHECK_INSTRUCTIONS,
                     ),
                 }
             ),
