@@ -3,9 +3,10 @@
 from collections.abc import Mapping
 from datetime import UTC, datetime
 
+from catalog_matching.domain.decision_tier import DecisionTier
 from p2pwatch.application.ports.driving.crawl_summarizer import ClientSummary, CrawlSummary
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
-from p2pwatch.domain.coverage import TargetCoverage
+from p2pwatch.domain.coverage import TargetCoverage, TargetCoverageStatus
 from p2pwatch.domain.node_state import NodeState
 from p2pwatch.domain.status_reading import READING_FRESH_FOR, PublishedReading, StatusReading
 from tests.fakes.adapters.driven.fake_coverage_reader import FakeCoverageReader
@@ -43,8 +44,13 @@ def test_each_configured_target_has_its_coverage_in_their_order() -> None:
     )
 
     assert summary.target_coverages == (
-        TargetCoverage("062B", status="none", best_tier=None, file_count=0),
-        TargetCoverage("062A", status="found", best_tier="download", file_count=1),
+        TargetCoverage("062B", status=TargetCoverageStatus.NONE, best_tier=None, file_count=0),
+        TargetCoverage(
+            "062A",
+            status=TargetCoverageStatus.FOUND,
+            best_tier=DecisionTier.DOWNLOAD,
+            file_count=1,
+        ),
     )
 
 

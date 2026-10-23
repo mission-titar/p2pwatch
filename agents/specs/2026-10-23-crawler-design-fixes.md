@@ -146,8 +146,8 @@ Strict TDD in every block, as `AGENTS.md` states it. Full contents, estimate sou
 | 70 | `refactor/composition-resource-stack` | the resource stack; backoff at start; gluetun's logger (D9, D10, D31) | 230, 13 |
 | 80 | `refactor/wake-subject` | `WakeSubject`; `record_queued` returns nothing (D11, D19) (Corrected: 20 files, one past the bound, kept whole by the operator) | 145, 20 (measured) |
 | 90 | `refactor/decision-tier` | `DecisionTier` in `catalog_matching` (D12) (Corrected: 20 files, kept whole: the operator lets a block pass the file bound by one or two files in this lot) | 170, 20 (measured) |
-| 100 | `refactor/retraction-type` | the crawler's tiers typed, `Retraction` (D12, D13) | 330, 19 |
-| 110 | `refactor/tier-rules-from-type` | tier rules and SQL from the type (D14) | 230, 13 |
+| 100 | `refactor/retraction-type` | the crawler's tiers typed, `Retraction` (D12, D13) (Corrected: `DecisionRecord.tier` typed in 110, the block reaching 24 files) | 216, 16 (measured) |
+| 110 | `refactor/tier-rules-from-type` | `DecisionRecord.tier` typed; tier rules and SQL from the type (D12, D14) (Corrected: takes block 100's typing of `DecisionRecord.tier`, 35 lines, 9 files) | 230, 13 |
 | 120 | `refactor/coverage-tiers-and-records-to-write` | coverage tiers; `records_to_write` (D15, D16) | 200, 11 |
 | 130 | `refactor/contact-point` | `ContactPoint` (D17) | 200, 12 |
 | 140 | `refactor/earlier-points-in-domain` | earlier points reduced in the domain (D18) | 200, 9 |

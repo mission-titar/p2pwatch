@@ -14,6 +14,7 @@ from jinja2 import Environment, FileSystemLoader, UndefinedError, meta
 from starlette.applications import Starlette
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord, Explanation
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_targets
@@ -38,7 +39,7 @@ from p2pwatch.application.ports.driving.source_lister import SourceListing
 from p2pwatch.application.ports.driving.source_name_describer import SourceNameDescription
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.console_query import QueryFailure
-from p2pwatch.domain.coverage import TargetCoverage
+from p2pwatch.domain.coverage import TargetCoverage, TargetCoverageStatus
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
 from p2pwatch.domain.file_history import DatedDecision, FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
@@ -110,7 +111,9 @@ _CRAWL_SUMMARY = CrawlSummary(
     client_summaries=(),
     is_paused=False,
     node_state=_NODE_STATE,
-    target_coverages=(TargetCoverage("062A", status="none", best_tier=None, file_count=0),),
+    target_coverages=(
+        TargetCoverage("062A", status=TargetCoverageStatus.NONE, best_tier=None, file_count=0),
+    ),
 )
 _SUMMARIZER = FakeCrawlSummarizer(_CRAWL_SUMMARY)
 _DESCRIBER = FakeNodeDescriber(NodeDescription(_NODE_STATE))
@@ -137,7 +140,7 @@ _OBSERVATION = FileObservation(
     datetime.fromisoformat(SEEN_AT),
 )
 _DECISION = DatedDecision(
-    DecisionRecord("062A", "catalog", "catalog"), datetime.fromisoformat(SEEN_AT), "n1"
+    DecisionRecord("062A", "catalog", DecisionTier.CATALOG), datetime.fromisoformat(SEEN_AT), "n1"
 )
 _WEEK = Interval(_WALL_CLOCK.now() - timedelta(days=7), _WALL_CLOCK.now())
 # One file seen once under one name, decided on 062A, with no source and no explanation.
@@ -296,7 +299,9 @@ async def _coverage_cells(coverage: TargetCoverage) -> list[str]:
 
 @pytest.mark.asyncio
 async def test_dashboard_shows_each_target_coverage_with_its_title() -> None:
-    coverage = TargetCoverage("062A", status="found", best_tier="download", file_count=2)
+    coverage = TargetCoverage(
+        "062A", status=TargetCoverageStatus.FOUND, best_tier=DecisionTier.DOWNLOAD, file_count=2
+    )
     assert await _coverage_cells(coverage) == [
         '<a href="/targets/062A">062A</a>',
         *("La Grenouille Cosmique", "found", "download", "2"),
@@ -305,7 +310,9 @@ async def test_dashboard_shows_each_target_coverage_with_its_title() -> None:
 
 @pytest.mark.asyncio
 async def test_dashboard_shows_a_target_without_a_best_tier_as_a_dot() -> None:
-    coverage = TargetCoverage("062A", status="none", best_tier=None, file_count=0)
+    coverage = TargetCoverage(
+        "062A", status=TargetCoverageStatus.NONE, best_tier=None, file_count=0
+    )
     assert (await _coverage_cells(coverage))[2:] == ["none", "·", "0"]
 
 
@@ -385,7 +392,9 @@ async def test_file_page_shows_the_network_the_native_id_and_the_ed2k_link() -> 
 @pytest.mark.asyncio
 async def test_file_page_shows_each_decision_with_its_rule_tier_and_instant() -> None:
     decisions = tuple(
-        DatedDecision(DecisionRecord(target_id, "numero_nu_confirmed", "download"), at, "n1")
+        DatedDecision(
+            DecisionRecord(target_id, "numero_nu_confirmed", DecisionTier.DOWNLOAD), at, "n1"
+        )
         for target_id, at in (("072A", _OBSERVATION.observed_at), ("072B", _WALL_CLOCK.now()))
     )
     page = await _file_page(replace(_FILE_DESCRIPTION, file_history=_history(decisions=decisions)))
@@ -887,7 +896,9 @@ async def test_file_page_without_a_decision_says_so() -> None:
 @pytest.mark.asyncio
 async def test_file_page_with_a_decision_but_no_explanation_says_so() -> None:
     # The explainer has none for a target the current config does not know.
-    unknown = replace(_DECISION, decision=DecisionRecord("S9E999Z", "catalog", "catalog"))
+    unknown = replace(
+        _DECISION, decision=DecisionRecord("S9E999Z", "catalog", DecisionTier.CATALOG)
+    )
     page = await _file_page(replace(_FILE_DESCRIPTION, file_history=_history(decisions=(unknown,))))
     assert "<dt>Target</dt><dd>S9E999Z</dd>" in page
     assert "<p>No explanation available.</p>" in page
@@ -1111,6 +1122,19 @@ async def test_empty_filter_param_does_not_silently_zero_results() -> None:
 
 
 @pytest.mark.asyncio
+async def test_unknown_tier_filter_is_ignored_and_lists_every_file() -> None:
+    # As an unknown ``sort`` or ``direction`` falls back to its default.
+    _, call = await _files_page("/files?tier=bogus")
+    assert call == _DEFAULT_CALL
+
+
+@pytest.mark.asyncio
+async def test_tier_filter_reaches_the_lister_as_the_type() -> None:
+    _, call = await _files_page("/files?tier=notify")
+    assert call.tier is DecisionTier.NOTIFY
+
+
+@pytest.mark.asyncio
 async def test_page_zero_is_clamped_to_first_page() -> None:
     # webui-security#2 regression: ``?page=0`` → OFFSET=-50 (SQLite returned page 1 by
     # luck). Now ``max(1, page)`` clamps.
@@ -1195,7 +1219,7 @@ def _catalog_entry(
 
 
 def _decision(target_id: str, tier: str) -> DecisionRecord:
-    return DecisionRecord(target_id, "rule", tier)
+    return DecisionRecord(target_id, "rule", DecisionTier(tier))
 
 
 def test_resolve_target_display_empty_decisions_is_empty_list() -> None:
@@ -1690,7 +1714,7 @@ def test_tier_facets_all_reset_and_masks_catalog() -> None:
 def test_tier_facets_selected_and_preserves_base() -> None:
     facets = _tier_facets(
         file_count_by_tier={"download": 1, "notify": 2},
-        active_tier="notify",
+        active_tier=DecisionTier.NOTIFY,
         kept_params={"search": "keroro", "sort": "size"},
     )
     notify = next(f for f in facets if f.label == "notify")

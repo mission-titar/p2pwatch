@@ -122,7 +122,7 @@ def test_read_catalog_entries_no_filter_returns_all(catalog_db: Path) -> None:
                 ),
                 observed_at=datetime(2026, 6, 22, 10, tzinfo=UTC),
             ),
-            decisions=(DecisionRecord("062A", "id_segment_exact", "download"),),
+            decisions=(DecisionRecord("062A", "id_segment_exact", DecisionTier.DOWNLOAD),),
         ),
     )
 
@@ -167,9 +167,10 @@ def test_read_catalog_entries_whole_episode_is_one_row_with_two_decisions(catalo
     rows = _entries(catalog_db)
     assert len(rows) == 1
     assert rows[0].decisions == (
-        DecisionRecord("072A", "numero_nu_confirmed", "download"),
-        DecisionRecord("072B", "numero_nu_confirmed", "download"),
+        DecisionRecord("072A", "numero_nu_confirmed", DecisionTier.DOWNLOAD),
+        DecisionRecord("072B", "numero_nu_confirmed", DecisionTier.DOWNLOAD),
     )
+    assert rows[0].decisions[0].tier is DecisionTier.DOWNLOAD
 
 
 @pytest.mark.parametrize("target_id", ["072A", "072B"])
@@ -217,11 +218,14 @@ def test_file_history_carries_observations_and_dated_decisions(catalog_db: Path)
     assert file_history.size_bytes == 100
     assert file_history.decisions == (
         DatedDecision(
-            DecisionRecord(target_id="062A", rule_name="id_segment_exact", tier="download"),
+            DecisionRecord(
+                target_id="062A", rule_name="id_segment_exact", tier=DecisionTier.DOWNLOAD
+            ),
             decided_at=datetime(2026, 6, 22, 10, 0, 1, tzinfo=UTC),
             node_id="n1",
         ),
     )
+    assert file_history.decisions[0].decision.tier is DecisionTier.DOWNLOAD
     assert [o.reported_file.filename for o in file_history.observations] == ["keroro_062.avi"]
     assert file_history.latest_observation == file_history.observations[0]
     assert file_history.known_filenames == ("keroro_062.avi",)

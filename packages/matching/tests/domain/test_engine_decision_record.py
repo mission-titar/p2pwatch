@@ -23,12 +23,14 @@ def _decision(tier: DecisionTier = DecisionTier.DOWNLOAD) -> MatchDecision:
 
 def test_to_record_projects_the_three_comparable_fields() -> None:
     record = to_record(_decision())
-    assert record == DecisionRecord(target_id="062A", rule_name="id_segment_exact", tier="download")
+    assert record == DecisionRecord(
+        target_id="062A", rule_name="id_segment_exact", tier=DecisionTier.DOWNLOAD
+    )
 
 
 def test_decision_record_is_frozen_and_equal_by_value() -> None:
-    a = DecisionRecord(target_id="062A", rule_name="r", tier="catalog")
-    b = DecisionRecord(target_id="062A", rule_name="r", tier="catalog")
+    a = DecisionRecord(target_id="062A", rule_name="r", tier=DecisionTier.CATALOG)
+    b = DecisionRecord(target_id="062A", rule_name="r", tier=DecisionTier.CATALOG)
     assert a == b
     assert hash(a) == hash(b)
 

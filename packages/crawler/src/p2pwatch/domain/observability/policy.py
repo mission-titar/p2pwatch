@@ -121,7 +121,7 @@ _RISE_HEADINGS = {DecisionTier.DOWNLOAD: "📥 Download", DecisionTier.NOTIFY: "
 
 def _rank(decision: FileTargetDecision | None) -> int:
     """``DecisionTier.rank``, where none and a retraction rank below every tier."""
-    return DecisionTier(decision.tier).rank if isinstance(decision, DecisionRecord) else -1
+    return decision.tier.rank if isinstance(decision, DecisionRecord) else -1
 
 
 def _risen_tier(change: DecisionChange) -> DecisionTier | None:
@@ -129,8 +129,7 @@ def _risen_tier(change: DecisionChange) -> DecisionTier | None:
     new = change.new_decision
     if not isinstance(new, DecisionRecord) or new.tier not in _RISE_HEADINGS:
         return None
-    tier = DecisionTier(new.tier)
-    return tier if tier.rank > _rank(change.previous_decision) else None
+    return new.tier if new.tier.rank > _rank(change.previous_decision) else None
 
 
 def _label(decision: FileTargetDecision | None) -> str:

@@ -1,5 +1,6 @@
 """``ListFiles``: a page of the catalog's files and their counts, in one read."""
 
+from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord
 from p2pwatch.application.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.application.ports.driving.file_lister import FileListing
@@ -13,7 +14,7 @@ _ENTRY = CatalogEntry(
     file=FileKey(Network.ED2K, "a" * 32),
     size_bytes=100,
     latest_observation=None,
-    decisions=(DecisionRecord("062A", "rule", "download"),),
+    decisions=(DecisionRecord("062A", "rule", DecisionTier.DOWNLOAD),),
 )
 
 

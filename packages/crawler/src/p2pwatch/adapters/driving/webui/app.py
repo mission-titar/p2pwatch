@@ -25,6 +25,7 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 
+from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.ed2k_link import build_ed2k_link
 from catalog_matching.domain.models import TargetSegment
 from p2pwatch.adapters.driving.webui.displays import (
@@ -155,7 +156,7 @@ def _resolve_target_display(
     catalog-tier rule; cf. ``displays.CatalogEntryDisplay``)."""
     resolved: list[tuple[str, str]] = []
     for decision in catalog_entry.decisions:
-        if decision.tier == "catalog":
+        if not decision.tier.identifies_target:
             resolved.append(("unidentified", "·"))
             continue
         segment = segment_by_id.get(decision.target_id)
@@ -185,7 +186,7 @@ def _catalog_entry_displays(
             )
             tier_values = {decision.tier for decision in catalog_entry.decisions}
             if len(tier_values) == 1:
-                tier_display = catalog_entry.decisions[0].tier
+                tier_display = str(catalog_entry.decisions[0].tier)
             else:
                 tier_display = " · ".join(
                     f"{decision.target_id}: {decision.tier}" for decision in catalog_entry.decisions
@@ -428,6 +429,11 @@ def _normalize_sort(raw: str | None) -> CatalogEntrySort:
     return CatalogEntrySort(raw) if raw is not None and raw in CatalogEntrySort else _DEFAULT_SORT
 
 
+def _normalize_tier(raw: str | None) -> DecisionTier | None:
+    """Map a raw ``tier`` param to its tier, or no tier filter when unknown or missing."""
+    return DecisionTier(raw) if raw is not None and raw in DecisionTier else None
+
+
 def _normalize_direction(raw: str | None) -> SortDirection:
     """Map a raw ``direction`` param to ``asc``/``desc``, or the default when unknown or missing."""
     return SortDirection(raw) if raw is not None and raw in SortDirection else _DEFAULT_DIRECTION
@@ -478,22 +484,20 @@ def _sort_headers(
     )
 
 
-# Tier facet display order (strongest first) and the catalog→"unidentified" mask, matching the
-# row rendering. Only tiers PRESENT in the counts are rendered.
-_FACET_TIER_ORDER: tuple[str, ...] = ("download", "notify", "catalog")
-
-
-def _facet_label(tier: str) -> str:
-    """Display label for a tier facet: ``catalog`` is masked to ``"unidentified"`` (the
-    keroro_large catch-all), every other tier shows its own name."""
-    return "unidentified" if tier == "catalog" else tier
+def _facet_label(tier: DecisionTier) -> str:
+    """Display label for a tier facet: a tier that identifies no target is masked to
+    ``"unidentified"``, as in the rows; every other tier shows its own name."""
+    return str(tier) if tier.identifies_target else "unidentified"
 
 
 def _tier_facets(
-    *, file_count_by_tier: Mapping[str, int], active_tier: str | None, kept_params: dict[str, str]
+    *,
+    file_count_by_tier: Mapping[str, int],
+    active_tier: DecisionTier | None,
+    kept_params: dict[str, str],
 ) -> tuple[TierFacetDisplay, ...]:
     """Precompute the tier facet (W-D8): an "all" reset (no count) followed by one entry per tier
-    present, in ``_FACET_TIER_ORDER``. ``kept_params`` are the params to preserve (the filters but
+    present, strongest first. ``kept_params`` are the params to preserve (the filters but
     ``tier``, plus ``sort`` and ``direction``; ``page`` already excluded); a tier entry appends
     ``tier=<t>``, the reset omits it."""
     all_url = "/files?" + urlencode(kept_params) if kept_params else "/files"
@@ -505,7 +509,7 @@ def _tier_facets(
             selected_flag="1" if active_tier is None else "",
         )
     ]
-    for tier in _FACET_TIER_ORDER:
+    for tier in sorted(DecisionTier, key=lambda tier: tier.rank, reverse=True):
         if tier not in file_count_by_tier:
             continue
         link_params = {**kept_params, "tier": tier}
@@ -514,7 +518,7 @@ def _tier_facets(
                 label=_facet_label(tier),
                 count_display=f"({file_count_by_tier[tier]})",
                 url="/files?" + urlencode(link_params),
-                selected_flag="1" if active_tier == tier else "",
+                selected_flag="1" if active_tier is tier else "",
             )
         )
     return tuple(facets)
@@ -746,8 +750,10 @@ def build_app(
             TargetCoverageDisplay(
                 target_id=coverage.target_id,
                 title=_segment_by_id[coverage.target_id].title,
-                status=coverage.status,
-                best_tier_display=coverage.best_tier if coverage.best_tier is not None else "·",
+                status=str(coverage.status),
+                best_tier_display=str(coverage.best_tier)
+                if coverage.best_tier is not None
+                else "·",
                 file_count=coverage.file_count,
             )
             for coverage in summary.target_coverages
@@ -772,7 +778,7 @@ def build_app(
         # Filters: ``param.strip() or None`` (webui-security#0). A select with an empty option
         # sent ``?target_id=`` (empty string) that matched 0 results with no message.
         target_id_param = _normalize_param(request.query_params.get("target_id"))
-        tier_param = _normalize_param(request.query_params.get("tier"))
+        tier_param = _normalize_tier(request.query_params.get("tier"))
         search_text = _normalize_param(request.query_params.get("search"))
         # Presence of ``show_unmatched`` (any value) opts into the whole catalogue.
         show_unmatched = request.query_params.get("show_unmatched") is not None
