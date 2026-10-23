@@ -154,7 +154,7 @@ def test_get_target_id_is_none_for_unknown_hash(
     assert tracked_download_store.read_queued_target_id(_A) is None
 
 
-def _last_seen(connection: sqlite3.Connection, file: FileKey) -> str:
+def _latest_seen(connection: sqlite3.Connection, file: FileKey) -> str:
     row = connection.execute(
         "SELECT latest_seen_at FROM downloads WHERE file_id = ?", (file.file_id,)
     ).fetchone()
@@ -169,7 +169,7 @@ def test_record_queued_stamps_latest_seen_at_with_queued_at(
     queued_at = connection.execute(
         "SELECT queued_at FROM downloads WHERE file_id = ?", (_A.file_id,)
     ).fetchone()[0]
-    assert queued_at == _last_seen(connection, _A) == utc_iso(_T0)
+    assert queued_at == _latest_seen(connection, _A) == utc_iso(_T0)
 
 
 def test_set_seen_stamps_the_seen_at_it_is_given(
@@ -177,7 +177,7 @@ def test_set_seen_stamps_the_seen_at_it_is_given(
 ) -> None:
     tracked_download_store.record_queued(_A, "062A", 100, _T0)
     tracked_download_store.set_seen([_status(_A)], _T0 + _DAY)
-    assert _last_seen(connection, _A) == utc_iso(_T0 + _DAY)
+    assert _latest_seen(connection, _A) == utc_iso(_T0 + _DAY)
 
 
 def test_set_seen_ignores_a_hash_it_does_not_know(

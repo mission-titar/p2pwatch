@@ -23,7 +23,7 @@ from catalog_matching.domain.validation import (
 )
 
 
-def test_parse_leaf_token_defs() -> None:
+def test_parse_leaf_token_definitions() -> None:
     config = parse_matcher_config(
         {
             "tokens": {
@@ -47,7 +47,7 @@ def test_parse_leaf_token_defs() -> None:
     )
 
 
-def test_parse_composite_token_def() -> None:
+def test_parse_composite_token_definition() -> None:
     config = parse_matcher_config(
         {
             "tokens": {
@@ -61,14 +61,14 @@ def test_parse_composite_token_def() -> None:
     assert config.tokens["kt"] == AnyDefinition(operands=("keroro", "titar"))
 
 
-def test_parse_not_token_def() -> None:
+def test_parse_not_token_definition() -> None:
     config = parse_matcher_config(
         {"tokens": {"keroro": {"keyword": "keroro"}, "nk": {"not": "keroro"}}, "rules": []}
     )
     assert config.tokens["nk"] == NotDefinition(operand="keroro")
 
 
-def test_parse_rule_with_inline_token_ref_and_condition() -> None:
+def test_parse_rule_with_inline_token_reference_and_condition() -> None:
     config = parse_matcher_config(
         {
             "tokens": {
@@ -165,7 +165,7 @@ def test_unknown_token_definition_shape_raises() -> None:
         parse_matcher_config({"tokens": {"x": {"frobnicate": "y"}}, "rules": []})
 
 
-def test_token_def_with_multiple_keys_raises() -> None:
+def test_token_definition_with_multiple_keys_raises() -> None:
     with pytest.raises(MatchingConfigError, match="exactly one type-key"):
         parse_matcher_config({"tokens": {"x": {"keyword": "a", "regex": "b"}}, "rules": []})
 
@@ -336,7 +336,7 @@ def test_attr_between_min_greater_than_max_is_rejected() -> None:
         )
 
 
-def test_token_ref_missing_name_raises() -> None:
+def test_token_reference_missing_name_raises() -> None:
     with pytest.raises(MatchingConfigError, match="token"):
         parse_matcher_config(
             {
@@ -543,13 +543,13 @@ def test_parse_targets_missing_required_segment_field_raises() -> None:
 # --- Branch-coverage leftovers ---
 
 
-def test_token_def_non_mapping_raises() -> None:
-    """_require_mapping raises MatchingConfigError if the token def is not a mapping."""
+def test_token_definition_non_mapping_raises() -> None:
+    """_require_mapping raises MatchingConfigError if the token definition is not a mapping."""
     with pytest.raises(MatchingConfigError, match="mapping"):
         parse_matcher_config({"tokens": {"x": "not-a-dict"}, "rules": []})
 
 
-def test_composite_token_def_multiple_condition_keys_raises() -> None:
+def test_composite_token_definition_multiple_condition_keys_raises() -> None:
     """_parse_condition raises if a composite token contains 2+ condition keys."""
     with pytest.raises(MatchingConfigError, match="exactly one condition"):
         parse_matcher_config({"tokens": {"x": {"all": ["a"], "any": ["b"]}}, "rules": []})
@@ -569,7 +569,7 @@ def test_all_body_non_list_raises() -> None:
 
 
 def test_coverage_token_missing_min_raises() -> None:
-    """_parse_token_def raises if a coverage does not declare 'min_coverage'."""
+    """_parse_token_definition raises if a coverage does not declare 'min_coverage'."""
     with pytest.raises(MatchingConfigError, match="'min_coverage'"):
         parse_matcher_config({"tokens": {"t": {"coverage": "title"}}, "rules": []})
 
@@ -591,7 +591,7 @@ def test_rules_non_list_raises() -> None:
         parse_matcher_config({"tokens": {}, "rules": "not-a-list"})
 
 
-def test_token_ref_with_coverage_token_no_override_ok() -> None:
+def test_token_reference_with_coverage_token_no_override_ok() -> None:
     """TokenReference on a coverage without an override: valid, no error."""
     config = parse_matcher_config(
         {

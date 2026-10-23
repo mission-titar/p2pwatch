@@ -10,7 +10,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.errors import (
 from p2pwatch.domain.store_error import StoreError
 
 
-def test_persistence_error_satisfies_repository_error_contract() -> None:
+def test_persistence_error_satisfies_store_error_contract() -> None:
     assert issubclass(PersistenceError, StoreError)
     assert issubclass(MigrationError, StoreError)  # transitive via PersistenceError
 

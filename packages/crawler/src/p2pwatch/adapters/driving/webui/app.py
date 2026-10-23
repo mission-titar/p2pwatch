@@ -1143,8 +1143,10 @@ def build_app(
                     "errors": (_CONSOLE_UNKNOWN_DB,),
                 },
             )
-        outcome = await run_in_threadpool(console_query_runner.run_console_query, database, sql)
-        query_answer = outcome.query_answer
+        console_query_run = await run_in_threadpool(
+            console_query_runner.run_console_query, database, sql
+        )
+        query_answer = console_query_run.query_answer
         if isinstance(query_answer, QueryFailure):
             return templates.TemplateResponse(
                 request,
@@ -1162,7 +1164,9 @@ def build_app(
             {
                 "sql": sql,
                 "db_options": db_options,
-                "query_answers": (_to_query_answer_display(query_answer, outcome.row_cap),),
+                "query_answers": (
+                    _to_query_answer_display(query_answer, console_query_run.row_cap),
+                ),
                 "errors": (),
             },
         )
@@ -1172,8 +1176,10 @@ def build_app(
         database = _console_database(db_key)
         if database is None:
             return Response(_CONSOLE_UNKNOWN_DB, status_code=400, media_type="text/plain")
-        outcome = await run_in_threadpool(console_query_runner.run_console_query, database, sql)
-        query_answer = outcome.query_answer
+        console_query_run = await run_in_threadpool(
+            console_query_runner.run_console_query, database, sql
+        )
+        query_answer = console_query_run.query_answer
         if isinstance(query_answer, QueryFailure):
             return Response(query_answer.message, status_code=400, media_type="text/plain")
         buffer = io.StringIO()

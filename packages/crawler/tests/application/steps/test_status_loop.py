@@ -200,14 +200,14 @@ async def test_each_reading_is_published_with_its_wall_and_monotonic_instants(
 ) -> None:
     fake_time, shutdown = FakeTime(), asyncio.Event()
     fake_time.step_wall(timedelta(hours=1))  # the two clocks part: each instant shows its clock
-    store = FakeStatusReadingStore()
+    status_reading_store = FakeStatusReadingStore()
     client = FakeStatusClient([_status(kad=_UP), reading], shutdown)
     deps = _deps("amuled", client, fake_time, FakeTimedEventEmitter(fake_time), shutdown)
-    deps.status_reading_writer = store
+    deps.status_reading_writer = status_reading_store
     await asyncio.wait_for(status_loop(deps, _NODE), timeout=1.0)
     read_at = fake_time.wall.now() - timedelta(seconds=60)  # the loop slept one period after it
     published_at = fake_time.monotonic.now() - timedelta(seconds=60)
-    assert store.read_readings() == {
+    assert status_reading_store.read_readings() == {
         "amuled": PublishedReading(StatusReading(read_at, published), published_at)
     }
 

@@ -30,6 +30,11 @@ from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDi
 from p2pwatch.domain.file_history import DatedDecision, FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation, ReportedFile
+from tests.support.adapters.driven.persistence_sqlite.catalog_seeds import (
+    seed,
+    seed_retracted,
+    seed_whole_episode,
+)
 from tests.support.catalog_rows import (
     SEEN_AT,
     file_id,
@@ -37,7 +42,6 @@ from tests.support.catalog_rows import (
     insert_file,
     insert_observation,
 )
-from tests.support.catalog_seeds import seed, seed_retracted, seed_whole_episode
 
 # Selects the CTE under test on its own: SQLite drops the CTEs a query does not reference, so
 # the resulting plan is exactly how ``latest_observation`` is resolved.

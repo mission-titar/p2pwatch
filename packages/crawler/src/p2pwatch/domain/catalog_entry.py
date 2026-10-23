@@ -12,7 +12,7 @@ class CatalogEntrySort(StrEnum):
     NAME = "name"
     SIZE = "size"
     SOURCES = "sources"
-    LATEST_SEEN = "last_seen"
+    LATEST_SEEN = "last_seen"  # the value keeps its old name: it is the URL's, in bookmarks
     TIER = "tier"  # the strongest tier of the file's current decisions
 
 

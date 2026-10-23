@@ -37,7 +37,7 @@ def build_command_line(
     *, env: Mapping[str, str], root_logger: logging.Logger
 ) -> ArgparseCommandLine:
     """The command line run in the environment ``env``, logging through ``root_logger``."""
-    amule_conf = PosixAmuleConfStore(amule_conf_path=_AMULE_CONF_PATH, change_owner=os.chown)
+    amule_conf_store = PosixAmuleConfStore(amule_conf_path=_AMULE_CONF_PATH, change_owner=os.chown)
     service_supervisor = S6ServiceSupervisor(
         port_sync_service_directory=_PORT_SYNC_SERVICE_DIRECTORY,
         amuled_service_directory=_AMULED_SERVICE_DIRECTORY,
@@ -64,8 +64,8 @@ def build_command_line(
                 ],
                 change_owner=os.chown,
             ),
-            amule_conf_reader=amule_conf,
-            amule_conf_writer=amule_conf,
+            amule_conf_reader=amule_conf_store,
+            amule_conf_writer=amule_conf_store,
             admin_password_setter=AmuleApiAdminPasswordSetter(
                 config_directory=_CONFIG_DIRECTORY,
                 home_directory=_HOME_DIRECTORY,
@@ -76,8 +76,8 @@ def build_command_line(
         ),
         port_sync_loop_runner=PortSyncComposition(
             env=env,
-            amule_conf_reader=amule_conf,
-            amule_conf_writer=amule_conf,
+            amule_conf_reader=amule_conf_store,
+            amule_conf_writer=amule_conf_store,
             service_supervisor=service_supervisor,
             url_opener=build_opener(),  # gluetun reached through the environment's proxies, if any
             monotonic_clock=SystemMonotonicClock(),

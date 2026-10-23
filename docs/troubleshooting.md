@@ -156,16 +156,16 @@ accumulé, mais vous redémarrez d'un état connu.
 
 ### Un téléchargement est bloqué, puis passe en `failed`
 
-- **Ce que fait le crawler.** Chaque cycle de téléchargement horodate `last_seen_at` pour chaque
+- **Ce que fait le crawler.** Chaque cycle de téléchargement horodate `latest_seen_at` pour chaque
   fichier suivi qu'amuled rapporte, que ce soit dans sa file de téléchargement ou dans ses fichiers
   partagés. Un téléchargement `queued` ou `downloading` qu'amuled ne rapporte pas lui est renvoyé à
   chaque cycle, jusqu'à ce qu'il le rapporte de nouveau. S'il ne l'a plus rapporté depuis
   `download.lost_after_seconds` (24 h par défaut), il est marqué `failed`, avec une ligne de
   journal : `file=... unseen by the client for 86400.0s: marked failed`.
 - **Comment l'absence se compte.** Sur l'horloge monotone du nœud, qu'un réglage de l'heure système
-  ne déplace pas. Au démarrage, le décompte reprend depuis `last_seen_at` : un téléchargement absent
-  depuis plus de `download.lost_after_seconds`, arrêt du nœud compris, passe en `failed` dès le
-  premier cycle. Une heure système reculée pendant l'arrêt ne fait jamais attendre plus de
+  ne déplace pas. Au démarrage, le décompte reprend depuis `latest_seen_at` : un téléchargement
+  absent depuis plus de `download.lost_after_seconds`, arrêt du nœud compris, passe en `failed` dès
+  le premier cycle. Une heure système reculée pendant l'arrêt ne fait jamais attendre plus de
   `download.lost_after_seconds` ; une heure avancée pendant l'arrêt compte, elle, comme du temps
   écoulé.
 - **Pourquoi c'est sans danger.** Une entrée reste dans la file d'amuled même avec **zéro source** :

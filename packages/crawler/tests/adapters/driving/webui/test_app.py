@@ -310,7 +310,7 @@ async def test_dashboard_shows_a_target_without_a_best_tier_as_a_dot() -> None:
 
 
 @pytest.mark.asyncio
-async def test_files_asks_for_the_first_page_of_matched_files_by_last_seen() -> None:
+async def test_files_asks_for_the_first_page_of_matched_files_by_latest_seen() -> None:
     text, call = await _files_page("/files")
     assert call == _DEFAULT_CALL
     assert TEST_HASH[:8] in text
@@ -575,7 +575,7 @@ async def _source_listing_page(
 
 
 @pytest.mark.asyncio
-async def test_sources_lists_each_source_with_its_links_last_seen_and_files() -> None:
+async def test_sources_lists_each_source_with_its_links_latest_seen_and_files() -> None:
     page, call = await _source_listing_page("/sources")
     assert call == ListSourcesCall(search_text=None, page=1)
     name = '<a href="/sources/name?source_name=AnimuseeFMR">AnimuseeFMR</a>'

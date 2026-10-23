@@ -40,7 +40,7 @@ def build_amule_bumper(
     *, env: Mapping[str, str], github_api_url: str, url_opener: OpenerDirector
 ) -> BumpAmule:
     """The bump run in the environment ``env``, GitHub at ``github_api_url`` by ``url_opener``."""
-    dockerfile = FilesystemDockerfileStore()
+    dockerfile_store = FilesystemDockerfileStore()
     github_output = env.get("GITHUB_OUTPUT")
     return BumpAmule(
         upstream_client=GithubUpstreamClient(
@@ -50,8 +50,8 @@ def build_amule_bumper(
             url_opener,
             timeout_seconds=_GITHUB_TIMEOUT_SECONDS,
         ),
-        dockerfile_reader=dockerfile,
-        dockerfile_writer=dockerfile,
+        dockerfile_reader=dockerfile_store,
+        dockerfile_writer=dockerfile_store,
         pull_request_drafter=FilesystemPullRequestDrafter(),
         bump_announcer=(
             GithubActionsBumpAnnouncer(Path(github_output))

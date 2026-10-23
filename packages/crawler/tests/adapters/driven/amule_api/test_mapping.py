@@ -46,7 +46,7 @@ def _result(**overrides: Any) -> dict[str, Any]:
     return row
 
 
-def _meta(reported_file: ReportedFile) -> dict[str, object]:
+def _raw_metadata(reported_file: ReportedFile) -> dict[str, object]:
     return dict(reported_file.raw_metadata)
 
 
@@ -91,7 +91,7 @@ def test_media_fills_the_columns_that_ec_never_could() -> None:
 
     assert reported_file.duration_seconds == 1440
     assert reported_file.bitrate_kbps == 1500
-    assert _meta(reported_file)["codec"] == "H.264"
+    assert _raw_metadata(reported_file)["codec"] == "H.264"
     # artist/album/title have no column: they survive in raw_metadata (spec §4.2).
     assert ("media.title", "Keroro") in reported_file.raw_metadata
 
@@ -101,20 +101,20 @@ def test_a_null_media_leaves_the_media_columns_empty() -> None:
 
     assert reported_file.duration_seconds is None
     assert reported_file.bitrate_kbps is None
-    assert _meta(reported_file)["codec"] is None
+    assert _raw_metadata(reported_file)["codec"] is None
 
 
 def test_a_malformed_media_object_is_tolerated() -> None:
     (reported_file,), _ = map_search_results([_result(media={"codec": 7})], "keroro")
 
-    assert _meta(reported_file)["codec"] is None
+    assert _raw_metadata(reported_file)["codec"] is None
     assert reported_file.duration_seconds is None
 
 
 def test_unmapped_keys_land_in_raw_metadata() -> None:
     (reported_file,), _ = map_search_results([_result(rating=3)], "keroro")
 
-    raw = _meta(reported_file)
+    raw = _raw_metadata(reported_file)
     assert raw["rating"] == "3"
     assert raw["status"] == "new"
     assert raw["already_downloaded"] == "false"
@@ -142,7 +142,9 @@ def test_every_alternate_name_becomes_its_own_observation() -> None:
     assert {reported_file.file for reported_file in reported_files} == {_KEY}
     assert {reported_file.size_bytes for reported_file in reported_files} == {3825205248}
     assert [reported_file.source_count for reported_file in reported_files] == [217, 40, 10]
-    assert [_meta(reported_file)["complete_source_count"] for reported_file in reported_files] == [
+    assert [
+        _raw_metadata(reported_file)["complete_source_count"] for reported_file in reported_files
+    ] == [
         142,
         22,
         3,
@@ -218,7 +220,7 @@ def test_missing_source_counts_read_as_zero() -> None:
     (reported_file,), _ = map_search_results([_result(sources="nope")], "keroro")
 
     assert reported_file.source_count == 0
-    assert _meta(reported_file)["complete_source_count"] == 0
+    assert _raw_metadata(reported_file)["complete_source_count"] == 0
 
 
 def test_a_non_integer_source_count_reads_as_zero() -> None:
@@ -230,7 +232,7 @@ def test_a_non_integer_source_count_reads_as_zero() -> None:
 def test_a_non_string_file_type_is_dropped() -> None:
     (reported_file,), _ = map_search_results([_result(file_type=7)], "keroro")
 
-    assert _meta(reported_file)["file_type"] is None
+    assert _raw_metadata(reported_file)["file_type"] is None
 
 
 def test_a_results_payload_that_is_not_a_list_yields_nothing() -> None:

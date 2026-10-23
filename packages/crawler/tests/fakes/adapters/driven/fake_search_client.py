@@ -43,5 +43,5 @@ def make_unreachable(message: str = "down") -> ClientUnreachableError:
     return ClientUnreachableError(message)
 
 
-def make_search_failed(message: str = "EC_OP_FAILED") -> SearchFailedError:
+def make_search_failed(message: str = "search failed") -> SearchFailedError:
     return SearchFailedError(message)

@@ -17,6 +17,7 @@ from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory, SourceNaming
+from tests.support.adapters.driven.persistence_sqlite.catalog_seeds import seed
 from tests.support.catalog_rows import (
     insert_file,
     insert_observation,
@@ -25,7 +26,6 @@ from tests.support.catalog_rows import (
     insert_source_variant,
     source_id,
 )
-from tests.support.catalog_seeds import seed
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _LIMIT = 50
@@ -216,7 +216,7 @@ def _known_sources(db: Path, *, search_text: str | None, offset: int) -> tuple[K
         return reader.read_known_sources(search_text=search_text, limit=_LIMIT, offset=offset)
 
 
-def test_known_sources_are_each_source_once_by_last_seen_with_its_latest_name(
+def test_known_sources_are_each_source_once_by_latest_seen_with_its_latest_name(
     catalog_db: Path,
 ) -> None:
     _seed_sources(catalog_db)

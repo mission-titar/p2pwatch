@@ -75,8 +75,8 @@ _PROJECT = f"emule_smoke_{uuid.uuid4().hex[:8]}"
 # Throwaway bind-mount root, named after the project so two runs never share it. Computed, not
 # created, at import time: this module is collected by every gate run, and only the fixture
 # below (which runs when the suite is actually selected) touches the filesystem.
-_STATE_DIR = Path(tempfile.gettempdir()) / _PROJECT
-_STATE_SUBDIRS = ("amule", "data", "downloads")
+_STATE_DIRECTORY = Path(tempfile.gettempdir()) / _PROJECT
+_STATE_SUBDIRECTORIES = ("amule", "data", "downloads")
 
 _EC_PASSWORD = "smoke-ec-password"
 _API_PASSWORD = "smoke-api-password"
@@ -88,7 +88,7 @@ _SMOKE_ENV = {
     "PGID": str(os.getgid()),
     "AMULE_EC_PASSWORD": _EC_PASSWORD,
     "AMULE_API_PASSWORD": _API_PASSWORD,
-    "SMOKE_STATE": str(_STATE_DIR),
+    "SMOKE_STATE": str(_STATE_DIRECTORY),
 }
 
 # The `.env` the render test writes beside its copy of compose.yml, and ONLY there. Values no
@@ -248,14 +248,14 @@ def project_files() -> Iterator[tuple[Path, ...]]:
         pytest.fail("run as a non-root user: PUID 0 would pass the data/ ownership check")
     base = (_SMOKE,)
     _down(base)
-    shutil.rmtree(_STATE_DIR, ignore_errors=True)
-    for name in _STATE_SUBDIRS:
-        (_STATE_DIR / name).mkdir(parents=True)
+    shutil.rmtree(_STATE_DIRECTORY, ignore_errors=True)
+    for name in _STATE_SUBDIRECTORIES:
+        (_STATE_DIRECTORY / name).mkdir(parents=True)
     try:
         yield base
     finally:
         _down(base)
-        shutil.rmtree(_STATE_DIR, ignore_errors=True)
+        shutil.rmtree(_STATE_DIRECTORY, ignore_errors=True)
 
 
 def test_the_harness_hides_everything_but_the_daemon_selectors() -> None:
@@ -475,7 +475,7 @@ def _ports(service: Any) -> set[tuple[int, str]]:
 def test_the_deploy_layout_renders(variant: str, tmp_path: Path) -> None:
     """The core and `ed2k` render from deploy/compose.yml, `ed2k` from its own directory."""
     services = _render(variant, tmp_path)
-    ed2k_dir = tmp_path / "ed2k"
+    ed2k_directory = tmp_path / "ed2k"
     core, ed2k = services[_CORE], services[_AMULE]
 
     assert ed2k["environment"]["PUID"] == _RENDER_DOTENV["PUID"]
@@ -483,8 +483,8 @@ def test_the_deploy_layout_renders(variant: str, tmp_path: Path) -> None:
     assert ed2k["environment"]["AMULE_EC_PASSWORD"] == _RENDER_DOTENV["AMULE_EC_PASSWORD"]
     assert core["user"] == f"{_RENDER_DOTENV['PUID']}:{_RENDER_DOTENV['PGID']}"
     for source, _ in _binds(ed2k).values():
-        assert source.is_relative_to(ed2k_dir), f"{source} is outside {ed2k_dir}"
-    assert _binds(core)["/downloads"] == (ed2k_dir / "downloads", True)
+        assert source.is_relative_to(ed2k_directory), f"{source} is outside {ed2k_directory}"
+    assert _binds(core)["/downloads"] == (ed2k_directory / "downloads", True)
     assert _binds(core)["/data"] == (tmp_path / "data", False)
     assert "network_mode" not in core  # the core stays outside the tunnel
     assert _ports(core) == {(8080, "tcp")}
@@ -508,7 +508,7 @@ def test_the_deploy_layout_renders(variant: str, tmp_path: Path) -> None:
 # amuled's IncomingDir, written by the startup one-shot into amule.conf. A file dropped there is
 # hashed and shared at the next amuled start, which is how we obtain a REAL ed2k hash without
 # ever computing one ourselves.
-_INCOMING_DIR = "/downloads/incoming"
+_INCOMING_DIRECTORY = "/downloads/incoming"
 _SEEDED_TARGET = "062A"
 _SEEDED_SIZE = 65536
 
@@ -631,7 +631,7 @@ def test_a_file_amuled_shares_is_recorded_completed(project_files: tuple[Path, .
         _AMULE,
         "sh",
         "-c",
-        f"head -c {_SEEDED_SIZE} /dev/urandom > {_INCOMING_DIR}/p2pwatch-smoke.bin",
+        f"head -c {_SEEDED_SIZE} /dev/urandom > {_INCOMING_DIRECTORY}/p2pwatch-smoke.bin",
         files=project_files,
         timeout=120,
     )

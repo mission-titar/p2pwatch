@@ -67,13 +67,13 @@ class MatcherResolver:
         min_similarity_override: float | None = None,
     ) -> Matcher:
         """Builds the matcher of token ``name`` for ``target`` (coverage overrides)."""
-        return self._build_def(
+        return self._build_definition(
             self.config.tokens[name], target, min_coverage_override, min_similarity_override
         )
 
     def resolve_rule(self, rule: Rule, target: TargetSegment) -> Matcher:
         """Builds the matcher of a rule's condition for ``target``."""
-        return self._build_def(rule.condition, target, None, None)
+        return self._build_definition(rule.condition, target, None, None)
 
     def resolve_target(self, target: TargetSegment) -> ResolvedTarget:
         """Builds all the trees (tokens + rules) for ``target``."""
@@ -94,16 +94,16 @@ class MatcherResolver:
             return self.resolve_token(
                 operand.name, target, operand.min_coverage, operand.min_similarity
             )
-        return self._build_def(operand, target, None, None)
+        return self._build_definition(operand, target, None, None)
 
-    def _build_def(
+    def _build_definition(
         self,
-        token_def: TokenDefinition,
+        token_definition: TokenDefinition,
         target: TargetSegment,
         min_coverage_override: float | None,
         min_similarity_override: float | None,
     ) -> Matcher:
-        match token_def:
+        match token_definition:
             case KeywordDefinition(phrase=phrase):
                 return KeywordMatcher(phrase)
             case RegexDefinition(pattern=pattern, flags=flags):
@@ -132,4 +132,4 @@ class MatcherResolver:
             case NotDefinition(operand=operand):
                 return NotMatcher(self._build_operand(operand, target))
             case _:  # pragma: no cover - exhaustive (mypy proves it via assert_never)
-                assert_never(token_def)
+                assert_never(token_definition)

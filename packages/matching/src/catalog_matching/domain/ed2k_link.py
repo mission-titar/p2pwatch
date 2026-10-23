@@ -1,11 +1,11 @@
 """PURE ed2k link construction (shared crawler + webui domain).
 
 The link has the form ``ed2k://|file|<name>|<size>|<hash>|/`` (format consumed by
-``EC_OP_ADD_LINK`` on the crawler side, reproduced for copy/share on the webui side). The
-``|`` is the FIELD SEPARATOR: a hostile filename could, if it contained a ``|``, inject a
+amuleapi's ``POST /downloads`` on the crawler side, reproduced for copy/share on the webui side).
+The ``|`` is the FIELD SEPARATOR: a hostile filename could, if it contained a ``|``, inject a
 field and break the link framing (size/hash shifted → link unusable or pointing elsewhere).
 So we escape the name with UTF-8 percent-encoding (``urllib.parse.quote``), keeping a
-readable safe set — a space becomes ``%20``, the ``|`` becomes ``%7C``, control characters
+readable safe set: a space becomes ``%20``, the ``|`` becomes ``%7C``, control characters
 and non-ASCII are neutralized. Only the 5 STRUCTURAL separators of the link
 (``|file|`` … ``|/``) stay as ``|``.
 

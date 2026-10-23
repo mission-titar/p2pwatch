@@ -4,7 +4,7 @@ The adapter SIGNALS, it does not decide (same philosophy as the amuleapi adapter
 unexpected ``sqlite3.Error`` comes out wrapped as ``PersistenceError``, never bare.
 An append-only trigger that fires is a BUG in the caller code, not a business
 case → the same ``PersistenceError``. ``wrap_sqlite_errors`` is the SINGLE
-wrapper shared by the connection and the two repositories (chained cause kept).
+wrapper shared by the connection and every store and reader (chained cause kept).
 
 ``PersistenceError`` INHERITS from the ``StoreError`` contract (``domain/
 store_error.py``): the application catches ``StoreError`` (orchestration spec §7,

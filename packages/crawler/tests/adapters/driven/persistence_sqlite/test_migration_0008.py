@@ -121,9 +121,9 @@ def test_files_refuse_a_non_canonical_ed2k_id_or_an_unknown_network(
 
 
 def test_a_new_observation_reuses_the_variant_0008_rekeyed(tmp_path: Path) -> None:
-    """The repository and 0008 hash a variant alike, or every file gets a second variant."""
+    """The store and 0008 hash a variant alike, or every file gets a second variant."""
     _catalog_at_7(tmp_path / "catalog.db")
-    migrated = open_catalog(tmp_path / "catalog.db")  # the repository writes today's columns
+    migrated = open_catalog(tmp_path / "catalog.db")  # the store writes today's columns
     reported_file = ReportedFile(
         file=FileKey(Network.ED2K, _B),
         filename="b.avi",
