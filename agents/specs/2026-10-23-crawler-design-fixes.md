@@ -245,13 +245,13 @@ exemptions of blocks 10 and 30 on their rows.
   domain the same way (A13). This supersedes the ledger's A9 config half ("`ConfigError` internal to the config
   adapter, no change"): once the domain builds the config, it raises its own error, and two types for one refusal
   would be the duplication A9 named. `load_config`, which reads the three files, stays in the adapter, its `except`
-  following, and its two tests stay in the adapter's test file. Block 30 moves the rest of the code and of its
+  following, and its two tests stay in the adapter's test file (Corrected: four, block 20 having added two). Block 30 moves the rest of the code and of its
   819-line test file verbatim: mechanical, exempt.
 - **D3.** `ValidateConfig` returns a `ConfigReport` holding at most one `ConfigProblem(file, key, message)`, which
   the command line words. An absent, unreadable or non-YAML file, or one whose root is not a mapping, raises
   `BrokenInputError` (the three tools' name), printed on one line, exit 1: a root that is no mapping is not the
   format the parser reads, as the tools class it. The crawl keeps raising. The split needs D2's. Accepted limit
-  (R6): one problem, the parser stopping at the first. `InvalidConfigError` carries its `key` and `message` apart,
+  (R6): one problem, the parser stopping at the first. `InvalidConfigError` carries its `key` and `message` apart (Corrected: from block 30, which replaces `ConfigError` and so keeps block 20's key path),
   its text staying `<key>: <message>` so the crawl's line is unchanged; the use case adds the `file` it checked.
   `ConfigProblem.key` is `str | None`: `None` for a matching problem, which keeps its whole text as its message,
   since the crawler's 23 config errors name a key path but 39 of the matching's name none apart (`reference cycle:
