@@ -144,7 +144,7 @@ Strict TDD in every block, as `AGENTS.md` states it. Full contents, estimate sou
 | 60 | `refactor/fixed-values-to-composition` | `PAGE_SIZE`; amuleapi's fixed values to the composition (D7, D8) (Corrected: split at 23 files) | 114, 17 (measured) |
 | 65 | `refactor/fixed-values-servers-and-console` | the servers' and the console's fixed values; `max_filename_length` with no default (D8) (Corrected: added in Act) | |
 | 70 | `refactor/composition-resource-stack` | the resource stack; backoff at start; gluetun's logger (D9, D10, D31) | 230, 13 |
-| 80 | `refactor/wake-subject` | `WakeSubject`; `record_queued` returns nothing (D11, D19) | 150, 16 |
+| 80 | `refactor/wake-subject` | `WakeSubject`; `record_queued` returns nothing (D11, D19) (Corrected: 20 files, one past the bound, kept whole by the operator) | 145, 20 (measured) |
 | 90 | `refactor/decision-tier` | `DecisionTier` in `catalog_matching` (D12) | 150, 10 |
 | 100 | `refactor/retraction-type` | the crawler's tiers typed, `Retraction` (D12, D13) | 330, 19 |
 | 110 | `refactor/tier-rules-from-type` | tier rules and SQL from the type (D14) | 230, 13 |
