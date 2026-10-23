@@ -12,5 +12,8 @@ class DecisionTier(StrEnum):
 
     @property
     def rank(self) -> int:
-        """Higher is stronger: the members are declared from the weakest."""
-        return list(DecisionTier).index(self)
+        """Higher is stronger: download, then notify, then catalog."""
+        return _WEAKEST_FIRST.index(self)
+
+
+_WEAKEST_FIRST = (DecisionTier.CATALOG, DecisionTier.NOTIFY, DecisionTier.DOWNLOAD)
