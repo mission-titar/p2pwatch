@@ -6,11 +6,11 @@ from pathlib import Path
 import pytest
 
 from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.engine import DecisionRecord, Explanation, MatchDecision
+from catalog_matching.domain.engine import DecisionRecord
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.file_target_decision import Retraction
+from p2pwatch.domain.file_target_decision import DatedDecision, FileTargetDecision, Retraction
 from tests.support.catalog_rows import insert_file
 
 _A = FileKey(Network.ED2K, "a" * 32)
@@ -20,15 +20,8 @@ _T0 = datetime(2026, 6, 12, tzinfo=UTC)
 _T1 = _T0 + timedelta(minutes=1)
 
 
-def _decision(rule_name: str, tier: DecisionTier, target_id: str = "062A") -> MatchDecision:
-    return MatchDecision(
-        target_id=target_id,
-        rule_name=rule_name,
-        tier=tier,
-        explanation=Explanation(
-            target_id=target_id, rules_fired=(rule_name,), tokens_matched=(), coverage_values=()
-        ),
-    )
+def _dated(decision: FileTargetDecision, decided_at: datetime) -> DatedDecision[FileTargetDecision]:
+    return DatedDecision(_A, decision, decided_at, _NODE)
 
 
 @pytest.fixture
@@ -54,13 +47,13 @@ def test_latest_decisions_returns_the_latest_record_per_target(
     decision_store: SqliteDecisionStore,
 ) -> None:
     decision_store.record_decision(
-        _A, _decision("keroro_large", DecisionTier.CATALOG, "062A"), _T0, _NODE
+        _dated(DecisionRecord("062A", "keroro_large", DecisionTier.CATALOG), _T0)
     )
     decision_store.record_decision(
-        _A, _decision("id_segment_exact", DecisionTier.DOWNLOAD, "062A"), _T1, _NODE
+        _dated(DecisionRecord("062A", "id_segment_exact", DecisionTier.DOWNLOAD), _T1)
     )  # newer
     decision_store.record_decision(
-        _A, _decision("numero_nu", DecisionTier.NOTIFY, "062B"), _T0, _NODE
+        _dated(DecisionRecord("062B", "numero_nu", DecisionTier.NOTIFY), _T0)
     )
     assert decision_store.read_latest_decisions(_A) == {
         "062A": DecisionRecord(
@@ -74,7 +67,7 @@ def test_latest_decisions_reads_each_tier_as_the_type(
     decision_store: SqliteDecisionStore,
 ) -> None:
     decision_store.record_decision(
-        _A, _decision("numero_nu", DecisionTier.NOTIFY, "062A"), _T0, _NODE
+        _dated(DecisionRecord("062A", "numero_nu", DecisionTier.NOTIFY), _T0)
     )
     latest = decision_store.read_latest_decisions(_A)["062A"]
     assert isinstance(latest, DecisionRecord)
@@ -85,9 +78,9 @@ def test_latest_decisions_includes_a_target_whose_latest_tier_is_retracted(
     decision_store: SqliteDecisionStore,
 ) -> None:
     decision_store.record_decision(
-        _A, _decision("id_segment_exact", DecisionTier.DOWNLOAD, "062A"), _T0, _NODE
+        _dated(DecisionRecord("062A", "id_segment_exact", DecisionTier.DOWNLOAD), _T0)
     )
-    decision_store.record_retraction(_A, "062A", _T1, _NODE)
+    decision_store.record_decision(_dated(Retraction("062A"), _T1))
     assert decision_store.read_latest_decisions(_A) == {"062A": Retraction("062A")}
 
 
@@ -95,9 +88,9 @@ def test_latest_decisions_excludes_the_legacy_empty_sentinel(
     decision_store: SqliteDecisionStore,
 ) -> None:
     decision_store.record_decision(
-        _A, _decision("numero_nu", DecisionTier.NOTIFY, "062A"), _T0, _NODE
+        _dated(DecisionRecord("062A", "numero_nu", DecisionTier.NOTIFY), _T0)
     )
-    decision_store.record_retraction(_A, "", _T1, _NODE)  # legacy target_id=""
+    decision_store.record_decision(_dated(Retraction(""), _T1))  # legacy target_id=""
     assert decision_store.read_latest_decisions(_A) == {
         "062A": DecisionRecord(target_id="062A", rule_name="numero_nu", tier=DecisionTier.NOTIFY)
     }

@@ -11,12 +11,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.engine import (
-    DecisionRecord,
-    Explanation,
-    MatchDecision,
-    MatchingEngine,
-)
+from catalog_matching.domain.engine import DecisionRecord, MatchingEngine
 from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
@@ -25,7 +20,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
 from p2pwatch.application.steps.decisions import rejudge_file
 from p2pwatch.application.steps.record_observations import record_observation
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.file_target_decision import Retraction
+from p2pwatch.domain.file_target_decision import DatedDecision, Retraction
 from p2pwatch.domain.observability.events import TargetTitle
 from p2pwatch.domain.observability.notification import TierRise
 from p2pwatch.domain.observation import FileObservation, ReportedFile
@@ -82,14 +77,13 @@ def _seed_decision(
     decided_at: datetime,
     node_id: str = _NODE,
 ) -> None:
-    explanation = Explanation(
-        target_id=target_id, rules_fired=(), tokens_matched=(), coverage_values=()
-    )
     decision_store.record_decision(
-        _key(native_id),
-        MatchDecision(target_id, "title_review", DecisionTier.NOTIFY, explanation),
-        decided_at,
-        node_id,
+        DatedDecision(
+            _key(native_id),
+            DecisionRecord(target_id, "title_review", DecisionTier.NOTIFY),
+            decided_at,
+            node_id,
+        )
     )
 
 
@@ -360,7 +354,9 @@ async def test_already_retracted_then_none_is_a_no_op(
         FileObservation(_reported_file(_HASH_CAT, _DISCARD_NAME), wall_clock.now(), _NODE)
     )
     _seed_decision(decision_store, _HASH_CAT, "062A", wall_clock.now())
-    decision_store.record_retraction(_key(_HASH_CAT), "062A", wall_clock.now(), _NODE)
+    decision_store.record_decision(
+        DatedDecision(_key(_HASH_CAT), Retraction("062A"), wall_clock.now(), _NODE)
+    )
     observability, waker = ObservabilityOverFakes(), FakeWaker()
     written = await _record(
         _HASH_CAT,

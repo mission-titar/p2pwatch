@@ -41,8 +41,9 @@ from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDi
 from p2pwatch.domain.console_query import QueryFailure
 from p2pwatch.domain.coverage import TargetCoverage, TargetCoverageStatus
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
-from p2pwatch.domain.file_history import DatedDecision, FileHistory
+from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.file_target_decision import DatedDecision
 from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
@@ -141,7 +142,10 @@ _OBSERVATION = FileObservation(
     "n1",
 )
 _DECISION = DatedDecision(
-    DecisionRecord("062A", "catalog", DecisionTier.CATALOG), datetime.fromisoformat(SEEN_AT), "n1"
+    _FILE,
+    DecisionRecord("062A", "catalog", DecisionTier.CATALOG),
+    datetime.fromisoformat(SEEN_AT),
+    "n1",
 )
 _WEEK = Interval(_WALL_CLOCK.now() - timedelta(days=7), _WALL_CLOCK.now())
 # One file seen once under one name, decided on 062A, with no source and no explanation.
@@ -394,7 +398,7 @@ async def test_file_page_shows_the_network_the_native_id_and_the_ed2k_link() -> 
 async def test_file_page_shows_each_decision_with_its_rule_tier_and_instant() -> None:
     decisions = tuple(
         DatedDecision(
-            DecisionRecord(target_id, "numero_nu_confirmed", DecisionTier.DOWNLOAD), at, "n1"
+            _FILE, DecisionRecord(target_id, "numero_nu_confirmed", DecisionTier.DOWNLOAD), at, "n1"
         )
         for target_id, at in (("072A", _OBSERVATION.observed_at), ("072B", _WALL_CLOCK.now()))
     )

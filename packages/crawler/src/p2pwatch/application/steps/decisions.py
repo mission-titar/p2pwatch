@@ -16,7 +16,7 @@ researcher-notifications §2).
 from dataclasses import replace
 
 from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.engine import MatchingEngine, to_record
+from catalog_matching.domain.engine import DecisionRecord, MatchingEngine, to_record
 from catalog_matching.domain.models import FileCandidate
 from p2pwatch.application.ports.driven.decision_reader import DecisionReader
 from p2pwatch.application.ports.driven.decision_writer import DecisionWriter
@@ -25,7 +25,7 @@ from p2pwatch.application.ports.driven.waker import Waker
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.file_key import FileKey
-from p2pwatch.domain.file_target_decision import Retraction, records_to_write
+from p2pwatch.domain.file_target_decision import DatedDecision, records_to_write
 from p2pwatch.domain.observability.events import DecisionChange, DecisionsRecorded
 from p2pwatch.domain.wake_subject import WakeSubject
 
@@ -53,18 +53,14 @@ async def rejudge_file(
         replace(base_candidate, filename=filename) for filename in filenames
     )
     persisted = decision_reader.read_latest_decisions(file)
-    fresh_by_target_id = {decision.target_id: decision for decision in fresh}
     changes: list[DecisionChange] = []
     for new_decision in records_to_write([to_record(decision) for decision in fresh], persisted):
         target_id = new_decision.target_id
-        if isinstance(new_decision, Retraction):
-            decision_writer.record_retraction(file, target_id, wall_clock.now(), node_id)
-        else:
-            decision_writer.record_decision(
-                file, fresh_by_target_id[target_id], wall_clock.now(), node_id
-            )
-            if new_decision.tier is DecisionTier.DOWNLOAD:
-                waker.wake(WakeSubject.DOWNLOAD)
+        decision_writer.record_decision(
+            DatedDecision(file, new_decision, wall_clock.now(), node_id)
+        )
+        if isinstance(new_decision, DecisionRecord) and new_decision.tier is DecisionTier.DOWNLOAD:
+            waker.wake(WakeSubject.DOWNLOAD)
         target = engine.target(target_id)
         changes.append(
             DecisionChange(
