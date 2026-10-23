@@ -1,5 +1,6 @@
 """Lists the catalog's files a page at a time, with the counts the files page shows."""
 
+from catalog_matching.domain.decision_tier import DecisionTier
 from p2pwatch.application.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.application.ports.driving.file_lister import FileLister, FileListing
 from p2pwatch.application.use_cases.paging import PAGE_SIZE
@@ -14,7 +15,7 @@ class ListFiles(FileLister):
         self,
         *,
         target_id: str | None,
-        tier: str | None,
+        tier: DecisionTier | None,
         search_text: str | None,
         matched_only: bool,
         sort: CatalogEntrySort,

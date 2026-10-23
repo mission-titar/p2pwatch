@@ -196,7 +196,7 @@ WHERE file_id = ?
 
 def _filter_clauses(
     target_id: str | None,
-    tier: str | None,
+    tier: DecisionTier | None,
     search_text: str | None,
 ) -> tuple[list[str], list[str]]:
     """Shared WHERE clauses + params for the explorer list and its counter.
@@ -257,7 +257,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
         self,
         *,
         target_id: str | None,
-        tier: str | None,
+        tier: DecisionTier | None,
         search_text: str | None,
     ) -> tuple[int, int]:
         """Not narrowed by the files page's ``matched_only``."""
@@ -275,7 +275,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
         *,
         target_id: str | None,
         search_text: str | None,
-    ) -> Mapping[str, int]:
+    ) -> Mapping[DecisionTier, int]:
         """Never a tier filter: each facet shows the count its choice would give; a multi-tier
         file counts under each of its tiers."""
         clauses, params = _filter_clauses(target_id, None, search_text)
@@ -284,7 +284,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
             sql += "WHERE " + " AND ".join(clauses) + "\n"
         sql += "GROUP BY ld.tier\n"
         rows = self._thread_read_connections.connection().execute(sql, params).fetchall()
-        return {row["tier"]: row["n"] for row in rows}
+        return {DecisionTier(row["tier"]): row["n"] for row in rows}
 
     # ------------------------------------------------------------------
     # Filtered paginated explorer
@@ -294,7 +294,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
         self,
         *,
         target_id: str | None,
-        tier: str | None,
+        tier: DecisionTier | None,
         search_text: str | None,
         matched_only: bool,
         sort: CatalogEntrySort,

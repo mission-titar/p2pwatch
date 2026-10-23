@@ -1,6 +1,7 @@
 from collections.abc import Mapping
 from typing import Any
 
+from catalog_matching.domain.decision_tier import DecisionTier
 from p2pwatch.application.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.domain.catalog_entry import CatalogEntry
 from p2pwatch.domain.file_history import FileHistory
@@ -14,7 +15,7 @@ class FakeCatalogFileReader(CatalogFileReader):
         *,
         catalog_entries: tuple[CatalogEntry, ...] = (),
         matched_and_total_file_counts: tuple[int, int] = (0, 0),
-        file_count_by_tier: Mapping[str, int] | None = None,
+        file_count_by_tier: Mapping[DecisionTier, int] | None = None,
         file_history: FileHistory | None = None,
     ) -> None:
         self._catalog_entries = catalog_entries
@@ -31,7 +32,7 @@ class FakeCatalogFileReader(CatalogFileReader):
         self.calls.append(("read_matched_and_total_file_counts", arguments))
         return self._matched_and_total_file_counts
 
-    def read_file_count_by_tier(self, **arguments: Any) -> Mapping[str, int]:
+    def read_file_count_by_tier(self, **arguments: Any) -> Mapping[DecisionTier, int]:
         self.calls.append(("read_file_count_by_tier", arguments))
         return self._file_count_by_tier
 
