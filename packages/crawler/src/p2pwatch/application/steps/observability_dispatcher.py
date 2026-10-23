@@ -13,7 +13,8 @@ from p2pwatch.domain.observability.notification import (
     RelayedLogLine,
     TextNotification,
 )
-from p2pwatch.domain.observability.policy import ObservabilityPlan, Severity, plan_observability
+from p2pwatch.domain.observability.policy import ObservabilityPlan, plan_observability
+from p2pwatch.domain.observability.severity import Severity
 
 
 def log_at_severity(logger: Logger, severity: Severity, message: str) -> None:

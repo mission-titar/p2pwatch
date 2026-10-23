@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from p2pwatch.domain.observability.policy import Severity
+from p2pwatch.domain.observability.severity import Severity
 
 
 @dataclass(frozen=True)

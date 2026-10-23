@@ -15,7 +15,8 @@ from p2pwatch.application.steps.observability_dispatcher import (
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability import events as ev
 from p2pwatch.domain.observability.notification import RelayedLogLine, TextNotification
-from p2pwatch.domain.observability.policy import Audience, Severity
+from p2pwatch.domain.observability.policy import Audience
+from p2pwatch.domain.observability.severity import Severity
 from tests.fakes.adapters.driven.fake_hanging_notifier import FakeHangingNotifier
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_metrics_recorder import FakeMetricsRecorder

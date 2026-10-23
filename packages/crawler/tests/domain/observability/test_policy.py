@@ -15,9 +15,9 @@ from p2pwatch.domain.observability.policy import (
     MetricInstruction,
     MetricName,
     ObservabilityPlan,
-    Severity,
     plan_observability,
 )
+from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.source import SourceKey
 
 _COMMUNITY = frozenset({Audience.COMMUNITY})
