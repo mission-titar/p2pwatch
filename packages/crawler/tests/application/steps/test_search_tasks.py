@@ -176,6 +176,22 @@ def test_the_backoff_is_saved_at_each_change(tasks: _Tasks) -> None:
     assert tasks.state.read_backoff_states() == {}
 
 
+def test_the_backoff_resumed_after_the_tasks_were_built_is_not_saved_again(
+    tasks: _Tasks,
+) -> None:
+    resumed = {BackoffKey("amuled", "ed2k"): BackoffState(1, EPOCH, timedelta(seconds=60))}
+
+    async def resume_once_built() -> None:
+        searching = tasks.searching(FakeTimedSearchClient({"kad": 30.0}), ["keroro"])
+        tasks.deps.backoff.load_from(resumed)
+        with suppress(TimeoutError):
+            async with asyncio.timeout(100.0):
+                await searching
+
+    run_virtual(resume_once_built())
+    assert tasks.state.saved == []
+
+
 def test_a_failed_save_is_logged_and_retried_after_the_next_search(tasks: _Tasks) -> None:
     tasks.state.failures = 1
     refused: list[Exception] = [SearchFailedError("refused"), SearchFailedError("refused")]

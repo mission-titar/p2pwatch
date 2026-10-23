@@ -2,13 +2,18 @@
 
 import asyncio
 from collections.abc import Callable, Coroutine
+from datetime import timedelta
 
 import pytest
 
 from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle
 from p2pwatch.application.steps.reevaluate_catalog import ReevaluationSummary
+from p2pwatch.application.steps.search_worker import BackoffPolicy, BackoffRegistry
 from p2pwatch.domain.observability.events import CrawlerStarted
+from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
+from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
 from tests.fakes.adapters.driven.fake_event_emitter import FakeEventEmitter
+from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_node_id_generator import FakeNodeIdGenerator
 from tests.fakes.adapters.driven.fake_node_id_store import FakeNodeIdStore
@@ -16,6 +21,8 @@ from tests.fakes.adapters.driven.fake_policy_fingerprint_store import FakePolicy
 from tests.fakes.adapters.driven.fake_time import FakeTime
 
 _FINGERPRINT = "policy-2"
+_KAD = BackoffKey("amuled", "kad")
+_POLICY = BackoffPolicy(base_seconds=2.0, cap_seconds=600.0, factor=2.0, jitter_ratio=0.0)
 
 
 class _Crawl:
@@ -29,11 +36,17 @@ class _Crawl:
         download_enabled: bool = False,
     ) -> None:
         self.steps: list[str] = []
+        self.backoff_states_seen_by_loops: list[dict[BackoffKey, BackoffState]] = []
         self.event_emitter = FakeEventEmitter()
         self.fingerprints = FakePolicyFingerprintStore(stored_fingerprint=stored_fingerprint)
         self.logger = FakeLogger()
         self.reevaluation_gate_logger = FakeLogger()
         self.shutdown = asyncio.Event()
+        fake_time = FakeTime()
+        self.backoff_state_store = FakeBackoffStateStore()
+        self.backoff = BackoffRegistry(
+            _POLICY, fake_time.wall, fake_time.monotonic, FakeJitterGenerator()
+        )
         self._loops_started = 0
         self._both_loops_started = asyncio.Event()
         self.crawler_lifecycle = CrawlerLifecycle(
@@ -41,12 +54,14 @@ class _Crawl:
             node_id_reader=FakeNodeIdStore(stored_node_id="stored-node"),
             node_id_writer=FakeNodeIdStore(stored_node_id=None),
             node_id_generator=FakeNodeIdGenerator("new-node"),
-            wall_clock=FakeTime().wall,
+            wall_clock=fake_time.wall,
             event_emitter=self.event_emitter,
             policy_fingerprint=_FINGERPRINT,
             policy_fingerprint_reader=self.fingerprints,
             policy_fingerprint_writer=self.fingerprints,
             reevaluate=self._reevaluate,
+            backoff=self.backoff,
+            backoff_state_reader=self.backoff_state_store,
             loops=[self._loop("search"), self._loop("status")],
             download_enabled=download_enabled,
             shutdown=self.shutdown,
@@ -63,6 +78,7 @@ class _Crawl:
     def _loop(self, name: str) -> Callable[[str], Coroutine[object, object, None]]:
         async def loop(node_id: str) -> None:
             self.steps.append(f"{name} under {node_id}")
+            self.backoff_states_seen_by_loops.append(self.backoff.snapshot())
             self._loops_started += 1
             if self._loops_started == 2:
                 self._both_loops_started.set()
@@ -121,3 +137,16 @@ async def test_a_changed_policy_is_re_evaluated_under_the_node_id_after_the_star
     assert crawl.reevaluation_gate_logger.lines == [
         LoggedLine("info", "catalogue re-evaluated: 3 files, 1 rows written")
     ]
+
+
+@pytest.mark.asyncio
+async def test_the_backoff_waits_the_previous_run_saved_are_resumed_before_the_loops() -> None:
+    crawl = _Crawl()
+    started_at = FakeTime().wall.now() - timedelta(seconds=100)
+    saved = {_KAD: BackoffState(1, started_at, timedelta(seconds=300))}
+    crawl.backoff_state_store.set_backoff_states(saved)
+
+    await crawl.run_until_both_loops_start_then_stop()
+
+    assert crawl.backoff_states_seen_by_loops == [saved, saved]
+    assert crawl.backoff.time_until_retry(_KAD) == timedelta(seconds=200)

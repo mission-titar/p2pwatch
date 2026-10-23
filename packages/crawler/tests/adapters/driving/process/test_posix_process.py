@@ -52,4 +52,3 @@ async def test_on_exit_the_signals_get_their_default_handlers_back() -> None:
 
     assert signal.getsignal(signal.SIGINT) is signal.default_int_handler
     assert signal.getsignal(signal.SIGTERM) is signal.SIG_DFL
-
