@@ -5,9 +5,9 @@ from datetime import UTC, datetime
 from p2pwatch.application.ports.driven.source_reader import SourceReader
 from p2pwatch.application.ports.driving.source_lister import SourceListing
 from p2pwatch.application.use_cases.list_sources import ListSources
+from p2pwatch.application.use_cases.paging import PAGE_SIZE
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.known_source import KnownSource
-from p2pwatch.domain.paging import PAGE_SIZE
 from p2pwatch.domain.source import SourceKey
 from tests.fakes.adapters.driven.fake_source_reader import FakeSourceReader
 
