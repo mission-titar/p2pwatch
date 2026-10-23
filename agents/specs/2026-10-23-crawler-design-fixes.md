@@ -145,7 +145,7 @@ Strict TDD in every block, as `AGENTS.md` states it. Full contents, estimate sou
 | 65 | `refactor/fixed-values-servers-and-console` | the servers' and the console's fixed values; `max_filename_length` with no default (D8) (Corrected: added in Act) | |
 | 70 | `refactor/composition-resource-stack` | the resource stack; backoff at start; gluetun's logger (D9, D10, D31) | 230, 13 |
 | 80 | `refactor/wake-subject` | `WakeSubject`; `record_queued` returns nothing (D11, D19) (Corrected: 20 files, one past the bound, kept whole by the operator) | 145, 20 (measured) |
-| 90 | `refactor/decision-tier` | `DecisionTier` in `catalog_matching` (D12) | 150, 10 |
+| 90 | `refactor/decision-tier` | `DecisionTier` in `catalog_matching` (D12) (Corrected: 20 files, kept whole: the operator lets a block pass the file bound by one or two files in this lot) | 170, 20 (measured) |
 | 100 | `refactor/retraction-type` | the crawler's tiers typed, `Retraction` (D12, D13) | 330, 19 |
 | 110 | `refactor/tier-rules-from-type` | tier rules and SQL from the type (D14) | 230, 13 |
 | 120 | `refactor/coverage-tiers-and-records-to-write` | coverage tiers; `records_to_write` (D15, D16) | 200, 11 |
