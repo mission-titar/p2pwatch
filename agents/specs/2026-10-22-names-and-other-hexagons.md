@@ -17,11 +17,13 @@
     s6 lines move to the supervisor's module (D19);
   - the download loop's eight "repo failure" log lines read "store failure";
   - port-sync logs a missing `amule.conf` on a line of its own instead of "amule.conf was not written (amule.conf
-    does not exist)" (D20);
+    does not exist)" (D20) (Corrected: at both of its reads, the first one's included, block 62);
   - `vex_checks`' `--format` and `--output` become one `--sarif <path>` (D12); `release.yml` and `grype-scan.yml`
     follow;
   - every bump pull request's body says "the `amule_api` adapter" instead of "the `mule_api` adapter";
   - a broken template or a missing VEX input ends in a one-line error naming the file, not a traceback (D13).
+    (Corrected: every broken input of the three tools, and `template_checks` names each template by its path under
+    the directory as given, its problems included; closing block.)
   No config key, route, metric or notification changes. The `?sort=last_seen` value, the `/controls/*` routes and
   the config keys `download.output_dir` and `attr_between` keep their names (D7).
 
@@ -164,6 +166,8 @@ Each goes into `AGENTS.md` in the block where the whole tree first follows it.
 - **D17. `vex_checks`' root is the working directory (H3, H11)**: `__main__` passes `cwd`, which every caller already
   runs from (poe, CI); `__file__` and the driving adapter's `.resolve()` go. The vex, template and coverage command
   lines take `PurePath`: vex's in block 50, the two others in their own blocks (70, 72), which touch them anyway.
+  (Corrected: coverage's command line takes no path at all, its package directory being the composition's;
+  block 72.)
 - **D18. `vex_checks` has one problem type (H4, H5, R6b)**: `ClaimProblem(advisory_id, message)` in the domain,
   without location, for the three checks; the image and stale reports carry the VEX's location once, as the SARIF
   port already receives it; `Violation` goes, and `SarifWriter.write_violations` becomes
@@ -221,6 +225,7 @@ rows: 16 moves code verbatim, 20 renames and nothing else, 22 renames local name
 | 90 | `docs/names-and-other-hexagons-wrap` | closing block: the holistic findings, backlog, handoff | 200, 6 |
 
 - Nineteen blocks; the operator allows splits in Act up to 25 for this lot, past which the lead asks again.
+  (Corrected: twenty-one with the closing block, 52 and 60 split in Act.)
 - The store splits (10 to 16) come before the renames, so no class is renamed twice. The logger names (24, 60)
   follow every module rename. The rules (80) come once the tree follows them: after 20 and 52 rename the Writers,
   42 and 50 fix `amule_bump`'s and `vex_checks`' defaults.
@@ -234,6 +239,7 @@ rows: 16 moves code verbatim, 20 renames and nothing else, 22 renames local name
    crawler's `migrations/` and the migration tests' SQL; for the methods, `git grep -nE
    '\.(crawl|publish|mark_seen|record_completed|save_backoff_states|write_amule_conf|write_dockerfile|write_step_outputs|write_pull_request_body|write_violations|pause|resume|shut_down)\('
    -- 'packages/*/src/**.py' 'packages/*/tests/**.py'` prints nothing. On `main` each prints at least one line.
+   (Corrected: but the SQL function `fold_raw_meta`, which `catalog/0007` calls and so keeps its name; block 20.)
 2. **The columns follow**: a fresh `local.db` has `downloads.latest_seen_at` and `latest_progress_at`, a fresh
    catalog `observation_variants.raw_metadata` and `source_variants.raw_metadata`, and a catalog and a `local.db`
    built at the previous schema keep their rows through the migrations (the migration tests).
@@ -268,7 +274,9 @@ rows: 16 moves code verbatim, 20 renames and nothing else, 22 renames local name
     opens no `local.db` (`git grep -n "open_local\|SavesRecorded" --
     packages/crawler/tests/application/steps/test_search_tasks.py` prints nothing); the catalog fixture stays, as in
     the other step tests. (Corrected: the check named every SQLite connection, which D4 does not decide; operator,
-    block 10.)
+    block 10. Corrected: the step tests keep the real SQLite catalog through `catalog_connection` and its stores,
+    `observation_store`, `catalog_scan_reader` and `decision_store`, blocks 12 and 14 having split the `catalog`
+    fixture.)
 14. **The workflows still run**: before the merge, `gh workflow run grype-scan.yml --ref <top branch>` passes, and
     release's `image-claims` command, run from the root with `--sarif` against a Syft SBOM of the crawler's image,
     exits 0.

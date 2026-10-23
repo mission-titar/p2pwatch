@@ -1,7 +1,8 @@
 # Handoff: the names and the other hexagons, lot B of the post-hexagonal corrections
 
 Drafted by block 80 from the lot's block reports (#410, #411, #413 to #429) and its own, and from the lead's notes
-taken during Act; to be corrected by the closing block 90 with the holistic review.
+taken during Act; corrected by the closing block 90 with the holistic review (`.reviews/lot-b-holistic.md` and
+`.reviews/lot-b-holistic-subreviews.md`).
 
 ## State
 
@@ -13,7 +14,8 @@ reaches the crawler's three option defaults (D14). Lot C (the crawler's design f
 spec.
 
 One stack cut from `main` at `5adea19e`. Twenty-one blocks as the table stands, the closing one included: the spec's
-nineteen, block 52 split in Act into 52 and 53 (file bound), block 60 into 60 and 61 (file bound).
+nineteen, block 52 split in Act into 52 and 53 (file bound), block 60 into 60 and 61 (file bound). The closing block's
+three commits measure 1082 lines in 75 files together, so the lead cuts it into parts (below, "Wrap counts").
 
 | Block | Pull request | Branch |
 |---|---|---|
@@ -36,11 +38,11 @@ nineteen, block 52 split in Act into 52 and 53 (file bound), block 60 into 60 an
 | 70 | #427 | `refactor/template-problems` |
 | 72 | #428 | `refactor/coverage-broken-input` |
 | 74 | #429 | `refactor/coverage-problems` |
-| 80 | block 80's | `chore/naming-and-defaults-rules` |
+| 80 | #430 | `chore/naming-and-defaults-rules` |
 | 90 | the closing one | `docs/names-and-other-hexagons-wrap` |
 
 Not merged at writing. The lot changes the image's code (the logger names, the columns, the log lines), so a release
-may follow, after "A copy before a migration that rewrites rows" ships (Backlog, below).
+may follow, after "A copy before a migration that rewrites rows" ships ("Backlog", below).
 
 ## What was built
 
@@ -87,8 +89,10 @@ may follow, after "A copy before a migration that rewrites rows" ships (Backlog,
 As the spec lists it: the three columns renamed (a console query naming them follows); 14 of the 17 logger names, and
 port-sync's s6 lines under the supervisor's module; "repo failure" reads "store failure"; port-sync's missing
 `amule.conf` on lines of its own, at both reads (block 62, `docs/troubleshooting.md`); `vex_checks`' `--sarif`; the
-bump body's "the `amule_api` adapter"; a broken template, VEX input or `.coverage` on one line naming the file. No
-config key, route, metric or notification changes.
+bump body's "the `amule_api` adapter"; a broken template, VEX input, Grype run, `pyproject.toml` or `.coverage` on
+one line naming the file (closing block: every shape, not only an absent file); `poe template-check`'s lines name each
+template by its path under the directory given (closing block). No config key, route, metric or notification
+changes.
 
 ## Acceptance
 
@@ -123,8 +127,8 @@ From the block reports, re-run where noted.
 12. Block 62: no `subprocess.run(` in the adapters, no `Callable[..., object]` `run_command`.
 13. Block 10: as corrected (operator, "B"), `open_local\|SavesRecorded` prints nothing in `test_search_tasks.py`.
 14. Block 50, local half: release's `image-claims` from the root exits 0 on a Syft SBOM of
-    `ghcr.io/mission-titar/p2pwatch:main`, with and without `--sarif`; `gh workflow run grype-scan.yml --ref <top
-    branch>` is the top branch's, before the merge.
+    `ghcr.io/mission-titar/p2pwatch:main`, with and without `--sarif`. The lead's, after the top is pushed:
+    `gh workflow run grype-scan.yml --ref <top branch>`: (to be filled by the lead: run id and conclusion).
 15. Block 80, at `77aa8b67`: `git diff --stat 5adea19e` over `deploy`, `security`, `packages/amule/docker` and both
     Dockerfiles prints nothing; `.github/workflows/` changes only the `--sarif` lines; the migrations gain only
     `catalog/0013_raw_metadata.sql` and `local/0012_latest_columns.sql`.
@@ -133,7 +137,63 @@ From the block reports, re-run where noted.
 
 ## Holistic review
 
-For the closing block: `.reviews/lot-b-holistic.md`, each finding's exit.
+`.reviews/lot-b-holistic.md`: 0 critical, 3 major, 17 minor; its two sub-reviews (stores, renames) add the minors
+of `.reviews/lot-b-holistic-subreviews.md`. Every finding is fixed in the closing block (the default exit), but
+Acceptance 14, the lead's, and the s6 supervisor's logger name (below). Exits, finding by finding:
+
+- **C5 gaps** (major): fixed. The three vex readers refuse a directory, an unreadable file, a file not in UTF-8, not
+  JSON or not of their format; Grype's non-zero exit names the SBOM (`grype exited with status N`), and so does an
+  output that is not its JSON report; `coverage_checks` refuses a `pyproject.toml` key that is not a table, naming
+  the key. One failing test per shape first (32 in `vex_checks`, 3 in `coverage_checks`: `IsADirectoryError`,
+  `UnicodeDecodeError`, `KeyError: 'statements'`, `TypeError: 'int' object is not iterable`, `AttributeError: 'str'
+  object has no attribute 'get'` and the others).
+- **The docs naming the old columns** (major): fixed, `docs/troubleshooting.md` and `docs/contributing/architecture.md`
+  name `latest_seen_at` and `raw_metadata`; the history of `local/0005` and `catalog/0007` keeps the old names.
+- **Acceptance 14** (major): the lead's, after the top is pushed (Acceptance, above).
+- **The ast-grep rules see a literal in the call only**: fixed as decided. `no-literal-option-default` also refuses a
+  literal in `set_defaults` (its test failed first, `FAIL no-literal-option-default ..............MM`); both rules'
+  notes and `AGENTS.md` say an indirection is a review matter.
+- **A Writer-only class passes the class check**: fixed, `test_port_files.py` refuses a class implementing a
+  `<Thing>Writer` port without its `<Thing>Reader`; injected on `AsyncioRunStateStore`, it reported
+  `{'...asyncio_run_state_store.py::AsyncioRunStateStore': ['RunStateWriter']}`.
+- **C2's clause**: fixed in `AGENTS.md`, "`Reader` and `Writer` name ports over our own state only (databases, files,
+  memory)", so `SbomReader` and `TestCoverageReader`, which read files, follow it; no rename.
+- **`RunStateReader` and `set_shutdown_requested`**: named as the rule's one exception in `AGENTS.md`, ended by lot
+  C's A1.
+- **The template parse error relative to the directory**: fixed, `FilesystemTemplateReader` keys each template by its
+  path under the directory given, so its problems and errors all name the file that way (the reader's test failed
+  first, `PosixPath('base.html') != PosixPath('/tmp/.../base.html')`).
+- **The stores' prose** (`store_error.py`, `errors.py`, `connection.py`, `__init__.py`, `AGENTS.md`'s "sync repos",
+  architecture's "repos", `output_dir`, the double plural): fixed.
+- **`catalog_seeds.py` at the `tests/support` root, its `h`**: fixed, moved to
+  `tests/support/adapters/driven/persistence_sqlite/`, the local named `native_id`.
+- **A package with no module passes whatever its `.coverage`**: fixed, not accepted. `TestCoverageReader` became
+  `read_test_coverage_by_module`, which loads the run before any module, and `CheckUnitCoverage` calls it once,
+  whatever the module count (the use case's test on an empty package and the reader's on an absent data file with no
+  module failed first).
+- **The logger names a wrong class would pass**: the re-evaluation's is tested, a wiring test seeding 200 files to
+  read its progress line under `p2pwatch.application.steps.reevaluate_catalog` (mutated to
+  `reevaluate_if_policy_changed.__module__`, it failed). `SearchTaskRunner` and `record_observation` log only on a
+  `StoreError`, which no wiring test can provoke: "Not validated". The s6 supervisor's: see "Not validated".
+- **`docs/migration-4x.md`'s long line**: fixed.
+- **The names that did not follow their class** (D1): fixed, from the symbols with Serena (the functions, the module
+  constants, the test names) and the locals with a token-level script, each batch checked with `git diff
+  --word-diff`: `console_query_run`, `_CONSOLE_QUERY_RUN`; `_parse_token_reference`, `_parse_token_definition`,
+  `_definition_token_names`, `_operand_token_references`, `_build_definition`, `token_definition`, `token_names`,
+  `token_references`; `amule_conf_store`, `dockerfile_store`, `run_state_store`, `_amule_conf_store`;
+  `thread_read_connections`; the test names after `announce_bump`, `draft_pull_request_body`, `StoreError` and
+  "store failure"; `_INCOMING_DIRECTORY`, `_STATE_DIRECTORY`, `_STATE_SUBDIRECTORIES`, `ed2k_directory`; one
+  `tracked_download_store` in `test_run_download_cycle.py` (its fixture `real_tracked_download_store`),
+  `status_reading_store`; `_latest_seen`, `_raw_metadata` and the `last_seen` test names.
+- **The stale prose beyond the store words** (`format.py`, `test_format.py`, `ed2k_link.py`'s `EC_OP_ADD_LINK` and long
+  dash, the fake's `EC_OP_FAILED`, "DB conns"): fixed.
+- **The migration history without `catalog/0013` and `local/0012`**: fixed, one sentence.
+- **`LATEST_SEEN = "last_seen"` and `fold_raw_meta` without a reason**: fixed, one comment line each.
+- **Acceptance 13's `catalog` fixture, "Nineteen blocks", Acceptance 1's `fold_raw_meta`, D17 for coverage, the
+  first read's log line**: each corrected in the spec with `(Corrected: ...)`.
+- **The type names blocks 70 and 74 chose** (the lead's note): checked against Naming, kept. Each names what one
+  instance is, with no abbreviation: `RefusedNode`, `FilteredLoop`, `LogicConstruct`; `ListingWithoutReason`,
+  `UnitNameCollision`, `ListedTestOfModule`, `UnmappedTestFile`, `StaleListing`, `Shortfall`.
 
 ## Departures from the spec
 
@@ -198,19 +258,13 @@ For the closing block: `.reviews/lot-b-holistic.md`, each finding's exit.
 types and `UnitCoverageProblem`, `TreeProblem`; `DEFAULT_CONFIG_PATH`, `DEFAULT_TARGETS_PATH`,
 `DEFAULT_MATCHER_PATH`, `writer-verbs`, `no-literal-option-default`, `shutdown_requested` (the fake's).
 
-## For the closing block (the lead's notes)
+## Backlog
 
-- Block 54: only `FileNotFoundError` becomes `BrokenInputError`; a directory, an unreadable file or malformed JSON
-  still end in a traceback (a C5 gap), to fix in the closing block rather than as a fix-back.
-- Block 20: `fold_raw_meta` kept: Acceptance 1 needs its correction.
-- Block 60: no unit test reads the s6 supervisor's logger name; only the rule keeps it from a literal.
-- Block 24: the logger names of `SearchTaskRunner`, `record_observation` and `reevaluate_catalog` are tested by no
-  log line.
-- Block 72: a well-formed `pyproject.toml` whose `tool`, `coverage_checks` or `tests_without_unit` is not a table
-  ends in an `AttributeError` (a C5 gap, never met).
-- Block 72: the coverage data is read at the first module only, so a package with no module passes whatever its
-  `.coverage` (no package is one).
-- The spec's "Nineteen blocks" under the table, and the lead's count of 22, against the table's 21 rows.
+Reconciled by the closing block: unchanged. The lot ships no entry: "A copy before a migration that rewrites rows"
+stays open and comes before any release; "Contract tests for the fakes" follows lot C; "The ast-grep rule tests bound
+to their rules by design" stays open (blocks 61, 80 and the closing block met it again); "Sort the files view by first
+seen" keeps the `last_seen` value this lot kept. No finding exits to the backlog: the run state's exception is
+written where the decision lives (`AGENTS.md`), and the logger names left untested are under "Not validated".
 
 ## For lot C and after
 
@@ -238,6 +292,10 @@ types and `UnitCoverageProblem`, `TreeProblem`; `DEFAULT_CONFIG_PATH`, `DEFAULT_
 - **`ast-grep test` skips a rule test whose rule does not exist** (blocks 61, 80): `9 passed` (then `10 passed`)
   with the new test present. Watch the rule fail on the tree or on an injection, or mutate it.
 - **`git add -A` sweeps coverage's parallel data files** (block 20), now ignored by `.coverage.*`.
+- **A token-level script renames a file's locals safely** (closing block): Python's `tokenize` renames NAME tokens
+  only, never a string or a comment, but a keyword argument too, which mypy then checks; the prose is reworded apart.
+- **A test that mutates the composition must use a name it imports**: `StdlibLogger(rejudge_file.__module__)`, not
+  imported there, crashed the crawl and failed on a timeout instead of on the name (closing block).
 - **`git checkout <file>` to undo an injection** also discards that file's uncommitted work (block 80): inject into
   committed files only, or keep a copy.
 - **`ruff check --fix` before the imports point at a new module** sorts the missing one as third-party; ruff format's
@@ -262,21 +320,26 @@ types and `UnitCoverageProblem`, `TreeProblem`; `DEFAULT_CONFIG_PATH`, `DEFAULT_
 - The amule image neither built nor run: the s6 command line checked by the unit tests only (block 62).
 - The two workflows on GitHub: the Grype scan on dispatch (Acceptance 14), the release on a tag.
 - The spec's "17 sites on `main`" of Acceptance 4 (block 61).
-- The s6 supervisor's logger name and three crawler logger names, by no log line (above).
-- CI on block 80 at writing.
+- The logger names of `SearchTaskRunner` and `record_observation`, which log only on a `StoreError` no wiring test
+  can provoke; only `no-literal-logger-name` keeps them from a literal, not from a wrong class.
+- The s6 supervisor's logger name: built in `build_command_line` with `subprocess.run`, it logs only when `s6-svc`
+  fails, which no unit test can reach without `s6-svc` (the lead's decision pending at writing).
+- Block 70's unreadable-subdirectory test is skipped when run as root.
 
 ## Wrap counts
 
-From `gh run list --branch <branch>` over blocks 10 to 74, 2026-10-23, for the closing block to complete.
+From `gh run list --branch <branch>` over blocks 10 to 74 (2026-10-23) and the lead's count.
 
-- **Runs**: one per block, all green: no fix-back and no cascaded rebase re-triggered a run so far.
-- **Splits**: 2 (block 52 into 52 and 53, block 60 into 60 and 61, both at the file bound). **Exemptions**: 5
-  (blocks 16, 20, 22 on their rows; 12 and 14 approved in Act).
+- **Fix-backs**: 0. **Cascaded rebases**: 0. **Runs re-triggered by them**: 0; one run per block, all green.
+- **Splits**: 2 (block 52 into 52 and 53, block 60 into 60 and 61, both at the file bound), and the closing block's,
+  cut by the lead from its commits: `fb1317a9` (the names and the prose, mechanical: 596 lines, 49 files),
+  `6c4970ad` (C5: 297 lines, 11 files), `4fc8110a` (the other fixes: 189 lines, 16 files), and the spec and handoff
+  commit, outside both counts.
+- **Exemptions**: 5 (blocks 12, 14, 16, 20, 22: 16, 20 and 22 on their rows, 12 and 14 approved in Act).
 - **Bodies called unreadable**: none known at writing.
 
 ## Next
 
-- The closing block 90: the holistic review's findings, the notes above, `BACKLOG.md` reconciled, this handoff
-  corrected.
+- The lead: dispatch `grype-scan.yml` on the top branch and fill Acceptance 14; the operator reads the stack.
 - After the merge: "A copy before a migration that rewrites rows" before any release; then lot C's Discuss and spec
   (A1 to A3 and the crawler's other design rows of the ledger).
