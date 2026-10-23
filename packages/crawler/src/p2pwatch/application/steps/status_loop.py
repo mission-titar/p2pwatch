@@ -5,13 +5,13 @@ The alert timers live in memory, on the monotonic clock: a restart restarts them
 degradation alerts at most one delay later.
 """
 
-import asyncio
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Literal
 
 from p2pwatch.application.ports.driven.event_emitter import EventEmitter
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
+from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
 from p2pwatch.application.ports.driven.status_client import StatusClient
 from p2pwatch.application.ports.driven.status_reading_writer import StatusReadingWriter
 from p2pwatch.application.ports.driven.wall_clock import WallClock
@@ -40,7 +40,7 @@ class StatusLoopDeps:
     wall_clock: WallClock
     monotonic_clock: MonotonicClock
     event_emitter: EventEmitter
-    shutdown: asyncio.Event
+    run_state_reader: RunStateReader
     status_reading_writer: StatusReadingWriter
 
 
@@ -86,7 +86,7 @@ async def status_loop(deps: StatusLoopDeps, node_id: str) -> None:
         if change is not None:
             await deps.event_emitter.emit(alert if change == "alert" else recovery, node_id)
 
-    while not deps.shutdown.is_set():
+    while not deps.run_state_reader.is_shutdown_requested():
         try:
             status = await deps.client.status()
         except ClientAuthError:

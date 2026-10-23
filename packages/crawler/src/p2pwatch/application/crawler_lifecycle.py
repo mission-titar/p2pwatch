@@ -1,6 +1,5 @@
 """``CrawlerLifecycle``: the root of the crawler's graph, which the composition runs once built."""
 
-import asyncio
 from collections.abc import Awaitable, Callable, Coroutine, Sequence
 
 from p2pwatch.application.ports.driven.backoff_state_reader import BackoffStateReader
@@ -11,6 +10,7 @@ from p2pwatch.application.ports.driven.node_id_reader import NodeIdReader
 from p2pwatch.application.ports.driven.node_id_writer import NodeIdWriter
 from p2pwatch.application.ports.driven.policy_fingerprint_reader import PolicyFingerprintReader
 from p2pwatch.application.ports.driven.policy_fingerprint_writer import PolicyFingerprintWriter
+from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.steps.reevaluate_catalog import ReevaluationSummary
 from p2pwatch.application.steps.reevaluate_if_policy_changed import reevaluate_if_policy_changed
@@ -42,7 +42,7 @@ class CrawlerLifecycle:
         backoff_state_reader: BackoffStateReader,
         loops: Sequence[Callable[[str], Coroutine[object, object, None]]],
         download_enabled: bool,
-        shutdown: asyncio.Event,
+        run_state_reader: RunStateReader,
         logger: Logger,
         reevaluation_gate_logger: Logger,
     ) -> None:
@@ -60,12 +60,12 @@ class CrawlerLifecycle:
         self._backoff_state_reader = backoff_state_reader
         self._loops = loops
         self._download_enabled = download_enabled
-        self._shutdown = shutdown
+        self._run_state_reader = run_state_reader
         self._logger = logger
         self._reevaluation_gate_logger = reevaluation_gate_logger
 
     async def run(self, *, arm_shutdown_bound: Callable[[], None]) -> None:
-        """Runs until ``shutdown``, calling ``arm_shutdown_bound`` before the loops unwind."""
+        """Runs until the shutdown is requested, arming the bound before the loops unwind."""
         node_id = resolve_node_id(
             self._configured_node_id,
             node_id_reader=self._node_id_reader,
@@ -91,7 +91,7 @@ class CrawlerLifecycle:
         )
         await supervise_loops(
             [_with_node_id(loop, node_id) for loop in self._loops],
-            shutdown=self._shutdown,
+            run_state_reader=self._run_state_reader,
             arm_shutdown_bound=arm_shutdown_bound,
         )
 

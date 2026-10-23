@@ -18,6 +18,7 @@ from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_node_id_generator import FakeNodeIdGenerator
 from tests.fakes.adapters.driven.fake_node_id_store import FakeNodeIdStore
 from tests.fakes.adapters.driven.fake_policy_fingerprint_store import FakePolicyFingerprintStore
+from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 
 _FINGERPRINT = "policy-2"
@@ -41,7 +42,7 @@ class _Crawl:
         self.fingerprints = FakePolicyFingerprintStore(stored_fingerprint=stored_fingerprint)
         self.logger = FakeLogger()
         self.reevaluation_gate_logger = FakeLogger()
-        self.shutdown = asyncio.Event()
+        self.run_state = FakeRunStateStore()
         fake_time = FakeTime()
         self.backoff_state_store = FakeBackoffStateStore()
         self.backoff = BackoffRegistry(
@@ -64,7 +65,7 @@ class _Crawl:
             backoff_state_reader=self.backoff_state_store,
             loops=[self._loop("search"), self._loop("status")],
             download_enabled=download_enabled,
-            shutdown=self.shutdown,
+            run_state_reader=self.run_state,
             logger=self.logger,
             reevaluation_gate_logger=self.reevaluation_gate_logger,
         )
@@ -91,7 +92,7 @@ class _Crawl:
             self.crawler_lifecycle.run(arm_shutdown_bound=lambda: self.steps.append("bound armed"))
         )
         await asyncio.wait_for(self._both_loops_started.wait(), 1.0)
-        self.shutdown.set()
+        self.run_state.set_shutdown_requested()
         await asyncio.wait_for(run, 1.0)
 
 

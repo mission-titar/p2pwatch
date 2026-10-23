@@ -302,13 +302,9 @@ class CrawlerComposition(CrawlerRunner):
         wall_clock = SystemWallClock()
         monotonic_clock = AsyncioMonotonicClock()
         waker = AsyncioWaker()
-        shutdown = asyncio.Event()
-        # The pause gate, armed (set = un-paused) so the crawler starts running.
-        resumed = asyncio.Event()
-        resumed.set()
         loop = asyncio.get_running_loop()
-        # On the crawler's OWN loop + events, so the webui thread changes it thread-safely.
-        run_state_store = AsyncioRunStateStore(loop=loop, resumed=resumed, shutdown=shutdown)
+        # On the crawler's OWN loop, so the webui thread changes it thread-safely.
+        run_state_store = AsyncioRunStateStore(loop=loop)
         shutdown_requester = RequestShutdown(run_state_store)
         async with PosixProcess(shutdown_requester), resource_stack() as stack:
             catalog_connection = open_catalog(crawler_config.catalog_db_path)
@@ -395,13 +391,13 @@ class CrawlerComposition(CrawlerRunner):
                 wall_clock,
                 monotonic_clock,
                 event_emitter,
-                shutdown,
+                run_state_store,
                 status_reading_store,
             )
             search_tasks = SearchTaskRunner(
                 workers=workers,
                 keywords=crawler_config.search.keywords,
-                resumed=resumed,
+                run_state_reader=run_state_store,
                 backoff=backoff,
                 backoff_state_writer=backoff_state_store,
                 monotonic_clock=monotonic_clock,
@@ -441,7 +437,7 @@ class CrawlerComposition(CrawlerRunner):
                     event_emitter=event_emitter,
                     logger=StdlibLogger(download_loop.__module__),
                     waker=waker,
-                    shutdown=shutdown,
+                    run_state_reader=run_state_store,
                 )
                 loops.append(partial(download_loop, download_deps))
 
@@ -472,7 +468,7 @@ class CrawlerComposition(CrawlerRunner):
                 backoff_state_reader=backoff_state_store,
                 loops=loops,
                 download_enabled=download_config is not None,
-                shutdown=shutdown,
+                run_state_reader=run_state_store,
                 logger=StdlibLogger(CrawlerLifecycle.__module__),
                 reevaluation_gate_logger=StdlibLogger(reevaluate_if_policy_changed.__module__),
             )
