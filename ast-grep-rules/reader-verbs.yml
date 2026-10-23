@@ -1,0 +1,13 @@
+id: reader-verbs
+language: python
+severity: error
+message: A Reader's method starts with `read_`, `iter_`, `is_`, `has_` or `wait_until_`.
+note: "`read_` gives a value, `iter_` an iterator, `is_` and `has_` a predicate, `wait_until_` a state reached."
+files: ["packages/*/src/*/application/ports/driven/*.py"]
+rule:
+  kind: function_definition
+  not: { has: { field: name, regex: '^(read|iter|is|has|wait_until)_' } }
+  inside:
+    kind: class_definition
+    has: { field: name, regex: 'Reader$' }
+    stopBy: end

@@ -1,0 +1,34 @@
+id: reader-verbs
+valid:
+  - |
+    class ObservationReader(ABC):
+        @abstractmethod
+        def read_known_filenames(self) -> list[str]:
+            """Every name."""
+  - |
+    class CatalogScanReader(ABC):
+        def iter_files(self) -> Iterator[FileKey]: ...
+  - |
+    class RunStateReader(ABC):
+        def is_paused(self) -> bool: ...
+        async def wait_until_resumed(self) -> None: ...
+  - |
+    class TrackedDownloadReader(ABC):
+        def has_tracked(self) -> bool: ...
+  - |
+    class ObservationWriter(ABC):
+        def record_observation(self, observation: FileObservation) -> None: ...
+invalid:
+  - |
+    class XReader(ABC):
+        @abstractmethod
+        def fetch_x(self) -> X: ...
+  - |
+    class RunStateReader(ABC):
+        def paused(self) -> bool: ...
+  - |
+    class RunStateReader(ABC):
+        async def wait_resumed(self) -> None: ...
+  - |
+    class ObservationReader(ABC):
+        def get_known_filenames(self) -> list[str]: ...
