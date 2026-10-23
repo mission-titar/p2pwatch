@@ -52,7 +52,7 @@ class ObservabilityDispatcher:
         self._notification_timeout_seconds = notification_timeout_seconds
 
     async def dispatch(self, event: Event, node_id: str) -> None:
-        plan = plan_observability(event, node_id)
+        plan = plan_observability(event)
         log_at_severity(self._logger, plan.severity, plan.message)
         for instruction in plan.metrics:
             self._metrics_recorder.apply(instruction)

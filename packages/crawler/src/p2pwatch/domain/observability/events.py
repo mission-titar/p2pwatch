@@ -60,6 +60,7 @@ class DecisionsRecorded:
     filename: str  # the clean name, the most sourced
     size_bytes: int
     changes: tuple[DecisionChange, ...]
+    node_id: str
 
 
 @dataclass(frozen=True)
@@ -72,6 +73,7 @@ class DownloadCompleted:
     file: FileKey
     filename: str  # the clean name, the most sourced
     target_titles: tuple[TargetTitle, ...]  # every download target of the file
+    node_id: str
 
 
 type ChannelField = Literal["connected", "connectable"]
@@ -134,6 +136,7 @@ class SourceFirstUseful:
     file: FileKey
     filename: str  # the clean name, the most sourced
     target_titles: tuple[TargetTitle, ...]  # none for a file without one
+    node_id: str
 
 
 @dataclass(frozen=True)
@@ -145,6 +148,7 @@ class SourceReappeared:
     filename: str
     target_titles: tuple[TargetTitle, ...]
     absent_for_seconds: float
+    node_id: str
 
 
 @dataclass(frozen=True)

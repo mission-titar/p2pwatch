@@ -175,7 +175,7 @@ def _channel_alert(
     )
 
 
-def _plan_decisions(event: DecisionsRecorded, node_id: str) -> ObservabilityPlan:
+def _plan_decisions(event: DecisionsRecorded) -> ObservabilityPlan:
     changes = ", ".join(
         f"{c.target_id} {_label(c.previous_decision)} → {_label(c.new_decision)}"
         for c in event.changes
@@ -201,7 +201,9 @@ def _plan_decisions(event: DecisionsRecorded, node_id: str) -> ObservabilityPlan
     return replace(
         plan,
         audiences=frozenset({Audience.COMMUNITY}),
-        notification=TierRise(top, target_titles, event.filename, event.size_bytes, link, node_id),
+        notification=TierRise(
+            top, target_titles, event.filename, event.size_bytes, link, event.node_id
+        ),
     )
 
 
@@ -210,7 +212,6 @@ def _plan_source(
     kind: SourceAlertKind,
     absent_for: timedelta | None,
     state_phrase: str,
-    node_id: str,
 ) -> ObservabilityPlan:
     short = f"{event.source.native_id[:8]}…"  # as the webui shortens a hash
     labels = (("network", event.source.network.value), ("kind", kind.value))
@@ -226,14 +227,14 @@ def _plan_source(
             absent_for,
             event.target_titles,
             event.filename,
-            node_id,
+            event.node_id,
         ),
     )
 
 
-def plan_observability(event: Event, node_id: str) -> ObservabilityPlan:
+def plan_observability(event: Event) -> ObservabilityPlan:
     """Map an event to its ``ObservabilityPlan`` (EXHAUSTIVE match → 100% branch); a community
-    notification carries ``node_id``."""
+    notification carries its event's node."""
     match event:
         case SearchExecuted():
             return ObservabilityPlan(
@@ -273,7 +274,7 @@ def plan_observability(event: Event, node_id: str) -> ObservabilityPlan:
                 (MetricInstruction(MetricName.OBSERVATIONS, "inc", _search_labels(event)),),
             )
         case DecisionsRecorded():
-            return _plan_decisions(event, node_id)
+            return _plan_decisions(event)
         case DownloadQueued():
             return ObservabilityPlan(
                 Severity.INFO,
@@ -286,7 +287,7 @@ def plan_observability(event: Event, node_id: str) -> ObservabilityPlan:
                 f"✅ download completed: {', '.join(t.target_id for t in event.target_titles)}",
                 (MetricInstruction(MetricName.DOWNLOADS_COMPLETED, "inc"),),
                 frozenset({Audience.COMMUNITY}),
-                CompletedDownload(event.target_titles, event.filename, node_id),
+                CompletedDownload(event.target_titles, event.filename, event.node_id),
             )
         case ChannelStatusSampled():
             return ObservabilityPlan(
@@ -341,7 +342,7 @@ def plan_observability(event: Event, node_id: str) -> ObservabilityPlan:
             )
         case SourceFirstUseful():
             return _plan_source(
-                event, SourceAlertKind.FIRST_USEFUL, None, "useful for the first time", node_id
+                event, SourceAlertKind.FIRST_USEFUL, None, "useful for the first time"
             )
         case SourceReappeared():
             return _plan_source(
@@ -349,7 +350,6 @@ def plan_observability(event: Event, node_id: str) -> ObservabilityPlan:
                 SourceAlertKind.REAPPEARED,
                 timedelta(seconds=event.absent_for_seconds),
                 f"reappeared after {event.absent_for_seconds / 3600:.0f} h",
-                node_id,
             )
         case CrawlerStarted():
             return ObservabilityPlan(
