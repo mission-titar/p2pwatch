@@ -2,7 +2,7 @@
 
 from pathlib import PurePath
 
-from coverage_checks.domain.shortfall import find_shortfall
+from coverage_checks.domain.shortfall import Shortfall, find_shortfall
 from coverage_checks.domain.test_coverage import Branch, TestCoverage
 
 SIZES = """\
@@ -63,9 +63,11 @@ def test_what_only_another_module_s_test_runs_is_short_naming_its_own_tests() ->
         test_coverage,
         SIZES,
     )
-    assert shortfall == (
-        "src/pkg/sizes.py: statements 7 and branches 5->7 run by none of its own tests"
-        " (tests/test_sizes.py, tests/test_sizes_more.py)"
+    assert shortfall == Shortfall(
+        module=PurePath("src/pkg/sizes.py"),
+        own_test_files=(PurePath("tests/test_sizes.py"), PurePath("tests/test_sizes_more.py")),
+        unrun_statements=(7,),
+        unrun_branches=((5, 7),),
     )
 
 
@@ -76,9 +78,11 @@ def test_a_function_of_a_module_without_own_tests_is_short() -> None:
         run=(SIZES_STATEMENTS, SIZES_BRANCHES),
         run_by_own_tests=(set(), set()),
     )
-    assert find_shortfall(PurePath("src/pkg/sizes.py"), (), test_coverage, SIZES) == (
-        "src/pkg/sizes.py: statements 5, 6, 7 and branches 5->6, 5->7 run by none of its own"
-        " tests (it has none)"
+    assert find_shortfall(PurePath("src/pkg/sizes.py"), (), test_coverage, SIZES) == Shortfall(
+        module=PurePath("src/pkg/sizes.py"),
+        own_test_files=(),
+        unrun_statements=(5, 6, 7),
+        unrun_branches=((5, 6), (5, 7)),
     )
 
 
@@ -104,13 +108,15 @@ def width():
     shortfall = find_shortfall(
         PurePath("src/pkg/widths.py"), (PurePath("tests/test_widths.py"),), test_coverage, widths
     )
-    assert shortfall == (
-        "src/pkg/widths.py: statements 6 and branches 3->6 run by none of its own tests"
-        " (tests/test_widths.py)"
+    assert shortfall == Shortfall(
+        module=PurePath("src/pkg/widths.py"),
+        own_test_files=(PurePath("tests/test_widths.py"),),
+        unrun_statements=(6,),
+        unrun_branches=((3, 6),),
     )
 
 
-def test_a_branch_to_the_function_s_exit_reads_exit() -> None:
+def test_a_branch_leaving_the_function_is_short_with_its_negative_end() -> None:
     names = """\
 def record(names, name):
     if name:
@@ -125,6 +131,9 @@ def record(names, name):
     shortfall = find_shortfall(
         PurePath("src/pkg/names.py"), (PurePath("tests/test_names.py"),), test_coverage, names
     )
-    assert shortfall == (
-        "src/pkg/names.py: branches 2->exit run by none of its own tests (tests/test_names.py)"
+    assert shortfall == Shortfall(
+        module=PurePath("src/pkg/names.py"),
+        own_test_files=(PurePath("tests/test_names.py"),),
+        unrun_statements=(),
+        unrun_branches=((2, -1),),
     )

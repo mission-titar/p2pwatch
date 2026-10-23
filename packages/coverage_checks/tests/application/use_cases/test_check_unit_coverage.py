@@ -4,7 +4,9 @@ from pathlib import PurePath
 
 from coverage_checks.application.ports.driving.unit_coverage_checker import UnitCoverageReport
 from coverage_checks.application.use_cases.check_unit_coverage import CheckUnitCoverage
+from coverage_checks.domain.own_tests import UnmappedTestFile
 from coverage_checks.domain.package_tree import PackageTree
+from coverage_checks.domain.shortfall import Shortfall
 from coverage_checks.domain.test_coverage import TestCoverage
 from tests.fakes.adapters.driven.fake_package_tree_reader import FakePackageTreeReader
 from tests.fakes.adapters.driven.fake_test_coverage_reader import FakeTestCoverageReader
@@ -66,10 +68,11 @@ def test_the_report_holds_the_tree_s_problems_then_each_short_module_s_with_the_
 
     assert report == UnitCoverageReport(
         problems=(
-            "tests/test_nothing.py: tests no module of src; name it after the module it tests,"
-            " or list it in [tool.coverage_checks] tests_without_unit with its reason",
-            "src/pkg/lonely.py: statements 2 run by none of its own tests (it has none)",
-            "src/pkg/other.py: statements 2 run by none of its own tests (tests/test_other.py)",
+            UnmappedTestFile(PurePath("tests/test_nothing.py")),
+            Shortfall(LONELY, own_test_files=(), unrun_statements=(2,), unrun_branches=()),
+            Shortfall(
+                OTHER, own_test_files=(OTHER_TESTS,), unrun_statements=(2,), unrun_branches=()
+            ),
         ),
         module_count=3,
         tested_module_count=2,
