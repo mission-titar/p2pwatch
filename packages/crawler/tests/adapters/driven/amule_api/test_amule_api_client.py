@@ -9,16 +9,13 @@ import httpx
 import pytest
 
 from p2pwatch.adapters.driven.amule_api.amule_api_client import AmuleApiClient
-from p2pwatch.adapters.driven.amule_api.errors import (
-    ApiAuthError,
-    ApiRejectedError,
-    ApiUnreachableError,
-)
+from p2pwatch.adapters.driven.amule_api.errors import ApiAuthError, ApiUnreachableError
 from p2pwatch.application.ports.driven.download_client import DownloadClient
 from p2pwatch.application.ports.driven.source_client import SourceClient
 from p2pwatch.domain.client_errors import (
     ClientUnreachableError,
     DownloadRejectedError,
+    ReadRejectedError,
     SearchFailedError,
 )
 from p2pwatch.domain.download.request import DownloadRequest
@@ -541,8 +538,9 @@ async def test_a_search_the_daemon_refuses_fails_its_channel() -> None:
     )
     client = await _connected(api)
 
-    with pytest.raises(SearchFailedError):
+    with pytest.raises(SearchFailedError, match="not connected to any server") as raised:
         await client.search("keroro", "ed2k", 120)
+    assert type(raised.value) is SearchFailedError
 
 
 @pytest.mark.asyncio
@@ -597,6 +595,19 @@ async def test_status_without_amuled_behind_amuleapi_is_unreachable(
     await client.close()
 
 
+@pytest.mark.asyncio
+async def test_a_status_the_daemon_refuses_is_a_refused_read() -> None:
+    # A route a weekly aMule bump renamed: /version answers 404 not_found.
+    api = FakeAmuleApi(status={"ec_connected": True})
+    api.overrides[("GET", "/api/v1/version")] = lambda _: error(404, "not_found", "no route")
+    client = await _connected(api)
+
+    with pytest.raises(ReadRejectedError, match="no route") as raised:
+        await client.status()
+    assert type(raised.value) is ReadRejectedError
+    await client.close()
+
+
 # --- downloads -------------------------------------------------------------------------------
 
 
@@ -618,8 +629,9 @@ async def test_a_link_the_daemon_refuses_is_reported() -> None:
     )
     client = await _connected(api)
 
-    with pytest.raises(ApiRejectedError, match="malformed"):
+    with pytest.raises(DownloadRejectedError, match="malformed") as raised:
         await client.start(DownloadRequest(file=_KEY, filename="x", size_bytes=1))
+    assert type(raised.value) is DownloadRejectedError
 
 
 @pytest.mark.asyncio
@@ -628,7 +640,7 @@ async def test_a_bulk_envelope_without_an_outcome_is_reported() -> None:
     api.overrides[("POST", "/api/v1/downloads")] = lambda _: httpx.Response(202, json={})
     client = await _connected(api)
 
-    with pytest.raises(ApiRejectedError):
+    with pytest.raises(DownloadRejectedError):
         await client.start(DownloadRequest(file=_KEY, filename="x", size_bytes=1))
 
 
@@ -672,6 +684,19 @@ async def test_a_page_whose_last_row_has_no_anchor_stops_the_sweep() -> None:
     await client.close()
 
     assert len(shared) == 499
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["/api/v1/downloads", "/api/v1/shared"])
+async def test_a_list_the_daemon_refuses_is_a_refused_read(path: str) -> None:
+    api = FakeAmuleApi()
+    api.overrides[("GET", path)] = lambda _: error(500, "amuled_rejected", "busy")
+    client = await _connected(api)
+
+    with pytest.raises(ReadRejectedError, match="busy") as raised:
+        await client.downloads()
+    assert type(raised.value) is ReadRejectedError
+    await client.close()
 
 
 @pytest.mark.asyncio
@@ -873,7 +898,7 @@ async def test_a_client_gone_between_the_list_and_its_detail_is_dropped() -> Non
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("status", "code", "raised"),
-    [(503, "ec_unavailable", ClientUnreachableError), (500, "amuled_rejected", ApiRejectedError)],
+    [(503, "ec_unavailable", ClientUnreachableError), (500, "amuled_rejected", ReadRejectedError)],
 )
 async def test_any_other_failure_of_a_detail_fails_the_read(
     status: int, code: str, raised: type[Exception]
@@ -920,8 +945,9 @@ async def test_a_refusal_other_than_a_missing_download_still_fails_the_read() ->
     )
     client = await _connected(api)
 
-    with pytest.raises(ApiRejectedError):
+    with pytest.raises(ReadRejectedError) as raised:
         await client.sources(_KEY)
+    assert type(raised.value) is ReadRejectedError
     await client.close()
 
 

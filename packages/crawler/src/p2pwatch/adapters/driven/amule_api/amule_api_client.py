@@ -10,8 +10,8 @@ import asyncio
 import json
 import logging
 import re
-from collections.abc import Callable
-from contextlib import suppress
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager, suppress
 from datetime import timedelta
 from typing import Any
 
@@ -40,6 +40,12 @@ from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.search_client import SearchClient
 from p2pwatch.application.ports.driven.source_client import SourceClient
 from p2pwatch.application.ports.driven.status_client import StatusClient
+from p2pwatch.domain.client_errors import (
+    ClientError,
+    DownloadRejectedError,
+    ReadRejectedError,
+    SearchFailedError,
+)
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
@@ -147,22 +153,23 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
     async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
         """Waits for the network's next allowed start, then polls until amuled reports the search
         finished or ``budget_seconds`` after its start. Never stops nor frees it: amuled does."""
-        search_type = _SEARCH_TYPES[channel]
-        if search_type == "kad":
-            search_id = await self._start_kad(keyword, budget_seconds)
-            if search_id is None:
-                return SearchAnswer((), 0)
-            await self._await_end(search_id, budget_seconds, widen=True)
-        else:
-            async with self._ed2k_lock:
-                if self._ed2k_next_start is not None:
-                    await self._sleep_until(self._ed2k_next_start)
-                self._ed2k_next_start = self._monotonic_clock.now() + _START_SPACING
-                search_id = await self._post_search(keyword, search_type)
-                await self._await_end(search_id, budget_seconds, widen=False)
-        rows = await self._collect(f"/search/{search_id}/results", "results")
-        reported_files, skipped_result_count = map_search_results(rows, keyword)
-        return SearchAnswer(reported_files, skipped_result_count)
+        with _refusal_as(SearchFailedError):
+            search_type = _SEARCH_TYPES[channel]
+            if search_type == "kad":
+                search_id = await self._start_kad(keyword, budget_seconds)
+                if search_id is None:
+                    return SearchAnswer((), 0)
+                await self._await_end(search_id, budget_seconds, widen=True)
+            else:
+                async with self._ed2k_lock:
+                    if self._ed2k_next_start is not None:
+                        await self._sleep_until(self._ed2k_next_start)
+                    self._ed2k_next_start = self._monotonic_clock.now() + _START_SPACING
+                    search_id = await self._post_search(keyword, search_type)
+                    await self._await_end(search_id, budget_seconds, widen=False)
+            rows = await self._collect(f"/search/{search_id}/results", "results")
+            reported_files, skipped_result_count = map_search_results(rows, keyword)
+            return SearchAnswer(reported_files, skipped_result_count)
 
     async def _start_kad(self, keyword: str, budget_seconds: float) -> int | None:
         """Starts in the Kad word's next free slot, reserved before sleeping; ``None`` without a
@@ -210,58 +217,66 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
     async def status(self) -> ClientStatus:
         """Raises unreachable unless amuleapi reaches amuled: otherwise it answers from its cache,
         and a dead amuled would read as connected."""
-        status = await self._call("GET", "/status")
-        if status.get("ec_connected") is not True:
-            raise ApiUnreachableError("GET /status: amuleapi does not reach amuled")
-        return map_client_status(status, await self._call("GET", "/version"))
+        with _refusal_as(ReadRejectedError):
+            status = await self._call("GET", "/status")
+            if status.get("ec_connected") is not True:
+                raise ApiUnreachableError("GET /status: amuleapi does not reach amuled")
+            return map_client_status(status, await self._call("GET", "/version"))
 
     async def start(self, request: DownloadRequest) -> None:
         """Queues the file by its ed2k link. The route is a bulk one, so a refused link comes back
         per item INSIDE a 2xx: the envelope reports the failure, never the status code."""
-        if request.file.network is not Network.ED2K:
-            raise ApiRejectedError(f"aMule downloads ed2k files only, not {request.file.network}")
-        link = build_ed2k_link(request.filename, request.size_bytes, request.file.native_id)
-        envelope = await self._call("POST", "/downloads", body={"links": [link]})
-        outcomes = envelope.get("results")
-        outcome = outcomes[0] if isinstance(outcomes, list) and outcomes else None
-        if not isinstance(outcome, dict) or outcome.get("ok") is not True:
-            raise ApiRejectedError(f"POST /downloads refused the link: {_outcome_reason(outcome)}")
+        with _refusal_as(DownloadRejectedError):
+            if request.file.network is not Network.ED2K:
+                raise DownloadRejectedError(
+                    f"aMule downloads ed2k files only, not {request.file.network}"
+                )
+            link = build_ed2k_link(request.filename, request.size_bytes, request.file.native_id)
+            envelope = await self._call("POST", "/downloads", body={"links": [link]})
+            outcomes = envelope.get("results")
+            outcome = outcomes[0] if isinstance(outcomes, list) and outcomes else None
+            if not isinstance(outcome, dict) or outcome.get("ok") is not True:
+                raise DownloadRejectedError(
+                    f"POST /downloads refused the link: {_outcome_reason(outcome)}"
+                )
 
     async def downloads(self) -> tuple[DownloadStatus, ...]:
         """The queue with its completed entries, then the shared files it no longer lists. Queue
         first: a file cleared between the two reads is then shared, not missing from both."""
-        rows = await self._collect("/downloads", "downloads", params={"status": "all"})
-        queue = [status for row in rows if (status := map_download_status(row)) is not None]
-        listed = {status.file for status in queue}
-        shared = [
-            status
-            for row in await self._collect("/shared", "shared")
-            if (status := map_shared_download(row)) is not None and status.file not in listed
-        ]
-        return (*queue, *shared)
+        with _refusal_as(ReadRejectedError):
+            rows = await self._collect("/downloads", "downloads", params={"status": "all"})
+            queue = [status for row in rows if (status := map_download_status(row)) is not None]
+            listed = {status.file for status in queue}
+            shared = [
+                status
+                for row in await self._collect("/shared", "shared")
+                if (status := map_shared_download(row)) is not None and status.file not in listed
+            ]
+            return (*queue, *shared)
 
     async def sources(self, file: FileKey) -> tuple[SourceReading, ...]:
         """The download's clients that offer us the file, each with its detail; none once it
         left. One detail call per source: only the detail names its server (D7)."""
-        if file.network is not Network.ED2K:
-            return ()
-        try:
-            rows = await self._collect(
-                f"/downloads/{file.native_id}/clients", "clients", keyset_column="ecid"
-            )
-        except ApiNotFoundError:
-            return ()
-        readings: list[SourceReading] = []
-        for row in rows:
-            ecid = offering_source_ecid(row)
-            if ecid is None:
-                continue
+        with _refusal_as(ReadRejectedError):
+            if file.network is not Network.ED2K:
+                return ()
             try:
-                detail = await self._call("GET", f"/clients/{ecid}")
+                rows = await self._collect(
+                    f"/downloads/{file.native_id}/clients", "clients", keyset_column="ecid"
+                )
             except ApiNotFoundError:
-                continue  # the client left between the list and its detail
-            readings.append(map_source(row, detail))
-        return merge_duplicate_sources(readings)
+                return ()
+            readings: list[SourceReading] = []
+            for row in rows:
+                ecid = offering_source_ecid(row)
+                if ecid is None:
+                    continue
+                try:
+                    detail = await self._call("GET", f"/clients/{ecid}")
+                except ApiNotFoundError:
+                    continue  # the client left between the list and its detail
+                readings.append(map_source(row, detail))
+            return merge_duplicate_sources(readings)
 
     async def _post_search(self, keyword: str, search_type: str) -> int:
         envelope = await self._call("POST", "/search", body={"query": keyword, "type": search_type})
@@ -370,6 +385,15 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
             if not isinstance(anchor, str | int):
                 return rows  # no anchor to advance on: stop rather than re-read page one
             page_params = {**page_params, "after": anchor}
+
+
+@contextmanager
+def _refusal_as(port_error: type[ClientError]) -> Iterator[None]:
+    """A refusal raised as ``port_error``, the operation's own, its message kept."""
+    try:
+        yield
+    except ApiRejectedError as refusal:
+        raise port_error(str(refusal)) from refusal
 
 
 async def _send(

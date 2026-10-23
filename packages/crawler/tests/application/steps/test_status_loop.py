@@ -6,10 +6,9 @@ from datetime import timedelta
 
 import pytest
 
-from p2pwatch.adapters.driven.amule_api.errors import ApiAuthError, ApiRejectedError
 from p2pwatch.application.ports.driven.status_client import StatusClient
 from p2pwatch.application.steps.status_loop import StatusLoopDeps, status_loop
-from p2pwatch.domain.client_errors import ClientError
+from p2pwatch.domain.client_errors import ClientAuthError, ClientError, ReadRejectedError
 from p2pwatch.domain.observability import events as ev
 from p2pwatch.domain.status_reading import (
     ChannelStatus,
@@ -153,15 +152,15 @@ async def test_unreachable_alerts_at_two_minutes_and_recovers_when_it_answers() 
 @pytest.mark.asyncio
 async def test_an_operation_the_api_refuses_reads_as_unreachable() -> None:
     # A route a weekly aMule bump renamed: /version answers 404 not_found.
-    refused = ApiRejectedError("GET /api/v1/version: 404 not_found: no route")
+    refused = ReadRejectedError("GET /api/v1/version: 404 not_found: no route")
     events = await _run(refused, refused, refused)
     assert (120.0, ev.ClientUnreachableLasting("amuled", 120.0)) in events
 
 
 @pytest.mark.asyncio
 async def test_a_refused_password_ends_the_loop() -> None:
-    with pytest.raises(ApiAuthError):
-        await _run(ApiAuthError("amuleapi refused the admin password"), _status(ed2k=_UP))
+    with pytest.raises(ClientAuthError):
+        await _run(ClientAuthError("amuleapi refused the admin password"), _status(ed2k=_UP))
 
 
 @pytest.mark.asyncio
