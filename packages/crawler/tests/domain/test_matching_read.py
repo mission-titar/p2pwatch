@@ -8,6 +8,8 @@ from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 from p2pwatch.domain.matching_read import MatchingExplainer
 
+_MAX_FILENAME_LENGTH = 4096
+
 # ---------------------------------------------------------------------------
 # Parsed-config minimal helpers
 # ---------------------------------------------------------------------------
@@ -55,7 +57,11 @@ rules:
 
 def test_explainer_returns_explanation_on_matching_filename() -> None:
     """Filename containing 'keroro' → Explanation with non-empty rules_fired."""
-    explainer = MatchingExplainer(engine=MatchingEngine(_minimal_matcher(), _minimal_targets()))
+    explainer = MatchingExplainer(
+        engine=MatchingEngine(
+            _minimal_matcher(), _minimal_targets(), max_filename_length=_MAX_FILENAME_LENGTH
+        )
+    )
     explanation = explainer.explain(
         filenames=["Keroro_062A_VF.avi"],
         size_bytes=None,
@@ -70,7 +76,11 @@ def test_explainer_returns_explanation_on_matching_filename() -> None:
 
 def test_explainer_returns_none_for_unknown_target() -> None:
     """target_id unknown to the config → None."""
-    explainer = MatchingExplainer(engine=MatchingEngine(_minimal_matcher(), _minimal_targets()))
+    explainer = MatchingExplainer(
+        engine=MatchingEngine(
+            _minimal_matcher(), _minimal_targets(), max_filename_length=_MAX_FILENAME_LENGTH
+        )
+    )
     explanation = explainer.explain(
         filenames=["Keroro_062A_VF.avi"],
         size_bytes=None,
@@ -109,7 +119,11 @@ rules:
         )
     )
 
-    explainer = MatchingExplainer(engine=MatchingEngine(matcher_config, _minimal_targets()))
+    explainer = MatchingExplainer(
+        engine=MatchingEngine(
+            matcher_config, _minimal_targets(), max_filename_length=_MAX_FILENAME_LENGTH
+        )
+    )
     # 100 * 1024 * 1024 = 104857600 bytes = exactly 100.0 MiB
     explanation = explainer.explain(
         filenames=["keroro_062a.avi"],
@@ -151,7 +165,11 @@ rules:
         )
     )
 
-    explainer = MatchingExplainer(engine=MatchingEngine(matcher_config, _minimal_targets()))
+    explainer = MatchingExplainer(
+        engine=MatchingEngine(
+            matcher_config, _minimal_targets(), max_filename_length=_MAX_FILENAME_LENGTH
+        )
+    )
     explanation = explainer.explain(
         filenames=["keroro_062a.avi"],
         size_bytes=None,
@@ -185,7 +203,11 @@ rules:
 """
         )
     )
-    explainer = MatchingExplainer(engine=MatchingEngine(matcher_config, _minimal_targets()))
+    explainer = MatchingExplainer(
+        engine=MatchingEngine(
+            matcher_config, _minimal_targets(), max_filename_length=_MAX_FILENAME_LENGTH
+        )
+    )
     explanation = explainer.explain(
         filenames=["ita.avi", "keroro.avi"],
         size_bytes=100 * 1024 * 1024,
