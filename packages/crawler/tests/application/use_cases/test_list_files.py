@@ -4,9 +4,9 @@ from catalog_matching.domain.engine import DecisionRecord
 from p2pwatch.application.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.application.ports.driving.file_lister import FileListing
 from p2pwatch.application.use_cases.list_files import ListFiles
+from p2pwatch.application.use_cases.paging import PAGE_SIZE
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.paging import PAGE_SIZE
 from tests.fakes.adapters.driven.fake_catalog_file_reader import FakeCatalogFileReader
 
 _ENTRY = CatalogEntry(

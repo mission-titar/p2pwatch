@@ -6,8 +6,8 @@ from datetime import datetime, timedelta
 from p2pwatch.application.ports.driven.source_reader import SourceReader
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.ports.driving.source_describer import SourceDescriber, SourceDescription
+from p2pwatch.application.use_cases.paging import PAGE_SIZE
 from p2pwatch.domain.interval import requested_interval
-from p2pwatch.domain.paging import PAGE_SIZE
 from p2pwatch.domain.sharing_period import PeriodWindow
 
 

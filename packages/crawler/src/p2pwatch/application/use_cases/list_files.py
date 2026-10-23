@@ -2,8 +2,8 @@
 
 from p2pwatch.application.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.application.ports.driving.file_lister import FileLister, FileListing
+from p2pwatch.application.use_cases.paging import PAGE_SIZE
 from p2pwatch.domain.catalog_entry import CatalogEntrySort, SortDirection
-from p2pwatch.domain.paging import PAGE_SIZE
 
 
 class ListFiles(FileLister):
