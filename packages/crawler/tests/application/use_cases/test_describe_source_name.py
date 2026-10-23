@@ -6,9 +6,9 @@ from datetime import UTC, datetime, timedelta
 from p2pwatch.application.ports.driven.source_reader import SourceReader
 from p2pwatch.application.ports.driving.source_name_describer import SourceNameDescription
 from p2pwatch.application.use_cases.describe_source_name import DescribeSourceName
+from p2pwatch.application.use_cases.paging import PAGE_SIZE
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.interval import Interval
-from p2pwatch.domain.paging import PAGE_SIZE
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch.domain.source_history import SourceNameHistory, SourceNaming

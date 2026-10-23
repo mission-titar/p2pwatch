@@ -6,6 +6,8 @@ Validates the MECHANICS of the download: ``start`` accepted + the file appears i
 from the ephemeral container): it is the start -> list -> status cycle that is validated.
 """
 
+from datetime import timedelta
+
 import httpx
 import pytest
 
@@ -32,6 +34,8 @@ async def test_start_then_appears_in_downloads(amuled: ApiEndpoint) -> None:
         amuled.port,
         amuled.password,
         timeout_seconds=30.0,
+        page_size=500,
+        progress_poll_interval=timedelta(seconds=5),
         monotonic_clock=AsyncioMonotonicClock(),
         transport_factory=httpx.AsyncHTTPTransport,
     )

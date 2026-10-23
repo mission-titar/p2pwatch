@@ -517,6 +517,7 @@ _API_HOST, _API_PORT = _AMULE, 4711
 
 _SHARED_HASHES = f"""
 import asyncio, json
+from datetime import timedelta
 import httpx
 from p2pwatch.adapters.driven.asyncio_monotonic_clock import AsyncioMonotonicClock
 from p2pwatch.adapters.driven.amule_api.amule_api_client import AmuleApiClient
@@ -527,6 +528,8 @@ async def main() -> None:
         {_API_PORT},
         {_API_PASSWORD!r},
         timeout_seconds=10.0,
+        page_size=500,
+        progress_poll_interval=timedelta(seconds=5),
         monotonic_clock=AsyncioMonotonicClock(),
         transport_factory=httpx.AsyncHTTPTransport,
     )

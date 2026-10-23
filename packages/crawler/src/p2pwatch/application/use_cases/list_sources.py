@@ -2,7 +2,7 @@
 
 from p2pwatch.application.ports.driven.source_reader import SourceReader
 from p2pwatch.application.ports.driving.source_lister import SourceLister, SourceListing
-from p2pwatch.domain.paging import PAGE_SIZE
+from p2pwatch.application.use_cases.paging import PAGE_SIZE
 
 
 class ListSources(SourceLister):

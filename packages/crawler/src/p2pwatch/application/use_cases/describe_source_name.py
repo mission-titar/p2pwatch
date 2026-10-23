@@ -9,8 +9,8 @@ from p2pwatch.application.ports.driving.source_name_describer import (
     SourceNameDescriber,
     SourceNameDescription,
 )
+from p2pwatch.application.use_cases.paging import PAGE_SIZE
 from p2pwatch.domain.interval import requested_interval
-from p2pwatch.domain.paging import PAGE_SIZE
 from p2pwatch.domain.sharing_period import PeriodWindow
 
 
