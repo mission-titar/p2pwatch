@@ -1,14 +1,9 @@
-"""``SqliteDecisionStore``: the matcher's verdicts, appended per target, and their latest reads.
-
-It stores what the domain ignores (data-model spec §3): ``decided_at`` and ``node_id``, given
-by the caller at each write.
-"""
+"""``SqliteDecisionStore``: the matcher's verdicts, appended per target, and their latest reads."""
 
 import sqlite3
-from datetime import datetime
 
 from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.engine import DecisionRecord, MatchDecision
+from catalog_matching.domain.engine import DecisionRecord
 from p2pwatch.adapters.driven.persistence_sqlite.canonical_native_id import (
     require_canonical_native_id,
 )
@@ -18,7 +13,7 @@ from p2pwatch.application.ports.driven.decision_reader import DecisionReader
 from p2pwatch.application.ports.driven.decision_writer import DecisionWriter
 from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction
+from p2pwatch.domain.file_target_decision import DatedDecision, FileTargetDecision, Retraction
 
 # The tier column's value on a retraction's row.
 _RETRACTED_TIER = "retracted"
@@ -69,50 +64,21 @@ class SqliteDecisionStore(DecisionWriter, DecisionReader):
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
 
-    def record_decision(
-        self, file: FileKey, decision: MatchDecision, decided_at: datetime, node_id: str
-    ) -> None:
+    def record_decision(self, dated_decision: DatedDecision[FileTargetDecision]) -> None:
         """INSERT alone (autocommit); unknown file → FK violated → ``PersistenceError``.
 
-        Only the 3 columns of ``MatchDecision`` are persisted (engine spec);
-        ``explanation`` is runtime explainability, NEVER a column.
+        A retraction is the row ``(target_id, rule_name="", tier=_RETRACTED_TIER)``, appended
+        instead of a mutation, per the append-only invariant (spec §7).
         """
-        require_canonical_native_id(file)
+        require_canonical_native_id(dated_decision.file)
         with wrap_sqlite_errors():
             self._connection.execute(
                 _INSERT_DECISION,
                 (
-                    file.file_id,
-                    decision.target_id,
-                    decision.rule_name,
-                    decision.tier,
-                    utc_iso(decided_at),
-                    node_id,
-                ),
-            )
-
-    def record_retraction(
-        self, file: FileKey, target_id: str, decided_at: datetime, node_id: str
-    ) -> None:
-        """Appends a per-target ``retracted`` decision (spec §7).
-
-        Mirrors ``record_decision`` (same canonical-hash guard, same autocommit ``INSERT``): a
-        file that no longer matches ``target_id`` gets an appended
-        ``(target_id, rule_name="", tier=_RETRACTED_TIER)`` row instead of a mutation, per the
-        append-only invariant. Retracting one target leaves the file's other targets intact.
-        Unknown file → FK violated → ``PersistenceError``.
-        """
-        require_canonical_native_id(file)
-        with wrap_sqlite_errors():
-            self._connection.execute(
-                _INSERT_DECISION,
-                (
-                    file.file_id,
-                    target_id,
-                    "",
-                    _RETRACTED_TIER,
-                    utc_iso(decided_at),
-                    node_id,
+                    dated_decision.file.file_id,
+                    *_decision_columns(dated_decision.decision),
+                    utc_iso(dated_decision.decided_at),
+                    dated_decision.node_id,
                 ),
             )
 
@@ -140,6 +106,12 @@ class SqliteDecisionStore(DecisionWriter, DecisionReader):
             DownloadCandidate(file=FileKey(Network(row[0]), row[1]), target_id=row[2])
             for row in rows
         )
+
+
+def _decision_columns(decision: FileTargetDecision) -> tuple[str, str, str]:
+    if isinstance(decision, Retraction):
+        return decision.target_id, "", _RETRACTED_TIER
+    return decision.target_id, decision.rule_name, decision.tier.value
 
 
 def _file_target_decision(target_id: str, rule_name: str, tier: str) -> FileTargetDecision:
