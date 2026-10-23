@@ -95,6 +95,7 @@ class ChannelDegraded:
     channel: str
     field: ChannelField
     degraded_for_seconds: float
+    node_id: str
 
 
 @dataclass(frozen=True)
@@ -102,6 +103,7 @@ class ChannelRecovered:
     client_name: str
     channel: str
     field: ChannelField
+    node_id: str
 
 
 @dataclass(frozen=True)
@@ -109,11 +111,13 @@ class ClientUnreachableLasting:
     # No answer from the client's API for ``unreachable_for_seconds``: emitted once until one comes.
     client_name: str
     unreachable_for_seconds: float
+    node_id: str
 
 
 @dataclass(frozen=True)
 class ClientReachableAgain:
     client_name: str
+    node_id: str
 
 
 @dataclass(frozen=True)
@@ -126,6 +130,7 @@ class DiskSpaceLow:
     # Emitted only on the crossing below the floor: the download loop owns the edge.
     free_bytes: int
     min_free_bytes: int
+    node_id: str
 
 
 @dataclass(frozen=True)
@@ -154,6 +159,7 @@ class SourceReappeared:
 @dataclass(frozen=True)
 class CrawlerStarted:
     download_enabled: bool
+    node_id: str
 
 
 type Event = (

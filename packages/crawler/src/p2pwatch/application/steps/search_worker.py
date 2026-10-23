@@ -171,8 +171,7 @@ class SearchWorker:
         await self._deps.observability_dispatcher.dispatch(
             SearchExecuted(
                 self._client_name, channel, len(answer.reported_files), answer.skipped_result_count
-            ),
-            node_id,
+            )
         )
         changed = 0
         for reported_file in answer.reported_files:
@@ -209,7 +208,7 @@ class SearchWorker:
                 delay.total_seconds(),
             )
             await self._deps.observability_dispatcher.dispatch(
-                SearchFailed(self._client_name, task.channel), node_id
+                SearchFailed(self._client_name, task.channel)
             )
             return
         except ClientUnreachableError as error:
@@ -220,9 +219,7 @@ class SearchWorker:
                 error,
                 delay.total_seconds(),
             )
-            await self._deps.observability_dispatcher.dispatch(
-                ClientUnreachable(self._client_name), node_id
-            )
+            await self._deps.observability_dispatcher.dispatch(ClientUnreachable(self._client_name))
             return
         changed = await self._record_observations(task.channel, answer, node_id)
         self._deps.backoff.reset(channel_backoff_key)

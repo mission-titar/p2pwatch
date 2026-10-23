@@ -108,7 +108,7 @@ async def _alert_sources(
                 node_id,
             )
         )
-        await deps.observability_dispatcher.dispatch(event, node_id)
+        await deps.observability_dispatcher.dispatch(event)
 
 
 async def record_sources(
