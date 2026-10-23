@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 import yaml
 
 from catalog_matching.domain.config import MatcherConfig
-from catalog_matching.domain.engine import DecisionRecord, Explanation
+from catalog_matching.domain.engine import DecisionRecord, Explanation, MatchingEngine
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 from p2pwatch.application.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.application.ports.driven.source_reader import SourceReader
@@ -77,7 +77,7 @@ def _describe(
     describe_file = DescribeFile(
         catalog_file_reader=catalog_file_reader,
         source_reader=source_reader or FakeSourceReader(),
-        explainer=MatchingExplainer(matcher_config=matcher_config, targets=_TARGETS),
+        explainer=MatchingExplainer(engine=MatchingEngine(matcher_config, _TARGETS)),
         wall_clock=FakeTime(_NOW).wall,
         source_period_gap=_GAP,
     )
