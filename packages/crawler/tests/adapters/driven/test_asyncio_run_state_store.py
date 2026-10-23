@@ -33,25 +33,25 @@ def _run_state_with(
     return run_state, run_state, resumed, shutdown
 
 
-def test_pause_clears_the_resumed_event() -> None:
+def test_setting_paused_clears_the_resumed_event() -> None:
     writer, _reader, resumed, shutdown = _run_state_with(FakeImmediateEventLoop())
     resumed.set()  # running
-    writer.pause()
+    writer.set_paused(True)
     assert not resumed.is_set()
     assert not shutdown.is_set()
 
 
-def test_resume_sets_the_resumed_event() -> None:
+def test_setting_unpaused_sets_the_resumed_event() -> None:
     writer, _reader, resumed, shutdown = _run_state_with(FakeImmediateEventLoop())
     resumed.clear()  # paused
-    writer.resume()
+    writer.set_paused(False)
     assert resumed.is_set()
     assert not shutdown.is_set()
 
 
-def test_shut_down_sets_only_the_shutdown_event() -> None:
+def test_setting_shutdown_requested_sets_only_the_shutdown_event() -> None:
     writer, _reader, resumed, shutdown = _run_state_with(FakeImmediateEventLoop())
-    writer.shut_down()
+    writer.set_shutdown_requested()
     assert shutdown.is_set()
     assert not resumed.is_set()
 
@@ -61,7 +61,7 @@ def test_mutation_is_deferred_to_the_loop_thread_via_call_soon_threadsafe() -> N
     caller thread; it is scheduled and only mutates once the loop runs the callback."""
     loop = FakeRecordingEventLoop()
     writer, _reader, _resumed, shutdown = _run_state_with(loop)
-    writer.shut_down()
+    writer.set_shutdown_requested()
     # Scheduled, but NOT yet applied (deferred to the crawler loop thread).
     assert len(loop.callbacks) == 1
     assert not shutdown.is_set()

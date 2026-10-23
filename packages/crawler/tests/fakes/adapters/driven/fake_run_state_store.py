@@ -3,20 +3,17 @@ from p2pwatch.application.ports.driven.run_state_writer import RunStateWriter
 
 
 class FakeRunStateStore(RunStateWriter, RunStateReader):
-    """Keeps each change by its method's name; reads ``paused``, which no change moves."""
+    """Reads back at once what it was set to, where the real store waits for the crawler's loop."""
 
     def __init__(self, *, paused: bool = False) -> None:
-        self.changes: list[str] = []
-        self.paused = paused
+        self._paused = paused
+        self.shutdown_requested = False
 
-    def pause(self) -> None:
-        self.changes.append("pause")
+    def set_paused(self, paused: bool) -> None:
+        self._paused = paused
 
-    def resume(self) -> None:
-        self.changes.append("resume")
-
-    def shut_down(self) -> None:
-        self.changes.append("shut_down")
+    def set_shutdown_requested(self) -> None:
+        self.shutdown_requested = True
 
     def is_paused(self) -> bool:
-        return self.paused
+        return self._paused

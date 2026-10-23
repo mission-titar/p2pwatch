@@ -11,4 +11,4 @@ class ResumeCrawl(CrawlResumer):
         self._run_state = run_state
 
     def resume_crawl(self) -> None:
-        self._run_state.resume()
+        self._run_state.set_paused(False)

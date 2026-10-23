@@ -11,4 +11,4 @@ class PauseCrawl(CrawlPauser):
         self._run_state = run_state
 
     def pause_crawl(self) -> None:
-        self._run_state.pause()
+        self._run_state.set_paused(True)
