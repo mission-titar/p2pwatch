@@ -74,9 +74,13 @@ async def test_the_sources_of_each_tracked_download_the_client_lists_are_recorde
     await run_download_cycle(deps, NODE)
     assert source_client.source_reads == [HASH_A, HASH_B]
     assert sources.recorded == [
-        SourcePoint(key(HASH_A), readings[HASH_A][0], SourceRole.QUEUED, start),
+        SourcePoint(key(HASH_A), readings[HASH_A][0], SourceRole.QUEUED, start, NODE),
         SourcePoint(
-            key(HASH_B), readings[HASH_B][0], SourceRole.UNDETERMINED, start + timedelta(seconds=1)
+            key(HASH_B),
+            readings[HASH_B][0],
+            SourceRole.UNDETERMINED,
+            start + timedelta(seconds=1),
+            NODE,
         ),
     ]
 

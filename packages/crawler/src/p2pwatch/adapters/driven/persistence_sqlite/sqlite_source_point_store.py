@@ -87,23 +87,23 @@ class SqliteSourcePointStore(SourcePointWriter, SourcePointReader):
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
 
-    def record_points(self, points: Sequence[SourcePoint], node_id: str) -> None:
+    def record_points(self, points: Sequence[SourcePoint]) -> None:
         """ONE transaction."""
         with wrap_sqlite_errors():
             self._connection.execute("BEGIN IMMEDIATE")
             try:
                 for point in points:
-                    self._record(point, node_id)
+                    self._record(point)
                 self._connection.execute("COMMIT")
             except BaseException:
                 with suppress(sqlite3.Error):
                     self._connection.execute("ROLLBACK")
                 raise
 
-    def _record(self, point: SourcePoint, node_id: str) -> None:
+    def _record(self, point: SourcePoint) -> None:
         """Writes the point's variant and the point."""
         reading = point.reading
-        variant = _variant_columns(point, node_id)
+        variant = _variant_columns(point)
         variant_content_hash = _content_hash(variant)
         if reading.source is not None:
             source = reading.source
@@ -169,7 +169,7 @@ def _latest_point(role: str, observed_at: int, session_received_bytes: int) -> L
     )
 
 
-def _variant_columns(point: SourcePoint, node_id: str) -> tuple[bytes | str | bool | None, ...]:
+def _variant_columns(point: SourcePoint) -> tuple[bytes | str | bool | None, ...]:
     """The variant's columns in table order, ``raw_metadata`` a JSON object with sorted keys."""
     reading = point.reading
     return (
@@ -181,7 +181,7 @@ def _variant_columns(point: SourcePoint, node_id: str) -> tuple[bytes | str | bo
         None if reading.contact_point is None else reading.contact_point.server,
         reading.connectable,
         json.dumps(dict(reading.raw_metadata), ensure_ascii=False, sort_keys=True),
-        node_id,
+        point.node_id,
     )
 
 

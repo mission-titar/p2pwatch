@@ -43,7 +43,9 @@ def _source_points(
     Reads every latest point before the write, with no ``await`` between."""
     since = read_at - carried_role_max_age(deps.time_between_source_reads)
     return tuple(
-        SourcePoint(file, reading, _role(deps, file, reading, since, read_at, node_id), read_at)
+        SourcePoint(
+            file, reading, _role(deps, file, reading, since, read_at, node_id), read_at, node_id
+        )
         for reading in readings
         if reading.source is not None or reading.source_name is not None
     )
@@ -126,7 +128,7 @@ async def record_sources(
         readings = await deps.source_client.sources(status.file)
         try:
             points = _source_points(deps, status.file, readings, read_at, node_id)
-            deps.source_point_writer.record_points(points, node_id)
+            deps.source_point_writer.record_points(points)
             await _alert_sources(deps, status.file, points, round_, node_id)
         except StoreError as error:
             deps.logger.error(
