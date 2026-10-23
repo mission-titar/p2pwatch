@@ -1,9 +1,10 @@
+from catalog_matching.domain.decision_tier import DecisionTier
 from p2pwatch.domain.download.policy import DownloadVerdict, decide_download
 
 
 def _verdict(
     *,
-    tier: str = "download",
+    tier: DecisionTier = DecisionTier.DOWNLOAD,
     target_status: str = "lost",
     already_downloaded: bool = False,
     free_bytes: int = 10_000,
@@ -39,8 +40,8 @@ def test_non_download_tier_is_a_conservative_guard() -> None:
     # DECISION D5: conservative guard ("do not download") — never triggered in prod
     # (the application only passes tier=download decisions), but an out-of-contract caller
     # does not crash and downloads nothing.
-    assert _verdict(tier="catalog") is DownloadVerdict.SKIP_COMPLETE
-    assert _verdict(tier="notify") is DownloadVerdict.SKIP_COMPLETE
+    assert _verdict(tier=DecisionTier.CATALOG) is DownloadVerdict.SKIP_COMPLETE
+    assert _verdict(tier=DecisionTier.NOTIFY) is DownloadVerdict.SKIP_COMPLETE
 
 
 def test_complete_target_skips() -> None:
@@ -112,7 +113,7 @@ def test_found_target_still_downloads_a_new_file() -> None:
     # re-downloaded when a NEW file matches it (intended archival redundancy).
     # Only target_status == "complete" skips; "found" never does in PROD.
     verdict = decide_download(
-        tier="download",
+        tier=DecisionTier.DOWNLOAD,
         target_status="found",
         already_tracked=False,
         free_bytes=100_000_000_000,

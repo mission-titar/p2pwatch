@@ -5,15 +5,24 @@ The tier order comes from ``DecisionTier.rank``, the matching engine's own.
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 
 from catalog_matching.domain.decision_tier import DecisionTier
+
+
+class TargetCoverageStatus(StrEnum):
+    """How far a target is recovered, its value the word the dashboard shows."""
+
+    FOUND = "found"
+    PARTIAL = "partial"
+    NONE = "none"
 
 
 @dataclass(frozen=True)
 class TargetCoverage:
     target_id: str
-    status: str  # "found" | "partial" | "none"
-    best_tier: str | None  # "download" | "notify" | "catalog" | None
+    status: TargetCoverageStatus
+    best_tier: DecisionTier | None
     file_count: int
 
 
@@ -23,13 +32,20 @@ def coverage_of(target_id: str, tiers: Sequence[str]) -> TargetCoverage:
     Catalog-tier decisions are the ``keroro_large`` catch-all: any keroro file with no numeric
     token resolves to the smallest ``target_id`` (``001A``) via the engine tie-break, so counting
     them would make one episode look partially recovered while the catalog has identified nothing.
-    They do NOT count as coverage of an episode (same ``tier == "catalog"`` criterion the ``/files``
-    "unidentified" mask uses in ``adapters.driving.webui.app._resolve_target_display``).
     """
-    identified = [tier for tier in tiers if tier != "catalog"]
+    identified = [
+        decision_tier
+        for decision_tier in map(DecisionTier, tiers)
+        if decision_tier.identifies_target
+    ]
     if not identified:
-        return TargetCoverage(target_id, status="none", best_tier=None, file_count=0)
-    # An unknown tier ranks ``-1``, below the weakest, neutral with respect to the choice.
-    best = max(identified, key=lambda tier: DecisionTier(tier).rank if tier in DecisionTier else -1)
-    status = "found" if best == "download" else "partial"
+        return TargetCoverage(
+            target_id, status=TargetCoverageStatus.NONE, best_tier=None, file_count=0
+        )
+    best = max(identified, key=lambda tier: tier.rank)
+    status = (
+        TargetCoverageStatus.FOUND
+        if best is DecisionTier.DOWNLOAD
+        else TargetCoverageStatus.PARTIAL
+    )
     return TargetCoverage(target_id, status=status, best_tier=best, file_count=len(identified))

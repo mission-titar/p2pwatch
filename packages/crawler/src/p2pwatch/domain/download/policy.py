@@ -15,6 +15,8 @@ otherwise we download.
 
 from enum import StrEnum
 
+from catalog_matching.domain.decision_tier import DecisionTier
+
 
 class DownloadVerdict(StrEnum):
     """Verdict of the auto-download policy (closed enum, spec §6)."""
@@ -27,7 +29,7 @@ class DownloadVerdict(StrEnum):
 
 def decide_download(
     *,
-    tier: str,
+    tier: DecisionTier,
     target_status: str,
     already_tracked: bool,
     free_bytes: int,
@@ -45,7 +47,7 @@ def decide_download(
     Free space alone would be wrong: ten downloads totalling 20 GB with 2 GB written look cheap
     to the filesystem, which knows nothing of the 18 GB still coming.
     """
-    if tier != "download":
+    if tier is not DecisionTier.DOWNLOAD:
         return DownloadVerdict.SKIP_COMPLETE  # conservative guard (DECISION D5)
     if target_status == "complete":
         return DownloadVerdict.SKIP_COMPLETE

@@ -7,3 +7,7 @@ def test_values_are_the_strings_of_the_policy_and_the_rows() -> None:
 
 def test_rank_orders_download_above_notify_above_catalog() -> None:
     assert DecisionTier.DOWNLOAD.rank > DecisionTier.NOTIFY.rank > DecisionTier.CATALOG.rank
+
+
+def test_only_the_catalog_tier_identifies_no_target() -> None:
+    assert [tier for tier in DecisionTier if not tier.identifies_target] == [DecisionTier.CATALOG]

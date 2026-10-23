@@ -145,6 +145,8 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
   `source_variants` devient `raw_metadata`. Adaptez vos requêtes de la console SQL.
 - **Les paramètres d'URL de `/files` changent de nom** : `q` devient `search`, `target` devient
   `target_id` et `dir` devient `direction`. Les anciens sont ignorés : mettez à jour vos favoris.
+  Un `?tier=` inconnu est ignoré lui aussi, comme un `sort` ou un `direction` inconnu : la liste
+  montre tous les fichiers au lieu de n'en montrer aucun.
   Après un redémarrage depuis le tableau de bord, l'adresse se termine par `?done=restarted` au lieu
   de `?done=restart`.
 - **Le crawler se lance par sa sous-commande**, `python -m p2pwatch crawl`, que l'image lance
