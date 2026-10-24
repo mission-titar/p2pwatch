@@ -303,10 +303,10 @@ async def test_low_disk_warns_once_per_crossing_and_rearms_at_the_floor() -> Non
     deps = build_deps(
         client=FakeDownloadClient(),
         tracked_download_store=FakeTrackedDownloadStore(),
+        free_space_meter=free_space_meter,
         min_free=600,
         observability_dispatcher=observability.dispatcher,
     )
-    deps.free_space_meter = free_space_meter
     warnings_per_cycle: list[int] = []
     for free in (500, 400, 600, 599):  # cross down, stay low, back AT the floor, cross again
         free_space_meter.free = free

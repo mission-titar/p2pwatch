@@ -3,10 +3,12 @@ from datetime import timedelta
 
 import pytest
 
+from p2pwatch.application.steps.download_decider import DownloadDecider
 from p2pwatch.application.steps.download_loop import (
     DownloadLoopDeps,
     download_loop,
 )
+from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.domain.wake_subject import WakeSubject
 from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
@@ -35,24 +37,40 @@ def _loop_deps(
     run_state: FakeRunStateStore,
     poll_interval: float = 30.0,
     fake_time: FakeTime | None = None,
+    decision_reader: FakeDecisionReader | None = None,
 ) -> DownloadLoopDeps:
-    downloads = FakeTrackedDownloadStore()
-    sources = FakeSourcePointStore()
+    client, downloads, sources = (
+        FakeDownloadClient(),
+        FakeTrackedDownloadStore(),
+        FakeSourcePointStore(),
+    )
     fake_time = fake_time or FakeTime()
-    decision_reader, observation_reader = FakeDecisionReader(), FakeObservationReader()
+    decision_reader, observation_reader = (
+        decision_reader or FakeDecisionReader(),
+        FakeObservationReader(),
+    )
     observability_dispatcher, logger = ObservabilityOverFakes().dispatcher, FakeLogger()
-    return DownloadLoopDeps(
-        download_client=FakeDownloadClient(),
-        source_client=FakeSourceClient(),
+    download_tracker = DownloadTracker(
         tracked_download_writer=downloads,
+        tracked_download_reader=downloads,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
+        targets=(),
+        lost_after=timedelta(days=1),
+        wall_clock=fake_time.wall,
+        monotonic_clock=fake_time.monotonic,
+        observability_dispatcher=observability_dispatcher,
+        logger=logger,
+    )
+    return DownloadLoopDeps(
+        download_client=client,
+        source_client=FakeSourceClient(),
         tracked_download_reader=downloads,
         source_point_writer=sources,
         source_point_reader=sources,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
         targets=(),
-        free_space_meter=FakeFreeSpaceMeter(1_000_000),
-        min_free_bytes=0,
         reappeared_after=timedelta(hours=12),
         sources_interval=timedelta(minutes=5),
         time_between_source_reads=timedelta(minutes=5, seconds=30),
@@ -60,16 +78,25 @@ def _loop_deps(
         monotonic_clock=fake_time.monotonic,
         observability_dispatcher=observability_dispatcher,
         logger=logger,
-        download_tracker=DownloadTracker(
-            tracked_download_writer=downloads,
-            tracked_download_reader=downloads,
+        download_tracker=download_tracker,
+        download_decider=DownloadDecider(
+            free_space_meter=FakeFreeSpaceMeter(1_000_000),
+            min_free_bytes=0,
             decision_reader=decision_reader,
             observation_reader=observation_reader,
+            tracked_download_writer=downloads,
+            tracked_download_reader=downloads,
             targets=(),
-            lost_after=timedelta(days=1),
+            download_tracker=download_tracker,
             wall_clock=fake_time.wall,
-            monotonic_clock=fake_time.monotonic,
             observability_dispatcher=observability_dispatcher,
+            logger=logger,
+        ),
+        download_starter=DownloadStarter(
+            download_client=client,
+            tracked_download_writer=downloads,
+            tracked_download_reader=downloads,
+            observation_reader=observation_reader,
             logger=logger,
         ),
         waker=waker,
@@ -130,8 +157,12 @@ async def test_loop_breaks_when_shutdown_is_requested_during_the_cycle() -> None
     # (by the catalog) → break without calling _sleep_or_wake (no sleep recorded).
     run_state = FakeRunStateStore()
     fake_time = FakeTime()
-    deps = _loop_deps(waker=FakeWaker(), run_state=run_state, fake_time=fake_time)
-    deps.decision_reader = FakeShutdownDuringCycleDecisionReader(run_state)
+    deps = _loop_deps(
+        waker=FakeWaker(),
+        run_state=run_state,
+        fake_time=fake_time,
+        decision_reader=FakeShutdownDuringCycleDecisionReader(run_state),
+    )
     await asyncio.wait_for(download_loop(deps, _NODE), timeout=1.0)
     assert fake_time.sleeps == []  # break before any sleep/wake
 

@@ -17,9 +17,7 @@ the iteration, ``StoreError`` is logged and the cycle continues. A stalled downl
 abandoned.
 """
 
-from p2pwatch.application.steps.download_decider import queue_new_candidates
 from p2pwatch.application.steps.download_deps import DownloadDeps
-from p2pwatch.application.steps.download_starter import start_unlisted
 from p2pwatch.application.steps.source_watcher import record_sources
 from p2pwatch.domain.client_errors import ClientUnreachableError, ReadRejectedError
 from p2pwatch.domain.store_error import StoreError
@@ -69,7 +67,7 @@ async def run_download_cycle(deps: DownloadDeps, node_id: str) -> None:
     await deps.download_tracker.track(listed_statuses, node_id)
     # Step 3 - CANDIDATES: NO client I/O → a StoreError or the disk's OSError, isolated (I2).
     try:
-        await queue_new_candidates(deps, outstanding_bytes, node_id)
+        await deps.download_decider.queue_new_candidates(outstanding_bytes, node_id)
     except StoreError as error:
         deps.logger.error("download candidates store failure (%s): step skipped, continues", error)
     except OSError as error:
@@ -79,7 +77,7 @@ async def run_download_cycle(deps: DownloadDeps, node_id: str) -> None:
     # Step 4 - START: client I/O → ClientUnreachableError = dead daemon = ABORT. Re-reads
     # ``read_tracked_states`` FRESHLY, so it runs even if step 3 partially failed.
     try:
-        await start_unlisted(deps, listed_files)
+        await deps.download_starter.start_unlisted(listed_files)
     except ClientUnreachableError as error:
         deps.logger.warning("download daemon unreachable (%s): iteration skipped, retry", error)
         return
