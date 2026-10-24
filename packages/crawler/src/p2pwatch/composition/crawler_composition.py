@@ -87,6 +87,7 @@ from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
+from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRegistry
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.download_cycle import DownloadCycle
@@ -100,11 +101,7 @@ from p2pwatch.application.steps.loop_supervisor import LoopSupervisor
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.search_tasks import SearchTaskRunner
-from p2pwatch.application.steps.search_worker import (
-    BackoffPolicy,
-    BackoffRegistry,
-    SearchWorker,
-)
+from p2pwatch.application.steps.search_worker import SearchWorker
 from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.application.steps.status_loop import StatusLoop
 from p2pwatch.application.use_cases.describe_file import DescribeFile

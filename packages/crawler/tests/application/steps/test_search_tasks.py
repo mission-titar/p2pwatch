@@ -17,14 +17,11 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import Sq
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
 )
+from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRegistry
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.search_tasks import SearchTaskRunner
-from p2pwatch.application.steps.search_worker import (
-    BackoffPolicy,
-    BackoffRegistry,
-    SearchWorker,
-)
+from p2pwatch.application.steps.search_worker import SearchWorker
 from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import ReportedFile
