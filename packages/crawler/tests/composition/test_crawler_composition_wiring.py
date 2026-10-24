@@ -433,11 +433,7 @@ async def test_a_backoff_the_previous_run_saved_holds_the_ed2k_search(
 ) -> None:
     local = open_local(tmp_path / "local.db")
     SqliteBackoffStateStore(local).set_backoff_states(
-        {
-            BackoffKey("amuled", "ed2k"): BackoffState(
-                1, SystemWallClock().now(), timedelta(hours=1)
-            )
-        }
+        {BackoffKey("amuled", "ed2k"): BackoffState(1, SystemWallClock().now(), timedelta(hours=1))}
     )
     local.close()
     config_path = _write(tmp_path / "crawler.yml", _config(tmp_path))
