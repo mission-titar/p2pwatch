@@ -1,8 +1,8 @@
-"""Tests for the shared decision helper (spec §7): set diff keyed by (hash, target_id).
+"""Tests for ``FileJudge`` (spec §7): set diff keyed by (hash, target_id).
 
-Real engine + real SQLite stores (mirrors ``test_record_observations.py``: "real stores
-on tmp_path") + the real dispatch step over fakes; ``waker`` and ``wall_clock`` are fakes.
-``_record`` observes the name first: the helper judges the file on every name the catalog knows.
+Real engine + real SQLite stores + the real dispatch step over fakes; ``waker`` and
+``wall_clock`` are fakes. ``_record`` observes the name first: the judge reads every name the
+catalog knows.
 """
 
 import sqlite3
@@ -17,15 +17,15 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import Sq
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
 )
-from p2pwatch.application.steps.decisions import rejudge_file
-from p2pwatch.application.steps.record_observations import record_observation
+from p2pwatch.application.ports.driven.wall_clock import WallClock
+from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision, Retraction
 from p2pwatch.domain.observability.events import TargetTitle
 from p2pwatch.domain.observability.notification import TierRise
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.wake_subject import WakeSubject
-from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_logger import LoggedLine
 from tests.fakes.adapters.driven.fake_ticking_wall_clock import FakeTickingWallClock
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
@@ -87,6 +87,25 @@ def _seed_decision(
     )
 
 
+def _file_judge(
+    observation_store: SqliteObservationStore,
+    decision_store: SqliteDecisionStore,
+    engine: MatchingEngine,
+    waker: FakeWaker,
+    observability: ObservabilityOverFakes,
+    wall_clock: WallClock,
+) -> FileJudge:
+    return FileJudge(
+        observation_reader=observation_store,
+        decision_writer=decision_store,
+        decision_reader=decision_store,
+        engine=engine,
+        waker=waker,
+        observability_dispatcher=observability.dispatcher,
+        wall_clock=wall_clock,
+    )
+
+
 async def _record(
     native_id: str,
     filename: str,
@@ -100,17 +119,9 @@ async def _record(
     observation_store.record_observation(
         FileObservation(_reported_file(native_id, filename), wall_clock.now(), _NODE)
     )
-    return await rejudge_file(
-        _key(native_id),
-        _reported_file(native_id, filename).to_candidate(),
-        observation_reader=observation_store,
-        decision_writer=decision_store,
-        decision_reader=decision_store,
-        engine=engine,
-        waker=waker,
-        observability_dispatcher=observability.dispatcher,
-        wall_clock=wall_clock,
-        node_id=_NODE,
+    judge = _file_judge(observation_store, decision_store, engine, waker, observability, wall_clock)
+    return await judge.rejudge(
+        _key(native_id), _reported_file(native_id, filename).to_candidate(), _NODE
     )
 
 
@@ -429,20 +440,15 @@ async def test_a_second_name_that_matches_nothing_does_not_retract_the_first(
     # Regression (spec amuleapi-migration §8.4): names of one hash used to alternate verdicts.
     observability, waker = ObservabilityOverFakes(), FakeWaker()
     written = [
-        await record_observation(
-            _reported_file(_HASH_DL, name),
-            observation_writer=observation_store,
-            observation_reader=observation_store,
-            decision_writer=decision_store,
-            decision_reader=decision_store,
-            engine=engine,
-            waker=waker,
-            observability_dispatcher=observability.dispatcher,
-            wall_clock=wall_clock,
-            client_name="amuled",
-            channel="ed2k",
-            logger=FakeLogger(),
-            node_id=_NODE,
+        await _record(
+            _HASH_DL,
+            name,
+            observation_store,
+            decision_store,
+            engine,
+            waker,
+            observability,
+            wall_clock,
         )
         for name in (_DL_NAME, _DISCARD_NAME, _DL_NAME, _DISCARD_NAME)
     ]
@@ -540,17 +546,9 @@ async def test_a_file_with_no_name_left_is_named_by_the_candidate(
     insert_file(catalog_connection, _HASH_CAT, 1)
     _seed_decision(decision_store, _HASH_CAT, "062A", wall_clock.now())
     observability, waker = ObservabilityOverFakes(), FakeWaker()
-    await rejudge_file(
-        _key(_HASH_CAT),
-        _reported_file(_HASH_CAT, _DISCARD_NAME).to_candidate(),
-        observation_reader=observation_store,
-        decision_writer=decision_store,
-        decision_reader=decision_store,
-        engine=engine,
-        waker=waker,
-        observability_dispatcher=observability.dispatcher,
-        wall_clock=wall_clock,
-        node_id=_NODE,
+    judge = _file_judge(observation_store, decision_store, engine, waker, observability, wall_clock)
+    await judge.rejudge(
+        _key(_HASH_CAT), _reported_file(_HASH_CAT, _DISCARD_NAME).to_candidate(), _NODE
     )
     assert observability.logger.lines == [
         _decisions_line(_HASH_CAT, _DISCARD_NAME, "062A notify → retracted")
@@ -570,17 +568,16 @@ async def test_each_row_carries_the_instant_read_right_before_its_write(
         FileObservation(_reported_file(_HASH_MULTI, _MULTI_NAME), seeded_at, _NODE)
     )
     _seed_decision(decision_store, _HASH_MULTI, "001A", seeded_at)
-    await rejudge_file(
-        _key(_HASH_MULTI),
-        _reported_file(_HASH_MULTI, _MULTI_NAME).to_candidate(),
-        observation_reader=observation_store,
-        decision_writer=decision_store,
-        decision_reader=decision_store,
-        engine=engine,
-        waker=FakeWaker(),
-        observability_dispatcher=ObservabilityOverFakes().dispatcher,
-        wall_clock=FakeTickingWallClock(FakeTime(start)),
-        node_id=_NODE,
+    judge = _file_judge(
+        observation_store,
+        decision_store,
+        engine,
+        FakeWaker(),
+        ObservabilityOverFakes(),
+        FakeTickingWallClock(FakeTime(start)),
+    )
+    await judge.rejudge(
+        _key(_HASH_MULTI), _reported_file(_HASH_MULTI, _MULTI_NAME).to_candidate(), _NODE
     )
     rows = catalog_connection.execute(
         "SELECT target_id, tier, decided_at FROM match_decisions ORDER BY id"

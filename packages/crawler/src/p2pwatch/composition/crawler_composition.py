@@ -88,9 +88,10 @@ from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
+from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.download_loop import DownloadLoopDeps, download_loop
+from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.application.steps.record_observations import record_observation
 from p2pwatch.application.steps.reevaluate_catalog import reevaluate_catalog
 from p2pwatch.application.steps.reevaluate_if_policy_changed import reevaluate_if_policy_changed
 from p2pwatch.application.steps.search_tasks import SearchTaskRunner
@@ -99,7 +100,7 @@ from p2pwatch.application.steps.search_worker import (
     BackoffRegistry,
     SearchWorker,
 )
-from p2pwatch.application.steps.status_loop import StatusLoopDeps, status_loop
+from p2pwatch.application.steps.status_loop import StatusLoop
 from p2pwatch.application.use_cases.describe_file import DescribeFile
 from p2pwatch.application.use_cases.describe_node import DescribeNode
 from p2pwatch.application.use_cases.describe_source import DescribeSource
@@ -366,6 +367,22 @@ class CrawlerComposition(CrawlerRunner):
                 monotonic_clock,
                 RandomJitterGenerator(jitter_seed=None),  # seeded by the system's entropy
             )
+            file_judge = FileJudge(
+                observation_reader=observation_store,
+                decision_writer=decision_store,
+                decision_reader=decision_store,
+                engine=engine,
+                waker=waker,
+                observability_dispatcher=observability_dispatcher,
+                wall_clock=wall_clock,
+            )
+            cataloguer = Cataloguer(
+                observation_writer=observation_store,
+                file_judge=file_judge,
+                observability_dispatcher=observability_dispatcher,
+                wall_clock=wall_clock,
+                logger=StdlibLogger(Cataloguer.__module__),
+            )
             client = self._amule_api_client(crawler_config, monotonic_clock)
             stack.push_async_callback(client.close)
             await client.open()
@@ -374,27 +391,20 @@ class CrawlerComposition(CrawlerRunner):
                     client_name=AMULE_CLIENT_NAME,
                     client=client,
                     backoff=backoff,
-                    observation_writer=observation_store,
-                    observation_reader=observation_store,
-                    decision_writer=decision_store,
-                    decision_reader=decision_store,
-                    engine=engine,
-                    waker=waker,
+                    cataloguer=cataloguer,
                     observability_dispatcher=observability_dispatcher,
-                    wall_clock=wall_clock,
                     logger=StdlibLogger(SearchWorker.__module__),
-                    observation_logger=StdlibLogger(record_observation.__module__),
                 )
             ]
             # The status and download loops share the search session: one session per node.
-            status_deps = StatusLoopDeps(
-                AMULE_CLIENT_NAME,
-                client,
-                wall_clock,
-                monotonic_clock,
-                observability_dispatcher,
-                run_state_store,
-                status_reading_store,
+            status_loop = StatusLoop(
+                client_name=AMULE_CLIENT_NAME,
+                client=client,
+                wall_clock=wall_clock,
+                monotonic_clock=monotonic_clock,
+                observability_dispatcher=observability_dispatcher,
+                run_state_reader=run_state_store,
+                status_reading_writer=status_reading_store,
             )
             search_tasks = SearchTaskRunner(
                 workers=workers,
@@ -407,7 +417,7 @@ class CrawlerComposition(CrawlerRunner):
             )
             loops: list[Callable[[str], Coroutine[object, object, None]]] = [
                 search_tasks.run,
-                partial(status_loop, status_deps),
+                status_loop.run,
             ]
 
             # Download enabled ⟺ the ``download`` section is present (``enabled: true``). Its loop
@@ -454,14 +464,8 @@ class CrawlerComposition(CrawlerRunner):
                 policy_fingerprint_reader=policy_fingerprint_store,
                 policy_fingerprint_writer=policy_fingerprint_store,
                 reevaluate=lambda node_id: reevaluate_catalog(
-                    observation_reader=observation_store,
-                    decision_writer=decision_store,
-                    decision_reader=decision_store,
+                    file_judge=file_judge,
                     catalog_scan_reader=catalog_scan_reader,
-                    engine=engine,
-                    waker=waker,
-                    observability_dispatcher=observability_dispatcher,
-                    wall_clock=wall_clock,
                     logger=StdlibLogger(reevaluate_catalog.__module__),
                     node_id=node_id,
                     progress_every_files=_REEVALUATION_PROGRESS_EVERY_FILES,

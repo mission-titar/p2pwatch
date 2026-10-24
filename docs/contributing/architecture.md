@@ -309,7 +309,7 @@ sequenceDiagram
   hash, sans taille exploitable, sans aucun nom ou qui n'est pas un objet est écarté et compté : la
   `SearchAnswer` porte ce compte jusqu'à `SearchExecuted`, qui l'ajoute à
   `p2pwatch_search_results_skipped`.
-- amuleapi ne date pas ses résultats : `record_observation` (`application/steps/record_observations.py`)
+- amuleapi ne date pas ses résultats : `Cataloguer` (`application/steps/cataloguer.py`)
   fait de chaque `ReportedFile` un `FileObservation` daté par `wall_clock.now()` juste avant
   l'écriture, l'instant où le crawler a appris l'existence du fichier, et marqué du nœud qui
   l'observe.
