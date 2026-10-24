@@ -169,7 +169,8 @@ Strict TDD in every block, as `AGENTS.md` states it. Full contents, estimate sou
 | 270 | `refactor/status-loop-class` | `StatusLoop` (D27) | 260, 6 |
 | 280 | `refactor/download-tracker` | `DownloadTracker` (D27, D29) | 400, 8 |
 | 290 | `refactor/download-decider-and-starter` | `DownloadDecider`, `DownloadStarter` (D27, D29) | 300, 8 |
-| 300 | `refactor/source-watcher` | `SourceWatcher` (D27, D29); `DownloadLabeler` holds the two shared reads, injected into `DownloadTracker` and `SourceWatcher` (Corrected: `DownloadLabeler` added by the operator in Act) | 200, 6 |
+| 300 | `refactor/source-watcher` | `DownloadLabeler` holds the two shared reads, injected into `DownloadTracker` (Corrected: added by the operator in Act; `SourceWatcher` to 305, the block reaching 645 lines) | 343, 12 (measured) |
+| 305 | `refactor/source-watcher-class` | `SourceWatcher`, holding the sources' read instant and the `DownloadLabeler` (D27, D29) (Corrected: added in Act, the lot at 38 blocks) | 311, 9 (measured) |
 | 310 | `refactor/download-cycle-class` | `DownloadCycle`, `DownloadLoop`; the bags gone (D27) | 400, 10 |
 | 320 | `docs/crawler-design-fixes-wrap` | closing block: holistic findings, backlog, handoff | |
 
