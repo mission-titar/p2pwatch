@@ -10,6 +10,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store i
 )
 from p2pwatch.application.steps.download_cycle import run_download_cycle
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
+from p2pwatch.domain.observability.events import TargetTitle
 from p2pwatch.domain.observability.notification import CompletedDownload
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
@@ -201,8 +202,32 @@ async def test_failed_shared_hash_is_resurrected_and_notified() -> None:
     )
     await run_download_cycle(deps, NODE)
     assert tracked_download_store.states[HASH_A] is DownloadState.COMPLETED
+    # No observation, no decision, no queued target: the hash names the file, "unknown" its target.
     [(_, notification)] = observability.notifier.calls
-    assert isinstance(notification, CompletedDownload)
+    assert notification == CompletedDownload((TargetTitle("unknown", ""),), HASH_A, NODE)
+
+
+@pytest.mark.asyncio
+async def test_a_completion_names_the_clean_file_and_every_download_target_of_the_hash() -> None:
+    tracked_download_store = FakeTrackedDownloadStore()
+    tracked_download_store.states[HASH_A] = DownloadState.DOWNLOADING
+    observability = ObservabilityOverFakes()
+    deps = build_deps(
+        client=FakeDownloadClient(listed=[(status(HASH_A, completed=True),)]),
+        tracked_download_store=tracked_download_store,
+        decision_reader=FakeDecisionReader(
+            candidates=(candidate(HASH_A, "062A"), candidate(HASH_A, "063A"))
+        ),
+        observation_reader=FakeObservationReader(
+            best={HASH_A: observation(HASH_A, "Keroro é.avi", 100)}
+        ),
+        observability_dispatcher=observability.dispatcher,
+    )
+    await run_download_cycle(deps, NODE)
+    [(_, notification)] = observability.notifier.calls
+    assert notification == CompletedDownload(
+        (TargetTitle("062A", "t"), TargetTitle("063A", "t2")), "Keroro é.avi", NODE
+    )
 
 
 @pytest.mark.asyncio

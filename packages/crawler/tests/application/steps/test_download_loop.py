@@ -4,6 +4,7 @@ from datetime import timedelta
 import pytest
 
 from p2pwatch.application.steps.download_decider import DownloadDecider
+from p2pwatch.application.steps.download_labeler import DownloadLabeler
 from p2pwatch.application.steps.download_loop import (
     DownloadLoopDeps,
     download_loop,
@@ -50,12 +51,16 @@ def _loop_deps(
         FakeObservationReader(),
     )
     observability_dispatcher, logger = ObservabilityOverFakes().dispatcher, FakeLogger()
+    download_labeler = DownloadLabeler(
+        observation_reader=observation_reader,
+        decision_reader=decision_reader,
+        tracked_download_reader=downloads,
+        targets=(),
+    )
     download_tracker = DownloadTracker(
         tracked_download_writer=downloads,
         tracked_download_reader=downloads,
-        decision_reader=decision_reader,
-        observation_reader=observation_reader,
-        targets=(),
+        download_labeler=download_labeler,
         lost_after=timedelta(days=1),
         wall_clock=fake_time.wall,
         monotonic_clock=fake_time.monotonic,
@@ -68,9 +73,7 @@ def _loop_deps(
         tracked_download_reader=downloads,
         source_point_writer=sources,
         source_point_reader=sources,
-        decision_reader=decision_reader,
-        observation_reader=observation_reader,
-        targets=(),
+        download_labeler=download_labeler,
         reappeared_after=timedelta(hours=12),
         sources_interval=timedelta(minutes=5),
         time_between_source_reads=timedelta(minutes=5, seconds=30),
