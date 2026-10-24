@@ -3,11 +3,11 @@
 from collections.abc import Callable, Coroutine, Sequence
 
 from p2pwatch.application.ports.driven.logger import Logger
+from p2pwatch.application.steps.backoff_registry import BackoffRegistry
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.loop_supervisor import LoopSupervisor
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.application.steps.search_worker import BackoffRegistry
 from p2pwatch.domain.observability.events import CrawlerStarted
 
 
