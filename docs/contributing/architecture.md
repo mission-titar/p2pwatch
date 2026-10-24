@@ -192,7 +192,9 @@ flowchart TB
   d'usage (`use_cases/`), ses étapes (`steps/`) et au plus un cycle de vie (`<x>_lifecycle.py`).
   Un cas d'usage est appelé du dehors, par un port pilotant qu'il implémente sur des ports pilotés.
   Une étape est un stade du graphe du cycle de vie, appelée seulement par lui ou par une autre
-  étape. Le cycle de vie (`CrawlerLifecycle`, `PortSyncLifecycle`) est le programme de son
+  étape : une classe, une par module, nommé d'après elle (`steps/node_id_resolver.py` contient
+  `NodeIdResolver`), qui reçoit ses dépendances à sa construction et les valeurs du run (le
+  `node_id`, un fichier) à l'appel. Le cycle de vie (`CrawlerLifecycle`, `PortSyncLifecycle`) est le programme de son
   démarrage à son arrêt, que la composition lance ; il n'a pas de port. Cas d'usage et étapes ne
   s'importent pas entre eux, ni le cycle de vie. Ce qui n'appelle aucun port va au domaine.
 - Chaque hexagone expose `build_command_line(...)` dans `composition/command_line.py`, qui
