@@ -28,7 +28,7 @@ class MatchingExplainer:
     ) -> Explanation | None:
         """Recompute the explanation of target ``target_id`` over every filename of one file.
 
-        Each filename carries the same fields, as ``rejudge_file`` judges a file.
+        Each filename carries the same fields, as ``FileJudge`` judges a file.
         Return ``None`` if ``target_id`` is unknown to the current config.
         """
         if size_bytes is None:

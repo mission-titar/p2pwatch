@@ -1,6 +1,6 @@
 """Tests for the re-evaluation step ``reevaluate_catalog`` (spec §7, plan Task 5).
 
-Real engine + real SQLite stores (same convention as ``test_decisions.py``: "real
+Real engine + real SQLite stores (same convention as ``test_file_judge.py``: "real
 stores on tmp_path"); the dispatch step is real, over fakes; ``waker`` and ``wall_clock`` are fakes
 (``FakeWaker``, ``FakeWallClock``). Each hash under test is seeded via
 ``observation_store.record_observation`` first so it shows up in ``iter_latest_observations``
@@ -22,6 +22,8 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import Sq
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
 )
+from p2pwatch.application.steps.file_judge import FileJudge
+from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.reevaluate_catalog import ReevaluationSummary, reevaluate_catalog
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision, Retraction
@@ -41,6 +43,25 @@ _HASH_MULTI = "dddddddddddddddddddddddddddddddd"
 _DL_NAME = "Keroro N°062A Les demoiselles cambrioleuses.avi"
 _CAT_NAME = "keroro something.avi"
 _MULTI_NAME = "Keroro 062 teletoon.avi"  # → 062A + 062B download (post-fan-out)
+
+
+def _file_judge(
+    observation_store: SqliteObservationStore,
+    decision_store: SqliteDecisionStore,
+    engine: MatchingEngine,
+    waker: FakeWaker,
+    observability_dispatcher: ObservabilityDispatcher,
+    wall_clock: FakeWallClock,
+) -> FileJudge:
+    return FileJudge(
+        observation_reader=observation_store,
+        decision_writer=decision_store,
+        decision_reader=decision_store,
+        engine=engine,
+        waker=waker,
+        observability_dispatcher=observability_dispatcher,
+        wall_clock=wall_clock,
+    )
 
 
 def _reported_file(native_id: str, filename: str) -> ReportedFile:
@@ -72,14 +93,10 @@ async def test_two_changed_rows_are_all_evaluated_and_written(
     observability = ObservabilityOverFakes()
     waker = FakeWaker()
     summary = await reevaluate_catalog(
-        observation_reader=observation_store,
-        decision_writer=decision_store,
-        decision_reader=decision_store,
+        file_judge=_file_judge(
+            observation_store, decision_store, engine, waker, observability.dispatcher, wall_clock
+        ),
         catalog_scan_reader=catalog_scan_reader,
-        engine=engine,
-        waker=waker,
-        observability_dispatcher=observability.dispatcher,
-        wall_clock=wall_clock,
         logger=FakeLogger(),
         node_id=_NODE,
         progress_every_files=200,
@@ -122,14 +139,10 @@ async def test_unchanged_row_is_evaluated_but_not_written(
     observability = ObservabilityOverFakes()
     waker = FakeWaker()
     summary = await reevaluate_catalog(
-        observation_reader=observation_store,
-        decision_writer=decision_store,
-        decision_reader=decision_store,
+        file_judge=_file_judge(
+            observation_store, decision_store, engine, waker, observability.dispatcher, wall_clock
+        ),
         catalog_scan_reader=catalog_scan_reader,
-        engine=engine,
-        waker=waker,
-        observability_dispatcher=observability.dispatcher,
-        wall_clock=wall_clock,
         logger=FakeLogger(),
         node_id=_NODE,
         progress_every_files=200,
@@ -166,14 +179,10 @@ async def test_store_error_on_one_row_is_absorbed_and_sweep_continues(
     observability = ObservabilityOverFakes()
     waker = FakeWaker()
     summary = await reevaluate_catalog(
-        observation_reader=observation_store,
-        decision_writer=decision_store,
-        decision_reader=decision_store,
+        file_judge=_file_judge(
+            observation_store, decision_store, engine, waker, observability.dispatcher, wall_clock
+        ),
         catalog_scan_reader=catalog_scan_reader,
-        engine=engine,
-        waker=waker,
-        observability_dispatcher=observability.dispatcher,
-        wall_clock=wall_clock,
         logger=logger,
         node_id=_NODE,
         progress_every_files=200,
@@ -201,14 +210,10 @@ async def test_empty_catalogue_yields_zero_summary(
     observability = ObservabilityOverFakes()
     waker = FakeWaker()
     summary = await reevaluate_catalog(
-        observation_reader=observation_store,
-        decision_writer=decision_store,
-        decision_reader=decision_store,
+        file_judge=_file_judge(
+            observation_store, decision_store, engine, waker, observability.dispatcher, wall_clock
+        ),
         catalog_scan_reader=catalog_scan_reader,
-        engine=engine,
-        waker=waker,
-        observability_dispatcher=observability.dispatcher,
-        wall_clock=wall_clock,
         logger=FakeLogger(),
         node_id=_NODE,
         progress_every_files=200,
@@ -242,14 +247,10 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
     )
     observability, waker = ObservabilityOverFakes(), FakeWaker()
     summary = await reevaluate_catalog(
-        observation_reader=observation_store,
-        decision_writer=decision_store,
-        decision_reader=decision_store,
+        file_judge=_file_judge(
+            observation_store, decision_store, engine, waker, observability.dispatcher, wall_clock
+        ),
         catalog_scan_reader=catalog_scan_reader,
-        engine=engine,
-        waker=waker,
-        observability_dispatcher=observability.dispatcher,
-        wall_clock=wall_clock,
         logger=FakeLogger(),
         node_id=_NODE,
         progress_every_files=200,
@@ -286,14 +287,10 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
     )
     observability, waker = ObservabilityOverFakes(), FakeWaker()
     summary = await reevaluate_catalog(
-        observation_reader=observation_store,
-        decision_writer=decision_store,
-        decision_reader=decision_store,
+        file_judge=_file_judge(
+            observation_store, decision_store, engine, waker, observability.dispatcher, wall_clock
+        ),
         catalog_scan_reader=catalog_scan_reader,
-        engine=engine,
-        waker=waker,
-        observability_dispatcher=observability.dispatcher,
-        wall_clock=wall_clock,
         logger=FakeLogger(),
         node_id=_NODE,
         progress_every_files=200,
@@ -330,14 +327,15 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
         FileObservation(_reported_file(_HASH_DL, "random.txt"), wall_clock.now(), _NODE)
     )
     summary = await reevaluate_catalog(
-        observation_reader=observation_store,
-        decision_writer=decision_store,
-        decision_reader=decision_store,
+        file_judge=_file_judge(
+            observation_store,
+            decision_store,
+            engine,
+            FakeWaker(),
+            ObservabilityOverFakes().dispatcher,
+            wall_clock,
+        ),
         catalog_scan_reader=catalog_scan_reader,
-        engine=engine,
-        waker=FakeWaker(),
-        observability_dispatcher=ObservabilityOverFakes().dispatcher,
-        wall_clock=wall_clock,
         logger=FakeLogger(),
         node_id=_NODE,
         progress_every_files=200,
@@ -369,14 +367,15 @@ async def test_progress_is_logged_at_each_multiple_of_the_cadence_only(
         FileObservation(_reported_file(_HASH_MULTI, "random.txt"), wall_clock.now(), _NODE)
     )
     await reevaluate_catalog(
-        observation_reader=observation_store,
-        decision_writer=decision_store,
-        decision_reader=decision_store,
+        file_judge=_file_judge(
+            observation_store,
+            decision_store,
+            engine,
+            FakeWaker(),
+            ObservabilityOverFakes().dispatcher,
+            wall_clock,
+        ),
         catalog_scan_reader=catalog_scan_reader,
-        engine=engine,
-        waker=FakeWaker(),
-        observability_dispatcher=ObservabilityOverFakes().dispatcher,
-        wall_clock=wall_clock,
         logger=logger,
         node_id=_NODE,
         progress_every_files=2,

@@ -4,19 +4,13 @@ earns, per client when unreachable and per channel when refused (stage 2, D4 and
 from dataclasses import dataclass
 from datetime import timedelta
 
-from catalog_matching.domain.engine import MatchingEngine
-from p2pwatch.application.ports.driven.decision_reader import DecisionReader
-from p2pwatch.application.ports.driven.decision_writer import DecisionWriter
 from p2pwatch.application.ports.driven.jitter_generator import JitterGenerator
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
-from p2pwatch.application.ports.driven.observation_reader import ObservationReader
-from p2pwatch.application.ports.driven.observation_writer import ObservationWriter
 from p2pwatch.application.ports.driven.search_client import SearchClient
-from p2pwatch.application.ports.driven.waker import Waker
 from p2pwatch.application.ports.driven.wall_clock import WallClock
+from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.application.steps.record_observations import record_observation
 from p2pwatch.domain.client_errors import ClientUnreachableError, SearchFailedError
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.observability.events import (
@@ -134,31 +128,17 @@ class SearchWorker:
         client_name: str,
         client: SearchClient,
         backoff: BackoffRegistry,
-        observation_writer: ObservationWriter,
-        observation_reader: ObservationReader,
-        decision_writer: DecisionWriter,
-        decision_reader: DecisionReader,
-        engine: MatchingEngine,
-        waker: Waker,
+        cataloguer: Cataloguer,
         observability_dispatcher: ObservabilityDispatcher,
-        wall_clock: WallClock,
         logger: Logger,
-        observation_logger: Logger,
     ) -> None:
         self._client_name = client_name
         self._client_backoff_key = BackoffKey(client_name, None)
         self._client = client
         self._backoff = backoff
-        self._observation_writer = observation_writer
-        self._observation_reader = observation_reader
-        self._decision_writer = decision_writer
-        self._decision_reader = decision_reader
-        self._engine = engine
-        self._waker = waker
+        self._cataloguer = cataloguer
         self._observability_dispatcher = observability_dispatcher
-        self._wall_clock = wall_clock
         self._logger = logger
-        self._observation_logger = observation_logger  # record_observation's
 
     @property
     def channels(self) -> tuple[str, ...]:
@@ -174,7 +154,7 @@ class SearchWorker:
 
     async def _record_observations(self, channel: str, answer: SearchAnswer, node_id: str) -> int:
         """Per-obs pipeline; returns the number of CHANGED verdicts (logging). A
-        ``StoreError`` per obs is ABSORBED inside ``record_observation`` (spec §7)."""
+        ``StoreError`` per obs is ABSORBED inside ``Cataloguer.catalog`` (spec §7)."""
         await self._observability_dispatcher.dispatch(
             SearchExecuted(
                 self._client_name, channel, len(answer.reported_files), answer.skipped_result_count
@@ -182,21 +162,7 @@ class SearchWorker:
         )
         changed = 0
         for reported_file in answer.reported_files:
-            if await record_observation(
-                reported_file,
-                observation_writer=self._observation_writer,
-                observation_reader=self._observation_reader,
-                decision_writer=self._decision_writer,
-                decision_reader=self._decision_reader,
-                engine=self._engine,
-                waker=self._waker,
-                observability_dispatcher=self._observability_dispatcher,
-                wall_clock=self._wall_clock,
-                client_name=self._client_name,
-                channel=channel,
-                logger=self._observation_logger,
-                node_id=node_id,
-            ):
+            if await self._cataloguer.catalog(reported_file, self._client_name, channel, node_id):
                 changed += 1
         return changed
 

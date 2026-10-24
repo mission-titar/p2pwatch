@@ -164,7 +164,7 @@ Strict TDD in every block, as `AGENTS.md` states it. Full contents, estimate sou
 | 240 | `refactor/dated-decision-writes` | decisions written as a `DatedDecision` (D26) | 280, 16 |
 | 250 | `refactor/community-events-carry-node` | community events carry their node (D26) | 230, 13 |
 | 252 | `refactor/operations-events-and-dispatch` | operations events carry their node; `dispatch(event)` (D26) | 240, 17 |
-| 260 | `refactor/search-worker-dependencies` | `SearchWorker` without `WorkerDeps` (D27) | 420, 8 |
+| 260 | `refactor/search-worker-dependencies` | `SearchWorker` without `WorkerDeps` (D27) (Corrected: the operator's Facade Services, `rejudge_file` becomes `FileJudge`, `record_observation` becomes `Cataloguer`, each built once) | 420, 8 |
 | 270 | `refactor/status-loop-class` | `StatusLoop` (D27) | 260, 6 |
 | 280 | `refactor/download-tracker` | `DownloadTracker` (D27, D29) | 400, 8 |
 | 290 | `refactor/download-decider-and-starter` | `DownloadDecider`, `DownloadStarter` (D27, D29) | 300, 8 |
@@ -471,7 +471,7 @@ exemptions of blocks 10 and 30 on their rows.
 | 240 | `DatedDecision` with its file, `record_decision(dated_decision)` | |
 | 250 | `DecisionsRecorded`, `DownloadCompleted`, `SourceFirstUseful`, `SourceReappeared` carry their node, the community notifications built from it | |
 | 252 | the six operations events carry their node, `RelayedLogLine` takes it from the event, `dispatch(event)` without `node_id` at its call sites; C5 | |
-| 260 | `SearchWorker` without `WorkerDeps` | |
+| 260 | `SearchWorker` without `WorkerDeps`; `FileJudge` and `Cataloguer` (Corrected: added in Integrate by the operator) | |
 | 270 | `StatusLoop` | |
 | 280 | `DownloadTracker`, owning the loss deadlines | |
 | 290 | `DownloadDecider`, owning the disk-low edge; `DownloadStarter` | |
