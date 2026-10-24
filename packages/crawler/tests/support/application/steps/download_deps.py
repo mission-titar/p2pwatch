@@ -18,6 +18,7 @@ from p2pwatch.application.steps.download_labeler import DownloadLabeler
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
+from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.download.states import FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
@@ -130,18 +131,8 @@ def build_deps(
     )
     return DownloadDeps(
         download_client=client,
-        source_client=source_client or FakeSourceClient(),
-        tracked_download_reader=tracked_download_store,
-        source_point_writer=sources,
-        source_point_reader=sources,
-        download_labeler=download_labeler,
         poll_interval_seconds=30.0,
-        reappeared_after=timedelta(hours=12),
-        sources_interval=sources_interval,
-        time_between_source_reads=time_between_source_reads,
-        wall_clock=wall_clock,
         monotonic_clock=fake_time.monotonic,
-        observability_dispatcher=observability_dispatcher,
         logger=logger,
         download_tracker=download_tracker,
         download_decider=DownloadDecider(
@@ -162,6 +153,20 @@ def build_deps(
             tracked_download_writer=tracked_download_store,
             tracked_download_reader=tracked_download_store,
             observation_reader=observation_reader,
+            logger=logger,
+        ),
+        source_watcher=SourceWatcher(
+            source_client=source_client or FakeSourceClient(),
+            tracked_download_reader=tracked_download_store,
+            source_point_writer=sources,
+            source_point_reader=sources,
+            download_labeler=download_labeler,
+            reappeared_after=timedelta(hours=12),
+            sources_interval=sources_interval,
+            time_between_source_reads=time_between_source_reads,
+            wall_clock=wall_clock,
+            monotonic_clock=fake_time.monotonic,
+            observability_dispatcher=observability_dispatcher,
             logger=logger,
         ),
     )

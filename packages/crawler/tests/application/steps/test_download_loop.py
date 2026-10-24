@@ -11,6 +11,7 @@ from p2pwatch.application.steps.download_loop import (
 )
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
+from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.domain.wake_subject import WakeSubject
 from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
@@ -69,17 +70,7 @@ def _loop_deps(
     )
     return DownloadLoopDeps(
         download_client=client,
-        source_client=FakeSourceClient(),
-        tracked_download_reader=downloads,
-        source_point_writer=sources,
-        source_point_reader=sources,
-        download_labeler=download_labeler,
-        reappeared_after=timedelta(hours=12),
-        sources_interval=timedelta(minutes=5),
-        time_between_source_reads=timedelta(minutes=5, seconds=30),
-        wall_clock=fake_time.wall,
         monotonic_clock=fake_time.monotonic,
-        observability_dispatcher=observability_dispatcher,
         logger=logger,
         download_tracker=download_tracker,
         download_decider=DownloadDecider(
@@ -100,6 +91,20 @@ def _loop_deps(
             tracked_download_writer=downloads,
             tracked_download_reader=downloads,
             observation_reader=observation_reader,
+            logger=logger,
+        ),
+        source_watcher=SourceWatcher(
+            source_client=FakeSourceClient(),
+            tracked_download_reader=downloads,
+            source_point_writer=sources,
+            source_point_reader=sources,
+            download_labeler=download_labeler,
+            reappeared_after=timedelta(hours=12),
+            sources_interval=timedelta(minutes=5),
+            time_between_source_reads=timedelta(minutes=5, seconds=30),
+            wall_clock=fake_time.wall,
+            monotonic_clock=fake_time.monotonic,
+            observability_dispatcher=observability_dispatcher,
             logger=logger,
         ),
         waker=waker,
