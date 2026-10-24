@@ -12,21 +12,6 @@ from p2pwatch.domain.observability.policy import plan_observability
 from p2pwatch.domain.observability.severity import Severity
 
 
-def log_at_severity(logger: Logger, severity: Severity, message: str) -> None:
-    """Writes ``message`` at the level ``severity`` maps to, a success being an info."""
-    match severity:
-        case Severity.DEBUG:
-            logger.debug(message)
-        case Severity.INFO | Severity.SUCCESS:
-            logger.info(message)
-        case Severity.WARNING:
-            logger.warning(message)
-        case Severity.ERROR:
-            logger.error(message)
-        case _:  # pragma: no cover
-            assert_never(severity)
-
-
 class ObservabilityDispatcher:
     """One dispatch point, three outputs: the log line, the metrics, the notifications."""
 
@@ -45,7 +30,7 @@ class ObservabilityDispatcher:
 
     async def dispatch(self, event: Event) -> None:
         plan = plan_observability(event)
-        log_at_severity(self._logger, plan.severity, plan.message)
+        self._log_at_severity(plan.severity, plan.message)
         for instruction in plan.metrics:
             self._metrics_recorder.apply(instruction)
         if plan.notification is None:
@@ -58,3 +43,15 @@ class ObservabilityDispatcher:
                 )
             except Exception as error:  # noqa: BLE001 (notifications NEVER break the crawl, E-D13)
                 self._logger.warning("notification %s failed (%s)", audience.value, error)
+
+    def _log_at_severity(self, severity: Severity, message: str) -> None:
+        """Writes ``message`` at the level ``severity`` maps to, a success being an info."""
+        match severity:
+            case Severity.DEBUG:
+                self._logger.debug(message)
+            case Severity.INFO | Severity.SUCCESS:
+                self._logger.info(message)
+            case Severity.WARNING:
+                self._logger.warning(message)
+            case _:  # pragma: no cover
+                assert_never(severity)

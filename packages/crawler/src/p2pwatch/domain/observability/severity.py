@@ -10,4 +10,3 @@ class Severity(Enum):
     INFO = auto()
     SUCCESS = auto()
     WARNING = auto()
-    ERROR = auto()

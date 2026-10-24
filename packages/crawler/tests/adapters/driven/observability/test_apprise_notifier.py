@@ -155,7 +155,6 @@ async def test_no_mention_reaches_apprise() -> None:
         (Severity.INFO, apprise.NotifyType.INFO),
         (Severity.SUCCESS, apprise.NotifyType.SUCCESS),
         (Severity.WARNING, apprise.NotifyType.WARNING),
-        (Severity.ERROR, apprise.NotifyType.FAILURE),
     ],
 )
 async def test_a_relayed_log_lines_severity_maps_to_a_notify_type(
