@@ -17,6 +17,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
 from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.file_judge import FileJudge
+from p2pwatch.application.steps.loop_supervisor import LoopSupervisor
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.search_worker import BackoffPolicy, BackoffRegistry
 from p2pwatch.domain.file_key import FileKey, Network
@@ -105,7 +106,7 @@ class _Crawl:
             backoff=self.backoff,
             loops=[self._loop("search"), self._loop("status")],
             download_enabled=download_enabled,
-            run_state_reader=self.run_state,
+            loop_supervisor=LoopSupervisor(run_state_reader=self.run_state),
             logger=self.logger,
         )
 

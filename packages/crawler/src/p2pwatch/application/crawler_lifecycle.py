@@ -3,12 +3,11 @@
 from collections.abc import Callable, Coroutine, Sequence
 
 from p2pwatch.application.ports.driven.logger import Logger
-from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
+from p2pwatch.application.steps.loop_supervisor import LoopSupervisor
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.search_worker import BackoffRegistry
-from p2pwatch.application.steps.supervise_loops import supervise_loops
 from p2pwatch.domain.observability.events import CrawlerStarted
 
 
@@ -25,7 +24,7 @@ class CrawlerLifecycle:
         backoff: BackoffRegistry,
         loops: Sequence[Callable[[str], Coroutine[object, object, None]]],
         download_enabled: bool,
-        run_state_reader: RunStateReader,
+        loop_supervisor: LoopSupervisor,
         logger: Logger,
     ) -> None:
         self._node_id_resolver = node_id_resolver
@@ -34,7 +33,7 @@ class CrawlerLifecycle:
         self._backoff = backoff
         self._loops = loops
         self._download_enabled = download_enabled
-        self._run_state_reader = run_state_reader
+        self._loop_supervisor = loop_supervisor
         self._logger = logger
 
     async def run(self, *, arm_shutdown_bound: Callable[[], None]) -> None:
@@ -50,9 +49,8 @@ class CrawlerLifecycle:
         # Before the loops, so the first search's tier actions (download wake, notify) see the
         # current policy. A comment-only edit of matcher.yml or targets.yml still runs one pass.
         await self._catalog_reevaluator.reevaluate_if_policy_changed(node_id)
-        await supervise_loops(
+        await self._loop_supervisor.supervise(
             [_with_node_id(loop, node_id) for loop in self._loops],
-            run_state_reader=self._run_state_reader,
             arm_shutdown_bound=arm_shutdown_bound,
         )
 

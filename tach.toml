@@ -343,7 +343,6 @@ path = "p2pwatch.application.crawler_lifecycle"
 layer = "lifecycle"
 depends_on = [
   "p2pwatch.application.ports.driven.logger",
-  "p2pwatch.application.ports.driven.run_state_reader",
   "p2pwatch.application.steps",
   "p2pwatch.domain",
 ]

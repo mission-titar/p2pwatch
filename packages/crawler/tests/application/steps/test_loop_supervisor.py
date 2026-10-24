@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from p2pwatch.application.steps.supervise_loops import supervise_loops
+from p2pwatch.application.steps.loop_supervisor import LoopSupervisor
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 
 
@@ -35,10 +35,8 @@ async def test_a_stop_without_a_signal_arms_the_bound_before_cancelling_every_lo
     run_state = FakeRunStateStore()
     search, status = _BlockedLoop("search", events), _BlockedLoop("status", events)
     supervision = asyncio.create_task(
-        supervise_loops(
-            [search.run, status.run],
-            run_state_reader=run_state,
-            arm_shutdown_bound=lambda: events.append("armed"),
+        LoopSupervisor(run_state_reader=run_state).supervise(
+            [search.run, status.run], arm_shutdown_bound=lambda: events.append("armed")
         )
     )
     await search.started.wait()
@@ -62,10 +60,8 @@ async def test_a_loop_that_ends_neither_stops_the_others_nor_arms_the_bound() ->
         ended.set()
 
     supervision = asyncio.create_task(
-        supervise_loops(
-            [end_at_once, status.run],
-            run_state_reader=run_state,
-            arm_shutdown_bound=lambda: events.append("armed"),
+        LoopSupervisor(run_state_reader=run_state).supervise(
+            [end_at_once, status.run], arm_shutdown_bound=lambda: events.append("armed")
         )
     )
     await ended.wait()
@@ -84,10 +80,8 @@ async def test_a_failing_loop_escapes_as_an_exception_group_without_arming_the_b
     status = _BlockedLoop("status", events)
 
     with pytest.RaisesGroup(pytest.RaisesExc(ValueError, match="a worker crashed")):
-        await supervise_loops(
-            [status.run, _fails],
-            run_state_reader=FakeRunStateStore(),
-            arm_shutdown_bound=lambda: events.append("armed"),
+        await LoopSupervisor(run_state_reader=FakeRunStateStore()).supervise(
+            [status.run, _fails], arm_shutdown_bound=lambda: events.append("armed")
         )
 
     assert events == ["status cancelled"]

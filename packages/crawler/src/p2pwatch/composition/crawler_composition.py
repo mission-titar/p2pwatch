@@ -96,6 +96,7 @@ from p2pwatch.application.steps.download_loop import DownloadLoop
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.file_judge import FileJudge
+from p2pwatch.application.steps.loop_supervisor import LoopSupervisor
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.search_tasks import SearchTaskRunner
@@ -518,7 +519,7 @@ class CrawlerComposition(CrawlerRunner):
                 backoff=backoff,
                 loops=loops,
                 download_enabled=download_config is not None,
-                run_state_reader=run_state_store,
+                loop_supervisor=LoopSupervisor(run_state_reader=run_state_store),
                 logger=StdlibLogger(CrawlerLifecycle.__module__),
             )
             # Entered disarmed: the steady state is unbounded, and the run arms it as soon as the
