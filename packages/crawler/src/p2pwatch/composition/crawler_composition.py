@@ -100,7 +100,7 @@ from p2pwatch.application.steps.search_worker import (
     BackoffRegistry,
     SearchWorker,
 )
-from p2pwatch.application.steps.status_loop import StatusLoopDeps, status_loop
+from p2pwatch.application.steps.status_loop import StatusLoop
 from p2pwatch.application.use_cases.describe_file import DescribeFile
 from p2pwatch.application.use_cases.describe_node import DescribeNode
 from p2pwatch.application.use_cases.describe_source import DescribeSource
@@ -397,14 +397,14 @@ class CrawlerComposition(CrawlerRunner):
                 )
             ]
             # The status and download loops share the search session: one session per node.
-            status_deps = StatusLoopDeps(
-                AMULE_CLIENT_NAME,
-                client,
-                wall_clock,
-                monotonic_clock,
-                observability_dispatcher,
-                run_state_store,
-                status_reading_store,
+            status_loop = StatusLoop(
+                client_name=AMULE_CLIENT_NAME,
+                client=client,
+                wall_clock=wall_clock,
+                monotonic_clock=monotonic_clock,
+                observability_dispatcher=observability_dispatcher,
+                run_state_reader=run_state_store,
+                status_reading_writer=status_reading_store,
             )
             search_tasks = SearchTaskRunner(
                 workers=workers,
@@ -417,7 +417,7 @@ class CrawlerComposition(CrawlerRunner):
             )
             loops: list[Callable[[str], Coroutine[object, object, None]]] = [
                 search_tasks.run,
-                partial(status_loop, status_deps),
+                status_loop.run,
             ]
 
             # Download enabled ⟺ the ``download`` section is present (``enabled: true``). Its loop
