@@ -32,7 +32,7 @@ class DownloadLoop:
     async def run(self, node_id: str) -> None:
         """Repeats the cycle then waits (poll/wake) until shutdown (DECISION D12).
 
-        Launched by ``CrawlerLifecycle`` through ``supervise_loops``; cancellation (shutdown) lands
+        Launched by ``CrawlerLifecycle`` through ``LoopSupervisor``; cancellation (shutdown) lands
         at the next ``await`` (a poll or the sleep/wake wait), never mid DB write.
         """
         while not self._run_state_reader.is_shutdown_requested():
