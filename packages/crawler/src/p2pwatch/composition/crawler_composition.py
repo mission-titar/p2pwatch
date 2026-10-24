@@ -115,13 +115,14 @@ from p2pwatch.application.use_cases.request_shutdown import RequestShutdown
 from p2pwatch.application.use_cases.resume_crawl import ResumeCrawl
 from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
-from p2pwatch.domain.config_defaults import AMULE_CLIENT_NAME
 from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
 from p2pwatch.domain.matching_read import MatchingExplainer
 
 _logger = logging.getLogger(__name__)
 
+# The label of the one client a node drives: crawler.yml has no key to name it.
+_AMULE_CLIENT_NAME = "amuled"
 _AMULE_API_TIMEOUT_SECONDS = 10.0
 # Rows asked for per list request. Every list route caps at 100 when `limit` is omitted, which
 # would silently truncate the shared-file sweep completion detection depends on (§7.5).
@@ -344,7 +345,7 @@ class CrawlerComposition(CrawlerRunner):
             engine = MatchingEngine(
                 config.matcher_config, config.targets, max_filename_length=_MAX_FILENAME_LENGTH
             )
-            status_reading_store = InMemoryStatusReadingStore((AMULE_CLIENT_NAME,))
+            status_reading_store = InMemoryStatusReadingStore((_AMULE_CLIENT_NAME,))
             # In-process webui (spec §5): own thread + loop, started EARLY (before the daemon client
             # + startup re-evaluation) so it is up promptly and stays isolated from the crawler's
             # synchronous work. Gated by ``webui.enabled``; a crash degrades (spec §17.1). Its
@@ -392,7 +393,7 @@ class CrawlerComposition(CrawlerRunner):
             await client.open()
             workers = [
                 SearchWorker(
-                    client_name=AMULE_CLIENT_NAME,
+                    client_name=_AMULE_CLIENT_NAME,
                     client=client,
                     backoff=backoff,
                     cataloguer=cataloguer,
@@ -402,7 +403,7 @@ class CrawlerComposition(CrawlerRunner):
             ]
             # The status and download loops share the search session: one session per node.
             status_loop = StatusLoop(
-                client_name=AMULE_CLIENT_NAME,
+                client_name=_AMULE_CLIENT_NAME,
                 client=client,
                 wall_clock=wall_clock,
                 monotonic_clock=monotonic_clock,
