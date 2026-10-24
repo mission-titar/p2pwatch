@@ -113,8 +113,9 @@ class SourceWatcher:
         read_at: datetime,
         node_id: str,
     ) -> tuple[SourcePoint, ...]:
-        """Each reading a source or a name tells apart, with its role, a carried one included (D4).
-        Reads every latest point before the write, with no ``await`` between."""
+        """A point per reading, with its role, the latest point's when aMule gives none; a source
+        without identity is told apart by its name. Reads every latest point before the write,
+        with no ``await`` between."""
         since = read_at - carried_role_max_age(self._time_between_source_reads)
         return tuple(
             SourcePoint(

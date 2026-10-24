@@ -39,7 +39,7 @@ _SOURCE_ROLES = {
     "no_needed_parts": SourceRole.NOTHING_NEW,
 }
 
-# States aMule leaves on its own: no role, the writer carries the latest point's usefulness (D3).
+# States aMule leaves on its own: no role here, the domain's ``carried_role`` keeps the latest one.
 _PASSING_STATES = frozenset(
     {
         "idle",
