@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from p2pwatch.application.steps.download_deps import DownloadDeps
-from p2pwatch.application.steps.download_file_reads import best_filename, target_titles
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.observability.events import SourceFirstUseful, SourceReappeared
@@ -94,13 +93,8 @@ async def _alert_sources(
         if alert is None:
             continue
         source_name = point.reading.source_name
-        filename = best_filename(file, observation_reader=deps.observation_reader)
-        titles = target_titles(
-            file,
-            decision_reader=deps.decision_reader,
-            tracked_download_reader=deps.tracked_download_reader,
-            targets=deps.targets,
-        )
+        filename = deps.download_labeler.best_filename(file)
+        titles = deps.download_labeler.target_titles(file)
         event: SourceFirstUseful | SourceReappeared = (
             SourceFirstUseful(source, source_name, file, filename, titles, node_id)
             if isinstance(alert, FirstUseful)

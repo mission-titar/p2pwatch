@@ -90,6 +90,7 @@ from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.download_decider import DownloadDecider
+from p2pwatch.application.steps.download_labeler import DownloadLabeler
 from p2pwatch.application.steps.download_loop import DownloadLoopDeps, download_loop
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
@@ -430,12 +431,16 @@ class CrawlerComposition(CrawlerRunner):
             if download_config is not None:
                 tracked_download_store = SqliteTrackedDownloadStore(local_connection)
                 source_point_store = SqliteSourcePointStore(catalog_connection)
+                download_labeler = DownloadLabeler(
+                    observation_reader=observation_store,
+                    decision_reader=decision_store,
+                    tracked_download_reader=tracked_download_store,
+                    targets=config.targets,
+                )
                 download_tracker = DownloadTracker(
                     tracked_download_writer=tracked_download_store,
                     tracked_download_reader=tracked_download_store,
-                    decision_reader=decision_store,
-                    observation_reader=observation_store,
-                    targets=config.targets,
+                    download_labeler=download_labeler,
                     lost_after=download_config.lost_after,
                     wall_clock=wall_clock,
                     monotonic_clock=monotonic_clock,
@@ -448,9 +453,7 @@ class CrawlerComposition(CrawlerRunner):
                     tracked_download_reader=tracked_download_store,
                     source_point_writer=source_point_store,
                     source_point_reader=source_point_store,
-                    decision_reader=decision_store,
-                    observation_reader=observation_store,
-                    targets=config.targets,
+                    download_labeler=download_labeler,
                     poll_interval_seconds=download_config.poll_interval_seconds,
                     reappeared_after=download_config.reappeared_after,
                     sources_interval=download_config.sources_interval,
