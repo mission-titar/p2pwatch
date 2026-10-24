@@ -1,4 +1,4 @@
-"""What the download stages' tests share: their fixtures' values and the deps they build."""
+"""What the download stages' tests share: their fixtures' values and the cycle they build."""
 
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
@@ -12,8 +12,8 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store i
 )
 from p2pwatch.application.ports.driven.free_space_meter import FreeSpaceMeter
 from p2pwatch.application.ports.driven.wall_clock import WallClock
+from p2pwatch.application.steps.download_cycle import DownloadCycle
 from p2pwatch.application.steps.download_decider import DownloadDecider
-from p2pwatch.application.steps.download_deps import DownloadDeps
 from p2pwatch.application.steps.download_labeler import DownloadLabeler
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
@@ -85,7 +85,7 @@ def started(client: FakeDownloadClient) -> list[str]:
     return [request.file.native_id for request in client.started]
 
 
-def build_deps(
+def build_cycle(
     *,
     client: FakeDownloadClient,
     source_client: FakeSourceClient | None = None,
@@ -104,7 +104,7 @@ def build_deps(
     time_between_source_reads: timedelta = timedelta(seconds=60),
     logger: FakeLogger | None = None,
     wall_clock: WallClock | None = None,
-) -> DownloadDeps:
+) -> DownloadCycle:
     fake_time = fake_time or FakeTime()
     wall_clock = wall_clock or fake_time.wall
     sources = sources or FakeSourcePointStore()
@@ -129,11 +129,8 @@ def build_deps(
         observability_dispatcher=observability_dispatcher,
         logger=logger,
     )
-    return DownloadDeps(
+    return DownloadCycle(
         download_client=client,
-        poll_interval_seconds=30.0,
-        monotonic_clock=fake_time.monotonic,
-        logger=logger,
         download_tracker=download_tracker,
         download_decider=DownloadDecider(
             free_space_meter=free_space_meter or FakeFreeSpaceMeter(free),
@@ -169,4 +166,5 @@ def build_deps(
             observability_dispatcher=observability_dispatcher,
             logger=logger,
         ),
+        logger=logger,
     )

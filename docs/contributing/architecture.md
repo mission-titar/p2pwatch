@@ -378,9 +378,9 @@ flowchart LR
 
 ## 7. Du téléchargement à la complétion
 
-Actif en mode téléchargement seulement. Une itération de `run_download_cycle` enchaîne trois étapes
-sur une seule session amuleapi, puis, toutes les `download.sources_interval_seconds`, relève les
-sources des téléchargements du crawler (§8.3).
+Actif en mode téléchargement seulement. Une itération de `DownloadCycle.run`, que `DownloadLoop`
+répète, enchaîne trois étapes sur une seule session amuleapi, puis, toutes les
+`download.sources_interval_seconds`, relève les sources des téléchargements du crawler (§8.3).
 
 ```mermaid
 flowchart TD
@@ -731,7 +731,7 @@ démon sont
 | Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`) |
 | Démarrage et boucles | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervise_loops.py` |
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
-| Boucles | `application/steps/` : `search_tasks.py`, `status_loop.py`, `download_loop.py` (le cycle `download_cycle.py` et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`, `source_watcher.py`, et `download_labeler.py`, qui nomme un téléchargement dans ses notifications) |
+| Boucles | `application/steps/` : `search_tasks.py`, `status_loop.py`, `download_loop.py` (`DownloadLoop`, qui répète le cycle `DownloadCycle` de `download_cycle.py` et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`, `source_watcher.py`, et `download_labeler.py`, qui nomme un téléchargement dans ses notifications) |
 | Cas d'usage | `application/use_cases/` : les pages (`summarize_crawl.py`, `describe_*.py`, `list_*.py`, `run_console_query.py`), les contrôles (`pause_crawl.py`, `resume_crawl.py`, `request_shutdown.py`), `validate_config.py`, `merge_catalogs.py` |
 | Config | `adapters/driven/config/` (lit les trois fichiers, résout `${VAR}`), `domain/crawler_config.py` (contrôle et construit `CrawlerConfig`) |
 | Recherche (pure) | `domain/search/` (`keywords`, `backoff`) |

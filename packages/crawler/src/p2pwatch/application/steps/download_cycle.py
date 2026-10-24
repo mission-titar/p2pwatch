@@ -1,7 +1,7 @@
 """The download loop: reconcile → completions → new candidates → sources → sleep/wake (spec §5).
 
-One serial task. ``run_download_cycle`` runs ONE iteration;
-``download_loop`` repeats it until shutdown, waiting ``poll_interval`` or the download wake.
+One serial task. ``DownloadCycle.run`` runs ONE iteration;
+``DownloadLoop`` repeats it until shutdown, waiting ``poll_interval`` or the download wake.
 Three things in it are not obvious:
 
 - **A completion is the client's own signal, never the bytes** (2026-09-02: 065B was stamped
@@ -17,7 +17,12 @@ the iteration, ``StoreError`` is logged and the cycle continues. A stalled downl
 abandoned.
 """
 
-from p2pwatch.application.steps.download_deps import DownloadDeps
+from p2pwatch.application.ports.driven.download_client import DownloadClient
+from p2pwatch.application.ports.driven.logger import Logger
+from p2pwatch.application.steps.download_decider import DownloadDecider
+from p2pwatch.application.steps.download_starter import DownloadStarter
+from p2pwatch.application.steps.download_tracker import DownloadTracker
+from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.domain.client_errors import ClientUnreachableError, ReadRejectedError
 from p2pwatch.domain.store_error import StoreError
 
@@ -25,67 +30,96 @@ from p2pwatch.domain.store_error import StoreError
 _UNAVAILABLE = (ClientUnreachableError, ReadRejectedError)
 
 
-async def run_download_cycle(deps: DownloadDeps, node_id: str) -> None:
-    """ONE iteration of the download loop (spec §5). Never raises: tolerates/absorbs.
+class DownloadCycle:
+    """One download round over the four stages, under one error doctrine."""
 
-    Two distinct error DOCTRINES (item I2 - anti-starvation):
+    def __init__(
+        self,
+        *,
+        download_client: DownloadClient,
+        download_tracker: DownloadTracker,
+        download_decider: DownloadDecider,
+        download_starter: DownloadStarter,
+        source_watcher: SourceWatcher,
+        logger: Logger,
+    ) -> None:
+        self._download_client = download_client
+        self._download_tracker = download_tracker
+        self._download_decider = download_decider
+        self._download_starter = download_starter
+        self._source_watcher = source_watcher
+        self._logger = logger
 
-    - An unavailable client (``ClientUnreachableError`` from step 0, ``start_unlisted`` or the
-      sources step; on the two reads, also a refused read, ``ReadRejectedError``) = dead
-      client → ABORT the iteration ("a dead client makes everything fail"). We skip the rest;
-      the next iteration retries.
-    - ``StoreError`` (persistence failure, NO client I/O) → ISOLATED PER STEP: a store
-      failure in one step must NOT starve the others. Each step that can raise
-      ``StoreError`` is wrapped separately (log + ``continue`` to the next step), and the
-      sources step per download. ``start_unlisted`` re-reads ``read_tracked_states`` FRESHLY, so
-      it runs even if an upstream step partially failed. "NEVER abandon a stalled download": the
-      1→2→3→4 order is preserved, each step is best-effort, and step 5, the sources, only
-      observes, so it comes last (stage 4, D8).
+    async def run(self, node_id: str) -> None:
+        """ONE iteration of the download loop (spec §5). Never raises: tolerates/absorbs.
 
-    The stores are sync → cancellation (shutdown) lands at the network ``await``, never mid-write.
+        Two distinct error DOCTRINES (item I2 - anti-starvation):
 
-    DECISION (audit 2026-06-23 / observability#5): a ``ClientUnreachableError`` here does NOT
-    dispatch ``ClientUnreachable`` (unlike the search tasks). The E-D5 taxonomy files this
-    event under SEARCH only; the download loop is single-client and the label
-    ``client=...`` would be meaningless (counter shared with the search workers). The
-    unavailability is handled by the next cycle's retry + the warning log. Intentional
-    asymmetry.
-    """
-    # Step 0 - SNAPSHOT: client I/O → unreachable or refused = dead daemon = ABORT.
-    try:
-        listed_statuses = await deps.download_client.downloads()
-    except _UNAVAILABLE as error:
-        deps.logger.warning("download daemon unreachable (%s): iteration skipped, retry", error)
-        return
-    listed_files = frozenset(status.file for status in listed_statuses)
-    # Clamped at 0: a nascent download (total not known yet) must not invent free space.
-    outstanding_bytes = sum(
-        max(status.size_bytes - status.bytes_done, 0) for status in listed_statuses
-    )
-    # Steps 1, 2 and 2b - STATES, COMPLETIONS, PRESENCE + LOSS: only StoreError, isolated inside.
-    await deps.download_tracker.track(listed_statuses, node_id)
-    # Step 3 - CANDIDATES: NO client I/O → a StoreError or the disk's OSError, isolated (I2).
-    try:
-        await deps.download_decider.queue_new_candidates(outstanding_bytes, node_id)
-    except StoreError as error:
-        deps.logger.error("download candidates store failure (%s): step skipped, continues", error)
-    except OSError as error:
-        # A missing or unreadable output mount: refuse to admit anything rather than take down
-        # the crawler, which also catalogues. Conservative, loud, and retried next cycle.
-        deps.logger.error("output directory unmeasurable (%s): no candidate admitted, retry", error)
-    # Step 4 - START: client I/O → ClientUnreachableError = dead daemon = ABORT. Re-reads
-    # ``read_tracked_states`` FRESHLY, so it runs even if step 3 partially failed.
-    try:
-        await deps.download_starter.start_unlisted(listed_files)
-    except ClientUnreachableError as error:
-        deps.logger.warning("download daemon unreachable (%s): iteration skipped, retry", error)
-        return
-    except StoreError as error:
-        deps.logger.error("download start store failure (%s): step skipped, retry", error)
-    # Step 5 - SOURCES: last, since it only observes; its failure must not skip a start (D8).
-    try:
-        await deps.source_watcher.record_sources(listed_statuses, node_id)
-    except _UNAVAILABLE as error:
-        deps.logger.warning("download daemon unreachable (%s): sources skipped, retry", error)
-    except StoreError as error:
-        deps.logger.error("download sources store failure (%s): step skipped, retry", error)
+        - An unavailable client (``ClientUnreachableError`` from step 0, ``start_unlisted`` or the
+          sources step; on the two reads, also a refused read, ``ReadRejectedError``) = dead
+          client → ABORT the iteration ("a dead client makes everything fail"). We skip the
+          rest; the next iteration retries.
+        - ``StoreError`` (persistence failure, NO client I/O) → ISOLATED PER STEP: a store
+          failure in one step must NOT starve the others. Each step that can raise
+          ``StoreError`` is wrapped separately (log + ``continue`` to the next step), and the
+          sources step per download. ``start_unlisted`` re-reads ``read_tracked_states``
+          FRESHLY, so it runs even if an upstream step partially failed. "NEVER abandon a
+          stalled download": the 1→2→3→4 order is preserved, each step is best-effort, and
+          step 5, the sources, only observes, so it comes last (stage 4, D8).
+
+        The stores are sync → cancellation (shutdown) lands at the network ``await``, never
+        mid-write.
+
+        DECISION (audit 2026-06-23 / observability#5): a ``ClientUnreachableError`` here does
+        NOT dispatch ``ClientUnreachable`` (unlike the search tasks). The E-D5 taxonomy files
+        this event under SEARCH only; the download loop is single-client and the label
+        ``client=...`` would be meaningless (counter shared with the search workers). The
+        unavailability is handled by the next cycle's retry + the warning log. Intentional
+        asymmetry.
+        """
+        # Step 0 - SNAPSHOT: client I/O → unreachable or refused = dead daemon = ABORT.
+        try:
+            listed_statuses = await self._download_client.downloads()
+        except _UNAVAILABLE as error:
+            self._logger.warning(
+                "download daemon unreachable (%s): iteration skipped, retry", error
+            )
+            return
+        listed_files = frozenset(status.file for status in listed_statuses)
+        # Clamped at 0: a nascent download (total not known yet) must not invent free space.
+        outstanding_bytes = sum(
+            max(status.size_bytes - status.bytes_done, 0) for status in listed_statuses
+        )
+        # Steps 1, 2 and 2b - STATES, COMPLETIONS, PRESENCE + LOSS: only StoreError, isolated.
+        await self._download_tracker.track(listed_statuses, node_id)
+        # Step 3 - CANDIDATES: NO client I/O → a StoreError or the disk's OSError, isolated (I2).
+        try:
+            await self._download_decider.queue_new_candidates(outstanding_bytes, node_id)
+        except StoreError as error:
+            self._logger.error(
+                "download candidates store failure (%s): step skipped, continues", error
+            )
+        except OSError as error:
+            # A missing or unreadable output mount: refuse to admit anything rather than take
+            # down the crawler, which also catalogues. Conservative, loud, and retried next cycle.
+            self._logger.error(
+                "output directory unmeasurable (%s): no candidate admitted, retry", error
+            )
+        # Step 4 - START: client I/O → ClientUnreachableError = dead daemon = ABORT. Re-reads
+        # ``read_tracked_states`` FRESHLY, so it runs even if step 3 partially failed.
+        try:
+            await self._download_starter.start_unlisted(listed_files)
+        except ClientUnreachableError as error:
+            self._logger.warning(
+                "download daemon unreachable (%s): iteration skipped, retry", error
+            )
+            return
+        except StoreError as error:
+            self._logger.error("download start store failure (%s): step skipped, retry", error)
+        # Step 5 - SOURCES: last, since it only observes; its failure must not skip a start (D8).
+        try:
+            await self._source_watcher.record_sources(listed_statuses, node_id)
+        except _UNAVAILABLE as error:
+            self._logger.warning("download daemon unreachable (%s): sources skipped, retry", error)
+        except StoreError as error:
+            self._logger.error("download sources store failure (%s): step skipped, retry", error)
