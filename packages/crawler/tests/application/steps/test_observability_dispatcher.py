@@ -8,10 +8,7 @@ from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord
 from p2pwatch.application.ports.driven.metrics_recorder import MetricsRecorder
 from p2pwatch.application.ports.driven.notifier import Notifier
-from p2pwatch.application.steps.observability_dispatcher import (
-    ObservabilityDispatcher,
-    log_at_severity,
-)
+from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability import events as ev
 from p2pwatch.domain.observability.notification import RelayedLogLine, TierRise
@@ -105,30 +102,21 @@ async def test_logs_the_message_but_notifies_the_plans_notification() -> None:
 
 
 @pytest.mark.asyncio
-async def test_log_level_matches_severity() -> None:
-    logger = FakeLogger()
-    await _dispatcher(FakeMetricsRecorder(), FakeNotifier(), logger).dispatch(
-        ev.ClientUnreachable("amuled")
-    )
-    assert [line.level for line in logger.lines] == ["warning"]
-
-
 @pytest.mark.parametrize(
-    ("severity", "level"),
+    ("event", "level"),
     [
-        (Severity.DEBUG, "debug"),
-        (Severity.INFO, "info"),
-        (Severity.SUCCESS, "info"),
-        (Severity.WARNING, "warning"),
-        (Severity.ERROR, "error"),
+        (ev.ObservationRecorded(client_name="amuled", channel="ed2k"), "debug"),
+        (ev.CrawlerStarted(download_enabled=True, node_id=_NODE), "info"),
+        (_COMPLETED, "info"),  # a success
+        (ev.ClientUnreachable("amuled"), "warning"),
     ],
 )
-def test_each_severity_logs_at_its_level(
-    severity: Severity, level: Literal["debug", "info", "warning", "error"]
+async def test_each_severity_logs_at_its_level(
+    event: ev.Event, level: Literal["debug", "info", "warning"]
 ) -> None:
     logger = FakeLogger()
-    log_at_severity(logger, severity, "100% done")
-    assert logger.lines == [LoggedLine(level, "100% done")]
+    await _dispatcher(FakeMetricsRecorder(), FakeNotifier(), logger).dispatch(event)
+    assert [line.level for line in logger.lines] == [level]
 
 
 @pytest.mark.asyncio

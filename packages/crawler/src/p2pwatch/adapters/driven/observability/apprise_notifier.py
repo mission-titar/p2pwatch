@@ -47,7 +47,6 @@ _NOTIFY_TYPES: dict[Severity, object] = {
     Severity.INFO: apprise.NotifyType.INFO,
     Severity.SUCCESS: apprise.NotifyType.SUCCESS,
     Severity.WARNING: apprise.NotifyType.WARNING,
-    Severity.ERROR: apprise.NotifyType.FAILURE,
 }
 
 
