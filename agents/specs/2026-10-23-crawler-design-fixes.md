@@ -37,7 +37,7 @@ Each goes into `AGENTS.md` in the block where the whole tree first follows it (d
 - **C4.** The domain writes plain text; the Markdown is the adapter's. Hard rules, block 220.
 - **C5.** A domain object carries who produced it; a Writer takes the object only. Naming, block 252.
 - **C6.** "A broken input raises" reaches the crawler's `validate-config`. Hard rules, block 40.
-- **C7.** A step is a class: its dependencies at construction, the run's values (`node_id`, a file) at the call; one step per module, named after it. Hard rules, block 315 (Corrected: added by the operator in Wrap).
+- **C7.** A step is a class: its dependencies at construction, the run's values (`node_id`, a file) at the call; one step per module, named after it. Hard rules, block 317 (Corrected: added by the operator in Wrap).
 
 ## Decisions
 
@@ -173,7 +173,8 @@ Strict TDD in every block, as `AGENTS.md` states it. Full contents, estimate sou
 | 300 | `refactor/source-watcher` | `DownloadLabeler` holds the two shared reads, injected into `DownloadTracker` (Corrected: added by the operator in Act; `SourceWatcher` to 305, the block reaching 645 lines) | 343, 12 (measured) |
 | 305 | `refactor/source-watcher-class` | `SourceWatcher`, holding the sources' read instant and the `DownloadLabeler` (D27, D29) (Corrected: added in Act, the lot at 38 blocks) | 311, 9 (measured) |
 | 310 | `refactor/download-cycle-class` | `DownloadCycle`, `DownloadLoop`; the bags gone (D27) | 400, 10 |
-| 315 | `refactor/lifecycle-dependencies` | `NodeIdResolver.resolve()`, `CatalogReevaluator.reevaluate_if_policy_changed(node_id)`, `BackoffRegistry.resume_waits()`: `CrawlerLifecycle` forwards no dependency; C7 applied: `CatalogReevaluator` absorbs `reevaluate_catalog`, `supervise_loops` becomes `LoopSupervisor`, `BackoffRegistry` gets its own module (D27, C3, C7) (Corrected: added in Wrap from the holistic review's MAJOR, the lot at 39 blocks) | 200, ~12 |
+| 315 | `refactor/lifecycle-dependencies` | `NodeIdResolver.resolve()`, `CatalogReevaluator.reevaluate_if_policy_changed(node_id)`, `BackoffRegistry.resume_waits()`, `CatalogReevaluator` absorbing `reevaluate_catalog`: `CrawlerLifecycle` from 17 parameters to 8 (D27, C3, C7) (Corrected: added in Wrap from the holistic review's MAJOR; 921 lines, exempt by the operator) | 921, 22 (measured) |
+| 317 | `refactor/step-classes-convention` | C7 in `AGENTS.md`: `supervise_loops` becomes `LoopSupervisor`, `BackoffRegistry` gets its own module, `search_tasks.py` becomes `search_task_runner.py` (C7) (Corrected: added in Wrap by the operator, the lot at 40 blocks) | |
 | 320 | `docs/crawler-design-fixes-wrap` | closing block: holistic findings, backlog, handoff | |
 
 - Order: the move first; the config before R6 and A2; the tier types before A5, A7 and A17; A2 to A4 before A17; A1 and A3 before the classes.
