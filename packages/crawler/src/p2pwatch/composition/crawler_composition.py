@@ -310,6 +310,7 @@ class CrawlerComposition(CrawlerRunner):
         # On the crawler's OWN loop, so the webui thread changes it thread-safely.
         run_state_store = AsyncioRunStateStore(loop=loop)
         shutdown_requester = RequestShutdown(run_state_store)
+        # The last context exits first: the resources close, then the signal handlers go.
         async with PosixProcess(shutdown_requester), resource_stack() as stack:
             catalog_connection = open_catalog(crawler_config.catalog_db_path)
             stack.callback(catalog_connection.close)
