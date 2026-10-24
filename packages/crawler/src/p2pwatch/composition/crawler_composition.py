@@ -104,6 +104,7 @@ from p2pwatch.application.steps.search_worker import (
     BackoffRegistry,
     SearchWorker,
 )
+from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.application.steps.status_loop import StatusLoop
 from p2pwatch.application.use_cases.describe_file import DescribeFile
 from p2pwatch.application.use_cases.describe_node import DescribeNode
@@ -449,18 +450,8 @@ class CrawlerComposition(CrawlerRunner):
                 )
                 download_deps = DownloadLoopDeps(
                     download_client=client,
-                    source_client=client,
-                    tracked_download_reader=tracked_download_store,
-                    source_point_writer=source_point_store,
-                    source_point_reader=source_point_store,
-                    download_labeler=download_labeler,
                     poll_interval_seconds=download_config.poll_interval_seconds,
-                    reappeared_after=download_config.reappeared_after,
-                    sources_interval=download_config.sources_interval,
-                    time_between_source_reads=download_config.time_between_source_reads,
-                    wall_clock=wall_clock,
                     monotonic_clock=monotonic_clock,
-                    observability_dispatcher=observability_dispatcher,
                     logger=StdlibLogger(download_loop.__module__),
                     download_tracker=download_tracker,
                     download_decider=DownloadDecider(
@@ -482,6 +473,20 @@ class CrawlerComposition(CrawlerRunner):
                         tracked_download_reader=tracked_download_store,
                         observation_reader=observation_store,
                         logger=StdlibLogger(DownloadStarter.__module__),
+                    ),
+                    source_watcher=SourceWatcher(
+                        source_client=client,
+                        tracked_download_reader=tracked_download_store,
+                        source_point_writer=source_point_store,
+                        source_point_reader=source_point_store,
+                        download_labeler=download_labeler,
+                        reappeared_after=download_config.reappeared_after,
+                        sources_interval=download_config.sources_interval,
+                        time_between_source_reads=download_config.time_between_source_reads,
+                        wall_clock=wall_clock,
+                        monotonic_clock=monotonic_clock,
+                        observability_dispatcher=observability_dispatcher,
+                        logger=StdlibLogger(SourceWatcher.__module__),
                     ),
                     waker=waker,
                     run_state_reader=run_state_store,

@@ -18,7 +18,6 @@ abandoned.
 """
 
 from p2pwatch.application.steps.download_deps import DownloadDeps
-from p2pwatch.application.steps.source_watcher import record_sources
 from p2pwatch.domain.client_errors import ClientUnreachableError, ReadRejectedError
 from p2pwatch.domain.store_error import StoreError
 
@@ -85,7 +84,7 @@ async def run_download_cycle(deps: DownloadDeps, node_id: str) -> None:
         deps.logger.error("download start store failure (%s): step skipped, retry", error)
     # Step 5 - SOURCES: last, since it only observes; its failure must not skip a start (D8).
     try:
-        await record_sources(deps, listed_statuses, node_id)
+        await deps.source_watcher.record_sources(listed_statuses, node_id)
     except _UNAVAILABLE as error:
         deps.logger.warning("download daemon unreachable (%s): sources skipped, retry", error)
     except StoreError as error:

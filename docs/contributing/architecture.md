@@ -588,7 +588,8 @@ transaction par téléchargement. Elle vient après les étapes qui font avancer
 pour qu'une erreur en lisant des sources n'en saute aucune. Elle tourne au premier tour après un
 démarrage, puis au premier tour qui suit `download.sources_interval_seconds` (300 s par défaut)
 depuis son dernier départ, que la lecture ait abouti ou non : deux lectures sont donc espacées de
-l'intervalle, plus un tour au plus.
+l'intervalle, plus un tour au plus. `SourceWatcher` tient cet instant en mémoire, sur l'horloge
+monotone.
 
 ```mermaid
 flowchart LR
