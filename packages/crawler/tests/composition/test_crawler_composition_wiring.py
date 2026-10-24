@@ -240,7 +240,7 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
         "crawler started: node_id=wired-node",
     ) in named_messages
     assert (
-        "p2pwatch.application.steps.reevaluate_if_policy_changed",
+        "p2pwatch.application.steps.catalog_reevaluator",
         "catalogue re-evaluated: 0 files, 0 rows written",
     ) in named_messages
     assert (
@@ -540,6 +540,6 @@ async def test_a_re_evaluation_logs_its_progress_under_its_module_s_name(
         await _crawl_until_a_search_is_read(config_path, targets_path)
 
     assert (
-        "p2pwatch.application.steps.reevaluate_catalog",
+        "p2pwatch.application.steps.catalog_reevaluator",
         "catalogue re-evaluation: 200/200 files, 0 rows written",
     ) in [(record.name, record.getMessage()) for record in caplog.records]

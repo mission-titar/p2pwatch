@@ -2,7 +2,7 @@
 
 APPLICATION ring, PURE orchestration (no ``try/except`` here: a ``StoreError`` is a
 port contract each CALLER absorbs on its own terms, cf. ``Cataloguer`` and
-``reevaluate_catalog``). Used by BOTH the per-observation pipeline (``cataloguer.py``)
+``CatalogReevaluator``). Used by BOTH the per-observation pipeline (``cataloguer.py``)
 and the startup catalogue re-evaluation, so the writes, the wake and the event are written once.
 
 The file is judged on EVERY filename the catalog knows for it (``engine.evaluate_file``, spec

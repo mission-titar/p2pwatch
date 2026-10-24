@@ -4,6 +4,7 @@ earns, per client when unreachable and per channel when refused (stage 2, D4 and
 from dataclasses import dataclass
 from datetime import timedelta
 
+from p2pwatch.application.ports.driven.backoff_state_reader import BackoffStateReader
 from p2pwatch.application.ports.driven.jitter_generator import JitterGenerator
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
@@ -58,16 +59,19 @@ class BackoffRegistry:
         wall_clock: WallClock,
         monotonic_clock: MonotonicClock,
         jitter_generator: JitterGenerator,
+        backoff_state_reader: BackoffStateReader,
     ) -> None:
         self._policy = policy
         self._wall_clock = wall_clock
         self._monotonic_clock = monotonic_clock
         self._jitter_generator = jitter_generator
+        self._backoff_state_reader = backoff_state_reader
         self._state_by_key: dict[BackoffKey, BackoffState] = {}
         self._deadline_by_key: dict[BackoffKey, MonotonicInstant] = {}
 
-    def load_from(self, states: dict[BackoffKey, BackoffState]) -> None:
-        """Resumes the waits a previous run persisted."""
+    def resume_waits(self) -> None:
+        """Resumes the waits a previous run saved, each holding what is left of it."""
+        states = self._backoff_state_reader.read_backoff_states()
         wall_now = self._wall_clock.now()
         monotonic_now = self._monotonic_clock.now()
         self._state_by_key = dict(states)

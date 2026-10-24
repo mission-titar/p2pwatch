@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from p2pwatch.application.steps.resolve_node_id import resolve_node_id
+from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from tests.fakes.adapters.driven.fake_node_id_generator import FakeNodeIdGenerator
 from tests.fakes.adapters.driven.fake_node_id_store import FakeNodeIdStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
@@ -13,13 +13,13 @@ def _resolve(
     store: FakeNodeIdStore,
     fake_time: FakeTime | None = None,
 ) -> str:
-    return resolve_node_id(
-        configured_node_id,
+    return NodeIdResolver(
+        configured_node_id=configured_node_id,
         node_id_reader=store,
         node_id_writer=store,
         node_id_generator=FakeNodeIdGenerator("new-node"),
         wall_clock=(fake_time or FakeTime()).wall,
-    )
+    ).resolve()
 
 
 def test_the_configured_node_id_wins_and_neither_reads_nor_records_one() -> None:

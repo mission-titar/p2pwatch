@@ -48,7 +48,7 @@ An agent adds an entry only after the operator has agreed to it.
 - **Contract tests for the fakes**: one suite per port, run against the fake and the real adapter, so a fake cannot
   drift from what it stands for. Section 7 of `agents/specs/2026-10-15-gate-tooling.md`.
 
-- **The node page shows a node id set in `crawler.yml`**: `resolve_node_id` returns a configured id without
+- **The node page shows a node id set in `crawler.yml`**: `NodeIdResolver` returns a configured id without
   recording it, so `/node` shows a blank id. Section "Backlog" of `agents/specs/2026-10-19-hexagon-p2pwatch.md`.
 
 - **The ast-grep rule tests bound to their rules by design**: a test whose rule does not exist passes, and no rule
