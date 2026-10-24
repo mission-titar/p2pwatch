@@ -1,19 +1,22 @@
 # Handoff: the crawler's design fixes, lot C of the post-hexagonal corrections
 
-Drafted by block 310 from the lot's block reports (#434 to #471) and its own; to be corrected by the closing block 320
-with the holistic review.
+Drafted by block 310 from the lot's block reports (#434 to #472), corrected by the closing block 320 with the holistic
+review and blocks 315 and 317's reports (#473, #474).
 
 ## State
 
 Tier Spec lot. Spec `agents/specs/2026-10-23-crawler-design-fixes.md` (approved 2026-10-23, with the exemptions of
-blocks 10 and 30; the operator raised the lot's ceiling to 36 blocks, then accepted 37 and 38 for blocks 265 and 305).
+blocks 10 and 30; the operator raised the lot's ceiling to 36 blocks, then accepted 37 and 38 for blocks 265 and 305,
+39 and 40 for blocks 315 and 317, added in Wrap).
 It applies the ledger `agents/reference/2026-10-22-post-hexagonal-audit.md`'s rows A1 to A15, A17, R6, R7 and R11 in
 the crawler, the previous handoff's D8 (the `*Deps` bags) and its item on amule's adapter loggers (D31).
 
-One stack cut from `main` at `114f335e`. Thirty-eight blocks with the closing one: the spec's thirty-four, plus 45
-(cut from 40 at 24 files), 65 (cut from 60 at 23 files), 265 (added in Integrate by the operator) and 305 (cut from
-300 at 645 lines). The lead also moved work between neighbours: block 100's typing of `DecisionTier` into 110, block
-150's writer side into 155, block 160's `reader-verbs` into 170, block 200's first commit into 190.
+One stack cut from `main` at `114f335e`, stack #469 on GitHub. Forty blocks with the closing one, pull requests #434 to
+#474 and the closing block's: the spec's thirty-four, plus 45 (cut from 40 at 24 files), 65 (cut from 60 at 23
+files), 265 (added in Integrate by the operator), 305 (cut from 300 at 645 lines), 315 (added in Wrap from the
+holistic review's MAJOR) and 317 (added in Wrap by the operator). The lead also moved work between neighbours: block
+100's typing of `DecisionTier` into 110, block 150's writer side into 155, block 160's `reader-verbs` into 170, block
+200's first commit into 190.
 
 | Block | Pull request | Branch |
 |---|---|---|
@@ -53,7 +56,9 @@ One stack cut from `main` at `114f335e`. Thirty-eight blocks with the closing on
 | 290 | #467 | `refactor/download-decider-and-starter` |
 | 300 | #470 | `refactor/source-watcher` |
 | 305 | #471 | `refactor/source-watcher-class` |
-| 310 | (its pull request) | `refactor/download-cycle-class` |
+| 310 | #472 | `refactor/download-cycle-class` |
+| 315 | #473 | `refactor/lifecycle-dependencies` |
+| 317 | #474 | `refactor/step-classes-convention` |
 | 320 | closing | `docs/crawler-design-fixes-wrap` |
 
 Not merged at writing. The lot changes the image's code (logger names, `validate-config`'s and `merge`'s output,
@@ -99,33 +104,48 @@ Not merged at writing. The lot changes the image's code (logger names, `validate
   `DownloadLabeler` (the two reads that name a download, the operator's addition); `SourceWatcher` (owns the sources'
   read instant); `DownloadCycle.run(node_id)` over the four stages with the error doctrine, `DownloadLoop.run(node_id)`
   repeating it. `DownloadDeps` and `DownloadLoopDeps` are gone; C3 is in `AGENTS.md`'s Hard rules.
+- **The lifecycle's steps** (blocks 315, 317, C7): `NodeIdResolver.resolve()`,
+  `CatalogReevaluator.reevaluate_if_policy_changed(node_id)` (which absorbed the catalog sweep),
+  `BackoffRegistry.resume_waits()` and `LoopSupervisor.supervise(loops, ...)` each hold what they use, so
+  `CrawlerLifecycle` drops from 17 parameters to 8 and forwards nothing. C7 is a Hard rule: a step is a class, one per
+  module, named after it (`backoff_registry.py`, `search_task_runner.py`); the dispatcher's `_log_at_severity` is
+  private and `Severity.ERROR`, which no plan produced, is gone.
+- **The closing block** (320): the holistic findings below, among them ruff's first-party packages named in
+  `pyproject.toml` and the audience derived from the notification (`audience_of`).
 
 ## What an operator sees change
 
 As appendix B lists it: `${NAME}` in every string value of `crawler.yml`, an unset one refusing the start under its
 key path; `merge` refuses an `--output` that is a source (exit 2, pointing at `--into`); `validate-config` prints
-`error: <file>: <reason>` for a broken file and `Invalid config: <file>: <key>: <message>` for a wrong one; the six
-config errors that named their key inside their text now read `<key>: <message>`; a crawl that meets a broken file
+`error: <file>: <reason>` for a broken file and `Invalid config: <file>: <key>: <message>` for a wrong one; the
+config errors that named their key inside their text now read `<key>: <message>`, a missing key included
+(`search.keywords: missing`, block 320); a crawl that meets a broken file
 prints `Invalid config, refusing to start: <file>: <reason>` (block 40); a config file that is not UTF-8 is refused on
 one line instead of a traceback (block 40); `/files?tier=<unknown>` lists every file; the event lines log under
 `p2pwatch.application.steps.observability_dispatcher`, the download lines under the module of the class that writes
 them (`download_cycle`, `download_tracker`, `download_decider`, `download_starter`, `source_watcher`), merge's skip line
-under `p2pwatch.application.use_cases.merge_catalogs`. `docs/migration-4x.md` lists them. No metric, notification,
+under `p2pwatch.application.use_cases.merge_catalogs`, the re-evaluation's under
+`p2pwatch.application.steps.catalog_reevaluator` (block 315), the backoff's save failure under
+`p2pwatch.application.steps.search_task_runner` (block 317). `docs/migration-4x.md` lists them. No metric, notification,
 webui page or schema changes.
 
 ## Acceptance
 
-From the block reports; the greps re-run by block 310 at its tip.
+From the block reports; the greps re-run by block 310 at its tip, and by the holistic review at `9556b5a9`.
 
 1. Blocks 160, 170: no `asyncio.Event` in the core, no "until lot C" in `AGENTS.md`; an injected `def fetch_x` fails
    `reader-verbs`, an injected `asyncio.Event()` fails `core-import-names`.
 2. Block 155: the acceptance grep over the adapters prints nothing.
 3. Block 180, 200: the adapter and `event_emitter.py` gone, `EventEmitter|describe|Report` prints nothing; removing
-   the `Severity.ERROR` arm fails mypy.
+   the `Severity.ERROR` arm failed mypy (block 317 then deleted `Severity.ERROR`, which no plan produced).
 4. Blocks 220 and 252: three scripts send 22 events of all 17 types through the whole chain on `main` and on the
    branch; `diff` prints nothing (90 lines, 26 apprise calls); with the branch's node changed, 13 lines differ.
    Sources in block 220's report. Not re-run after block 252 (blocks 260 to 310 change no event, plan or notifier).
-5. **Not run by any block**: the webui's `/`, `/files` and a file page rendered on `main` and on the top branch.
+5. Met, by the holistic review at `9556b5a9`: a fixture of five files with decisions of every tier, a retraction,
+   several filenames and source points, built with `main`'s stores, rendered by each tree's own `build_app` with a
+   fixed wall clock and diffed page by page. 14 pages IDENTICAL (`/`, `/files`, the three tier facets, five file pages,
+   `/node`, `/sources`, two target pages); only `/files?tier=bogus` DIFFERS, the intended change (`0 of 0` on `main`,
+   `5 of 5` on the branch). Scripts: the session scratchpad's `accept5/` (`build_fixture.py`, `render.py`, `run.sh`).
 6. Block 70: `load_from` prints nothing in the composition.
 7. Blocks 90, 110: both greps print nothing; `test_unknown_tier_filter_is_ignored_and_lists_every_file`.
 8. Block 50: `class ApiRejectedError(ApiError):` at `errors.py:28`; one test per operation asserting the exact type.
@@ -143,11 +163,31 @@ From the block reports; the greps re-run by block 310 at its tip.
 17. Block 310: `git diff --stat main...HEAD` over `deploy/`, `security/`, the migrations, both Dockerfiles and
     `.github/workflows/` prints nothing.
 18. Block 70: prints nothing.
-19. The gate green at every block (each report).
+19. The gate green at every block (each report); CI run 40098775950 on `9556b5a9` passed every job, the integration
+    suites on both architectures included.
 
 ## Holistic review
 
-Left for the closing block.
+`.reviews/lot-c-holistic.md` (gitignored), over `git diff origin/main...origin/refactor/download-cycle-class` at
+`9556b5a9`: CRITICAL 0, MAJOR 1, MINOR 13. No invariant broken. Each finding's exit, as the operator approved it ("Je
+valide le plan"):
+
+| Finding | Exit |
+|---|---|
+| MAJOR: `CrawlerLifecycle` forwarded 13 of its 17 parameters | fixed in block 315 (8 parameters), C7 in block 317 |
+| ruff classes a first-party import by the disk, and its cache keeps the verdict | fixed in 320: `[tool.ruff.lint.isort] known-first-party` names the eight packages and `tests` |
+| `ObservabilityPlan.audiences` apart from its notification | fixed in 320: the field dropped, `audience_of(notification)` decides |
+| a missing nested config key keyed on its section | fixed in 320: `search.keywords: missing`, `docs/migration-4x.md` updated |
+| `AMULE_CLIENT_NAME` among the domain's defaults | fixed in 320: the composition's `_AMULE_CLIENT_NAME`; spec D2 corrected |
+| the readers' `'retracted'` literals | fixed in 320: `tier IN (<every DecisionTier>)`, generated from the enum |
+| `download_tracker.py`'s `del` after a loss, a surviving mutant | fixed in 320: deleted, the reconciliation owns the drop |
+| `async with PosixProcess(...), resource_stack()`'s untested order | accepted limit (no unit test can reach inside `run_crawler`); a comment names the exit order, since nested statements are refused by ruff's SIM117 and would re-indent 221 lines |
+| stale docs: matching's `AGENTS.md` sketch, `mapping.py`, the cataloguer's docstring | fixed in 320 |
+| two docstrings of this lot pointing at a bare decision id | fixed in 320; the ones moved verbatim from `run_download_cycle.py` stay |
+| `docs/operate.md`'s 147-character line | fixed in 320 |
+| `DecisionChange.title` for a gone target reaches no output | accepted limit: the file judge cannot know which change will rise, the policy decides |
+| no check that a contact point's network is its file's | `BACKLOG.md`, in the "Stage 5, new networks" entry: with one network the check cannot fail under coverage |
+| the handoff's acceptance 5, "Constructor sizes" and later items | corrected here |
 
 ## Departures from the spec
 
@@ -189,6 +229,11 @@ Left for the closing block.
   deadlines became behavioural.
 - Block 310: the loop test keeps its own stage graph (a first version built it through `build_cycle`, 66 lines more,
   past the 500-line bound).
+- Block 315: `LoopSupervisor`, C7 and the `BackoffRegistry` module left to block 317 (the operator).
+- Block 317: `log_at_severity` a private method of the dispatcher, `Severity.ERROR` deleted (its class 2 answer).
+- Block 320: the resource stack's order named by a comment, not two nested `async with` (ruff's SIM117); the readers
+  now drop a tier the enum does not list instead of raising on it; the optional de-duplication of the loop test's
+  stage graph not done (the block already past the file bound).
 
 ## Class 1 fixes
 
@@ -213,6 +258,10 @@ Left for the closing block.
 - Block 260, in Integrate: Facade Services for the forwarded dependencies ("Oui"), `FileJudge` and `Cataloguer`
   ("Ok"), block 265 with the mechanical exemption, the lot at 37 ("Ok").
 - Block 300: `DownloadLabeler` added ("Ok"), then the block cut into 300 and 305, the lot at 38 ("validé").
+- Block 315, after the review: the MAJOR fixed by Facade Services, 921 lines exempt, the rest to a block 317, the lot
+  at 40 ("ok"); `search_tasks.py` renamed in 317 ("ok").
+- Block 317: kept whole at 637 lines and 22 files under a mechanical exemption ("Validé"); `log_at_severity` private
+  and `Severity.ERROR` deleted ("Validé").
 
 ## Names settled by teammates
 
@@ -222,13 +271,17 @@ Left for the closing block.
 `_plan_decisions`, `_plan_source`, `log_at_severity`, `FakeTimedNotifier`, `target_titles` (the notifications'),
 `domain/observability/severity.py`, `_relayed`, `_decision_columns`, `track`, `reset_loss_deadline`,
 `queue_new_candidates`, `start_unlisted`, `record_sources`, `DownloadLabeler.best_filename`,
-`DownloadLabeler.target_titles`, `build_cycle` (the stages' test helper, in `tests/support/application/steps/download_cycle.py`).
+`DownloadLabeler.target_titles`, `build_cycle` (the stages' test helper, in `tests/support/application/steps/download_cycle.py`),
+`NodeIdResolver`, `CatalogReevaluator`, `resume_waits`, `LoopSupervisor`, `audience_of`, `_AMULE_CLIENT_NAME`,
+`_DECISION_TIERS`.
 
 ## Backlog
 
-To reconcile in the closing block. The spec's section: "A copy before a migration that rewrites rows" stays open and
-comes before any release; "Contract tests for the fakes" follows this lot, the ports now in their final shape; the
-other entries it names are untouched. No block report asks for a new entry.
+Reconciled by block 320: nothing in it shipped with this lot, so no entry is deleted. "A copy before a migration that
+rewrites rows" stays open and comes before any release; "Contract tests for the fakes" follows this lot, the ports now
+in their final shape; "The node page shows a node id set in `crawler.yml`" names `NodeIdResolver` (block 315); the
+"Stage 5, new networks" entry gains `SourcePoint` refusing a contact point of another network than its file's (the
+holistic review, the operator's agreement).
 
 ## For the next lots
 
@@ -236,24 +289,28 @@ other entries it names are untouched. No block report asks for a new entry.
   `reset_loss_deadline(file)` right after each `record_queued`, with no `await` between (D19). The alternative, the
   decider returning the files it queued and the cycle resetting their deadlines, loses the reset of the files queued
   before a `StoreError` mid-loop, which would then fall back on `latest_seen_at` and the wall clock.
-- **Constructor sizes** (Seemann's over-injection, checked per block): `DownloadDecider` 11 parameters,
-  `SourceWatcher` 12, `DownloadTracker` 8, `DownloadStarter` 5, `DownloadLabeler` 4, `DownloadCycle` 6,
-  `DownloadLoop` 5, `StatusLoop` 7; none passes a dependency straight through to one callee since blocks 265 and 300.
-- **`ObservabilityPlan.audiences` could derive from its notification** (block 252): every plan has at most one
-  audience, given by the notification's kind; deriving it would remove an audience without a notification.
+- **Constructor sizes** (Seemann's over-injection, checked per block, counted at 320's tip): `CrawlerLifecycle` 8
+  parameters, `DownloadDecider` 11, `SourceWatcher` 12, `DownloadTracker` 8, `DownloadStarter` 5, `DownloadLabeler`
+  4, `DownloadCycle` 6, `DownloadLoop` 5, `StatusLoop` 7, `CatalogReevaluator` 7, `NodeIdResolver` 5; none passes a
+  dependency straight through to one callee since blocks 265, 300 and 315.
 - **The loop test builds its own stage graph** beside `build_cycle` (block 310): about 70 lines that blocks 280 to
-  305 each edited beside the shared helper.
+  305 each edited beside the shared helper. Left by 320, which was past the file bound.
 - **Strings a `StrEnum` lets pass** (blocks 110, 120): `test_prod_targets.py` compares `t.status == "found"`, and
   `test_app.py`'s `_decision(tier="catalog")` passes strings; mypy accepts both.
-- **`packages/matching/AGENTS.md`'s flow sketch** reads `MatchingEngine(config, targets)` (block 65).
-- **A second network** (block 130): the store no longer checks that a contact point's network is the file's; the
-  step or the mapper will have to keep them consistent.
+- **A tier the enum does not list** (block 320): the readers keep `tier IN (<every DecisionTier>)`, so a row of an
+  unknown tier (a catalog written by a later version) is skipped where `DecisionTier(row["tier"])` used to raise.
 
 ## Pitfalls
 
-- **ruff's cache keeps the import class of a module that did not exist yet** (blocks 210, 220): tests written before
-  their module get it classed third-party, the local gate passes, CI's cold run fails. Run
-  `uv run ruff check --no-cache .` before trusting the gate.
+- **ruff classed a first-party import by whether its module existed on disk** (blocks 210, 220), and its cache kept
+  the verdict: tests written before their module sorted it third-party, the local gate passed, CI's cold run failed.
+  Fixed by design in block 320 (`known-first-party`): before, a probe printed pass, pass, pass, fail for "absent cold,
+  absent warm, present warm, present cold"; after, all four agree.
+- **GitHub refuses to change the base of a pull request in a stack** (block 265's insertion): the lead unstacked it on
+  GitHub and submitted the stack again, which is why the stack is #469 and block 265 is #468.
+- **`gh stack` 0.1.1 inserts a branch mid-stack only through its TUI**: the lead edited `.git/gh-stack` by hand
+  (blocks 265, 305).
+- **ruff's SIM117 refuses two nested `with` statements** that one could hold (block 320).
 - **Serena's `find_referencing_symbols` returns nothing** on a new module, a module constant or `tests/support`
   (blocks 10, 20, 310): `git grep -w` instead.
 - **A decorator's body runs at import**, credited to no test by `_unit-coverage-check`, and a decorated `async def`
@@ -274,25 +331,42 @@ other entries it names are untouched. No block report asks for a new entry.
 
 - The integration suites locally; CI runs them (the client errors of block 50, the two new amuleapi arguments of
   block 60 in the compose smoke's script).
-- Acceptance 5 (the webui rendered identically), run by no block.
 - The logger names of `DownloadTracker`, `SourceWatcher` and `DownloadCycle`: no wiring scenario produces their lines;
   the composition passes `StdlibLogger(<Class>.__module__)`. `DownloadDecider`'s is tested (block 290).
-- The resource stack's nesting order, shown only by `run_crawler` (block 70).
+- The resource stack's nesting order, shown only by `run_crawler` (block 70), now named by a comment (block 320).
 
 ## Wrap counts
 
-To count in the closing block (`gh run list --branch <branch>`). Known from the reports: block 210's first two runs
-failed `validate / lint` on the import order ruff's cache had let pass, fixed by `e33d8aaf` and `08924bde`.
+Counted by block 320 with `gh run list --branch <branch>` over the 39 branches below it: 60 runs of the `PR` workflow
+for 39 pull requests, so 21 beyond one run each.
+
+- **Fix-backs and the runs they re-triggered** (16):
+  - block 45's `--into`: the fix on 45, then a cascaded rebase over 50 to 80, 11 runs (one on 45, two on each of the
+    five branches above it, one of each pair cancelled by the next push);
+  - block 210's two lint fixes, ruff's cache having let the import order pass (`e33d8aaf`, `08924bde`): 2 runs, both
+    failing before them, no cascade;
+  - block 260's Facade Services, which became block 265 inserted under 270: the stack rebuilt on GitHub and a cascaded
+    rebase over 270 to 290, 3 runs.
+- **Re-pushes by a block's own teammate before the next block began** (5): blocks 20, 110, 155, 170, and 190, which
+  took block 200's first commit.
+- **Cascaded rebases**: two (block 45's over five branches, block 265's over three).
+- **Bodies called unreadable**: none reported.
+- **The measure**: 16 runs re-triggered by fix-backs and cascades, 21 counting the teammates' own re-pushes, against 40
+  blocks. Fewer runs than blocks and no unreadable body: by workflow's measure, stacking cost less than pull requests in
+  series.
 
 - **Splits**: 40 into 40 and 45, 60 into 60 and 65, 300 into 300 and 305; work moved by the lead from 100 to 110, 150
   to 155, 160 to 170, 200 to 190.
-- **Exemptions**: 10 and 30 (the spec), 180 (28 files), 220 (600 lines), 265 (890 lines, 15 files).
+- **Exemptions**: 10 and 30 (the spec), 180 (28 files), 220 (600 lines), 265 (890 lines, 15 files), 315 (921 lines,
+  22 files), 317 (637 lines, 22 files).
 - **The file allowance** (20 or 21 files): blocks 80, 90, 110, 120 and 230; block 160 at 22 by the operator.
 - **Bodies called unreadable**: none known at writing.
 
 ## Next
 
-- The holistic review over `git diff origin/main...origin/refactor/download-cycle-class`, then the closing block 320.
-- The operator reads the stack and merges it (`gh stack merge --rebase`).
-- After the merge: "A copy before a migration that rewrites rows" before any release; then "Contract tests for the
-  fakes".
+- The operator reads the stack; the lead rebases it onto the current `main` and waits for every run to be green; the
+  operator merges it (`gh stack merge --rebase`).
+- After the merge, the lead proposes a release decision: the lot changes what the image ships (logger names,
+  `validate-config`'s and `merge`'s output, `${NAME}` everywhere). "A copy before a migration that rewrites rows" still
+  gates any release.
+- Then "Contract tests for the fakes", the ports now in their final shape.
