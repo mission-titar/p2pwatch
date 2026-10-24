@@ -7,6 +7,7 @@ from p2pwatch.application.steps.download_loop import (
     DownloadLoopDeps,
     download_loop,
 )
+from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.domain.wake_subject import WakeSubject
 from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
@@ -38,6 +39,8 @@ def _loop_deps(
     downloads = FakeTrackedDownloadStore()
     sources = FakeSourcePointStore()
     fake_time = fake_time or FakeTime()
+    decision_reader, observation_reader = FakeDecisionReader(), FakeObservationReader()
+    observability_dispatcher, logger = ObservabilityOverFakes().dispatcher, FakeLogger()
     return DownloadLoopDeps(
         download_client=FakeDownloadClient(),
         source_client=FakeSourceClient(),
@@ -45,19 +48,30 @@ def _loop_deps(
         tracked_download_reader=downloads,
         source_point_writer=sources,
         source_point_reader=sources,
-        decision_reader=FakeDecisionReader(),
-        observation_reader=FakeObservationReader(),
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
         targets=(),
         free_space_meter=FakeFreeSpaceMeter(1_000_000),
         min_free_bytes=0,
-        lost_after=timedelta(days=1),
         reappeared_after=timedelta(hours=12),
         sources_interval=timedelta(minutes=5),
         time_between_source_reads=timedelta(minutes=5, seconds=30),
         wall_clock=fake_time.wall,
         monotonic_clock=fake_time.monotonic,
-        observability_dispatcher=ObservabilityOverFakes().dispatcher,
-        logger=FakeLogger(),
+        observability_dispatcher=observability_dispatcher,
+        logger=logger,
+        download_tracker=DownloadTracker(
+            tracked_download_writer=downloads,
+            tracked_download_reader=downloads,
+            decision_reader=decision_reader,
+            observation_reader=observation_reader,
+            targets=(),
+            lost_after=timedelta(days=1),
+            wall_clock=fake_time.wall,
+            monotonic_clock=fake_time.monotonic,
+            observability_dispatcher=observability_dispatcher,
+            logger=logger,
+        ),
         waker=waker,
         poll_interval_seconds=poll_interval,
         run_state_reader=run_state,

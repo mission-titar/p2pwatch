@@ -93,8 +93,14 @@ async def _alert_sources(
         round_.decided.add(source)
         if alert is None:
             continue
-        source_name, filename = point.reading.source_name, best_filename(deps, file)
-        titles = target_titles(deps, file)
+        source_name = point.reading.source_name
+        filename = best_filename(file, observation_reader=deps.observation_reader)
+        titles = target_titles(
+            file,
+            decision_reader=deps.decision_reader,
+            tracked_download_reader=deps.tracked_download_reader,
+            targets=deps.targets,
+        )
         event: SourceFirstUseful | SourceReappeared = (
             SourceFirstUseful(source, source_name, file, filename, titles, node_id)
             if isinstance(alert, FirstUseful)
