@@ -4,19 +4,30 @@ from datetime import timedelta
 import pytest
 
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
+from p2pwatch.application.steps.download_cycle import DownloadCycle
+from p2pwatch.application.steps.download_decider import DownloadDecider
+from p2pwatch.application.steps.download_labeler import DownloadLabeler
 from p2pwatch.application.steps.download_loop import DownloadLoop
+from p2pwatch.application.steps.download_starter import DownloadStarter
+from p2pwatch.application.steps.download_tracker import DownloadTracker
+from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.domain.wake_subject import WakeSubject
 from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
+from tests.fakes.adapters.driven.fake_free_space_meter import FakeFreeSpaceMeter
+from tests.fakes.adapters.driven.fake_logger import FakeLogger
+from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_shutdown_during_cycle_decision_reader import (
     FakeShutdownDuringCycleDecisionReader,
 )
+from tests.fakes.adapters.driven.fake_source_client import FakeSourceClient
+from tests.fakes.adapters.driven.fake_source_point_store import FakeSourcePointStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
-from tests.support.application.steps.download_cycle import build_cycle
+from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
 _NODE = "n1"
 
@@ -30,14 +41,74 @@ def _download_loop(
     monotonic_clock: MonotonicClock | None = None,
     decision_reader: FakeDecisionReader | None = None,
 ) -> DownloadLoop:
+    client, downloads, sources = (
+        FakeDownloadClient(),
+        FakeTrackedDownloadStore(),
+        FakeSourcePointStore(),
+    )
     fake_time = fake_time or FakeTime()
-    return DownloadLoop(
-        download_cycle=build_cycle(
-            client=FakeDownloadClient(),
-            tracked_download_store=FakeTrackedDownloadStore(),
+    decision_reader, observation_reader = (
+        decision_reader or FakeDecisionReader(),
+        FakeObservationReader(),
+    )
+    observability_dispatcher, logger = ObservabilityOverFakes().dispatcher, FakeLogger()
+    download_labeler = DownloadLabeler(
+        observation_reader=observation_reader,
+        decision_reader=decision_reader,
+        tracked_download_reader=downloads,
+        targets=(),
+    )
+    download_tracker = DownloadTracker(
+        tracked_download_writer=downloads,
+        tracked_download_reader=downloads,
+        download_labeler=download_labeler,
+        lost_after=timedelta(days=1),
+        wall_clock=fake_time.wall,
+        monotonic_clock=fake_time.monotonic,
+        observability_dispatcher=observability_dispatcher,
+        logger=logger,
+    )
+    download_cycle = DownloadCycle(
+        download_client=client,
+        download_tracker=download_tracker,
+        download_decider=DownloadDecider(
+            free_space_meter=FakeFreeSpaceMeter(1_000_000),
+            min_free_bytes=0,
             decision_reader=decision_reader,
-            fake_time=fake_time,
+            observation_reader=observation_reader,
+            tracked_download_writer=downloads,
+            tracked_download_reader=downloads,
+            targets=(),
+            download_tracker=download_tracker,
+            wall_clock=fake_time.wall,
+            observability_dispatcher=observability_dispatcher,
+            logger=logger,
         ),
+        download_starter=DownloadStarter(
+            download_client=client,
+            tracked_download_writer=downloads,
+            tracked_download_reader=downloads,
+            observation_reader=observation_reader,
+            logger=logger,
+        ),
+        source_watcher=SourceWatcher(
+            source_client=FakeSourceClient(),
+            tracked_download_reader=downloads,
+            source_point_writer=sources,
+            source_point_reader=sources,
+            download_labeler=download_labeler,
+            reappeared_after=timedelta(hours=12),
+            sources_interval=timedelta(minutes=5),
+            time_between_source_reads=timedelta(minutes=5, seconds=30),
+            wall_clock=fake_time.wall,
+            monotonic_clock=fake_time.monotonic,
+            observability_dispatcher=observability_dispatcher,
+            logger=logger,
+        ),
+        logger=logger,
+    )
+    return DownloadLoop(
+        download_cycle=download_cycle,
         poll_interval_seconds=poll_interval,
         monotonic_clock=monotonic_clock or fake_time.monotonic,
         waker=waker,
