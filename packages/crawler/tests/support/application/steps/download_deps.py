@@ -14,6 +14,7 @@ from p2pwatch.application.ports.driven.free_space_meter import FreeSpaceMeter
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.steps.download_decider import DownloadDecider
 from p2pwatch.application.steps.download_deps import DownloadDeps
+from p2pwatch.application.steps.download_labeler import DownloadLabeler
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
@@ -111,12 +112,16 @@ def build_deps(
     targets = targets if targets is not None else TARGETS
     observability_dispatcher = observability_dispatcher or ObservabilityOverFakes().dispatcher
     logger = logger or FakeLogger()
+    download_labeler = DownloadLabeler(
+        observation_reader=observation_reader,
+        decision_reader=decision_reader,
+        tracked_download_reader=tracked_download_store,
+        targets=targets,
+    )
     download_tracker = DownloadTracker(
         tracked_download_writer=tracked_download_store,
         tracked_download_reader=tracked_download_store,
-        decision_reader=decision_reader,
-        observation_reader=observation_reader,
-        targets=targets,
+        download_labeler=download_labeler,
         lost_after=lost_after,
         wall_clock=wall_clock,
         monotonic_clock=fake_time.monotonic,
@@ -129,9 +134,7 @@ def build_deps(
         tracked_download_reader=tracked_download_store,
         source_point_writer=sources,
         source_point_reader=sources,
-        decision_reader=decision_reader,
-        observation_reader=observation_reader,
-        targets=targets,
+        download_labeler=download_labeler,
         poll_interval_seconds=30.0,
         reappeared_after=timedelta(hours=12),
         sources_interval=sources_interval,

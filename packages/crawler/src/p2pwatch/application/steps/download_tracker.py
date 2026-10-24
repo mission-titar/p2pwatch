@@ -1,18 +1,14 @@
 """Follows the client's list: states, completions, presence, loss."""
 
-from collections.abc import Sequence
 from datetime import timedelta
 from typing import Literal
 
-from catalog_matching.domain.models import TargetSegment
-from p2pwatch.application.ports.driven.decision_reader import DecisionReader
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
-from p2pwatch.application.ports.driven.observation_reader import ObservationReader
 from p2pwatch.application.ports.driven.tracked_download_reader import TrackedDownloadReader
 from p2pwatch.application.ports.driven.tracked_download_writer import TrackedDownloadWriter
 from p2pwatch.application.ports.driven.wall_clock import WallClock
-from p2pwatch.application.steps.download_file_reads import best_filename, target_titles
+from p2pwatch.application.steps.download_labeler import DownloadLabeler
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.download.states import DownloadState, FailureReason
 from p2pwatch.domain.download.status import DownloadStatus
@@ -31,9 +27,7 @@ class DownloadTracker:
         *,
         tracked_download_writer: TrackedDownloadWriter,
         tracked_download_reader: TrackedDownloadReader,
-        decision_reader: DecisionReader,
-        observation_reader: ObservationReader,
-        targets: Sequence[TargetSegment],
+        download_labeler: DownloadLabeler,
         lost_after: timedelta,
         wall_clock: WallClock,
         monotonic_clock: MonotonicClock,
@@ -42,9 +36,7 @@ class DownloadTracker:
     ) -> None:
         self._tracked_download_writer = tracked_download_writer
         self._tracked_download_reader = tracked_download_reader
-        self._decision_reader = decision_reader
-        self._observation_reader = observation_reader
-        self._targets = targets
+        self._download_labeler = download_labeler
         self._lost_after = lost_after
         self._wall_clock = wall_clock
         self._monotonic_clock = monotonic_clock
@@ -125,16 +117,11 @@ class DownloadTracker:
         """
         self._tracked_download_writer.set_completed(file, self._wall_clock.now())
         states[file] = DownloadState.COMPLETED
-        titles = target_titles(
-            file,
-            decision_reader=self._decision_reader,
-            tracked_download_reader=self._tracked_download_reader,
-            targets=self._targets,
-        )
+        titles = self._download_labeler.target_titles(file)
         await self._observability_dispatcher.dispatch(
             DownloadCompleted(
                 file,
-                best_filename(file, observation_reader=self._observation_reader),
+                self._download_labeler.best_filename(file),
                 titles or (TargetTitle("unknown", ""),),
                 node_id,
             )
