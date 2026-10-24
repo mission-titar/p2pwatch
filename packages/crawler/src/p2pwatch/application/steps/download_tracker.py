@@ -180,10 +180,10 @@ class DownloadTracker:
         """
         monotonic_now = self._monotonic_clock.now()
         self._reconcile_loss_deadlines(listed_files, monotonic_now)
+        # A failed download's deadline goes at the next reconciliation, with every terminal one.
         deadlines = self._loss_deadline_by_file
         for file in [file for file, deadline in deadlines.items() if deadline <= monotonic_now]:
             self._tracked_download_writer.set_state(file, DownloadState.FAILED, FailureReason.LOST)
-            del deadlines[file]
             self._logger.warning(
                 "file=%s unseen by the client for %ss: marked failed",
                 file.native_id,
