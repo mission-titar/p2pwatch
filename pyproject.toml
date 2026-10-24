@@ -43,6 +43,20 @@ src = [
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "TID251"]
 
+# Named, not found on disk: else a module not yet written sorts third-party, and the cache keeps it.
+[tool.ruff.lint.isort]
+known-first-party = [
+  "p2pwatch",
+  "p2pwatch_amule",
+  "catalog_matching",
+  "vex_checks",
+  "template_checks",
+  "coverage_checks",
+  "amule_bump",
+  "pytest_settings",
+  "tests",
+]
+
 # Only the clock adapters read the system clock or sleep; asyncio's own timeouts run on the loop's time.
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "datetime.datetime.now".msg = "Inject the WallClock port."
