@@ -239,7 +239,7 @@ def test_the_root_backoff_is_refused_with_its_new_place() -> None:
 def test_a_missing_backoff_is_fatal() -> None:
     raw = _minimal_raw()
     del raw["search"]["backoff"]
-    with pytest.raises(InvalidConfigError, match=r"search\.backoff: key '\w+' missing"):
+    with pytest.raises(InvalidConfigError, match=r"^search\.backoff\.factor: missing$"):
         parse_crawler_config(raw)
 
 
@@ -493,14 +493,14 @@ def test_download_output_dir_must_be_a_string() -> None:
 def test_a_missing_search_section_is_fatal() -> None:
     raw = _minimal_raw()
     del raw["search"]
-    with pytest.raises(InvalidConfigError, match="search: key 'keywords' missing"):
+    with pytest.raises(InvalidConfigError, match=r"^search\.keywords: missing$"):
         parse_crawler_config(raw)
 
 
 def test_missing_search_keywords_are_fatal() -> None:
     raw = _minimal_raw()
     del raw["search"]["keywords"]
-    with pytest.raises(InvalidConfigError, match="search: key 'keywords' missing"):
+    with pytest.raises(InvalidConfigError, match=r"^search\.keywords: missing$"):
         parse_crawler_config(raw)
 
 
@@ -586,7 +586,7 @@ def test_observability_bad_log_level_rejected() -> None:
 
 def test_observability_metrics_enabled_key_missing_rejected() -> None:
     raw = _minimal_raw() | {"observability": {"log_level": "INFO", "metrics": {"port": 9100}}}
-    with pytest.raises(InvalidConfigError, match="'enabled' missing"):
+    with pytest.raises(InvalidConfigError, match=r"^observability\.metrics\.enabled: missing$"):
         parse_crawler_config(raw)
 
 

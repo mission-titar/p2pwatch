@@ -162,10 +162,11 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
   illisible ou qui n'est pas du YAML, les deux en code 1. Au démarrage, un tel fichier se lit
   `Invalid config, refusing to start: <fichier>: <raison>` au lieu de
   `unreadable YAML file: <fichier> (...)`.
-- **Toute erreur de `crawler.yml` commence par sa clé**, `<clé>: <message>`. Six refus changent
-  donc un peu de texte : une clé retirée ou déplacée (`port_sync: was removed, ...`), une clé de la
-  racine absente (`catalog_db_path: missing` au lieu de `key 'catalog_db_path' missing`), une
-  section qui n'est pas un dictionnaire (`search.backoff: mapping expected, got list` au lieu de
+- **Toute erreur de `crawler.yml` commence par sa clé**, `<clé>: <message>`. Ces refus changent
+  donc un peu de texte : une clé retirée ou déplacée (`port_sync: was removed, ...`), une clé
+  absente (`catalog_db_path: missing` au lieu de `key 'catalog_db_path' missing`,
+  `search.keywords: missing` au lieu de `search: key 'keywords' missing`), une section qui n'est
+  pas un dictionnaire (`search.backoff: mapping expected, got list` au lieu de
   `section 'search.backoff': ...`), `search.backoff.factor: must be ≥ 1 (growth), got 0.5` et
   `search.backoff.cap_seconds: 1.0 < base_seconds (10.0): cap below floor`.
 - **Quelques lignes de journal et noms de loggers changent** : le crawler journalise sous le nom

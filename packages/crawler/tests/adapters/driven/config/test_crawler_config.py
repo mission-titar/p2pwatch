@@ -84,7 +84,7 @@ def test_an_unset_variable_under_any_key_is_an_invalid_config_naming_its_key_pat
     ("broken_file", "text", "key", "message"),
     [
         ("crawler.yml", "search: [unclosed\n", None, "{path}: invalid YAML: "),  # a broken file
-        ("crawler.yml", "search: {}\n", "search", "key 'keywords' missing"),
+        ("crawler.yml", "search: {}\n", "search.keywords", "missing"),
         ("targets.yml", "episodes: nope\n", None, "'episodes' section: list expected"),
         ("matcher.yml", "tokens: {}\nrules: {}\n", None, "'rules' section: list expected"),
     ],
