@@ -1,7 +1,7 @@
 """Observability policy: ``plan_observability(event) → ObservabilityPlan`` (spec Plan E §3, E-D3).
 
 DOMAIN ring (pure). The ONLY place that decides, for each event, severity, message,
-metric(s), audiences. ``plan_observability`` is an EXHAUSTIVE match (``assert_never`` → 100%
+metric(s), notification. ``plan_observability`` is an EXHAUSTIVE match (``assert_never`` → 100%
 branch).
 The domain knows nothing of ``logging``, Prometheus or apprise: ``Severity``/``Audience``/
 ``MetricName`` are DOMAIN enums, translated by the adapters (E-D3), and a community notification
@@ -100,18 +100,27 @@ class MetricInstruction:
 
 @dataclass(frozen=True)
 class ObservabilityPlan:
-    """What one event produces: severity + message + metric(s) + notification audiences.
+    """What one event produces: severity + message + metric(s) + notification.
 
     ``metrics`` is a TUPLE (one event can feed several metrics: ``ChannelStatusSampled`` sets
-    two gauges). Empty ``audiences`` = no notification. ``notification`` is what each audience is
-    sent: a community kind, or the log line relayed to the operations.
+    two gauges). ``notification`` is a community kind, or the log line relayed to the operations.
     """
 
     severity: Severity
     message: str
     metrics: tuple[MetricInstruction, ...] = ()
-    audiences: frozenset[Audience] = frozenset()
     notification: Notification | None = None
+
+
+def audience_of(notification: Notification) -> Audience:
+    """Who ``notification`` is for, which its kind decides."""
+    match notification:
+        case TierRise() | SourceAlert() | CompletedDownload():
+            return Audience.COMMUNITY
+        case RelayedLogLine():
+            return Audience.OPERATIONS
+        case _:  # pragma: no cover
+            assert_never(notification)
 
 
 def _rank(decision: FileTargetDecision | None) -> int:
@@ -169,13 +178,7 @@ def _relayed(
     severity: Severity, message: str, node_id: str, metrics: tuple[MetricInstruction, ...] = ()
 ) -> ObservabilityPlan:
     """An operations plan: its log line relayed under ``node_id``."""
-    return ObservabilityPlan(
-        severity,
-        message,
-        metrics,
-        frozenset({Audience.OPERATIONS}),
-        RelayedLogLine(message, severity, node_id),
-    )
+    return ObservabilityPlan(severity, message, metrics, RelayedLogLine(message, severity, node_id))
 
 
 def _channel_alert(
@@ -209,7 +212,6 @@ def _plan_decisions(event: DecisionsRecorded) -> ObservabilityPlan:
     target_titles = tuple(TargetTitle(c.target_id, c.title) for c, _ in risen)
     return replace(
         plan,
-        audiences=frozenset({Audience.COMMUNITY}),
         notification=TierRise(
             top, target_titles, event.filename, event.size_bytes, link, event.node_id
         ),
@@ -228,7 +230,6 @@ def _plan_source(
         Severity.INFO,
         f"source {short} {state_phrase}: {event.filename}",
         (MetricInstruction(MetricName.SOURCE_ALERTS, "inc", labels),),
-        frozenset({Audience.COMMUNITY}),
         SourceAlert(
             kind,
             event.source,
@@ -295,7 +296,6 @@ def plan_observability(event: Event) -> ObservabilityPlan:
                 Severity.SUCCESS,
                 f"✅ download completed: {', '.join(t.target_id for t in event.target_titles)}",
                 (MetricInstruction(MetricName.DOWNLOADS_COMPLETED, "inc"),),
-                frozenset({Audience.COMMUNITY}),
                 CompletedDownload(event.target_titles, event.filename, event.node_id),
             )
         case ChannelStatusSampled():

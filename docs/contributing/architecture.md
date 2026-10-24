@@ -691,7 +691,8 @@ flowchart LR
 ```
 
 Le **domaine** émet des `Event` purs ; une **politique** pure (`plan_observability`) les route vers des
-`ObservabilityPlan` (sévérité de log + instructions de métrique + audiences COMMUNITY/OPERATIONS) ;
+`ObservabilityPlan` (sévérité de log + instructions de métrique + notification, dont le genre donne
+l'audience COMMUNITY ou OPERATIONS) ;
 l'**étape** `ObservabilityDispatcher` (`application/steps/observability_dispatcher.py`) les applique.
 Une notification à la communauté y est une valeur typée (`TierRise`, `SourceAlert`,
 `CompletedDownload`) : le domaine n'écrit que du texte brut, l'adaptateur `AppriseNotifier` en écrit

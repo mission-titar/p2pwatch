@@ -12,6 +12,7 @@ from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction
 from p2pwatch.domain.observability import events as ev
 from p2pwatch.domain.observability.notification import (
     CompletedDownload,
+    Notification,
     RelayedLogLine,
     SourceAlert,
     SourceAlertKind,
@@ -22,13 +23,12 @@ from p2pwatch.domain.observability.policy import (
     MetricInstruction,
     MetricName,
     ObservabilityPlan,
+    audience_of,
     plan_observability,
 )
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.source import SourceKey
 
-_COMMUNITY = frozenset({Audience.COMMUNITY})
-_OPERATIONS = frozenset({Audience.OPERATIONS})
 _AMULED_KAD = (("client", "amuled"), ("channel", "kad"))
 _AMULED_ED2K = (("client", "amuled"), ("channel", "ed2k"))
 _ED2K_FIRST_USEFUL = (("network", "ed2k"), ("kind", "first_useful"))
@@ -43,9 +43,7 @@ def _relayed(
     severity: Severity, message: str, metrics: tuple[MetricInstruction, ...] = ()
 ) -> ObservabilityPlan:
     """An operations plan: its log line relayed under the event's node."""
-    return ObservabilityPlan(
-        severity, message, metrics, _OPERATIONS, RelayedLogLine(message, severity, _NODE)
-    )
+    return ObservabilityPlan(severity, message, metrics, RelayedLogLine(message, severity, _NODE))
 
 
 CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
@@ -197,7 +195,6 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
             Severity.INFO,
             "source 1f2e3d4c… useful for the first time: Keroro 062.avi",
             (MetricInstruction(MetricName.SOURCE_ALERTS, "inc", _ED2K_FIRST_USEFUL),),
-            _COMMUNITY,
             SourceAlert(
                 SourceAlertKind.FIRST_USEFUL,
                 _SOURCE,
@@ -217,7 +214,6 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
             Severity.INFO,
             "source 1f2e3d4c… reappeared after 26 h: Keroro 062.avi",
             (MetricInstruction(MetricName.SOURCE_ALERTS, "inc", _ED2K_REAPPEARED),),
-            _COMMUNITY,
             SourceAlert(
                 SourceAlertKind.REAPPEARED,
                 _SOURCE,
@@ -284,7 +280,7 @@ def test_only_a_rise_to_notify_or_download_reaches_the_community(
     before: str | None, after: str, notified: bool
 ) -> None:
     plan = plan_observability(_decisions(_change("062A", before, after)))
-    assert plan.audiences == (_COMMUNITY if notified else frozenset())
+    assert (plan.notification is not None) == notified
     assert plan.metrics == (MetricInstruction(MetricName.DECISIONS, "inc", (("tier", after),)),)
 
 
@@ -346,9 +342,26 @@ def test_a_completed_download_notifies_its_targets_and_file() -> None:
         Severity.SUCCESS,
         "✅ download completed: 062A, 062B",
         (MetricInstruction(MetricName.DOWNLOADS_COMPLETED, "inc"),),
-        _COMMUNITY,
         CompletedDownload(_062A_062B, "Keroro `062`.avi", _NODE),
     )
+
+
+@pytest.mark.parametrize(
+    ("notification", "audience"),
+    [
+        (TierRise(DecisionTier.NOTIFY, _062A, "Keroro 062.avi", 1, "ed2k://", _NODE), "community"),
+        (
+            SourceAlert(SourceAlertKind.FIRST_USEFUL, _SOURCE, None, None, (), "k.avi", _NODE),
+            "community",
+        ),
+        (CompletedDownload(_062A, "Keroro 062.avi", _NODE), "community"),
+        (RelayedLogLine("x", Severity.WARNING, _NODE), "operations"),
+    ],
+)
+def test_a_notification_goes_to_the_audience_its_kind_names(
+    notification: Notification, audience: str
+) -> None:
+    assert audience_of(notification) is Audience(audience)
 
 
 def test_a_source_without_a_name_or_a_target_is_alerted_without_them() -> None:
