@@ -1,7 +1,6 @@
 import pytest
 
 from catalog_matching.domain.models import TargetSegment
-from p2pwatch.application.steps.download_cycle import run_download_cycle
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.observability.notification import RelayedLogLine
@@ -13,11 +12,11 @@ from tests.fakes.adapters.driven.fake_free_space_meter import FakeFreeSpaceMeter
 from tests.fakes.adapters.driven.fake_logger import LoggedLine
 from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
-from tests.support.application.steps.download_deps import (
+from tests.support.application.steps.download_cycle import (
     HASH_A,
     HASH_B,
     NODE,
-    build_deps,
+    build_cycle,
     candidate,
     key,
     observation,
@@ -35,13 +34,13 @@ async def test_new_candidate_is_queued_and_link_added() -> None:
     observation_reader = FakeObservationReader(
         observations={HASH_A: observation(HASH_A, "Keroro.avi", 100)}
     )
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await run_download_cycle(deps, NODE)
+    await cycle.run(NODE)
     assert tracked_download_store.states[HASH_A] is DownloadState.QUEUED
     assert client.started == [DownloadRequest(key(HASH_A), "Keroro.avi", 100)]
 
@@ -53,13 +52,13 @@ async def test_already_downloaded_candidate_is_deduped() -> None:
     tracked_download_store.states[HASH_A] = DownloadState.DOWNLOADING  # already known
     decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
     observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "x", 1)})
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await run_download_cycle(deps, NODE)
+    await cycle.run(NODE)
     assert client.started == []  # dedup: no new link
 
 
@@ -89,7 +88,7 @@ async def test_two_segment_candidates_same_hash_dedup_to_one_download() -> None:
     observation_reader = FakeObservationReader(
         observations={HASH_A: observation(HASH_A, "Keroro 062.avi", 100)}
     )
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
@@ -97,7 +96,7 @@ async def test_two_segment_candidates_same_hash_dedup_to_one_download() -> None:
         observability_dispatcher=observability.dispatcher,
         targets=targets,
     )
-    await run_download_cycle(deps, NODE)
+    await cycle.run(NODE)
     assert list(tracked_download_store.states) == [HASH_A]
     assert tracked_download_store.states[HASH_A] is DownloadState.QUEUED
     assert started(client) == [HASH_A]
@@ -118,13 +117,13 @@ async def test_complete_target_candidate_is_skipped() -> None:
         candidates=(candidate(HASH_B, "063A"),)  # 063A status=complete
     )
     observation_reader = FakeObservationReader(observations={HASH_B: observation(HASH_B, "x", 1)})
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await run_download_cycle(deps, NODE)
+    await cycle.run(NODE)
     assert client.started == []
     assert HASH_B not in tracked_download_store.states
 
@@ -135,7 +134,7 @@ async def test_a_candidate_that_would_break_the_disk_floor_defers() -> None:
     tracked_download_store = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
     observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "x", 500)})
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
@@ -143,7 +142,7 @@ async def test_a_candidate_that_would_break_the_disk_floor_defers() -> None:
         free=1_000,
         min_free=600,  # 1000 - 500 < 600 → defers
     )
-    await run_download_cycle(deps, NODE)
+    await cycle.run(NODE)
     assert client.started == []
     assert HASH_A not in tracked_download_store.states
 
@@ -157,7 +156,7 @@ async def test_outstanding_queue_bytes_are_charged_against_the_floor() -> None:
     tracked_download_store.states[HASH_B] = DownloadState.DOWNLOADING
     decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
     observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "x", 200)})
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
@@ -165,7 +164,7 @@ async def test_outstanding_queue_bytes_are_charged_against_the_floor() -> None:
         free=1_000,
         min_free=0,
     )
-    await run_download_cycle(deps, NODE)
+    await cycle.run(NODE)
     assert client.started == []
     assert HASH_A not in tracked_download_store.states
 
@@ -179,7 +178,7 @@ async def test_a_nascent_queue_entry_commits_nothing() -> None:
     tracked_download_store.states[HASH_B] = DownloadState.DOWNLOADING
     decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
     observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "x", 200)})
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
@@ -187,7 +186,7 @@ async def test_a_nascent_queue_entry_commits_nothing() -> None:
         free=1_000,
         min_free=800,
     )
-    await run_download_cycle(deps, NODE)
+    await cycle.run(NODE)
     assert tracked_download_store.states[HASH_A] is DownloadState.QUEUED
 
 
@@ -199,13 +198,13 @@ async def test_candidate_without_observation_is_skipped() -> None:
     tracked_download_store = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
     observation_reader = FakeObservationReader(observations={})
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await run_download_cycle(deps, NODE)
+    await cycle.run(NODE)
     assert client.started == []
 
 
@@ -225,7 +224,7 @@ async def test_intra_cycle_floor_accounts_for_links_added_this_cycle() -> None:
             HASH_B: observation(HASH_B, "b", 600),
         }
     )
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
@@ -233,7 +232,7 @@ async def test_intra_cycle_floor_accounts_for_links_added_this_cycle() -> None:
         free=1000,
         min_free=0,
     )
-    await run_download_cycle(deps, NODE)
+    await cycle.run(NODE)
     assert len(client.started) == 1  # only one fit above the floor
 
 
@@ -247,13 +246,13 @@ async def test_candidate_for_unknown_target_is_treated_as_complete() -> None:
         candidates=(candidate(HASH_A, "S9E999Z"),)  # ghost target, absent from TARGETS
     )
     observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "x", 1)})
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await run_download_cycle(deps, NODE)
+    await cycle.run(NODE)
     assert client.started == []
     assert HASH_A not in tracked_download_store.states
 
@@ -267,14 +266,14 @@ async def test_dispatches_download_queued() -> None:
     observation_reader = FakeObservationReader(
         observations={HASH_A: observation(HASH_A, "Keroro.avi", 100)}
     )
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
         observability_dispatcher=observability.dispatcher,
     )
-    await run_download_cycle(deps, NODE)
+    await cycle.run(NODE)
     assert LoggedLine("info", "download queued: 062A") in observability.logger.lines
     assert MetricInstruction(MetricName.DOWNLOADS_QUEUED, "inc") in (
         observability.metrics_recorder.applied
@@ -284,13 +283,13 @@ async def test_dispatches_download_queued() -> None:
 @pytest.mark.asyncio
 async def test_each_cycle_reports_the_measured_free_space() -> None:
     observability = ObservabilityOverFakes()
-    deps = build_deps(
+    cycle = build_cycle(
         client=FakeDownloadClient(),
         tracked_download_store=FakeTrackedDownloadStore(),
         free=4_242,
         observability_dispatcher=observability.dispatcher,
     )
-    await run_download_cycle(deps, NODE)
+    await cycle.run(NODE)
     assert observability.metrics_recorder.applied == [
         MetricInstruction(MetricName.DISK_FREE_BYTES, "set", (), 4_242.0)
     ]
@@ -300,7 +299,7 @@ async def test_each_cycle_reports_the_measured_free_space() -> None:
 async def test_low_disk_warns_once_per_crossing_and_rearms_at_the_floor() -> None:
     observability = ObservabilityOverFakes()
     free_space_meter = FakeFreeSpaceMeter(500)
-    deps = build_deps(
+    cycle = build_cycle(
         client=FakeDownloadClient(),
         tracked_download_store=FakeTrackedDownloadStore(),
         free_space_meter=free_space_meter,
@@ -311,7 +310,7 @@ async def test_low_disk_warns_once_per_crossing_and_rearms_at_the_floor() -> Non
     for free in (500, 400, 600, 599):  # cross down, stay low, back AT the floor, cross again
         free_space_meter.free = free
         before = len(observability.notifier.calls)
-        await run_download_cycle(deps, NODE)
+        await cycle.run(NODE)
         warnings_per_cycle.append(len(observability.notifier.calls) - before)
     assert warnings_per_cycle == [1, 0, 0, 1]
     low = "download disk low: 0.0 GiB free, under the 0.0 GiB floor (no new download)"

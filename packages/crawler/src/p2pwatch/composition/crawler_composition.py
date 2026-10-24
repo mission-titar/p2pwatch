@@ -22,7 +22,6 @@ import sys
 from collections.abc import AsyncIterator, Callable, Coroutine, Mapping
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from datetime import timedelta
-from functools import partial
 from importlib.metadata import version
 from pathlib import Path, PurePath
 
@@ -89,9 +88,10 @@ from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
 from p2pwatch.application.steps.cataloguer import Cataloguer
+from p2pwatch.application.steps.download_cycle import DownloadCycle
 from p2pwatch.application.steps.download_decider import DownloadDecider
 from p2pwatch.application.steps.download_labeler import DownloadLabeler
-from p2pwatch.application.steps.download_loop import DownloadLoopDeps, download_loop
+from p2pwatch.application.steps.download_loop import DownloadLoop
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.file_judge import FileJudge
@@ -448,11 +448,8 @@ class CrawlerComposition(CrawlerRunner):
                     observability_dispatcher=observability_dispatcher,
                     logger=StdlibLogger(DownloadTracker.__module__),
                 )
-                download_deps = DownloadLoopDeps(
+                download_cycle = DownloadCycle(
                     download_client=client,
-                    poll_interval_seconds=download_config.poll_interval_seconds,
-                    monotonic_clock=monotonic_clock,
-                    logger=StdlibLogger(download_loop.__module__),
                     download_tracker=download_tracker,
                     download_decider=DownloadDecider(
                         free_space_meter=ShutilFreeSpaceMeter(download_config.output_directory),
@@ -488,10 +485,16 @@ class CrawlerComposition(CrawlerRunner):
                         observability_dispatcher=observability_dispatcher,
                         logger=StdlibLogger(SourceWatcher.__module__),
                     ),
+                    logger=StdlibLogger(DownloadCycle.__module__),
+                )
+                download_loop = DownloadLoop(
+                    download_cycle=download_cycle,
+                    poll_interval_seconds=download_config.poll_interval_seconds,
+                    monotonic_clock=monotonic_clock,
                     waker=waker,
                     run_state_reader=run_state_store,
                 )
-                loops.append(partial(download_loop, download_deps))
+                loops.append(download_loop.run)
 
             crawler_lifecycle = CrawlerLifecycle(
                 configured_node_id=crawler_config.node_id,

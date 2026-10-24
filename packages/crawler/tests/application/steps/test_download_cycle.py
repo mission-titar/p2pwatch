@@ -1,6 +1,5 @@
 import pytest
 
-from p2pwatch.application.steps.download_cycle import run_download_cycle
 from p2pwatch.domain.client_errors import (
     ClientUnreachableError,
     DownloadRejectedError,
@@ -14,12 +13,12 @@ from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationR
 from tests.fakes.adapters.driven.fake_source_client import FakeSourceClient
 from tests.fakes.adapters.driven.fake_source_point_store import FakeSourcePointStore
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
-from tests.support.application.steps.download_deps import (
+from tests.support.application.steps.download_cycle import (
     HASH_A,
     HASH_B,
     HASH_C,
     NODE,
-    build_deps,
+    build_cycle,
     candidate,
     observation,
     started,
@@ -36,12 +35,12 @@ _UNAVAILABLE = [ClientUnreachableError("daemon down"), ReadRejectedError("amuled
 async def test_unreachable_client_is_tolerated_and_iteration_skipped(failure: Exception) -> None:
     client = FakeDownloadClient(list_failures=[failure])
     tracked_download_store = FakeTrackedDownloadStore()
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),)),
     )
-    await run_download_cycle(deps, NODE)  # does not raise
+    await cycle.run(NODE)  # does not raise
     assert client.started == []  # iteration skipped (no candidates processed)
 
 
@@ -53,13 +52,13 @@ async def test_store_error_is_absorbed() -> None:
     )  # record_queued raises StoreError
     decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
     observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "x", 1)})
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await run_download_cycle(deps, NODE)  # does not raise (StoreError absorbed)
+    await cycle.run(NODE)  # does not raise (StoreError absorbed)
 
 
 @pytest.mark.asyncio
@@ -70,13 +69,13 @@ async def test_start_unreachable_keeps_queued_and_is_tolerated() -> None:
     tracked_download_store = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
     observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "x", 1)})
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await run_download_cycle(deps, NODE)  # does not raise
+    await cycle.run(NODE)  # does not raise
     assert tracked_download_store.states[HASH_A] is DownloadState.QUEUED  # stays queued → caught up
     assert client.started == []
 
@@ -93,13 +92,13 @@ async def test_completion_and_new_candidate_in_the_same_cycle() -> None:
     observation_reader = FakeObservationReader(
         observations={HASH_B: observation(HASH_B, "b.avi", 100)}
     )
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await run_download_cycle(deps, NODE)
+    await cycle.run(NODE)
     assert (
         tracked_download_store.states[HASH_A] is DownloadState.COMPLETED
     )  # shared and out of the queue
@@ -126,13 +125,13 @@ async def test_completion_store_failure_does_not_starve_new_candidates() -> None
     observation_reader = FakeObservationReader(
         observations={HASH_B: observation(HASH_B, "b.avi", 100)}
     )
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await run_download_cycle(deps, NODE)  # does not raise
+    await cycle.run(NODE)  # does not raise
     # Observable effect of step 3: HASH_B enqueued AND its link emitted despite the step-2 failure.
     assert tracked_download_store.states[HASH_B] is DownloadState.QUEUED
     assert HASH_B in started(client)
@@ -156,13 +155,13 @@ async def test_candidate_store_failure_does_not_starve_completions() -> None:
     observation_reader = FakeObservationReader(
         observations={HASH_B: observation(HASH_B, "b.avi", 100)}
     )
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await run_download_cycle(deps, NODE)  # does not raise
+    await cycle.run(NODE)  # does not raise
     # Observable effect of step 2: HASH_A completed despite the step-3 failure.
     assert tracked_download_store.states[HASH_A] is DownloadState.COMPLETED
     # HASH_B was NOT enqueued (record_queued raised) → no link emitted for it.
@@ -185,13 +184,13 @@ async def test_monitor_unreachable_aborts_subsequent_steps() -> None:
     observation_reader = FakeObservationReader(
         observations={HASH_B: observation(HASH_B, "b.avi", 100)}
     )
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await run_download_cycle(deps, NODE)  # does not raise (tolerated) but EVERYTHING is skipped
+    await cycle.run(NODE)  # does not raise (tolerated) but EVERYTHING is skipped
     assert tracked_download_store.states[HASH_A] is DownloadState.COMPLETED  # unchanged
     assert HASH_B not in tracked_download_store.states  # step 3 NOT executed
     assert client.started == []
@@ -210,13 +209,13 @@ async def test_monitor_store_failure_is_isolated_and_does_not_starve_candidates(
     observation_reader = FakeObservationReader(
         observations={HASH_B: observation(HASH_B, "b.avi", 100)}
     )
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await run_download_cycle(deps, NODE)  # does not raise
+    await cycle.run(NODE)  # does not raise
     # Step 3 ran despite the step-1 failure: HASH_B enqueued + link emitted.
     assert tracked_download_store.states[HASH_B] is DownloadState.QUEUED
     assert HASH_B in started(client)
@@ -225,20 +224,20 @@ async def test_monitor_store_failure_is_isolated_and_does_not_starve_candidates(
 @pytest.mark.asyncio
 async def test_start_store_failure_is_tolerated_and_does_not_raise() -> None:
     # start_unlisted raises StoreError (set_state fails while marking a rejected start) →
-    # tolerated (log), run_download_cycle does not raise. Contract "never raises".
+    # tolerated (log), the cycle does not raise. Contract "never raises".
     # start rejected → start_unlisted tries set_state(FAILED), which raises
     # StoreError.
     client = FakeDownloadClient(start_failures=[DownloadRejectedError("rejected")])
     tracked_download_store = FakeTrackedDownloadStore(fail_set_state_for={HASH_A})
     decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
     observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "x", 1)})
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await run_download_cycle(deps, NODE)  # does NOT raise (step-4 StoreError tolerated)
+    await cycle.run(NODE)  # does NOT raise (step-4 StoreError tolerated)
 
 
 @pytest.mark.asyncio
@@ -250,7 +249,7 @@ async def test_an_unmeasurable_output_directory_admits_nothing_and_does_not_rais
     decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
     observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "x", 100)})
     observability = ObservabilityOverFakes()
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
@@ -258,7 +257,7 @@ async def test_an_unmeasurable_output_directory_admits_nothing_and_does_not_rais
         free_space_meter=FakeBrokenFreeSpaceMeter(),
         observability_dispatcher=observability.dispatcher,
     )
-    await run_download_cycle(deps, NODE)
+    await cycle.run(NODE)
     assert client.started == []
     assert HASH_A not in tracked_download_store.states
     assert observability.logger.lines == []
@@ -281,16 +280,13 @@ async def test_a_daemon_unavailable_while_reading_sources_ends_the_round_after_t
         observations={HASH_C: observation(HASH_C, "c.avi", 1)}
     )
     sources = FakeSourcePointStore()
-    await run_download_cycle(
-        build_deps(
-            client=client,
-            source_client=source_client,
-            tracked_download_store=tracked_download_store,
-            observation_reader=observation_reader,
-            sources=sources,
-        ),
-        NODE,
-    )  # does not raise
+    await build_cycle(
+        client=client,
+        source_client=source_client,
+        tracked_download_store=tracked_download_store,
+        observation_reader=observation_reader,
+        sources=sources,
+    ).run(NODE)  # does not raise
     assert started(client) == [HASH_C]
     assert source_client.source_reads == [HASH_A]
     assert sources.recorded == []
@@ -301,10 +297,10 @@ async def test_a_store_failure_reading_the_tracked_downloads_reads_no_source() -
     client = FakeDownloadClient(listed=[(status(HASH_A),)])
     source_client = FakeSourceClient()
     tracked_download_store = FakeTrackedDownloadStore(fail_tracked_states=True)
-    deps = build_deps(
+    cycle = build_cycle(
         client=client, source_client=source_client, tracked_download_store=tracked_download_store
     )
-    await run_download_cycle(deps, NODE)  # does not raise
+    await cycle.run(NODE)  # does not raise
     assert source_client.source_reads == []
 
 
@@ -320,11 +316,11 @@ async def test_a_daemon_unreachable_at_the_start_reads_no_source() -> None:
         observations={HASH_C: observation(HASH_C, "c.avi", 1)}
     )
     source_client = FakeSourceClient()
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         source_client=source_client,
         tracked_download_store=tracked_download_store,
         observation_reader=observation_reader,
     )
-    await run_download_cycle(deps, NODE)
+    await cycle.run(NODE)
     assert source_client.source_reads == []
