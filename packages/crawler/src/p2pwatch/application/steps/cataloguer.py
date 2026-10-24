@@ -1,7 +1,7 @@
 """The cataloguer, the per-observation pipeline: record → delegate to the file judge (spec §4).
 
-APPLICATION ring (orchestration spec §4): orchestrates PORTS (synchronous stores + pure engine
-+ async waker), does no I/O itself. For EACH observation (spec §4):
+APPLICATION ring (orchestration spec §4): writes through the ``ObservationWriter`` and hands the
+file to ``FileJudge``, doing no I/O itself. For EACH observation (spec §4):
 
 1. ``record_observation`` ALWAYS (periodic re-observation is the goal, spec §3/§6).
 2. ``FileJudge.rejudge`` (``file_judge.py``) does the rest: evaluate via the pure
