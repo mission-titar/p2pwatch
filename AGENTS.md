@@ -221,7 +221,7 @@ a function does.
 | `driving` | the side that calls the core: a driving port is what a use case offers, a driving adapter calls it (the command line, the webui) | `primary`, `inbound` |
 | `driven` | the side the core calls: a driven port is what the core needs, a driven adapter implements it (SQLite, amuleapi) | `secondary`, `outbound` |
 | `use case` | an operation called from outside through a driving port, in `application/use_cases/`: `ValidateConfig` | `service`, `interactor` |
-| `step` | a stage of the lifecycle's graph, called only by the lifecycle or another step, in `application/steps/`: `resolve_node_id` | a use case |
+| `step` | a stage of the lifecycle's graph, called only by the lifecycle or another step, in `application/steps/`: `NodeIdResolver` | a use case |
 | `lifecycle` | the program from its start to its stop, which the composition runs: `CrawlerLifecycle`, `PortSyncLifecycle`, behind no driving port | `app` |
 | `micros` | an integer of microseconds: an instant counts from the epoch | a bare `_at` on an `int` |
 | `id`, `db`, `sql`, `url`, `api`, `json`, `ecid`, `mib`, `iso`, `min`, `max`, `conf`, `argv`, `env`, `cwd` | the abbreviations allowed (`conf`: aMule's `amule.conf`; `argv`, `env`, `cwd`: what a `__main__.py` reads of its process) | `dir` for `directory` |

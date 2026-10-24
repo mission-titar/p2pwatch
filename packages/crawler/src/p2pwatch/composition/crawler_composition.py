@@ -87,6 +87,7 @@ from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
+from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.download_cycle import DownloadCycle
 from p2pwatch.application.steps.download_decider import DownloadDecider
@@ -95,9 +96,8 @@ from p2pwatch.application.steps.download_loop import DownloadLoop
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.file_judge import FileJudge
+from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.application.steps.reevaluate_catalog import reevaluate_catalog
-from p2pwatch.application.steps.reevaluate_if_policy_changed import reevaluate_if_policy_changed
 from p2pwatch.application.steps.search_tasks import SearchTaskRunner
 from p2pwatch.application.steps.search_worker import (
     BackoffPolicy,
@@ -363,14 +363,15 @@ class CrawlerComposition(CrawlerRunner):
                     wall_clock=wall_clock,
                     monotonic_clock=monotonic_clock,
                 )
-            # SHARED backoff registry: built ONCE, resumed by the lifecycle at its start (backoff
-            # survives restart, spec §3/§7), injected into ALL workers + passed to the search tasks
-            # that persist it. Single writer on the event loop.
+            # SHARED backoff registry: built ONCE, resumes its waits at the lifecycle's start
+            # (backoff survives restart, spec §3/§7), injected into ALL workers + passed to the
+            # search tasks that persist it. Single writer on the event loop.
             backoff = BackoffRegistry(
                 _backoff_policy(crawler_config),
                 wall_clock,
                 monotonic_clock,
                 RandomJitterGenerator(jitter_seed=None),  # seeded by the system's entropy
+                backoff_state_store,
             )
             file_judge = FileJudge(
                 observation_reader=observation_store,
@@ -497,29 +498,28 @@ class CrawlerComposition(CrawlerRunner):
                 loops.append(download_loop.run)
 
             crawler_lifecycle = CrawlerLifecycle(
-                configured_node_id=crawler_config.node_id,
-                node_id_reader=node_id_store,
-                node_id_writer=node_id_store,
-                node_id_generator=Uuid4NodeIdGenerator(),
-                wall_clock=wall_clock,
+                node_id_resolver=NodeIdResolver(
+                    configured_node_id=crawler_config.node_id,
+                    node_id_reader=node_id_store,
+                    node_id_writer=node_id_store,
+                    node_id_generator=Uuid4NodeIdGenerator(),
+                    wall_clock=wall_clock,
+                ),
                 observability_dispatcher=observability_dispatcher,
-                policy_fingerprint=config.policy_fingerprint,
-                policy_fingerprint_reader=policy_fingerprint_store,
-                policy_fingerprint_writer=policy_fingerprint_store,
-                reevaluate=lambda node_id: reevaluate_catalog(
+                catalog_reevaluator=CatalogReevaluator(
+                    policy_fingerprint=config.policy_fingerprint,
+                    policy_fingerprint_reader=policy_fingerprint_store,
+                    policy_fingerprint_writer=policy_fingerprint_store,
                     file_judge=file_judge,
                     catalog_scan_reader=catalog_scan_reader,
-                    logger=StdlibLogger(reevaluate_catalog.__module__),
-                    node_id=node_id,
                     progress_every_files=_REEVALUATION_PROGRESS_EVERY_FILES,
+                    logger=StdlibLogger(CatalogReevaluator.__module__),
                 ),
                 backoff=backoff,
-                backoff_state_reader=backoff_state_store,
                 loops=loops,
                 download_enabled=download_config is not None,
                 run_state_reader=run_state_store,
                 logger=StdlibLogger(CrawlerLifecycle.__module__),
-                reevaluation_gate_logger=StdlibLogger(reevaluate_if_policy_changed.__module__),
             )
             # Entered disarmed: the steady state is unbounded, and the run arms it as soon as the
             # shutdown is requested, so the unwind and the close below are bounded.

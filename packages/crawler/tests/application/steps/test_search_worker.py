@@ -25,6 +25,7 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability.policy import MetricInstruction, MetricName
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
+from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_search_client import (
@@ -68,10 +69,12 @@ def _reported_file() -> ReportedFile:
 
 
 def _registry(
-    fake_time: FakeTime, jitter_generator: FakeJitterGenerator | None = None
+    fake_time: FakeTime, saved: dict[BackoffKey, BackoffState] | None = None
 ) -> BackoffRegistry:
+    backoff_state_store = FakeBackoffStateStore()
+    backoff_state_store.set_backoff_states(saved or {})
     return BackoffRegistry(
-        _POLICY, fake_time.wall, fake_time.monotonic, jitter_generator or FakeJitterGenerator()
+        _POLICY, fake_time.wall, fake_time.monotonic, FakeJitterGenerator(), backoff_state_store
     )
 
 
@@ -187,7 +190,9 @@ def test_backoff_registry_jitter_extends_the_delay() -> None:
     fake_time = FakeTime()
     policy = dataclasses.replace(_POLICY, jitter_ratio=0.5)  # jitter in [0, 0.5*delay)
     jitter_generator = FakeJitterGenerator(jitter_value=1.0)  # constant 1.0s jitter
-    registry = BackoffRegistry(policy, fake_time.wall, fake_time.monotonic, jitter_generator)
+    registry = BackoffRegistry(
+        policy, fake_time.wall, fake_time.monotonic, jitter_generator, FakeBackoffStateStore()
+    )
     delay = registry.record_failure(_KAD)
     assert delay == timedelta(seconds=3)  # base 2.0 + jitter 1.0
     assert jitter_generator.jitter_spans == [1.0]  # span = jitter_ratio (0.5) * delay (2.0)
@@ -202,30 +207,32 @@ def test_the_snapshot_holds_each_waits_start_on_the_wall_clock_and_its_delay() -
     assert registry.snapshot() == {_KAD: BackoffState(1, started_at, timedelta(seconds=2))}
 
 
-def test_a_loaded_backoff_waits_what_is_left_of_its_delay() -> None:
+def test_a_resumed_backoff_waits_what_is_left_of_its_delay() -> None:
     fake_time = FakeTime()
     started_at = fake_time.wall.now() - timedelta(seconds=100)
-    registry = _registry(fake_time)
-    registry.load_from({_KAD: BackoffState(1, started_at, timedelta(seconds=300))})
+    saved = {_KAD: BackoffState(1, started_at, timedelta(seconds=300))}
+    registry = _registry(fake_time, saved)
+    registry.resume_waits()
+    assert registry.snapshot() == saved
     assert registry.time_until_retry(_KAD) == timedelta(seconds=200)
 
 
-def test_a_loaded_backoff_started_in_the_future_waits_its_delay_at_most() -> None:
+def test_a_resumed_backoff_started_in_the_future_waits_its_delay_at_most() -> None:
     fake_time = FakeTime()
     started_at = fake_time.wall.now() + timedelta(hours=1)
-    registry = _registry(fake_time)
-    registry.load_from({_KAD: BackoffState(1, started_at, timedelta(seconds=300))})
+    registry = _registry(fake_time, {_KAD: BackoffState(1, started_at, timedelta(seconds=300))})
+    registry.resume_waits()
     fake_time.advance(timedelta(seconds=299))
     assert registry.is_in_backoff(_KAD) is True
     fake_time.advance(timedelta(seconds=1))
     assert registry.is_in_backoff(_KAD) is False
 
 
-def test_a_loaded_backoff_keeps_its_attempts() -> None:
+def test_a_resumed_backoff_keeps_its_attempts() -> None:
     fake_time = FakeTime()
     started_at = fake_time.wall.now() - timedelta(hours=1)
-    registry = _registry(fake_time)
-    registry.load_from({_KAD: BackoffState(2, started_at, timedelta(seconds=4))})
+    registry = _registry(fake_time, {_KAD: BackoffState(2, started_at, timedelta(seconds=4))})
+    registry.resume_waits()
     assert registry.is_in_backoff(_KAD) is False
     assert registry.record_failure(_KAD) == timedelta(seconds=8)  # the third attempt
 

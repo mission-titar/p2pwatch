@@ -68,10 +68,10 @@ class _Tasks:
         self.decision_store = decision_store
         self.engine = engine
         self.wall_clock = FakeLoopWallClock()
-        self.backoff = BackoffRegistry(
-            _POLICY, self.wall_clock, FakeLoopMonotonicClock(), FakeJitterGenerator()
-        )
         self.state = FakeBackoffStateStore()
+        self.backoff = BackoffRegistry(
+            _POLICY, self.wall_clock, FakeLoopMonotonicClock(), FakeJitterGenerator(), self.state
+        )
         self.run_state = FakeRunStateStore()
         self.logger = FakeLogger()
 
@@ -201,16 +201,17 @@ def test_the_backoff_resumed_after_the_tasks_were_built_is_not_saved_again(
     tasks: _Tasks,
 ) -> None:
     resumed = {BackoffKey("amuled", "ed2k"): BackoffState(1, EPOCH, timedelta(seconds=60))}
+    tasks.state.set_backoff_states(resumed)  # the previous run's save
 
     async def resume_once_built() -> None:
         searching = tasks.searching(FakeTimedSearchClient({"kad": 30.0}), ["keroro"])
-        tasks.backoff.load_from(resumed)
+        tasks.backoff.resume_waits()
         with suppress(TimeoutError):
             async with asyncio.timeout(100.0):
                 await searching
 
     run_virtual(resume_once_built())
-    assert tasks.state.saved == []
+    assert tasks.state.saved == [resumed]
 
 
 def test_a_failed_save_is_logged_and_retried_after_the_next_search(tasks: _Tasks) -> None:

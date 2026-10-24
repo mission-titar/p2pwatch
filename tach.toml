@@ -342,15 +342,8 @@ depends_on = [
 path = "p2pwatch.application.crawler_lifecycle"
 layer = "lifecycle"
 depends_on = [
-  "p2pwatch.application.ports.driven.backoff_state_reader",
   "p2pwatch.application.ports.driven.logger",
-  "p2pwatch.application.ports.driven.node_id_generator",
-  "p2pwatch.application.ports.driven.node_id_reader",
-  "p2pwatch.application.ports.driven.node_id_writer",
-  "p2pwatch.application.ports.driven.policy_fingerprint_reader",
-  "p2pwatch.application.ports.driven.policy_fingerprint_writer",
   "p2pwatch.application.ports.driven.run_state_reader",
-  "p2pwatch.application.ports.driven.wall_clock",
   "p2pwatch.application.steps",
   "p2pwatch.domain",
 ]
