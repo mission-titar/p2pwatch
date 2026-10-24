@@ -1,6 +1,7 @@
 """``FakeTime``: the clock step the monotonic clock's tests rely on; ``FakeLogger``: its lines;
 ``FakeDecisionReader`` and ``FakeObservationReader``: the reads the download loop never makes;
-``FakeNoSetStateTrackedDownloadStore``: the state change a cycle never makes."""
+``FakeNoSetStateTrackedDownloadStore``: the state change a cycle never makes;
+``FakeBlockingMonotonicClock``: the time the download loop never reads from it."""
 
 from datetime import timedelta
 
@@ -8,6 +9,7 @@ import pytest
 
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import FileKey, Network
+from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_no_set_state_tracked_download_store import (
@@ -69,3 +71,8 @@ def test_the_store_refuses_the_state_change_a_cycle_never_makes() -> None:
         FakeNoSetStateTrackedDownloadStore().set_state(
             FileKey(Network.ED2K, "a" * 32), DownloadState.FAILED
         )
+
+
+def test_the_blocking_clock_refuses_the_time_the_download_loop_never_reads() -> None:
+    with pytest.raises(AssertionError, match="no time"):
+        FakeBlockingMonotonicClock().now()
