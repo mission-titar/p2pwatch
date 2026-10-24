@@ -5,7 +5,7 @@ LATEST match decision **per target** (ROW_NUMBER window PARTITION BY ``(file_id,
 so a whole-episode file contributes to every target it matches. The legacy ``target_id=''``
 sentinel and per-target ``retracted`` rows are excluded.
 
-All SQL lives in module constants, parameterized (no value interpolation).
+All SQL lives in module constants, parameterized; only the tiers are interpolated, from their enum.
 """
 
 from catalog_matching.domain.decision_tier import DecisionTier
@@ -18,12 +18,15 @@ from p2pwatch.application.ports.driven.coverage_reader import CoverageReader
 # Constants
 # ---------------------------------------------------------------------------
 
+# Every tier a decision takes, from the closed enum (no user input, safe to interpolate).
+_DECISION_TIERS = ", ".join(f"'{tier}'" for tier in DecisionTier)
+
 # Latest decision per (file_id, target_id) via ROW_NUMBER window: a whole-episode file holds
 # one CURRENT decision per target it satisfies, so it must contribute to each of them, not
 # just the single most-recent row across all its targets. The legacy target_id='' sentinel
 # (pre-per-target retraction model) is excluded, and a per-target "retracted" latest decision
-# (retracted == unmatched for that target) is dropped too.
-_SQL_COVERAGE = """\
+# (retracted == unmatched for that target) is dropped too: it is no ``DecisionTier``.
+_SQL_COVERAGE = f"""\
 SELECT
     ld.file_id,
     ld.target_id,
@@ -41,7 +44,7 @@ FROM (
 ) AS ld
 WHERE ld.rn = 1
 AND ld.target_id != ''
-AND ld.tier != 'retracted'
+AND ld.tier IN ({_DECISION_TIERS})
 ORDER BY ld.target_id, ld.file_id
 """
 
