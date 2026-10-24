@@ -181,7 +181,7 @@ valide le plan"):
 | `AMULE_CLIENT_NAME` among the domain's defaults | fixed in 320: the composition's `_AMULE_CLIENT_NAME`; spec D2 corrected |
 | the readers' `'retracted'` literals | fixed in 320: `tier IN (<every DecisionTier>)`, generated from the enum |
 | `download_tracker.py`'s `del` after a loss, a surviving mutant | fixed in 320: deleted, the reconciliation owns the drop |
-| `async with PosixProcess(...), resource_stack()`'s untested order | accepted limit (no unit test can reach inside `run_crawler`); a comment names the exit order, since nested statements are refused by ruff's SIM117 and would re-indent 221 lines |
+| `async with PosixProcess(...), resource_stack()`'s untested order | fixed by a comment naming the exit order, SIM117 refusing nested statements (which would also re-indent 221 lines); no unit test can reach inside `run_crawler`. The operator's "oui" |
 | stale docs: matching's `AGENTS.md` sketch, `mapping.py`, the cataloguer's docstring | fixed in 320 |
 | two docstrings of this lot pointing at a bare decision id | fixed in 320; the ones moved verbatim from `run_download_cycle.py` stay |
 | `docs/operate.md`'s 147-character line | fixed in 320 |
@@ -262,6 +262,8 @@ valide le plan"):
   at 40 ("ok"); `search_tasks.py` renamed in 317 ("ok").
 - Block 317: kept whole at 637 lines and 22 files under a mechanical exemption ("Validé"); `log_at_severity` private
   and `Severity.ERROR` deleted ("Validé").
+- Block 320: kept whole at 22 files, with a one-line comment instead of the two nested `async with` ruff refuses
+  ("oui").
 
 ## Names settled by teammates
 
@@ -350,7 +352,7 @@ for 39 pull requests, so 21 beyond one run each.
 - **Re-pushes by a block's own teammate before the next block began** (5): blocks 20, 110, 155, 170, and 190, which
   took block 200's first commit.
 - **Cascaded rebases**: two (block 45's over five branches, block 265's over three).
-- **Bodies called unreadable**: none reported.
+- **Bodies called unreadable**: none; the operator called no body unreadable unprompted.
 - **The measure**: 16 runs re-triggered by fix-backs and cascades, 21 counting the teammates' own re-pushes, against 40
   blocks. Fewer runs than blocks and no unreadable body: by workflow's measure, stacking cost less than pull requests in
   series.
@@ -359,6 +361,7 @@ for 39 pull requests, so 21 beyond one run each.
   to 155, 160 to 170, 200 to 190.
 - **Exemptions**: 10 and 30 (the spec), 180 (28 files), 220 (600 lines), 265 (890 lines, 15 files), 315 (921 lines,
   22 files), 317 (637 lines, 22 files).
+- **The file allowance passed**: 320 at 22 files by the operator (139 lines).
 - **The file allowance** (20 or 21 files): blocks 80, 90, 110, 120 and 230; block 160 at 22 by the operator.
 - **Bodies called unreadable**: none known at writing.
 
