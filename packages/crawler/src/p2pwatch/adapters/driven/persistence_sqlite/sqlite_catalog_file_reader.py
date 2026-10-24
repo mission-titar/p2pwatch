@@ -57,7 +57,9 @@ def _tier_rank_case(column: str) -> str:
 
 
 _TIER_RANK_CASE = _tier_rank_case("ld.tier")
-# The tiers that identify a target, from the closed enum too: ``catalog`` is left out.
+# Every tier a decision takes, from the closed enum too: a retraction's row is left out.
+_DECISION_TIERS = ", ".join(f"'{tier}'" for tier in DecisionTier)
+# The tiers that identify a target: ``catalog`` is left out too.
 _IDENTIFYING_TIERS = ", ".join(f"'{tier}'" for tier in DecisionTier if tier.identifies_target)
 
 # The "latest per group" CTEs shared by the explorer list + counter, each folding an
@@ -89,7 +91,7 @@ WITH latest_dec AS (
     )
     WHERE rn = 1
     AND target_id != ''
-    AND tier != 'retracted'
+    AND tier IN ({_DECISION_TIERS})
 ),
 dec_agg AS (
     SELECT
@@ -166,7 +168,7 @@ JOIN files AS f ON f.file_id = ld.file_id
 
 # All current decisions of a file: latest per (file_id, target_id), excluding the legacy
 # ``target_id == ''`` sentinel and any target whose latest row is a ``retracted`` marker.
-_SQL_FILE_DECISIONS = """\
+_SQL_FILE_DECISIONS = f"""\
 SELECT target_id, rule_name, tier, decided_at, node_id
 FROM (
     SELECT
@@ -184,7 +186,7 @@ FROM (
 )
 WHERE rn = 1
 AND target_id != ''
-AND tier != 'retracted'
+AND tier IN ({_DECISION_TIERS})
 ORDER BY target_id
 """
 
