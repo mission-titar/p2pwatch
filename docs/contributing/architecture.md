@@ -234,7 +234,7 @@ flowchart TB
 
 C'est le cœur du système et sa raison d'être : **être là 24/7** pour attraper un fichier rare à
 l'instant où une source le partage. Une tâche par *(client, canal, mot-clé)* cherche en boucle,
-toutes en même temps (`application/steps/search_tasks.py`).
+toutes en même temps (`application/steps/search_task_runner.py`).
 
 ```mermaid
 flowchart TD
@@ -731,7 +731,7 @@ démon sont
 | Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`) |
 | Démarrage et boucles | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/loop_supervisor.py` (`LoopSupervisor`) |
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
-| Boucles | `application/steps/` : `search_tasks.py`, `status_loop.py`, `download_loop.py` (`DownloadLoop`, qui répète le cycle `DownloadCycle` de `download_cycle.py` et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`, `source_watcher.py`, et `download_labeler.py`, qui nomme un téléchargement dans ses notifications) |
+| Boucles | `application/steps/` : `search_task_runner.py` (`SearchTaskRunner`, sur les `SearchWorker` de `search_worker.py` et leur `BackoffRegistry` de `backoff_registry.py`), `status_loop.py`, `download_loop.py` (`DownloadLoop`, qui répète le cycle `DownloadCycle` de `download_cycle.py` et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`, `source_watcher.py`, et `download_labeler.py`, qui nomme un téléchargement dans ses notifications) |
 | Cas d'usage | `application/use_cases/` : les pages (`summarize_crawl.py`, `describe_*.py`, `list_*.py`, `run_console_query.py`), les contrôles (`pause_crawl.py`, `resume_crawl.py`, `request_shutdown.py`), `validate_config.py`, `merge_catalogs.py` |
 | Config | `adapters/driven/config/` (lit les trois fichiers, résout `${VAR}`), `domain/crawler_config.py` (contrôle et construit `CrawlerConfig`) |
 | Recherche (pure) | `domain/search/` (`keywords`, `backoff`) |

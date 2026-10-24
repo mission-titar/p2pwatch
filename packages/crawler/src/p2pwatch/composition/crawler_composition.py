@@ -100,7 +100,7 @@ from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.loop_supervisor import LoopSupervisor
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.application.steps.search_tasks import SearchTaskRunner
+from p2pwatch.application.steps.search_task_runner import SearchTaskRunner
 from p2pwatch.application.steps.search_worker import SearchWorker
 from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.application.steps.status_loop import StatusLoop
@@ -410,7 +410,7 @@ class CrawlerComposition(CrawlerRunner):
                 run_state_reader=run_state_store,
                 status_reading_writer=status_reading_store,
             )
-            search_tasks = SearchTaskRunner(
+            search_task_runner = SearchTaskRunner(
                 workers=workers,
                 keywords=crawler_config.search.keywords,
                 run_state_reader=run_state_store,
@@ -420,7 +420,7 @@ class CrawlerComposition(CrawlerRunner):
                 logger=StdlibLogger(SearchTaskRunner.__module__),
             )
             loops: list[Callable[[str], Coroutine[object, object, None]]] = [
-                search_tasks.run,
+                search_task_runner.run,
                 status_loop.run,
             ]
 
