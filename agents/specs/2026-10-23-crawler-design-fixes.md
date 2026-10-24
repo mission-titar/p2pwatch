@@ -247,7 +247,7 @@ exemptions of blocks 10 and 30 on their rows.
   The operator's choice is A13's option a; resolving everywhere is its price, named in appendix B. In block 20 the
   checks also stop calling `interpolate` and carry their key path apart from their message.
 - **D2.** `domain/crawler_config.py` holds `CrawlerConfig`, `LoadedConfig` and the checks; `AMULE_CLIENT_NAME` joins
-  `config_defaults.py` in block 20 (Corrected: in block 20, as appendix A's row says, not 30); `time_between_source_reads` moves with `DownloadConfig`, so A2's "time between reads
+  `config_defaults.py` in block 20 (Corrected: in block 20, as appendix A's row says, not 30; then a composition constant in block 320, since no option sets it); `time_between_source_reads` moves with `DownloadConfig`, so A2's "time between reads
   computed by the domain" is met here; `math` joins `domain-imports.yml`. The matching parses `matcher.yml` in its
   domain the same way (A13). This supersedes the ledger's A9 config half ("`ConfigError` internal to the config
   adapter, no change"): once the domain builds the config, it raises its own error, and two types for one refusal
