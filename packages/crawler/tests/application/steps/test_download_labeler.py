@@ -5,7 +5,7 @@ from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
-from tests.support.application.steps.download_deps import (
+from tests.support.application.steps.download_cycle import (
     HASH_A,
     HASH_B,
     candidate,

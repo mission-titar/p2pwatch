@@ -1,6 +1,5 @@
 import pytest
 
-from p2pwatch.application.steps.download_cycle import run_download_cycle
 from p2pwatch.domain.client_errors import DownloadRejectedError
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.states import DownloadState, FailureReason
@@ -8,11 +7,11 @@ from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
-from tests.support.application.steps.download_deps import (
+from tests.support.application.steps.download_cycle import (
     HASH_A,
     HASH_B,
     NODE,
-    build_deps,
+    build_cycle,
     candidate,
     key,
     observation,
@@ -29,12 +28,12 @@ async def test_queued_download_without_observation_emits_no_link() -> None:
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.states[HASH_A] = DownloadState.QUEUED
     tracked_download_store.sizes[HASH_A] = 100
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         observation_reader=FakeObservationReader(observations={}),  # no observation
     )
-    await run_download_cycle(deps, NODE)
+    await cycle.run(NODE)
     assert client.started == []
 
 
@@ -46,13 +45,13 @@ async def test_start_rejected_marks_failed_and_does_not_crash() -> None:
     tracked_download_store = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
     observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "x", 1)})
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await run_download_cycle(deps, NODE)  # does not raise (application failure tolerated per hash)
+    await cycle.run(NODE)  # does not raise (application failure tolerated per hash)
     assert (
         tracked_download_store.states[HASH_A] is DownloadState.FAILED
     )  # link rejected → marked failed
@@ -75,13 +74,13 @@ async def test_start_rejected_for_one_file_does_not_block_the_next() -> None:
             HASH_B: observation(HASH_B, "b", 1),
         }
     )
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await run_download_cycle(deps, NODE)
+    await cycle.run(NODE)
     assert tracked_download_store.states[HASH_A] is DownloadState.FAILED  # rejected
     assert tracked_download_store.states[HASH_B] is DownloadState.QUEUED  # accepted (link emitted)
     assert HASH_B in started(client)
@@ -97,14 +96,14 @@ async def test_a_download_the_client_forgot_is_started_once_per_round_until_list
     observation_reader = FakeObservationReader(
         observations={HASH_A: observation(HASH_A, "a.avi", 9)}
     )
-    deps = build_deps(
+    cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         observation_reader=observation_reader,
     )
     rounds = []
     for _ in range(4):
-        await run_download_cycle(deps, NODE)
+        await cycle.run(NODE)
         rounds.append(len(client.started))
     assert rounds == [1, 2, 2, 3]
     assert client.started[0] == DownloadRequest(key(HASH_A), "a.avi", 9)
@@ -120,12 +119,9 @@ async def test_a_failed_or_completed_download_the_client_forgot_is_not_started()
     observation_reader = FakeObservationReader(
         observations={HASH_A: observation(HASH_A, "x", 1), HASH_B: observation(HASH_B, "x", 1)}
     )
-    await run_download_cycle(
-        build_deps(
-            client=client,
-            tracked_download_store=tracked_download_store,
-            observation_reader=observation_reader,
-        ),
-        NODE,
-    )
+    await build_cycle(
+        client=client,
+        tracked_download_store=tracked_download_store,
+        observation_reader=observation_reader,
+    ).run(NODE)
     assert client.started == []
