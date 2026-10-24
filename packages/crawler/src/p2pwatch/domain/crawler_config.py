@@ -194,9 +194,7 @@ def _key_path(error_label: str, key: str) -> str:
 def _required(section: dict[str, Any], key: str, error_label: str) -> Any:
     if key in section:
         return section[key]
-    if not error_label:
-        raise InvalidConfigError(key, "missing")
-    raise InvalidConfigError(error_label, f"key {key!r} missing")
+    raise InvalidConfigError(_key_path(error_label, key), "missing")
 
 
 def _number(section: dict[str, Any], key: str, error_label: str) -> float:
