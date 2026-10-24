@@ -17,6 +17,8 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import Sq
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
 )
+from p2pwatch.application.steps.cataloguer import Cataloguer
+from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.search_tasks import SearchTaskRunner
 from p2pwatch.application.steps.search_worker import (
     BackoffPolicy,
@@ -74,20 +76,30 @@ class _Tasks:
         self.logger = FakeLogger()
 
     def searching(self, client: Any, keywords: list[str]) -> Coroutine[Any, Any, None]:
-        worker = SearchWorker(
-            client_name="amuled",
-            client=client,
-            backoff=self.backoff,
-            observation_writer=self.observation_store,
+        dispatcher = ObservabilityOverFakes().dispatcher
+        file_judge = FileJudge(
             observation_reader=self.observation_store,
             decision_writer=self.decision_store,
             decision_reader=self.decision_store,
             engine=self.engine,
             waker=FakeWaker(),
-            observability_dispatcher=ObservabilityOverFakes().dispatcher,
+            observability_dispatcher=dispatcher,
+            wall_clock=self.wall_clock,
+        )
+        cataloguer = Cataloguer(
+            observation_writer=self.observation_store,
+            file_judge=file_judge,
+            observability_dispatcher=dispatcher,
             wall_clock=self.wall_clock,
             logger=FakeLogger(),
-            observation_logger=FakeLogger(),
+        )
+        worker = SearchWorker(
+            client_name="amuled",
+            client=client,
+            backoff=self.backoff,
+            cataloguer=cataloguer,
+            observability_dispatcher=dispatcher,
+            logger=FakeLogger(),
         )
         return SearchTaskRunner(
             workers=[worker],

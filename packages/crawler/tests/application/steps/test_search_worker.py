@@ -11,6 +11,8 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
     SqliteObservationStore,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
+from p2pwatch.application.steps.cataloguer import Cataloguer
+from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.search_worker import (
     SEARCH_BUDGET_SECONDS,
@@ -83,22 +85,32 @@ def _worker(
     *,
     observability_dispatcher: ObservabilityDispatcher | None = None,
     logger: FakeLogger | None = None,
-    observation_logger: FakeLogger | None = None,
+    cataloguer_logger: FakeLogger | None = None,
 ) -> SearchWorker:
-    return SearchWorker(
-        client_name="amule-1",
-        client=client,
-        backoff=backoff,
-        observation_writer=observation_store,
+    dispatcher = observability_dispatcher or ObservabilityOverFakes().dispatcher
+    file_judge = FileJudge(
         observation_reader=observation_store,
         decision_writer=decision_store,
         decision_reader=decision_store,
         engine=engine,
         waker=FakeWaker(),
-        observability_dispatcher=observability_dispatcher or ObservabilityOverFakes().dispatcher,
+        observability_dispatcher=dispatcher,
         wall_clock=fake_time.wall,
+    )
+    cataloguer = Cataloguer(
+        observation_writer=observation_store,
+        file_judge=file_judge,
+        observability_dispatcher=dispatcher,
+        wall_clock=fake_time.wall,
+        logger=cataloguer_logger or FakeLogger(),
+    )
+    return SearchWorker(
+        client_name="amule-1",
+        client=client,
+        backoff=backoff,
+        cataloguer=cataloguer,
+        observability_dispatcher=dispatcher,
         logger=logger or FakeLogger(),
-        observation_logger=observation_logger or FakeLogger(),
     )
 
 
@@ -307,7 +319,7 @@ async def test_multiple_observations_some_unchanged_are_all_processed(
     fake_time = FakeTime()
     discarded = ReportedFile(
         file=FileKey(Network.ED2K, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-        filename="random.txt",  # discarded by the engine → record_observation returns False
+        filename="random.txt",  # discarded by the engine → catalog returns 0
         size_bytes=10,
         source_count=1,
         keyword="keroro",
@@ -515,7 +527,7 @@ async def test_a_search_logs_on_the_worker_logger_and_a_failed_observation_on_it
         " BEGIN SELECT RAISE(ABORT, 'injected failure'); END"
     )
     fake_time = FakeTime()
-    logger, observation_logger = FakeLogger(), FakeLogger()
+    logger, cataloguer_logger = FakeLogger(), FakeLogger()
     client = FakeSearchClient(results=[(_reported_file(),)])
     worker = _worker(
         client,
@@ -525,7 +537,7 @@ async def test_a_search_logs_on_the_worker_logger_and_a_failed_observation_on_it
         _registry(fake_time),
         fake_time,
         logger=logger,
-        observation_logger=observation_logger,
+        cataloguer_logger=cataloguer_logger,
     )
 
     await worker.run_task(SearchTask("keroro", "ed2k"), _NODE)
@@ -533,4 +545,4 @@ async def test_a_search_logs_on_the_worker_logger_and_a_failed_observation_on_it
     assert logger.lines == [
         LoggedLine("info", "client amule-1: 'keroro'/ed2k → 0 verdict(s) changed"),
     ]
-    assert [line.level for line in observation_logger.lines] == ["error"]
+    assert [line.level for line in cataloguer_logger.lines] == ["error"]

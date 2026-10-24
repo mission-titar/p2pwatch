@@ -117,7 +117,7 @@ a function does.
   or a `timedelta` needs none.
 - **A boolean reads as a predicate**: `is_tracked`, `has_useful_point`, `clamped`, `enabled`.
 - **A function says what it returns or does, side effects included**:
-  `reevaluate_if_policy_changed`, `rejudge_file`. A class names what one instance is.
+  `reevaluate_if_policy_changed`, `rejudge`. A class names what one instance is: `FileJudge`, `Cataloguer`.
 - **A mapping is `<values>_by_<key>`, a collection the plural of its element.**
 - **`latest` is the most recent of a series; `last` only pairs with `first`.**
 - **No abbreviation but the glossary's**, units and protocol names (`kbps`, `tcp`, `md4`, `ed2k`) aside.
@@ -172,6 +172,8 @@ a function does.
 | `latest point` | `LatestPoint`, a source's latest point under one of its variants: its role, its instant, its session's received bytes; `carried_role` carries its role to a reading in a passing state, `EarlierPoints.of` reduces a source's earlier ones | `last point` |
 | `reported file` | `ReportedFile`, what the network reports of a file, with no instant: the mapper builds it, a `SearchAnswer` carries it | `observation` |
 | `observation` | `FileObservation`, a reported file, its `observed_at`, the instant the crawler learned of it, stamped right before the write, and its node; every catalog read returns it whole | a reported file, `sighting` |
+| `cataloguer` | `Cataloguer`, records a reported file as an observation, then has the file judge judge it again | `record_observation`, which is the Writer's |
+| `file judge` | `FileJudge`, judges a file on every filename the catalog knows and records the decisions that changed, built once and shared by the cataloguer and the reevaluation | a decision helper |
 | `candidate` | a `FileCandidate`, one name of a file and its metadata, the matcher's input; a `DownloadCandidate` is a file with a download-tier decision | `names` |
 | `target` | an episode segment to recover: `target_id`, `TargetSegment`, its `letter` | `segment` for the letter; Kad's keyword target, which is a `kad_word` |
 | `tier` | `DecisionTier`, a decision's strength: `catalog`, `notify`, `download`, its `rank` their order, `identifies_target` false for `catalog` alone | `before`, `after`; `retracted`, which is a retraction |
