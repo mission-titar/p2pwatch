@@ -1,12 +1,11 @@
 """Edge-triggered state: computes ``first_occurrence`` for notification anti-spam (E-D8).
 
-Mutable inter-iteration state, like ``BackoffRegistry``. Built by the
-download loop's deps, consulted by that loop (E.2): ``enter(condition)`` returns ``True`` ONLY
-on the transition to active (first occurrence of a failure); ``leave(condition)`` rearms on
-recovery. The metric, in contrast, increments on EVERY occurrence (Prometheus wants the raw
-state): the edge-trigger only governs notification. Single-threaded on the event loop → no lock.
-The state is in-process (not persisted): after a restart, an ongoing failure re-notifies once
-(acceptable, E-D8)."""
+Mutable inter-iteration state, like ``BackoffRegistry``. Held by ``DownloadDecider`` (E.2):
+``enter(condition)`` returns ``True`` ONLY on the transition to active (first occurrence of a
+failure); ``leave(condition)`` rearms on recovery. The metric, in contrast, increments on EVERY
+occurrence (Prometheus wants the raw state): the edge-trigger only governs notification.
+Single-threaded on the event loop → no lock. The state is in-process (not persisted): after a
+restart, an ongoing failure re-notifies once (acceptable, E-D8)."""
 
 
 class EdgeState:

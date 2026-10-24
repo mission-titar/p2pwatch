@@ -89,7 +89,9 @@ from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
 from p2pwatch.application.steps.cataloguer import Cataloguer
+from p2pwatch.application.steps.download_decider import DownloadDecider
 from p2pwatch.application.steps.download_loop import DownloadLoopDeps, download_loop
+from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
@@ -428,18 +430,27 @@ class CrawlerComposition(CrawlerRunner):
             if download_config is not None:
                 tracked_download_store = SqliteTrackedDownloadStore(local_connection)
                 source_point_store = SqliteSourcePointStore(catalog_connection)
+                download_tracker = DownloadTracker(
+                    tracked_download_writer=tracked_download_store,
+                    tracked_download_reader=tracked_download_store,
+                    decision_reader=decision_store,
+                    observation_reader=observation_store,
+                    targets=config.targets,
+                    lost_after=download_config.lost_after,
+                    wall_clock=wall_clock,
+                    monotonic_clock=monotonic_clock,
+                    observability_dispatcher=observability_dispatcher,
+                    logger=StdlibLogger(DownloadTracker.__module__),
+                )
                 download_deps = DownloadLoopDeps(
                     download_client=client,
                     source_client=client,
-                    tracked_download_writer=tracked_download_store,
                     tracked_download_reader=tracked_download_store,
                     source_point_writer=source_point_store,
                     source_point_reader=source_point_store,
                     decision_reader=decision_store,
                     observation_reader=observation_store,
                     targets=config.targets,
-                    free_space_meter=ShutilFreeSpaceMeter(download_config.output_directory),
-                    min_free_bytes=download_config.min_free_bytes,
                     poll_interval_seconds=download_config.poll_interval_seconds,
                     reappeared_after=download_config.reappeared_after,
                     sources_interval=download_config.sources_interval,
@@ -448,17 +459,26 @@ class CrawlerComposition(CrawlerRunner):
                     monotonic_clock=monotonic_clock,
                     observability_dispatcher=observability_dispatcher,
                     logger=StdlibLogger(download_loop.__module__),
-                    download_tracker=DownloadTracker(
-                        tracked_download_writer=tracked_download_store,
-                        tracked_download_reader=tracked_download_store,
+                    download_tracker=download_tracker,
+                    download_decider=DownloadDecider(
+                        free_space_meter=ShutilFreeSpaceMeter(download_config.output_directory),
+                        min_free_bytes=download_config.min_free_bytes,
                         decision_reader=decision_store,
                         observation_reader=observation_store,
+                        tracked_download_writer=tracked_download_store,
+                        tracked_download_reader=tracked_download_store,
                         targets=config.targets,
-                        lost_after=download_config.lost_after,
+                        download_tracker=download_tracker,
                         wall_clock=wall_clock,
-                        monotonic_clock=monotonic_clock,
                         observability_dispatcher=observability_dispatcher,
-                        logger=StdlibLogger(DownloadTracker.__module__),
+                        logger=StdlibLogger(DownloadDecider.__module__),
+                    ),
+                    download_starter=DownloadStarter(
+                        download_client=client,
+                        tracked_download_writer=tracked_download_store,
+                        tracked_download_reader=tracked_download_store,
+                        observation_reader=observation_store,
+                        logger=StdlibLogger(DownloadStarter.__module__),
                     ),
                     waker=waker,
                     run_state_reader=run_state_store,

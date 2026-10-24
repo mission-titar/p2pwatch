@@ -244,7 +244,7 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
         "catalogue re-evaluated: 0 files, 0 rows written",
     ) in named_messages
     assert (
-        "p2pwatch.application.steps.download_loop",
+        "p2pwatch.application.steps.download_decider",
         f"candidate file={_HASH} queued for download",
     ) in named_messages
     assert "🟢 node online (download on)" in caplog.messages

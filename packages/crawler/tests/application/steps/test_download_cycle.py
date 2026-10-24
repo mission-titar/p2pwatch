@@ -255,9 +255,9 @@ async def test_an_unmeasurable_output_directory_admits_nothing_and_does_not_rais
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
+        free_space_meter=FakeBrokenFreeSpaceMeter(),
         observability_dispatcher=observability.dispatcher,
     )
-    deps.free_space_meter = FakeBrokenFreeSpaceMeter()
     await run_download_cycle(deps, NODE)
     assert client.started == []
     assert HASH_A not in tracked_download_store.states

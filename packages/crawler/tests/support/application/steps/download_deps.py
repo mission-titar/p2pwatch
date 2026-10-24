@@ -10,8 +10,11 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store impor
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store import (
     SqliteTrackedDownloadStore,
 )
+from p2pwatch.application.ports.driven.free_space_meter import FreeSpaceMeter
 from p2pwatch.application.ports.driven.wall_clock import WallClock
+from p2pwatch.application.steps.download_decider import DownloadDecider
 from p2pwatch.application.steps.download_deps import DownloadDeps
+from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.download.candidate import DownloadCandidate
@@ -88,6 +91,7 @@ def build_deps(
     decision_reader: FakeDecisionReader | None = None,
     observation_reader: FakeObservationReader | None = None,
     free: int = 1_000_000,
+    free_space_meter: FreeSpaceMeter | None = None,
     min_free: int = 0,
     lost_after: timedelta = timedelta(days=1),
     observability_dispatcher: ObservabilityDispatcher | None = None,
@@ -107,18 +111,27 @@ def build_deps(
     targets = targets if targets is not None else TARGETS
     observability_dispatcher = observability_dispatcher or ObservabilityOverFakes().dispatcher
     logger = logger or FakeLogger()
+    download_tracker = DownloadTracker(
+        tracked_download_writer=tracked_download_store,
+        tracked_download_reader=tracked_download_store,
+        decision_reader=decision_reader,
+        observation_reader=observation_reader,
+        targets=targets,
+        lost_after=lost_after,
+        wall_clock=wall_clock,
+        monotonic_clock=fake_time.monotonic,
+        observability_dispatcher=observability_dispatcher,
+        logger=logger,
+    )
     return DownloadDeps(
         download_client=client,
         source_client=source_client or FakeSourceClient(),
-        tracked_download_writer=tracked_download_store,
         tracked_download_reader=tracked_download_store,
         source_point_writer=sources,
         source_point_reader=sources,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
         targets=targets,
-        free_space_meter=FakeFreeSpaceMeter(free),
-        min_free_bytes=min_free,
         poll_interval_seconds=30.0,
         reappeared_after=timedelta(hours=12),
         sources_interval=sources_interval,
@@ -127,16 +140,25 @@ def build_deps(
         monotonic_clock=fake_time.monotonic,
         observability_dispatcher=observability_dispatcher,
         logger=logger,
-        download_tracker=DownloadTracker(
-            tracked_download_writer=tracked_download_store,
-            tracked_download_reader=tracked_download_store,
+        download_tracker=download_tracker,
+        download_decider=DownloadDecider(
+            free_space_meter=free_space_meter or FakeFreeSpaceMeter(free),
+            min_free_bytes=min_free,
             decision_reader=decision_reader,
             observation_reader=observation_reader,
+            tracked_download_writer=tracked_download_store,
+            tracked_download_reader=tracked_download_store,
             targets=targets,
-            lost_after=lost_after,
+            download_tracker=download_tracker,
             wall_clock=wall_clock,
-            monotonic_clock=fake_time.monotonic,
             observability_dispatcher=observability_dispatcher,
+            logger=logger,
+        ),
+        download_starter=DownloadStarter(
+            download_client=client,
+            tracked_download_writer=tracked_download_store,
+            tracked_download_reader=tracked_download_store,
+            observation_reader=observation_reader,
             logger=logger,
         ),
     )
