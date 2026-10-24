@@ -175,7 +175,7 @@ Strict TDD in every block, as `AGENTS.md` states it. Full contents, estimate sou
 | 310 | `refactor/download-cycle-class` | `DownloadCycle`, `DownloadLoop`; the bags gone (D27) | 400, 10 |
 | 315 | `refactor/lifecycle-dependencies` | `NodeIdResolver.resolve()`, `CatalogReevaluator.reevaluate_if_policy_changed(node_id)`, `BackoffRegistry.resume_waits()`, `CatalogReevaluator` absorbing `reevaluate_catalog`: `CrawlerLifecycle` from 17 parameters to 8 (D27, C3, C7) (Corrected: added in Wrap from the holistic review's MAJOR; 921 lines, exempt by the operator) | 921, 22 (measured) |
 | 317 | `refactor/step-classes-convention` | C7 in `AGENTS.md`: `supervise_loops` becomes `LoopSupervisor`, `BackoffRegistry` gets its own module, `search_tasks.py` becomes `search_task_runner.py` (C7) (Corrected: added in Wrap by the operator, the lot at 40 blocks) | |
-| 320 | `docs/crawler-design-fixes-wrap` | closing block: holistic findings, backlog, handoff | |
+| 320 | `docs/crawler-design-fixes-wrap` | closing block: holistic findings, backlog, handoff (Corrected: kept whole at 22 files by the operator; the resource stack's exit order named by a comment, since ruff's SIM117 refuses two nested `async with`) | 139, 22 (measured) |
 
 - Order: the move first; the config before R6 and A2; the tier types before A5, A7 and A17; A2 to A4 before A17; A1 and A3 before the classes.
 - Soft spots: blocks 100 and 230 at 19 files, 252 at 17 to 19, 150, 200 and 220 near 500 lines, 280 to 300 not re-measured.
