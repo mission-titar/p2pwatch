@@ -20,6 +20,8 @@ from tests.support.port_implementations import (
 _EXEMPTIONS: dict[str, str] = {
     "crawler/tests/fakes/adapters/driven/fake_no_set_state_tracked_download_store.py"
     "::FakeNoSetStateTrackedDownloadStore": "fails the test on any set_state, by design",
+    "crawler/tests/fakes/adapters/driven/fake_blocking_monotonic_clock.py"
+    "::FakeBlockingMonotonicClock": "sleeps for good and fails the test on any now, by design",
 }
 
 
