@@ -38,7 +38,7 @@ class ApiNotFoundError(ApiRejectedError):
 
 
 def error_from_response(response: httpx.Response) -> ApiError:
-    """A non-2xx response -> the adapter error the port contract calls for."""
+    """A non-2xx response -> the adapter error it maps to."""
     code, message = _error_code_and_message(response)
     detail = (
         f"{response.request.method} {response.request.url.path}: "

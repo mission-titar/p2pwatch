@@ -1,8 +1,8 @@
-"""The error contract every client adapter raises under, so the application never imports one."""
+"""The errors every client adapter raises, so the application never imports one."""
 
 
 class ClientError(Exception):
-    """Base of the client error contract."""
+    """Base of the client errors."""
 
 
 class ClientUnreachableError(ClientError):

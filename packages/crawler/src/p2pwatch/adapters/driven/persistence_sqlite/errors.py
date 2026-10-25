@@ -6,7 +6,7 @@ An append-only trigger that fires is a BUG in the caller code, not a business
 case → the same ``PersistenceError``. ``wrap_sqlite_errors`` is the SINGLE
 wrapper shared by the connection and every store and reader (chained cause kept).
 
-``PersistenceError`` INHERITS from the ``StoreError`` contract (``domain/
+``PersistenceError`` INHERITS from the stores' error type ``StoreError`` (``domain/
 store_error.py``): the application catches ``StoreError`` (orchestration spec §7,
 "a failed obs is logged, the cycle continues"), never this adapter class (dependency rule §4).
 """
@@ -19,7 +19,7 @@ from p2pwatch.domain.store_error import StoreError
 
 
 class PersistenceError(StoreError):
-    """Base of all persistence adapter errors (under the port contract)."""
+    """Base of all persistence adapter errors, each a ``StoreError``."""
 
 
 class MigrationError(PersistenceError):
