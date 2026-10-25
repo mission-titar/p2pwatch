@@ -61,7 +61,7 @@ def class_def(definition: ClassDefinition) -> ast.ClassDef:
     )
 
 
-def _first_party_bases(file: Path, class_node: ast.ClassDef) -> list[ClassDefinition]:
+def first_party_bases(file: Path, class_node: ast.ClassDef) -> list[ClassDefinition]:
     module = parsed(file)
     imported_by_name = {
         alias.asname or alias.name: (node.module, alias.name)
@@ -87,7 +87,7 @@ def _first_party_bases(file: Path, class_node: ast.ClassDef) -> list[ClassDefini
 
 def implemented_ports(file: Path, class_node: ast.ClassDef) -> set[ClassDefinition]:
     """The ports the class implements, through any first-party base."""
-    return {port for base in _first_party_bases(file, class_node) for port in ports(base)}
+    return {port for base in first_party_bases(file, class_node) for port in ports(base)}
 
 
 def ports(definition: ClassDefinition) -> set[ClassDefinition]:
