@@ -66,7 +66,7 @@ class _Tasks:
         self.observation_store = observation_store
         self.decision_store = decision_store
         self.engine = engine
-        self.wall_clock = FakeLoopWallClock()
+        self.wall_clock = FakeLoopWallClock(loop)
         self.state = FakeBackoffStateStore()
         self.monotonic_clock = FakeLoopMonotonicClock(loop)
         self.backoff = BackoffRegistry(
