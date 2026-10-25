@@ -140,7 +140,9 @@ def test_no_class_under_tests_outside_its_fakes_implements_a_port() -> None:
     port_names_by_stray_class = {
         f"{file.relative_to(PACKAGES_DIR)}::{node.name}": sorted(port.name for port in class_ports)
         for file in sorted(PACKAGES_DIR.glob("*/tests/**/*.py"))
+        # A test_*.py beside the doubles holds none, so a port's implementation there strays.
         if not file.is_relative_to(package_dir(file) / "tests" / "fakes")
+        or file.name.startswith("test_")
         for node in ast.walk(parsed(file))
         if isinstance(node, ast.ClassDef) and (class_ports := implemented_ports(file, node))
     }
