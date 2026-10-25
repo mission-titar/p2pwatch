@@ -35,8 +35,11 @@ def _is_record(definition: ClassDefinition) -> bool:
 
 
 def _doubles_by_file() -> dict[Path, list[ClassDefinition]]:
+    # A test_*.py beside the doubles tests them and holds none.
     fakes_files = sorted(
-        file for file in PACKAGES_DIR.glob("*/tests/fakes/**/*.py") if file.name != "__init__.py"
+        file
+        for file in PACKAGES_DIR.glob("*/tests/fakes/**/*.py")
+        if file.name != "__init__.py" and not file.name.startswith("test_")
     )
     return {
         file: [definition for definition in class_definitions(file) if not _is_record(definition)]

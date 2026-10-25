@@ -71,7 +71,6 @@ exclude_also = ["if TYPE_CHECKING:"]
 
 # Test files that test no module of `src`, each with what it tests (_unit-coverage-check).
 [tool.coverage_checks.tests_without_unit]
-"tests/adapters/driven/amule_api/test_api_fakes.py" = "the amuleapi fake of tests/fakes, on a loopback socket"
 "tests/adapters/driven/persistence_sqlite/test_append_only.py" = "the catalog's append-only triggers, in SQL"
 "tests/adapters/driven/persistence_sqlite/test_local_migration_0006.py" = "a SQL migration of local.db"
 "tests/adapters/driven/persistence_sqlite/test_local_migration_0007.py" = "a SQL migration of local.db"
@@ -93,6 +92,7 @@ exclude_also = ["if TYPE_CHECKING:"]
 "tests/adapters/driven/persistence_sqlite/test_migration_last_seen_at.py" = "a SQL migration of local.db"
 "tests/application/test_fakes.py" = "the fakes of tests/fakes"
 "tests/composition/test_prod_targets.py" = "deploy/targets.yml"
+"tests/fakes/test_fake_amule_api_server.py" = "the amuleapi fake of tests/fakes, on a loopback socket"
 "tests/integration/" = "a real daemon or the compose stack: integration suites, deselected by marker"
 "tests/test_fake_files.py" = "every package's tests/fakes: one double per file, in the ring of what it replaces"
 "tests/test_port_files.py" = "every hexagon's port files: one port per file"

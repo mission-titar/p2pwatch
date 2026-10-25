@@ -45,7 +45,8 @@ Le projet a **deux niveaux** :
    > remplace (`packages/crawler/tests/test_fake_files.py` le vérifie), et ses utilitaires partagés
    > dans `tests/support` : la suite de chaque paquet qui en a les mesure (`--cov=tests`, fichiers de
    > test et conftests exclus), si bien qu'une ligne ou une branche qu'aucun test n'y exécute fait
-   > échouer le gate. Aucun fichier nommé `test_*.py` n'y vit, puisque la mesure l'exclurait.
+   > échouer le gate. Les tests d'une doublure vivent à côté d'elle, dans un
+   > `test_<module de la doublure>.py` que la mesure exclut comme tout fichier de test.
 
    Après les suites, `test` lance `_unit-coverage-check` : dans chaque paquet, chaque module doit
    être couvert, instructions et branches, par **ses propres tests**, les fichiers qui portent son
