@@ -74,7 +74,7 @@ def _status_loop(
         monotonic_clock=fake_time.monotonic,
         observability_dispatcher=observability.dispatcher,
         run_state_reader=run_state,
-        status_reading_writer=status_reading_writer or FakeStatusReadingStore(),
+        status_reading_writer=status_reading_writer or FakeStatusReadingStore((client_name,)),
     )
 
 
@@ -220,7 +220,7 @@ async def test_each_reading_is_published_with_its_wall_and_monotonic_instants(
 ) -> None:
     fake_time, run_state = FakeTime(), FakeRunStateStore()
     fake_time.step_wall(timedelta(hours=1))  # the two clocks part: each instant shows its clock
-    status_reading_store = FakeStatusReadingStore()
+    status_reading_store = FakeStatusReadingStore(("amuled",))
     client = FakeStatusClient([_status(kad=_UP), reading], run_state)
     status_loop = _status_loop(
         "amuled", client, fake_time, _Observability(fake_time), run_state, status_reading_store

@@ -8,7 +8,7 @@ from p2pwatch.application.ports.driving.crawl_summarizer import ClientSummary, C
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.domain.coverage import TargetCoverage, TargetCoverageStatus
 from p2pwatch.domain.node_state import NodeState
-from p2pwatch.domain.status_reading import READING_FRESH_FOR, PublishedReading, StatusReading
+from p2pwatch.domain.status_reading import READING_FRESH_FOR, StatusReading
 from tests.fakes.adapters.driven.fake_coverage_reader import FakeCoverageReader
 from tests.fakes.adapters.driven.fake_node_state_reader import FakeNodeStateReader
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
@@ -23,7 +23,7 @@ def _summarize(
     *,
     target_ids: tuple[str, ...] = (),
     tiers_by_target: Mapping[str, tuple[DecisionTier, ...]] | None = None,
-    published_readings: Mapping[str, PublishedReading | None] | None = None,
+    status_reading_store: FakeStatusReadingStore | None = None,
     paused: bool = False,
     fake_time: FakeTime | None = None,
 ) -> CrawlSummary:
@@ -32,7 +32,7 @@ def _summarize(
         coverage_reader=FakeCoverageReader(tiers_by_target or {}),
         node_state_reader=FakeNodeStateReader(_NODE_STATE),
         run_state_reader=FakeRunStateStore(paused=paused),
-        status_reading_reader=FakeStatusReadingStore(published_readings),
+        status_reading_reader=status_reading_store or FakeStatusReadingStore(()),
         monotonic_clock=(fake_time or FakeTime()).monotonic,
     ).summarize_crawl()
 
@@ -64,13 +64,11 @@ def test_a_reading_is_fresh_until_it_is_older_than_its_freshness() -> None:
     fake_time = FakeTime()
     published_at = fake_time.monotonic.now()
     fake_time.advance(READING_FRESH_FOR)
-    published_readings = {
-        "never": None,
-        "fresh": PublishedReading(_READING, published_at),
-        "stale": PublishedReading(_READING, published_at - READING_FRESH_FOR / 2),
-    }
+    status_reading_store = FakeStatusReadingStore(("never", "fresh", "stale"))
+    status_reading_store.set_reading("fresh", _READING, published_at)
+    status_reading_store.set_reading("stale", _READING, published_at - READING_FRESH_FOR / 2)
 
-    summary = _summarize(published_readings=published_readings, fake_time=fake_time)
+    summary = _summarize(status_reading_store=status_reading_store, fake_time=fake_time)
 
     assert summary.client_summaries == (
         ClientSummary("never", reading=None, is_fresh=False),

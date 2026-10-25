@@ -11,4 +11,4 @@ class StatusReadingReader(ABC):
 
     @abstractmethod
     def read_readings(self) -> Mapping[str, PublishedReading | None]:
-        """Each client's reading, ``None`` before its first."""
+        """Each client the store was built with, its reading ``None`` before its first."""
