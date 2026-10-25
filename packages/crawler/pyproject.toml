@@ -61,7 +61,7 @@ asyncio_default_fixture_loop_scope = "function"
 [tool.coverage.run]
 branch = true
 source = ["p2pwatch", "tests"]
-# The doubles and helpers are measured, the tests and conftests are not.
+# The doubles, helpers and contracts are measured, the tests and conftests are not.
 omit = ["tests/**/test_*.py", "tests/**/conftest.py"]
 
 [tool.coverage.report]

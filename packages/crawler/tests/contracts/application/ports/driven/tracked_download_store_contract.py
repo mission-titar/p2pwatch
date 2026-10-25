@@ -75,7 +75,7 @@ class TrackedDownloadStoreContract(ABC):
         assert tracked_download_store.read_tracked_states() == {_A: DownloadState.QUEUED}
         assert tracked_download_store.read_queued_target_id(_A) == "062A"
 
-    def test_a_queued_download_never_listed_is_read_as_last_listed_when_queued(
+    def test_a_queued_download_never_listed_is_read_as_seen_when_queued(
         self, tracked_download_store: TrackedDownloadStore
     ) -> None:
         tracked_download_store.record_queued(_A, "062A", 100, _QUEUED_AT)
@@ -113,7 +113,7 @@ class TrackedDownloadStoreContract(ABC):
         assert tracked_download_store.is_tracked(_A) is True
         assert tracked_download_store.read_tracked_states() == {_A: DownloadState.COMPLETED}
 
-    def test_a_listed_download_is_read_as_last_listed_at_its_latest_stamp(
+    def test_a_listed_download_is_read_at_its_latest_listing(
         self, tracked_download_store: TrackedDownloadStore
     ) -> None:
         tracked_download_store.record_queued(_A, "062A", 100, _QUEUED_AT)
