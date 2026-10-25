@@ -88,6 +88,15 @@ def _subclasses(suite: ClassDefinition) -> list[ClassDefinition]:
     ]
 
 
+def _own_test_file_pattern(implementation: ClassDefinition) -> Path:
+    """`tests/a/test_b*.py` for `src/<pkg>/a/b.py`; `tests/fakes/a/test_b.py` for a fake `b.py`."""
+    file = implementation.file.relative_to(PACKAGES_DIR)
+    package, *module_parts = file.parts
+    if module_parts[0] == "tests":
+        return file.with_name(f"test_{file.name}")
+    return Path(package, "tests", *module_parts[2:-1], f"test_{file.stem}*.py")
+
+
 def _method_names(definition: ClassDefinition, *, abstract: bool) -> set[str]:
     return {
         node.name
@@ -136,6 +145,22 @@ def test_each_subclass_of_a_contract_defines_its_abstract_fixtures() -> None:
     assert all(abstract_names_by_suite.values())
     assert {
         subclass: names for subclass, names in undefined_names_by_subclass.items() if names
+    } == {}
+
+
+def test_each_subclass_of_a_contract_sits_in_its_implementation_s_own_test_module() -> None:
+    own_test_file_pattern_by_subclass = {
+        subclass: _own_test_file_pattern(implementation)
+        for suite, implementations in _implementations_by_suite().items()
+        for implementation in implementations
+        for subclass in _subclasses(suite)
+        if subclass.name == f"Test{implementation.name}"
+    }
+    assert own_test_file_pattern_by_subclass
+    assert {
+        shown(subclass): str(pattern)
+        for subclass, pattern in own_test_file_pattern_by_subclass.items()
+        if not subclass.file.relative_to(PACKAGES_DIR).full_match(pattern)
     } == {}
 
 
