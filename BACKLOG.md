@@ -59,10 +59,10 @@ An agent adds an entry only after the operator has agreed to it.
 - **Contract tests for the fakes of outside systems**: each suite run against the real system (amuled, apprise, GitHub,
   Gluetun) under the integration markers, never against a fake server. Section "Backlog" of `agents/specs/2026-10-25-fake-contract-tests.md`.
 
-- **Stubs and spies written with decoy**: the hand-written ones replaced by typed `decoy` mocks (its v3 API), so a
-  stub answers only the arguments it expects. Section "Backlog" of `agents/specs/2026-10-25-fake-contract-tests.md`.
-
 ## Postponed
 
 - **Adopt ty**, first as the gate's type checker in mypy's place, then as Serena's language server, once it reaches
   parity. Section "ty: the parity conditions" of `agents/specs/2026-10-17-serena-and-the-language-servers.md`.
+
+- **A generic way to write the tests' stubs and spies**: one typed mechanism for all of them, where a call no stub
+  expects fails the test, in place of a class per port. Candidates measured in `agents/reference/2026-10-25-stub-and-spy-libraries.md`.
