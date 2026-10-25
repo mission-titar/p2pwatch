@@ -3,9 +3,10 @@ instead of sleeping, so concurrent tasks share one simulated time."""
 
 import asyncio
 import selectors
-from collections.abc import Coroutine
+from collections.abc import Iterator
 from datetime import UTC, datetime
-from typing import Any
+
+import pytest
 
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 
@@ -28,7 +29,7 @@ class _VirtualSelector(selectors.DefaultSelector):
         return []
 
 
-class _VirtualLoop(asyncio.SelectorEventLoop):
+class VirtualLoop(asyncio.SelectorEventLoop):
     def __init__(self) -> None:
         self._virtual = _VirtualSelector()
         super().__init__(self._virtual)
@@ -37,9 +38,9 @@ class _VirtualLoop(asyncio.SelectorEventLoop):
         return self._virtual.time
 
 
-def run_virtual[T](main: Coroutine[Any, Any, T]) -> T:
-    loop = _VirtualLoop()
-    try:
-        return loop.run_until_complete(main)
-    finally:
-        loop.close()
+@pytest.fixture
+def virtual_loop() -> Iterator[VirtualLoop]:
+    """A loop the test runs with ``run_until_complete``, handed out first to what reads its time."""
+    loop = VirtualLoop()
+    yield loop
+    loop.close()

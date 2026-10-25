@@ -40,7 +40,7 @@ from tests.fakes.adapters.driven.fake_timed_search_client import FakeTimedSearch
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 from tests.support.catalog_rows import observation_node_ids
-from tests.support.virtual_time import EPOCH, run_virtual
+from tests.support.virtual_time import EPOCH, VirtualLoop
 
 _NODE = "n1"
 _HOUR = 3600.0
@@ -53,21 +53,24 @@ _POLICY = BackoffPolicy(
 
 
 class _Tasks:
-    """The tasks' dependencies, with one client named ``amuled``."""
+    """The tasks' dependencies, with one client named ``amuled``, run on ``loop``."""
 
     def __init__(
         self,
         observation_store: SqliteObservationStore,
         decision_store: SqliteDecisionStore,
         engine: MatchingEngine,
+        loop: VirtualLoop,
     ) -> None:
+        self.loop = loop
         self.observation_store = observation_store
         self.decision_store = decision_store
         self.engine = engine
         self.wall_clock = FakeLoopWallClock()
         self.state = FakeBackoffStateStore()
+        self.monotonic_clock = FakeLoopMonotonicClock(loop)
         self.backoff = BackoffRegistry(
-            _POLICY, self.wall_clock, FakeLoopMonotonicClock(), FakeJitterGenerator(), self.state
+            _POLICY, self.wall_clock, self.monotonic_clock, FakeJitterGenerator(), self.state
         )
         self.run_state = FakeRunStateStore()
         self.logger = FakeLogger()
@@ -104,7 +107,7 @@ class _Tasks:
             run_state_reader=self.run_state,
             backoff=self.backoff,
             backoff_state_writer=self.state,
-            monotonic_clock=FakeLoopMonotonicClock(),
+            monotonic_clock=self.monotonic_clock,
             logger=self.logger,
         ).run(_NODE)
 
@@ -116,7 +119,7 @@ class _Tasks:
                 async with asyncio.timeout(seconds):
                     await asyncio.gather(self.searching(client, keywords), *beside)
 
-        run_virtual(bounded())
+        self.loop.run_until_complete(bounded())
 
 
 @pytest.fixture
@@ -124,8 +127,9 @@ def tasks(
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
+    virtual_loop: VirtualLoop,
 ) -> _Tasks:
-    return _Tasks(observation_store, decision_store, engine)
+    return _Tasks(observation_store, decision_store, engine, virtual_loop)
 
 
 def test_each_channel_and_keyword_searches_in_its_own_task(tasks: _Tasks) -> None:
@@ -207,7 +211,7 @@ def test_the_backoff_resumed_after_the_tasks_were_built_is_not_saved_again(
             async with asyncio.timeout(100.0):
                 await searching
 
-    run_virtual(resume_once_built())
+    tasks.loop.run_until_complete(resume_once_built())
     assert tasks.state.saved == [resumed]
 
 
@@ -236,5 +240,5 @@ def test_a_search_that_never_suspends_does_not_starve_the_loop(tasks: _Tasks) ->
         with suppress(asyncio.CancelledError):
             await searching
 
-    run_virtual(main())
+    tasks.loop.run_until_complete(main())
     assert client.calls >= 100
