@@ -90,7 +90,7 @@ def _method_names(definition: ClassDefinition, *, abstract: bool) -> set[str]:
     return {
         node.name
         for node in class_def(definition).body
-        if isinstance(node, ast.FunctionDef)
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
         and (
             not abstract
             or any(ast.unparse(decorator) == "abstractmethod" for decorator in node.decorator_list)

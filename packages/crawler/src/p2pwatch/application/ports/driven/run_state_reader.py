@@ -5,7 +5,10 @@ from abc import ABC, abstractmethod
 
 
 class RunStateReader(ABC):
-    """Reads the run state: its predicates from any thread, its waits on the crawler's loop only."""
+    """Reads the run state: its predicates from any thread, its waits on the crawler's loop only.
+
+    The run state starts resumed, without a shutdown request.
+    """
 
     @abstractmethod
     def is_paused(self) -> bool:
