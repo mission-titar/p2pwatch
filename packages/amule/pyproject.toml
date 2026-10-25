@@ -35,7 +35,7 @@ testpaths = ["tests"]
 [tool.coverage.run]
 branch = true
 source = ["p2pwatch_amule", "tests"]
-# The doubles and helpers are measured, the tests and conftests are not.
+# The doubles, helpers and contracts are measured, the tests and conftests are not.
 omit = ["tests/**/test_*.py", "tests/**/conftest.py"]
 
 [tool.coverage_checks.tests_without_unit]
