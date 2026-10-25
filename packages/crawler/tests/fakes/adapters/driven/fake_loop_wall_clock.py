@@ -6,7 +6,10 @@ from tests.support.virtual_time import EPOCH
 
 
 class FakeLoopWallClock(WallClock):
-    """The running loop's time as the ``WallClock`` port."""
+    """The time of the loop it is given as the ``WallClock`` port."""
+
+    def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
+        self._loop = loop
 
     def now(self) -> datetime:
-        return EPOCH + timedelta(seconds=asyncio.get_running_loop().time())
+        return EPOCH + timedelta(seconds=self._loop.time())

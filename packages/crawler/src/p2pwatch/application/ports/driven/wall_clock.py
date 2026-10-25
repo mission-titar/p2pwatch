@@ -9,4 +9,4 @@ class WallClock(ABC):
 
     @abstractmethod
     def now(self) -> datetime:
-        """The current UTC time, aware."""
+        """The current UTC time, aware; callable from any thread, with no running event loop."""
