@@ -48,6 +48,20 @@ Le projet a **deux niveaux** :
    > échouer le gate. Les tests d'une doublure vivent à côté d'elle, dans un
    > `test_<module de la doublure>.py` que la mesure exclut comme tout fichier de test.
 
+   Un port dont les fakes fonctionnent vraiment (un store qui relit ce qu'on lui a écrit, une
+   horloge qui avance) a un **contrat** : sa promesse, écrite une fois comme une suite pytest abstraite,
+   `<Port>Contract` (ou `<Chose>StoreContract` pour une paire `Writer`/`Reader`), dans
+   `tests/contracts/` au miroir du port. Sa fixture abstraite construit l'implémentation testée, et
+   ses tests énoncent les docstrings du port : le port fait référence, jamais l'adaptateur réel.
+   Chaque implémentation lance le contrat par une sous-classe `Test<Implémentation>` qui définit
+   cette fixture, dans son propre module de test (celui de l'adaptateur, ou le
+   `test_<module du fake>.py` à côté du fake). `packages/crawler/tests/test_contract_subclasses.py`
+   refuse une implémentation d'un port sous contrat sans sa sous-classe, une sous-classe restée
+   abstraite (pytest l'ignorerait sans rien dire) et une exemption périmée. Comme `tests/fakes` et
+   `tests/support`, `tests/contracts` est mesuré à 100 % et ne contient aucun `test_*.py` ; le
+   `conftest.py` du paquet l'inscrit à la réécriture des assertions de pytest, sans quoi un `assert`
+   de contrat en échec n'afficherait qu'un `AssertionError` nu.
+
    Après les suites, `test` lance `_unit-coverage-check` : dans chaque paquet, chaque module doit
    être couvert, instructions et branches, par **ses propres tests**, les fichiers qui portent son
    nom dans le répertoire miroir du sien (`tests/a/test_b.py` et `tests/a/test_b_<aspect>.py` pour
