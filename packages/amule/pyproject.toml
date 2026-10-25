@@ -38,6 +38,10 @@ source = ["p2pwatch_amule", "tests"]
 # The doubles and helpers are measured, the tests and conftests are not.
 omit = ["tests/**/test_*.py", "tests/**/conftest.py"]
 
+[tool.coverage_checks.tests_without_unit]
+"tests/fakes/adapters/driven/test_fake_amule_conf_store.py" = "a fake of tests/fakes, against its contract"
+"tests/fakes/adapters/driven/test_fake_monotonic_clock.py" = "a fake of tests/fakes, against its contract"
+
 [tool.deptry]
 # Replaces the default list, whose `tests` pattern silently drops the tests root.
 exclude = ["\\.venv"]

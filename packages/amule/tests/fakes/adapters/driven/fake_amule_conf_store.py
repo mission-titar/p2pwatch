@@ -4,14 +4,17 @@ from p2pwatch_amule.application.ports.driven.amule_conf_writer import AmuleConfW
 
 class FakeAmuleConfStore(AmuleConfReader, AmuleConfWriter):
     """amule.conf held as text, ``None`` when absent; records each read and each write in
-    ``actions``, or raises ``write_error`` on a write."""
+    ``actions``, or raises ``read_error`` on a read and ``write_error`` on a write."""
 
     def __init__(self, actions: list[str]) -> None:
         self.actions = actions
         self.conf: str | None = None
+        self.read_error: OSError | None = None
         self.write_error: OSError | None = None
 
     def read_amule_conf(self) -> str | None:
+        if self.read_error is not None:
+            raise self.read_error
         self.actions.append("read amule.conf")
         return self.conf
 

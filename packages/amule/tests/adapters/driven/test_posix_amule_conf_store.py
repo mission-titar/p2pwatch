@@ -6,6 +6,9 @@ from pathlib import Path
 import pytest
 
 from p2pwatch_amule.adapters.driven.posix_amule_conf_store import PosixAmuleConfStore
+from tests.contracts.application.ports.driven.amule_conf_store_contract import (
+    AmuleConfStoreContract,
+)
 from tests.fakes.adapters.driven.fake_ownership import FakeOwnership
 
 
@@ -13,18 +16,16 @@ def _amule_conf_store(amule_conf_path: Path, ownership: FakeOwnership) -> PosixA
     return PosixAmuleConfStore(amule_conf_path=amule_conf_path, change_owner=ownership.change_owner)
 
 
-def test_an_absent_conf_reads_as_none(tmp_path: Path) -> None:
-    amule_conf_store = _amule_conf_store(tmp_path / "amule.conf", FakeOwnership())
+class TestPosixAmuleConfStore(AmuleConfStoreContract):
+    @pytest.fixture
+    def amule_conf_store(self, tmp_path: Path) -> PosixAmuleConfStore:
+        return _amule_conf_store(tmp_path / "amule.conf", FakeOwnership())
 
-    assert amule_conf_store.read_amule_conf() is None
-
-
-def test_an_existing_conf_reads_as_its_text(tmp_path: Path) -> None:
-    amule_conf_path = tmp_path / "amule.conf"
-    amule_conf_path.write_text("[eMule]\nMaxUpload=42\n")
-    amule_conf_store = _amule_conf_store(amule_conf_path, FakeOwnership())
-
-    assert amule_conf_store.read_amule_conf() == "[eMule]\nMaxUpload=42\n"
+    @pytest.fixture
+    def unreadable_amule_conf_store(self, tmp_path: Path) -> PosixAmuleConfStore:
+        # A directory: IsADirectoryError, an OSError even as root.
+        (tmp_path / "amule.conf").mkdir()
+        return _amule_conf_store(tmp_path / "amule.conf", FakeOwnership())
 
 
 def test_the_written_conf_is_owned_and_private(tmp_path: Path) -> None:
