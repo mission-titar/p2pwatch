@@ -14,7 +14,7 @@ rule:
           field: attribute
     # Any reference, an attribute's or a method's name included (`obj.__dict__`, `operator.attrgetter`).
     - kind: identifier
-      regex: ^(attrgetter|methodcaller|__dict__|__getattribute__|__setattr__|__delattr__)$
+      regex: ^(attrgetter|methodcaller|__dict__|__getattr__|__getattribute__|__setattr__|__delattr__)$
     # Any import of the builtins module, which would reach them written out (`builtins.getattr`).
     - kind: import_statement
       has:

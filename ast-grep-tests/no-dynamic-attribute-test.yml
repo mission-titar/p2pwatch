@@ -1,0 +1,20 @@
+id: no-dynamic-attribute
+valid:
+  - "store.read_known_sources()"
+  - "client.setattr(name)"
+  - "from operator import itemgetter"
+  - "import builtins_helpers"
+invalid:
+  - "getattr(mock, name)"
+  - "value = vars(config)"
+  - "check = hasattr"
+  - "print(__builtins__)"
+  - "config.__dict__"
+  - "operator.attrgetter('name')"
+  - "from operator import methodcaller"
+  - "object.__getattribute__(mock, name)"
+  - "object.__setattr__(mock, name, value)"
+  - "type(mock).__getattr__(mock, name)"
+  - "def __getattr__(self, name: str) -> object: ..."
+  - "import builtins"
+  - "from builtins import getattr as read"
