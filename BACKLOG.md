@@ -57,6 +57,14 @@ An agent adds an entry only after the operator has agreed to it.
 - **The webui in the visitor's time zone**: UTC rendered, the browser converts each date with JavaScript; needs
   `AGENTS.md`'s "Python only" amended and a JS test chain. Section 6's "Adjacent backlog items" of `agents/specs/2026-10-13-append-only-source-points.md`.
 
+## Tooling improvement
+
+- **Contract tests for the fakes of outside systems**: each suite run against the real system (amuled, apprise, GitHub,
+  Gluetun) under the integration markers, never against a fake server. Section "Backlog" of `agents/specs/2026-10-25-fake-contract-tests.md`.
+
+- **Stubs and spies written with decoy**: the hand-written ones replaced by typed `decoy` mocks (its v3 API), so a
+  stub answers only the arguments it expects. Section "Backlog" of `agents/specs/2026-10-25-fake-contract-tests.md`.
+
 ## Postponed
 
 - **Adopt ty**, first as the gate's type checker in mypy's place, then as Serena's language server, once it reaches
