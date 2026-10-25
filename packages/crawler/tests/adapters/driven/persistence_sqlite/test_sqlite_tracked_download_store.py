@@ -13,10 +13,11 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store i
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
+from tests.contracts.application.ports.driven.tracked_download_store_contract import (
+    TrackedDownloadStoreContract,
+)
 
 _A = FileKey(Network.ED2K, "a" * 32)
-_B = FileKey(Network.ED2K, "b" * 32)
-_C = FileKey(Network.ED2K, "c" * 32)
 _T0 = datetime(2026, 6, 12, tzinfo=UTC)
 _DAY = timedelta(days=1)
 
@@ -47,11 +48,10 @@ def tracked_download_store(connection: sqlite3.Connection) -> SqliteTrackedDownl
     return SqliteTrackedDownloadStore(connection)
 
 
-def test_record_queued_inserts_a_new_download(
-    tracked_download_store: SqliteTrackedDownloadStore,
-) -> None:
-    tracked_download_store.record_queued(_A, "062A", 100, _T0)
-    assert tracked_download_store.is_tracked(_A) is True
+class TestSqliteTrackedDownloadStore(TrackedDownloadStoreContract):
+    @pytest.fixture
+    def tracked_download_store(self, connection: sqlite3.Connection) -> SqliteTrackedDownloadStore:
+        return SqliteTrackedDownloadStore(connection)
 
 
 def test_record_queued_keys_the_row_by_file_id_and_keeps_the_file_key(
@@ -73,24 +73,11 @@ def test_record_queued_is_dedup_safe(
     ).fetchall() == [("062A", 100, utc_iso(_T0))]
 
 
-def test_is_downloaded_is_false_for_unknown_hash(
-    tracked_download_store: SqliteTrackedDownloadStore,
-) -> None:
-    assert tracked_download_store.is_tracked(_A) is False
-
-
-def test_set_state_updates_the_state(tracked_download_store: SqliteTrackedDownloadStore) -> None:
-    tracked_download_store.record_queued(_A, "062A", 100, _T0)
-    tracked_download_store.set_state(_A, DownloadState.DOWNLOADING)
-    assert tracked_download_store.read_tracked_states()[_A] is DownloadState.DOWNLOADING
-
-
 def test_set_completed_stamps_the_completed_at_it_is_given(
     tracked_download_store: SqliteTrackedDownloadStore, connection: sqlite3.Connection
 ) -> None:
     tracked_download_store.record_queued(_A, "062A", 100, _T0)
     tracked_download_store.set_completed(_A, _T0 + _DAY)
-    assert tracked_download_store.read_tracked_states()[_A] is DownloadState.COMPLETED
     stamped = connection.execute(
         "SELECT completed_at FROM downloads WHERE file_id = ?", (_A.file_id,)
     ).fetchone()[0]
@@ -122,16 +109,6 @@ def test_set_completed_on_unknown_hash_raises(
         tracked_download_store.set_completed(_A, _T0)
 
 
-def test_active_states_maps_hash_to_state(
-    tracked_download_store: SqliteTrackedDownloadStore,
-) -> None:
-    tracked_download_store.record_queued(_A, "062A", 100, _T0)
-    tracked_download_store.record_queued(_B, "063A", 200, _T0)
-    tracked_download_store.set_state(_B, DownloadState.FAILED)
-    states = tracked_download_store.read_tracked_states()
-    assert states == {_A: DownloadState.QUEUED, _B: DownloadState.FAILED}
-
-
 def test_record_queued_is_atomic_on_injected_failure(
     tracked_download_store: SqliteTrackedDownloadStore, connection: sqlite3.Connection
 ) -> None:
@@ -142,19 +119,6 @@ def test_record_queued_is_atomic_on_injected_failure(
     with pytest.raises(PersistenceError, match="injected failure"):
         tracked_download_store.record_queued(_A, "062A", 100, _T0)
     assert tracked_download_store.is_tracked(_A) is False
-
-
-def test_get_target_id_returns_target_for_known_hash(
-    tracked_download_store: SqliteTrackedDownloadStore,
-) -> None:
-    tracked_download_store.record_queued(_A, "062A", 100, _T0)
-    assert tracked_download_store.read_queued_target_id(_A) == "062A"
-
-
-def test_get_target_id_is_none_for_unknown_hash(
-    tracked_download_store: SqliteTrackedDownloadStore,
-) -> None:
-    assert tracked_download_store.read_queued_target_id(_A) is None
 
 
 def _latest_seen(connection: sqlite3.Connection, file: FileKey) -> str:
@@ -173,42 +137,6 @@ def test_record_queued_stamps_latest_seen_at_with_queued_at(
         "SELECT queued_at FROM downloads WHERE file_id = ?", (_A.file_id,)
     ).fetchone()[0]
     assert queued_at == _latest_seen(connection, _A) == utc_iso(_T0)
-
-
-def test_set_seen_stamps_the_seen_at_it_is_given(
-    tracked_download_store: SqliteTrackedDownloadStore, connection: sqlite3.Connection
-) -> None:
-    tracked_download_store.record_queued(_A, "062A", 100, _T0)
-    tracked_download_store.set_seen([_status(_A)], _T0 + _DAY)
-    assert _latest_seen(connection, _A) == utc_iso(_T0 + _DAY)
-
-
-def test_set_seen_ignores_a_hash_it_does_not_know(
-    tracked_download_store: SqliteTrackedDownloadStore,
-) -> None:
-    # A shared file the crawler never queued: no row, no raise.
-    tracked_download_store.set_seen([_status(_A)], _T0)
-    assert tracked_download_store.is_tracked(_A) is False
-
-
-def test_latest_seen_at_by_file_reads_when_the_client_last_listed_each_download(
-    tracked_download_store: SqliteTrackedDownloadStore,
-) -> None:
-    tracked_download_store.record_queued(_A, "062A", 100, _T0)
-    tracked_download_store.record_queued(_B, "063A", 200, _T0)
-    tracked_download_store.set_state(_B, DownloadState.DOWNLOADING)
-    tracked_download_store.set_seen([_status(_B)], _T0 + _DAY)
-    assert tracked_download_store.read_latest_seen_at_by_file() == {_A: _T0, _B: _T0 + _DAY}
-
-
-def test_latest_seen_at_by_file_leaves_the_terminal_downloads_out(
-    tracked_download_store: SqliteTrackedDownloadStore,
-) -> None:
-    for file in (_A, _B, _C):
-        tracked_download_store.record_queued(file, "062A", 100, _T0)
-    tracked_download_store.set_completed(_B, _T0)
-    tracked_download_store.set_state(_C, DownloadState.FAILED, FailureReason.LOST)
-    assert tracked_download_store.read_latest_seen_at_by_file() == {_A: _T0}
 
 
 def test_latest_seen_at_by_file_reads_a_row_never_stamped_at_its_queuing(

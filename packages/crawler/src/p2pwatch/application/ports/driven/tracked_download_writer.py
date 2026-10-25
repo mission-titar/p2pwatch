@@ -34,4 +34,5 @@ class TrackedDownloadWriter(ABC):
 
     @abstractmethod
     def set_seen(self, statuses: Iterable[DownloadStatus], seen_at: datetime) -> None:
-        """Stamps each listed download ``seen_at``, with its waiting reason."""
+        """Stamps each listed download ``seen_at``, with its waiting reason; a file listed but not
+        tracked stays untracked, without error."""

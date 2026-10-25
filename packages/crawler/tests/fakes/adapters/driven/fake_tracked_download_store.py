@@ -11,16 +11,8 @@ from p2pwatch.domain.store_error import StoreError
 
 
 class FakeTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
-    """In-memory tracked download store (the contract of SqliteTrackedDownloadStore, without SQL).
-
-    Keyed by ``native_id``; ``failures`` holds the failure reasons, ``queued_at``,
-    ``completed_at`` and ``seen_at`` the instants received, and ``latest_seen_at`` what
-    ``read_latest_seen_at_by_file`` reads back.
-    ``fail_set_state_for`` and ``fail_set_completed_for``: hashes for which ``set_state`` or
-    ``set_completed`` raises ``StoreError``, to simulate a mid-cycle store failure
-    (cf. logic-download#2/error-boundary#2).
-    ``fail_tracked_states``: ``read_tracked_states()`` raises, to simulate persistence being down
-    also at re-read time (every step of the cycle absorbs)."""
+    """Tracked downloads in memory, keyed by ``native_id``, each write's arguments kept for
+    inspection; a ``fail_*`` knob makes its method, or its hashes, raise ``StoreError``."""
 
     def __init__(
         self,
@@ -54,6 +46,8 @@ class FakeTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
     ) -> None:
         if self._fail_record:
             raise StoreError("downloads write failed")
+        if file.native_id in self.states:
+            return
         self.states[file.native_id] = DownloadState.QUEUED
         self._target_ids[file.native_id] = target_id
         self.sizes[file.native_id] = size_bytes

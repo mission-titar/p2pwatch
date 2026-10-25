@@ -17,7 +17,8 @@ class TrackedDownloadReader(ABC):
 
     @abstractmethod
     def read_latest_seen_at_by_file(self) -> dict[FileKey, datetime]:
-        """When the client last listed each queued or downloading download."""
+        """When the client last listed each queued or downloading download, else when it was
+        queued, each aware in UTC."""
 
     @abstractmethod
     def read_tracked_states(self) -> dict[FileKey, DownloadState]:
