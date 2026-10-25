@@ -186,6 +186,17 @@ def test_an_unreadable_amule_conf_asks_the_supervisor_nothing_and_is_logged(
     )
 
 
+def test_an_amule_conf_that_cannot_be_read_asks_the_supervisor_nothing_and_is_logged(
+    node: Node,
+) -> None:
+    node.amule_conf.read_error = PermissionError("denied")
+    node.run_loop()
+    assert node.actions == [UP]
+    assert node.logger.lines == [
+        LoggedLine("error", "amule.conf's port is unreadable, amuled left as is (denied)")
+    ]
+
+
 def test_a_missing_amule_conf_asks_the_supervisor_nothing_and_is_logged(node: Node) -> None:
     node.amule_conf.conf = None
     node.run_loop()
