@@ -5,7 +5,7 @@ from p2pwatch.application.ports.driven.run_state_writer import RunStateWriter
 
 
 class FakeRunStateStore(RunStateWriter, RunStateReader):
-    """Applies each change at once, where the real store hands it to the crawler's loop."""
+    """Applies each change at once, on the caller's thread; starts in the state ``paused`` sets."""
 
     def __init__(self, *, paused: bool = False) -> None:
         self._resumed = asyncio.Event()
