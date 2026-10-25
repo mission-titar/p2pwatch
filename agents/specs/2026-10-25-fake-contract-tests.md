@@ -165,7 +165,7 @@ against its parent branch, from its report.)
 | 100 | `test/waker-contract` | the `Waker` contract | 100, 5 | 68, 4 |
 | 110 | `test/amule-contracts` | amule's `AmuleConfStore` and `MonotonicClock` contracts; `FakeAmuleConfStore`'s read error (D9); amule's `tests_without_unit` and assertion rewriting | 280, 11 | 158, 14 |
 | 120 | `test/dockerfile-store-contract` | amule_bump's `DockerfileStore` contract; its `tests_without_unit` and assertion rewriting | 120, 7 | 76, 9 |
-| 130 | `docs/fake-contract-tests-wrap` | closing block: holistic findings, backlog, handoff | | MEASURED_130 |
+| 130 | `docs/fake-contract-tests-wrap` | closing block: holistic findings, backlog, handoff | | 73, 18 |
 
 - Order: the helpers' move first, then the check with its first contract, so that every later contract is checked as it
   lands. The check covers only the ports a suite exists for, so each later block adds a suite, all its subclasses and its
