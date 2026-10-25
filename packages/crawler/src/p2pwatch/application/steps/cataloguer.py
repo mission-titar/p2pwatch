@@ -11,7 +11,7 @@ file to ``FileJudge``, doing no I/O itself. For EACH observation (spec §4):
 
 The stores are SYNCHRONOUS, called DIRECTLY (spec §3: sub-ms, no ``to_thread`` in the
 MVP; accepted consequence: DB writes are de facto serialized on the event loop).
-A ``StoreError`` (a PORT contract, never an adapter) on ONE observation is
+A ``StoreError`` (a PORT's error type, never an adapter's) on ONE observation is
 LOGGED and ABSORBED here: ``catalog`` returns ``0`` and the cycle continues (spec §7) - a
 single corrupt/failed obs does not bring down the whole sweep, but the failure stays
 VISIBLE (``error``-level log, so a persistent failure gets noticed).

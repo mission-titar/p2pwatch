@@ -1,7 +1,7 @@
 """The file judge: evaluate → record / retract what changed → wake → dispatch (spec §7).
 
 APPLICATION ring, PURE orchestration (no ``try/except`` here: a ``StoreError`` is a
-port contract each CALLER absorbs on its own terms, cf. ``Cataloguer`` and
+port's error each CALLER absorbs on its own terms, cf. ``Cataloguer`` and
 ``CatalogReevaluator``). Used by BOTH the per-observation pipeline (``cataloguer.py``)
 and the startup catalogue re-evaluation, so the writes, the wake and the event are written once.
 

@@ -1,4 +1,4 @@
-"""``Matcher`` contract and ``all``/``any``/``not`` combinators (cf. spec §8.3).
+"""``Matcher`` and the ``all``/``any``/``not`` combinators (cf. spec §8.3).
 
 Pure domain: these combinators wrap other ``Matcher``s (Plan 2a leaves or combinators) and
 expose the same ``matches(candidate) -> bool`` interface.
@@ -10,7 +10,7 @@ from catalog_matching.domain.models import FileCandidate
 
 
 class Matcher(ABC):
-    """The contract of the leaves (Plan 2a) and the combinators; ``CoverageMatcher.coverage()``
+    """What the leaves (Plan 2a) and the combinators promise; ``CoverageMatcher.coverage()``
     is not part of it, the explanation reads it directly."""
 
     @abstractmethod
