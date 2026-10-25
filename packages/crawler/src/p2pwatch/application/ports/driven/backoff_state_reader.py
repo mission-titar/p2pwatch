@@ -11,4 +11,4 @@ class BackoffStateReader(ABC):
 
     @abstractmethod
     def read_backoff_states(self) -> dict[BackoffKey, BackoffState]:
-        """The states saved last, ``{}`` before the first save."""
+        """The states saved last, ``{}`` before the first save, each ``started_at`` aware in UTC."""
