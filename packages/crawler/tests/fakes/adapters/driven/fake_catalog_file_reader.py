@@ -1,9 +1,9 @@
 from collections.abc import Mapping
-from typing import Any
+from datetime import datetime
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from p2pwatch.application.ports.driven.catalog_file_reader import CatalogFileReader
-from p2pwatch.domain.catalog_entry import CatalogEntry
+from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_history import FileHistory
 
 
@@ -22,20 +22,54 @@ class FakeCatalogFileReader(CatalogFileReader):
         self._matched_and_total_file_counts = matched_and_total_file_counts
         self._file_count_by_tier = file_count_by_tier or {}
         self._file_history = file_history
-        self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.calls: list[tuple[str, dict[str, object]]] = []
 
-    def read_catalog_entries(self, **arguments: Any) -> tuple[CatalogEntry, ...]:
+    def read_catalog_entries(
+        self,
+        *,
+        target_id: str | None,
+        tier: DecisionTier | None,
+        search_text: str | None,
+        matched_only: bool,
+        sort: CatalogEntrySort,
+        direction: SortDirection,
+        limit: int,
+        offset: int,
+    ) -> tuple[CatalogEntry, ...]:
+        arguments: dict[str, object] = {
+            "target_id": target_id,
+            "tier": tier,
+            "search_text": search_text,
+            "matched_only": matched_only,
+            "sort": sort,
+            "direction": direction,
+            "limit": limit,
+            "offset": offset,
+        }
         self.calls.append(("read_catalog_entries", arguments))
         return self._catalog_entries
 
-    def read_matched_and_total_file_counts(self, **arguments: Any) -> tuple[int, int]:
+    def read_matched_and_total_file_counts(
+        self, *, target_id: str | None, tier: DecisionTier | None, search_text: str | None
+    ) -> tuple[int, int]:
+        arguments: dict[str, object] = {
+            "target_id": target_id,
+            "tier": tier,
+            "search_text": search_text,
+        }
         self.calls.append(("read_matched_and_total_file_counts", arguments))
         return self._matched_and_total_file_counts
 
-    def read_file_count_by_tier(self, **arguments: Any) -> Mapping[DecisionTier, int]:
+    def read_file_count_by_tier(
+        self, *, target_id: str | None, search_text: str | None
+    ) -> Mapping[DecisionTier, int]:
+        arguments: dict[str, object] = {"target_id": target_id, "search_text": search_text}
         self.calls.append(("read_file_count_by_tier", arguments))
         return self._file_count_by_tier
 
-    def read_file_history(self, file_id: bytes, **arguments: Any) -> FileHistory | None:
-        self.calls.append(("read_file_history", {"file_id": file_id, **arguments}))
+    def read_file_history(
+        self, file_id: bytes, *, since: datetime, until: datetime
+    ) -> FileHistory | None:
+        arguments: dict[str, object] = {"file_id": file_id, "since": since, "until": until}
+        self.calls.append(("read_file_history", arguments))
         return self._file_history

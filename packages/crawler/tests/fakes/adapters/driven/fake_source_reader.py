@@ -1,5 +1,3 @@
-from typing import Any
-
 from p2pwatch.application.ports.driven.source_reader import SourceReader
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.known_source import KnownSource
@@ -24,24 +22,45 @@ class FakeSourceReader(SourceReader):
         self._source_history = source_history
         self._source_name_history = source_name_history
         self._sharing_periods = sharing_periods
-        self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.calls: list[tuple[str, dict[str, object]]] = []
 
-    def read_known_sources(self, **arguments: Any) -> tuple[KnownSource, ...]:
+    def read_known_sources(
+        self, *, search_text: str | None, limit: int, offset: int
+    ) -> tuple[KnownSource, ...]:
+        arguments: dict[str, object] = {
+            "search_text": search_text,
+            "limit": limit,
+            "offset": offset,
+        }
         self.calls.append(("read_known_sources", arguments))
         return self._known_sources
 
-    def read_source_count(self, **arguments: Any) -> int:
-        self.calls.append(("read_source_count", arguments))
+    def read_source_count(self, *, search_text: str | None) -> int:
+        self.calls.append(("read_source_count", {"search_text": search_text}))
         return self._source_count
 
-    def read_source_history(self, source_id: bytes, **arguments: Any) -> SourceHistory | None:
-        self.calls.append(("read_source_history", {"source_id": source_id, **arguments}))
+    def read_source_history(
+        self, source_id: bytes, *, limit: int, offset: int, window: PeriodWindow
+    ) -> SourceHistory | None:
+        arguments: dict[str, object] = {
+            "source_id": source_id,
+            "limit": limit,
+            "offset": offset,
+            "window": window,
+        }
+        self.calls.append(("read_source_history", arguments))
         return self._source_history
 
     def read_source_name_history(
-        self, source_name: str, **arguments: Any
+        self, source_name: str, *, limit: int, offset: int, window: PeriodWindow
     ) -> SourceNameHistory | None:
-        self.calls.append(("read_source_name_history", {"source_name": source_name, **arguments}))
+        arguments: dict[str, object] = {
+            "source_name": source_name,
+            "limit": limit,
+            "offset": offset,
+            "window": window,
+        }
+        self.calls.append(("read_source_name_history", arguments))
         return self._source_name_history
 
     def read_sharing_periods(
