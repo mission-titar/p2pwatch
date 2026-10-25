@@ -22,7 +22,8 @@
 
 Nothing. The lot touches tests and test support, the docstrings of the eight port files listed in acceptance 4, the
 three packages' `pyproject.toml` (`tests_without_unit`), `AGENTS.md` and `docs/contributing/testing.md`; no code in
-`src` and no image change.
+`src` and no image change. (Corrected: the closing block also rewords seven `src` docstrings that used "contract" in
+another sense (acceptance 4), and the three `pyproject.toml`'s coverage comment.)
 
 ## Conventions
 
@@ -34,10 +35,13 @@ Each goes into `AGENTS.md` in the block that first applies it.
   holds no `test_*.py`; like `tests/fakes` and `tests/support`, it is measured at 100 % and left out of
   `_unit-coverage-check`. Each package's `tests/conftest.py` registers `tests.contracts` for pytest's assertion
   rewriting, since pytest rewrites only test modules, conftests and plugins, and a contract's failing `assert` would
-  otherwise print a bare `AssertionError`. Hard rules, block 20.
+  otherwise print a bare `AssertionError`. Hard rules, block 20. (Corrected: a pair's contract types its fixture with
+  a `Protocol` of the pair, `<Thing>Store`, in the contract's module, since an implementation shares no nominal base
+  with the pair; applied from block 20, written into `AGENTS.md` and `testing.md` by the closing block.)
 - **C2. A subclass per implementation, `Test<Implementation>`**, in the implementation's own test module: a real adapter's
   test module, or for a fake `tests/fakes/<path of the fake>/test_<fake module>.py`, listed in `tests_without_unit`.
-  Hard rules, block 20.
+  Hard rules, block 20. (Corrected: nothing checked the module until the closing block's structure test, which expects
+  `tests/a/test_b*.py` for `src/<pkg>/a/b.py` and `tests/fakes/a/test_b.py` for `tests/fakes/a/b.py`.)
 - **C3. The port is the reference.** A port's docstring is its promise and its contract tests all of it; a behaviour
   the port leaves unstated enters the docstring when a production consumer relies on it; a double's docstring describes
   the double against its port, never against another implementation. Hard rules, block 20.
@@ -94,6 +98,9 @@ Details per decision: appendix A.
   9.1.1 silently skips a test class left abstract (appendix B), so a subclass that forgets its fixture would run nothing; a
   stale exemption is refused as `tests_without_unit` refuses a stale listing. Accepted limit: `test_fake_files.py`'s
   reach (a base written `module.Port`, a relative import, a re-export), which no file of the tree uses (appendix B).
+  (Corrected: four checks from block 20, the fourth refusing a contract whose name matches no port of its package,
+  which would otherwise check nothing; a fifth from the closing block, each subclass in its implementation's own test
+  module (C2). Each store contract also declares a `Protocol` of its pair to type its fixture (C1).)
 - **D9. Six fakes are fixed**, each to pass a promise its contract tests: `FakeNodeIdStore` refuses a second id and
   `FakeTrackedDownloadStore` keeps an already tracked file's row, both promises their ports state (D4);
   `FakeStatusReadingStore` is built with its client names, a promise relied on (A1); `FakeLoopMonotonicClock` and
@@ -102,7 +109,11 @@ Details per decision: appendix A.
   these fixes remove (appendix B).
 - **D10. A test that a contract restates is deleted**: a real adapter's (the rest stays: SQL rows, migrations, rollbacks,
   threads, file modes), and those of `C/tests/application/test_fakes.py` on the contracted fakes (`FakeTime`'s clocks,
-  lines 22 and 33). Why: covering twice brings nothing (the operator, 2026-10-14).
+  lines 22 and 33). Why: covering twice brings nothing (the operator, 2026-10-14). (Corrected: no contract restates
+  `test_fakes.py`'s two tests, "a monotonic sleep moves the wall clock" and "`step_wall` leaves the monotonic clock",
+  which are `FakeTime`'s own behaviour; their deletion stands because the consumers' tests catch both breaks, 10 and 2
+  failures under the holistic review's mutations. And block 80 pruned `AsyncioMonotonicClock`'s bounded read, which
+  no contract restates since it names the clock read; the closing block restores it.)
 - **D11. A fake keeps its fault knobs and spy attributes; its contract runs on its default configuration, but for a
   knob that reaches a failure the port states** (`FakeAmuleConfStore`'s read error). Why: the knobs test our failure
   handling, and a decoy mock cannot make a working store fail on its third write.
@@ -116,6 +127,10 @@ Details per decision: appendix A.
   `tests/application/`, which mirrors nothing it tests. Block 20 amends the two sentences this makes false
   (`AGENTS.md`: `tests/fakes` holds no `test_*.py`; `docs/contributing/testing.md`: « Aucun fichier nommé `test_*.py`
   n'y vit »), and `test_fake_files.py` skips the `test_*.py` files of `tests/fakes`, which hold subclasses, not doubles.
+  (Corrected: the skip and both sentences landed in block 10, whose move of `FakeAmuleApiServer`'s tests made the check
+  fail and the sentences false. The skip also hid a port's implementation written in such a file from every structure
+  check; the closing block has the stray-class check of `test_fake_files.py` treat a `test_*.py` of `tests/fakes` as
+  outside the fakes.)
 - **D15. C3 holds of every double from block 20.** The docstrings that compare a double with another implementation are
   rewritten, contracted or not: `FakeJitterGenerator` and `FakeFreeSpaceMeter` in block 20, `FakeTrackedDownloadStore`
   in block 50, `FakeRunStateStore` in block 60. Why: the rule is written for all doubles, and the lot should not end
@@ -124,7 +139,8 @@ Details per decision: appendix A.
   test_api_fakes.py` (`FakeAmuleApiServer`, 62 lines) becomes `C/tests/fakes/test_fake_amule_api_server.py` in block 10;
   what block 80 leaves of `C/tests/application/test_fakes.py` (one test each of `FakeDecisionReader`,
   `FakeNoSetStateTrackedDownloadStore`, `FakeBlockingMonotonicClock`) moves to a `test_<fake module>.py` beside each
-  double, and the file goes. These are the only test files dedicated to doubles: the two are the only ones
+  double, and the file goes. (Corrected: five doubles, not three: `FakeLogger`'s test too, and the catalog-reads test
+  covered `FakeDecisionReader` and `FakeObservationReader`, split into one test each; block 80.) These are the only test files dedicated to doubles: the two are the only ones
   `tests_without_unit` lists for doubles, and a test file named after no `src` module fails `_unit-coverage-check`
   unless listed there (every package's `pyproject.toml`, 2026-10-25). A test of a double written inside a module's own
   test file would escape this count; none is known.
@@ -132,30 +148,32 @@ Details per decision: appendix A.
 ## Blocks
 
 Estimates: the Sonnet agent `contract-estimates`, on the tree at `84d6c0fe`, 2026-10-25; the contract bodies are
-guessed from appendix A and the tests they restate.
+guessed from appendix A and the tests they restate. (Corrected: the Measured column, each block's lines and files
+against its parent branch, from its report.)
 
-| # | Branch | Holds | Lines, files |
-|---|--------|-------|--------------|
-| 10 | `test/contract-port-implementations` | this spec; `test_fake_files.py`'s AST helpers moved to `tests/support/port_implementations.py`; `test_api_fakes.py` moved beside its fake (D17) | 370, 5 |
-| 20 | `test/contract-subclasses-check` | the structure test; the `PolicyFingerprintStore` contract and its two subclasses; the assertion rewriting; C1 to C4 and the amended sentences in `AGENTS.md` and `testing.md`; two docstrings (D5 to D8, D10, D14 to D16) | 400, 15 |
-| 30 | `test/node-id-store-contract` | the `NodeIdStore` contract; `FakeNodeIdStore` refuses a second id (D9) | 150, 7 |
-| 40 | `test/backoff-state-store-contract` | the `BackoffStateStore` contract; its port's aware read (A1) | 190, 6 |
-| 50 | `test/tracked-download-store-contract` | the `TrackedDownloadStore` contract and its exemption; its ports' silences (A1); `FakeTrackedDownloadStore`'s fix and docstring (D9, D15) | 360, 7 |
-| 60 | `test/run-state-store-contract` | the `RunStateStore` contract; its initial state in the port; `FakeRunStateStore`'s docstring (D15) | 210, 7 |
-| 70 | `test/status-reading-store-contract` | the `StatusReadingStore` contract; its listed clients in the port; `FakeStatusReadingStore` built with them (D9) | 150, 9 |
-| 80 | `test/monotonic-clock-contract` | the crawler's `MonotonicClock` contract and its exemption; its promises (D12); `virtual_time.py` hands out the loop it runs, so that `FakeLoopMonotonicClock` receives it (D9); `test_fakes.py`'s clock tests pruned, the rest moved beside its doubles (D10, D17) | 330, 17 |
-| 90 | `test/wall-clock-contract` | the crawler's `WallClock` contract; its promises (A1); `FakeLoopWallClock` receives its loop (D9) | 200, 9 |
-| 100 | `test/waker-contract` | the `Waker` contract | 100, 5 |
-| 110 | `test/amule-contracts` | amule's `AmuleConfStore` and `MonotonicClock` contracts; `FakeAmuleConfStore`'s read error (D9); amule's `tests_without_unit` and assertion rewriting | 280, 11 |
-| 120 | `test/dockerfile-store-contract` | amule_bump's `DockerfileStore` contract; its `tests_without_unit` and assertion rewriting | 120, 7 |
-| 130 | `docs/fake-contract-tests-wrap` | closing block: holistic findings, backlog, handoff | |
+| # | Branch | Holds | Lines, files | Measured |
+|---|--------|-------|--------------|----------|
+| 10 | `test/contract-port-implementations` | this spec; `test_fake_files.py`'s AST helpers moved to `tests/support/port_implementations.py`; `test_api_fakes.py` moved beside its fake (D17); (Corrected: D14's skip and the two amended sentences) | 370, 5 | 268, 7 |
+| 20 | `test/contract-subclasses-check` | the structure test; the `PolicyFingerprintStore` contract and its two subclasses; the assertion rewriting; C1 to C4 and the amended sentences in `AGENTS.md` and `testing.md` (Corrected: the sentences amended in block 10, this block adding `tests/contracts` to them); two docstrings (D5 to D8, D10, D14 to D16) | 400, 15 | 266, 15 |
+| 30 | `test/node-id-store-contract` | the `NodeIdStore` contract; `FakeNodeIdStore` refuses a second id (D9) | 150, 7 | 69, 5 |
+| 40 | `test/backoff-state-store-contract` | the `BackoffStateStore` contract; its port's aware read (A1) | 190, 6 | 96, 5 |
+| 50 | `test/tracked-download-store-contract` | the `TrackedDownloadStore` contract and its exemption; its ports' silences (A1); `FakeTrackedDownloadStore`'s fix and docstring (D9, D15) | 360, 7 | 268, 8 |
+| 60 | `test/run-state-store-contract` | the `RunStateStore` contract; its initial state in the port; `FakeRunStateStore`'s docstring (D15) | 210, 7 | 214, 8 |
+| 70 | `test/status-reading-store-contract` | the `StatusReadingStore` contract; its listed clients in the port; `FakeStatusReadingStore` built with them (D9) | 150, 9 | 123, 8 |
+| 80 | `test/monotonic-clock-contract` | the crawler's `MonotonicClock` contract and its exemption; its promises (D12); `virtual_time.py` hands out the loop it runs, so that `FakeLoopMonotonicClock` receives it (D9); `test_fakes.py`'s clock tests pruned, the rest moved beside its doubles (D10, D17) | 330, 17 | 340, 19 |
+| 90 | `test/wall-clock-contract` | the crawler's `WallClock` contract; its promises (A1); `FakeLoopWallClock` receives its loop (D9) | 200, 9 | 82, 9 |
+| 100 | `test/waker-contract` | the `Waker` contract | 100, 5 | 68, 4 |
+| 110 | `test/amule-contracts` | amule's `AmuleConfStore` and `MonotonicClock` contracts; `FakeAmuleConfStore`'s read error (D9); amule's `tests_without_unit` and assertion rewriting | 280, 11 | 158, 14 |
+| 120 | `test/dockerfile-store-contract` | amule_bump's `DockerfileStore` contract; its `tests_without_unit` and assertion rewriting | 120, 7 | 76, 9 |
+| 130 | `docs/fake-contract-tests-wrap` | closing block: holistic findings, backlog, handoff | | MEASURED_130 |
 
 - Order: the helpers' move first, then the check with its first contract, so that every later contract is checked as it
   lands. The check covers only the ports a suite exists for, so each later block adds a suite, all its subclasses and its
   exemptions together.
 - Blocks 80 and 90 were one, estimated at 400 lines and 17 files before `virtual_time.py`'s change was known: split
   ahead. Rows 10, 20, 80, 90, 110 and 120 were raised by the lead after the review and D17, from the files they add;
-  block 80 at 17 files is the soft spot: if it passes 19, `test_fakes.py`'s dispersal moves to block 90.
+  block 80 at 17 files is the soft spot: if it passes 19, `test_fakes.py`'s dispersal moves to block 90. (Corrected:
+  block 80 measured 19 files, within the bound, D17's five doubles instead of three adding the two.)
 
 ## Acceptance
 
@@ -169,9 +187,20 @@ guessed from appendix A and the tests they restate.
 4. `git diff origin/main...<top> --stat -- 'packages/*/src'` lists only these files, under
    `application/ports/driven/`, and each one's diff changes docstrings only: C's `tracked_download_writer.py`,
    `tracked_download_reader.py`, `backoff_state_reader.py`, `run_state_reader.py`, `status_reading_reader.py`,
-   `monotonic_clock.py`, `wall_clock.py`; A's `monotonic_clock.py`.
+   `monotonic_clock.py`, `wall_clock.py`; A's `monotonic_clock.py`. (Corrected: the pathspec is
+   `'packages/*/src/*'`, since `'packages/*/src'` matches nothing; and the closing block rewords, docstrings only, the
+   seven `src` files whose docstrings used "contract" in another sense than the glossary's: C's
+   `domain/client_errors.py`, `domain/store_error.py`, `adapters/driven/persistence_sqlite/errors.py`,
+   `adapters/driven/amule_api/errors.py`, `application/steps/cataloguer.py`, `application/steps/file_judge.py`, and
+   `packages/matching/src/catalog_matching/domain/combinators.py`.)
 5. `grep -rniE "the real|Sqlite|Asyncio|InMemory|Posix|Filesystem|System[A-Z]|AmuleApi|Github|S6|Shutil|Stdlib|Random[A-Z]|Apprise|Gluetun|Prometheus|Uuid4"
-   packages/*/tests/fakes` prints no docstring or comment line.
+   packages/*/tests/fakes` prints no docstring or comment line. (Corrected: as worded, it printed the docstrings and
+   comments of the outside systems' fakes at `tests/fakes`' root, which describe the system they replace, and,
+   case-insensitive, `asyncio` code lines. Narrowed to the doubles of ports: case-sensitive, over `tests/fakes`'
+   subdirectories, without the two doubles of what an adapter receives, `FakeCommandRunner` and `FakeApprise`:
+   `grep -rnE "[Tt]he real|[Ss]qlite|SQLite|Asyncio|InMemory|Posix|Filesystem|System[A-Z]|AmuleApi|amuleapi|Git[Hh]ub|S6|s6|Shutil|Stdlib|Random[A-Z]|Apprise|[Gg]luetun|Prometheus|Uuid4" packages/*/tests/fakes/*/ --exclude=fake_command_runner.py --exclude=fake_apprise.py`
+   printed nothing (exit 1) at the closing block, 2026-10-25; on `84d6c0fe` it printed the two docstrings the lot
+   rewrote, of `FakeTrackedDownloadStore` and `FakeRunStateStore`.)
 6. The closing block's report holds a table with one row per A1 row: for a silence relied on, the port line that states
    it and the contract test that tests it; for one left unspecified, the absence of both.
 7. `AGENTS.md` carries C1 to C4, names `tests/contracts` beside `tests/fakes` and `tests/support`, and no longer says
@@ -220,10 +249,16 @@ guessed from appendix A and the tests they restate.
 | `WallClock` | `now()` callable from any thread, no running loop needed | relied on (`describe_file.py:38`, `describe_source.py:30`, `describe_source_name.py:33`, called from the webui's handlers): stated |
 | `WallClock` | `now()` never decreases | unspecified (`remaining_wait` clamps a step back) |
 | `DockerfileStore` | a write into a missing directory | unspecified (`B/.../bump_amule.py:68-69` writes the path it just read) |
+| `StatusReadingStore` | a reading set for a client the store was not built with | unspecified (the status loop sets only its own configured client). (Corrected: row added by block 70.) |
+| `StatusReadingStore` | a read is a snapshot a later write never changes | unspecified (the in-memory store's mechanism, kept in its own test). (Corrected: row added by block 70.) |
 
 Already stated, kept and tested (D4): `record_queued` keeps an already tracked file's row; a second node id is refused;
 the run state's waits return at once when already resumed or requested; `read_amule_conf` raises `OSError` when the
-file exists but cannot be read (relied on by `A/application/port_sync_lifecycle.py:56-65`).
+file exists but cannot be read (relied on by `A/application/port_sync_lifecycle.py:56-65`). (Corrected: also tested as
+stated, by the blocks named: each run state writer method changes its own state only, a pause requesting no shutdown
+and a shutdown request leaving the crawler resumed, and both run state ports' "any thread" (60); the status reading's
+replacement and its read from any thread (70). The closing block tests port-sync's `OSError` side through
+`FakeAmuleConfStore`'s `read_error`.)
 
 ### A2. The suites and their subclasses
 
@@ -256,6 +291,11 @@ Twelve suites, 28 subclasses, two exemptions.
   `OSError` even as root), the fake its new read error.
 - The fake clocks build on a `FakeTime`; `FakeLoopMonotonicClock` and `FakeLoopWallClock` on the loop `virtual_time.py`
   hands out. Their only users are `test_amule_api_client_search_pacing.py` and `test_search_task_runner.py`.
+  (Corrected: their contract subclasses build them on pytest-asyncio's running loop, since the contract is async and the
+  virtual loop cannot wait on a thread, which the thread test needs; their users still hand them the virtual loop.
+  Blocks 80 and 90.)
+- (Corrected: amule's `MonotonicClockContract` compares `now().nanoseconds`, since amule's `MonotonicInstant` is not
+  ordered and its difference rounds a sub-microsecond step to zero; block 110.)
 - `FakeTime` is never given a naive `start` in the tree, so `FakeWallClock` is aware in every configuration a test uses.
 
 ## Appendix B: measurements
