@@ -53,11 +53,14 @@ Le projet a **deux niveaux** :
    `<Port>Contract` (ou `<Chose>StoreContract` pour une paire `Writer`/`Reader`), dans
    `tests/contracts/` au miroir du port. Sa fixture abstraite construit l'implémentation testée, et
    ses tests énoncent les docstrings du port : le port fait référence, jamais l'adaptateur réel.
+   Le contrat d'une paire type sa fixture par un `Protocol` de la paire, nommé `<Chose>Store`,
+   dans le module du contrat (tests seulement : mypy y tient la fixture de chaque sous-classe).
    Chaque implémentation lance le contrat par une sous-classe `Test<Implémentation>` qui définit
    cette fixture, dans son propre module de test (celui de l'adaptateur, ou le
    `test_<module du fake>.py` à côté du fake). `packages/crawler/tests/test_contract_subclasses.py`
-   refuse une implémentation d'un port sous contrat sans sa sous-classe, une sous-classe restée
-   abstraite (pytest l'ignorerait sans rien dire) et une exemption périmée. Comme `tests/fakes` et
+   refuse un contrat qui ne nomme aucun port de son paquet, une implémentation d'un port sous
+   contrat sans sa sous-classe, une sous-classe hors du module de test de son implémentation, une
+   sous-classe restée abstraite (pytest l'ignorerait sans rien dire) et une exemption périmée. Comme `tests/fakes` et
    `tests/support`, `tests/contracts` est mesuré à 100 % et ne contient aucun `test_*.py` ; le
    `conftest.py` du paquet l'inscrit à la réécriture des assertions de pytest, sans quoi un `assert`
    de contrat en échec n'afficherait qu'un `AssertionError` nu.
