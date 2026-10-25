@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 
 from p2pwatch.application.ports.driven.status_reading_reader import StatusReadingReader
 from p2pwatch.application.ports.driven.status_reading_writer import StatusReadingWriter
@@ -7,12 +7,10 @@ from p2pwatch.domain.status_reading import PublishedReading, StatusReading
 
 
 class FakeStatusReadingStore(StatusReadingWriter, StatusReadingReader):
-    """Reads the readings it is given, each replaced by the client's latest reading."""
+    """Readings in a dict, each read a copy of it."""
 
-    def __init__(
-        self, published_readings: Mapping[str, PublishedReading | None] | None = None
-    ) -> None:
-        self._published_readings = dict(published_readings or {})
+    def __init__(self, client_names: Iterable[str]) -> None:
+        self._published_readings: dict[str, PublishedReading | None] = dict.fromkeys(client_names)
 
     def set_reading(
         self, client_name: str, reading: StatusReading, published_at: MonotonicInstant
