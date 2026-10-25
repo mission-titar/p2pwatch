@@ -17,7 +17,10 @@ from tests.support.port_implementations import (
 )
 
 # Implementations that break their port on purpose, by `shown` name, each with its reason.
-_EXEMPTIONS: dict[str, str] = {}
+_EXEMPTIONS: dict[str, str] = {
+    "crawler/tests/fakes/adapters/driven/fake_no_set_state_tracked_download_store.py"
+    "::FakeNoSetStateTrackedDownloadStore": "fails the test on any set_state, by design",
+}
 
 
 def _suites() -> list[ClassDefinition]:
