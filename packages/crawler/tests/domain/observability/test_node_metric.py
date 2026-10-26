@@ -1,13 +1,21 @@
-"""The node counters and gauges, and the instructions they refuse at construction."""
+"""The node counters and gauges, their typed labels, and the instructions they refuse."""
 
 import pytest
 
+from catalog_matching.domain.decision_tier import DecisionTier
+from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.observability.node_metric import (
+    ChannelLabels,
+    ClientLabels,
     CounterIncrement,
+    DecisionLabels,
     GaugeSetting,
     NodeCounter,
     NodeGauge,
+    NodeMetricLabels,
+    SourceAlertLabels,
 )
+from p2pwatch.domain.observability.notification import SourceAlertKind
 
 _CLIENT_CHANNEL = ("client", "channel")
 
@@ -42,33 +50,69 @@ def test_a_node_metric_has_its_exposed_name_and_describes_itself() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("labels", "pairs"),
+    [
+        (ChannelLabels("amuled", "kad"), (("client", "amuled"), ("channel", "kad"))),
+        (ClientLabels("amuled"), (("client", "amuled"),)),
+        (DecisionLabels(DecisionTier.NOTIFY), (("tier", "notify"),)),
+        (DecisionLabels("retracted"), (("tier", "retracted"),)),
+        (
+            SourceAlertLabels(Network.ED2K, SourceAlertKind.FIRST_USEFUL),
+            (("network", "ed2k"), ("kind", "first_useful")),
+        ),
+    ],
+)
+def test_labels_write_their_pairs_in_the_order_of_their_names(
+    labels: NodeMetricLabels, pairs: tuple[tuple[str, str], ...]
+) -> None:
+    assert labels.pairs() == pairs
+    assert tuple(name for name, _ in pairs) == labels.names
+
+
 def test_an_increment_names_a_counter_its_labels_and_its_amount() -> None:
-    increment = CounterIncrement(NodeCounter.DECISIONS, (("tier", "notify"),), 2.0)
-    assert (increment.labels, increment.amount) == ((("tier", "notify"),), 2.0)
+    increment = CounterIncrement(NodeCounter.DECISIONS, DecisionLabels(DecisionTier.NOTIFY), 2.0)
+    assert (increment.labels, increment.amount) == (DecisionLabels(DecisionTier.NOTIFY), 2.0)
 
 
 def test_a_setting_of_none_names_a_gauge_series_to_remove() -> None:
-    setting = GaugeSetting(NodeGauge.CHANNEL_CONNECTED, (("client", "a"), ("channel", "kad")), None)
+    setting = GaugeSetting(NodeGauge.CHANNEL_CONNECTED, ChannelLabels("amuled", "kad"), None)
     assert setting.value is None
 
 
 @pytest.mark.parametrize(
-    ("counter", "labels"),
+    ("counter", "labels", "message"),
     [
-        (NodeCounter.SEARCHES, (("client", "amuled"),)),
-        (NodeCounter.CLIENT_UNREACHABLE, (("client", "amuled"), ("channel", "kad"))),
-        (NodeCounter.DOWNLOADS_COMPLETED, (("client", "amuled"),)),
-        (NodeCounter.SEARCHES, (("channel", "kad"), ("client", "amuled"))),
+        (
+            NodeCounter.SEARCHES,
+            ClientLabels("amuled"),
+            "p2pwatch_searches takes ChannelLabels, given ClientLabels",
+        ),
+        (NodeCounter.SEARCHES, None, "p2pwatch_searches takes ChannelLabels, given no labels"),
+        (
+            NodeCounter.DOWNLOADS_COMPLETED,
+            ClientLabels("amuled"),
+            "p2pwatch_downloads_completed takes no labels, given ClientLabels",
+        ),
     ],
-    ids=["missing", "extra", "on an unlabelled counter", "out of the declared order"],
+    ids=["other labels", "missing labels", "labels on an unlabelled counter"],
 )
-def test_an_increment_whose_label_names_are_not_its_counters_cannot_be_built(
-    counter: NodeCounter, labels: tuple[tuple[str, str], ...]
+def test_an_increment_whose_labels_are_not_its_counters_cannot_be_built(
+    counter: NodeCounter, labels: NodeMetricLabels | None, message: str
 ) -> None:
-    with pytest.raises(ValueError, match=f"{counter.exposed_name} takes the labels"):
+    with pytest.raises(ValueError, match=message):
         CounterIncrement(counter, labels)
 
 
-def test_a_setting_whose_label_names_are_not_its_gauges_cannot_be_built() -> None:
-    with pytest.raises(ValueError, match="p2pwatch_crawler_up takes the labels"):
-        GaugeSetting(NodeGauge.CRAWLER_UP, (("client", "amuled"),), 1.0)
+def test_a_setting_whose_labels_are_not_its_gauges_cannot_be_built() -> None:
+    with pytest.raises(
+        ValueError, match="p2pwatch_crawler_up takes no labels, given ChannelLabels"
+    ):
+        GaugeSetting(NodeGauge.CRAWLER_UP, ChannelLabels("amuled", "kad"), 1.0)
+
+
+def test_an_instruction_gives_the_pairs_of_its_labels_or_none_unlabelled() -> None:
+    labelled = GaugeSetting(NodeGauge.CHANNEL_CONNECTED, ChannelLabels("amuled", "kad"), 1.0)
+    unlabelled = CounterIncrement(NodeCounter.DOWNLOADS_QUEUED)
+    assert labelled.label_pairs() == (("client", "amuled"), ("channel", "kad"))
+    assert unlabelled.label_pairs() == ()

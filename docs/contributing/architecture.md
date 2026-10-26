@@ -704,9 +704,11 @@ Les métriques du nœud sont un état à nous : le dispatcher les écrit par le 
 d'`InMemoryNodeMetricStore`, et la route `/metrics` de la webui les lit par le cas d'usage
 `ListNodeMetrics`, derrière son port pilotant `NodeMetricLister`, puis écrit elle-même le format
 texte 0.0.4 de Prometheus. Le domaine porte le catalogue des métriques, compteurs `NodeCounter` et
-jauges `NodeGauge`, chacun avec sa description et ses noms de labels : un `CounterIncrement` ne
-prend qu'un compteur, un `GaugeSetting` qu'une jauge, et des labels qui ne sont pas ceux de la
-métrique lèvent une erreur à la construction. Rien ne scrape `/metrics`
+jauges `NodeGauge`, chacun avec sa description et sa classe de labels (`ChannelLabels`,
+`ClientLabels`, `DecisionLabels`, `SourceAlertLabels`, ou aucune) : un `CounterIncrement` ne
+prend qu'un compteur, un `GaugeSetting` qu'une jauge, et des labels d'une autre classe que celle
+de la métrique lèvent une erreur à la construction. Chaque classe écrit ses paires (nom, texte),
+que le store garde telles quelles pour l'exposition. Rien ne scrape `/metrics`
 par défaut : pointez-y votre propre Prometheus si vous voulez des tableaux de bord.
 
 **Discipline de frontière (E-D13)** : les échecs de notifieur (apprise) et les échecs d'appel au

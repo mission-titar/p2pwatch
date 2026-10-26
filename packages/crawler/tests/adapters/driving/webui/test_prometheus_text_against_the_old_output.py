@@ -6,19 +6,26 @@ from pathlib import Path
 
 import pytest
 
+from catalog_matching.domain.decision_tier import DecisionTier
 from p2pwatch.adapters.driven.in_memory_node_metric_store import InMemoryNodeMetricStore
 from p2pwatch.adapters.driving.webui.prometheus_text import prometheus_text
 from p2pwatch.application.use_cases.list_node_metrics import ListNodeMetrics
+from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.observability.node_metric import (
+    ChannelLabels,
+    ClientLabels,
     CounterIncrement,
+    DecisionLabels,
     GaugeSetting,
     NodeCounter,
     NodeGauge,
+    SourceAlertLabels,
 )
+from p2pwatch.domain.observability.notification import SourceAlertKind
 
 _FIXTURES = Path(__file__).parents[3] / "fixtures"
-_AMULED_ED2K = (("client", "amuled"), ("channel", "ed2k"))
-_AMULED_KAD = (("client", "amuled"), ("channel", "kad"))
+_AMULED_ED2K = ChannelLabels("amuled", "ed2k")
+_AMULED_KAD = ChannelLabels("amuled", "kad")
 
 # Every node metric, and each instruction test_policy's cases write: increments that add up, an
 # increment of 0, a gauge replaced, a series removed, an absent one removed, a label to escape.
@@ -28,12 +35,12 @@ INSTRUCTIONS: tuple[CounterIncrement | GaugeSetting, ...] = (
     CounterIncrement(NodeCounter.SEARCHES, _AMULED_KAD),
     CounterIncrement(NodeCounter.SEARCH_RESULTS_SKIPPED, _AMULED_KAD, 0.0),
     CounterIncrement(NodeCounter.SEARCHES, _AMULED_ED2K),
-    CounterIncrement(NodeCounter.CLIENT_UNREACHABLE, (("client", "slskd"),)),
-    CounterIncrement(NodeCounter.CLIENT_UNREACHABLE, (("client", 'a\\b"c\nd'),)),
+    CounterIncrement(NodeCounter.CLIENT_UNREACHABLE, ClientLabels("slskd")),
+    CounterIncrement(NodeCounter.CLIENT_UNREACHABLE, ClientLabels('a\\b"c\nd')),
     CounterIncrement(NodeCounter.SEARCH_FAILURES, _AMULED_KAD),
     CounterIncrement(NodeCounter.OBSERVATIONS, _AMULED_KAD),
-    CounterIncrement(NodeCounter.DECISIONS, (("tier", "download"),)),
-    CounterIncrement(NodeCounter.DECISIONS, (("tier", "notify"),)),
+    CounterIncrement(NodeCounter.DECISIONS, DecisionLabels(DecisionTier.DOWNLOAD)),
+    CounterIncrement(NodeCounter.DECISIONS, DecisionLabels(DecisionTier.NOTIFY)),
     CounterIncrement(NodeCounter.DOWNLOADS_QUEUED),
     CounterIncrement(NodeCounter.DOWNLOADS_COMPLETED),
     GaugeSetting(NodeGauge.CHANNEL_CONNECTED, _AMULED_KAD, 1.0),
@@ -42,12 +49,16 @@ INSTRUCTIONS: tuple[CounterIncrement | GaugeSetting, ...] = (
     GaugeSetting(NodeGauge.CHANNEL_CONNECTABLE, _AMULED_ED2K, 1.0),
     GaugeSetting(NodeGauge.CHANNEL_CONNECTED, _AMULED_KAD, None),
     GaugeSetting(NodeGauge.CHANNEL_CONNECTABLE, _AMULED_KAD, None),
-    GaugeSetting(NodeGauge.CHANNEL_CONNECTED, (("client", "slskd"), ("channel", "ed2k")), None),
-    GaugeSetting(NodeGauge.DISK_FREE_BYTES, (), 5_000.0),
-    GaugeSetting(NodeGauge.DISK_FREE_BYTES, (), 500_000_000_000.0),
-    GaugeSetting(NodeGauge.CRAWLER_UP, (), 1.0),
-    CounterIncrement(NodeCounter.SOURCE_ALERTS, (("network", "ed2k"), ("kind", "first_useful"))),
-    CounterIncrement(NodeCounter.SOURCE_ALERTS, (("network", "ed2k"), ("kind", "reappeared"))),
+    GaugeSetting(NodeGauge.CHANNEL_CONNECTED, ChannelLabels("slskd", "ed2k"), None),
+    GaugeSetting(NodeGauge.DISK_FREE_BYTES, None, 5_000.0),
+    GaugeSetting(NodeGauge.DISK_FREE_BYTES, None, 500_000_000_000.0),
+    GaugeSetting(NodeGauge.CRAWLER_UP, None, 1.0),
+    CounterIncrement(
+        NodeCounter.SOURCE_ALERTS, SourceAlertLabels(Network.ED2K, SourceAlertKind.FIRST_USEFUL)
+    ),
+    CounterIncrement(
+        NodeCounter.SOURCE_ALERTS, SourceAlertLabels(Network.ED2K, SourceAlertKind.REAPPEARED)
+    ),
 )
 
 _SAMPLE_LINE = re.compile(r"(?P<name>\w+)(?:\{(?P<labels>.*)\})? (?P<value>\S+)")

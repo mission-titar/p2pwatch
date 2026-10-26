@@ -11,10 +11,14 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction
 from p2pwatch.domain.observability import events as ev
 from p2pwatch.domain.observability.node_metric import (
+    ChannelLabels,
+    ClientLabels,
     CounterIncrement,
+    DecisionLabels,
     GaugeSetting,
     NodeCounter,
     NodeGauge,
+    SourceAlertLabels,
 )
 from p2pwatch.domain.observability.notification import (
     CompletedDownload,
@@ -33,10 +37,10 @@ from p2pwatch.domain.observability.policy import (
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.source import SourceKey
 
-_AMULED_KAD = (("client", "amuled"), ("channel", "kad"))
-_AMULED_ED2K = (("client", "amuled"), ("channel", "ed2k"))
-_ED2K_FIRST_USEFUL = (("network", "ed2k"), ("kind", "first_useful"))
-_ED2K_REAPPEARED = (("network", "ed2k"), ("kind", "reappeared"))
+_AMULED_KAD = ChannelLabels("amuled", "kad")
+_AMULED_ED2K = ChannelLabels("amuled", "ed2k")
+_ED2K_FIRST_USEFUL = SourceAlertLabels(Network.ED2K, SourceAlertKind.FIRST_USEFUL)
+_ED2K_REAPPEARED = SourceAlertLabels(Network.ED2K, SourceAlertKind.REAPPEARED)
 _SOURCE = SourceKey(Network.ED2K, "1f2e3d4c" * 4)
 _FILE = FileKey(Network.ED2K, "8f3a1c0b9e7d44a2b6c1f0e9d8a7b6c5")
 _062A = (ev.TargetTitle("062A", "Les demoiselles cambrioleuses"),)
@@ -71,7 +75,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ObservabilityPlan(
             Severity.WARNING,
             "slskd unreachable",
-            (CounterIncrement(NodeCounter.CLIENT_UNREACHABLE, (("client", "slskd"),)),),
+            (CounterIncrement(NodeCounter.CLIENT_UNREACHABLE, ClientLabels("slskd")),),
         ),
     ),
     (
@@ -169,7 +173,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ObservabilityPlan(
             Severity.DEBUG,
             "download disk free: 5000 bytes",
-            (GaugeSetting(NodeGauge.DISK_FREE_BYTES, (), 5_000.0),),
+            (GaugeSetting(NodeGauge.DISK_FREE_BYTES, None, 5_000.0),),
         ),
     ),
     (
@@ -184,7 +188,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         _relayed(
             Severity.INFO,
             "🟢 node online (download on)",
-            (GaugeSetting(NodeGauge.CRAWLER_UP, (), 1.0),),
+            (GaugeSetting(NodeGauge.CRAWLER_UP, None, 1.0),),
         ),
     ),
     (
@@ -192,7 +196,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         _relayed(
             Severity.INFO,
             "🟢 node online (download off)",
-            (GaugeSetting(NodeGauge.CRAWLER_UP, (), 1.0),),
+            (GaugeSetting(NodeGauge.CRAWLER_UP, None, 1.0),),
         ),
     ),
     (
@@ -240,8 +244,8 @@ def test_plan_observability_maps_every_event() -> None:
 
 
 def test_every_node_metric_the_policy_writes_fits_its_catalog() -> None:
-    """Structural guardrail: an instruction refuses at construction label names other than its node
-    metric's, so a policy writing one raises here, before a recorder ever sees it."""
+    """Structural guardrail: an instruction refuses at construction labels of another class than
+    its node metric's, so a policy writing one raises here, before a recorder ever sees it."""
     for event, _ in CASES:
         plan_observability(event)
 
@@ -294,7 +298,12 @@ def test_only_a_rise_to_notify_or_download_reaches_the_community(
 ) -> None:
     plan = plan_observability(_decisions(_change("062A", before, after)))
     assert (plan.notification is not None) == notified
-    assert plan.node_metrics == (CounterIncrement(NodeCounter.DECISIONS, (("tier", after),)),)
+    assert plan.node_metrics == (
+        CounterIncrement(
+            NodeCounter.DECISIONS,
+            DecisionLabels("retracted" if after == "retracted" else DecisionTier(after)),
+        ),
+    )
 
 
 _062A_062B = (
@@ -316,8 +325,8 @@ def test_a_file_with_risen_targets_is_one_rise_naming_the_file_and_targets() -> 
         _NODE,
     )
     assert plan.node_metrics == (
-        CounterIncrement(NodeCounter.DECISIONS, (("tier", "download"),)),
-        CounterIncrement(NodeCounter.DECISIONS, (("tier", "notify"),)),
+        CounterIncrement(NodeCounter.DECISIONS, DecisionLabels(DecisionTier.DOWNLOAD)),
+        CounterIncrement(NodeCounter.DECISIONS, DecisionLabels(DecisionTier.NOTIFY)),
     )
 
 

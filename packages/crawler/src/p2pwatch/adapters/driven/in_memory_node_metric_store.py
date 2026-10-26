@@ -24,14 +24,14 @@ class InMemoryNodeMetricStore(NodeMetricWriter, NodeMetricReader):
         self._value_by_series: Mapping[_Series, float] = {}
 
     def record_increment(self, increment: CounterIncrement) -> None:
-        series = (increment.counter, increment.labels)
+        series = (increment.counter, increment.label_pairs())
         self._value_by_series = {
             **self._value_by_series,
             series: self._value_by_series.get(series, 0.0) + increment.amount,
         }
 
     def set_gauge(self, setting: GaugeSetting) -> None:
-        series = (setting.gauge, setting.labels)
+        series = (setting.gauge, setting.label_pairs())
         if setting.value is None:
             self._value_by_series = {
                 kept: kept_value
