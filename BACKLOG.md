@@ -27,9 +27,6 @@ An agent adds an entry only after the operator has agreed to it.
 - **The node page shows a node id set in `crawler.yml`**: `NodeIdResolver` returns a configured id without
   recording it, so `/node` shows a blank id. Section "Backlog" of `agents/specs/2026-10-19-hexagon-p2pwatch.md`.
 
-- **The VEX's Python claims applied by Grype**: CVE-2025-15366 and -15367 target `pkg:generic/python`, which matches
-  none of the Debian packages Grype reports them on, so they still show (proved on v4.1.0's attested SBOM). `SECURITY.md`.
-
 - **Mutation testing in the gate**: mutmut run cold on a pull request's impact set, from the per-test coverage, so
   a test that stops detecting a fault fails the gate. D13 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`.
 
