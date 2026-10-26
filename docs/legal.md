@@ -96,8 +96,8 @@ Il ne protège pas contre :
 ## En pratique
 
 - **Préférez la pile VPN** (gluetun, Low-ID) à la pile par défaut.
-- **N'exposez pas la WebUI sur Internet, ni donc sa route `/metrics`.** Restez en réseau local, ou passez par un VPN
-  d'accès (WireGuard, Tailscale) et un reverse proxy avec authentification.
+- **N'exposez pas la WebUI sur Internet, ni donc sa route `/metrics`.** Restez en réseau local, ou
+  passez par un VPN d'accès (WireGuard, Tailscale) et un reverse proxy avec authentification.
 - **Ne publiez pas votre IP publique** sur des forums liés au projet : « mon nœud est ici, venez
   voir » vous expose même via VPN si vous êtes seul à l'utiliser à cet instant.
 - **Gardez votre système à jour**, surtout avec un port entrant ouvert (route B).
