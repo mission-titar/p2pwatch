@@ -101,9 +101,8 @@ jobs:
           sarif_file: /tmp/applied-claims.sarif
           category: vex-applied-claims-${{ matrix.package }}
 
-      # Scans the SBOM (not the live image) so results are reproducible, applying the
-      # OpenVEX pulled from the image. No --fail-on: findings are surfaced via SARIF,
-      # not a job failure; triage happens through VEX.
+      # Scans the SBOM (not the live image) so results are reproducible, applying the leg's VEX.
+      # No --fail-on: findings are surfaced via SARIF, not a job failure; triage happens through VEX.
       - name: Run Grype against the attested SBOM
         run: grype sbom:/tmp/sbom.syft.json --vex "$VEX" -o sarif --file /tmp/grype.sarif
 

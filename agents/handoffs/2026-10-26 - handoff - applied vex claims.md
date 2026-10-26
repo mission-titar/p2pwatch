@@ -1,7 +1,7 @@
 # Handoff: the VEX claims Grype applies
 
-Drafted by block 30 from the lot's block reports (#505, #506) and its own, for the closing block 40 to correct with
-the holistic review.
+Drafted by block 30 from the lot's block reports (#505, #506) and its own, corrected by the closing block 40 with the
+holistic review (`applied-claims-holistic`).
 
 ## State
 
@@ -16,7 +16,7 @@ One stack cut from `main` at `cc57f84d` (#504 merged), which had not moved when 
 |---|---|---|
 | 10 | #505 | `refactor/applied-claims-name` |
 | 20 | #506 | `chore/verified-anchore-tools` |
-| 30 | block 30's | `feat/applied-vex-claims` |
+| 30 | #508 | `feat/applied-vex-claims` |
 | 40 | the closing block's | `docs/applied-vex-claims-closing` |
 
 Not merged at writing. The lot changes no image: `vex_checks` is CI tooling, and the workflows change how CI installs
@@ -33,7 +33,8 @@ Wrap (f)).
   and `install-syft` (Syft v1.54.1), each installing cosign, fetching the tool's `install.sh` at the release tag's
   commit into a file, and running it with `-v` and `DOWNLOAD_TAG_INSTALL_SCRIPT=false`. They replace
   `anchore/scan-action`, `anchore/sbom-action` (in `validate.yml` and twice in `release.yml`, now one
-  `syft scan registry:...` with two outputs) and the daily scan's `curl | sh`. Dependabot no longer bumps either tool.
+  `syft scan registry:...` with two outputs) and the daily scan's `curl | sh`. Dependabot no longer bumps either tool;
+  each action says so in a comment (block 40).
 - **The check** (block 30, D1, D2, D4, D5): the driven port is `VulnerabilityScanner.scan_sbom(sbom_path, vex_path)
   -> VulnerabilityScan`, the value in `domain/vulnerability_scan.py` with `found_advisory_ids` and
   `unsuppressed_advisory_ids`. `GrypeVulnerabilityScanner` runs `grype sbom:<sbom> --vex <vex> -o json`: `matches` are
@@ -45,6 +46,8 @@ Wrap (f)).
   then `python -m vex_checks applied-claims` without `--sarif`, both under
   `if: startsWith(github.ref, 'refs/tags/v')`. The comment that kept staleness out of the release is gone, and
   `SECURITY.md` describes the check as a release hard-fail on a tag only.
+- **The closing block** (block 40): the holistic review's eight findings (below), and the backlog entry "A release
+  publishes both images or neither".
 
 ## Acceptance
 
@@ -55,8 +58,10 @@ Wrap (f)).
 3. Block 20, locally with cosign v3.0.6: a normal install logs `signature verification succeeded`; a wrong identity,
    through a `COSIGN_BINARY` wrapper, fails both tools on `failed to verify certificate identity: no matching
    CertificateIdentity found`.
-4. Waits for CI and the merge (`validate`, `publish-manifest`, aMule in the SBOM). Block 20 checked locally that both
-   SBOMs of `p2pwatch-amule:main` carry `pkg:generic/amule@3.1.0`.
+4. `validate` half met: `validate` is green on #505, #506 and #508 (`gh pr view <n> --json statusCheckRollup`), and
+   #508's arm64 leg (run 40375697504, job 121759304818) logs `[info] signature verification succeeded` for the Syft
+   install, then passes the `pkg:generic/amule@` check. Block 20 checked locally that both SBOMs of
+   `p2pwatch-amule:main` carry `pkg:generic/amule@3.1.0`. `publish-manifest` waits for the merge.
 5. Block 30, `test_check_applied_claims.py`, each watched failing on the old logic over the new signature:
    - stale: `problems: (ClaimProblem(advisory_id='CVE-B', message='no longer reported by Grype'),) !=
      (ClaimProblem(advisory_id='CVE-B', message='stale: Grype does not report it'),)`;
@@ -64,11 +69,18 @@ Wrap (f)).
      message='not applied: Grype leaves a match unsuppressed'),)`;
    - an unreadable VEX: `assert [(PurePosixPath('/tmp/sbom.syft.json'),
      PurePosixPath('/repo/security/crawler.vex.openvex.json'))] == []`, the scanner run before the reader raised;
+   - the scanner given the VEX, rerun by block 40 with the use case handing the SBOM's path in its place (the old
+     `scan_sbom(sbom_path)` call has no form on the new signature): `At index 0 diff:
+     (PurePosixPath('/tmp/sbom.syft.json'), PurePosixPath('/tmp/sbom.syft.json')) !=
+     (PurePosixPath('/tmp/sbom.syft.json'), PurePosixPath('/repo/security/crawler.vex.openvex.json'))`;
    - the SARIF rule id `unapplied-vex-claim`; a fully suppressed claim passes.
 6. Block 30, `test_grype_vulnerability_scanner.py`, over the old parsing: a VEX-ignored match not found
    (`found_advisory_ids: frozenset({'CVE-1'}) != frozenset({'CVE-1', 'CVE-2'})`), a match ignored by the VEX among
    other rules not found (`assert frozenset() == {'CVE-2'}`), four malformed `ignoredMatches` shapes `DID NOT RAISE
-   BrokenInputError`. A report with no `ignoredMatches` is the shape of the matches-only tests.
+   BrokenInputError`. A report with no `ignoredMatches` is the shape of the matches-only tests. Rerun by block 40
+   against the old argv (no `--vex`), Grype run with the VEX fails: `At index 0 diff: (['grype', 'sbom:.../sbom.json',
+   '-o', 'json'], {...}) != (['grype', 'sbom:.../sbom.json', '--vex', '/repo/security/crawler.vex.openvex.json', '-o',
+   'json'], {...})`.
 7. Block 30, against real Grype v0.120.1 (`anchore/grype:v0.120.1` behind a `grype` wrapper on `PATH`, database built
    2026-10-26T06:38:44Z), on SBOMs made by `anchore/syft:v1.42.3` from `p2pwatch:main` (`sha256:3920aa5a...`) and
    `p2pwatch-amule:main` (`sha256:155f6624...`, with `+sbom-cataloger`):
@@ -76,6 +88,7 @@ Wrap (f)).
      Grype leaves a match unsuppressed`;
    - current VEX: exit 0 on both images;
    - the crawler's VEX plus a claim for `CVE-1999-0001`: exit 1, `CVE-1999-0001: stale: Grype does not report it`.
+   The holistic review repeated it on the release's SBOM path (measurements below), with the same outcome.
 8. Waits for the merge: `publish-manifest` on `main` should show both new steps skipped and stay green.
 9. Block 30: `grep -n -i "stale\|prune" .github/workflows/release.yml SECURITY.md` prints only `SECURITY.md`'s two
    lines naming a stale claim as a failure.
@@ -83,7 +96,41 @@ Wrap (f)).
 
 ## The holistic review's findings
 
-For the closing block.
+0 critical, 0 major, 8 minor (`.reviews/applied-claims-holistic.md`). Every one fixed in block 40.
+
+1. `VexReader.read_claims` did not promise the `BrokenInputError` `CheckAppliedClaims` relies on: its docstring now
+   does, and `FakeVexReader`'s describes the double against it. Fixed.
+2. `VulnerabilityScan.found_advisory_ids`'s comment said "every match", though a match another ignore rule dropped
+   counts in neither set: the comment and `VulnerabilityScanner.scan_sbom`'s docstring now say it. Fixed.
+3. No watched failure for Grype run with `--vex`, nor for the use case handing the VEX to the scanner: both reran,
+   their failure lines in acceptance 5 and 6. Fixed.
+4. Nothing said the two actions' pins are bumped by hand, while `dependabot.yml` reads as covering them: one comment
+   line per action (Dependabot skips URLs, the SHA is the tag's commit, the version written twice). Fixed.
+5. The daily scan's comment said it applies "the OpenVEX pulled from the image", where the step reads the leg's VEX:
+   reworded "applying the leg's VEX". The attested-or-versioned choice for the main scan goes to "Next", for the v5
+   scan lot (the lead's call, in place of editing that backlog entry). Fixed.
+6. `FakeVulnerabilityScanner.scanned_paths` held bare pairs: a frozen `ScannedSbom(sbom_path, vex_path)` in the fake's
+   file, the list `scanned_sboms`. Fixed.
+7. Grype's `described-by` warning on the aMule SBOM was missing from the pitfalls: recorded below. Fixed.
+8. Facts the handoff could state (#508, acceptance 4's `validate` half, the `syft scan registry:` path): updated. Fixed.
+
+## Measured by the holistic review
+
+On 2026-10-26.
+
+- The release's SBOM path: Syft v1.54.1 `scan registry:ghcr.io/mission-titar/<image>@sha256:<amd64 digest of :main>`
+  (`3920aa5a...` crawler, `155f6624...` aMule), `SYFT_SELECT_CATALOGERS=+sbom-cataloger`, both outputs at once. The
+  source keeps the image identity with no scheme, and `pkg:generic/amule@` is in both aMule SBOMs. Then
+  `python -m vex_checks applied-claims` with `anchore/grype:v0.120.1`: the current VEX exits 0 on both images, the VEX
+  before #504 exits 1 on both, `CVE-2025-15366` and `CVE-2025-15367` each `not applied`.
+- `SYFT_REGISTRY_AUTH_*` without an authority applies to any registry (stereoscope's `canBeUsedWithRegistry`), so the
+  two variables take effect; the job's `docker/login-action` would cover it anyway.
+- A match ignored by one of Grype's default rules carries `"namespace": ""`, so the adapter's `rule["namespace"]`
+  matches real output and raises no `KeyError`.
+- Grype v0.120.1 still has `--file`; `-o sarif --file` on the aMule SBOM with its VEX gives 345 results, the spec's
+  count.
+- Both pins were published 2026-10-06, and each URL's SHA is the commit of its annotated tag (`v0.120.1` → `6f8d854a`,
+  `v1.54.1` → `b254e6d9`).
 
 ## Departures from the spec
 
@@ -110,25 +157,32 @@ None in any block.
   signs with a sigstore bundle from v1.53.0, Grype from v0.120.0; cosign must be v2.5.0 or newer (block 20).
 - **Without `DOWNLOAD_TAG_INSTALL_SCRIPT=false`**, the pinned `install.sh` hands over to the tag's script from
   `get.anchore.io`, so pinning it verifies nothing (block 20).
+- **Grype warns `unknown relationship type: described-by` (`from=syft`) on every aMule SBOM** Syft v1.54.1 writes with
+  `+sbom-cataloger`. Not version skew: Grype v0.120.1 vendors Syft v1.54.1, and v0.121.0 (vendoring v1.55.0) prints
+  it too. The aMule claims still apply. It shows in the tag gate's log, and in the daily scan once the v5 legs read
+  this Syft's SBOMs: do not "fix" it by changing versions (holistic review).
 - **Under zsh, an unquoted `$files` is not split into words**: `xargs -0` over `git grep -lz` (block 10).
 
 ## Not validated
 
 - The release steps run only on a tag, first at v5's.
+- `release.yml`'s `syft scan registry:` with `SYFT_REGISTRY_AUTH_*` runs first in `publish-manifest` after the merge;
+  the holistic review ran the same command locally (above).
 - The daily scan runs the new check on `main` after the merge. It still scans v4's `mulewatch`, whose attested VEX
   names `pkg:generic/python`, so it should report both Python claims not applied, under `vex-applied-claims-mulewatch`,
   until the v5 legs replace it.
-- Block 20's `syft scan registry:` with `SYFT_REGISTRY_AUTH_*` was not run locally, nor the arm64 install
-  (`validate`'s arm64 leg runs it).
 
 ## Wrap counts
 
-For the closing block.
+No fix-back, no cascaded rebase. One run re-triggered: block 20's arm64 job, after a transient HTTP 504 from
+github.com while `install.sh` resolved the Syft release (run 40373396119). No body called unreadable. One re-triggered
+run for four blocks: stacking cost less than pull requests in series.
 
 ## Next
 
-- The closing block: the holistic review's fixes, the backlog entry "A release publishes both images or neither"
-  (spec, "Not in this lot"), this handoff corrected.
 - The operator reads the stack; the lead rebases it onto the current `main`; the operator merges it.
 - Then the backlog, "A copy before a migration that rewrites rows" first, with "The Grype scan back on p2pwatch at the
-  v5 release", whose legs will upload under the category this lot named.
+  v5 release", whose legs will upload under the category this lot named. That lot decides on purpose which VEX the
+  main scan applies: the attested one (`/tmp/vex.openvex.json`, as `SECURITY.md` says today) or the leg's versioned
+  file (as its matrix comment implies), and aligns `SECURITY.md` with the choice.
+- The backlog entry "A release publishes both images or neither", added by block 40.

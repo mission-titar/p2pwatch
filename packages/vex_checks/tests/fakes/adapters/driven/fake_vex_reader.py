@@ -6,8 +6,8 @@ from vex_checks.domain.broken_input_error import BrokenInputError
 
 
 class FakeVexReader(VexReader):
-    """Reads the claims given for a VEX file, and ``claims`` from any other; an unreadable one
-    raises, as an absent file would."""
+    """Reads the claims given for a VEX file, and ``claims`` from any other; raises
+    ``BrokenInputError`` naming a path given as unreadable."""
 
     def __init__(
         self,

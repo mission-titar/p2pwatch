@@ -7,4 +7,5 @@ class VexReader(ABC):
 
     @abstractmethod
     def read_claims(self, vex_path: PurePath) -> dict[str, str]:
-        """The justification of each ``not_affected`` statement, by advisory id."""
+        """The justification of each ``not_affected`` statement, by advisory id; raises
+        ``BrokenInputError`` naming a file it cannot read."""
