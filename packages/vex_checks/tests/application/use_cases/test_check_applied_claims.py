@@ -11,7 +11,10 @@ from tests.fakes.adapters.driven.fake_code_scanning_reporter import (
     WrittenSarif,
 )
 from tests.fakes.adapters.driven.fake_vex_reader import FakeVexReader
-from tests.fakes.adapters.driven.fake_vulnerability_scanner import FakeVulnerabilityScanner
+from tests.fakes.adapters.driven.fake_vulnerability_scanner import (
+    FakeVulnerabilityScanner,
+    ScannedSbom,
+)
 from vex_checks.application.ports.driving.applied_claims_checker import AppliedClaimsReport
 from vex_checks.application.use_cases.check_applied_claims import CheckAppliedClaims
 from vex_checks.domain.broken_input_error import BrokenInputError
@@ -94,7 +97,7 @@ def test_the_scanner_is_given_the_sbom_and_the_vex() -> None:
 
     _checker(vulnerability_scanner).check_applied_claims(SBOM_PATH, VEX_PATH, None)
 
-    assert vulnerability_scanner.scanned_paths == [(SBOM_PATH, VEX_PATH)]
+    assert vulnerability_scanner.scanned_sboms == [ScannedSbom(SBOM_PATH, VEX_PATH)]
 
 
 def test_an_unreadable_vex_raises_before_the_scanner_runs() -> None:
@@ -105,7 +108,7 @@ def test_an_unreadable_vex_raises_before_the_scanner_runs() -> None:
     with pytest.raises(BrokenInputError, match=f"^{re.escape(str(VEX_PATH))}: no such file$"):
         checker.check_applied_claims(SBOM_PATH, VEX_PATH, None)
 
-    assert vulnerability_scanner.scanned_paths == []
+    assert vulnerability_scanner.scanned_sboms == []
 
 
 def test_asked_for_sarif_the_problems_are_written_under_the_unapplied_vex_claim_rule() -> None:
