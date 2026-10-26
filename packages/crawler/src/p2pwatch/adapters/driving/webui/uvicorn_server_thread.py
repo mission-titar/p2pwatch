@@ -1,16 +1,34 @@
 """``UvicornServerThread``: the webui served by uvicorn on a thread and an event loop of its own."""
 
 import asyncio
+import copy
 import logging
 import socket
 import threading
 from collections.abc import Iterable
 from contextlib import AbstractContextManager, ExitStack
+from typing import Any
 
 import uvicorn
 from starlette.applications import Starlette
+from uvicorn.config import LOGGING_CONFIG
 
 _logger = logging.getLogger(__name__)
+
+
+class _MetricsScrapeFilter(logging.Filter):
+    """Drops the access line of a ``/metrics`` request, which Prometheus sends every few seconds."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return '"GET /metrics HTTP/' not in record.getMessage()
+
+
+def _log_config() -> dict[str, Any]:
+    """uvicorn's own logging, its access logger filtered by ``_MetricsScrapeFilter``."""
+    log_config = copy.deepcopy(LOGGING_CONFIG)
+    log_config["filters"] = {"metrics_scrapes": {"()": _MetricsScrapeFilter}}
+    log_config["loggers"]["uvicorn.access"]["filters"] = ["metrics_scrapes"]
+    return log_config
 
 
 class _StartReportingServer(uvicorn.Server):
@@ -41,7 +59,8 @@ class UvicornServerThread:
         self._serving_resources = tuple(serving_resources)
         self._settled = threading.Event()
         self._server = _StartReportingServer(
-            uvicorn.Config(app, host=host, port=port, log_level="info"), self._settled
+            uvicorn.Config(app, host=host, port=port, log_config=_log_config(), log_level="info"),
+            self._settled,
         )
         self._thread = threading.Thread(target=self._serve, name="webui", daemon=True)
         self._start_timeout_seconds = start_timeout_seconds
