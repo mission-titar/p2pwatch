@@ -11,6 +11,12 @@ from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability import events as ev
+from p2pwatch.domain.observability.node_metric import (
+    CounterIncrement,
+    GaugeSetting,
+    NodeCounter,
+    NodeGauge,
+)
 from p2pwatch.domain.observability.notification import RelayedLogLine, TierRise
 from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.observability.severity import Severity
@@ -46,7 +52,9 @@ async def test_logs_and_applies_metrics_no_audience() -> None:
     await _dispatcher(metrics_recorder, notifier).dispatch(
         ev.ObservationRecorded(client_name="amuled", channel="ed2k")
     )
-    assert [m.name.value for m in metrics_recorder.applied] == ["p2pwatch_observations"]
+    assert metrics_recorder.applied == [
+        CounterIncrement(NodeCounter.OBSERVATIONS, (("client", "amuled"), ("channel", "ed2k")))
+    ]
     assert notifier.calls == []  # ObservationRecorded has no audience
 
 
@@ -58,9 +66,10 @@ async def test_two_metrics_one_event() -> None:
             client_name="amuled", channel="kad", connected=True, connectable=True
         )
     )
-    assert [m.name.value for m in metrics_recorder.applied] == [
-        "p2pwatch_channel_connected",
-        "p2pwatch_channel_connectable",
+    labels = (("client", "amuled"), ("channel", "kad"))
+    assert metrics_recorder.applied == [
+        GaugeSetting(NodeGauge.CHANNEL_CONNECTED, labels, 1.0),
+        GaugeSetting(NodeGauge.CHANNEL_CONNECTABLE, labels, 1.0),
     ]
 
 

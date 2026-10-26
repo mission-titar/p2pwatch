@@ -13,7 +13,12 @@ from p2pwatch.adapters.driven.observability.prometheus_metrics_recorder import (
     start_metrics_server,
 )
 from p2pwatch.domain.observability.events import SearchExecuted, SourceFirstUseful
-from p2pwatch.domain.observability.node_metric import CounterIncrement, GaugeSetting, NodeMetricName
+from p2pwatch.domain.observability.node_metric import (
+    CounterIncrement,
+    GaugeSetting,
+    NodeCounter,
+    NodeGauge,
+)
 from p2pwatch.domain.observability.policy import plan_observability
 from tests.domain.observability.test_policy import CASES
 from tests.fakes.adapters.driven.fake_metrics_server import FakeMetricsServer
@@ -23,15 +28,15 @@ def test_counter_inc_with_label() -> None:
     registry = CollectorRegistry()
     metrics_recorder = PrometheusMetricsRecorder(registry)
     labels = (("client", "amuled"), ("channel", "ed2k"))
-    metrics_recorder.apply(CounterIncrement(NodeMetricName.OBSERVATIONS, labels))
-    metrics_recorder.apply(CounterIncrement(NodeMetricName.OBSERVATIONS, labels))
+    metrics_recorder.apply(CounterIncrement(NodeCounter.OBSERVATIONS, labels))
+    metrics_recorder.apply(CounterIncrement(NodeCounter.OBSERVATIONS, labels))
     # counter exposed WITH the _total suffix added by prometheus_client
     assert registry.get_sample_value("p2pwatch_observations_total", dict(labels)) == 2.0
 
 
 def test_counter_inc_no_label() -> None:
     registry = CollectorRegistry()
-    PrometheusMetricsRecorder(registry).apply(CounterIncrement(NodeMetricName.DOWNLOADS_COMPLETED))
+    PrometheusMetricsRecorder(registry).apply(CounterIncrement(NodeCounter.DOWNLOADS_COMPLETED))
     assert registry.get_sample_value("p2pwatch_downloads_completed_total") == 1.0
 
 
@@ -39,7 +44,7 @@ def test_gauge_set_with_label() -> None:
     registry = CollectorRegistry()
     PrometheusMetricsRecorder(registry).apply(
         GaugeSetting(
-            NodeMetricName.CHANNEL_CONNECTABLE,
+            NodeGauge.CHANNEL_CONNECTABLE,
             (("client", "amuled"), ("channel", "kad")),
             1.0,
         )
@@ -50,7 +55,7 @@ def test_gauge_set_with_label() -> None:
 
 def test_gauge_set_no_label() -> None:
     registry = CollectorRegistry()
-    PrometheusMetricsRecorder(registry).apply(GaugeSetting(NodeMetricName.CRAWLER_UP, (), 1.0))
+    PrometheusMetricsRecorder(registry).apply(GaugeSetting(NodeGauge.CRAWLER_UP, (), 1.0))
     assert registry.get_sample_value("p2pwatch_crawler_up") == 1.0
 
 
@@ -60,9 +65,9 @@ def test_a_channel_series_is_removed_while_unknown_and_only_that_one() -> None:
     amuled = (("client", "amuled"), ("channel", "kad"))
     other = (("client", "other"), ("channel", "kad"))
     for labels in (amuled, other):
-        metrics_recorder.apply(GaugeSetting(NodeMetricName.CHANNEL_CONNECTED, labels, 1.0))
-        metrics_recorder.apply(GaugeSetting(NodeMetricName.CHANNEL_CONNECTABLE, labels, 0.0))
-    metrics_recorder.apply(GaugeSetting(NodeMetricName.CHANNEL_CONNECTABLE, amuled, None))
+        metrics_recorder.apply(GaugeSetting(NodeGauge.CHANNEL_CONNECTED, labels, 1.0))
+        metrics_recorder.apply(GaugeSetting(NodeGauge.CHANNEL_CONNECTABLE, labels, 0.0))
+    metrics_recorder.apply(GaugeSetting(NodeGauge.CHANNEL_CONNECTABLE, amuled, None))
     assert registry.get_sample_value("p2pwatch_channel_connectable", dict(amuled)) is None
     assert registry.get_sample_value("p2pwatch_channel_connectable", dict(other)) == 0.0
     assert registry.get_sample_value("p2pwatch_channel_connected", dict(amuled)) == 1.0
@@ -73,7 +78,7 @@ def test_removing_a_series_never_set_is_a_no_op() -> None:
     registry = CollectorRegistry()
     labels = (("client", "amuled"), ("channel", "ed2k"))
     PrometheusMetricsRecorder(registry).apply(
-        GaugeSetting(NodeMetricName.CHANNEL_CONNECTED, labels, None)
+        GaugeSetting(NodeGauge.CHANNEL_CONNECTED, labels, None)
     )
     assert registry.get_sample_value("p2pwatch_channel_connected", dict(labels)) is None
 
@@ -83,17 +88,19 @@ def test_the_search_and_channel_metrics_are_labelled_by_client_and_channel() -> 
     metrics_recorder = PrometheusMetricsRecorder(registry)
     labels = (("client", "amuled"), ("channel", "kad"))
     counters = (
-        NodeMetricName.SEARCHES,
-        NodeMetricName.SEARCH_RESULTS_SKIPPED,
-        NodeMetricName.OBSERVATIONS,
-        NodeMetricName.SEARCH_FAILURES,
+        NodeCounter.SEARCHES,
+        NodeCounter.SEARCH_RESULTS_SKIPPED,
+        NodeCounter.OBSERVATIONS,
+        NodeCounter.SEARCH_FAILURES,
     )
-    gauges = (NodeMetricName.CHANNEL_CONNECTED, NodeMetricName.CHANNEL_CONNECTABLE)
-    for name in counters:
-        metrics_recorder.apply(CounterIncrement(name, labels))
-    for name in gauges:
-        metrics_recorder.apply(GaugeSetting(name, labels, 1.0))
-    samples = [f"{name}_total" for name in counters] + [name.value for name in gauges]
+    gauges = (NodeGauge.CHANNEL_CONNECTED, NodeGauge.CHANNEL_CONNECTABLE)
+    for counter in counters:
+        metrics_recorder.apply(CounterIncrement(counter, labels))
+    for gauge in gauges:
+        metrics_recorder.apply(GaugeSetting(gauge, labels, 1.0))
+    samples = [f"{counter.exposed_name}_total" for counter in counters] + [
+        gauge.exposed_name for gauge in gauges
+    ]
     assert [registry.get_sample_value(sample, dict(labels)) for sample in samples] == [1.0] * 6
 
 
@@ -149,7 +156,7 @@ def _free_port() -> int:
 
 def test_the_metrics_server_serves_the_registry_on_its_port_until_stopped() -> None:
     registry = CollectorRegistry()
-    PrometheusMetricsRecorder(registry).apply(CounterIncrement(NodeMetricName.DOWNLOADS_COMPLETED))
+    PrometheusMetricsRecorder(registry).apply(CounterIncrement(NodeCounter.DOWNLOADS_COMPLETED))
     port = _free_port()
 
     stop = start_metrics_server(registry, port, start_http_server, join_timeout_seconds=1.0)

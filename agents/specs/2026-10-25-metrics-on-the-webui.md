@@ -34,9 +34,10 @@
 
 ## Conventions
 
-- **C1. Glossary: `node metric`**: a measurement of the node's own running (searches done, free disk, the crawler
-  up), which Prometheus reads; never a file's or a source's figures. Its types: `NodeMetricName` (with its kind,
-  description and label names), `CounterIncrement` and `GaugeSetting` (what the policy writes), `NodeMetricSample`
+- **C1. Glossary: `node metric`**: a measurement of the node's own running (searches done, free disk, the crawler up),
+  which Prometheus reads; never a file's or a source's figures. Its types: `NodeCounter` and `NodeGauge` (each member
+  with its exposed name, description and label names) (Corrected: the operator's review of block 20, PR #492: was
+  `NodeMetricName` with its kind), `CounterIncrement` and `GaugeSetting` (what the policy writes), `NodeMetricSample`
   (one series and its current value). Naming, block 10 for the word, the types with the blocks that add them.
 
 ## Decisions
@@ -58,22 +59,28 @@
   single-writer premise goes into `InMemoryNodeMetricStore`'s docstring. Why: the pattern `InMemoryStatusReadingStore`
   already follows for the same two threads, with no lock.
 - **D5. The catalog of node metrics moves to the domain.** Each `NodeMetricName` carries its kind (`NodeMetricKind`,
-  counter or gauge), its description and its label names, which `PrometheusMetricsRecorder`'s `_COUNTERS` and
-  `_GAUGES` hold today. Why: what a metric means is domain knowledge; the use case needs the label names to tell an
-  unlabelled metric never written (one sample at 0) from a labelled one (no sample), and the instructions need them to
-  be checked (D6).
+  counter or gauge), its description and its label names, which `PrometheusMetricsRecorder`'s `_COUNTERS` and `_GAUGES`
+  hold today. Why: what a metric means is domain knowledge; the use case needs the label names to tell an unlabelled
+  metric never written (one sample at 0) from a labelled one (no sample), and the instructions need them to be checked
+  (D6). (Corrected: the operator's review of block 20, PR #492: `NodeMetricName`, `NodeMetricKind` and a module dict of
+  metadata gave way to two enums, `NodeCounter` and `NodeGauge`, over a memberless `NodeMetric`; each member declares in
+  its own definition its exposed name, description and label names, its value a private frozen declaration of the three,
+  since an enum `__new__` making the name the value runs only at import, which `_unit-coverage-check` credits to no
+  test.)
 - **D6. `MetricInstruction` splits into `CounterIncrement` and `GaugeSetting`, each refusing at construction what does
   not fit its catalog entry.** `CounterIncrement(name, labels, amount)` names a counter; `GaugeSetting(name, labels,
   value)` names a gauge, its `value` `None` to remove the series. A name of the other kind, or labels whose names are
   not exactly the metric's, raises `ValueError`. `MetricOperation` goes. Why: today `prometheus_client` raises on a
-  wrong or missing label and on an `inc` to a gauge, and
-  `test_every_emitted_metric_is_declared_in_the_metrics_recorder` rests on it; an in-memory store would take any
-  instruction silently. The type makes a wrong instruction unbuildable, and the structural test is kept, over
-  `plan_observability`'s cases, against the construction.
-- **D7. The listing names every metric of the catalog.** `NodeMetricListing` holds each `NodeMetricName` with its
-  kind, description and samples; a metric without labels that nothing has written has one sample at 0. An increment of
-  0 creates its series at 0; removing an absent series does nothing. Why: the series stay those `prometheus_client`
-  exposes today (probed on 0.26.0 by the second review).
+  wrong or missing label and on an `inc` to a gauge, and `test_every_emitted_metric_is_declared_in_the_metrics_recorder`
+  rests on it; an in-memory store would take any instruction silently. The type makes a wrong instruction unbuildable,
+  and the structural test is kept, over `plan_observability`'s cases, against the construction. (Corrected: the
+  operator's review of block 20, PR #492: `CounterIncrement(counter, labels, amount)` takes a `NodeCounter` and
+  `GaugeSetting(gauge, labels, value)` a `NodeGauge`, so mypy refuses an increment of a gauge; the labels stay names
+  checked against the member's here, and become typed label classes in block 85.)
+- **D7. The listing names every metric of the catalog.** `NodeMetricListing` holds each `NodeCounter` and `NodeGauge`
+  (Corrected: was `NodeMetricName`, D5) with its kind, description and samples; a metric without labels that nothing has
+  written has one sample at 0. An increment of 0 creates its series at 0; removing an absent series does nothing. Why:
+  the series stay those `prometheus_client` exposes today (probed on 0.26.0 by the second review).
 - **D8. The webui writes the Prometheus text format 0.0.4 itself**, in a module of the webui beside `format.py`: per
   metric `# HELP` and `# TYPE`, then a line per sample, label values escaped (`\\`, `"`, newline), served as
   `text/plain; version=0.0.4; charset=utf-8` whatever the `Accept` header. A counter's name takes `_total` on its
@@ -156,12 +163,12 @@ test then starts the webui, on `("127.0.0.1", 0)`.
    nothing on an absent one, series apart by labels, a tuple `read_samples` returned is unchanged by a later write; run
    by `TestInMemoryNodeMetricStore` and `TestFakeNodeMetricStore`. `test_contract_subclasses.py` and
    `test_port_files.py` pass with no new exemption.
-5. **A wrong instruction cannot be built.** Unit tests of the domain: a `CounterIncrement` naming a gauge, a
-   `GaugeSetting` naming a counter, missing labels, an extra label and labels on an unlabelled metric each raise
-   `ValueError`. The structural test builds every instruction `plan_observability` writes over `test_policy`'s cases.
-6. **The use case lists the whole catalog.** Unit tests of `ListNodeMetrics`: every `NodeMetricName` appears once with
-   its kind and description; an unlabelled metric never written has one sample at 0; a labelled one never written has
-   none.
+5. **A wrong instruction cannot be built.** Unit tests of the domain: missing labels, an extra label and labels on an
+   unlabelled metric each raise `ValueError` (Corrected: a counter named for a gauge is mypy's to refuse, D6). The
+   structural test builds every instruction `plan_observability` writes over `test_policy`'s cases.
+6. **The use case lists the whole catalog.** Unit tests of `ListNodeMetrics`: every `NodeCounter` and `NodeGauge`
+   (Corrected: was `NodeMetricName`, D5) appears once with its kind and description; an unlabelled metric never written
+   has one sample at 0; a labelled one never written has none.
 7. **Each removed key is refused by name.** Unit tests of `C/src/p2pwatch/domain/crawler_config.py`: `webui:
    {enabled: true}` raises `InvalidConfigError` whose `key` is `webui.enabled`; `observability: {metrics: {enabled:
    true, port: 9090}}` raises one whose `key` is `observability.metrics`; both messages say "was removed". Fails today:

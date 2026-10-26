@@ -15,8 +15,8 @@ from p2pwatch.application.ports.driven.metrics_recorder import MetricsRecorder
 from p2pwatch.domain.observability.node_metric import (
     CounterIncrement,
     GaugeSetting,
-    NodeMetricKind,
-    NodeMetricName,
+    NodeCounter,
+    NodeGauge,
 )
 
 
@@ -25,25 +25,27 @@ class PrometheusMetricsRecorder(MetricsRecorder):
 
     def __init__(self, registry: CollectorRegistry) -> None:
         self._counters = {
-            name: Counter(name.value, name.description, name.label_names, registry=registry)
-            for name in NodeMetricName
-            if name.kind is NodeMetricKind.COUNTER
+            counter: Counter(
+                counter.exposed_name, counter.description, counter.label_names, registry=registry
+            )
+            for counter in NodeCounter
         }
         self._gauges = {
-            name: Gauge(name.value, name.description, name.label_names, registry=registry)
-            for name in NodeMetricName
-            if name.kind is NodeMetricKind.GAUGE
+            gauge: Gauge(
+                gauge.exposed_name, gauge.description, gauge.label_names, registry=registry
+            )
+            for gauge in NodeGauge
         }
 
     def apply(self, instruction: CounterIncrement | GaugeSetting) -> None:
         labels = dict(instruction.labels)
         if isinstance(instruction, CounterIncrement):
-            counter = self._counters[instruction.name]
+            counter = self._counters[instruction.counter]
             (counter.labels(**labels) if labels else counter).inc(instruction.amount)
         elif instruction.value is None:
-            self._gauges[instruction.name].remove_by_labels(labels)
+            self._gauges[instruction.gauge].remove_by_labels(labels)
         else:
-            gauge = self._gauges[instruction.name]
+            gauge = self._gauges[instruction.gauge]
             (gauge.labels(**labels) if labels else gauge).set(instruction.value)
 
 
