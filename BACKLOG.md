@@ -21,9 +21,6 @@ An agent adds an entry only after the operator has agreed to it.
 - **Test quality** (lot 3 of the gate tooling umbrella): every unit test keeps unique coverage of its unit, the others are
   pruned, mutmut proving no detected mutant is lost. D3 to D5 and D13 to D15 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`, lot order in D12.
 
-- **The ast-grep rule tests bound to their rules by design**: a test whose rule does not exist passes, and no rule
-  must have a test; fix the cause, not a pairing check. Section "Backlog" of `agents/specs/2026-10-19-hexagon-p2pwatch.md`.
-
 - **The node page shows a node id set in `crawler.yml`**: `NodeIdResolver` returns a configured id without
   recording it, so `/node` shows a blank id. Section "Backlog" of `agents/specs/2026-10-19-hexagon-p2pwatch.md`.
 
