@@ -76,7 +76,12 @@
   and the structural test is kept, over `plan_observability`'s cases, against the construction. (Corrected: the
   operator's review of block 20, PR #492: `CounterIncrement(counter, labels, amount)` takes a `NodeCounter` and
   `GaugeSetting(gauge, labels, value)` a `NodeGauge`, so mypy refuses an increment of a gauge; the labels stay names
-  checked against the member's here, and become typed label classes in block 85.)
+  checked against the member's here, and become typed label classes in block 85.) (Corrected: block 85, from the same
+  review: the labels are typed, a frozen domain dataclass per shape, `ChannelLabels(client_name, channel)`,
+  `ClientLabels(client_name)`, `DecisionLabels(tier)` (a `DecisionTier` or `"retracted"`) and
+  `SourceAlertLabels(network, kind)`, `None` for an unlabelled metric; labels that are not an instance of the member's
+  label class raise `ValueError`, since mypy cannot tie a member to its class. Each class writes its `(name, text)`
+  pairs, on which the store keys a series, so `NodeMetricSample` and the exposition do not change.)
 - **D7. The listing names every metric of the catalog.** `NodeMetricListing` holds each `NodeCounter` and `NodeGauge`
   (Corrected: was `NodeMetricName`, D5) with its kind, description and samples; a metric without labels that nothing has
   written has one sample at 0. An increment of 0 creates its series at 0; removing an absent series does nothing. Why:
@@ -215,4 +220,5 @@ Estimates by `metrics-estimate-2` on `main` at `8229a42e`, within 15 %, re-measu
 | 60 | `test/node-metrics-against-the-old-output` | D11: the fixture and its comparison; the wiring test (without `observability.metrics`) and the smoke read `/metrics` on 8080; acceptance 1, 3 | ~240 lines, 6 files |
 | 70 | `feat/drop-prometheus-client` | D14, D15 for `observability.metrics`, What goes away: the recorder, its port, the spy, the 9090 server, the dispatcher's single writer, the dependency, `deploy/crawler.yml`, the smoke's refused 9090; commit `feat!:`; acceptance 7 for `observability.metrics`, 8 | 440 to 510 lines, 17 files: mostly deletions, the teammate trims to the bound |
 | 80 | `docs/node-metrics-documents` | Documents but the lines block 30 took; acceptance 9 | ~90 lines, 5 files |
+| 85 | `refactor/node-metric-labels` | D6's typed labels, from the operator's review of #492 (Corrected: added after approval, split from block 20): the label classes, the instructions refusing another class, the store and its fake keyed on the labels' pairs, the glossary and `architecture.md` | 276 lines, 11 files, measured |
 | 90 | `docs/metrics-on-the-webui-closing` | Wrap: findings fixed, `BACKLOG.md` (the entry deleted), the handoff | ~3 lines, 1 file |

@@ -42,10 +42,14 @@ from p2pwatch.domain.observability.events import (
     TargetTitle,
 )
 from p2pwatch.domain.observability.node_metric import (
+    ChannelLabels,
+    ClientLabels,
     CounterIncrement,
+    DecisionLabels,
     GaugeSetting,
     NodeCounter,
     NodeGauge,
+    SourceAlertLabels,
 )
 from p2pwatch.domain.observability.notification import (
     CompletedDownload,
@@ -105,7 +109,7 @@ def _risen_tier(change: DecisionChange) -> DecisionTier | None:
 
 
 def _label(decision: FileTargetDecision | None) -> str:
-    """How a log line and a node metric label name a decision."""
+    """How a log line names a decision."""
     if decision is None:
         return "none"
     if isinstance(decision, Retraction):
@@ -127,19 +131,22 @@ def _yes_no(flag: bool | None) -> str:
     return "unknown" if flag is None else "yes" if flag else "no"
 
 
-def _search_labels(
-    event: SearchExecuted | SearchFailed | ObservationRecorded,
-) -> tuple[tuple[str, str], ...]:
-    return (("client", event.client_name), ("channel", event.channel))
+def _channel_labels(
+    event: SearchExecuted | SearchFailed | ObservationRecorded | ChannelStatusSampled,
+) -> ChannelLabels:
+    return ChannelLabels(event.client_name, event.channel)
+
+
+def _decision_labels(decision: FileTargetDecision) -> DecisionLabels:
+    return DecisionLabels("retracted" if isinstance(decision, Retraction) else decision.tier)
 
 
 def _channel_gauge(
     gauge: NodeGauge, event: ChannelStatusSampled, state: bool | None
 ) -> GaugeSetting:
-    labels = (("client", event.client_name), ("channel", event.channel))
     if state is None:  # an unknown state has no series, never a stale one
-        return GaugeSetting(gauge, labels, None)
-    return GaugeSetting(gauge, labels, float(state))
+        return GaugeSetting(gauge, _channel_labels(event), None)
+    return GaugeSetting(gauge, _channel_labels(event), float(state))
 
 
 def _relayed(
@@ -169,7 +176,7 @@ def _plan_decisions(event: DecisionsRecorded) -> ObservabilityPlan:
         Severity.INFO,
         f"decisions for {event.filename} ({event.file.native_id}): {changes}",
         tuple(
-            CounterIncrement(NodeCounter.DECISIONS, (("tier", _label(c.new_decision)),))
+            CounterIncrement(NodeCounter.DECISIONS, _decision_labels(c.new_decision))
             for c in event.changes
         ),
     )
@@ -198,11 +205,14 @@ def _plan_source(
     state_phrase: str,
 ) -> ObservabilityPlan:
     short = f"{event.source.native_id[:8]}…"  # as the webui shortens a hash
-    labels = (("network", event.source.network.value), ("kind", kind.value))
     return ObservabilityPlan(
         Severity.INFO,
         f"source {short} {state_phrase}: {event.filename}",
-        (CounterIncrement(NodeCounter.SOURCE_ALERTS, labels),),
+        (
+            CounterIncrement(
+                NodeCounter.SOURCE_ALERTS, SourceAlertLabels(event.source.network, kind)
+            ),
+        ),
         SourceAlert(
             kind,
             event.source,
@@ -224,11 +234,11 @@ def plan_observability(event: Event) -> ObservabilityPlan:
                 Severity.DEBUG,
                 f"search {event.channel}: {event.observation_count} observation(s)",
                 (
-                    CounterIncrement(NodeCounter.SEARCHES, _search_labels(event)),
+                    CounterIncrement(NodeCounter.SEARCHES, _channel_labels(event)),
                     # Even by 0: the series exists from the first search, before any drift.
                     CounterIncrement(
                         NodeCounter.SEARCH_RESULTS_SKIPPED,
-                        _search_labels(event),
+                        _channel_labels(event),
                         float(event.skipped_result_count),
                     ),
                 ),
@@ -239,7 +249,7 @@ def plan_observability(event: Event) -> ObservabilityPlan:
                 f"{event.client_name} unreachable",
                 (
                     CounterIncrement(
-                        NodeCounter.CLIENT_UNREACHABLE, (("client", event.client_name),)
+                        NodeCounter.CLIENT_UNREACHABLE, ClientLabels(event.client_name)
                     ),
                 ),
             )
@@ -247,13 +257,13 @@ def plan_observability(event: Event) -> ObservabilityPlan:
             return ObservabilityPlan(
                 Severity.WARNING,
                 f"search failed on {event.channel}",
-                (CounterIncrement(NodeCounter.SEARCH_FAILURES, _search_labels(event)),),
+                (CounterIncrement(NodeCounter.SEARCH_FAILURES, _channel_labels(event)),),
             )
         case ObservationRecorded():
             return ObservabilityPlan(
                 Severity.DEBUG,
                 f"observation recorded ({event.channel})",
-                (CounterIncrement(NodeCounter.OBSERVATIONS, _search_labels(event)),),
+                (CounterIncrement(NodeCounter.OBSERVATIONS, _channel_labels(event)),),
             )
         case DecisionsRecorded():
             return _plan_decisions(event)
@@ -301,7 +311,7 @@ def plan_observability(event: Event) -> ObservabilityPlan:
             return ObservabilityPlan(
                 Severity.DEBUG,
                 f"download disk free: {event.free_bytes} bytes",
-                (GaugeSetting(NodeGauge.DISK_FREE_BYTES, (), float(event.free_bytes)),),
+                (GaugeSetting(NodeGauge.DISK_FREE_BYTES, None, float(event.free_bytes)),),
             )
         case DiskSpaceLow():
             return _relayed(
@@ -326,7 +336,7 @@ def plan_observability(event: Event) -> ObservabilityPlan:
                 Severity.INFO,
                 f"🟢 node online (download {'on' if event.download_enabled else 'off'})",
                 event.node_id,
-                (GaugeSetting(NodeGauge.CRAWLER_UP, (), 1.0),),
+                (GaugeSetting(NodeGauge.CRAWLER_UP, None, 1.0),),
             )
         case _:  # pragma: no cover
             assert_never(event)

@@ -1,8 +1,10 @@
 """``ListNodeMetrics``: every node metric of the catalog, with the samples the store holds."""
 
+from catalog_matching.domain.decision_tier import DecisionTier
 from p2pwatch.application.use_cases.list_node_metrics import ListNodeMetrics
 from p2pwatch.domain.observability.node_metric import (
     CounterIncrement,
+    DecisionLabels,
     NodeCounter,
     NodeGauge,
     NodeMetricSample,
@@ -26,7 +28,9 @@ def test_an_unlabelled_metric_never_written_has_one_sample_at_zero() -> None:
 
 def test_a_labelled_metric_lists_the_samples_written_and_none_before() -> None:
     node_metric_store = FakeNodeMetricStore()
-    node_metric_store.record_increment(CounterIncrement(NodeCounter.DECISIONS, _DOWNLOAD_TIER))
+    node_metric_store.record_increment(
+        CounterIncrement(NodeCounter.DECISIONS, DecisionLabels(DecisionTier.DOWNLOAD))
+    )
     samples_by_node_metric = (
         ListNodeMetrics(node_metric_store).list_node_metrics().samples_by_node_metric
     )

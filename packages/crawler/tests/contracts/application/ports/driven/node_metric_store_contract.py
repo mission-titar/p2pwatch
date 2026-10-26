@@ -8,6 +8,7 @@ from typing import Protocol
 import pytest
 
 from p2pwatch.domain.observability.node_metric import (
+    ChannelLabels,
     CounterIncrement,
     GaugeSetting,
     NodeCounter,
@@ -15,8 +16,10 @@ from p2pwatch.domain.observability.node_metric import (
     NodeMetricSample,
 )
 
-_ED2K = (("client", "amuled"), ("channel", "ed2k"))
-_KAD = (("client", "amuled"), ("channel", "kad"))
+_ED2K = ChannelLabels("amuled", "ed2k")
+_KAD = ChannelLabels("amuled", "kad")
+_ED2K_PAIRS = (("client", "amuled"), ("channel", "ed2k"))
+_KAD_PAIRS = (("client", "amuled"), ("channel", "kad"))
 
 
 class NodeMetricStore(Protocol):
@@ -46,7 +49,7 @@ class NodeMetricStoreContract(ABC):
         node_metric_store.record_increment(CounterIncrement(NodeCounter.SEARCHES, _ED2K))
         node_metric_store.record_increment(CounterIncrement(NodeCounter.SEARCHES, _ED2K, 2.0))
         assert node_metric_store.read_samples() == (
-            NodeMetricSample(NodeCounter.SEARCHES, _ED2K, 3.0),
+            NodeMetricSample(NodeCounter.SEARCHES, _ED2K_PAIRS, 3.0),
         )
 
     def test_an_increment_of_zero_creates_its_series_at_zero(
@@ -54,14 +57,14 @@ class NodeMetricStoreContract(ABC):
     ) -> None:
         node_metric_store.record_increment(CounterIncrement(NodeCounter.SEARCHES, _ED2K, 0.0))
         assert node_metric_store.read_samples() == (
-            NodeMetricSample(NodeCounter.SEARCHES, _ED2K, 0.0),
+            NodeMetricSample(NodeCounter.SEARCHES, _ED2K_PAIRS, 0.0),
         )
 
     def test_a_setting_replaces_its_series(self, node_metric_store: NodeMetricStore) -> None:
         node_metric_store.set_gauge(GaugeSetting(NodeGauge.CHANNEL_CONNECTED, _ED2K, 1.0))
         node_metric_store.set_gauge(GaugeSetting(NodeGauge.CHANNEL_CONNECTED, _ED2K, 0.0))
         assert node_metric_store.read_samples() == (
-            NodeMetricSample(NodeGauge.CHANNEL_CONNECTED, _ED2K, 0.0),
+            NodeMetricSample(NodeGauge.CHANNEL_CONNECTED, _ED2K_PAIRS, 0.0),
         )
 
     def test_a_setting_of_none_removes_its_series(self, node_metric_store: NodeMetricStore) -> None:
@@ -75,7 +78,7 @@ class NodeMetricStoreContract(ABC):
         node_metric_store.set_gauge(GaugeSetting(NodeGauge.CHANNEL_CONNECTED, _ED2K, 1.0))
         node_metric_store.set_gauge(GaugeSetting(NodeGauge.CHANNEL_CONNECTED, _KAD, None))
         assert node_metric_store.read_samples() == (
-            NodeMetricSample(NodeGauge.CHANNEL_CONNECTED, _ED2K, 1.0),
+            NodeMetricSample(NodeGauge.CHANNEL_CONNECTED, _ED2K_PAIRS, 1.0),
         )
 
     def test_series_of_one_node_metric_are_apart_by_their_labels(
@@ -86,23 +89,23 @@ class NodeMetricStoreContract(ABC):
         node_metric_store.set_gauge(GaugeSetting(NodeGauge.CHANNEL_CONNECTED, _ED2K, 1.0))
         node_metric_store.set_gauge(GaugeSetting(NodeGauge.CHANNEL_CONNECTED, _KAD, None))
         assert set(node_metric_store.read_samples()) == {
-            NodeMetricSample(NodeCounter.SEARCHES, _ED2K, 1.0),
-            NodeMetricSample(NodeCounter.SEARCHES, _KAD, 2.0),
-            NodeMetricSample(NodeGauge.CHANNEL_CONNECTED, _ED2K, 1.0),
+            NodeMetricSample(NodeCounter.SEARCHES, _ED2K_PAIRS, 1.0),
+            NodeMetricSample(NodeCounter.SEARCHES, _KAD_PAIRS, 2.0),
+            NodeMetricSample(NodeGauge.CHANNEL_CONNECTED, _ED2K_PAIRS, 1.0),
         }
 
     def test_a_later_write_leaves_the_samples_already_read_unchanged(
         self, node_metric_store: NodeMetricStore
     ) -> None:
-        node_metric_store.set_gauge(GaugeSetting(NodeGauge.CRAWLER_UP, (), 1.0))
+        node_metric_store.set_gauge(GaugeSetting(NodeGauge.CRAWLER_UP, None, 1.0))
         samples = node_metric_store.read_samples()
-        node_metric_store.set_gauge(GaugeSetting(NodeGauge.CRAWLER_UP, (), 0.0))
+        node_metric_store.set_gauge(GaugeSetting(NodeGauge.CRAWLER_UP, None, 0.0))
         assert samples == (NodeMetricSample(NodeGauge.CRAWLER_UP, (), 1.0),)
 
     def test_the_samples_are_read_from_another_thread(
         self, node_metric_store: NodeMetricStore
     ) -> None:
-        node_metric_store.set_gauge(GaugeSetting(NodeGauge.CRAWLER_UP, (), 1.0))
+        node_metric_store.set_gauge(GaugeSetting(NodeGauge.CRAWLER_UP, None, 1.0))
         with ThreadPoolExecutor(max_workers=1) as executor:
             samples = executor.submit(node_metric_store.read_samples).result()
         assert samples == (NodeMetricSample(NodeGauge.CRAWLER_UP, (), 1.0),)
