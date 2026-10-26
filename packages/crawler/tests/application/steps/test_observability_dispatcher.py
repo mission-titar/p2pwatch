@@ -6,16 +6,13 @@ import pytest
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord
-from p2pwatch.adapters.driven.in_memory_node_metric_store import InMemoryNodeMetricStore
 from p2pwatch.application.ports.driven.metrics_recorder import MetricsRecorder
-from p2pwatch.application.ports.driven.node_metric_writer import NodeMetricWriter
 from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability import events as ev
 from p2pwatch.domain.observability.node_metric import (
     CounterIncrement,
-    GaugeSetting,
     NodeCounter,
     NodeGauge,
     NodeMetricSample,
@@ -26,6 +23,7 @@ from p2pwatch.domain.observability.severity import Severity
 from tests.fakes.adapters.driven.fake_hanging_notifier import FakeHangingNotifier
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_metrics_recorder import FakeMetricsRecorder
+from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
 from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
 from tests.fakes.adapters.driven.fake_raising_notifier import FakeRaisingNotifier
 
@@ -36,54 +34,54 @@ _COMPLETED = ev.DownloadCompleted(
 
 
 def _dispatcher(
-    metrics_recorder: MetricsRecorder,
+    node_metric_store: FakeNodeMetricStore,
     notifier: Notifier,
     logger: FakeLogger | None = None,
     timeout: float = 5.0,
-    node_metric_writer: NodeMetricWriter | None = None,
+    metrics_recorder: MetricsRecorder | None = None,
 ) -> ObservabilityDispatcher:
     return ObservabilityDispatcher(
         logger=logger or FakeLogger(),
-        metrics_recorder=metrics_recorder,
-        node_metric_writer=node_metric_writer or InMemoryNodeMetricStore(),
+        metrics_recorder=metrics_recorder or FakeMetricsRecorder(),
+        node_metric_writer=node_metric_store,
         notifier=notifier,
         notification_timeout_seconds=timeout,
     )
 
 
 @pytest.mark.asyncio
-async def test_logs_and_applies_metrics_no_audience() -> None:
-    metrics_recorder, notifier = FakeMetricsRecorder(), FakeNotifier()
-    await _dispatcher(metrics_recorder, notifier).dispatch(
+async def test_logs_and_writes_node_metrics_no_audience() -> None:
+    node_metric_store, notifier = FakeNodeMetricStore(), FakeNotifier()
+    await _dispatcher(node_metric_store, notifier).dispatch(
         ev.ObservationRecorded(client_name="amuled", channel="ed2k")
     )
-    assert metrics_recorder.applied == [
-        CounterIncrement(NodeCounter.OBSERVATIONS, (("client", "amuled"), ("channel", "ed2k")))
-    ]
+    assert node_metric_store.read_samples() == (
+        NodeMetricSample(
+            NodeCounter.OBSERVATIONS, (("client", "amuled"), ("channel", "ed2k")), 1.0
+        ),
+    )
     assert notifier.calls == []  # ObservationRecorded has no audience
 
 
 @pytest.mark.asyncio
-async def test_two_metrics_one_event() -> None:
-    metrics_recorder, notifier = FakeMetricsRecorder(), FakeNotifier()
-    await _dispatcher(metrics_recorder, notifier).dispatch(
+async def test_two_node_metrics_one_event() -> None:
+    node_metric_store = FakeNodeMetricStore()
+    await _dispatcher(node_metric_store, FakeNotifier()).dispatch(
         ev.ChannelStatusSampled(
             client_name="amuled", channel="kad", connected=True, connectable=True
         )
     )
     labels = (("client", "amuled"), ("channel", "kad"))
-    assert metrics_recorder.applied == [
-        GaugeSetting(NodeGauge.CHANNEL_CONNECTED, labels, 1.0),
-        GaugeSetting(NodeGauge.CHANNEL_CONNECTABLE, labels, 1.0),
-    ]
+    assert node_metric_store.read_samples() == (
+        NodeMetricSample(NodeGauge.CHANNEL_CONNECTED, labels, 1.0),
+        NodeMetricSample(NodeGauge.CHANNEL_CONNECTABLE, labels, 1.0),
+    )
 
 
 @pytest.mark.asyncio
 async def test_writes_each_counter_increment_and_gauge_setting_to_the_node_metric_store() -> None:
-    node_metric_store = InMemoryNodeMetricStore()
-    dispatcher = _dispatcher(
-        FakeMetricsRecorder(), FakeNotifier(), node_metric_writer=node_metric_store
-    )
+    node_metric_store = FakeNodeMetricStore()
+    dispatcher = _dispatcher(node_metric_store, FakeNotifier())
     await dispatcher.dispatch(ev.ClientUnreachable("amuled"))
     await dispatcher.dispatch(ev.CrawlerStarted(download_enabled=True, node_id=_NODE))
     assert node_metric_store.read_samples() == (
@@ -93,9 +91,20 @@ async def test_writes_each_counter_increment_and_gauge_setting_to_the_node_metri
 
 
 @pytest.mark.asyncio
+async def test_applies_each_instruction_to_the_metrics_recorder_until_it_leaves() -> None:
+    metrics_recorder = FakeMetricsRecorder()
+    await _dispatcher(
+        FakeNodeMetricStore(), FakeNotifier(), metrics_recorder=metrics_recorder
+    ).dispatch(ev.ClientUnreachable("amuled"))
+    assert metrics_recorder.applied == [
+        CounterIncrement(NodeCounter.CLIENT_UNREACHABLE, (("client", "amuled"),))
+    ]
+
+
+@pytest.mark.asyncio
 async def test_relays_the_log_line_under_the_events_node() -> None:
-    metrics_recorder, notifier = FakeMetricsRecorder(), FakeNotifier()
-    await _dispatcher(metrics_recorder, notifier).dispatch(
+    notifier = FakeNotifier()
+    await _dispatcher(FakeNodeMetricStore(), notifier).dispatch(
         ev.CrawlerStarted(download_enabled=True, node_id=_NODE)
     )
     assert notifier.calls == [
@@ -108,7 +117,7 @@ async def test_logs_the_message_but_notifies_the_plans_notification() -> None:
     logger, notifier = FakeLogger(), FakeNotifier()
     download = DecisionRecord("062A", "rule", DecisionTier.DOWNLOAD)
     change = ev.DecisionChange("062A", "Les demoiselles cambrioleuses", None, download)
-    await _dispatcher(FakeMetricsRecorder(), notifier, logger).dispatch(
+    await _dispatcher(FakeNodeMetricStore(), notifier, logger).dispatch(
         ev.DecisionsRecorded(
             FileKey(Network.ED2K, "a" * 32), "Keroro 062.avi", 1024, (change,), _NODE
         )
@@ -143,21 +152,21 @@ async def test_each_severity_logs_at_its_level(
     event: ev.Event, level: Literal["debug", "info", "warning"]
 ) -> None:
     logger = FakeLogger()
-    await _dispatcher(FakeMetricsRecorder(), FakeNotifier(), logger).dispatch(event)
+    await _dispatcher(FakeNodeMetricStore(), FakeNotifier(), logger).dispatch(event)
     assert [line.level for line in logger.lines] == [level]
 
 
 @pytest.mark.asyncio
 async def test_notification_failure_is_absorbed() -> None:
-    logger, metrics_recorder = FakeLogger(), FakeMetricsRecorder()
-    await _dispatcher(metrics_recorder, FakeRaisingNotifier(), logger).dispatch(_COMPLETED)
-    assert metrics_recorder.applied  # the metric went through despite the notification failure
+    logger, node_metric_store = FakeLogger(), FakeNodeMetricStore()
+    await _dispatcher(node_metric_store, FakeRaisingNotifier(), logger).dispatch(_COMPLETED)
+    assert node_metric_store.read_samples()  # written despite the notification failure
     assert logger.lines[-1] == LoggedLine("warning", "notification community failed (canal mort)")
 
 
 @pytest.mark.asyncio
 async def test_notification_timeout_is_absorbed() -> None:
-    metrics_recorder = FakeMetricsRecorder()
+    node_metric_store = FakeNodeMetricStore()
     # short timeout + hanging notifier → wait_for raises TimeoutError, absorbed.
-    await _dispatcher(metrics_recorder, FakeHangingNotifier(), timeout=0.01).dispatch(_COMPLETED)
-    assert metrics_recorder.applied
+    await _dispatcher(node_metric_store, FakeHangingNotifier(), timeout=0.01).dispatch(_COMPLETED)
+    assert node_metric_store.read_samples()

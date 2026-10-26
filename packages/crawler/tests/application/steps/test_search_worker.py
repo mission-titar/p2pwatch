@@ -20,7 +20,7 @@ from p2pwatch.application.steps.search_worker import (
     SearchWorker,
 )
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.observability.node_metric import CounterIncrement, NodeCounter
+from p2pwatch.domain.observability.node_metric import NodeCounter, NodeMetricSample
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
@@ -333,11 +333,11 @@ async def test_successful_search_emits_search_executed_with_network_and_counts(
         LoggedLine("info", f"decisions for {_DL_NAME} ({_HASH}): 062A none → download"),
     ]
     labels = (("client", "amule-1"), ("channel", "ed2k"))
-    assert observability.metrics_recorder.applied[:3] == [
-        CounterIncrement(NodeCounter.SEARCHES, labels),
-        CounterIncrement(NodeCounter.SEARCH_RESULTS_SKIPPED, labels, 2.0),
-        CounterIncrement(NodeCounter.OBSERVATIONS, labels),
-    ]
+    assert observability.node_metric_store.read_samples()[:3] == (
+        NodeMetricSample(NodeCounter.SEARCHES, labels, 1.0),
+        NodeMetricSample(NodeCounter.SEARCH_RESULTS_SKIPPED, labels, 2.0),
+        NodeMetricSample(NodeCounter.OBSERVATIONS, labels, 1.0),
+    )
     assert observability.notifier.node_ids == [_NODE]
 
 
@@ -363,9 +363,11 @@ async def test_search_failure_dispatches_search_failed(
     )
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"), _NODE)
     assert observability.logger.lines == [LoggedLine("warning", "search failed on ed2k")]
-    assert observability.metrics_recorder.applied == [
-        CounterIncrement(NodeCounter.SEARCH_FAILURES, (("client", "amule-1"), ("channel", "ed2k")))
-    ]
+    assert observability.node_metric_store.read_samples() == (
+        NodeMetricSample(
+            NodeCounter.SEARCH_FAILURES, (("client", "amule-1"), ("channel", "ed2k")), 1.0
+        ),
+    )
 
 
 @pytest.mark.asyncio
@@ -389,9 +391,9 @@ async def test_transport_failure_during_search_dispatches_client_unreachable(
     )
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"), _NODE)
     assert observability.logger.lines == [LoggedLine("warning", "amule-1 unreachable")]
-    assert observability.metrics_recorder.applied == [
-        CounterIncrement(NodeCounter.CLIENT_UNREACHABLE, (("client", "amule-1"),))
-    ]
+    assert observability.node_metric_store.read_samples() == (
+        NodeMetricSample(NodeCounter.CLIENT_UNREACHABLE, (("client", "amule-1"),), 1.0),
+    )
 
 
 @pytest.mark.asyncio

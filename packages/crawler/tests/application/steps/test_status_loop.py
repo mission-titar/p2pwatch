@@ -6,7 +6,6 @@ from datetime import timedelta
 
 import pytest
 
-from p2pwatch.adapters.driven.in_memory_node_metric_store import InMemoryNodeMetricStore
 from p2pwatch.application.ports.driven.status_client import StatusClient
 from p2pwatch.application.ports.driven.status_reading_writer import StatusReadingWriter
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
@@ -22,6 +21,7 @@ from p2pwatch.domain.status_reading import (
 )
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_metrics_recorder import FakeMetricsRecorder
+from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_search_client import make_unreachable
 from tests.fakes.adapters.driven.fake_status_client import FakeStatusClient
@@ -48,7 +48,7 @@ class _Observability:
         self.dispatcher = ObservabilityDispatcher(
             logger=self.logger,
             metrics_recorder=FakeMetricsRecorder(),
-            node_metric_writer=InMemoryNodeMetricStore(),
+            node_metric_writer=FakeNodeMetricStore(),
             notifier=self.notifier,
             notification_timeout_seconds=_NOTIFICATION_TIMEOUT_SECONDS,
         )

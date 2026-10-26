@@ -18,7 +18,6 @@ from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord, Explanation
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_targets
-from p2pwatch.adapters.driven.in_memory_node_metric_store import InMemoryNodeMetricStore
 from p2pwatch.adapters.driving.webui.app import (
     _catalog_entry_displays,
     _normalize_direction,
@@ -35,11 +34,13 @@ from p2pwatch.application.ports.driving.crawl_summarizer import ClientSummary, C
 from p2pwatch.application.ports.driving.file_describer import FileDescription
 from p2pwatch.application.ports.driving.file_lister import FileListing
 from p2pwatch.application.ports.driving.node_describer import NodeDescription
-from p2pwatch.application.ports.driving.node_metric_lister import NodeMetricLister
+from p2pwatch.application.ports.driving.node_metric_lister import (
+    NodeMetricLister,
+    NodeMetricListing,
+)
 from p2pwatch.application.ports.driving.source_describer import SourceDescription
 from p2pwatch.application.ports.driving.source_lister import SourceListing
 from p2pwatch.application.ports.driving.source_name_describer import SourceNameDescription
-from p2pwatch.application.use_cases.list_node_metrics import ListNodeMetrics
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.console_query import QueryFailure
 from p2pwatch.domain.coverage import TargetCoverage, TargetCoverageStatus
@@ -50,7 +51,7 @@ from p2pwatch.domain.file_target_decision import DatedDecision
 from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
-from p2pwatch.domain.observability.node_metric import GaugeSetting, NodeGauge
+from p2pwatch.domain.observability.node_metric import NodeGauge, NodeMetricSample
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from p2pwatch.domain.sharing_period import SharingPeriod
@@ -68,6 +69,7 @@ from tests.fakes.application.use_cases.fake_file_describer import (
 )
 from tests.fakes.application.use_cases.fake_file_lister import FakeFileLister, ListFilesCall
 from tests.fakes.application.use_cases.fake_node_describer import FakeNodeDescriber
+from tests.fakes.application.use_cases.fake_node_metric_lister import FakeNodeMetricLister
 from tests.fakes.application.use_cases.fake_shutdown_requester import FakeShutdownRequester
 from tests.fakes.application.use_cases.fake_source_describer import (
     DescribeSourceCall,
@@ -139,7 +141,7 @@ _NO_SOURCE_DESCRIBER = FakeSourceDescriber(None)
 _NO_SOURCE_NAME_DESCRIBER = FakeSourceNameDescriber(None)
 # These tests run no console query: ``test_app_console.py`` does.
 _NO_CONSOLE_QUERY_RUNNER = FakeConsoleQueryRunner(ConsoleQueryRun(QueryFailure(""), 1000))
-_NO_NODE_METRIC_LISTER = ListNodeMetrics(InMemoryNodeMetricStore())
+_NO_NODE_METRIC_LISTER = FakeNodeMetricLister(NodeMetricListing({}))
 _FILE = FileKey(Network.ED2K, TEST_HASH)
 _OBSERVATION = FileObservation(
     ReportedFile(_FILE, "keroro_s2e62a_vf.avi", 100_000_000, 5, "keroro"),
@@ -305,9 +307,10 @@ async def test_health_returns_200(populated_app: tuple[Starlette, str]) -> None:
 
 @pytest.mark.asyncio
 async def test_metrics_serve_the_listing_as_prometheus_text_whatever_the_accept_header() -> None:
-    node_metric_store = InMemoryNodeMetricStore()
-    node_metric_store.set_gauge(GaugeSetting(NodeGauge.CRAWLER_UP, (), 1.0))
-    app = _app_on_fakes(node_metric_lister=ListNodeMetrics(node_metric_store))
+    node_metric_listing = NodeMetricListing(
+        {NodeGauge.CRAWLER_UP: (NodeMetricSample(NodeGauge.CRAWLER_UP, (), 1.0),)}
+    )
+    app = _app_on_fakes(node_metric_lister=FakeNodeMetricLister(node_metric_listing))
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/metrics", headers={"Accept": "application/openmetrics-text"})
     assert resp.status_code == 200

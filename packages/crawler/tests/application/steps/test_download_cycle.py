@@ -261,7 +261,7 @@ async def test_an_unmeasurable_output_directory_admits_nothing_and_does_not_rais
     assert client.started == []
     assert HASH_A not in tracked_download_store.states
     assert observability.logger.lines == []
-    assert observability.metrics_recorder.applied == []
+    assert observability.node_metric_store.read_samples() == ()
 
 
 @pytest.mark.asyncio

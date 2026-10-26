@@ -3,12 +3,7 @@ import pytest
 from catalog_matching.domain.models import TargetSegment
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.states import DownloadState
-from p2pwatch.domain.observability.node_metric import (
-    CounterIncrement,
-    GaugeSetting,
-    NodeCounter,
-    NodeGauge,
-)
+from p2pwatch.domain.observability.node_metric import NodeCounter, NodeGauge, NodeMetricSample
 from p2pwatch.domain.observability.notification import RelayedLogLine
 from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.observability.severity import Severity
@@ -281,8 +276,8 @@ async def test_dispatches_download_queued() -> None:
     )
     await cycle.run(NODE)
     assert LoggedLine("info", "download queued: 062A") in observability.logger.lines
-    assert CounterIncrement(NodeCounter.DOWNLOADS_QUEUED) in (
-        observability.metrics_recorder.applied
+    assert NodeMetricSample(NodeCounter.DOWNLOADS_QUEUED, (), 1.0) in (
+        observability.node_metric_store.read_samples()
     )
 
 
@@ -296,9 +291,9 @@ async def test_each_cycle_reports_the_measured_free_space() -> None:
         observability_dispatcher=observability.dispatcher,
     )
     await cycle.run(NODE)
-    assert observability.metrics_recorder.applied == [
-        GaugeSetting(NodeGauge.DISK_FREE_BYTES, (), 4_242.0)
-    ]
+    assert observability.node_metric_store.read_samples() == (
+        NodeMetricSample(NodeGauge.DISK_FREE_BYTES, (), 4_242.0),
+    )
 
 
 @pytest.mark.asyncio
