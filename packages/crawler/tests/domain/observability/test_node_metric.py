@@ -116,3 +116,10 @@ def test_an_instruction_gives_the_pairs_of_its_labels_or_none_unlabelled() -> No
     unlabelled = CounterIncrement(NodeCounter.DOWNLOADS_QUEUED)
     assert labelled.label_pairs() == (("client", "amuled"), ("channel", "kad"))
     assert unlabelled.label_pairs() == ()
+
+
+def test_an_increment_of_a_negative_amount_cannot_be_built() -> None:
+    with pytest.raises(
+        ValueError, match="p2pwatch_searches takes an amount of 0 or more, not -1.0"
+    ):
+        CounterIncrement(NodeCounter.SEARCHES, ChannelLabels("amuled", "kad"), -1.0)
