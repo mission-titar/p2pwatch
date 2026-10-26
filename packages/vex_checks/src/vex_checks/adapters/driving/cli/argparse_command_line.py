@@ -5,9 +5,9 @@ import sys
 from collections.abc import Callable, Sequence
 from pathlib import PurePath
 
+from vex_checks.application.ports.driving.applied_claims_checker import AppliedClaimsChecker
 from vex_checks.application.ports.driving.claim_coverage_checker import ClaimCoverageChecker
 from vex_checks.application.ports.driving.image_claims_checker import ImageClaimsChecker
-from vex_checks.application.ports.driving.stale_claims_checker import StaleClaimsChecker
 from vex_checks.domain.broken_input_error import BrokenInputError
 from vex_checks.domain.claim_problem import ClaimProblem
 
@@ -38,19 +38,19 @@ def _print_problems(
 
 
 class ArgparseCommandLine:
-    """``image-claims``, ``stale-claims`` and ``claim-coverage`` over their checkers. A relative
+    """``image-claims``, ``applied-claims`` and ``claim-coverage`` over their checkers. A relative
     path is taken under ``cwd``."""
 
     def __init__(
         self,
         *,
         image_claims_checker: ImageClaimsChecker,
-        stale_claims_checker: StaleClaimsChecker,
+        applied_claims_checker: AppliedClaimsChecker,
         claim_coverage_checker: ClaimCoverageChecker,
         cwd: PurePath,
     ) -> None:
         self._image_claims_checker = image_claims_checker
-        self._stale_claims_checker = stale_claims_checker
+        self._applied_claims_checker = applied_claims_checker
         self._claim_coverage_checker = claim_coverage_checker
         self._cwd = cwd
 
@@ -64,10 +64,10 @@ class ArgparseCommandLine:
             "image-claims", help="check the image claims against the image's SBOM"
         )
         _add_image_options(image_claims, self._under_cwd)
-        stale_claims = subparsers.add_parser(
-            "stale-claims", help="flag the claims Grype no longer reports for the image"
+        applied_claims = subparsers.add_parser(
+            "applied-claims", help="flag the claims Grype no longer reports for the image"
         )
-        _add_image_options(stale_claims, self._under_cwd)
+        _add_image_options(applied_claims, self._under_cwd)
         subparsers.add_parser(
             "claim-coverage",
             help="check that every claim maps to one image premise or source rule, and back",
@@ -76,8 +76,8 @@ class ArgparseCommandLine:
         try:
             if args.command == "image-claims":
                 return self._check_image_claims(args.sbom, args.vex, args.sarif)
-            if args.command == "stale-claims":
-                return self._check_stale_claims(args.sbom, args.vex, args.sarif)
+            if args.command == "applied-claims":
+                return self._check_applied_claims(args.sbom, args.vex, args.sarif)
             return self._check_claim_coverage()
         except BrokenInputError as error:
             print(f"error: {error}", file=sys.stderr)
@@ -89,10 +89,10 @@ class ArgparseCommandLine:
         report = self._image_claims_checker.check_image_claims(sbom, vex, sarif_output)
         return _print_problems(report.problems, report.vex_location, sarif_output)
 
-    def _check_stale_claims(
+    def _check_applied_claims(
         self, sbom: PurePath, vex: PurePath, sarif_output: PurePath | None
     ) -> int:
-        report = self._stale_claims_checker.check_stale_claims(sbom, vex, sarif_output)
+        report = self._applied_claims_checker.check_applied_claims(sbom, vex, sarif_output)
         return _print_problems(report.problems, report.vex_location, sarif_output)
 
     def _check_claim_coverage(self) -> int:

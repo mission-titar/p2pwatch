@@ -155,7 +155,7 @@ développement et en CI, jamais dans une image.
 |---|---|---|---|
 | `p2pwatch` | `packages/crawler/`, avec `catalog_matching` (`packages/matching/`), son domaine dans une distribution à part | `CrawlerRunner`, `ConfigValidator`, `CatalogMerger` pour la ligne de commande, un port par page ou contrôle de la webui, `/metrics` compris, que Prometheus appelle | amuleapi, les deux bases SQLite, les horloges, apprise |
 | `p2pwatch_amule` | `packages/amule/` | `ContainerBooter`, `PortSyncLoopRunner` | `amule.conf`, s6, gluetun, les comptes et répertoires d'amuled, `amuleapi --set-admin-pass` |
-| `vex_checks` | `packages/vex_checks/` | `ImageClaimsChecker`, `StaleClaimsChecker`, `ClaimCoverageChecker` | les VEX, le SBOM Syft, Grype, le SARIF, les règles source d'ast-grep |
+| `vex_checks` | `packages/vex_checks/` | `ImageClaimsChecker`, `AppliedClaimsChecker`, `ClaimCoverageChecker` | les VEX, le SBOM Syft, Grype, le SARIF, les règles source d'ast-grep |
 | `template_checks` | `packages/template_checks/` | `LogicFreeChecker`, `TemplateAttributeLister` | les gabarits de la webui |
 | `coverage_checks` | `packages/coverage_checks/` | `UnitCoverageChecker` | `.coverage`, l'arbre du paquet et son `pyproject.toml` |
 | `amule_bump` | `packages/amule_bump/` | `AmuleBumper` | l'API GitHub, le Dockerfile, le corps de la pull request, `GITHUB_OUTPUT` |

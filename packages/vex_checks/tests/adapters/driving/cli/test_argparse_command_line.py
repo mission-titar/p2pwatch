@@ -5,21 +5,21 @@ from pathlib import PurePath
 
 import pytest
 
+from tests.fakes.application.use_cases.fake_applied_claims_checker import (
+    AppliedClaimsCheck,
+    FakeAppliedClaimsChecker,
+)
 from tests.fakes.application.use_cases.fake_claim_coverage_checker import FakeClaimCoverageChecker
 from tests.fakes.application.use_cases.fake_image_claims_checker import (
     FakeImageClaimsChecker,
     ImageClaimsCheck,
-)
-from tests.fakes.application.use_cases.fake_stale_claims_checker import (
-    FakeStaleClaimsChecker,
-    StaleClaimsCheck,
 )
 from vex_checks.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from vex_checks.domain.broken_input_error import BrokenInputError
 from vex_checks.domain.claim_problem import ClaimProblem
 
 _CWD = PurePath("/work/repo")
-_IMAGE_COMMANDS = ["image-claims", "stale-claims"]
+_IMAGE_COMMANDS = ["image-claims", "applied-claims"]
 _SARIF_OPTIONS = pytest.mark.parametrize(
     ("options", "sarif_output"),
     [([], None), (["--sarif", "o.sarif"], _CWD / "o.sarif")],
@@ -41,13 +41,13 @@ class _Checks:
         claim_coverage_problems: Sequence[ClaimProblem] = (),
     ) -> None:
         self.image_claims_checker = FakeImageClaimsChecker(problems, _VEX_LOCATION)
-        self.stale_claims_checker = FakeStaleClaimsChecker(problems, _VEX_LOCATION)
+        self.applied_claims_checker = FakeAppliedClaimsChecker(problems, _VEX_LOCATION)
         self.claim_coverage_checker = FakeClaimCoverageChecker(claim_coverage_problems)
 
     def command_line(self) -> ArgparseCommandLine:
         return ArgparseCommandLine(
             image_claims_checker=self.image_claims_checker,
-            stale_claims_checker=self.stale_claims_checker,
+            applied_claims_checker=self.applied_claims_checker,
             claim_coverage_checker=self.claim_coverage_checker,
             cwd=_CWD,
         )
@@ -55,7 +55,7 @@ class _Checks:
     def ran_none(self) -> bool:
         return (
             self.image_claims_checker.checks == []
-            and self.stale_claims_checker.checks == []
+            and self.applied_claims_checker.checks == []
             and self.claim_coverage_checker.check_count == 0
         )
 
@@ -71,7 +71,7 @@ def test_image_claims_checks_the_sbom_the_vex_and_its_sarif_output_under_the_cwd
     assert checks.image_claims_checker.checks == [
         ImageClaimsCheck(_CWD / "s.json", _CWD / "v.json", sarif_output)
     ]
-    assert checks.stale_claims_checker.checks == []
+    assert checks.applied_claims_checker.checks == []
 
 
 @pytest.mark.parametrize(
@@ -88,11 +88,11 @@ def test_an_image_check_is_given_the_vex_under_the_cwd_as_written(
     checks = _Checks()
 
     checks.command_line().run(["image-claims", "--sbom", "/s.json", "--vex", vex])
-    checks.command_line().run(["stale-claims", "--sbom", "/s.json", "--vex", vex])
+    checks.command_line().run(["applied-claims", "--sbom", "/s.json", "--vex", vex])
 
     sbom_path = PurePath("/s.json")
     assert checks.image_claims_checker.checks == [ImageClaimsCheck(sbom_path, vex_path, None)]
-    assert checks.stale_claims_checker.checks == [StaleClaimsCheck(sbom_path, vex_path, None)]
+    assert checks.applied_claims_checker.checks == [AppliedClaimsCheck(sbom_path, vex_path, None)]
 
 
 @pytest.mark.parametrize("command", _IMAGE_COMMANDS)
@@ -137,15 +137,15 @@ def test_an_image_check_asked_for_sarif_prints_nothing_and_returns_zero_despite_
 
 
 @_SARIF_OPTIONS
-def test_stale_claims_checks_the_sbom_the_vex_and_its_sarif_output_under_the_cwd(
+def test_applied_claims_checks_the_sbom_the_vex_and_its_sarif_output_under_the_cwd(
     options: list[str], sarif_output: PurePath | None
 ) -> None:
     checks = _Checks()
 
-    checks.command_line().run(["stale-claims", "--sbom", "s.json", "--vex", "v.json", *options])
+    checks.command_line().run(["applied-claims", "--sbom", "s.json", "--vex", "v.json", *options])
 
-    assert checks.stale_claims_checker.checks == [
-        StaleClaimsCheck(_CWD / "s.json", _CWD / "v.json", sarif_output)
+    assert checks.applied_claims_checker.checks == [
+        AppliedClaimsCheck(_CWD / "s.json", _CWD / "v.json", sarif_output)
     ]
     assert checks.image_claims_checker.checks == []
 
@@ -197,7 +197,7 @@ def test_claim_coverage_prints_each_problem_as_an_error_and_returns_one(
     )
     assert checks.claim_coverage_checker.check_count == 1
     assert checks.image_claims_checker.checks == []
-    assert checks.stale_claims_checker.checks == []
+    assert checks.applied_claims_checker.checks == []
 
 
 def test_claim_coverage_with_no_problem_prints_nothing_and_returns_zero(
@@ -226,14 +226,15 @@ def test_a_broken_input_is_printed_as_one_error_line_and_returns_one(
     assert captured.out == ""
 
 
-def test_source_claims_is_no_subcommand(capsys: pytest.CaptureFixture[str]) -> None:
+@pytest.mark.parametrize("command", ["source-claims", "stale-claims"])
+def test_a_former_check_is_no_subcommand(command: str, capsys: pytest.CaptureFixture[str]) -> None:
     checks = _Checks()
 
     with pytest.raises(SystemExit) as exit_info:
-        checks.command_line().run(["source-claims"])
+        checks.command_line().run([command])
 
     assert exit_info.value.code == 2
-    assert "invalid choice: 'source-claims'" in capsys.readouterr().err
+    assert f"invalid choice: '{command}'" in capsys.readouterr().err
     assert checks.ran_none()
 
 
@@ -255,4 +256,4 @@ def test_the_help_lists_the_subcommands(capsys: pytest.CaptureFixture[str]) -> N
         _Checks().command_line().run(["--help"])
 
     assert exit_info.value.code == 0
-    assert "{image-claims,stale-claims,claim-coverage}" in capsys.readouterr().out
+    assert "{image-claims,applied-claims,claim-coverage}" in capsys.readouterr().out

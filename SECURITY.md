@@ -145,12 +145,12 @@ a genuinely false claim, as hard-fail steps in the release before anything is si
   absent is present, or a dpkg package or hand-declared component is below the minimum version
   a claim relies on. The aMule claims rest on the version declared in the aMule image's SBOM
   (`pkg:generic/amule`).
-- **`stale-claims`** (daily Grype scan as SARIF, non-blocking): flags VEX entries Grype no
+- **`applied-claims`** (daily Grype scan as SARIF, non-blocking): flags VEX entries Grype no
   longer reports for the image, so obsolete suppressions get pruned. Staleness never blocks a
   release: a suppressed CVE that Grype stops reporting has been fixed upstream, which does not
   make the image less safe, so it is surfaced for cleanup rather than gated.
 
-In the daily scan `image-claims` and `stale-claims` run in SARIF mode: drift surfaces
+In the daily scan `image-claims` and `applied-claims` run in SARIF mode: drift surfaces
 in Code scanning without failing the workflow. In the release the first three hard-fail, so a
 false source, coverage, or image claim stops the image from being tagged, signed, or attested;
 staleness is left to the daily scan.

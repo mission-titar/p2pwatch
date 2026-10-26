@@ -36,7 +36,7 @@ jobs:
         with:
           save-cache: 'false'  # restore only; validate is the x86 cache writer
 
-      - name: Install Grype CLI (pinned) for the stale-claims check
+      - name: Install Grype CLI (pinned) for the applied-claims check
         run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/grype/fa8b7e2a528cf1f8b098123f256c61db9e5df69c/install.sh \
             | sh -s -- -b "$HOME/.local/bin" v0.115.0
@@ -92,17 +92,17 @@ jobs:
 
       - name: Check for stale VEX entries no longer reported by Grype
         run: >
-          uv run python -m vex_checks stale-claims
+          uv run python -m vex_checks applied-claims
           --sbom /tmp/sbom.syft.json
           --vex "$VEX"
-          --sarif /tmp/stale.sarif
+          --sarif /tmp/applied-claims.sarif
 
-      - name: Upload stale-claims SARIF to code scanning
+      - name: Upload applied-claims SARIF to code scanning
         if: always()
         uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
-          sarif_file: /tmp/stale.sarif
-          category: vex-stale-claims-${{ matrix.package }}
+          sarif_file: /tmp/applied-claims.sarif
+          category: vex-applied-claims-${{ matrix.package }}
 
       # Scans the SBOM (not the live image) so results are reproducible, applying the
       # OpenVEX pulled from the image. fail-build is false: findings are surfaced via
