@@ -115,6 +115,7 @@ _REMOVED_KEYS = (
     "decision_poll_interval_seconds",
     "keyword_pause_max_seconds",
     "keyword_pause_min_seconds",
+    "node_id",
     "observability.metrics",
     "port_sync",
     "search_poll_budget_seconds",
@@ -145,7 +146,7 @@ class CrawlerConfig:
 
     Wiring (ex-local): ``amule_api_password`` (the daemon's amuleapi admin password, the same
     one the aMule web UI takes; host/port are code
-    constants), DB paths, ``node_id`` (``None`` = the one from ``local.db``), ``observability``,
+    constants), DB paths, ``observability``,
     ``download`` (``None`` ⟺ download off, crawl-only).
     """
 
@@ -154,7 +155,6 @@ class CrawlerConfig:
     amule_api_password: str
     catalog_db_path: str
     local_db_path: str
-    node_id: str | None
     observability: ObservabilityConfig
     download: DownloadConfig | None
     webui: WebuiConfig
@@ -431,11 +431,6 @@ def parse_crawler_config(document: dict[str, Any]) -> CrawlerConfig:
     for key, new_path in _MOVED_KEYS.items():
         if key in document:
             raise InvalidConfigError(key, f"moved to '{new_path}', move it in crawler.yml")
-    node_id_raw = document.get("node_id")
-    if node_id_raw is not None and (not isinstance(node_id_raw, str) or not node_id_raw):
-        raise InvalidConfigError(
-            "node_id", f"non-empty string or absent expected, got {node_id_raw!r}"
-        )
     observability = _parse_observability(
         _require_mapping(document.get("observability", {}), "observability")
     )
@@ -445,7 +440,6 @@ def parse_crawler_config(document: dict[str, Any]) -> CrawlerConfig:
         amule_api_password=_string(document, "amule_api_password", _ROOT),
         catalog_db_path=_string(document, "catalog_db_path", _ROOT),
         local_db_path=_string(document, "local_db_path", _ROOT),
-        node_id=node_id_raw,
         observability=observability,
         download=_parse_download(document),
         webui=_parse_webui(document),

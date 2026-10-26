@@ -130,6 +130,8 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
   Une variable absente de l'environnement est refusée où qu'elle soit, même dans une section
   désactivée, en nommant sa clé : `search.keywords[0]: environment variable 'X' referenced but not
   set`. Une valeur résolue reste du texte : un nombre ne peut pas venir de l'environnement.
+- **La clé `node_id` de `crawler.yml`, jamais documentée, est refusée** (`node_id: was removed,
+  ...`) : l'identifiant du nœud est toujours celui que `local.db` garde.
 - **Les métriques `emule_*` deviennent `p2pwatch_*`.** Les trois du port-sync
   (`emule_port_sync_triggered`, `emule_port_mismatch`, `emule_high_id_recovered`) disparaissent
   avec leurs notifications : un Low-ID se lit sur `p2pwatch_channel_connectable`, et un canal non

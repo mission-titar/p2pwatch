@@ -86,7 +86,6 @@ def test_parses_a_valid_config() -> None:
         amule_api_password="secret",
         catalog_db_path="/data/catalog.db",
         local_db_path="/data/local.db",
-        node_id=None,
         observability=ObservabilityConfig(
             log_level="INFO", notification_timeout_seconds=5.0, notifications=()
         ),
@@ -209,6 +208,7 @@ def test_non_positive_value_is_fatal() -> None:
         "decision_poll_interval_seconds",
         "keyword_pause_max_seconds",
         "keyword_pause_min_seconds",
+        "node_id",
         "port_sync",
         "search_poll_budget_seconds",
         "search_poll_interval_seconds",
@@ -295,12 +295,6 @@ def test_backoff_cap_below_base_is_fatal() -> None:
 
 
 # ------------------------------------------------------------------------- the single amuled
-
-
-def test_node_id_override_is_kept() -> None:
-    raw = _minimal_raw()
-    raw["node_id"] = "fixed-node"
-    assert parse_crawler_config(raw).node_id == "fixed-node"
 
 
 def test_missing_amule_api_password_is_fatal() -> None:

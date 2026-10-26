@@ -6,15 +6,13 @@ from p2pwatch.domain.store_error import StoreError
 
 
 class FakeNodeIdStore(NodeIdReader, NodeIdWriter):
-    """The node's id in memory: counts its reads, keeps the id recorded with its instant."""
+    """The node's id in memory: keeps the id recorded with its instant."""
 
     def __init__(self, *, stored_node_id: str | None) -> None:
         self._stored_node_id = stored_node_id
-        self.reads = 0
         self.recorded: list[tuple[str, datetime]] = []
 
     def read_node_id(self) -> str | None:
-        self.reads += 1
         return self._stored_node_id
 
     def record_node_id(self, node_id: str, created_at: datetime) -> None:
