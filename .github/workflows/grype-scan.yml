@@ -36,11 +36,8 @@ jobs:
         with:
           save-cache: 'false'  # restore only; validate is the x86 cache writer
 
-      - name: Install Grype CLI (pinned) for the applied-claims check
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/grype/fa8b7e2a528cf1f8b098123f256c61db9e5df69c/install.sh \
-            | sh -s -- -b "$HOME/.local/bin" v0.115.0
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Install Grype, verified
+        uses: ./.github/actions/install-grype
 
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
@@ -105,20 +102,14 @@ jobs:
           category: vex-applied-claims-${{ matrix.package }}
 
       # Scans the SBOM (not the live image) so results are reproducible, applying the
-      # OpenVEX pulled from the image. fail-build is false: findings are surfaced via
-      # SARIF, not a job failure; triage happens through VEX.
+      # OpenVEX pulled from the image. No --fail-on: findings are surfaced via SARIF,
+      # not a job failure; triage happens through VEX.
       - name: Run Grype against the attested SBOM
-        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
-        id: scan
-        with:
-          sbom: /tmp/sbom.syft.json
-          vex: /tmp/vex.openvex.json
-          fail-build: "false"
-          output-format: sarif
+        run: grype sbom:/tmp/sbom.syft.json --vex "$VEX" -o sarif --file /tmp/grype.sarif
 
       - name: Upload SARIF to GitHub code scanning
         if: always()
         uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
-          sarif_file: ${{ steps.scan.outputs.sarif }}
+          sarif_file: /tmp/grype.sarif
           category: grype-${{ matrix.package }}
