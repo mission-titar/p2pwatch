@@ -56,7 +56,7 @@ flowchart LR
   gluetun --> net
   amuled -->|"finished files"| out
   crawler -.->|"free space · statvfs, read-only mount"| out
-  crawler -->|"/metrics · scraped"| prom
+  prom -->|"scrapes /metrics · 8080"| crawler
   crawler -->|"notifications · apprise URL"| notif
 ```
 
@@ -82,8 +82,8 @@ Conséquences de cette forme, chacune porteuse ailleurs dans ce document :
   invalide se voit comme une boucle `Restarting`. Une sortie propre (le contrôle de redémarrage de
   la webui) ramène le crawler seul, et `amuled` garde ses sessions eD2k et Kad.
 
-Aucun conteneur Prometheus ou Grafana n'est livré avec la pile : le crawler expose `/metrics` et un
-opérateur qui veut des tableaux de bord y pointe son propre Prometheus.
+Aucun conteneur Prometheus ou Grafana n'est livré avec la pile : la webui sert `/metrics` sur 8080
+et un opérateur qui veut des tableaux de bord y pointe son propre Prometheus.
 
 **Composants internes et données partagées** (le crawler écrit, la webui lit ; `matching` est une
 bibliothèque importée) :
@@ -153,7 +153,7 @@ développement et en CI, jamais dans une image.
 
 | Hexagone | Paquet | Ports pilotants | Ce que pilotent ses adaptateurs |
 |---|---|---|---|
-| `p2pwatch` | `packages/crawler/`, avec `catalog_matching` (`packages/matching/`), son domaine dans une distribution à part | `CrawlerRunner`, `ConfigValidator`, `CatalogMerger` pour la ligne de commande, un port par page ou contrôle de la webui | amuleapi, les deux bases SQLite, les horloges, Prometheus, apprise |
+| `p2pwatch` | `packages/crawler/`, avec `catalog_matching` (`packages/matching/`), son domaine dans une distribution à part | `CrawlerRunner`, `ConfigValidator`, `CatalogMerger` pour la ligne de commande, un port par page ou contrôle de la webui, `/metrics` compris, que Prometheus appelle | amuleapi, les deux bases SQLite, les horloges, apprise |
 | `p2pwatch_amule` | `packages/amule/` | `ContainerBooter`, `PortSyncLoopRunner` | `amule.conf`, s6, gluetun, les comptes et répertoires d'amuled, `amuleapi --set-admin-pass` |
 | `vex_checks` | `packages/vex_checks/` | `ImageClaimsChecker`, `StaleClaimsChecker`, `ClaimCoverageChecker` | les VEX, le SBOM Syft, Grype, le SARIF, les règles source d'ast-grep |
 | `template_checks` | `packages/template_checks/` | `LogicFreeChecker`, `TemplateAttributeLister` | les gabarits de la webui |
@@ -681,31 +681,38 @@ flowchart LR
   desc["plan_observability()<br/>→ ObservabilityPlan"]
   disp["Dispatcher"]
   log["logs"]
-  prom["/metrics"]
+  store[("InMemoryNodeMetricStore")]
+  prom["webui /metrics"]
   notif["Notifications<br/>apprise URL"]
 
   uc --> desc --> disp
   disp --> log
-  disp --> prom
+  disp -->|NodeMetricWriter| store
+  prom -->|"ListNodeMetrics · NodeMetricReader"| store
   disp -->|best-effort| notif
 ```
 
 Le **domaine** émet des `Event` purs ; une **politique** pure (`plan_observability`) les route vers des
-`ObservabilityPlan` (sévérité de log + instructions de métrique + notification, dont le genre donne
-l'audience COMMUNITY ou OPERATIONS) ;
+`ObservabilityPlan` (sévérité de log + `CounterIncrement` et `GaugeSetting` des métriques du
+nœud + notification, dont le genre donne l'audience COMMUNITY ou OPERATIONS) ;
 l'**étape** `ObservabilityDispatcher` (`application/steps/observability_dispatcher.py`) les applique.
 Une notification à la communauté y est une valeur typée (`TierRise`, `SourceAlert`,
 `CompletedDownload`) : le domaine n'écrit que du texte brut, l'adaptateur `AppriseNotifier` en écrit
 le Markdown. Aux opérations, la notification relaie la ligne de log (`RelayedLogLine`). Un événement
 qui notifie porte son `node_id`, que sa notification reprend.
-Le point d'accès Prometheus est servi par le crawler lui-même
-sur `observability.metrics.port` (`9090` dans le `crawler.yml` livré) ; rien ne le scrape par défaut, donc publiez ce
-port et pointez-y votre propre Prometheus si vous voulez des tableaux de bord.
+Les métriques du nœud sont un état à nous : le dispatcher les écrit par le `NodeMetricWriter`
+d'`InMemoryNodeMetricStore`, et la route `/metrics` de la webui les lit par le cas d'usage
+`ListNodeMetrics`, derrière son port pilotant `NodeMetricLister`, puis écrit elle-même le format
+texte 0.0.4 de Prometheus. Le domaine porte le catalogue des métriques, compteurs `NodeCounter` et
+jauges `NodeGauge`, chacun avec sa description et ses noms de labels : un `CounterIncrement` ne
+prend qu'un compteur, un `GaugeSetting` qu'une jauge, et des labels qui ne sont pas ceux de la
+métrique lèvent une erreur à la construction. Rien ne scrape `/metrics`
+par défaut : pointez-y votre propre Prometheus si vous voulez des tableaux de bord.
 
 **Discipline de frontière (E-D13)** : les échecs de notifieur (apprise) et les échecs d'appel au
 démon sont
 **absorbés** (dégradation) ; un échec dans un composant in-process testé à 100 % (par exemple
-`PrometheusMetricsRecorder`) **crashe bruyamment**, parce que c'est un bug, pas un transitoire.
+`InMemoryNodeMetricStore`) **crashe bruyamment**, parce que c'est un bug, pas un transitoire.
 
 ## 11. Invariants de conception (récapitulatif)
 

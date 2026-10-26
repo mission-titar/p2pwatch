@@ -38,8 +38,8 @@ Ce qui n'y entre jamais :
   seule et n'authentifie personne. Exposée, elle exige un reverse proxy pour l'authentification.
 - **Aucune télémétrie.** Rien ne part vers un service que vous n'avez pas choisi : les
   notifications vont aux seules cibles d'`observability.notifications`, et une alerte de source y
-  porte le nom et le début du user hash de la source. `/metrics` est un endpoint local, à scraper si
-  vous le voulez, sans Prometheus ni Grafana dans la pile.
+  porte le nom et le début du user hash de la source. `/metrics` est une route de la WebUI, à scraper
+  si vous le voulez, sans Prometheus ni Grafana dans la pile.
 - **Aucun contenu de fichier.** Même en téléchargement actif, p2pwatch ne lit jamais les octets
   d'un fichier : ni détection de type, ni sonde média, ni antivirus. Le fichier vit à part dans
   `downloads/incoming`.
@@ -96,7 +96,7 @@ Il ne protège pas contre :
 ## En pratique
 
 - **Préférez la pile VPN** (gluetun, Low-ID) à la pile par défaut.
-- **N'exposez sur Internet ni la WebUI ni `/metrics`.** Restez en réseau local, ou passez par un VPN
+- **N'exposez pas la WebUI sur Internet, ni donc sa route `/metrics`.** Restez en réseau local, ou passez par un VPN
   d'accès (WireGuard, Tailscale) et un reverse proxy avec authentification.
 - **Ne publiez pas votre IP publique** sur des forums liés au projet : « mon nœud est ici, venez
   voir » vous expose même via VPN si vous êtes seul à l'utiliser à cet instant.
