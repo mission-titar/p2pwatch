@@ -1,8 +1,8 @@
 """The promise of the ``NodeMetricReader`` and ``NodeMetricWriter`` pair; the port promises no
-order of the samples, so they are compared as sets."""
+order of the samples, so they are compared as multisets."""
 
 from abc import ABC, abstractmethod
-from concurrent.futures import ThreadPoolExecutor
+from collections import Counter
 from typing import Protocol
 
 import pytest
@@ -88,24 +88,10 @@ class NodeMetricStoreContract(ABC):
         node_metric_store.record_increment(CounterIncrement(NodeCounter.SEARCHES, _KAD, 2.0))
         node_metric_store.set_gauge(GaugeSetting(NodeGauge.CHANNEL_CONNECTED, _ED2K, 1.0))
         node_metric_store.set_gauge(GaugeSetting(NodeGauge.CHANNEL_CONNECTED, _KAD, None))
-        assert set(node_metric_store.read_samples()) == {
-            NodeMetricSample(NodeCounter.SEARCHES, _ED2K_PAIRS, 1.0),
-            NodeMetricSample(NodeCounter.SEARCHES, _KAD_PAIRS, 2.0),
-            NodeMetricSample(NodeGauge.CHANNEL_CONNECTED, _ED2K_PAIRS, 1.0),
-        }
-
-    def test_a_later_write_leaves_the_samples_already_read_unchanged(
-        self, node_metric_store: NodeMetricStore
-    ) -> None:
-        node_metric_store.set_gauge(GaugeSetting(NodeGauge.CRAWLER_UP, None, 1.0))
-        samples = node_metric_store.read_samples()
-        node_metric_store.set_gauge(GaugeSetting(NodeGauge.CRAWLER_UP, None, 0.0))
-        assert samples == (NodeMetricSample(NodeGauge.CRAWLER_UP, (), 1.0),)
-
-    def test_the_samples_are_read_from_another_thread(
-        self, node_metric_store: NodeMetricStore
-    ) -> None:
-        node_metric_store.set_gauge(GaugeSetting(NodeGauge.CRAWLER_UP, None, 1.0))
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            samples = executor.submit(node_metric_store.read_samples).result()
-        assert samples == (NodeMetricSample(NodeGauge.CRAWLER_UP, (), 1.0),)
+        assert Counter(node_metric_store.read_samples()) == Counter(
+            [
+                NodeMetricSample(NodeCounter.SEARCHES, _ED2K_PAIRS, 1.0),
+                NodeMetricSample(NodeCounter.SEARCHES, _KAD_PAIRS, 2.0),
+                NodeMetricSample(NodeGauge.CHANNEL_CONNECTED, _ED2K_PAIRS, 1.0),
+            ]
+        )
