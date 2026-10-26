@@ -31,7 +31,7 @@ class ObservabilityDispatcher:
     async def dispatch(self, event: Event) -> None:
         plan = plan_observability(event)
         self._log_at_severity(plan.severity, plan.message)
-        for instruction in plan.metrics:
+        for instruction in plan.node_metrics:
             self._metrics_recorder.apply(instruction)
         if plan.notification is None:
             return
