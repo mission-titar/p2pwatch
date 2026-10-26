@@ -282,7 +282,8 @@ Un nœud publie deux surfaces web, qui n'ont pas la même posture :
 | **4711** | amuleapi, l'interface propre à aMule | le mot de passe admin `AMULE_API_PASSWORD` |
 
 **Le port 8080 n'a aucune authentification, d'aucune sorte.** Quiconque l'atteint obtient le
-catalogue, historique des sources compris, les contrôles du tableau de bord qui modifient l'état, une console SQL en lecture seule et les métriques du nœud (`/metrics`).
+catalogue, historique des sources compris, les contrôles du tableau de bord qui modifient l'état,
+une console SQL en lecture seule et les métriques du nœud (`/metrics`).
 `AMULE_API_PASSWORD` ne protège que le 4711. Mettez le 8080 derrière un reverse proxy ou un VPN, ou
 gardez-le sur un réseau de confiance, et ne le posez jamais sur l'Internet ouvert.
 
