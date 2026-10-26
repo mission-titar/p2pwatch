@@ -146,7 +146,7 @@ def _refuse_unless_it_fits(node_metric: NodeMetric, labels: NodeMetricLabels | N
 @dataclass(frozen=True)
 class CounterIncrement:
     """Adds ``amount`` to the series of ``counter`` that ``labels`` names; labels of another class
-    than the counter's raise ``ValueError``."""
+    than the counter's, or a negative amount, raise ``ValueError``."""
 
     counter: NodeCounter
     labels: NodeMetricLabels | None = None
@@ -154,6 +154,10 @@ class CounterIncrement:
 
     def __post_init__(self) -> None:
         _refuse_unless_it_fits(self.counter, self.labels)
+        if self.amount < 0:
+            raise ValueError(
+                f"{self.counter.exposed_name} takes an amount of 0 or more, not {self.amount}"
+            )
 
     def label_pairs(self) -> tuple[tuple[str, str], ...]:
         """Its labels' ``(name, text)`` pairs, none when it has no labels."""
