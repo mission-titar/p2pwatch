@@ -238,16 +238,10 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
 ]
 
 
+# Also the catalog's guardrail: a policy writing an instruction that misfits its node metric raises.
 def test_plan_observability_maps_every_event() -> None:
     for event, expected in CASES:
         assert plan_observability(event) == expected, f"wrong ObservabilityPlan for {event!r}"
-
-
-def test_every_node_metric_the_policy_writes_fits_its_catalog() -> None:
-    """Structural guardrail: an instruction refuses at construction labels of another class than
-    its node metric's, so a policy writing one raises here, before a recorder ever sees it."""
-    for event, _ in CASES:
-        plan_observability(event)
 
 
 _HASH = "8f3a1c0b9e7d44a2b6c1f0e9d8a7b6c5"
