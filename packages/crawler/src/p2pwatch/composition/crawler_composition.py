@@ -27,7 +27,6 @@ from pathlib import Path, PurePath
 
 import apprise
 import httpx
-from prometheus_client import CollectorRegistry, start_http_server
 
 import p2pwatch.adapters.driving.webui
 from catalog_matching.domain.engine import MatchingEngine
@@ -39,10 +38,6 @@ from p2pwatch.adapters.driven.config.crawler_config import load_config
 from p2pwatch.adapters.driven.in_memory_node_metric_store import InMemoryNodeMetricStore
 from p2pwatch.adapters.driven.in_memory_status_reading_store import InMemoryStatusReadingStore
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
-from p2pwatch.adapters.driven.observability.prometheus_metrics_recorder import (
-    PrometheusMetricsRecorder,
-    start_metrics_server,
-)
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_backoff_state_store import (
     SqliteBackoffStateStore,
@@ -134,8 +129,6 @@ _AMULE_API_PROGRESS_POLL_INTERVAL = timedelta(seconds=5)
 _WEBUI_START_TIMEOUT_SECONDS = 5.0
 # uvicorn polls ``should_exit`` every 0.1 s, so the join normally returns well within its bound.
 _WEBUI_JOIN_TIMEOUT_SECONDS = 5.0
-# The metrics server stops on the event loop, where no shutdown deadline can cut a blocking call.
-_METRICS_SERVER_JOIN_TIMEOUT_SECONDS = 1.0
 # How many SQLite VM steps the SQL console runs between two checks of its query budget.
 _CONSOLE_BUDGET_CHECK_INSTRUCTIONS = 1000
 # A longer filename is never matched: it bounds the matching's cost on what a peer advertises.
@@ -324,7 +317,6 @@ class CrawlerComposition(CrawlerRunner):
             node_id_store = SqliteNodeIdStore(local_connection)
             policy_fingerprint_store = SqlitePolicyFingerprintStore(local_connection)
             observability = crawler_config.observability
-            registry = CollectorRegistry()
             node_metric_store = InMemoryNodeMetricStore()
             notifier = AppriseNotifier(
                 tuple((t.url, t.audience, t.node_prefix) for t in observability.notifications),
@@ -332,18 +324,9 @@ class CrawlerComposition(CrawlerRunner):
             )
             observability_dispatcher = ObservabilityDispatcher(
                 logger=StdlibLogger(ObservabilityDispatcher.__module__),
-                metrics_recorder=PrometheusMetricsRecorder(registry),
                 node_metric_writer=node_metric_store,
                 notifier=notifier,
                 notification_timeout_seconds=observability.notification_timeout_seconds,
-            )
-            stack.callback(
-                start_metrics_server(
-                    registry,
-                    observability.metrics_port,
-                    start_http_server,
-                    join_timeout_seconds=_METRICS_SERVER_JOIN_TIMEOUT_SECONDS,
-                )
             )
             observation_store = SqliteObservationStore(catalog_connection)
             catalog_scan_reader = SqliteCatalogScanReader(catalog_connection)

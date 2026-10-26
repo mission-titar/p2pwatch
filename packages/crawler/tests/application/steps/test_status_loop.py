@@ -20,7 +20,6 @@ from p2pwatch.domain.status_reading import (
     StatusReading,
 )
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
-from tests.fakes.adapters.driven.fake_metrics_recorder import FakeMetricsRecorder
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_search_client import make_unreachable
@@ -47,7 +46,6 @@ class _Observability:
         self.notifier = FakeTimedNotifier(fake_time)
         self.dispatcher = ObservabilityDispatcher(
             logger=self.logger,
-            metrics_recorder=FakeMetricsRecorder(),
             node_metric_writer=FakeNodeMetricStore(),
             notifier=self.notifier,
             notification_timeout_seconds=_NOTIFICATION_TIMEOUT_SECONDS,

@@ -227,6 +227,11 @@ _METRICS_SHOW_THE_CRAWLER_UP = (
     "response = urllib.request.urlopen('http://localhost:8080/metrics');"
     "print(response.status, 'p2pwatch_crawler_up 1.0' in response.read().decode().splitlines())"
 )
+# No second HTTP server: the 4.x metrics port refuses the connection.
+_NO_METRICS_SERVER_ON_9090 = (
+    "import errno, socket;"
+    "print(socket.socket().connect_ex(('localhost', 9090)) == errno.ECONNREFUSED)"
+)
 
 # amuleapi is supervised by amuled, not by s6, so s6-svstat says nothing about it. Read from the
 # core, by the service name the core itself uses, its /health proves the wiring.
@@ -321,6 +326,7 @@ def test_the_two_containers_work_together(project_files: tuple[Path, ...]) -> No
         "200 True",
         project_files,
     )
+    assert _exec(_CORE, "python", "-c", _NO_METRICS_SERVER_ON_9090, files=project_files) == "True"
     _wait_for(
         "amuleapi /health",
         lambda: _exec(_CORE, "python", "-c", _AMULEAPI_HEALTH, files=project_files),

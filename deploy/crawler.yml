@@ -27,7 +27,6 @@ webui:
 
 observability:
   log_level: INFO
-  metrics: { enabled: true, port: 9090 }
   notification_timeout_seconds: 5.0
   # notifications:
   #   - url: "discord://${DISCORD_WEBHOOK_ID}/${DISCORD_WEBHOOK_TOKEN}"
