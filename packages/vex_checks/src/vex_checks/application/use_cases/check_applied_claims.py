@@ -5,9 +5,9 @@ from pathlib import PurePath
 from vex_checks.application.ports.driven.code_scanning_reporter import CodeScanningReporter
 from vex_checks.application.ports.driven.vex_reader import VexReader
 from vex_checks.application.ports.driven.vulnerability_scanner import VulnerabilityScanner
-from vex_checks.application.ports.driving.stale_claims_checker import (
-    StaleClaimsChecker,
-    StaleClaimsReport,
+from vex_checks.application.ports.driving.applied_claims_checker import (
+    AppliedClaimsChecker,
+    AppliedClaimsReport,
 )
 from vex_checks.domain.claim_problem import ClaimProblem
 from vex_checks.domain.vex_location import locate_vex
@@ -15,7 +15,7 @@ from vex_checks.domain.vex_location import locate_vex
 _RULE_ID = "stale-vex-entry"
 
 
-class CheckStaleClaims(StaleClaimsChecker):
+class CheckAppliedClaims(AppliedClaimsChecker):
     """A claim outlives its subject once the scan stops reporting its advisory: it should be
     pruned. Names a VEX inside ``repository_root`` relative to it."""
 
@@ -32,9 +32,9 @@ class CheckStaleClaims(StaleClaimsChecker):
         self._vex_reader = vex_reader
         self._code_scanning_reporter = code_scanning_reporter
 
-    def check_stale_claims(
+    def check_applied_claims(
         self, sbom_path: PurePath, vex_path: PurePath, sarif_path: PurePath | None
-    ) -> StaleClaimsReport:
+    ) -> AppliedClaimsReport:
         advisory_ids = self._vulnerability_scanner.scan_sbom(sbom_path)
         vex_location = locate_vex(vex_path, self._repository_root)
         problems = tuple(
@@ -46,4 +46,4 @@ class CheckStaleClaims(StaleClaimsChecker):
             self._code_scanning_reporter.report_claim_problems(
                 sarif_path, _RULE_ID, problems, vex_location
             )
-        return StaleClaimsReport(problems=problems, vex_location=vex_location)
+        return AppliedClaimsReport(problems=problems, vex_location=vex_location)

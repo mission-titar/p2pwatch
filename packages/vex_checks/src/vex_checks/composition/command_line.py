@@ -12,9 +12,9 @@ from vex_checks.adapters.driven.grype_vulnerability_scanner import GrypeVulnerab
 from vex_checks.adapters.driven.open_vex_reader import OpenVexReader
 from vex_checks.adapters.driven.syft_sbom_reader import SyftSbomReader
 from vex_checks.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
+from vex_checks.application.use_cases.check_applied_claims import CheckAppliedClaims
 from vex_checks.application.use_cases.check_claim_coverage import CheckClaimCoverage
 from vex_checks.application.use_cases.check_image_claims import CheckImageClaims
-from vex_checks.application.use_cases.check_stale_claims import CheckStaleClaims
 from vex_checks.domain.registry import PREMISES
 
 # Bare, so that the environment's PATH finds it where the workflow installs it.
@@ -34,7 +34,7 @@ def build_command_line(*, env: Mapping[str, str], cwd: Path) -> ArgparseCommandL
             sbom_reader=SyftSbomReader(),
             code_scanning_reporter=code_scanning_reporter,
         ),
-        stale_claims_checker=CheckStaleClaims(
+        applied_claims_checker=CheckAppliedClaims(
             repository_root=cwd,
             vulnerability_scanner=GrypeVulnerabilityScanner(
                 grype_executable=_GRYPE_EXECUTABLE, env=env, run_command=subprocess.run

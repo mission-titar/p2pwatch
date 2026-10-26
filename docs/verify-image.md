@@ -54,7 +54,7 @@ par digest d'architecture. Le détail de la chaîne et du triage VEX est dans `S
 > **Des noms qui ne suivent pas celui de l'image, exprès.** Chaque image a son fichier de claims
 > et ses catégories SARIF, nommés d'après son paquet : `security/crawler.vex.openvex.json` et le
 > suffixe `-crawler` pour `p2pwatch`, `security/amule.vex.openvex.json` et le suffixe `-amule` pour
-> `p2pwatch-amule` (`grype-crawler`, `vex-image-claims-crawler`, `vex-stale-claims-crawler`, et
+> `p2pwatch-amule` (`grype-crawler`, `vex-image-claims-crawler`, `vex-applied-claims-crawler`, et
 > leurs équivalents `-amule`). Renommer une catégorie Code scanning rend ses findings existants
 > orphelins. Seul le *produit* VEX porte le nom de l'image. Jusqu'à la sortie de la v5, le scan
 > quotidien ne couvre que l'image unique de la v4, sous le suffixe `-mulewatch`.

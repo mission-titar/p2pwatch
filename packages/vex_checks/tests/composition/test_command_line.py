@@ -37,7 +37,7 @@ def test_image_claims_locates_the_problems_at_the_vex_relative_to_the_cwd(
     )
 
 
-def test_stale_claims_runs_the_grype_found_on_the_path_of_its_environment(
+def test_applied_claims_runs_the_grype_found_on_the_path_of_its_environment(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     # The stand-in reports nothing, so every claim of the VEX is stale.
@@ -45,7 +45,7 @@ def test_stale_claims_runs_the_grype_found_on_the_path_of_its_environment(
     grype.write_text("#!/bin/sh\necho '{\"matches\": []}'\n")
     grype.chmod(0o755)
     sbom = _write(tmp_path / "sbom.syft.json", {"artifacts": []})
-    argv = ["stale-claims", "--sbom", str(sbom), "--vex", "security/amule.vex.openvex.json"]
+    argv = ["applied-claims", "--sbom", str(sbom), "--vex", "security/amule.vex.openvex.json"]
 
     assert _run(argv, {"PATH": str(tmp_path)}, _REPOSITORY_ROOT) == 1
 

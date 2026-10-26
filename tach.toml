@@ -1024,9 +1024,9 @@ path = "vex_checks.adapters.driving.cli"
 layer = "adapters"
 depends_on = [
   "vex_checks.domain",
+  "vex_checks.application.ports.driving.applied_claims_checker",
   "vex_checks.application.ports.driving.claim_coverage_checker",
   "vex_checks.application.ports.driving.image_claims_checker",
-  "vex_checks.application.ports.driving.stale_claims_checker",
 ]
 
 [[modules]]
@@ -1039,9 +1039,9 @@ depends_on = [
   "vex_checks.application.ports.driven.source_rule_reader",
   "vex_checks.application.ports.driven.vex_reader",
   "vex_checks.application.ports.driven.vulnerability_scanner",
+  "vex_checks.application.ports.driving.applied_claims_checker",
   "vex_checks.application.ports.driving.claim_coverage_checker",
   "vex_checks.application.ports.driving.image_claims_checker",
-  "vex_checks.application.ports.driving.stale_claims_checker",
   "vex_checks.domain",
 ]
 
@@ -1100,6 +1100,6 @@ layer = "ports"
 depends_on = ["vex_checks.domain"]
 
 [[modules]]
-path = "vex_checks.application.ports.driving.stale_claims_checker"
+path = "vex_checks.application.ports.driving.applied_claims_checker"
 layer = "ports"
 depends_on = ["vex_checks.domain"]
