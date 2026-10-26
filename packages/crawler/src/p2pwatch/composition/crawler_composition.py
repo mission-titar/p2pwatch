@@ -488,7 +488,6 @@ class CrawlerComposition(CrawlerRunner):
 
             crawler_lifecycle = CrawlerLifecycle(
                 node_id_resolver=NodeIdResolver(
-                    configured_node_id=crawler_config.node_id,
                     node_id_reader=node_id_store,
                     node_id_writer=node_id_store,
                     node_id_generator=Uuid4NodeIdGenerator(),

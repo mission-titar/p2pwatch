@@ -55,7 +55,6 @@ class _Crawl:
         catalog_scan_reader: SqliteCatalogScanReader,
         engine: MatchingEngine,
         *,
-        configured_node_id: str | None = None,
         stored_fingerprint: str | None = _FINGERPRINT,
         download_enabled: bool = False,
     ) -> None:
@@ -79,7 +78,6 @@ class _Crawl:
         self._both_loops_started = asyncio.Event()
         self.crawler_lifecycle = CrawlerLifecycle(
             node_id_resolver=NodeIdResolver(
-                configured_node_id=configured_node_id,
                 node_id_reader=FakeNodeIdStore(stored_node_id="stored-node"),
                 node_id_writer=FakeNodeIdStore(stored_node_id=None),
                 node_id_generator=FakeNodeIdGenerator("new-node"),
@@ -161,7 +159,7 @@ async def test_the_crawler_starts_under_the_stored_node_id_and_runs_each_loop_wi
 
 
 @pytest.mark.asyncio
-async def test_a_configured_node_id_and_the_download_loop_show_in_the_start(
+async def test_the_download_loop_shows_in_the_start(
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_scan_reader: SqliteCatalogScanReader,
@@ -172,20 +170,19 @@ async def test_a_configured_node_id_and_the_download_loop_show_in_the_start(
         decision_store,
         catalog_scan_reader,
         engine,
-        configured_node_id="forced-node",
         download_enabled=True,
     )
 
     await crawl.run_until_both_loops_start_then_stop()
 
     assert crawl.logger.lines == [
-        LoggedLine("info", "crawler started: node_id=forced-node"),
+        LoggedLine("info", "crawler started: node_id=stored-node"),
         LoggedLine("info", "download enabled: download loop armed"),
     ]
     assert crawl.observability.notifier.calls == [
         (
             Audience.OPERATIONS,
-            RelayedLogLine("🟢 node online (download on)", Severity.INFO, "forced-node"),
+            RelayedLogLine("🟢 node online (download on)", Severity.INFO, "stored-node"),
         )
     ]
 
