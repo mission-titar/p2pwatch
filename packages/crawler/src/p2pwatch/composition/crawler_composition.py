@@ -36,6 +36,7 @@ from p2pwatch.adapters.driven.asyncio_monotonic_clock import AsyncioMonotonicClo
 from p2pwatch.adapters.driven.asyncio_run_state_store import AsyncioRunStateStore
 from p2pwatch.adapters.driven.asyncio_waker import AsyncioWaker
 from p2pwatch.adapters.driven.config.crawler_config import load_config
+from p2pwatch.adapters.driven.in_memory_node_metric_store import InMemoryNodeMetricStore
 from p2pwatch.adapters.driven.in_memory_status_reading_store import InMemoryStatusReadingStore
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
 from p2pwatch.adapters.driven.observability.prometheus_metrics_recorder import (
@@ -109,6 +110,7 @@ from p2pwatch.application.use_cases.describe_node import DescribeNode
 from p2pwatch.application.use_cases.describe_source import DescribeSource
 from p2pwatch.application.use_cases.describe_source_name import DescribeSourceName
 from p2pwatch.application.use_cases.list_files import ListFiles
+from p2pwatch.application.use_cases.list_node_metrics import ListNodeMetrics
 from p2pwatch.application.use_cases.list_sources import ListSources
 from p2pwatch.application.use_cases.pause_crawl import PauseCrawl
 from p2pwatch.application.use_cases.request_shutdown import RequestShutdown
@@ -208,6 +210,7 @@ class CrawlerComposition(CrawlerRunner):
         config: LoadedConfig,
         stack: AsyncExitStack,
         status_reading_store: InMemoryStatusReadingStore,
+        node_metric_store: InMemoryNodeMetricStore,
         run_state_store: AsyncioRunStateStore,
         shutdown_requester: RequestShutdown,
         engine: MatchingEngine,
@@ -216,8 +219,8 @@ class CrawlerComposition(CrawlerRunner):
     ) -> None:
         """Start the read-only webui on its OWN thread + loop (spec §5). It shares with the crawler
         the parsed config (immutable), the engine and the clocks (no state after their
-        construction), the status reading store (whole snapshots swapped, never mutated) and the
-        run state (every change scheduled on the crawler's loop).
+        construction), the status reading and node metric stores (whole snapshots swapped, never
+        mutated) and the run state (every change scheduled on the crawler's loop).
         It reads through its OWN ``ThreadReadConnections``, one connection per thread. Its stop is
         registered on ``stack`` so it runs during the normal LIFO unwind, AFTER the loops stop."""
         crawler_config = config.crawler_config
@@ -276,6 +279,7 @@ class CrawlerComposition(CrawlerRunner):
                     ),
                 }
             ),
+            node_metric_lister=ListNodeMetrics(node_metric_store),
             amule_url=crawler_config.webui.amule_url,
         )
         server_thread = UvicornServerThread(
@@ -321,6 +325,7 @@ class CrawlerComposition(CrawlerRunner):
             policy_fingerprint_store = SqlitePolicyFingerprintStore(local_connection)
             observability = crawler_config.observability
             registry = CollectorRegistry()
+            node_metric_store = InMemoryNodeMetricStore()
             notifier = AppriseNotifier(
                 tuple((t.url, t.audience, t.node_prefix) for t in observability.notifications),
                 apprise_factory=apprise.Apprise,
@@ -328,6 +333,7 @@ class CrawlerComposition(CrawlerRunner):
             observability_dispatcher = ObservabilityDispatcher(
                 logger=StdlibLogger(ObservabilityDispatcher.__module__),
                 metrics_recorder=PrometheusMetricsRecorder(registry),
+                node_metric_writer=node_metric_store,
                 notifier=notifier,
                 notification_timeout_seconds=observability.notification_timeout_seconds,
             )
@@ -356,6 +362,7 @@ class CrawlerComposition(CrawlerRunner):
                 config=config,
                 stack=stack,
                 status_reading_store=status_reading_store,
+                node_metric_store=node_metric_store,
                 run_state_store=run_state_store,
                 shutdown_requester=shutdown_requester,
                 engine=engine,

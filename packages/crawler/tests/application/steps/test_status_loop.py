@@ -6,6 +6,7 @@ from datetime import timedelta
 
 import pytest
 
+from p2pwatch.adapters.driven.in_memory_node_metric_store import InMemoryNodeMetricStore
 from p2pwatch.application.ports.driven.status_client import StatusClient
 from p2pwatch.application.ports.driven.status_reading_writer import StatusReadingWriter
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
@@ -47,6 +48,7 @@ class _Observability:
         self.dispatcher = ObservabilityDispatcher(
             logger=self.logger,
             metrics_recorder=FakeMetricsRecorder(),
+            node_metric_writer=InMemoryNodeMetricStore(),
             notifier=self.notifier,
             notification_timeout_seconds=_NOTIFICATION_TIMEOUT_SECONDS,
         )

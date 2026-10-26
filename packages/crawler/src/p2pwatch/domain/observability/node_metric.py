@@ -103,3 +103,12 @@ class GaugeSetting:
 
     def __post_init__(self) -> None:
         _refuse_unless_it_fits(self.gauge, self.labels)
+
+
+@dataclass(frozen=True)
+class NodeMetricSample:
+    """One series of ``node_metric``, its labels in the catalog's order, and its value."""
+
+    node_metric: NodeCounter | NodeGauge
+    labels: tuple[tuple[str, str], ...]
+    value: float

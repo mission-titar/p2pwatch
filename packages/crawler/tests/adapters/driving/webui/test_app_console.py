@@ -12,12 +12,14 @@ from starlette.applications import Starlette
 
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_targets
+from p2pwatch.adapters.driven.in_memory_node_metric_store import InMemoryNodeMetricStore
 from p2pwatch.adapters.driving.webui.app import build_app
 from p2pwatch.application.ports.driving.console_query_runner import ConsoleQueryRun
 from p2pwatch.application.ports.driving.crawl_summarizer import CrawlSummary
 from p2pwatch.application.ports.driving.file_lister import FileListing
 from p2pwatch.application.ports.driving.node_describer import NodeDescription
 from p2pwatch.application.ports.driving.source_lister import SourceListing
+from p2pwatch.application.use_cases.list_node_metrics import ListNodeMetrics
 from p2pwatch.domain.console_query import ConsoleDatabase, QueryAnswer, QueryFailure
 from p2pwatch.domain.node_state import NodeState
 from tests.fakes.application.use_cases.fake_console_query_runner import (
@@ -83,6 +85,7 @@ def _build(console_query_runner: FakeConsoleQueryRunner) -> Starlette:
         source_describer=FakeSourceDescriber(None),
         source_name_describer=FakeSourceNameDescriber(None),
         console_query_runner=console_query_runner,
+        node_metric_lister=ListNodeMetrics(InMemoryNodeMetricStore()),
         amule_url="http://localhost:4711",
     )
 
