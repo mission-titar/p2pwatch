@@ -15,7 +15,7 @@ from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.observability.node_metric import CounterIncrement, NodeMetricName
+from p2pwatch.domain.observability.node_metric import CounterIncrement, NodeCounter
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.wake_subject import WakeSubject
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
@@ -368,7 +368,7 @@ async def test_emits_observation_then_decision_on_change(
         LoggedLine("info", f"decisions for {_DL_NAME} ({_HASH_DL}): 062A none → download"),
     ]
     assert observability.metrics_recorder.applied[0] == CounterIncrement(
-        NodeMetricName.OBSERVATIONS, (("client", "amuled"), ("channel", "ed2k"))
+        NodeCounter.OBSERVATIONS, (("client", "amuled"), ("channel", "ed2k"))
     )
 
 

@@ -10,7 +10,12 @@ from catalog_matching.domain.engine import DecisionRecord
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction
 from p2pwatch.domain.observability import events as ev
-from p2pwatch.domain.observability.node_metric import CounterIncrement, GaugeSetting, NodeMetricName
+from p2pwatch.domain.observability.node_metric import (
+    CounterIncrement,
+    GaugeSetting,
+    NodeCounter,
+    NodeGauge,
+)
 from p2pwatch.domain.observability.notification import (
     CompletedDownload,
     Notification,
@@ -56,8 +61,8 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
             Severity.DEBUG,
             "search ed2k: 7 observation(s)",
             (
-                CounterIncrement(NodeMetricName.SEARCHES, _AMULED_ED2K),
-                CounterIncrement(NodeMetricName.SEARCH_RESULTS_SKIPPED, _AMULED_ED2K, 2.0),
+                CounterIncrement(NodeCounter.SEARCHES, _AMULED_ED2K),
+                CounterIncrement(NodeCounter.SEARCH_RESULTS_SKIPPED, _AMULED_ED2K, 2.0),
             ),
         ),
     ),
@@ -66,7 +71,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ObservabilityPlan(
             Severity.WARNING,
             "slskd unreachable",
-            (CounterIncrement(NodeMetricName.CLIENT_UNREACHABLE, (("client", "slskd"),)),),
+            (CounterIncrement(NodeCounter.CLIENT_UNREACHABLE, (("client", "slskd"),)),),
         ),
     ),
     (
@@ -74,7 +79,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ObservabilityPlan(
             Severity.WARNING,
             "search failed on kad",
-            (CounterIncrement(NodeMetricName.SEARCH_FAILURES, _AMULED_KAD),),
+            (CounterIncrement(NodeCounter.SEARCH_FAILURES, _AMULED_KAD),),
         ),
     ),
     (
@@ -82,7 +87,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ObservabilityPlan(
             Severity.DEBUG,
             "observation recorded (kad)",
-            (CounterIncrement(NodeMetricName.OBSERVATIONS, _AMULED_KAD),),
+            (CounterIncrement(NodeCounter.OBSERVATIONS, _AMULED_KAD),),
         ),
     ),
     (
@@ -90,7 +95,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ObservabilityPlan(
             Severity.INFO,
             "download queued: 062A",
-            (CounterIncrement(NodeMetricName.DOWNLOADS_QUEUED),),
+            (CounterIncrement(NodeCounter.DOWNLOADS_QUEUED),),
         ),
     ),
     (
@@ -101,8 +106,8 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
             Severity.DEBUG,
             "status amuled kad: connected yes, connectable no",
             (
-                GaugeSetting(NodeMetricName.CHANNEL_CONNECTED, _AMULED_KAD, 1.0),
-                GaugeSetting(NodeMetricName.CHANNEL_CONNECTABLE, _AMULED_KAD, 0.0),
+                GaugeSetting(NodeGauge.CHANNEL_CONNECTED, _AMULED_KAD, 1.0),
+                GaugeSetting(NodeGauge.CHANNEL_CONNECTABLE, _AMULED_KAD, 0.0),
             ),
         ),
     ),
@@ -114,8 +119,8 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
             Severity.DEBUG,
             "status amuled kad: connected unknown, connectable unknown",
             (
-                GaugeSetting(NodeMetricName.CHANNEL_CONNECTED, _AMULED_KAD, None),
-                GaugeSetting(NodeMetricName.CHANNEL_CONNECTABLE, _AMULED_KAD, None),
+                GaugeSetting(NodeGauge.CHANNEL_CONNECTED, _AMULED_KAD, None),
+                GaugeSetting(NodeGauge.CHANNEL_CONNECTABLE, _AMULED_KAD, None),
             ),
         ),
     ),
@@ -164,7 +169,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ObservabilityPlan(
             Severity.DEBUG,
             "download disk free: 5000 bytes",
-            (GaugeSetting(NodeMetricName.DISK_FREE_BYTES, (), 5_000.0),),
+            (GaugeSetting(NodeGauge.DISK_FREE_BYTES, (), 5_000.0),),
         ),
     ),
     (
@@ -179,7 +184,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         _relayed(
             Severity.INFO,
             "🟢 node online (download on)",
-            (GaugeSetting(NodeMetricName.CRAWLER_UP, (), 1.0),),
+            (GaugeSetting(NodeGauge.CRAWLER_UP, (), 1.0),),
         ),
     ),
     (
@@ -187,7 +192,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         _relayed(
             Severity.INFO,
             "🟢 node online (download off)",
-            (GaugeSetting(NodeMetricName.CRAWLER_UP, (), 1.0),),
+            (GaugeSetting(NodeGauge.CRAWLER_UP, (), 1.0),),
         ),
     ),
     (
@@ -195,7 +200,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ObservabilityPlan(
             Severity.INFO,
             "source 1f2e3d4c… useful for the first time: Keroro 062.avi",
-            (CounterIncrement(NodeMetricName.SOURCE_ALERTS, _ED2K_FIRST_USEFUL),),
+            (CounterIncrement(NodeCounter.SOURCE_ALERTS, _ED2K_FIRST_USEFUL),),
             SourceAlert(
                 SourceAlertKind.FIRST_USEFUL,
                 _SOURCE,
@@ -214,7 +219,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ObservabilityPlan(
             Severity.INFO,
             "source 1f2e3d4c… reappeared after 26 h: Keroro 062.avi",
-            (CounterIncrement(NodeMetricName.SOURCE_ALERTS, _ED2K_REAPPEARED),),
+            (CounterIncrement(NodeCounter.SOURCE_ALERTS, _ED2K_REAPPEARED),),
             SourceAlert(
                 SourceAlertKind.REAPPEARED,
                 _SOURCE,
@@ -235,8 +240,8 @@ def test_plan_observability_maps_every_event() -> None:
 
 
 def test_every_node_metric_the_policy_writes_fits_its_catalog() -> None:
-    """Structural guardrail: an instruction refuses at construction a node metric of the other kind
-    or other label names, so a policy writing one raises here, before a recorder ever sees it."""
+    """Structural guardrail: an instruction refuses at construction label names other than its node
+    metric's, so a policy writing one raises here, before a recorder ever sees it."""
     for event, _ in CASES:
         plan_observability(event)
 
@@ -289,7 +294,7 @@ def test_only_a_rise_to_notify_or_download_reaches_the_community(
 ) -> None:
     plan = plan_observability(_decisions(_change("062A", before, after)))
     assert (plan.notification is not None) == notified
-    assert plan.node_metrics == (CounterIncrement(NodeMetricName.DECISIONS, (("tier", after),)),)
+    assert plan.node_metrics == (CounterIncrement(NodeCounter.DECISIONS, (("tier", after),)),)
 
 
 _062A_062B = (
@@ -311,8 +316,8 @@ def test_a_file_with_risen_targets_is_one_rise_naming_the_file_and_targets() -> 
         _NODE,
     )
     assert plan.node_metrics == (
-        CounterIncrement(NodeMetricName.DECISIONS, (("tier", "download"),)),
-        CounterIncrement(NodeMetricName.DECISIONS, (("tier", "notify"),)),
+        CounterIncrement(NodeCounter.DECISIONS, (("tier", "download"),)),
+        CounterIncrement(NodeCounter.DECISIONS, (("tier", "notify"),)),
     )
 
 
@@ -349,7 +354,7 @@ def test_a_completed_download_notifies_its_targets_and_file() -> None:
     assert plan == ObservabilityPlan(
         Severity.SUCCESS,
         "✅ download completed: 062A, 062B",
-        (CounterIncrement(NodeMetricName.DOWNLOADS_COMPLETED),),
+        (CounterIncrement(NodeCounter.DOWNLOADS_COMPLETED),),
         CompletedDownload(_062A_062B, "Keroro `062`.avi", _NODE),
     )
 
