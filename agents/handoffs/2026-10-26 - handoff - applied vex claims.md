@@ -166,11 +166,15 @@ None in any block.
 ## Not validated
 
 - The release steps run only on a tag, first at v5's.
-- `release.yml`'s `syft scan registry:` with `SYFT_REGISTRY_AUTH_*` runs first in `publish-manifest` after the merge;
-  the holistic review ran the same command locally (above).
-- The daily scan runs the new check on `main` after the merge. It still scans v4's `mulewatch`, whose attested VEX
-  names `pkg:generic/python`, so it should report both Python claims not applied, under `vex-applied-claims-mulewatch`,
-  until the v5 legs replace it.
+
+Validated after the merge (`46fea82a`), 2026-10-26:
+
+- The merge push's Release run (40381844889) is green: `Install Syft, verified` and `syft scan registry:` passed in
+  both `publish-manifest` legs, and `Install Grype, verified` and the `applied-claims` gate were skipped.
+- The daily scan, dispatched by hand on `main` (run 40384454173), is green: Grype installed with
+  `signature verification succeeded`; `grype-mulewatch` still holds 365 open alerts, none duplicated; and
+  `vex-applied-claims-mulewatch` holds two `unapplied-vex-claim` alerts, CVE-2025-15366 and CVE-2025-15367, since v4's
+  attested VEX names `pkg:generic/python`. They stay open until the v5 legs replace `mulewatch`'s.
 
 ## Wrap counts
 
