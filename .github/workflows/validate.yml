@@ -131,18 +131,16 @@ jobs:
           echo "$amuleapi"
           grep -qF "aMuleD $AMULE_VERSION compiled" <<< "$amuled"
           grep -qF "amuleapi $AMULE_VERSION compiled" <<< "$amuleapi"
-      # The same action, Syft and cataloger selection as release.yml, so a PR proves what a
-      # release will attest. The sbom-cataloger is not an image cataloger: off unless selected.
+      - name: Install Syft, verified (${{ matrix.arch }})
+        uses: ./.github/actions/install-syft
+      # The same Syft and cataloger selection as release.yml, so a PR proves what a release
+      # will attest. The sbom-cataloger is not an image cataloger: off unless selected.
       - name: Generate the SBOM of the local aMule image (${{ matrix.arch }})
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         env:
           SYFT_SELECT_CATALOGERS: +sbom-cataloger
-        with:
-          image: docker:${{ env.AMULE_IMAGE }}:ci-${{ github.sha }}
-          format: syft-json
-          output-file: /tmp/sbom-amule.syft.json
-          upload-artifact: "false"
-          upload-release-assets: "false"
+        run: >
+          syft scan "docker:$AMULE_IMAGE:ci-${{ github.sha }}"
+          -o syft-json=/tmp/sbom-amule.syft.json
       - name: Check that aMule is in the SBOM at the pinned version (${{ matrix.arch }})
         env:
           AMULE_VERSION: ${{ steps.amule.outputs.value }}

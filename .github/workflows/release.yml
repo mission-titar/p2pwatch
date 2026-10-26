@@ -114,29 +114,20 @@ jobs:
           digest=$(ls | head -1)
           echo "ref=${{ env.IMAGE }}@sha256:${digest}" >> "$GITHUB_OUTPUT"
 
-      - name: Generate the Syft-JSON SBOM (native, for the checks and the VEX-aware daily scan)
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
-        env:
-          SYFT_SELECT_CATALOGERS: +sbom-cataloger
-        with:
-          image: ${{ steps.prepublish.outputs.ref }}
-          format: syft-json
-          output-file: /tmp/sbom.syft.json
-          upload-artifact: "false"
-          registry-username: ${{ github.actor }}
-          registry-password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install Syft, verified
+        uses: ./.github/actions/install-syft
 
-      - name: Generate the CycloneDX SBOM (portable, for external consumers)
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+      # Syft-JSON for the checks and the VEX-aware daily scan, CycloneDX for external consumers.
+      - name: Generate the Syft-JSON and CycloneDX SBOMs
         env:
           SYFT_SELECT_CATALOGERS: +sbom-cataloger
-        with:
-          image: ${{ steps.prepublish.outputs.ref }}
-          format: cyclonedx-json
-          output-file: /tmp/sbom.cyclonedx.json
-          upload-artifact: "false"
-          registry-username: ${{ github.actor }}
-          registry-password: ${{ secrets.GITHUB_TOKEN }}
+          SYFT_REGISTRY_AUTH_USERNAME: ${{ github.actor }}
+          SYFT_REGISTRY_AUTH_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          REF: ${{ steps.prepublish.outputs.ref }}
+        run: >
+          syft scan "registry:$REF"
+          -o syft-json=/tmp/sbom.syft.json
+          -o cyclonedx-json=/tmp/sbom.cyclonedx.json
 
       # aMule is declared by a file only the sbom-cataloger reads, and that cataloger is off unless
       # selected (the SYFT_SELECT_CATALOGERS above): a regression is SILENT, Grype scores it zero.

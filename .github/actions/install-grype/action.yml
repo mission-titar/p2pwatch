@@ -1,0 +1,17 @@
+name: Install Grype
+description: >
+  Install the pinned Grype release on PATH, its checksums verified with cosign against
+  anchore's release workflow before the binary is checked against them.
+runs:
+  using: composite
+  steps:
+    - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+    - shell: bash
+      env:
+        # Left true, the script runs the tag's install.sh from get.anchore.io instead of itself.
+        DOWNLOAD_TAG_INSTALL_SCRIPT: 'false'
+      run: |
+        curl -sSfL -o "$RUNNER_TEMP/install-grype.sh" \
+          https://raw.githubusercontent.com/anchore/grype/6f8d854af29d3a3086b11a84afa51554a2a245fe/install.sh # v0.120.1
+        sh "$RUNNER_TEMP/install-grype.sh" -v -b "$HOME/.local/bin" v0.120.1
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
