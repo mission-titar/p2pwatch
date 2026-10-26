@@ -52,6 +52,37 @@ async def test_start_serves_the_app_on_the_port_bound_and_stop_ends_the_thread(
 
 
 @pytest.mark.asyncio
+async def test_the_access_log_leaves_out_the_metrics_scrapes(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    server_thread = UvicornServerThread(
+        Starlette(routes=[Route("/", _ok), Route("/metrics", _ok)]),
+        ("127.0.0.1", 0),
+        start_timeout_seconds=5.0,
+        join_timeout_seconds=5.0,
+        serving_resources=(),
+    )
+    # uvicorn's access logger does not propagate: caplog reads it through a handler of its own.
+    access_logger = logging.getLogger("uvicorn.access")
+    access_logger.addHandler(caplog.handler)
+    try:
+        await server_thread.start()
+        host, port = server_thread.bound_address
+        async with httpx.AsyncClient() as http:
+            await http.get(f"http://{host}:{port}/metrics")
+            await http.get(f"http://{host}:{port}/")
+        await server_thread.stop()
+    finally:
+        access_logger.removeHandler(caplog.handler)
+    access_lines = [
+        record.getMessage().split(" - ")[1]
+        for record in caplog.records
+        if record.name == "uvicorn.access"
+    ]
+    assert access_lines == ['"GET / HTTP/1.1" 200']
+
+
+@pytest.mark.asyncio
 async def test_a_port_already_bound_degrades_the_webui_without_raising(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
