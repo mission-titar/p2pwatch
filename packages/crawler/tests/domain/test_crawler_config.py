@@ -9,7 +9,6 @@ from p2pwatch.domain.crawler_config import (
     BackoffConfig,
     CrawlerConfig,
     DownloadConfig,
-    MetricsConfig,
     NotificationTarget,
     ObservabilityConfig,
     SearchConfig,
@@ -89,7 +88,7 @@ def test_parses_a_valid_config() -> None:
         local_db_path="/data/local.db",
         node_id=None,
         observability=ObservabilityConfig(
-            log_level="INFO", metrics=None, notification_timeout_seconds=5.0, notifications=()
+            log_level="INFO", notification_timeout_seconds=5.0, notifications=()
         ),
         download=None,
         webui=_default_webui(),
@@ -225,12 +224,21 @@ def test_a_removed_key_is_refused_by_name(key: str) -> None:
     )
 
 
-def test_a_removed_key_of_a_section_is_refused_by_its_path() -> None:
-    raw = _minimal_raw() | {"webui": {"enabled": True}}
+@pytest.mark.parametrize(
+    ("section", "key_path"),
+    [
+        ({"webui": {"enabled": True}}, "webui.enabled"),
+        ({"observability": {"metrics": {"enabled": True, "port": 9090}}}, "observability.metrics"),
+    ],
+)
+def test_a_removed_key_of_a_section_is_refused_by_its_path(
+    section: dict[str, Any], key_path: str
+) -> None:
+    raw = _minimal_raw() | section
     with pytest.raises(InvalidConfigError) as raised:
         parse_crawler_config(raw)
     assert (raised.value.key, raised.value.message) == (
-        "webui.enabled",
+        key_path,
         "was removed, delete it from crawler.yml",
     )
 
@@ -539,79 +547,30 @@ def test_search_keywords_rejects_non_string_entry() -> None:
 # ----------------------------------------------------------- observability
 
 
-def test_an_absent_observability_logs_at_info_with_no_metrics_and_no_notification() -> None:
+def test_an_absent_observability_logs_at_info_with_no_notification() -> None:
     assert parse_crawler_config(_minimal_raw()).observability == ObservabilityConfig(
-        log_level="INFO", metrics=None, notification_timeout_seconds=5.0, notifications=()
+        log_level="INFO", notification_timeout_seconds=5.0, notifications=()
     )
-
-
-@pytest.mark.parametrize(
-    ("metrics", "port"),
-    [
-        (MetricsConfig(enabled=True, port=9100), 9100),
-        (MetricsConfig(enabled=False, port=9100), None),
-        (None, None),
-    ],
-)
-def test_the_metrics_port_is_the_configured_one_only_when_enabled(
-    metrics: MetricsConfig | None, port: int | None
-) -> None:
-    observability = ObservabilityConfig(
-        log_level="INFO", metrics=metrics, notification_timeout_seconds=5.0, notifications=()
-    )
-    assert observability.metrics_port == port
 
 
 def test_observability_parsed() -> None:
     raw = _minimal_raw() | {
         "observability": {
             "log_level": "DEBUG",
-            "metrics": {"enabled": True, "port": 9100},
             "notification_timeout_seconds": 3.0,
         }
     }
     config = parse_crawler_config(raw)
     assert config.observability == ObservabilityConfig(
         log_level="DEBUG",
-        metrics=MetricsConfig(enabled=True, port=9100),
         notification_timeout_seconds=3.0,
         notifications=(),
-    )
-
-
-def test_observability_metrics_optional() -> None:
-    raw = _minimal_raw() | {"observability": {"log_level": "INFO"}}
-    config = parse_crawler_config(raw)
-    assert config.observability == ObservabilityConfig(
-        log_level="INFO", metrics=None, notification_timeout_seconds=5.0, notifications=()
     )
 
 
 def test_observability_bad_log_level_rejected() -> None:
     raw = _minimal_raw() | {"observability": {"log_level": "LOUD"}}
     with pytest.raises(InvalidConfigError, match="log_level"):
-        parse_crawler_config(raw)
-
-
-def test_observability_metrics_enabled_key_missing_rejected() -> None:
-    raw = _minimal_raw() | {"observability": {"log_level": "INFO", "metrics": {"port": 9100}}}
-    with pytest.raises(InvalidConfigError, match=r"^observability\.metrics\.enabled: missing$"):
-        parse_crawler_config(raw)
-
-
-def test_observability_metrics_port_key_missing_rejected() -> None:
-    # missing-key branch of _positive_int (the only required caller left since the download
-    # knobs gained defaults).
-    raw = _minimal_raw() | {"observability": {"log_level": "INFO", "metrics": {"enabled": True}}}
-    with pytest.raises(InvalidConfigError, match="port"):
-        parse_crawler_config(raw)
-
-
-def test_observability_metrics_enabled_non_bool_rejected() -> None:
-    raw = _minimal_raw() | {
-        "observability": {"log_level": "INFO", "metrics": {"enabled": 1, "port": 9100}}
-    }
-    with pytest.raises(InvalidConfigError, match="boolean expected"):
         parse_crawler_config(raw)
 
 

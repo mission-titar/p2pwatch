@@ -115,6 +115,7 @@ _REMOVED_KEYS = (
     "decision_poll_interval_seconds",
     "keyword_pause_max_seconds",
     "keyword_pause_min_seconds",
+    "observability.metrics",
     "port_sync",
     "search_poll_budget_seconds",
     "search_poll_interval_seconds",
@@ -126,29 +127,13 @@ _MOVED_KEYS = {"backoff": "search.backoff"}
 
 
 @dataclass(frozen=True)
-class MetricsConfig:
-    """Crawler's Prometheus metrics server (E-D9). ``port`` = dedicated HTTP server."""
-
-    enabled: bool
-    port: int
-
-
-@dataclass(frozen=True)
 class ObservabilityConfig:
     """Observability settings (``crawler.yml``). ``log_level`` drives the global logging
     (bootstrap → setLevel); ``notifications`` = apprise targets (interpolated URLs, E-D2/E-D7)."""
 
     log_level: str
-    metrics: MetricsConfig | None
     notification_timeout_seconds: float
     notifications: tuple[NotificationTarget, ...]
-
-    @property
-    def metrics_port(self) -> int | None:
-        """The port the metrics server listens on, ``None`` when it is off."""
-        if self.metrics is None or not self.metrics.enabled:
-            return None
-        return self.metrics.port
 
 
 @dataclass(frozen=True)
@@ -232,14 +217,6 @@ def _positive_int(section: dict[str, Any], key: str, error_label: str) -> int:
     return setting
 
 
-def _bool(section: dict[str, Any], key: str, error_label: str) -> bool:
-    """REQUIRED boolean, else ``InvalidConfigError`` (fail-fast §5/§14)."""
-    setting = _required(section, key, error_label)
-    if not isinstance(setting, bool):
-        raise InvalidConfigError(_key_path(error_label, key), f"boolean expected, got {setting!r}")
-    return setting
-
-
 # Coherent bounds for a P2P watch: a day for a delay, 30 days for an absence (operator, 2026-10-13).
 _A_DAY_SECONDS = 86_400.0
 _THIRTY_DAYS_SECONDS = 2_592_000.0
@@ -297,13 +274,6 @@ def _parse_observability(section: dict[str, Any]) -> ObservabilityConfig:
         raise InvalidConfigError(
             "observability.log_level", f"one of {sorted(_LOG_LEVELS)} expected, got {log_level!r}"
         )
-    metrics: MetricsConfig | None = None
-    if "metrics" in section:
-        metrics_raw = _require_mapping(section["metrics"], "observability.metrics")
-        metrics = MetricsConfig(
-            enabled=_bool(metrics_raw, "enabled", "observability.metrics"),
-            port=_positive_int(metrics_raw, "port", "observability.metrics"),
-        )
     timeout = _seconds(
         section,
         "notification_timeout_seconds",
@@ -337,7 +307,6 @@ def _parse_observability(section: dict[str, Any]) -> ObservabilityConfig:
         )
     return ObservabilityConfig(
         log_level=log_level,
-        metrics=metrics,
         notification_timeout_seconds=timeout,
         notifications=tuple(notifications),
     )

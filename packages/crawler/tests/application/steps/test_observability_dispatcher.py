@@ -6,13 +6,11 @@ import pytest
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord
-from p2pwatch.application.ports.driven.metrics_recorder import MetricsRecorder
 from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observability import events as ev
 from p2pwatch.domain.observability.node_metric import (
-    CounterIncrement,
     NodeCounter,
     NodeGauge,
     NodeMetricSample,
@@ -22,7 +20,6 @@ from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.observability.severity import Severity
 from tests.fakes.adapters.driven.fake_hanging_notifier import FakeHangingNotifier
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
-from tests.fakes.adapters.driven.fake_metrics_recorder import FakeMetricsRecorder
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
 from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
 from tests.fakes.adapters.driven.fake_raising_notifier import FakeRaisingNotifier
@@ -38,11 +35,9 @@ def _dispatcher(
     notifier: Notifier,
     logger: FakeLogger | None = None,
     timeout: float = 5.0,
-    metrics_recorder: MetricsRecorder | None = None,
 ) -> ObservabilityDispatcher:
     return ObservabilityDispatcher(
         logger=logger or FakeLogger(),
-        metrics_recorder=metrics_recorder or FakeMetricsRecorder(),
         node_metric_writer=node_metric_store,
         notifier=notifier,
         notification_timeout_seconds=timeout,
@@ -88,17 +83,6 @@ async def test_writes_each_counter_increment_and_gauge_setting_to_the_node_metri
         NodeMetricSample(NodeCounter.CLIENT_UNREACHABLE, (("client", "amuled"),), 1.0),
         NodeMetricSample(NodeGauge.CRAWLER_UP, (), 1.0),
     )
-
-
-@pytest.mark.asyncio
-async def test_applies_each_instruction_to_the_metrics_recorder_until_it_leaves() -> None:
-    metrics_recorder = FakeMetricsRecorder()
-    await _dispatcher(
-        FakeNodeMetricStore(), FakeNotifier(), metrics_recorder=metrics_recorder
-    ).dispatch(ev.ClientUnreachable("amuled"))
-    assert metrics_recorder.applied == [
-        CounterIncrement(NodeCounter.CLIENT_UNREACHABLE, (("client", "amuled"),))
-    ]
 
 
 @pytest.mark.asyncio
