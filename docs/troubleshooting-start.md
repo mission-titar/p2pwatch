@@ -178,5 +178,5 @@ récupération après panne, voir [Diagnostics avancés](troubleshooting.md).
   ```
   `p2pwatch` pas `Up` → [« Un conteneur redémarre en boucle »](#un-conteneur-redémarre-en-boucle).
   `Up` mais page inaccessible → confirmez l'adresse (le port est peut-être remappé, voir
-  [« Le port est déjà pris »](#le-port-est-déjà-pris)) et que `webui.enabled` vaut `true` dans
-  `crawler.yml`.
+  [« Le port est déjà pris »](#le-port-est-déjà-pris)) et que `compose.yml` publie bien le 8080
+  dans les `ports:` de `p2pwatch`.

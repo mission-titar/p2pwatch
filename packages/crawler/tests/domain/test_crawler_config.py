@@ -51,10 +51,9 @@ def _full_download_section() -> dict[str, Any]:
     }
 
 
-def _webui_of_defaults(*, enabled: bool) -> WebuiConfig:
-    """The webui of a section that sets at most ``enabled``: the default aMule link and gap."""
+def _default_webui() -> WebuiConfig:
+    """The webui of a section that sets nothing: the default aMule link and gap."""
     return WebuiConfig(
-        enabled=enabled,
         amule_url="http://localhost:4711",
         source_period_gap=timedelta(seconds=990),
     )
@@ -93,7 +92,7 @@ def test_parses_a_valid_config() -> None:
             log_level="INFO", metrics=None, notification_timeout_seconds=5.0, notifications=()
         ),
         download=None,
-        webui=_webui_of_defaults(enabled=True),
+        webui=_default_webui(),
     )
 
 
@@ -222,6 +221,16 @@ def test_a_removed_key_is_refused_by_name(key: str) -> None:
         parse_crawler_config(raw)
     assert (raised.value.key, raised.value.message) == (
         key,
+        "was removed, delete it from crawler.yml",
+    )
+
+
+def test_a_removed_key_of_a_section_is_refused_by_its_path() -> None:
+    raw = _minimal_raw() | {"webui": {"enabled": True}}
+    with pytest.raises(InvalidConfigError) as raised:
+        parse_crawler_config(raw)
+    assert (raised.value.key, raised.value.message) == (
+        "webui.enabled",
         "was removed, delete it from crawler.yml",
     )
 
@@ -676,44 +685,19 @@ def test_a_notification_tag_is_refused_with_its_new_name(target: dict[str, str])
 # ------------------------------------------------------------------- webui
 
 
-def test_webui_absent_defaults_to_enabled() -> None:
-    # No webui section → the in-process webui is ON by default. The bind is fixed at
-    # 0.0.0.0:8080 in the composition ring; it is NOT configurable here.
-    config = parse_crawler_config(_minimal_raw())
-    assert config.webui == _webui_of_defaults(enabled=True)
-
-
-def test_webui_enabled_false_disables_the_surface() -> None:
-    raw = _minimal_raw() | {"webui": {"enabled": False}}
-    assert parse_crawler_config(raw).webui == _webui_of_defaults(enabled=False)
-
-
 def test_webui_host_and_port_are_silently_ignored() -> None:
     # A legacy config still carrying host/port must NOT fail: those keys are simply not read
-    # (the bind is fixed in code). The result is `enabled` and the defaults, nothing else.
-    raw = _minimal_raw() | {"webui": {"enabled": True, "host": "1.2.3.4", "port": 9999}}
+    # (the bind is fixed in code). The result is the defaults, nothing else.
+    raw = _minimal_raw() | {"webui": {"host": "1.2.3.4", "port": 9999}}
     config = parse_crawler_config(raw)
-    assert config.webui == _webui_of_defaults(enabled=True)
+    assert config.webui == _default_webui()
     # the type no longer carries a bind
     assert {field.name for field in dataclasses.fields(WebuiConfig)}.isdisjoint({"host", "port"})
-
-
-def test_webui_enabled_defaults_true_when_key_absent_in_section() -> None:
-    # Section present (with a now-ignored host) but no `enabled` key → default True
-    # (missing-key branch of _bool_default); the host is ignored.
-    raw = _minimal_raw() | {"webui": {"host": "1.2.3.4"}}
-    assert parse_crawler_config(raw).webui == _webui_of_defaults(enabled=True)
 
 
 def test_webui_section_must_be_a_mapping() -> None:
     raw = _minimal_raw() | {"webui": [1, 2]}
     with pytest.raises(InvalidConfigError, match=r"^webui: mapping expected, got list$"):
-        parse_crawler_config(raw)
-
-
-def test_webui_enabled_non_bool_is_fatal() -> None:
-    raw = _minimal_raw() | {"webui": {"enabled": "yes"}}
-    with pytest.raises(InvalidConfigError, match="boolean expected"):
         parse_crawler_config(raw)
 
 
@@ -729,7 +713,7 @@ def test_webui_amule_url_is_configurable_for_a_reverse_proxy() -> None:
     assert parse_crawler_config(raw).webui.amule_url == "https://mule.example.org/amule"
 
 
-@pytest.mark.parametrize("webui", [None, {"enabled": True}], ids=["no-section", "no-key"])
+@pytest.mark.parametrize("webui", [None, {"host": "1.2.3.4"}], ids=["no-section", "no-key"])
 def test_webui_source_period_gap_defaults_to_the_writers_tolerance_at_the_shipped_defaults(
     webui: dict[str, Any] | None,
 ) -> None:

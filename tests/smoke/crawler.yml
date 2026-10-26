@@ -14,10 +14,6 @@ search:
 catalog_db_path: /data/catalog.db
 local_db_path: /data/local.db
 
-# webui served in-process by the crawler, on a bind fixed at 0.0.0.0:8080 in code.
-webui:
-  enabled: true
-
 download:
   enabled: true
   poll_interval_seconds: 3.0

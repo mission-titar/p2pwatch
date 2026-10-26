@@ -292,8 +292,9 @@ ouvre ses propres connexions SQLite en lecture seule (`mode=ro` et `PRAGMA query
 une connexion en écriture. Toute tentative d'écriture est refusée par SQLite avant d'atteindre le
 disque, ce qui protège votre catalogue même d'une régression du code.
 
-Pour le couper sans couper le crawl, mettez `webui.enabled: false` dans `crawler.yml`. Pour couper
-le crawl en gardant aMule vivant, c'est `docker compose stop p2pwatch`.
+Il est toujours servi, aucun réglage ne le coupe. Retirer la ligne `"8080:8080"` des `ports:` de
+`compose.yml` le retire du réseau de l'hôte ; le réseau compose l'atteint toujours. Pour couper le
+crawl en gardant aMule vivant, c'est `docker compose stop p2pwatch`.
 
 ### Routes disponibles
 

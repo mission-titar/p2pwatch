@@ -18,9 +18,7 @@ local_db_path: /data/local.db
 
 # Read-only webui served in-process by the crawler (own thread). The bind is fixed at
 # 0.0.0.0:8080 in code; no built-in auth -> front it with the reverse proxy / VPN.
-# enabled: false => headless crawler, no HTTP surface.
 webui:
-  enabled: true
   # Resolved by the BROWSER, not the container: localhost only works when the browser runs on
   # the Docker host. Set it to the reachable address otherwise (NAS hostname, reverse proxy).
   amule_url: http://localhost:4711
