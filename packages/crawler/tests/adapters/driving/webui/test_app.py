@@ -18,6 +18,7 @@ from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord, Explanation
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_targets
+from p2pwatch.adapters.driven.in_memory_node_metric_store import InMemoryNodeMetricStore
 from p2pwatch.adapters.driving.webui.app import (
     _catalog_entry_displays,
     _normalize_direction,
@@ -34,9 +35,11 @@ from p2pwatch.application.ports.driving.crawl_summarizer import ClientSummary, C
 from p2pwatch.application.ports.driving.file_describer import FileDescription
 from p2pwatch.application.ports.driving.file_lister import FileListing
 from p2pwatch.application.ports.driving.node_describer import NodeDescription
+from p2pwatch.application.ports.driving.node_metric_lister import NodeMetricLister
 from p2pwatch.application.ports.driving.source_describer import SourceDescription
 from p2pwatch.application.ports.driving.source_lister import SourceListing
 from p2pwatch.application.ports.driving.source_name_describer import SourceNameDescription
+from p2pwatch.application.use_cases.list_node_metrics import ListNodeMetrics
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.console_query import QueryFailure
 from p2pwatch.domain.coverage import TargetCoverage, TargetCoverageStatus
@@ -47,6 +50,7 @@ from p2pwatch.domain.file_target_decision import DatedDecision
 from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
+from p2pwatch.domain.observability.node_metric import GaugeSetting, NodeGauge
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from p2pwatch.domain.sharing_period import SharingPeriod
@@ -135,6 +139,7 @@ _NO_SOURCE_DESCRIBER = FakeSourceDescriber(None)
 _NO_SOURCE_NAME_DESCRIBER = FakeSourceNameDescriber(None)
 # These tests run no console query: ``test_app_console.py`` does.
 _NO_CONSOLE_QUERY_RUNNER = FakeConsoleQueryRunner(ConsoleQueryRun(QueryFailure(""), 1000))
+_NO_NODE_METRIC_LISTER = ListNodeMetrics(InMemoryNodeMetricStore())
 _FILE = FileKey(Network.ED2K, TEST_HASH)
 _OBSERVATION = FileObservation(
     ReportedFile(_FILE, "keroro_s2e62a_vf.avi", 100_000_000, 5, "keroro"),
@@ -170,6 +175,7 @@ def _app_on_fakes(
     target_segments: tuple[TargetSegment, ...] | None = None,
     controls: _Controls = _NO_CONTROLS,
     amule_url: str = _AMULE_URL,
+    node_metric_lister: NodeMetricLister = _NO_NODE_METRIC_LISTER,
 ) -> Starlette:
     import p2pwatch.adapters.driving.webui
 
@@ -190,6 +196,7 @@ def _app_on_fakes(
         source_name_describer=source_name_describer,
         amule_url=amule_url,
         console_query_runner=_NO_CONSOLE_QUERY_RUNNER,
+        node_metric_lister=node_metric_lister,
     )
 
 
@@ -294,6 +301,18 @@ async def test_health_returns_200(populated_app: tuple[Starlette, str]) -> None:
         resp = await client.get("/health")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_metrics_serve_the_listing_as_prometheus_text_whatever_the_accept_header() -> None:
+    node_metric_store = InMemoryNodeMetricStore()
+    node_metric_store.set_gauge(GaugeSetting(NodeGauge.CRAWLER_UP, (), 1.0))
+    app = _app_on_fakes(node_metric_lister=ListNodeMetrics(node_metric_store))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/metrics", headers={"Accept": "application/openmetrics-text"})
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "text/plain; version=0.0.4; charset=utf-8"
+    assert "p2pwatch_crawler_up 1.0" in resp.text.splitlines()
 
 
 async def _coverage_cells(coverage: TargetCoverage) -> list[str]:
@@ -1051,6 +1070,7 @@ async def test_a_template_reading_what_its_context_lacks_raises(
         source_name_describer=_NO_SOURCE_NAME_DESCRIBER,
         amule_url=_AMULE_URL,
         console_query_runner=_NO_CONSOLE_QUERY_RUNNER,
+        node_metric_lister=_NO_NODE_METRIC_LISTER,
     )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         with pytest.raises(UndefinedError):

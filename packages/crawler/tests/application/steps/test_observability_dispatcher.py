@@ -6,7 +6,9 @@ import pytest
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord
+from p2pwatch.adapters.driven.in_memory_node_metric_store import InMemoryNodeMetricStore
 from p2pwatch.application.ports.driven.metrics_recorder import MetricsRecorder
+from p2pwatch.application.ports.driven.node_metric_writer import NodeMetricWriter
 from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.file_key import FileKey, Network
@@ -16,6 +18,7 @@ from p2pwatch.domain.observability.node_metric import (
     GaugeSetting,
     NodeCounter,
     NodeGauge,
+    NodeMetricSample,
 )
 from p2pwatch.domain.observability.notification import RelayedLogLine, TierRise
 from p2pwatch.domain.observability.policy import Audience
@@ -37,10 +40,12 @@ def _dispatcher(
     notifier: Notifier,
     logger: FakeLogger | None = None,
     timeout: float = 5.0,
+    node_metric_writer: NodeMetricWriter | None = None,
 ) -> ObservabilityDispatcher:
     return ObservabilityDispatcher(
         logger=logger or FakeLogger(),
         metrics_recorder=metrics_recorder,
+        node_metric_writer=node_metric_writer or InMemoryNodeMetricStore(),
         notifier=notifier,
         notification_timeout_seconds=timeout,
     )
@@ -71,6 +76,20 @@ async def test_two_metrics_one_event() -> None:
         GaugeSetting(NodeGauge.CHANNEL_CONNECTED, labels, 1.0),
         GaugeSetting(NodeGauge.CHANNEL_CONNECTABLE, labels, 1.0),
     ]
+
+
+@pytest.mark.asyncio
+async def test_writes_each_counter_increment_and_gauge_setting_to_the_node_metric_store() -> None:
+    node_metric_store = InMemoryNodeMetricStore()
+    dispatcher = _dispatcher(
+        FakeMetricsRecorder(), FakeNotifier(), node_metric_writer=node_metric_store
+    )
+    await dispatcher.dispatch(ev.ClientUnreachable("amuled"))
+    await dispatcher.dispatch(ev.CrawlerStarted(download_enabled=True, node_id=_NODE))
+    assert node_metric_store.read_samples() == (
+        NodeMetricSample(NodeCounter.CLIENT_UNREACHABLE, (("client", "amuled"),), 1.0),
+        NodeMetricSample(NodeGauge.CRAWLER_UP, (), 1.0),
+    )
 
 
 @pytest.mark.asyncio

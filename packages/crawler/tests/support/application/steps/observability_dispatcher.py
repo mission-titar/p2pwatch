@@ -1,5 +1,6 @@
 """A real dispatch step over the fakes its outputs land in, for the steps that dispatch."""
 
+from p2pwatch.adapters.driven.in_memory_node_metric_store import InMemoryNodeMetricStore
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_metrics_recorder import FakeMetricsRecorder
@@ -18,6 +19,7 @@ class ObservabilityOverFakes:
         self.dispatcher = ObservabilityDispatcher(
             logger=self.logger,
             metrics_recorder=self.metrics_recorder,
+            node_metric_writer=InMemoryNodeMetricStore(),
             notifier=self.notifier,
             notification_timeout_seconds=_NOTIFICATION_TIMEOUT_SECONDS,
         )

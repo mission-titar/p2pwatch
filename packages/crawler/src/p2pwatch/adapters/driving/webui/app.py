@@ -70,6 +70,10 @@ from p2pwatch.adapters.driving.webui.format import (
     short_timestamp,
     utc_timestamp,
 )
+from p2pwatch.adapters.driving.webui.prometheus_text import (
+    PROMETHEUS_TEXT_MEDIA_TYPE,
+    prometheus_text,
+)
 from p2pwatch.application.ports.driving.console_query_runner import ConsoleQueryRunner
 from p2pwatch.application.ports.driving.crawl_pauser import CrawlPauser
 from p2pwatch.application.ports.driving.crawl_resumer import CrawlResumer
@@ -77,6 +81,7 @@ from p2pwatch.application.ports.driving.crawl_summarizer import ClientSummary, C
 from p2pwatch.application.ports.driving.file_describer import FileDescriber
 from p2pwatch.application.ports.driving.file_lister import FileLister
 from p2pwatch.application.ports.driving.node_describer import NodeDescriber
+from p2pwatch.application.ports.driving.node_metric_lister import NodeMetricLister
 from p2pwatch.application.ports.driving.shutdown_requester import ShutdownRequester
 from p2pwatch.application.ports.driving.source_describer import SourceDescriber
 from p2pwatch.application.ports.driving.source_lister import SourceLister
@@ -708,6 +713,7 @@ def build_app(
     source_describer: SourceDescriber,
     source_name_describer: SourceNameDescriber,
     console_query_runner: ConsoleQueryRunner,
+    node_metric_lister: NodeMetricLister,
     amule_url: str,
 ) -> Starlette:
     """Build and return the wired Starlette application.
@@ -718,7 +724,8 @@ def build_app(
     itself holds no write connection (spec §4/§10). ``crawl_summarizer`` serves the dashboard,
     ``node_describer`` /node, ``file_lister`` /files and a target's page, ``file_describer`` a
     file's page, ``source_lister`` /sources, ``source_describer`` a source's page,
-    ``source_name_describer`` a name's page, ``console_query_runner`` the console.
+    ``source_name_describer`` a name's page, ``console_query_runner`` the console,
+    ``node_metric_lister`` /metrics.
 
     ``amule_url`` is the base the nav's aMule entry points at (design §9); the caller reads it
     from ``webui.amule_url``."""
@@ -1198,6 +1205,10 @@ def build_app(
             headers={"Content-Disposition": 'attachment; filename="query.csv"'},
         )
 
+    async def handle_metrics(request: Request) -> Response:
+        node_metric_listing = node_metric_lister.list_node_metrics()
+        return Response(prometheus_text(node_metric_listing), media_type=PROMETHEUS_TEXT_MEDIA_TYPE)
+
     # ------------------------------------------------------------------
     # Application
     # ------------------------------------------------------------------
@@ -1205,6 +1216,7 @@ def build_app(
     return Starlette(
         routes=[
             Route("/health", handle_health),
+            Route("/metrics", handle_metrics),
             Route("/", handle_dashboard),
             Route("/files", handle_files),
             Route("/files/{file_id}", handle_file),

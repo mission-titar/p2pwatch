@@ -204,6 +204,15 @@ layer = "adapters"
 depends_on = ["p2pwatch.domain", "p2pwatch.application.ports.driven.waker"]
 
 [[modules]]
+path = "p2pwatch.adapters.driven.in_memory_node_metric_store"
+layer = "adapters"
+depends_on = [
+  "p2pwatch.domain",
+  "p2pwatch.application.ports.driven.node_metric_reader",
+  "p2pwatch.application.ports.driven.node_metric_writer",
+]
+
+[[modules]]
 path = "p2pwatch.adapters.driven.in_memory_status_reading_store"
 layer = "adapters"
 depends_on = [
@@ -332,6 +341,7 @@ depends_on = [
   "p2pwatch.application.ports.driving.file_describer",
   "p2pwatch.application.ports.driving.file_lister",
   "p2pwatch.application.ports.driving.node_describer",
+  "p2pwatch.application.ports.driving.node_metric_lister",
   "p2pwatch.application.ports.driving.shutdown_requester",
   "p2pwatch.application.ports.driving.source_describer",
   "p2pwatch.application.ports.driving.source_lister",
@@ -368,6 +378,7 @@ depends_on = [
   "p2pwatch.application.ports.driven.node_id_generator",
   "p2pwatch.application.ports.driven.node_id_reader",
   "p2pwatch.application.ports.driven.node_id_writer",
+  "p2pwatch.application.ports.driven.node_metric_writer",
   "p2pwatch.application.ports.driven.notifier",
   "p2pwatch.application.ports.driven.observation_reader",
   "p2pwatch.application.ports.driven.observation_writer",
@@ -397,6 +408,7 @@ depends_on = [
   "p2pwatch.application.ports.driven.coverage_reader",
   "p2pwatch.application.ports.driven.logger",
   "p2pwatch.application.ports.driven.monotonic_clock",
+  "p2pwatch.application.ports.driven.node_metric_reader",
   "p2pwatch.application.ports.driven.node_state_reader",
   "p2pwatch.application.ports.driven.run_state_reader",
   "p2pwatch.application.ports.driven.run_state_writer",
@@ -412,6 +424,7 @@ depends_on = [
   "p2pwatch.application.ports.driving.file_describer",
   "p2pwatch.application.ports.driving.file_lister",
   "p2pwatch.application.ports.driving.node_describer",
+  "p2pwatch.application.ports.driving.node_metric_lister",
   "p2pwatch.application.ports.driving.shutdown_requester",
   "p2pwatch.application.ports.driving.source_describer",
   "p2pwatch.application.ports.driving.source_lister",
@@ -427,6 +440,7 @@ depends_on = [
   "p2pwatch.adapters.driven.asyncio_waker",
   "p2pwatch.adapters.driven.config",
   "p2pwatch.adapters.driven.filesystem_catalog_finder",
+  "p2pwatch.adapters.driven.in_memory_node_metric_store",
   "p2pwatch.adapters.driven.in_memory_status_reading_store",
   "p2pwatch.adapters.driven.asyncio_monotonic_clock",
   "p2pwatch.adapters.driven.amule_api",
@@ -546,6 +560,16 @@ depends_on = []
 
 [[modules]]
 path = "p2pwatch.application.ports.driven.metrics_recorder"
+layer = "ports"
+depends_on = ["p2pwatch.domain"]
+
+[[modules]]
+path = "p2pwatch.application.ports.driven.node_metric_reader"
+layer = "ports"
+depends_on = ["p2pwatch.domain"]
+
+[[modules]]
+path = "p2pwatch.application.ports.driven.node_metric_writer"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
@@ -701,6 +725,11 @@ depends_on = ["p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.application.ports.driving.node_describer"
+layer = "ports"
+depends_on = ["p2pwatch.domain"]
+
+[[modules]]
+path = "p2pwatch.application.ports.driving.node_metric_lister"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 
