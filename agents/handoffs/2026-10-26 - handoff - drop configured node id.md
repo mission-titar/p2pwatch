@@ -32,11 +32,9 @@ way to removing the key.
 - **Removal over either fix**: recording a configured id clashes with `record_node_id`, which refuses a second one;
   showing the resolved id needs a port and an in-memory store for the webui, for a setting no one uses.
 
-## Not validated
-
-- Continuous integration at writing.
+- Continuous integration green on the pull request (#511, run 40407750387, `success`), merged as `803ab181`.
 
 ## Next
 
-The operator reviews and merges the pull request. Then the backlog, "A copy before a migration that rewrites rows"
+The backlog, "A copy before a migration that rewrites rows"
 first.
