@@ -67,10 +67,10 @@ async def test_two_node_metrics_one_event() -> None:
         )
     )
     labels = (("client", "amuled"), ("channel", "kad"))
-    assert node_metric_store.read_samples() == (
+    assert set(node_metric_store.read_samples()) == {
         NodeMetricSample(NodeGauge.CHANNEL_CONNECTED, labels, 1.0),
         NodeMetricSample(NodeGauge.CHANNEL_CONNECTABLE, labels, 1.0),
-    )
+    }
 
 
 @pytest.mark.asyncio
@@ -79,10 +79,10 @@ async def test_writes_each_counter_increment_and_gauge_setting_to_the_node_metri
     dispatcher = _dispatcher(node_metric_store, FakeNotifier())
     await dispatcher.dispatch(ev.ClientUnreachable("amuled"))
     await dispatcher.dispatch(ev.CrawlerStarted(download_enabled=True, node_id=_NODE))
-    assert node_metric_store.read_samples() == (
+    assert set(node_metric_store.read_samples()) == {
         NodeMetricSample(NodeCounter.CLIENT_UNREACHABLE, (("client", "amuled"),), 1.0),
         NodeMetricSample(NodeGauge.CRAWLER_UP, (), 1.0),
-    )
+    }
 
 
 @pytest.mark.asyncio

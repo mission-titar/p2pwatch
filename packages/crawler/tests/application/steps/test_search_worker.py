@@ -333,11 +333,12 @@ async def test_successful_search_emits_search_executed_with_network_and_counts(
         LoggedLine("info", f"decisions for {_DL_NAME} ({_HASH}): 062A none → download"),
     ]
     labels = (("client", "amule-1"), ("channel", "ed2k"))
-    assert observability.node_metric_store.read_samples()[:3] == (
+    assert set(observability.node_metric_store.read_samples()) == {
         NodeMetricSample(NodeCounter.SEARCHES, labels, 1.0),
         NodeMetricSample(NodeCounter.SEARCH_RESULTS_SKIPPED, labels, 2.0),
         NodeMetricSample(NodeCounter.OBSERVATIONS, labels, 1.0),
-    )
+        NodeMetricSample(NodeCounter.DECISIONS, (("tier", "download"),), 1.0),
+    }
     assert observability.notifier.node_ids == [_NODE]
 
 

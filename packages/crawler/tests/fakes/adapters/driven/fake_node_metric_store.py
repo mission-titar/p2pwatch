@@ -10,7 +10,7 @@ from p2pwatch.domain.observability.node_metric import (
 
 
 class FakeNodeMetricStore(NodeMetricWriter, NodeMetricReader):
-    """Series in a dict, read in the order they were first written."""
+    """Series in a dict, written and read on one thread."""
 
     def __init__(self) -> None:
         self._value_by_series: dict[
