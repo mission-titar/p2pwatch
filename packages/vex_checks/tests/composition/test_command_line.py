@@ -52,7 +52,7 @@ def test_applied_claims_runs_the_grype_found_on_the_path_of_its_environment(
     lines = capsys.readouterr().out.splitlines()
     assert lines
     assert all(
-        line.endswith(": no longer reported by Grype (security/amule.vex.openvex.json)")
+        line.endswith(": stale: Grype does not report it (security/amule.vex.openvex.json)")
         for line in lines
     )
 

@@ -99,13 +99,10 @@ jobs:
 
       # --- Pre-publish VEX honesty gate ------------------------------------------------------
       # The per-arch images already exist in ghcr by digest (pushed, gated behind integration,
-      # by the `validate` job). We generate the SBOM from the amd64 digest so the three VEX
-      # checks below run BEFORE any consumable tag, signature, or attestation is published. Our
-      # two arches share one Dockerfile and identical dpkg/python versions, so the amd64 SBOM
-      # carries the same package set the arm64 image would. Staleness is deliberately NOT gated
-      # here: a suppressed CVE that Grype stops reporting has been fixed upstream, which never
-      # makes the image less safe. The daily grype-scan surfaces it as a non-blocking SARIF
-      # signal so the VEX gets pruned, without failing a release.
+      # by the `validate` job). We generate the SBOM from the amd64 digest so the VEX checks
+      # below run BEFORE any consumable tag, signature, or attestation is published. Our two
+      # arches share one Dockerfile and identical dpkg/python versions, so the amd64 SBOM
+      # carries the same package set the arm64 image would.
 
       - name: Resolve the amd64 image reference to scan before publishing
         id: prepublish
@@ -152,6 +149,18 @@ jobs:
       - name: Gate that image-family VEX claims hold against the SBOM
         run: >
           uv run python -m vex_checks image-claims
+          --sbom /tmp/sbom.syft.json
+          --vex "$VEX"
+
+      # On a tag only: a change in Grype's database, or its outage, would block every push to main.
+      - name: Install Grype, verified
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: ./.github/actions/install-grype
+
+      - name: Gate that Grype reports every VEX claim and applies it to every match
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: >
+          uv run python -m vex_checks applied-claims
           --sbom /tmp/sbom.syft.json
           --vex "$VEX"
 

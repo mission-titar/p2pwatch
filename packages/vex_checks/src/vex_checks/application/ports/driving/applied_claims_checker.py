@@ -1,4 +1,4 @@
-"""``AppliedClaimsChecker``: flags the claims of a VEX a vulnerability scan no longer reports."""
+"""``AppliedClaimsChecker``: flags the claims of a VEX a vulnerability scan does not apply."""
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -14,11 +14,11 @@ class AppliedClaimsReport:
 
 
 class AppliedClaimsChecker(ABC):
-    """Checks a VEX's claims are still reported, writing a SARIF report of the problems when given
-    a path."""
+    """Checks that Grype reports each claim of a VEX and suppresses every match of it, writing a
+    SARIF report of the problems when given a path."""
 
     @abstractmethod
     def check_applied_claims(
         self, sbom_path: PurePath, vex_path: PurePath, sarif_path: PurePath | None
     ) -> AppliedClaimsReport:
-        """The claims whose advisory the scan of the SBOM no longer reports."""
+        """The claims the scan of the SBOM with the VEX does not report, or leaves unsuppressed."""

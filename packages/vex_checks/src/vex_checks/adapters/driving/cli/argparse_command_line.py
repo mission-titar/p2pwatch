@@ -65,7 +65,7 @@ class ArgparseCommandLine:
         )
         _add_image_options(image_claims, self._under_cwd)
         applied_claims = subparsers.add_parser(
-            "applied-claims", help="flag the claims Grype no longer reports for the image"
+            "applied-claims", help="flag the claims Grype does not report or apply for the image"
         )
         _add_image_options(applied_claims, self._under_cwd)
         subparsers.add_parser(

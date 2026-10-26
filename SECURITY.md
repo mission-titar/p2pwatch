@@ -126,9 +126,9 @@ signed.
 
 A `not_affected` claim is a promise about how the image is built and run. Over time source
 and base images drift, so four checks assert those promises still hold: the source claims as
-ast-grep rules, the other three as subcommands of `python -m vex_checks`. They run as a
-non-blocking PR job (only `validate / gate` is required to merge) and, for the three that catch
-a genuinely false claim, as hard-fail steps in the release before anything is signed or attested:
+ast-grep rules, the other three as subcommands of `python -m vex_checks`. All four are
+hard-fail steps in the release before anything is signed or attested; the first two also run
+as a non-blocking PR job (only `validate / gate` is required to merge):
 
 - **The source claims** (`poe vex-source-claims`; PR job, release hard-fail): the scan fails if our
   own source starts reaching code a `vulnerable_code_not_in_execute_path` claim says we never
@@ -145,15 +145,15 @@ a genuinely false claim, as hard-fail steps in the release before anything is si
   absent is present, or a dpkg package or hand-declared component is below the minimum version
   a claim relies on. The aMule claims rest on the version declared in the aMule image's SBOM
   (`pkg:generic/amule`).
-- **`applied-claims`** (daily Grype scan as SARIF, non-blocking): flags VEX entries Grype no
-  longer reports for the image, so obsolete suppressions get pruned. Staleness never blocks a
-  release: a suppressed CVE that Grype stops reporting has been fixed upstream, which does not
-  make the image less safe, so it is surfaced for cleanup rather than gated.
+- **`applied-claims`** (daily Grype scan as SARIF, release hard-fail on a tag only): runs Grype
+  over the image's SBOM with the VEX, and fails if Grype does not report a claimed CVE (the claim
+  is stale) or leaves any match of it unsuppressed (the claim is not applied, for example because
+  it names a package the image does not have). It runs on a release tag and not on a push to
+  `main`, so a change in Grype's database never blocks the `main` images.
 
 In the daily scan `image-claims` and `applied-claims` run in SARIF mode: drift surfaces
-in Code scanning without failing the workflow. In the release the first three hard-fail, so a
-false source, coverage, or image claim stops the image from being tagged, signed, or attested;
-staleness is left to the daily scan.
+in Code scanning without failing the workflow. In the release they hard-fail, so a false,
+stale, or unapplied claim stops the image from being tagged, signed, or attested.
 
 ## Reporting a security issue
 

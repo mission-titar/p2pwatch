@@ -87,7 +87,7 @@ jobs:
           sarif_file: /tmp/image-claims.sarif
           category: vex-image-claims-${{ matrix.package }}
 
-      - name: Check for stale VEX entries no longer reported by Grype
+      - name: Check that Grype reports every VEX claim and applies it to every match
         run: >
           uv run python -m vex_checks applied-claims
           --sbom /tmp/sbom.syft.json
