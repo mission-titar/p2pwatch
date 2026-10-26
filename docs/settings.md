@@ -51,17 +51,10 @@ L'exemple de configuration complet est dans
 
 ## Métriques Prometheus
 
-Le crawler expose un point d'accès Prometheus sur le port réglé par `observability.metrics.port`
-dans `crawler.yml` (`9090`, actif, dans le `crawler.yml` livré ; sans section `observability.metrics`, aucun point d'accès n'est servi). **Ni Prometheus ni Grafana ne sont livrés
-avec la pile** : si vous voulez des tableaux de bord, faites pointer votre propre Prometheus sur le
-nœud.
-
-Ce port n'est pas publié sur l'hôte. Pour le joindre, publiez-le vous-même en ajoutant
-`"9090:9090"` à la liste `ports:` du service `p2pwatch` dans `compose.yml`, sous les deux
-variantes : le crawler n'est jamais derrière le VPN.
-
-Traitez ce port comme le 8080 : **aucune authentification**, donc gardez-le hors de l'Internet
-ouvert.
+Le catalogue web sert les métriques du nœud à Prometheus sur la route `/metrics`, sur le même port
+8080 que ses pages, au format texte 0.0.4. Aucun réglage ne l'active ni ne la coupe : elle est
+servie dès que le catalogue l'est. **Ni Prometheus ni Grafana ne sont livrés avec la pile** : si
+vous voulez des tableaux de bord, faites pointer votre propre Prometheus sur le nœud.
 
 Exemple de `scrape_config` pour votre propre `prometheus.yml` :
 
@@ -69,11 +62,16 @@ Exemple de `scrape_config` pour votre propre `prometheus.yml` :
 scrape_configs:
   - job_name: 'p2pwatch'
     static_configs:
-      - targets: ['node.example.lan:9090']   # l'hôte sur lequel vous avez publié 9090
+      - targets: ['node.example.lan:8080']   # l'hôte qui publie le 8080 du catalogue
 ```
 
-Pour couper entièrement le point d'accès, mettez `observability.metrics.enabled: false` dans
-`crawler.yml`. Le crawl et le catalogue web continuent normalement.
+Si vous avez remappé le 8080 ([Changer un port](#changer-un-port)), visez le port de l'hôte. Si le
+catalogue web tombe, le crawl continue mais `/metrics` ne répond plus : Prometheus marque alors la
+cible hors ligne (sa série `up` à 0).
+
+`/metrics` n'a **aucune authentification**, comme le reste du 8080. Derrière un reverse proxy, elle
+est joignable partout où le catalogue l'est, sauf si le proxy la filtre : gardez-la hors de
+l'Internet ouvert.
 
 ## Le seuil de l'alerte reappeared
 

@@ -39,6 +39,11 @@ entière, et ces six clés de la racine : `cycle_interval_seconds`, `decision_po
 `keyword_pause_max_seconds`. Tant que l'une reste, le crawler refuse de démarrer en la nommant :
 `port_sync: was removed, delete it from crawler.yml`.
 
+Retirez aussi `enabled` de la section `webui:`, et la clé `metrics` de la section
+`observability:` : le catalogue web est toujours servi, et les métriques passent sur son port.
+Restées, elles sont refusées de même : `webui.enabled: was removed, delete it from crawler.yml` et
+`observability.metrics: was removed, delete it from crawler.yml`.
+
 Déplacez ensuite la section `backoff:` sous `search:`, à côté de `keywords`, que la 5.0 rend
 obligatoire. Laissée à la racine, elle est refusée de même :
 `backoff: moved to 'search.backoff', move it in crawler.yml`.
@@ -132,6 +137,15 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
 - **Le label `network` devient `channel`** sur `p2pwatch_searches`, `p2pwatch_observations` et
   `p2pwatch_search_failures`, qui gagnent aussi un label `client`. Adaptez les requêtes de vos
   tableaux de bord et de vos règles d'alerte.
+- **Prometheus scrape le 8080.** `/metrics` est une route du catalogue web,
+  `http://<nœud>:8080/metrics`, et plus rien n'écoute sur le 9090 : visez `:8080` dans votre
+  `scrape_config`, et retirez `"9090:9090"` des `ports:` si vous l'aviez publié. Le format passe
+  d'OpenMetrics 1.0.0 au texte 0.0.4 : les séries gardent leurs noms, leurs labels et leurs
+  valeurs, mais les échantillons `_created` des compteurs disparaissent, et la famille d'un
+  compteur prend son suffixe `_total` (`# TYPE p2pwatch_searches_total counter`).
+- **Le catalogue web est toujours servi**, et `/metrics` avec lui. Retirer `"8080:8080"` des
+  `ports:` de `compose.yml` le retire du réseau de l'hôte ; le réseau compose l'atteint toujours.
+  S'il tombe, le crawl continue mais `/metrics` ne répond plus.
 - **La notification de démarrage devient** `🟢 node online (download on)`, ou `(download off)`, au
   lieu de `🟢 instance online (mode full)` ou `(mode observer)`.
 - **Dans `local.db`, la table `backfill_state` devient `reevaluation_state`**, sa colonne
