@@ -1,0 +1,30 @@
+# HELP p2pwatch_searches_total Searches performed
+# TYPE p2pwatch_searches_total counter
+# HELP p2pwatch_search_results_skipped_total Search results the client could not read
+# TYPE p2pwatch_search_results_skipped_total counter
+# HELP p2pwatch_observations_total Observations recorded
+# TYPE p2pwatch_observations_total counter
+# HELP p2pwatch_search_failures_total Failed searches
+# TYPE p2pwatch_search_failures_total counter
+# HELP p2pwatch_client_unreachable_total Client unreachable
+# TYPE p2pwatch_client_unreachable_total counter
+# HELP p2pwatch_decisions_total Match decisions recorded
+# TYPE p2pwatch_decisions_total counter
+# HELP p2pwatch_downloads_queued_total Downloads queued
+# TYPE p2pwatch_downloads_queued_total counter
+p2pwatch_downloads_queued_total 0.0
+# HELP p2pwatch_downloads_completed_total Downloads completed
+# TYPE p2pwatch_downloads_completed_total counter
+p2pwatch_downloads_completed_total 0.0
+# HELP p2pwatch_source_alerts_total Sources first useful or reappeared
+# TYPE p2pwatch_source_alerts_total counter
+# HELP p2pwatch_download_disk_free_bytes Free bytes on the download filesystem
+# TYPE p2pwatch_download_disk_free_bytes gauge
+p2pwatch_download_disk_free_bytes 0.0
+# HELP p2pwatch_crawler_up Crawler running (1)
+# TYPE p2pwatch_crawler_up gauge
+p2pwatch_crawler_up 0.0
+# HELP p2pwatch_channel_connected Channel joined its network (1)
+# TYPE p2pwatch_channel_connected gauge
+# HELP p2pwatch_channel_connectable Peers can connect to the channel (1)
+# TYPE p2pwatch_channel_connectable gauge

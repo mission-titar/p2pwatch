@@ -6,7 +6,6 @@ import json
 import logging
 import re
 import signal
-import socket
 import threading
 import warnings
 from datetime import timedelta
@@ -115,13 +114,6 @@ def _crawl(
     )
 
 
-def _free_port() -> int:
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port: int = probe.getsockname()[1]
-        return port
-
-
 def _webui_bound_address(messages: list[str]) -> tuple[str, int]:
     matches = [match for match in map(_WEBUI_SERVING.match, messages) if match is not None]
     assert len(matches) == 1, messages
@@ -176,7 +168,6 @@ async def _crawl_until_a_search_is_read(config_path: Path, targets_path: Path) -
 async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stops_on_restart(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    metrics_port = _free_port()
     download = {
         "enabled": True,
         "poll_interval_seconds": 30.0,
@@ -191,7 +182,7 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
         _config(
             tmp_path,
             node_id="wired-node",
-            observability={"log_level": "INFO", "metrics": {"enabled": True, "port": metrics_port}},
+            observability={"log_level": "INFO"},
             download=download,
         ),
     )
@@ -206,7 +197,7 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
         )
         host, port = _webui_bound_address(caplog.messages)
         async with httpx.AsyncClient() as http:
-            metrics = await http.get(f"http://127.0.0.1:{metrics_port}/metrics")
+            metrics = await http.get(f"http://{host}:{port}/metrics")
             catalog_query, local_query = [  # each table lives in one database only
                 await http.post(f"http://{host}:{port}/console.csv", data=form)
                 for form in (
@@ -252,6 +243,9 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
     assert decision_node_ids(catalog) == {"wired-node"}
     catalog.close()
     assert (host, port != 8080) == ("127.0.0.1", True)
+    assert metrics.status_code == 200
+    assert metrics.headers["content-type"] == "text/plain; version=0.0.4; charset=utf-8"
+    assert "p2pwatch_crawler_up 1.0" in metrics.text.splitlines()
     assert "p2pwatch_observations_total{" in metrics.text
     assert (catalog_query.status_code, local_query.status_code) == (200, 200)
     assert _HASH in catalog_query.text and _HASH in local_query.text

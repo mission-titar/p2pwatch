@@ -221,6 +221,13 @@ _WEBUI_HEALTH_FROM_ED2K = (
     f"import urllib.request;print(urllib.request.urlopen('http://{_CORE}:8080/health').status)"
 )
 
+# The node metrics on the webui's port: "200 True" once the crawler has started.
+_METRICS_SHOW_THE_CRAWLER_UP = (
+    "import urllib.request;"
+    "response = urllib.request.urlopen('http://localhost:8080/metrics');"
+    "print(response.status, 'p2pwatch_crawler_up 1.0' in response.read().decode().splitlines())"
+)
+
 # amuleapi is supervised by amuled, not by s6, so s6-svstat says nothing about it. Read from the
 # core, by the service name the core itself uses, its /health proves the wiring.
 _AMULEAPI_HEALTH = (
@@ -306,6 +313,12 @@ def test_the_two_containers_work_together(project_files: tuple[Path, ...]) -> No
         "webui /health from ed2k",
         lambda: _exec(_AMULE, "python3", "-c", _WEBUI_HEALTH_FROM_ED2K, files=project_files),
         "200",
+        project_files,
+    )
+    _wait_for(
+        "node metrics on 8080",
+        lambda: _exec(_CORE, "python", "-c", _METRICS_SHOW_THE_CRAWLER_UP, files=project_files),
+        "200 True",
         project_files,
     )
     _wait_for(
