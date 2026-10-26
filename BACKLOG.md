@@ -15,6 +15,9 @@ An agent adds an entry only after the operator has agreed to it.
 - **Every stamp an integer of microseconds since the epoch**, as the catalog's points already are: the ISO-8601 TEXT
   stamps left in both databases converted; the catalog's waits for the copy before a migration that rewrites rows. D12 of `agents/specs/2026-10-14-monotonic-clock.md`.
 
+- **`client_name` and `channel` typed across the domain**: events, search tasks and the node metrics' labels hold both
+  as `str` though their values are known. "Adjacent backlog items" of `agents/specs/2026-10-25-metrics-on-the-webui.md`.
+
 - **Test quality** (lot 3 of the gate tooling umbrella): every unit test keeps unique coverage of its unit, the others are
   pruned, mutmut proving no detected mutant is lost. D3 to D5 and D13 to D15 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`, lot order in D12.
 
