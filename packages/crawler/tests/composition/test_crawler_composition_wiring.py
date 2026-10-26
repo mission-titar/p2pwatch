@@ -88,7 +88,6 @@ def _config(tmp_path: Path, **sections: object) -> dict[str, Any]:
         "catalog_db_path": str(tmp_path / "catalog.db"),
         "local_db_path": str(tmp_path / "local.db"),
         "observability": {"log_level": "INFO"},
-        "webui": {"enabled": False},
     } | sections
 
 
@@ -194,7 +193,6 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
             node_id="wired-node",
             observability={"log_level": "INFO", "metrics": {"enabled": True, "port": metrics_port}},
             download=download,
-            webui={"enabled": True},
         ),
     )
     targets_path = tmp_path / "targets.yml"
@@ -378,7 +376,7 @@ async def test_observer_mode_crawls_its_config_files_with_one_ed2k_search_until_
     assert root_logger.level == logging.DEBUG
     assert "🟢 node online (download off)" in caplog.messages
     assert api.logins == 1
-    assert not any(map(_WEBUI_SERVING.match, caplog.messages))
+    assert _webui_bound_address(caplog.messages)[0] == "127.0.0.1"  # served in crawl-only too
 
 
 # The cut close may leave the client's sockets open, as the process exit closes them in production.
@@ -456,7 +454,7 @@ async def test_a_backoff_the_previous_run_saved_holds_the_ed2k_search(
 async def test_a_pause_from_the_webui_holds_the_searches_until_its_resume(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    config_path = _write(tmp_path / "crawler.yml", _config(tmp_path, webui={"enabled": True}))
+    config_path = _write(tmp_path / "crawler.yml", _config(tmp_path))
     api = FakeAmuleApi()
     login_arrived = threading.Event()
     paused = threading.Event()

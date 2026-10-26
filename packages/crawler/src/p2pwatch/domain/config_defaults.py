@@ -12,7 +12,6 @@ DEFAULT_LOG_LEVEL = "INFO"
 DEFAULT_NOTIFICATION_TIMEOUT_SECONDS = 5.0
 DEFAULT_NODE_PREFIX = True
 
-DEFAULT_WEBUI_ENABLED = True
 # The no-proxy case: aMule's web UI on its published port.
 DEFAULT_AMULE_URL = "http://localhost:4711"
 # 3 x (300 + 30): the carried role's max age at the shipped intervals (source points spec, D6).

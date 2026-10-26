@@ -31,7 +31,6 @@ from p2pwatch.domain.config_defaults import (
     DEFAULT_REAPPEARED_AFTER,
     DEFAULT_SOURCE_PERIOD_GAP,
     DEFAULT_SOURCES_INTERVAL,
-    DEFAULT_WEBUI_ENABLED,
 )
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.observability.policy import Audience
@@ -90,12 +89,11 @@ class DownloadConfig:
 
 @dataclass(frozen=True)
 class WebuiConfig:
-    """In-process read-only webui HTTP surface (monolith-consolidation spec §8).
+    """In-process read-only webui HTTP surface (monolith-consolidation spec §8), always served.
 
-    ``enabled`` gates the WHOLE HTTP surface (``false`` ⇒ headless crawler, no port). The section
-    is OPTIONAL (absent ⇒ enabled). The uvicorn bind is FIXED at ``0.0.0.0:8080`` in the
-    composition ring, not configurable here; exposure is governed by the operator's Docker
-    compose (published port + networks), not by an app-level bind address.
+    The section is OPTIONAL. The uvicorn bind is FIXED at ``0.0.0.0:8080`` in the composition
+    ring, not configurable here; exposure is governed by the operator's Docker compose
+    (published port + networks), not by an app-level bind address.
 
     ``amule_url`` is where the nav's aMule link points. The two containers each publish a web
     surface and p2pwatch cannot know how its own is reached, so this is a plain configurable
@@ -105,14 +103,13 @@ class WebuiConfig:
     spec, D6): a reading option, so a crawl-only node viewing a merged catalog has one too.
     """
 
-    enabled: bool
     amule_url: str
     source_period_gap: timedelta
 
 
 _LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
 
-# Keys no longer read: refused, so an operator never believes they still apply.
+# Keys no longer read, by dotted path: refused, so an operator never believes they still apply.
 _REMOVED_KEYS = (
     "cycle_interval_seconds",
     "decision_poll_interval_seconds",
@@ -121,6 +118,7 @@ _REMOVED_KEYS = (
     "port_sync",
     "search_poll_budget_seconds",
     "search_poll_interval_seconds",
+    "webui.enabled",
 )
 
 # Keys read elsewhere now: refused with their new place, so an operator never edits a dead one.
@@ -431,7 +429,6 @@ def _parse_webui(document: dict[str, Any]) -> WebuiConfig:
     The bind is FIXED at 0.0.0.0:8080 in the composition ring, so this reads no host/port: an
     unknown key (a legacy ``host``/``port``) is ignored silently, no fail-fast."""
     section = _require_mapping(document.get("webui", {}), "webui")
-    enabled = _bool_default(section, "enabled", "webui", DEFAULT_WEBUI_ENABLED)
     gap = timedelta(
         seconds=_seconds(
             section,
@@ -443,15 +440,25 @@ def _parse_webui(document: dict[str, Any]) -> WebuiConfig:
     amule_url = (
         _string(section, "amule_url", "webui") if "amule_url" in section else DEFAULT_AMULE_URL
     )
-    return WebuiConfig(enabled=enabled, amule_url=amule_url, source_period_gap=gap)
+    return WebuiConfig(amule_url=amule_url, source_period_gap=gap)
+
+
+def _holds_key_path(document: dict[str, Any], key_path: str) -> bool:
+    """Whether ``document`` holds the dotted ``key_path``, each section on the way a mapping."""
+    node: Any = document
+    for key in key_path.split("."):
+        if not isinstance(node, dict) or key not in node:
+            return False
+        node = node[key]
+    return True
 
 
 def parse_crawler_config(document: dict[str, Any]) -> CrawlerConfig:
     """Builds a validated ``CrawlerConfig`` from the parsed YAML dict, its ``${NAME}`` already
     resolved. Fail-fast §5/§14: any inconsistency → ``InvalidConfigError``."""
-    for key in _REMOVED_KEYS:
-        if key in document:
-            raise InvalidConfigError(key, "was removed, delete it from crawler.yml")
+    for key_path in _REMOVED_KEYS:
+        if _holds_key_path(document, key_path):
+            raise InvalidConfigError(key_path, "was removed, delete it from crawler.yml")
     for key, new_path in _MOVED_KEYS.items():
         if key in document:
             raise InvalidConfigError(key, f"moved to '{new_path}', move it in crawler.yml")

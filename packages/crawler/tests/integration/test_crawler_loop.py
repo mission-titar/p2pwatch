@@ -29,8 +29,6 @@ search:
 amule_api_password: ${{AMULE_API_PASSWORD}}
 catalog_db_path: {data}/catalog.db
 local_db_path: {data}/local.db
-webui:
-  enabled: false
 """
 _SEARCH_WORKER_LOGGER = "p2pwatch.application.steps.search_worker"
 

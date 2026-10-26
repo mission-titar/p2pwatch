@@ -349,20 +349,19 @@ class CrawlerComposition(CrawlerRunner):
             status_reading_store = InMemoryStatusReadingStore((_AMULE_CLIENT_NAME,))
             # In-process webui (spec §5): own thread + loop, started EARLY (before the daemon client
             # + startup re-evaluation) so it is up promptly and stays isolated from the crawler's
-            # synchronous work. Gated by ``webui.enabled``; a crash degrades (spec §17.1). Its
-            # graceful stop is on ``stack`` → runs at the normal shutdown unwind (after the database
-            # connections are pushed, so it stops the thread before those close in LIFO teardown).
-            if crawler_config.webui.enabled:
-                await self._start_webui(
-                    config=config,
-                    stack=stack,
-                    status_reading_store=status_reading_store,
-                    run_state_store=run_state_store,
-                    shutdown_requester=shutdown_requester,
-                    engine=engine,
-                    wall_clock=wall_clock,
-                    monotonic_clock=monotonic_clock,
-                )
+            # synchronous work. A crash degrades (spec §17.1). Its graceful stop is on ``stack`` →
+            # runs at the normal shutdown unwind (after the database connections are pushed, so it
+            # stops the thread before those close in LIFO teardown).
+            await self._start_webui(
+                config=config,
+                stack=stack,
+                status_reading_store=status_reading_store,
+                run_state_store=run_state_store,
+                shutdown_requester=shutdown_requester,
+                engine=engine,
+                wall_clock=wall_clock,
+                monotonic_clock=monotonic_clock,
+            )
             # SHARED backoff registry: built ONCE, resumes its waits at the lifecycle's start
             # (backoff survives restart, spec §3/§7), injected into ALL workers + passed to the
             # search tasks that persist it. Single writer on the event loop.
