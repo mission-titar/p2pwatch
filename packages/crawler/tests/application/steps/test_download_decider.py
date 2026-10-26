@@ -3,8 +3,9 @@ import pytest
 from catalog_matching.domain.models import TargetSegment
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.states import DownloadState
+from p2pwatch.domain.observability.node_metric import CounterIncrement, GaugeSetting, NodeMetricName
 from p2pwatch.domain.observability.notification import RelayedLogLine
-from p2pwatch.domain.observability.policy import Audience, MetricInstruction, NodeMetricName
+from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.observability.severity import Severity
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
@@ -275,7 +276,7 @@ async def test_dispatches_download_queued() -> None:
     )
     await cycle.run(NODE)
     assert LoggedLine("info", "download queued: 062A") in observability.logger.lines
-    assert MetricInstruction(NodeMetricName.DOWNLOADS_QUEUED, "inc") in (
+    assert CounterIncrement(NodeMetricName.DOWNLOADS_QUEUED) in (
         observability.metrics_recorder.applied
     )
 
@@ -291,7 +292,7 @@ async def test_each_cycle_reports_the_measured_free_space() -> None:
     )
     await cycle.run(NODE)
     assert observability.metrics_recorder.applied == [
-        MetricInstruction(NodeMetricName.DISK_FREE_BYTES, "set", (), 4_242.0)
+        GaugeSetting(NodeMetricName.DISK_FREE_BYTES, (), 4_242.0)
     ]
 
 

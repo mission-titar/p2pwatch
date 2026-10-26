@@ -6,16 +6,12 @@ node metric(s), notification. ``plan_observability`` is an EXHAUSTIVE match (``a
 The domain knows nothing of ``logging``, Prometheus or apprise: ``Severity``/``Audience``/
 ``NodeMetricName`` are DOMAIN enums, translated by the adapters (E-D3), and a community notification
 is a typed value whose Markdown the notifier writes.
-
-Prometheus GOTCHA: COUNTER names do NOT include ``_total`` here: ``prometheus_client``
-adds it at exposition (including it would produce ``…_total_total``). Gauges: name
-as-is.
 """
 
 from dataclasses import dataclass, replace
 from datetime import timedelta
-from enum import Enum, StrEnum
-from typing import Literal, assert_never
+from enum import Enum
+from typing import assert_never
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.ed2k_link import build_ed2k_link
@@ -45,6 +41,11 @@ from p2pwatch.domain.observability.events import (
     SourceReappeared,
     TargetTitle,
 )
+from p2pwatch.domain.observability.node_metric import (
+    CounterIncrement,
+    GaugeSetting,
+    NodeMetricName,
+)
 from p2pwatch.domain.observability.notification import (
     CompletedDownload,
     Notification,
@@ -63,41 +64,6 @@ class Audience(Enum):
     OPERATIONS = "operations"
 
 
-class NodeMetricName(StrEnum):
-    """Node metric names. Counters WITHOUT ``_total`` (added by prometheus_client at exposition)."""
-
-    SEARCHES = "p2pwatch_searches"
-    SEARCH_RESULTS_SKIPPED = "p2pwatch_search_results_skipped"
-    OBSERVATIONS = "p2pwatch_observations"
-    SEARCH_FAILURES = "p2pwatch_search_failures"
-    CLIENT_UNREACHABLE = "p2pwatch_client_unreachable"
-    DECISIONS = "p2pwatch_decisions"
-    DOWNLOADS_QUEUED = "p2pwatch_downloads_queued"
-    DOWNLOADS_COMPLETED = "p2pwatch_downloads_completed"
-    DISK_FREE_BYTES = "p2pwatch_download_disk_free_bytes"
-    CRAWLER_UP = "p2pwatch_crawler_up"
-    CHANNEL_CONNECTED = "p2pwatch_channel_connected"
-    CHANNEL_CONNECTABLE = "p2pwatch_channel_connectable"
-    SOURCE_ALERTS = "p2pwatch_source_alerts"
-
-
-MetricOperation = Literal["inc", "set", "remove"]
-
-
-@dataclass(frozen=True)
-class MetricInstruction:
-    """A node metric operation: counter ``inc`` / gauge ``set`` or ``remove``.
-
-    ``labels`` = tuple of ordered (key, value) pairs (hashable → usable in an ``ObservabilityPlan``
-    equality test). ``amount`` = quantity (default 1.0 for ``inc``).
-    """
-
-    name: NodeMetricName
-    operation: MetricOperation
-    labels: tuple[tuple[str, str], ...] = ()
-    amount: float = 1.0
-
-
 @dataclass(frozen=True)
 class ObservabilityPlan:
     """What one event produces: severity + message + node metric(s) + notification.
@@ -109,7 +75,7 @@ class ObservabilityPlan:
 
     severity: Severity
     message: str
-    node_metrics: tuple[MetricInstruction, ...] = ()
+    node_metrics: tuple[CounterIncrement | GaugeSetting, ...] = ()
     notification: Notification | None = None
 
 
@@ -168,18 +134,18 @@ def _search_labels(
 
 def _channel_gauge(
     name: NodeMetricName, event: ChannelStatusSampled, state: bool | None
-) -> MetricInstruction:
+) -> GaugeSetting:
     labels = (("client", event.client_name), ("channel", event.channel))
     if state is None:  # an unknown state has no series, never a stale one
-        return MetricInstruction(name, "remove", labels)
-    return MetricInstruction(name, "set", labels, float(state))
+        return GaugeSetting(name, labels, None)
+    return GaugeSetting(name, labels, float(state))
 
 
 def _relayed(
     severity: Severity,
     message: str,
     node_id: str,
-    node_metrics: tuple[MetricInstruction, ...] = (),
+    node_metrics: tuple[CounterIncrement | GaugeSetting, ...] = (),
 ) -> ObservabilityPlan:
     """An operations plan: its log line relayed under ``node_id``."""
     return ObservabilityPlan(
@@ -202,7 +168,7 @@ def _plan_decisions(event: DecisionsRecorded) -> ObservabilityPlan:
         Severity.INFO,
         f"decisions for {event.filename} ({event.file.native_id}): {changes}",
         tuple(
-            MetricInstruction(NodeMetricName.DECISIONS, "inc", (("tier", _label(c.new_decision)),))
+            CounterIncrement(NodeMetricName.DECISIONS, (("tier", _label(c.new_decision)),))
             for c in event.changes
         ),
     )
@@ -235,7 +201,7 @@ def _plan_source(
     return ObservabilityPlan(
         Severity.INFO,
         f"source {short} {state_phrase}: {event.filename}",
-        (MetricInstruction(NodeMetricName.SOURCE_ALERTS, "inc", labels),),
+        (CounterIncrement(NodeMetricName.SOURCE_ALERTS, labels),),
         SourceAlert(
             kind,
             event.source,
@@ -257,11 +223,10 @@ def plan_observability(event: Event) -> ObservabilityPlan:
                 Severity.DEBUG,
                 f"search {event.channel}: {event.observation_count} observation(s)",
                 (
-                    MetricInstruction(NodeMetricName.SEARCHES, "inc", _search_labels(event)),
+                    CounterIncrement(NodeMetricName.SEARCHES, _search_labels(event)),
                     # Even by 0: the series exists from the first search, before any drift.
-                    MetricInstruction(
+                    CounterIncrement(
                         NodeMetricName.SEARCH_RESULTS_SKIPPED,
-                        "inc",
                         _search_labels(event),
                         float(event.skipped_result_count),
                     ),
@@ -272,8 +237,8 @@ def plan_observability(event: Event) -> ObservabilityPlan:
                 Severity.WARNING,
                 f"{event.client_name} unreachable",
                 (
-                    MetricInstruction(
-                        NodeMetricName.CLIENT_UNREACHABLE, "inc", (("client", event.client_name),)
+                    CounterIncrement(
+                        NodeMetricName.CLIENT_UNREACHABLE, (("client", event.client_name),)
                     ),
                 ),
             )
@@ -281,13 +246,13 @@ def plan_observability(event: Event) -> ObservabilityPlan:
             return ObservabilityPlan(
                 Severity.WARNING,
                 f"search failed on {event.channel}",
-                (MetricInstruction(NodeMetricName.SEARCH_FAILURES, "inc", _search_labels(event)),),
+                (CounterIncrement(NodeMetricName.SEARCH_FAILURES, _search_labels(event)),),
             )
         case ObservationRecorded():
             return ObservabilityPlan(
                 Severity.DEBUG,
                 f"observation recorded ({event.channel})",
-                (MetricInstruction(NodeMetricName.OBSERVATIONS, "inc", _search_labels(event)),),
+                (CounterIncrement(NodeMetricName.OBSERVATIONS, _search_labels(event)),),
             )
         case DecisionsRecorded():
             return _plan_decisions(event)
@@ -295,13 +260,13 @@ def plan_observability(event: Event) -> ObservabilityPlan:
             return ObservabilityPlan(
                 Severity.INFO,
                 f"download queued: {event.target_id}",
-                (MetricInstruction(NodeMetricName.DOWNLOADS_QUEUED, "inc"),),
+                (CounterIncrement(NodeMetricName.DOWNLOADS_QUEUED),),
             )
         case DownloadCompleted():
             return ObservabilityPlan(
                 Severity.SUCCESS,
                 f"✅ download completed: {', '.join(t.target_id for t in event.target_titles)}",
-                (MetricInstruction(NodeMetricName.DOWNLOADS_COMPLETED, "inc"),),
+                (CounterIncrement(NodeMetricName.DOWNLOADS_COMPLETED),),
                 CompletedDownload(event.target_titles, event.filename, event.node_id),
             )
         case ChannelStatusSampled():
@@ -335,11 +300,7 @@ def plan_observability(event: Event) -> ObservabilityPlan:
             return ObservabilityPlan(
                 Severity.DEBUG,
                 f"download disk free: {event.free_bytes} bytes",
-                (
-                    MetricInstruction(
-                        NodeMetricName.DISK_FREE_BYTES, "set", (), float(event.free_bytes)
-                    ),
-                ),
+                (GaugeSetting(NodeMetricName.DISK_FREE_BYTES, (), float(event.free_bytes)),),
             )
         case DiskSpaceLow():
             return _relayed(
@@ -364,7 +325,7 @@ def plan_observability(event: Event) -> ObservabilityPlan:
                 Severity.INFO,
                 f"🟢 node online (download {'on' if event.download_enabled else 'off'})",
                 event.node_id,
-                (MetricInstruction(NodeMetricName.CRAWLER_UP, "set", (), 1.0),),
+                (GaugeSetting(NodeMetricName.CRAWLER_UP, (), 1.0),),
             )
         case _:  # pragma: no cover
             assert_never(event)
