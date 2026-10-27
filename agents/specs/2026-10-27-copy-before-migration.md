@@ -30,8 +30,10 @@ network other than eD2k (operator, 2026-10-27).
 - **Not enough disk.** The crawler refuses to start before writing anything, and its log names the space needed and
   the space free. On the node, from version 5, the need is about 15.1 GB in `data/`.
 - **`merge`.** A destination that `merge` migrates is copied the same way. Its sources are never copied.
-- **Deleting copies.** p2pwatch never deletes one. The docs say when the operator may, and to keep the earliest copy
-  of an unfinished upgrade.
+- **Deleting copies.** p2pwatch never deletes one. The docs say when the operator may, and to keep, among an
+  unfinished upgrade's copies, the one with the smallest number, the most recent if several. (Corrected: "the
+  earliest copy" became this in block 60. After a return to the old release and a new try, the earliest `pre-0006`
+  misses the rows the old release wrote since.)
 
 ## 3. Decisions
 
@@ -61,7 +63,9 @@ of identity, so the proof is a digest of the content, paid only on the rare path
 halfway leaves the node worse off than before.*
 
 **D7. p2pwatch never deletes a copy.** *A backup that deletes itself works against its purpose: a wrong result from a
-migration can surface weeks later (operator).*
+migration can surface weeks later (operator).* The one to keep until an upgrade succeeds is the copy with the smallest
+number, the most recent if several: a larger number holds a half-migrated database. (Corrected: added in block 60, in
+place of section 2's "earliest".)
 
 **D8. Opening a database goes through an object the composition builds.** `SqliteDatabaseOpener` replaces the
 functions `open_catalog` and `open_local`, and receives a `SqlitePreMigrationCopier` that makes the copies. *The copy
@@ -86,8 +90,11 @@ crash. D5 already keeps the restart loop from piling up copies (operator).*
   upgrade (`docs/migration-1x.md`, `docs/migration-2x.md`).
 - A unit test parses every shipped script with sqlfluff's parser (`Linter(dialect="sqlite").parse_string`), the one
   `poe sql-lint` already runs on them. A script holding a `delete_statement`, an `update_statement`, a
-  `drop_table_statement`, an `insert_statement` that contains a `select_statement`, or an `ALTER TABLE ... DROP COLUMN`
-  must carry the directive, and one carrying it must hold one of them. sqlfluff joins the crawler's `dev` group.
+  `drop_table_statement`, an `insert_statement` that contains a `select_statement`, a `REPLACE` keyword or an upsert's
+  `DO UPDATE`, or an `ALTER TABLE ... DROP COLUMN` must carry the directive, and one carrying it must hold one of them.
+  A statement inside a `CREATE TRIGGER` body does not count: it does not run when the script creates the trigger.
+  sqlfluff joins the crawler's `dev` group. (Corrected: `INSERT OR REPLACE`, `REPLACE INTO`, the upsert's `DO UPDATE`
+  and the trigger bodies, from the holistic review, operator 2026-10-27; done in block 80.)
 - *Why: a future script that forgets the directive then fails the gate, where a fixed list would not. A test over the
   parsed SQL rather than a sqlfluff rule: a custom rule needs a plugin package installed through an entry point, and a
   test sits higher than a lint rule in what enforces it. Parsed rather than a keyword scan: a keyword inside a string
@@ -111,9 +118,11 @@ apply_migrations(connection, pending)
 the scripts, apply scripts. Its private `_open` goes, and with it the word "runner".
 
 `pending_migrations(connection, scripts)` returns a `PendingMigrations(current_version, migrations)`, a frozen value
-only it builds, after refusing a database newer than the code. `ensure_copy` and `apply_migrations` take it and
-nothing else of the version, so neither can run before the database's version was read. *The type carries the order,
-as `MonotonicInstant` carries the clock's, instead of a convention callers must keep (operator).*
+it builds after refusing a database newer than the code. `ensure_copy` and `apply_migrations` take it and nothing
+else of the version, so a caller that builds it only through `pending_migrations` cannot run either before the
+database's version was read. *The type makes the order visible, as `MonotonicInstant` does the clock's (operator).*
+(Corrected: the order is a convention the type makes visible, not one the type carries: any module can build a
+`PendingMigrations`, and no gate rule refuses it. Operator, 2026-10-27, from the holistic review.)
 
 `SqlitePreMigrationCopier.ensure_copy` runs these steps, each only if the previous one did not end it; on return, a
 pre-migration copy matching the database exists, or none was needed:
@@ -137,7 +146,8 @@ order: they start from version 0, which is never copied.
 - The name's instant is the `WallClock`'s, in UTC, to the second.
 - The `.partial` is linked to the final name with `os.link`, then unlinked. A taken name raises `FileExistsError`,
   turned into a `MigrationError` naming the file, and the `.partial` is removed. *`os.rename` and `os.replace` would
-  silently replace an existing file.*
+  silently replace an existing file.* (Corrected: every `OSError` of the link becomes that `MigrationError`, a
+  filesystem without hard links included, in block 80 from the holistic review.)
 - A leftover must be deleted first: without its journal, `VACUUM INTO` fails on it with `file is not a database`;
   complete, with `output file already exists` (appendix B).
 
@@ -206,17 +216,25 @@ order: they start from version 0, which is never copied.
   copy; the merge invariant (`:50`) allows the copy beside the destination and names
   `SqliteDatabaseOpener.open_catalog`; the clock invariant ("A store has no clock") lets an adapter other than a store
   hold a clock for its own I/O, the opener's `WallClock` among its examples.
-- `docs/operate.md`: persistence and the update say when a copy appears, its name, when it may be deleted, and to keep
-  the earliest of an unfinished upgrade; the `merge --into X X` paragraph says the destination is copied first.
+- `docs/operate.md`: persistence and the update say when a copy appears, its name, when it may be deleted, and which
+  copy of an unfinished upgrade to keep (section 2); the `merge --into X X` paragraph says the destination is copied
+  first. (Corrected: which copy to keep, as in section 2.)
 - `docs/limits.md`: the upgrade's need in `data/` (4.5) and the copy's duration (502.5 s for 5.67 GB, 2026-10-13).
   Its migrations' duration (196 to 295 s, 2026-10-09) is checked against the 2026-10-13 spike (674.9 s for 0006 to
   0010) and corrected where touched.
 - `docs/migration-4x.md`: the backup warning keeps recommending a backup and mentions the automatic copy; the first
-  start gains the copy and its duration; the rollback gives the restore steps: stop the crawler, remove the database
-  and its `-wal` and `-shm`, rename the copy. *A stale `-wal` beside a restored file would be replayed onto it.*
-- `docs/troubleshooting-start.md`: an entry for the space refusal, beside the other `MigrationError` entries.
+  start gains the copy and its duration; the rollback gives the restore steps: stop the crawler, rename the copy over
+  the database, remove the database's `-wal` and `-shm`, one database at a time and only one that has a `pre-0006`
+  copy. *A stale `-wal` beside a restored file would be replayed onto it. A database without a copy was never
+  migrated: the crawler opens the catalog first, so a failure there leaves `local.db` untouched.* (Corrected: per
+  database, only one with a copy, the rename before the removal, in block 90 from the holistic review's major
+  finding: removing first deleted a `local.db` that had no copy.)
+- `docs/troubleshooting-start.md`: an entry for the space refusal, beside the other `MigrationError` entries; the
+  restart loop, slow after an upgrade since each start digests the database and its copy, and how to halt it.
+  (Corrected: the restart loop added in block 90, from the holistic review.)
 - `docs/install.md`: the upgrade warning names the space needed.
 - `docs/contributing/architecture.md`: the migration recipe gains `copy-before` and when a script carries it.
+  (Corrected: with 4.1's extended list and the trigger bodies left out.)
 
 ## 6. Acceptance
 
@@ -272,7 +290,8 @@ Unit tests of the crawler's package, on real files in `tmp_path`. "A version N c
 | 40 | `feat/reuse-a-matching-copy` | criteria 5 to 8, then 4.2's step 3 and 4.4 | about 310 lines, 5 files |
 | 50 | `feat/mark-row-changing-migrations` | criteria 10 to 16 with 4.1's test, then the marks, `AGENTS.md` | about 220 lines, 17 to 19 files |
 | 60 | `docs/pre-migration-copy` | section 5's docs under `docs/`; drafts the handoff | about 130 lines, 6 files |
-| 90 | `docs/pre-migration-copy-wrap` | the closing block: the holistic review's fixes, `BACKLOG.md`, the handoff | a few lines |
+| 80 | `fix/pre-migration-copy-review` | the holistic review's findings in code, tests and ignore files | 95 lines, 16 files (measured) |
+| 90 | `docs/pre-migration-copy-wrap` | the closing block: the holistic review's findings in the documents, `BACKLOG.md`, the handoff | a few lines |
 
 - **Every block is written test first** (`AGENTS.md`, Strict TDD): each test is watched failing before the code
   that answers it. Block 20 moves imports and adds no behaviour.
@@ -283,6 +302,8 @@ Unit tests of the crawler's package, on real files in `tmp_path`. "A version N c
 - Estimates by agent `migcopy-estimate` on `main`, within about 25 %. If block 30 passes a bound, the space check moves
   to block 40; if block 50 does, criterion 16 and `AGENTS.md` move to block 60.
 - Cut from `main` at `cd307232` or later.
+- (Corrected: block 80 added. The holistic review's fixes touch 16 files in code and tests, and 6 more in the
+  documents: together they pass the 20-file bound, so the closing block split in two, code first.)
 
 ## 8. Limits and scope
 
@@ -296,6 +317,9 @@ Unit tests of the crawler's package, on real files in `tmp_path`. "A version N c
   the first pending to the last marked, six per database on the node. Each holds the live pages only, and the earliest
   stays the real backup.
 - **SQLite's temporary files are not counted** in the need.
+- **4.1's test cannot see a row rewritten by an existing trigger.** A plain `INSERT` that fires a trigger created by
+  an earlier script, and whose body deletes or updates rows, leaves the script unmarked. (Corrected: added with 4.1's
+  exclusion of trigger bodies, operator 2026-10-27.)
 - **4.1's test cannot see a statement sqlfluff does not parse.** `poe sql-lint` fails on one unless its line carries
   `-- noqa: PRS`, as 0009's `VACUUM` does; such a line is visible in review.
 

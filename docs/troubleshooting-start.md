@@ -66,7 +66,9 @@ récupération après panne, voir [Diagnostics avancés](troubleshooting.md).
 
 ### Un conteneur redémarre en boucle
 
-- **Symptôme.** `docker compose ps` montre le service en **`Restarting`** ou `Exited`.
+- **Symptôme.** `docker compose ps` montre le service en **`Restarting`** ou `Exited`. Juste après
+  une montée d'image, le crawler peut aussi rester `Up` plusieurs minutes entre deux échecs (voir
+  la migration qui échoue, ci-dessous).
 - **Diagnostic.** `docker compose ps` dit lequel : `p2pwatch` (le crawler), `ed2k` (le client
   eMule) ou, sous la variante VPN, `ed2k-gluetun`. Lisez ensuite son journal seul, par exemple
   `docker compose logs p2pwatch`. Docker relance le crawler après chacune de ses sorties, donc
@@ -83,6 +85,12 @@ récupération après panne, voir [Diagnostics avancés](troubleshooting.md).
       voir [« Un conteneur ne peut pas écrire dans ses dossiers »](troubleshooting.md#un-conteneur-ne-peut-pas-écrire-dans-ses-dossiers-puid--pgid).
     - **Journal d'une ligne, sans Python** (`ed2k`) : voir
       [« Une variable obligatoire manque »](#une-variable-obligatoire-manque).
+    - **Une migration qui échoue** (`p2pwatch`), juste après une montée d'image : le journal
+      contient `MigrationError: ...`, voir les entrées ci-dessous. Chaque relance compare d'abord la
+      base à sa [copie d'avant migration](operate.md#la-copie-davant-migration) (le journal dit
+      `pre-migration copy of ...: comparing with ...`) : sur un gros catalogue, cela prend
+      plusieurs minutes et charge le disque, et le service reste `Up` entre deux échecs.
+      `docker compose stop p2pwatch` arrête la boucle le temps de décider.
 
 !!! bug "`database or disk is full`, juste après une montée d'image"
 
@@ -126,7 +134,9 @@ récupération après panne, voir [Diagnostics avancés](troubleshooting.md).
     l'ancien outil `python -m mulewatch.compact`, qui n'existe plus. Une journée compactée ne garde
     ni le mot-clé, ni la durée, ni les métadonnées brutes : elle ne peut pas devenir des
     observations, et la migration refuse plutôt que d'inventer ce qui manque. Elle a été annulée :
-    le catalogue est intact.
+    le catalogue est intact. Docker relance le crawler, et chaque relance compare d'abord le
+    catalogue à sa copie d'avant migration, plusieurs minutes durant lesquelles le disque travaille :
+    `docker compose stop p2pwatch` arrête la boucle.
 
     Remède : revenez à votre ancienne image (`ghcr.io/mission-titar/mulewatch:4.1.0`) par le
     [retour arrière](migration-4x.md#retour-arrière) de la migration. Ouvrez ensuite un ticket sur

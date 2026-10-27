@@ -13,15 +13,12 @@ An agent adds an entry only after the operator has agreed to it.
 ## Debt
 
 - **Every stamp an integer of microseconds since the epoch**, as the catalog's points already are: the ISO-8601 TEXT
-  stamps left in both databases converted; the catalog's waits for the copy before a migration that rewrites rows. D12 of `agents/specs/2026-10-14-monotonic-clock.md`.
+  stamps left in both databases converted. D12 of `agents/specs/2026-10-14-monotonic-clock.md`.
 
 - **Test quality** (lot 3 of the gate tooling umbrella): every unit test keeps unique coverage of its unit, the others are
   pruned, mutmut proving no detected mutant is lost. D3 to D5 and D13 to D15 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`, lot order in D12.
 
 ## Must be done before the next release
-
-- **A copy before a migration that rewrites rows** (required before the next release): the runner copies the
-  catalog with `VACUUM INTO` first. Design: section 9 of `agents/specs/2026-10-13-append-only-source-points.md`.
 
 - **The Grype scan back on p2pwatch at the v5 release**: one leg per image, `p2pwatch` and `p2pwatch-amule`, each with
   its versioned VEX and signed by `mission-titar/p2pwatch`, in place of v4's `mulewatch` leg. `.github/workflows/grype-scan.yml`.
