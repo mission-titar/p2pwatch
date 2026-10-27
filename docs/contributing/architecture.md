@@ -520,18 +520,19 @@ dans `observation_variants` et `source_variants`, `local/0012` `downloads.last_s
 
 ### 8.1 Écrire une migration
 
-Au démarrage, le runner (`adapters/driven/persistence_sqlite/connection.py`) applique dans l'ordre chaque
-script `NNNN_*.sql` de `migrations/catalog/` ou `migrations/local/` dont le numéro dépasse le
-`PRAGMA user_version` de la base, puis y inscrit ce numéro. Une base plus récente que le code est
-refusée. Les règles d'écriture :
+À chaque ouverture d'une base, au démarrage du crawler comme pour la destination de `merge`,
+l'ouvreur (`SqliteDatabaseOpener`, dans `adapters/driven/persistence_sqlite/sqlite_database_opener.py`)
+applique dans l'ordre chaque script `NNNN_*.sql` de `migrations/catalog/` ou `migrations/local/` dont
+le numéro dépasse le `PRAGMA user_version` de la base, puis y inscrit ce numéro. Une base plus récente
+que le code est refusée. Les règles d'écriture :
 
 - **Le nom.** Un préfixe à quatre chiffres, strictement croissant ; les trous sont permis. Une
   migration ne s'insère jamais sous un numéro déjà livré : une base inscrite plus haut ne la verrait
   pas.
-- **Une transaction par script.** Le runner ouvre la transaction, inscrit la version dedans et la
+- **Une transaction par script.** L'ouvreur ouvre la transaction, inscrit la version dedans et la
   valide : un échec annule le script entier et laisse la version inchangée. Le script n'écrit donc ni
   `BEGIN`, ni `COMMIT`, ni `ROLLBACK` ; un `COMMIT` égaré lève `MigrationError`.
-- **Pas de `CREATE TEMP TABLE`.** Le runner change `temp_store` autour des migrations, ce qui
+- **Pas de `CREATE TEMP TABLE`.** L'ouvreur change `temp_store` autour des migrations, ce qui
   détruit toute table temporaire.
 - **`foreign_keys` reste actif.** `PRAGMA foreign_keys = OFF` est ignoré dans une transaction, sans
   erreur : la recette ci-dessous s'en passe.
@@ -553,15 +554,23 @@ refusée. Les règles d'écriture :
   `PRAGMA cache_size = -262144` (256 Mo). Là où SQLite est compilé avec `SECURE_DELETE`, comme dans
   l'image, le `DROP` d'une grosse table garde tout son contenu dans le journal de l'instruction, en
   mémoire, jusqu'au manque de mémoire ; le cache plus grand accélère une copie limitée par les
-  entrées-sorties. Le runner relit ces deux pragmas avant chaque script et les rétablit après : un
+  entrées-sorties. L'ouvreur relit ces deux pragmas avant chaque script et les rétablit après : un
   script règle ce dont il a besoin et ne remet jamais rien en place.
 - **Les tris passent par des fichiers temporaires** (`temp_store = FILE`) dans le dossier temporaire
   du conteneur, pas dans `/data` : un tri en mémoire n'a pas de plafond.
 - **La directive `-- migration: no-transaction`**, seule et exacte en première ligne, fait exécuter
   le script hors transaction, pour ce qui l'exige comme `VACUUM` ; la version est inscrite après son
   succès. Le script doit alors pouvoir être rejoué, car un arrêt entre sa fin et l'inscription le
-  relance au démarrage suivant. Toute autre première ligne commençant par `-- migration:` est refusée
-  au chargement des scripts.
+  relance au démarrage suivant.
+- **La directive `-- migration: copy-before`**, seule et exacte en première ligne, marque un script
+  qui supprime ou réécrit des lignes : un `DELETE`, un `UPDATE`, un `DROP TABLE`, un
+  `INSERT ... SELECT` ou un `ALTER TABLE ... DROP COLUMN`. Avant d'appliquer des migrations dont une
+  au moins la porte, l'ouvreur copie la base à côté d'elle
+  ([la copie d'avant migration](../operate.md#la-copie-davant-migration)). `test_migration_directives.py`
+  analyse chaque script livré avec sqlfluff et exige la directive exactement quand le script contient
+  l'une de ces instructions : un script qui l'oublie fait échouer la gate.
+- **Une directive au plus par script**, aucun n'ayant besoin des deux. Toute autre première ligne
+  commençant par `-- migration:` est refusée au chargement des scripts.
 
 ### 8.2 Ce qui mérite un `CHECK`
 

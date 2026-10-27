@@ -11,8 +11,12 @@ variante VPN. Aucune donnée n'est perdue. Six étapes, depuis votre dossier de 
 
 !!! warning "Sauvegardez d'abord votre configuration et votre catalogue"
 
-    Le premier démarrage de la 5.0 réécrit le catalogue : cette copie est votre seul retour vers la
-    4.x. `amule/` et `downloads/` ne sont que déplacés, inutile de les copier.
+    Le premier démarrage de la 5.0 réécrit les deux bases. Il en garde d'abord une
+    [copie d'avant migration](operate.md#la-copie-davant-migration) dans `data/`, mais votre
+    sauvegarde reste le retour le plus sûr vers la 4.x : elle garde aussi votre configuration. Les
+    deux demandent de la place : la sauvegarde la taille de `data/`, le premier démarrage jusqu'à
+    deux fois le catalogue dans `data/`. `amule/` et `downloads/` ne sont que déplacés, inutile de
+    les copier.
 
     ```bash
     mkdir ../mulewatch.4x.bak
@@ -114,9 +118,13 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
 
 ## Ce qui change
 
-- **Le premier démarrage réécrit le catalogue** : trois à cinq minutes sur un gros catalogue,
-  pendant lesquelles le catalogue web ne répond pas. Ne redémarrez rien avant la fin, voir
-  [Limites connues](limits.md#le-premier-démarrage-qui-réécrit-le-catalogue).
+- **Le premier démarrage copie puis réécrit les deux bases** : il garde
+  `data/catalog.db.pre-0006.<heure>_UTC` et `data/local.db.pre-0006.<heure>_UTC`, puis migre. Une
+  vingtaine de minutes sur un catalogue de 6 Go, dont huit pour la copie, pendant lesquelles le
+  catalogue web ne répond pas. Ne redémarrez rien avant la fin, voir
+  [Limites connues](limits.md#le-premier-démarrage-qui-réécrit-le-catalogue). Faute de place dans
+  `data/`, le crawler refuse de démarrer sans rien écrire, voir
+  [Le déploiement bloque](troubleshooting-start.md#un-conteneur-redémarre-en-boucle).
 - **Deux journaux.** `docker compose logs p2pwatch` ne montre plus que le crawler ; amuled et le
   port-sync écrivent dans `docker compose logs ed2k`, amuleapi dans `ed2k/amule/amuleapi.log`.
 - **Sous la variante VPN, le crawler sort du tunnel.** Seul `ed2k` passe par `ed2k-gluetun`. Le
@@ -216,3 +224,17 @@ docker compose up -d    # ou -f gluetun.compose.yml
 
 Votre ancien `compose.yml` tire toujours `ghcr.io/mission-titar/mulewatch:latest`, qui reste la
 4.1.0. Le catalogue revient à son état d'avant la migration.
+
+**Sans sauvegarde de `data/`**, les copies d'avant migration en tiennent lieu pour les deux bases ;
+votre configuration, elle, vient de votre sauvegarde. Gardez alors `data/` : retirez-le du `rm -r`
+ci-dessus. Puis, avant le `docker compose up -d`, remplacez chaque base par la plus récente de ses
+copies `pre-0006`, après avoir supprimé ses fichiers `-wal` et `-shm` : laissés là, ils seraient
+rejoués sur la copie.
+
+```bash
+ls data/*.pre-0006.*  # la plus récente de chaque base vient en dernier
+rm -f data/catalog.db data/catalog.db-wal data/catalog.db-shm
+rm -f data/local.db data/local.db-wal data/local.db-shm
+mv data/catalog.db.pre-0006.<heure>_UTC data/catalog.db
+mv data/local.db.pre-0006.<heure>_UTC data/local.db
+```

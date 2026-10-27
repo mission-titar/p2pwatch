@@ -18,7 +18,9 @@ identifie avec certitude, dans un dossier `ed2k/downloads/` posé à côté de v
 !!! warning "Vous mettez à niveau un nœud existant ?"
 
     Lisez d'abord [Migrer un nœud 4.x](migration-4x.md), et ne lancez rien avant : la migration se
-    fait à la main, une fois. Un nœud plus ancien passe d'abord par
+    fait à la main, une fois. Son premier démarrage demande, libres dans `data/`, jusqu'à deux fois
+    la taille du catalogue : une copie d'avant migration, puis la migration. Un nœud plus ancien
+    passe d'abord par
     [Migrer un nœud 1.x](migration-1x.md) ou [Migrer un nœud 2.x](migration-2x.md).
 
 !!! info "Votre adresse IP sera visible des autres pairs"
