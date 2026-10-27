@@ -1,3 +1,4 @@
+-- migration: copy-before
 -- local.db, migration 0006: the cycle's scheduler state (stage 2 spec, D7, D19).
 -- channel_backoff goes too: its amuled:global keys are read by no task, and a reset costs one
 -- backoff at most.

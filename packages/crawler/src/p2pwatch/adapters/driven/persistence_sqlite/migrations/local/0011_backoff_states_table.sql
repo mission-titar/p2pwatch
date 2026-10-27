@@ -1,3 +1,4 @@
+-- migration: copy-before
 -- local.db, migration 0011: the search backoff in a typed table, each wait's start and delay.
 -- The waits pending at the upgrade are dropped with scheduler_state: each restarts at its base.
 

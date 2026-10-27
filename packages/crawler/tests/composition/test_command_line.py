@@ -1,6 +1,7 @@
 """The command line, wired to the real adapters and composition."""
 
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,10 @@ from tests.support.adapters.driven.persistence_sqlite.helpers import (
     HASH_B,
     count,
     make_catalog,
+)
+from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_catalog_at
+from tests.support.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier import (
+    pre_migration_copies,
 )
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
@@ -73,3 +78,25 @@ def test_merge_of_two_catalogs_named_under_cwd_into_a_new_one_holds_both(
     done = next(record for record in caplog.records if record.getMessage().startswith("merge done"))
     # An operator's filters keep its module's name.
     assert done.name == "p2pwatch.application.use_cases.merge_catalogs"
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["merge", "--into", "a.db", "a.db", "b.db"],
+        ["merge", "--output", "a.db", "--force", "b.db"],
+    ],
+)
+def test_merge_copies_a_version_5_destination_and_no_source(
+    tmp_path: Path, argv: list[str]
+) -> None:
+    open_catalog_at(tmp_path / "a.db", 5).close()
+    make_catalog(tmp_path / "b.db", {"files": [{"native_id": HASH_B, "size_bytes": 100}]})
+    before = datetime.now(UTC).replace(microsecond=0)
+
+    assert _run(argv, tmp_path) == 0
+
+    after = datetime.now(UTC)
+    [(prefix, instant)] = pre_migration_copies(tmp_path)
+    assert prefix == "a.db.pre-0006"
+    assert before <= instant <= after

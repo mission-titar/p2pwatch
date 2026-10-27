@@ -1,3 +1,4 @@
+-- migration: copy-before
 -- local.db, migration 0005: last_seen_at on downloads (lost-download TTL spec, 2026-09-13).
 --
 -- The backfill is load-bearing: expire_lost compares last_seen_at against a cutoff, and
