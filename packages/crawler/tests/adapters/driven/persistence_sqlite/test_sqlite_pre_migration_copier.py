@@ -1,3 +1,4 @@
+import os
 import sqlite3
 from contextlib import closing
 from datetime import timedelta
@@ -158,6 +159,34 @@ def test_a_taken_name_refuses_and_leaves_its_file(tmp_path: Path) -> None:
         with pytest.raises(MigrationError, match=_COPY_NAME):
             _copier().ensure_copy(connection, path, pending_migrations(connection, scripts))
     assert taken.read_bytes() == b"taken"
+    assert _copy_names(path.parent) == [_COPY_NAME]
+
+
+def test_a_link_the_filesystem_refuses_raises_a_migration_error(tmp_path: Path) -> None:
+    scripts = _scripts(tmp_path / "scripts", _COPY_BEFORE + "DELETE FROM t;")
+    # The longest name whose .partial-journal fits NAME_MAX, 255: its final name does not.
+    path = tmp_path / "data" / ("c" * (255 - len(".pre-0003.partial-journal")))
+    final_name = f"{path.name}.pre-0003.2026-06-12_00-00-00_UTC"
+    with (
+        closing(_seeded(path, scripts)) as connection,
+        pytest.raises(MigrationError, match=rf"{final_name}\b.*File name too long"),
+    ):
+        _copier().ensure_copy(connection, path, pending_migrations(connection, scripts))
+    assert _copy_names(path.parent) == []
+
+
+def test_a_copy_of_a_database_named_by_a_relative_path_is_reused(tmp_path: Path) -> None:
+    scripts = _scripts(tmp_path / "scripts", _COPY_BEFORE + "DELETE FROM t;")
+    # A URI escapes these characters.
+    path = tmp_path / "data #%?" / "catalog.db"
+    _seeded(path, scripts).close()
+    relative_path = Path(os.path.relpath(path))
+    time = FakeTime()
+    copier = _copier(time=time)
+    with closing(connect(relative_path)) as connection:
+        copier.ensure_copy(connection, relative_path, pending_migrations(connection, scripts))
+        time.advance(timedelta(minutes=1))
+        copier.ensure_copy(connection, relative_path, pending_migrations(connection, scripts))
     assert _copy_names(path.parent) == [_COPY_NAME]
 
 

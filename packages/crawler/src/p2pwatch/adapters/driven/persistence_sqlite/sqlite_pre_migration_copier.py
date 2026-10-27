@@ -8,6 +8,7 @@ from contextlib import closing
 from datetime import UTC
 from glob import escape
 from pathlib import Path
+from urllib.parse import quote
 
 from p2pwatch.adapters.driven.persistence_sqlite.connection import PendingMigrations
 from p2pwatch.adapters.driven.persistence_sqlite.database_digest import database_digest
@@ -18,7 +19,7 @@ _logger = logging.getLogger(__name__)
 
 
 class SqlitePreMigrationCopier:
-    """Makes the pre-migration copy of a database, ``<file>.pre-<NNNN>.<instant>_UTC``, ``NNNN``
+    """Makes the pre-migration copy of a database, ``<file>.pre-<NNNN>.<stamp>_UTC``, ``NNNN``
     its first pending version, and never deletes one."""
 
     def __init__(self, wall_clock: WallClock, free_bytes: Callable[[Path], int]) -> None:
@@ -45,8 +46,8 @@ class SqlitePreMigrationCopier:
             _logger.info("pre-migration copy of %s: writing %s", path, partial)
             # Outside any transaction, which VACUUM INTO refuses.
             connection.execute("VACUUM INTO ?", (str(partial),))
-        instant = self._wall_clock.now().astimezone(UTC).strftime("%Y-%m-%d_%H-%M-%S")
-        _rename_without_replacing(partial, path.with_name(f"{prefix}.{instant}_UTC"))
+        stamp = self._wall_clock.now().astimezone(UTC).strftime("%Y-%m-%d_%H-%M-%S")
+        _rename_without_replacing(partial, path.with_name(f"{prefix}.{stamp}_UTC"))
 
     def _check_free_space(self, connection: sqlite3.Connection, path: Path) -> None:
         # The copy holds the live pages only; the migrations need the file's size again.
@@ -74,7 +75,9 @@ def _matches_its_latest_copy(connection: sqlite3.Connection, path: Path, prefix:
     latest = candidates[-1]
     _logger.info("pre-migration copy of %s: comparing with %s", path, latest)
     try:
-        with closing(sqlite3.connect(f"{latest.as_uri()}?mode=ro", uri=True)) as candidate:
+        # Not as_uri(), which refuses a relative path.
+        uri = f"file:{quote(str(latest))}?mode=ro"
+        with closing(sqlite3.connect(uri, uri=True)) as candidate:
             candidate_digest = database_digest(candidate)
     except sqlite3.Error as error:
         _logger.warning("pre-migration copy: %s cannot be read (%s)", latest, error)
@@ -97,8 +100,10 @@ def _rename_without_replacing(partial: Path, final: Path) -> None:
     # os.rename and os.replace would silently replace a file at the final name.
     try:
         os.link(partial, final)
-    except FileExistsError as error:
-        raise MigrationError(f"pre-migration copy: {final} already exists") from error
+    except OSError as error:
+        raise MigrationError(
+            f"pre-migration copy: {final} not created: {error.strerror}"
+        ) from error
     finally:
         partial.unlink()
     _logger.info("pre-migration copy: %s", final)
