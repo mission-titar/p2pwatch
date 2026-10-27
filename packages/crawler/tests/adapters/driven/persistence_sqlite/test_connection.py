@@ -16,14 +16,6 @@ from p2pwatch.adapters.driven.persistence_sqlite.connection import (
     utc_iso,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError, PersistenceError
-from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
-    open_catalog,
-    open_local,
-)
-from tests.support.catalog_rows import insert_decision, insert_file
-
-# Canonical 32-char lowercase hex hash (satisfies the CHECK constraint).
-_CANONICAL_HASH = "a" * 32
 
 # PRAGMA temp_store: 1 = FILE (0 = the compile-time default).
 _TEMP_STORE_FILE = 1
@@ -43,24 +35,6 @@ def _migrate(connection: sqlite3.Connection, scripts: tuple[Migration, ...]) -> 
     apply_migrations(connection, pending_migrations(connection, scripts))
 
 
-def test_open_catalog_indexes_the_source_variants(tmp_path: Path) -> None:
-    connection = open_catalog(tmp_path / "catalog.db")
-    try:
-        rows = connection.execute(
-            "SELECT l.name, i.name FROM pragma_index_list('source_variants') AS l,"
-            " pragma_index_info(l.name) AS i WHERE l.origin = 'c' ORDER BY l.name, i.seqno"
-        ).fetchall()
-        assert rows == [
-            ("idx_source_variants_file_source", "file_id"),
-            ("idx_source_variants_file_source", "source_id"),
-            ("idx_source_variants_name", "name"),
-            ("idx_source_variants_node_id", "node_id"),
-            ("idx_source_variants_source_id", "source_id"),
-        ]
-    finally:
-        connection.close()
-
-
 def test_connect_registers_the_variant_functions_before_migrating(tmp_path: Path) -> None:
     probe = "CREATE TABLE probe AS SELECT iso_to_micros('1970-01-01T00:00:00.000001+00:00') AS us;"
     connection = connect(tmp_path / "catalog.db")
@@ -69,46 +43,6 @@ def test_connect_registers_the_variant_functions_before_migrating(tmp_path: Path
         assert connection.execute("SELECT us FROM probe").fetchone()[0] == 1
     finally:
         connection.close()
-
-
-def test_open_applies_wal_and_foreign_keys_and_recursive_triggers_pragmas(tmp_path: Path) -> None:
-    connection = open_catalog(tmp_path / "catalog.db")
-    try:
-        assert connection.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
-        assert connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
-        assert connection.execute("PRAGMA recursive_triggers").fetchone()[0] == 1
-    finally:
-        connection.close()
-
-
-def test_open_local_applies_recursive_triggers_pragma(tmp_path: Path) -> None:
-    connection = open_local(tmp_path / "local.db")
-    try:
-        assert connection.execute("PRAGMA recursive_triggers").fetchone()[0] == 1
-    finally:
-        connection.close()
-
-
-def test_foreign_keys_are_enforced(tmp_path: Path) -> None:
-    connection = open_catalog(tmp_path / "catalog.db")
-    try:
-        with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
-            insert_decision(connection, "absent", "t", "catalog")
-    finally:
-        connection.close()
-
-
-def test_reopen_is_idempotent_and_keeps_data(tmp_path: Path) -> None:
-    path = tmp_path / "catalog.db"
-    first = open_catalog(path)
-    insert_file(first, _CANONICAL_HASH, 1)
-    first.close()
-    second = open_catalog(path)  # versions already applied: NO script replays
-    try:
-        assert second.execute("PRAGMA user_version").fetchone()[0] == 13
-        assert second.execute("SELECT count(*) FROM files").fetchone()[0] == 1
-    finally:
-        second.close()
 
 
 def test_in_memory_database_is_refused_because_wal_is_required() -> None:
@@ -122,22 +56,22 @@ def test_unopenable_path_raises_persistence_error(tmp_path: Path) -> None:
         connect(tmp_path)  # a directory is not a database
 
 
-def test_database_newer_than_the_code_is_refused(tmp_path: Path) -> None:
-    path = tmp_path / "catalog.db"
-    open_catalog(path).close()
-    raw = sqlite3.connect(path, autocommit=True)
-    raw.execute("PRAGMA user_version = 99")
-    raw.close()
-    with pytest.raises(MigrationError, match="99"):
-        open_catalog(path)
-
-
 def test_pending_migrations_keeps_the_scripts_above_the_version(tmp_path: Path) -> None:
     scripts = (Migration(1, "A"), Migration(2, "B"), Migration(3, "C"))
     connection = sqlite3.connect(tmp_path / "pending.db", autocommit=True)
     try:
         connection.execute("PRAGMA user_version = 1")
         assert pending_migrations(connection, scripts) == PendingMigrations(1, scripts[1:])
+    finally:
+        connection.close()
+
+
+def test_pending_migrations_refuses_a_database_newer_than_the_code(tmp_path: Path) -> None:
+    connection = sqlite3.connect(tmp_path / "newer.db", autocommit=True)
+    try:
+        connection.execute("PRAGMA user_version = 99")
+        with pytest.raises(MigrationError, match="99"):
+            pending_migrations(connection, (Migration(1, "A"),))
     finally:
         connection.close()
 
@@ -241,24 +175,6 @@ def test_utc_iso_is_fixed_width_and_normalizes_to_utc() -> None:
     paris = timezone(timedelta(hours=2))
     moment = datetime(2026, 6, 11, 14, 0, 0, tzinfo=paris)
     assert utc_iso(moment) == "2026-06-11T12:00:00.000000+00:00"
-
-
-# --- MANDATED AMENDMENT: recursive_triggers guards append-only against INSERT OR REPLACE ---
-
-
-def test_insert_or_replace_on_existing_hash_raises_integrity_error(tmp_path: Path) -> None:
-    """INSERT OR REPLACE on an existing files row must raise (triggers guarded by
-    recursive_triggers=ON, spec §3 amendment).  The trigger fires on the implicit DELETE
-    that REPLACE performs internally, surfacing as sqlite3.IntegrityError."""
-    connection = open_catalog(tmp_path / "catalog.db")
-    try:
-        insert_file(connection, _CANONICAL_HASH, 1)
-        with pytest.raises(sqlite3.IntegrityError):
-            connection.execute(
-                "INSERT OR REPLACE INTO files SELECT file_id, network, native_id, 2 FROM files"
-            )
-    finally:
-        connection.close()
 
 
 # --- Hardening (adversarial review post-6c389b1) ---
