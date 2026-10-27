@@ -87,9 +87,11 @@ que l'ancienne version l'a laissée : parmi les copies de cette mise à jour, **
 petit numéro**, la plus récente s'il y en a plusieurs. Une copie de numéro plus grand tient une base
 à moitié migrée.
 
-Pour revenir à une copie, arrêtez le crawler, supprimez la base et ses fichiers `-wal` et `-shm`,
-renommez la copie au nom de la base, puis démarrez l'ancienne version : la nouvelle referait la
-migration. Un `-wal` laissé à côté de la base restaurée y serait rejoué. Les commandes sont dans le
+Pour revenir à une copie, arrêtez le crawler, renommez la copie au nom de la base, qu'elle
+remplace, puis supprimez les fichiers `-wal` et `-shm` de la base : laissés là, ils seraient rejoués
+sur la copie. Démarrez ensuite l'ancienne version : la nouvelle referait la migration. Restaurez
+seulement une base qui a une copie de cette mise à jour, et une base à la fois : une base supprimée
+avant que sa copie soit trouvée est perdue. Les commandes sont dans le
 [retour arrière](migration-4x.md#retour-arrière) de la migration 4.x.
 
 ### Redémarrer une pièce plutôt que tout le nœud

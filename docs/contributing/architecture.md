@@ -564,8 +564,10 @@ que le code est refusée. Les règles d'écriture :
   relance au démarrage suivant.
 - **La directive `-- migration: copy-before`**, seule et exacte en première ligne, marque un script
   qui supprime ou réécrit des lignes : un `DELETE`, un `UPDATE`, un `DROP TABLE`, un
-  `INSERT ... SELECT` ou un `ALTER TABLE ... DROP COLUMN`. Avant d'appliquer des migrations dont une
-  au moins la porte, l'ouvreur copie la base à côté d'elle
+  `INSERT ... SELECT`, un `INSERT OR REPLACE`, un `REPLACE INTO`, un
+  `INSERT ... ON CONFLICT DO UPDATE` ou un `ALTER TABLE ... DROP COLUMN`. Le corps d'un
+  `CREATE TRIGGER` ne compte pas : il ne s'exécute pas quand le script crée le trigger. Avant
+  d'appliquer des migrations dont une au moins la porte, l'ouvreur copie la base à côté d'elle
   ([la copie d'avant migration](../operate.md#la-copie-davant-migration)). `test_migration_directives.py`
   analyse chaque script livré avec sqlfluff et exige la directive exactement quand le script contient
   l'une de ces instructions : un script qui l'oublie fait échouer la gate.

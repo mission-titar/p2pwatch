@@ -225,16 +225,22 @@ docker compose up -d    # ou -f gluetun.compose.yml
 Votre ancien `compose.yml` tire toujours `ghcr.io/mission-titar/mulewatch:latest`, qui reste la
 4.1.0. Le catalogue revient à son état d'avant la migration.
 
-**Sans sauvegarde de `data/`**, les copies d'avant migration en tiennent lieu pour les deux bases ;
-votre configuration, elle, vient de votre sauvegarde. Gardez alors `data/` : retirez-le du `rm -r`
-ci-dessus. Puis, avant le `docker compose up -d`, remplacez chaque base par la plus récente de ses
-copies `pre-0006`, après avoir supprimé ses fichiers `-wal` et `-shm` : laissés là, ils seraient
-rejoués sur la copie.
+**Sans sauvegarde de `data/`**, les copies d'avant migration en tiennent lieu ; votre
+configuration, elle, vient de votre sauvegarde. Gardez alors `data/` : retirez-le du `rm -r`
+ci-dessus. Puis, avant le `docker compose up -d`, cherchez les copies `pre-0006` de chaque base :
 
 ```bash
-ls data/*.pre-0006.*  # la plus récente de chaque base vient en dernier
-rm -f data/catalog.db data/catalog.db-wal data/catalog.db-shm
-rm -f data/local.db data/local.db-wal data/local.db-shm
-mv data/catalog.db.pre-0006.<heure>_UTC data/catalog.db
-mv data/local.db.pre-0006.<heure>_UTC data/local.db
+ls data/*.pre-0006.*_UTC  # la plus récente de chaque base vient en dernier
 ```
+
+Restaurez seulement une base qui a une copie `pre-0006`, la plus récente : renommez-la au nom de la
+base, qu'elle remplace, puis supprimez les fichiers `-wal` et `-shm` de la base, qui seraient sinon
+rejoués sur la copie. Une ligne par base, que vous ne lancez que si sa copie existe :
+
+```bash
+mv data/catalog.db.pre-0006.<heure>_UTC data/catalog.db && rm -f data/catalog.db-wal data/catalog.db-shm
+mv data/local.db.pre-0006.<heure>_UTC data/local.db && rm -f data/local.db-wal data/local.db-shm
+```
+
+Une base sans copie `pre-0006` n'a jamais été migrée : laissez-la telle quelle. C'est le cas de
+`local.db` quand la migration du catalogue a échoué, car le crawler ouvre le catalogue d'abord.
