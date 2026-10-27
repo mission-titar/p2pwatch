@@ -24,39 +24,45 @@ téléchargements, attendez-vous à une détection de complétion plus lente.
 ## Une montée d'image demande de la place sur le disque, sur un gros catalogue
 
 Au premier démarrage qui suit une mise à jour, le crawler applique les migrations de base en
-attente. Une migration qui construit un index ou réécrit une table **trie dans des fichiers
-temporaires**, dans le dossier temporaire du conteneur : sur le disque où Docker range ses
-conteneurs, pas dans `data/`. Ce premier démarrage demande donc de la place libre sur ce disque, en
-plus du catalogue.
+attente. Il demande de la place sur deux disques :
 
-S'il en manque, la migration échoue sans rien abîmer : elle est annulée, le catalogue reste dans son
-état d'avant, et le crawler refuse de démarrer. Le diagnostic et le remède sont dans
-[« Un conteneur redémarre en boucle »](troubleshooting-start.md#un-conteneur-redémarre-en-boucle).
+- **Celui de `data/`.** Quand une migration en attente supprime ou réécrit des lignes, le crawler
+  garde d'abord une [copie d'avant migration](operate.md#la-copie-davant-migration) de la base, à
+  côté d'elle. Il lui faut la place de la copie (les pages utiles de la base, plus son `-wal`), puis
+  celle de la migration (la base et son `-wal` encore), soit jusqu'à deux fois la base. Il la mesure
+  avant d'écrire quoi que ce soit, et refuse de démarrer s'il en manque, en nommant la place
+  nécessaire et la place libre (voir
+  [« Un conteneur redémarre en boucle »](troubleshooting-start.md#un-conteneur-redémarre-en-boucle)).
+  Pour un catalogue de 7,5 Go, comptez 15 Go libres.
+- **Celui de Docker.** Une migration qui construit un index ou réécrit une table **trie dans des
+  fichiers temporaires**, dans le dossier temporaire du conteneur : sur le disque où Docker range
+  ses conteneurs, pas dans `data/`. Le crawler ne les compte pas dans sa mesure. S'il en manque, la
+  migration échoue sans rien abîmer : elle est annulée, le catalogue reste dans son état d'avant,
+  et le crawler refuse de démarrer. Le diagnostic et le remède sont dans
+  [« Un conteneur redémarre en boucle »](troubleshooting-start.md#un-conteneur-redémarre-en-boucle).
 
 ### Le premier démarrage qui réécrit le catalogue
 
 Les migrations `catalog/0006` à `0009` réécrivent tout le catalogue : chaque fichier change
-d'identifiant, et les observations passent à un stockage compact. Mesuré le 2026-10-09 sur une
-copie d'un catalogue réel de 11,65 millions d'observations (5,3 Go), avec l'image, la base sur un
-dossier monté de Docker Desktop et `--memory 2g` :
+d'identifiant, et les observations passent à un stockage compact. Mesuré le 2026-10-13 sur un
+instantané du catalogue d'un nœud réel (5,9 Go), avec l'image, la base sur un dossier monté de
+Docker Desktop et les limites de `compose.yml` (`--memory 2g`) :
 
-| Étape | Durée | Mémoire au plus haut | Disque en plus, au plus haut |
-|---|---|---|---|
-| `0006` et `0007` | 166 à 235 s | 288 Mio | 0,45 Go |
-| `0008` | 10 à 13 s | 333 Mio | 0,24 Go |
-| `0009` | 9 s | 296 Mio | 0,44 Go |
+| Étape | Durée | Mémoire au plus haut | En plus dans `data/` | Fichiers temporaires |
+|---|---|---|---|---|
+| Copie d'avant migration | 502,5 s | 11 Mo | la copie, 5,67 Go | aucun |
+| `0006` à `0010` | 674,9 s, dont `0007` 445,6 s, `0008` 148,1 s et `0009` 79,0 s | 352 Mo | le WAL, 0,26 Go | 245 Mo au plus |
 
-Comptez donc trois à cinq minutes en tout (de 196 à 295 s sur la même copie), pendant lesquelles le
-crawler ne cherche rien et l'interface web ne répond pas. Le journal annonce chaque migration par
-une ligne comme `migration 7: applying`. Ne redémarrez pas le conteneur avant la fin : la migration
-en cours serait annulée, puis reprise à zéro. Le disque en plus se répartit entre le WAL, à côté du
-catalogue, et les fichiers temporaires dans le `/var/tmp` du conteneur, donc sur le disque de
-Docker : `0009` y écrit une copie du catalogue réécrit (0,2 Go). Prévoyez de la place libre sur
-les deux, pas seulement dans `data/`.
+Comptez donc une vingtaine de minutes sur ce catalogue, davantage sur un plus gros, pendant
+lesquelles le crawler ne cherche rien et l'interface web ne répond pas. Le journal annonce la copie
+par `pre-migration copy of /data/catalog.db: writing ...`, puis chaque migration par une ligne comme
+`migration 7: applying`. Ne redémarrez pas le conteneur avant la fin : une copie interrompue serait
+supprimée puis refaite, une migration en cours annulée puis reprise à zéro.
 
-Les trois premières laissent le fichier à sa taille d'avant : l'espace libéré reste à l'intérieur.
-`0009` le rend au disque (`VACUUM`) puis vide le WAL, et le fichier retombe à la taille de ses
-données : 0,21 Go pour ce catalogue de 5,3 Go.
+Les migrations laissent d'abord le fichier à sa taille d'avant : l'espace libéré reste à
+l'intérieur. `0009` le rend au disque (`VACUUM`) puis vide le WAL, et le fichier retombe à la taille
+de ses données : 0,22 Go pour ce catalogue de 5,9 Go, à la version 10. La copie, elle, garde sa
+taille jusqu'à ce que vous la supprimiez.
 
 ## Le durcissement des conteneurs s'arrête assez bas
 

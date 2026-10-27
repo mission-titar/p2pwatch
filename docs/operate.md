@@ -47,6 +47,8 @@ docker compose up -d
 ```
 
 Les commandes sont les mêmes sous les deux variantes : la ligne `include:` de `compose.yml` choisit.
+Une mise à jour qui réécrit une base en garde d'abord une copie dans `data/` : voir
+[La copie d'avant migration](#la-copie-davant-migration).
 
 **Redémarrage de l'hôte.** Les conteneurs reviennent seuls au boot, aucune commande à relancer, à
 condition que Docker démarre en service système. Vérifiez avec `docker compose ps`.
@@ -57,6 +59,38 @@ les dossiers d'aMule sous `ed2k/`, et refuse la section `port_sync:` de `crawler
 **Nœud 1.x.** Ne lancez pas la 2.0 par-dessus un nœud 1.x sans avoir suivi
 [Migrer un nœud 1.x](migration-1x.md) : les volumes nommés ne sont pas lus par la nouvelle pile, et
 le nœud semblera avoir perdu son catalogue. Les données, elles, sont toujours dans les volumes.
+
+### La copie d'avant migration
+
+Une mise à jour peut apporter des migrations, que le crawler applique à son premier démarrage.
+Quand l'une d'elles supprime ou réécrit des lignes, il copie d'abord la base à côté d'elle, dans
+`data/`, par exemple `catalog.db.pre-0006.2026-10-27_11-53-00_UTC` : `0006` est la première
+migration en attente, et l'heure, en UTC, celle de la copie. Une copie par base, quel que soit le
+nombre de migrations en attente ; une base neuve n'est jamais copiée. Le journal l'annonce par
+`pre-migration copy of /data/catalog.db: writing ...`.
+
+Avant d'écrire quoi que ce soit, le crawler vérifie que la place libre de `data/` couvre la copie
+et la migration, soit jusqu'à deux fois la base, et refuse de démarrer sinon (voir
+[Limites connues](limits.md#une-montée-dimage-demande-de-la-place-sur-le-disque-sur-un-gros-catalogue)).
+
+- **Une migration qui échoue** arrête le crawler, Docker le relance, et elle échoue de nouveau. La
+  copie n'est faite qu'une fois : tant que la base n'a pas changé, les démarrages suivants la
+  reprennent (`reusing ...` dans le journal).
+- **Un retour à l'ancienne version, puis un nouvel essai** : l'ancienne version écrit de nouvelles
+  lignes, la base ne correspond plus à la copie, et le nouvel essai en fait une seconde, sans
+  toucher à la première.
+
+p2pwatch ne supprime jamais une copie. Supprimez-la vous-même une fois la mise à jour aboutie (le
+crawler tourne, le catalogue web montre vos fichiers) et quand vous ne comptez plus revenir à
+l'ancienne version. Tant qu'une mise à jour n'a pas abouti, gardez la copie qui tient la base telle
+que l'ancienne version l'a laissée : parmi les copies de cette mise à jour, **celle qui porte le plus
+petit numéro**, la plus récente s'il y en a plusieurs. Une copie de numéro plus grand tient une base
+à moitié migrée.
+
+Pour revenir à une copie, arrêtez le crawler, supprimez la base et ses fichiers `-wal` et `-shm`,
+renommez la copie au nom de la base, puis démarrez l'ancienne version : la nouvelle referait la
+migration. Un `-wal` laissé à côté de la base restaurée y serait rejoué. Les commandes sont dans le
+[retour arrière](migration-4x.md#retour-arrière) de la migration 4.x.
 
 ### Redémarrer une pièce plutôt que tout le nœud
 
@@ -102,7 +136,8 @@ changé de forme, et ces résultats ne sont pas catalogués.
 Des ordres de grandeur, à ajuster selon votre trafic eMule réel et le nombre de cibles :
 
 - **`data/catalog.db`** grossit lentement, de l'ordre de 0,25 Go par trimestre au rythme d'un nœud
-  réel (estimation du 2026-10-09).
+  réel (estimation du 2026-10-09). Une mise à jour qui le réécrit demande en plus jusqu'à deux fois
+  sa taille, et laisse sa [copie d'avant migration](#la-copie-davant-migration).
 - **`ed2k/downloads/`** s'accumule sans borne, rien ne le purge. Le crawler mesure l'espace libre et
   refuse un nouveau candidat si cela passerait sous `download.min_free_bytes` (10 Gio par défaut).
   C'est un **plancher**, pas un ménage : il bloque les nouveaux téléchargements quand le disque se
@@ -123,7 +158,10 @@ identifier le coupable, puis faites le ménage dans `ed2k/downloads/incoming`.
 ## Outils de catalogue
 
 Ces deux outils sont ponctuels et jamais déclenchés par le crawler. La fusion **n'écrit que dans sa
-destination** : un fichier neuf (`--output`), ou le catalogue que vous désignez par `--into`.
+destination** : un fichier neuf (`--output`), ou le catalogue que vous désignez par `--into`. Seule
+exception : quand elle met à niveau une destination existante par une migration qui réécrit des
+lignes, elle en garde d'abord une [copie d'avant migration](#la-copie-davant-migration) à côté
+d'elle. Une source n'est jamais copiée.
 
 **Valider la configuration**, sans rien démarrer. À lancer avant un déploiement. Affiche
 `Config valid` si les trois fichiers sont valides. Sinon elle sort en erreur (code 1) : un fichier
@@ -154,7 +192,9 @@ docker compose exec p2pwatch python -m p2pwatch merge \
 Un catalogue source doit être au même schéma que votre version : la fusion refuse une copie faite
 par une version plus ancienne (`has schema version 5, expected 12`), car elle ne migre jamais un
 catalogue source. Migrez-le d'abord en le fusionnant dans lui-même, qui l'ouvre et le met à niveau
-sur place, de préférence sur une copie, puisqu'une version plus ancienne ne pourra plus le lire :
+sur place. Si une migration en attente réécrit des lignes, la fusion le copie d'abord à côté de lui,
+comme le crawler au démarrage. Travaillez tout de même de préférence sur une copie, puisqu'une
+version plus ancienne ne pourra plus lire le catalogue migré :
 
 ```bash
 docker compose exec p2pwatch python -m p2pwatch merge \

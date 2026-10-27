@@ -105,6 +105,20 @@ récupération après panne, voir [Diagnostics avancés](troubleshooting.md).
     inutilisées), puis `docker compose up -d`. La migration repart de zéro et, une fois passée, ne
     se rejoue plus.
 
+!!! bug "`pre-migration copy of ...: ... bytes needed`, juste après une montée d'image"
+
+    Le journal du crawler contient par exemple `MigrationError: pre-migration copy of
+    /data/catalog.db: 15100000000 bytes needed in /data, 9000000000 free`. Une migration en attente
+    réécrit des lignes : le crawler garde d'abord une
+    [copie d'avant migration](operate.md#la-copie-davant-migration) de la base, et la place libre de
+    `data/` ne couvre pas cette copie plus la migration. Il a refusé avant d'écrire quoi que ce
+    soit : la base est intacte.
+
+    Remède : libérez sur le disque de `data/` au moins la différence entre les deux nombres, en
+    octets (`df -B1 data`). Les copies d'avant migration d'une mise à jour déjà aboutie peuvent
+    partir, pas celle qu'une mise à jour inachevée
+    [demande de garder](operate.md#la-copie-davant-migration). Puis `docker compose up -d`.
+
 !!! bug "`file_observation_ranges holds rows`, juste après une montée d'image"
 
     Le journal du crawler contient `MigrationError: migration 6 failed: file_observation_ranges
