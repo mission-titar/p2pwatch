@@ -144,7 +144,7 @@ def test_a_mapped_result_reuses_the_variant_0007_migrated_from_its_old_row(
         connection.close()
 
 
-def test_the_runner_restores_the_pragmas_0007_sets(tmp_path: Path) -> None:
+def test_apply_migrations_restores_the_pragmas_0007_sets(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
     _old_catalog(path, _BARE)
     connection = open_catalog_forcing_secure_delete_at(path, 7)

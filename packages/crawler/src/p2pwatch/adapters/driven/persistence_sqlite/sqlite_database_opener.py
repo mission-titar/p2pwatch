@@ -19,7 +19,7 @@ _MIGRATIONS = resources.files("p2pwatch.adapters.driven.persistence_sqlite") / "
 
 
 class SqliteDatabaseOpener:
-    """Opens a database and applies its pending migrations, the one way the code opens one."""
+    """Opens a database and applies its pending migrations, the one way the code migrates one."""
 
     def __init__(self, pre_migration_copier: SqlitePreMigrationCopier) -> None:
         self._pre_migration_copier = pre_migration_copier

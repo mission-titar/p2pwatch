@@ -75,7 +75,7 @@ def test_a_refused_open_closes_its_connection(tmp_path: Path) -> None:
     assert [w for w in caught if issubclass(w.category, ResourceWarning)] == []
 
 
-def test_open_local_runs_the_pre_migration_copier_before_migrating(tmp_path: Path) -> None:
+def test_open_local_runs_the_pre_migration_copier(tmp_path: Path) -> None:
     leftover = tmp_path / "local.db.pre-0001.partial"
     leftover.write_bytes(b"a copy a stop interrupted")
     database_opener().open_local(tmp_path / "local.db").close()

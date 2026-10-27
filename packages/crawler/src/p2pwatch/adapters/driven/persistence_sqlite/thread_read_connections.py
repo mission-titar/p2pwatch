@@ -11,8 +11,9 @@ otherwise. It NEVER sets ``journal_mode=WAL``/``foreign_keys``/migrations: those
 writer's job (``connection.py``); the reader inherits WAL from the single writer, and an
 autocommit read holds no persistent read lock, so a long-lived reader does not block the
 writer's WAL checkpointing. ``row_factory = sqlite3.Row`` gives the read adapters access by
-column name. ``temp_store=FILE``, as the migration runner (stage 1, D8): the temp b-trees the
-reads materialize (sorts, ``group_concat``) spill to disk, since an in-memory sort is unbounded.
+column name. ``temp_store=FILE``, as ``apply_migrations`` sets it (stage 1, D8): the temp
+b-trees the reads materialize (sorts, ``group_concat``) spill to disk, since an in-memory sort is
+unbounded.
 The ``MEMORY`` hotfix (461b135) answered a tmpfs ``/tmp`` and ``read_only``, gone since 2026-09-16.
 
 A reader keeps sqlite3's same-thread check: only the thread that opened it may use or close it.

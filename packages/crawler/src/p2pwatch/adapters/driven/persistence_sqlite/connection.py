@@ -1,4 +1,4 @@
-"""SQLite connection + migration scripts (data-model spec §3/§4/§7).
+"""SQLite connection + migration scripts.
 
 Each connection is opened in REAL autocommit (``autocommit=True``, Python ≥ 3.12):
 transactions are EXPLICIT (``BEGIN``/``COMMIT``/``ROLLBACK`` written by the
@@ -51,8 +51,8 @@ class Migration:
 
 @dataclass(frozen=True)
 class PendingMigrations:
-    """The migrations above a database's version: only ``pending_migrations`` builds one, so
-    nothing applies them before that version was read."""
+    """The migrations above a database's version. By a convention the type makes visible, only
+    ``pending_migrations`` builds one, once it has read that version."""
 
     current_version: int
     migrations: tuple[Migration, ...]
@@ -172,7 +172,7 @@ def _run_restoring_pragmas(connection: sqlite3.Connection, migration: Migration)
 
 
 def _run_in_transaction(connection: sqlite3.Connection, migration: Migration) -> None:
-    # Two concurrent opens: the loser fails cleanly, single writer by doctrine (spec §3).
+    # Two concurrent opens: the loser fails cleanly, single writer by doctrine.
     try:
         connection.execute("BEGIN")
         connection.executescript(migration.script)
