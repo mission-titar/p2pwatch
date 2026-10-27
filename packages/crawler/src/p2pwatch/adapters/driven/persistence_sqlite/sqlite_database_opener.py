@@ -11,12 +11,18 @@ from p2pwatch.adapters.driven.persistence_sqlite.connection import (
     load_scripts,
     pending_migrations,
 )
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier import (
+    SqlitePreMigrationCopier,
+)
 
 _MIGRATIONS = resources.files("p2pwatch.adapters.driven.persistence_sqlite") / "migrations"
 
 
 class SqliteDatabaseOpener:
     """Opens a database and applies its pending migrations, the one way the code opens one."""
+
+    def __init__(self, pre_migration_copier: SqlitePreMigrationCopier) -> None:
+        self._pre_migration_copier = pre_migration_copier
 
     def open_catalog(self, path: Path) -> sqlite3.Connection:
         """Opens/migrates ``catalog.db`` (the append-only triggers are part of the schema)."""
@@ -30,6 +36,7 @@ class SqliteDatabaseOpener:
         connection = connect(path)
         try:
             pending = pending_migrations(connection, scripts)
+            self._pre_migration_copier.ensure_copy(connection, path, pending)
             apply_migrations(connection, pending)
         except BaseException:
             # Unconditional close: whatever fails, the connection must not leak.

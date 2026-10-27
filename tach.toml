@@ -286,6 +286,7 @@ depends_on = [
   "p2pwatch.application.ports.driven.source_point_writer",
   "p2pwatch.application.ports.driven.source_reader",
   "p2pwatch.application.ports.driven.sql_executor",
+  "p2pwatch.application.ports.driven.wall_clock",
 ]
 
 [[modules]]
