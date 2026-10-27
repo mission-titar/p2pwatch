@@ -34,7 +34,7 @@ jobs:
       - name: Unit tests
         run: uv run poe test
 
-  # Pushes by digest only: publish-manifest tags downstream of it, so no tag skips integration.
+  # Pushes by digest only: publish tags downstream of it, so no tag skips integration.
   build-and-verify:
     needs: [lint, test]
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
