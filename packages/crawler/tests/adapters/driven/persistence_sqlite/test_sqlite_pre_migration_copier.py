@@ -1,5 +1,6 @@
 import sqlite3
 from contextlib import closing
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -40,9 +41,11 @@ def _seeded(path: Path, scripts: tuple[Migration, ...]) -> sqlite3.Connection:
     return connection
 
 
-def _copier(free_bytes: FakeFreeBytes | None = None) -> SqlitePreMigrationCopier:
+def _copier(
+    free_bytes: FakeFreeBytes | None = None, time: FakeTime | None = None
+) -> SqlitePreMigrationCopier:
     free_bytes = free_bytes or FakeFreeBytes(_AMPLE_BYTES)
-    return SqlitePreMigrationCopier(FakeTime().wall, free_bytes.free_bytes)
+    return SqlitePreMigrationCopier((time or FakeTime()).wall, free_bytes.free_bytes)
 
 
 def _copy_names(directory: Path) -> list[str]:
@@ -156,3 +159,67 @@ def test_a_taken_name_refuses_and_leaves_its_file(tmp_path: Path) -> None:
             _copier().ensure_copy(connection, path, pending_migrations(connection, scripts))
     assert taken.read_bytes() == b"taken"
     assert _copy_names(path.parent) == [_COPY_NAME]
+
+
+_FAILING = _COPY_BEFORE + "DELETE FROM t;\nINSERT INTO absent VALUES (1);"
+
+
+def _open(path: Path, scripts: tuple[Migration, ...], copier: SqlitePreMigrationCopier) -> None:
+    """The opener's steps over the scripts, then the connection closed."""
+    with closing(connect(path)) as connection:
+        pending = pending_migrations(connection, scripts)
+        copier.ensure_copy(connection, path, pending)
+        apply_migrations(connection, pending)
+
+
+def test_a_failed_migration_is_retried_on_the_same_copy(tmp_path: Path) -> None:
+    scripts = _scripts(tmp_path / "scripts", _FAILING)
+    path = tmp_path / "data" / "catalog.db"
+    _seeded(path, scripts).close()
+    time = FakeTime()
+    copier = _copier(time=time)
+    with pytest.raises(MigrationError, match="migration 3"):
+        _open(path, scripts, copier)
+    first = (path.parent / _COPY_NAME).stat()
+    time.advance(timedelta(minutes=1))
+    (path.parent / "catalog.db.pre-0003.partial").write_bytes(b"a copy a stop interrupted")
+    with pytest.raises(MigrationError, match="migration 3"):
+        _open(path, scripts, copier)
+    assert _copy_names(path.parent) == [_COPY_NAME]
+    again = (path.parent / _COPY_NAME).stat()
+    assert (again.st_ino, again.st_mtime_ns) == (first.st_ino, first.st_mtime_ns)
+
+
+def test_a_changed_database_gets_a_new_copy(tmp_path: Path) -> None:
+    scripts = _scripts(tmp_path / "scripts", _FAILING)
+    path = tmp_path / "data" / "catalog.db"
+    _seeded(path, scripts).close()
+    time = FakeTime()
+    copier = _copier(time=time)
+    with pytest.raises(MigrationError, match="migration 3"):
+        _open(path, scripts, copier)
+    first_bytes = (path.parent / _COPY_NAME).read_bytes()
+    with closing(sqlite3.connect(path, autocommit=True)) as writer:
+        writer.execute("INSERT INTO t VALUES (3)")
+    time.advance(timedelta(minutes=1))
+    with pytest.raises(MigrationError, match="migration 3"):
+        _open(path, scripts, copier)
+    second_name = "catalog.db.pre-0003.2026-06-12_00-01-00_UTC"
+    assert _copy_names(path.parent) == [_COPY_NAME, second_name]
+    assert (path.parent / _COPY_NAME).read_bytes() == first_bytes
+
+
+def test_an_unreadable_candidate_is_not_reused(tmp_path: Path) -> None:
+    scripts = _scripts(tmp_path / "scripts", _COPY_BEFORE + "DELETE FROM t;")
+    path = tmp_path / "data" / "catalog.db"
+    time = FakeTime()
+    copier = _copier(time=time)
+    junk = path.parent / "catalog.db.pre-0003.2026-06-12_00-01-00_UTC"
+    with closing(_seeded(path, scripts)) as connection:
+        copier.ensure_copy(connection, path, pending_migrations(connection, scripts))
+        junk.write_bytes(b"junk" * 1024)
+        time.advance(timedelta(minutes=2))
+        copier.ensure_copy(connection, path, pending_migrations(connection, scripts))
+    second_name = "catalog.db.pre-0003.2026-06-12_00-02-00_UTC"
+    assert _copy_names(path.parent) == [_COPY_NAME, junk.name, second_name]
+    assert junk.read_bytes() == b"junk" * 1024

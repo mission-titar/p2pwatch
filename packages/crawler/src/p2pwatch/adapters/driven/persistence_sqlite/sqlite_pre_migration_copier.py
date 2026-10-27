@@ -4,11 +4,13 @@ import logging
 import os
 import sqlite3
 from collections.abc import Callable
+from contextlib import closing
 from datetime import UTC
 from glob import escape
 from pathlib import Path
 
 from p2pwatch.adapters.driven.persistence_sqlite.connection import PendingMigrations
+from p2pwatch.adapters.driven.persistence_sqlite.database_digest import database_digest
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError, wrap_sqlite_errors
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 
@@ -26,9 +28,9 @@ class SqlitePreMigrationCopier:
     def ensure_copy(
         self, connection: sqlite3.Connection, path: Path, pending: PendingMigrations
     ) -> None:
-        """On return, a pre-migration copy of ``path`` exists, or none was needed: no pending
-        migration is marked ``copy-before``, or the database is new. Short of free space, it
-        raises ``MigrationError`` before writing anything."""
+        """On return, a pre-migration copy matching ``path``'s content exists, reused or made, or
+        none was needed: no pending migration is marked ``copy-before``, or the database is new.
+        Short of free space, it raises ``MigrationError`` before writing anything."""
         _delete_leftovers(path)
         if pending.current_version == 0 or not any(
             migration.copy_before for migration in pending.migrations
@@ -36,6 +38,8 @@ class SqlitePreMigrationCopier:
             return
         prefix = f"{path.name}.pre-{pending.migrations[0].version:04d}"
         with wrap_sqlite_errors():
+            if _matches_its_latest_copy(connection, path, prefix):
+                return
             self._check_free_space(connection, path)
             partial = path.with_name(f"{prefix}.partial")
             _logger.info("pre-migration copy of %s: writing %s", path, partial)
@@ -59,6 +63,26 @@ class SqlitePreMigrationCopier:
                 f"pre-migration copy of {path}: {need_bytes} bytes needed in {path.parent}, "
                 f"{free_bytes} free"
             )
+
+
+def _matches_its_latest_copy(connection: sqlite3.Connection, path: Path, prefix: str) -> bool:
+    """Whether the most recent ``<prefix>.*_UTC`` holds the database's content; one that cannot
+    be read matches nothing and is left alone."""
+    candidates = sorted(path.parent.glob(escape(prefix) + ".*_UTC"))
+    if not candidates:
+        return False
+    latest = candidates[-1]
+    _logger.info("pre-migration copy of %s: comparing with %s", path, latest)
+    try:
+        with closing(sqlite3.connect(f"{latest.as_uri()}?mode=ro", uri=True)) as candidate:
+            candidate_digest = database_digest(candidate)
+    except sqlite3.Error as error:
+        _logger.warning("pre-migration copy: %s cannot be read (%s)", latest, error)
+        return False
+    if candidate_digest != database_digest(connection):
+        return False
+    _logger.info("pre-migration copy of %s: reusing %s", path, latest)
+    return True
 
 
 def _delete_leftovers(path: Path) -> None:
