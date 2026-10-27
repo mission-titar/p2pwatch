@@ -15,17 +15,11 @@ An agent adds an entry only after the operator has agreed to it.
 - **Every stamp an integer of microseconds since the epoch**, as the catalog's points already are: the ISO-8601 TEXT
   stamps left in both databases converted; the catalog's waits for the copy before a migration that rewrites rows. D12 of `agents/specs/2026-10-14-monotonic-clock.md`.
 
-- **`client_name` and `channel` typed across the domain**: events, search tasks and the node metrics' labels hold both
-  as `str` though their values are known. "Adjacent backlog items" of `agents/specs/2026-10-25-metrics-on-the-webui.md`.
-
 - **Test quality** (lot 3 of the gate tooling umbrella): every unit test keeps unique coverage of its unit, the others are
   pruned, mutmut proving no detected mutant is lost. D3 to D5 and D13 to D15 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`, lot order in D12.
 
 - **A release publishes both images or neither**: at a tag, each image publishes on its own, so a failing
   `image-claims` or `applied-claims` leaves the other's new `latest` beside its own old one. "Not in this lot" of `agents/specs/2026-10-26-applied-vex-claims.md`.
-
-- **Mutation testing in the gate**: mutmut run cold on a pull request's impact set, from the per-test coverage, so
-  a test that stops detecting a fault fails the gate. D13 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`.
 
 ## Must be done before the next release
 
@@ -48,7 +42,13 @@ An agent adds an entry only after the operator has agreed to it.
 - **The webui in the visitor's time zone**: UTC rendered, the browser converts each date with JavaScript; needs
   `AGENTS.md`'s "Python only" amended and a JS test chain. Section 6's "Adjacent backlog items" of `agents/specs/2026-10-13-append-only-source-points.md`.
 
-## Tooling improvement
+## Technical improvements
+
+- **Mutation testing in the gate**: mutmut run cold on a pull request's impact set, from the per-test coverage, so
+  a test that stops detecting a fault fails the gate. D13 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`.
+
+- **Identifiers typed apart from bare strings**: `client_name`, `channel`, `node_id`, `keyword` and `target_id` each a `NewType` the core passes around,
+  so mypy refuses a swap; the values stay opaque, per D2 of `agents/specs/2026-10-09-stage2-search-download-status-ports.md`. Worth it once stage 5 multiplies clients and channels.
 
 - **Contract tests for the fakes of outside systems**: each suite run against the real system (amuled, apprise, GitHub,
   Gluetun) under the integration markers, never against a fake server. Section "Backlog" of `agents/specs/2026-10-25-fake-contract-tests.md`.
