@@ -1,7 +1,7 @@
 -- migration: copy-before
 -- catalog.db, migration 0007: observations as variants plus timestamps (stage 1 spec, D4 and D7).
 -- One transaction over every observation: secure_delete OFF keeps the DROP's freed pages out of the
--- statement journal, the 256 MB cache keeps the copy off the disk; the runner restores both after.
+-- statement journal, the 256 MB cache keeps the copy off the disk; apply_migrations restores both.
 PRAGMA secure_delete = OFF;
 PRAGMA cache_size = -262144;
 

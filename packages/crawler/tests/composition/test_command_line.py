@@ -87,9 +87,7 @@ def test_merge_of_two_catalogs_named_under_cwd_into_a_new_one_holds_both(
         ["merge", "--output", "a.db", "--force", "b.db"],
     ],
 )
-def test_merge_copies_a_version_5_destination_and_no_source(
-    tmp_path: Path, argv: list[str]
-) -> None:
+def test_merge_copies_a_version_5_destination(tmp_path: Path, argv: list[str]) -> None:
     open_catalog_at(tmp_path / "a.db", 5).close()
     make_catalog(tmp_path / "b.db", {"files": [{"native_id": HASH_B, "size_bytes": 100}]})
     before = datetime.now(UTC).replace(microsecond=0)
