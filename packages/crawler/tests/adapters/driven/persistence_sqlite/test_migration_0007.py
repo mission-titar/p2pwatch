@@ -10,6 +10,7 @@ import pytest
 
 from p2pwatch.adapters.driven.amule_api.mapping import map_search_results
 from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
+from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
 )
@@ -155,12 +156,12 @@ def test_the_runner_restores_the_pragmas_0007_sets(tmp_path: Path) -> None:
         connection.close()
 
 
-def test_the_forcing_opener_closes_its_connection_when_opening_fails(tmp_path: Path) -> None:
+def test_the_forcing_opener_closes_its_connection_when_migrating_fails(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
-    path.write_bytes(b"not a database" * 100)
+    open_catalog_at(path, 8).close()
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        with pytest.raises(sqlite3.DatabaseError, match="not a database"):
+        with pytest.raises(MigrationError, match="db newer than the code"):
             open_catalog_forcing_secure_delete_at(path, 7)
         # A connection left open warns when it is collected.
         gc.collect()

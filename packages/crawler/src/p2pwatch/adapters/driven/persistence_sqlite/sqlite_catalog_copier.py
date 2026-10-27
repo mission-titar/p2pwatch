@@ -30,8 +30,10 @@ from collections.abc import Sequence
 from contextlib import suppress
 from pathlib import Path, PurePath
 
-from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import (
+    SqliteDatabaseOpener,
+)
 from p2pwatch.application.ports.driven.catalog_copier import CatalogCopier
 from p2pwatch.domain.catalog_copy_error import CatalogCopyError
 
@@ -121,11 +123,16 @@ _COPY_STATEMENTS = (
 class SqliteCatalogCopier(CatalogCopier):
     """Copies through ``ATTACH``, one source and one transaction at a time."""
 
+    def __init__(self, database_opener: SqliteDatabaseOpener) -> None:
+        self._database_opener = database_opener
+
     def copy_catalogs(self, destination: PurePath, source_catalogs: Sequence[PurePath]) -> None:
-        _copy_catalogs(Path(destination), source_catalogs)
+        _copy_catalogs(self._database_opener, Path(destination), source_catalogs)
 
 
-def _copy_catalogs(destination: Path, source_catalogs: Sequence[PurePath]) -> None:
+def _copy_catalogs(
+    database_opener: SqliteDatabaseOpener, destination: Path, source_catalogs: Sequence[PurePath]
+) -> None:
     """Copies ``source_catalogs`` into ``destination``, idempotent.
 
     ``destination`` is opened via ``open_catalog``: a new file gets the schema + the triggers, an
@@ -140,7 +147,7 @@ def _copy_catalogs(destination: Path, source_catalogs: Sequence[PurePath]) -> No
     We never migrate a source in place, so an off-version schema could silently mis-copy.
     """
     try:
-        connection = open_catalog(destination)
+        connection = database_opener.open_catalog(destination)
     except PersistenceError as error:
         raise CatalogCopyError(f"cannot open output {destination}: {error}") from error
     try:

@@ -8,24 +8,17 @@ import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.connection import (
     Migration,
-    _apply_migrations,
-    _load_scripts,
-    _open,
+    PendingMigrations,
+    apply_migrations,
+    connect,
+    load_scripts,
     open_catalog,
     open_local,
+    pending_migrations,
     utc_iso,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError, PersistenceError
 from tests.support.catalog_rows import insert_decision, insert_file
-
-_SOURCES = {"sources", "source_variants", "source_observations"}
-_CATALOG_TABLES = {"files", "observation_variants", "observations", "match_decisions"} | _SOURCES
-_LOCAL_TABLES = {
-    "node_runtime",
-    "downloads",
-    "backoff_states",
-    "reevaluation_state",
-}
 
 # Canonical 32-char lowercase hex hash (satisfies the CHECK constraint).
 _CANONICAL_HASH = "a" * 32
@@ -43,13 +36,8 @@ def _table_names(connection: sqlite3.Connection) -> set[str]:
     return {row[0] for row in rows}
 
 
-def test_open_catalog_creates_the_tables_and_versions_the_schema(tmp_path: Path) -> None:
-    connection = open_catalog(tmp_path / "catalog.db")
-    try:
-        assert _table_names(connection) == _CATALOG_TABLES
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 13
-    finally:
-        connection.close()
+def _migrate(connection: sqlite3.Connection, scripts: tuple[Migration, ...]) -> None:
+    apply_migrations(connection, pending_migrations(connection, scripts))
 
 
 def test_open_catalog_indexes_the_source_variants(tmp_path: Path) -> None:
@@ -70,20 +58,12 @@ def test_open_catalog_indexes_the_source_variants(tmp_path: Path) -> None:
         connection.close()
 
 
-def test_open_registers_the_variant_functions_before_migrating(tmp_path: Path) -> None:
+def test_connect_registers_the_variant_functions_before_migrating(tmp_path: Path) -> None:
     probe = "CREATE TABLE probe AS SELECT iso_to_micros('1970-01-01T00:00:00.000001+00:00') AS us;"
-    connection = _open(tmp_path / "catalog.db", (Migration(1, probe),))
+    connection = connect(tmp_path / "catalog.db")
     try:
+        _migrate(connection, (Migration(1, probe),))
         assert connection.execute("SELECT us FROM probe").fetchone()[0] == 1
-    finally:
-        connection.close()
-
-
-def test_open_local_creates_the_tables_and_versions_the_schema(tmp_path: Path) -> None:
-    connection = open_local(tmp_path / "local.db")
-    try:
-        assert _table_names(connection) == _LOCAL_TABLES
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 12
     finally:
         connection.close()
 
@@ -131,12 +111,12 @@ def test_reopen_is_idempotent_and_keeps_data(tmp_path: Path) -> None:
 def test_in_memory_database_is_refused_because_wal_is_required() -> None:
     # :memory: reports journal_mode='memory' (empirically verified) -> flat refusal.
     with pytest.raises(PersistenceError, match="WAL"):
-        open_catalog(":memory:")
+        connect(":memory:")
 
 
 def test_unopenable_path_raises_persistence_error(tmp_path: Path) -> None:
     with pytest.raises(PersistenceError):
-        open_catalog(tmp_path)  # a directory is not a database
+        connect(tmp_path)  # a directory is not a database
 
 
 def test_database_newer_than_the_code_is_refused(tmp_path: Path) -> None:
@@ -149,10 +129,20 @@ def test_database_newer_than_the_code_is_refused(tmp_path: Path) -> None:
         open_catalog(path)
 
 
+def test_pending_migrations_keeps_the_scripts_above_the_version(tmp_path: Path) -> None:
+    scripts = (Migration(1, "A"), Migration(2, "B"), Migration(3, "C"))
+    connection = sqlite3.connect(tmp_path / "pending.db", autocommit=True)
+    try:
+        connection.execute("PRAGMA user_version = 1")
+        assert pending_migrations(connection, scripts) == PendingMigrations(scripts[1:])
+    finally:
+        connection.close()
+
+
 def test_apply_migrations_with_no_scripts_is_a_noop(tmp_path: Path) -> None:
     connection = sqlite3.connect(tmp_path / "vide.db", autocommit=True)
     try:
-        _apply_migrations(connection, ())
+        _migrate(connection, ())
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 0
     finally:
         connection.close()
@@ -167,7 +157,7 @@ def test_migrations_sort_through_temporary_files(tmp_path: Path) -> None:
         "INSERT INTO probe SELECT temp_store FROM pragma_temp_store();"
     )
     try:
-        _apply_migrations(connection, (Migration(1, script),))
+        _migrate(connection, (Migration(1, script),))
         assert connection.execute("SELECT temp_store FROM probe").fetchone()[0] == _TEMP_STORE_FILE
     finally:
         connection.close()
@@ -177,7 +167,7 @@ def test_temp_store_is_restored_after_migrations(tmp_path: Path) -> None:
     connection = sqlite3.connect(tmp_path / "restore.db", autocommit=True)
     try:
         before = connection.execute("PRAGMA temp_store").fetchone()[0]
-        _apply_migrations(connection, (Migration(1, "CREATE TABLE t (x INTEGER);"),))
+        _migrate(connection, (Migration(1, "CREATE TABLE t (x INTEGER);"),))
         assert connection.execute("PRAGMA temp_store").fetchone()[0] == before
     finally:
         connection.close()
@@ -189,7 +179,7 @@ def test_temp_store_is_restored_even_when_a_migration_fails(tmp_path: Path) -> N
     try:
         before = connection.execute("PRAGMA temp_store").fetchone()[0]
         with pytest.raises(MigrationError):
-            _apply_migrations(connection, (Migration(1, "INSERT INTO nonexistent VALUES (1);"),))
+            _migrate(connection, (Migration(1, "INSERT INTO nonexistent VALUES (1);"),))
         assert connection.execute("PRAGMA temp_store").fetchone()[0] == before
     finally:
         connection.close()
@@ -200,7 +190,7 @@ def test_failed_script_is_rolled_back_and_version_unchanged(tmp_path: Path) -> N
     bad_script = "CREATE TABLE disparait (x INTEGER);\nINSERT INTO inexistante VALUES (1);"
     try:
         with pytest.raises(MigrationError, match="migration 2"):
-            _apply_migrations(
+            _migrate(
                 connection,
                 (Migration(1, "CREATE TABLE survit (x INTEGER);"), Migration(2, bad_script)),
             )
@@ -221,10 +211,10 @@ def test_each_applied_script_logs_one_line_before_it_runs(
         Migration(2, "CREATE TABLE b (x INTEGER);"),
     )
     try:
-        _apply_migrations(connection, scripts[:1])
+        _migrate(connection, scripts[:1])
         caplog.clear()
         with caplog.at_level("INFO"):
-            _apply_migrations(connection, scripts)
+            _migrate(connection, scripts)
         assert caplog.messages == ["migration 2: applying"]
     finally:
         connection.close()
@@ -234,13 +224,13 @@ def test_load_scripts_orders_by_name_and_skips_non_sql(tmp_path: Path) -> None:
     (tmp_path / "0002_second.sql").write_text("B", encoding="utf-8")
     (tmp_path / "0001_premier.sql").write_text("A", encoding="utf-8")
     (tmp_path / "README.md").write_text("ignored", encoding="utf-8")
-    assert _load_scripts(tmp_path) == (Migration(1, "A"), Migration(2, "B"))
+    assert load_scripts(tmp_path) == (Migration(1, "A"), Migration(2, "B"))
 
 
 def test_load_scripts_rejects_a_non_numeric_prefix(tmp_path: Path) -> None:
     (tmp_path / "abcd_mauvais.sql").write_text("X", encoding="utf-8")
     with pytest.raises(MigrationError, match="abcd_mauvais.sql"):
-        _load_scripts(tmp_path)
+        load_scripts(tmp_path)
 
 
 def test_utc_iso_is_fixed_width_and_normalizes_to_utc() -> None:
@@ -275,7 +265,7 @@ def test_load_scripts_rejects_duplicate_version_numbers(tmp_path: Path) -> None:
     (tmp_path / "0001_a.sql").write_text("A", encoding="utf-8")
     (tmp_path / "0001_b.sql").write_text("B", encoding="utf-8")
     with pytest.raises(MigrationError, match="increasing"):
-        _load_scripts(tmp_path)
+        load_scripts(tmp_path)
 
 
 def test_load_scripts_rejects_non_padded_prefixes_that_misorder(tmp_path: Path) -> None:
@@ -283,7 +273,7 @@ def test_load_scripts_rejects_non_padded_prefixes_that_misorder(tmp_path: Path) 
     (tmp_path / "2_a.sql").write_text("A", encoding="utf-8")
     (tmp_path / "10_b.sql").write_text("B", encoding="utf-8")
     with pytest.raises(MigrationError, match="increasing"):
-        _load_scripts(tmp_path)
+        load_scripts(tmp_path)
 
 
 def test_stray_commit_in_a_script_is_detected_before_stamping(tmp_path: Path) -> None:
@@ -292,7 +282,7 @@ def test_stray_commit_in_a_script_is_detected_before_stamping(tmp_path: Path) ->
     connection = sqlite3.connect(tmp_path / "commit.db", autocommit=True)
     try:
         with pytest.raises(MigrationError, match="migration 2"):
-            _apply_migrations(
+            _migrate(
                 connection,
                 (Migration(1, "CREATE TABLE survit (x INTEGER);"), Migration(2, "COMMIT;")),
             )
@@ -310,19 +300,19 @@ def test_stray_commit_followed_by_a_failure_keeps_the_version_unstamped(tmp_path
     script = "CREATE TABLE t (x INTEGER);\nCOMMIT;\nINSERT INTO inexistante VALUES (1);"
     try:
         with pytest.raises(MigrationError, match="migration 1"):
-            _apply_migrations(connection, (Migration(1, script),))
+            _migrate(connection, (Migration(1, script),))
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 0
     finally:
         connection.close()
 
 
-def test_open_closes_the_connection_when_opening_fails(tmp_path: Path) -> None:
+def test_connect_closes_the_connection_when_configuring_fails(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
     path.write_bytes(b"not a database" * 100)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         with pytest.raises(PersistenceError, match="not a database"):
-            open_catalog(path)
+            connect(path)
         # A connection left open warns when it is collected.
         gc.collect()
     assert [w for w in caught if issubclass(w.category, ResourceWarning)] == []
@@ -339,7 +329,7 @@ def test_utc_iso_rejects_a_naive_datetime() -> None:
 def test_load_scripts_reads_the_no_transaction_directive(tmp_path: Path) -> None:
     (tmp_path / "0001_plain.sql").write_text("A", encoding="utf-8")
     (tmp_path / "0002_vacuum.sql").write_text(_NO_TRANSACTION + "VACUUM;", encoding="utf-8")
-    assert _load_scripts(tmp_path) == (
+    assert load_scripts(tmp_path) == (
         Migration(1, "A", transactional=True),
         Migration(2, _NO_TRANSACTION + "VACUUM;", transactional=False),
     )
@@ -350,7 +340,7 @@ def test_load_scripts_rejects_a_misspelled_directive(tmp_path: Path) -> None:
         "-- migration: no-transction\nVACUUM;", encoding="utf-8"
     )
     with pytest.raises(MigrationError, match="0001_typo.sql.*no-transction"):
-        _load_scripts(tmp_path)
+        load_scripts(tmp_path)
 
 
 def test_vacuum_without_the_directive_fails_inside_the_runner_transaction(tmp_path: Path) -> None:
@@ -360,7 +350,7 @@ def test_vacuum_without_the_directive_fails_inside_the_runner_transaction(tmp_pa
     connection = sqlite3.connect(tmp_path / "vacuum.db", autocommit=True)
     try:
         with pytest.raises(MigrationError, match="cannot VACUUM from within a transaction"):
-            _apply_migrations(connection, _load_scripts(scripts))
+            _migrate(connection, load_scripts(scripts))
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 0
     finally:
         connection.close()
@@ -373,7 +363,7 @@ def test_vacuum_with_the_directive_runs_and_stamps_its_version(tmp_path: Path) -
     (scripts / "0002_vacuum.sql").write_text(_NO_TRANSACTION + "VACUUM;", encoding="utf-8")
     connection = sqlite3.connect(tmp_path / "vacuum.db", autocommit=True)
     try:
-        _apply_migrations(connection, _load_scripts(scripts))
+        _migrate(connection, load_scripts(scripts))
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
         assert not connection.in_transaction
     finally:
@@ -390,7 +380,7 @@ def test_failing_script_with_the_directive_leaves_the_version_unchanged(tmp_path
     connection = sqlite3.connect(tmp_path / "broken.db", autocommit=True)
     try:
         with pytest.raises(MigrationError, match="migration 2"):
-            _apply_migrations(connection, _load_scripts(scripts))
+            _migrate(connection, load_scripts(scripts))
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
     finally:
         connection.close()
@@ -413,7 +403,7 @@ def test_a_script_pragmas_are_restored_after_it(tmp_path: Path, transactional: b
         connection.execute("PRAGMA secure_delete = ON")
         before = _secure_delete_and_cache_size(connection)
         script = _LARGE_REWRITE_PRAGMAS + "CREATE TABLE t (x INTEGER);"
-        _apply_migrations(connection, (Migration(1, script, transactional),))
+        _migrate(connection, (Migration(1, script, transactional),))
         assert _secure_delete_and_cache_size(connection) == before == (1, -2000)
     finally:
         connection.close()
@@ -426,7 +416,7 @@ def test_a_script_pragmas_are_restored_even_when_it_fails(tmp_path: Path) -> Non
         before = _secure_delete_and_cache_size(connection)
         script = _LARGE_REWRITE_PRAGMAS + "INSERT INTO inexistante VALUES (1);"
         with pytest.raises(MigrationError):
-            _apply_migrations(connection, (Migration(1, script),))
+            _migrate(connection, (Migration(1, script),))
         assert _secure_delete_and_cache_size(connection) == before
     finally:
         connection.close()
@@ -436,7 +426,7 @@ def test_a_fast_secure_delete_is_restored_as_fast(tmp_path: Path) -> None:
     connection = sqlite3.connect(tmp_path / "fast.db", autocommit=True)
     try:
         connection.execute("PRAGMA secure_delete = FAST")
-        _apply_migrations(connection, (Migration(1, _LARGE_REWRITE_PRAGMAS),))
+        _migrate(connection, (Migration(1, _LARGE_REWRITE_PRAGMAS),))
         assert connection.execute("PRAGMA secure_delete").fetchone()[0] == 2
     finally:
         connection.close()

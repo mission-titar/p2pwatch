@@ -7,6 +7,9 @@ from pathlib import Path
 from p2pwatch.adapters.driven.config.filesystem_config_checker import FilesystemConfigChecker
 from p2pwatch.adapters.driven.filesystem_catalog_finder import FilesystemCatalogFinder
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier import SqliteCatalogCopier
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import (
+    SqliteDatabaseOpener,
+)
 from p2pwatch.adapters.driven.stdlib_logger import StdlibLogger
 from p2pwatch.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from p2pwatch.application.use_cases.merge_catalogs import MergeCatalogs
@@ -35,7 +38,7 @@ def build_command_line(
         config_validator=ValidateConfig(FilesystemConfigChecker(env)),
         catalog_merger=MergeCatalogs(
             FilesystemCatalogFinder(),
-            SqliteCatalogCopier(),
+            SqliteCatalogCopier(SqliteDatabaseOpener()),
             StdlibLogger(MergeCatalogs.__module__),
         ),
         root_logger=root_logger,

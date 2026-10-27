@@ -9,7 +9,7 @@ and is therefore refused outright; the tests use real files (spec §8) -
 crosses the append-only triggers, spec §3 post-review amendment).
 
 The migration runner applies the ``NNNN_*.sql`` scripts embedded in the package and tracks
-them in ``PRAGMA user_version`` (see ``_apply_migrations``).
+them in ``PRAGMA user_version`` (see ``apply_migrations``).
 
 This module also carries the stores' timestamp format (``utc_iso``): ISO-8601 UTC as
 TEXT (spec §3), FIXED microseconds so that lexicographic order IS chronological order (the FIFO
@@ -50,6 +50,14 @@ class Migration:
     transactional: bool = True
 
 
+@dataclass(frozen=True)
+class PendingMigrations:
+    """The migrations above a database's version: only ``pending_migrations`` builds one, so
+    nothing applies them before that version was read."""
+
+    migrations: tuple[Migration, ...]
+
+
 def utc_iso(moment: datetime) -> str:
     """Fixed-width ISO-8601 UTC (microseconds ALWAYS written), e.g.
     ``2026-06-11T12:00:00.000000+00:00``. ``moment`` must be AWARE (ENFORCED: naive →
@@ -61,22 +69,32 @@ def utc_iso(moment: datetime) -> str:
 
 def open_catalog(path: Path | str) -> sqlite3.Connection:
     """Opens/migrates ``catalog.db`` (the append-only triggers are part of the schema)."""
-    return _open(path, _load_scripts(_MIGRATIONS / "catalog"))
+    return _open(path, load_scripts(_MIGRATIONS / "catalog"))
 
 
 def open_local(path: Path | str) -> sqlite3.Connection:
     """Opens/migrates ``local.db``."""
-    return _open(path, _load_scripts(_MIGRATIONS / "local"))
+    return _open(path, load_scripts(_MIGRATIONS / "local"))
 
 
-def _open(path: Path | str, migrations: tuple[Migration, ...]) -> sqlite3.Connection:
+def _open(path: Path | str, scripts: tuple[Migration, ...]) -> sqlite3.Connection:
+    connection = connect(path)
+    try:
+        apply_migrations(connection, pending_migrations(connection, scripts))
+    except BaseException:
+        connection.close()
+        raise
+    return connection
+
+
+def connect(path: Path | str) -> sqlite3.Connection:
+    """A connection to ``path`` in WAL, its pragmas set and the SQL functions registered."""
     with wrap_sqlite_errors():
         connection = sqlite3.connect(path, autocommit=True)
     try:
         with wrap_sqlite_errors():
             _configure(connection)
             register_sql_functions(connection)
-            _apply_migrations(connection, migrations)
     except BaseException:
         # Unconditional close: whatever fails, the connection must not leak.
         connection.close()
@@ -94,7 +112,7 @@ def _configure(connection: sqlite3.Connection) -> None:
     connection.execute("PRAGMA recursive_triggers=ON")
 
 
-def _load_scripts(directory: Traversable) -> tuple[Migration, ...]:
+def load_scripts(directory: Traversable) -> tuple[Migration, ...]:
     """The ``NNNN_*.sql`` scripts by name; a bad name, a misordered version or an unknown
     directive raises ``MigrationError`` (non-``.sql`` files are ignored, gaps allowed)."""
     scripts: list[Migration] = []
@@ -124,25 +142,35 @@ def _is_transactional(name: str, script: str) -> bool:
     return True
 
 
-def _apply_migrations(connection: sqlite3.Connection, scripts: tuple[Migration, ...]) -> None:
-    """Applies the scripts above ``user_version`` in order, each stamped once it succeeds; the
-    rules for writing one: ``docs/contributing/architecture.md``, "Écrire une migration"."""
-    current = int(connection.execute("PRAGMA user_version").fetchone()[0])
+def pending_migrations(
+    connection: sqlite3.Connection, scripts: tuple[Migration, ...]
+) -> PendingMigrations:
+    """The scripts above the database's ``user_version``; a database newer than the code raises
+    ``MigrationError``."""
+    with wrap_sqlite_errors():
+        current = int(connection.execute("PRAGMA user_version").fetchone()[0])
     latest = scripts[-1].version if scripts else 0
     if current > latest:
         raise MigrationError(
             f"db at version {current}, code at version {latest}: "
             "db newer than the code, refusing to start (spec §3)"
         )
-    # On disk: an in-memory sort is unbounded (+697 MB for one index at 11.5M rows).
-    connection.execute("PRAGMA temp_store=FILE")
-    try:
-        for migration in scripts:
-            if migration.version > current:
+    migrations = tuple(migration for migration in scripts if migration.version > current)
+    return PendingMigrations(migrations)
+
+
+def apply_migrations(connection: sqlite3.Connection, pending: PendingMigrations) -> None:
+    """Applies the pending scripts in order, each stamped once it succeeds; the rules for
+    writing one: ``docs/contributing/architecture.md``, "Écrire une migration"."""
+    with wrap_sqlite_errors():
+        # On disk: an in-memory sort is unbounded (+697 MB for one index at 11.5M rows).
+        connection.execute("PRAGMA temp_store=FILE")
+        try:
+            for migration in pending.migrations:
                 _logger.info("migration %d: applying", migration.version)
                 _run_restoring_pragmas(connection, migration)
-    finally:
-        connection.execute("PRAGMA temp_store=DEFAULT")
+        finally:
+            connection.execute("PRAGMA temp_store=DEFAULT")
 
 
 def _run_restoring_pragmas(connection: sqlite3.Connection, migration: Migration) -> None:
