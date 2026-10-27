@@ -12,12 +12,12 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadLocalConnection,
     ThreadReadConnections,
     open_reader,
 )
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import insert_file
 
 _HASH_A = "a" * 32

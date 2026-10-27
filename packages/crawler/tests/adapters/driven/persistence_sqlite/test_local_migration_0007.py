@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.driven.persistence_sqlite.connection import open_local
 from p2pwatch.domain.file_key import FileKey, Network
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_local_at
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_local
 
 _A, _B = "a" * 32, "0123456789abcdef" * 2
 _ROWS = (

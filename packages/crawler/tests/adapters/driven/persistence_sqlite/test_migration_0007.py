@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.adapters.driven.amule_api.mapping import map_search_results
-from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
@@ -20,6 +19,7 @@ from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
     open_catalog_at,
     open_catalog_forcing_secure_delete_at,
 )
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 
 _A, _B = "a" * 32, "b" * 32
 _T1 = "2026-06-11T12:00:00.000001+00:00"

@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier import SqliteCatalogCopier
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     SqliteDatabaseOpener,
@@ -26,6 +25,7 @@ from tests.support.adapters.driven.persistence_sqlite.helpers import (
     stamp_user_version,
     variant_ids,
 )
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 
 # The current catalog schema version = the last catalog migration's number.
 # open_catalog stamps the output to it; the guard rejects any source that is not at it.

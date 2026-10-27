@@ -3,13 +3,13 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.driven.persistence_sqlite.connection import open_local
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_policy_fingerprint_store import (
     SqlitePolicyFingerprintStore,
 )
 from tests.contracts.application.ports.driven.policy_fingerprint_store_contract import (
     PolicyFingerprintStoreContract,
 )
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_local
 
 
 class TestSqlitePolicyFingerprintStore(PolicyFingerprintStoreContract):
