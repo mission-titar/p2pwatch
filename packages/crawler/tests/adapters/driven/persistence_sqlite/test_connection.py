@@ -29,6 +29,7 @@ _CANONICAL_HASH = "a" * 32
 _TEMP_STORE_FILE = 1
 
 _NO_TRANSACTION = "-- migration: no-transaction\n"
+_COPY_BEFORE = "-- migration: copy-before\n"
 
 
 def _table_names(connection: sqlite3.Connection) -> set[str]:
@@ -136,7 +137,7 @@ def test_pending_migrations_keeps_the_scripts_above_the_version(tmp_path: Path) 
     connection = sqlite3.connect(tmp_path / "pending.db", autocommit=True)
     try:
         connection.execute("PRAGMA user_version = 1")
-        assert pending_migrations(connection, scripts) == PendingMigrations(scripts[1:])
+        assert pending_migrations(connection, scripts) == PendingMigrations(1, scripts[1:])
     finally:
         connection.close()
 
@@ -279,11 +280,13 @@ def test_load_scripts_rejects_non_padded_prefixes_that_misorder(tmp_path: Path) 
 
 
 def test_stray_commit_in_a_script_is_detected_before_stamping(tmp_path: Path) -> None:
-    # A COMMIT inside a script closes the runner's envelope: detection BEFORE the stamp,
+    # A COMMIT inside a script closes its migration's transaction: detection BEFORE the stamp,
     # version unchanged, NO partial state (the attack script only does COMMIT).
     connection = sqlite3.connect(tmp_path / "commit.db", autocommit=True)
     try:
-        with pytest.raises(MigrationError, match="migration 2"):
+        with pytest.raises(
+            MigrationError, match=r"^migration 2: the script closed its migration's transaction"
+        ):
             _migrate(
                 connection,
                 (Migration(1, "CREATE TABLE survit (x INTEGER);"), Migration(2, "COMMIT;")),
@@ -337,6 +340,23 @@ def test_load_scripts_reads_the_no_transaction_directive(tmp_path: Path) -> None
     )
 
 
+def test_load_scripts_reads_the_copy_before_directive(tmp_path: Path) -> None:
+    (tmp_path / "0001_plain.sql").write_text("A", encoding="utf-8")
+    (tmp_path / "0002_drop.sql").write_text(_COPY_BEFORE + "DROP TABLE t;", encoding="utf-8")
+    assert load_scripts(tmp_path) == (
+        Migration(1, "A", copy_before=False),
+        Migration(2, _COPY_BEFORE + "DROP TABLE t;", copy_before=True),
+    )
+
+
+def test_load_scripts_rejects_a_misspelled_copy_before_directive(tmp_path: Path) -> None:
+    (tmp_path / "0001_typo.sql").write_text(
+        "-- migration: copy-befor\nDROP TABLE t;", encoding="utf-8"
+    )
+    with pytest.raises(MigrationError, match="0001_typo.sql.*copy-befor'"):
+        load_scripts(tmp_path)
+
+
 def test_load_scripts_rejects_a_misspelled_directive(tmp_path: Path) -> None:
     (tmp_path / "0001_typo.sql").write_text(
         "-- migration: no-transction\nVACUUM;", encoding="utf-8"
@@ -345,7 +365,9 @@ def test_load_scripts_rejects_a_misspelled_directive(tmp_path: Path) -> None:
         load_scripts(tmp_path)
 
 
-def test_vacuum_without_the_directive_fails_inside_the_runner_transaction(tmp_path: Path) -> None:
+def test_vacuum_without_the_directive_fails_inside_its_migration_transaction(
+    tmp_path: Path,
+) -> None:
     scripts = tmp_path / "scripts"
     scripts.mkdir()
     (scripts / "0001_vacuum.sql").write_text("VACUUM;", encoding="utf-8")

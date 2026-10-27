@@ -1,4 +1,4 @@
-"""SQLite connection + migration runner (data-model spec §3/§4/§7).
+"""SQLite connection + migration scripts (data-model spec §3/§4/§7).
 
 Each connection is opened in REAL autocommit (``autocommit=True``, Python ≥ 3.12):
 transactions are EXPLICIT (``BEGIN``/``COMMIT``/``ROLLBACK`` written by the
@@ -8,8 +8,8 @@ and is therefore refused outright; the tests use real files (spec §8) -
 ``foreign_keys=ON``, and ``recursive_triggers=ON`` (without which ``INSERT OR REPLACE``
 crosses the append-only triggers, spec §3 post-review amendment).
 
-The migration runner applies the ``NNNN_*.sql`` scripts embedded in the package and tracks
-them in ``PRAGMA user_version`` (see ``apply_migrations``).
+``apply_migrations`` applies the ``NNNN_*.sql`` scripts embedded in the package and tracks
+them in ``PRAGMA user_version``.
 
 This module also carries the stores' timestamp format (``utc_iso``): ISO-8601 UTC as
 TEXT (spec §3), FIXED microseconds so that lexicographic order IS chronological order (the FIFO
@@ -36,6 +36,7 @@ _logger = logging.getLogger(__name__)
 
 _DIRECTIVE = "-- migration:"
 _NO_TRANSACTION = "-- migration: no-transaction"
+_COPY_BEFORE = "-- migration: copy-before"
 # Index = the value ``PRAGMA secure_delete`` reads; ``= 2`` would set ON, not FAST.
 _SECURE_DELETE_MODES = ("OFF", "ON", "FAST")
 
@@ -45,6 +46,7 @@ class Migration:
     version: int
     script: str
     transactional: bool = True
+    copy_before: bool = False
 
 
 @dataclass(frozen=True)
@@ -52,6 +54,7 @@ class PendingMigrations:
     """The migrations above a database's version: only ``pending_migrations`` builds one, so
     nothing applies them before that version was read."""
 
+    current_version: int
     migrations: tuple[Migration, ...]
 
 
@@ -100,7 +103,7 @@ def load_scripts(directory: Traversable) -> tuple[Migration, ...]:
         if not prefix.isdigit():
             raise MigrationError(f"invalid script name (NNNN_*.sql expected): {script_file.name}")
         script = script_file.read_text(encoding="utf-8")
-        scripts.append(Migration(int(prefix), script, _is_transactional(script_file.name, script)))
+        scripts.append(_read_directive(int(prefix), script_file.name, script))
     for left, right in pairwise(script.version for script in scripts):
         if right <= left:
             raise MigrationError(
@@ -110,13 +113,18 @@ def load_scripts(directory: Traversable) -> tuple[Migration, ...]:
     return tuple(scripts)
 
 
-def _is_transactional(name: str, script: str) -> bool:
+def _read_directive(version: int, name: str, script: str) -> Migration:
     first_line = script.partition("\n")[0]
     if first_line == _NO_TRANSACTION:
-        return False
+        return Migration(version, script, transactional=False)
+    if first_line == _COPY_BEFORE:
+        return Migration(version, script, copy_before=True)
     if first_line.startswith(_DIRECTIVE):
-        raise MigrationError(f"{name}: unknown directive {first_line!r}, only {_NO_TRANSACTION!r}")
-    return True
+        raise MigrationError(
+            f"{name}: unknown directive {first_line!r}, "
+            f"only {_NO_TRANSACTION!r} or {_COPY_BEFORE!r}"
+        )
+    return Migration(version, script)
 
 
 def pending_migrations(
@@ -125,15 +133,15 @@ def pending_migrations(
     """The scripts above the database's ``user_version``; a database newer than the code raises
     ``MigrationError``."""
     with wrap_sqlite_errors():
-        current = int(connection.execute("PRAGMA user_version").fetchone()[0])
+        current_version = int(connection.execute("PRAGMA user_version").fetchone()[0])
     latest = scripts[-1].version if scripts else 0
-    if current > latest:
+    if current_version > latest:
         raise MigrationError(
-            f"db at version {current}, code at version {latest}: "
+            f"db at version {current_version}, code at version {latest}: "
             "db newer than the code, refusing to start (spec §3)"
         )
-    migrations = tuple(migration for migration in scripts if migration.version > current)
-    return PendingMigrations(migrations)
+    migrations = tuple(migration for migration in scripts if migration.version > current_version)
+    return PendingMigrations(current_version, migrations)
 
 
 def apply_migrations(connection: sqlite3.Connection, pending: PendingMigrations) -> None:
@@ -164,13 +172,13 @@ def _run_restoring_pragmas(connection: sqlite3.Connection, migration: Migration)
 
 
 def _run_in_transaction(connection: sqlite3.Connection, migration: Migration) -> None:
-    # Two concurrent runners: the loser fails cleanly, single writer by doctrine (spec §3).
+    # Two concurrent opens: the loser fails cleanly, single writer by doctrine (spec §3).
     try:
         connection.execute("BEGIN")
         connection.executescript(migration.script)
         if not connection.in_transaction:
             raise MigrationError(
-                f"migration {migration.version}: the script closed the runner's transaction "
+                f"migration {migration.version}: the script closed its migration's transaction "
                 "(COMMIT/ROLLBACK forbidden inside a migration script)"
             )
         connection.execute(f"PRAGMA user_version = {migration.version}")

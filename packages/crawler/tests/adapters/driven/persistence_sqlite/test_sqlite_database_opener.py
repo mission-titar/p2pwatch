@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError
-from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import (
-    SqliteDatabaseOpener,
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
+    database_opener,
 )
 
 _SOURCES = {"sources", "source_variants", "source_observations"}
@@ -28,7 +28,7 @@ def _table_names(connection: sqlite3.Connection) -> set[str]:
 
 
 def test_open_catalog_creates_the_tables_and_versions_the_schema(tmp_path: Path) -> None:
-    connection = SqliteDatabaseOpener().open_catalog(tmp_path / "catalog.db")
+    connection = database_opener().open_catalog(tmp_path / "catalog.db")
     try:
         assert _table_names(connection) == _CATALOG_TABLES
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 13
@@ -37,7 +37,7 @@ def test_open_catalog_creates_the_tables_and_versions_the_schema(tmp_path: Path)
 
 
 def test_open_local_creates_the_tables_and_versions_the_schema(tmp_path: Path) -> None:
-    connection = SqliteDatabaseOpener().open_local(tmp_path / "local.db")
+    connection = database_opener().open_local(tmp_path / "local.db")
     try:
         assert _table_names(connection) == _LOCAL_TABLES
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 12
@@ -53,7 +53,14 @@ def test_a_refused_open_closes_its_connection(tmp_path: Path) -> None:
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         with pytest.raises(MigrationError, match="99"):
-            SqliteDatabaseOpener().open_catalog(path)
+            database_opener().open_catalog(path)
         # A connection left open warns when it is collected.
         gc.collect()
     assert [w for w in caught if issubclass(w.category, ResourceWarning)] == []
+
+
+def test_open_local_runs_the_pre_migration_copier_before_migrating(tmp_path: Path) -> None:
+    leftover = tmp_path / "local.db.pre-0001.partial"
+    leftover.write_bytes(b"a copy a stop interrupted")
+    database_opener().open_local(tmp_path / "local.db").close()
+    assert not leftover.exists()

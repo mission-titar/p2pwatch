@@ -3,6 +3,7 @@
 import logging
 from collections.abc import Mapping
 from pathlib import Path
+from shutil import disk_usage
 
 from p2pwatch.adapters.driven.config.filesystem_config_checker import FilesystemConfigChecker
 from p2pwatch.adapters.driven.filesystem_catalog_finder import FilesystemCatalogFinder
@@ -10,7 +11,11 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier import Sq
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     SqliteDatabaseOpener,
 )
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier import (
+    SqlitePreMigrationCopier,
+)
 from p2pwatch.adapters.driven.stdlib_logger import StdlibLogger
+from p2pwatch.adapters.driven.system_wall_clock import SystemWallClock
 from p2pwatch.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from p2pwatch.application.use_cases.merge_catalogs import MergeCatalogs
 from p2pwatch.application.use_cases.validate_config import ValidateConfig
@@ -38,7 +43,13 @@ def build_command_line(
         config_validator=ValidateConfig(FilesystemConfigChecker(env)),
         catalog_merger=MergeCatalogs(
             FilesystemCatalogFinder(),
-            SqliteCatalogCopier(SqliteDatabaseOpener()),
+            SqliteCatalogCopier(
+                SqliteDatabaseOpener(
+                    SqlitePreMigrationCopier(
+                        SystemWallClock(), lambda directory: disk_usage(directory).free
+                    )
+                )
+            ),
             StdlibLogger(MergeCatalogs.__module__),
         ),
         root_logger=root_logger,

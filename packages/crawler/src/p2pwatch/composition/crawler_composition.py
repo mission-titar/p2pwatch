@@ -24,6 +24,7 @@ from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from datetime import timedelta
 from importlib.metadata import version
 from pathlib import Path, PurePath
+from shutil import disk_usage
 
 import apprise
 import httpx
@@ -61,6 +62,9 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
 )
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_policy_fingerprint_store import (
     SqlitePolicyFingerprintStore,
+)
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier import (
+    SqlitePreMigrationCopier,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store import (
     SqliteSourcePointStore,
@@ -311,7 +315,9 @@ class CrawlerComposition(CrawlerRunner):
         shutdown_requester = RequestShutdown(run_state_store)
         # The last context exits first: the resources close, then the signal handlers go.
         async with PosixProcess(shutdown_requester), resource_stack() as stack:
-            database_opener = SqliteDatabaseOpener()
+            database_opener = SqliteDatabaseOpener(
+                SqlitePreMigrationCopier(wall_clock, lambda directory: disk_usage(directory).free)
+            )
             catalog_connection = database_opener.open_catalog(Path(crawler_config.catalog_db_path))
             stack.callback(catalog_connection.close)
             local_connection = database_opener.open_local(Path(crawler_config.local_db_path))

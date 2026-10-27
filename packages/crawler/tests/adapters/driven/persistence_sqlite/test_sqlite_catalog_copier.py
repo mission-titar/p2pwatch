@@ -10,9 +10,6 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier import SqliteCatalogCopier
-from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import (
-    SqliteDatabaseOpener,
-)
 from p2pwatch.domain.catalog_copy_error import CatalogCopyError
 from p2pwatch.domain.file_key import FileKey, Network
 from tests.support.adapters.driven.persistence_sqlite.helpers import (
@@ -25,7 +22,10 @@ from tests.support.adapters.driven.persistence_sqlite.helpers import (
     stamp_user_version,
     variant_ids,
 )
-from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
+    database_opener,
+    open_catalog,
+)
 
 # The current catalog schema version = the last catalog migration's number.
 # open_catalog stamps the output to it; the guard rejects any source that is not at it.
@@ -36,7 +36,7 @@ _COPIER_LOGGER = "p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_cop
 
 
 def _copy_catalogs(destination: Path, source_catalogs: list[Path]) -> None:
-    SqliteCatalogCopier(SqliteDatabaseOpener()).copy_catalogs(destination, source_catalogs)
+    SqliteCatalogCopier(database_opener()).copy_catalogs(destination, source_catalogs)
 
 
 def _file_observation(native_id: str, *, node_id: str, observed_at: str) -> dict[str, object]:
