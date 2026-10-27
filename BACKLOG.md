@@ -18,9 +18,6 @@ An agent adds an entry only after the operator has agreed to it.
 - **Test quality** (lot 3 of the gate tooling umbrella): every unit test keeps unique coverage of its unit, the others are
   pruned, mutmut proving no detected mutant is lost. D3 to D5 and D13 to D15 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`, lot order in D12.
 
-- **A release publishes both images or neither**: at a tag, each image publishes on its own, so a failing
-  `image-claims` or `applied-claims` leaves the other's new `latest` beside its own old one. "Not in this lot" of `agents/specs/2026-10-26-applied-vex-claims.md`.
-
 ## Must be done before the next release
 
 - **A copy before a migration that rewrites rows** (required before the next release): the runner copies the

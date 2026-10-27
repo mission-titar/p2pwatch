@@ -17,8 +17,9 @@ Every image pushed to GHCR is **signed** (keyless, OIDC-based, via
   (`security/crawler.vex.openvex.json` for `p2pwatch`, `security/amule.vex.openvex.json` for
   `p2pwatch-amule`): the triage marking non-exploitable CVEs as `not_affected`.
 
-Signing and attestation happen in `.github/workflows/release.yml` (job `publish-manifest`, one
-matrix leg per image, so an image whose gates fail publishes nothing), bound to each image's
+Signing and attestation happen in `.github/workflows/release.yml` (job `publish`, one
+matrix leg per image, which runs only once the audits of both images pass: a release publishes
+both images or neither), bound to each image's
 multi-arch **index digest**; the signature is `--recursive`, so each per-arch
 child manifest is signed too. See `docs/verify-image.md` (section "Vérifier
 l'authenticité d'une image") for how to verify a pulled image.

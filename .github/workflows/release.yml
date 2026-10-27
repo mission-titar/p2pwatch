@@ -23,19 +23,32 @@ jobs:
     with:
       push: true
 
-  # Fan-in, one leg per image: combine its per-arch digests into one multi-arch manifest and tag
-  # it. fail-fast is off so a failing leg never cancels the other halfway through signing.
-  # A consumable tag, its signature, and its attestations are all published only AFTER the VEX
-  # honesty gate below passes. `validate` (build + integration) has already succeeded, and the
-  # per-arch layers exist in ghcr by digest only (no tag, no signature), so nothing a consumer
-  # can trust is ever published for an image whose VEX claims fail.
-  publish-manifest:
+  # The unaffected CVEs our source backs, checked once before either image publishes.
+  audit-source-unaffected-cves:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up uv and sync the dev environment
+        uses: ./.github/actions/setup-uv-env
+        with:
+          save-cache: 'false'  # restore only; validate is the x86 cache writer
+
+      - name: Gate that our source never reaches the exempted code paths
+        run: uv run poe vex-source-claims
+
+      - name: Gate that every VEX claim maps to a premise and back
+        run: uv run poe vex-claim-coverage
+
+  # One leg per image, on its amd64 digest, before any consumable tag exists. fail-fast is off so
+  # each image gets its verdict. The SBOMs it writes are the ones `publish` attests.
+  audit-image-unaffected-cves:
     needs: validate
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
-      id-token: write  # keyless OIDC for cosign sign/attest
+      packages: read
     strategy:
       fail-fast: false
       matrix:
@@ -56,6 +69,102 @@ jobs:
         with:
           save-cache: 'false'  # restore only; validate is the x86 cache writer
 
+      # Each per-arch digest is a single-platform index: Syft on this amd64 runner fails on arm64's.
+      - name: Download the amd64 image digest
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: digest-${{ matrix.package }}-amd64
+          path: /tmp/amd64-digest
+
+      # Both arches share one Dockerfile and identical package versions: amd64's SBOM stands for both.
+      - name: Resolve the amd64 image reference
+        id: amd64
+        working-directory: /tmp/amd64-digest
+        run: |
+          digest=$(ls | head -1)
+          echo "ref=${{ env.IMAGE }}@sha256:${digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Install Syft, verified
+        uses: ./.github/actions/install-syft
+
+      # Syft-JSON for the checks and the VEX-aware daily scan, CycloneDX for external consumers.
+      - name: Generate the Syft-JSON and CycloneDX SBOMs
+        env:
+          SYFT_SELECT_CATALOGERS: +sbom-cataloger
+          SYFT_REGISTRY_AUTH_USERNAME: ${{ github.actor }}
+          SYFT_REGISTRY_AUTH_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          REF: ${{ steps.amd64.outputs.ref }}
+        run: >
+          syft scan "registry:$REF"
+          -o syft-json=/tmp/sbom.syft.json
+          -o cyclonedx-json=/tmp/sbom.cyclonedx.json
+
+      # aMule is declared by a file only the sbom-cataloger reads, and that cataloger is off unless
+      # selected (the SYFT_SELECT_CATALOGERS above): a regression is SILENT, Grype scores it zero.
+      - name: Gate that aMule is in the SBOM under its CPE-matching declaration
+        if: matrix.package == 'amule'
+        run: |
+          for sbom in /tmp/sbom.syft.json /tmp/sbom.cyclonedx.json; do
+            if ! grep -q '"pkg:generic/amule@' "$sbom"; then
+              echo "::error::no pkg:generic/amule in $sbom: either the sbom-cataloger did not run"
+              echo "::error::(SYFT_SELECT_CATALOGERS=+sbom-cataloger) or the image lost its"
+              echo "::error::/usr/local/share/amule/amule.cdx.json. Grype would score aMule zero."
+              exit 1
+            fi
+          done
+
+      - name: Gate that image-family VEX claims hold against the SBOM
+        run: >
+          uv run python -m vex_checks image-claims
+          --sbom /tmp/sbom.syft.json
+          --vex "$VEX"
+
+      # On a tag only: a change in Grype's database, or its outage, would block every push to main.
+      - name: Install Grype, verified
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: ./.github/actions/install-grype
+
+      - name: Gate that Grype reports every VEX claim and applies it to every match
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: >
+          uv run python -m vex_checks applied-claims
+          --sbom /tmp/sbom.syft.json
+          --vex "$VEX"
+
+      - name: Upload the SBOMs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom-${{ matrix.package }}
+          path: |
+            /tmp/sbom.syft.json
+            /tmp/sbom.cyclonedx.json
+          if-no-files-found: error
+          retention-days: 1
+
+  # Both images or neither: a matrix job fails when any leg does, and a failed need skips this job.
+  # fail-fast is off so a failing leg never cancels the other halfway through signing.
+  publish:
+    needs: [audit-source-unaffected-cves, audit-image-unaffected-cves]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write  # keyless OIDC for cosign sign/attest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: crawler
+            image: ghcr.io/mission-titar/p2pwatch
+          - package: amule
+            image: ghcr.io/mission-titar/p2pwatch-amule
+    env:
+      IMAGE: ${{ matrix.image }}
+      VEX: security/${{ matrix.package }}.vex.openvex.json
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
       - name: Download the per-arch image digests
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -63,16 +172,11 @@ jobs:
           path: /tmp/digests
           merge-multiple: true
 
-      # A second copy of just the amd64 digest, isolated, so the pre-publish SBOM scans the amd64
-      # image specifically. This runner is amd64, and each per-arch digest is a single-platform
-      # index (buildx wraps the image with its provenance attestation): Syft would fail on the
-      # arm64 index with "no child with platform linux/amd64". The merged /tmp/digests above keeps
-      # both arches for the manifest-list creation later.
-      - name: Download the amd64 digest for the pre-publish SBOM
+      - name: Download the SBOMs the audit wrote
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: digest-${{ matrix.package }}-amd64
-          path: /tmp/amd64-digest
+          name: sbom-${{ matrix.package }}
+          path: /tmp
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -96,75 +200,6 @@ jobs:
             type=sha
             type=semver,pattern={{version}}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-
-      # --- Pre-publish VEX honesty gate ------------------------------------------------------
-      # The per-arch images already exist in ghcr by digest (pushed, gated behind integration,
-      # by the `validate` job). We generate the SBOM from the amd64 digest so the VEX checks
-      # below run BEFORE any consumable tag, signature, or attestation is published. Our two
-      # arches share one Dockerfile and identical dpkg/python versions, so the amd64 SBOM
-      # carries the same package set the arm64 image would.
-
-      - name: Resolve the amd64 image reference to scan before publishing
-        id: prepublish
-        working-directory: /tmp/amd64-digest
-        run: |
-          digest=$(ls | head -1)
-          echo "ref=${{ env.IMAGE }}@sha256:${digest}" >> "$GITHUB_OUTPUT"
-
-      - name: Install Syft, verified
-        uses: ./.github/actions/install-syft
-
-      # Syft-JSON for the checks and the VEX-aware daily scan, CycloneDX for external consumers.
-      - name: Generate the Syft-JSON and CycloneDX SBOMs
-        env:
-          SYFT_SELECT_CATALOGERS: +sbom-cataloger
-          SYFT_REGISTRY_AUTH_USERNAME: ${{ github.actor }}
-          SYFT_REGISTRY_AUTH_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
-          REF: ${{ steps.prepublish.outputs.ref }}
-        run: >
-          syft scan "registry:$REF"
-          -o syft-json=/tmp/sbom.syft.json
-          -o cyclonedx-json=/tmp/sbom.cyclonedx.json
-
-      # aMule is declared by a file only the sbom-cataloger reads, and that cataloger is off unless
-      # selected (the SYFT_SELECT_CATALOGERS above): a regression is SILENT, Grype scores it zero.
-      - name: Gate that aMule is in the SBOM under its CPE-matching declaration
-        if: matrix.package == 'amule'
-        run: |
-          for sbom in /tmp/sbom.syft.json /tmp/sbom.cyclonedx.json; do
-            if ! grep -q '"pkg:generic/amule@' "$sbom"; then
-              echo "::error::no pkg:generic/amule in $sbom: either the sbom-cataloger did not run"
-              echo "::error::(SYFT_SELECT_CATALOGERS=+sbom-cataloger) or the image lost its"
-              echo "::error::/usr/local/share/amule/amule.cdx.json. Grype would score aMule zero."
-              exit 1
-            fi
-          done
-
-      - name: Gate that our source never reaches the exempted code paths
-        run: uv run poe vex-source-claims
-
-      - name: Gate that every VEX claim maps to a premise and back
-        run: uv run poe vex-claim-coverage
-
-      - name: Gate that image-family VEX claims hold against the SBOM
-        run: >
-          uv run python -m vex_checks image-claims
-          --sbom /tmp/sbom.syft.json
-          --vex "$VEX"
-
-      # On a tag only: a change in Grype's database, or its outage, would block every push to main.
-      - name: Install Grype, verified
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: ./.github/actions/install-grype
-
-      - name: Gate that Grype reports every VEX claim and applies it to every match
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: >
-          uv run python -m vex_checks applied-claims
-          --sbom /tmp/sbom.syft.json
-          --vex "$VEX"
-
-      # --- Publish (reached only when every gate above passed) -------------------------------
 
       - name: Create the multi-arch manifest list and push the tags
         working-directory: /tmp/digests
@@ -209,7 +244,7 @@ jobs:
   # The GitHub release page, written from the annotated tag once both images are signed and
   # attested: `needs` on a matrix job waits for every leg.
   github-release:
-    needs: publish-manifest
+    needs: publish
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:
