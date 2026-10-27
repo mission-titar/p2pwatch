@@ -1,3 +1,4 @@
+-- migration: copy-before
 -- catalog.db, migration 0011: sources as variants and points, every table append-only again
 -- (source points spec, D1, D2, D8). Stage 4's source rows are dropped: no release holds them.
 

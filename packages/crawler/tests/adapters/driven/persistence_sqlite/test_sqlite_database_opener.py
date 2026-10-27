@@ -1,11 +1,16 @@
 import gc
 import sqlite3
 import warnings
+from contextlib import closing
 from pathlib import Path
 
 import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError
+from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
+    open_catalog_at,
+    open_local_at,
+)
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     database_opener,
     open_catalog,
@@ -15,6 +20,11 @@ from tests.support.catalog_rows import insert_decision, insert_file
 
 # Canonical 32-char lowercase hex hash (satisfies the CHECK constraint).
 _CANONICAL_HASH = "a" * 32
+_HASH = "0123456789abcdef0123456789abcdef"
+_USER_HASH = "1f" * 16
+_INSTANT = "2026-03-01T00:00:00.000000+00:00"
+# The support opener's FakeTime starts at 2026-06-12 00:00:00 UTC.
+_FAKE_TIME_START = "2026-06-12_00-00-00"
 
 _SOURCES = {"sources", "source_variants", "source_observations"}
 _CATALOG_TABLES = {"files", "observation_variants", "observations", "match_decisions"} | _SOURCES
@@ -70,6 +80,112 @@ def test_open_local_runs_the_pre_migration_copier_before_migrating(tmp_path: Pat
     leftover.write_bytes(b"a copy a stop interrupted")
     database_opener().open_local(tmp_path / "local.db").close()
     assert not leftover.exists()
+
+
+def _rows_by_table(path: Path) -> dict[str, list[tuple[object, ...]]]:
+    with closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)) as connection:
+        tables = [
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name"
+            )
+        ]
+        return {
+            table: connection.execute(f'SELECT * FROM "{table}" ORDER BY rowid').fetchall()
+            for table in tables
+        }
+
+
+def _version(path: Path) -> int:
+    with closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)) as connection:
+        version: int = connection.execute("PRAGMA user_version").fetchone()[0]
+        return version
+
+
+def _copy_names(directory: Path) -> list[str]:
+    return sorted(file.name for file in directory.iterdir() if ".pre-" in file.name)
+
+
+def _write_catalog_at_5(path: Path) -> None:
+    """A version 5 catalog holding a row in every table 0006 keeps or drops, ranges aside (0006
+    refuses them)."""
+    with closing(open_catalog_at(path, 5)) as connection:
+        connection.execute(f"INSERT INTO files (ed2k_hash, size_bytes) VALUES ('{_HASH}', 100)")
+        connection.execute(
+            "INSERT INTO file_observations (ed2k_hash, filename, size_bytes, source_count,"
+            " complete_source_count, raw_meta, keyword, observed_at, node_id) VALUES"
+            f" ('{_HASH}', 'Keroro 062A.avi', 100, 3, 1, '{{}}', 'keroro', '{_INSTANT}', 'n1')"
+        )
+        connection.execute(f"INSERT INTO sources (user_hash) VALUES ('{_USER_HASH}')")
+        connection.execute(
+            "INSERT INTO source_observations (user_hash, ed2k_hash, raw_meta, observed_at,"
+            f" node_id) VALUES ('{_USER_HASH}', '{_HASH}', '{{}}', '{_INSTANT}', 'n1')"
+        )
+        connection.execute(
+            "INSERT INTO match_decisions (ed2k_hash, target_id, rule_name, tier, decided_at,"
+            f" node_id) VALUES ('{_HASH}', '062A', 'rule', 'download', '{_INSTANT}', 'n1')"
+        )
+
+
+def test_a_version_5_catalog_leaves_one_copy_at_version_5_holding_its_rows(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "catalog.db"
+    _write_catalog_at_5(path)
+    rows_before = _rows_by_table(path)
+
+    database_opener().open_catalog(path).close()
+
+    assert _copy_names(tmp_path) == [f"catalog.db.pre-0006.{_FAKE_TIME_START}_UTC"]
+    copy = tmp_path / f"catalog.db.pre-0006.{_FAKE_TIME_START}_UTC"
+    assert _version(copy) == 5
+    assert _rows_by_table(copy) == rows_before
+    assert [table for table, rows in rows_before.items() if not rows] == ["file_observation_ranges"]
+    assert _version(path) == 13
+
+
+def test_a_migrated_catalog_opened_again_adds_no_file(tmp_path: Path) -> None:
+    path = tmp_path / "catalog.db"
+    _write_catalog_at_5(path)
+    database_opener().open_catalog(path).close()
+    files_before = sorted(tmp_path.iterdir())
+
+    database_opener().open_catalog(path).close()
+
+    assert sorted(tmp_path.iterdir()) == files_before
+
+
+def test_a_new_catalog_is_not_copied(tmp_path: Path) -> None:
+    with closing(database_opener().open_catalog(tmp_path / "catalog.db")):
+        names = sorted(file.name for file in tmp_path.iterdir())
+    assert names == ["catalog.db", "catalog.db-shm", "catalog.db-wal"]
+
+
+def test_a_marked_migration_below_an_unmarked_one_is_found(tmp_path: Path) -> None:
+    path = tmp_path / "catalog.db"
+    open_catalog_at(path, 9).close()
+
+    database_opener().open_catalog(path).close()
+
+    assert _copy_names(tmp_path) == [f"catalog.db.pre-0010.{_FAKE_TIME_START}_UTC"]
+    assert _version(tmp_path / f"catalog.db.pre-0010.{_FAKE_TIME_START}_UTC") == 9
+
+
+def test_a_version_5_local_db_leaves_one_copy_at_version_5(tmp_path: Path) -> None:
+    path = tmp_path / "local.db"
+    with closing(open_local_at(path, 5)) as connection:
+        connection.execute(
+            "INSERT INTO downloads (ed2k_hash, target_id, state, queued_at, size_bytes)"
+            f" VALUES ('{_HASH}', '062A', 'queued', '{_INSTANT}', 100)"
+        )
+    rows_before = _rows_by_table(path)
+
+    database_opener().open_local(path).close()
+
+    assert _copy_names(tmp_path) == [f"local.db.pre-0006.{_FAKE_TIME_START}_UTC"]
+    copy = tmp_path / f"local.db.pre-0006.{_FAKE_TIME_START}_UTC"
+    assert _version(copy) == 5
+    assert _rows_by_table(copy) == rows_before
 
 
 def test_open_catalog_indexes_the_source_variants(tmp_path: Path) -> None:

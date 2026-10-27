@@ -1,3 +1,4 @@
+-- migration: copy-before
 -- catalog.db, migration 0008: a file is (network, native_id), keyed by file_id (stage 1, D1, D7).
 -- observations is rebuilt too: renaming observation_variants away would leave it pointing there.
 -- Same pragmas as 0007; the runner restores both after.

@@ -1,3 +1,4 @@
+-- migration: copy-before
 -- local.db, migration 0004: drop the verification queue (scope-reduction spec, 2026-09-13).
 -- DROP TABLE takes the two partial indices with it.
 --

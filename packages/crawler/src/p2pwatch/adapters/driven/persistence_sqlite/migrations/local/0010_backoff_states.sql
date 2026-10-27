@@ -1,3 +1,4 @@
+-- migration: copy-before
 -- local.db, migration 0010: the backoff key and a waiting reason (descriptive names spec, D5).
 
 UPDATE scheduler_state SET key = 'backoff_states'

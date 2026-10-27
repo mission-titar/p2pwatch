@@ -1,3 +1,4 @@
+-- migration: copy-before
 -- catalog.db, migration 0006: drop the tables nothing writes any more (stage 1 spec, D5 and D6).
 -- A catalog holding a compacted day refuses; RAISE only runs in a trigger, hence the guard table.
 

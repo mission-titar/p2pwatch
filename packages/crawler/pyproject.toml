@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=9.1.1", "pytest-cov>=5", "pytest-asyncio>=1.2"]
+dev = ["pytest>=9.1.1", "pytest-cov>=5", "pytest-asyncio>=1.2", "sqlfluff>=4.3.0"]
 
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
@@ -87,6 +87,7 @@ exclude_also = ["if TYPE_CHECKING:"]
 "tests/adapters/driven/persistence_sqlite/test_migration_0011.py" = "a SQL migration of catalog.db"
 "tests/adapters/driven/persistence_sqlite/test_migration_0012.py" = "a SQL migration of catalog.db"
 "tests/adapters/driven/persistence_sqlite/test_migration_0013.py" = "a SQL migration of catalog.db"
+"tests/adapters/driven/persistence_sqlite/test_migration_directives.py" = "the migration scripts' copy-before directives, against their statements"
 "tests/adapters/driven/persistence_sqlite/test_migration_drop_verification.py" = "SQL migrations of both databases"
 "tests/adapters/driven/persistence_sqlite/test_migration_last_seen_at.py" = "a SQL migration of local.db"
 "tests/composition/test_prod_targets.py" = "deploy/targets.yml"

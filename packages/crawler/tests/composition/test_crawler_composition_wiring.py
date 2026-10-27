@@ -8,7 +8,7 @@ import re
 import signal
 import threading
 import warnings
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from http.server import ThreadingHTTPServer
 from importlib.metadata import version
 from pathlib import Path
@@ -32,9 +32,13 @@ from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.fakes.fake_amule_api import PASSWORD, FakeAmuleApi
 from tests.fakes.fake_amule_api_server import FakeAmuleApiServer
 from tests.fakes.fake_notification_sink import FakeNotificationSink
+from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_catalog_at
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     open_catalog,
     open_local,
+)
+from tests.support.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier import (
+    pre_migration_copies,
 )
 from tests.support.catalog_rows import (
     decision_node_ids,
@@ -534,3 +538,17 @@ async def test_a_re_evaluation_logs_its_progress_under_its_module_s_name(
         "p2pwatch.application.steps.catalog_reevaluator",
         "catalogue re-evaluation: 200/200 files, 0 rows written",
     ) in [(record.name, record.getMessage()) for record in caplog.records]
+
+
+@pytest.mark.asyncio
+async def test_a_version_5_catalog_is_copied_before_its_migrations(tmp_path: Path) -> None:
+    open_catalog_at(tmp_path / "catalog.db", 5).close()
+    config_path = _write(tmp_path / "crawler.yml", _config(tmp_path))
+    before = datetime.now(UTC).replace(microsecond=0)
+
+    await _crawl_until_a_search_is_read(config_path, _SHIPPED_TARGETS)
+
+    after = datetime.now(UTC)
+    [(prefix, instant)] = pre_migration_copies(tmp_path)
+    assert prefix == "catalog.db.pre-0006"
+    assert before <= instant <= after

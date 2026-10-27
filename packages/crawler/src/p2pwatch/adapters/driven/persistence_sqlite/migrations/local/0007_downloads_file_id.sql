@@ -1,3 +1,4 @@
+-- migration: copy-before
 -- local.db, migration 0007: downloads keyed by file_id, the catalog's key (stage 2 spec, D11, D19).
 -- network and native_id stay: file_id is one-way, and the loop needs the FileKey back.
 
