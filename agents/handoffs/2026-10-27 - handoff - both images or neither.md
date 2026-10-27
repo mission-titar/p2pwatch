@@ -30,9 +30,9 @@ one matrix leg, with `fail-fast: false`: a failing `image-claims` or `applied-cl
 
 ## Not validated
 
-- **The whole workflow**: `release.yml` runs on a push to `main` or a tag only. The merge's push exercises the path
-  where both audits pass (`main` and `sha-` tags on both images); `applied-claims` and the `latest` tag wait for the
-  next tag.
+- **The tag path**: `applied-claims` in the new job and the `latest` tag wait for the next tag. The merge's push (#512,
+  `97382e60`, release run 40489236337, `success`) validated the path where both audits pass: both audit legs, both
+  `publish` legs, `github-release` skipped off a tag.
 - **The failing path** (one audit red, no `publish` leg run) rests on GitHub's documented `needs` semantics, never
   observed here.
 
