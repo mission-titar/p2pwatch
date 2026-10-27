@@ -12,12 +12,14 @@ from p2pwatch.adapters.driven.persistence_sqlite.connection import (
     apply_migrations,
     connect,
     load_scripts,
-    open_catalog,
-    open_local,
     pending_migrations,
     utc_iso,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError, PersistenceError
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
+    open_catalog,
+    open_local,
+)
 from tests.support.catalog_rows import insert_decision, insert_file
 
 # Canonical 32-char lowercase hex hash (satisfies the CHECK constraint).

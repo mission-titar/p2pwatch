@@ -18,7 +18,6 @@ import httpx
 import pytest
 import yaml
 
-from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_backoff_state_store import (
     SqliteBackoffStateStore,
 )
@@ -33,6 +32,10 @@ from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.fakes.fake_amule_api import PASSWORD, FakeAmuleApi
 from tests.fakes.fake_amule_api_server import FakeAmuleApiServer
 from tests.fakes.fake_notification_sink import FakeNotificationSink
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
+    open_catalog,
+    open_local,
+)
 from tests.support.catalog_rows import (
     decision_node_ids,
     insert_file,

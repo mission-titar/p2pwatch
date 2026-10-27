@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_catalog_at
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 
 _HASH = "a" * 32
 _DEAD_TABLES = ("source_observations", "sources", "file_observation_ranges")

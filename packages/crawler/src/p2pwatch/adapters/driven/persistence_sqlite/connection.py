@@ -21,7 +21,6 @@ import sqlite3
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from importlib import resources
 from importlib.resources.abc import Traversable
 from itertools import pairwise
 from pathlib import Path
@@ -34,8 +33,6 @@ from p2pwatch.adapters.driven.persistence_sqlite.errors import (
 from p2pwatch.adapters.driven.persistence_sqlite.variants import register_sql_functions
 
 _logger = logging.getLogger(__name__)
-
-_MIGRATIONS = resources.files("p2pwatch.adapters.driven.persistence_sqlite") / "migrations"
 
 _DIRECTIVE = "-- migration:"
 _NO_TRANSACTION = "-- migration: no-transaction"
@@ -65,26 +62,6 @@ def utc_iso(moment: datetime) -> str:
     if moment.tzinfo is None:
         raise ValueError("utc_iso requires an aware datetime")
     return moment.astimezone(UTC).isoformat(timespec="microseconds")
-
-
-def open_catalog(path: Path | str) -> sqlite3.Connection:
-    """Opens/migrates ``catalog.db`` (the append-only triggers are part of the schema)."""
-    return _open(path, load_scripts(_MIGRATIONS / "catalog"))
-
-
-def open_local(path: Path | str) -> sqlite3.Connection:
-    """Opens/migrates ``local.db``."""
-    return _open(path, load_scripts(_MIGRATIONS / "local"))
-
-
-def _open(path: Path | str, scripts: tuple[Migration, ...]) -> sqlite3.Connection:
-    connection = connect(path)
-    try:
-        apply_migrations(connection, pending_migrations(connection, scripts))
-    except BaseException:
-        connection.close()
-        raise
-    return connection
 
 
 def connect(path: Path | str) -> sqlite3.Connection:

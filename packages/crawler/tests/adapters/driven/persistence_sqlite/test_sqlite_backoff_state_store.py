@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.driven.persistence_sqlite.connection import open_local
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_backoff_state_store import (
     SqliteBackoffStateStore,
@@ -14,6 +13,7 @@ from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.contracts.application.ports.driven.backoff_state_store_contract import (
     BackoffStateStoreContract,
 )
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_local
 
 _STARTED_AT = datetime(2026, 6, 12, 10, 0, 0, 123456, tzinfo=UTC)
 _BACKOFF = {

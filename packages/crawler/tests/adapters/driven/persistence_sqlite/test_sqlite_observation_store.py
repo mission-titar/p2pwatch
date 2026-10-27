@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
@@ -15,6 +14,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
 from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash, iso_to_micros
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation, ReportedFile, fold_raw_metadata
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import count_observations, insert_file
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"

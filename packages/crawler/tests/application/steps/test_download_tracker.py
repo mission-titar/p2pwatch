@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.driven.persistence_sqlite.connection import open_local
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store import (
     SqliteTrackedDownloadStore,
 )
@@ -21,6 +20,7 @@ from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationR
 from tests.fakes.adapters.driven.fake_ticking_wall_clock import FakeTickingWallClock
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_local
 from tests.support.application.steps.download_cycle import (
     HASH_A,
     HASH_B,

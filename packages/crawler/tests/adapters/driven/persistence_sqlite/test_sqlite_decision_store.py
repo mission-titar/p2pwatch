@@ -7,12 +7,12 @@ import pytest
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord
-from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
 from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision, Retraction
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import insert_file
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"

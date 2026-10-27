@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.driven.persistence_sqlite.connection import open_local, utc_iso
+from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store import (
     SqliteTrackedDownloadStore,
@@ -16,6 +16,7 @@ from p2pwatch.domain.file_key import FileKey, Network
 from tests.contracts.application.ports.driven.tracked_download_store_contract import (
     TrackedDownloadStoreContract,
 )
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_local
 
 _A = FileKey(Network.ED2K, "a" * 32)
 _T0 = datetime(2026, 6, 12, tzinfo=UTC)

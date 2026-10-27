@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.driven.persistence_sqlite.connection import open_local
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_local
 
 
 @pytest.fixture

@@ -5,12 +5,12 @@ import sqlite3
 from importlib import resources
 from pathlib import Path
 
-from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
     insert_v12_observation,
     insert_v12_source_point,
     open_catalog_at,
 )
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import insert_decision, insert_file, insert_source
 
 _A, _USER = "a" * 32, "1f2e" * 8

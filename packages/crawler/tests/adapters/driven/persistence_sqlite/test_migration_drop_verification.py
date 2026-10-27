@@ -13,12 +13,15 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store import (
     SqliteTrackedDownloadStore,
 )
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import FileKey, Network
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
+    open_catalog,
+    open_local,
+)
 
 _LOCAL_MIGRATIONS = (
     resources.files("p2pwatch.adapters.driven.persistence_sqlite") / "migrations/local"
