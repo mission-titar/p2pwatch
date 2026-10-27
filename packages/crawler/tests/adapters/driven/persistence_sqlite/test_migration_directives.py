@@ -5,27 +5,46 @@ from importlib import resources
 
 import pytest
 from sqlfluff.core import Linter
+from sqlfluff.core.parser import BaseSegment
 
 _MIGRATIONS = resources.files("p2pwatch.adapters.driven.persistence_sqlite") / "migrations"
 _COPY_BEFORE = "-- migration: copy-before\n"
 _ROW_CHANGING_STATEMENTS = ("delete_statement", "update_statement", "drop_table_statement")
+# A trigger's body runs on later writes, not when the script creates the trigger.
+_TRIGGER = "create_trigger"
+
+
+def _has_keyword(segment: BaseSegment, keyword: str) -> bool:
+    return any(
+        child.is_type("keyword") and child.raw.upper() == keyword for child in segment.segments
+    )
+
+
+def _insert_rewrites_rows(insert: BaseSegment) -> bool:
+    """``INSERT ... SELECT`` copies rows; ``REPLACE`` and an upsert's ``DO UPDATE`` rewrite them."""
+    return (
+        next(insert.recursive_crawl("select_statement"), None) is not None
+        or _has_keyword(insert, "REPLACE")
+        or any(_has_keyword(upsert, "UPDATE") for upsert in insert.recursive_crawl("upsert_clause"))
+    )
 
 
 def _rewrites_rows(script: str) -> bool:
     tree = Linter(dialect="sqlite").parse_string(script).tree
     assert tree is not None
-    if any(next(tree.recursive_crawl(kind), None) for kind in _ROW_CHANGING_STATEMENTS):
+    if any(
+        next(tree.recursive_crawl(kind, no_recursive_seg_type=_TRIGGER), None)
+        for kind in _ROW_CHANGING_STATEMENTS
+    ):
         return True
     if any(
-        next(insert.recursive_crawl("select_statement"), None)
-        for insert in tree.recursive_crawl("insert_statement")
+        _insert_rewrites_rows(insert)
+        for insert in tree.recursive_crawl("insert_statement", no_recursive_seg_type=_TRIGGER)
     ):
         return True
     # SQLite's one ALTER TABLE that drops anything is DROP COLUMN.
     return any(
-        segment.is_type("keyword") and segment.raw.upper() == "DROP"
-        for alter in tree.recursive_crawl("alter_table_statement")
-        for segment in alter.segments
+        _has_keyword(alter, "DROP") for alter in tree.recursive_crawl("alter_table_statement")
     )
 
 
@@ -72,6 +91,9 @@ def test_a_shipped_script_carrying_the_directive_without_rewriting_rows_is_found
         "UPDATE a SET b = 1;\n",
         "DROP TABLE a;\n",
         "INSERT INTO a SELECT b FROM c;\n",
+        "INSERT OR REPLACE INTO a VALUES (1);\n",
+        "REPLACE INTO a VALUES (1);\n",
+        "INSERT INTO a VALUES (1) ON CONFLICT (b) DO UPDATE SET c = 1;\n",
     ],
 )
 def test_an_unmarked_script_rewriting_rows_is_found(script: str) -> None:
@@ -84,6 +106,8 @@ def test_an_unmarked_script_rewriting_rows_is_found(script: str) -> None:
         "ALTER TABLE a ADD COLUMN b INTEGER;\n",
         "ALTER TABLE a RENAME COLUMN b TO c;\n",
         "INSERT INTO a VALUES (1);\n",
+        "INSERT INTO a VALUES (1) ON CONFLICT DO NOTHING;\n",
+        "CREATE TRIGGER t AFTER INSERT ON a BEGIN DELETE FROM b; INSERT INTO c SELECT 1; END;\n",
         "SELECT 'DELETE FROM a';\n",
         "-- DELETE FROM a\nCREATE INDEX i ON a (b);\n",
     ],
