@@ -3,7 +3,7 @@
 COMPOSITION ring (the only one allowed to import adapters AND application). Builds:
 - ONE ``SqliteObservationStore`` + ``SqliteCatalogScanReader``, ``SqliteDecisionStore``,
   ``SqliteNodeIdStore``, ``SqlitePolicyFingerprintStore`` and ``SqliteBackoffStateStore``
-  (single writer, invariant §11), connections opened via ``open_catalog``/``open_local``
+  (single writer, invariant §11), connections opened by the ``SqliteDatabaseOpener``
   (migrations checked at startup, fail-fast §14).
 - the ``MatchingEngine`` (once),
 - ONE ``AmuleApiClient`` + ``SearchWorker`` on the one amuled the core drives, whose
@@ -38,7 +38,6 @@ from p2pwatch.adapters.driven.config.crawler_config import load_config
 from p2pwatch.adapters.driven.in_memory_node_metric_store import InMemoryNodeMetricStore
 from p2pwatch.adapters.driven.in_memory_status_reading_store import InMemoryStatusReadingStore
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
-from p2pwatch.adapters.driven.persistence_sqlite.connection import open_catalog, open_local
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_backoff_state_store import (
     SqliteBackoffStateStore,
 )
@@ -49,6 +48,9 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_scan_reader impo
     SqliteCatalogScanReader,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_coverage_reader import SqliteCoverageReader
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import (
+    SqliteDatabaseOpener,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_node_id_store import SqliteNodeIdStore
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_node_state_reader import (
@@ -309,9 +311,10 @@ class CrawlerComposition(CrawlerRunner):
         shutdown_requester = RequestShutdown(run_state_store)
         # The last context exits first: the resources close, then the signal handlers go.
         async with PosixProcess(shutdown_requester), resource_stack() as stack:
-            catalog_connection = open_catalog(crawler_config.catalog_db_path)
+            database_opener = SqliteDatabaseOpener()
+            catalog_connection = database_opener.open_catalog(Path(crawler_config.catalog_db_path))
             stack.callback(catalog_connection.close)
-            local_connection = open_local(crawler_config.local_db_path)
+            local_connection = database_opener.open_local(Path(crawler_config.local_db_path))
             stack.callback(local_connection.close)
 
             node_id_store = SqliteNodeIdStore(local_connection)
