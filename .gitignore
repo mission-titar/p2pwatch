@@ -12,6 +12,7 @@ dist/
 *.db
 *.db-wal
 *.db-shm
+*.db.pre-*
 # Secrets de déploiement (EC password, clé VPN) : JAMAIS versionnés.
 # Seul deploy/.env.example est versionné ; deploy/.env (et tout .env) est ignoré.
 .env
