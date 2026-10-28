@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
-from p2pwatch.adapters.driven.persistence_sqlite.micros import iso_to_micros
+from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
 )
@@ -23,7 +23,6 @@ _HASH_B = "b" * 32
 _KEY = FileKey(Network.ED2K, _HASH)
 _NODE = "11111111-2222-3333-4444-555555555555"
 _T0 = datetime(2026, 6, 11, 12, 0, 0, tzinfo=UTC)
-_T0_ISO = "2026-06-11T12:00:00.000000+00:00"
 
 
 def _reported_file(
@@ -83,7 +82,7 @@ def test_record_observation_round_trip(
     ).fetchone()
     assert row == (*variant, content_hash(*variant))
     observation = connection.execute("SELECT observed_at_micros, source_count FROM observations")
-    assert observation.fetchall() == [(iso_to_micros(_T0_ISO), 5)]
+    assert observation.fetchall() == [(instant_to_micros(_T0), 5)]
 
 
 def test_raw_metadata_preserves_order_duplicates_and_non_ascii(

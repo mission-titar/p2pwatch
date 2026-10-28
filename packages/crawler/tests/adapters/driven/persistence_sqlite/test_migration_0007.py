@@ -10,7 +10,7 @@ import pytest
 
 from p2pwatch.adapters.driven.amule_api.mapping import map_search_results
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError
-from p2pwatch.adapters.driven.persistence_sqlite.micros import iso_to_micros
+from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
 )
@@ -62,6 +62,10 @@ def _old_catalog(path: Path, *rows: tuple[object, ...]) -> None:
     connection.close()
 
 
+def _stamp_micros(stamp: str) -> int:
+    return instant_to_micros(datetime.fromisoformat(stamp))
+
+
 def _with(row: tuple[object, ...], **changes: object) -> tuple[object, ...]:
     names = [name.strip() for name in _COLUMNS.split(",")]
     return tuple(changes.get(name, cell) for name, cell in zip(names, row, strict=True))
@@ -82,10 +86,10 @@ def test_observations_become_variants_with_their_timestamps_and_nothing_is_lost(
     try:
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 7
         assert sorted(connection.execute(_REBUILT).fetchall()) == [
-            (*_FULL_VARIANT, _full_meta(2), "keroro", "n1", iso_to_micros(_T1), 5),
-            (*_FULL_VARIANT, _full_meta(2), "keroro", "n1", iso_to_micros(_T2), 6),
-            (*_FULL_VARIANT, _full_meta(3), "keroro", "n1", iso_to_micros(_T3), 5),
-            (*_BARE_VARIANT, _BARE_META, "titar", "n2", iso_to_micros(_T1), 1),
+            (*_FULL_VARIANT, _full_meta(2), "keroro", "n1", _stamp_micros(_T1), 5),
+            (*_FULL_VARIANT, _full_meta(2), "keroro", "n1", _stamp_micros(_T2), 6),
+            (*_FULL_VARIANT, _full_meta(3), "keroro", "n1", _stamp_micros(_T3), 5),
+            (*_BARE_VARIANT, _BARE_META, "titar", "n2", _stamp_micros(_T1), 1),
         ]
         assert connection.execute("SELECT count(*) FROM observation_variants").fetchone()[0] == 3
     finally:

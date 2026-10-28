@@ -9,7 +9,7 @@ import sqlite3
 from collections.abc import Callable
 from functools import cache
 
-from p2pwatch.adapters.driven.persistence_sqlite.micros import iso_to_micros
+from p2pwatch.adapters.driven.persistence_sqlite import micros
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import fold_raw_metadata
 
@@ -62,7 +62,15 @@ def register_sql_functions(connection: sqlite3.Connection) -> None:
     create_memoized_function(connection, "fold_raw_meta", 4, fold_stored)
     connection.create_function("file_id", 2, file_id, deterministic=True)
     # Never memoized: every observation has its own stamp, the memo would hold them all.
+    # The migrations' reference, the one sanctioned: remove_migration_sql_functions drops it after.
+    iso_to_micros = micros.iso_to_micros  # type: ignore[deprecated]
     connection.create_function("iso_to_micros", 1, iso_to_micros, deterministic=True)
+
+
+def remove_migration_sql_functions(connection: sqlite3.Connection) -> None:
+    """Removes ``iso_to_micros``, which only the migrations call, so a store's SQL cannot."""
+    # create_function(..., None) registers None; this call hands SQLite the NULLs that delete it.
+    connection.create_window_function("iso_to_micros", 1, None)
 
 
 def create_memoized_function(

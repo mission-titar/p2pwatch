@@ -56,6 +56,12 @@ Each decision is the choice, then its reason.
   `connection.py`, deleted with `utc_iso`. A naive `datetime` raises `ValueError`, as `utc_iso` did. *Names on the
   model of `iso_to_micros`, saying what goes in and what comes out (operator, 2026-10-28); one module ends the
   copies of `_EPOCH` and of `_micros`.*
+  *Amended in block 60 (operator, 2026-10-28): `iso_to_micros` is deprecated, for the migrations only. Python
+  marks it `@warnings.deprecated(..., category=None)`, no runtime warning, and mypy's `deprecated` error code
+  refuses every reference but its registration in `variants.py`; the opener removes the SQL function once the
+  migrations are applied, so a store's SQL calling it fails at once. A text stamp is only ever an older
+  database's, read while migrating. (Corrected: D4 kept `iso_to_micros` as an ordinary conversion beside the
+  pair.)*
 - **D5. The three migrations that rebuild a table carry `-- migration: copy-before`; the two that only rename do
   not.** *A rebuild is an `INSERT ... SELECT` and a `DROP TABLE`, which `test_migration_directives.py` requires
   marked; a `RENAME COLUMN` rewrites the schema and no row, as catalog 0012 says.*

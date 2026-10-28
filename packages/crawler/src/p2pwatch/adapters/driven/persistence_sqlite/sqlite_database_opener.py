@@ -31,7 +31,10 @@ from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import (
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier import (
     SqlitePreMigrationCopier,
 )
-from p2pwatch.adapters.driven.persistence_sqlite.variants import register_sql_functions
+from p2pwatch.adapters.driven.persistence_sqlite.variants import (
+    register_sql_functions,
+    remove_migration_sql_functions,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -62,6 +65,8 @@ class SqliteDatabaseOpener:
             pending = _pending_migrations(connection, scripts)
             self._pre_migration_copier.ensure_copy(connection, path, pending)
             _apply_migrations(connection, pending)
+            with wrap_sqlite_errors():
+                remove_migration_sql_functions(connection)
         except BaseException:
             # Unconditional close: whatever fails, the connection must not leak.
             connection.close()

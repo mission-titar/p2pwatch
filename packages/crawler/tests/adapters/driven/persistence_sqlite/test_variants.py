@@ -9,6 +9,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.variants import (
     content_hash,
     create_memoized_function,
     register_sql_functions,
+    remove_migration_sql_functions,
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import fold_raw_metadata
@@ -85,6 +86,19 @@ def test_a_memoized_sql_function_calls_its_function_once_per_distinct_arguments(
 def test_iso_to_micros_sql_function_matches_the_python_one(connection: sqlite3.Connection) -> None:
     row = connection.execute("SELECT iso_to_micros('1970-01-01T00:00:00.000001+00:00')").fetchone()
     assert row[0] == 1
+
+
+def test_removing_the_migration_functions_removes_iso_to_micros_alone(
+    connection: sqlite3.Connection,
+) -> None:
+    remove_migration_sql_functions(connection)
+    with pytest.raises(sqlite3.OperationalError, match="no such function: iso_to_micros"):
+        connection.execute("SELECT iso_to_micros('1970-01-01T00:00:00.000001+00:00')")
+    names = connection.execute(
+        "SELECT name FROM pragma_function_list"
+        " WHERE name IN ('content_hash', 'file_id', 'fold_raw_meta', 'iso_to_micros')"
+    ).fetchall()
+    assert sorted(names) == [("content_hash",), ("file_id",), ("fold_raw_meta",)]
 
 
 def test_file_id_sql_function_is_the_file_key_file_id(connection: sqlite3.Connection) -> None:

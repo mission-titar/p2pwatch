@@ -287,6 +287,14 @@ def test_open_registers_the_variant_functions_before_migrating(tmp_path: Path) -
         assert connection.execute("SELECT us FROM probe").fetchone()[0] == 1
 
 
+def test_open_removes_iso_to_micros_once_migrated(tmp_path: Path) -> None:
+    with (
+        closing(_open(tmp_path / "catalog.db", ())) as connection,
+        pytest.raises(sqlite3.OperationalError, match="no such function: iso_to_micros"),
+    ):
+        connection.execute("SELECT iso_to_micros('1970-01-01T00:00:00.000001+00:00')")
+
+
 def test_in_memory_database_is_refused_because_wal_is_required() -> None:
     # :memory: reports journal_mode='memory' (empirically verified) -> flat refusal.
     with pytest.raises(PersistenceError, match="WAL"):
