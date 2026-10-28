@@ -8,6 +8,7 @@ from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_history import FileHistory
+from p2pwatch.domain.identifiers import FileId
 
 
 class CatalogFileReader(ABC):
@@ -46,7 +47,7 @@ class CatalogFileReader(ABC):
 
     @abstractmethod
     def read_file_history(
-        self, file_id: bytes, *, since: datetime, until: datetime
+        self, file_id: FileId, *, since: datetime, until: datetime
     ) -> FileHistory | None:
         """The file's history, its observations from ``since`` included to ``until`` excluded;
         ``None`` for a file the catalog does not hold."""

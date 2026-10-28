@@ -49,7 +49,7 @@ from p2pwatch.domain.download.states import DownloadState, FailureReason, Waitin
 from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision
-from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, FileId, Keyword, NodeId
 from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
@@ -484,7 +484,7 @@ async def test_file_page_of_a_file_the_catalog_does_not_hold_is_a_styled_404() -
     response, calls = await _file_response(f"/files/{TEST_HASH}", None)
     assert response.status_code == 404
     assert "not found" in response.text.lower()
-    assert calls == [DescribeFileCall(bytes.fromhex(TEST_HASH), None, None)]
+    assert calls == [DescribeFileCall(FileId(bytes.fromhex(TEST_HASH)), None, None)]
 
 
 @pytest.mark.asyncio

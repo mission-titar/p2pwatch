@@ -30,7 +30,7 @@ from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDi
 from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import FileId, NodeId
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -342,7 +342,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
         )
 
     def read_file_history(
-        self, file_id: bytes, *, since: datetime, until: datetime
+        self, file_id: FileId, *, since: datetime, until: datetime
     ) -> FileHistory | None:
         connection = self._thread_read_connections.connection()
         file_row = connection.execute(_SQL_FILE, (file_id,)).fetchone()

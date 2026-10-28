@@ -2,13 +2,14 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from p2pwatch.application.ports.driving.file_describer import FileDescriber, FileDescription
+from p2pwatch.domain.identifiers import FileId
 
 
 @dataclass(frozen=True)
 class DescribeFileCall:
     """The arguments of one ``describe_file`` call."""
 
-    file_id: bytes
+    file_id: FileId
     requested_since: datetime | None
     requested_until: datetime | None
 
@@ -22,7 +23,7 @@ class FakeFileDescriber(FileDescriber):
 
     def describe_file(
         self,
-        file_id: bytes,
+        file_id: FileId,
         *,
         requested_since: datetime | None,
         requested_until: datetime | None,

@@ -7,6 +7,7 @@ from p2pwatch.application.ports.driven.catalog_file_reader import CatalogFileRea
 from p2pwatch.application.ports.driven.source_reader import SourceReader
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.ports.driving.file_describer import FileDescriber, FileDescription
+from p2pwatch.domain.identifiers import FileId
 from p2pwatch.domain.interval import requested_interval
 from p2pwatch.domain.matching_read import MatchingExplainer
 from p2pwatch.domain.sharing_period import PeriodWindow
@@ -30,7 +31,7 @@ class DescribeFile(FileDescriber):
 
     def describe_file(
         self,
-        file_id: bytes,
+        file_id: FileId,
         *,
         requested_since: datetime | None,
         requested_until: datetime | None,

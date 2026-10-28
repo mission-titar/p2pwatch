@@ -32,7 +32,7 @@ from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDi
 from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision
-from p2pwatch.domain.identifiers import Keyword, NodeId
+from p2pwatch.domain.identifiers import FileId, Keyword, NodeId
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from tests.support.adapters.driven.persistence_sqlite.catalog_seeds import (
     seed,
@@ -265,7 +265,7 @@ def test_file_history_of_an_unknown_file_id_is_none(catalog_db: Path) -> None:
     with ThreadReadConnections(catalog_db) as thread_read_connections:
         reader = SqliteCatalogFileReader(thread_read_connections)
         by_native_id = reader.read_file_history(
-            bytes.fromhex("a" * 32), since=_EPOCH, until=_YEAR_3000
+            FileId(bytes.fromhex("a" * 32)), since=_EPOCH, until=_YEAR_3000
         )
     assert by_native_id is None  # a file is read by its id, never by its ed2k hash
 

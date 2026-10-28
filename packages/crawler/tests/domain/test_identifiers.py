@@ -1,5 +1,5 @@
 from catalog_matching.domain.identifiers import TargetId
-from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, FileId, Keyword, NodeId
 
 
 def _node_id(node_id: NodeId) -> str:
@@ -22,6 +22,10 @@ def _keyword(keyword: Keyword) -> str:
     return keyword
 
 
+def _file_id(file_id: FileId) -> bytes:
+    return file_id
+
+
 def test_a_bare_str_is_no_node_id() -> None:
     """The ``type: ignore`` proves mypy refuses the call: an unused one fails the gate."""
     assert _node_id("node-a") == "node-a"  # type: ignore[arg-type]
@@ -40,6 +44,11 @@ def test_a_bare_str_is_no_channel() -> None:
 def test_a_bare_str_is_no_keyword() -> None:
     """The ``type: ignore`` proves mypy refuses the call: an unused one fails the gate."""
     assert _keyword("keroro") == "keroro"  # type: ignore[arg-type]
+
+
+def test_a_bare_bytes_is_no_file_id() -> None:
+    """The ``type: ignore`` proves mypy refuses the call: an unused one fails the gate."""
+    assert _file_id(b"\x00" * 16) == b"\x00" * 16  # type: ignore[arg-type]
 
 
 def test_a_node_id_and_a_target_id_are_refused_for_each_other() -> None:
