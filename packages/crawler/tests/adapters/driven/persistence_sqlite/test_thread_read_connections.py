@@ -64,7 +64,7 @@ def test_open_reader_refuses_writes(tmp_path: Path) -> None:
 
 
 def test_open_reader_sorts_through_temporary_files(tmp_path: Path) -> None:
-    """``temp_store=FILE`` (1), as ``apply_migrations`` sets it: an in-memory sort is unbounded
+    """``temp_store=FILE`` (1), as the opener sets it to migrate: an in-memory sort is unbounded
     (stage 1, D8)."""
     path = tmp_path / "catalog.db"
     _seed(path)

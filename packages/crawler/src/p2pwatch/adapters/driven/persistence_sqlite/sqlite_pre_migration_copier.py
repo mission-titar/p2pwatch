@@ -10,9 +10,9 @@ from glob import escape
 from pathlib import Path
 from urllib.parse import quote
 
-from p2pwatch.adapters.driven.persistence_sqlite.connection import PendingMigrations
 from p2pwatch.adapters.driven.persistence_sqlite.database_digest import database_digest
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError, wrap_sqlite_errors
+from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import PendingMigrations
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 
 _logger = logging.getLogger(__name__)
