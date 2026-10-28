@@ -4,13 +4,14 @@ from pathlib import Path
 
 from p2pwatch_amule.application.ports.driven.amule_conf_reader import AmuleConfReader
 from p2pwatch_amule.application.ports.driven.amule_conf_writer import AmuleConfWriter
+from p2pwatch_amule.domain.identifiers import Gid, Uid
 
 
 class PosixAmuleConfStore(AmuleConfReader, AmuleConfWriter):
     """amule.conf at the path it is given, chowned through ``change_owner``."""
 
     def __init__(
-        self, *, amule_conf_path: Path, change_owner: Callable[[Path, int, int], None]
+        self, *, amule_conf_path: Path, change_owner: Callable[[Path, Uid, Gid], None]
     ) -> None:
         self._amule_conf_path = amule_conf_path
         self._change_owner = change_owner
@@ -21,7 +22,7 @@ class PosixAmuleConfStore(AmuleConfReader, AmuleConfWriter):
         except FileNotFoundError:
             return None
 
-    def set_amule_conf(self, conf: str, uid: int, gid: int) -> None:
+    def set_amule_conf(self, conf: str, uid: Uid, gid: Gid) -> None:
         # Replaced, not rewritten in place: a failed write must not leave amuled a truncated file.
         temporary_path = self._amule_conf_path.with_name(self._amule_conf_path.name + ".tmp")
         # Created afresh: the 0600 applies only on creation, a leftover's mode would carry over.

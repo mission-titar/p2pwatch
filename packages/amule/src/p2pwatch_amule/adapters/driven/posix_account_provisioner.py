@@ -3,6 +3,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from p2pwatch_amule.application.ports.driven.account_provisioner import AccountProvisioner
+from p2pwatch_amule.domain.identifiers import Gid, Uid
 
 
 class PosixAccountProvisioner(AccountProvisioner):
@@ -21,7 +22,7 @@ class PosixAccountProvisioner(AccountProvisioner):
         self._find_group = find_group
         self._find_user = find_user
 
-    def find_or_create_amule_account(self, uid: int, gid: int) -> None:
+    def find_or_create_amule_account(self, uid: Uid, gid: Gid) -> None:
         # -o tolerates a uid/gid a Debian system account already holds: PUID/PGID only have to
         # match the host's ownership of the bind mounts.
         if _is_missing(self._find_group):

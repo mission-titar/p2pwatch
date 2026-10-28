@@ -3,6 +3,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from p2pwatch_amule.application.ports.driven.admin_password_setter import AdminPasswordSetter
+from p2pwatch_amule.domain.identifiers import Gid, Uid
 
 
 class AmuleApiAdminPasswordSetter(AdminPasswordSetter):
@@ -21,7 +22,7 @@ class AmuleApiAdminPasswordSetter(AdminPasswordSetter):
         self._env = env
         self._run_command = run_command
 
-    def set_admin_password(self, api_password: str, uid: int, gid: int) -> None:
+    def set_admin_password(self, api_password: str, uid: Uid, gid: Gid) -> None:
         # Run as amule so amuleapi-passwords (0600) lands owned as amuled's amuleapi expects.
         self._run_command(
             [
