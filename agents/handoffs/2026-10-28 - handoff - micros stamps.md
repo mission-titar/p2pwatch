@@ -70,11 +70,11 @@ v5 release, or through a `main` image the operator chooses to run.
 
 ## Evidence
 
-Every block's `uv run poe check` exit 0 at its tip (crawler: 1687 passed at block 10, 1698 at blocks 50 and 60; 100 % branch
+Every block's `uv run poe check` exit 0 at its tip (crawler: 1687 passed at block 10, 1698 at block 50, 1700 at block 60; 100 % branch
 coverage; `_unit-coverage-check` clean). `uv run poe docs-build` "No issues found" at blocks 20, 30, 40, 50 and 60.
 
 Budgets against each parent: block 10, 194 lines and 17 files; block 20, 305 and 30 (exemption); block 25, 27 and 5;
-block 30, 215 and 17; block 40, 297 and 12; block 50, 255 and 14; block 60, 34 and 7.
+block 30, 215 and 17; block 40, 297 and 12; block 50, 255 and 14; block 60, 131 and 18.
 
 Criterion 10, at block 50's tip: `git grep -n "utc_iso\|fromisoformat" packages/crawler/src` prints `micros.py:23`
 (`iso_to_micros`) and `webui/format.py:93`, nothing else; `git grep -n "^_EPOCH"
