@@ -1157,7 +1157,7 @@ def _template_reads(loader: FileSystemLoader, name: str) -> set[str]:
     [
         "/",
         "/files",
-        "/files/{file_id}",
+        "/files/{file_id_hex}",
         "/files/not-a-hex-id",
         "/sources",
         _USER_PAGE,
@@ -1177,7 +1177,7 @@ async def test_each_page_passes_its_template_only_what_it_reads(
     app, hash_ = populated_app
     recorder = _TemplateRecorder(app)
     async with AsyncClient(transport=ASGITransport(app=recorder), base_url="http://test") as client:
-        await client.get(url.format(file_id=_FILE.file_id.hex()))
+        await client.get(url.format(file_id_hex=_FILE.file_id.hex()))
     (rendered,) = recorder.rendered
     loader = FileSystemLoader(Path(p2pwatch.adapters.driving.webui.__file__).parent / "templates")
     passed = set(rendered["context"]) - {"request"}
@@ -1933,7 +1933,7 @@ async def test_nav_amule_link_uses_the_configured_base() -> None:
 async def test_nav_on_a_non_nav_path_renders_every_entry_as_a_link(
     populated_app: tuple[Starlette, str],
 ) -> None:
-    """A page that is NOT a nav destination (here /files/{file_id}, a file's page) leaves every
+    """A page that is NOT a nav destination (here /files/{file_id_hex}, a file's page) leaves every
     entry a link and marks none active: the active entry is an EXACT path match, not a prefix."""
     app, hash_ = populated_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

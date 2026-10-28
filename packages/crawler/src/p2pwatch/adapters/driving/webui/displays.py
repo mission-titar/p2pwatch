@@ -163,7 +163,7 @@ class CatalogEntryDisplay:
       as ``"{target_id}: {tier}"`` joined with ``" · "``.
     """
 
-    file_id: str  # 32 lowercase hex, the detail page's path
+    file_id_hex: str  # 32 lowercase hex, the detail page's path
     short_hash: str  # of the native id
     filename: str
     sources_display: str  # the count, or "unknown" for a file never seen

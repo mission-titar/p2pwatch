@@ -131,7 +131,7 @@ def _make_nav_context(amule_url: str) -> Callable[[Request], dict[str, Any]]:
     which base.html then renders as the bold current page: that is what replaces the per-page
     ``<h1>``.
 
-    The match is exact, so a sub-page (``/files/{file_id}``, ``/targets/{id}``) marks no entry
+    The match is exact, so a sub-page (``/files/{file_id_hex}``, ``/targets/{id}``) marks no entry
     active: it is not itself a nav destination, and it names itself with its own heading.
 
     The last entry is the aMule container's web surface, amuleapi's own UI. Its base
@@ -203,7 +203,7 @@ def _catalog_entry_displays(
         latest = catalog_entry.latest_observation
         rows.append(
             CatalogEntryDisplay(
-                file_id=catalog_entry.file.file_id.hex(),
+                file_id_hex=catalog_entry.file.file_id.hex(),
                 short_hash=short_hash(catalog_entry.file.native_id),
                 filename="" if latest is None else latest.reported_file.filename,
                 sources_display=(
@@ -899,7 +899,7 @@ def build_app(
         )
 
     async def handle_source(request: Request) -> Response:
-        source_id_hex: str = request.path_params["source_id"]
+        source_id_hex: str = request.path_params["source_id_hex"]
         page = _page_number(request.query_params.get("page"))
         requested_since, requested_until = _requested_ends(request)
         description = (
@@ -981,7 +981,7 @@ def build_app(
         )
 
     async def handle_file(request: Request) -> Response:
-        file_id_hex: str = request.path_params["file_id"]
+        file_id_hex: str = request.path_params["file_id_hex"]
 
         requested_since, requested_until = _requested_ends(request)
         description = (
@@ -1226,11 +1226,11 @@ def build_app(
             Route("/metrics", handle_metrics),
             Route("/", handle_dashboard),
             Route("/files", handle_files),
-            Route("/files/{file_id}", handle_file),
+            Route("/files/{file_id_hex}", handle_file),
             Route("/sources", handle_sources),
-            # Before ``/sources/{source_id}``, which would otherwise take ``name`` (D13).
+            # Before ``/sources/{source_id_hex}``, which would otherwise take ``name`` (D13).
             Route("/sources/name", handle_source_name),
-            Route("/sources/{source_id}", handle_source),
+            Route("/sources/{source_id_hex}", handle_source),
             Route("/targets/{target_id}", handle_target),
             Route("/node", handle_node),
             Route("/controls/pause", handle_pause, methods=["POST"]),
