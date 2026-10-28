@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store import (
     SqliteTrackedDownloadStore,
 )
@@ -215,7 +216,7 @@ async def test_a_completion_names_the_clean_file_and_every_download_target_of_th
         client=FakeDownloadClient(listed=[(status(HASH_A, completed=True),)]),
         tracked_download_store=tracked_download_store,
         decision_reader=FakeDecisionReader(
-            candidates=(candidate(HASH_A, "062A"), candidate(HASH_A, "063A"))
+            candidates=(candidate(HASH_A, TargetId("062A")), candidate(HASH_A, TargetId("063A")))
         ),
         observation_reader=FakeObservationReader(
             best={HASH_A: observation(HASH_A, "Keroro é.avi", 100)}
@@ -225,7 +226,9 @@ async def test_a_completion_names_the_clean_file_and_every_download_target_of_th
     await cycle.run(NODE)
     [(_, notification)] = observability.notifier.calls
     assert notification == CompletedDownload(
-        (TargetTitle("062A", "t"), TargetTitle("063A", "t2")), "Keroro é.avi", NODE
+        (TargetTitle(TargetId("062A"), "t"), TargetTitle(TargetId("063A"), "t2")),
+        "Keroro é.avi",
+        NODE,
     )
 
 
@@ -263,7 +266,7 @@ async def test_a_download_amuled_no_longer_knows_becomes_failed() -> None:
     client, fake_time = FakeDownloadClient(listed=[(status(HASH_A),), ()]), FakeTime()
     logger = FakeLogger()
     tracked_download_store = FakeTrackedDownloadStore()
-    tracked_download_store.record_queued(key(HASH_A), "062A", 1, fake_time.wall.now())
+    tracked_download_store.record_queued(key(HASH_A), TargetId("062A"), 1, fake_time.wall.now())
     observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "a", 1)})
     cycle = build_cycle(
         client=client,
@@ -292,7 +295,7 @@ async def test_each_download_write_carries_the_instant_read_right_before_it() ->
     client = FakeDownloadClient(listed=[(status(HASH_A, completed=True),)])
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.states[HASH_A] = DownloadState.DOWNLOADING
-    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_B, "062A"),))
+    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_B, TargetId("062A")),))
     observation_reader = FakeObservationReader(
         observations={HASH_B: observation(HASH_B, "b.avi", 100)}
     )
@@ -335,7 +338,7 @@ async def test_waiting_for_sources_is_not_failing_for_a_simulated_year(tmp_path:
     fake_time = FakeTime()
     connection = open_local(tmp_path / "local.db")
     tracked_download_store = SqliteTrackedDownloadStore(connection)
-    tracked_download_store.record_queued(key(HASH_A), "062A", 10, fake_time.wall.now())
+    tracked_download_store.record_queued(key(HASH_A), TargetId("062A"), 10, fake_time.wall.now())
     waiting = status(HASH_A, total=10, waiting=WaitingReason.NO_SOURCE)
     client = FakeDownloadClient(listed=[(waiting,)] * 12)
     cycle = build_cycle(
@@ -364,7 +367,9 @@ async def test_a_wall_clock_step_forward_fails_no_download_absent_from_one_poll(
     real_tracked_download_store: SqliteTrackedDownloadStore,
 ) -> None:
     fake_time = FakeTime()
-    real_tracked_download_store.record_queued(key(HASH_A), "062A", 10, fake_time.wall.now())
+    real_tracked_download_store.record_queued(
+        key(HASH_A), TargetId("062A"), 10, fake_time.wall.now()
+    )
     cycle = build_cycle(
         client=FakeDownloadClient(listed=[(status(HASH_A, total=10),), ()]),
         tracked_download_store=real_tracked_download_store,
@@ -386,7 +391,7 @@ async def test_a_latest_seen_at_in_the_future_waits_lost_after_no_more(
     # Stamped before the wall clock stepped back an hour, while the node was down.
     fake_time = FakeTime()
     real_tracked_download_store.record_queued(
-        key(HASH_A), "062A", 10, fake_time.wall.now() + timedelta(hours=1)
+        key(HASH_A), TargetId("062A"), 10, fake_time.wall.now() + timedelta(hours=1)
     )
     cycle = build_cycle(
         client=FakeDownloadClient(),
@@ -409,7 +414,7 @@ async def test_a_download_last_seen_two_days_ago_fails_at_the_first_cycle(
 ) -> None:
     fake_time = FakeTime()
     real_tracked_download_store.record_queued(
-        key(HASH_A), "062A", 10, fake_time.wall.now() - timedelta(days=2)
+        key(HASH_A), TargetId("062A"), 10, fake_time.wall.now() - timedelta(days=2)
     )
     cycle = build_cycle(
         client=FakeDownloadClient(),
@@ -429,7 +434,7 @@ async def test_a_download_the_node_queued_is_lost_after_lost_after_of_monotonic_
     cycle = build_cycle(
         client=FakeDownloadClient(),  # never lists it
         tracked_download_store=real_tracked_download_store,
-        decision_reader=FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),)),
+        decision_reader=FakeDecisionReader(candidates=(candidate(HASH_A, TargetId("062A")),)),
         observation_reader=FakeObservationReader(
             observations={HASH_A: observation(HASH_A, "a.avi", 10)}
         ),
@@ -449,7 +454,7 @@ async def test_a_download_the_node_queued_is_lost_after_lost_after_of_monotonic_
 async def test_a_row_the_operator_deleted_then_queued_again_waits_lost_after_anew() -> None:
     fake_time = FakeTime()
     tracked_download_store = FakeTrackedDownloadStore()
-    tracked_download_store.record_queued(key(HASH_A), "062A", 10, fake_time.wall.now())
+    tracked_download_store.record_queued(key(HASH_A), TargetId("062A"), 10, fake_time.wall.now())
     cycle = build_cycle(
         client=FakeDownloadClient(listed=[(status(HASH_A),)]),
         tracked_download_store=tracked_download_store,
@@ -459,7 +464,7 @@ async def test_a_row_the_operator_deleted_then_queued_again_waits_lost_after_ane
     del tracked_download_store.states[HASH_A]  # for a manual retry
     await cycle.run(NODE)
     fake_time.advance(timedelta(hours=12))
-    tracked_download_store.record_queued(key(HASH_A), "062A", 10, fake_time.wall.now())
+    tracked_download_store.record_queued(key(HASH_A), TargetId("062A"), 10, fake_time.wall.now())
     fake_time.advance(timedelta(hours=12))
     await cycle.run(NODE)
     assert tracked_download_store.states[HASH_A] is DownloadState.QUEUED
@@ -510,7 +515,7 @@ async def test_tracked_states_store_failure_is_absorbed_at_step_2() -> None:
 async def test_presence_store_failure_is_absorbed_and_candidates_still_run() -> None:
     client = FakeDownloadClient()
     tracked_download_store = FakeTrackedDownloadStore(fail_set_seen=True)
-    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
+    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, TargetId("062A")),))
     observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "x", 100)})
     cycle = build_cycle(
         client=client,

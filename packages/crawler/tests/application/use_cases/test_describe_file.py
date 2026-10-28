@@ -8,6 +8,7 @@ import yaml
 from catalog_matching.domain.config import MatcherConfig
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord, Explanation, MatchingEngine
+from catalog_matching.domain.identifiers import TargetId
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 from p2pwatch.application.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.application.ports.driven.source_reader import SourceReader
@@ -35,7 +36,7 @@ _OBSERVATION = FileObservation(
     "n1",
 )
 _DECISION = DatedDecision(
-    _FILE, DecisionRecord("062A", "catalog", DecisionTier.CATALOG), _NOW, "n1"
+    _FILE, DecisionRecord(TargetId("062A"), "catalog", DecisionTier.CATALOG), _NOW, "n1"
 )
 _HISTORY = FileHistory(
     _FILE, 100, (_OBSERVATION,), _OBSERVATION, (_DECISION,), ("Keroro 62a ITA.avi", "keroro.avi")
@@ -165,7 +166,7 @@ def test_the_first_decision_is_explained_over_every_known_filename() -> None:
     description = _describe(FakeCatalogFileReader(file_history=_HISTORY))
     assert description is not None
     assert description.explanation == Explanation(
-        target_id="062A",
+        target_id=TargetId("062A"),
         rules_fired=("catalog",),
         tokens_matched=("ita", "keroro"),
         coverage_values=(),

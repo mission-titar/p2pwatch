@@ -3,6 +3,7 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
+from catalog_matching.domain.identifiers import TargetId
 from catalog_matching.domain.models import TargetSegment
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store import (
     SqliteSourcePointStore,
@@ -65,7 +66,7 @@ def observation(hash_hex: str, filename: str, size_bytes: int) -> FileObservatio
     return FileObservation(reported_file, SEEN_AT, NODE)
 
 
-def candidate(hash_hex: str, target_id: str) -> DownloadCandidate:
+def candidate(hash_hex: str, target_id: TargetId) -> DownloadCandidate:
     return DownloadCandidate(file=key(hash_hex), target_id=target_id)
 
 

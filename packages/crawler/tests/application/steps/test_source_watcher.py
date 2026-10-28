@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store import (
     SqliteSourcePointStore,
 )
@@ -241,7 +242,7 @@ async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
     # Stage 4, D9: the first file's event, named after its decision and best name.
     queued = (_read(_PEER, "AnimuseeFMR"),)
     source_client = FakeSourceClient(readings={HASH_A: queued, HASH_B: queued})
-    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
+    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, TargetId("062A")),))
     observation_reader = FakeObservationReader(
         best={HASH_A: observation(HASH_A, "Keroro 062.avi", 1)}
     )
@@ -257,7 +258,7 @@ async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
     )
     await cycle.run(NODE)
     assert _alerts(observability) == [
-        _alert(_PEER, "AnimuseeFMR", None, "Keroro 062.avi", (TargetTitle("062A", "t"),))
+        _alert(_PEER, "AnimuseeFMR", None, "Keroro 062.avi", (TargetTitle(TargetId("062A"), "t"),))
     ]
     assert observability.notifier.node_ids == [NODE]
 
@@ -278,7 +279,7 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
     sources = FakeSourcePointStore(history=history)
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.record_queued(
-        key(HASH_B), "063A", 100, start
+        key(HASH_B), TargetId("063A"), 100, start
     )  # queued for it, no decision left
     tracked_download_store.states.update(
         {HASH_A: DownloadState.DOWNLOADING, HASH_B: DownloadState.DOWNLOADING}
@@ -297,7 +298,13 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
     assert sources.asked == [(_OTHER_PEER, start), (_PEER, start)]
     assert sources.node_ids == {NODE}  # the round writes and reads the cycle's node's points
     assert _alerts(observability) == [
-        _alert(_PEER, "AnimuseeFMR", timedelta(hours=13), HASH_B, (TargetTitle("063A", "t2"),))
+        _alert(
+            _PEER,
+            "AnimuseeFMR",
+            timedelta(hours=13),
+            HASH_B,
+            (TargetTitle(TargetId("063A"), "t2"),),
+        )
     ]
 
 

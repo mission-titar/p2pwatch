@@ -9,6 +9,7 @@ DOMAIN ring (pure). One FROZEN dataclass per salient observable fact; tagged uni
 from dataclasses import dataclass
 from typing import Literal
 
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.file_target_decision import FileTargetDecision
 from p2pwatch.domain.source import SourceKey
@@ -41,7 +42,7 @@ class ObservationRecorded:
 
 @dataclass(frozen=True)
 class DecisionChange:
-    target_id: str
+    target_id: TargetId
     title: str
     previous_decision: FileTargetDecision | None  # None for a target never judged
     new_decision: FileTargetDecision
@@ -49,7 +50,7 @@ class DecisionChange:
 
 @dataclass(frozen=True)
 class TargetTitle:
-    target_id: str
+    target_id: TargetId
     title: str
 
 
@@ -65,7 +66,7 @@ class DecisionsRecorded:
 
 @dataclass(frozen=True)
 class DownloadQueued:
-    target_id: str
+    target_id: TargetId
 
 
 @dataclass(frozen=True)

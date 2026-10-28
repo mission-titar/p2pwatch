@@ -20,6 +20,7 @@ from contextlib import suppress
 from datetime import datetime
 from typing import Literal
 
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError, wrap_sqlite_errors
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros, micros_to_instant
 from p2pwatch.application.ports.driven.tracked_download_reader import TrackedDownloadReader
@@ -73,7 +74,7 @@ class SqliteTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
         self._connection = connection
 
     def record_queued(
-        self, file: FileKey, target_id: str, size_bytes: int, queued_at: datetime
+        self, file: FileKey, target_id: TargetId, size_bytes: int, queued_at: datetime
     ) -> None:
         """INSERT of a ``queued`` download (dedup-safe: a duplicate is ignored)."""
         queued_at_micros = instant_to_micros(queued_at)
@@ -169,7 +170,7 @@ class SqliteTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
             rows = self._connection.execute(_TRACKED_STATES).fetchall()
         return {FileKey(Network(row[0]), row[1]): DownloadState(row[2]) for row in rows}
 
-    def read_queued_target_id(self, file: FileKey) -> str | None:
+    def read_queued_target_id(self, file: FileKey) -> TargetId | None:
         """``target_id`` the file was queued for, or ``None`` (never queued).
 
         The download loop uses it to label the completion notification; ``None`` is a normal
@@ -179,4 +180,4 @@ class SqliteTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
             row = self._connection.execute(_QUEUED_TARGET_ID, (file.file_id,)).fetchone()
         if row is None:
             return None
-        return str(row[0])
+        return TargetId(row[0])

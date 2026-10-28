@@ -8,6 +8,7 @@ from collections.abc import Iterable
 from dataclasses import replace
 
 from catalog_matching.domain.engine import Explanation, MatchingEngine
+from catalog_matching.domain.identifiers import TargetId
 from catalog_matching.domain.models import FileCandidate
 from p2pwatch.domain.observation import candidate_from_fields
 
@@ -24,7 +25,7 @@ class MatchingExplainer:
         size_bytes: int | None,
         duration_seconds: int | None,
         bitrate_kbps: int | None,
-        target_id: str,
+        target_id: TargetId,
     ) -> Explanation | None:
         """Recompute the explanation of target ``target_id`` over every filename of one file.
 

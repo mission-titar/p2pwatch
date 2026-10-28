@@ -7,6 +7,7 @@ import pytest
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction
 from p2pwatch.domain.observability import events as ev
@@ -43,7 +44,7 @@ _ED2K_FIRST_USEFUL = SourceAlertLabels(Network.ED2K, SourceAlertKind.FIRST_USEFU
 _ED2K_REAPPEARED = SourceAlertLabels(Network.ED2K, SourceAlertKind.REAPPEARED)
 _SOURCE = SourceKey(Network.ED2K, "1f2e3d4c" * 4)
 _FILE = FileKey(Network.ED2K, "8f3a1c0b9e7d44a2b6c1f0e9d8a7b6c5")
-_062A = (ev.TargetTitle("062A", "Les demoiselles cambrioleuses"),)
+_062A = (ev.TargetTitle(TargetId("062A"), "Les demoiselles cambrioleuses"),)
 _NODE = "titar-node-1"
 
 
@@ -95,7 +96,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ),
     ),
     (
-        ev.DownloadQueued(target_id="062A"),
+        ev.DownloadQueued(target_id=TargetId("062A")),
         ObservabilityPlan(
             Severity.INFO,
             "download queued: 062A",
@@ -257,14 +258,14 @@ def _decisions(*changes: ev.DecisionChange) -> ev.DecisionsRecorded:
     )
 
 
-def _decision(target_id: str, label: str) -> FileTargetDecision:
+def _decision(target_id: TargetId, label: str) -> FileTargetDecision:
     """The decision a log line names ``label``: a tier, or ``retracted``."""
     if label == "retracted":
         return Retraction(target_id)
     return DecisionRecord(target_id, "rule", DecisionTier(label))
 
 
-def _change(target_id: str, before: str | None, after: str) -> ev.DecisionChange:
+def _change(target_id: TargetId, before: str | None, after: str) -> ev.DecisionChange:
     title = {"062A": "Les demoiselles cambrioleuses", "062B": "Le grand combat sous-marin"}
     previous = None if before is None else _decision(target_id, before)
     return ev.DecisionChange(target_id, title[target_id], previous, _decision(target_id, after))
@@ -290,7 +291,7 @@ def _change(target_id: str, before: str | None, after: str) -> ev.DecisionChange
 def test_only_a_rise_to_notify_or_download_reaches_the_community(
     before: str | None, after: str, notified: bool
 ) -> None:
-    plan = plan_observability(_decisions(_change("062A", before, after)))
+    plan = plan_observability(_decisions(_change(TargetId("062A"), before, after)))
     assert (plan.notification is not None) == notified
     assert plan.node_metrics == (
         CounterIncrement(
@@ -301,14 +302,16 @@ def test_only_a_rise_to_notify_or_download_reaches_the_community(
 
 
 _062A_062B = (
-    ev.TargetTitle("062A", "Les demoiselles cambrioleuses"),
-    ev.TargetTitle("062B", "Le grand combat sous-marin"),
+    ev.TargetTitle(TargetId("062A"), "Les demoiselles cambrioleuses"),
+    ev.TargetTitle(TargetId("062B"), "Le grand combat sous-marin"),
 )
 
 
 def test_a_file_with_risen_targets_is_one_rise_naming_the_file_and_targets() -> None:
     plan = plan_observability(
-        _decisions(_change("062A", None, "download"), _change("062B", None, "notify"))
+        _decisions(
+            _change(TargetId("062A"), None, "download"), _change(TargetId("062B"), None, "notify")
+        )
     )
     assert plan.notification == TierRise(
         DecisionTier.DOWNLOAD,
@@ -326,18 +329,24 @@ def test_a_file_with_risen_targets_is_one_rise_naming_the_file_and_targets() -> 
 
 def test_the_rise_lists_only_the_risen_targets_under_their_highest_tier() -> None:
     plan = plan_observability(
-        _decisions(_change("062A", "catalog", "notify"), _change("062B", "notify", "retracted"))
+        _decisions(
+            _change(TargetId("062A"), "catalog", "notify"),
+            _change(TargetId("062B"), "notify", "retracted"),
+        )
     )
     assert isinstance(plan.notification, TierRise)
     assert (plan.notification.tier, plan.notification.target_titles) == (
         DecisionTier.NOTIFY,
-        (ev.TargetTitle("062A", "Les demoiselles cambrioleuses"),),
+        (ev.TargetTitle(TargetId("062A"), "Les demoiselles cambrioleuses"),),
     )
 
 
 def test_decisions_log_one_line_listing_every_change() -> None:
     plan = plan_observability(
-        _decisions(_change("062A", None, "download"), _change("062B", "notify", "retracted"))
+        _decisions(
+            _change(TargetId("062A"), None, "download"),
+            _change(TargetId("062B"), "notify", "retracted"),
+        )
     )
     assert plan.severity == Severity.INFO
     assert plan.message == (
@@ -346,7 +355,7 @@ def test_decisions_log_one_line_listing_every_change() -> None:
 
 
 def test_a_change_without_a_rise_has_no_notification() -> None:
-    plan = plan_observability(_decisions(_change("062A", "download", "notify")))
+    plan = plan_observability(_decisions(_change(TargetId("062A"), "download", "notify")))
     assert plan.notification is None
 
 

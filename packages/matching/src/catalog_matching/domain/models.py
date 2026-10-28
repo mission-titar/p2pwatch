@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+from catalog_matching.domain.identifiers import TargetId
+
 LOST = "lost"
 FOUND = "found"
 # Closed set of target statuses (a found target is still downloaded: archival redundancy).
@@ -39,6 +41,6 @@ class TargetSegment:
     status: str = LOST
 
     @property
-    def target_id(self) -> str:
+    def target_id(self) -> TargetId:
         """Stable segment id: zero-padded absolute number + segment letter, e.g. ``062A``."""
-        return f"{self.absolute_number:03d}{self.letter.upper()}"
+        return TargetId(f"{self.absolute_number:03d}{self.letter.upper()}")

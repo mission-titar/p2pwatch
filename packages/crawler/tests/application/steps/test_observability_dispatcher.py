@@ -6,6 +6,7 @@ import pytest
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.file_key import FileKey, Network
@@ -26,7 +27,10 @@ from tests.fakes.adapters.driven.fake_raising_notifier import FakeRaisingNotifie
 
 _NODE = "titar-node-1"
 _COMPLETED = ev.DownloadCompleted(
-    FileKey(Network.ED2K, "a" * 32), "Keroro 062.avi", (ev.TargetTitle("062A", "t"),), _NODE
+    FileKey(Network.ED2K, "a" * 32),
+    "Keroro 062.avi",
+    (ev.TargetTitle(TargetId("062A"), "t"),),
+    _NODE,
 )
 
 
@@ -99,8 +103,8 @@ async def test_relays_the_log_line_under_the_events_node() -> None:
 @pytest.mark.asyncio
 async def test_logs_the_message_but_notifies_the_plans_notification() -> None:
     logger, notifier = FakeLogger(), FakeNotifier()
-    download = DecisionRecord("062A", "rule", DecisionTier.DOWNLOAD)
-    change = ev.DecisionChange("062A", "Les demoiselles cambrioleuses", None, download)
+    download = DecisionRecord(TargetId("062A"), "rule", DecisionTier.DOWNLOAD)
+    change = ev.DecisionChange(TargetId("062A"), "Les demoiselles cambrioleuses", None, download)
     await _dispatcher(FakeNodeMetricStore(), notifier, logger).dispatch(
         ev.DecisionsRecorded(
             FileKey(Network.ED2K, "a" * 32), "Keroro 062.avi", 1024, (change,), _NODE
@@ -112,7 +116,7 @@ async def test_logs_the_message_but_notifies_the_plans_notification() -> None:
             Audience.COMMUNITY,
             TierRise(
                 DecisionTier.DOWNLOAD,
-                (ev.TargetTitle("062A", "Les demoiselles cambrioleuses"),),
+                (ev.TargetTitle(TargetId("062A"), "Les demoiselles cambrioleuses"),),
                 "Keroro 062.avi",
                 1024,
                 f"ed2k://|file|Keroro%20062.avi|1024|{'a' * 32}|/",

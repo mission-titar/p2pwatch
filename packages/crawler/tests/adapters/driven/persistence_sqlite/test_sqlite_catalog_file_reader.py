@@ -11,6 +11,7 @@ import pytest
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_file_reader import (
     _JOIN_DECISIONS,
     _JOIN_LATEST_OBSERVATION,
@@ -58,7 +59,7 @@ _LIMIT = 50
 def _entries(
     catalog_db: Path,
     *,
-    target_id: str | None = None,
+    target_id: TargetId | None = None,
     tier: DecisionTier | None = None,
     search_text: str | None = None,
     matched_only: bool = False,
@@ -82,7 +83,7 @@ def _entries(
 def _counts(
     catalog_db: Path,
     *,
-    target_id: str | None = None,
+    target_id: TargetId | None = None,
     tier: DecisionTier | None = None,
     search_text: str | None = None,
 ) -> tuple[int, int]:
@@ -125,15 +126,17 @@ def test_read_catalog_entries_no_filter_returns_all(catalog_db: Path) -> None:
                 observed_at=datetime(2026, 6, 22, 10, tzinfo=UTC),
                 node_id="n1",
             ),
-            decisions=(DecisionRecord("062A", "id_segment_exact", DecisionTier.DOWNLOAD),),
+            decisions=(
+                DecisionRecord(TargetId("062A"), "id_segment_exact", DecisionTier.DOWNLOAD),
+            ),
         ),
     )
 
 
 def test_read_catalog_entries_filter_by_target(catalog_db: Path) -> None:
     seed(catalog_db)
-    hit = _entries(catalog_db, target_id="062A")
-    miss = _entries(catalog_db, target_id="001A")
+    hit = _entries(catalog_db, target_id=TargetId("062A"))
+    miss = _entries(catalog_db, target_id=TargetId("001A"))
     assert len(hit) == 1
     assert miss == ()
 
@@ -170,15 +173,15 @@ def test_read_catalog_entries_whole_episode_is_one_row_with_two_decisions(catalo
     rows = _entries(catalog_db)
     assert len(rows) == 1
     assert rows[0].decisions == (
-        DecisionRecord("072A", "numero_nu_confirmed", DecisionTier.DOWNLOAD),
-        DecisionRecord("072B", "numero_nu_confirmed", DecisionTier.DOWNLOAD),
+        DecisionRecord(TargetId("072A"), "numero_nu_confirmed", DecisionTier.DOWNLOAD),
+        DecisionRecord(TargetId("072B"), "numero_nu_confirmed", DecisionTier.DOWNLOAD),
     )
     assert rows[0].decisions[0].tier is DecisionTier.DOWNLOAD
 
 
-@pytest.mark.parametrize("target_id", ["072A", "072B"])
+@pytest.mark.parametrize("target_id", [TargetId("072A"), TargetId("072B")])
 def test_read_catalog_entries_filter_by_one_target_returns_whole_episode(
-    catalog_db: Path, target_id: str
+    catalog_db: Path, target_id: TargetId
 ) -> None:
     seed_whole_episode(catalog_db)
     rows = _entries(catalog_db, target_id=target_id)
@@ -223,7 +226,7 @@ def test_file_history_carries_observations_and_dated_decisions(catalog_db: Path)
         DatedDecision(
             FileKey(Network.ED2K, "a" * 32),
             DecisionRecord(
-                target_id="062A", rule_name="id_segment_exact", tier=DecisionTier.DOWNLOAD
+                target_id=TargetId("062A"), rule_name="id_segment_exact", tier=DecisionTier.DOWNLOAD
             ),
             decided_at=datetime(2026, 6, 22, 10, 0, 1, tzinfo=UTC),
             node_id="n1",
@@ -265,7 +268,7 @@ def test_file_history_of_an_unknown_file_id_is_none(catalog_db: Path) -> None:
 def test_file_history_reads_a_recorded_decision_back_to_the_microsecond(catalog_db: Path) -> None:
     decided = DatedDecision(
         FileKey(Network.ED2K, "a" * 32),
-        DecisionRecord("062A", "id_segment_exact", DecisionTier.DOWNLOAD),
+        DecisionRecord(TargetId("062A"), "id_segment_exact", DecisionTier.DOWNLOAD),
         datetime(2026, 6, 22, 10, 0, 1, 123456, tzinfo=UTC),
         "n1",
     )
@@ -318,8 +321,8 @@ def test_file_history_whole_episode_lists_both_decisions(catalog_db: Path) -> No
 
 def test_read_catalog_entries_combined_target_and_tier_filters(catalog_db: Path) -> None:
     seed(catalog_db)
-    hit = _entries(catalog_db, target_id="062A", tier=DecisionTier.DOWNLOAD)
-    miss = _entries(catalog_db, target_id="062A", tier=DecisionTier.NOTIFY)
+    hit = _entries(catalog_db, target_id=TargetId("062A"), tier=DecisionTier.DOWNLOAD)
+    miss = _entries(catalog_db, target_id=TargetId("062A"), tier=DecisionTier.NOTIFY)
     assert len(hit) == 1
     assert miss == ()
 
@@ -507,16 +510,16 @@ def _seed_catalog_tier_on_001a(db: Path) -> None:
 def test_target_scope_excludes_catalog_tier(catalog_db: Path) -> None:
     """A catalog-tier decision pinned to 001A must NOT surface under target='001A'."""
     _seed_catalog_tier_on_001a(catalog_db)
-    rows = _entries(catalog_db, target_id="001A")
+    rows = _entries(catalog_db, target_id=TargetId("001A"))
     assert rows == ()
-    matched, _total = _counts(catalog_db, target_id="001A")
+    matched, _total = _counts(catalog_db, target_id=TargetId("001A"))
     assert matched == 0
 
 
 def test_target_scope_keeps_non_catalog_tier(catalog_db: Path) -> None:
     """A non-catalog (download) decision on 062A is still returned under target='062A'."""
     seed(catalog_db)  # existing helper: a 'download' decision on 062A
-    rows = _entries(catalog_db, target_id="062A")
+    rows = _entries(catalog_db, target_id=TargetId("062A"))
     assert len(rows) == 1
 
 

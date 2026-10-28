@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from datetime import datetime
 
 from catalog_matching.domain.decision_tier import DecisionTier
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_history import FileHistory
 
@@ -18,7 +19,7 @@ class CatalogFileReader(ABC):
     def read_catalog_entries(
         self,
         *,
-        target_id: str | None,
+        target_id: TargetId | None,
         tier: DecisionTier | None,
         search_text: str | None,
         matched_only: bool,
@@ -32,14 +33,14 @@ class CatalogFileReader(ABC):
 
     @abstractmethod
     def read_matched_and_total_file_counts(
-        self, *, target_id: str | None, tier: DecisionTier | None, search_text: str | None
+        self, *, target_id: TargetId | None, tier: DecisionTier | None, search_text: str | None
     ) -> tuple[int, int]:
         """Of the files passing the filters, how many hold a current decision, and how many in
         all."""
 
     @abstractmethod
     def read_file_count_by_tier(
-        self, *, target_id: str | None, search_text: str | None
+        self, *, target_id: TargetId | None, search_text: str | None
     ) -> Mapping[DecisionTier, int]:
         """By tier, how many files passing the filters hold a current decision of that tier."""
 

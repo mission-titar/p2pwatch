@@ -5,15 +5,16 @@ from catalog_matching.domain.engine import (
     MatchDecision,
     to_record,
 )
+from catalog_matching.domain.identifiers import TargetId
 
 
 def _decision(tier: DecisionTier = DecisionTier.DOWNLOAD) -> MatchDecision:
     return MatchDecision(
-        target_id="062A",
+        target_id=TargetId("062A"),
         rule_name="id_segment_exact",
         tier=tier,
         explanation=Explanation(
-            target_id="062A",
+            target_id=TargetId("062A"),
             rules_fired=("id_segment_exact",),
             tokens_matched=(),
             coverage_values=(),
@@ -24,13 +25,13 @@ def _decision(tier: DecisionTier = DecisionTier.DOWNLOAD) -> MatchDecision:
 def test_to_record_projects_the_three_comparable_fields() -> None:
     record = to_record(_decision())
     assert record == DecisionRecord(
-        target_id="062A", rule_name="id_segment_exact", tier=DecisionTier.DOWNLOAD
+        target_id=TargetId("062A"), rule_name="id_segment_exact", tier=DecisionTier.DOWNLOAD
     )
 
 
 def test_decision_record_is_frozen_and_equal_by_value() -> None:
-    a = DecisionRecord(target_id="062A", rule_name="r", tier=DecisionTier.CATALOG)
-    b = DecisionRecord(target_id="062A", rule_name="r", tier=DecisionTier.CATALOG)
+    a = DecisionRecord(target_id=TargetId("062A"), rule_name="r", tier=DecisionTier.CATALOG)
+    b = DecisionRecord(target_id=TargetId("062A"), rule_name="r", tier=DecisionTier.CATALOG)
     assert a == b
     assert hash(a) == hash(b)
 

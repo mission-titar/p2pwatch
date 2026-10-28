@@ -11,6 +11,7 @@ import pytest
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord, MatchingEngine, to_record
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_scan_reader import (
     SqliteCatalogScanReader,
@@ -303,7 +304,7 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
     decision_store.record_decision(
         DatedDecision(
             FileKey(Network.ED2K, _HASH_MULTI),
-            DecisionRecord("001A", "keroro_large", DecisionTier.CATALOG),
+            DecisionRecord(TargetId("001A"), "keroro_large", DecisionTier.CATALOG),
             wall_clock.now(),
             _NODE,
         )
@@ -319,12 +320,12 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
     ]
     assert decision_store.read_latest_decisions(FileKey(Network.ED2K, _HASH_MULTI)) == {
         "062A": DecisionRecord(
-            target_id="062A", rule_name="numero_nu_confirmed", tier=DecisionTier.DOWNLOAD
+            target_id=TargetId("062A"), rule_name="numero_nu_confirmed", tier=DecisionTier.DOWNLOAD
         ),
         "062B": DecisionRecord(
-            target_id="062B", rule_name="numero_nu_confirmed", tier=DecisionTier.DOWNLOAD
+            target_id=TargetId("062B"), rule_name="numero_nu_confirmed", tier=DecisionTier.DOWNLOAD
         ),
-        "001A": Retraction("001A"),
+        TargetId("001A"): Retraction(TargetId("001A")),
     }
 
 
@@ -342,7 +343,9 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
         FileObservation(_reported_file(_HASH_MULTI, _MULTI_NAME), wall_clock.now(), _NODE)
     )
     decision_store.record_decision(
-        DatedDecision(FileKey(Network.ED2K, _HASH_MULTI), Retraction(""), wall_clock.now(), _NODE)
+        DatedDecision(
+            FileKey(Network.ED2K, _HASH_MULTI), Retraction(TargetId("")), wall_clock.now(), _NODE
+        )
     )
     reevaluation = _Reevaluation(
         observation_store, decision_store, catalog_scan_reader, engine, wall_clock
@@ -392,7 +395,7 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
     ]
     assert decision_store.read_latest_decisions(FileKey(Network.ED2K, _HASH_DL)) == {
         "062A": DecisionRecord(
-            target_id="062A", rule_name="id_segment_exact", tier=DecisionTier.DOWNLOAD
+            target_id=TargetId("062A"), rule_name="id_segment_exact", tier=DecisionTier.DOWNLOAD
         )
     }
 

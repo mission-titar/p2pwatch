@@ -1,3 +1,4 @@
+from catalog_matching.domain.identifiers import TargetId
 from catalog_matching.domain.models import TargetSegment
 from p2pwatch.application.steps.download_labeler import DownloadLabeler
 from p2pwatch.domain.observability.events import TargetTitle
@@ -52,26 +53,30 @@ def test_a_file_whose_observations_are_gone_is_named_by_its_native_id() -> None:
 
 def test_the_titles_are_every_download_target_of_the_file() -> None:
     decision_reader = FakeDecisionReader(
-        candidates=(candidate(HASH_A, "062A"), candidate(HASH_A, "062B"), candidate(HASH_B, "063A"))
+        candidates=(
+            candidate(HASH_A, TargetId("062A")),
+            candidate(HASH_A, TargetId("062B")),
+            candidate(HASH_B, TargetId("063A")),
+        )
     )
     labeler = _labeler(decision_reader=decision_reader)
     assert labeler.target_titles(key(HASH_A)) == (
-        TargetTitle("062A", "ta"),
-        TargetTitle("062B", "tb"),
+        TargetTitle(TargetId("062A"), "ta"),
+        TargetTitle(TargetId("062B"), "tb"),
     )
 
 
 def test_a_file_without_a_download_decision_has_the_target_it_was_queued_for() -> None:
     tracked_download_store = FakeTrackedDownloadStore()
-    tracked_download_store.record_queued(key(HASH_A), "062B", 100, FakeTime().wall.now())
+    tracked_download_store.record_queued(key(HASH_A), TargetId("062B"), 100, FakeTime().wall.now())
     labeler = _labeler(tracked_download_store=tracked_download_store)
-    assert labeler.target_titles(key(HASH_A)) == (TargetTitle("062B", "tb"),)
+    assert labeler.target_titles(key(HASH_A)) == (TargetTitle(TargetId("062B"), "tb"),)
 
 
 def test_a_target_the_targets_no_longer_list_has_an_empty_title() -> None:
-    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "063A"),))
+    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, TargetId("063A")),))
     labeler = _labeler(decision_reader=decision_reader)
-    assert labeler.target_titles(key(HASH_A)) == (TargetTitle("063A", ""),)
+    assert labeler.target_titles(key(HASH_A)) == (TargetTitle(TargetId("063A"), ""),)
 
 
 def test_a_file_neither_decided_nor_queued_has_no_title() -> None:

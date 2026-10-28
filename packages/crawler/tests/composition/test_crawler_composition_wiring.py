@@ -18,6 +18,7 @@ import httpx
 import pytest
 import yaml
 
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_backoff_state_store import (
     SqliteBackoffStateStore,
 )
@@ -290,7 +291,7 @@ async def test_the_download_loop_records_a_tracked_downloads_sources_under_the_n
     catalog.close()
     local = open_local(tmp_path / "local.db")
     SqliteTrackedDownloadStore(local).record_queued(
-        FileKey(Network.ED2K, _HASH), "062A", 10, SystemWallClock().now()
+        FileKey(Network.ED2K, _HASH), TargetId("062A"), 10, SystemWallClock().now()
     )
     local.close()
     download = {

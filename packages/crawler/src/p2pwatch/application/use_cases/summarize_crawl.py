@@ -1,5 +1,6 @@
 """Summarizes the crawl from the catalog, local.db, the run state and the clients' readings."""
 
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.application.ports.driven.coverage_reader import CoverageReader
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.node_state_reader import NodeStateReader
@@ -20,7 +21,7 @@ class SummarizeCrawl(CrawlSummarizer):
     def __init__(
         self,
         *,
-        target_ids: tuple[str, ...],
+        target_ids: tuple[TargetId, ...],
         coverage_reader: CoverageReader,
         node_state_reader: NodeStateReader,
         run_state_reader: RunStateReader,

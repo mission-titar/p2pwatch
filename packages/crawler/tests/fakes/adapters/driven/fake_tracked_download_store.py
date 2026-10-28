@@ -2,6 +2,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from typing import Literal
 
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.application.ports.driven.tracked_download_reader import TrackedDownloadReader
 from p2pwatch.application.ports.driven.tracked_download_writer import TrackedDownloadWriter
 from p2pwatch.domain.download.states import DownloadState, FailureReason
@@ -36,13 +37,13 @@ class FakeTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
         self._fail_set_completed_for = fail_set_completed_for or set()
         self._fail_tracked_states = fail_tracked_states
         self._fail_set_seen = fail_set_seen
-        self._target_ids: dict[str, str] = {}
+        self._target_ids: dict[str, TargetId] = {}
 
-    def read_queued_target_id(self, file: FileKey) -> str | None:
+    def read_queued_target_id(self, file: FileKey) -> TargetId | None:
         return self._target_ids.get(file.native_id)
 
     def record_queued(
-        self, file: FileKey, target_id: str, size_bytes: int, queued_at: datetime
+        self, file: FileKey, target_id: TargetId, size_bytes: int, queued_at: datetime
     ) -> None:
         if self._fail_record:
             raise StoreError("downloads write failed")

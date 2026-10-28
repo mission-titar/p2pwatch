@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.file_key import FileKey
 
 
@@ -10,4 +11,4 @@ class DownloadCandidate:
     """A file whose latest verdict for ``target_id`` is tier=download, for the download loop."""
 
     file: FileKey
-    target_id: str
+    target_id: TargetId

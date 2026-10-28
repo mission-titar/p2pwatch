@@ -4,6 +4,7 @@ their target and when the client last listed them."""
 from abc import ABC, abstractmethod
 from datetime import datetime
 
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import FileKey
 
@@ -25,5 +26,5 @@ class TrackedDownloadReader(ABC):
         """Every tracked download's state."""
 
     @abstractmethod
-    def read_queued_target_id(self, file: FileKey) -> str | None:
+    def read_queued_target_id(self, file: FileKey) -> TargetId | None:
         """The target ``file`` was queued for, ``None`` when it is not tracked."""
