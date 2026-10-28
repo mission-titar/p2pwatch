@@ -259,7 +259,7 @@ class MatchingEngine:
         Key = (highest tier, smallest rule index, smallest ``target_id``); ``target_id`` is
         unique, so the key is a strict total order -> a unique, target-order-independent winner.
         """
-        best_key: tuple[int, int, str] | None = None
+        best_key: tuple[int, int, TargetId] | None = None
         best_hit: _RuleHit | None = None
         for hit in hits:
             key = (-hit.tier.rank, hit.rule_index, hit.resolved.target.target_id)
