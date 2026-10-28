@@ -171,7 +171,10 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
   `observed_at` devient `observed_at_micros` dans `observations` et `source_observations` du
   catalogue, et `started_at` devient `started_at_micros` dans `backoff_states` de `local.db`.
   L'instant d'une décision, jusqu'ici un texte ISO-8601 dans `match_decisions.decided_at`, devient
-  lui aussi un entier de microsecondes, `decided_at_micros`. Adaptez vos requêtes de la console SQL.
+  lui aussi un entier de microsecondes, `decided_at_micros`, comme les quatre instants de
+  `downloads` dans `local.db` : `queued_at`, `completed_at`, `latest_seen_at` et
+  `latest_progress_at` deviennent `queued_at_micros`, `completed_at_micros`,
+  `latest_seen_at_micros` et `latest_progress_at_micros`. Adaptez vos requêtes de la console SQL.
 - **Les paramètres d'URL de `/files` changent de nom** : `q` devient `search`, `target` devient
   `target_id` et `dir` devient `direction`. Les anciens sont ignorés : mettez à jour vos favoris.
   Un `?tier=` inconnu est ignoré lui aussi, comme un `sort` ou un `direction` inconnu : la liste

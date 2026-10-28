@@ -476,7 +476,7 @@ flowchart LR
   (triggers `BEFORE UPDATE/DELETE -> ABORT`), pour que N nœuds fusionnent en un seul catalogue
   (`python -m p2pwatch merge`). Les insertions sont **idempotentes** (`INSERT OR IGNORE` /
   `ON CONFLICT DO NOTHING`), donc sans danger en cas de redémarrage en pleine écriture.
-- **`local.db`** (version de schéma 13) : l'état d'exécution du nœud (identité, suivi des
+- **`local.db`** (version de schéma 14) : l'état d'exécution du nœud (identité, suivi des
   téléchargements et de leur progression, backoff des recherches, empreinte de la politique
   réévaluée). **Jamais fusionnée** : elle appartient à un seul nœud.
 
@@ -522,7 +522,9 @@ dans `observation_variants` et `source_variants`, `local/0012` `downloads.last_s
 porte son unité dans son nom, par des `RENAME COLUMN` eux aussi.
 `catalog/0015` reconstruit `match_decisions` pour stocker l'instant d'une décision en
 microsecondes, `decided_at_micros`, au lieu du texte ISO-8601 ; chaque ligne garde son `id`, qui
-départage deux décisions du même instant.
+départage deux décisions du même instant. `local/0014` reconstruit `downloads` en table `STRICT`,
+ses quatre instants en microsecondes : `queued_at_micros`, `completed_at_micros`,
+`latest_seen_at_micros` et `latest_progress_at_micros`.
 
 ### 8.1 Écrire une migration
 

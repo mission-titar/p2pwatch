@@ -8,15 +8,20 @@ from pathlib import Path
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_node_state_reader import (
     SqliteNodeStateReader,
 )
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store import (
+    SqliteTrackedDownloadStore,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadReadConnections,
 )
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
+from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 
 _STARTED_AT_MICROS = 1_781_258_400_000_000  # 2026-06-12T10:00:00Z
+_QUEUED_AT_MICROS = 1_782_122_400_000_000  # 2026-06-22T10:00:00Z
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -39,14 +44,14 @@ def test_node_state_populated(local_db: Path) -> None:
     # --- populate ---
     with closing(sqlite3.connect(local_db)) as w, w:
         w.execute(
-            "INSERT INTO downloads (file_id, network, native_id, target_id, state, queued_at,"
-            " size_bytes, latest_progress_at, waiting_reason, failure_reason)"
-            " VALUES (x'00', 'ed2k', ?, '062A', 'failed', ?, ?, ?, ?, ?)",
+            "INSERT INTO downloads (file_id, network, native_id, target_id, state,"
+            " queued_at_micros, size_bytes, latest_progress_at_micros, waiting_reason,"
+            " failure_reason) VALUES (x'00', 'ed2k', ?, '062A', 'failed', ?, ?, ?, ?, ?)",
             (
                 "aabbccdd" * 4,
-                "2026-06-22T10:00:00.000000+00:00",
+                _QUEUED_AT_MICROS,
                 1024,
-                "2026-06-23T10:00:00.000000+00:00",
+                _QUEUED_AT_MICROS + 86_400_000_000,
                 "no_source",
                 "error",
             ),
@@ -105,13 +110,10 @@ def test_node_state_populated(local_db: Path) -> None:
 def test_a_completed_download_reads_its_completion(local_db: Path) -> None:
     with closing(sqlite3.connect(local_db)) as w, w:
         w.execute(
-            "INSERT INTO downloads (file_id, network, native_id, target_id, state, queued_at,"
-            " completed_at) VALUES (x'00', 'ed2k', ?, '062A', 'completed', ?, ?)",
-            (
-                "aabbccdd" * 4,
-                "2026-06-22T10:00:00.000000+00:00",
-                "2026-06-24T10:00:00.250000+00:00",
-            ),
+            "INSERT INTO downloads (file_id, network, native_id, target_id, state,"
+            " queued_at_micros, completed_at_micros)"
+            " VALUES (x'00', 'ed2k', ?, '062A', 'completed', ?, ?)",
+            ("aabbccdd" * 4, _QUEUED_AT_MICROS, _QUEUED_AT_MICROS + 172_800_250_000),
         )
 
     (download,) = _read_node_state(local_db).downloads
@@ -119,6 +121,33 @@ def test_a_completed_download_reads_its_completion(local_db: Path) -> None:
     assert download.state is DownloadState.COMPLETED
     assert download.completed_at == datetime(2026, 6, 24, 10, 0, 0, 250000, tzinfo=UTC)
     assert download.latest_progress_at is None
+
+
+def test_a_download_reads_back_each_instant_its_store_wrote(local_db: Path) -> None:
+    file = FileKey(Network.ED2K, "aabbccdd" * 4)
+    queued_at = datetime(2026, 6, 22, 10, 0, 0, 123456, tzinfo=UTC)
+    progressed_at = queued_at + timedelta(hours=1, microseconds=1)
+    completed_at = queued_at + timedelta(days=1, microseconds=7)
+    with closing(sqlite3.connect(local_db, autocommit=True)) as connection:
+        tracked_download_store = SqliteTrackedDownloadStore(connection)
+        tracked_download_store.record_queued(file, "062A", 100, queued_at)
+        tracked_download_store.set_seen(
+            [DownloadStatus(file, 40, 100, False, None, None)], progressed_at
+        )
+        tracked_download_store.set_completed(file, completed_at)
+
+    assert _read_node_state(local_db).downloads == (
+        TrackedDownload(
+            file=file,
+            target_id="062A",
+            state=DownloadState.COMPLETED,
+            queued_at=queued_at,
+            completed_at=completed_at,
+            latest_progress_at=progressed_at,
+            waiting_reason=None,
+            failure_reason=None,
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
