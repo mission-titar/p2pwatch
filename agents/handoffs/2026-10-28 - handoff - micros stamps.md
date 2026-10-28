@@ -57,6 +57,12 @@ v5 release, or through a `main` image the operator chooses to run.
   its explicit transaction (the connection is in autocommit; a second id hits the primary key, `StoreError` as the
   port promises). `connection.py`, `utc_iso` and `test_connection.py` are deleted. The webui's four docstrings that
   described an instant as `utc_iso` or `local.db` stored it say "ISO-8601 to the microsecond".
+- **`iso_to_micros` for the migrations only** (block 60, the operator's request after the holistic review; D4
+  amended): `@warnings.deprecated(..., category=None)`, so no runtime warning that `-W error` would turn into a
+  failed migration, and mypy's `deprecated` error code (root `[tool.mypy]`) refuses every reference but its
+  registration in `variants.py`, under `# type: ignore[deprecated]`. The opener removes the SQL function once the
+  migrations are applied (`remove_migration_sql_functions`), so a store's SQL calling it fails with `no such
+  function`. The tests reach it through SQL only; their seeds go through `instant_to_micros(datetime.fromisoformat(...))`.
 - **The documents**: `docs/contributing/architecture.md` (the diagram's `node_identity`, catalog 15, local 15, the
   five migrations in the history paragraph) and `docs/migration-4x.md` (the `_micros` columns, `node_runtime` as
   `node_identity` and the stop at local 0015 of a `node_id` without `created_at`), each block for its migration. Block 20 also
@@ -102,6 +108,8 @@ Each criterion's test watched failing, from the block reports:
   `iso_to_micros` of it, as `insert_observation` does, so the seeds' ISO literals stay readable; only the copier
   test's `"t1"` seed became `_T1`.
 - Block 40: `SqliteNodeStateReader`'s `created_at` read `datetime.fromisoformat` inline until block 50.
+- Block 60: the opener removes `iso_to_micros` with `create_window_function(..., None)`, not the
+  `create_function(..., None)` asked for, which only re-registers it as `None` (Pitfalls).
 - Block 50: `test_a_failed_record_is_rolled_back_whole` is removed (one `INSERT` cannot half-write, and the
   contract's `test_a_second_node_id_is_refused` covers the conflict); `test_a_naive_created_at_does_not_wedge_the_connection`
   becomes `test_a_naive_created_at_raises_and_records_nothing`, since no transaction is left to wedge.
@@ -134,6 +142,10 @@ No fix-back. One cascaded rebase: block 30 onto the inserted block 25, done by t
 it re-triggered no run. No body called unreadable so far.
 
 ## Pitfalls
+
+- `connection.create_function(name, n, None)` deletes nothing in Python 3.13: it registers `None`, and a call then
+  fails with `user-defined function raised exception`. `create_window_function(name, n, None)` hands SQLite the
+  NULL callbacks that delete a function of that name and arity, a scalar one included (block 60).
 
 - A migration test that opens through `open_catalog`/`open_local` breaks at every later migration: pin it with
   `open_*_at(path, N)` (block 20).

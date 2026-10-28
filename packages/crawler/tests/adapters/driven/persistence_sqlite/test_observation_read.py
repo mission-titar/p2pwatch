@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite import observation_read
-from p2pwatch.adapters.driven.persistence_sqlite.micros import iso_to_micros
+from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
@@ -191,7 +191,8 @@ def test_the_timeline_reads_its_interval_only(connection: sqlite3.Connection) ->
     ]
     for n, at in enumerate(ats):
         _raw(connection, _A, f"{n}.avi", at)
-    since, until = iso_to_micros(ats[1]), iso_to_micros(ats[3])
+    since = instant_to_micros(datetime.fromisoformat(ats[1]))
+    until = instant_to_micros(datetime.fromisoformat(ats[3]))
     assert observation_read.observations_between(connection, _key(_A), since, until) == (
         _observation("1.avi", ats[1]),
         _observation("2.avi", ats[2]),

@@ -84,6 +84,7 @@ known-first-party = [
 [tool.mypy]
 python_version = "3.13"
 strict = true
+enable_error_code = ["deprecated"]
 
 # For editors, not the gate: without the venv, no import resolves.
 [tool.pyright]

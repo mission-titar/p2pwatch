@@ -2,8 +2,9 @@
 
 import hashlib
 import sqlite3
+from datetime import datetime
 
-from p2pwatch.adapters.driven.persistence_sqlite.micros import iso_to_micros
+from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceKey
@@ -54,7 +55,7 @@ def insert_observation(
     connection.execute(
         "INSERT INTO observations (variant_id, observed_at_micros, source_count)"
         " SELECT variant_id, ?, ? FROM observation_variants WHERE content_hash = ?",
-        (iso_to_micros(observed_at), source_count, key),
+        (instant_to_micros(datetime.fromisoformat(observed_at)), source_count, key),
     )
 
 
@@ -72,7 +73,14 @@ def insert_decision(
         "INSERT INTO match_decisions"
         " (file_id, target_id, rule_name, tier, decided_at_micros, node_id)"
         " VALUES (?, ?, ?, ?, ?, ?)",
-        (file_id(native_id), target_id, rule_name, tier, iso_to_micros(decided_at), node_id),
+        (
+            file_id(native_id),
+            target_id,
+            rule_name,
+            tier,
+            instant_to_micros(datetime.fromisoformat(decided_at)),
+            node_id,
+        ),
     )
 
 
