@@ -4,6 +4,7 @@ import yaml
 
 from catalog_matching.domain.config import MatcherConfig
 from catalog_matching.domain.engine import Explanation, MatchingEngine
+from catalog_matching.domain.identifiers import TargetId
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 from p2pwatch.domain.matching_read import MatchingExplainer
@@ -67,7 +68,7 @@ def test_explainer_returns_explanation_on_matching_filename() -> None:
         size_bytes=None,
         duration_seconds=None,
         bitrate_kbps=None,
-        target_id="062A",
+        target_id=TargetId("062A"),
     )
     assert isinstance(explanation, Explanation)
     assert len(explanation.rules_fired) > 0
@@ -86,7 +87,7 @@ def test_explainer_returns_none_for_unknown_target() -> None:
         size_bytes=None,
         duration_seconds=None,
         bitrate_kbps=None,
-        target_id="S9E999Z",
+        target_id=TargetId("S9E999Z"),
     )
     assert explanation is None
 
@@ -130,7 +131,7 @@ rules:
         size_bytes=104857600,
         duration_seconds=None,
         bitrate_kbps=None,
-        target_id="062A",
+        target_id=TargetId("062A"),
     )
     assert isinstance(explanation, Explanation)
     assert "catalog" in explanation.rules_fired
@@ -175,7 +176,7 @@ rules:
         size_bytes=None,
         duration_seconds=1350,
         bitrate_kbps=1500,
-        target_id="062A",
+        target_id=TargetId("062A"),
     )
     assert isinstance(explanation, Explanation)
     assert "catalog" in explanation.rules_fired
@@ -213,7 +214,7 @@ rules:
         size_bytes=100 * 1024 * 1024,
         duration_seconds=None,
         bitrate_kbps=None,
-        target_id="062A",
+        target_id=TargetId("062A"),
     )
     assert isinstance(explanation, Explanation)
     assert explanation.vetoes_fired == ("ita",)

@@ -7,6 +7,7 @@ import pytest
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
@@ -23,12 +24,13 @@ _B = FileKey(Network.ED2K, "b" * 32)
 _NODE = "11111111-2222-3333-4444-555555555555"
 _T0 = datetime(2026, 6, 11, 12, 0, 0, 123456, tzinfo=UTC)
 _T1 = _T0 + timedelta(minutes=1)
+_TARGET_ID = TargetId("062A")
 
 
 def _decision(
     file: FileKey,
     tier: DecisionTier = DecisionTier.DOWNLOAD,
-    target_id: str = "062A",
+    target_id: TargetId = _TARGET_ID,
     decided_at: datetime = _T0,
     node_id: str = _NODE,
 ) -> DatedDecision[DecisionRecord]:
@@ -36,7 +38,7 @@ def _decision(
 
 
 def _retraction(file: FileKey, node_id: str = _NODE) -> DatedDecision[Retraction]:
-    return DatedDecision(file, Retraction("062A"), _T0, node_id)
+    return DatedDecision(file, Retraction(TargetId("062A")), _T0, node_id)
 
 
 @pytest.fixture
@@ -117,7 +119,9 @@ def test_record_retraction_round_trip(
         " FROM match_decisions"
     ).fetchone()
     assert row == (_KEY.file_id, "062A", "", "retracted", instant_to_micros(_T0), _NODE)
-    assert decision_store.read_latest_decisions(_KEY) == {"062A": Retraction("062A")}
+    assert decision_store.read_latest_decisions(_KEY) == {
+        TargetId("062A"): Retraction(TargetId("062A"))
+    }
 
 
 def test_each_decision_stores_its_own_node_id(
@@ -138,7 +142,9 @@ def test_record_retraction_row_is_append_only(
     with pytest.raises(sqlite3.IntegrityError, match="match_decisions is append-only"):
         connection.execute("DELETE FROM match_decisions")
     # The retracted row SURVIVED both attempts, untouched.
-    assert decision_store.read_latest_decisions(_KEY) == {"062A": Retraction("062A")}
+    assert decision_store.read_latest_decisions(_KEY) == {
+        TargetId("062A"): Retraction(TargetId("062A"))
+    }
 
 
 def test_download_candidates_include_a_file_whose_latest_verdict_is_download(
@@ -148,7 +154,7 @@ def test_download_candidates_include_a_file_whose_latest_verdict_is_download(
     # newer = download
     decision_store.record_decision(_decision(_A, DecisionTier.DOWNLOAD, decided_at=_T1))
     assert decision_store.read_download_candidates() == (
-        DownloadCandidate(file=_A, target_id="062A"),
+        DownloadCandidate(file=_A, target_id=TargetId("062A")),
     )
 
 
@@ -157,7 +163,7 @@ def test_download_candidates_include_a_single_download_only_decision(
 ) -> None:
     decision_store.record_decision(_decision(_A, DecisionTier.DOWNLOAD))
     assert decision_store.read_download_candidates() == (
-        DownloadCandidate(file=_A, target_id="062A"),
+        DownloadCandidate(file=_A, target_id=TargetId("062A")),
     )
 
 
@@ -177,7 +183,7 @@ def test_download_candidates_isolate_each_file(decision_store: SqliteDecisionSto
     decision_store.record_decision(_decision(_B, DecisionTier.DOWNLOAD))
     decision_store.record_decision(_decision(_B, DecisionTier.CATALOG, decided_at=_T1))
     assert decision_store.read_download_candidates() == (
-        DownloadCandidate(file=_A, target_id="062A"),
+        DownloadCandidate(file=_A, target_id=TargetId("062A")),
     )
 
 
@@ -191,11 +197,11 @@ def test_download_candidates_hold_both_segments_of_one_file(
     decision_store: SqliteDecisionStore,
 ) -> None:
     # spec §6: a whole-episode file both segments in download must NOT lose a candidate.
-    decision_store.record_decision(_decision(_A, DecisionTier.DOWNLOAD, "062A"))
-    decision_store.record_decision(_decision(_A, DecisionTier.DOWNLOAD, "062B"))
+    decision_store.record_decision(_decision(_A, DecisionTier.DOWNLOAD, TargetId("062A")))
+    decision_store.record_decision(_decision(_A, DecisionTier.DOWNLOAD, TargetId("062B")))
     assert decision_store.read_download_candidates() == (
-        DownloadCandidate(file=_A, target_id="062A"),
-        DownloadCandidate(file=_A, target_id="062B"),
+        DownloadCandidate(file=_A, target_id=TargetId("062A")),
+        DownloadCandidate(file=_A, target_id=TargetId("062B")),
     )
 
 
@@ -203,8 +209,8 @@ def test_download_candidates_isolate_each_target_within_one_file(
     decision_store: SqliteDecisionStore,
 ) -> None:
     # same file, two targets: 062A latest=download, 062B latest=catalog → only 062A.
-    decision_store.record_decision(_decision(_A, DecisionTier.DOWNLOAD, "062A"))
-    decision_store.record_decision(_decision(_A, DecisionTier.CATALOG, "062B"))
+    decision_store.record_decision(_decision(_A, DecisionTier.DOWNLOAD, TargetId("062A")))
+    decision_store.record_decision(_decision(_A, DecisionTier.CATALOG, TargetId("062B")))
     assert decision_store.read_download_candidates() == (
-        DownloadCandidate(file=_A, target_id="062A"),
+        DownloadCandidate(file=_A, target_id=TargetId("062A")),
     )

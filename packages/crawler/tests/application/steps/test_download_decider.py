@@ -1,5 +1,6 @@
 import pytest
 
+from catalog_matching.domain.identifiers import TargetId
 from catalog_matching.domain.models import TargetSegment
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.states import DownloadState
@@ -31,7 +32,7 @@ from tests.support.application.steps.observability_dispatcher import Observabili
 async def test_new_candidate_is_queued_and_link_added() -> None:
     client = FakeDownloadClient()
     tracked_download_store = FakeTrackedDownloadStore()
-    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
+    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, TargetId("062A")),))
     observation_reader = FakeObservationReader(
         observations={HASH_A: observation(HASH_A, "Keroro.avi", 100)}
     )
@@ -51,7 +52,7 @@ async def test_already_downloaded_candidate_is_deduped() -> None:
     client = FakeDownloadClient(listed=[(status(HASH_A),)])
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.states[HASH_A] = DownloadState.DOWNLOADING  # already known
-    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
+    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, TargetId("062A")),))
     observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "x", 1)})
     cycle = build_cycle(
         client=client,
@@ -84,7 +85,7 @@ async def test_two_segment_candidates_same_hash_dedup_to_one_download() -> None:
     client = FakeDownloadClient()
     tracked_download_store = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(
-        candidates=(candidate(HASH_A, "062A"), candidate(HASH_A, "062B"))
+        candidates=(candidate(HASH_A, TargetId("062A")), candidate(HASH_A, TargetId("062B")))
     )
     observation_reader = FakeObservationReader(
         observations={HASH_A: observation(HASH_A, "Keroro 062.avi", 100)}
@@ -115,7 +116,7 @@ async def test_complete_target_candidate_is_skipped() -> None:
     client = FakeDownloadClient()
     tracked_download_store = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(
-        candidates=(candidate(HASH_B, "063A"),)  # 063A status=complete
+        candidates=(candidate(HASH_B, TargetId("063A")),)  # 063A status=complete
     )
     observation_reader = FakeObservationReader(observations={HASH_B: observation(HASH_B, "x", 1)})
     cycle = build_cycle(
@@ -133,7 +134,7 @@ async def test_complete_target_candidate_is_skipped() -> None:
 async def test_a_candidate_that_would_break_the_disk_floor_defers() -> None:
     client = FakeDownloadClient()
     tracked_download_store = FakeTrackedDownloadStore()
-    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
+    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, TargetId("062A")),))
     observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "x", 500)})
     cycle = build_cycle(
         client=client,
@@ -155,7 +156,7 @@ async def test_outstanding_queue_bytes_are_charged_against_the_floor() -> None:
     client = FakeDownloadClient(listed=[(status(HASH_B, done=100, total=1000),)])
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.states[HASH_B] = DownloadState.DOWNLOADING
-    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
+    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, TargetId("062A")),))
     observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "x", 200)})
     cycle = build_cycle(
         client=client,
@@ -177,7 +178,7 @@ async def test_a_nascent_queue_entry_commits_nothing() -> None:
     client = FakeDownloadClient(listed=[(status(HASH_B, done=50, total=0),)])
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.states[HASH_B] = DownloadState.DOWNLOADING
-    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
+    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, TargetId("062A")),))
     observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "x", 200)})
     cycle = build_cycle(
         client=client,
@@ -197,7 +198,7 @@ async def test_candidate_without_observation_is_skipped() -> None:
     # we skip it (log), never a crash.
     client = FakeDownloadClient()
     tracked_download_store = FakeTrackedDownloadStore()
-    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
+    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, TargetId("062A")),))
     observation_reader = FakeObservationReader(observations={})
     cycle = build_cycle(
         client=client,
@@ -217,7 +218,7 @@ async def test_intra_cycle_floor_accounts_for_links_added_this_cycle() -> None:
     client = FakeDownloadClient()
     tracked_download_store = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(
-        candidates=(candidate(HASH_A, "062A"), candidate(HASH_B, "062A"))
+        candidates=(candidate(HASH_A, TargetId("062A")), candidate(HASH_B, TargetId("062A")))
     )
     observation_reader = FakeObservationReader(
         observations={
@@ -244,7 +245,7 @@ async def test_candidate_for_unknown_target_is_treated_as_complete() -> None:
     client = FakeDownloadClient()
     tracked_download_store = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(
-        candidates=(candidate(HASH_A, "S9E999Z"),)  # ghost target, absent from TARGETS
+        candidates=(candidate(HASH_A, TargetId("S9E999Z")),)  # ghost target, absent from TARGETS
     )
     observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "x", 1)})
     cycle = build_cycle(
@@ -263,7 +264,7 @@ async def test_dispatches_download_queued() -> None:
     observability = ObservabilityOverFakes()
     client = FakeDownloadClient()
     tracked_download_store = FakeTrackedDownloadStore()
-    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
+    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, TargetId("062A")),))
     observation_reader = FakeObservationReader(
         observations={HASH_A: observation(HASH_A, "Keroro.avi", 100)}
     )

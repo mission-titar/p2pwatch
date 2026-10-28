@@ -1,5 +1,6 @@
 import pytest
 
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.client_errors import DownloadRejectedError
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.states import DownloadState, FailureReason
@@ -43,7 +44,7 @@ async def test_start_rejected_marks_failed_and_does_not_crash() -> None:
     # THIS hash is marked FAILED (spec §9 "failed + log"), the loop continues, does not raise.
     client = FakeDownloadClient(start_failures=[DownloadRejectedError("rejected")])
     tracked_download_store = FakeTrackedDownloadStore()
-    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, "062A"),))
+    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, TargetId("062A")),))
     observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "x", 1)})
     cycle = build_cycle(
         client=client,
@@ -66,7 +67,7 @@ async def test_start_rejected_for_one_file_does_not_block_the_next() -> None:
     client = FakeDownloadClient(start_failures=[DownloadRejectedError("rejected")])
     tracked_download_store = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(
-        candidates=(candidate(HASH_A, "062A"), candidate(HASH_B, "062A"))
+        candidates=(candidate(HASH_A, TargetId("062A")), candidate(HASH_B, TargetId("062A")))
     )
     observation_reader = FakeObservationReader(
         observations={

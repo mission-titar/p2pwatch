@@ -4,6 +4,7 @@ import sqlite3
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.canonical_native_id import (
     require_canonical_native_id,
 )
@@ -82,7 +83,7 @@ class SqliteDecisionStore(DecisionWriter, DecisionReader):
                 ),
             )
 
-    def read_latest_decisions(self, file: FileKey) -> dict[str, FileTargetDecision]:
+    def read_latest_decisions(self, file: FileKey) -> dict[TargetId, FileTargetDecision]:
         """Latest verdict per target for this file (set-diff anti-redundancy, spec §7), READ.
 
         Maps ``target_id`` → its latest decision. INCLUDES a target whose latest decision is a
@@ -92,7 +93,8 @@ class SqliteDecisionStore(DecisionWriter, DecisionReader):
         """
         with wrap_sqlite_errors():
             rows = self._connection.execute(_SELECT_LATEST_DECISIONS, (file.file_id,)).fetchall()
-        return {row[0]: _file_target_decision(*row) for row in rows}
+        decisions = [_file_target_decision(TargetId(row[0]), row[1], row[2]) for row in rows]
+        return {decision.target_id: decision for decision in decisions}
 
     def read_download_candidates(self) -> tuple[DownloadCandidate, ...]:
         """``(file, target_id)`` whose LATEST verdict is tier=download, to replay (download §5).
@@ -103,7 +105,7 @@ class SqliteDecisionStore(DecisionWriter, DecisionReader):
         with wrap_sqlite_errors():
             rows = self._connection.execute(_SELECT_DOWNLOAD_DECISIONS).fetchall()
         return tuple(
-            DownloadCandidate(file=FileKey(Network(row[0]), row[1]), target_id=row[2])
+            DownloadCandidate(file=FileKey(Network(row[0]), row[1]), target_id=TargetId(row[2]))
             for row in rows
         )
 
@@ -114,7 +116,7 @@ def _decision_columns(decision: FileTargetDecision) -> tuple[str, str, str]:
     return decision.target_id, decision.rule_name, decision.tier.value
 
 
-def _file_target_decision(target_id: str, rule_name: str, tier: str) -> FileTargetDecision:
+def _file_target_decision(target_id: TargetId, rule_name: str, tier: str) -> FileTargetDecision:
     if tier == _RETRACTED_TIER:
         return Retraction(target_id)
     return DecisionRecord(target_id, rule_name, DecisionTier(tier))

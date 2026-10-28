@@ -16,6 +16,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord, Explanation
+from catalog_matching.domain.identifiers import TargetId
 from catalog_matching.domain.models import TargetSegment
 from catalog_matching.domain.validation import parse_targets
 from p2pwatch.adapters.driving.webui.app import (
@@ -119,7 +120,9 @@ _CRAWL_SUMMARY = CrawlSummary(
     is_paused=False,
     node_state=_NODE_STATE,
     target_coverages=(
-        TargetCoverage("062A", status=TargetCoverageStatus.NONE, best_tier=None, file_count=0),
+        TargetCoverage(
+            TargetId("062A"), status=TargetCoverageStatus.NONE, best_tier=None, file_count=0
+        ),
     ),
 )
 _SUMMARIZER = FakeCrawlSummarizer(_CRAWL_SUMMARY)
@@ -150,7 +153,7 @@ _OBSERVATION = FileObservation(
 )
 _DECISION = DatedDecision(
     _FILE,
-    DecisionRecord("062A", "catalog", DecisionTier.CATALOG),
+    DecisionRecord(TargetId("062A"), "catalog", DecisionTier.CATALOG),
     datetime.fromisoformat(SEEN_AT),
     "n1",
 )
@@ -224,7 +227,7 @@ async def _files_page(
 ) -> tuple[str, ListFilesCall]:
     """The page rendered from ``file_listing`` (one catalog-tier file by default), and its call."""
     if file_listing is None:
-        file_listing = _one_file(_decision("062A", "catalog"))
+        file_listing = _one_file(_decision(TargetId("062A"), "catalog"))
     file_lister = FakeFileLister(file_listing)
     app = _app_on_fakes(file_lister=file_lister, target_segments=target_segments)
     text = await _page(app, url)
@@ -327,7 +330,10 @@ async def _coverage_cells(coverage: TargetCoverage) -> list[str]:
 @pytest.mark.asyncio
 async def test_dashboard_shows_each_target_coverage_with_its_title() -> None:
     coverage = TargetCoverage(
-        "062A", status=TargetCoverageStatus.FOUND, best_tier=DecisionTier.DOWNLOAD, file_count=2
+        TargetId("062A"),
+        status=TargetCoverageStatus.FOUND,
+        best_tier=DecisionTier.DOWNLOAD,
+        file_count=2,
     )
     assert await _coverage_cells(coverage) == [
         '<a href="/targets/062A">062A</a>',
@@ -338,7 +344,7 @@ async def test_dashboard_shows_each_target_coverage_with_its_title() -> None:
 @pytest.mark.asyncio
 async def test_dashboard_shows_a_target_without_a_best_tier_as_a_dot() -> None:
     coverage = TargetCoverage(
-        "062A", status=TargetCoverageStatus.NONE, best_tier=None, file_count=0
+        TargetId("062A"), status=TargetCoverageStatus.NONE, best_tier=None, file_count=0
     )
     assert (await _coverage_cells(coverage))[2:] == ["none", "·", "0"]
 
@@ -422,7 +428,10 @@ async def test_file_page_shows_each_decision_with_its_rule_tier_and_instant() ->
         DatedDecision(
             _FILE, DecisionRecord(target_id, "numero_nu_confirmed", DecisionTier.DOWNLOAD), at, "n1"
         )
-        for target_id, at in (("072A", _OBSERVATION.observed_at), ("072B", _WALL_CLOCK.now()))
+        for target_id, at in (
+            (TargetId("072A"), _OBSERVATION.observed_at),
+            (TargetId("072B"), _WALL_CLOCK.now()),
+        )
     )
     page = await _file_page(replace(_FILE_DESCRIPTION, file_history=_history(decisions=decisions)))
     for target_id, decided_at in (("072A", SEEN_AT), ("072B", "2026-10-14T20:00:00.000000+00:00")):
@@ -497,7 +506,7 @@ async def test_files_list_links_each_file_to_its_file_id() -> None:
 @pytest.mark.asyncio
 async def test_file_page_shows_the_explanation_its_use_case_gives() -> None:
     explanation = Explanation(
-        target_id="072B",
+        target_id=TargetId("072B"),
         rules_fired=("title_review",),
         tokens_matched=("ita", "keroro", "title_hit"),
         coverage_values=(("title_hit", 2 / 3),),
@@ -924,7 +933,7 @@ async def test_file_page_without_a_decision_says_so() -> None:
 async def test_file_page_with_a_decision_but_no_explanation_says_so() -> None:
     # The explainer has none for a target the current config does not know.
     unknown = replace(
-        _DECISION, decision=DecisionRecord("S9E999Z", "catalog", DecisionTier.CATALOG)
+        _DECISION, decision=DecisionRecord(TargetId("S9E999Z"), "catalog", DecisionTier.CATALOG)
     )
     page = await _file_page(replace(_FILE_DESCRIPTION, file_history=_history(decisions=(unknown,))))
     assert "<dt>Target</dt><dd>S9E999Z</dd>" in page
@@ -982,7 +991,7 @@ async def test_base_nav_uses_singular_node_href(
 
 _DOWNLOAD = TrackedDownload(
     file=FileKey(Network.ED2K, TEST_HASH),
-    target_id="062A",
+    target_id=TargetId("062A"),
     state=DownloadState.DOWNLOADING,
     queued_at=datetime(2026, 10, 10, tzinfo=UTC),
     completed_at=None,
@@ -1246,7 +1255,7 @@ def _catalog_entry(
     )
 
 
-def _decision(target_id: str, tier: str) -> DecisionRecord:
+def _decision(target_id: TargetId, tier: str) -> DecisionRecord:
     return DecisionRecord(target_id, "rule", DecisionTier(tier))
 
 
@@ -1255,25 +1264,31 @@ def test_resolve_target_display_empty_decisions_is_empty_list() -> None:
 
 
 def test_resolve_target_display_catalog_decision_is_unidentified() -> None:
-    catalog_entry = _catalog_entry(decisions=(_decision(target_id="062A", tier="catalog"),))
+    catalog_entry = _catalog_entry(
+        decisions=(_decision(target_id=TargetId("062A"), tier="catalog"),)
+    )
     assert _resolve_target_display(catalog_entry, _SEGMENT_BY_ID) == [("unidentified", "·")]
 
 
 def test_resolve_target_display_resolvable_id_joins_seasonal_locator_and_title() -> None:
-    catalog_entry = _catalog_entry(decisions=(_decision(target_id="062A", tier="download"),))
+    catalog_entry = _catalog_entry(
+        decisions=(_decision(target_id=TargetId("062A"), tier="download"),)
+    )
     assert _resolve_target_display(catalog_entry, _SEGMENT_BY_ID) == [
         ("062A / S02E11A", "La Grenouille Cosmique")
     ]
 
 
 def test_resolve_target_display_unknown_id_falls_back_to_raw_id() -> None:
-    catalog_entry = _catalog_entry(decisions=(_decision(target_id="999Z", tier="download"),))
+    catalog_entry = _catalog_entry(
+        decisions=(_decision(target_id=TargetId("999Z"), tier="download"),)
+    )
     assert _resolve_target_display(catalog_entry, _SEGMENT_BY_ID) == [("999Z", "·")]
 
 
 def test_resolve_target_display_two_segments_returns_a_pair_each() -> None:
     catalog_entry = _catalog_entry(
-        decisions=(_decision("062A", "download"), _decision("062B", "download"))
+        decisions=(_decision(TargetId("062A"), "download"), _decision(TargetId("062B"), "download"))
     )
     assert _resolve_target_display(catalog_entry, _SEGMENTS_AB) == [
         ("062A / S02E11A", "La Grenouille Cosmique"),
@@ -1289,7 +1304,7 @@ def test_catalog_entry_displays_empty_decisions_all_dashes() -> None:
 
 def test_catalog_entry_displays_two_segments_aggregate_cells_shared_tier() -> None:
     catalog_entry = _catalog_entry(
-        decisions=(_decision("062A", "download"), _decision("062B", "download"))
+        decisions=(_decision(TargetId("062A"), "download"), _decision(TargetId("062B"), "download"))
     )
     [display] = _catalog_entry_displays([catalog_entry], _SEGMENTS_AB)
     assert display.decisions_display == (
@@ -1301,7 +1316,7 @@ def test_catalog_entry_displays_two_segments_aggregate_cells_shared_tier() -> No
 
 def test_catalog_entry_displays_two_segments_differing_tiers_lists_per_target() -> None:
     catalog_entry = _catalog_entry(
-        decisions=(_decision("062A", "download"), _decision("062B", "notify"))
+        decisions=(_decision(TargetId("062A"), "download"), _decision(TargetId("062B"), "notify"))
     )
     [display] = _catalog_entry_displays([catalog_entry], _SEGMENTS_AB)
     assert display.tier_display == "062A: download · 062B: notify"
@@ -1335,7 +1350,7 @@ def test_catalog_entry_displays_shows_a_file_never_seen_with_unknown_sources() -
 async def test_files_catalog_tier_shows_unidentified() -> None:
     """A tier=catalog decision → the /files list must show "unidentified", not the resolved
     id/title."""
-    text, _ = await _files_page("/files", _one_file(_decision("062A", "catalog")))
+    text, _ = await _files_page("/files", _one_file(_decision(TargetId("062A"), "catalog")))
     assert TEST_HASH[:8] in text
     # Scoped to the table cell (not the static tier legend, which also mentions the word).
     assert '<div class="cell-line">unidentified</div>' in text
@@ -1344,7 +1359,7 @@ async def test_files_catalog_tier_shows_unidentified() -> None:
 
 @pytest.mark.asyncio
 async def test_files_resolvable_target_shows_seasonal_locator_and_title() -> None:
-    text, _ = await _files_page("/files", _one_file(_decision("062A", "download")))
+    text, _ = await _files_page("/files", _one_file(_decision(TargetId("062A"), "download")))
     assert "062A / S02E11A" in text
     assert "La Grenouille Cosmique" in text
 
@@ -1360,7 +1375,7 @@ async def test_files_table_is_scroll_wrapped_and_name_has_full_title() -> None:
 
 @pytest.mark.asyncio
 async def test_files_unknown_target_shows_raw_id_and_dash_title() -> None:
-    text, _ = await _files_page("/files", _one_file(_decision("999Z", "download")))
+    text, _ = await _files_page("/files", _one_file(_decision(TargetId("999Z"), "download")))
     assert "999Z" in text
     # The static tier legend also mentions the word "unidentified": scope to the cell.
     assert '<div class="cell-line">unidentified</div>' not in text
@@ -1411,7 +1426,7 @@ async def test_files_nonobvious_columns_have_header_tooltips() -> None:
 async def test_target_page_resolves_title_via_segment_mapping() -> None:
     """/targets/{id} shares _catalog_entry_displays with /files: confirm handle_target ALSO
     threads the segment_by_id mapping (both call sites, per the brief)."""
-    text, _ = await _files_page("/targets/062A", _one_file(_decision("062A", "download")))
+    text, _ = await _files_page("/targets/062A", _one_file(_decision(TargetId("062A"), "download")))
     assert "062A / S02E11A" in text
     assert "La Grenouille Cosmique" in text
 
@@ -1444,7 +1459,9 @@ episodes:
 
 @pytest.mark.asyncio
 async def test_files_whole_episode_renders_one_row_with_aggregated_targets() -> None:
-    listing = _one_file(_decision("072A", "download"), _decision("072B", "download"))
+    listing = _one_file(
+        _decision(TargetId("072A"), "download"), _decision(TargetId("072B"), "download")
+    )
     text, _ = await _files_page("/files", listing, _targets_ab())
     assert text.count(TEST_HASH[:8]) == 1
     assert '<div class="cell-line">072A / S03E06A</div>' in text

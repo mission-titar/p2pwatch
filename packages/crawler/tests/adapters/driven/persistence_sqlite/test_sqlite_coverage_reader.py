@@ -6,6 +6,7 @@ from contextlib import closing
 from pathlib import Path
 
 from catalog_matching.domain.decision_tier import DecisionTier
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_coverage_reader import SqliteCoverageReader
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadReadConnections,
@@ -22,7 +23,7 @@ from tests.support.catalog_rows import insert_decision, insert_file
 # ---------------------------------------------------------------------------
 
 
-def _read_target_coverage(catalog_db: Path) -> Mapping[str, tuple[DecisionTier, ...]]:
+def _read_target_coverage(catalog_db: Path) -> Mapping[TargetId, tuple[DecisionTier, ...]]:
     with ThreadReadConnections(catalog_db) as thread_read_connections:
         return SqliteCoverageReader(thread_read_connections).read_target_coverage()
 
@@ -30,12 +31,12 @@ def _read_target_coverage(catalog_db: Path) -> Mapping[str, tuple[DecisionTier, 
 def test_target_coverage_groups_by_target(catalog_db: Path) -> None:
     seed(catalog_db)
     coverage = _read_target_coverage(catalog_db)
-    assert coverage["062A"] == (DecisionTier.DOWNLOAD,)
+    assert coverage[TargetId("062A")] == (DecisionTier.DOWNLOAD,)
 
 
 def test_target_coverage_reads_each_tier_as_the_type(catalog_db: Path) -> None:
     seed(catalog_db)
-    (tier,) = _read_target_coverage(catalog_db)["062A"]
+    (tier,) = _read_target_coverage(catalog_db)[TargetId("062A")]
     assert tier is DecisionTier.DOWNLOAD
 
 
@@ -51,14 +52,14 @@ def test_target_coverage_multiple_files_same_target(catalog_db: Path) -> None:
             insert_file(connection, suffix * 32)
             insert_decision(connection, suffix * 32, "062A", "download")
     coverage = _read_target_coverage(catalog_db)
-    assert len(coverage["062A"]) == 2
+    assert len(coverage[TargetId("062A")]) == 2
 
 
 def test_target_coverage_whole_episode_contributes_to_both_targets(catalog_db: Path) -> None:
     seed_whole_episode(catalog_db)
     coverage = _read_target_coverage(catalog_db)
-    assert coverage["072A"] == (DecisionTier.DOWNLOAD,)
-    assert coverage["072B"] == (DecisionTier.DOWNLOAD,)
+    assert coverage[TargetId("072A")] == (DecisionTier.DOWNLOAD,)
+    assert coverage[TargetId("072B")] == (DecisionTier.DOWNLOAD,)
 
 
 def test_target_coverage_ignores_legacy_empty_target_sentinel(catalog_db: Path) -> None:
@@ -82,7 +83,7 @@ def test_target_coverage_ignores_legacy_empty_target_sentinel(catalog_db: Path) 
             decided_at="2026-07-05T11:00:00.000000+00:00",
         )
     coverage = _read_target_coverage(catalog_db)
-    assert coverage["090A"] == (DecisionTier.DOWNLOAD,)
+    assert coverage[TargetId("090A")] == (DecisionTier.DOWNLOAD,)
     assert "" not in coverage
 
 
@@ -101,7 +102,7 @@ def test_target_coverage_uses_latest_decision_per_hash(catalog_db: Path) -> None
             connection, h, "062A", "download", decided_at="2026-06-22T11:00:00.000000+00:00"
         )
     coverage = _read_target_coverage(catalog_db)
-    assert coverage["062A"] == (DecisionTier.DOWNLOAD,)
+    assert coverage[TargetId("062A")] == (DecisionTier.DOWNLOAD,)
 
 
 def test_target_coverage_omits_retracted(catalog_db: Path) -> None:
@@ -109,7 +110,7 @@ def test_target_coverage_omits_retracted(catalog_db: Path) -> None:
     seed(catalog_db)
     seed_retracted(catalog_db)
     coverage = _read_target_coverage(catalog_db)
-    assert coverage["062A"] == (DecisionTier.DOWNLOAD,)
+    assert coverage[TargetId("062A")] == (DecisionTier.DOWNLOAD,)
     assert "063A" not in coverage  # the retracted file's earlier (now stale) target
 
 
@@ -121,4 +122,4 @@ def test_coverage_tie_break_on_id(catalog_db: Path) -> None:
         insert_decision(connection, h, "062A", "catalog")
         insert_decision(connection, h, "062A", "download")
     coverage = _read_target_coverage(catalog_db)
-    assert coverage["062A"] == (DecisionTier.DOWNLOAD,)
+    assert coverage[TargetId("062A")] == (DecisionTier.DOWNLOAD,)

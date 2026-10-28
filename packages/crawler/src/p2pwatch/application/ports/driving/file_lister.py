@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from catalog_matching.domain.decision_tier import DecisionTier
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 
 
@@ -24,7 +25,7 @@ class FileLister(ABC):
     def list_files(
         self,
         *,
-        target_id: str | None,
+        target_id: TargetId | None,
         tier: DecisionTier | None,
         search_text: str | None,
         matched_only: bool,

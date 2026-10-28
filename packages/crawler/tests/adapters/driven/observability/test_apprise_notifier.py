@@ -9,6 +9,7 @@ import pytest
 from apprise.plugins.discord import USER_ROLE_DETECTION_RE
 
 from catalog_matching.domain.decision_tier import DecisionTier
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.observability.events import TargetTitle
@@ -28,8 +29,8 @@ from tests.fakes.adapters.driven.fake_apprise import FakeApprise
 _NODE = "titar-node-1"
 _HASH = "8f3a1c0b9e7d44a2b6c1f0e9d8a7b6c5"
 _SOURCE = SourceKey(Network.ED2K, "1f2e3d4c" * 4)
-_062A = TargetTitle("062A", "Les demoiselles cambrioleuses")
-_062B = TargetTitle("062B", "Le grand combat sous-marin")
+_062A = TargetTitle(TargetId("062A"), "Les demoiselles cambrioleuses")
+_062B = TargetTitle(TargetId("062B"), "Le grand combat sous-marin")
 _LINE = RelayedLogLine("online", Severity.INFO, _NODE)
 
 
@@ -139,7 +140,7 @@ async def test_every_message_is_sent_as_markdown() -> None:
 async def test_no_mention_reaches_apprise() -> None:
     hostile = "@everyone @here <@123> <@&456>"
     notifier, groups = _notifier()
-    alert = _source_alert(hostile, None, (TargetTitle("062A", hostile),), hostile)
+    alert = _source_alert(hostile, None, (TargetTitle(TargetId("062A"), hostile),), hostile)
     await notifier.notify(Audience.COMMUNITY, alert)
     await notifier.notify(Audience.OPERATIONS, RelayedLogLine(hostile, Severity.WARNING, _NODE))
     for call in (call for group in groups for call in group.sent):

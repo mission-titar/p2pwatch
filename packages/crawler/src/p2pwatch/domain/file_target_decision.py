@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from catalog_matching.domain.engine import DecisionRecord
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.file_key import FileKey
 
 
@@ -13,7 +14,7 @@ class Retraction:
     """The file no longer matches ``target_id``: the append-only catalog appends this instead
     of deleting the record. The engine never produces it, so it is no tier."""
 
-    target_id: str
+    target_id: TargetId
 
 
 type FileTargetDecision = DecisionRecord | Retraction
@@ -31,7 +32,7 @@ class DatedDecision[Decision: FileTargetDecision]:
 
 
 def records_to_write(
-    fresh: Sequence[DecisionRecord], persisted: Mapping[str, FileTargetDecision]
+    fresh: Sequence[DecisionRecord], persisted: Mapping[TargetId, FileTargetDecision]
 ) -> tuple[FileTargetDecision, ...]:
     """What the file's fresh records change in its persisted decisions, by target: each fresh
     record unlike its persisted one, then a retraction per target the fresh ones dropped."""

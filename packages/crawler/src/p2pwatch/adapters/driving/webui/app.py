@@ -27,6 +27,7 @@ from starlette.templating import Jinja2Templates
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.ed2k_link import build_ed2k_link
+from catalog_matching.domain.identifiers import TargetId
 from catalog_matching.domain.models import TargetSegment
 from p2pwatch.adapters.driving.webui.displays import (
     BackoffStateDisplay,
@@ -153,7 +154,7 @@ def _make_nav_context(amule_url: str) -> Callable[[Request], dict[str, Any]]:
 
 
 def _resolve_target_display(
-    catalog_entry: CatalogEntry, segment_by_id: Mapping[str, TargetSegment]
+    catalog_entry: CatalogEntry, segment_by_id: Mapping[TargetId, TargetSegment]
 ) -> list[tuple[str, str]]:
     """Per-decision ``(target, title)`` pairs for a catalog entry, in the entry's
     decision order (by target_id). Empty when the file has no current decision. The
@@ -176,7 +177,7 @@ def _resolve_target_display(
 
 
 def _catalog_entry_displays(
-    catalog_entries: Iterable[CatalogEntry], segment_by_id: Mapping[str, TargetSegment]
+    catalog_entries: Iterable[CatalogEntry], segment_by_id: Mapping[TargetId, TargetSegment]
 ) -> list[CatalogEntryDisplay]:
     """Convert catalog entries into ``CatalogEntryDisplay`` view-models: one row per file, the
     file's (usually two) segment decisions surfaced as one ``DecisionCellDisplay`` each in
@@ -437,6 +438,12 @@ def _normalize_sort(raw: str | None) -> CatalogEntrySort:
 def _normalize_tier(raw: str | None) -> DecisionTier | None:
     """Map a raw ``tier`` param to its tier, or no tier filter when unknown or missing."""
     return DecisionTier(raw) if raw is not None and raw in DecisionTier else None
+
+
+def _normalize_target_id(raw: str | None) -> TargetId | None:
+    """Map a raw ``target_id`` param to its target id, or no target filter when empty or missing."""
+    normalized = _normalize_param(raw)
+    return None if normalized is None else TargetId(normalized)
 
 
 def _normalize_direction(raw: str | None) -> SortDirection:
@@ -784,7 +791,7 @@ def build_app(
     async def handle_files(request: Request) -> Response:
         # Filters: ``param.strip() or None`` (webui-security#0). A select with an empty option
         # sent ``?target_id=`` (empty string) that matched 0 results with no message.
-        target_id_param = _normalize_param(request.query_params.get("target_id"))
+        target_id_param = _normalize_target_id(request.query_params.get("target_id"))
         tier_param = _normalize_tier(request.query_params.get("tier"))
         search_text = _normalize_param(request.query_params.get("search"))
         # Presence of ``show_unmatched`` (any value) opts into the whole catalogue.
@@ -1063,7 +1070,7 @@ def build_app(
         )
 
     async def handle_target(request: Request) -> Response:
-        target_id: str = request.path_params["target_id"]
+        target_id = TargetId(request.path_params["target_id"])
         file_listing = file_lister.list_files(
             target_id=target_id,
             tier=None,

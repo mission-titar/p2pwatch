@@ -26,6 +26,7 @@ from catalog_matching.domain.config import (
     TokenReference,
 )
 from catalog_matching.domain.decision_tier import DecisionTier
+from catalog_matching.domain.identifiers import TargetId
 from catalog_matching.domain.interpolation import (
     PLACEHOLDER,
     TARGET_PLACEHOLDERS,
@@ -554,7 +555,7 @@ def parse_targets(raw: dict[str, Any]) -> tuple[TargetSegment, ...]:
                 )
             )
     parsed_segments = tuple(segments)
-    seen: set[str] = set()
+    seen: set[TargetId] = set()
     for segment in parsed_segments:
         if segment.target_id in seen:
             raise MatchingConfigError(

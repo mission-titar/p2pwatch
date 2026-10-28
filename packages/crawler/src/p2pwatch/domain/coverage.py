@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from catalog_matching.domain.decision_tier import DecisionTier
+from catalog_matching.domain.identifiers import TargetId
 
 
 class TargetCoverageStatus(StrEnum):
@@ -20,13 +21,13 @@ class TargetCoverageStatus(StrEnum):
 
 @dataclass(frozen=True)
 class TargetCoverage:
-    target_id: str
+    target_id: TargetId
     status: TargetCoverageStatus
     best_tier: DecisionTier | None
     file_count: int
 
 
-def coverage_of(target_id: str, tiers: Sequence[DecisionTier]) -> TargetCoverage:
+def coverage_of(target_id: TargetId, tiers: Sequence[DecisionTier]) -> TargetCoverage:
     """``tiers``: the tier of each file's latest decision for this target.
 
     Catalog-tier decisions are the ``keroro_large`` catch-all: any keroro file with no numeric

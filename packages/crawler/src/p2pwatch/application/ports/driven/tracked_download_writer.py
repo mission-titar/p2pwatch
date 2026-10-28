@@ -5,6 +5,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from typing import Literal
 
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.download.states import DownloadState, FailureReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey
@@ -15,7 +16,7 @@ class TrackedDownloadWriter(ABC):
 
     @abstractmethod
     def record_queued(
-        self, file: FileKey, target_id: str, size_bytes: int, queued_at: datetime
+        self, file: FileKey, target_id: TargetId, size_bytes: int, queued_at: datetime
     ) -> None:
         """Tracks ``file`` as queued; a file already tracked keeps its row."""
 

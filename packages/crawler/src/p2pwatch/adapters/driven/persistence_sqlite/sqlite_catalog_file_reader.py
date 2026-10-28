@@ -13,6 +13,7 @@ from datetime import datetime
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros, micros_to_instant
 from p2pwatch.adapters.driven.persistence_sqlite.observation_read import (
     LATEST_OBSERVATION_CTE,
@@ -197,7 +198,7 @@ WHERE file_id = ?
 
 
 def _filter_clauses(
-    target_id: str | None,
+    target_id: TargetId | None,
     tier: DecisionTier | None,
     search_text: str | None,
 ) -> tuple[list[str], list[str]]:
@@ -254,7 +255,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
     def read_matched_and_total_file_counts(
         self,
         *,
-        target_id: str | None,
+        target_id: TargetId | None,
         tier: DecisionTier | None,
         search_text: str | None,
     ) -> tuple[int, int]:
@@ -271,7 +272,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
     def read_file_count_by_tier(
         self,
         *,
-        target_id: str | None,
+        target_id: TargetId | None,
         search_text: str | None,
     ) -> Mapping[DecisionTier, int]:
         """Never a tier filter: each facet shows the count its choice would give; a multi-tier
@@ -291,7 +292,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
     def read_catalog_entries(
         self,
         *,
-        target_id: str | None,
+        target_id: TargetId | None,
         tier: DecisionTier | None,
         search_text: str | None,
         matched_only: bool,
@@ -327,7 +328,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
                 # A file with no observation LEFT JOINs to NULLs.
                 latest_observation=None if row["filename"] is None else observation_from_row(row),
                 decisions=tuple(
-                    DecisionRecord(target_id=t, rule_name=r, tier=DecisionTier(ti))
+                    DecisionRecord(target_id=TargetId(t), rule_name=r, tier=DecisionTier(ti))
                     for t, r, ti in zip(
                         _split_concat(row["target_ids"]),
                         _split_concat(row["rule_names"]),
@@ -354,7 +355,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
             DatedDecision(
                 file,
                 DecisionRecord(
-                    target_id=row["target_id"],
+                    target_id=TargetId(row["target_id"]),
                     rule_name=row["rule_name"],
                     tier=DecisionTier(row["tier"]),
                 ),

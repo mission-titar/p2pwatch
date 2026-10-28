@@ -5,6 +5,7 @@ from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_node_id_store import SqliteNodeIdStore
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_node_state_reader import (
     SqliteNodeStateReader,
@@ -73,7 +74,7 @@ def test_node_state_populated(local_db: Path) -> None:
     assert state.downloads == (
         TrackedDownload(
             file=FileKey(Network.ED2K, "aabbccdd" * 4),
-            target_id="062A",
+            target_id=TargetId("062A"),
             state=DownloadState.FAILED,
             queued_at=datetime(2026, 6, 22, 10, tzinfo=UTC),
             completed_at=None,
@@ -127,7 +128,7 @@ def test_a_download_reads_back_each_instant_its_store_wrote(local_db: Path) -> N
     completed_at = queued_at + timedelta(days=1, microseconds=7)
     with closing(sqlite3.connect(local_db, autocommit=True)) as connection:
         tracked_download_store = SqliteTrackedDownloadStore(connection)
-        tracked_download_store.record_queued(file, "062A", 100, queued_at)
+        tracked_download_store.record_queued(file, TargetId("062A"), 100, queued_at)
         tracked_download_store.set_seen(
             [DownloadStatus(file, 40, 100, False, None, None)], progressed_at
         )
@@ -136,7 +137,7 @@ def test_a_download_reads_back_each_instant_its_store_wrote(local_db: Path) -> N
     assert _read_node_state(local_db).downloads == (
         TrackedDownload(
             file=file,
-            target_id="062A",
+            target_id=TargetId("062A"),
             state=DownloadState.COMPLETED,
             queued_at=queued_at,
             completed_at=completed_at,

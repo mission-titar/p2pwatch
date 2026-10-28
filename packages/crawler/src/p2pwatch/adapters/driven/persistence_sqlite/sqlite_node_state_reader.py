@@ -10,6 +10,7 @@ All SQL lives in module constants, parameterized (no value interpolation).
 from datetime import datetime, timedelta
 from enum import StrEnum
 
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.micros import micros_to_instant
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadReadConnections,
@@ -78,7 +79,7 @@ class SqliteNodeStateReader(NodeStateReader):
         downloads = tuple(
             TrackedDownload(
                 file=FileKey(Network(row["network"]), row["native_id"]),
-                target_id=row["target_id"],
+                target_id=TargetId(row["target_id"]),
                 state=DownloadState(row["state"]),
                 queued_at=micros_to_instant(row["queued_at_micros"]),
                 completed_at=_instant(row["completed_at_micros"]),

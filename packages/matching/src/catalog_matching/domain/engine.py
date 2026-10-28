@@ -15,6 +15,7 @@ from typing import NamedTuple
 from catalog_matching.domain.combinators import Matcher
 from catalog_matching.domain.config import MatcherConfig
 from catalog_matching.domain.decision_tier import DecisionTier
+from catalog_matching.domain.identifiers import TargetId
 from catalog_matching.domain.matchers import CoverageMatcher
 from catalog_matching.domain.models import FileCandidate, TargetSegment
 from catalog_matching.domain.resolver import MatcherResolver, ResolvedTarget
@@ -30,7 +31,7 @@ class Explanation:
     value, sorted by name.
     """
 
-    target_id: str
+    target_id: TargetId
     rules_fired: tuple[str, ...]
     tokens_matched: tuple[str, ...]
     coverage_values: tuple[tuple[str, float], ...]
@@ -47,7 +48,7 @@ class MatchDecision:
     the decision. ``explanation`` carries the explainability (§8.5).
     """
 
-    target_id: str
+    target_id: TargetId
     rule_name: str
     tier: DecisionTier
     explanation: Explanation
@@ -64,7 +65,7 @@ class DecisionRecord:
     equal iff their three fields are equal (frozen dataclass → field-by-field ``==``).
     """
 
-    target_id: str
+    target_id: TargetId
     rule_name: str
     tier: DecisionTier
 
@@ -166,16 +167,18 @@ class MatchingEngine:
         self._resolved: tuple[ResolvedTarget, ...] = tuple(
             resolver.resolve_target(target) for target in targets
         )
-        self._resolved_by_target: dict[str, ResolvedTarget] = {
+        self._resolved_by_target: dict[TargetId, ResolvedTarget] = {
             r.target.target_id: r for r in self._resolved
         }
 
-    def target(self, target_id: str) -> TargetSegment | None:
+    def target(self, target_id: TargetId) -> TargetSegment | None:
         """The target segment of ``target_id``, or ``None`` if unknown."""
         resolved = self._resolved_by_target.get(target_id)
         return None if resolved is None else resolved.target
 
-    def explain(self, candidates: Iterable[FileCandidate], target_id: str) -> Explanation | None:
+    def explain(
+        self, candidates: Iterable[FileCandidate], target_id: TargetId
+    ) -> Explanation | None:
         """Explains target ``target_id`` over every candidate of one file; ``None`` if unknown.
 
         Over-long filenames are skipped, as in :meth:`evaluate_file`.
@@ -196,7 +199,7 @@ class MatchingEngine:
         single-winner min-key over ALL hits yields one ``unattributed`` decision, or ``[]``.
         """
         matchable_candidates = self._matchable_candidates(candidates)
-        best_by_target_id: dict[str, _RuleHit] = {}
+        best_by_target_id: dict[TargetId, _RuleHit] = {}
         for resolved in self._resolved:
             if self._vetoed(resolved, matchable_candidates):
                 continue

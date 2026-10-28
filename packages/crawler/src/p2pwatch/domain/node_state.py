@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
@@ -14,7 +15,7 @@ class TrackedDownload:
     """A download with a row in ``downloads``, whatever its state."""
 
     file: FileKey
-    target_id: str
+    target_id: TargetId
     state: DownloadState
     queued_at: datetime
     completed_at: datetime | None

@@ -6,6 +6,7 @@ import yaml
 
 from catalog_matching.domain.config import RegexDefinition
 from catalog_matching.domain.engine import MatchingEngine
+from catalog_matching.domain.identifiers import TargetId
 from catalog_matching.domain.matchers import RegexMatcher
 from catalog_matching.domain.models import FileCandidate
 from catalog_matching.domain.validation import parse_matcher_config, parse_targets
@@ -232,7 +233,7 @@ def test_explicit_id_ignores_unmarked_numbers_and_nxnn(filename: str) -> None:
 def test_other_episode_vetoes_only_another_explicit_number(
     filename: str, vetoes: tuple[str, ...]
 ) -> None:
-    explanation = _engine().explain([FileCandidate(filename=filename)], "062A")
+    explanation = _engine().explain([FileCandidate(filename=filename)], TargetId("062A"))
     assert explanation is not None
     assert explanation.vetoes_fired == vetoes
 

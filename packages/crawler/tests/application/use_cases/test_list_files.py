@@ -2,6 +2,7 @@
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.application.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.application.ports.driving.file_lister import FileListing
 from p2pwatch.application.use_cases.list_files import ListFiles
@@ -14,7 +15,7 @@ _ENTRY = CatalogEntry(
     file=FileKey(Network.ED2K, "a" * 32),
     size_bytes=100,
     latest_observation=None,
-    decisions=(DecisionRecord("062A", "rule", DecisionTier.DOWNLOAD),),
+    decisions=(DecisionRecord(TargetId("062A"), "rule", DecisionTier.DOWNLOAD),),
 )
 
 
@@ -29,7 +30,7 @@ def _reader(entry_count: int = 1) -> FakeCatalogFileReader:
 
 def _list_files(reader: CatalogFileReader, *, page: int = 1) -> FileListing:
     return ListFiles(reader).list_files(
-        target_id="062A",
+        target_id=TargetId("062A"),
         tier=DecisionTier.DOWNLOAD,
         search_text="keroro",
         matched_only=True,

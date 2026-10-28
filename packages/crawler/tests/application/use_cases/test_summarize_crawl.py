@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 
 from catalog_matching.domain.decision_tier import DecisionTier
+from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.application.ports.driving.crawl_summarizer import ClientSummary, CrawlSummary
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.domain.coverage import TargetCoverage, TargetCoverageStatus
@@ -21,8 +22,8 @@ _READING = StatusReading(read_at=datetime(2026, 10, 14, tzinfo=UTC), status=None
 
 def _summarize(
     *,
-    target_ids: tuple[str, ...] = (),
-    tiers_by_target: Mapping[str, tuple[DecisionTier, ...]] | None = None,
+    target_ids: tuple[TargetId, ...] = (),
+    tiers_by_target: Mapping[TargetId, tuple[DecisionTier, ...]] | None = None,
     status_reading_store: FakeStatusReadingStore | None = None,
     paused: bool = False,
     fake_time: FakeTime | None = None,
@@ -39,14 +40,19 @@ def _summarize(
 
 def test_each_configured_target_has_its_coverage_in_their_order() -> None:
     summary = _summarize(
-        target_ids=("062B", "062A"),
-        tiers_by_target={"062A": (DecisionTier.DOWNLOAD,), "999Z": (DecisionTier.NOTIFY,)},
+        target_ids=(TargetId("062B"), TargetId("062A")),
+        tiers_by_target={
+            TargetId("062A"): (DecisionTier.DOWNLOAD,),
+            TargetId("999Z"): (DecisionTier.NOTIFY,),
+        },
     )
 
     assert summary.target_coverages == (
-        TargetCoverage("062B", status=TargetCoverageStatus.NONE, best_tier=None, file_count=0),
         TargetCoverage(
-            "062A",
+            TargetId("062B"), status=TargetCoverageStatus.NONE, best_tier=None, file_count=0
+        ),
+        TargetCoverage(
+            TargetId("062A"),
             status=TargetCoverageStatus.FOUND,
             best_tier=DecisionTier.DOWNLOAD,
             file_count=1,

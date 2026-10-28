@@ -12,6 +12,7 @@ from catalog_matching.domain.engine import (
     MatchingEngine,
     _first_matching_rule,
 )
+from catalog_matching.domain.identifiers import TargetId
 from catalog_matching.domain.models import FileCandidate, TargetSegment
 from catalog_matching.domain.resolver import MatcherResolver, ResolvedTarget
 from catalog_matching.domain.validation import parse_matcher_config
@@ -21,7 +22,7 @@ _MAX_FILENAME_LENGTH = 4096
 
 def test_explanation_is_frozen_and_holds_fields() -> None:
     explanation = Explanation(
-        target_id="062A",
+        target_id=TargetId("062A"),
         rules_fired=("id_segment_exact", "keroro_large"),
         tokens_matched=("is_video", "keroro", "segment_id"),
         coverage_values=(("title_hit", 1.0),),
@@ -32,18 +33,18 @@ def test_explanation_is_frozen_and_holds_fields() -> None:
     assert explanation.coverage_values == (("title_hit", 1.0),)
     assert explanation.vetoes_fired == ()
     with pytest.raises(dataclasses.FrozenInstanceError):
-        explanation.target_id = "062B"  # type: ignore[misc]
+        explanation.target_id = TargetId("062B")  # type: ignore[misc]
 
 
 def test_match_decision_is_frozen_and_holds_persisted_columns_plus_explanation() -> None:
     explanation = Explanation(
-        target_id="062A",
+        target_id=TargetId("062A"),
         rules_fired=("id_segment_exact",),
         tokens_matched=("keroro",),
         coverage_values=(),
     )
     decision = MatchDecision(
-        target_id="062A",
+        target_id=TargetId("062A"),
         rule_name="id_segment_exact",
         tier=DecisionTier.DOWNLOAD,
         explanation=explanation,
@@ -466,7 +467,7 @@ def test_evaluate_all_explains_with_the_winning_name() -> None:
     decisions = _fanout_engine().evaluate_file(
         [FileCandidate(filename="Keroro rediffusion.mkv"), winner]
     )
-    assert decisions[0].explanation == _fanout_engine().explain([winner], "062A")
+    assert decisions[0].explanation == _fanout_engine().explain([winner], TargetId("062A"))
 
 
 def test_evaluate_all_of_no_name_is_a_discard() -> None:

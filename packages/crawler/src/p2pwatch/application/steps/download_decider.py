@@ -3,6 +3,7 @@
 from collections.abc import Sequence
 
 from catalog_matching.domain.decision_tier import DecisionTier
+from catalog_matching.domain.identifiers import TargetId
 from catalog_matching.domain.models import TargetSegment
 from p2pwatch.application.ports.driven.decision_reader import DecisionReader
 from p2pwatch.application.ports.driven.free_space_meter import FreeSpaceMeter
@@ -18,7 +19,7 @@ from p2pwatch.domain.edge_state import EdgeState
 from p2pwatch.domain.observability.events import DiskSpaceLow, DownloadQueued, FreeSpaceSampled
 
 
-def _target_status(targets: Sequence[TargetSegment], target_id: str) -> str:
+def _target_status(targets: Sequence[TargetSegment], target_id: TargetId) -> str:
     """Target status (lookup ``target_id → status``); ``complete`` by default if the target
     has vanished from the config (conservative: do not download for an unknown target)."""
     for target in targets:
