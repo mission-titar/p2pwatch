@@ -70,9 +70,9 @@ def insert_decision(
 ) -> None:
     connection.execute(
         "INSERT INTO match_decisions"
-        " (file_id, target_id, rule_name, tier, decided_at, node_id)"
+        " (file_id, target_id, rule_name, tier, decided_at_micros, node_id)"
         " VALUES (?, ?, ?, ?, ?, ?)",
-        (file_id(native_id), target_id, rule_name, tier, decided_at, node_id),
+        (file_id(native_id), target_id, rule_name, tier, iso_to_micros(decided_at), node_id),
     )
 
 

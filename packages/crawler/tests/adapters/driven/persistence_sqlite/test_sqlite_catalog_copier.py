@@ -29,7 +29,7 @@ from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener imp
 
 # The current catalog schema version = the last catalog migration's number.
 # open_catalog stamps the output to it; the guard rejects any source that is not at it.
-_CURRENT_SCHEMA_VERSION = 14
+_CURRENT_SCHEMA_VERSION = 15
 _T1 = "2026-06-11T12:00:00.000000+00:00"
 _T2 = "2026-06-11T13:00:00.000000+00:00"
 _COPIER_LOGGER = "p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier"
@@ -62,7 +62,7 @@ def _full_catalog(letter: str, *, node_id: str) -> dict[str, list[dict[str, obje
                 "target_id": "062A",
                 "rule_name": "r",
                 "tier": "download",
-                "decided_at": "t1",
+                "decided_at": _T1,
                 "node_id": node_id,
             }
         ],

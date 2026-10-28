@@ -12,7 +12,7 @@ import pytest
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord, MatchingEngine
-from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
+from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
@@ -580,11 +580,11 @@ async def test_each_row_carries_the_instant_read_right_before_its_write(
         _key(_HASH_MULTI), _reported_file(_HASH_MULTI, _MULTI_NAME).to_candidate(), _NODE
     )
     rows = catalog_connection.execute(
-        "SELECT target_id, tier, decided_at FROM match_decisions ORDER BY id"
+        "SELECT target_id, tier, decided_at_micros FROM match_decisions ORDER BY id"
     ).fetchall()
     assert rows == [
-        ("001A", "notify", utc_iso(seeded_at)),
-        ("062A", "download", utc_iso(start)),
-        ("062B", "download", utc_iso(start + timedelta(minutes=1))),
-        ("001A", "retracted", utc_iso(start + timedelta(minutes=2))),
+        ("001A", "notify", instant_to_micros(seeded_at)),
+        ("062A", "download", instant_to_micros(start)),
+        ("062B", "download", instant_to_micros(start + timedelta(minutes=1))),
+        ("001A", "retracted", instant_to_micros(start + timedelta(minutes=2))),
     ]

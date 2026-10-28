@@ -13,7 +13,7 @@ from datetime import datetime
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord
-from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
+from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros, micros_to_instant
 from p2pwatch.adapters.driven.persistence_sqlite.observation_read import (
     LATEST_OBSERVATION_CTE,
     known_filenames,
@@ -83,7 +83,7 @@ WITH latest_dec AS (
             md.tier,
             ROW_NUMBER() OVER (
                 PARTITION BY md.file_id, md.target_id
-                ORDER BY md.decided_at DESC, md.id DESC
+                ORDER BY md.decided_at_micros DESC, md.id DESC
             ) AS rn
         FROM match_decisions AS md
     )
@@ -167,17 +167,17 @@ JOIN files AS f ON f.file_id = ld.file_id
 # All current decisions of a file: latest per (file_id, target_id), excluding the legacy
 # ``target_id == ''`` sentinel and any target whose latest row is a ``retracted`` marker.
 _SQL_FILE_DECISIONS = f"""\
-SELECT target_id, rule_name, tier, decided_at, node_id
+SELECT target_id, rule_name, tier, decided_at_micros, node_id
 FROM (
     SELECT
         md.target_id,
         md.rule_name,
         md.tier,
-        md.decided_at,
+        md.decided_at_micros,
         md.node_id,
         ROW_NUMBER() OVER (
             PARTITION BY md.target_id
-            ORDER BY md.decided_at DESC, md.id DESC
+            ORDER BY md.decided_at_micros DESC, md.id DESC
         ) AS rn
     FROM match_decisions AS md
     WHERE md.file_id = ?
@@ -358,7 +358,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
                     rule_name=row["rule_name"],
                     tier=DecisionTier(row["tier"]),
                 ),
-                decided_at=datetime.fromisoformat(row["decided_at"]),
+                decided_at=micros_to_instant(row["decided_at_micros"]),
                 node_id=row["node_id"],
             )
             for row in dec_rows

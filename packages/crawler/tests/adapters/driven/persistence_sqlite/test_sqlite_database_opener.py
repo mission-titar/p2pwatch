@@ -49,7 +49,7 @@ def test_open_catalog_creates_the_tables_and_versions_the_schema(tmp_path: Path)
     connection = database_opener().open_catalog(tmp_path / "catalog.db")
     try:
         assert _table_names(connection) == _CATALOG_TABLES
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 14
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 15
     finally:
         connection.close()
 
@@ -143,7 +143,7 @@ def test_a_version_5_catalog_leaves_one_copy_at_version_5_holding_its_rows(
     assert _version(copy) == 5
     assert _rows_by_table(copy) == rows_before
     assert [table for table, rows in rows_before.items() if not rows] == ["file_observation_ranges"]
-    assert _version(path) == 14
+    assert _version(path) == 15
 
 
 def test_a_migrated_catalog_opened_again_adds_no_file(tmp_path: Path) -> None:
@@ -242,7 +242,7 @@ def test_reopen_is_idempotent_and_keeps_data(tmp_path: Path) -> None:
     first.close()
     second = open_catalog(path)  # versions already applied: NO script replays
     try:
-        assert second.execute("PRAGMA user_version").fetchone()[0] == 14
+        assert second.execute("PRAGMA user_version").fetchone()[0] == 15
         assert second.execute("SELECT count(*) FROM files").fetchone()[0] == 1
     finally:
         second.close()

@@ -8,6 +8,7 @@ import pytest
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
+from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
 from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.file_key import FileKey, Network
@@ -20,8 +21,7 @@ _KEY = FileKey(Network.ED2K, _HASH)
 _A = FileKey(Network.ED2K, "a" * 32)
 _B = FileKey(Network.ED2K, "b" * 32)
 _NODE = "11111111-2222-3333-4444-555555555555"
-_T0 = datetime(2026, 6, 11, 12, 0, 0, tzinfo=UTC)
-_T0_ISO = "2026-06-11T12:00:00.000000+00:00"
+_T0 = datetime(2026, 6, 11, 12, 0, 0, 123456, tzinfo=UTC)
 _T1 = _T0 + timedelta(minutes=1)
 
 
@@ -58,9 +58,18 @@ def test_record_decision_round_trip(
 ) -> None:
     decision_store.record_decision(_decision(_KEY))
     row = connection.execute(
-        "SELECT file_id, target_id, rule_name, tier, decided_at, node_id FROM match_decisions"
+        "SELECT file_id, target_id, rule_name, tier, typeof(decided_at_micros), decided_at_micros,"
+        " node_id FROM match_decisions"
     ).fetchone()
-    assert row == (_KEY.file_id, "062A", "exact_062a", "download", _T0_ISO, _NODE)
+    assert row == (
+        _KEY.file_id,
+        "062A",
+        "exact_062a",
+        "download",
+        "integer",
+        instant_to_micros(_T0),
+        _NODE,
+    )
 
 
 def test_explanation_is_never_persisted(
@@ -70,7 +79,15 @@ def test_explanation_is_never_persisted(
     columns = {
         row[1] for row in connection.execute("PRAGMA table_info(match_decisions)").fetchall()
     }
-    assert columns == {"id", "file_id", "target_id", "rule_name", "tier", "decided_at", "node_id"}
+    assert columns == {
+        "id",
+        "file_id",
+        "target_id",
+        "rule_name",
+        "tier",
+        "decided_at_micros",
+        "node_id",
+    }
 
 
 def test_record_decision_for_unknown_file_raises_persistence_error(
@@ -96,9 +113,10 @@ def test_record_retraction_round_trip(
 ) -> None:
     decision_store.record_decision(_retraction(_KEY))
     row = connection.execute(
-        "SELECT file_id, target_id, rule_name, tier, decided_at, node_id FROM match_decisions"
+        "SELECT file_id, target_id, rule_name, tier, decided_at_micros, node_id"
+        " FROM match_decisions"
     ).fetchone()
-    assert row == (_KEY.file_id, "062A", "", "retracted", _T0_ISO, _NODE)
+    assert row == (_KEY.file_id, "062A", "", "retracted", instant_to_micros(_T0), _NODE)
     assert decision_store.read_latest_decisions(_KEY) == {"062A": Retraction("062A")}
 
 

@@ -89,6 +89,7 @@ exclude_also = ["if TYPE_CHECKING:"]
 "tests/adapters/driven/persistence_sqlite/test_migration_0012.py" = "a SQL migration of catalog.db"
 "tests/adapters/driven/persistence_sqlite/test_migration_0013.py" = "a SQL migration of catalog.db"
 "tests/adapters/driven/persistence_sqlite/test_migration_0014.py" = "a SQL migration of catalog.db"
+"tests/adapters/driven/persistence_sqlite/test_migration_0015.py" = "a SQL migration of catalog.db"
 "tests/adapters/driven/persistence_sqlite/test_migration_directives.py" = "the migration scripts' copy-before directives, against their statements"
 "tests/adapters/driven/persistence_sqlite/test_migration_drop_verification.py" = "SQL migrations of both databases"
 "tests/adapters/driven/persistence_sqlite/test_migration_last_seen_at.py" = "a SQL migration of local.db"

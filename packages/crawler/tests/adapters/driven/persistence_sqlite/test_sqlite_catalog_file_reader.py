@@ -22,6 +22,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_file_reader impo
     SqliteCatalogFileReader,
     _tier_rank_case,
 )
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadReadConnections,
     open_reader,
@@ -259,6 +260,21 @@ def test_file_history_of_an_unknown_file_id_is_none(catalog_db: Path) -> None:
             bytes.fromhex("a" * 32), since=_EPOCH, until=_YEAR_3000
         )
     assert by_native_id is None  # a file is read by its id, never by its ed2k hash
+
+
+def test_file_history_reads_a_recorded_decision_back_to_the_microsecond(catalog_db: Path) -> None:
+    decided = DatedDecision(
+        FileKey(Network.ED2K, "a" * 32),
+        DecisionRecord("062A", "id_segment_exact", DecisionTier.DOWNLOAD),
+        datetime(2026, 6, 22, 10, 0, 1, 123456, tzinfo=UTC),
+        "n1",
+    )
+    with closing(sqlite3.connect(catalog_db)) as connection, connection:
+        insert_file(connection, "a" * 32)
+        SqliteDecisionStore(connection).record_decision(decided)
+    file_history = _history(catalog_db, "a" * 32)
+    assert file_history is not None
+    assert file_history.decisions == (decided,)
 
 
 def test_file_history_retracted_target_is_no_decision(catalog_db: Path) -> None:
