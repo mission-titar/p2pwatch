@@ -38,7 +38,7 @@ FROM (
         md.tier,
         ROW_NUMBER() OVER (
             PARTITION BY md.file_id, md.target_id
-            ORDER BY md.decided_at DESC, md.id DESC
+            ORDER BY md.decided_at_micros DESC, md.id DESC
         ) AS rn
     FROM match_decisions AS md
 ) AS ld

@@ -472,7 +472,7 @@ flowchart LR
   end
 ```
 
-- **`catalog.db`** (version de schéma 14) : la connaissance accumulée, **append-only**, chaque table
+- **`catalog.db`** (version de schéma 15) : la connaissance accumulée, **append-only**, chaque table
   (triggers `BEFORE UPDATE/DELETE -> ABORT`), pour que N nœuds fusionnent en un seul catalogue
   (`python -m p2pwatch merge`). Les insertions sont **idempotentes** (`INSERT OR IGNORE` /
   `ON CONFLICT DO NOTHING`), donc sans danger en cas de redémarrage en pleine écriture.
@@ -520,6 +520,9 @@ dans `observation_variants` et `source_variants`, `local/0012` `downloads.last_s
 `observed_at_micros` dans `observations` et `source_observations`, `local/0013`
 `backoff_states.started_at` en `started_at_micros` : un instant stocké en entier de microsecondes
 porte son unité dans son nom, par des `RENAME COLUMN` eux aussi.
+`catalog/0015` reconstruit `match_decisions` pour stocker l'instant d'une décision en
+microsecondes, `decided_at_micros`, au lieu du texte ISO-8601 ; chaque ligne garde son `id`, qui
+départage deux décisions du même instant.
 
 ### 8.1 Écrire une migration
 

@@ -11,7 +11,7 @@ import pytest
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord, MatchingEngine, to_record
-from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
+from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_scan_reader import (
     SqliteCatalogScanReader,
 )
@@ -200,8 +200,10 @@ async def test_two_changed_rows_are_all_evaluated_and_written(
     tiers = dict(decision_tiers(catalog_connection))
     assert tiers == {_HASH_DL: "download", _HASH_CAT: "catalog"}
     assert decision_node_ids(catalog_connection) == {_NODE}
-    decided_at = catalog_connection.execute("SELECT DISTINCT decided_at FROM match_decisions")
-    assert decided_at.fetchall() == [(utc_iso(wall_clock.now()),)]
+    decided_at_micros = catalog_connection.execute(
+        "SELECT DISTINCT decided_at_micros FROM match_decisions"
+    )
+    assert decided_at_micros.fetchall() == [(instant_to_micros(wall_clock.now()),)]
     # Iteration is ORDER BY native_id: "31d6..." sorts before "aaaa..." (ASCII '3' < 'a').
     assert [line.message for line in reevaluation.observability.logger.lines] == [
         f"decisions for {_DL_NAME} ({_HASH_DL}): 062A none → download",

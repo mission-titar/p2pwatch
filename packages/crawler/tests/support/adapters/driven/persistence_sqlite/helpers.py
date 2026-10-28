@@ -30,7 +30,7 @@ _ROWS_BY_TABLE: Mapping[str, str] = {
         " JOIN observations AS o USING (variant_id)"
     ),
     "match_decisions": (
-        "SELECT f.native_id, d.target_id, d.rule_name, d.tier, d.decided_at, d.node_id"
+        "SELECT f.native_id, d.target_id, d.rule_name, d.tier, d.decided_at_micros, d.node_id"
         " FROM match_decisions AS d JOIN files AS f USING (file_id)"
     ),
     "sources": "SELECT network, native_id FROM sources",

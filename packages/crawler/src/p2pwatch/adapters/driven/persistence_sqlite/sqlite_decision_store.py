@@ -7,8 +7,8 @@ from catalog_matching.domain.engine import DecisionRecord
 from p2pwatch.adapters.driven.persistence_sqlite.canonical_native_id import (
     require_canonical_native_id,
 )
-from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
+from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.application.ports.driven.decision_reader import DecisionReader
 from p2pwatch.application.ports.driven.decision_writer import DecisionWriter
 from p2pwatch.domain.download.candidate import DownloadCandidate
@@ -19,27 +19,27 @@ from p2pwatch.domain.file_target_decision import DatedDecision, FileTargetDecisi
 _RETRACTED_TIER = "retracted"
 
 _INSERT_DECISION = """
-INSERT INTO match_decisions (file_id, target_id, rule_name, tier, decided_at, node_id)
+INSERT INTO match_decisions (file_id, target_id, rule_name, tier, decided_at_micros, node_id)
 VALUES (?, ?, ?, ?, ?, ?)
 """
 
 # Latest verdict per (file_id, target_id) for one file (set-diff anti-redundancy, spec §7).
-# ROW_NUMBER per target, order (decided_at, id) DESCENDING (most recent = rank 1); keep rank 1.
-# INCLUDES a target whose latest tier is 'retracted' (no tier filter); EXCLUDES the legacy
-# target_id='' sentinel (not a real target). The idx_match_decisions_file_target_decided index
-# serves the filter.
+# ROW_NUMBER per target, order (decided_at_micros, id) DESCENDING (most recent = rank 1); keep
+# rank 1. INCLUDES a target whose latest tier is 'retracted' (no tier filter); EXCLUDES the legacy
+# target_id='' sentinel (not a real target). The idx_match_decisions_file_target_decided_at_micros
+# index serves the filter.
 _SELECT_LATEST_DECISIONS = """
 SELECT target_id, rule_name, tier FROM (
     SELECT
         target_id, rule_name, tier,
-        ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY decided_at DESC, id DESC) AS rn
+        ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY decided_at_micros DESC, id DESC) AS rn
     FROM match_decisions
     WHERE file_id = ? AND target_id <> ''
 ) WHERE rn = 1
 """
 
 # Latest verdict per (file_id, target_id), kept when tier=download (download spec §5,
-# multi-target §6). Window: ROW_NUMBER per (file_id, target_id), order (decided_at, id)
+# multi-target §6). Window: ROW_NUMBER per (file_id, target_id), order (decided_at_micros, id)
 # DESCENDING (most recent = rank 1); keep rank 1 AND tier='download'. PARTITION BY the FULL
 # key so a whole-episode file with BOTH segments in download yields BOTH candidates. Sorted
 # by (network, native_id, target_id).
@@ -48,7 +48,7 @@ SELECT f.network, f.native_id, d.target_id FROM (
     SELECT
         file_id, target_id, tier,
         ROW_NUMBER() OVER (
-            PARTITION BY file_id, target_id ORDER BY decided_at DESC, id DESC
+            PARTITION BY file_id, target_id ORDER BY decided_at_micros DESC, id DESC
         ) AS rn
     FROM match_decisions
 ) AS d
@@ -77,7 +77,7 @@ class SqliteDecisionStore(DecisionWriter, DecisionReader):
                 (
                     dated_decision.file.file_id,
                     *_decision_columns(dated_decision.decision),
-                    utc_iso(dated_decision.decided_at),
+                    instant_to_micros(dated_decision.decided_at),
                     dated_decision.node_id,
                 ),
             )

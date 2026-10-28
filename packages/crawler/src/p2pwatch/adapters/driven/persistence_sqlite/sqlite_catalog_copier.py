@@ -71,8 +71,8 @@ JOIN main.observation_variants AS d ON d.content_hash = s.content_hash
 
 # DISTINCT drops the source's own twins, which NOT EXISTS against the destination cannot see.
 _COPY_MATCH_DECISIONS = f"""
-INSERT INTO main.match_decisions (file_id, target_id, rule_name, tier, decided_at, node_id)
-SELECT DISTINCT file_id, target_id, rule_name, tier, decided_at, node_id
+INSERT INTO main.match_decisions (file_id, target_id, rule_name, tier, decided_at_micros, node_id)
+SELECT DISTINCT file_id, target_id, rule_name, tier, decided_at_micros, node_id
 FROM {_SRC}.match_decisions AS s
 WHERE NOT EXISTS (
     SELECT 1 FROM main.match_decisions AS d
@@ -80,7 +80,7 @@ WHERE NOT EXISTS (
       AND d.target_id IS s.target_id
       AND d.rule_name IS s.rule_name
       AND d.tier IS s.tier
-      AND d.decided_at IS s.decided_at
+      AND d.decided_at_micros IS s.decided_at_micros
       AND d.node_id IS s.node_id
 )
 """
