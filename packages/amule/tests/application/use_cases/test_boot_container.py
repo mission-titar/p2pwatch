@@ -7,6 +7,7 @@ import pytest
 
 from p2pwatch_amule.application.use_cases.boot_container import BootContainer
 from p2pwatch_amule.domain.conf import reconcile_conf
+from p2pwatch_amule.domain.identifiers import Gid, Uid
 from p2pwatch_amule.domain.settings import BootSettings
 from tests.fakes.adapters.driven.fake_account_provisioner import FakeAccountProvisioner
 from tests.fakes.adapters.driven.fake_admin_password_setter import FakeAdminPasswordSetter
@@ -17,7 +18,11 @@ from tests.fakes.adapters.driven.fake_service_supervisor import FakeServiceSuper
 DIGEST = hashlib.md5(b"hunter2").hexdigest()
 
 BOOT_SETTINGS = BootSettings(
-    puid=1000, pgid=1001, ec_password="hunter2", api_password="s3cret", port_sync_enabled=False
+    puid=Uid(1000),
+    pgid=Gid(1001),
+    ec_password="hunter2",
+    api_password="s3cret",
+    port_sync_enabled=False,
 )
 
 

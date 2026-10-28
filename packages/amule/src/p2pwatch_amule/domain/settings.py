@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from urllib.parse import urlsplit
 
+from p2pwatch_amule.domain.identifiers import Gid, Uid
 from p2pwatch_amule.domain.settings_error import SettingsError
 
 DEFAULT_GLUETUN_CONTROL_URL = "http://localhost:8000"
@@ -22,8 +23,8 @@ _OFF = ("disabled", "no", "off", "false")
 
 @dataclass(frozen=True)
 class BootSettings:
-    puid: int
-    pgid: int
+    puid: Uid
+    pgid: Gid
     ec_password: str
     api_password: str
     port_sync_enabled: bool
@@ -34,16 +35,16 @@ class PortSyncSettings:
     gluetun_control_url: str
     poll_interval: timedelta
     restart_min_interval: timedelta
-    puid: int
-    pgid: int
+    puid: Uid
+    pgid: Gid
 
 
 def parse_boot_settings(env: Mapping[str, str]) -> BootSettings:
     """Return the boot step's settings from `env`, refusing the first missing or invalid one,
     port-sync's included when it is on."""
     boot_settings = BootSettings(
-        puid=_required_id(env, "PUID"),
-        pgid=_required_id(env, "PGID"),
+        puid=_puid(env),
+        pgid=_pgid(env),
         ec_password=_password(env, "AMULE_EC_PASSWORD"),
         api_password=_password(env, "AMULE_API_PASSWORD"),
         port_sync_enabled=is_port_sync_enabled(env),
@@ -85,8 +86,8 @@ def parse_port_sync_settings(env: Mapping[str, str]) -> PortSyncSettings:
         restart_min_interval=_seconds(
             env, "PORT_SYNC_RESTART_MIN_SECONDS", DEFAULT_PORT_SYNC_RESTART_MIN_INTERVAL
         ),
-        puid=_required_id(env, "PUID"),
-        pgid=_required_id(env, "PGID"),
+        puid=_puid(env),
+        pgid=_pgid(env),
     )
 
 
@@ -105,7 +106,15 @@ def _password(env: Mapping[str, str], name: str) -> str:
     return password
 
 
-def _required_id(env: Mapping[str, str], name: str) -> int:
+def _puid(env: Mapping[str, str]) -> Uid:
+    return Uid(_numeric_id(env, "PUID"))
+
+
+def _pgid(env: Mapping[str, str]) -> Gid:
+    return Gid(_numeric_id(env, "PGID"))
+
+
+def _numeric_id(env: Mapping[str, str], name: str) -> int:
     setting = _required(env, name)
     # isascii + isdigit: int() would also take "-1", "+1", "1_000", " 1" and non-ASCII digits.
     if not (setting.isascii() and setting.isdigit()):

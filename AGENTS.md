@@ -120,6 +120,8 @@ a function does.
   `value`, `entry`, `payload`; a single letter only inside a one-line comprehension or lambda.
 - **A quantity carries its unit unless its type does**: `_seconds`, `_bytes`, `_mib`, `_micros`; a `datetime`
   or a `timedelta` needs none.
+- **An identifier is a `NewType`** named after its variable in CamelCase, in its package's
+  `domain/identifiers.py`, typed where it enters (`NodeId`, `Channel`).
 - **A boolean reads as a predicate**: `is_tracked`, `has_useful_point`, `clamped`, `enabled`.
 - **A function says what it returns or does, side effects included**:
   `reevaluate_if_policy_changed`, `rejudge`. A class names what one instance is: `FileJudge`, `Cataloguer`.
@@ -233,7 +235,7 @@ a function does.
 | `step` | a stage of the lifecycle's graph, called only by the lifecycle or another step: a class in `application/steps/`, one per module, `NodeIdResolver` | a use case |
 | `lifecycle` | the program from its start to its stop, which the composition runs: `CrawlerLifecycle`, `PortSyncLifecycle`, behind no driving port | `app` |
 | `micros` | an integer of microseconds: an instant counts from the epoch; a column holding one is named `<x>_micros` too | a bare `_at` on an `int`, a column's included |
-| `id`, `db`, `sql`, `url`, `api`, `json`, `ecid`, `mib`, `iso`, `min`, `max`, `conf`, `argv`, `env`, `cwd` | the abbreviations allowed (`conf`: aMule's `amule.conf`; `argv`, `env`, `cwd`: what a `__main__.py` reads of its process) | `dir` for `directory` |
+| `id`, `db`, `sql`, `url`, `api`, `json`, `ecid`, `mib`, `iso`, `min`, `max`, `conf`, `argv`, `env`, `cwd`, `uid`, `gid` | the abbreviations allowed (`conf`: aMule's `amule.conf`; `argv`, `env`, `cwd`: what a `__main__.py` reads of its process; `uid`, `gid`: POSIX's user and group ids) | `dir` for `directory` |
 
 ## Workflow
 
