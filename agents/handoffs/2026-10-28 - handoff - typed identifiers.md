@@ -16,7 +16,8 @@ Thirteen blocks against the spec's eleven. Before Act, block 10 of the first dra
 70 into 80, 90 and 100. After the holistic review, the lead cut blocks 110 and 120 from its findings, so they are not
 in the spec's table, and the closing block, numbered 110 there, became 130. Blocks 40 to 70 passed 20 files, block 50
 also its estimate of 500 lines, under the mechanical exemption on their spec rows (operator, 2026-10-28); block 120
-passed 20 files under the same exemption, asked of the operator after the block, not before (Pitfalls).
+passed 20 files under the same exemption, asked of the operator after the block, not before, and approved by the
+operator (2026-10-28; Pitfalls).
 
 | Block | Pull request | Branch |
 |---|---|---|
@@ -198,7 +199,8 @@ planned. No body called unreadable so far.
   `boot_container.py`, missed `port_sync_lifecycle.py` for `PortSyncSettings`, and renamed no dataclass keyword: the
   edits were discarded and the rename done by anchored `sed`, its diff read line by line (block 110).
 - A mechanical rename past 20 files (block 120: 296 lines, 24 files, 5 of them through the support module's `NODE`)
-  takes the exemption, which the lead asks of the operator before the block starts; here it was asked after.
+  takes the exemption, which the lead asks of the operator before the block starts; here it was asked after, and
+  approved by the operator (2026-10-28).
 - Under zsh, `sed -i ... $files` does not word-split a variable: pipe `git grep -lz` into `xargs -0` (block 120).
 - A watch command ending with `; echo ...` exits 0 whatever the run's result: read `gh run watch --exit-status`'s own
   exit, or `gh pr checks --required` (the lead, #537).
