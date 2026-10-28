@@ -7,18 +7,11 @@ _MODULUS = 1 << 256
 
 
 def database_digest(connection: sqlite3.Connection) -> bytes:
-    """Covers the ``user_version``, the schema and every row of every table ``sqlite_schema``
-    lists, SQLite's own included, whatever the rows' order, read through SQLite."""
+    """Covers the ``user_version`` and every line of ``iterdump``, whatever their order: the schema,
+    every row, ``sqlite_sequence`` and ``sqlite_stat1``, not the other ``sqlite_stat*``."""
     user_version = connection.execute("PRAGMA user_version").fetchone()[0]
-    schema = connection.execute("SELECT sql FROM sqlite_schema ORDER BY sql").fetchall()
-    table_names = connection.execute(
-        "SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name"
-    ).fetchall()
-    rows_sum = 0
-    for (table_name,) in table_names:
-        quoted = '"' + table_name.replace('"', '""') + '"'
-        for row in connection.execute(f"SELECT * FROM {quoted}"):
-            # Added, so the rows' order does not matter; repr keeps 1, '1' and b'1' apart.
-            row_hash = sha256(repr((table_name, row)).encode()).digest()
-            rows_sum = (rows_sum + int.from_bytes(row_hash)) % _MODULUS
-    return sha256(repr((user_version, schema, rows_sum)).encode()).digest()
+    lines_sum = 0
+    for line in connection.iterdump():
+        # Added, so the rows' order does not matter.
+        lines_sum = (lines_sum + int.from_bytes(sha256(line.encode()).digest())) % _MODULUS
+    return sha256(repr((user_version, lines_sum)).encode()).digest()
