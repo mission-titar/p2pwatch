@@ -220,7 +220,7 @@ def _catalog_entry_displays(
 
 
 def _observation_display(observation: FileObservation) -> ObservationDisplay:
-    """An observation as one timeline line, its instant as ``utc_iso`` writes it."""
+    """An observation as one timeline line, its instant in ISO-8601 to the microsecond."""
     reported_file = observation.reported_file
     return ObservationDisplay(
         filename=reported_file.filename,
@@ -599,8 +599,8 @@ def _client_lines(client_summaries: tuple[ClientSummary, ...]) -> tuple[ClientLi
     return tuple(lines)
 
 
-def _stored_instant(moment: datetime | None) -> str:
-    """An instant as local.db stores it, blank when unknown."""
+def _iso_instant(moment: datetime | None) -> str:
+    """An instant in ISO-8601 to the microsecond, blank when unknown."""
     return "" if moment is None else moment.isoformat(timespec="microseconds")
 
 
@@ -611,15 +611,15 @@ def _reason_text(reason: StrEnum | None) -> str:
 def _node_state_display(node_state: NodeState) -> NodeStateDisplay:
     return NodeStateDisplay(
         node_id=node_state.node_id or "",
-        created_at=_stored_instant(node_state.created_at),
+        created_at=_iso_instant(node_state.created_at),
         downloads=tuple(
             TrackedDownloadDisplay(
                 native_id=download.file.native_id,
                 target_id=download.target_id,
                 state=download.state.value,
                 queued_at=download.queued_at.isoformat(timespec="microseconds"),
-                completed_at=_stored_instant(download.completed_at),
-                latest_progress_at=_stored_instant(download.latest_progress_at),
+                completed_at=_iso_instant(download.completed_at),
+                latest_progress_at=_iso_instant(download.latest_progress_at),
                 waiting_reason=_reason_text(download.waiting_reason),
                 failure_reason=_reason_text(download.failure_reason),
             )
