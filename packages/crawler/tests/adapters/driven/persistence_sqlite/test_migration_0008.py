@@ -141,7 +141,7 @@ def test_a_new_observation_reuses_the_variant_0008_rekeyed(tmp_path: Path) -> No
         migrated.close()
 
 
-def test_apply_migrations_restores_the_pragmas_0008_sets(tmp_path: Path) -> None:
+def test_migrating_restores_the_pragmas_0008_sets(tmp_path: Path) -> None:
     _catalog_at_7(tmp_path / "catalog.db")
     connection = open_catalog_forcing_secure_delete_at(tmp_path / "catalog.db", 8)
     try:

@@ -6,13 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError
+from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError, PersistenceError
+from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import Migration, load_scripts
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
     open_catalog_at,
     open_local_at,
 )
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     database_opener,
+    database_opener_setting,
     open_catalog,
     open_local,
 )
@@ -258,3 +260,197 @@ def test_insert_or_replace_on_existing_hash_raises_integrity_error(tmp_path: Pat
             )
     finally:
         connection.close()
+
+
+# --- The steps of an open: the connection, the pending scripts, their application ---
+
+# PRAGMA temp_store: 1 = FILE (0 = the compile-time default).
+_TEMP_STORE_DEFAULT = 0
+_TEMP_STORE_FILE = 1
+
+_NO_TRANSACTION = "-- migration: no-transaction\n"
+
+
+def _open(path: Path, scripts: tuple[Migration, ...]) -> sqlite3.Connection:
+    return database_opener().open(path, scripts)
+
+
+def _version_and_tables(path: Path) -> tuple[int, set[str]]:
+    """What a failed open left in ``path``, read once its connection is closed."""
+    with closing(sqlite3.connect(path)) as connection:
+        return connection.execute("PRAGMA user_version").fetchone()[0], _table_names(connection)
+
+
+def test_open_registers_the_variant_functions_before_migrating(tmp_path: Path) -> None:
+    probe = "CREATE TABLE probe AS SELECT iso_to_micros('1970-01-01T00:00:00.000001+00:00') AS us;"
+    with closing(_open(tmp_path / "catalog.db", (Migration(1, probe),))) as connection:
+        assert connection.execute("SELECT us FROM probe").fetchone()[0] == 1
+
+
+def test_in_memory_database_is_refused_because_wal_is_required() -> None:
+    # :memory: reports journal_mode='memory' (empirically verified) -> flat refusal.
+    with pytest.raises(PersistenceError, match="WAL"):
+        _open(Path(":memory:"), ())
+
+
+def test_unopenable_path_raises_persistence_error(tmp_path: Path) -> None:
+    with pytest.raises(PersistenceError):
+        _open(tmp_path, ())  # a directory is not a database
+
+
+def test_open_applies_the_scripts_above_the_version_only(tmp_path: Path) -> None:
+    path = tmp_path / "pending.db"
+    with closing(sqlite3.connect(path, autocommit=True)) as raw:
+        raw.execute("PRAGMA user_version = 1")
+    scripts = (
+        Migration(1, "CREATE TABLE a (x INTEGER);"),
+        Migration(2, "CREATE TABLE b (x INTEGER);"),
+        Migration(3, "CREATE TABLE c (x INTEGER);"),
+    )
+    _open(path, scripts).close()
+    assert _version_and_tables(path) == (3, {"b", "c"})
+
+
+def test_open_refuses_a_database_newer_than_its_scripts(tmp_path: Path) -> None:
+    path = tmp_path / "newer.db"
+    with closing(sqlite3.connect(path, autocommit=True)) as raw:
+        raw.execute("PRAGMA user_version = 99")
+    with pytest.raises(MigrationError, match="99"):
+        _open(path, (Migration(1, "A"),))
+
+
+def test_open_with_no_scripts_migrates_nothing(tmp_path: Path) -> None:
+    with closing(_open(tmp_path / "vide.db", ())) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 0
+
+
+def test_migrations_sort_through_temporary_files(tmp_path: Path) -> None:
+    """The probe records the ``temp_store`` in force while a migration runs: an in-memory sort
+    is unbounded (+697 MB for one index at 11.5M rows), a file-backed one is not."""
+    script = (
+        "CREATE TABLE probe (temp_store INTEGER);\n"
+        "INSERT INTO probe SELECT temp_store FROM pragma_temp_store();"
+    )
+    with closing(_open(tmp_path / "probe.db", (Migration(1, script),))) as connection:
+        assert connection.execute("SELECT temp_store FROM probe").fetchone()[0] == _TEMP_STORE_FILE
+
+
+def test_temp_store_is_restored_after_migrations(tmp_path: Path) -> None:
+    scripts = (Migration(1, "CREATE TABLE t (x INTEGER);"),)
+    with closing(_open(tmp_path / "restore.db", scripts)) as connection:
+        assert connection.execute("PRAGMA temp_store").fetchone()[0] == _TEMP_STORE_DEFAULT
+
+
+def test_failed_script_is_rolled_back_and_version_unchanged(tmp_path: Path) -> None:
+    path = tmp_path / "echec.db"
+    bad_script = "CREATE TABLE disparait (x INTEGER);\nINSERT INTO inexistante VALUES (1);"
+    with pytest.raises(MigrationError, match="migration 2"):
+        _open(path, (Migration(1, "CREATE TABLE survit (x INTEGER);"), Migration(2, bad_script)))
+    # Migration 1 has ITS OWN transaction (applied); migration 2 is ENTIRELY rolled back.
+    assert _version_and_tables(path) == (1, {"survit"})
+
+
+def test_each_applied_script_logs_one_line_before_it_runs(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A long first boot shows which script runs, so a silent wait is not taken for a hang."""
+    path = tmp_path / "log.db"
+    scripts = (
+        Migration(1, "CREATE TABLE a (x INTEGER);"),
+        Migration(2, "CREATE TABLE b (x INTEGER);"),
+    )
+    _open(path, scripts[:1]).close()
+    caplog.clear()
+    with caplog.at_level("INFO"):
+        _open(path, scripts).close()
+    assert caplog.messages == ["migration 2: applying"]
+
+
+def test_stray_commit_in_a_script_is_detected_before_stamping(tmp_path: Path) -> None:
+    # A COMMIT inside a script closes its migration's transaction: detection BEFORE the stamp,
+    # version unchanged, NO partial state (the attack script only does COMMIT).
+    path = tmp_path / "commit.db"
+    with pytest.raises(
+        MigrationError, match=r"^migration 2: the script closed its migration's transaction"
+    ):
+        _open(path, (Migration(1, "CREATE TABLE survit (x INTEGER);"), Migration(2, "COMMIT;")))
+    assert _version_and_tables(path) == (1, {"survit"})
+
+
+def test_stray_commit_followed_by_a_failure_keeps_the_version_unstamped(tmp_path: Path) -> None:
+    # Attack variant 2: a stray COMMIT THEN a statement that fails. The work
+    # committed by the stray COMMIT is unrecoverable, but the version MUST NOT
+    # be stamped (otherwise the migration would be marked applied even though it failed).
+    path = tmp_path / "commit2.db"
+    script = "CREATE TABLE t (x INTEGER);\nCOMMIT;\nINSERT INTO inexistante VALUES (1);"
+    with pytest.raises(MigrationError, match="migration 1"):
+        _open(path, (Migration(1, script),))
+    assert _version_and_tables(path)[0] == 0
+
+
+def test_open_closes_the_connection_when_configuring_fails(tmp_path: Path) -> None:
+    path = tmp_path / "catalog.db"
+    path.write_bytes(b"not a database" * 100)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with pytest.raises(PersistenceError, match="not a database"):
+            _open(path, ())
+        # A connection left open warns when it is collected.
+        gc.collect()
+    assert [w for w in caught if issubclass(w.category, ResourceWarning)] == []
+
+
+def test_vacuum_without_the_directive_fails_inside_its_migration_transaction(
+    tmp_path: Path,
+) -> None:
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "0001_vacuum.sql").write_text("VACUUM;", encoding="utf-8")
+    path = tmp_path / "vacuum.db"
+    with pytest.raises(MigrationError, match="cannot VACUUM from within a transaction"):
+        _open(path, load_scripts(scripts))
+    assert _version_and_tables(path)[0] == 0
+
+
+def test_vacuum_with_the_directive_runs_and_stamps_its_version(tmp_path: Path) -> None:
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "0001_table.sql").write_text("CREATE TABLE t (x INTEGER);", encoding="utf-8")
+    (scripts / "0002_vacuum.sql").write_text(_NO_TRANSACTION + "VACUUM;", encoding="utf-8")
+    with closing(_open(tmp_path / "vacuum.db", load_scripts(scripts))) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert not connection.in_transaction
+
+
+def test_failing_script_with_the_directive_leaves_the_version_unchanged(tmp_path: Path) -> None:
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "0001_table.sql").write_text("CREATE TABLE t (x INTEGER);", encoding="utf-8")
+    (scripts / "0002_broken.sql").write_text(
+        _NO_TRANSACTION + "INSERT INTO inexistante VALUES (1);", encoding="utf-8"
+    )
+    path = tmp_path / "broken.db"
+    with pytest.raises(MigrationError, match="migration 2"):
+        _open(path, load_scripts(scripts))
+    assert _version_and_tables(path)[0] == 1
+
+
+_LARGE_REWRITE_PRAGMAS = "PRAGMA secure_delete = OFF;\nPRAGMA cache_size = -262144;\n"
+
+
+@pytest.mark.parametrize("transactional", [True, False])
+def test_a_script_pragmas_are_restored_after_it(tmp_path: Path, transactional: bool) -> None:
+    """``secure_delete = 1`` stands for the image's build, which compiles ``SECURE_DELETE`` in."""
+    opener = database_opener_setting("PRAGMA secure_delete = ON")
+    script = _LARGE_REWRITE_PRAGMAS + "CREATE TABLE t (x INTEGER);"
+    scripts = (Migration(1, script, transactional),)
+    with closing(opener.open(tmp_path / "pragmas.db", scripts)) as connection:
+        assert connection.execute("PRAGMA secure_delete").fetchone()[0] == 1
+        assert connection.execute("PRAGMA cache_size").fetchone()[0] == -2000
+
+
+def test_a_fast_secure_delete_is_restored_as_fast(tmp_path: Path) -> None:
+    opener = database_opener_setting("PRAGMA secure_delete = FAST")
+    scripts = (Migration(1, _LARGE_REWRITE_PRAGMAS),)
+    with closing(opener.open(tmp_path / "fast.db", scripts)) as connection:
+        assert connection.execute("PRAGMA secure_delete").fetchone()[0] == 2

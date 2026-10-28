@@ -3,46 +3,36 @@ import sqlite3
 from importlib import resources
 from pathlib import Path
 
-from p2pwatch.adapters.driven.persistence_sqlite import connection as connection_module
+from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import Migration, load_scripts
 from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceKey
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
+    database_opener,
+    database_opener_setting,
+)
 
 _MIGRATIONS = resources.files("p2pwatch.adapters.driven.persistence_sqlite") / "migrations"
 
 
 def open_catalog_at(path: Path, version: int) -> sqlite3.Connection:
     """A catalog.db migrated up to ``version`` only, as an older release left it."""
-    return _migrated_up_to(connection_module.connect(path), "catalog", version)
+    return database_opener().open(path, _scripts_up_to("catalog", version))
 
 
 def open_catalog_forcing_secure_delete_at(path: Path, version: int) -> sqlite3.Connection:
     """The same, ``secure_delete`` ON: stands for the image's SQLite, which compiles it in."""
-    connection = connection_module.connect(path)
-    connection.execute("PRAGMA secure_delete = ON")
-    return _migrated_up_to(connection, "catalog", version)
+    opener = database_opener_setting("PRAGMA secure_delete = ON")
+    return opener.open(path, _scripts_up_to("catalog", version))
 
 
 def open_local_at(path: Path, version: int) -> sqlite3.Connection:
     """The same for a local.db."""
-    return _migrated_up_to(connection_module.connect(path), "local", version)
+    return database_opener().open(path, _scripts_up_to("local", version))
 
 
-def _migrated_up_to(
-    connection: sqlite3.Connection, database: str, version: int
-) -> sqlite3.Connection:
-    try:
-        scripts = _scripts_up_to(database, version)
-        pending = connection_module.pending_migrations(connection, scripts)
-        connection_module.apply_migrations(connection, pending)
-    except BaseException:
-        connection.close()
-        raise
-    return connection
-
-
-def _scripts_up_to(database: str, version: int) -> tuple[connection_module.Migration, ...]:
-    scripts = connection_module.load_scripts(_MIGRATIONS / database)
+def _scripts_up_to(database: str, version: int) -> tuple[Migration, ...]:
+    scripts = load_scripts(_MIGRATIONS / database)
     return tuple(script for script in scripts if script.version <= version)
 
 
