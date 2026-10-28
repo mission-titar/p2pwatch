@@ -8,9 +8,10 @@ from pathlib import Path
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
     insert_v12_observation,
     insert_v12_source_point,
+    insert_v14_decision,
     open_catalog_at,
 )
-from tests.support.catalog_rows import insert_decision, insert_file, insert_source
+from tests.support.catalog_rows import insert_file, insert_source
 
 _A, _USER = "a" * 32, "1f2e" * 8
 _RENAMED = {
@@ -43,7 +44,7 @@ def test_0013_renames_raw_meta_in_the_schema_and_keeps_every_value(tmp_path: Pat
     connection = open_catalog_at(path, 12)
     insert_file(connection, _A)
     insert_v12_observation(connection, _A, "Keroro 062.avi")
-    insert_decision(connection, _A, "062A", "download")
+    insert_v14_decision(connection, _A)
     insert_source(connection, _USER)
     insert_v12_source_point(connection, _A, _USER)
     schema, rows = _schema(connection), _rows(connection)
