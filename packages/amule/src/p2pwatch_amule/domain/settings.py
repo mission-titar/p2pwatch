@@ -23,8 +23,8 @@ _OFF = ("disabled", "no", "off", "false")
 
 @dataclass(frozen=True)
 class BootSettings:
-    puid: Uid
-    pgid: Gid
+    uid: Uid
+    gid: Gid
     ec_password: str
     api_password: str
     port_sync_enabled: bool
@@ -35,16 +35,16 @@ class PortSyncSettings:
     gluetun_control_url: str
     poll_interval: timedelta
     restart_min_interval: timedelta
-    puid: Uid
-    pgid: Gid
+    uid: Uid
+    gid: Gid
 
 
 def parse_boot_settings(env: Mapping[str, str]) -> BootSettings:
     """Return the boot step's settings from `env`, refusing the first missing or invalid one,
     port-sync's included when it is on."""
     boot_settings = BootSettings(
-        puid=_puid(env),
-        pgid=_pgid(env),
+        uid=_puid(env),
+        gid=_pgid(env),
         ec_password=_password(env, "AMULE_EC_PASSWORD"),
         api_password=_password(env, "AMULE_API_PASSWORD"),
         port_sync_enabled=is_port_sync_enabled(env),
@@ -86,8 +86,8 @@ def parse_port_sync_settings(env: Mapping[str, str]) -> PortSyncSettings:
         restart_min_interval=_seconds(
             env, "PORT_SYNC_RESTART_MIN_SECONDS", DEFAULT_PORT_SYNC_RESTART_MIN_INTERVAL
         ),
-        puid=_puid(env),
-        pgid=_pgid(env),
+        uid=_puid(env),
+        gid=_pgid(env),
     )
 
 

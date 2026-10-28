@@ -24,8 +24,8 @@ SETTINGS = PortSyncSettings(
     gluetun_control_url="http://localhost:8000",
     poll_interval=timedelta(seconds=60),
     restart_min_interval=timedelta(seconds=300),
-    puid=Uid(1000),
-    pgid=Gid(1001),
+    uid=Uid(1000),
+    gid=Gid(1001),
 )
 CONF = "[eMule]\nPort=4662\nUDPPort=4672\nMaxUpload=42\n\n[AmuleApi]\nEnabled=1\n\n"
 

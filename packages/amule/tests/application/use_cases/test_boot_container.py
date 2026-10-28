@@ -18,8 +18,8 @@ from tests.fakes.adapters.driven.fake_service_supervisor import FakeServiceSuper
 DIGEST = hashlib.md5(b"hunter2").hexdigest()
 
 BOOT_SETTINGS = BootSettings(
-    puid=Uid(1000),
-    pgid=Gid(1001),
+    uid=Uid(1000),
+    gid=Gid(1001),
     ec_password="hunter2",
     api_password="s3cret",
     port_sync_enabled=False,
