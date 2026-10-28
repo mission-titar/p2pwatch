@@ -22,7 +22,7 @@ from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision, Retraction
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import Keyword, NodeId
 from p2pwatch.domain.observability.events import TargetTitle
 from p2pwatch.domain.observability.notification import TierRise
 from p2pwatch.domain.observation import FileObservation, ReportedFile
@@ -68,7 +68,7 @@ def _reported_file(native_id: str, filename: str, sources: int = 3) -> ReportedF
         filename=filename,
         size_bytes=_SIZE,
         source_count=sources,
-        keyword="keroro",
+        keyword=Keyword("keroro"),
     )
 
 

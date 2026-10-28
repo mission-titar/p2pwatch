@@ -14,7 +14,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
 )
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import Keyword, NodeId
 from p2pwatch.domain.observation import FileObservation
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
     open_catalog_at,
@@ -137,7 +137,7 @@ def test_a_mapped_result_reuses_the_variant_0007_migrated_from_its_old_row(
     old_meta = '[["rating", "0"], ["status", "mystère"]]'
     path = tmp_path / "catalog.db"
     _old_catalog(path, _with(_FULL, raw_meta=old_meta))
-    (reported_file,), _ = map_search_results([search_result], "keroro")
+    (reported_file,), _ = map_search_results([search_result], Keyword("keroro"))
     connection = open_catalog(path)
     try:
         SqliteObservationStore(connection).record_observation(

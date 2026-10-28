@@ -4,6 +4,7 @@ import pytest
 
 from catalog_matching.domain.models import FileCandidate
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import Keyword
 from p2pwatch.domain.observation import ReportedFile, candidate_from_fields, fold_raw_metadata
 
 _KEY = FileKey(Network.ED2K, "31d6cfe0d16ae931b73c59d7e0c089c0")
@@ -15,7 +16,7 @@ def _full_reported_file() -> ReportedFile:
         filename="Keroro 062A.avi",
         size_bytes=3 * 1024 * 1024,
         source_count=5,
-        keyword="keroro",
+        keyword=Keyword("keroro"),
         duration_seconds=1234,
         bitrate_kbps=1500,
         raw_metadata=(("0x0308", "0"), ("codec", None), ("complete_source_count", 2)),
@@ -44,7 +45,7 @@ def test_media_fields_and_raw_metadata_default_to_absent() -> None:
         filename="Keroro 062A.avi",
         size_bytes=100,
         source_count=0,
-        keyword="keroro",
+        keyword=Keyword("keroro"),
     )
     assert reported_file.duration_seconds is None
     assert reported_file.bitrate_kbps is None
@@ -68,7 +69,7 @@ def test_to_candidate_maps_absent_media_metadata_to_none() -> None:
         filename="Keroro 062A.avi",
         size_bytes=524288,  # 0.5 MiB
         source_count=1,
-        keyword="keroro",
+        keyword=Keyword("keroro"),
     )
     candidate = reported_file.to_candidate()
     assert candidate == FileCandidate(

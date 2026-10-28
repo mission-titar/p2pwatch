@@ -13,7 +13,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
     SqliteObservationStore,
 )
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import Keyword, NodeId
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import insert_file
@@ -37,7 +37,7 @@ def _reported_file(
         filename=filename,
         size_bytes=size_bytes,
         source_count=5,
-        keyword="keroro",
+        keyword=Keyword("keroro"),
         duration_seconds=duration_seconds,
         bitrate_kbps=bitrate_kbps,
     )

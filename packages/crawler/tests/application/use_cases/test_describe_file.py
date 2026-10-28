@@ -17,7 +17,7 @@ from p2pwatch.application.use_cases.describe_file import DescribeFile
 from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import Keyword, NodeId
 from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.matching_read import MatchingExplainer
 from p2pwatch.domain.observation import FileObservation, ReportedFile
@@ -32,7 +32,7 @@ _SECOND_NOW = _NOW.replace(microsecond=0)
 _FILE = FileKey(Network.ED2K, "a" * 32)
 _GAP = timedelta(seconds=90)
 _OBSERVATION = FileObservation(
-    ReportedFile(_FILE, "keroro_062a.avi", 100, 5, "keroro", 1300, 900, ()),
+    ReportedFile(_FILE, "keroro_062a.avi", 100, 5, Keyword("keroro"), 1300, 900, ()),
     _NOW - timedelta(hours=1),
     NodeId("n1"),
 )

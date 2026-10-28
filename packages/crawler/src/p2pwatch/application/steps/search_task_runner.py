@@ -47,13 +47,13 @@ class SearchTaskRunner:
         """Runs every task until cancelled, recording what they find under ``node_id``."""
         # Taken here, once the lifecycle resumed the backoff, so no search rewrites what it read.
         self._saved = self._backoff.snapshot()
-        texts = [keyword.text for keyword in dedupe_keywords(self._keywords)]
+        keywords = dedupe_keywords(self._keywords)
         async with asyncio.TaskGroup() as group:
             for worker in self._workers:
                 for channel in worker.channels:
-                    for text in texts:
+                    for keyword in keywords:
                         group.create_task(
-                            self._search_forever(worker, SearchTask(text, channel), node_id)
+                            self._search_forever(worker, SearchTask(keyword, channel), node_id)
                         )
 
     async def _search_forever(

@@ -5,3 +5,4 @@ from typing import NewType
 NodeId = NewType("NodeId", str)
 ClientName = NewType("ClientName", str)
 Channel = NewType("Channel", str)
+Keyword = NewType("Keyword", str)

@@ -7,26 +7,19 @@ and DEDUPLICATED (first seen wins).
 """
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+
+from p2pwatch.domain.identifiers import Keyword
 
 
-@dataclass(frozen=True)
-class SearchKeyword:
-    """A keyword to search. FROZEN and hashable → trivial deduplication."""
-
-    text: str
-
-
-def dedupe_keywords(keywords: Sequence[str]) -> tuple[SearchKeyword, ...]:
+def dedupe_keywords(keywords: Sequence[str]) -> tuple[Keyword, ...]:
     """ORDERED and DEDUPLICATED list of keywords (spec search-simplification).
 
-    Order = input order; deduplication by ``text`` (first seen wins); empty strings are
-    ignored.
+    Order = input order; deduplication first seen wins; empty strings are ignored.
     """
     seen: set[str] = set()
-    deduplicated: list[SearchKeyword] = []
+    deduplicated: list[Keyword] = []
     for text in keywords:
         if text and text not in seen:
             seen.add(text)
-            deduplicated.append(SearchKeyword(text=text))
+            deduplicated.append(Keyword(text))
     return tuple(deduplicated)

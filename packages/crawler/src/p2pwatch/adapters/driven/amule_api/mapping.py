@@ -13,7 +13,7 @@ from typing import Any
 from p2pwatch.domain.download.states import FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import Channel
+from p2pwatch.domain.identifiers import Channel, Keyword
 from p2pwatch.domain.observation import ReportedFile, fold_raw_metadata
 from p2pwatch.domain.source import (
     ContactPoint,
@@ -96,7 +96,7 @@ _WAITING_STATUSES = {
 
 
 def map_search_results(
-    search_results: object, keyword: str
+    search_results: object, keyword: Keyword
 ) -> tuple[tuple[ReportedFile, ...], int]:
     """The ``results[]`` of a search → ``(reported_files, skipped_result_count)``, counting the
     results that yield no reported file; a nameless name row beside a named one is not counted."""
@@ -265,7 +265,7 @@ def _channel(
     return ChannelStatus(channel, connected, connectable if connected else None)
 
 
-def _map_result(search_result: object, keyword: str) -> list[ReportedFile]:
+def _map_result(search_result: object, keyword: Keyword) -> list[ReportedFile]:
     """One result row → one reported file PER FILENAME; none when the row is unusable."""
     if not isinstance(search_result, dict):
         return []
