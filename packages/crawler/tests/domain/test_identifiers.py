@@ -93,3 +93,27 @@ def test_a_file_id_and_a_source_id_are_refused_for_each_other() -> None:
     """Each ``type: ignore`` proves mypy refuses the call: an unused one fails the gate."""
     assert _file_id(SourceId(b"\x00" * 16)) == b"\x00" * 16  # type: ignore[arg-type]
     assert _source_id(FileId(b"\x00" * 16)) == b"\x00" * 16  # type: ignore[arg-type]
+
+
+def test_a_node_id_and_a_client_name_are_refused_for_each_other() -> None:
+    """Each ``type: ignore`` proves mypy refuses the call: an unused one fails the gate."""
+    assert _node_id(ClientName("amuled")) == "amuled"  # type: ignore[arg-type]
+    assert _client_name(NodeId("node-a")) == "node-a"  # type: ignore[arg-type]
+
+
+def test_a_node_id_and_a_channel_are_refused_for_each_other() -> None:
+    """Each ``type: ignore`` proves mypy refuses the call: an unused one fails the gate."""
+    assert _node_id(Channel("kad")) == "kad"  # type: ignore[arg-type]
+    assert _channel(NodeId("node-a")) == "node-a"  # type: ignore[arg-type]
+
+
+def test_a_node_id_and_a_keyword_are_refused_for_each_other() -> None:
+    """Each ``type: ignore`` proves mypy refuses the call: an unused one fails the gate."""
+    assert _node_id(Keyword("keroro")) == "keroro"  # type: ignore[arg-type]
+    assert _keyword(NodeId("node-a")) == "node-a"  # type: ignore[arg-type]
+
+
+def test_a_client_name_and_a_keyword_are_refused_for_each_other() -> None:
+    """Each ``type: ignore`` proves mypy refuses the call: an unused one fails the gate."""
+    assert _client_name(Keyword("keroro")) == "keroro"  # type: ignore[arg-type]
+    assert _keyword(ClientName("amuled")) == "amuled"  # type: ignore[arg-type]
