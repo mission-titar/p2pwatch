@@ -81,8 +81,9 @@ crash. D5 already keeps the restart loop from piling up copies (operator).*
 
 ### 4.1 The directive
 
-- Exact first line, the same grammar as `-- migration: no-transaction` (`connection.py:118-124`). `Migration` gains
-  `copy_before: bool` beside `transactional: bool`: the model allows both, and only the script reader takes one
+- Exact first line, the same grammar as `-- migration: no-transaction` (`connection.py:118-124`, in
+  `migration_scripts.py` since block 85). `Migration` gains `copy_before: bool` beside `transactional: bool`: the
+  model allows both, and only the script reader takes one
   directive per script, since no script needs both today (the only `no-transaction` script, catalog 0009, changes no
   row). *The reader's grammar is a detail of how scripts are read, not a rule of what a migration is (operator).*
 - Marked: catalog 0005, 0006, 0007, 0008, 0011; local 0004, 0005, 0006, 0007, 0010, 0011 (appendix A). Those the node
@@ -103,24 +104,27 @@ crash. D5 already keeps the restart loop from piling up copies (operator).*
 
 ### 4.2 The steps of an open
 
-The sequence of an open lives in one place, the opener's private method `_open(path, scripts)`, which
-`open_catalog` and `open_local` call. It reads top to bottom, and nothing outside the opener calls its steps one by
-one:
+The sequence of an open lives in one place, the opener's method `open(path, scripts)`, which `open_catalog` and
+`open_local` call with the shipped scripts. It reads top to bottom, and its steps are private functions of
+`sqlite_database_opener.py`, so nothing else can migrate a database without its pre-migration copy:
 
 ```python
-connection = connect(path)                               # WAL, pragmas, SQL functions
-pending = pending_migrations(connection, scripts)        # raises if the database is newer than the code
+connection = _connect(path)                              # WAL, pragmas, SQL functions
+pending = _pending_migrations(connection, scripts)       # raises if the database is newer than the code
 self._pre_migration_copier.ensure_copy(connection, path, pending)  # the steps below
-apply_migrations(connection, pending)
+_apply_migrations(connection, pending)
 ```
 
-`connection.py` keeps only independent pieces, each taking what it needs as parameters: configure a connection, load
-the scripts, apply scripts. Its private `_open` goes, and with it the word "runner".
+`Migration`, `PendingMigrations` and `load_scripts` live in `migration_scripts.py`. `connection.py` keeps `utc_iso`
+alone, until the backlog's "Every stamp an integer of microseconds since the epoch" removes it with the module. The
+private `_open` of `connection.py` goes, and with it the word "runner". (Corrected: the steps private to the opener,
+which exposes `open(path, scripts)`, where the spec left them public pieces of `connection.py`; block 85, from the
+operator's review of #514, 2026-10-28.)
 
-`pending_migrations(connection, scripts)` returns a `PendingMigrations(current_version, migrations)`, a frozen value
-it builds after refusing a database newer than the code. `ensure_copy` and `apply_migrations` take it and nothing
-else of the version, so a caller that builds it only through `pending_migrations` cannot run either before the
-database's version was read. *The type makes the order visible, as `MonotonicInstant` does the clock's (operator).*
+`_pending_migrations(connection, scripts)` returns a `PendingMigrations(current_version, migrations)`, a frozen value
+it builds after refusing a database newer than the code. `ensure_copy` and `_apply_migrations` take it and nothing
+else of the version, so a caller that builds it only through the opener cannot run either before the database's
+version was read. The copier's own tests build one by hand, at a known version. *The type makes the order visible, as `MonotonicInstant` does the clock's (operator).*
 (Corrected: the order is a convention the type makes visible, not one the type carries: any module can build a
 `PendingMigrations`, and no gate rule refuses it. Operator, 2026-10-27, from the holistic review.)
 
@@ -137,9 +141,11 @@ pre-migration copy matching the database exists, or none was needed:
 *The order matters: a lookup that matched `.partial` would take a killed copy for the most recent one; a reused copy
 must still clear a leftover; a space reading before the cleanup would count the leftover against the need.*
 
-`older_catalog.py`'s builders, which build older databases for the tests, chain `connect`, `pending_migrations` and
-`apply_migrations` themselves, as their `secure_delete` variant already does, `PendingMigrations` holding them to the
-order: they start from version 0, which is never copied.
+`older_catalog.py`'s builders, which build older databases for the tests, call the support opener's `open` with the
+scripts up to a version. A builder that opens above version 0 with a marked script pending leaves a pre-migration copy
+in its `tmp_path`. Their `secure_delete` variant hands the opener a copier that sets the pragma in `ensure_copy`, then
+copies (`database_opener_setting(pragma)`), the one point between configuring the connection and migrating it.
+(Corrected: the builders chained the steps themselves until block 85 made them private.)
 
 ### 4.3 Writing the copy
 
@@ -153,19 +159,23 @@ order: they start from version 0, which is never copied.
 
 ### 4.4 The digest
 
-- It covers the `user_version`, the schema (`sqlite_schema`'s SQL, sorted) and every row of every table that
-  `sqlite_schema` lists when the digest runs, SQLite's own tables included. No list of tables in the code, and nothing
-  taken from the catalog being append-only: a table added by a future migration is covered without a line changed.
-- It reads through SQLite (`SELECT`), never the files, so the committed rows still in the `-wal` count. Each row is
-  hashed with its table's name; the hashes are added, so the rows' order does not matter. The candidate copy is opened
-  read-only.
+- It covers the `user_version` and every line of SQLite's own dump, `connection.iterdump()`: the schema, every row
+  of every table, `sqlite_sequence` and `sqlite_stat1`, but not the other `sqlite_stat*` tables. No list of tables in
+  the code, and nothing taken from the catalog being append-only: a table added by a future migration is covered
+  without a line changed.
+- It reads through SQLite, never the files, so the committed rows still in the `-wal` count. Each line is hashed; the
+  hashes are added, so the rows' order does not matter. The candidate copy is opened read-only.
+- (Corrected: `iterdump`'s lines in place of each table's rows, read by `SELECT` with the table names quoted by hand,
+  from the operator's review of block 40, #517. It drops the `sqlite_stat*` tables but `sqlite_stat1`, which no
+  shipped migration writes, and costs 16.2 s per side against 9.2 s on 1.1 GB, on tmpfs.)
 - A candidate that cannot be read (its open or its digest raises a `sqlite3.Error`) is a non-match: a new copy is made
   and that file is left alone.
 - *Why a digest. In WAL mode the header's change counter does not move, a rolled-back transaction changes the
   `-wal`'s mtime, and `data_version` moves on a checkpoint that changed nothing. The database file's mtime and size
   move or stay regardless of content (a checkpoint, a `touch`, a `cp -a`). Counting rows is exact only for the
-  append-only catalog, not for `local.db`. The digest's cost, about a minute of CPU per side on the catalog, is a lower
-  bound (appendix B), paid only after a failure or a return to an old release.*
+  append-only catalog, not for `local.db`. The digest's cost, about two minutes of CPU per side on the catalog, is a
+  lower bound (appendix B), paid only after a failure or a return to an old release.* (Corrected: "about a minute"
+  before `iterdump`.)
 
 ### 4.5 Free space
 
@@ -182,8 +192,8 @@ order: they start from version 0, which is never copied.
 ### 4.6 The opener and its wiring
 
 - `SqliteDatabaseOpener(pre_migration_copier)` in `adapters/driven/persistence_sqlite/sqlite_database_opener.py`,
-  methods `open_catalog(path)` and `open_local(path)`, each returning a `sqlite3.Connection` as today. The module
-  functions are removed.
+  methods `open_catalog(path)` and `open_local(path)`, each returning a `sqlite3.Connection` as today, over
+  `open(path, scripts)`. The module functions are removed. (Corrected: `open(path, scripts)`, block 85.)
 - `SqlitePreMigrationCopier(wall_clock, free_bytes)` in `sqlite_pre_migration_copier.py`, method
   `ensure_copy(connection, path, pending)`: the steps of 4.2, the name and the space check.
 - `wall_clock` is the `WallClock` port: a new `tach.toml` edge from `persistence_sqlite` to
@@ -199,8 +209,9 @@ order: they start from version 0, which is never copied.
 - The crawler's composition builds `SqliteDatabaseOpener(SqlitePreMigrationCopier(wall_clock, free_bytes))` with its
   `SystemWallClock`, opens both databases and passes the connections to the stores as today. `build_command_line`
   builds one with a `SystemWallClock` for `merge` and passes the opener to `SqliteCatalogCopier`'s constructor.
-- Modules: `connection.py` keeps its pieces (4.2); the digest goes in `database_digest.py`. All in the one
-  `persistence_sqlite` tach module.
+- Modules: the steps of an open in `sqlite_database_opener.py`, `Migration`, `PendingMigrations` and `load_scripts`
+  in `migration_scripts.py`, `connection.py` holding `utc_iso` alone (4.2); the digest goes in `database_digest.py`.
+  All in the one `persistence_sqlite` tach module. (Corrected: `connection.py` kept its pieces until block 85.)
 - Own tests: `test_sqlite_database_opener.py` (the open tests move there from `test_connection.py`),
   `test_sqlite_pre_migration_copier.py`, `test_database_digest.py`, each covering every branch of its module.
 - Test support: `tests/support/adapters/driven/persistence_sqlite/sqlite_database_opener.py` gives `open_catalog(path)`
@@ -262,7 +273,8 @@ Unit tests of the crawler's package, on real files in `tmp_path`. "A version N c
 8. **The digest discriminates** (`test_database_digest.py`): equal on a database and its `VACUUM INTO` copy; different
    when a row changes, a row moves to another table of the same shape, the schema changes or the `user_version`
    changes; equal when the same rows are inserted in another order.
-9. **The directive is parsed.** `_load_scripts` reads `copy-before`; a misspelled directive still raises.
+9. **The directive is parsed.** `_load_scripts` reads `copy-before`; a misspelled directive still raises. (Corrected:
+   `load_scripts`, in `migration_scripts.py` since block 85.)
 
 ### On the shipped scripts (block 50)
 
@@ -291,6 +303,7 @@ Unit tests of the crawler's package, on real files in `tmp_path`. "A version N c
 | 50 | `feat/mark-row-changing-migrations` | criteria 10 to 16 with 4.1's test, then the marks, `AGENTS.md` | about 220 lines, 17 to 19 files |
 | 60 | `docs/pre-migration-copy` | section 5's docs under `docs/`; drafts the handoff | about 130 lines, 6 files |
 | 80 | `fix/pre-migration-copy-review` | the holistic review's findings in code, tests and ignore files | 95 lines, 16 files (measured) |
+| 85 | `refactor/opener-owns-migrations` | the steps of an open private to the opener, `migration_scripts.py`, `connection.py` holding `utc_iso` alone (4.2, 4.6) | 1102 lines, 14 files (measured, exemption) |
 | 90 | `docs/pre-migration-copy-wrap` | the closing block: the holistic review's findings in the documents, `BACKLOG.md`, the handoff | a few lines |
 
 - **Every block is written test first** (`AGENTS.md`, Strict TDD): each test is watched failing before the code
@@ -304,6 +317,10 @@ Unit tests of the crawler's package, on real files in `tmp_path`. "A version N c
 - Cut from `main` at `cd307232` or later.
 - (Corrected: block 80 added. The holistic review's fixes touch 16 files in code and tests, and 6 more in the
   documents: together they pass the 20-file bound, so the closing block split in two, code first.)
+- (Corrected: block 85 inserted under the closing block, from the operator's review of #514, which asked why
+  `connection.py` still held public steps beside the opener: any module could migrate a database without its copy.
+  It takes the size exemption, approved by the operator on 2026-10-28: mostly code moved between modules,
+  `git diff -M -C` at +541/-610.)
 
 ## 8. Limits and scope
 
@@ -389,6 +406,7 @@ in the core image `main` (SQLite 3.46.1): they match.
 | `VACUUM INTO` | 2.2 s | about 12 s |
 | `count(*)` of every table | under 0.05 s | |
 | the digest, Python, one side | 10.4 s | about 60 s |
+| the digest over `iterdump`, one side, on 1.1 GB (block 40's fix-back, 2026-10-28) | 16.2 s (9.2 s by `SELECT`) | about 109 s |
 
 sqlfluff 4.3.0's parse of every shipped script (probe by the lead, 2026-10-27) finds the row-changing statements of
 appendix A's table exactly, and none in the other scripts; catalog 0009 is unparsable (`VACUUM`).

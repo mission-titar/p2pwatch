@@ -1,7 +1,7 @@
 # Handoff: a copy before a migration that rewrites rows
 
 Drafted by block 60 from the lot's block reports (#513, #514, #516, #517, #518) and its own, corrected by the closing
-block 90 with the holistic review and block 80's report (#520).
+block 90 with the holistic review, the operator's review comments and the reports of blocks 80 (#520) and 85 (#522).
 
 ## State
 
@@ -10,9 +10,11 @@ operator 2026-10-27). It ships the backlog entry "A copy before a migration that
 deleted from `BACKLOG.md`, and dropped from the entry "Every stamp an integer of microseconds since the epoch" its wait
 on this lot (spec 8). Nothing else changed in `BACKLOG.md`.
 
-One stack cut from `main` at `cd307232`, which had not moved when block 90 was written (`git fetch`, 2026-10-27).
-Eight blocks: the closing block split in two, block 80 for the code and block 90 for the documents, since together
-they passed the 20-file bound (16 files, then 6). Block 20 took the mechanical exemption on its spec row (33 files).
+One stack cut from `main` at `cd307232`, which had not moved when block 90 was updated (`git fetch`, 2026-10-28).
+Nine blocks: the closing block split in two, block 80 for the code and block 90 for the documents, since together
+they passed the 20-file bound (16 files, then 6); block 85 was inserted under block 90 for the operator's review of
+#514. Block 20 took the mechanical exemption on its spec row (33 files), block 85 the size exemption (operator,
+2026-10-28).
 
 | Block | Pull request | Branch |
 |---|---|---|
@@ -23,7 +25,8 @@ they passed the 20-file bound (16 files, then 6). Block 20 took the mechanical e
 | 50 | #518 | `feat/mark-row-changing-migrations` |
 | 60 | #519 | `docs/pre-migration-copy` |
 | 80 | #520 | `fix/pre-migration-copy-review` |
-| 90 | the closing block's | `docs/pre-migration-copy-wrap` |
+| 85 | #522 | `refactor/opener-owns-migrations` |
+| 90 | #521 | `docs/pre-migration-copy-wrap` |
 
 Not merged at writing. **No release follows this lot**: the v5 waits for a P2P network other than eD2k (operator,
 2026-10-27). The lot changes what the image ships (the `main` image copies before a marked migration from block 50 on),
@@ -34,12 +37,13 @@ so the copy reaches the node only with the v5 release, or through a `main` image
 - **The opener** (block 10, D8): `SqliteDatabaseOpener(pre_migration_copier)` in
   `adapters/driven/persistence_sqlite/sqlite_database_opener.py`, methods `open_catalog(path)` and `open_local(path)`,
   is the one way the code migrates a database (`ThreadReadConnections` and the SQL console open both databases
-  without migrating them). Its private `_open` reads `connect`, `pending_migrations`, `ensure_copy`,
-  `apply_migrations`, and closes the connection on any failure. `connection.py` keeps the independent pieces
-  (`connect`, `load_scripts`, `pending_migrations`, `apply_migrations`). `PendingMigrations(current_version,
-  migrations)` is built by `pending_migrations` by convention, which the type makes visible: neither the copy nor the
-  migrations can run before the version was read, as long as no other module builds one (no gate rule refuses it,
-  operator 2026-10-27). The crawler's composition builds one opener for both databases (the config's `str` paths wrapped
+  without migrating them). Both call `open(path, scripts)`, which reads `_connect`, `_pending_migrations`,
+  `ensure_copy`, `_apply_migrations`, and closes the connection on any failure. Since block 85 those steps are private
+  functions of `sqlite_database_opener.py`, so nothing else can migrate a database without its copy; `Migration`,
+  `PendingMigrations` and `load_scripts` live in `migration_scripts.py`, and `connection.py` holds `utc_iso` alone
+  until the stamps debt removes it. `PendingMigrations(current_version, migrations)` is built by the opener by
+  convention, which the type makes visible (no gate rule refuses another builder, operator 2026-10-27); the copier's
+  own tests build one by hand. The crawler's composition builds one opener for both databases (the config's `str` paths wrapped
   in `Path`); `build_command_line` builds one for `merge` and hands it to `SqliteCatalogCopier`'s constructor.
 - **The old functions removed** (block 20): the tests open through
   `tests/support/adapters/driven/persistence_sqlite/sqlite_database_opener.py` (`open_catalog`, `open_local`,
@@ -55,9 +59,9 @@ so the copy reaches the node only with the v5 release, or through a `main` image
   before any write. `free_bytes` is a `Callable[[Path], int]` the composition passes over `shutil.disk_usage`;
   `FakeFreeBytes` in `tests/fakes/adapters/driven/fake_free_bytes.py`. A new `tach.toml` edge from
   `persistence_sqlite` to the `WallClock` port. The word "runner" left `connection.py` and its tests.
-- **The reuse** (block 40, D5): `database_digest.py`, a SHA-256 over the `user_version`, the sorted schema SQL and the
-  sum modulo 2^256 of each row's SHA-256 of `repr((table_name, row))`, over every table `sqlite_schema` lists, read
-  through SQLite so the `-wal` counts. Before copying, the copier digests the most recent
+- **The reuse** (block 40, D5): `database_digest.py`, a SHA-256 over the `user_version` and the sum modulo 2^256 of
+  the SHA-256 of each line of `connection.iterdump()`: the schema, every row, `sqlite_sequence` and `sqlite_stat1`,
+  not the other `sqlite_stat*`. It reads through SQLite, so the `-wal` counts. Before copying, the copier digests the most recent
   `<file>.pre-<NNNN>.*_UTC` (`NNNN` the first pending version), opened read-only, and reuses it on equality; one that
   cannot be read matches nothing and is left alone. The open tests still in `test_connection.py` moved to the
   opener's.
@@ -78,6 +82,10 @@ so the copy reaches the node only with the v5 release, or through a `main` image
   `crawler.yml` works; `test_migration_directives.py` also counts `INSERT OR REPLACE`, `REPLACE INTO` and an upsert's
   `DO UPDATE`, and ignores a trigger's body; `*.db.pre-*` in `.gitignore` and `.dockerignore`; the wording findings
   (below).
+- **The opener owns the steps** (block 85, from the operator's review of #514): above; `older_catalog.py` opens
+  through the support opener's `open` with the scripts up to a version, and its `secure_delete` variant hands the
+  opener a copier that sets the pragma in `ensure_copy` (`database_opener_setting(pragma)`). A failed migration fails
+  the open, which closes the connection, so the pragmas are restored on success only (no `finally`).
 - **The holistic review's document findings** (block 90): the 4.x rollback without a backup restores only a database
   that has a `pre-0006` copy, one command per database, the rename before the removal of `-wal` and `-shm`;
   `troubleshooting-start.md`'s restart loop says it is slow after an upgrade and how to halt it; `AGENTS.md`,
@@ -90,12 +98,13 @@ Every block's `uv run poe check` exit 0 at its tip (crawler: 1635 passed at bloc
 `uv run poe docs-build` ("No issues found"); the strict build shown failing on a dead anchor first
 (`RuntimeError: Aborted because --strict flag is set`).
 
-Block 80: `uv run poe check` exit 0 (crawler: 1684 passed, 100 % coverage). Block 90: `uv run poe check` (crawler 1684 passed) and
-`uv run poe docs-build`, both exit 0.
+Block 80: `uv run poe check` exit 0 (crawler: 1684 passed, 100 % coverage). Block 85: exit 0 (1682 passed, two
+tests removed whose state a closed connection no longer shows). Block 90: `uv run poe check` (crawler 1682 passed)
+and `uv run poe docs-build`, both exit 0.
 
 Budgets against each parent: block 10, 272 lines and 10 files; block 20, 113 lines and 33 files (exemption); block
-30, 364 and 12; block 40, 370 and 6; block 50, 285 and 18; block 60, 142 and 6; block 80, 95 and 16; block 90,
-49 and 6.
+30, 364 and 12; block 40, 370 and 6; block 50, 285 and 18; block 60, 142 and 6; block 80, 95 and 16; block 85,
+1102 and 14 (exemption, `git diff -M -C` at +541/-610); block 90, 49 and 6.
 
 Each criterion's test watched failing, from the block reports:
 
@@ -113,6 +122,8 @@ Each criterion's test watched failing, from the block reports:
   `assert ['0001_script.sql'] == []`; the refused link, `OSError: [Errno 36] File name too long`; the relative path,
   `ValueError: relative path can't be expressed as a file URI`. The quoting was shown needed by a mutation (a
   directory named `data #%?`).
+- Block 85 adds no behaviour: its `secure_delete` seam was shown needed by replacing its pragma with `pass`, which
+  fails five tests.
 
 ## Departures from the spec
 
@@ -132,6 +143,10 @@ Each criterion's test watched failing, from the block reports:
 - Block 90: the 4.x rollback renames the copy over the database before removing `-wal` and `-shm`, where the spec said
   remove then rename: a mistyped copy name then deletes nothing. The `ls` reads `*.pre-0006.*_UTC`, since a leftover
   `.partial` would sort after the dated copies.
+- Block 85: two tests removed (`test_temp_store_is_restored_even_when_a_migration_fails`,
+  `test_a_script_pragmas_are_restored_even_when_it_fails`), since a failed open closes its connection; the migration
+  log line's logger follows its module to `...sqlite_database_opener`; `_connect` takes a `Path` only. The spec's
+  4.2 and 4.6 were corrected by block 90.
 - `docs/limits.md`'s 2026-10-09 measurements (196 to 295 s on a 5.3 GB copy) were replaced by the 2026-10-13 spike's
   (502.5 s for the copy, 674.9 s for 0006 to 0010, on a 5.9 GB snapshot of the node's catalog): the spike is more
   recent, on the node's own catalog, and the earlier "three to five minutes" was more than twice too short.
@@ -156,13 +171,25 @@ Each criterion's test watched failing, from the block reports:
 | `test_open_local_runs_the_pre_migration_copier_before_migrating` promised an order it cannot see | fixed, block 80 (renamed) |
 | `test_merge_copies_a_version_5_destination_and_no_source`'s second half could not fail | fixed, block 80 (renamed) |
 
-Seen by block 80 outside the findings, not fixed: the other `spec §N` references in `connection.py`, older than the
-lot, and `FakeFreeSpaceMeter.free`, also without its unit.
+Seen by block 80 outside the findings, not fixed: the other `spec §N` references of `connection.py`, older than the
+lot (moved by block 85 into the opener's module docstring), and `FakeFreeSpaceMeter.free`, also without its unit.
+
+## The operator's review comments
+
+| Comment | Exit |
+|---|---|
+| #517, `database_digest.py`: the table names quoted by hand, fragile as escaping | fixed by a fix-back in block 40 (`acbee5ec`): the digest hashes `iterdump`'s lines plus the `user_version`. It covers `sqlite_stat1` but not the other `sqlite_stat*`, which no shipped migration writes; 16.2 s per side against 9.2 s on 1.1 GB, tmpfs. Spec 4.4 and appendix B corrected |
+| #514, `connection.py`: why it still exists beside the opener | fixed by block 85, inserted under block 90: the steps private to the opener, `migration_scripts.py`, `connection.py` holding `utc_iso` alone. Spec 4.2, 4.6 and the block table corrected |
 
 ## Counts
 
-Fix-backs: none. Cascaded rebases: none. Runs they re-triggered: none. No body called unreadable. The stack is not yet
-rebased onto `main` for the merge, which had not moved.
+- Fix-backs: one, block 40's (#517).
+- Cascaded rebases: one, by the lead over blocks 50 to 90 after the fix-back. It re-triggered five runs, each doubled
+  by GitHub, the first of each pair cancelled by concurrency.
+- The insertion of block 85 added two runs: block 85's own and block 90's, rebased onto it.
+- In all, seven runs re-triggered that ran to the end, against nine blocks; twelve counting the doubles GitHub
+  cancelled. The insertion is not counted as a cascade: only block 90 sat above block 85.
+- No body called unreadable. The stack is not yet rebased onto `main` for the merge, which had not moved.
 
 ## Pitfalls
 
