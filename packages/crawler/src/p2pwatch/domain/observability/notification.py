@@ -7,6 +7,7 @@ from datetime import timedelta
 from enum import StrEnum
 
 from catalog_matching.domain.decision_tier import DecisionTier
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import TargetTitle
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.source import SourceKey
@@ -21,7 +22,7 @@ class TierRise:
     filename: str
     size_bytes: int
     ed2k_link: str
-    node_id: str
+    node_id: NodeId
 
 
 class SourceAlertKind(StrEnum):
@@ -41,7 +42,7 @@ class SourceAlert:
     absent_for: timedelta | None
     target_titles: tuple[TargetTitle, ...]
     filename: str
-    node_id: str
+    node_id: NodeId
 
 
 @dataclass(frozen=True)
@@ -50,7 +51,7 @@ class CompletedDownload:
 
     target_titles: tuple[TargetTitle, ...]
     filename: str
-    node_id: str
+    node_id: NodeId
 
 
 @dataclass(frozen=True)
@@ -59,7 +60,7 @@ class RelayedLogLine:
 
     message: str
     severity: Severity
-    node_id: str
+    node_id: NodeId
 
 
 type Notification = TierRise | SourceAlert | CompletedDownload | RelayedLogLine

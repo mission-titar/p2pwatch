@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 
 from p2pwatch.domain.file_key import FileKey
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.source import LatestPoint, SourceKey, SourceReading
 
 
@@ -18,17 +19,17 @@ class SourcePointReader(ABC):
         reading: SourceReading,
         since: datetime,
         before: datetime,
-        node_id: str,
+        node_id: NodeId,
     ) -> LatestPoint | None:
         """The latest point of ``reading``'s source on ``file`` from ``since`` to ``before``,
         a source without identity being told apart by its name among those without one."""
 
     @abstractmethod
     def read_earlier_points(
-        self, source: SourceKey, before: datetime, node_id: str
+        self, source: SourceKey, before: datetime, node_id: NodeId
     ) -> tuple[LatestPoint, ...]:
         """The latest point of each of ``source``'s variants that has one before ``before``."""
 
     @abstractmethod
-    def has_points_before(self, before: datetime, node_id: str) -> bool:
+    def has_points_before(self, before: datetime, node_id: NodeId) -> bool:
         """Whether any point was observed before ``before``."""

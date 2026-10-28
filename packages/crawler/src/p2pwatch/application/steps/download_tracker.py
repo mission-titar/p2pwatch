@@ -13,6 +13,7 @@ from p2pwatch.application.steps.observability_dispatcher import ObservabilityDis
 from p2pwatch.domain.download.states import DownloadState, FailureReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.observability.events import DownloadCompleted
 from p2pwatch.domain.persisted_wait import remaining_wait
@@ -45,7 +46,7 @@ class DownloadTracker:
         # Each queued or downloading download's instant from which it counts as lost.
         self._loss_deadline_by_file: dict[FileKey, MonotonicInstant] = {}
 
-    async def track(self, listed_statuses: tuple[DownloadStatus, ...], node_id: str) -> None:
+    async def track(self, listed_statuses: tuple[DownloadStatus, ...], node_id: NodeId) -> None:
         """Follows ``listed_statuses``: a store failure in one step skips that step only."""
         # Step 1 - RECONCILE: NO client I/O left (the list came from step 0) → only StoreError.
         # Every step shares that ONE snapshot: a second read could only contradict the first.
@@ -107,7 +108,7 @@ class DownloadTracker:
                 states[file] = wanted_state
 
     async def _record_completion(
-        self, file: FileKey, states: dict[FileKey, DownloadState], node_id: str
+        self, file: FileKey, states: dict[FileKey, DownloadState], node_id: NodeId
     ) -> None:
         """Marks ``completed`` (stamps completed_at) and notifies (step 2, §5).
 
@@ -131,7 +132,7 @@ class DownloadTracker:
         self,
         states: dict[FileKey, DownloadState],
         listed_statuses: tuple[DownloadStatus, ...],
-        node_id: str,
+        node_id: NodeId,
     ) -> None:
         """Completes each tracked file the client reports ``completed``.
 

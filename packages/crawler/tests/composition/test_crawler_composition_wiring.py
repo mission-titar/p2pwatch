@@ -29,6 +29,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store i
 from p2pwatch.adapters.driven.system_wall_clock import SystemWallClock
 from p2pwatch.composition.crawler_composition import CrawlerComposition
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.fakes.fake_amule_api import PASSWORD, FakeAmuleApi
 from tests.fakes.fake_amule_api_server import FakeAmuleApiServer
@@ -99,7 +100,7 @@ def _config(tmp_path: Path, **sections: object) -> dict[str, Any]:
     } | sections
 
 
-def _record_node_id(tmp_path: Path, node_id: str) -> None:
+def _record_node_id(tmp_path: Path, node_id: NodeId) -> None:
     """``local.db`` holding ``node_id``, as a node started before."""
     local = open_local(tmp_path / "local.db")
     SqliteNodeIdStore(local).record_node_id(node_id, SystemWallClock().now())
@@ -193,7 +194,7 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
         "reappeared_after_seconds": 43200,
         "sources_interval_seconds": 300,
     }
-    _record_node_id(tmp_path, "wired-node")
+    _record_node_id(tmp_path, NodeId("wired-node"))
     config_path = _write(
         tmp_path / "crawler.yml",
         _config(tmp_path, observability={"log_level": "INFO"}, download=download),
@@ -302,7 +303,7 @@ async def test_the_download_loop_records_a_tracked_downloads_sources_under_the_n
         "output_dir": str(tmp_path),
         "reappeared_after_seconds": 43200,
     }
-    _record_node_id(tmp_path, "wired-node")
+    _record_node_id(tmp_path, NodeId("wired-node"))
     config_path = _write(tmp_path / "crawler.yml", _config(tmp_path, download=download))
     listed = {"hash": _HASH, "size_bytes": 10, "completed_bytes": 4, "status": "downloading"}
     source = {"ecid": 1, "name": "peer", "user_hash": "1f" * 16, "role": "downloading_from"}
@@ -331,7 +332,7 @@ async def test_the_nodes_notifications_carry_its_id_in_their_username_and_title(
     threading.Thread(target=sink.serve_forever, daemon=True).start()
     notification = {"url": f"json://127.0.0.1:{sink.server_port}/", "audience": "operations"}
     observability = {"log_level": "INFO", "notifications": [notification]}
-    _record_node_id(tmp_path, "wired-node")
+    _record_node_id(tmp_path, NodeId("wired-node"))
     config_path = _write(tmp_path / "crawler.yml", _config(tmp_path, observability=observability))
     default_sigterm = signal.getsignal(signal.SIGTERM)
 

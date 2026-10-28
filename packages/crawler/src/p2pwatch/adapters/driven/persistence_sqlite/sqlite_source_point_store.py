@@ -12,6 +12,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.application.ports.driven.source_point_reader import SourcePointReader
 from p2pwatch.application.ports.driven.source_point_writer import SourcePointWriter
 from p2pwatch.domain.file_key import FileKey
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.source import LatestPoint, SourceKey, SourcePoint, SourceReading, SourceRole
 
 # The source's latest point in the window. Without an identity, a source is its name among the
@@ -123,7 +124,7 @@ class SqliteSourcePointStore(SourcePointWriter, SourcePointReader):
         reading: SourceReading,
         since: datetime,
         before: datetime,
-        node_id: str,
+        node_id: NodeId,
     ) -> LatestPoint | None:
         """The latest point of ``reading``'s source on ``file`` from ``since`` to ``before``."""
         with wrap_sqlite_errors():
@@ -141,7 +142,7 @@ class SqliteSourcePointStore(SourcePointWriter, SourcePointReader):
         return None if row is None else _latest_point(*row)
 
     def read_earlier_points(
-        self, source: SourceKey, before: datetime, node_id: str
+        self, source: SourceKey, before: datetime, node_id: NodeId
     ) -> tuple[LatestPoint, ...]:
         """The latest point of each of ``source``'s variants that has one before ``before``."""
         with wrap_sqlite_errors():
@@ -155,7 +156,7 @@ class SqliteSourcePointStore(SourcePointWriter, SourcePointReader):
             ).fetchall()
         return tuple(_latest_point(*row) for row in rows)
 
-    def has_points_before(self, before: datetime, node_id: str) -> bool:
+    def has_points_before(self, before: datetime, node_id: NodeId) -> bool:
         """Whether ``node_id`` has a point observed before ``before``."""
         with wrap_sqlite_errors():
             row = self._connection.execute(

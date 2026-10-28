@@ -8,6 +8,7 @@ from p2pwatch.application.ports.driving.source_name_describer import SourceNameD
 from p2pwatch.application.use_cases.describe_source_name import DescribeSourceName
 from p2pwatch.application.use_cases.paging import PAGE_SIZE
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
@@ -112,7 +113,7 @@ def test_only_a_full_page_of_sources_offers_a_next_one() -> None:
 def test_every_period_read_is_described_on_every_page() -> None:
     period = SharingPeriod(
         FileKey(Network.ED2K, "a" * 32), None, "AnimuseeFMR", SourceRole.QUEUED,
-        None, None, _NOW, _NOW, 0, "n1",
+        None, None, _NOW, _NOW, 0, NodeId("n1"),
     )  # fmt: skip
     history = SourceNameHistory("AnimuseeFMR", (_NAMING,), (period,) * (PAGE_SIZE + 1), {})
 

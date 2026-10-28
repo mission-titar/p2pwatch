@@ -11,12 +11,13 @@ from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision, FileTargetDecision, Retraction
+from p2pwatch.domain.identifiers import NodeId
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import insert_file
 
 _A = FileKey(Network.ED2K, "a" * 32)
 _NEVER_STORED = FileKey(Network.ED2K, "b" * 32)
-_NODE = "11111111-2222-3333-4444-555555555555"
+_NODE = NodeId("11111111-2222-3333-4444-555555555555")
 _T0 = datetime(2026, 6, 12, tzinfo=UTC)
 _T1 = _T0 + timedelta(minutes=1)
 

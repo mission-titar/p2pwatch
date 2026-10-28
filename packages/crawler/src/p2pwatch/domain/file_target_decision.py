@@ -7,6 +7,7 @@ from datetime import datetime
 from catalog_matching.domain.engine import DecisionRecord
 from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.file_key import FileKey
+from p2pwatch.domain.identifiers import NodeId
 
 
 @dataclass(frozen=True)
@@ -28,7 +29,7 @@ class DatedDecision[Decision: FileTargetDecision]:
     file: FileKey
     decision: Decision
     decided_at: datetime
-    node_id: str
+    node_id: NodeId
 
 
 def records_to_write(

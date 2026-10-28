@@ -1,4 +1,5 @@
 from p2pwatch.application.ports.driven.notifier import Notifier
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.notification import Notification
 from p2pwatch.domain.observability.policy import Audience
 
@@ -8,7 +9,7 @@ class FakeNotifier(Notifier):
         self.calls: list[tuple[Audience, Notification]] = []
 
     @property
-    def node_ids(self) -> list[str]:
+    def node_ids(self) -> list[NodeId]:
         return [notification.node_id for _, notification in self.calls]
 
     async def notify(self, audience: Audience, notification: Notification) -> None:

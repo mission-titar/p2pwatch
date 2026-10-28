@@ -10,6 +10,7 @@ from p2pwatch.application.steps.backoff_registry import BackoffRegistry
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.client_errors import ClientUnreachableError, SearchFailedError
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import (
     ClientUnreachable,
     SearchExecuted,
@@ -66,7 +67,9 @@ class SearchWorker:
             self._backoff.time_until_retry(BackoffKey(self._client_name, channel)),
         )
 
-    async def _record_observations(self, channel: str, answer: SearchAnswer, node_id: str) -> int:
+    async def _record_observations(
+        self, channel: str, answer: SearchAnswer, node_id: NodeId
+    ) -> int:
         """Per-obs pipeline; returns the number of CHANGED verdicts (logging). A
         ``StoreError`` per obs is ABSORBED inside ``Cataloguer.catalog`` (spec §7)."""
         await self._observability_dispatcher.dispatch(
@@ -80,7 +83,7 @@ class SearchWorker:
                 changed += 1
         return changed
 
-    async def run_task(self, task: SearchTask, node_id: str) -> None:
+    async def run_task(self, task: SearchTask, node_id: NodeId) -> None:
         """One search, run once ``time_until_ready`` is zero. Never raises: backs off and logs."""
         channel_backoff_key = BackoffKey(self._client_name, task.channel)
         try:

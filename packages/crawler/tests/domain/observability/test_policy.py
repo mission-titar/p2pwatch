@@ -10,6 +10,7 @@ from catalog_matching.domain.engine import DecisionRecord
 from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability import events as ev
 from p2pwatch.domain.observability.node_metric import (
     ChannelLabels,
@@ -45,7 +46,7 @@ _ED2K_REAPPEARED = SourceAlertLabels(Network.ED2K, SourceAlertKind.REAPPEARED)
 _SOURCE = SourceKey(Network.ED2K, "1f2e3d4c" * 4)
 _FILE = FileKey(Network.ED2K, "8f3a1c0b9e7d44a2b6c1f0e9d8a7b6c5")
 _062A = (ev.TargetTitle(TargetId("062A"), "Les demoiselles cambrioleuses"),)
-_NODE = "titar-node-1"
+_NODE = NodeId("titar-node-1")
 
 
 def _relayed(

@@ -19,6 +19,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import 
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 
@@ -151,7 +152,7 @@ def test_a_download_reads_back_each_instant_its_store_wrote(local_db: Path) -> N
 def test_the_node_identity_reads_back_the_instant_its_store_wrote(local_db: Path) -> None:
     created_at = datetime(2026, 6, 22, 10, 0, 0, 123456, tzinfo=UTC)
     with closing(sqlite3.connect(local_db, autocommit=True)) as connection:
-        SqliteNodeIdStore(connection).record_node_id("test-node-42", created_at)
+        SqliteNodeIdStore(connection).record_node_id(NodeId("test-node-42"), created_at)
 
     state = _read_node_state(local_db)
 

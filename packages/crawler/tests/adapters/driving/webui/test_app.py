@@ -49,6 +49,7 @@ from p2pwatch.domain.download.states import DownloadState, FailureReason, Waitin
 from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
@@ -110,7 +111,7 @@ class _Controls:
 # The read-path fixtures never call the controls, and read the crawl as running.
 _NO_CONTROLS = _Controls()
 _NODE_STATE = NodeState(
-    node_id="node-test-001",
+    node_id=NodeId("node-test-001"),
     created_at=datetime(2024, 1, 1, tzinfo=UTC),
     downloads=(),
     backoff_state_by_key={},
@@ -149,13 +150,13 @@ _FILE = FileKey(Network.ED2K, TEST_HASH)
 _OBSERVATION = FileObservation(
     ReportedFile(_FILE, "keroro_s2e62a_vf.avi", 100_000_000, 5, "keroro"),
     datetime.fromisoformat(SEEN_AT),
-    "n1",
+    NodeId("n1"),
 )
 _DECISION = DatedDecision(
     _FILE,
     DecisionRecord(TargetId("062A"), "catalog", DecisionTier.CATALOG),
     datetime.fromisoformat(SEEN_AT),
-    "n1",
+    NodeId("n1"),
 )
 _WEEK = Interval(_WALL_CLOCK.now() - timedelta(days=7), _WALL_CLOCK.now())
 # One file seen once under one name, decided on 062A, with no source and no explanation.
@@ -426,7 +427,10 @@ async def test_file_page_shows_the_network_the_native_id_and_the_ed2k_link() -> 
 async def test_file_page_shows_each_decision_with_its_rule_tier_and_instant() -> None:
     decisions = tuple(
         DatedDecision(
-            _FILE, DecisionRecord(target_id, "numero_nu_confirmed", DecisionTier.DOWNLOAD), at, "n1"
+            _FILE,
+            DecisionRecord(target_id, "numero_nu_confirmed", DecisionTier.DOWNLOAD),
+            at,
+            NodeId("n1"),
         )
         for target_id, at in (
             (TargetId("072A"), _OBSERVATION.observed_at),
@@ -545,12 +549,12 @@ async def test_file_page_shows_its_source_history_in_the_order_read() -> None:
         _FILE, _SOURCE, "AnimuseeFMR", SourceRole.SENDING, None, None,
         datetime(2026, 10, 13, 20, 1, 30, tzinfo=UTC),
         datetime(2026, 10, 13, 22, 52, 10, tzinfo=UTC),
-        10_485_760, "n1",
+        10_485_760, NodeId("n1"),
     )  # fmt: skip
     queued = SharingPeriod(
         _FILE, _SOURCE, "AnimuseeFMR", SourceRole.QUEUED, "198.51.100.7:4661", False,
         datetime(2026, 10, 13, 20, 0, 30, tzinfo=UTC), datetime(2026, 10, 13, 20, 1, tzinfo=UTC),
-        0, "n2",
+        0, NodeId("n2"),
     )  # fmt: skip
     page = await _file_page(replace(_FILE_DESCRIPTION, sharing_periods=(sending, queued)))
     name = '<a href="/sources/name?source_name=AnimuseeFMR">AnimuseeFMR</a>'
@@ -571,9 +575,9 @@ async def test_file_page_shows_its_source_history_in_the_order_read() -> None:
 @pytest.mark.asyncio
 async def test_file_page_links_only_the_name_or_the_hash_a_period_has() -> None:
     at, queued = datetime(2026, 10, 13, 20, tzinfo=UTC), SourceRole.QUEUED
-    unnamed = SharingPeriod(_FILE, _SOURCE, None, queued, None, True, at, at, 0, "n1")
+    unnamed = SharingPeriod(_FILE, _SOURCE, None, queued, None, True, at, at, 0, NodeId("n1"))
     hashless = SharingPeriod(
-        _FILE, None, "http://emule-project.net", queued, None, None, at, at, 0, "n1"
+        _FILE, None, "http://emule-project.net", queued, None, None, at, at, 0, NodeId("n1")
     )
     page = await _file_page(replace(_FILE_DESCRIPTION, sharing_periods=(unnamed, hashless)))
     name = '<a href="/sources/name?source_name=http%3A%2F%2Femule-project.net">http://emule-project.net</a>'
@@ -697,10 +701,28 @@ _SOURCE_DESCRIPTION = SourceDescription(
         (_NAMING,),
         (
             SharingPeriod(
-                _FILE, _SOURCE, "AnimuseeFMR", SourceRole.QUEUED, None, None, _8PM, _8PM_30, 0, "n1"
+                _FILE,
+                _SOURCE,
+                "AnimuseeFMR",
+                SourceRole.QUEUED,
+                None,
+                None,
+                _8PM,
+                _8PM_30,
+                0,
+                NodeId("n1"),
             ),
             SharingPeriod(
-                _UNSEEN, _SOURCE, "AnimuseeFMR", SourceRole.STANDBY, None, None, _8PM, _8PM, 0, "n1"
+                _UNSEEN,
+                _SOURCE,
+                "AnimuseeFMR",
+                SourceRole.STANDBY,
+                None,
+                None,
+                _8PM,
+                _8PM,
+                0,
+                NodeId("n1"),
             ),
         ),
         {_FILE: "keroro_s2e62a_vf.avi"},
@@ -716,7 +738,16 @@ _SOURCE_NAME_DESCRIPTION = SourceNameDescription(
         (_NAMING, SourceNaming(_OTHER_SOURCE, "AnimuseeFMR", _8PM, 1)),
         (
             SharingPeriod(
-                _UNSEEN, None, "AnimuseeFMR", SourceRole.STANDBY, None, None, _8PM, _8PM, 0, "n1"
+                _UNSEEN,
+                None,
+                "AnimuseeFMR",
+                SourceRole.STANDBY,
+                None,
+                None,
+                _8PM,
+                _8PM,
+                0,
+                NodeId("n1"),
             ),
         ),
         {},
@@ -884,7 +915,9 @@ async def test_source_page_shows_its_hash_its_names_and_its_periods() -> None:
 
 @pytest.mark.asyncio
 async def test_a_source_without_a_name_reads_unknown_unlinked_on_its_page() -> None:
-    period = SharingPeriod(_FILE, _SOURCE, None, SourceRole.QUEUED, None, None, _8PM, _8PM, 0, "n1")
+    period = SharingPeriod(
+        _FILE, _SOURCE, None, SourceRole.QUEUED, None, None, _8PM, _8PM, 0, NodeId("n1")
+    )
     history = SourceHistory(_SOURCE, (), (period,), {_FILE: "keroro_s2e62a_vf.avi"})
     page = await _source_page(replace(_SOURCE_DESCRIPTION, source_history=history))
     file = f'<a href="/files/{_FILE.file_id.hex()}">keroro_s2e62a_vf.avi</a>'
@@ -1250,7 +1283,7 @@ def _catalog_entry(
     return CatalogEntry(
         file=reported_file.file,
         size_bytes=1024,
-        latest_observation=FileObservation(reported_file, observed_at, "n1"),
+        latest_observation=FileObservation(reported_file, observed_at, NodeId("n1")),
         decisions=decisions,
     )
 

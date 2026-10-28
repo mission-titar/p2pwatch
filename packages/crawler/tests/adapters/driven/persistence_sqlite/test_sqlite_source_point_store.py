@@ -11,6 +11,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store impor
     SqliteSourcePointStore,
 )
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.source import LatestPoint, SourceKey, SourceReading, SourceRole
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import (
@@ -26,6 +27,7 @@ _USER, _OTHER_USER = "1f2e" * 8, "c" * 32
 _KEY, _OTHER_KEY = SourceKey(Network.ED2K, _USER), SourceKey(Network.ED2K, _OTHER_USER)
 _T0 = datetime(2026, 10, 13, 20, 0, tzinfo=UTC)
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+_NODE = NodeId("n1")
 
 
 def _us(moment: datetime) -> int:
@@ -78,7 +80,7 @@ def _latest(
     before: datetime,
     *,
     native_id: str = _FILE,
-    node_id: str = "n1",
+    node_id: NodeId = _NODE,
 ) -> LatestPoint | None:
     file = FileKey(Network.ED2K, native_id)
     return source_point_store.read_latest_point(file, reading, since, before, node_id)
@@ -122,9 +124,9 @@ def test_the_latest_point_reads_this_file_on_the_given_node_only(
     _points(catalog, _T0, role="sending", native_id=_OTHER_FILE)
     _points(catalog, _T0, role="nothing_new", node_id="n2")
     assert _latest(source_point_store, _passing(), _T0, before) is None
-    assert _latest(source_point_store, _passing(), _T0, before, node_id="n2") == LatestPoint(
-        SourceRole.NOTHING_NEW, _T0, 0
-    )
+    assert _latest(
+        source_point_store, _passing(), _T0, before, node_id=NodeId("n2")
+    ) == LatestPoint(SourceRole.NOTHING_NEW, _T0, 0)
 
 
 def test_earlier_points_are_each_variants_latest_point_before_the_round(
@@ -134,7 +136,7 @@ def test_earlier_points_are_each_variants_latest_point_before_the_round(
     _points(catalog, _T0, _T0 + timedelta(seconds=30), role="nothing_new")
     _points(catalog, _T0 + timedelta(hours=1), role="standby", session_received_bytes=9_728)
     _points(catalog, round_started_at, round_started_at + timedelta(seconds=30))
-    assert set(source_point_store.read_earlier_points(_KEY, round_started_at, "n1")) == {
+    assert set(source_point_store.read_earlier_points(_KEY, round_started_at, NodeId("n1"))) == {
         LatestPoint(SourceRole.NOTHING_NEW, _T0 + timedelta(seconds=30), 0),
         LatestPoint(SourceRole.STANDBY, _T0 + timedelta(hours=1), 9_728),
     }
@@ -147,25 +149,25 @@ def test_earlier_points_read_this_sources_points_on_every_file_of_the_given_node
     _points(catalog, _T0, role="sending", native_id=_OTHER_FILE)
     _points(catalog, later, user_hash=_OTHER_USER)
     _points(catalog, later, node_id="n2")
-    assert source_point_store.read_earlier_points(_KEY, later + timedelta(seconds=30), "n1") == (
-        LatestPoint(SourceRole.SENDING, _T0, 0),
-    )
-    assert source_point_store.read_earlier_points(_OTHER_KEY, later, "n1") == ()
-    assert source_point_store.read_earlier_points(_KEY, later + timedelta(seconds=30), "n2") == (
-        LatestPoint(SourceRole.QUEUED, later, 0),
-    )
+    assert source_point_store.read_earlier_points(
+        _KEY, later + timedelta(seconds=30), NodeId("n1")
+    ) == (LatestPoint(SourceRole.SENDING, _T0, 0),)
+    assert source_point_store.read_earlier_points(_OTHER_KEY, later, NodeId("n1")) == ()
+    assert source_point_store.read_earlier_points(
+        _KEY, later + timedelta(seconds=30), NodeId("n2")
+    ) == (LatestPoint(SourceRole.QUEUED, later, 0),)
 
 
 def test_has_points_before_reads_only_the_given_nodes_points_before(
     source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
-    assert not source_point_store.has_points_before(_T0, "n1")
+    assert not source_point_store.has_points_before(_T0, NodeId("n1"))
     _points(catalog, _T0 - timedelta(hours=1), node_id="n2")
-    assert not source_point_store.has_points_before(_T0, "n1")
-    assert source_point_store.has_points_before(_T0, "n2")
+    assert not source_point_store.has_points_before(_T0, NodeId("n1"))
+    assert source_point_store.has_points_before(_T0, NodeId("n2"))
     _points(catalog, _T0, role="standby")
-    assert not source_point_store.has_points_before(_T0, "n1")
-    assert source_point_store.has_points_before(_T0 + timedelta(microseconds=1), "n1")
+    assert not source_point_store.has_points_before(_T0, NodeId("n1"))
+    assert source_point_store.has_points_before(_T0 + timedelta(microseconds=1), NodeId("n1"))
 
 
 def _steps(connection: sqlite3.Connection, read: Callable[[], object]) -> int:
@@ -206,11 +208,13 @@ def test_earlier_points_seek_once_per_variant_whatever_the_history(
             )
     source_point_store = SqliteSourcePointStore(catalog)
     source_point_store.read_earlier_points(
-        _KEY, before, "n1"
+        _KEY, before, NodeId("n1")
     )  # the first call prepares the statement
-    small = _steps(catalog, lambda: source_point_store.read_earlier_points(_KEY, before, "n1"))
+    small = _steps(
+        catalog, lambda: source_point_store.read_earlier_points(_KEY, before, NodeId("n1"))
+    )
     large = _steps(
-        catalog, lambda: source_point_store.read_earlier_points(_OTHER_KEY, before, "n1")
+        catalog, lambda: source_point_store.read_earlier_points(_OTHER_KEY, before, NodeId("n1"))
     )
     assert abs(large - small) <= small // 10
 
@@ -220,15 +224,21 @@ def test_earlier_points_seek_this_sources_variants_whatever_the_node_holds(
 ) -> None:
     _points(catalog, _T0)
     _other_variants(catalog, range(100))
-    source_point_store.read_earlier_points(_KEY, _T0, "n1")  # the first call prepares the statement
+    source_point_store.read_earlier_points(
+        _KEY, _T0, NodeId("n1")
+    )  # the first call prepares the statement
     small = _steps(
         catalog,
-        lambda: source_point_store.read_earlier_points(_KEY, _T0 + timedelta(hours=1), "n1"),
+        lambda: source_point_store.read_earlier_points(
+            _KEY, _T0 + timedelta(hours=1), NodeId("n1")
+        ),
     )
     _other_variants(catalog, range(100, 10_000))
     large = _steps(
         catalog,
-        lambda: source_point_store.read_earlier_points(_KEY, _T0 + timedelta(hours=1), "n1"),
+        lambda: source_point_store.read_earlier_points(
+            _KEY, _T0 + timedelta(hours=1), NodeId("n1")
+        ),
     )
     assert abs(large - small) <= small // 10
 

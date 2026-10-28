@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from p2pwatch.domain.file_key import FileKey
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.source import SourceKey, SourceRole
 
 
@@ -31,4 +32,4 @@ class SharingPeriod:
     first_seen_at: datetime
     last_seen_at: datetime
     received_bytes: int
-    node_id: str  # the node that read it: a merged catalog holds several
+    node_id: NodeId  # the node that read it: a merged catalog holds several

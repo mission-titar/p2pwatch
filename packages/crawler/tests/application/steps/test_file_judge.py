@@ -22,6 +22,7 @@ from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision, Retraction
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import TargetTitle
 from p2pwatch.domain.observability.notification import TierRise
 from p2pwatch.domain.observation import FileObservation, ReportedFile
@@ -34,7 +35,7 @@ from tests.fakes.adapters.driven.fake_wall_clock import FakeWallClock
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 from tests.support.catalog_rows import decision_node_ids, insert_file
 
-_NODE = "n1"
+_NODE = NodeId("n1")
 _HASH_DL = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _HASH_CAT = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 _HASH_DISCARD = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -76,7 +77,7 @@ def _seed_decision(
     native_id: str,
     target_id: TargetId,
     decided_at: datetime,
-    node_id: str = _NODE,
+    node_id: NodeId = _NODE,
 ) -> None:
     decision_store.record_decision(
         DatedDecision(
@@ -299,7 +300,7 @@ async def test_a_target_no_name_supports_is_retracted_without_nudge(
         FileObservation(_reported_file(_HASH_CAT, _DISCARD_NAME), wall_clock.now(), _NODE)
     )
     _seed_decision(
-        decision_store, _HASH_CAT, TargetId("062A"), wall_clock.now(), node_id="seed-node"
+        decision_store, _HASH_CAT, TargetId("062A"), wall_clock.now(), node_id=NodeId("seed-node")
     )
     observability, waker = ObservabilityOverFakes(), FakeWaker()
     written = await _record(

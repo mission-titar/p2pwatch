@@ -17,6 +17,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import 
 )
 from p2pwatch.application.ports.driven.source_reader import SourceReader
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
@@ -198,7 +199,7 @@ def _sharing_period(row: sqlite3.Row) -> SharingPeriod:
         first_seen_at=micros_to_instant(row["first_seen_at_micros"]),
         last_seen_at=micros_to_instant(row["last_seen_at_micros"]),
         received_bytes=row["growth"] if role is SourceRole.SENDING else 0,
-        node_id=row["node_id"],
+        node_id=NodeId(row["node_id"]),
     )
 
 

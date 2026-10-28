@@ -26,6 +26,7 @@ from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.file_target_decision import DatedDecision, records_to_write
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import DecisionChange, DecisionsRecorded
 from p2pwatch.domain.wake_subject import WakeSubject
 
@@ -52,7 +53,7 @@ class FileJudge:
         self._observability_dispatcher = observability_dispatcher
         self._wall_clock = wall_clock
 
-    async def rejudge(self, file: FileKey, base_candidate: FileCandidate, node_id: str) -> int:
+    async def rejudge(self, file: FileKey, base_candidate: FileCandidate, node_id: NodeId) -> int:
         """Judge the file on all its known filenames for every target, then record what changed
         (``base_candidate`` gives the fields other than the filename).
 

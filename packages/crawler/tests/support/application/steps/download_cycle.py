@@ -24,6 +24,7 @@ from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.download.states import FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
@@ -36,7 +37,7 @@ from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
-NODE = "n1"
+NODE = NodeId("n1")
 HASH_A = "a" * 32
 HASH_B = "b" * 32
 HASH_C = "c" * 32

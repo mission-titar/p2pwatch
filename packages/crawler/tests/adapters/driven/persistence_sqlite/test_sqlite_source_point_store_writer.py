@@ -15,6 +15,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store impor
     SqliteSourcePointStore,
 )
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.source import (
     ContactPoint,
     SourceKey,
@@ -30,6 +31,7 @@ _KEY = SourceKey(Network.ED2K, "1f2e" * 8)
 _T0 = datetime(2026, 10, 13, 20, 0, tzinfo=UTC)
 _T0_US = int(_T0.timestamp()) * 1_000_000
 _POLL = timedelta(seconds=30)
+_NODE = NodeId("n1")
 _Q, _S = SourceRole.QUEUED, SourceRole.SENDING
 
 
@@ -47,7 +49,7 @@ def _reading(role: SourceRole | None = _Q, *, counter: int = 0) -> SourceReading
 
 
 def _point(
-    role: SourceRole = _Q, *, counter: int = 0, index: int = 0, node_id: str = "n1"
+    role: SourceRole = _Q, *, counter: int = 0, index: int = 0, node_id: NodeId = _NODE
 ) -> SourcePoint:
     """A point of ``_FILE`` with its reading's role, ``index`` reads after ``_T0``."""
     return SourcePoint(_FILE, _reading(role, counter=counter), role, _T0 + index * _POLL, node_id)
@@ -108,7 +110,7 @@ def test_a_change_of_role_leaves_two_variants(
 def test_a_point_is_written_with_its_role_a_carried_one_included(
     source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
-    source_point_store.record_points([SourcePoint(_FILE, _reading(None), _Q, _T0, "n1")])
+    source_point_store.record_points([SourcePoint(_FILE, _reading(None), _Q, _T0, NodeId("n1"))])
     assert _points(catalog) == [("queued", _T0_US, 0)]
 
 
@@ -116,7 +118,7 @@ def test_a_point_without_identity_writes_its_variant_and_no_source(
     source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
     reading = dataclasses.replace(_reading(), source=None)
-    source_point_store.record_points([SourcePoint(_FILE, reading, _Q, _T0, "n1")])
+    source_point_store.record_points([SourcePoint(_FILE, reading, _Q, _T0, NodeId("n1"))])
     variants = catalog.execute("SELECT source_id, name FROM source_variants").fetchall()
     assert variants == [(None, "AnimuseeFMR")]
     assert catalog.execute("SELECT COUNT(*) FROM sources").fetchone() == (0,)
@@ -142,7 +144,7 @@ def test_a_negative_counter_is_refused_not_dropped(
 def test_another_nodes_identical_reading_is_its_own_variant(
     source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
-    source_point_store.record_points([_point(node_id="n2"), _point()])
+    source_point_store.record_points([_point(node_id=NodeId("n2")), _point()])
     assert _variants(catalog) == 2
     assert len(_points(catalog)) == 2
     node_ids = catalog.execute("SELECT node_id FROM source_variants ORDER BY variant_id")
@@ -158,7 +160,7 @@ def test_the_variant_and_the_source_are_written_as_d2_states(
         connectable=True,
         raw_metadata=(("source_origin", "kad"), ("protocol_extensions", ("a", "b"))),
     )
-    source_point_store.record_points([SourcePoint(_FILE, reading, _Q, _T0, "n1")])
+    source_point_store.record_points([SourcePoint(_FILE, reading, _Q, _T0, NodeId("n1"))])
     raw_metadata = '{"protocol_extensions": ["a", "b"], "source_origin": "kad"}'
     columns: list[object] = [_FILE.file_id.hex(), _KEY.source_id.hex(), "AnimuseeFMR"]
     columns += ["emule 0.50a", "queued", "176.103.48.36:4184", True, raw_metadata, "n1"]
@@ -190,6 +192,6 @@ def test_a_failed_write_rolls_back_the_whole_call(
 ) -> None:
     unknown = FileKey(Network.ED2K, "d" * 32)
     with pytest.raises(PersistenceError, match="FOREIGN KEY"):
-        source_point_store.record_points([SourcePoint(unknown, _reading(), _Q, _T0, "n1")])
+        source_point_store.record_points([SourcePoint(unknown, _reading(), _Q, _T0, NodeId("n1"))])
     assert catalog.execute("SELECT COUNT(*) FROM sources").fetchone() == (0,)
     assert not catalog.in_transaction

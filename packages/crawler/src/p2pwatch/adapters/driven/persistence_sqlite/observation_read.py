@@ -7,6 +7,7 @@ from typing import Any
 
 from p2pwatch.adapters.driven.persistence_sqlite.micros import micros_to_instant
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 
 # Each file's latest observation: its variant with the newest observation, then that variant's
@@ -102,7 +103,7 @@ def observation_from_row(row: Any) -> FileObservation:
         bitrate_kbps=row[7],
         raw_metadata=tuple((name, rendered) for name, rendered in json.loads(row[8])),
     )
-    return FileObservation(reported_file, micros_to_instant(row[9]), row[10])
+    return FileObservation(reported_file, micros_to_instant(row[9]), NodeId(row[10]))
 
 
 def latest_observation(connection: sqlite3.Connection, file: FileKey) -> FileObservation | None:

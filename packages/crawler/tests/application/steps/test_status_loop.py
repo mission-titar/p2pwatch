@@ -11,6 +11,7 @@ from p2pwatch.application.ports.driven.status_reading_writer import StatusReadin
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.status_loop import StatusLoop
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError, ReadRejectedError
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.status_reading import (
@@ -34,7 +35,7 @@ type _Reading = ClientStatus | ClientError
 _UP = (True, True)
 _LOW_ID = (True, False)  # on the network, not connectable
 _DOWN = make_unreachable()
-_NODE = "titar-node-1"
+_NODE = NodeId("titar-node-1")
 _NOTIFICATION_TIMEOUT_SECONDS = 5.0
 
 

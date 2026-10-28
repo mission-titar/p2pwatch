@@ -21,6 +21,7 @@ from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.loop_supervisor import LoopSupervisor
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.notification import RelayedLogLine
 from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.observability.severity import Severity
@@ -78,9 +79,9 @@ class _Crawl:
         self._both_loops_started = asyncio.Event()
         self.crawler_lifecycle = CrawlerLifecycle(
             node_id_resolver=NodeIdResolver(
-                node_id_reader=FakeNodeIdStore(stored_node_id="stored-node"),
+                node_id_reader=FakeNodeIdStore(stored_node_id=NodeId("stored-node")),
                 node_id_writer=FakeNodeIdStore(stored_node_id=None),
-                node_id_generator=FakeNodeIdGenerator("new-node"),
+                node_id_generator=FakeNodeIdGenerator(NodeId("new-node")),
                 wall_clock=self.fake_time.wall,
             ),
             observability_dispatcher=self.observability.dispatcher,
@@ -108,8 +109,8 @@ class _Crawl:
             logger=self.logger,
         )
 
-    def _loop(self, name: str) -> Callable[[str], Coroutine[object, object, None]]:
-        async def loop(node_id: str) -> None:
+    def _loop(self, name: str) -> Callable[[NodeId], Coroutine[object, object, None]]:
+        async def loop(node_id: NodeId) -> None:
             self.steps.append(
                 f"{name} under {node_id}, {len(self.observability.logger.lines)} event(s) out"
             )
@@ -145,7 +146,7 @@ async def test_the_crawler_starts_under_the_stored_node_id_and_runs_each_loop_wi
     assert crawl.observability.notifier.calls == [
         (
             Audience.OPERATIONS,
-            RelayedLogLine("🟢 node online (download off)", Severity.INFO, "stored-node"),
+            RelayedLogLine("🟢 node online (download off)", Severity.INFO, NodeId("stored-node")),
         )
     ]
     assert crawl.steps == [
@@ -182,7 +183,7 @@ async def test_the_download_loop_shows_in_the_start(
     assert crawl.observability.notifier.calls == [
         (
             Audience.OPERATIONS,
-            RelayedLogLine("🟢 node online (download on)", Severity.INFO, "stored-node"),
+            RelayedLogLine("🟢 node online (download on)", Severity.INFO, NodeId("stored-node")),
         )
     ]
 
@@ -203,7 +204,7 @@ async def test_a_changed_policy_is_re_evaluated_under_the_node_id_after_the_star
     )
     reported_file = ReportedFile(FileKey(Network.ED2K, _HASH), _FILENAME, 234_000_000, 3, "keroro")
     observation_store.record_observation(
-        FileObservation(reported_file, crawl.fake_time.wall.now(), "stored-node")
+        FileObservation(reported_file, crawl.fake_time.wall.now(), NodeId("stored-node"))
     )
 
     await crawl.run_until_both_loops_start_then_stop()

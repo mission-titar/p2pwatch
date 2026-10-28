@@ -4,6 +4,7 @@ from datetime import datetime
 from p2pwatch.application.ports.driven.source_point_reader import SourcePointReader
 from p2pwatch.application.ports.driven.source_point_writer import SourcePointWriter
 from p2pwatch.domain.file_key import FileKey
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.source import LatestPoint, SourceKey, SourcePoint, SourceReading
 from p2pwatch.domain.store_error import StoreError
 
@@ -28,7 +29,7 @@ class FakeSourcePointStore(SourcePointWriter, SourcePointReader):
         self.latest_asked: list[tuple[str, SourceReading, datetime, datetime]] = []
         self.asked: list[tuple[SourceKey, datetime]] = []
         self.baselines: list[datetime] = []
-        self.node_ids: set[str] = set()  # every read's and every point's
+        self.node_ids: set[NodeId] = set()  # every read's and every point's
         self._fail_for = fail_for or set()
         self._latest = latest
         self._history = history or {}
@@ -47,20 +48,20 @@ class FakeSourcePointStore(SourcePointWriter, SourcePointReader):
         reading: SourceReading,
         since: datetime,
         before: datetime,
-        node_id: str,
+        node_id: NodeId,
     ) -> LatestPoint | None:
         self.node_ids.add(node_id)
         self.latest_asked.append((file.native_id, reading, since, before))
         return self._latest
 
     def read_earlier_points(
-        self, source: SourceKey, before: datetime, node_id: str
+        self, source: SourceKey, before: datetime, node_id: NodeId
     ) -> tuple[LatestPoint, ...]:
         self.node_ids.add(node_id)
         self.asked.append((source, before))
         return self._history.get(source, ())
 
-    def has_points_before(self, before: datetime, node_id: str) -> bool:
+    def has_points_before(self, before: datetime, node_id: NodeId) -> bool:
         self.node_ids.add(node_id)
         self.baselines.append(before)
         if len(self.baselines) <= self._baseline_failures:

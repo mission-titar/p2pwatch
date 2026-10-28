@@ -8,6 +8,7 @@ from datetime import datetime
 
 from catalog_matching.domain.models import FileCandidate
 from p2pwatch.domain.file_key import FileKey
+from p2pwatch.domain.identifiers import NodeId
 
 RawMetadata = tuple[tuple[str, str | int | None], ...]
 
@@ -80,4 +81,4 @@ class FileObservation:
 
     reported_file: ReportedFile
     observed_at: datetime
-    node_id: str
+    node_id: NodeId

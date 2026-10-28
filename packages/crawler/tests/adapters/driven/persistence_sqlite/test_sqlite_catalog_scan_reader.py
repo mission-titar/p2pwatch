@@ -13,6 +13,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
     SqliteObservationStore,
 )
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import insert_file
@@ -20,7 +21,7 @@ from tests.support.catalog_rows import insert_file
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _HASH_B = "b" * 32
 _KEY = FileKey(Network.ED2K, _HASH)
-_NODE = "11111111-2222-3333-4444-555555555555"
+_NODE = NodeId("11111111-2222-3333-4444-555555555555")
 _T0 = datetime(2026, 6, 11, 12, 0, 0, tzinfo=UTC)
 
 
@@ -76,7 +77,7 @@ def test_iter_latest_observations_returns_the_latest_per_hash(
             file=FileKey(Network.ED2K, _HASH_B),
         ),
         _T0,
-        "n2",
+        NodeId("n2"),
     )
     observation_store.record_observation(
         FileObservation(_reported_file(filename="old.avi", size_bytes=100), _T0, _NODE)
