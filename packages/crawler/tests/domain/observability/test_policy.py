@@ -46,7 +46,7 @@ _ED2K_REAPPEARED = SourceAlertLabels(Network.ED2K, SourceAlertKind.REAPPEARED)
 _SOURCE = SourceKey(Network.ED2K, "1f2e3d4c" * 4)
 _FILE = FileKey(Network.ED2K, "8f3a1c0b9e7d44a2b6c1f0e9d8a7b6c5")
 _062A = (ev.TargetTitle(TargetId("062A"), "Les demoiselles cambrioleuses"),)
-_NODE = NodeId("titar-node-1")
+_NODE_ID = NodeId("titar-node-1")
 
 
 def _relayed(
@@ -54,7 +54,7 @@ def _relayed(
 ) -> ObservabilityPlan:
     """An operations plan: its log line relayed under the event's node."""
     return ObservabilityPlan(
-        severity, message, node_metrics, RelayedLogLine(message, severity, _NODE)
+        severity, message, node_metrics, RelayedLogLine(message, severity, _NODE_ID)
     )
 
 
@@ -145,7 +145,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
             channel=Channel("ed2k"),
             field="connected",
             degraded_for_seconds=300.0,
-            node_id=_NODE,
+            node_id=_NODE_ID,
         ),
         _relayed(Severity.WARNING, "amuled ed2k: off its network for 5 min"),
     ),
@@ -155,7 +155,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
             channel=Channel("kad"),
             field="connectable",
             degraded_for_seconds=300.0,
-            node_id=_NODE,
+            node_id=_NODE_ID,
         ),
         _relayed(Severity.WARNING, "amuled kad: not connectable for 5 min"),
     ),
@@ -164,7 +164,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
             client_name=ClientName("amuled"),
             channel=Channel("ed2k"),
             field="connected",
-            node_id=_NODE,
+            node_id=_NODE_ID,
         ),
         _relayed(Severity.INFO, "amuled ed2k: back on its network"),
     ),
@@ -173,18 +173,18 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
             client_name=ClientName("amuled"),
             channel=Channel("kad"),
             field="connectable",
-            node_id=_NODE,
+            node_id=_NODE_ID,
         ),
         _relayed(Severity.INFO, "amuled kad: connectable again"),
     ),
     (
         ev.ClientUnreachableLasting(
-            client_name=ClientName("amuled"), unreachable_for_seconds=120.0, node_id=_NODE
+            client_name=ClientName("amuled"), unreachable_for_seconds=120.0, node_id=_NODE_ID
         ),
         _relayed(Severity.WARNING, "amuled unreachable for 2 min"),
     ),
     (
-        ev.ClientReachableAgain(client_name=ClientName("amuled"), node_id=_NODE),
+        ev.ClientReachableAgain(client_name=ClientName("amuled"), node_id=_NODE_ID),
         _relayed(Severity.INFO, "amuled reachable again"),
     ),
     (
@@ -196,14 +196,14 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ),
     ),
     (
-        ev.DiskSpaceLow(free_bytes=3 * 2**29, min_free_bytes=10 * 2**30, node_id=_NODE),
+        ev.DiskSpaceLow(free_bytes=3 * 2**29, min_free_bytes=10 * 2**30, node_id=_NODE_ID),
         _relayed(
             Severity.WARNING,
             "download disk low: 1.5 GiB free, under the 10.0 GiB floor (no new download)",
         ),
     ),
     (
-        ev.CrawlerStarted(download_enabled=True, node_id=_NODE),
+        ev.CrawlerStarted(download_enabled=True, node_id=_NODE_ID),
         _relayed(
             Severity.INFO,
             "🟢 node online (download on)",
@@ -211,7 +211,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ),
     ),
     (
-        ev.CrawlerStarted(download_enabled=False, node_id=_NODE),
+        ev.CrawlerStarted(download_enabled=False, node_id=_NODE_ID),
         _relayed(
             Severity.INFO,
             "🟢 node online (download off)",
@@ -219,7 +219,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ),
     ),
     (
-        ev.SourceFirstUseful(_SOURCE, "AnimuseeFMR", _FILE, "Keroro 062.avi", _062A, _NODE),
+        ev.SourceFirstUseful(_SOURCE, "AnimuseeFMR", _FILE, "Keroro 062.avi", _062A, _NODE_ID),
         ObservabilityPlan(
             Severity.INFO,
             "source 1f2e3d4c… useful for the first time: Keroro 062.avi",
@@ -231,13 +231,13 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
                 None,
                 _062A,
                 "Keroro 062.avi",
-                _NODE,
+                _NODE_ID,
             ),
         ),
     ),
     (
         ev.SourceReappeared(
-            _SOURCE, "AnimuseeFMR", _FILE, "Keroro 062.avi", _062A, 93_600.0, _NODE
+            _SOURCE, "AnimuseeFMR", _FILE, "Keroro 062.avi", _062A, 93_600.0, _NODE_ID
         ),
         ObservabilityPlan(
             Severity.INFO,
@@ -250,7 +250,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
                 timedelta(hours=26),
                 _062A,
                 "Keroro 062.avi",
-                _NODE,
+                _NODE_ID,
             ),
         ),
     ),
@@ -272,7 +272,7 @@ def _decisions(*changes: ev.DecisionChange) -> ev.DecisionsRecorded:
         filename="Keroro 062.avi",
         size_bytes=367_185_920,
         changes=changes,
-        node_id=_NODE,
+        node_id=_NODE_ID,
     )
 
 
@@ -337,7 +337,7 @@ def test_a_file_with_risen_targets_is_one_rise_naming_the_file_and_targets() -> 
         "Keroro 062.avi",
         367_185_920,
         f"ed2k://|file|Keroro%20062.avi|367185920|{_HASH}|/",
-        _NODE,
+        _NODE_ID,
     )
     assert plan.node_metrics == (
         CounterIncrement(NodeCounter.DECISIONS, DecisionLabels(DecisionTier.DOWNLOAD)),
@@ -379,19 +379,19 @@ def test_a_change_without_a_rise_has_no_notification() -> None:
 
 def test_a_completed_download_notifies_its_targets_and_file() -> None:
     plan = plan_observability(
-        ev.DownloadCompleted(FileKey(Network.ED2K, _HASH), "Keroro `062`.avi", _062A_062B, _NODE)
+        ev.DownloadCompleted(FileKey(Network.ED2K, _HASH), "Keroro `062`.avi", _062A_062B, _NODE_ID)
     )
     assert plan == ObservabilityPlan(
         Severity.SUCCESS,
         "✅ download completed: 062A, 062B",
         (CounterIncrement(NodeCounter.DOWNLOADS_COMPLETED),),
-        CompletedDownload(_062A_062B, "Keroro `062`.avi", _NODE),
+        CompletedDownload(_062A_062B, "Keroro `062`.avi", _NODE_ID),
     )
 
 
 def test_a_completed_download_without_a_target_logs_unknown() -> None:
     plan = plan_observability(
-        ev.DownloadCompleted(FileKey(Network.ED2K, _HASH), "Keroro 062.avi", (), _NODE)
+        ev.DownloadCompleted(FileKey(Network.ED2K, _HASH), "Keroro 062.avi", (), _NODE_ID)
     )
     assert plan.message == "✅ download completed: unknown"
 
@@ -399,13 +399,16 @@ def test_a_completed_download_without_a_target_logs_unknown() -> None:
 @pytest.mark.parametrize(
     ("notification", "audience"),
     [
-        (TierRise(DecisionTier.NOTIFY, _062A, "Keroro 062.avi", 1, "ed2k://", _NODE), "community"),
         (
-            SourceAlert(SourceAlertKind.FIRST_USEFUL, _SOURCE, None, None, (), "k.avi", _NODE),
+            TierRise(DecisionTier.NOTIFY, _062A, "Keroro 062.avi", 1, "ed2k://", _NODE_ID),
             "community",
         ),
-        (CompletedDownload(_062A, "Keroro 062.avi", _NODE), "community"),
-        (RelayedLogLine("x", Severity.WARNING, _NODE), "operations"),
+        (
+            SourceAlert(SourceAlertKind.FIRST_USEFUL, _SOURCE, None, None, (), "k.avi", _NODE_ID),
+            "community",
+        ),
+        (CompletedDownload(_062A, "Keroro 062.avi", _NODE_ID), "community"),
+        (RelayedLogLine("x", Severity.WARNING, _NODE_ID), "operations"),
     ],
 )
 def test_a_notification_goes_to_the_audience_its_kind_names(
@@ -416,8 +419,8 @@ def test_a_notification_goes_to_the_audience_its_kind_names(
 
 def test_a_source_without_a_name_or_a_target_is_alerted_without_them() -> None:
     plan = plan_observability(
-        ev.SourceFirstUseful(_SOURCE, None, _FILE, "Keroro 062.avi", (), _NODE)
+        ev.SourceFirstUseful(_SOURCE, None, _FILE, "Keroro 062.avi", (), _NODE_ID)
     )
     assert plan.notification == SourceAlert(
-        SourceAlertKind.FIRST_USEFUL, _SOURCE, None, None, (), "Keroro 062.avi", _NODE
+        SourceAlertKind.FIRST_USEFUL, _SOURCE, None, None, (), "Keroro 062.avi", _NODE_ID
     )

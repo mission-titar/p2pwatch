@@ -22,7 +22,7 @@ _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _KEY = FileKey(Network.ED2K, _HASH)
 _A = FileKey(Network.ED2K, "a" * 32)
 _B = FileKey(Network.ED2K, "b" * 32)
-_NODE = NodeId("11111111-2222-3333-4444-555555555555")
+_NODE_ID = NodeId("11111111-2222-3333-4444-555555555555")
 _T0 = datetime(2026, 6, 11, 12, 0, 0, 123456, tzinfo=UTC)
 _T1 = _T0 + timedelta(minutes=1)
 _TARGET_ID = TargetId("062A")
@@ -33,12 +33,12 @@ def _decision(
     tier: DecisionTier = DecisionTier.DOWNLOAD,
     target_id: TargetId = _TARGET_ID,
     decided_at: datetime = _T0,
-    node_id: NodeId = _NODE,
+    node_id: NodeId = _NODE_ID,
 ) -> DatedDecision[DecisionRecord]:
     return DatedDecision(file, DecisionRecord(target_id, "exact_062a", tier), decided_at, node_id)
 
 
-def _retraction(file: FileKey, node_id: NodeId = _NODE) -> DatedDecision[Retraction]:
+def _retraction(file: FileKey, node_id: NodeId = _NODE_ID) -> DatedDecision[Retraction]:
     return DatedDecision(file, Retraction(TargetId("062A")), _T0, node_id)
 
 
@@ -71,7 +71,7 @@ def test_record_decision_round_trip(
         "download",
         "integer",
         instant_to_micros(_T0),
-        _NODE,
+        _NODE_ID,
     )
 
 
@@ -119,7 +119,7 @@ def test_record_retraction_round_trip(
         "SELECT file_id, target_id, rule_name, tier, decided_at_micros, node_id"
         " FROM match_decisions"
     ).fetchone()
-    assert row == (_KEY.file_id, "062A", "", "retracted", instant_to_micros(_T0), _NODE)
+    assert row == (_KEY.file_id, "062A", "", "retracted", instant_to_micros(_T0), _NODE_ID)
     assert decision_store.read_latest_decisions(_KEY) == {
         TargetId("062A"): Retraction(TargetId("062A"))
     }

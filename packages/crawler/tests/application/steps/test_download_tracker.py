@@ -25,7 +25,7 @@ from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener imp
 from tests.support.application.steps.download_cycle import (
     HASH_A,
     HASH_B,
-    NODE,
+    NODE_ID,
     build_cycle,
     candidate,
     key,
@@ -44,7 +44,7 @@ async def test_monitor_marks_in_progress_when_not_complete() -> None:
         client=client,
         tracked_download_store=tracked_download_store,
     )
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     assert tracked_download_store.states[HASH_A] is DownloadState.DOWNLOADING
 
 
@@ -56,7 +56,7 @@ async def test_monitor_does_not_regress_a_completed_queue_entry() -> None:
     tracked_download_store = FakeNoSetStateTrackedDownloadStore()
     tracked_download_store.states[HASH_A] = DownloadState.COMPLETED
     cycle = build_cycle(client=client, tracked_download_store=tracked_download_store)
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     assert tracked_download_store.states[HASH_A] is DownloadState.COMPLETED  # unchanged
 
 
@@ -69,7 +69,7 @@ async def test_monitor_resurrects_a_failed_download_back_in_the_queue() -> None:
     tracked_download_store.states[HASH_A] = DownloadState.FAILED
     tracked_download_store.failures[HASH_A] = FailureReason.LOST
     cycle = build_cycle(client=client, tracked_download_store=tracked_download_store)
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     assert tracked_download_store.states[HASH_A] is DownloadState.DOWNLOADING
     assert tracked_download_store.failures[HASH_A] is None
 
@@ -83,7 +83,7 @@ async def test_monitor_ignores_unknown_queue_entries() -> None:
         client=client,
         tracked_download_store=tracked_download_store,
     )
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     assert HASH_B not in tracked_download_store.states
 
 
@@ -95,7 +95,7 @@ async def test_every_byte_received_is_not_a_completion() -> None:
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.states[HASH_A] = DownloadState.DOWNLOADING
     cycle = build_cycle(client=client, tracked_download_store=tracked_download_store)
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     assert (
         tracked_download_store.states[HASH_A] is DownloadState.DOWNLOADING
     )  # NOT flipped to COMPLETED
@@ -124,7 +124,7 @@ async def test_one_hash_store_failure_does_not_starve_other_completions() -> Non
         client=client,
         tracked_download_store=tracked_download_store,
     )
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     # despite the failure on HASH_A
     assert tracked_download_store.states[HASH_B] is DownloadState.COMPLETED
 
@@ -140,7 +140,7 @@ async def test_monitor_no_op_when_state_already_matches() -> None:
         client=client,
         tracked_download_store=tracked_download_store,
     )
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     assert tracked_download_store.states[HASH_A] is DownloadState.DOWNLOADING
 
 
@@ -153,7 +153,7 @@ async def test_shared_file_for_tracked_hash_is_completed() -> None:
         client=client,
         tracked_download_store=tracked_download_store,
     )
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     assert tracked_download_store.states[HASH_A] is DownloadState.COMPLETED
 
 
@@ -165,7 +165,7 @@ async def test_shared_file_for_untracked_hash_is_ignored() -> None:
         client=client,
         tracked_download_store=tracked_download_store,
     )
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     assert HASH_A not in tracked_download_store.states
 
 
@@ -182,7 +182,7 @@ async def test_already_completed_shared_hash_is_not_recompleted() -> None:
         tracked_download_store=tracked_download_store,
         observability_dispatcher=observability.dispatcher,
     )
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     assert tracked_download_store.completed_at == {}
     assert observability.notifier.calls == []
 
@@ -200,11 +200,11 @@ async def test_failed_shared_hash_is_resurrected_and_notified() -> None:
         tracked_download_store=tracked_download_store,
         observability_dispatcher=observability.dispatcher,
     )
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     assert tracked_download_store.states[HASH_A] is DownloadState.COMPLETED
     # No observation, no decision, no queued target: the hash names the file, no target is named.
     [(_, notification)] = observability.notifier.calls
-    assert notification == CompletedDownload((), HASH_A, NODE)
+    assert notification == CompletedDownload((), HASH_A, NODE_ID)
 
 
 @pytest.mark.asyncio
@@ -223,12 +223,12 @@ async def test_a_completion_names_the_clean_file_and_every_download_target_of_th
         ),
         observability_dispatcher=observability.dispatcher,
     )
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     [(_, notification)] = observability.notifier.calls
     assert notification == CompletedDownload(
         (TargetTitle(TargetId("062A"), "t"), TargetTitle(TargetId("063A"), "t2")),
         "Keroro é.avi",
-        NODE,
+        NODE_ID,
     )
 
 
@@ -241,7 +241,7 @@ async def test_monitor_moves_queued_to_downloading_not_completed() -> None:
         client=client,
         tracked_download_store=tracked_download_store,
     )
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     assert (
         tracked_download_store.states[HASH_A] is DownloadState.DOWNLOADING
     )  # NOT completed (bytes ignored)
@@ -257,7 +257,7 @@ async def test_marks_seen_every_listed_download_completed_ones_included() -> Non
     tracked_download_store.states[HASH_A] = DownloadState.DOWNLOADING
     tracked_download_store.states[HASH_B] = DownloadState.COMPLETED
     cycle = build_cycle(client=client, tracked_download_store=tracked_download_store)
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     assert tracked_download_store.seen == [{HASH_A, HASH_B}]
 
 
@@ -276,9 +276,9 @@ async def test_a_download_amuled_no_longer_knows_becomes_failed() -> None:
         fake_time=fake_time,
         logger=logger,
     )
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     fake_time.advance(timedelta(hours=1))
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     assert tracked_download_store.states[HASH_A] is DownloadState.FAILED
     assert tracked_download_store.failures[HASH_A] is FailureReason.LOST
     assert client.started == []  # failed by the TTL: never started again
@@ -306,7 +306,7 @@ async def test_each_download_write_carries_the_instant_read_right_before_it() ->
         observation_reader=observation_reader,
         wall_clock=wall_clock,
     )
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     minute = timedelta(minutes=1)
     assert tracked_download_store.completed_at == {HASH_A: start + minute}
     assert tracked_download_store.seen_at == [start + 2 * minute]
@@ -324,7 +324,7 @@ async def test_a_failure_the_client_reports_stays_failed_round_after_round() -> 
     cycle = build_cycle(client=client, tracked_download_store=tracked_download_store)
     rounds = []
     for _ in range(3):
-        await cycle.run(NODE)
+        await cycle.run(NODE_ID)
         rounds.append(
             (tracked_download_store.states[HASH_A], tracked_download_store.failures.get(HASH_A))
         )
@@ -349,7 +349,7 @@ async def test_waiting_for_sources_is_not_failing_for_a_simulated_year(tmp_path:
     )
     for _ in range(12):
         fake_time.advance(timedelta(days=30))
-        await cycle.run(NODE)
+        await cycle.run(NODE_ID)
     row = connection.execute("SELECT state, waiting_reason, failure_reason FROM downloads")
     assert row.fetchall() == [("downloading", "no_source", None)]
     connection.close()
@@ -376,9 +376,9 @@ async def test_a_wall_clock_step_forward_fails_no_download_absent_from_one_poll(
         lost_after=timedelta(days=1),
         fake_time=fake_time,
     )
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     fake_time.step_wall(timedelta(days=2))
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     assert real_tracked_download_store.read_tracked_states() == {
         key(HASH_A): DownloadState.DOWNLOADING
     }
@@ -399,12 +399,12 @@ async def test_a_latest_seen_at_in_the_future_waits_lost_after_no_more(
         lost_after=timedelta(days=1),
         fake_time=fake_time,
     )
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     fake_time.advance(timedelta(days=1) - timedelta(seconds=1))
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     assert real_tracked_download_store.read_tracked_states() == {key(HASH_A): DownloadState.QUEUED}
     fake_time.advance(timedelta(seconds=1))
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     assert real_tracked_download_store.read_tracked_states() == {key(HASH_A): DownloadState.FAILED}
 
 
@@ -422,7 +422,7 @@ async def test_a_download_last_seen_two_days_ago_fails_at_the_first_cycle(
         lost_after=timedelta(days=1),
         fake_time=fake_time,
     )
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     assert real_tracked_download_store.read_tracked_states() == {key(HASH_A): DownloadState.FAILED}
 
 
@@ -441,12 +441,12 @@ async def test_a_download_the_node_queued_is_lost_after_lost_after_of_monotonic_
         lost_after=timedelta(days=1),
         fake_time=fake_time,
     )
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     fake_time.step_wall(timedelta(days=2))
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     assert real_tracked_download_store.read_tracked_states() == {key(HASH_A): DownloadState.QUEUED}
     fake_time.advance(timedelta(days=1))
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     assert real_tracked_download_store.read_tracked_states() == {key(HASH_A): DownloadState.FAILED}
 
 
@@ -460,13 +460,13 @@ async def test_a_row_the_operator_deleted_then_queued_again_waits_lost_after_ane
         tracked_download_store=tracked_download_store,
         fake_time=fake_time,
     )
-    await cycle.run(NODE)  # listed: lost a day from now
+    await cycle.run(NODE_ID)  # listed: lost a day from now
     del tracked_download_store.states[HASH_A]  # for a manual retry
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     fake_time.advance(timedelta(hours=12))
     tracked_download_store.record_queued(key(HASH_A), TargetId("062A"), 10, fake_time.wall.now())
     fake_time.advance(timedelta(hours=12))
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     assert tracked_download_store.states[HASH_A] is DownloadState.QUEUED
 
 
@@ -491,7 +491,7 @@ async def test_monitor_store_error_still_promotes_completions_in_same_cycle() ->
         client=client,
         tracked_download_store=tracked_download_store,
     )
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     # HASH_A's completion is recorded despite the failure of reconcile_states on HASH_B
     assert tracked_download_store.states[HASH_A] is DownloadState.COMPLETED
 
@@ -508,7 +508,7 @@ async def test_tracked_states_store_failure_is_absorbed_at_step_2() -> None:
         client=client,
         tracked_download_store=tracked_download_store,
     )
-    await cycle.run(NODE)  # does not raise (both StoreError are absorbed)
+    await cycle.run(NODE_ID)  # does not raise (both StoreError are absorbed)
 
 
 @pytest.mark.asyncio
@@ -523,5 +523,5 @@ async def test_presence_store_failure_is_absorbed_and_candidates_still_run() -> 
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await cycle.run(NODE)  # does not raise
+    await cycle.run(NODE_ID)  # does not raise
     assert tracked_download_store.states[HASH_A] is DownloadState.QUEUED

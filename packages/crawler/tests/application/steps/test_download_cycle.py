@@ -18,7 +18,7 @@ from tests.support.application.steps.download_cycle import (
     HASH_A,
     HASH_B,
     HASH_C,
-    NODE,
+    NODE_ID,
     build_cycle,
     candidate,
     observation,
@@ -41,7 +41,7 @@ async def test_unreachable_client_is_tolerated_and_iteration_skipped(failure: Ex
         tracked_download_store=tracked_download_store,
         decision_reader=FakeDecisionReader(candidates=(candidate(HASH_A, TargetId("062A")),)),
     )
-    await cycle.run(NODE)  # does not raise
+    await cycle.run(NODE_ID)  # does not raise
     assert client.started == []  # iteration skipped (no candidates processed)
 
 
@@ -59,7 +59,7 @@ async def test_store_error_is_absorbed() -> None:
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await cycle.run(NODE)  # does not raise (StoreError absorbed)
+    await cycle.run(NODE_ID)  # does not raise (StoreError absorbed)
 
 
 @pytest.mark.asyncio
@@ -76,7 +76,7 @@ async def test_start_unreachable_keeps_queued_and_is_tolerated() -> None:
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await cycle.run(NODE)  # does not raise
+    await cycle.run(NODE_ID)  # does not raise
     assert tracked_download_store.states[HASH_A] is DownloadState.QUEUED  # stays queued → caught up
     assert client.started == []
 
@@ -99,7 +99,7 @@ async def test_completion_and_new_candidate_in_the_same_cycle() -> None:
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     assert (
         tracked_download_store.states[HASH_A] is DownloadState.COMPLETED
     )  # shared and out of the queue
@@ -132,7 +132,7 @@ async def test_completion_store_failure_does_not_starve_new_candidates() -> None
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await cycle.run(NODE)  # does not raise
+    await cycle.run(NODE_ID)  # does not raise
     # Observable effect of step 3: HASH_B enqueued AND its link emitted despite the step-2 failure.
     assert tracked_download_store.states[HASH_B] is DownloadState.QUEUED
     assert HASH_B in started(client)
@@ -164,7 +164,7 @@ async def test_candidate_store_failure_does_not_starve_completions() -> None:
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await cycle.run(NODE)  # does not raise
+    await cycle.run(NODE_ID)  # does not raise
     # Observable effect of step 2: HASH_A completed despite the step-3 failure.
     assert tracked_download_store.states[HASH_A] is DownloadState.COMPLETED
     # HASH_B was NOT enqueued (record_queued raised) → no link emitted for it.
@@ -193,7 +193,7 @@ async def test_monitor_unreachable_aborts_subsequent_steps() -> None:
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await cycle.run(NODE)  # does not raise (tolerated) but EVERYTHING is skipped
+    await cycle.run(NODE_ID)  # does not raise (tolerated) but EVERYTHING is skipped
     assert tracked_download_store.states[HASH_A] is DownloadState.COMPLETED  # unchanged
     assert HASH_B not in tracked_download_store.states  # step 3 NOT executed
     assert client.started == []
@@ -218,7 +218,7 @@ async def test_monitor_store_failure_is_isolated_and_does_not_starve_candidates(
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await cycle.run(NODE)  # does not raise
+    await cycle.run(NODE_ID)  # does not raise
     # Step 3 ran despite the step-1 failure: HASH_B enqueued + link emitted.
     assert tracked_download_store.states[HASH_B] is DownloadState.QUEUED
     assert HASH_B in started(client)
@@ -240,7 +240,7 @@ async def test_start_store_failure_is_tolerated_and_does_not_raise() -> None:
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await cycle.run(NODE)  # does NOT raise (step-4 StoreError tolerated)
+    await cycle.run(NODE_ID)  # does NOT raise (step-4 StoreError tolerated)
 
 
 @pytest.mark.asyncio
@@ -260,7 +260,7 @@ async def test_an_unmeasurable_output_directory_admits_nothing_and_does_not_rais
         free_space_meter=FakeBrokenFreeSpaceMeter(),
         observability_dispatcher=observability.dispatcher,
     )
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     assert client.started == []
     assert HASH_A not in tracked_download_store.states
     assert observability.logger.lines == []
@@ -289,7 +289,7 @@ async def test_a_daemon_unavailable_while_reading_sources_ends_the_round_after_t
         tracked_download_store=tracked_download_store,
         observation_reader=observation_reader,
         sources=sources,
-    ).run(NODE)  # does not raise
+    ).run(NODE_ID)  # does not raise
     assert started(client) == [HASH_C]
     assert source_client.source_reads == [HASH_A]
     assert sources.recorded == []
@@ -303,7 +303,7 @@ async def test_a_store_failure_reading_the_tracked_downloads_reads_no_source() -
     cycle = build_cycle(
         client=client, source_client=source_client, tracked_download_store=tracked_download_store
     )
-    await cycle.run(NODE)  # does not raise
+    await cycle.run(NODE_ID)  # does not raise
     assert source_client.source_reads == []
 
 
@@ -325,5 +325,5 @@ async def test_a_daemon_unreachable_at_the_start_reads_no_source() -> None:
         tracked_download_store=tracked_download_store,
         observation_reader=observation_reader,
     )
-    await cycle.run(NODE)
+    await cycle.run(NODE_ID)
     assert source_client.source_reads == []

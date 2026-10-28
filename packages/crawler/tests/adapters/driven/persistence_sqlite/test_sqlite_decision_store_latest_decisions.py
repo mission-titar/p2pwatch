@@ -17,13 +17,13 @@ from tests.support.catalog_rows import insert_file
 
 _A = FileKey(Network.ED2K, "a" * 32)
 _NEVER_STORED = FileKey(Network.ED2K, "b" * 32)
-_NODE = NodeId("11111111-2222-3333-4444-555555555555")
+_NODE_ID = NodeId("11111111-2222-3333-4444-555555555555")
 _T0 = datetime(2026, 6, 12, tzinfo=UTC)
 _T1 = _T0 + timedelta(minutes=1)
 
 
 def _dated(decision: FileTargetDecision, decided_at: datetime) -> DatedDecision[FileTargetDecision]:
-    return DatedDecision(_A, decision, decided_at, _NODE)
+    return DatedDecision(_A, decision, decided_at, _NODE_ID)
 
 
 @pytest.fixture

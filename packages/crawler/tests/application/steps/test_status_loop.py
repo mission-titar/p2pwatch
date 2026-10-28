@@ -35,7 +35,7 @@ type _Reading = ClientStatus | ClientError
 _UP = (True, True)
 _LOW_ID = (True, False)  # on the network, not connectable
 _DOWN = make_unreachable()
-_NODE = NodeId("titar-node-1")
+_NODE_ID = NodeId("titar-node-1")
 _AMULED = ClientName("amuled")
 _NOTIFICATION_TIMEOUT_SECONDS = 5.0
 
@@ -88,7 +88,7 @@ async def _run(*readings: _Reading, client: ClientName = _AMULED) -> _Observabil
     observability = _Observability(fake_time)
     scripted = FakeStatusClient(list(readings), run_state)
     await asyncio.wait_for(
-        _status_loop(client, scripted, fake_time, observability, run_state).run(_NODE),
+        _status_loop(client, scripted, fake_time, observability, run_state).run(_NODE_ID),
         timeout=1.0,
     )
     return observability
@@ -99,7 +99,7 @@ async def test_every_alert_is_notified_under_the_node_id_the_loop_runs_with() ->
     observability = await _run(_DOWN, _DOWN, _DOWN, _status(ed2k=_UP))
     notifications = observability.notifier.notifications
     assert notifications
-    assert {notification.node_id for _, notification in notifications} == {_NODE}
+    assert {notification.node_id for _, notification in notifications} == {_NODE_ID}
 
 
 async def _alerts(*readings: _Reading) -> list[tuple[float, Notification]]:
@@ -107,11 +107,11 @@ async def _alerts(*readings: _Reading) -> list[tuple[float, Notification]]:
 
 
 def _warning(message: str) -> RelayedLogLine:
-    return RelayedLogLine(message, Severity.WARNING, _NODE)
+    return RelayedLogLine(message, Severity.WARNING, _NODE_ID)
 
 
 def _info(message: str) -> RelayedLogLine:
-    return RelayedLogLine(message, Severity.INFO, _NODE)
+    return RelayedLogLine(message, Severity.INFO, _NODE_ID)
 
 
 _NOT_CONNECTABLE = "not connectable for 5 min"
@@ -235,7 +235,7 @@ async def test_each_reading_is_published_with_its_wall_and_monotonic_instants(
         run_state,
         status_reading_store,
     )
-    await asyncio.wait_for(status_loop.run(_NODE), timeout=1.0)
+    await asyncio.wait_for(status_loop.run(_NODE_ID), timeout=1.0)
     read_at = fake_time.wall.now() - timedelta(seconds=60)  # the loop slept one period after it
     published_at = fake_time.monotonic.now() - timedelta(seconds=60)
     assert status_reading_store.read_readings() == {
@@ -250,7 +250,9 @@ async def test_a_wall_clock_step_forward_raises_no_alert_before_its_delay() -> N
     observability = _Observability(fake_time)
     client = FakeSteppedStatusClient([_status(ed2k=_LOW_ID)] * 5, run_state, fake_time)
     await asyncio.wait_for(
-        _status_loop(ClientName("amuled"), client, fake_time, observability, run_state).run(_NODE),
+        _status_loop(ClientName("amuled"), client, fake_time, observability, run_state).run(
+            _NODE_ID
+        ),
         timeout=1.0,
     )
     assert observability.notifier.notifications == []

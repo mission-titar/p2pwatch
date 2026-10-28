@@ -21,7 +21,7 @@ from tests.support.catalog_rows import insert_file
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _HASH_B = "b" * 32
 _KEY = FileKey(Network.ED2K, _HASH)
-_NODE = NodeId("11111111-2222-3333-4444-555555555555")
+_NODE_ID = NodeId("11111111-2222-3333-4444-555555555555")
 _T0 = datetime(2026, 6, 11, 12, 0, 0, tzinfo=UTC)
 
 
@@ -67,7 +67,7 @@ def test_iter_latest_observations_returns_the_latest_per_hash(
     # _HASH gets TWO observations a minute apart: only the LATEST must come back.
     # _HASH_B gets a single observation with media metadata present, by another node.
     newest = FileObservation(
-        _reported_file(filename="new.avi", size_bytes=200), _T0 + timedelta(minutes=1), _NODE
+        _reported_file(filename="new.avi", size_bytes=200), _T0 + timedelta(minutes=1), _NODE_ID
     )
     other = FileObservation(
         dataclasses.replace(
@@ -80,7 +80,7 @@ def test_iter_latest_observations_returns_the_latest_per_hash(
         NodeId("n2"),
     )
     observation_store.record_observation(
-        FileObservation(_reported_file(filename="old.avi", size_bytes=100), _T0, _NODE)
+        FileObservation(_reported_file(filename="old.avi", size_bytes=100), _T0, _NODE_ID)
     )
     observation_store.record_observation(newest)
     observation_store.record_observation(other)
@@ -99,10 +99,10 @@ def test_iter_latest_observations_breaks_an_observed_at_tie_on_the_highest_varia
 ) -> None:
     # Both rows share observed_at, so the newer variant (higher variant_id) wins.
     observation_store.record_observation(
-        FileObservation(_reported_file(filename="first.avi"), _T0, _NODE)
+        FileObservation(_reported_file(filename="first.avi"), _T0, _NODE_ID)
     )
     observation_store.record_observation(
-        FileObservation(_reported_file(filename="second.avi"), _T0, _NODE)
+        FileObservation(_reported_file(filename="second.avi"), _T0, _NODE_ID)
     )
     filenames = [
         observation.reported_file.filename
@@ -116,13 +116,13 @@ def test_read_file_count_counts_catalogued_hashes_not_observations(
     catalog_scan_reader: SqliteCatalogScanReader,
 ) -> None:
     assert catalog_scan_reader.read_file_count() == 0
-    observation_store.record_observation(FileObservation(_reported_file(), _T0, _NODE))
-    observation_store.record_observation(FileObservation(_reported_file(), _T0, _NODE))
+    observation_store.record_observation(FileObservation(_reported_file(), _T0, _NODE_ID))
+    observation_store.record_observation(FileObservation(_reported_file(), _T0, _NODE_ID))
     observation_store.record_observation(
         FileObservation(
             dataclasses.replace(_reported_file(), file=FileKey(Network.ED2K, _HASH_B)),
             _T0,
-            _NODE,
+            _NODE_ID,
         ),
     )
     assert catalog_scan_reader.read_file_count() == 2

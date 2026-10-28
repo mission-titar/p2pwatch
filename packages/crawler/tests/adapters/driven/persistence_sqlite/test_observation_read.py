@@ -19,7 +19,7 @@ from tests.support.catalog_rows import insert_file, insert_observation
 _A, _B, _C = "a" * 32, "b" * 32, "c" * 32
 _TIE = "2026-06-01T10:00:00.000000+00:00"
 _YEAR_3000 = 32_503_680_000_000_000
-_NODE = NodeId("n1")
+_NODE_ID = NodeId("n1")
 
 
 def _key(native_id: str) -> FileKey:
@@ -62,7 +62,7 @@ def _observation(
     media: int | None = None,
     native_id: str = _A,
     sources: int = 5,
-    node_id: NodeId = _NODE,
+    node_id: NodeId = _NODE_ID,
 ) -> FileObservation:
     reported_file = ReportedFile(
         file=_key(native_id),

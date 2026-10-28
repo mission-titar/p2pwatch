@@ -35,7 +35,7 @@ from tests.fakes.adapters.driven.fake_wall_clock import FakeWallClock
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 from tests.support.catalog_rows import decision_node_ids, insert_file
 
-_NODE = NodeId("n1")
+_NODE_ID = NodeId("n1")
 _HASH_DL = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _HASH_CAT = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 _HASH_DISCARD = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -77,7 +77,7 @@ def _seed_decision(
     native_id: str,
     target_id: TargetId,
     decided_at: datetime,
-    node_id: NodeId = _NODE,
+    node_id: NodeId = _NODE_ID,
 ) -> None:
     decision_store.record_decision(
         DatedDecision(
@@ -119,11 +119,11 @@ async def _record(
     wall_clock: FakeWallClock,
 ) -> int:
     observation_store.record_observation(
-        FileObservation(_reported_file(native_id, filename), wall_clock.now(), _NODE)
+        FileObservation(_reported_file(native_id, filename), wall_clock.now(), _NODE_ID)
     )
     judge = _file_judge(observation_store, decision_store, engine, waker, observability, wall_clock)
     return await judge.rejudge(
-        _key(native_id), _reported_file(native_id, filename).to_candidate(), _NODE
+        _key(native_id), _reported_file(native_id, filename).to_candidate(), _NODE_ID
     )
 
 
@@ -151,11 +151,11 @@ async def test_new_decision_is_recorded_emitted_and_nudged(
         "062A",
         "download",
     )
-    assert decision_node_ids(catalog_connection) == {_NODE}
+    assert decision_node_ids(catalog_connection) == {_NODE_ID}
     assert observability.logger.lines == [
         _decisions_line(_HASH_DL, _DL_NAME, "062A none → download")
     ]
-    assert observability.notifier.node_ids == [_NODE]
+    assert observability.notifier.node_ids == [_NODE_ID]
     assert waker.woken_subjects == [WakeSubject.DOWNLOAD]
 
 
@@ -297,7 +297,7 @@ async def test_a_target_no_name_supports_is_retracted_without_nudge(
     wall_clock: FakeWallClock,
 ) -> None:
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_CAT, _DISCARD_NAME), wall_clock.now(), _NODE)
+        FileObservation(_reported_file(_HASH_CAT, _DISCARD_NAME), wall_clock.now(), _NODE_ID)
     )
     _seed_decision(
         decision_store, _HASH_CAT, TargetId("062A"), wall_clock.now(), node_id=NodeId("seed-node")
@@ -317,7 +317,7 @@ async def test_a_target_no_name_supports_is_retracted_without_nudge(
     assert decision_store.read_latest_decisions(_key(_HASH_CAT)) == {
         TargetId("062A"): Retraction(TargetId("062A"))
     }
-    assert decision_node_ids(catalog_connection) == {"seed-node", _NODE}
+    assert decision_node_ids(catalog_connection) == {"seed-node", _NODE_ID}
     assert observability.logger.lines == [
         _decisions_line(_HASH_CAT, _DISCARD_NAME, "062A notify → retracted")
     ]
@@ -333,7 +333,7 @@ async def test_every_unsupported_target_is_retracted(
     wall_clock: FakeWallClock,
 ) -> None:
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_MULTI, _DISCARD_NAME), wall_clock.now(), _NODE)
+        FileObservation(_reported_file(_HASH_MULTI, _DISCARD_NAME), wall_clock.now(), _NODE_ID)
     )
     _seed_decision(decision_store, _HASH_MULTI, TargetId("062A"), wall_clock.now())
     _seed_decision(decision_store, _HASH_MULTI, TargetId("062B"), wall_clock.now())
@@ -368,11 +368,11 @@ async def test_already_retracted_then_none_is_a_no_op(
     wall_clock: FakeWallClock,
 ) -> None:
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_CAT, _DISCARD_NAME), wall_clock.now(), _NODE)
+        FileObservation(_reported_file(_HASH_CAT, _DISCARD_NAME), wall_clock.now(), _NODE_ID)
     )
     _seed_decision(decision_store, _HASH_CAT, TargetId("062A"), wall_clock.now())
     decision_store.record_decision(
-        DatedDecision(_key(_HASH_CAT), Retraction(TargetId("062A")), wall_clock.now(), _NODE)
+        DatedDecision(_key(_HASH_CAT), Retraction(TargetId("062A")), wall_clock.now(), _NODE_ID)
     )
     observability, waker = ObservabilityOverFakes(), FakeWaker()
     written = await _record(
@@ -498,7 +498,7 @@ async def test_the_event_names_the_file_by_its_most_sourced_name(
     wall_clock: FakeWallClock,
 ) -> None:
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_DL, _DL_NAME, sources=9), wall_clock.now(), _NODE)
+        FileObservation(_reported_file(_HASH_DL, _DL_NAME, sources=9), wall_clock.now(), _NODE_ID)
     )
     observability, waker = ObservabilityOverFakes(), FakeWaker()
     await _record(
@@ -524,7 +524,7 @@ async def test_a_target_gone_from_the_targets_is_retracted(
     wall_clock: FakeWallClock,
 ) -> None:
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_CAT, _DISCARD_NAME), wall_clock.now(), _NODE)
+        FileObservation(_reported_file(_HASH_CAT, _DISCARD_NAME), wall_clock.now(), _NODE_ID)
     )
     _seed_decision(decision_store, _HASH_CAT, TargetId("999Z"), wall_clock.now())
     observability, waker = ObservabilityOverFakes(), FakeWaker()
@@ -557,7 +557,7 @@ async def test_a_file_with_no_name_left_is_named_by_the_candidate(
     observability, waker = ObservabilityOverFakes(), FakeWaker()
     judge = _file_judge(observation_store, decision_store, engine, waker, observability, wall_clock)
     await judge.rejudge(
-        _key(_HASH_CAT), _reported_file(_HASH_CAT, _DISCARD_NAME).to_candidate(), _NODE
+        _key(_HASH_CAT), _reported_file(_HASH_CAT, _DISCARD_NAME).to_candidate(), _NODE_ID
     )
     assert observability.logger.lines == [
         _decisions_line(_HASH_CAT, _DISCARD_NAME, "062A notify → retracted")
@@ -574,7 +574,7 @@ async def test_each_row_carries_the_instant_read_right_before_its_write(
     start = datetime(2026, 6, 12, tzinfo=UTC)
     seeded_at = start - timedelta(days=1)
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_MULTI, _MULTI_NAME), seeded_at, _NODE)
+        FileObservation(_reported_file(_HASH_MULTI, _MULTI_NAME), seeded_at, _NODE_ID)
     )
     _seed_decision(decision_store, _HASH_MULTI, TargetId("001A"), seeded_at)
     judge = _file_judge(
@@ -586,7 +586,7 @@ async def test_each_row_carries_the_instant_read_right_before_its_write(
         FakeTickingWallClock(FakeTime(start)),
     )
     await judge.rejudge(
-        _key(_HASH_MULTI), _reported_file(_HASH_MULTI, _MULTI_NAME).to_candidate(), _NODE
+        _key(_HASH_MULTI), _reported_file(_HASH_MULTI, _MULTI_NAME).to_candidate(), _NODE_ID
     )
     rows = catalog_connection.execute(
         "SELECT target_id, tier, decided_at_micros FROM match_decisions ORDER BY id"

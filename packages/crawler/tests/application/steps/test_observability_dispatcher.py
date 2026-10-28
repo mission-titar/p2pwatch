@@ -26,12 +26,12 @@ from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricSto
 from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
 from tests.fakes.adapters.driven.fake_raising_notifier import FakeRaisingNotifier
 
-_NODE = NodeId("titar-node-1")
+_NODE_ID = NodeId("titar-node-1")
 _COMPLETED = ev.DownloadCompleted(
     FileKey(Network.ED2K, "a" * 32),
     "Keroro 062.avi",
     (ev.TargetTitle(TargetId("062A"), "t"),),
-    _NODE,
+    _NODE_ID,
 )
 
 
@@ -86,7 +86,7 @@ async def test_writes_each_counter_increment_and_gauge_setting_to_the_node_metri
     node_metric_store = FakeNodeMetricStore()
     dispatcher = _dispatcher(node_metric_store, FakeNotifier())
     await dispatcher.dispatch(ev.ClientUnreachable(ClientName("amuled")))
-    await dispatcher.dispatch(ev.CrawlerStarted(download_enabled=True, node_id=_NODE))
+    await dispatcher.dispatch(ev.CrawlerStarted(download_enabled=True, node_id=_NODE_ID))
     assert set(node_metric_store.read_samples()) == {
         NodeMetricSample(NodeCounter.CLIENT_UNREACHABLE, (("client", "amuled"),), 1.0),
         NodeMetricSample(NodeGauge.CRAWLER_UP, (), 1.0),
@@ -97,10 +97,13 @@ async def test_writes_each_counter_increment_and_gauge_setting_to_the_node_metri
 async def test_relays_the_log_line_under_the_events_node() -> None:
     notifier = FakeNotifier()
     await _dispatcher(FakeNodeMetricStore(), notifier).dispatch(
-        ev.CrawlerStarted(download_enabled=True, node_id=_NODE)
+        ev.CrawlerStarted(download_enabled=True, node_id=_NODE_ID)
     )
     assert notifier.calls == [
-        (Audience.OPERATIONS, RelayedLogLine("🟢 node online (download on)", Severity.INFO, _NODE))
+        (
+            Audience.OPERATIONS,
+            RelayedLogLine("🟢 node online (download on)", Severity.INFO, _NODE_ID),
+        )
     ]
 
 
@@ -111,7 +114,7 @@ async def test_logs_the_message_but_notifies_the_plans_notification() -> None:
     change = ev.DecisionChange(TargetId("062A"), "Les demoiselles cambrioleuses", None, download)
     await _dispatcher(FakeNodeMetricStore(), notifier, logger).dispatch(
         ev.DecisionsRecorded(
-            FileKey(Network.ED2K, "a" * 32), "Keroro 062.avi", 1024, (change,), _NODE
+            FileKey(Network.ED2K, "a" * 32), "Keroro 062.avi", 1024, (change,), _NODE_ID
         )
     )
     assert logger.lines[-1].message.startswith("decisions for Keroro 062.avi")
@@ -124,7 +127,7 @@ async def test_logs_the_message_but_notifies_the_plans_notification() -> None:
                 "Keroro 062.avi",
                 1024,
                 f"ed2k://|file|Keroro%20062.avi|1024|{'a' * 32}|/",
-                _NODE,
+                _NODE_ID,
             ),
         )
     ]
@@ -138,7 +141,7 @@ async def test_logs_the_message_but_notifies_the_plans_notification() -> None:
             ev.ObservationRecorded(client_name=ClientName("amuled"), channel=Channel("ed2k")),
             "debug",
         ),
-        (ev.CrawlerStarted(download_enabled=True, node_id=_NODE), "info"),
+        (ev.CrawlerStarted(download_enabled=True, node_id=_NODE_ID), "info"),
         (_COMPLETED, "info"),  # a success
         (ev.ClientUnreachable(ClientName("amuled")), "warning"),
     ],
