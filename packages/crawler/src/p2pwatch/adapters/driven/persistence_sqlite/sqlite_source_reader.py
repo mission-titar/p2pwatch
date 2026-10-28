@@ -31,13 +31,13 @@ _MICROSECOND = timedelta(microseconds=1)
 # A period joins the consecutive points of one identity (the source_id, else the name) on one
 # file and one node, cut where the variant changes, a gap passes the window's gap or the
 # session's received bytes drop (source points spec, D6). Only the window's points are read, a
-# seek on the primary key bounded by ``observed_at``. A ``_WHERE_*`` goes between this and
+# seek on the primary key bounded by ``observed_at_micros``. A ``_WHERE_*`` goes between this and
 # ``_SQL_PERIODS_END``.
 _SQL_PERIODS = """\
 WITH points AS (
     SELECT
         o.variant_id,
-        o.observed_at,
+        o.observed_at_micros,
         o.session_received_bytes,
         v.file_id,
         v.node_id,
@@ -47,30 +47,30 @@ WITH points AS (
     JOIN source_observations AS o ON o.variant_id = v.variant_id
 """
 _SQL_PERIODS_END = """\
-        AND o.observed_at >= :since AND o.observed_at < :until
+        AND o.observed_at_micros >= :since AND o.observed_at_micros < :until
 ),
 starts AS (
     SELECT
         *,
         (
             variant_id IS NOT LAG(variant_id) OVER identity
-            OR observed_at - LAG(observed_at) OVER identity > :gap
+            OR observed_at_micros - LAG(observed_at_micros) OVER identity > :gap
             OR session_received_bytes < LAG(session_received_bytes) OVER identity
         ) AS starts_period
     FROM points
     WINDOW identity AS (
         PARTITION BY file_id, node_id, source_id, hashless_name
-        ORDER BY observed_at, variant_id
+        ORDER BY observed_at_micros, variant_id
     )
 ),
 numbered AS (
     SELECT
         variant_id,
-        observed_at,
+        observed_at_micros,
         session_received_bytes,
         SUM(starts_period) OVER (
             PARTITION BY file_id, node_id, source_id, hashless_name
-            ORDER BY observed_at, variant_id
+            ORDER BY observed_at_micros, variant_id
             ROWS UNBOUNDED PRECEDING
         ) AS period
     FROM starts
@@ -78,8 +78,8 @@ numbered AS (
 periods AS (
     SELECT
         variant_id,
-        MIN(observed_at) AS first_seen_at,
-        MAX(observed_at) AS last_seen_at,
+        MIN(observed_at_micros) AS first_seen_at,
+        MAX(observed_at_micros) AS last_seen_at,
         MAX(session_received_bytes) - MIN(session_received_bytes) AS growth
     FROM numbered
     GROUP BY variant_id, period
@@ -106,7 +106,8 @@ ORDER BY p.first_seen_at DESC, p.variant_id DESC
 
 # A variant's latest point, one seek on the primary key, never an aggregate of every point.
 _SQL_VARIANT_LATEST_SEEN = (
-    "(SELECT MAX(o.observed_at) FROM source_observations AS o WHERE o.variant_id = v.variant_id)"
+    "(SELECT MAX(o.observed_at_micros) FROM source_observations AS o"
+    " WHERE o.variant_id = v.variant_id)"
 )
 
 # The sources with a user hash, each with its last read and its number of files (D13). A source

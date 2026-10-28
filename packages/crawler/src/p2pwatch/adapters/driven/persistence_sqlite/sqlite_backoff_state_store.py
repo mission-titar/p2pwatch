@@ -11,10 +11,12 @@ from p2pwatch.application.ports.driven.backoff_state_reader import BackoffStateR
 from p2pwatch.application.ports.driven.backoff_state_writer import BackoffStateWriter
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 
-_SELECT = "SELECT client_name, channel, attempts, started_at, delay_seconds FROM backoff_states"
+_SELECT = (
+    "SELECT client_name, channel, attempts, started_at_micros, delay_seconds FROM backoff_states"
+)
 
 _INSERT = """
-INSERT INTO backoff_states (client_name, channel, attempts, started_at, delay_seconds)
+INSERT INTO backoff_states (client_name, channel, attempts, started_at_micros, delay_seconds)
 VALUES (?, ?, ?, ?, ?)
 """
 

@@ -52,7 +52,7 @@ def insert_observation(
         (*variant, key),
     )
     connection.execute(
-        "INSERT INTO observations (variant_id, observed_at, source_count)"
+        "INSERT INTO observations (variant_id, observed_at_micros, source_count)"
         " SELECT variant_id, ?, ? FROM observation_variants WHERE content_hash = ?",
         (iso_to_micros(observed_at), source_count, key),
     )
@@ -115,14 +115,14 @@ def insert_source_variant(
 def insert_source_point(
     connection: sqlite3.Connection,
     variant_id: int,
-    observed_at: int,
+    observed_at_micros: int,
     *,
     session_received_bytes: int = 0,
 ) -> None:
     connection.execute(
-        "INSERT INTO source_observations (variant_id, observed_at, session_received_bytes)"
+        "INSERT INTO source_observations (variant_id, observed_at_micros, session_received_bytes)"
         " VALUES (?, ?, ?)",
-        (variant_id, observed_at, session_received_bytes),
+        (variant_id, observed_at_micros, session_received_bytes),
     )
 
 

@@ -46,7 +46,7 @@ INSERT OR IGNORE INTO observation_variants (
 """
 
 _INSERT_OBSERVATION = """
-INSERT OR IGNORE INTO observations (variant_id, observed_at, source_count)
+INSERT OR IGNORE INTO observations (variant_id, observed_at_micros, source_count)
 SELECT variant_id, ?, ? FROM observation_variants WHERE content_hash = ?
 """
 

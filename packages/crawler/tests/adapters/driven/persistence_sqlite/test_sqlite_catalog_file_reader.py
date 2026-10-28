@@ -47,7 +47,7 @@ from tests.support.catalog_rows import (
 # Selects the CTE under test on its own: SQLite drops the CTEs a query does not reference, so
 # the resulting plan is exactly how ``latest_observation`` is resolved.
 LATEST_OBSERVATION_PROBE = (
-    "SELECT file_id, filename, source_count, observed_at FROM latest_observation"
+    "SELECT file_id, filename, source_count, observed_at_micros FROM latest_observation"
 )
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _YEAR_3000 = datetime(3000, 1, 1, tzinfo=UTC)  # after every instant a test writes
@@ -519,7 +519,8 @@ def _seed_sortable(db: Path) -> None:
 
     Every sort key yields a distinct order, and ``last_seen`` (a < b < c) is deliberately
     orthogonal to BOTH ``size`` (a is largest) AND ``tier`` (b is strongest): so a sort column
-    that silently swaps to ``observed_at`` cannot pass unnoticed on any key, including ``tier``.
+    that silently swaps to ``observed_at_micros`` cannot pass unnoticed on any key, including
+    ``tier``.
     """
     rows = [
         ("a" * 32, "beta.avi", 300, 5, "2026-01-01T10:00:00.000000+00:00", "062A", "notify"),
@@ -713,7 +714,10 @@ def test_file_history_of_a_file_never_seen_has_no_observation(catalog_db: Path) 
     ("label", "sql"),
     [
         ("latest_observation alone", _SQL_CTES + LATEST_OBSERVATION_PROBE),
-        ("read_catalog_entries", _SQL_LIST_FILES_BASE + "ORDER BY obs.observed_at DESC LIMIT 50"),
+        (
+            "read_catalog_entries",
+            _SQL_LIST_FILES_BASE + "ORDER BY obs.observed_at_micros DESC LIMIT 50",
+        ),
         (
             "read_matched_and_total_file_counts",
             _SQL_COUNT_FILES_BASE + _JOIN_LATEST_OBSERVATION + _JOIN_DECISIONS,

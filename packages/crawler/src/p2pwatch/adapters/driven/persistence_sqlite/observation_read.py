@@ -24,22 +24,22 @@ LATEST_OBSERVATION_CTE = """latest_observation AS (
         v.duration_seconds AS duration_seconds,
         v.bitrate_kbps AS bitrate_kbps,
         v.raw_metadata AS raw_metadata,
-        o.observed_at AS observed_at,
+        o.observed_at_micros AS observed_at_micros,
         v.node_id AS node_id
     FROM files AS f
     LEFT JOIN observation_variants AS v ON v.variant_id = (
         SELECT v2.variant_id FROM observation_variants AS v2
         WHERE v2.file_id = f.file_id
         ORDER BY (
-            SELECT max(o2.observed_at) FROM observations AS o2
+            SELECT max(o2.observed_at_micros) FROM observations AS o2
             WHERE o2.variant_id = v2.variant_id
         ) DESC, v2.variant_id DESC
         LIMIT 1
     )
-    LEFT JOIN observations AS o ON (o.variant_id, o.observed_at, o.source_count) = (
-        SELECT o3.variant_id, o3.observed_at, o3.source_count FROM observations AS o3
+    LEFT JOIN observations AS o ON (o.variant_id, o.observed_at_micros, o.source_count) = (
+        SELECT o3.variant_id, o3.observed_at_micros, o3.source_count FROM observations AS o3
         WHERE o3.variant_id = v.variant_id
-        ORDER BY o3.observed_at DESC, o3.source_count DESC
+        ORDER BY o3.observed_at_micros DESC, o3.source_count DESC
         LIMIT 1
     )
 )"""
@@ -47,7 +47,7 @@ LATEST_OBSERVATION_CTE = """latest_observation AS (
 # Every query below returns these columns in this order, for ``observation_from_row``.
 _COLUMNS = (
     "network, native_id, filename, size_bytes, source_count, keyword, duration_seconds,"
-    " bitrate_kbps, raw_metadata, observed_at, node_id"
+    " bitrate_kbps, raw_metadata, observed_at_micros, node_id"
 )
 
 SELECT_LATEST_OBSERVATION = f"""WITH {LATEST_OBSERVATION_CTE}
@@ -60,7 +60,7 @@ SELECT {_COLUMNS} FROM latest_observation WHERE filename IS NOT NULL ORDER BY ne
 
 _FROM_OBSERVATIONS = """
 SELECT f.network, f.native_id, v.filename, v.size_bytes, o.source_count, v.keyword,
-    v.duration_seconds, v.bitrate_kbps, v.raw_metadata, o.observed_at, v.node_id
+    v.duration_seconds, v.bitrate_kbps, v.raw_metadata, o.observed_at_micros, v.node_id
 FROM files AS f
 JOIN observation_variants AS v ON v.file_id = f.file_id
 JOIN observations AS o ON o.variant_id = v.variant_id
@@ -70,8 +70,8 @@ JOIN observations AS o ON o.variant_id = v.variant_id
 # source_count.
 _SELECT_OBSERVATIONS_BETWEEN = (
     _FROM_OBSERVATIONS
-    + """WHERE f.file_id = ? AND o.observed_at >= ? AND o.observed_at < ?
-ORDER BY o.observed_at, v.variant_id, o.source_count
+    + """WHERE f.file_id = ? AND o.observed_at_micros >= ? AND o.observed_at_micros < ?
+ORDER BY o.observed_at_micros, v.variant_id, o.source_count
 """
 )
 
@@ -85,7 +85,7 @@ SELECT DISTINCT filename FROM observation_variants WHERE file_id = ? ORDER BY 1
 _SELECT_BEST_OBSERVATION = (
     _FROM_OBSERVATIONS
     + """WHERE f.file_id = ?
-ORDER BY o.source_count DESC, o.observed_at DESC, v.filename
+ORDER BY o.source_count DESC, o.observed_at_micros DESC, v.filename
 LIMIT 1
 """
 )

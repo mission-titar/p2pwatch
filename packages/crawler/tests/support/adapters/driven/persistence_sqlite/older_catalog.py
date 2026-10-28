@@ -163,3 +163,30 @@ def insert_v12_source_point(connection: sqlite3.Connection, native_id: str, user
         " VALUES (?, 20, 7)",
         (row[0],),
     )
+
+
+def insert_v13_observation(connection: sqlite3.Connection, native_id: str, filename: str) -> None:
+    """An observation of version 13, before 0014 renamed ``observed_at``."""
+    variant = (FileKey(Network.ED2K, native_id).file_id, filename, 100, None)
+    key = content_hash(*variant, None, "[]", "keroro", "n1")
+    connection.execute(
+        "INSERT INTO observation_variants (file_id, filename, size_bytes, duration_seconds,"
+        " raw_metadata, keyword, node_id, content_hash)"
+        " VALUES (?, ?, ?, ?, '[]', 'keroro', 'n1', ?)",
+        (*variant, key),
+    )
+    connection.execute(
+        "INSERT INTO observations (variant_id, observed_at, source_count)"
+        " SELECT variant_id, 1781258400123456, 1 FROM observation_variants"
+        " WHERE content_hash = ?",
+        (key,),
+    )
+
+
+def insert_v13_source_point(connection: sqlite3.Connection, variant_id: int) -> None:
+    """A point of version 13 on ``variant_id``, before 0014 renamed ``observed_at``."""
+    connection.execute(
+        "INSERT INTO source_observations (variant_id, observed_at, session_received_bytes)"
+        " VALUES (?, 1781258400654321, 7)",
+        (variant_id,),
+    )

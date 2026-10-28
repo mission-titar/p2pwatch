@@ -117,7 +117,9 @@ async def test_the_observation_carries_the_clocks_instant(
         ObservabilityOverFakes().dispatcher,
         FakeLogger(),
     ).catalog(_reported_file(_HASH_DISCARD, "random.txt"), "amuled", "ed2k", _NODE)
-    observed_at = catalog_connection.execute("SELECT observed_at FROM observations").fetchone()
+    observed_at = catalog_connection.execute(
+        "SELECT observed_at_micros FROM observations"
+    ).fetchone()
     assert observed_at == (instant_to_micros(wall_clock.now()),)
 
 

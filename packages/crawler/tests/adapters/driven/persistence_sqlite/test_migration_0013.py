@@ -10,7 +10,6 @@ from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
     insert_v12_source_point,
     open_catalog_at,
 )
-from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import insert_decision, insert_file, insert_source
 
 _A, _USER = "a" * 32, "1f2e" * 8
@@ -50,7 +49,7 @@ def test_0013_renames_raw_meta_in_the_schema_and_keeps_every_value(tmp_path: Pat
     schema, rows = _schema(connection), _rows(connection)
     connection.close()
 
-    connection = open_catalog(path)
+    connection = open_catalog_at(path, 13)
     try:
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 13
         assert _schema(connection) == [(kind, name, _renamed(sql)) for kind, name, sql in schema]
