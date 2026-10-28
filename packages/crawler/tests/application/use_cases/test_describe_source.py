@@ -8,7 +8,7 @@ from p2pwatch.application.ports.driving.source_describer import SourceDescriptio
 from p2pwatch.application.use_cases.describe_source import DescribeSource
 from p2pwatch.application.use_cases.paging import PAGE_SIZE
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import NodeId, SourceId
 from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
@@ -38,7 +38,10 @@ def _describe(
         source_reader=reader, wall_clock=FakeTime(_NOW).wall, source_period_gap=_GAP
     )
     return describe_source.describe_source(
-        b"\x01" * 16, page=page, requested_since=requested_since, requested_until=requested_until
+        SourceId(b"\x01" * 16),
+        page=page,
+        requested_since=requested_since,
+        requested_until=requested_until,
     )
 
 

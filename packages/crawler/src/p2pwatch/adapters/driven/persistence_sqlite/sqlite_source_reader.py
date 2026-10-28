@@ -17,7 +17,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import 
 )
 from p2pwatch.application.ports.driven.source_reader import SourceReader
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import NodeId, SourceId
 from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
@@ -276,7 +276,7 @@ class SqliteSourceReader(SourceReader):
         return count
 
     def read_source_history(
-        self, source_id: bytes, *, limit: int, offset: int, window: PeriodWindow
+        self, source_id: SourceId, *, limit: int, offset: int, window: PeriodWindow
     ) -> SourceHistory | None:
         connection = self._thread_read_connections.connection()
         row = connection.execute(_SQL_SOURCE, (source_id,)).fetchone()
