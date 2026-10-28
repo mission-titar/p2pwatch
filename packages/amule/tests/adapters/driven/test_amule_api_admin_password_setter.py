@@ -5,6 +5,7 @@ from pathlib import Path
 from p2pwatch_amule.adapters.driven.amule_api_admin_password_setter import (
     AmuleApiAdminPasswordSetter,
 )
+from p2pwatch_amule.domain.identifiers import Gid, Uid
 from tests.fakes.adapters.driven.fake_command_runner import FakeCommandRunner
 
 HOME_DIRECTORY = Path("/home/amule")
@@ -24,7 +25,7 @@ def _admin_password_setter(command_runner: FakeCommandRunner) -> AmuleApiAdminPa
 def test_amuleapi_sets_the_password_as_the_uid_and_gid_alone() -> None:
     command_runner = FakeCommandRunner()
 
-    _admin_password_setter(command_runner).set_admin_password("mot de passé", 1000, 1001)
+    _admin_password_setter(command_runner).set_admin_password("mot de passé", Uid(1000), Gid(1001))
 
     argv = ["amuleapi", "--config-dir=/home/amule/.aMule", "--set-admin-pass=mot de passé"]
     assert command_runner.commands == [

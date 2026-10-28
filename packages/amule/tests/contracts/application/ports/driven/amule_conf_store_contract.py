@@ -5,13 +5,15 @@ from typing import Protocol
 
 import pytest
 
+from p2pwatch_amule.domain.identifiers import Gid, Uid
+
 
 class AmuleConfStore(Protocol):
     """Both ports of the pair, which one store implements."""
 
     def read_amule_conf(self) -> str | None: ...
 
-    def set_amule_conf(self, conf: str, uid: int, gid: int) -> None: ...
+    def set_amule_conf(self, conf: str, uid: Uid, gid: Gid) -> None: ...
 
 
 class AmuleConfStoreContract(ABC):
@@ -31,12 +33,12 @@ class AmuleConfStoreContract(ABC):
         assert amule_conf_store.read_amule_conf() is None
 
     def test_a_set_amule_conf_is_read_back(self, amule_conf_store: AmuleConfStore) -> None:
-        amule_conf_store.set_amule_conf("[eMule]\nMaxUpload=42\n", 1000, 1001)
+        amule_conf_store.set_amule_conf("[eMule]\nMaxUpload=42\n", Uid(1000), Gid(1001))
         assert amule_conf_store.read_amule_conf() == "[eMule]\nMaxUpload=42\n"
 
     def test_a_second_amule_conf_replaces_the_first(self, amule_conf_store: AmuleConfStore) -> None:
-        amule_conf_store.set_amule_conf("[eMule]\nMaxUpload=42\n", 1000, 1001)
-        amule_conf_store.set_amule_conf("[eMule]\nMaxUpload=7\n", 1000, 1001)
+        amule_conf_store.set_amule_conf("[eMule]\nMaxUpload=42\n", Uid(1000), Gid(1001))
+        amule_conf_store.set_amule_conf("[eMule]\nMaxUpload=7\n", Uid(1000), Gid(1001))
         assert amule_conf_store.read_amule_conf() == "[eMule]\nMaxUpload=7\n"
 
     def test_an_amule_conf_that_cannot_be_read_raises_os_error(
