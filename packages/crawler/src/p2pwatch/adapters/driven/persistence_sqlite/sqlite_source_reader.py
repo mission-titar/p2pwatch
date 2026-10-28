@@ -78,8 +78,8 @@ numbered AS (
 periods AS (
     SELECT
         variant_id,
-        MIN(observed_at_micros) AS first_seen_at,
-        MAX(observed_at_micros) AS last_seen_at,
+        MIN(observed_at_micros) AS first_seen_at_micros,
+        MAX(observed_at_micros) AS last_seen_at_micros,
         MAX(session_received_bytes) - MIN(session_received_bytes) AS growth
     FROM numbered
     GROUP BY variant_id, period
@@ -93,15 +93,15 @@ SELECT
     v.role,
     v.contact_point,
     v.connectable,
-    p.first_seen_at,
-    p.last_seen_at,
+    p.first_seen_at_micros,
+    p.last_seen_at_micros,
     p.growth,
     v.node_id
 FROM periods AS p
 JOIN source_variants AS v ON v.variant_id = p.variant_id
 JOIN files AS f ON f.file_id = v.file_id
 LEFT JOIN sources AS s ON s.source_id = v.source_id
-ORDER BY p.first_seen_at DESC, p.variant_id DESC
+ORDER BY p.first_seen_at_micros DESC, p.variant_id DESC
 """
 
 # A variant's latest point, one seek on the primary key, never an aggregate of every point.
@@ -117,7 +117,7 @@ FROM sources AS s
 JOIN (
     SELECT
         v.source_id,
-        MAX({_SQL_VARIANT_LATEST_SEEN}) AS latest_seen_at,
+        MAX({_SQL_VARIANT_LATEST_SEEN}) AS latest_seen_at_micros,
         COUNT(DISTINCT v.file_id) AS file_count
     FROM source_variants AS v
     GROUP BY v.source_id
@@ -137,7 +137,7 @@ _SQL_LIST_SOURCES_SELECT = f"""\
 SELECT
     s.network,
     s.native_id,
-    seen.latest_seen_at,
+    seen.latest_seen_at_micros,
     seen.file_count,
     (
         SELECT v.name
@@ -158,14 +158,14 @@ SELECT
     s.network,
     s.native_id,
     v.name,
-    MAX({_SQL_VARIANT_LATEST_SEEN}) AS latest_seen_at,
+    MAX({_SQL_VARIANT_LATEST_SEEN}) AS latest_seen_at_micros,
     COUNT(DISTINCT v.file_id) AS file_count
 FROM source_variants AS v
 JOIN sources AS s ON s.source_id = v.source_id
 """
 _SQL_PAIRS_END = """\
 GROUP BY v.source_id, v.name
-ORDER BY latest_seen_at DESC, v.source_id, v.name
+ORDER BY latest_seen_at_micros DESC, v.source_id, v.name
 LIMIT :limit OFFSET :offset
 """
 
@@ -195,8 +195,8 @@ def _sharing_period(row: sqlite3.Row) -> SharingPeriod:
         role=role,
         contact_point=row["contact_point"],
         connectable=None if connectable is None else bool(connectable),
-        first_seen_at=micros_to_instant(row["first_seen_at"]),
-        last_seen_at=micros_to_instant(row["last_seen_at"]),
+        first_seen_at=micros_to_instant(row["first_seen_at_micros"]),
+        last_seen_at=micros_to_instant(row["last_seen_at_micros"]),
         received_bytes=row["growth"] if role is SourceRole.SENDING else 0,
         node_id=row["node_id"],
     )
@@ -222,7 +222,7 @@ def _source_namings(
         SourceNaming(
             source=SourceKey(Network(row["network"]), row["native_id"]),
             source_name=row["name"],
-            latest_seen_at=micros_to_instant(row["latest_seen_at"]),
+            latest_seen_at=micros_to_instant(row["latest_seen_at_micros"]),
             file_count=row["file_count"],
         )
         for row in connection.execute(_SQL_PAIRS + where + _SQL_PAIRS_END, params)
@@ -255,14 +255,14 @@ class SqliteSourceReader(SourceReader):
             _SQL_LIST_SOURCES_SELECT
             + _SQL_SOURCES_FROM
             + search
-            + "ORDER BY seen.latest_seen_at DESC, s.source_id\nLIMIT ? OFFSET ?\n"
+            + "ORDER BY seen.latest_seen_at_micros DESC, s.source_id\nLIMIT ? OFFSET ?\n"
         )
         rows = self._thread_read_connections.connection().execute(sql, [*params, limit, offset])
         return tuple(
             KnownSource(
                 source=SourceKey(Network(row["network"]), row["native_id"]),
                 source_name=row["name"],
-                latest_seen_at=micros_to_instant(row["latest_seen_at"]),
+                latest_seen_at=micros_to_instant(row["latest_seen_at_micros"]),
                 file_count=row["file_count"],
             )
             for row in rows

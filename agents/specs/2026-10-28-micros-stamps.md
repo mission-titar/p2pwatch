@@ -24,8 +24,11 @@ Three stores even convert through the text to reach the integer (`iso_to_micros(
   databases are at version 5, this adds no copy: 0006 already makes one, and one copy covers every pending
   migration. A node already at catalog 13 (one running a `main` image) pays a full copy of its catalog, and needs
   the free space for it.
-- **A `node_id` without its `created_at` refuses the upgrade** (D7): the log reads `NOT NULL constraint failed:
-  node_identity.created_at_micros`, and `local.db` stays as it was. No known database is in that state.
+- **A `node_id` without its `created_at` stops the upgrade** (D7): the log reads `NOT NULL constraint failed:
+  node_identity.created_at_micros`, the migrations before local 0015 stay applied, and the crawler does not
+  start; going back to v4 means restoring `local.db`'s copy with the lowest number. No known database is in that
+  state. (Corrected: `local.db` does not stay as it was, since each migration commits on its own; the holistic
+  review, fixed in block 60.)
 - **In the SQL console, every stamp is an integer named `<x>_micros`**: `observed_at_micros`, `decided_at_micros`,
   `queued_at_micros` and the others; `node_runtime` is gone, its two values in `node_identity`.
   `docs/migration-4x.md` lists the change beside the other renamed columns.

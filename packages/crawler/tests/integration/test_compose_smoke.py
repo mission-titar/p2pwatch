@@ -563,14 +563,14 @@ _SEED_ROW = f"""
 import datetime, sqlite3, sys
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.domain.file_key import FileKey, Network
-now = instant_to_micros(datetime.datetime.now(datetime.UTC))
+now_micros = instant_to_micros(datetime.datetime.now(datetime.UTC))
 file = FileKey(Network.ED2K, sys.argv[1])
 connection = sqlite3.connect("/data/local.db", timeout=30)
 connection.execute(
     "INSERT INTO downloads (file_id, network, native_id, target_id, state, queued_at_micros,"
     " size_bytes, latest_seen_at_micros)"
     " VALUES (?, ?, ?, {_SEEDED_TARGET!r}, 'downloading', ?, {_SEEDED_SIZE}, ?)",
-    (file.file_id, file.network, file.native_id, now, now),
+    (file.file_id, file.network, file.native_id, now_micros, now_micros),
 )
 connection.commit()
 """

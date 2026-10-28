@@ -1,7 +1,7 @@
 # Handoff: every stamp an integer of microseconds since the epoch
 
-Drafted by block 50 from the lot's block reports (#525, #526, #528, #529, #530) and its own, for the closing block 60
-to correct with the holistic review.
+Drafted by block 50 from the lot's block reports (#525, #526, #528, #529, #530) and its own, corrected by the closing
+block 60 (#532) with the holistic review.
 
 ## State
 
@@ -10,7 +10,7 @@ operator 2026-10-28). It ships the backlog entry "Every stamp an integer of micr
 `agents/specs/2026-10-14-monotonic-clock.md`), which the closing block deletes from `BACKLOG.md`, and adds the entry
 "Every catalog table STRICT" (spec 7, D2).
 
-One stack cut from `main` at `cb823348`, which had not moved when block 50 was drafted (`git fetch`, 2026-10-28).
+One stack cut from `main` at `cb823348`, which had not moved when block 60 was written (`git fetch`, 2026-10-28).
 Seven blocks: block 25 was cut under block 30 by the lead, since block 30 reached 22 files against its parent.
 Block 20 took the mechanical exemption on its spec row (30 files).
 
@@ -21,8 +21,8 @@ Block 20 took the mechanical exemption on its spec row (30 files).
 | 25 | #528 | `test/older-catalog-decisions` |
 | 30 | #529 | `feat/decision-stamps-micros` |
 | 40 | #530 | `feat/download-stamps-micros` |
-| 50 | #TBD | `feat/node-identity-strict` |
-| 60 | | `docs/micros-stamps-wrap` |
+| 50 | #531 | `feat/node-identity-strict` |
+| 60 | #532 | `docs/micros-stamps-wrap` |
 
 Not merged at writing. **No release follows this lot**: the v5 waits for a P2P network other than eD2k (operator,
 2026-10-27). The lot changes what the image ships (five migrations, the stores), so it reaches the node only with the
@@ -59,16 +59,16 @@ v5 release, or through a `main` image the operator chooses to run.
   described an instant as `utc_iso` or `local.db` stored it say "ISO-8601 to the microsecond".
 - **The documents**: `docs/contributing/architecture.md` (the diagram's `node_identity`, catalog 15, local 15, the
   five migrations in the history paragraph) and `docs/migration-4x.md` (the `_micros` columns, `node_runtime` as
-  `node_identity` and the refusal of a `node_id` without `created_at`), each block for its migration. Block 20 also
+  `node_identity` and the stop at local 0015 of a `node_id` without `created_at`), each block for its migration. Block 20 also
   corrected `architecture.md`'s versions, one behind each before the lot.
 
 ## Evidence
 
-Every block's `uv run poe check` exit 0 at its tip (crawler: 1687 passed at block 10, 1698 at block 50; 100 % branch
-coverage; `_unit-coverage-check` clean). `uv run poe docs-build` "No issues found" at blocks 20, 30, 40 and 50.
+Every block's `uv run poe check` exit 0 at its tip (crawler: 1687 passed at block 10, 1698 at blocks 50 and 60; 100 % branch
+coverage; `_unit-coverage-check` clean). `uv run poe docs-build` "No issues found" at blocks 20, 30, 40, 50 and 60.
 
 Budgets against each parent: block 10, 194 lines and 17 files; block 20, 305 and 30 (exemption); block 25, 27 and 5;
-block 30, 215 and 17; block 40, 297 and 12; block 50, 255 and 14.
+block 30, 215 and 17; block 40, 297 and 12; block 50, 255 and 14; block 60, 34 and 7.
 
 Criterion 10, at block 50's tip: `git grep -n "utc_iso\|fromisoformat" packages/crawler/src` prints `micros.py:23`
 (`iso_to_micros`) and `webui/format.py:93`, nothing else; `git grep -n "^_EPOCH"
@@ -117,11 +117,21 @@ No class 2 question in the lot.
 
 ## The holistic review
 
-For the closing block: findings and their exits.
+By `micros-holistic-review` over `git diff origin/main...origin/feat/node-identity-strict`: CRITICAL 0, MAJOR 0,
+MINOR 5. Spec conformance clean (sections 4.1 to 4.4, criteria 1 to 10, the schema diffed at both ends).
+
+| Finding | Exit |
+|---|---|
+| `docs/migration-4x.md` said a `node_id` without `created_at` leaves `local.db` as it was; a v4 node's `local.db` stops at 0015 with 0006 to 0014 applied | fixed, block 60: the bullet says the crawler stops there and points at the copy of lowest number; spec section 2 corrected under a `(Corrected: ...)` marker |
+| `sqlite_source_reader.py` kept integer result columns under a bare `_at` (`first_seen_at`, `last_seen_at`, `latest_seen_at`) | fixed, block 60: the aliases, their `ORDER BY` and their row keys end in `_micros`; the domain fields keep their names |
+| Test locals holding micros under a bare `_at` (`test_cataloguer.py`, `test_search_worker.py`, the compose smoke's `now`) | fixed, block 60: `observed_at_micros`, `now_micros` |
+| `local/0015_node_identity.sql`'s header left the reason for the `LEFT JOIN` to "(D7)" | fixed, block 60: the header states it in place |
+| The handoff's `#TBD` for block 50, and its node upgrade "not run" | fixed, block 60: #531, and the reviewer's sample run under "Not validated" |
 
 ## Counts
 
-For the closing block: fix-backs, cascaded rebases and the runs they re-triggered. At block 50's drafting: none.
+No fix-back. One cascaded rebase: block 30 onto the inserted block 25, done by the lead before either was pushed, so
+it re-triggered no run. No body called unreadable so far.
 
 ## Pitfalls
 
@@ -139,8 +149,11 @@ For the closing block: fix-backs, cascaded rebases and the runs they re-triggere
 
 ## Not validated
 
-- **The node's upgrade under this code**: its databases at version 5 go to catalog 15 and local 15 under one copy
-  each (0006 already makes one); not run. A node at catalog 13 (a `main` image) pays a full copy of its catalog.
+- **The node's upgrade under this code, at full size**: not run. `micros-holistic-review` ran a node-shaped one on
+  samples of the node's two databases (their v5 schemas, 52 decisions, 10 files, 200 observations, 5 downloads,
+  `node_runtime`): opened at block 50's tip, both reached version 15 under one copy each (`*.pre-0006.*`), every stamp
+  `integer`, the 3 `NULL` `completed_at` still `NULL`, `node_identity` holding its one row. A node at catalog 13 (a
+  `main` image) pays a full copy of its catalog.
 - The integration suites, the compose smoke's integer seed included, run only in CI's `validate / gate`.
 
 ## Next

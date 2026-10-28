@@ -1,6 +1,7 @@
 -- migration: copy-before
 -- local.db, migration 0015: node_runtime becomes node_identity, every table STRICT (micros spec).
--- A node_id without its created_at reaches the NOT NULL and fails the migration (D7).
+-- A node_id without its created_at fails the migration on the NOT NULL rather than drop the id:
+-- a node that lost its id would write under a new one from then on (D7).
 
 -- 1. The identity, one typed row; no code reads any other key of node_runtime.
 CREATE TABLE node_identity (
