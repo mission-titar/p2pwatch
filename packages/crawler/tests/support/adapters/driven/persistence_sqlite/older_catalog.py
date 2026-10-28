@@ -190,3 +190,18 @@ def insert_v13_source_point(connection: sqlite3.Connection, variant_id: int) -> 
         " VALUES (?, 1781258400654321, 7)",
         (variant_id,),
     )
+
+
+def insert_v14_decision(
+    connection: sqlite3.Connection,
+    native_id: str,
+    *,
+    decision_id: int | None = None,
+    decided_at: str = "2026-06-22T10:00:00.000000+00:00",
+) -> None:
+    """A decision of versions 8 to 14, before 0015 stored ``decided_at`` as micros."""
+    connection.execute(
+        "INSERT INTO match_decisions (id, file_id, target_id, rule_name, tier, decided_at, node_id)"
+        " VALUES (?, ?, '062A', 'exact_062a', 'download', ?, 'n1')",
+        (decision_id, FileKey(Network.ED2K, native_id).file_id, decided_at),
+    )
