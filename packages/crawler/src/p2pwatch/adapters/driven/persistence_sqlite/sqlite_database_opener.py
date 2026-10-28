@@ -117,25 +117,22 @@ def _apply_migrations(connection: sqlite3.Connection, pending: PendingMigrations
     with wrap_sqlite_errors():
         # On disk: an in-memory sort is unbounded (+697 MB for one index at 11.5M rows).
         connection.execute("PRAGMA temp_store=FILE")
-        try:
-            for migration in pending.migrations:
-                _logger.info("migration %d: applying", migration.version)
-                _run_restoring_pragmas(connection, migration)
-        finally:
-            connection.execute("PRAGMA temp_store=DEFAULT")
+        # No finally: a failed migration fails the open, which closes the connection.
+        for migration in pending.migrations:
+            _logger.info("migration %d: applying", migration.version)
+            _run_restoring_pragmas(connection, migration)
+        connection.execute("PRAGMA temp_store=DEFAULT")
 
 
 def _run_restoring_pragmas(connection: sqlite3.Connection, migration: Migration) -> None:
     secure_delete = int(connection.execute("PRAGMA secure_delete").fetchone()[0])
     cache_size = int(connection.execute("PRAGMA cache_size").fetchone()[0])
-    try:
-        if migration.transactional:
-            _run_in_transaction(connection, migration)
-        else:
-            _run_outside_transaction(connection, migration)
-    finally:
-        connection.execute(f"PRAGMA secure_delete = {_SECURE_DELETE_MODES[secure_delete]}")
-        connection.execute(f"PRAGMA cache_size = {cache_size}")
+    if migration.transactional:
+        _run_in_transaction(connection, migration)
+    else:
+        _run_outside_transaction(connection, migration)
+    connection.execute(f"PRAGMA secure_delete = {_SECURE_DELETE_MODES[secure_delete]}")
+    connection.execute(f"PRAGMA cache_size = {cache_size}")
 
 
 def _run_in_transaction(connection: sqlite3.Connection, migration: Migration) -> None:
