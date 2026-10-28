@@ -11,7 +11,7 @@ from p2pwatch.application.ports.driven.status_reading_writer import StatusReadin
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.status_loop import StatusLoop
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError, ReadRejectedError
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.status_reading import (
@@ -36,6 +36,7 @@ _UP = (True, True)
 _LOW_ID = (True, False)  # on the network, not connectable
 _DOWN = make_unreachable()
 _NODE = NodeId("titar-node-1")
+_AMULED = ClientName("amuled")
 _NOTIFICATION_TIMEOUT_SECONDS = 5.0
 
 
@@ -56,12 +57,15 @@ class _Observability:
 def _status(**channels: tuple[bool, bool | None]) -> ClientStatus:
     return ClientStatus(
         "3.0.1",
-        tuple(ChannelStatus(name, on, connectable) for name, (on, connectable) in channels.items()),
+        tuple(
+            ChannelStatus(Channel(name), on, connectable)
+            for name, (on, connectable) in channels.items()
+        ),
     )
 
 
 def _status_loop(
-    client_name: str,
+    client_name: ClientName,
     client: StatusClient,
     fake_time: FakeTime,
     observability: _Observability,
@@ -79,7 +83,7 @@ def _status_loop(
     )
 
 
-async def _run(*readings: _Reading, client: str = "amuled") -> _Observability:
+async def _run(*readings: _Reading, client: ClientName = _AMULED) -> _Observability:
     fake_time, run_state = FakeTime(), FakeRunStateStore()
     observability = _Observability(fake_time)
     scripted = FakeStatusClient(list(readings), run_state)
@@ -127,7 +131,7 @@ async def test_a_degraded_state_lasting_four_minutes_never_alerts_nor_recovers()
 
 @pytest.mark.asyncio
 async def test_off_the_network_alerts_whatever_the_client_and_channel() -> None:
-    observability = await _run(*[_status(x=(False, None))] * 6, client="fake")
+    observability = await _run(*[_status(x=(False, None))] * 6, client=ClientName("fake"))
     assert observability.notifier.notifications == [
         (300.0, _warning("fake x: off its network for 5 min"))
     ]
@@ -221,10 +225,15 @@ async def test_each_reading_is_published_with_its_wall_and_monotonic_instants(
 ) -> None:
     fake_time, run_state = FakeTime(), FakeRunStateStore()
     fake_time.step_wall(timedelta(hours=1))  # the two clocks part: each instant shows its clock
-    status_reading_store = FakeStatusReadingStore(("amuled",))
+    status_reading_store = FakeStatusReadingStore((ClientName("amuled"),))
     client = FakeStatusClient([_status(kad=_UP), reading], run_state)
     status_loop = _status_loop(
-        "amuled", client, fake_time, _Observability(fake_time), run_state, status_reading_store
+        ClientName("amuled"),
+        client,
+        fake_time,
+        _Observability(fake_time),
+        run_state,
+        status_reading_store,
     )
     await asyncio.wait_for(status_loop.run(_NODE), timeout=1.0)
     read_at = fake_time.wall.now() - timedelta(seconds=60)  # the loop slept one period after it
@@ -241,7 +250,7 @@ async def test_a_wall_clock_step_forward_raises_no_alert_before_its_delay() -> N
     observability = _Observability(fake_time)
     client = FakeSteppedStatusClient([_status(ed2k=_LOW_ID)] * 5, run_state, fake_time)
     await asyncio.wait_for(
-        _status_loop("amuled", client, fake_time, observability, run_state).run(_NODE),
+        _status_loop(ClientName("amuled"), client, fake_time, observability, run_state).run(_NODE),
         timeout=1.0,
     )
     assert observability.notifier.notifications == []

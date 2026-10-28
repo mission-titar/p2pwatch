@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 
+from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.status_reading import StatusReading
 
@@ -11,6 +12,6 @@ class StatusReadingWriter(ABC):
 
     @abstractmethod
     def set_reading(
-        self, client_name: str, reading: StatusReading, published_at: MonotonicInstant
+        self, client_name: ClientName, reading: StatusReading, published_at: MonotonicInstant
     ) -> None:
         """Replaces the client's reading."""

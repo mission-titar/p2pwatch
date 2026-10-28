@@ -4,13 +4,14 @@ import dataclasses
 from datetime import timedelta
 
 from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRegistry
+from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
 from tests.fakes.adapters.driven.fake_time import FakeTime
 
-_KAD = BackoffKey("amule-1", "kad")
-_ED2K = BackoffKey("amule-1", "ed2k")
+_KAD = BackoffKey(ClientName("amule-1"), Channel("kad"))
+_ED2K = BackoffKey(ClientName("amule-1"), Channel("ed2k"))
 
 # jitter_ratio 0.0 + FakeJitterGenerator(jitter_value=0.0) → backoff = exact NOMINAL delay.
 _POLICY = BackoffPolicy(

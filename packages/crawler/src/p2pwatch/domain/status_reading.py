@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from p2pwatch.domain.identifiers import Channel
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 
 STATUS_PERIOD = timedelta(minutes=1)
@@ -18,7 +19,7 @@ def is_reading_fresh(age: timedelta) -> bool:
 class ChannelStatus:
     """``connectable``: peers can connect to us; ``None`` when the client cannot tell."""
 
-    channel: str
+    channel: Channel
     connected: bool
     connectable: bool | None
 

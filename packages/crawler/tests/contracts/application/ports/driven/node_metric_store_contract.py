@@ -7,6 +7,7 @@ from typing import Protocol
 
 import pytest
 
+from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.observability.node_metric import (
     ChannelLabels,
     CounterIncrement,
@@ -16,8 +17,8 @@ from p2pwatch.domain.observability.node_metric import (
     NodeMetricSample,
 )
 
-_ED2K = ChannelLabels("amuled", "ed2k")
-_KAD = ChannelLabels("amuled", "kad")
+_ED2K = ChannelLabels(ClientName("amuled"), Channel("ed2k"))
+_KAD = ChannelLabels(ClientName("amuled"), Channel("kad"))
 _ED2K_PAIRS = (("client", "amuled"), ("channel", "ed2k"))
 _KAD_PAIRS = (("client", "amuled"), ("channel", "kad"))
 

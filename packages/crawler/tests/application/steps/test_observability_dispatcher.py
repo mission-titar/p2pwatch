@@ -10,7 +10,7 @@ from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability import events as ev
 from p2pwatch.domain.observability.node_metric import (
     NodeCounter,
@@ -53,7 +53,7 @@ def _dispatcher(
 async def test_logs_and_writes_node_metrics_no_audience() -> None:
     node_metric_store, notifier = FakeNodeMetricStore(), FakeNotifier()
     await _dispatcher(node_metric_store, notifier).dispatch(
-        ev.ObservationRecorded(client_name="amuled", channel="ed2k")
+        ev.ObservationRecorded(client_name=ClientName("amuled"), channel=Channel("ed2k"))
     )
     assert node_metric_store.read_samples() == (
         NodeMetricSample(
@@ -68,7 +68,10 @@ async def test_two_node_metrics_one_event() -> None:
     node_metric_store = FakeNodeMetricStore()
     await _dispatcher(node_metric_store, FakeNotifier()).dispatch(
         ev.ChannelStatusSampled(
-            client_name="amuled", channel="kad", connected=True, connectable=True
+            client_name=ClientName("amuled"),
+            channel=Channel("kad"),
+            connected=True,
+            connectable=True,
         )
     )
     labels = (("client", "amuled"), ("channel", "kad"))
@@ -82,7 +85,7 @@ async def test_two_node_metrics_one_event() -> None:
 async def test_writes_each_counter_increment_and_gauge_setting_to_the_node_metric_store() -> None:
     node_metric_store = FakeNodeMetricStore()
     dispatcher = _dispatcher(node_metric_store, FakeNotifier())
-    await dispatcher.dispatch(ev.ClientUnreachable("amuled"))
+    await dispatcher.dispatch(ev.ClientUnreachable(ClientName("amuled")))
     await dispatcher.dispatch(ev.CrawlerStarted(download_enabled=True, node_id=_NODE))
     assert set(node_metric_store.read_samples()) == {
         NodeMetricSample(NodeCounter.CLIENT_UNREACHABLE, (("client", "amuled"),), 1.0),
@@ -131,10 +134,13 @@ async def test_logs_the_message_but_notifies_the_plans_notification() -> None:
 @pytest.mark.parametrize(
     ("event", "level"),
     [
-        (ev.ObservationRecorded(client_name="amuled", channel="ed2k"), "debug"),
+        (
+            ev.ObservationRecorded(client_name=ClientName("amuled"), channel=Channel("ed2k")),
+            "debug",
+        ),
         (ev.CrawlerStarted(download_enabled=True, node_id=_NODE), "info"),
         (_COMPLETED, "info"),  # a success
-        (ev.ClientUnreachable("amuled"), "warning"),
+        (ev.ClientUnreachable(ClientName("amuled")), "warning"),
     ],
 )
 async def test_each_severity_logs_at_its_level(

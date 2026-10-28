@@ -9,6 +9,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_backoff_state_store import (
     SqliteBackoffStateStore,
 )
+from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.contracts.application.ports.driven.backoff_state_store_contract import (
     BackoffStateStoreContract,
@@ -17,8 +18,10 @@ from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener imp
 
 _STARTED_AT = datetime(2026, 6, 12, 10, 0, 0, 123456, tzinfo=UTC)
 _BACKOFF = {
-    BackoffKey("amule-1", "kad"): BackoffState(2, _STARTED_AT, timedelta(seconds=300)),
-    BackoffKey("amule-1", None): BackoffState(1, _STARTED_AT, timedelta(seconds=2.75)),
+    BackoffKey(ClientName("amule-1"), Channel("kad")): BackoffState(
+        2, _STARTED_AT, timedelta(seconds=300)
+    ),
+    BackoffKey(ClientName("amule-1"), None): BackoffState(1, _STARTED_AT, timedelta(seconds=2.75)),
 }
 
 
@@ -75,8 +78,10 @@ def test_set_backoff_states_is_atomic_on_injected_failure(
         " BEGIN SELECT RAISE(ABORT, 'injected failure'); END"
     )
     later = {
-        BackoffKey("amule-1", None): BackoffState(2, _STARTED_AT, timedelta(seconds=4)),
-        BackoffKey("amule-1", "ed2k"): BackoffState(1, _STARTED_AT, timedelta(seconds=2)),
+        BackoffKey(ClientName("amule-1"), None): BackoffState(2, _STARTED_AT, timedelta(seconds=4)),
+        BackoffKey(ClientName("amule-1"), Channel("ed2k")): BackoffState(
+            1, _STARTED_AT, timedelta(seconds=2)
+        ),
     }
     with pytest.raises(PersistenceError, match="injected failure"):
         backoff_state_store.set_backoff_states(later)

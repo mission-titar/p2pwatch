@@ -3,6 +3,7 @@ from datetime import timedelta
 
 import pytest
 
+from p2pwatch.domain.identifiers import Channel
 from p2pwatch.domain.status_reading import (
     STATUS_PERIOD,
     ChannelStatus,
@@ -21,7 +22,7 @@ def test_a_reading_older_than_two_status_periods_is_not_fresh() -> None:
 
 
 def test_a_client_status_is_frozen_and_holds_its_channels() -> None:
-    kad = ChannelStatus(channel="kad", connected=True, connectable=None)
+    kad = ChannelStatus(channel=Channel("kad"), connected=True, connectable=None)
     status = ClientStatus(version="3.0.1", channels=(kad,))
 
     assert status.channels[0].connectable is None

@@ -5,6 +5,7 @@ from collections.abc import Iterable, Mapping
 
 from p2pwatch.application.ports.driven.status_reading_reader import StatusReadingReader
 from p2pwatch.application.ports.driven.status_reading_writer import StatusReadingWriter
+from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.status_reading import PublishedReading, StatusReading
 
@@ -12,13 +13,13 @@ from p2pwatch.domain.status_reading import PublishedReading, StatusReading
 class InMemoryStatusReadingStore(StatusReadingWriter, StatusReadingReader):
     """Holds no clock: each reading comes with the instant it was published at."""
 
-    def __init__(self, client_names: Iterable[str]) -> None:
-        self._published_readings: Mapping[str, PublishedReading | None] = dict.fromkeys(
+    def __init__(self, client_names: Iterable[ClientName]) -> None:
+        self._published_readings: Mapping[ClientName, PublishedReading | None] = dict.fromkeys(
             client_names
         )
 
     def set_reading(
-        self, client_name: str, reading: StatusReading, published_at: MonotonicInstant
+        self, client_name: ClientName, reading: StatusReading, published_at: MonotonicInstant
     ) -> None:
         # A new map, never a mutation: the other thread reads whole snapshots, no lock needed.
         self._published_readings = {
@@ -26,5 +27,5 @@ class InMemoryStatusReadingStore(StatusReadingWriter, StatusReadingReader):
             client_name: PublishedReading(reading, published_at),
         }
 
-    def read_readings(self) -> Mapping[str, PublishedReading | None]:
+    def read_readings(self) -> Mapping[ClientName, PublishedReading | None]:
         return self._published_readings

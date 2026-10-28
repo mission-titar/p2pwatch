@@ -15,7 +15,7 @@ from p2pwatch.application.ports.driven.status_reading_writer import StatusReadin
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.observability.events import (
     ChannelDegraded,
@@ -64,7 +64,7 @@ class StatusLoop:
     def __init__(
         self,
         *,
-        client_name: str,
+        client_name: ClientName,
         client: StatusClient,
         wall_clock: WallClock,
         monotonic_clock: MonotonicClock,
@@ -80,7 +80,7 @@ class StatusLoop:
         self._run_state_reader = run_state_reader
         self._status_reading_writer = status_reading_writer
         self._api_timer = _AlertTimer(UNREACHABLE_ALERT_AFTER)
-        self._channel_timers: dict[tuple[str, ChannelField], _AlertTimer] = {}
+        self._channel_timers: dict[tuple[Channel, ChannelField], _AlertTimer] = {}
 
     async def run(self, node_id: NodeId) -> None:
         """Reads the status every period until shutdown, its alerts carrying ``node_id``."""
@@ -93,7 +93,7 @@ class StatusLoop:
                 self._publish(None)
                 await self._observability_dispatcher.dispatch(ClientUnreachable(self._client_name))
                 # Every channel is unknown while the API is: only the API's own alert can fire.
-                readings: list[tuple[str, bool | None, bool | None]] = [
+                readings: list[tuple[Channel, bool | None, bool | None]] = [
                     (channel, None, None)
                     for channel in dict.fromkeys(c for c, _ in self._channel_timers)
                 ]

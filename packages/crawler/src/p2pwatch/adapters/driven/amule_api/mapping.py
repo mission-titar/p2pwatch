@@ -13,6 +13,7 @@ from typing import Any
 from p2pwatch.domain.download.states import FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import Channel
 from p2pwatch.domain.observation import ReportedFile, fold_raw_metadata
 from p2pwatch.domain.source import (
     ContactPoint,
@@ -158,8 +159,8 @@ def map_client_status(status: object, version: object) -> ClientStatus:
     ed2k, kad = _as_dict(body.get("ed2k")), _as_dict(body.get("kad"))
     high_id, firewalled = ed2k.get("high_id"), kad.get("firewalled_tcp")
     channels = (
-        _channel("ed2k", ed2k, high_id if isinstance(high_id, bool) else None),
-        _channel("kad", kad, not firewalled if isinstance(firewalled, bool) else None),
+        _channel(Channel("ed2k"), ed2k, high_id if isinstance(high_id, bool) else None),
+        _channel(Channel("kad"), kad, not firewalled if isinstance(firewalled, bool) else None),
     )
     return ClientStatus(version=_string(_as_dict(version).get("daemon_version")), channels=channels)
 
@@ -256,7 +257,9 @@ def _meta_value(field: object) -> str | int | bool | tuple[str, ...] | None:
     return _render(field)
 
 
-def _channel(channel: str, channel_json: dict[str, Any], connectable: bool | None) -> ChannelStatus:
+def _channel(
+    channel: Channel, channel_json: dict[str, Any], connectable: bool | None
+) -> ChannelStatus:
     """Off the network the flag tells nothing: there ``high_id`` false means "no id yet"."""
     connected = channel_json.get("state") == "connected"
     return ChannelStatus(channel, connected, connectable if connected else None)

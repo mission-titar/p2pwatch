@@ -1,4 +1,5 @@
 from p2pwatch.application.ports.driven.search_client import SearchClient
+from p2pwatch.domain.identifiers import Channel
 from p2pwatch.domain.search.answer import SearchAnswer
 
 
@@ -11,10 +12,10 @@ class FakeNeverSuspendingSearchClient(SearchClient):
         self.ticks = 0  # advanced by a concurrent coroutine
         self._ticks_seen = -1
 
-    def channels(self) -> tuple[str, ...]:
-        return ("x",)
+    def channels(self) -> tuple[Channel, ...]:
+        return (Channel("x"),)
 
-    async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
+    async def search(self, keyword: str, channel: Channel, budget_seconds: float) -> SearchAnswer:
         self.calls += 1
         assert self.ticks > self._ticks_seen, "the loop is starved"
         self._ticks_seen = self.ticks

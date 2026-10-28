@@ -11,6 +11,7 @@ from typing import ClassVar, Literal
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from p2pwatch.domain.file_key import Network
+from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.observability.notification import SourceAlertKind
 
 
@@ -30,8 +31,8 @@ class NodeMetricLabels(ABC):
 @dataclass(frozen=True)
 class ChannelLabels(NodeMetricLabels):
     names = ("client", "channel")
-    client_name: str
-    channel: str
+    client_name: ClientName
+    channel: Channel
 
     def texts(self) -> tuple[str, ...]:
         return (self.client_name, self.channel)
@@ -40,7 +41,7 @@ class ChannelLabels(NodeMetricLabels):
 @dataclass(frozen=True)
 class ClientLabels(NodeMetricLabels):
     names = ("client",)
-    client_name: str
+    client_name: ClientName
 
     def texts(self) -> tuple[str, ...]:
         return (self.client_name,)

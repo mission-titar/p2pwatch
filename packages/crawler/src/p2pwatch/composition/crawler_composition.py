@@ -120,13 +120,13 @@ from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import ClientName, NodeId
 from p2pwatch.domain.matching_read import MatchingExplainer
 
 _logger = logging.getLogger(__name__)
 
 # The label of the one client a node drives: crawler.yml has no key to name it.
-_AMULE_CLIENT_NAME = "amuled"
+_AMULE_CLIENT_NAME = ClientName("amuled")
 _AMULE_API_TIMEOUT_SECONDS = 10.0
 # Rows asked for per list request. Every list route caps at 100 when `limit` is omitted, which
 # would silently truncate the shared-file sweep completion detection depends on (§7.5).

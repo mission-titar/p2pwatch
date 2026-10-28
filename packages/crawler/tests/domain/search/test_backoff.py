@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState, backoff_delay
 
 _STARTED_AT = datetime(2026, 6, 12, 10, tzinfo=UTC)
@@ -33,12 +34,12 @@ def test_attempt_zero_or_negative_is_treated_as_the_first() -> None:
 
 
 def test_a_backoff_key_names_a_channel_or_the_whole_client() -> None:
-    channel_key = BackoffKey(client_name="amule-1", channel="kad")
+    channel_key = BackoffKey(client_name=ClientName("amule-1"), channel=Channel("kad"))
     assert (channel_key.client_name, channel_key.channel) == ("amule-1", "kad")
-    assert BackoffKey("amule-1", None) != channel_key
-    assert {channel_key: 1}[BackoffKey("amule-1", "kad")] == 1
+    assert BackoffKey(ClientName("amule-1"), None) != channel_key
+    assert {channel_key: 1}[BackoffKey(ClientName("amule-1"), Channel("kad"))] == 1
     with pytest.raises(dataclasses.FrozenInstanceError):
-        channel_key.channel = "ed2k"  # type: ignore[misc]
+        channel_key.channel = Channel("ed2k")  # type: ignore[misc]
 
 
 def test_a_backoff_state_is_frozen_and_holds_its_wait() -> None:

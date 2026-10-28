@@ -29,7 +29,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store i
 from p2pwatch.adapters.driven.system_wall_clock import SystemWallClock
 from p2pwatch.composition.crawler_composition import CrawlerComposition
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.fakes.fake_amule_api import PASSWORD, FakeAmuleApi
 from tests.fakes.fake_amule_api_server import FakeAmuleApiServer
@@ -435,7 +435,11 @@ async def test_a_backoff_the_previous_run_saved_holds_the_ed2k_search(
 ) -> None:
     local = open_local(tmp_path / "local.db")
     SqliteBackoffStateStore(local).set_backoff_states(
-        {BackoffKey("amuled", "ed2k"): BackoffState(1, SystemWallClock().now(), timedelta(hours=1))}
+        {
+            BackoffKey(ClientName("amuled"), Channel("ed2k")): BackoffState(
+                1, SystemWallClock().now(), timedelta(hours=1)
+            )
+        }
     )
     local.close()
     config_path = _write(tmp_path / "crawler.yml", _config(tmp_path))

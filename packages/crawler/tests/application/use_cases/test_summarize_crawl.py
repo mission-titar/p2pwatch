@@ -8,7 +8,7 @@ from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.application.ports.driving.crawl_summarizer import ClientSummary, CrawlSummary
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.domain.coverage import TargetCoverage, TargetCoverageStatus
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import ClientName, NodeId
 from p2pwatch.domain.node_state import NodeState
 from p2pwatch.domain.status_reading import READING_FRESH_FOR, StatusReading
 from tests.fakes.adapters.driven.fake_coverage_reader import FakeCoverageReader
@@ -73,14 +73,18 @@ def test_a_reading_is_fresh_until_it_is_older_than_its_freshness() -> None:
     fake_time = FakeTime()
     published_at = fake_time.monotonic.now()
     fake_time.advance(READING_FRESH_FOR)
-    status_reading_store = FakeStatusReadingStore(("never", "fresh", "stale"))
-    status_reading_store.set_reading("fresh", _READING, published_at)
-    status_reading_store.set_reading("stale", _READING, published_at - READING_FRESH_FOR / 2)
+    status_reading_store = FakeStatusReadingStore(
+        (ClientName("never"), ClientName("fresh"), ClientName("stale"))
+    )
+    status_reading_store.set_reading(ClientName("fresh"), _READING, published_at)
+    status_reading_store.set_reading(
+        ClientName("stale"), _READING, published_at - READING_FRESH_FOR / 2
+    )
 
     summary = _summarize(status_reading_store=status_reading_store, fake_time=fake_time)
 
     assert summary.client_summaries == (
-        ClientSummary("never", reading=None, is_fresh=False),
-        ClientSummary("fresh", reading=_READING, is_fresh=True),
-        ClientSummary("stale", reading=_READING, is_fresh=False),
+        ClientSummary(ClientName("never"), reading=None, is_fresh=False),
+        ClientSummary(ClientName("fresh"), reading=_READING, is_fresh=True),
+        ClientSummary(ClientName("stale"), reading=_READING, is_fresh=False),
     )

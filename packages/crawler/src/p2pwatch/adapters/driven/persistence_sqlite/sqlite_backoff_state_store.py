@@ -9,6 +9,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_error
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros, micros_to_instant
 from p2pwatch.application.ports.driven.backoff_state_reader import BackoffStateReader
 from p2pwatch.application.ports.driven.backoff_state_writer import BackoffStateWriter
+from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 
 _SELECT = (
@@ -29,7 +30,9 @@ class SqliteBackoffStateStore(BackoffStateReader, BackoffStateWriter):
         with wrap_sqlite_errors():
             rows = self._connection.execute(_SELECT).fetchall()
         return {
-            BackoffKey(client_name, channel): BackoffState(
+            BackoffKey(
+                ClientName(client_name), None if channel is None else Channel(channel)
+            ): BackoffState(
                 attempts,
                 micros_to_instant(started_at_micros),
                 timedelta(seconds=delay_seconds),

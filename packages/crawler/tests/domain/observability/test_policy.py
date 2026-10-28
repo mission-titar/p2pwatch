@@ -10,7 +10,7 @@ from catalog_matching.domain.engine import DecisionRecord
 from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability import events as ev
 from p2pwatch.domain.observability.node_metric import (
     ChannelLabels,
@@ -39,8 +39,8 @@ from p2pwatch.domain.observability.policy import (
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.source import SourceKey
 
-_AMULED_KAD = ChannelLabels("amuled", "kad")
-_AMULED_ED2K = ChannelLabels("amuled", "ed2k")
+_AMULED_KAD = ChannelLabels(ClientName("amuled"), Channel("kad"))
+_AMULED_ED2K = ChannelLabels(ClientName("amuled"), Channel("ed2k"))
 _ED2K_FIRST_USEFUL = SourceAlertLabels(Network.ED2K, SourceAlertKind.FIRST_USEFUL)
 _ED2K_REAPPEARED = SourceAlertLabels(Network.ED2K, SourceAlertKind.REAPPEARED)
 _SOURCE = SourceKey(Network.ED2K, "1f2e3d4c" * 4)
@@ -61,7 +61,10 @@ def _relayed(
 CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
     (
         ev.SearchExecuted(
-            client_name="amuled", channel="ed2k", observation_count=7, skipped_result_count=2
+            client_name=ClientName("amuled"),
+            channel=Channel("ed2k"),
+            observation_count=7,
+            skipped_result_count=2,
         ),
         ObservabilityPlan(
             Severity.DEBUG,
@@ -73,15 +76,15 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ),
     ),
     (
-        ev.ClientUnreachable(client_name="slskd"),
+        ev.ClientUnreachable(client_name=ClientName("slskd")),
         ObservabilityPlan(
             Severity.WARNING,
             "slskd unreachable",
-            (CounterIncrement(NodeCounter.CLIENT_UNREACHABLE, ClientLabels("slskd")),),
+            (CounterIncrement(NodeCounter.CLIENT_UNREACHABLE, ClientLabels(ClientName("slskd"))),),
         ),
     ),
     (
-        ev.SearchFailed(client_name="amuled", channel="kad"),
+        ev.SearchFailed(client_name=ClientName("amuled"), channel=Channel("kad")),
         ObservabilityPlan(
             Severity.WARNING,
             "search failed on kad",
@@ -89,7 +92,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ),
     ),
     (
-        ev.ObservationRecorded(client_name="amuled", channel="kad"),
+        ev.ObservationRecorded(client_name=ClientName("amuled"), channel=Channel("kad")),
         ObservabilityPlan(
             Severity.DEBUG,
             "observation recorded (kad)",
@@ -106,7 +109,10 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
     ),
     (
         ev.ChannelStatusSampled(
-            client_name="amuled", channel="kad", connected=True, connectable=False
+            client_name=ClientName("amuled"),
+            channel=Channel("kad"),
+            connected=True,
+            connectable=False,
         ),
         ObservabilityPlan(
             Severity.DEBUG,
@@ -119,7 +125,10 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
     ),
     (
         ev.ChannelStatusSampled(
-            client_name="amuled", channel="kad", connected=None, connectable=None
+            client_name=ClientName("amuled"),
+            channel=Channel("kad"),
+            connected=None,
+            connectable=None,
         ),
         ObservabilityPlan(
             Severity.DEBUG,
@@ -132,8 +141,8 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
     ),
     (
         ev.ChannelDegraded(
-            client_name="amuled",
-            channel="ed2k",
+            client_name=ClientName("amuled"),
+            channel=Channel("ed2k"),
             field="connected",
             degraded_for_seconds=300.0,
             node_id=_NODE,
@@ -142,8 +151,8 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
     ),
     (
         ev.ChannelDegraded(
-            client_name="amuled",
-            channel="kad",
+            client_name=ClientName("amuled"),
+            channel=Channel("kad"),
             field="connectable",
             degraded_for_seconds=300.0,
             node_id=_NODE,
@@ -151,23 +160,31 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         _relayed(Severity.WARNING, "amuled kad: not connectable for 5 min"),
     ),
     (
-        ev.ChannelRecovered(client_name="amuled", channel="ed2k", field="connected", node_id=_NODE),
+        ev.ChannelRecovered(
+            client_name=ClientName("amuled"),
+            channel=Channel("ed2k"),
+            field="connected",
+            node_id=_NODE,
+        ),
         _relayed(Severity.INFO, "amuled ed2k: back on its network"),
     ),
     (
         ev.ChannelRecovered(
-            client_name="amuled", channel="kad", field="connectable", node_id=_NODE
+            client_name=ClientName("amuled"),
+            channel=Channel("kad"),
+            field="connectable",
+            node_id=_NODE,
         ),
         _relayed(Severity.INFO, "amuled kad: connectable again"),
     ),
     (
         ev.ClientUnreachableLasting(
-            client_name="amuled", unreachable_for_seconds=120.0, node_id=_NODE
+            client_name=ClientName("amuled"), unreachable_for_seconds=120.0, node_id=_NODE
         ),
         _relayed(Severity.WARNING, "amuled unreachable for 2 min"),
     ),
     (
-        ev.ClientReachableAgain(client_name="amuled", node_id=_NODE),
+        ev.ClientReachableAgain(client_name=ClientName("amuled"), node_id=_NODE),
         _relayed(Severity.INFO, "amuled reachable again"),
     ),
     (

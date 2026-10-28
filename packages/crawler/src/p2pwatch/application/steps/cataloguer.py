@@ -22,7 +22,7 @@ from p2pwatch.application.ports.driven.observation_writer import ObservationWrit
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.events import ObservationRecorded
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.store_error import StoreError
@@ -47,7 +47,11 @@ class Cataloguer:
         self._logger = logger
 
     async def catalog(
-        self, reported_file: ReportedFile, client_name: str, channel: str, node_id: NodeId
+        self,
+        reported_file: ReportedFile,
+        client_name: ClientName,
+        channel: Channel,
+        node_id: NodeId,
     ) -> int:
         """Process ONE observation (spec §7). Returns the number of rows written (0..N).
 
