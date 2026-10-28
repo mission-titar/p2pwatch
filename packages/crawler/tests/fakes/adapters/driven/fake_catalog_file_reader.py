@@ -5,6 +5,7 @@ from catalog_matching.domain.decision_tier import DecisionTier
 from p2pwatch.application.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_history import FileHistory
+from p2pwatch.domain.identifiers import FileId
 
 
 class FakeCatalogFileReader(CatalogFileReader):
@@ -68,7 +69,7 @@ class FakeCatalogFileReader(CatalogFileReader):
         return self._file_count_by_tier
 
     def read_file_history(
-        self, file_id: bytes, *, since: datetime, until: datetime
+        self, file_id: FileId, *, since: datetime, until: datetime
     ) -> FileHistory | None:
         arguments: dict[str, object] = {"file_id": file_id, "since": since, "until": until}
         self.calls.append(("read_file_history", arguments))

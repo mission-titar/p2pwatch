@@ -6,6 +6,7 @@ from datetime import datetime
 
 from catalog_matching.domain.engine import Explanation
 from p2pwatch.domain.file_history import FileHistory
+from p2pwatch.domain.identifiers import FileId
 from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.sharing_period import SharingPeriod
 
@@ -25,7 +26,7 @@ class FileDescriber(ABC):
     @abstractmethod
     def describe_file(
         self,
-        file_id: bytes,
+        file_id: FileId,
         *,
         requested_since: datetime | None,
         requested_until: datetime | None,

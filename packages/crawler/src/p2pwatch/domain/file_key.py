@@ -7,6 +7,8 @@ import uuid
 from dataclasses import dataclass
 from enum import StrEnum
 
+from p2pwatch.domain.identifiers import FileId
+
 _NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "https://mission-titar.github.io/p2pwatch/file")
 
 
@@ -24,6 +26,6 @@ class FileKey:
     native_id: str
 
     @property
-    def file_id(self) -> bytes:
+    def file_id(self) -> FileId:
         """The 16 bytes of ``uuid5(namespace, "<network>:<native_id>")``."""
-        return uuid.uuid5(_NAMESPACE, f"{self.network}:{self.native_id}").bytes
+        return FileId(uuid.uuid5(_NAMESPACE, f"{self.network}:{self.native_id}").bytes)

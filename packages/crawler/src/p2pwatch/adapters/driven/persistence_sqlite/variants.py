@@ -11,6 +11,7 @@ from functools import cache
 
 from p2pwatch.adapters.driven.persistence_sqlite import micros
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import FileId
 from p2pwatch.domain.observation import fold_raw_metadata
 
 
@@ -39,7 +40,7 @@ def content_hash(
     return hashlib.blake2b(canonical.encode(), digest_size=16).digest()
 
 
-def file_id(network: str, native_id: str) -> bytes:
+def file_id(network: str, native_id: str) -> FileId:
     """``FileKey.file_id`` for the SQL function; an unknown network raises."""
     return FileKey(Network(network), native_id).file_id
 

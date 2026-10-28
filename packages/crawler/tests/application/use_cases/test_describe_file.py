@@ -17,7 +17,7 @@ from p2pwatch.application.use_cases.describe_file import DescribeFile
 from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision
-from p2pwatch.domain.identifiers import Keyword, NodeId
+from p2pwatch.domain.identifiers import FileId, Keyword, NodeId
 from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.matching_read import MatchingExplainer
 from p2pwatch.domain.observation import FileObservation, ReportedFile
@@ -97,7 +97,7 @@ def _describe(
         source_period_gap=_GAP,
     )
     return describe_file.describe_file(
-        b"\x01" * 16, requested_since=requested_since, requested_until=requested_until
+        FileId(b"\x01" * 16), requested_since=requested_since, requested_until=requested_until
     )
 
 
