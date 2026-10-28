@@ -12,9 +12,6 @@ An agent adds an entry only after the operator has agreed to it.
 
 ## Debt
 
-- **Every stamp an integer of microseconds since the epoch**, as the catalog's points already are: the ISO-8601 TEXT
-  stamps left in both databases converted. D12 of `agents/specs/2026-10-14-monotonic-clock.md`.
-
 - **Test quality** (lot 3 of the gate tooling umbrella): every unit test keeps unique coverage of its unit, the others are
   pruned, mutmut proving no detected mutant is lost. D3 to D5 and D13 to D15 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`, lot order in D12.
 
@@ -46,6 +43,9 @@ An agent adds an entry only after the operator has agreed to it.
 
 - **Contract tests for the fakes of outside systems**: each suite run against the real system (amuled, apprise, GitHub,
   Gluetun) under the integration markers, never against a fake server. Section "Backlog" of `agents/specs/2026-10-25-fake-contract-tests.md`.
+
+- **Every catalog table STRICT**, as `local.db`'s are: all of them rebuilt at once, so SQLite refuses a value of the
+  wrong type; it costs a rebuild of the catalog's largest tables. D2 of `agents/specs/2026-10-28-micros-stamps.md`.
 
 ## Postponed
 

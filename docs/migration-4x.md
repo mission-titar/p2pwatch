@@ -177,9 +177,12 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
   `latest_seen_at_micros` et `latest_progress_at_micros`. Adaptez vos requêtes de la console SQL.
 - **Dans `local.db`, la table `node_runtime` devient `node_identity`**, une seule ligne : ses
   colonnes `node_id` et `created_at_micros` remplacent les clés `node_id` et `created_at`, l'instant
-  devenant un entier de microsecondes. Un `local.db` dont `node_runtime` porte un `node_id` sans son
-  `created_at` refuse la mise à niveau (`NOT NULL constraint failed:
-  node_identity.created_at_micros`) et reste tel quel. Adaptez vos requêtes de la console SQL.
+  devenant un entier de microsecondes. Adaptez vos requêtes de la console SQL. Un `local.db` dont
+  `node_runtime` porte un `node_id` sans son `created_at` arrête la mise à niveau à sa migration
+  `0015` (`NOT NULL constraint failed: node_identity.created_at_micros`) : les migrations d'avant
+  restent appliquées, et le crawler ne démarre pas. Pour revenir à la 4.x, restaurez la copie de
+  `local.db` qui porte le plus petit numéro ([la copie d'avant
+  migration](operate.md#la-copie-davant-migration)).
 - **Les paramètres d'URL de `/files` changent de nom** : `q` devient `search`, `target` devient
   `target_id` et `dir` devient `direction`. Les anciens sont ignorés : mettez à jour vos favoris.
   Un `?tier=` inconnu est ignoré lui aussi, comme un `sort` ou un `direction` inconnu : la liste
