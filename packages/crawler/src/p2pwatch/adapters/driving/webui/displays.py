@@ -77,7 +77,7 @@ class ObservationDisplay:
 
 @dataclass(frozen=True)
 class DecisionDisplay:
-    """A current decision of a file, its instant as ``utc_iso`` writes it."""
+    """A current decision of a file, its instant in ISO-8601 to the microsecond."""
 
     target_id: str
     rule_name: str
@@ -92,8 +92,8 @@ class DecisionDisplay:
 
 @dataclass(frozen=True)
 class TrackedDownloadDisplay:
-    """One line of /node's downloads, its instants as local.db stores them, an unknown one
-    blank."""
+    """One line of /node's downloads, its instants in ISO-8601 to the microsecond, an unknown
+    one blank."""
 
     native_id: str
     target_id: str
