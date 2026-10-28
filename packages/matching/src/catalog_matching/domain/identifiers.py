@@ -1,4 +1,4 @@
-"""The identifier this package produces, a type of its own so that mypy refuses a bare str."""
+"""The identifiers this package carries, each a type of its own so that mypy refuses a swap."""
 
 from typing import NewType
 
