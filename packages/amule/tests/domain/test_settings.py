@@ -5,6 +5,7 @@ from datetime import timedelta
 
 import pytest
 
+from p2pwatch_amule.domain.identifiers import Gid, Uid
 from p2pwatch_amule.domain.settings import (
     BootSettings,
     PortSyncSettings,
@@ -26,8 +27,8 @@ IDS = {"PUID": "1000", "PGID": "1001"}
 
 def test_the_boot_variables_give_the_boot_settings() -> None:
     assert parse_boot_settings(BOOT_ENV) == BootSettings(
-        puid=1000,
-        pgid=1001,
+        puid=Uid(1000),
+        pgid=Gid(1001),
         ec_password="hunter2",
         api_password="s3cret",
         port_sync_enabled=False,
@@ -125,8 +126,8 @@ def test_no_variable_set_but_the_ids_gives_todays_values() -> None:
         gluetun_control_url="http://localhost:8000",
         poll_interval=timedelta(seconds=60),
         restart_min_interval=timedelta(seconds=300),
-        puid=1000,
-        pgid=1001,
+        puid=Uid(1000),
+        pgid=Gid(1001),
     )
 
 
@@ -151,8 +152,8 @@ def test_each_variable_overrides_the_domains_value() -> None:
         gluetun_control_url="https://gluetun:9999/prefix",
         poll_interval=timedelta(seconds=5),
         restart_min_interval=timedelta(seconds=30),
-        puid=1000,
-        pgid=1001,
+        puid=Uid(1000),
+        pgid=Gid(1001),
     )
 
 

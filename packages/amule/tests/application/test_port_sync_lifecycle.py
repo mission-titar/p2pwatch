@@ -8,6 +8,7 @@ import pytest
 
 from p2pwatch_amule.application.port_sync_lifecycle import PortSyncLifecycle
 from p2pwatch_amule.domain.conf import with_listen_port
+from p2pwatch_amule.domain.identifiers import Gid, Uid
 from p2pwatch_amule.domain.settings import PortSyncSettings
 from tests.fakes.adapters.driven.fake_amule_conf_store import FakeAmuleConfStore
 from tests.fakes.adapters.driven.fake_forwarded_port_client import FakeForwardedPortClient
@@ -23,8 +24,8 @@ SETTINGS = PortSyncSettings(
     gluetun_control_url="http://localhost:8000",
     poll_interval=timedelta(seconds=60),
     restart_min_interval=timedelta(seconds=300),
-    puid=1000,
-    pgid=1001,
+    puid=Uid(1000),
+    pgid=Gid(1001),
 )
 CONF = "[eMule]\nPort=4662\nUDPPort=4672\nMaxUpload=42\n\n[AmuleApi]\nEnabled=1\n\n"
 
