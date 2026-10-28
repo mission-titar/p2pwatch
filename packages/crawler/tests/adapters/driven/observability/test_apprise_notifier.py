@@ -228,6 +228,12 @@ async def test_a_completed_download_names_its_targets_and_file() -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_completed_download_without_a_target_names_none() -> None:
+    call = await _sent_to_the_bare_group(CompletedDownload((), "Keroro 062.avi", _NODE))
+    assert call["body"] == "**Targets**\nunknown\n\n**File**\n`Keroro 062.avi`"
+
+
+@pytest.mark.asyncio
 async def test_a_first_useful_source_names_itself_its_targets_and_its_file() -> None:
     call = await _sent_to_the_bare_group(_source_alert("AnimuseeFMR", None))
     assert (call["title"], call["body"]) == (

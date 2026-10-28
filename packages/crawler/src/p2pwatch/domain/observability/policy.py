@@ -276,7 +276,8 @@ def plan_observability(event: Event) -> ObservabilityPlan:
         case DownloadCompleted():
             return ObservabilityPlan(
                 Severity.SUCCESS,
-                f"✅ download completed: {', '.join(t.target_id for t in event.target_titles)}",
+                "✅ download completed: "
+                + (", ".join(t.target_id for t in event.target_titles) or "unknown"),
                 (CounterIncrement(NodeCounter.DOWNLOADS_COMPLETED),),
                 CompletedDownload(event.target_titles, event.filename, event.node_id),
             )
