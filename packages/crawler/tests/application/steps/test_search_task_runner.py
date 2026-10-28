@@ -43,7 +43,7 @@ from tests.support.application.steps.observability_dispatcher import Observabili
 from tests.support.catalog_rows import observation_node_ids
 from tests.support.virtual_time import EPOCH, VirtualLoop
 
-_NODE = NodeId("n1")
+_NODE_ID = NodeId("n1")
 _HOUR = 3600.0
 _POLICY = BackoffPolicy(
     base_seconds=60.0,
@@ -110,7 +110,7 @@ class _Tasks:
             backoff_state_writer=self.state,
             monotonic_clock=self.monotonic_clock,
             logger=self.logger,
-        ).run(_NODE)
+        ).run(_NODE_ID)
 
     def run_for(
         self, seconds: float, client: Any, keywords: list[str], *beside: Coroutine[Any, Any, None]
@@ -156,7 +156,7 @@ def test_a_task_records_its_observations_under_the_node_id_the_tasks_run_with(
         FakeTimedSearchClient({Channel("x"): 30.0}, reported_files=(reported_file,)),
         ["keroro"],
     )
-    assert observation_node_ids(catalog_connection) == {_NODE}
+    assert observation_node_ids(catalog_connection) == {_NODE_ID}
 
 
 def test_channels_do_not_wait_for_each_other(tasks: _Tasks) -> None:

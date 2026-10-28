@@ -37,7 +37,7 @@ from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
-NODE = NodeId("n1")
+NODE_ID = NodeId("n1")
 HASH_A = "a" * 32
 HASH_B = "b" * 32
 HASH_C = "c" * 32
@@ -64,7 +64,7 @@ def key(hash_hex: str) -> FileKey:
 
 def observation(hash_hex: str, filename: str, size_bytes: int) -> FileObservation:
     reported_file = ReportedFile(key(hash_hex), filename, size_bytes, 1, Keyword("keroro"))
-    return FileObservation(reported_file, SEEN_AT, NODE)
+    return FileObservation(reported_file, SEEN_AT, NODE_ID)
 
 
 def candidate(hash_hex: str, target_id: TargetId) -> DownloadCandidate:

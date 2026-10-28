@@ -31,7 +31,7 @@ _KEY = SourceKey(Network.ED2K, "1f2e" * 8)
 _T0 = datetime(2026, 10, 13, 20, 0, tzinfo=UTC)
 _T0_US = int(_T0.timestamp()) * 1_000_000
 _POLL = timedelta(seconds=30)
-_NODE = NodeId("n1")
+_NODE_ID = NodeId("n1")
 _Q, _S = SourceRole.QUEUED, SourceRole.SENDING
 
 
@@ -49,7 +49,7 @@ def _reading(role: SourceRole | None = _Q, *, counter: int = 0) -> SourceReading
 
 
 def _point(
-    role: SourceRole = _Q, *, counter: int = 0, index: int = 0, node_id: NodeId = _NODE
+    role: SourceRole = _Q, *, counter: int = 0, index: int = 0, node_id: NodeId = _NODE_ID
 ) -> SourcePoint:
     """A point of ``_FILE`` with its reading's role, ``index`` reads after ``_T0``."""
     return SourcePoint(_FILE, _reading(role, counter=counter), role, _T0 + index * _POLL, node_id)

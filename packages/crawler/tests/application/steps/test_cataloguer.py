@@ -29,7 +29,7 @@ from tests.support.catalog_rows import (
     observation_node_ids,
 )
 
-_NODE = NodeId("n1")
+_NODE_ID = NodeId("n1")
 _HASH_DL = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _HASH_CAT = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 _HASH_DISCARD = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -95,7 +95,7 @@ async def test_observation_is_always_recorded_even_when_discarded(
         observability.dispatcher,
         FakeLogger(),
     ).catalog(
-        _reported_file(_HASH_DISCARD, "random.txt"), ClientName("amuled"), Channel("ed2k"), _NODE
+        _reported_file(_HASH_DISCARD, "random.txt"), ClientName("amuled"), Channel("ed2k"), _NODE_ID
     )
     assert changed == 0
     assert count_observations(catalog_connection) == 1
@@ -120,7 +120,7 @@ async def test_the_observation_carries_the_clocks_instant(
         ObservabilityOverFakes().dispatcher,
         FakeLogger(),
     ).catalog(
-        _reported_file(_HASH_DISCARD, "random.txt"), ClientName("amuled"), Channel("ed2k"), _NODE
+        _reported_file(_HASH_DISCARD, "random.txt"), ClientName("amuled"), Channel("ed2k"), _NODE_ID
     )
     observed_at_micros = catalog_connection.execute(
         "SELECT observed_at_micros FROM observations"
@@ -146,14 +146,14 @@ async def test_new_verdict_is_persisted_and_nudged(
         waker,
         observability.dispatcher,
         FakeLogger(),
-    ).catalog(_reported_file(_HASH_DL, _DL_NAME), ClientName("amuled"), Channel("ed2k"), _NODE)
+    ).catalog(_reported_file(_HASH_DL, _DL_NAME), ClientName("amuled"), Channel("ed2k"), _NODE_ID)
     assert changed == 1
     assert catalog_connection.execute("SELECT tier FROM match_decisions").fetchone() == (
         "download",
     )
     assert observation_node_ids(catalog_connection) == decision_node_ids(catalog_connection)
-    assert decision_node_ids(catalog_connection) == {_NODE}
-    assert observability.notifier.node_ids == [_NODE]
+    assert decision_node_ids(catalog_connection) == {_NODE_ID}
+    assert observability.notifier.node_ids == [_NODE_ID]
     assert waker.woken_subjects == [WakeSubject.DOWNLOAD]
 
 
@@ -178,7 +178,7 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
             waker,
             observability.dispatcher,
             FakeLogger(),
-        ).catalog(reported_file, ClientName("amuled"), Channel("ed2k"), _NODE)
+        ).catalog(reported_file, ClientName("amuled"), Channel("ed2k"), _NODE_ID)
         == 1
     )
     # Second observation of the SAME file a minute later: same catalog verdict → no re-append.
@@ -192,7 +192,7 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
             waker,
             observability.dispatcher,
             FakeLogger(),
-        ).catalog(reported_file, ClientName("amuled"), Channel("ed2k"), _NODE)
+        ).catalog(reported_file, ClientName("amuled"), Channel("ed2k"), _NODE_ID)
         == 0
     )
     assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 1
@@ -219,7 +219,9 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
         waker,
         observability.dispatcher,
         FakeLogger(),
-    ).catalog(_reported_file(_HASH_DL, _NOTIFY_NAME), ClientName("amuled"), Channel("ed2k"), _NODE)
+    ).catalog(
+        _reported_file(_HASH_DL, _NOTIFY_NAME), ClientName("amuled"), Channel("ed2k"), _NODE_ID
+    )
     # 2nd view of the SAME hash, DOWNLOAD name → verdict changes → re-append + wake.
     changed = await _cataloguer(
         observation_store,
@@ -229,7 +231,7 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
         waker,
         observability.dispatcher,
         FakeLogger(),
-    ).catalog(_reported_file(_HASH_DL, _DL_NAME), ClientName("amuled"), Channel("ed2k"), _NODE)
+    ).catalog(_reported_file(_HASH_DL, _DL_NAME), ClientName("amuled"), Channel("ed2k"), _NODE_ID)
     assert changed == 1
     tiers = [
         row[0]
@@ -265,7 +267,7 @@ async def test_persistence_error_is_absorbed_and_cycle_continues(
         waker,
         observability.dispatcher,
         logger,
-    ).catalog(_reported_file(_HASH_DL, _DL_NAME), ClientName("amuled"), Channel("ed2k"), _NODE)
+    ).catalog(_reported_file(_HASH_DL, _DL_NAME), ClientName("amuled"), Channel("ed2k"), _NODE_ID)
     assert changed == 0  # absorbed, the cycle continues
     assert waker.woken_subjects == []
     assert logger.lines == [  # file= as key=value, like the download side's
@@ -299,7 +301,7 @@ async def test_signal_consumer_awaits_the_nudge(
         waker,
         observability.dispatcher,
         FakeLogger(),
-    ).catalog(_reported_file(_HASH_DL, _DL_NAME), ClientName("amuled"), Channel("ed2k"), _NODE)
+    ).catalog(_reported_file(_HASH_DL, _DL_NAME), ClientName("amuled"), Channel("ed2k"), _NODE_ID)
     await asyncio.wait_for(waiter, timeout=1.0)
     assert waiter.done()
 
@@ -322,7 +324,7 @@ async def test_download_tier_verdict_also_nudges_the_download_subject(
         waker,
         observability.dispatcher,
         FakeLogger(),
-    ).catalog(_reported_file(_HASH_DL, _DL_NAME), ClientName("amuled"), Channel("ed2k"), _NODE)
+    ).catalog(_reported_file(_HASH_DL, _DL_NAME), ClientName("amuled"), Channel("ed2k"), _NODE_ID)
     assert changed == 1
     assert waker.woken_subjects == [WakeSubject.DOWNLOAD]
 
@@ -349,7 +351,7 @@ async def test_non_download_tier_verdict_does_not_nudge_the_download_subject(
         _reported_file(_HASH_CAT, "keroro something.avi"),
         ClientName("amuled"),
         Channel("ed2k"),
-        _NODE,
+        _NODE_ID,
     )
     assert changed == 1
     assert waker.woken_subjects == []
@@ -373,7 +375,7 @@ async def test_emits_observation_then_decision_on_change(
         waker,
         observability.dispatcher,
         FakeLogger(),
-    ).catalog(reported_file, ClientName("amuled"), Channel("ed2k"), _NODE)
+    ).catalog(reported_file, ClientName("amuled"), Channel("ed2k"), _NODE_ID)
     assert observability.logger.lines == [
         LoggedLine("debug", "observation recorded (ed2k)"),
         LoggedLine("info", f"decisions for {_DL_NAME} ({_HASH_DL}): 062A none → download"),
@@ -401,7 +403,7 @@ async def test_emits_only_observation_when_discarded(
         FakeWaker(),
         observability.dispatcher,
         FakeLogger(),
-    ).catalog(reported_file, ClientName("amuled"), Channel("kad"), _NODE)
+    ).catalog(reported_file, ClientName("amuled"), Channel("kad"), _NODE_ID)
     assert observability.logger.lines == [LoggedLine("debug", "observation recorded (kad)")]
 
 
@@ -427,7 +429,7 @@ async def test_multi_segment_observation_records_two_rows(
         _reported_file(_HASH_DL, "Keroro 062 teletoon.avi"),
         ClientName("amuled"),
         Channel("ed2k"),
-        _NODE,
+        _NODE_ID,
     )
     assert changed == 2
     assert catalog_connection.execute(

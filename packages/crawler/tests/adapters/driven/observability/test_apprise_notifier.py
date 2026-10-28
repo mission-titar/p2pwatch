@@ -27,12 +27,12 @@ from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.source import SourceKey
 from tests.fakes.adapters.driven.fake_apprise import FakeApprise
 
-_NODE = NodeId("titar-node-1")
+_NODE_ID = NodeId("titar-node-1")
 _HASH = "8f3a1c0b9e7d44a2b6c1f0e9d8a7b6c5"
 _SOURCE = SourceKey(Network.ED2K, "1f2e3d4c" * 4)
 _062A = TargetTitle(TargetId("062A"), "Les demoiselles cambrioleuses")
 _062B = TargetTitle(TargetId("062B"), "Le grand combat sous-marin")
-_LINE = RelayedLogLine("online", Severity.INFO, _NODE)
+_LINE = RelayedLogLine("online", Severity.INFO, _NODE_ID)
 
 
 def _notifier() -> tuple[AppriseNotifier, list[FakeApprise]]:
@@ -61,7 +61,7 @@ async def _sent_to_the_bare_group(notification: Notification) -> dict[str, objec
 
 def _rise(tier: DecisionTier, filename: str = "Keroro 062.avi") -> TierRise:
     link = f"ed2k://|file|Keroro%20062.avi|367185920|{_HASH}|/"
-    return TierRise(tier, (_062A, _062B), filename, 367_185_920, link, _NODE)
+    return TierRise(tier, (_062A, _062B), filename, 367_185_920, link, _NODE_ID)
 
 
 def _source_alert(
@@ -71,7 +71,7 @@ def _source_alert(
     filename: str = "Keroro 062.avi",
 ) -> SourceAlert:
     kind = SourceAlertKind.FIRST_USEFUL if absent_for is None else SourceAlertKind.REAPPEARED
-    return SourceAlert(kind, _SOURCE, source_name, absent_for, target_titles, filename, _NODE)
+    return SourceAlert(kind, _SOURCE, source_name, absent_for, target_titles, filename, _NODE_ID)
 
 
 @pytest.mark.asyncio
@@ -132,7 +132,7 @@ async def test_the_node_prefix_goes_into_the_title_of_the_prefixed_group_only() 
 @pytest.mark.asyncio
 async def test_every_message_is_sent_as_markdown() -> None:
     notifier, groups = _notifier()
-    await notifier.notify(Audience.OPERATIONS, RelayedLogLine("x", Severity.WARNING, _NODE))
+    await notifier.notify(Audience.OPERATIONS, RelayedLogLine("x", Severity.WARNING, _NODE_ID))
     calls = [call for group in groups for call in group.sent]
     assert [c["body_format"] for c in calls] == [apprise.NotifyFormat.MARKDOWN] * 2
 
@@ -143,7 +143,7 @@ async def test_no_mention_reaches_apprise() -> None:
     notifier, groups = _notifier()
     alert = _source_alert(hostile, None, (TargetTitle(TargetId("062A"), hostile),), hostile)
     await notifier.notify(Audience.COMMUNITY, alert)
-    await notifier.notify(Audience.OPERATIONS, RelayedLogLine(hostile, Severity.WARNING, _NODE))
+    await notifier.notify(Audience.OPERATIONS, RelayedLogLine(hostile, Severity.WARNING, _NODE_ID))
     for call in (call for group in groups for call in group.sent):
         for text in (call["title"], call["body"]):
             assert isinstance(text, str)
@@ -163,7 +163,7 @@ async def test_a_relayed_log_lines_severity_maps_to_a_notify_type(
     severity: Severity, notify_type: apprise.NotifyType
 ) -> None:
     notifier, groups = _notifier()
-    await notifier.notify(Audience.OPERATIONS, RelayedLogLine("x", severity, _NODE))
+    await notifier.notify(Audience.OPERATIONS, RelayedLogLine("x", severity, _NODE_ID))
     assert groups[0].sent[-1]["notify_type"] == notify_type
 
 
@@ -173,7 +173,7 @@ async def test_a_relayed_log_lines_severity_maps_to_a_notify_type(
     [
         (_rise(DecisionTier.NOTIFY), apprise.NotifyType.INFO),
         (_source_alert(None, timedelta(hours=26)), apprise.NotifyType.INFO),
-        (CompletedDownload((_062A,), "x.avi", _NODE), apprise.NotifyType.SUCCESS),
+        (CompletedDownload((_062A,), "x.avi", _NODE_ID), apprise.NotifyType.SUCCESS),
     ],
     ids=["rise", "source-alert", "completed-download"],
 )
@@ -216,7 +216,7 @@ async def test_a_backtick_in_the_name_cannot_close_its_code_span() -> None:
 
 @pytest.mark.asyncio
 async def test_a_completed_download_names_its_targets_and_file() -> None:
-    completed = CompletedDownload((_062A, _062B), "Keroro `062`.avi", _NODE)
+    completed = CompletedDownload((_062A, _062B), "Keroro `062`.avi", _NODE_ID)
     call = await _sent_to_the_bare_group(completed)
     assert (call["title"], call["body"]) == (
         "✅ Downloaded",
@@ -231,7 +231,7 @@ async def test_a_completed_download_names_its_targets_and_file() -> None:
 
 @pytest.mark.asyncio
 async def test_a_completed_download_without_a_target_names_none() -> None:
-    call = await _sent_to_the_bare_group(CompletedDownload((), "Keroro 062.avi", _NODE))
+    call = await _sent_to_the_bare_group(CompletedDownload((), "Keroro 062.avi", _NODE_ID))
     assert call["body"] == "**Targets**\nunknown\n\n**File**\n`Keroro 062.avi`"
 
 

@@ -27,7 +27,7 @@ _USER, _OTHER_USER = "1f2e" * 8, "c" * 32
 _KEY, _OTHER_KEY = SourceKey(Network.ED2K, _USER), SourceKey(Network.ED2K, _OTHER_USER)
 _T0 = datetime(2026, 10, 13, 20, 0, tzinfo=UTC)
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
-_NODE = NodeId("n1")
+_NODE_ID = NodeId("n1")
 
 
 def _us(moment: datetime) -> int:
@@ -80,7 +80,7 @@ def _latest(
     before: datetime,
     *,
     native_id: str = _FILE,
-    node_id: NodeId = _NODE,
+    node_id: NodeId = _NODE_ID,
 ) -> LatestPoint | None:
     file = FileKey(Network.ED2K, native_id)
     return source_point_store.read_latest_point(file, reading, since, before, node_id)
