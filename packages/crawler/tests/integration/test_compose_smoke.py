@@ -561,13 +561,14 @@ asyncio.run(main())
 
 _SEED_ROW = f"""
 import datetime, sqlite3, sys
+from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.domain.file_key import FileKey, Network
-now = datetime.datetime.now(datetime.UTC).isoformat()
+now = instant_to_micros(datetime.datetime.now(datetime.UTC))
 file = FileKey(Network.ED2K, sys.argv[1])
 connection = sqlite3.connect("/data/local.db", timeout=30)
 connection.execute(
-    "INSERT INTO downloads"
-    " (file_id, network, native_id, target_id, state, queued_at, size_bytes, latest_seen_at)"
+    "INSERT INTO downloads (file_id, network, native_id, target_id, state, queued_at_micros,"
+    " size_bytes, latest_seen_at_micros)"
     " VALUES (?, ?, ?, {_SEEDED_TARGET!r}, 'downloading', ?, {_SEEDED_SIZE}, ?)",
     (file.file_id, file.network, file.native_id, now, now),
 )
@@ -578,7 +579,8 @@ _READ_ROW = """
 import sqlite3, sys
 connection = sqlite3.connect("/data/local.db", timeout=30)
 row = connection.execute(
-    "SELECT state, completed_at IS NOT NULL FROM downloads WHERE native_id = ?", (sys.argv[1],)
+    "SELECT state, completed_at_micros IS NOT NULL FROM downloads WHERE native_id = ?",
+    (sys.argv[1],),
 ).fetchone()
 print(row[0], bool(row[1]))
 """

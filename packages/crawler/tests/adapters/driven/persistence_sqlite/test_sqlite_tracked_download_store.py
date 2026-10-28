@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
+from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store import (
     SqliteTrackedDownloadStore,
 )
@@ -19,7 +19,7 @@ from tests.contracts.application.ports.driven.tracked_download_store_contract im
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_local
 
 _A = FileKey(Network.ED2K, "a" * 32)
-_T0 = datetime(2026, 6, 12, tzinfo=UTC)
+_T0 = datetime(2026, 6, 12, 0, 0, 0, 123456, tzinfo=UTC)
 _DAY = timedelta(days=1)
 
 
@@ -30,8 +30,8 @@ def _status(file: FileKey, done: int = 0, waiting: WaitingReason | None = None) 
 def _lifecycle(connection: sqlite3.Connection, file: FileKey) -> tuple[object, ...]:
     return tuple(
         connection.execute(
-            "SELECT bytes_done, latest_progress_at, waiting_reason, failure_reason FROM downloads"
-            " WHERE file_id = ?",
+            "SELECT bytes_done, latest_progress_at_micros, waiting_reason, failure_reason"
+            " FROM downloads WHERE file_id = ?",
             (file.file_id,),
         ).fetchone()
     )
@@ -70,8 +70,8 @@ def test_record_queued_is_dedup_safe(
     tracked_download_store.record_queued(_A, "062A", 100, _T0)
     tracked_download_store.record_queued(_A, "063A", 200, _T0 + _DAY)  # duplicate ignored
     assert connection.execute(
-        "SELECT target_id, size_bytes, queued_at FROM downloads"
-    ).fetchall() == [("062A", 100, utc_iso(_T0))]
+        "SELECT target_id, size_bytes, queued_at_micros FROM downloads"
+    ).fetchall() == [("062A", 100, instant_to_micros(_T0))]
 
 
 def test_set_completed_stamps_the_completed_at_it_is_given(
@@ -80,9 +80,10 @@ def test_set_completed_stamps_the_completed_at_it_is_given(
     tracked_download_store.record_queued(_A, "062A", 100, _T0)
     tracked_download_store.set_completed(_A, _T0 + _DAY)
     stamped = connection.execute(
-        "SELECT completed_at FROM downloads WHERE file_id = ?", (_A.file_id,)
-    ).fetchone()[0]
-    assert stamped == utc_iso(_T0 + _DAY)
+        "SELECT typeof(completed_at_micros), completed_at_micros FROM downloads WHERE file_id = ?",
+        (_A.file_id,),
+    ).fetchone()
+    assert stamped == ("integer", instant_to_micros(_T0 + _DAY))
 
 
 def test_set_state_non_completed_leaves_completed_at_null(
@@ -91,7 +92,7 @@ def test_set_state_non_completed_leaves_completed_at_null(
     tracked_download_store.record_queued(_A, "062A", 100, _T0)
     tracked_download_store.set_state(_A, DownloadState.DOWNLOADING)
     stamped = connection.execute(
-        "SELECT completed_at FROM downloads WHERE file_id = ?", (_A.file_id,)
+        "SELECT completed_at_micros FROM downloads WHERE file_id = ?", (_A.file_id,)
     ).fetchone()[0]
     assert stamped is None
 
@@ -122,11 +123,13 @@ def test_record_queued_is_atomic_on_injected_failure(
     assert tracked_download_store.is_tracked(_A) is False
 
 
-def _latest_seen(connection: sqlite3.Connection, file: FileKey) -> str:
+def _latest_seen(connection: sqlite3.Connection, file: FileKey) -> tuple[str, int]:
     row = connection.execute(
-        "SELECT latest_seen_at FROM downloads WHERE file_id = ?", (file.file_id,)
+        "SELECT typeof(latest_seen_at_micros), latest_seen_at_micros FROM downloads"
+        " WHERE file_id = ?",
+        (file.file_id,),
     ).fetchone()
-    return str(row[0])
+    return row[0], row[1]
 
 
 def test_record_queued_stamps_latest_seen_at_with_queued_at(
@@ -135,9 +138,10 @@ def test_record_queued_stamps_latest_seen_at_with_queued_at(
     # A row amuled never picks up must still age out, from its queuing.
     tracked_download_store.record_queued(_A, "062A", 100, _T0)
     queued_at = connection.execute(
-        "SELECT queued_at FROM downloads WHERE file_id = ?", (_A.file_id,)
-    ).fetchone()[0]
-    assert queued_at == _latest_seen(connection, _A) == utc_iso(_T0)
+        "SELECT typeof(queued_at_micros), queued_at_micros FROM downloads WHERE file_id = ?",
+        (_A.file_id,),
+    ).fetchone()
+    assert queued_at == _latest_seen(connection, _A) == ("integer", instant_to_micros(_T0))
 
 
 def test_latest_seen_at_by_file_reads_a_row_never_stamped_at_its_queuing(
@@ -145,7 +149,7 @@ def test_latest_seen_at_by_file_reads_a_row_never_stamped_at_its_queuing(
 ) -> None:
     # Only a row written by hand can hold a NULL: it ages from its queuing, as local 0005 did.
     tracked_download_store.record_queued(_A, "062A", 100, _T0)
-    connection.execute("UPDATE downloads SET latest_seen_at = NULL")
+    connection.execute("UPDATE downloads SET latest_seen_at_micros = NULL")
     assert tracked_download_store.read_latest_seen_at_by_file() == {_A: _T0}
 
 
@@ -165,7 +169,10 @@ def test_set_seen_stamps_progress_only_when_the_bytes_grow(
     grown_at = _T0 + timedelta(hours=1)
     tracked_download_store.set_seen([_status(_A, 40, WaitingReason.REMOTE_QUEUE)], grown_at)
     tracked_download_store.set_seen([_status(_A, 40)], grown_at + 3 * _DAY)
-    assert _lifecycle(connection, _A) == (40, utc_iso(grown_at), None, None)
+    assert _lifecycle(connection, _A) == (40, instant_to_micros(grown_at), None, None)
+    assert _latest_seen(connection, _A) == ("integer", instant_to_micros(grown_at + 3 * _DAY))
+    progress_type = connection.execute("SELECT typeof(latest_progress_at_micros) FROM downloads")
+    assert progress_type.fetchone() == ("integer",)
 
 
 def test_set_seen_stores_the_client_hashing_or_allocating_as_local_processing(

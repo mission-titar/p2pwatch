@@ -30,13 +30,13 @@ SELECT
     native_id,
     target_id,
     state,
-    queued_at,
-    completed_at,
-    latest_progress_at,
+    queued_at_micros,
+    completed_at_micros,
+    latest_progress_at_micros,
     waiting_reason,
     failure_reason
 FROM downloads
-ORDER BY queued_at ASC, native_id ASC
+ORDER BY queued_at_micros ASC, native_id ASC
 """
 
 _SQL_BACKOFF = """\
@@ -50,8 +50,8 @@ SELECT value FROM node_runtime WHERE key = ?
 """
 
 
-def _instant(iso: str | None) -> datetime | None:
-    return None if iso is None else datetime.fromisoformat(iso)
+def _instant(micros: int | None) -> datetime | None:
+    return None if micros is None else micros_to_instant(micros)
 
 
 def _optional[Reason: StrEnum](reason_type: type[Reason], stored: str | None) -> Reason | None:
@@ -81,9 +81,9 @@ class SqliteNodeStateReader(NodeStateReader):
                 file=FileKey(Network(row["network"]), row["native_id"]),
                 target_id=row["target_id"],
                 state=DownloadState(row["state"]),
-                queued_at=datetime.fromisoformat(row["queued_at"]),
-                completed_at=_instant(row["completed_at"]),
-                latest_progress_at=_instant(row["latest_progress_at"]),
+                queued_at=micros_to_instant(row["queued_at_micros"]),
+                completed_at=_instant(row["completed_at_micros"]),
+                latest_progress_at=_instant(row["latest_progress_at_micros"]),
                 waiting_reason=_optional(WaitingReason, row["waiting_reason"]),
                 failure_reason=_optional(FailureReason, row["failure_reason"]),
             )
@@ -100,7 +100,9 @@ class SqliteNodeStateReader(NodeStateReader):
         }
 
         node_id: str | None = node_id_row["value"] if node_id_row is not None else None
-        created_at = _instant(created_at_row["value"]) if created_at_row is not None else None
+        created_at = (
+            datetime.fromisoformat(created_at_row["value"]) if created_at_row is not None else None
+        )
 
         return NodeState(
             node_id=node_id,

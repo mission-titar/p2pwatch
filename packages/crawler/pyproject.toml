@@ -79,6 +79,7 @@ exclude_also = ["if TYPE_CHECKING:"]
 "tests/adapters/driven/persistence_sqlite/test_local_migration_0011.py" = "a SQL migration of local.db"
 "tests/adapters/driven/persistence_sqlite/test_local_migration_0012.py" = "a SQL migration of local.db"
 "tests/adapters/driven/persistence_sqlite/test_local_migration_0013.py" = "a SQL migration of local.db"
+"tests/adapters/driven/persistence_sqlite/test_local_migration_0014.py" = "a SQL migration of local.db"
 "tests/adapters/driven/persistence_sqlite/test_migration_0002.py" = "a SQL migration of catalog.db"
 "tests/adapters/driven/persistence_sqlite/test_migration_0006.py" = "a SQL migration of catalog.db"
 "tests/adapters/driven/persistence_sqlite/test_migration_0007.py" = "a SQL migration of catalog.db"

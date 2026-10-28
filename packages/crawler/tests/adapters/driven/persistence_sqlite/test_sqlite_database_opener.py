@@ -58,7 +58,7 @@ def test_open_local_creates_the_tables_and_versions_the_schema(tmp_path: Path) -
     connection = database_opener().open_local(tmp_path / "local.db")
     try:
         assert _table_names(connection) == _LOCAL_TABLES
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 13
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 14
     finally:
         connection.close()
 

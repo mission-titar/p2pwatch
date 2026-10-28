@@ -50,8 +50,9 @@ def test_0007_refuses_a_native_id_its_network_does_not_define(
     try:
         with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
             connection.execute(
-                "INSERT INTO downloads (file_id, network, native_id, target_id, state, queued_at)"
-                " VALUES (x'00', ?, ?, '062A', 'queued', '2026-10-10')",
+                "INSERT INTO downloads"
+                " (file_id, network, native_id, target_id, state, queued_at_micros)"
+                " VALUES (x'00', ?, ?, '062A', 'queued', 0)",
                 (network, native_id),
             )
     finally:
