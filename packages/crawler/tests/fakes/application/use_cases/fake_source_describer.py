@@ -2,13 +2,14 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from p2pwatch.application.ports.driving.source_describer import SourceDescriber, SourceDescription
+from p2pwatch.domain.identifiers import SourceId
 
 
 @dataclass(frozen=True)
 class DescribeSourceCall:
     """The arguments of one ``describe_source`` call."""
 
-    source_id: bytes
+    source_id: SourceId
     page: int
     requested_since: datetime | None
     requested_until: datetime | None
@@ -23,7 +24,7 @@ class FakeSourceDescriber(SourceDescriber):
 
     def describe_source(
         self,
-        source_id: bytes,
+        source_id: SourceId,
         *,
         page: int,
         requested_since: datetime | None,

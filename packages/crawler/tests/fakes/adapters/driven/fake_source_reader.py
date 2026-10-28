@@ -1,5 +1,6 @@
 from p2pwatch.application.ports.driven.source_reader import SourceReader
 from p2pwatch.domain.file_key import FileKey
+from p2pwatch.domain.identifiers import SourceId
 from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory
@@ -40,7 +41,7 @@ class FakeSourceReader(SourceReader):
         return self._source_count
 
     def read_source_history(
-        self, source_id: bytes, *, limit: int, offset: int, window: PeriodWindow
+        self, source_id: SourceId, *, limit: int, offset: int, window: PeriodWindow
     ) -> SourceHistory | None:
         arguments: dict[str, object] = {
             "source_id": source_id,

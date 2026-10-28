@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import NodeId, SourceId
 
 # Its own namespace, so that a source_id never equals a file_id (stage 4 spec, D2).
 _NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "https://mission-titar.github.io/p2pwatch/source")
@@ -37,9 +37,9 @@ class SourceKey:
             raise ValueError(f"a {self.network} source's native_id is {shape}")
 
     @property
-    def source_id(self) -> bytes:
+    def source_id(self) -> SourceId:
         """The 16 bytes of ``uuid5(namespace, "<network>:<native_id>")``."""
-        return uuid.uuid5(_NAMESPACE, f"{self.network}:{self.native_id}").bytes
+        return SourceId(uuid.uuid5(_NAMESPACE, f"{self.network}:{self.native_id}").bytes)
 
 
 class SourceUsefulness(StrEnum):

@@ -90,7 +90,7 @@ from p2pwatch.application.ports.driving.source_name_describer import SourceNameD
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.console_query import ConsoleDatabase, QueryAnswer, QueryFailure
 from p2pwatch.domain.file_key import Network
-from p2pwatch.domain.identifiers import FileId
+from p2pwatch.domain.identifiers import FileId, SourceId
 from p2pwatch.domain.interval import (
     MAX_INTERVAL_SPAN,
     Interval,
@@ -905,7 +905,7 @@ def build_app(
         requested_since, requested_until = _requested_ends(request)
         description = (
             source_describer.describe_source(
-                bytes.fromhex(source_id_hex),
+                SourceId(bytes.fromhex(source_id_hex)),
                 page=page,
                 requested_since=requested_since,
                 requested_until=requested_until,

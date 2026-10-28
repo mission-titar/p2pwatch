@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 
+from p2pwatch.domain.identifiers import SourceId
 from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.source_history import SourceHistory
 
@@ -22,7 +23,7 @@ class SourceDescriber(ABC):
     @abstractmethod
     def describe_source(
         self,
-        source_id: bytes,
+        source_id: SourceId,
         *,
         page: int,
         requested_since: datetime | None,

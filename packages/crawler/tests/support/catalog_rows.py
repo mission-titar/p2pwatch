@@ -7,7 +7,7 @@ from datetime import datetime
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import FileId
+from p2pwatch.domain.identifiers import FileId, SourceId
 from p2pwatch.domain.source import SourceKey
 
 SEEN_AT = "2026-06-22T10:00:00.000000+00:00"
@@ -85,7 +85,7 @@ def insert_decision(
     )
 
 
-def source_id(user_hash: str) -> bytes:
+def source_id(user_hash: str) -> SourceId:
     return SourceKey(Network.ED2K, user_hash).source_id
 
 

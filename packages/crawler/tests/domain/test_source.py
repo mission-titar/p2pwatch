@@ -36,7 +36,7 @@ def test_source_id_is_the_uuid5_of_network_and_native_id_in_the_source_namespace
 
 
 def test_source_id_never_equals_the_file_id_of_the_same_native_id() -> None:
-    assert SourceKey(Network.ED2K, _HASH).source_id != FileKey(Network.ED2K, _HASH).file_id
+    assert bytes(SourceKey(Network.ED2K, _HASH).source_id) != FileKey(Network.ED2K, _HASH).file_id
 
 
 def test_source_id_differs_per_native_id() -> None:
