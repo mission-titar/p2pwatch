@@ -362,6 +362,13 @@ def test_a_completed_download_notifies_its_targets_and_file() -> None:
     )
 
 
+def test_a_completed_download_without_a_target_logs_unknown() -> None:
+    plan = plan_observability(
+        ev.DownloadCompleted(FileKey(Network.ED2K, _HASH), "Keroro 062.avi", (), _NODE)
+    )
+    assert plan.message == "✅ download completed: unknown"
+
+
 @pytest.mark.parametrize(
     ("notification", "audience"),
     [

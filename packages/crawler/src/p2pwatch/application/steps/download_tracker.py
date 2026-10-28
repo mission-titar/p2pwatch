@@ -14,7 +14,7 @@ from p2pwatch.domain.download.states import DownloadState, FailureReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
-from p2pwatch.domain.observability.events import DownloadCompleted, TargetTitle
+from p2pwatch.domain.observability.events import DownloadCompleted
 from p2pwatch.domain.persisted_wait import remaining_wait
 from p2pwatch.domain.store_error import StoreError
 
@@ -117,12 +117,11 @@ class DownloadTracker:
         """
         self._tracked_download_writer.set_completed(file, self._wall_clock.now())
         states[file] = DownloadState.COMPLETED
-        titles = self._download_labeler.target_titles(file)
         await self._observability_dispatcher.dispatch(
             DownloadCompleted(
                 file,
                 self._download_labeler.best_filename(file),
-                titles or (TargetTitle("unknown", ""),),
+                self._download_labeler.target_titles(file),
                 node_id,
             )
         )

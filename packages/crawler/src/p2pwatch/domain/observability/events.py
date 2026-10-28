@@ -72,7 +72,7 @@ class DownloadQueued:
 class DownloadCompleted:
     file: FileKey
     filename: str  # the clean name, the most sourced
-    target_titles: tuple[TargetTitle, ...]  # every download target of the file
+    target_titles: tuple[TargetTitle, ...]  # every download target of the file, none if unknown
     node_id: str
 
 

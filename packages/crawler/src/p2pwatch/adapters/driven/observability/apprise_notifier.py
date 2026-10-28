@@ -58,7 +58,9 @@ _SOURCE_ALERT_TITLES = {
 
 
 def _targets_section(target_titles: tuple[TargetTitle, ...]) -> str:
-    return "**Targets**\n" + "\n".join(f"{t.target_id} - {t.title}" for t in target_titles)
+    return "**Targets**\n" + (
+        "\n".join(f"{t.target_id} - {t.title}" for t in target_titles) or "unknown"
+    )
 
 
 def _code_name(filename: str) -> str:
