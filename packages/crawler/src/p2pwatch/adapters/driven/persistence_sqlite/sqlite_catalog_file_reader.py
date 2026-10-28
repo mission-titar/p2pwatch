@@ -41,7 +41,7 @@ SORT_COLUMNS: dict[CatalogEntrySort, str] = {
     CatalogEntrySort.NAME: "obs.filename",
     CatalogEntrySort.SIZE: "f.size_bytes",
     CatalogEntrySort.SOURCES: "obs.source_count",
-    CatalogEntrySort.LATEST_SEEN: "obs.observed_at",
+    CatalogEntrySort.LATEST_SEEN: "obs.observed_at_micros",
     CatalogEntrySort.TIER: "dec.best_tier_rank",
 }
 SORT_DIRECTIONS: dict[SortDirection, str] = {SortDirection.ASC: "ASC", SortDirection.DESC: "DESC"}
@@ -124,7 +124,7 @@ SELECT
     obs.duration_seconds,
     obs.bitrate_kbps,
     obs.raw_metadata,
-    obs.observed_at,
+    obs.observed_at_micros,
     obs.node_id,
     f.size_bytes AS file_size_bytes,
     dec.target_ids,

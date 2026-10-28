@@ -7,7 +7,6 @@ from pathlib import Path
 
 from p2pwatch.domain.file_key import FileKey, Network
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_local_at
-from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_local
 
 _A = FileKey(Network.ED2K, "a" * 32)
 _RENAMED = {
@@ -45,7 +44,7 @@ def test_0012_renames_the_two_columns_in_the_schema_and_keeps_every_value(
     rows = connection.execute("SELECT * FROM downloads").fetchall()
     connection.close()
 
-    connection = open_local(path)
+    connection = open_local_at(path, 12)
     try:
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 12
         assert _schema(connection) == [(kind, name, _renamed(sql)) for kind, name, sql in schema]

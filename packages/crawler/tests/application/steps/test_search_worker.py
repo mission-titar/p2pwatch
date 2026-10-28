@@ -183,7 +183,9 @@ async def test_successful_task_records_observation(
     await worker.run_task(SearchTask(keyword="keroro", channel="ed2k"), _NODE)
     assert client.searches == [("keroro", "ed2k")]
     assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 1
-    observed_at = catalog_connection.execute("SELECT observed_at FROM observations").fetchone()
+    observed_at = catalog_connection.execute(
+        "SELECT observed_at_micros FROM observations"
+    ).fetchone()
     assert observed_at == (instant_to_micros(fake_time.wall.now()),)
     assert observation_node_ids(catalog_connection) == decision_node_ids(catalog_connection)
     assert decision_node_ids(catalog_connection) == {_NODE}

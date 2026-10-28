@@ -472,11 +472,11 @@ flowchart LR
   end
 ```
 
-- **`catalog.db`** (version de schéma 12) : la connaissance accumulée, **append-only**, chaque table
+- **`catalog.db`** (version de schéma 14) : la connaissance accumulée, **append-only**, chaque table
   (triggers `BEFORE UPDATE/DELETE -> ABORT`), pour que N nœuds fusionnent en un seul catalogue
   (`python -m p2pwatch merge`). Les insertions sont **idempotentes** (`INSERT OR IGNORE` /
   `ON CONFLICT DO NOTHING`), donc sans danger en cas de redémarrage en pleine écriture.
-- **`local.db`** (version de schéma 11) : l'état d'exécution du nœud (identité, suivi des
+- **`local.db`** (version de schéma 13) : l'état d'exécution du nœud (identité, suivi des
   téléchargements et de leur progression, backoff des recherches, empreinte de la politique
   réévaluée). **Jamais fusionnée** : elle appartient à un seul nœud.
 
@@ -516,7 +516,10 @@ début de son attente en microsecondes et son délai. Les attentes en cours à l
 perdues, et chaque backoff repart de sa base. `catalog/0013` renomme `raw_meta` en `raw_metadata`
 dans `observation_variants` et `source_variants`, `local/0012` `downloads.last_seen_at` et
 `last_progress_at` en `latest_seen_at` et `latest_progress_at` : des `RENAME COLUMN`, comme
-`catalog/0012`, qui ne réécrivent aucune ligne.
+`catalog/0012`, qui ne réécrivent aucune ligne. `catalog/0014` renomme `observed_at` en
+`observed_at_micros` dans `observations` et `source_observations`, `local/0013`
+`backoff_states.started_at` en `started_at_micros` : un instant stocké en entier de microsecondes
+porte son unité dans son nom, par des `RENAME COLUMN` eux aussi.
 
 ### 8.1 Écrire une migration
 
@@ -607,7 +610,7 @@ monotone.
 ```mermaid
 flowchart LR
   s["sources<br/>network, native_id"] --> v["source_variants<br/>file_id, name, software, role,<br/>contact_point, connectable,<br/>raw_metadata, node_id"]
-  v --> o["source_observations<br/>observed_at, session_received_bytes"]
+  v --> o["source_observations<br/>observed_at_micros, session_received_bytes"]
 ```
 
 - **`sources`**, l'identité : `source_id` est un UUID v5 de `network:native_id`, comme `file_id`
@@ -621,8 +624,9 @@ flowchart LR
 - **`source_observations`**, un point par variante et par lecture, en microsecondes, avec
   `session_received_bytes`, le compteur d'octets qu'aMule tient pour ce client (reçus de lui tous
   fichiers confondus, remis à zéro quand aMule recrée le client). La clé primaire
-  `(variant_id, observed_at)` refuse un second point au même instant ; l'écrivain l'insère avec
-  `ON CONFLICT DO NOTHING`, jamais `OR IGNORE`, qui avalerait aussi le `CHECK` du compteur (§8.2).
+  `(variant_id, observed_at_micros)` refuse un second point au même instant ; l'écrivain l'insère
+  avec `ON CONFLICT DO NOTHING`, jamais `OR IGNORE`, qui avalerait aussi le `CHECK` du compteur
+  (§8.2).
 
 Un état qu'aMule traverse de lui-même (`idle`, `connecting`...) prend l'utilité du dernier point de
 la source sur ce fichier et ce nœud (par `source_id`, ou par nom sans user hash), si ce point tombe

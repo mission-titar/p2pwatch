@@ -62,8 +62,8 @@ _COPY_VARIANTS = (
 )
 
 _COPY_OBSERVATIONS = f"""
-INSERT OR IGNORE INTO main.observations (variant_id, observed_at, source_count)
-SELECT d.variant_id, o.observed_at, o.source_count
+INSERT OR IGNORE INTO main.observations (variant_id, observed_at_micros, source_count)
+SELECT d.variant_id, o.observed_at_micros, o.source_count
 FROM {_SRC}.observations AS o
 JOIN {_SRC}.observation_variants AS s ON s.variant_id = o.variant_id
 JOIN main.observation_variants AS d ON d.content_hash = s.content_hash
@@ -101,8 +101,9 @@ _COPY_SOURCE_VARIANTS = (
 )
 
 _COPY_SOURCE_OBSERVATIONS = f"""
-INSERT OR IGNORE INTO main.source_observations (variant_id, observed_at, session_received_bytes)
-SELECT d.variant_id, o.observed_at, o.session_received_bytes
+INSERT OR IGNORE INTO main.source_observations
+    (variant_id, observed_at_micros, session_received_bytes)
+SELECT d.variant_id, o.observed_at_micros, o.session_received_bytes
 FROM {_SRC}.source_observations AS o
 JOIN {_SRC}.source_variants AS s ON s.variant_id = o.variant_id
 JOIN main.source_variants AS d ON d.content_hash = s.content_hash

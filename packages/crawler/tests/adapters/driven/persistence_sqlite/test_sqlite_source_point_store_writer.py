@@ -67,11 +67,11 @@ def source_point_store(catalog: sqlite3.Connection) -> SqliteSourcePointStore:
 
 
 def _points(catalog: sqlite3.Connection) -> list[tuple[object, ...]]:
-    """``(role, observed_at, session_received_bytes)`` in time order."""
+    """``(role, observed_at_micros, session_received_bytes)`` in time order."""
     return catalog.execute(
-        "SELECT v.role, o.observed_at, o.session_received_bytes"
+        "SELECT v.role, o.observed_at_micros, o.session_received_bytes"
         " FROM source_observations AS o JOIN source_variants AS v USING (variant_id)"
-        " ORDER BY o.observed_at, v.node_id"
+        " ORDER BY o.observed_at_micros, v.node_id"
     ).fetchall()
 
 

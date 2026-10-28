@@ -40,7 +40,7 @@ ORDER BY queued_at ASC, native_id ASC
 """
 
 _SQL_BACKOFF = """\
-SELECT client_name, channel, attempts, started_at, delay_seconds
+SELECT client_name, channel, attempts, started_at_micros, delay_seconds
 FROM backoff_states
 ORDER BY client_name ASC, channel ASC
 """
@@ -93,7 +93,7 @@ class SqliteNodeStateReader(NodeStateReader):
         backoff_state_by_key = {
             BackoffKey(row["client_name"], row["channel"]): BackoffState(
                 row["attempts"],
-                micros_to_instant(row["started_at"]),
+                micros_to_instant(row["started_at_micros"]),
                 timedelta(seconds=row["delay_seconds"]),
             )
             for row in connection.execute(_SQL_BACKOFF)

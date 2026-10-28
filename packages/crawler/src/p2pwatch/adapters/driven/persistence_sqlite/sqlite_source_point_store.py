@@ -18,7 +18,7 @@ from p2pwatch.domain.source import LatestPoint, SourceKey, SourcePoint, SourceRe
 # variants without one (D4). One seek per variant, never a walk of the points.
 # The unary + keeps the planner off idx_source_variants_node_id, which holds all this node's rows.
 _LATEST_POINT = """
-SELECT v.role, o.observed_at, o.session_received_bytes
+SELECT v.role, o.observed_at_micros, o.session_received_bytes
 FROM source_variants AS v
 INNER JOIN source_observations AS o ON v.variant_id = o.variant_id
 WHERE
@@ -26,11 +26,12 @@ WHERE
     AND v.source_id IS :source_id
     AND (:source_id IS NOT NULL OR v.name = :source_name)
     AND +v.node_id = :node_id
-    AND o.observed_at = (
-        SELECT MAX(p.observed_at) FROM source_observations AS p
-        WHERE p.variant_id = v.variant_id AND p.observed_at >= :since AND p.observed_at < :before
+    AND o.observed_at_micros = (
+        SELECT MAX(p.observed_at_micros) FROM source_observations AS p
+        WHERE p.variant_id = v.variant_id
+            AND p.observed_at_micros >= :since AND p.observed_at_micros < :before
     )
-ORDER BY o.observed_at DESC
+ORDER BY o.observed_at_micros DESC
 LIMIT 1
 """
 
@@ -49,22 +50,22 @@ ON CONFLICT (content_hash) DO NOTHING
 
 # Not OR IGNORE, which would also swallow the CHECK on session_received_bytes (D2).
 _INSERT_POINT = """
-INSERT INTO source_observations (variant_id, observed_at, session_received_bytes)
+INSERT INTO source_observations (variant_id, observed_at_micros, session_received_bytes)
 SELECT variant_id, ?, ? FROM source_variants WHERE content_hash = ?
-ON CONFLICT (variant_id, observed_at) DO NOTHING
+ON CONFLICT (variant_id, observed_at_micros) DO NOTHING
 """
 
 # Each variant's latest point before the round, one seek each (D5's reason); + as in _LATEST_POINT.
 _EARLIER_POINTS = """
-SELECT v.role, o.observed_at, o.session_received_bytes
+SELECT v.role, o.observed_at_micros, o.session_received_bytes
 FROM source_variants AS v
 INNER JOIN source_observations AS o ON v.variant_id = o.variant_id
 WHERE
     v.source_id = :source_id
     AND +v.node_id = :node_id
-    AND o.observed_at = (
-        SELECT MAX(p.observed_at) FROM source_observations AS p
-        WHERE p.variant_id = v.variant_id AND p.observed_at < :before
+    AND o.observed_at_micros = (
+        SELECT MAX(p.observed_at_micros) FROM source_observations AS p
+        WHERE p.variant_id = v.variant_id AND p.observed_at_micros < :before
     )
 """
 
@@ -72,7 +73,7 @@ _HAS_POINTS_BEFORE = """
 SELECT EXISTS (
     SELECT 1 FROM source_variants AS v
     INNER JOIN source_observations AS o ON v.variant_id = o.variant_id
-    WHERE v.node_id = ? AND o.observed_at < ?
+    WHERE v.node_id = ? AND o.observed_at_micros < ?
 )
 """
 
@@ -163,8 +164,10 @@ class SqliteSourcePointStore(SourcePointWriter, SourcePointReader):
         return bool(row[0])
 
 
-def _latest_point(role: str, observed_at: int, session_received_bytes: int) -> LatestPoint:
-    return LatestPoint(SourceRole(role), micros_to_instant(observed_at), session_received_bytes)
+def _latest_point(role: str, observed_at_micros: int, session_received_bytes: int) -> LatestPoint:
+    return LatestPoint(
+        SourceRole(role), micros_to_instant(observed_at_micros), session_received_bytes
+    )
 
 
 def _variant_columns(point: SourcePoint) -> tuple[bytes | str | bool | None, ...]:

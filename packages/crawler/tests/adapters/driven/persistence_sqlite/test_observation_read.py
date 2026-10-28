@@ -230,7 +230,8 @@ def test_the_timeline_seeks_its_interval_by_primary_key(connection: sqlite3.Conn
         )
     ]
     assert (
-        "SEARCH o USING PRIMARY KEY (variant_id=? AND observed_at>? AND observed_at<?)" in plan
+        "SEARCH o USING PRIMARY KEY"
+        " (variant_id=? AND observed_at_micros>? AND observed_at_micros<?)" in plan
     ), plan
 
 

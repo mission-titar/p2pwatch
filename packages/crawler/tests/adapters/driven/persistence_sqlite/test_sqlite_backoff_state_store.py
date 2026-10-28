@@ -54,7 +54,8 @@ def test_a_backoff_state_is_one_row_its_start_in_micros(
 ) -> None:
     backoff_state_store.set_backoff_states(_BACKOFF)
     rows = connection.execute(
-        "SELECT client_name, channel, attempts, started_at, delay_seconds FROM backoff_states"
+        "SELECT client_name, channel, attempts, started_at_micros, delay_seconds"
+        " FROM backoff_states"
         " ORDER BY channel"
     ).fetchall()
     started_at_micros = 1_781_258_400_123_456

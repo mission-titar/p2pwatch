@@ -82,7 +82,7 @@ def test_record_observation_round_trip(
         " keyword, node_id, content_hash FROM observation_variants"
     ).fetchone()
     assert row == (*variant, content_hash(*variant))
-    observation = connection.execute("SELECT observed_at, source_count FROM observations")
+    observation = connection.execute("SELECT observed_at_micros, source_count FROM observations")
     assert observation.fetchall() == [(iso_to_micros(_T0_ISO), 5)]
 
 

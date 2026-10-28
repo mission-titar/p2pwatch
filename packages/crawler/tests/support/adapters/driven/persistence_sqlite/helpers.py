@@ -25,7 +25,7 @@ _ROWS_BY_TABLE: Mapping[str, str] = {
     "files": "SELECT native_id, size_bytes FROM files",
     "observations": (
         "SELECT f.native_id, v.filename, v.size_bytes, v.duration_seconds, v.bitrate_kbps,"
-        " v.raw_metadata, v.keyword, v.node_id, o.observed_at, o.source_count"
+        " v.raw_metadata, v.keyword, v.node_id, o.observed_at_micros, o.source_count"
         " FROM files AS f JOIN observation_variants AS v USING (file_id)"
         " JOIN observations AS o USING (variant_id)"
     ),
@@ -40,7 +40,7 @@ _ROWS_BY_TABLE: Mapping[str, str] = {
         " LEFT JOIN sources AS s ON s.source_id = v.source_id"
     ),
     "source_observations": (
-        "SELECT v.content_hash, o.observed_at, o.session_received_bytes"
+        "SELECT v.content_hash, o.observed_at_micros, o.session_received_bytes"
         " FROM source_observations AS o JOIN source_variants AS v USING (variant_id)"
     ),
 }

@@ -167,6 +167,10 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
 - **Dans le catalogue, la colonne `media_length_sec` devient `duration_seconds`**, désormais dans
   `observation_variants`, et la colonne `raw_meta` de `observation_variants` et de
   `source_variants` devient `raw_metadata`. Adaptez vos requêtes de la console SQL.
+- **Un instant stocké en entier de microsecondes depuis l'epoch porte son unité dans son nom** :
+  `observed_at` devient `observed_at_micros` dans `observations` et `source_observations` du
+  catalogue, et `started_at` devient `started_at_micros` dans `backoff_states` de `local.db`.
+  Adaptez vos requêtes de la console SQL.
 - **Les paramètres d'URL de `/files` changent de nom** : `q` devient `search`, `target` devient
   `target_id` et `dir` devient `direction`. Les anciens sont ignorés : mettez à jour vos favoris.
   Un `?tier=` inconnu est ignoré lui aussi, comme un `sort` ou un `direction` inconnu : la liste

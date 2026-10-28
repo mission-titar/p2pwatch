@@ -29,7 +29,7 @@ from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener imp
 
 # The current catalog schema version = the last catalog migration's number.
 # open_catalog stamps the output to it; the guard rejects any source that is not at it.
-_CURRENT_SCHEMA_VERSION = 13
+_CURRENT_SCHEMA_VERSION = 14
 _T1 = "2026-06-11T12:00:00.000000+00:00"
 _T2 = "2026-06-11T13:00:00.000000+00:00"
 _COPIER_LOGGER = "p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier"
@@ -67,7 +67,7 @@ def _full_catalog(letter: str, *, node_id: str) -> dict[str, list[dict[str, obje
             }
         ],
         "source_observations": [
-            {"native_id": ed2k, "user_hash": ed2k, "node_id": node_id, "observed_at": 10}
+            {"native_id": ed2k, "user_hash": ed2k, "node_id": node_id, "observed_at_micros": 10}
         ],
     }
 
@@ -94,7 +94,7 @@ def _source_points(
                 "native_id": HASH_A,
                 "user_hash": user_hash,
                 "node_id": "n1",
-                "observed_at": moment,
+                "observed_at_micros": moment,
                 "session_received_bytes": moment,
             }
             for moment in moments
