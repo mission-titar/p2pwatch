@@ -17,6 +17,7 @@ from p2pwatch.application.use_cases.describe_file import DescribeFile
 from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.matching_read import MatchingExplainer
 from p2pwatch.domain.observation import FileObservation, ReportedFile
@@ -33,15 +34,17 @@ _GAP = timedelta(seconds=90)
 _OBSERVATION = FileObservation(
     ReportedFile(_FILE, "keroro_062a.avi", 100, 5, "keroro", 1300, 900, ()),
     _NOW - timedelta(hours=1),
-    "n1",
+    NodeId("n1"),
 )
 _DECISION = DatedDecision(
-    _FILE, DecisionRecord(TargetId("062A"), "catalog", DecisionTier.CATALOG), _NOW, "n1"
+    _FILE, DecisionRecord(TargetId("062A"), "catalog", DecisionTier.CATALOG), _NOW, NodeId("n1")
 )
 _HISTORY = FileHistory(
     _FILE, 100, (_OBSERVATION,), _OBSERVATION, (_DECISION,), ("Keroro 62a ITA.avi", "keroro.avi")
 )
-_PERIOD = SharingPeriod(_FILE, None, "Teammate", SourceRole.QUEUED, None, None, _NOW, _NOW, 0, "n1")
+_PERIOD = SharingPeriod(
+    _FILE, None, "Teammate", SourceRole.QUEUED, None, None, _NOW, _NOW, 0, NodeId("n1")
+)
 _TARGETS = parse_targets(
     yaml.safe_load(
         """\

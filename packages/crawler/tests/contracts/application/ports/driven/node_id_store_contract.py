@@ -6,6 +6,7 @@ from typing import Protocol
 
 import pytest
 
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.store_error import StoreError
 
 _CREATED_AT = datetime(2026, 6, 11, 12, 0, 0, tzinfo=UTC)
@@ -14,9 +15,9 @@ _CREATED_AT = datetime(2026, 6, 11, 12, 0, 0, tzinfo=UTC)
 class NodeIdStore(Protocol):
     """Both ports of the pair, which one store implements."""
 
-    def read_node_id(self) -> str | None: ...
+    def read_node_id(self) -> NodeId | None: ...
 
-    def record_node_id(self, node_id: str, created_at: datetime) -> None: ...
+    def record_node_id(self, node_id: NodeId, created_at: datetime) -> None: ...
 
 
 class NodeIdStoreContract(ABC):
@@ -29,10 +30,10 @@ class NodeIdStoreContract(ABC):
         assert node_id_store.read_node_id() is None
 
     def test_a_recorded_node_id_is_read_back(self, node_id_store: NodeIdStore) -> None:
-        node_id_store.record_node_id("first-node", _CREATED_AT)
+        node_id_store.record_node_id(NodeId("first-node"), _CREATED_AT)
         assert node_id_store.read_node_id() == "first-node"
 
     def test_a_second_node_id_is_refused(self, node_id_store: NodeIdStore) -> None:
-        node_id_store.record_node_id("first-node", _CREATED_AT)
+        node_id_store.record_node_id(NodeId("first-node"), _CREATED_AT)
         with pytest.raises(StoreError):
-            node_id_store.record_node_id("second-node", _CREATED_AT)
+            node_id_store.record_node_id(NodeId("second-node"), _CREATED_AT)

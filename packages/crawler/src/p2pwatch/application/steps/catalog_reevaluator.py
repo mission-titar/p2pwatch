@@ -7,6 +7,7 @@ from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.policy_fingerprint_reader import PolicyFingerprintReader
 from p2pwatch.application.ports.driven.policy_fingerprint_writer import PolicyFingerprintWriter
 from p2pwatch.application.steps.file_judge import FileJudge
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.store_error import StoreError
 
 
@@ -42,7 +43,7 @@ class CatalogReevaluator:
         self._progress_every_files = progress_every_files
         self._logger = logger
 
-    async def reevaluate_if_policy_changed(self, node_id: str) -> None:
+    async def reevaluate_if_policy_changed(self, node_id: NodeId) -> None:
         """Re-evaluates iff the stored policy fingerprint differs, then stores it; logs either
         outcome."""
         if self._policy_fingerprint_reader.read_policy_fingerprint() == self._policy_fingerprint:
@@ -57,7 +58,7 @@ class CatalogReevaluator:
             summary.rows_written,
         )
 
-    async def _reevaluate_catalog(self, node_id: str) -> ReevaluationSummary:
+    async def _reevaluate_catalog(self, node_id: NodeId) -> ReevaluationSummary:
         """Judges each file in turn; a ``StoreError`` on one is logged and the sweep goes on."""
         total = self._catalog_scan_reader.read_file_count()
         files_evaluated = 0

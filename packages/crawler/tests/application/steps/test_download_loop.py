@@ -11,6 +11,7 @@ from p2pwatch.application.steps.download_loop import DownloadLoop
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.source_watcher import SourceWatcher
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.wake_subject import WakeSubject
 from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
@@ -29,7 +30,7 @@ from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedD
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
-_NODE = "n1"
+_NODE = NodeId("n1")
 
 
 def _download_loop(

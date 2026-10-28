@@ -10,6 +10,7 @@ from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability import events as ev
 from p2pwatch.domain.observability.node_metric import (
     NodeCounter,
@@ -25,7 +26,7 @@ from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricSto
 from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
 from tests.fakes.adapters.driven.fake_raising_notifier import FakeRaisingNotifier
 
-_NODE = "titar-node-1"
+_NODE = NodeId("titar-node-1")
 _COMPLETED = ev.DownloadCompleted(
     FileKey(Network.ED2K, "a" * 32),
     "Keroro 062.avi",

@@ -7,6 +7,7 @@ from datetime import datetime
 from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
 from p2pwatch.domain.file_key import FileKey
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 
 
@@ -28,7 +29,7 @@ class TrackedDownload:
 class NodeState:
     """``node_id`` and ``created_at`` are ``None`` until the node first records its id."""
 
-    node_id: str | None
+    node_id: NodeId | None
     created_at: datetime | None
     downloads: tuple[TrackedDownload, ...]
     backoff_state_by_key: Mapping[BackoffKey, BackoffState]

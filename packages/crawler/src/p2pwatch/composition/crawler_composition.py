@@ -120,6 +120,7 @@ from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.matching_read import MatchingExplainer
 
 _logger = logging.getLogger(__name__)
@@ -419,7 +420,7 @@ class CrawlerComposition(CrawlerRunner):
                 monotonic_clock=monotonic_clock,
                 logger=StdlibLogger(SearchTaskRunner.__module__),
             )
-            loops: list[Callable[[str], Coroutine[object, object, None]]] = [
+            loops: list[Callable[[NodeId], Coroutine[object, object, None]]] = [
                 search_task_runner.run,
                 status_loop.run,
             ]

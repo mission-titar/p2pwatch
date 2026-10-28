@@ -27,6 +27,7 @@ import apprise
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from p2pwatch.application.ports.driven.notifier import Notifier
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import TargetTitle
 from p2pwatch.domain.observability.notification import (
     CompletedDownload,
@@ -128,9 +129,9 @@ class AppriseNotifier(Notifier):
     def __init__(self, targets: AppriseTargets, *, apprise_factory: Callable[..., object]) -> None:
         self._targets = targets
         self._apprise_factory = apprise_factory
-        self._groups_by_node_id: dict[str, tuple[object, object]] = {}
+        self._groups_by_node_id: dict[NodeId, tuple[object, object]] = {}
 
-    def _groups(self, node_id: str) -> tuple[object, object]:
+    def _groups(self, node_id: NodeId) -> tuple[object, object]:
         """The node's prefixed and bare groups, built on its first notification."""
         # Per node: apprise hands the asset, its username, to each URL when it is added.
         if node_id in self._groups_by_node_id:

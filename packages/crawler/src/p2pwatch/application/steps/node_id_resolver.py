@@ -4,6 +4,7 @@ from p2pwatch.application.ports.driven.node_id_generator import NodeIdGenerator
 from p2pwatch.application.ports.driven.node_id_reader import NodeIdReader
 from p2pwatch.application.ports.driven.node_id_writer import NodeIdWriter
 from p2pwatch.application.ports.driven.wall_clock import WallClock
+from p2pwatch.domain.identifiers import NodeId
 
 
 class NodeIdResolver:
@@ -22,7 +23,7 @@ class NodeIdResolver:
         self._node_id_generator = node_id_generator
         self._wall_clock = wall_clock
 
-    def resolve(self) -> str:
+    def resolve(self) -> NodeId:
         """The stored ``node_id``, else a new one, recorded."""
         stored_node_id = self._node_id_reader.read_node_id()
         if stored_node_id is not None:

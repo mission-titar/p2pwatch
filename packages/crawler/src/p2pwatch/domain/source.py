@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import NodeId
 
 # Its own namespace, so that a source_id never equals a file_id (stage 4 spec, D2).
 _NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "https://mission-titar.github.io/p2pwatch/source")
@@ -161,7 +162,7 @@ class SourcePoint:
     reading: SourceReading
     role: SourceRole
     observed_at: datetime
-    node_id: str
+    node_id: NodeId
 
 
 @dataclass(frozen=True)

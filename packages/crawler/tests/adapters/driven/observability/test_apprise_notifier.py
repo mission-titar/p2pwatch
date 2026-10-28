@@ -12,6 +12,7 @@ from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
 from p2pwatch.domain.file_key import Network
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import TargetTitle
 from p2pwatch.domain.observability.notification import (
     CompletedDownload,
@@ -26,7 +27,7 @@ from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.source import SourceKey
 from tests.fakes.adapters.driven.fake_apprise import FakeApprise
 
-_NODE = "titar-node-1"
+_NODE = NodeId("titar-node-1")
 _HASH = "8f3a1c0b9e7d44a2b6c1f0e9d8a7b6c5"
 _SOURCE = SourceKey(Network.ED2K, "1f2e3d4c" * 4)
 _062A = TargetTitle(TargetId("062A"), "Les demoiselles cambrioleuses")
@@ -100,7 +101,7 @@ async def test_a_node_keeps_its_groups_and_another_node_gets_its_own() -> None:
     await notifier.notify(Audience.COMMUNITY, _LINE)
     await notifier.notify(Audience.COMMUNITY, _LINE)
     await notifier.notify(
-        Audience.COMMUNITY, CompletedDownload((_062A,), "Keroro 062.avi", "titar-node-2")
+        Audience.COMMUNITY, CompletedDownload((_062A,), "Keroro 062.avi", NodeId("titar-node-2"))
     )
     assert [group.asset.app_id for group in groups] == [
         "p2pwatch - titar-node-1",

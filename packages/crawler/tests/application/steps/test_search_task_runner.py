@@ -24,6 +24,7 @@ from p2pwatch.application.steps.search_task_runner import SearchTaskRunner
 from p2pwatch.application.steps.search_worker import SearchWorker
 from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
@@ -42,7 +43,7 @@ from tests.support.application.steps.observability_dispatcher import Observabili
 from tests.support.catalog_rows import observation_node_ids
 from tests.support.virtual_time import EPOCH, VirtualLoop
 
-_NODE = "n1"
+_NODE = NodeId("n1")
 _HOUR = 3600.0
 _POLICY = BackoffPolicy(
     base_seconds=60.0,

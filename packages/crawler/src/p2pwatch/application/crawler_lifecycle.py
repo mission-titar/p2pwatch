@@ -8,6 +8,7 @@ from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.loop_supervisor import LoopSupervisor
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import CrawlerStarted
 
 
@@ -22,7 +23,7 @@ class CrawlerLifecycle:
         observability_dispatcher: ObservabilityDispatcher,
         catalog_reevaluator: CatalogReevaluator,
         backoff: BackoffRegistry,
-        loops: Sequence[Callable[[str], Coroutine[object, object, None]]],
+        loops: Sequence[Callable[[NodeId], Coroutine[object, object, None]]],
         download_enabled: bool,
         loop_supervisor: LoopSupervisor,
         logger: Logger,
@@ -56,6 +57,6 @@ class CrawlerLifecycle:
 
 
 def _with_node_id(
-    loop: Callable[[str], Coroutine[object, object, None]], node_id: str
+    loop: Callable[[NodeId], Coroutine[object, object, None]], node_id: NodeId
 ) -> Callable[[], Coroutine[object, object, None]]:
     return lambda: loop(node_id)

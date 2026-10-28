@@ -32,6 +32,7 @@ from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDi
 from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from tests.support.adapters.driven.persistence_sqlite.catalog_seeds import (
     seed,
@@ -124,7 +125,7 @@ def test_read_catalog_entries_no_filter_returns_all(catalog_db: Path) -> None:
                     FileKey(Network.ED2K, "a" * 32), "keroro_062.avi", 100, 5, keyword="keroro"
                 ),
                 observed_at=datetime(2026, 6, 22, 10, tzinfo=UTC),
-                node_id="n1",
+                node_id=NodeId("n1"),
             ),
             decisions=(
                 DecisionRecord(TargetId("062A"), "id_segment_exact", DecisionTier.DOWNLOAD),
@@ -229,7 +230,7 @@ def test_file_history_carries_observations_and_dated_decisions(catalog_db: Path)
                 target_id=TargetId("062A"), rule_name="id_segment_exact", tier=DecisionTier.DOWNLOAD
             ),
             decided_at=datetime(2026, 6, 22, 10, 0, 1, tzinfo=UTC),
-            node_id="n1",
+            node_id=NodeId("n1"),
         ),
     )
     assert file_history.decisions[0].decision.tier is DecisionTier.DOWNLOAD
@@ -270,7 +271,7 @@ def test_file_history_reads_a_recorded_decision_back_to_the_microsecond(catalog_
         FileKey(Network.ED2K, "a" * 32),
         DecisionRecord(TargetId("062A"), "id_segment_exact", DecisionTier.DOWNLOAD),
         datetime(2026, 6, 22, 10, 0, 1, 123456, tzinfo=UTC),
-        "n1",
+        NodeId("n1"),
     )
     with closing(sqlite3.connect(catalog_db)) as connection, connection:
         insert_file(connection, "a" * 32)

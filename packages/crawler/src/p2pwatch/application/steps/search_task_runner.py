@@ -14,6 +14,7 @@ from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
 from p2pwatch.application.steps.backoff_registry import BackoffRegistry
 from p2pwatch.application.steps.search_worker import SearchTask, SearchWorker
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.domain.store_error import StoreError
@@ -42,7 +43,7 @@ class SearchTaskRunner:
         self._logger = logger
         self._saved: dict[BackoffKey, BackoffState] = {}
 
-    async def run(self, node_id: str) -> None:
+    async def run(self, node_id: NodeId) -> None:
         """Runs every task until cancelled, recording what they find under ``node_id``."""
         # Taken here, once the lifecycle resumed the backoff, so no search rewrites what it read.
         self._saved = self._backoff.snapshot()
@@ -55,7 +56,9 @@ class SearchTaskRunner:
                             self._search_forever(worker, SearchTask(text, channel), node_id)
                         )
 
-    async def _search_forever(self, worker: SearchWorker, task: SearchTask, node_id: str) -> None:
+    async def _search_forever(
+        self, worker: SearchWorker, task: SearchTask, node_id: NodeId
+    ) -> None:
         while True:
             await self._run_state_reader.wait_until_resumed()
             wait = worker.time_until_ready(task.channel)

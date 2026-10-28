@@ -18,6 +18,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import 
 from p2pwatch.application.ports.driven.node_state_reader import NodeStateReader
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 
@@ -100,7 +101,7 @@ class SqliteNodeStateReader(NodeStateReader):
         }
 
         return NodeState(
-            node_id=identity_row["node_id"] if identity_row is not None else None,
+            node_id=NodeId(identity_row["node_id"]) if identity_row is not None else None,
             created_at=(
                 micros_to_instant(identity_row["created_at_micros"])
                 if identity_row is not None

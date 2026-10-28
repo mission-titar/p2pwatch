@@ -24,6 +24,7 @@ from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision, Retraction
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.store_error import StoreError
 from p2pwatch.domain.wake_subject import WakeSubject
@@ -35,7 +36,7 @@ from tests.fakes.adapters.driven.fake_wall_clock import FakeWallClock
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 from tests.support.catalog_rows import decision_node_ids, decision_tiers
 
-_NODE = "n1"
+_NODE = NodeId("n1")
 _FINGERPRINT = "policy-2"
 _HASH_DL = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _HASH_CAT = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

@@ -307,7 +307,7 @@ depends_on = ["p2pwatch.application.ports.driven.logger"]
 [[modules]]
 path = "p2pwatch.adapters.driven.uuid4_node_id_generator"
 layer = "adapters"
-depends_on = ["p2pwatch.application.ports.driven.node_id_generator"]
+depends_on = ["p2pwatch.application.ports.driven.node_id_generator", "p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.adapters.driven.system_wall_clock"
@@ -575,17 +575,17 @@ depends_on = ["p2pwatch.domain"]
 [[modules]]
 path = "p2pwatch.application.ports.driven.node_id_generator"
 layer = "ports"
-depends_on = []
+depends_on = ["p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.application.ports.driven.node_id_reader"
 layer = "ports"
-depends_on = []
+depends_on = ["p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.application.ports.driven.node_id_writer"
 layer = "ports"
-depends_on = []
+depends_on = ["p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.application.ports.driven.node_state_reader"

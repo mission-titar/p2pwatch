@@ -11,6 +11,7 @@ import pytest
 from p2pwatch.adapters.driven.persistence_sqlite import observation_read
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import insert_file, insert_observation
@@ -18,6 +19,7 @@ from tests.support.catalog_rows import insert_file, insert_observation
 _A, _B, _C = "a" * 32, "b" * 32, "c" * 32
 _TIE = "2026-06-01T10:00:00.000000+00:00"
 _YEAR_3000 = 32_503_680_000_000_000
+_NODE = NodeId("n1")
 
 
 def _key(native_id: str) -> FileKey:
@@ -60,7 +62,7 @@ def _observation(
     media: int | None = None,
     native_id: str = _A,
     sources: int = 5,
-    node_id: str = "n1",
+    node_id: NodeId = _NODE,
 ) -> FileObservation:
     reported_file = ReportedFile(
         file=_key(native_id),
@@ -77,7 +79,7 @@ def _observation(
 def test_every_read_carries_the_node_of_its_observation(connection: sqlite3.Connection) -> None:
     insert_file(connection, _A)
     _raw(connection, _A, "keroro.avi", _TIE, node_id="n2")
-    observation = _observation("keroro.avi", _TIE, node_id="n2")
+    observation = _observation("keroro.avi", _TIE, node_id=NodeId("n2"))
     assert observation_read.latest_observation(connection, _key(_A)) == observation
     assert list(observation_read.iter_latest_observations(connection)) == [observation]
     assert observation_read.best_observation(connection, _key(_A)) == observation

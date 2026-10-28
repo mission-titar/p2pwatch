@@ -13,6 +13,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import 
     ThreadReadConnections,
 )
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
@@ -159,9 +160,11 @@ def test_sharing_periods_join_each_identity_on_each_node_newest_first(catalog_db
     key, queued_role = SourceKey(Network.ED2K, _USER), SourceRole.QUEUED
     at_30, at_45 = _at(30 * _S), _at(45 * _S)
     assert periods == (
-        SharingPeriod(a, None, "Teammate", queued_role, None, None, at_45, at_45, 0, "n1"),
-        SharingPeriod(a, None, None, queued_role, None, True, at_30, at_30, 0, "n1"),
-        SharingPeriod(a, key, "AnimuseeFMR", queued_role, None, None, at_30, at_30, 0, "n2"),
+        SharingPeriod(a, None, "Teammate", queued_role, None, None, at_45, at_45, 0, NodeId("n1")),
+        SharingPeriod(a, None, None, queued_role, None, True, at_30, at_30, 0, NodeId("n1")),
+        SharingPeriod(
+            a, key, "AnimuseeFMR", queued_role, None, None, at_30, at_30, 0, NodeId("n2")
+        ),
         SharingPeriod(
             a,
             key,
@@ -172,7 +175,7 @@ def test_sharing_periods_join_each_identity_on_each_node_newest_first(catalog_db
             _at(0),
             _at(60 * _S),
             0,
-            "n1",
+            NodeId("n1"),
         ),
     )
 
@@ -296,7 +299,16 @@ def _period(
     file: FileKey, source: SourceKey | None, source_name: str | None, first: int, last: int
 ) -> SharingPeriod:
     return SharingPeriod(
-        file, source, source_name, SourceRole.QUEUED, None, None, _at(first), _at(last), 0, "n1"
+        file,
+        source,
+        source_name,
+        SourceRole.QUEUED,
+        None,
+        None,
+        _at(first),
+        _at(last),
+        0,
+        NodeId("n1"),
     )
 
 
@@ -319,7 +331,9 @@ def test_a_source_history_holds_its_names_its_periods_over_every_file_and_their_
         FileKey(Network.ED2K, "a" * 32),
         FileKey(Network.ED2K, "b" * 32),
     )
-    sending = SharingPeriod(b, key, None, SourceRole.SENDING, None, None, _at(50), _at(60), 0, "n1")
+    sending = SharingPeriod(
+        b, key, None, SourceRole.SENDING, None, None, _at(50), _at(60), 0, NodeId("n1")
+    )
     assert _source_history(catalog_db, _USER) == SourceHistory(
         source=key,
         source_namings=(
@@ -375,7 +389,7 @@ def test_a_source_name_history_holds_its_hashes_and_its_periods_without_one(
     user, other = SourceKey(Network.ED2K, _USER), SourceKey(Network.ED2K, _OTHER)
     b = FileKey(Network.ED2K, "b" * 32)
     hashless = SharingPeriod(
-        b, None, "AnimuseeFMR", SourceRole.STANDBY, None, None, _at(95), _at(95), 0, "n1"
+        b, None, "AnimuseeFMR", SourceRole.STANDBY, None, None, _at(95), _at(95), 0, NodeId("n1")
     )
     assert _source_name_history(catalog_db, "AnimuseeFMR") == SourceNameHistory(
         source_name="AnimuseeFMR",

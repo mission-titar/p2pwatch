@@ -19,6 +19,7 @@ from p2pwatch.application.steps.search_worker import (
     SearchWorker,
 )
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.node_metric import NodeCounter, NodeMetricSample
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey
@@ -39,7 +40,7 @@ from tests.support.catalog_rows import (
     observation_node_ids,
 )
 
-_NODE = "n1"
+_NODE = NodeId("n1")
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _DL_NAME = "Keroro N°062A Les demoiselles cambrioleuses.avi"
 _CLIENT = BackoffKey("amule-1", None)

@@ -12,6 +12,7 @@ from typing import Literal
 from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.file_target_decision import FileTargetDecision
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.source import SourceKey
 
 
@@ -61,7 +62,7 @@ class DecisionsRecorded:
     filename: str  # the clean name, the most sourced
     size_bytes: int
     changes: tuple[DecisionChange, ...]
-    node_id: str
+    node_id: NodeId
 
 
 @dataclass(frozen=True)
@@ -74,7 +75,7 @@ class DownloadCompleted:
     file: FileKey
     filename: str  # the clean name, the most sourced
     target_titles: tuple[TargetTitle, ...]  # every download target of the file, none if unknown
-    node_id: str
+    node_id: NodeId
 
 
 type ChannelField = Literal["connected", "connectable"]
@@ -96,7 +97,7 @@ class ChannelDegraded:
     channel: str
     field: ChannelField
     degraded_for_seconds: float
-    node_id: str
+    node_id: NodeId
 
 
 @dataclass(frozen=True)
@@ -104,7 +105,7 @@ class ChannelRecovered:
     client_name: str
     channel: str
     field: ChannelField
-    node_id: str
+    node_id: NodeId
 
 
 @dataclass(frozen=True)
@@ -112,13 +113,13 @@ class ClientUnreachableLasting:
     # No answer from the client's API for ``unreachable_for_seconds``: emitted once until one comes.
     client_name: str
     unreachable_for_seconds: float
-    node_id: str
+    node_id: NodeId
 
 
 @dataclass(frozen=True)
 class ClientReachableAgain:
     client_name: str
-    node_id: str
+    node_id: NodeId
 
 
 @dataclass(frozen=True)
@@ -131,7 +132,7 @@ class DiskSpaceLow:
     # Emitted only on the crossing below the floor: the download loop owns the edge.
     free_bytes: int
     min_free_bytes: int
-    node_id: str
+    node_id: NodeId
 
 
 @dataclass(frozen=True)
@@ -142,7 +143,7 @@ class SourceFirstUseful:
     file: FileKey
     filename: str  # the clean name, the most sourced
     target_titles: tuple[TargetTitle, ...]  # none for a file without one
-    node_id: str
+    node_id: NodeId
 
 
 @dataclass(frozen=True)
@@ -154,13 +155,13 @@ class SourceReappeared:
     filename: str
     target_titles: tuple[TargetTitle, ...]
     absent_for_seconds: float
-    node_id: str
+    node_id: NodeId
 
 
 @dataclass(frozen=True)
 class CrawlerStarted:
     download_enabled: bool
-    node_id: str
+    node_id: NodeId
 
 
 type Event = (

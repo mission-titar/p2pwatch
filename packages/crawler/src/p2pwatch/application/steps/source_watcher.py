@@ -14,6 +14,7 @@ from p2pwatch.application.steps.download_labeler import DownloadLabeler
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.observability.events import SourceFirstUseful, SourceReappeared
 from p2pwatch.domain.source import (
@@ -75,7 +76,7 @@ class SourceWatcher:
         self._sources_read_at: MonotonicInstant | None = None
 
     async def record_sources(
-        self, listed_statuses: tuple[DownloadStatus, ...], node_id: str
+        self, listed_statuses: tuple[DownloadStatus, ...], node_id: NodeId
     ) -> None:
         """Records the sources of each of our downloads the client lists, completed ones aside,
         then alerts on them (stage 4, D8; source points, D5). A store failure skips that
@@ -111,7 +112,7 @@ class SourceWatcher:
         file: FileKey,
         readings: tuple[SourceReading, ...],
         read_at: datetime,
-        node_id: str,
+        node_id: NodeId,
     ) -> tuple[SourcePoint, ...]:
         """A point per reading, with its role, the latest point's when aMule gives none; a source
         without identity is told apart by its name. Reads every latest point before the write,
@@ -131,7 +132,7 @@ class SourceWatcher:
         reading: SourceReading,
         since: datetime,
         read_at: datetime,
-        node_id: str,
+        node_id: NodeId,
     ) -> SourceRole:
         if reading.role is not None:
             return reading.role
@@ -143,7 +144,7 @@ class SourceWatcher:
         file: FileKey,
         points: tuple[SourcePoint, ...],
         round_: _AlertRound,
-        node_id: str,
+        node_id: NodeId,
     ) -> None:
         """Emits D5's alerts for the useful points of a committed write, once per source per
         round."""

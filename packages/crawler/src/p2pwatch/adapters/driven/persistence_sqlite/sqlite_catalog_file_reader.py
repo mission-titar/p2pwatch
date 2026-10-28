@@ -30,6 +30,7 @@ from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDi
 from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision
+from p2pwatch.domain.identifiers import NodeId
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -360,7 +361,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
                     tier=DecisionTier(row["tier"]),
                 ),
                 decided_at=micros_to_instant(row["decided_at_micros"]),
-                node_id=row["node_id"],
+                node_id=NodeId(row["node_id"]),
             )
             for row in dec_rows
         )

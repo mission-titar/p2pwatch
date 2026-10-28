@@ -18,6 +18,7 @@ from catalog_matching.domain.ed2k_link import build_ed2k_link
 from catalog_matching.domain.engine import DecisionRecord
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import (
     ChannelDegraded,
     ChannelField,
@@ -152,7 +153,7 @@ def _channel_gauge(
 def _relayed(
     severity: Severity,
     message: str,
-    node_id: str,
+    node_id: NodeId,
     node_metrics: tuple[CounterIncrement | GaugeSetting, ...] = (),
 ) -> ObservabilityPlan:
     """An operations plan: its log line relayed under ``node_id``."""

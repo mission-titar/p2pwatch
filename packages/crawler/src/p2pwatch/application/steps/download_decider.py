@@ -16,6 +16,7 @@ from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.download.policy import DownloadVerdict, decide_download
 from p2pwatch.domain.edge_state import EdgeState
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import DiskSpaceLow, DownloadQueued, FreeSpaceSampled
 
 
@@ -59,7 +60,7 @@ class DownloadDecider:
         self._logger = logger
         self._disk_low_edge = EdgeState()
 
-    async def queue_new_candidates(self, outstanding_bytes: int, node_id: str) -> None:
+    async def queue_new_candidates(self, outstanding_bytes: int, node_id: NodeId) -> None:
         """Replays tier=download decisions missing from ``downloads`` (step 3, spec §5).
 
         ``outstanding_bytes`` is what the client still has to transfer, measured from the cycle's

@@ -6,6 +6,7 @@ import pytest
 
 from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import (
     DownloadCompleted,
     ObservationRecorded,
@@ -23,7 +24,7 @@ def test_event_is_frozen() -> None:
         file=FileKey(Network.ED2K, "a" * 32),
         filename="x.avi",
         target_titles=(TargetTitle(TargetId("062A"), "t"),),
-        node_id="titar-node-1",
+        node_id=NodeId("titar-node-1"),
     )
     with pytest.raises(dataclasses.FrozenInstanceError):
         event.filename = "y.avi"  # type: ignore[misc]

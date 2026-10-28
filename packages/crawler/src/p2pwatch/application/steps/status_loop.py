@@ -15,6 +15,7 @@ from p2pwatch.application.ports.driven.status_reading_writer import StatusReadin
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.observability.events import (
     ChannelDegraded,
@@ -81,7 +82,7 @@ class StatusLoop:
         self._api_timer = _AlertTimer(UNREACHABLE_ALERT_AFTER)
         self._channel_timers: dict[tuple[str, ChannelField], _AlertTimer] = {}
 
-    async def run(self, node_id: str) -> None:
+    async def run(self, node_id: NodeId) -> None:
         """Reads the status every period until shutdown, its alerts carrying ``node_id``."""
         while not self._run_state_reader.is_shutdown_requested():
             try:

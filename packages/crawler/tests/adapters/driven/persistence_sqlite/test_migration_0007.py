@@ -14,6 +14,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
 )
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observation import FileObservation
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
     open_catalog_at,
@@ -140,7 +141,7 @@ def test_a_mapped_result_reuses_the_variant_0007_migrated_from_its_old_row(
     connection = open_catalog(path)
     try:
         SqliteObservationStore(connection).record_observation(
-            FileObservation(reported_file, datetime(2026, 6, 12, tzinfo=UTC), "n1")
+            FileObservation(reported_file, datetime(2026, 6, 12, tzinfo=UTC), NodeId("n1"))
         )
         assert connection.execute("SELECT count(*) FROM observation_variants").fetchone()[0] == 1
         assert connection.execute("SELECT count(*) FROM observations").fetchone()[0] == 2

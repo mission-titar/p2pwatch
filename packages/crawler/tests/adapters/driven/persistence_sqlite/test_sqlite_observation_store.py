@@ -14,6 +14,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
 )
 from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observation import FileObservation, ReportedFile, fold_raw_metadata
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import count_observations, insert_file
@@ -21,7 +22,7 @@ from tests.support.catalog_rows import count_observations, insert_file
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _HASH_B = "b" * 32
 _KEY = FileKey(Network.ED2K, _HASH)
-_NODE = "11111111-2222-3333-4444-555555555555"
+_NODE = NodeId("11111111-2222-3333-4444-555555555555")
 _T0 = datetime(2026, 6, 11, 12, 0, 0, tzinfo=UTC)
 
 
@@ -211,8 +212,8 @@ def test_outer_transaction_survives_record_observation_failure(
 def test_each_observation_stores_its_own_node_id(
     observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
-    observation_store.record_observation(FileObservation(_reported_file(), _T0, "n1"))
-    observation_store.record_observation(FileObservation(_reported_file(), _T0, "n2"))
+    observation_store.record_observation(FileObservation(_reported_file(), _T0, NodeId("n1")))
+    observation_store.record_observation(FileObservation(_reported_file(), _T0, NodeId("n2")))
     variants = connection.execute("SELECT node_id FROM observation_variants ORDER BY variant_id")
     assert variants.fetchall() == [("n1",), ("n2",)]
 

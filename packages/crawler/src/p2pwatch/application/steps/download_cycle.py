@@ -24,6 +24,7 @@ from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.domain.client_errors import ClientUnreachableError, ReadRejectedError
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.store_error import StoreError
 
 # A read the client refuses is the daemon unavailable.
@@ -50,7 +51,7 @@ class DownloadCycle:
         self._source_watcher = source_watcher
         self._logger = logger
 
-    async def run(self, node_id: str) -> None:
+    async def run(self, node_id: NodeId) -> None:
         """ONE iteration of the download loop (spec §5). Never raises: tolerates/absorbs.
 
         Two distinct error DOCTRINES (item I2 - anti-starvation):
