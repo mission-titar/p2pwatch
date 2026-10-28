@@ -5,12 +5,11 @@ from datetime import timedelta
 import pytest
 
 from catalog_matching.domain.engine import MatchingEngine
-from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
+from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
 )
-from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
@@ -119,7 +118,7 @@ async def test_the_observation_carries_the_clocks_instant(
         FakeLogger(),
     ).catalog(_reported_file(_HASH_DISCARD, "random.txt"), "amuled", "ed2k", _NODE)
     observed_at = catalog_connection.execute("SELECT observed_at FROM observations").fetchone()
-    assert observed_at == (iso_to_micros(utc_iso(wall_clock.now())),)
+    assert observed_at == (instant_to_micros(wall_clock.now()),)
 
 
 @pytest.mark.asyncio

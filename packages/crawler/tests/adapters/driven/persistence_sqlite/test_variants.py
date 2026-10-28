@@ -2,15 +2,12 @@ import hashlib
 import json
 import sqlite3
 from collections.abc import Iterator
-from datetime import UTC, datetime
 
 import pytest
 
-from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.variants import (
     content_hash,
     create_memoized_function,
-    iso_to_micros,
     register_sql_functions,
 )
 from p2pwatch.domain.file_key import FileKey, Network
@@ -83,24 +80,6 @@ def test_a_memoized_sql_function_calls_its_function_once_per_distinct_arguments(
     connection.close()
     assert rows == [("aa",), ("aa",), ("bb",)]
     assert calls == [("a", 2), ("b", 2)]
-
-
-def test_iso_to_micros_counts_microseconds_since_the_epoch() -> None:
-    assert iso_to_micros("1970-01-01T00:00:00.000001+00:00") == 1
-
-
-def test_iso_to_micros_reads_back_what_utc_iso_writes() -> None:
-    moment = datetime(2026, 6, 11, 12, 0, 0, 123456, tzinfo=UTC)
-    assert iso_to_micros(utc_iso(moment)) == 1_781_179_200_123_456
-
-
-def test_iso_to_micros_normalizes_an_offset_to_utc() -> None:
-    assert iso_to_micros("2026-06-11T14:00:00.123456+02:00") == 1_781_179_200_123_456
-
-
-def test_iso_to_micros_refuses_a_naive_stamp() -> None:
-    with pytest.raises(TypeError):
-        iso_to_micros("2026-06-11T12:00:00.123456")
 
 
 def test_iso_to_micros_sql_function_matches_the_python_one(connection: sqlite3.Connection) -> None:

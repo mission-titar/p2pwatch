@@ -4,12 +4,11 @@ from datetime import timedelta
 import pytest
 
 from catalog_matching.domain.engine import MatchingEngine
-from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
+from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
 )
-from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
 from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRegistry
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.file_judge import FileJudge
@@ -185,7 +184,7 @@ async def test_successful_task_records_observation(
     assert client.searches == [("keroro", "ed2k")]
     assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 1
     observed_at = catalog_connection.execute("SELECT observed_at FROM observations").fetchone()
-    assert observed_at == (iso_to_micros(utc_iso(fake_time.wall.now())),)
+    assert observed_at == (instant_to_micros(fake_time.wall.now()),)
     assert observation_node_ids(catalog_connection) == decision_node_ids(catalog_connection)
     assert decision_node_ids(catalog_connection) == {_NODE}
 

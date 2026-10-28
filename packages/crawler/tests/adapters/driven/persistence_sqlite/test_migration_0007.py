@@ -10,10 +10,10 @@ import pytest
 
 from p2pwatch.adapters.driven.amule_api.mapping import map_search_results
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError
+from p2pwatch.adapters.driven.persistence_sqlite.micros import iso_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
 )
-from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
 from p2pwatch.domain.observation import FileObservation
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
     open_catalog_at,

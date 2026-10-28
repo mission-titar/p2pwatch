@@ -8,8 +8,9 @@ All SQL lives in module constants, parameterized (no value interpolation).
 """
 
 import sqlite3
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
+from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros, micros_to_instant
 from p2pwatch.adapters.driven.persistence_sqlite.observation_read import best_observation
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadReadConnections,
@@ -25,7 +26,6 @@ from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory, Sou
 # Constants
 # ---------------------------------------------------------------------------
 
-_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _MICROSECOND = timedelta(microseconds=1)
 
 # A period joins the consecutive points of one identity (the source_id, else the name) on one
@@ -183,10 +183,6 @@ def _sources_search(search_text: str | None) -> tuple[str, list[str]]:
     return _SQL_SOURCES_SEARCH, [f"{search_text}%", f"%{search_text}%"]
 
 
-def _micros(moment: datetime) -> int:
-    return (moment - _EPOCH) // _MICROSECOND
-
-
 def _sharing_period(row: sqlite3.Row) -> SharingPeriod:
     """A row of ``_SQL_PERIODS`` as a period; only a sending one received its growth (D6)."""
     network, connectable = row["network"], row["connectable"]
@@ -198,8 +194,8 @@ def _sharing_period(row: sqlite3.Row) -> SharingPeriod:
         role=role,
         contact_point=row["contact_point"],
         connectable=None if connectable is None else bool(connectable),
-        first_seen_at=_EPOCH + row["first_seen_at"] * _MICROSECOND,
-        last_seen_at=_EPOCH + row["last_seen_at"] * _MICROSECOND,
+        first_seen_at=micros_to_instant(row["first_seen_at"]),
+        last_seen_at=micros_to_instant(row["last_seen_at"]),
         received_bytes=row["growth"] if role is SourceRole.SENDING else 0,
         node_id=row["node_id"],
     )
@@ -210,8 +206,8 @@ def _period_rows(
 ) -> list[sqlite3.Row]:
     params = {
         "key": key,
-        "since": _micros(window.since),
-        "until": _micros(window.until),
+        "since": instant_to_micros(window.since),
+        "until": instant_to_micros(window.until),
         "gap": window.gap // _MICROSECOND,
     }
     return connection.execute(_SQL_PERIODS + where + _SQL_PERIODS_END, params).fetchall()
@@ -225,7 +221,7 @@ def _source_namings(
         SourceNaming(
             source=SourceKey(Network(row["network"]), row["native_id"]),
             source_name=row["name"],
-            latest_seen_at=_EPOCH + row["latest_seen_at"] * _MICROSECOND,
+            latest_seen_at=micros_to_instant(row["latest_seen_at"]),
             file_count=row["file_count"],
         )
         for row in connection.execute(_SQL_PAIRS + where + _SQL_PAIRS_END, params)
@@ -265,7 +261,7 @@ class SqliteSourceReader(SourceReader):
             KnownSource(
                 source=SourceKey(Network(row["network"]), row["native_id"]),
                 source_name=row["name"],
-                latest_seen_at=_EPOCH + row["latest_seen_at"] * _MICROSECOND,
+                latest_seen_at=micros_to_instant(row["latest_seen_at"]),
                 file_count=row["file_count"],
             )
             for row in rows

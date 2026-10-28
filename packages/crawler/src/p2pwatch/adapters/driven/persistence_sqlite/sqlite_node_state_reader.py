@@ -7,9 +7,10 @@
 All SQL lives in module constants, parameterized (no value interpolation).
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from enum import StrEnum
 
+from p2pwatch.adapters.driven.persistence_sqlite.micros import micros_to_instant
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadReadConnections,
 )
@@ -18,8 +19,6 @@ from p2pwatch.domain.download.states import DownloadState, FailureReason, Waitin
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
-
-_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 # ---------------------------------------------------------------------------
 # SQL constants
@@ -94,7 +93,7 @@ class SqliteNodeStateReader(NodeStateReader):
         backoff_state_by_key = {
             BackoffKey(row["client_name"], row["channel"]): BackoffState(
                 row["attempts"],
-                _EPOCH + timedelta(microseconds=row["started_at"]),
+                micros_to_instant(row["started_at"]),
                 timedelta(seconds=row["delay_seconds"]),
             )
             for row in connection.execute(_SQL_BACKOFF)
