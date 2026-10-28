@@ -96,7 +96,7 @@ class PortSyncLifecycle:
             return
         self._amule_conf_writer.set_amule_conf(
             with_listen_port(amule_conf, forwarded_port),
-            self._port_sync_settings.puid,
-            self._port_sync_settings.pgid,
+            self._port_sync_settings.uid,
+            self._port_sync_settings.gid,
         )
         self._logger.info("amule.conf now sets Port and UDPPort to %d", forwarded_port)

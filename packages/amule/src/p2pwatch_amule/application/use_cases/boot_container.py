@@ -37,19 +37,17 @@ class BootContainer(ContainerBooter):
 
     def boot_container(self) -> None:
         boot_settings = self._boot_settings
-        self._account_provisioner.find_or_create_amule_account(
-            boot_settings.puid, boot_settings.pgid
-        )
+        self._account_provisioner.find_or_create_amule_account(boot_settings.uid, boot_settings.gid)
         self._amuled_directory_preparer.prepare_amuled_directories(
-            boot_settings.puid, boot_settings.pgid
+            boot_settings.uid, boot_settings.gid
         )
         conf = reconcile_conf(
             self._amule_conf_reader.read_amule_conf(),
             ec_password_digest(boot_settings.ec_password),
         )
-        self._amule_conf_writer.set_amule_conf(conf, boot_settings.puid, boot_settings.pgid)
+        self._amule_conf_writer.set_amule_conf(conf, boot_settings.uid, boot_settings.gid)
         self._admin_password_setter.set_admin_password(
-            boot_settings.api_password, boot_settings.puid, boot_settings.pgid
+            boot_settings.api_password, boot_settings.uid, boot_settings.gid
         )
         if boot_settings.port_sync_enabled:
             self._service_supervisor.enable_port_sync()
