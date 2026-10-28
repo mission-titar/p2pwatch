@@ -45,8 +45,8 @@ FROM backoff_states
 ORDER BY client_name ASC, channel ASC
 """
 
-_SQL_NODE_RUNTIME_KEY = """\
-SELECT value FROM node_runtime WHERE key = ?
+_SQL_NODE_IDENTITY = """\
+SELECT node_id, created_at_micros FROM node_identity
 """
 
 
@@ -73,8 +73,7 @@ class SqliteNodeStateReader(NodeStateReader):
         connection = self._thread_read_connections.connection()
         dl_rows = connection.execute(_SQL_DOWNLOADS).fetchall()
 
-        node_id_row = connection.execute(_SQL_NODE_RUNTIME_KEY, ("node_id",)).fetchone()
-        created_at_row = connection.execute(_SQL_NODE_RUNTIME_KEY, ("created_at",)).fetchone()
+        identity_row = connection.execute(_SQL_NODE_IDENTITY).fetchone()
 
         downloads = tuple(
             TrackedDownload(
@@ -99,14 +98,13 @@ class SqliteNodeStateReader(NodeStateReader):
             for row in connection.execute(_SQL_BACKOFF)
         }
 
-        node_id: str | None = node_id_row["value"] if node_id_row is not None else None
-        created_at = (
-            datetime.fromisoformat(created_at_row["value"]) if created_at_row is not None else None
-        )
-
         return NodeState(
-            node_id=node_id,
-            created_at=created_at,
+            node_id=identity_row["node_id"] if identity_row is not None else None,
+            created_at=(
+                micros_to_instant(identity_row["created_at_micros"])
+                if identity_row is not None
+                else None
+            ),
             downloads=downloads,
             backoff_state_by_key=backoff_state_by_key,
         )

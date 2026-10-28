@@ -1,19 +1,18 @@
-"""``SqliteNodeIdStore``: the node id, in ``node_runtime`` beside its ``created_at`` (spec §3)."""
+"""``SqliteNodeIdStore``: the node id and its ``created_at``, in ``node_identity``'s one row."""
 
 import sqlite3
-from contextlib import suppress
 from datetime import datetime
 
-from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
+from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.application.ports.driven.node_id_reader import NodeIdReader
 from p2pwatch.application.ports.driven.node_id_writer import NodeIdWriter
 
-_SELECT_NODE_ID = "SELECT value FROM node_runtime WHERE key = 'node_id'"
+_SELECT_NODE_ID = "SELECT node_id FROM node_identity"
 
 _INSERT_NODE_IDENTITY = """
-INSERT INTO node_runtime (key, value)
-VALUES ('node_id', ?), ('created_at', ?)
+INSERT INTO node_identity (id, node_id, created_at_micros)
+VALUES (1, ?, ?)
 """
 
 
@@ -30,16 +29,7 @@ class SqliteNodeIdStore(NodeIdReader, NodeIdWriter):
         return str(row[0]) if row is not None else None
 
     def record_node_id(self, node_id: str, created_at: datetime) -> None:
-        """Persists ``node_id`` with ``created_at``, both rows or neither."""
+        """Persists ``node_id`` with ``created_at``, in one row."""
+        created_at_micros = instant_to_micros(created_at)
         with wrap_sqlite_errors():
-            # Formatted BEFORE the BEGIN: a naive instant must not raise inside the transaction.
-            created_at_iso = utc_iso(created_at)
-            self._connection.execute("BEGIN IMMEDIATE")
-            try:
-                self._connection.execute(_INSERT_NODE_IDENTITY, (node_id, created_at_iso))
-                self._connection.execute("COMMIT")
-            except BaseException:
-                # A NON-sqlite failure must not leave the connection in_transaction for good.
-                with suppress(sqlite3.Error):
-                    self._connection.execute("ROLLBACK")
-                raise
+            self._connection.execute(_INSERT_NODE_IDENTITY, (node_id, created_at_micros))
