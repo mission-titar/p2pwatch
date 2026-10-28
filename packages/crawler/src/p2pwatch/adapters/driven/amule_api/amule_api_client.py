@@ -49,7 +49,7 @@ from p2pwatch.domain.client_errors import (
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import Channel
+from p2pwatch.domain.identifiers import Channel, Keyword
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.search.answer import SearchAnswer
 from p2pwatch.domain.source import SourceReading
@@ -99,7 +99,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         self._ed2k_lock = asyncio.Lock()
         self._ed2k_next_start: MonotonicInstant | None = None  # no ed2k start yet
         self._kad_next_start: dict[str, MonotonicInstant] = {}
-        self._keywords_without_kad_word: set[str] = set()
+        self._keywords_without_kad_word: set[Keyword] = set()
 
     def channels(self) -> tuple[Channel, ...]:
         return tuple(_SEARCH_TYPES)
@@ -148,7 +148,9 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
             await _send(http, "POST", "/auth/logout")
         await http.aclose()
 
-    async def search(self, keyword: str, channel: Channel, budget_seconds: float) -> SearchAnswer:
+    async def search(
+        self, keyword: Keyword, channel: Channel, budget_seconds: float
+    ) -> SearchAnswer:
         """Waits for the network's next allowed start, then polls until amuled reports the search
         finished or ``budget_seconds`` after its start. Never stops nor frees it: amuled does."""
         with _refusal_as(SearchFailedError):
@@ -169,7 +171,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
             reported_files, skipped_result_count = map_search_results(rows, keyword)
             return SearchAnswer(reported_files, skipped_result_count)
 
-    async def _start_kad(self, keyword: str, budget_seconds: float) -> int | None:
+    async def _start_kad(self, keyword: Keyword, budget_seconds: float) -> int | None:
         """Starts in the Kad word's next free slot, reserved before sleeping; ``None`` without a
         Kad word. A held Kad word is retried each poll, for one budget from the first attempt."""
         kad_word = _kad_word(keyword)
@@ -276,7 +278,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
                 readings.append(map_source(row, detail))
             return merge_duplicate_sources(readings)
 
-    async def _post_search(self, keyword: str, search_type: str) -> int:
+    async def _post_search(self, keyword: Keyword, search_type: str) -> int:
         envelope = await self._call("POST", "/search", body={"query": keyword, "type": search_type})
         search_id = envelope.get("search_id")
         if not isinstance(search_id, int) or isinstance(search_id, bool):
@@ -420,7 +422,7 @@ def _decode(response: httpx.Response) -> dict[str, Any]:
     return decoded_body if isinstance(decoded_body, dict) else {}
 
 
-def _kad_word(keyword: str) -> str | None:
+def _kad_word(keyword: Keyword) -> str | None:
     """Kad's key for a keyword search: its first word of 3 UTF-8 bytes or more, lowercased
     (aMule ``SearchManager.cpp:283-292``)."""
     words = _KAD_SEPARATORS.split(keyword)

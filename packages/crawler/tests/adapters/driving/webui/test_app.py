@@ -49,7 +49,7 @@ from p2pwatch.domain.download.states import DownloadState, FailureReason, Waitin
 from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision
-from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
@@ -148,7 +148,7 @@ _NO_CONSOLE_QUERY_RUNNER = FakeConsoleQueryRunner(ConsoleQueryRun(QueryFailure("
 _NO_NODE_METRIC_LISTER = FakeNodeMetricLister(NodeMetricListing({}))
 _FILE = FileKey(Network.ED2K, TEST_HASH)
 _OBSERVATION = FileObservation(
-    ReportedFile(_FILE, "keroro_s2e62a_vf.avi", 100_000_000, 5, "keroro"),
+    ReportedFile(_FILE, "keroro_s2e62a_vf.avi", 100_000_000, 5, Keyword("keroro")),
     datetime.fromisoformat(SEEN_AT),
     NodeId("n1"),
 )
@@ -1281,7 +1281,9 @@ def _catalog_entry(
     decisions: tuple[DecisionRecord, ...],
     observed_at: datetime = datetime(2024, 1, 1, tzinfo=UTC),
 ) -> CatalogEntry:
-    reported_file = ReportedFile(FileKey(Network.ED2K, TEST_HASH), "f.avi", 1024, 1, "keroro")
+    reported_file = ReportedFile(
+        FileKey(Network.ED2K, TEST_HASH), "f.avi", 1024, 1, Keyword("keroro")
+    )
     return CatalogEntry(
         file=reported_file.file,
         size_bytes=1024,

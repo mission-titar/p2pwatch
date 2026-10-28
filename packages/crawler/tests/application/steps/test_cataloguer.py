@@ -14,7 +14,7 @@ from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.observability.node_metric import NodeCounter, NodeMetricSample
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.wake_subject import WakeSubject
@@ -72,7 +72,7 @@ def _reported_file(native_id: str, filename: str) -> ReportedFile:
         filename=filename,
         size_bytes=234_000_000,
         source_count=3,
-        keyword="keroro",
+        keyword=Keyword("keroro"),
     )
 
 

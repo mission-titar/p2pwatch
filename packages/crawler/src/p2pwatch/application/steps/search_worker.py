@@ -10,7 +10,7 @@ from p2pwatch.application.steps.backoff_registry import BackoffRegistry
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.client_errors import ClientUnreachableError, SearchFailedError
-from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.observability.events import (
     ClientUnreachable,
     SearchExecuted,
@@ -27,7 +27,7 @@ SEARCH_BUDGET_SECONDS = 120.0
 class SearchTask:
     """A unit of work: a keyword on a channel (spec §4)."""
 
-    keyword: str
+    keyword: Keyword
     channel: Channel
 
 

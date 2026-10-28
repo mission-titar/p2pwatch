@@ -18,7 +18,7 @@ from p2pwatch.adapters.driven.amule_api.mapping import (
 from p2pwatch.domain.download.states import FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import Channel
+from p2pwatch.domain.identifiers import Channel, Keyword
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.source import ContactPoint, SourceKey, SourceReading, SourceRole
 from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus
@@ -52,7 +52,7 @@ def _raw_metadata(reported_file: ReportedFile) -> dict[str, object]:
 
 
 def test_maps_a_result_to_an_observation() -> None:
-    reported_files, skipped = map_search_results([_result()], "keroro")
+    reported_files, skipped = map_search_results([_result()], Keyword("keroro"))
 
     assert skipped == 0
     (reported_file,) = reported_files
@@ -64,7 +64,7 @@ def test_maps_a_result_to_an_observation() -> None:
 
 
 def test_the_ed2k_only_fields_are_folded_last_into_raw_metadata() -> None:
-    (reported_file,), _ = map_search_results([_result(media={"codec": "H.264"})], "keroro")
+    (reported_file,), _ = map_search_results([_result(media={"codec": "H.264"})], Keyword("keroro"))
 
     assert reported_file.raw_metadata[-3:] == (
         ("codec", "H.264"),
@@ -74,7 +74,7 @@ def test_the_ed2k_only_fields_are_folded_last_into_raw_metadata() -> None:
 
 
 def test_an_uppercase_hash_is_folded_to_lowercase() -> None:
-    (reported_file,), _ = map_search_results([_result(hash=_HASH.upper())], "keroro")
+    (reported_file,), _ = map_search_results([_result(hash=_HASH.upper())], Keyword("keroro"))
 
     assert reported_file.file == _KEY
 
@@ -88,7 +88,7 @@ def test_media_fills_the_columns_that_ec_never_could() -> None:
         "album": "",
         "title": "Keroro",
     }
-    (reported_file,), _ = map_search_results([_result(media=media)], "keroro")
+    (reported_file,), _ = map_search_results([_result(media=media)], Keyword("keroro"))
 
     assert reported_file.duration_seconds == 1440
     assert reported_file.bitrate_kbps == 1500
@@ -98,7 +98,7 @@ def test_media_fills_the_columns_that_ec_never_could() -> None:
 
 
 def test_a_null_media_leaves_the_media_columns_empty() -> None:
-    (reported_file,), _ = map_search_results([_result()], "keroro")
+    (reported_file,), _ = map_search_results([_result()], Keyword("keroro"))
 
     assert reported_file.duration_seconds is None
     assert reported_file.bitrate_kbps is None
@@ -106,14 +106,14 @@ def test_a_null_media_leaves_the_media_columns_empty() -> None:
 
 
 def test_a_malformed_media_object_is_tolerated() -> None:
-    (reported_file,), _ = map_search_results([_result(media={"codec": 7})], "keroro")
+    (reported_file,), _ = map_search_results([_result(media={"codec": 7})], Keyword("keroro"))
 
     assert _raw_metadata(reported_file)["codec"] is None
     assert reported_file.duration_seconds is None
 
 
 def test_unmapped_keys_land_in_raw_metadata() -> None:
-    (reported_file,), _ = map_search_results([_result(rating=3)], "keroro")
+    (reported_file,), _ = map_search_results([_result(rating=3)], Keyword("keroro"))
 
     raw = _raw_metadata(reported_file)
     assert raw["rating"] == "3"
@@ -131,7 +131,9 @@ def test_every_alternate_name_becomes_its_own_observation() -> None:
         {"ecid": 621, "name": "[Keroro].095.avi", "sources": {"total": 40, "complete": 22}},
         {"ecid": 622, "name": "sgt-frog-095.avi", "sources": {"total": 10, "complete": 3}},
     ]
-    reported_files, skipped = map_search_results([_result(alternate_names=alternates)], "keroro")
+    reported_files, skipped = map_search_results(
+        [_result(alternate_names=alternates)], Keyword("keroro")
+    )
 
     assert skipped == 0
     assert [reported_file.filename for reported_file in reported_files] == [
@@ -154,27 +156,29 @@ def test_every_alternate_name_becomes_its_own_observation() -> None:
 
 def test_an_alternate_never_carries_the_volatile_ecid() -> None:
     alternate = {"ecid": 621, "name": "[Keroro].095.avi", "sources": {"total": 40}}
-    reported_files, _ = map_search_results([_result(alternate_names=[alternate])], "keroro")
+    reported_files, _ = map_search_results(
+        [_result(alternate_names=[alternate])], Keyword("keroro")
+    )
 
     assert all("621" not in str(rendered) for _, rendered in reported_files[1].raw_metadata)
 
 
 def test_a_result_without_a_usable_hash_is_skipped_and_counted() -> None:
-    reported_files, skipped = map_search_results([_result(hash="not-a-hash")], "keroro")
+    reported_files, skipped = map_search_results([_result(hash="not-a-hash")], Keyword("keroro"))
 
     assert reported_files == ()
     assert skipped == 1
 
 
 def test_a_result_without_a_usable_size_is_skipped_and_counted() -> None:
-    reported_files, skipped = map_search_results([_result(size_bytes=True)], "keroro")
+    reported_files, skipped = map_search_results([_result(size_bytes=True)], Keyword("keroro"))
 
     assert reported_files == ()
     assert skipped == 1
 
 
 def test_a_result_that_is_not_an_object_is_skipped_and_counted() -> None:
-    reported_files, skipped = map_search_results(["nonsense"], "keroro")
+    reported_files, skipped = map_search_results(["nonsense"], Keyword("keroro"))
 
     assert reported_files == ()
     assert skipped == 1
@@ -182,7 +186,9 @@ def test_a_result_that_is_not_an_object_is_skipped_and_counted() -> None:
 
 def test_an_unusable_name_costs_only_its_own_observation_and_is_not_counted() -> None:
     alternates = [{"name": 7}, "nonsense", {"name": "sgt-frog-095.avi"}]
-    reported_files, skipped = map_search_results([_result(alternate_names=alternates)], "keroro")
+    reported_files, skipped = map_search_results(
+        [_result(alternate_names=alternates)], Keyword("keroro")
+    )
 
     assert [reported_file.filename for reported_file in reported_files] == [
         "Keroro.095.avi",
@@ -194,7 +200,7 @@ def test_an_unusable_name_costs_only_its_own_observation_and_is_not_counted() ->
 def test_a_nameless_parent_does_not_lose_its_alternates() -> None:
     alternates = [{"name": "sgt-frog-095.avi"}]
     reported_files, skipped = map_search_results(
-        [_result(name="", alternate_names=alternates)], "keroro"
+        [_result(name="", alternate_names=alternates)], Keyword("keroro")
     )
 
     assert [reported_file.filename for reported_file in reported_files] == ["sgt-frog-095.avi"]
@@ -203,7 +209,7 @@ def test_a_nameless_parent_does_not_lose_its_alternates() -> None:
 
 def test_a_result_without_any_usable_name_is_skipped_and_counted() -> None:
     reported_files, skipped = map_search_results(
-        [_result(name="", alternate_names=[{"name": 7}])], "keroro"
+        [_result(name="", alternate_names=[{"name": 7}])], Keyword("keroro")
     )
 
     assert reported_files == ()
@@ -211,33 +217,37 @@ def test_a_result_without_any_usable_name_is_skipped_and_counted() -> None:
 
 
 def test_a_malformed_alternate_names_list_is_ignored() -> None:
-    reported_files, skipped = map_search_results([_result(alternate_names="nope")], "keroro")
+    reported_files, skipped = map_search_results(
+        [_result(alternate_names="nope")], Keyword("keroro")
+    )
 
     assert len(reported_files) == 1
     assert skipped == 0
 
 
 def test_missing_source_counts_read_as_zero() -> None:
-    (reported_file,), _ = map_search_results([_result(sources="nope")], "keroro")
+    (reported_file,), _ = map_search_results([_result(sources="nope")], Keyword("keroro"))
 
     assert reported_file.source_count == 0
     assert _raw_metadata(reported_file)["complete_source_count"] == 0
 
 
 def test_a_non_integer_source_count_reads_as_zero() -> None:
-    (reported_file,), _ = map_search_results([_result(sources={"total": "many"})], "keroro")
+    (reported_file,), _ = map_search_results(
+        [_result(sources={"total": "many"})], Keyword("keroro")
+    )
 
     assert reported_file.source_count == 0
 
 
 def test_a_non_string_file_type_is_dropped() -> None:
-    (reported_file,), _ = map_search_results([_result(file_type=7)], "keroro")
+    (reported_file,), _ = map_search_results([_result(file_type=7)], Keyword("keroro"))
 
     assert _raw_metadata(reported_file)["file_type"] is None
 
 
 def test_a_results_payload_that_is_not_a_list_yields_nothing() -> None:
-    assert map_search_results("nope", "keroro") == ((), 0)
+    assert map_search_results("nope", Keyword("keroro")) == ((), 0)
 
 
 def _queued(status: str, **overrides: Any) -> dict[str, Any]:

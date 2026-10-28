@@ -32,7 +32,7 @@ from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDi
 from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import Keyword, NodeId
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from tests.support.adapters.driven.persistence_sqlite.catalog_seeds import (
     seed,
@@ -122,7 +122,11 @@ def test_read_catalog_entries_no_filter_returns_all(catalog_db: Path) -> None:
             size_bytes=100,
             latest_observation=FileObservation(
                 ReportedFile(
-                    FileKey(Network.ED2K, "a" * 32), "keroro_062.avi", 100, 5, keyword="keroro"
+                    FileKey(Network.ED2K, "a" * 32),
+                    "keroro_062.avi",
+                    100,
+                    5,
+                    keyword=Keyword("keroro"),
                 ),
                 observed_at=datetime(2026, 6, 22, 10, tzinfo=UTC),
                 node_id=NodeId("n1"),

@@ -24,7 +24,7 @@ from p2pwatch.application.steps.search_task_runner import SearchTaskRunner
 from p2pwatch.application.steps.search_worker import SearchWorker
 from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
@@ -148,7 +148,9 @@ def test_each_channel_and_keyword_searches_in_its_own_task(tasks: _Tasks) -> Non
 def test_a_task_records_its_observations_under_the_node_id_the_tasks_run_with(
     tasks: _Tasks, catalog_connection: sqlite3.Connection
 ) -> None:
-    reported_file = ReportedFile(FileKey(Network.ED2K, "a" * 32), "keroro.avi", 1, 1, "keroro")
+    reported_file = ReportedFile(
+        FileKey(Network.ED2K, "a" * 32), "keroro.avi", 1, 1, Keyword("keroro")
+    )
     tasks.run_for(
         40.0,
         FakeTimedSearchClient({Channel("x"): 30.0}, reported_files=(reported_file,)),

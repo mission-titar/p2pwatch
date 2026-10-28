@@ -8,7 +8,7 @@ from datetime import datetime
 
 from catalog_matching.domain.models import FileCandidate
 from p2pwatch.domain.file_key import FileKey
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import Keyword, NodeId
 
 RawMetadata = tuple[tuple[str, str | int | None], ...]
 
@@ -62,7 +62,7 @@ class ReportedFile:
     filename: str
     size_bytes: int
     source_count: int
-    keyword: str
+    keyword: Keyword
     duration_seconds: int | None = None
     bitrate_kbps: int | None = None
     raw_metadata: RawMetadata = ()

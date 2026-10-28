@@ -24,7 +24,7 @@ from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.download.states import FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import Keyword, NodeId
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
@@ -63,7 +63,7 @@ def key(hash_hex: str) -> FileKey:
 
 
 def observation(hash_hex: str, filename: str, size_bytes: int) -> FileObservation:
-    reported_file = ReportedFile(key(hash_hex), filename, size_bytes, 1, "keroro")
+    reported_file = ReportedFile(key(hash_hex), filename, size_bytes, 1, Keyword("keroro"))
     return FileObservation(reported_file, SEEN_AT, NODE)
 
 

@@ -12,7 +12,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
 )
 from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import Keyword, NodeId
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
     open_catalog_at,
@@ -130,7 +130,7 @@ def test_a_new_observation_reuses_the_variant_0008_rekeyed(tmp_path: Path) -> No
         filename="b.avi",
         size_bytes=200,
         source_count=4,
-        keyword="keroro",
+        keyword=Keyword("keroro"),
     )
     try:
         SqliteObservationStore(migrated).record_observation(

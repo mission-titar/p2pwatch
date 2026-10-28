@@ -21,7 +21,7 @@ from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.loop_supervisor import LoopSupervisor
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.observability.notification import RelayedLogLine
 from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.observability.severity import Severity
@@ -202,7 +202,9 @@ async def test_a_changed_policy_is_re_evaluated_under_the_node_id_after_the_star
         engine,
         stored_fingerprint="policy-1",
     )
-    reported_file = ReportedFile(FileKey(Network.ED2K, _HASH), _FILENAME, 234_000_000, 3, "keroro")
+    reported_file = ReportedFile(
+        FileKey(Network.ED2K, _HASH), _FILENAME, 234_000_000, 3, Keyword("keroro")
+    )
     observation_store.record_observation(
         FileObservation(reported_file, crawl.fake_time.wall.now(), NodeId("stored-node"))
     )

@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from p2pwatch.domain.identifiers import Channel
+from p2pwatch.domain.identifiers import Channel, Keyword
 from p2pwatch.domain.search.answer import SearchAnswer
 
 
@@ -14,6 +14,8 @@ class SearchClient(ABC):
         """The channels it searches: opaque names the core never tests."""
 
     @abstractmethod
-    async def search(self, keyword: str, channel: Channel, budget_seconds: float) -> SearchAnswer:
+    async def search(
+        self, keyword: Keyword, channel: Channel, budget_seconds: float
+    ) -> SearchAnswer:
         """Returns once the client signals the end, or ``budget_seconds`` after the search's
         network start at the latest."""
