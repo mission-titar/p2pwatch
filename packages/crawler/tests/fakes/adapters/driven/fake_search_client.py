@@ -1,5 +1,6 @@
 from p2pwatch.application.ports.driven.search_client import SearchClient
 from p2pwatch.domain.client_errors import ClientUnreachableError, SearchFailedError
+from p2pwatch.domain.identifiers import Channel
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.search.answer import SearchAnswer
 
@@ -15,7 +16,7 @@ class FakeSearchClient(SearchClient):
     def __init__(
         self,
         *,
-        channels: tuple[str, ...] = ("ed2k", "kad"),
+        channels: tuple[Channel, ...] = (Channel("ed2k"), Channel("kad")),
         results: list[tuple[ReportedFile, ...]] | None = None,
         search_failures: list[Exception] | None = None,
         skipped_result_count: int = 0,
@@ -24,13 +25,13 @@ class FakeSearchClient(SearchClient):
         self._results = list(results or [])
         self._skipped_result_count = skipped_result_count
         self._search_failures = list(search_failures or [])
-        self.searches: list[tuple[str, str]] = []
+        self.searches: list[tuple[str, Channel]] = []
         self.budgets: list[float] = []
 
-    def channels(self) -> tuple[str, ...]:
+    def channels(self) -> tuple[Channel, ...]:
         return self._channels
 
-    async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
+    async def search(self, keyword: str, channel: Channel, budget_seconds: float) -> SearchAnswer:
         self.searches.append((keyword, channel))
         self.budgets.append(budget_seconds)
         if self._search_failures:

@@ -22,6 +22,7 @@ from p2pwatch.domain.client_errors import (
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import Channel
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.source import ContactPoint, SourceRole
 from p2pwatch.domain.status_reading import ChannelStatus
@@ -451,7 +452,7 @@ async def test_a_body_that_is_not_json_is_an_unreachable_daemon() -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("channel", "search_type"), [("ed2k", "global"), ("kad", "kad")])
 async def test_search_starts_the_keyword_on_the_channels_search_type(
-    channel: str, search_type: str
+    channel: Channel, search_type: str
 ) -> None:
     api = FakeAmuleApi()
     client = await _connected(api)
@@ -474,7 +475,7 @@ async def test_search_answers_the_results_with_their_keyword_and_counts_what_it_
     api = FakeAmuleApi(results=[*rows, {"hash": "nope"}])
     client = await _connected(api)
 
-    answer = await client.search("keroro", "ed2k", 120)
+    answer = await client.search("keroro", Channel("ed2k"), 120)
     await client.close()
 
     assert len(answer.reported_files) == 501
@@ -487,7 +488,7 @@ async def test_search_returns_as_soon_as_amuled_reports_it_finished() -> None:
     api = FakeAmuleApi(search_seconds={"keroro": 12})
     client = await _connected(api)
 
-    await client.search("keroro", "ed2k", 120)
+    await client.search("keroro", Channel("ed2k"), 120)
     await client.close()
 
     assert _progress_polls(api) == [0, 5, 10, 15]
@@ -498,7 +499,7 @@ async def test_search_reads_its_progress_at_the_poll_interval_it_was_given() -> 
     api = FakeAmuleApi(search_seconds={"keroro": 7})
     client = await _connected(api, progress_poll_interval=timedelta(seconds=3))
 
-    await client.search("keroro", "ed2k", 120)
+    await client.search("keroro", Channel("ed2k"), 120)
     await client.close()
 
     assert _progress_polls(api) == [0, 3, 6, 9]
@@ -509,7 +510,7 @@ async def test_search_stops_waiting_at_its_budget_and_returns_what_it_holds() ->
     api = FakeAmuleApi(progress={"state": "running"}, results=[_result()])
     client = await _connected(api)
 
-    answer = await client.search("keroro", "ed2k", 12)
+    answer = await client.search("keroro", Channel("ed2k"), 12)
     await client.close()
 
     assert _progress_polls(api) == [0, 5, 10, 12]
@@ -522,7 +523,7 @@ async def test_search_never_stops_nor_frees_its_search() -> None:
     api = FakeAmuleApi(progress={"state": "running"})
     client = await _connected(api)
 
-    await client.search("keroro", "kad", 120)
+    await client.search("keroro", Channel("kad"), 120)
     await client.close()
 
     assert _paths(api, "/api/v1/search/42/stop") == []
@@ -536,7 +537,7 @@ async def test_a_kad_search_is_widened_from_its_second_poll_until_kad_refuses() 
     api.overrides[("POST", "/api/v1/search/42/more")] = lambda _: answers.pop(0)
     client = await _connected(api)
 
-    await client.search("keroro", "kad", 120)
+    await client.search("keroro", Channel("kad"), 120)
     await client.close()
 
     assert _seconds_after_start(api, "POST", "/api/v1/search/42/more") == [5, 10, 15, 20, 25]
@@ -547,7 +548,7 @@ async def test_an_ed2k_search_is_never_widened() -> None:
     api = FakeAmuleApi(progress={"state": "running"})
     client = await _connected(api)
 
-    await client.search("keroro", "ed2k", 120)
+    await client.search("keroro", Channel("ed2k"), 120)
     await client.close()
 
     assert _paths(api, "/api/v1/search/42/more") == []
@@ -560,7 +561,7 @@ async def test_a_failed_widening_leaves_the_search_standing() -> None:
     api.overrides[("POST", "/api/v1/search/42/more")] = lambda _: error(400, "bad_request")
     client = await _connected(api)
 
-    answer = await client.search("keroro", "kad", 120)
+    answer = await client.search("keroro", Channel("kad"), 120)
     await client.close()
 
     assert len(answer.reported_files) == 1
@@ -576,7 +577,7 @@ async def test_a_search_the_daemon_refuses_fails_its_channel() -> None:
     client = await _connected(api)
 
     with pytest.raises(SearchFailedError, match="not connected to any server") as raised:
-        await client.search("keroro", "ed2k", 120)
+        await client.search("keroro", Channel("ed2k"), 120)
     assert type(raised.value) is SearchFailedError
 
 
@@ -587,7 +588,7 @@ async def test_a_search_reply_without_an_id_fails_its_channel() -> None:
     client = await _connected(api)
 
     with pytest.raises(SearchFailedError):
-        await client.search("keroro", "ed2k", 120)
+        await client.search("keroro", Channel("ed2k"), 120)
 
 
 # --- status ----------------------------------------------------------------------------------
@@ -610,8 +611,8 @@ async def test_status_reads_the_channels_and_the_daemon_version() -> None:
 
     assert status.version == "GIT rev. 3.0.1-773-g500293ba3"
     assert status.channels == (
-        ChannelStatus(channel="ed2k", connected=True, connectable=False),
-        ChannelStatus(channel="kad", connected=False, connectable=None),
+        ChannelStatus(channel=Channel("ed2k"), connected=True, connectable=False),
+        ChannelStatus(channel=Channel("kad"), connected=False, connectable=None),
     )
 
 

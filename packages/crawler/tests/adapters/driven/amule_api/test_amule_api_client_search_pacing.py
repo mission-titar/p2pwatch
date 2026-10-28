@@ -14,6 +14,7 @@ import pytest
 
 from p2pwatch.adapters.driven.amule_api.amule_api_client import AmuleApiClient
 from p2pwatch.domain.client_errors import SearchFailedError
+from p2pwatch.domain.identifiers import Channel
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.search.answer import SearchAnswer
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
@@ -78,12 +79,12 @@ def _polled_until(api: FakeAmuleApi, search_id: int) -> float:
     )
 
 
-async def _search_for(api: FakeAmuleApi, keywords: list[str], channels: list[str]) -> None:
+async def _search_for(api: FakeAmuleApi, keywords: list[str], channels: list[Channel]) -> None:
     """One task per (channel, keyword), each searching again as soon as it returns, for an hour."""
     client = await _connected(api)
     loop = asyncio.get_running_loop()
 
-    async def task(keyword: str, channel: str) -> None:
+    async def task(keyword: str, channel: Channel) -> None:
         while loop.time() < _HOUR:
             await client.search(keyword, channel, _BUDGET)
             await asyncio.sleep(0)
@@ -99,7 +100,7 @@ _TARGETS = {"keroro": "keroro", "keroro mission": "keroro", "titar": "titar"}
 
 def _hour_of_three_keywords(loop: VirtualLoop) -> FakeAmuleApi:
     api = _api(loop, search_seconds=dict(_DURATIONS))
-    loop.run_until_complete(_search_for(api, list(_DURATIONS), ["ed2k", "kad"]))
+    loop.run_until_complete(_search_for(api, list(_DURATIONS), [Channel("ed2k"), Channel("kad")]))
     return api
 
 
@@ -107,7 +108,7 @@ def _hour_of_three_keywords(loop: VirtualLoop) -> FakeAmuleApi:
 @pytest.mark.parametrize("step", [timedelta(hours=-1), timedelta(hours=1)])
 @pytest.mark.asyncio
 async def test_a_wall_clock_step_leaves_two_starts_a_minute_apart(
-    channel: str, step: timedelta
+    channel: Channel, step: timedelta
 ) -> None:
     fake_time = FakeTime()
     client = await _connected(FakeAmuleApi(monotonic_clock=fake_time.monotonic))
@@ -177,7 +178,8 @@ def test_an_ed2k_search_that_never_finishes_holds_the_next_start_one_budget(
     async def main() -> None:
         client = await _connected(api)
         await asyncio.gather(
-            client.search("keroro", "ed2k", _BUDGET), client.search("titar", "ed2k", _BUDGET)
+            client.search("keroro", Channel("ed2k"), _BUDGET),
+            client.search("titar", Channel("ed2k"), _BUDGET),
         )
 
     virtual_loop.run_until_complete(main())
@@ -192,10 +194,11 @@ def test_concurrent_callers_of_one_kad_target_each_get_their_own_slot(
 
     async def main() -> None:
         client = await _connected(api)
-        await client.search("keroro", "kad", _BUDGET)
+        await client.search("keroro", Channel("kad"), _BUDGET)
         # Both wait for the target's next slot: whoever wakes first must not leave it free.
         await asyncio.gather(
-            client.search("keroro 1", "kad", _BUDGET), client.search("keroro 2", "kad", _BUDGET)
+            client.search("keroro 1", Channel("kad"), _BUDGET),
+            client.search("keroro 2", Channel("kad"), _BUDGET),
         )
 
     virtual_loop.run_until_complete(main())
@@ -223,8 +226,8 @@ def test_kad_keys_a_keyword_on_its_first_word_of_three_bytes(
 
     async def main() -> None:
         client = await _connected(api)
-        await client.search(first, "kad", _BUDGET)
-        await client.search(second, "kad", _BUDGET)
+        await client.search(first, Channel("kad"), _BUDGET)
+        await client.search(second, Channel("kad"), _BUDGET)
 
     virtual_loop.run_until_complete(main())
 
@@ -242,7 +245,7 @@ def test_a_keyword_without_a_kad_target_neither_spins_nor_searches(
         client = await _connected(api)
         loop = asyncio.get_running_loop()
         while loop.time() < _HOUR and len(returned_at) <= 60:  # bounded, should it spin
-            assert await client.search(keyword, "kad", _BUDGET) == SearchAnswer((), 0)
+            assert await client.search(keyword, Channel("kad"), _BUDGET) == SearchAnswer((), 0)
             returned_at.append(loop.time())
             await asyncio.sleep(0)
 
@@ -260,7 +263,7 @@ def test_a_keyword_without_a_kad_target_is_logged_once(
     async def main() -> None:
         client = await _connected(_api(virtual_loop))
         for keyword in ("62", "62", "ok", "62"):
-            await client.search(keyword, "kad", _BUDGET)
+            await client.search(keyword, Channel("kad"), _BUDGET)
 
     virtual_loop.run_until_complete(main())
 
@@ -279,7 +282,7 @@ def test_a_kad_target_held_elsewhere_is_retried_each_poll_until_it_frees(
 
     async def main() -> None:
         client = await _connected(api)
-        await client.search("keroro", "kad", _BUDGET)
+        await client.search("keroro", Channel("kad"), _BUDGET)
 
     virtual_loop.run_until_complete(main())
 
@@ -299,7 +302,7 @@ def test_a_kad_target_held_past_one_budget_fails_the_channel_at_that_budget(
     async def main() -> None:
         client = await _connected(api)
         with pytest.raises(SearchFailedError):
-            await client.search("keroro", "kad", _BUDGET)
+            await client.search("keroro", Channel("kad"), _BUDGET)
         failed_at.append(asyncio.get_running_loop().time())
 
     virtual_loop.run_until_complete(main())
@@ -317,7 +320,7 @@ def test_any_other_kad_refusal_fails_the_channel_at_once(virtual_loop: VirtualLo
     async def main() -> None:
         client = await _connected(api)
         with pytest.raises(SearchFailedError):
-            await client.search("keroro", "kad", _BUDGET)
+            await client.search("keroro", Channel("kad"), _BUDGET)
 
     virtual_loop.run_until_complete(main())
 

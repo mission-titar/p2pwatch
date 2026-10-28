@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 import pytest
 
 from p2pwatch.adapters.driven.in_memory_status_reading_store import InMemoryStatusReadingStore
+from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.status_reading import ClientStatus, StatusReading
 from tests.contracts.application.ports.driven.status_reading_store_contract import (
@@ -20,7 +21,7 @@ class TestInMemoryStatusReadingStore(StatusReadingStoreContract):
 
 
 def test_publishing_replaces_the_snapshot_and_never_changes_one_already_read() -> None:
-    status_reading_store = InMemoryStatusReadingStore(("amuled",))
+    status_reading_store = InMemoryStatusReadingStore((ClientName("amuled"),))
     before = status_reading_store.read_readings()
-    status_reading_store.set_reading("amuled", _READING, MonotonicInstant(7))
+    status_reading_store.set_reading(ClientName("amuled"), _READING, MonotonicInstant(7))
     assert before == {"amuled": None}

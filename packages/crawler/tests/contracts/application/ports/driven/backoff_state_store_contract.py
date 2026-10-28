@@ -6,12 +6,15 @@ from typing import Protocol
 
 import pytest
 
+from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 
 _STARTED_AT = datetime(2026, 6, 12, 10, 0, 0, 123456, tzinfo=UTC)
 _BACKOFF = {
-    BackoffKey("amule-1", "kad"): BackoffState(2, _STARTED_AT, timedelta(seconds=300)),
-    BackoffKey("amule-1", None): BackoffState(1, _STARTED_AT, timedelta(seconds=2.75)),
+    BackoffKey(ClientName("amule-1"), Channel("kad")): BackoffState(
+        2, _STARTED_AT, timedelta(seconds=300)
+    ),
+    BackoffKey(ClientName("amule-1"), None): BackoffState(1, _STARTED_AT, timedelta(seconds=2.75)),
 }
 
 
@@ -44,8 +47,12 @@ class BackoffStateStoreContract(ABC):
         self, backoff_state_store: BackoffStateStore
     ) -> None:
         later = {
-            BackoffKey("amule-1", None): BackoffState(2, _STARTED_AT, timedelta(seconds=4)),
-            BackoffKey("amule-1", "ed2k"): BackoffState(1, _STARTED_AT, timedelta(seconds=2)),
+            BackoffKey(ClientName("amule-1"), None): BackoffState(
+                2, _STARTED_AT, timedelta(seconds=4)
+            ),
+            BackoffKey(ClientName("amule-1"), Channel("ed2k")): BackoffState(
+                1, _STARTED_AT, timedelta(seconds=2)
+            ),
         }
         backoff_state_store.set_backoff_states(_BACKOFF)
         backoff_state_store.set_backoff_states(later)

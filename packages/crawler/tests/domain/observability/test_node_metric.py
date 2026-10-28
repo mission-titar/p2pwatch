@@ -4,6 +4,7 @@ import pytest
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from p2pwatch.domain.file_key import Network
+from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.observability.node_metric import (
     ChannelLabels,
     ClientLabels,
@@ -53,8 +54,11 @@ def test_a_node_metric_has_its_exposed_name_and_describes_itself() -> None:
 @pytest.mark.parametrize(
     ("labels", "pairs"),
     [
-        (ChannelLabels("amuled", "kad"), (("client", "amuled"), ("channel", "kad"))),
-        (ClientLabels("amuled"), (("client", "amuled"),)),
+        (
+            ChannelLabels(ClientName("amuled"), Channel("kad")),
+            (("client", "amuled"), ("channel", "kad")),
+        ),
+        (ClientLabels(ClientName("amuled")), (("client", "amuled"),)),
         (DecisionLabels(DecisionTier.NOTIFY), (("tier", "notify"),)),
         (DecisionLabels("retracted"), (("tier", "retracted"),)),
         (
@@ -76,7 +80,9 @@ def test_an_increment_names_a_counter_its_labels_and_its_amount() -> None:
 
 
 def test_a_setting_of_none_names_a_gauge_series_to_remove() -> None:
-    setting = GaugeSetting(NodeGauge.CHANNEL_CONNECTED, ChannelLabels("amuled", "kad"), None)
+    setting = GaugeSetting(
+        NodeGauge.CHANNEL_CONNECTED, ChannelLabels(ClientName("amuled"), Channel("kad")), None
+    )
     assert setting.value is None
 
 
@@ -85,13 +91,13 @@ def test_a_setting_of_none_names_a_gauge_series_to_remove() -> None:
     [
         (
             NodeCounter.SEARCHES,
-            ClientLabels("amuled"),
+            ClientLabels(ClientName("amuled")),
             "p2pwatch_searches takes ChannelLabels, given ClientLabels",
         ),
         (NodeCounter.SEARCHES, None, "p2pwatch_searches takes ChannelLabels, given no labels"),
         (
             NodeCounter.DOWNLOADS_COMPLETED,
-            ClientLabels("amuled"),
+            ClientLabels(ClientName("amuled")),
             "p2pwatch_downloads_completed takes no labels, given ClientLabels",
         ),
     ],
@@ -108,11 +114,13 @@ def test_a_setting_whose_labels_are_not_its_gauges_cannot_be_built() -> None:
     with pytest.raises(
         ValueError, match="p2pwatch_crawler_up takes no labels, given ChannelLabels"
     ):
-        GaugeSetting(NodeGauge.CRAWLER_UP, ChannelLabels("amuled", "kad"), 1.0)
+        GaugeSetting(NodeGauge.CRAWLER_UP, ChannelLabels(ClientName("amuled"), Channel("kad")), 1.0)
 
 
 def test_an_instruction_gives_the_pairs_of_its_labels_or_none_unlabelled() -> None:
-    labelled = GaugeSetting(NodeGauge.CHANNEL_CONNECTED, ChannelLabels("amuled", "kad"), 1.0)
+    labelled = GaugeSetting(
+        NodeGauge.CHANNEL_CONNECTED, ChannelLabels(ClientName("amuled"), Channel("kad")), 1.0
+    )
     unlabelled = CounterIncrement(NodeCounter.DOWNLOADS_QUEUED)
     assert labelled.label_pairs() == (("client", "amuled"), ("channel", "kad"))
     assert unlabelled.label_pairs() == ()
@@ -122,4 +130,6 @@ def test_an_increment_of_a_negative_amount_cannot_be_built() -> None:
     with pytest.raises(
         ValueError, match="p2pwatch_searches takes an amount of 0 or more, not -1.0"
     ):
-        CounterIncrement(NodeCounter.SEARCHES, ChannelLabels("amuled", "kad"), -1.0)
+        CounterIncrement(
+            NodeCounter.SEARCHES, ChannelLabels(ClientName("amuled"), Channel("kad")), -1.0
+        )

@@ -19,7 +19,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import 
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 
@@ -92,11 +92,11 @@ def test_node_state_populated(local_db: Path) -> None:
     # backoff, the whole client first, each with its start and its delay
     assert list(state.backoff_state_by_key.items()) == [
         (
-            BackoffKey("amuled", None),
+            BackoffKey(ClientName("amuled"), None),
             BackoffState(3, datetime(1970, 1, 1, tzinfo=UTC), timedelta(seconds=120)),
         ),
         (
-            BackoffKey("amuled", "kad"),
+            BackoffKey(ClientName("amuled"), Channel("kad")),
             BackoffState(1, datetime(2026, 6, 12, 10, tzinfo=UTC), timedelta(seconds=2.5)),
         ),
     ]

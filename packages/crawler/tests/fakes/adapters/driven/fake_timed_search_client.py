@@ -1,6 +1,7 @@
 import asyncio
 
 from p2pwatch.application.ports.driven.search_client import SearchClient
+from p2pwatch.domain.identifiers import Channel
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.search.answer import SearchAnswer
 
@@ -10,7 +11,7 @@ class FakeTimedSearchClient(SearchClient):
 
     def __init__(
         self,
-        durations: dict[str, float],
+        durations: dict[Channel, float],
         *,
         search_failures: list[Exception] | None = None,
         reported_files: tuple[ReportedFile, ...] = (),
@@ -19,12 +20,12 @@ class FakeTimedSearchClient(SearchClient):
         self._durations = durations
         self._search_failures = search_failures or []
         self._reported_files = reported_files
-        self.searches: list[tuple[float, str, str]] = []
+        self.searches: list[tuple[float, str, Channel]] = []
 
-    def channels(self) -> tuple[str, ...]:
+    def channels(self) -> tuple[Channel, ...]:
         return self._channels
 
-    async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
+    async def search(self, keyword: str, channel: Channel, budget_seconds: float) -> SearchAnswer:
         self.searches.append((asyncio.get_running_loop().time(), keyword, channel))
         if self._search_failures:
             raise self._search_failures.pop(0)

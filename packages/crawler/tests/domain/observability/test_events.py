@@ -6,7 +6,7 @@ import pytest
 
 from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.events import (
     DownloadCompleted,
     ObservationRecorded,
@@ -15,7 +15,7 @@ from p2pwatch.domain.observability.events import (
 
 
 def test_observation_recorded_carries_client_and_network() -> None:
-    event = ObservationRecorded(client_name="amuled", channel="ed2k")
+    event = ObservationRecorded(client_name=ClientName("amuled"), channel=Channel("ed2k"))
     assert (event.client_name, event.channel) == ("amuled", "ed2k")
 
 

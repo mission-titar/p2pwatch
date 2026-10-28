@@ -8,10 +8,11 @@ from typing import Protocol
 
 import pytest
 
+from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.status_reading import ClientStatus, PublishedReading, StatusReading
 
-CLIENT_NAMES = ("amuled", "emule")
+CLIENT_NAMES = (ClientName("amuled"), ClientName("emule"))
 _READING = StatusReading(datetime(2026, 6, 12, tzinfo=UTC), ClientStatus("3.0.1", ()))
 _SILENT_READING = StatusReading(datetime(2026, 6, 12, 0, 1, tzinfo=UTC), None)
 
@@ -20,7 +21,7 @@ class StatusReadingStore(Protocol):
     """Both ports of the pair, which one store implements."""
 
     def set_reading(
-        self, client_name: str, reading: StatusReading, published_at: MonotonicInstant
+        self, client_name: ClientName, reading: StatusReading, published_at: MonotonicInstant
     ) -> None: ...
 
     def read_readings(self) -> Mapping[str, PublishedReading | None]: ...
@@ -40,7 +41,7 @@ class StatusReadingStoreContract(ABC):
     def test_a_reading_is_read_with_its_instant(
         self, status_reading_store: StatusReadingStore
     ) -> None:
-        status_reading_store.set_reading("amuled", _READING, MonotonicInstant(7))
+        status_reading_store.set_reading(ClientName("amuled"), _READING, MonotonicInstant(7))
         assert status_reading_store.read_readings() == {
             "amuled": PublishedReading(_READING, MonotonicInstant(7)),
             "emule": None,
@@ -49,8 +50,8 @@ class StatusReadingStoreContract(ABC):
     def test_a_reading_replaces_the_clients_previous_one(
         self, status_reading_store: StatusReadingStore
     ) -> None:
-        status_reading_store.set_reading("amuled", _READING, MonotonicInstant(7))
-        status_reading_store.set_reading("amuled", _SILENT_READING, MonotonicInstant(8))
+        status_reading_store.set_reading(ClientName("amuled"), _READING, MonotonicInstant(7))
+        status_reading_store.set_reading(ClientName("amuled"), _SILENT_READING, MonotonicInstant(8))
         assert status_reading_store.read_readings()["amuled"] == PublishedReading(
             _SILENT_READING, MonotonicInstant(8)
         )
@@ -58,7 +59,7 @@ class StatusReadingStoreContract(ABC):
     def test_a_reading_is_read_from_another_thread(
         self, status_reading_store: StatusReadingStore
     ) -> None:
-        status_reading_store.set_reading("amuled", _READING, MonotonicInstant(7))
+        status_reading_store.set_reading(ClientName("amuled"), _READING, MonotonicInstant(7))
         with ThreadPoolExecutor(max_workers=1) as executor:
             published_readings = executor.submit(status_reading_store.read_readings).result()
         assert published_readings["amuled"] == PublishedReading(_READING, MonotonicInstant(7))

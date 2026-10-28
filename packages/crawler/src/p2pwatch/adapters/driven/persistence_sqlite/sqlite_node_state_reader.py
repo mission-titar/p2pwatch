@@ -18,7 +18,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import 
 from p2pwatch.application.ports.driven.node_state_reader import NodeStateReader
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 
@@ -92,7 +92,10 @@ class SqliteNodeStateReader(NodeStateReader):
         )
 
         backoff_state_by_key = {
-            BackoffKey(row["client_name"], row["channel"]): BackoffState(
+            BackoffKey(
+                ClientName(row["client_name"]),
+                None if row["channel"] is None else Channel(row["channel"]),
+            ): BackoffState(
                 row["attempts"],
                 micros_to_instant(row["started_at_micros"]),
                 timedelta(seconds=row["delay_seconds"]),

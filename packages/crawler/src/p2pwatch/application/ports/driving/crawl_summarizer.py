@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from p2pwatch.domain.coverage import TargetCoverage
+from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.node_state import NodeState
 from p2pwatch.domain.status_reading import StatusReading
 
@@ -12,7 +13,7 @@ from p2pwatch.domain.status_reading import StatusReading
 class ClientSummary:
     """A client's latest status reading, ``None`` before its first; stale, it is not fresh."""
 
-    client_name: str
+    client_name: ClientName
     reading: StatusReading | None
     is_fresh: bool
 

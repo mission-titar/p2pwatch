@@ -21,7 +21,7 @@ from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.loop_supervisor import LoopSupervisor
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import RelayedLogLine
 from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.observability.severity import Severity
@@ -39,7 +39,7 @@ from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
 _FINGERPRINT = "policy-2"
-_KAD = BackoffKey("amuled", "kad")
+_KAD = BackoffKey(ClientName("amuled"), Channel("kad"))
 _POLICY = BackoffPolicy(base_seconds=2.0, cap_seconds=600.0, factor=2.0, jitter_ratio=0.0)
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _FILENAME = "Keroro N°062A Les demoiselles cambrioleuses.avi"

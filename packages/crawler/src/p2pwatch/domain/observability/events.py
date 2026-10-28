@@ -12,33 +12,33 @@ from typing import Literal
 from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.file_target_decision import FileTargetDecision
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.source import SourceKey
 
 
 @dataclass(frozen=True)
 class SearchExecuted:
-    client_name: str
-    channel: str
+    client_name: ClientName
+    channel: Channel
     observation_count: int
     skipped_result_count: int  # results the client could not read: a drift of its protocol
 
 
 @dataclass(frozen=True)
 class ClientUnreachable:
-    client_name: str
+    client_name: ClientName
 
 
 @dataclass(frozen=True)
 class SearchFailed:
-    client_name: str
-    channel: str
+    client_name: ClientName
+    channel: Channel
 
 
 @dataclass(frozen=True)
 class ObservationRecorded:
-    client_name: str
-    channel: str
+    client_name: ClientName
+    channel: Channel
 
 
 @dataclass(frozen=True)
@@ -84,8 +84,8 @@ type ChannelField = Literal["connected", "connectable"]
 @dataclass(frozen=True)
 class ChannelStatusSampled:
     # One status reading of a channel; None is unknown (the client's API did not answer).
-    client_name: str
-    channel: str
+    client_name: ClientName
+    channel: Channel
     connected: bool | None
     connectable: bool | None
 
@@ -93,8 +93,8 @@ class ChannelStatusSampled:
 @dataclass(frozen=True)
 class ChannelDegraded:
     # A channel's field has read False for ``degraded_for_seconds``: emitted once until it recovers.
-    client_name: str
-    channel: str
+    client_name: ClientName
+    channel: Channel
     field: ChannelField
     degraded_for_seconds: float
     node_id: NodeId
@@ -102,8 +102,8 @@ class ChannelDegraded:
 
 @dataclass(frozen=True)
 class ChannelRecovered:
-    client_name: str
-    channel: str
+    client_name: ClientName
+    channel: Channel
     field: ChannelField
     node_id: NodeId
 
@@ -111,14 +111,14 @@ class ChannelRecovered:
 @dataclass(frozen=True)
 class ClientUnreachableLasting:
     # No answer from the client's API for ``unreachable_for_seconds``: emitted once until one comes.
-    client_name: str
+    client_name: ClientName
     unreachable_for_seconds: float
     node_id: NodeId
 
 
 @dataclass(frozen=True)
 class ClientReachableAgain:
-    client_name: str
+    client_name: ClientName
     node_id: NodeId
 
 

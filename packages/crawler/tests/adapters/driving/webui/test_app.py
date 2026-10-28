@@ -49,7 +49,7 @@ from p2pwatch.domain.download.states import DownloadState, FailureReason, Waitin
 from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
@@ -1042,8 +1042,10 @@ async def _node_page(node_state: NodeState) -> str:
 async def test_node_page_shows_each_backoff_and_its_planned_retry_in_utc() -> None:
     started_at = datetime(2026, 6, 12, 10, tzinfo=UTC)
     backoff_state_by_key = {
-        BackoffKey("amuled", None): BackoffState(3, started_at, timedelta(seconds=120)),
-        BackoffKey("amuled", "kad"): BackoffState(1, started_at, timedelta(seconds=2.5)),
+        BackoffKey(ClientName("amuled"), None): BackoffState(3, started_at, timedelta(seconds=120)),
+        BackoffKey(ClientName("amuled"), Channel("kad")): BackoffState(
+            1, started_at, timedelta(seconds=2.5)
+        ),
     }
     before = await _node_page(_NODE_STATE)
     after = await _node_page(replace(_NODE_STATE, backoff_state_by_key=backoff_state_by_key))
@@ -1626,11 +1628,11 @@ async def test_each_control_followed_lands_on_its_dashboard_banner(
     assert len(controls.calls) == 1
 
 
-_CHANNELS = (ChannelStatus("ed2k", True, False), ChannelStatus("x", False, None))
+_CHANNELS = (ChannelStatus(Channel("ed2k"), True, False), ChannelStatus(Channel("x"), False, None))
 
 
 async def _clients_section(reading: StatusReading | None, *, is_fresh: bool = True) -> str:
-    client_summary = ClientSummary("amuled", reading, is_fresh=is_fresh)
+    client_summary = ClientSummary(ClientName("amuled"), reading, is_fresh=is_fresh)
     summary = replace(_CRAWL_SUMMARY, client_summaries=(client_summary,))
     text = await _page(_app_on_fakes(crawl_summary=summary), "/")
     return text[text.index("<h2>Clients</h2>") : text.index("<h2>Crawl</h2>")]

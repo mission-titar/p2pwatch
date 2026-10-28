@@ -49,12 +49,13 @@ from p2pwatch.domain.client_errors import (
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import Channel
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.search.answer import SearchAnswer
 from p2pwatch.domain.source import SourceReading
 from p2pwatch.domain.status_reading import ClientStatus
 
-_SEARCH_TYPES = {"ed2k": "global", "kad": "kad"}
+_SEARCH_TYPES = {Channel("ed2k"): "global", Channel("kad"): "kad"}
 
 # Least time between two ed2k starts, and between two Kad starts on one Kad word (spec stage 2,
 # D5): rules of the networks, not settings, since a key would invite lowering them until the ban.
@@ -100,7 +101,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         self._kad_next_start: dict[str, MonotonicInstant] = {}
         self._keywords_without_kad_word: set[str] = set()
 
-    def channels(self) -> tuple[str, ...]:
+    def channels(self) -> tuple[Channel, ...]:
         return tuple(_SEARCH_TYPES)
 
     async def _connect(self) -> httpx.AsyncClient:
@@ -147,7 +148,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
             await _send(http, "POST", "/auth/logout")
         await http.aclose()
 
-    async def search(self, keyword: str, channel: str, budget_seconds: float) -> SearchAnswer:
+    async def search(self, keyword: str, channel: Channel, budget_seconds: float) -> SearchAnswer:
         """Waits for the network's next allowed start, then polls until amuled reports the search
         finished or ``budget_seconds`` after its start. Never stops nor frees it: amuled does."""
         with _refusal_as(SearchFailedError):

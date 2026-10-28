@@ -10,13 +10,15 @@ keeps this module trivially testable and the jitter replayable. Used by
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from p2pwatch.domain.identifiers import Channel, ClientName
+
 
 @dataclass(frozen=True)
 class BackoffKey:
     """What a backoff holds back: one channel of a client, or the whole client (``None``)."""
 
-    client_name: str
-    channel: str | None
+    client_name: ClientName
+    channel: Channel | None
 
 
 @dataclass(frozen=True)

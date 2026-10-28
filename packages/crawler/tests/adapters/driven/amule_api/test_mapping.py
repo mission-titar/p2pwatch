@@ -18,6 +18,7 @@ from p2pwatch.adapters.driven.amule_api.mapping import (
 from p2pwatch.domain.download.states import FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import Channel
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.source import ContactPoint, SourceKey, SourceReading, SourceRole
 from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus
@@ -343,8 +344,8 @@ def test_a_connected_high_id_and_open_kad_are_connectable() -> None:
     assert status == ClientStatus(
         version="3.0.1",
         channels=(
-            ChannelStatus(channel="ed2k", connected=True, connectable=True),
-            ChannelStatus(channel="kad", connected=True, connectable=True),
+            ChannelStatus(channel=Channel("ed2k"), connected=True, connectable=True),
+            ChannelStatus(channel=Channel("kad"), connected=True, connectable=True),
         ),
     )
 

@@ -10,7 +10,7 @@ from p2pwatch.application.steps.backoff_registry import BackoffRegistry
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.client_errors import ClientUnreachableError, SearchFailedError
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.events import (
     ClientUnreachable,
     SearchExecuted,
@@ -28,7 +28,7 @@ class SearchTask:
     """A unit of work: a keyword on a channel (spec §4)."""
 
     keyword: str
-    channel: str
+    channel: Channel
 
 
 class SearchWorker:
@@ -40,7 +40,7 @@ class SearchWorker:
     def __init__(
         self,
         *,
-        client_name: str,
+        client_name: ClientName,
         client: SearchClient,
         backoff: BackoffRegistry,
         cataloguer: Cataloguer,
@@ -56,11 +56,11 @@ class SearchWorker:
         self._logger = logger
 
     @property
-    def channels(self) -> tuple[str, ...]:
+    def channels(self) -> tuple[Channel, ...]:
         """The channels its client declares."""
         return self._client.channels()
 
-    def time_until_ready(self, channel: str) -> timedelta:
+    def time_until_ready(self, channel: Channel) -> timedelta:
         """How long until neither the client nor ``channel`` is backed off."""
         return max(
             self._backoff.time_until_retry(self._client_backoff_key),
@@ -68,7 +68,7 @@ class SearchWorker:
         )
 
     async def _record_observations(
-        self, channel: str, answer: SearchAnswer, node_id: NodeId
+        self, channel: Channel, answer: SearchAnswer, node_id: NodeId
     ) -> int:
         """Per-obs pipeline; returns the number of CHANGED verdicts (logging). A
         ``StoreError`` per obs is ABSORBED inside ``Cataloguer.catalog`` (spec §7)."""
