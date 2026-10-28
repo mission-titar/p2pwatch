@@ -31,7 +31,7 @@ _FAKE_TIME_START = "2026-06-12_00-00-00"
 _SOURCES = {"sources", "source_variants", "source_observations"}
 _CATALOG_TABLES = {"files", "observation_variants", "observations", "match_decisions"} | _SOURCES
 _LOCAL_TABLES = {
-    "node_runtime",
+    "node_identity",
     "downloads",
     "backoff_states",
     "reevaluation_state",
@@ -58,7 +58,7 @@ def test_open_local_creates_the_tables_and_versions_the_schema(tmp_path: Path) -
     connection = database_opener().open_local(tmp_path / "local.db")
     try:
         assert _table_names(connection) == _LOCAL_TABLES
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 14
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 15
     finally:
         connection.close()
 

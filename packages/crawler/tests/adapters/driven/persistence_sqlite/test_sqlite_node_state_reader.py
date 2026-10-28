@@ -5,6 +5,7 @@ from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_node_id_store import SqliteNodeIdStore
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_node_state_reader import (
     SqliteNodeStateReader,
 )
@@ -40,7 +41,7 @@ def _read_node_state(path: Path) -> NodeState:
 
 
 def test_node_state_populated(local_db: Path) -> None:
-    """Populated DB: downloads, backoff_states, node_runtime."""
+    """Populated DB: downloads, backoff_states, node_identity."""
     # --- populate ---
     with closing(sqlite3.connect(local_db)) as w, w:
         w.execute(
@@ -61,12 +62,8 @@ def test_node_state_populated(local_db: Path) -> None:
             [("amuled", "kad", 1, _STARTED_AT_MICROS, 2.5), ("amuled", None, 3, 0, 120.0)],
         )
         w.execute(
-            "INSERT INTO node_runtime VALUES (?,?)",
-            ("node_id", "test-node-42"),
-        )
-        w.execute(
-            "INSERT INTO node_runtime VALUES (?,?)",
-            ("created_at", "2026-06-22T00:00:00.000000+00:00"),
+            "INSERT INTO node_identity VALUES (1, ?, ?)",
+            ("test-node-42", 1_782_086_400_000_000),
         )
         w.commit()
 
@@ -102,7 +99,7 @@ def test_node_state_populated(local_db: Path) -> None:
         ),
     ]
 
-    # node_runtime
+    # node_identity
     assert state.node_id == "test-node-42"
     assert state.created_at == datetime(2026, 6, 22, tzinfo=UTC)
 
@@ -148,6 +145,16 @@ def test_a_download_reads_back_each_instant_its_store_wrote(local_db: Path) -> N
             failure_reason=None,
         ),
     )
+
+
+def test_the_node_identity_reads_back_the_instant_its_store_wrote(local_db: Path) -> None:
+    created_at = datetime(2026, 6, 22, 10, 0, 0, 123456, tzinfo=UTC)
+    with closing(sqlite3.connect(local_db, autocommit=True)) as connection:
+        SqliteNodeIdStore(connection).record_node_id("test-node-42", created_at)
+
+    state = _read_node_state(local_db)
+
+    assert (state.node_id, state.created_at) == ("test-node-42", created_at)
 
 
 # ---------------------------------------------------------------------------

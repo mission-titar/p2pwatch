@@ -465,7 +465,7 @@ flowchart LR
     so["source_observations"]
   end
   subgraph loc["local.db · per node"]
-    nr["node_runtime"]
+    ni["node_identity"]
     dl["downloads"]
     bs["backoff_states"]
     rs["reevaluation_state"]
@@ -476,7 +476,7 @@ flowchart LR
   (triggers `BEFORE UPDATE/DELETE -> ABORT`), pour que N nœuds fusionnent en un seul catalogue
   (`python -m p2pwatch merge`). Les insertions sont **idempotentes** (`INSERT OR IGNORE` /
   `ON CONFLICT DO NOTHING`), donc sans danger en cas de redémarrage en pleine écriture.
-- **`local.db`** (version de schéma 14) : l'état d'exécution du nœud (identité, suivi des
+- **`local.db`** (version de schéma 15) : l'état d'exécution du nœud (identité, suivi des
   téléchargements et de leur progression, backoff des recherches, empreinte de la politique
   réévaluée). **Jamais fusionnée** : elle appartient à un seul nœud.
 
@@ -524,7 +524,11 @@ porte son unité dans son nom, par des `RENAME COLUMN` eux aussi.
 microsecondes, `decided_at_micros`, au lieu du texte ISO-8601 ; chaque ligne garde son `id`, qui
 départage deux décisions du même instant. `local/0014` reconstruit `downloads` en table `STRICT`,
 ses quatre instants en microsecondes : `queued_at_micros`, `completed_at_micros`,
-`latest_seen_at_micros` et `latest_progress_at_micros`.
+`latest_seen_at_micros` et `latest_progress_at_micros`. `local/0015` remplace la table clé-valeur
+`node_runtime` par `node_identity`, une seule ligne typée : `node_id` et `created_at_micros`. Une
+base dont `node_runtime` porte un `node_id` sans son `created_at` refuse de migrer plutôt que de
+perdre l'identité du nœud. `reevaluation_state` est reconstruite elle aussi, si bien que chaque table
+de `local.db` est désormais `STRICT`.
 
 ### 8.1 Écrire une migration
 
