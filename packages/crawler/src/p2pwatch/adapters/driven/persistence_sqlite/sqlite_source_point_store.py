@@ -5,18 +5,14 @@ import json
 import sqlite3
 from collections.abc import Sequence
 from contextlib import suppress
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 
-from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
-from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
+from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros, micros_to_instant
 from p2pwatch.application.ports.driven.source_point_reader import SourcePointReader
 from p2pwatch.application.ports.driven.source_point_writer import SourcePointWriter
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.source import LatestPoint, SourceKey, SourcePoint, SourceReading, SourceRole
-
-_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
-_MICROSECOND = timedelta(microseconds=1)
 
 # The source's latest point in the window. Without an identity, a source is its name among the
 # variants without one (D4). One seek per variant, never a walk of the points.
@@ -113,7 +109,11 @@ class SqliteSourcePointStore(SourcePointWriter, SourcePointReader):
         self._connection.execute(_INSERT_VARIANT, (*variant, variant_content_hash))
         self._connection.execute(
             _INSERT_POINT,
-            (_micros(point.observed_at), reading.session_received_bytes, variant_content_hash),
+            (
+                instant_to_micros(point.observed_at),
+                reading.session_received_bytes,
+                variant_content_hash,
+            ),
         )
 
     def read_latest_point(
@@ -133,8 +133,8 @@ class SqliteSourcePointStore(SourcePointWriter, SourcePointReader):
                     "source_id": None if reading.source is None else reading.source.source_id,
                     "source_name": reading.source_name,
                     "node_id": node_id,
-                    "since": _micros(since),
-                    "before": _micros(before),
+                    "since": instant_to_micros(since),
+                    "before": instant_to_micros(before),
                 },
             ).fetchone()
         return None if row is None else _latest_point(*row)
@@ -146,7 +146,11 @@ class SqliteSourcePointStore(SourcePointWriter, SourcePointReader):
         with wrap_sqlite_errors():
             rows = self._connection.execute(
                 _EARLIER_POINTS,
-                {"source_id": source.source_id, "node_id": node_id, "before": _micros(before)},
+                {
+                    "source_id": source.source_id,
+                    "node_id": node_id,
+                    "before": instant_to_micros(before),
+                },
             ).fetchall()
         return tuple(_latest_point(*row) for row in rows)
 
@@ -154,19 +158,13 @@ class SqliteSourcePointStore(SourcePointWriter, SourcePointReader):
         """Whether ``node_id`` has a point observed before ``before``."""
         with wrap_sqlite_errors():
             row = self._connection.execute(
-                _HAS_POINTS_BEFORE, (node_id, _micros(before))
+                _HAS_POINTS_BEFORE, (node_id, instant_to_micros(before))
             ).fetchone()
         return bool(row[0])
 
 
-def _micros(moment: datetime) -> int:
-    return iso_to_micros(utc_iso(moment))
-
-
 def _latest_point(role: str, observed_at: int, session_received_bytes: int) -> LatestPoint:
-    return LatestPoint(
-        SourceRole(role), _EPOCH + observed_at * _MICROSECOND, session_received_bytes
-    )
+    return LatestPoint(SourceRole(role), micros_to_instant(observed_at), session_received_bytes)
 
 
 def _variant_columns(point: SourcePoint) -> tuple[bytes | str | bool | None, ...]:

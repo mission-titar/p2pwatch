@@ -3,16 +3,13 @@
 
 import sqlite3
 from contextlib import suppress
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
-from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
-from p2pwatch.adapters.driven.persistence_sqlite.variants import iso_to_micros
+from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros, micros_to_instant
 from p2pwatch.application.ports.driven.backoff_state_reader import BackoffStateReader
 from p2pwatch.application.ports.driven.backoff_state_writer import BackoffStateWriter
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
-
-_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 _SELECT = "SELECT client_name, channel, attempts, started_at, delay_seconds FROM backoff_states"
 
@@ -32,7 +29,7 @@ class SqliteBackoffStateStore(BackoffStateReader, BackoffStateWriter):
         return {
             BackoffKey(client_name, channel): BackoffState(
                 attempts,
-                _EPOCH + timedelta(microseconds=started_at_micros),
+                micros_to_instant(started_at_micros),
                 timedelta(seconds=delay_seconds),
             )
             for client_name, channel, attempts, started_at_micros, delay_seconds in rows
@@ -45,7 +42,7 @@ class SqliteBackoffStateStore(BackoffStateReader, BackoffStateWriter):
                 backoff_key.client_name,
                 backoff_key.channel,
                 state.attempts,
-                iso_to_micros(utc_iso(state.started_at)),
+                instant_to_micros(state.started_at),
                 state.delay.total_seconds(),
             )
             for backoff_key, state in backoff_state_by_key.items()

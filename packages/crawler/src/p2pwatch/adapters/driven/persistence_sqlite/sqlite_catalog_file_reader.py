@@ -9,10 +9,11 @@ All SQL lives in module constants, parameterized (no value interpolation).
 """
 
 from collections.abc import Mapping
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord
+from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.observation_read import (
     LATEST_OBSERVATION_CTE,
     known_filenames,
@@ -32,9 +33,6 @@ from p2pwatch.domain.file_target_decision import DatedDecision
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-
-_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
-_MICROSECOND = timedelta(microseconds=1)
 
 # Sort allowlist (webui spec §3.1): a sort maps to a FIXED ORDER BY expression; no param value is
 # ever interpolated into SQL. ``tier`` sorts by the file's strongest tier rank
@@ -231,10 +229,6 @@ def _filter_clauses(
     return clauses, params
 
 
-def _micros(moment: datetime) -> int:
-    return (moment - _EPOCH) // _MICROSECOND
-
-
 def _latest_observation_join(search_text: str | None) -> str:
     """The counters' join to the latest observation, which only the name filter reads."""
     return "" if search_text is None else _JOIN_LATEST_OBSERVATION
@@ -373,7 +367,9 @@ class SqliteCatalogFileReader(CatalogFileReader):
         return FileHistory(
             file=file,
             size_bytes=file_row["size_bytes"],
-            observations=observations_between(connection, file, _micros(since), _micros(until)),
+            observations=observations_between(
+                connection, file, instant_to_micros(since), instant_to_micros(until)
+            ),
             latest_observation=latest_observation(connection, file),
             decisions=decisions,
             known_filenames=known_filenames(connection, file),

@@ -26,9 +26,9 @@ from p2pwatch.adapters.driven.persistence_sqlite import observation_read
 from p2pwatch.adapters.driven.persistence_sqlite.canonical_native_id import (
     require_canonical_native_id,
 )
-from p2pwatch.adapters.driven.persistence_sqlite.connection import utc_iso
 from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
-from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash, iso_to_micros
+from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
+from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash
 from p2pwatch.application.ports.driven.observation_reader import ObservationReader
 from p2pwatch.application.ports.driven.observation_writer import ObservationWriter
 from p2pwatch.domain.file_key import FileKey
@@ -73,7 +73,7 @@ class SqliteObservationStore(ObservationWriter, ObservationReader):
             observation.node_id,
         )
         variant_content_hash = content_hash(*variant)
-        observed_at_micros = iso_to_micros(utc_iso(observation.observed_at))
+        observed_at_micros = instant_to_micros(observation.observed_at)
         with wrap_sqlite_errors():
             self._connection.execute("BEGIN")
             try:

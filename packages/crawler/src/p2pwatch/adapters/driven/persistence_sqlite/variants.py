@@ -7,14 +7,11 @@ import hashlib
 import json
 import sqlite3
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
 from functools import cache
 
+from p2pwatch.adapters.driven.persistence_sqlite.micros import iso_to_micros
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import fold_raw_metadata
-
-_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
-_MICROSECOND = timedelta(microseconds=1)
 
 
 def content_hash(
@@ -40,11 +37,6 @@ def content_hash(
     )
     canonical = json.dumps(columns, ensure_ascii=False, separators=(",", ":"))
     return hashlib.blake2b(canonical.encode(), digest_size=16).digest()
-
-
-def iso_to_micros(stamp: str) -> int:
-    """Microseconds since the Unix epoch of an aware ISO-8601 stamp; a naive one raises."""
-    return (datetime.fromisoformat(stamp) - _EPOCH) // _MICROSECOND
 
 
 def file_id(network: str, native_id: str) -> bytes:
