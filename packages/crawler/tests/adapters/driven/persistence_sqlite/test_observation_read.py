@@ -13,6 +13,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Keyword, NodeId
 from p2pwatch.domain.observation import FileObservation, ReportedFile
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import insert_file, insert_observation
 
@@ -216,8 +217,8 @@ def test_observation_reads_seek_a_variant_s_observations_by_primary_key(
 ) -> None:
     # Asserts the PLAN, not a duration: a scan of observations is 11.6M rows on the node.
     plan = [
-        str(row[3])
-        for row in connection.execute("EXPLAIN QUERY PLAN " + sql, (_A,) * sql.count("?"))
+        str(step["detail"])
+        for step in rows(connection, "EXPLAIN QUERY PLAN " + sql, (_A,) * sql.count("?"))
     ]
     assert any(re.match(r"SEARCH o\w* USING PRIMARY KEY \(variant_id=\?", step) for step in plan), (
         plan
@@ -227,9 +228,11 @@ def test_observation_reads_seek_a_variant_s_observations_by_primary_key(
 
 def test_the_timeline_seeks_its_interval_by_primary_key(connection: sqlite3.Connection) -> None:
     plan = [
-        str(row[3])
-        for row in connection.execute(
-            "EXPLAIN QUERY PLAN " + observation_read._SELECT_OBSERVATIONS_BETWEEN, (_A, 0, 1)
+        str(step["detail"])
+        for step in rows(
+            connection,
+            "EXPLAIN QUERY PLAN " + observation_read._SELECT_OBSERVATIONS_BETWEEN,
+            (_A, 0, 1),
         )
     ]
     assert (

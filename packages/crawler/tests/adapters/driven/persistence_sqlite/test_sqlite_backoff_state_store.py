@@ -14,6 +14,7 @@ from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.contracts.application.ports.driven.backoff_state_store_contract import (
     BackoffStateStoreContract,
 )
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_local
 
 _STARTED_AT = datetime(2026, 6, 12, 10, 0, 0, 123456, tzinfo=UTC)
@@ -56,15 +57,28 @@ def test_a_backoff_state_is_one_row_its_start_in_micros(
     backoff_state_store: SqliteBackoffStateStore, connection: sqlite3.Connection
 ) -> None:
     backoff_state_store.set_backoff_states(_BACKOFF)
-    rows = connection.execute(
+    backoff_states = rows(
+        connection,
         "SELECT client_name, channel, attempts, started_at_micros, delay_seconds"
         " FROM backoff_states"
-        " ORDER BY channel"
-    ).fetchall()
+        " ORDER BY channel",
+    )
     started_at_micros = 1_781_258_400_123_456
-    assert rows == [
-        ("amule-1", None, 1, started_at_micros, 2.75),
-        ("amule-1", "kad", 2, started_at_micros, 300.0),
+    assert backoff_states == [
+        {
+            "client_name": "amule-1",
+            "channel": None,
+            "attempts": 1,
+            "started_at_micros": started_at_micros,
+            "delay_seconds": 2.75,
+        },
+        {
+            "client_name": "amule-1",
+            "channel": "kad",
+            "attempts": 2,
+            "started_at_micros": started_at_micros,
+            "delay_seconds": 300.0,
+        },
     ]
 
 

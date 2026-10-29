@@ -3,11 +3,13 @@ import sqlite3
 import warnings
 from contextlib import closing
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError, PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import Migration, load_scripts
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
     open_catalog_at,
     open_local_at,
@@ -39,17 +41,18 @@ _LOCAL_TABLES = {
 
 
 def _table_names(connection: sqlite3.Connection) -> set[str]:
-    rows = connection.execute(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
-    ).fetchall()
-    return {row[0] for row in rows}
+    tables = rows(
+        connection,
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+    )
+    return {table["name"] for table in tables}
 
 
 def test_open_catalog_creates_the_tables_and_versions_the_schema(tmp_path: Path) -> None:
     connection = database_opener().open_catalog(tmp_path / "catalog.db")
     try:
         assert _table_names(connection) == _CATALOG_TABLES
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 15
+        assert rows(connection, "PRAGMA user_version") == [{"user_version": 15}]
     finally:
         connection.close()
 
@@ -58,7 +61,7 @@ def test_open_local_creates_the_tables_and_versions_the_schema(tmp_path: Path) -
     connection = database_opener().open_local(tmp_path / "local.db")
     try:
         assert _table_names(connection) == _LOCAL_TABLES
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 15
+        assert rows(connection, "PRAGMA user_version") == [{"user_version": 15}]
     finally:
         connection.close()
 
@@ -84,23 +87,23 @@ def test_open_local_runs_the_pre_migration_copier(tmp_path: Path) -> None:
     assert not leftover.exists()
 
 
-def _rows_by_table(path: Path) -> dict[str, list[tuple[object, ...]]]:
+def _rows_by_table(path: Path) -> dict[str, list[dict[str, Any]]]:
     with closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)) as connection:
         tables = [
-            row[0]
-            for row in connection.execute(
-                "SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name"
+            row["name"]
+            for row in rows(
+                connection, "SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name"
             )
         ]
         return {
-            table: connection.execute(f'SELECT * FROM "{table}" ORDER BY rowid').fetchall()
-            for table in tables
+            table: rows(connection, f'SELECT * FROM "{table}" ORDER BY rowid') for table in tables
         }
 
 
 def _version(path: Path) -> int:
     with closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)) as connection:
-        version: int = connection.execute("PRAGMA user_version").fetchone()[0]
+        (row,) = rows(connection, "PRAGMA user_version")
+        version: int = row["user_version"]
         return version
 
 
@@ -142,7 +145,9 @@ def test_a_version_5_catalog_leaves_one_copy_at_version_5_holding_its_rows(
     copy = tmp_path / f"catalog.db.pre-0006.{_FAKE_TIME_START}_UTC"
     assert _version(copy) == 5
     assert _rows_by_table(copy) == rows_before
-    assert [table for table, rows in rows_before.items() if not rows] == ["file_observation_ranges"]
+    assert [table for table, table_rows in rows_before.items() if not table_rows] == [
+        "file_observation_ranges"
+    ]
     assert _version(path) == 15
 
 
@@ -193,16 +198,21 @@ def test_a_version_5_local_db_leaves_one_copy_at_version_5(tmp_path: Path) -> No
 def test_open_catalog_indexes_the_source_variants(tmp_path: Path) -> None:
     connection = open_catalog(tmp_path / "catalog.db")
     try:
-        rows = connection.execute(
-            "SELECT l.name, i.name FROM pragma_index_list('source_variants') AS l,"
-            " pragma_index_info(l.name) AS i WHERE l.origin = 'c' ORDER BY l.name, i.seqno"
-        ).fetchall()
-        assert rows == [
-            ("idx_source_variants_file_source", "file_id"),
-            ("idx_source_variants_file_source", "source_id"),
-            ("idx_source_variants_name", "name"),
-            ("idx_source_variants_node_id", "node_id"),
-            ("idx_source_variants_source_id", "source_id"),
+        indexed_columns = rows(
+            connection,
+            "SELECT l.name AS index_name, i.name AS column_name"
+            " FROM pragma_index_list('source_variants') AS l, pragma_index_info(l.name) AS i"
+            " WHERE l.origin = 'c' ORDER BY l.name, i.seqno",
+        )
+        assert indexed_columns == [
+            {"index_name": index_name, "column_name": column_name}
+            for index_name, column_name in (
+                ("idx_source_variants_file_source", "file_id"),
+                ("idx_source_variants_file_source", "source_id"),
+                ("idx_source_variants_name", "name"),
+                ("idx_source_variants_node_id", "node_id"),
+                ("idx_source_variants_source_id", "source_id"),
+            )
         ]
     finally:
         connection.close()
@@ -211,9 +221,9 @@ def test_open_catalog_indexes_the_source_variants(tmp_path: Path) -> None:
 def test_open_applies_wal_and_foreign_keys_and_recursive_triggers_pragmas(tmp_path: Path) -> None:
     connection = open_catalog(tmp_path / "catalog.db")
     try:
-        assert connection.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
-        assert connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
-        assert connection.execute("PRAGMA recursive_triggers").fetchone()[0] == 1
+        assert rows(connection, "PRAGMA journal_mode") == [{"journal_mode": "wal"}]
+        assert rows(connection, "PRAGMA foreign_keys") == [{"foreign_keys": 1}]
+        assert rows(connection, "PRAGMA recursive_triggers") == [{"recursive_triggers": 1}]
     finally:
         connection.close()
 
@@ -221,7 +231,7 @@ def test_open_applies_wal_and_foreign_keys_and_recursive_triggers_pragmas(tmp_pa
 def test_open_local_applies_recursive_triggers_pragma(tmp_path: Path) -> None:
     connection = open_local(tmp_path / "local.db")
     try:
-        assert connection.execute("PRAGMA recursive_triggers").fetchone()[0] == 1
+        assert rows(connection, "PRAGMA recursive_triggers") == [{"recursive_triggers": 1}]
     finally:
         connection.close()
 
@@ -242,8 +252,8 @@ def test_reopen_is_idempotent_and_keeps_data(tmp_path: Path) -> None:
     first.close()
     second = open_catalog(path)  # versions already applied: NO script replays
     try:
-        assert second.execute("PRAGMA user_version").fetchone()[0] == 15
-        assert second.execute("SELECT count(*) FROM files").fetchone()[0] == 1
+        assert rows(second, "PRAGMA user_version") == [{"user_version": 15}]
+        assert rows(second, "SELECT count(*) AS file_count FROM files") == [{"file_count": 1}]
     finally:
         second.close()
 
@@ -278,13 +288,14 @@ def _open(path: Path, scripts: tuple[Migration, ...]) -> sqlite3.Connection:
 def _version_and_tables(path: Path) -> tuple[int, set[str]]:
     """What a failed open left in ``path``, read once its connection is closed."""
     with closing(sqlite3.connect(path)) as connection:
-        return connection.execute("PRAGMA user_version").fetchone()[0], _table_names(connection)
+        (row,) = rows(connection, "PRAGMA user_version")
+        return row["user_version"], _table_names(connection)
 
 
 def test_open_registers_the_variant_functions_before_migrating(tmp_path: Path) -> None:
     probe = "CREATE TABLE probe AS SELECT iso_to_micros('1970-01-01T00:00:00.000001+00:00') AS us;"
     with closing(_open(tmp_path / "catalog.db", (Migration(1, probe),))) as connection:
-        assert connection.execute("SELECT us FROM probe").fetchone()[0] == 1
+        assert rows(connection, "SELECT us FROM probe") == [{"us": 1}]
 
 
 def test_open_removes_iso_to_micros_once_migrated(tmp_path: Path) -> None:
@@ -329,7 +340,7 @@ def test_open_refuses_a_database_newer_than_its_scripts(tmp_path: Path) -> None:
 
 def test_open_with_no_scripts_migrates_nothing(tmp_path: Path) -> None:
     with closing(_open(tmp_path / "vide.db", ())) as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 0
+        assert rows(connection, "PRAGMA user_version") == [{"user_version": 0}]
 
 
 def test_migrations_sort_through_temporary_files(tmp_path: Path) -> None:
@@ -340,13 +351,15 @@ def test_migrations_sort_through_temporary_files(tmp_path: Path) -> None:
         "INSERT INTO probe SELECT temp_store FROM pragma_temp_store();"
     )
     with closing(_open(tmp_path / "probe.db", (Migration(1, script),))) as connection:
-        assert connection.execute("SELECT temp_store FROM probe").fetchone()[0] == _TEMP_STORE_FILE
+        assert rows(connection, "SELECT temp_store FROM probe") == [
+            {"temp_store": _TEMP_STORE_FILE}
+        ]
 
 
 def test_temp_store_is_restored_after_migrations(tmp_path: Path) -> None:
     scripts = (Migration(1, "CREATE TABLE t (x INTEGER);"),)
     with closing(_open(tmp_path / "restore.db", scripts)) as connection:
-        assert connection.execute("PRAGMA temp_store").fetchone()[0] == _TEMP_STORE_DEFAULT
+        assert rows(connection, "PRAGMA temp_store") == [{"temp_store": _TEMP_STORE_DEFAULT}]
 
 
 def test_failed_script_is_rolled_back_and_version_unchanged(tmp_path: Path) -> None:
@@ -426,7 +439,7 @@ def test_vacuum_with_the_directive_runs_and_stamps_its_version(tmp_path: Path) -
     (scripts / "0001_table.sql").write_text("CREATE TABLE t (x INTEGER);", encoding="utf-8")
     (scripts / "0002_vacuum.sql").write_text(_NO_TRANSACTION + "VACUUM;", encoding="utf-8")
     with closing(_open(tmp_path / "vacuum.db", load_scripts(scripts))) as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert rows(connection, "PRAGMA user_version") == [{"user_version": 2}]
         assert not connection.in_transaction
 
 
@@ -453,12 +466,12 @@ def test_a_script_pragmas_are_restored_after_it(tmp_path: Path, transactional: b
     script = _LARGE_REWRITE_PRAGMAS + "CREATE TABLE t (x INTEGER);"
     scripts = (Migration(1, script, transactional),)
     with closing(opener.open(tmp_path / "pragmas.db", scripts)) as connection:
-        assert connection.execute("PRAGMA secure_delete").fetchone()[0] == 1
-        assert connection.execute("PRAGMA cache_size").fetchone()[0] == -2000
+        assert rows(connection, "PRAGMA secure_delete") == [{"secure_delete": 1}]
+        assert rows(connection, "PRAGMA cache_size") == [{"cache_size": -2000}]
 
 
 def test_a_fast_secure_delete_is_restored_as_fast(tmp_path: Path) -> None:
     opener = database_opener_setting("PRAGMA secure_delete = FAST")
     scripts = (Migration(1, _LARGE_REWRITE_PRAGMAS),)
     with closing(opener.open(tmp_path / "fast.db", scripts)) as connection:
-        assert connection.execute("PRAGMA secure_delete").fetchone()[0] == 2
+        assert rows(connection, "PRAGMA secure_delete") == [{"secure_delete": 2}]

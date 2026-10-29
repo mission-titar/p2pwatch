@@ -39,6 +39,7 @@ from tests.support.adapters.driven.persistence_sqlite.catalog_seeds import (
     seed_retracted,
     seed_whole_episode,
 )
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.catalog_rows import (
     SEEN_AT,
     file_id,
@@ -765,7 +766,7 @@ def test_latest_obs_seeks_per_file_instead_of_scanning_observations(
     primary key, never walks ``observations`` (11.6M rows on the node). Asserts the PLAN, not a
     duration, so it stays deterministic; each real query is checked, not the CTE alone."""
     with closing(open_reader(catalog_db)) as reader:
-        plan = [str(row[3]) for row in reader.execute("EXPLAIN QUERY PLAN " + sql)]
+        plan = [str(step["detail"]) for step in rows(reader, "EXPLAIN QUERY PLAN " + sql)]
 
     assert any(re.match(r"SEARCH o\w* USING PRIMARY KEY \(variant_id=\?", step) for step in plan), (
         f"{label} does not seek observations by key: {plan}"

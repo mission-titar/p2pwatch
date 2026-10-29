@@ -10,6 +10,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import (
     insert_decision,
@@ -35,7 +36,8 @@ _ROWS_BY_TABLE: Mapping[str, str] = {
     ),
     "sources": "SELECT network, native_id FROM sources",
     "source_variants": (
-        "SELECT f.native_id, s.native_id, v.name, v.role, v.node_id, v.content_hash"
+        "SELECT f.native_id AS file_native_id, s.native_id AS source_native_id,"
+        " v.name, v.role, v.node_id, v.content_hash"
         " FROM source_variants AS v JOIN files AS f USING (file_id)"
         " LEFT JOIN sources AS s ON s.source_id = v.source_id"
     ),
@@ -76,12 +78,12 @@ def make_catalog(path: Path, content: Mapping[str, Sequence[Mapping[str, Any]]])
 
 
 def _insert_source_points(
-    connection: sqlite3.Connection, rows: Sequence[Mapping[str, Any]]
+    connection: sqlite3.Connection, source_points: Sequence[Mapping[str, Any]]
 ) -> None:
     """Each row: its variant's ``native_id``, ``user_hash`` and ``node_id``, then its point's
     arguments."""
     variants: dict[tuple[str, str | None, str], int] = {}
-    for row in rows:
+    for row in source_points:
         variant = (row["native_id"], row["user_hash"], row["node_id"])
         if variant not in variants:
             user_hash = variant[1]
@@ -116,26 +118,31 @@ def count(path: Path, table: str) -> int:
     """Number of rows of ``table`` in the catalog ``path``."""
     connection = open_catalog(path)
     try:
-        return int(connection.execute(f"SELECT count(*) FROM {table}").fetchone()[0])
+        (row,) = rows(connection, f"SELECT count(*) AS row_count FROM {table}")
+        return int(row["row_count"])
     finally:
         connection.close()
 
 
-def rows_without_id(path: Path, table: str) -> list[tuple[object, ...]]:
+def rows_without_id(path: Path, table: str) -> list[dict[str, Any]]:
     """All rows of ``table`` by their natural key (no local id), sorted."""
     connection = open_catalog(path)
     try:
-        cursor = connection.execute(_ROWS_BY_TABLE[table])
-        return sorted(cursor.fetchall(), key=lambda row: tuple(str(cell) for cell in row))
+        return sorted_by_values(rows(connection, _ROWS_BY_TABLE[table]))
     finally:
         connection.close()
+
+
+def sorted_by_values(table_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """``table_rows`` in the order of their values, read in their columns' order."""
+    return sorted(table_rows, key=lambda row: tuple(str(cell) for cell in row.values()))
 
 
 def variant_ids(path: Path) -> list[int]:
     """The (reassigned) ``variant_id`` values, sorted ascending."""
     connection = open_catalog(path)
     try:
-        cursor = connection.execute("SELECT variant_id FROM observation_variants ORDER BY 1")
-        return [int(row[0]) for row in cursor.fetchall()]
+        variants = rows(connection, "SELECT variant_id FROM observation_variants ORDER BY 1")
+        return [int(row["variant_id"]) for row in variants]
     finally:
         connection.close()

@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import (
     insert_decision,
@@ -69,4 +70,4 @@ def test_insert_remains_allowed_on_every_table(seeded_catalog: sqlite3.Connectio
     # Append-only = you can ALWAYS add (the seed INSERT already succeeded);
     # here we prove a SECOND insert passes too (the triggers only block U/D).
     insert_file(seeded_catalog, "b" * 32, 2)
-    assert seeded_catalog.execute("SELECT count(*) FROM files").fetchone()[0] == 2
+    assert rows(seeded_catalog, "SELECT count(*) AS file_count FROM files") == [{"file_count": 2}]
