@@ -9,6 +9,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.micros import (
     micros_to_instant,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.variants import register_sql_functions
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 
 _INSTANT = datetime(2026, 6, 11, 12, 0, 0, 123456, tzinfo=UTC)
 _MICROS = 1_781_179_200_123_456
@@ -24,7 +25,8 @@ def connection() -> Iterator[sqlite3.Connection]:
 
 def _iso_to_micros(connection: sqlite3.Connection, stamp: str) -> int:
     """``iso_to_micros`` as the migrations call it, the one way it is called."""
-    micros: int = connection.execute("SELECT iso_to_micros(?)", (stamp,)).fetchone()[0]
+    [row] = rows(connection, "SELECT iso_to_micros(?) AS micros", (stamp,))
+    micros: int = row["micros"]
     return micros
 
 

@@ -578,11 +578,12 @@ connection.commit()
 _READ_ROW = """
 import sqlite3, sys
 connection = sqlite3.connect("/data/local.db", timeout=30)
+connection.row_factory = sqlite3.Row
 row = connection.execute(
-    "SELECT state, completed_at_micros IS NOT NULL FROM downloads WHERE native_id = ?",
+    "SELECT state, completed_at_micros IS NOT NULL AS completed FROM downloads WHERE native_id = ?",
     (sys.argv[1],),
 ).fetchone()
-print(row[0], bool(row[1]))
+print(row["state"], bool(row["completed"]))
 """
 
 
