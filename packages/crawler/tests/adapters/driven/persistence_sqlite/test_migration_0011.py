@@ -2,7 +2,9 @@
 
 import sqlite3
 from pathlib import Path
+from typing import Any
 
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
     insert_stage4_range,
     insert_stage4_variant,
@@ -33,26 +35,23 @@ def _catalog_at_10(path: Path) -> None:
     connection.close()
 
 
-def _rows(connection: sqlite3.Connection) -> dict[str, list[tuple[object, ...]]]:
-    return {
-        table: connection.execute(f"SELECT * FROM {table} ORDER BY 1, 2").fetchall()
-        for table in _KEPT
-    }
+def _kept_rows(connection: sqlite3.Connection) -> dict[str, list[dict[str, Any]]]:
+    return {table: rows(connection, f"SELECT * FROM {table} ORDER BY 1, 2") for table in _KEPT}
 
 
 def _columns(connection: sqlite3.Connection, table: str) -> list[str]:
-    return [row[1] for row in connection.execute(f"PRAGMA table_info({table})")]
+    return [column["name"] for column in rows(connection, f"PRAGMA table_info({table})")]
 
 
 def test_0011_drops_the_ranges_and_recreates_the_source_tables_empty(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
     _catalog_at_10(path)
     before = open_catalog_at(path, 10)
-    kept = _rows(before)
+    kept = _kept_rows(before)
     before.close()
     connection = open_catalog_at(path, 11)
     try:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 11
+        assert rows(connection, "PRAGMA user_version") == [{"user_version": 11}]
         assert _columns(connection, "source_ranges") == []
         assert "node_id" in _columns(connection, "source_variants")
         assert _columns(connection, "source_observations") == [
@@ -61,9 +60,11 @@ def test_0011_drops_the_ranges_and_recreates_the_source_tables_empty(tmp_path: P
             "transfer_counter",
         ]
         for table in ("source_variants", "source_observations"):
-            assert connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone() == (0,)
-        assert _rows(connection) == kept
+            assert rows(connection, f"SELECT COUNT(*) AS row_count FROM {table}") == [
+                {"row_count": 0}
+            ]
+        assert _kept_rows(connection) == kept
         assert kept["sources"] != []
-        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+        assert rows(connection, "PRAGMA foreign_key_check") == []
     finally:
         connection.close()

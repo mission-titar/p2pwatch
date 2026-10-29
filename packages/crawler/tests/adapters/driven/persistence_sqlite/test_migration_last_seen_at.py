@@ -9,6 +9,7 @@ import sqlite3
 from importlib import resources
 from pathlib import Path
 
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_local_at
 
 _LOCAL_MIGRATIONS = (
@@ -39,7 +40,8 @@ def test_backfills_last_seen_at_with_queued_at(tmp_path: Path) -> None:
     _write_local_db_at_version_4(path)
     connection = open_local_at(path, 5)
     try:
-        row = connection.execute("SELECT last_seen_at FROM downloads WHERE ed2k_hash = 'a1'")
-        assert row.fetchone()[0] == _QUEUED_AT
+        assert rows(connection, "SELECT last_seen_at FROM downloads WHERE ed2k_hash = 'a1'") == [
+            {"last_seen_at": _QUEUED_AT}
+        ]
     finally:
         connection.close()

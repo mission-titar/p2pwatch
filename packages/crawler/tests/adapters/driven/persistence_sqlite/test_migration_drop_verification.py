@@ -18,6 +18,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store i
 )
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import FileKey, Network
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     open_catalog,
     open_local,
@@ -29,8 +30,8 @@ _LOCAL_MIGRATIONS = (
 
 
 def _names(connection: sqlite3.Connection, kind: str) -> set[str]:
-    rows = connection.execute("SELECT name FROM sqlite_master WHERE type = ?", (kind,))
-    return {str(row[0]) for row in rows}
+    schema_rows = rows(connection, "SELECT name FROM sqlite_master WHERE type = ?", (kind,))
+    return {str(row["name"]) for row in schema_rows}
 
 
 def _write_legacy_local_db(path: Path) -> None:
