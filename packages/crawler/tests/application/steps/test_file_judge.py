@@ -32,8 +32,9 @@ from tests.fakes.adapters.driven.fake_ticking_wall_clock import FakeTickingWallC
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.fakes.adapters.driven.fake_wall_clock import FakeWallClock
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
-from tests.support.catalog_rows import decision_node_ids, insert_file
+from tests.support.catalog_rows import count_decisions, decision_node_ids, insert_file
 
 _NODE_ID = NodeId("n1")
 _HASH_DL = "31d6cfe0d16ae931b73c59d7e0c089c0"
@@ -147,10 +148,9 @@ async def test_new_decision_is_recorded_emitted_and_nudged(
         wall_clock,
     )
     assert written == 1
-    assert catalog_connection.execute("SELECT target_id, tier FROM match_decisions").fetchone() == (
-        "062A",
-        "download",
-    )
+    assert rows(catalog_connection, "SELECT target_id, tier FROM match_decisions") == [
+        {"target_id": "062A", "tier": "download"}
+    ]
     assert decision_node_ids(catalog_connection) == {_NODE_ID}
     assert observability.logger.lines == [
         _decisions_line(_HASH_DL, _DL_NAME, "062A none → download")
@@ -179,11 +179,11 @@ async def test_multi_segment_file_records_both_segments_then_is_idempotent(
         wall_clock,
     )
     assert written == 2
-    assert catalog_connection.execute(
-        "SELECT target_id, rule_name, tier FROM match_decisions ORDER BY id"
-    ).fetchall() == [
-        ("062A", "numero_nu_confirmed", "download"),
-        ("062B", "numero_nu_confirmed", "download"),
+    assert rows(
+        catalog_connection, "SELECT target_id, rule_name, tier FROM match_decisions ORDER BY id"
+    ) == [
+        {"target_id": "062A", "rule_name": "numero_nu_confirmed", "tier": "download"},
+        {"target_id": "062B", "rule_name": "numero_nu_confirmed", "tier": "download"},
     ]
     assert observability.logger.lines == [
         _decisions_line(_HASH_MULTI, _MULTI_NAME, "062A none → download, 062B none → download")
@@ -206,7 +206,7 @@ async def test_multi_segment_file_records_both_segments_then_is_idempotent(
         wall_clock,
     )
     assert again == 0
-    assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 2
+    assert count_decisions(catalog_connection) == 2
 
 
 @pytest.mark.asyncio
@@ -240,10 +240,8 @@ async def test_changed_decision_is_reappended_emitted_and_nudged(
     )
     assert written == 1
     tiers = [
-        row[0]
-        for row in catalog_connection.execute(
-            "SELECT tier FROM match_decisions ORDER BY id"
-        ).fetchall()
+        decision["tier"]
+        for decision in rows(catalog_connection, "SELECT tier FROM match_decisions ORDER BY id")
     ]
     assert tiers == ["notify", "download"]
     assert observability.logger.lines == [
@@ -283,7 +281,7 @@ async def test_unchanged_decision_is_not_reappended_emitted_or_signalled(
         wall_clock,
     )
     assert (first, second) == (1, 0)
-    assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 1
+    assert count_decisions(catalog_connection) == 1
     assert len(observability.logger.lines) == 1
     assert waker.woken_subjects == []
 
@@ -409,7 +407,7 @@ async def test_never_matched_then_none_is_a_no_op(
         wall_clock,
     )
     assert written == 0
-    assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 0
+    assert count_decisions(catalog_connection) == 0
     assert observability.logger.lines == []
     assert waker.woken_subjects == []
 
@@ -588,12 +586,20 @@ async def test_each_row_carries_the_instant_read_right_before_its_write(
     await judge.rejudge(
         _key(_HASH_MULTI), _reported_file(_HASH_MULTI, _MULTI_NAME).to_candidate(), _NODE_ID
     )
-    rows = catalog_connection.execute(
-        "SELECT target_id, tier, decided_at_micros FROM match_decisions ORDER BY id"
-    ).fetchall()
-    assert rows == [
-        ("001A", "notify", instant_to_micros(seeded_at)),
-        ("062A", "download", instant_to_micros(start)),
-        ("062B", "download", instant_to_micros(start + timedelta(minutes=1))),
-        ("001A", "retracted", instant_to_micros(start + timedelta(minutes=2))),
+    assert rows(
+        catalog_connection,
+        "SELECT target_id, tier, decided_at_micros FROM match_decisions ORDER BY id",
+    ) == [
+        {"target_id": "001A", "tier": "notify", "decided_at_micros": instant_to_micros(seeded_at)},
+        {"target_id": "062A", "tier": "download", "decided_at_micros": instant_to_micros(start)},
+        {
+            "target_id": "062B",
+            "tier": "download",
+            "decided_at_micros": instant_to_micros(start + timedelta(minutes=1)),
+        },
+        {
+            "target_id": "001A",
+            "tier": "retracted",
+            "decided_at_micros": instant_to_micros(start + timedelta(minutes=2)),
+        },
     ]

@@ -4,6 +4,7 @@ import sqlite3
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -16,6 +17,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Keyword, NodeId
 from p2pwatch.domain.observation import FileObservation, ReportedFile, fold_raw_metadata
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import count_observations, insert_file
 
@@ -60,37 +62,52 @@ def observation_store(connection: sqlite3.Connection) -> SqliteObservationStore:
     return SqliteObservationStore(connection)
 
 
+def _file_count(connection: sqlite3.Connection) -> int:
+    [count] = rows(connection, "SELECT count(*) AS file_count FROM files")
+    file_count: int = count["file_count"]
+    return file_count
+
+
+def _variant_count(connection: sqlite3.Connection) -> int:
+    [count] = rows(connection, "SELECT count(*) AS variant_count FROM observation_variants")
+    variant_count: int = count["variant_count"]
+    return variant_count
+
+
 def test_record_observation_round_trip(
     observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
     observation_store.record_observation(FileObservation(_reported_file(), _T0, _NODE_ID))
-    file_row = connection.execute("SELECT * FROM files").fetchone()
-    assert file_row == (_KEY.file_id, "ed2k", _HASH, 234567890)
-    variant = (
-        _KEY.file_id,
-        "Keroro 062A.avi",
-        234567890,
-        None,
-        None,
-        '[["0x0308", "0"], ["0x0308", "0"], ["0x0999", "mystère"], ["codec", null],'
+    assert rows(connection, "SELECT * FROM files") == [
+        {"file_id": _KEY.file_id, "network": "ed2k", "native_id": _HASH, "size_bytes": 234567890}
+    ]
+    variant: dict[str, Any] = {
+        "file_id": _KEY.file_id,
+        "filename": "Keroro 062A.avi",
+        "size_bytes": 234567890,
+        "duration_seconds": None,
+        "bitrate_kbps": None,
+        "raw_metadata": '[["0x0308", "0"], ["0x0308", "0"], ["0x0999", "mystère"], ["codec", null],'
         ' ["file_type", null], ["complete_source_count", 2]]',
-        "keroro",
-        _NODE_ID,
-    )
-    row = connection.execute(
+        "keyword": "keroro",
+        "node_id": _NODE_ID,
+    }
+    assert rows(
+        connection,
         "SELECT file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_metadata,"
-        " keyword, node_id, content_hash FROM observation_variants"
-    ).fetchone()
-    assert row == (*variant, content_hash(*variant))
-    observation = connection.execute("SELECT observed_at_micros, source_count FROM observations")
-    assert observation.fetchall() == [(instant_to_micros(_T0), 5)]
+        " keyword, node_id, content_hash FROM observation_variants",
+    ) == [{**variant, "content_hash": content_hash(*variant.values())}]
+    assert rows(connection, "SELECT observed_at_micros, source_count FROM observations") == [
+        {"observed_at_micros": instant_to_micros(_T0), "source_count": 5}
+    ]
 
 
 def test_raw_metadata_preserves_order_duplicates_and_non_ascii(
     observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
     observation_store.record_observation(FileObservation(_reported_file(), _T0, _NODE_ID))
-    stored = connection.execute("SELECT raw_metadata FROM observation_variants").fetchone()[0]
+    [variant] = rows(connection, "SELECT raw_metadata FROM observation_variants")
+    stored = variant["raw_metadata"]
     assert "mystère" in stored  # ensure_ascii=False: the accent is stored AS IS
     assert json.loads(stored)[:3] == [["0x0308", "0"], ["0x0308", "0"], ["0x0999", "mystère"]]
 
@@ -103,11 +120,12 @@ def test_record_observation_twice_first_seen_wins_in_files(
     observation_store.record_observation(
         FileObservation(_reported_file(filename="leurre.avi", size_bytes=999), _T0, _NODE_ID)
     )
-    assert connection.execute("SELECT size_bytes FROM files").fetchall() == [(234567890,)]
-    observed_sizes = connection.execute(
-        "SELECT size_bytes FROM observation_variants ORDER BY variant_id"
-    ).fetchall()
-    assert observed_sizes == [(234567890,), (999,)]  # the anomaly stays VISIBLE
+    assert rows(connection, "SELECT size_bytes FROM files") == [{"size_bytes": 234567890}]
+    observed_sizes = rows(
+        connection, "SELECT size_bytes FROM observation_variants ORDER BY variant_id"
+    )
+    # The anomaly stays VISIBLE.
+    assert observed_sizes == [{"size_bytes": 234567890}, {"size_bytes": 999}]
 
 
 def test_a_variant_seen_again_is_stored_once_with_both_timestamps(
@@ -117,7 +135,7 @@ def test_a_variant_seen_again_is_stored_once_with_both_timestamps(
     observation_store.record_observation(
         FileObservation(_reported_file(), _T0 + timedelta(minutes=1), _NODE_ID)
     )
-    assert connection.execute("SELECT count(*) FROM observation_variants").fetchone()[0] == 1
+    assert _variant_count(connection) == 1
     assert count_observations(connection) == 2
 
 
@@ -135,10 +153,9 @@ def test_record_observation_with_media_metadata(
     observation_store.record_observation(
         FileObservation(_reported_file(duration_seconds=1474, bitrate_kbps=1200), _T0, _NODE_ID)
     )
-    row = connection.execute(
-        "SELECT duration_seconds, bitrate_kbps FROM observation_variants"
-    ).fetchone()
-    assert row == (1474, 1200)
+    assert rows(connection, "SELECT duration_seconds, bitrate_kbps FROM observation_variants") == [
+        {"duration_seconds": 1474, "bitrate_kbps": 1200}
+    ]
 
 
 def test_record_observation_is_one_transaction(
@@ -155,8 +172,8 @@ def test_record_observation_is_one_transaction(
             FileObservation(dataclasses.replace(_reported_file(), source_count=404), _T0, _NODE_ID)
         )
     # ATOMICITY: the file and its variant were rolled back with the transaction.
-    assert connection.execute("SELECT count(*) FROM files").fetchone()[0] == 0
-    assert connection.execute("SELECT count(*) FROM observation_variants").fetchone()[0] == 0
+    assert _file_count(connection) == 0
+    assert _variant_count(connection) == 0
     # The store stays USABLE: rollback done, connection out of transaction.
     assert not connection.in_transaction
     observation_store.record_observation(FileObservation(_reported_file(), _T0, _NODE_ID))
@@ -173,7 +190,7 @@ def test_record_observation_rejects_non_canonical_hash(
     upper = dataclasses.replace(_reported_file(), file=FileKey(Network.ED2K, _HASH.upper()))
     with pytest.raises(PersistenceError, match="non-canonical eD2k hash"):
         observation_store.record_observation(FileObservation(upper, _T0, _NODE_ID))
-    assert connection.execute("SELECT count(*) FROM files").fetchone()[0] == 0
+    assert _file_count(connection) == 0
     assert count_observations(connection) == 0
 
 
@@ -204,9 +221,9 @@ def test_outer_transaction_survives_record_observation_failure(
     with pytest.raises(PersistenceError, match="cannot start a transaction within a transaction"):
         observation_store.record_observation(FileObservation(_reported_file(), _T0, _NODE_ID))
     assert connection.in_transaction  # the outer transaction is INTACT
-    assert connection.execute("SELECT count(*) FROM files").fetchone()[0] == 1
+    assert _file_count(connection) == 1
     connection.execute("ROLLBACK")
-    assert connection.execute("SELECT count(*) FROM files").fetchone()[0] == 0
+    assert _file_count(connection) == 0
 
 
 def test_each_observation_stores_its_own_node_id(
@@ -214,8 +231,10 @@ def test_each_observation_stores_its_own_node_id(
 ) -> None:
     observation_store.record_observation(FileObservation(_reported_file(), _T0, NodeId("n1")))
     observation_store.record_observation(FileObservation(_reported_file(), _T0, NodeId("n2")))
-    variants = connection.execute("SELECT node_id FROM observation_variants ORDER BY variant_id")
-    assert variants.fetchall() == [("n1",), ("n2",)]
+    assert rows(connection, "SELECT node_id FROM observation_variants ORDER BY variant_id") == [
+        {"node_id": "n1"},
+        {"node_id": "n2"},
+    ]
 
 
 def test_read_latest_observation_of_a_file_never_observed_is_none(

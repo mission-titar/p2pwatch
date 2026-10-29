@@ -17,11 +17,13 @@ from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import 
     ThreadReadConnections,
     open_reader,
 )
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import insert_file
 
 _HASH_A = "a" * 32
 _HASH_B = "b" * 32
+_FILE_COUNT = "SELECT COUNT(*) AS file_count FROM files"
 
 
 def _seed(path: Path) -> None:
@@ -70,7 +72,7 @@ def test_open_reader_sorts_through_temporary_files(tmp_path: Path) -> None:
     _seed(path)
     reader = open_reader(path)
     try:
-        assert reader.execute("PRAGMA temp_store").fetchone()[0] == 1  # 1 == FILE
+        assert rows(reader, "PRAGMA temp_store") == [{"temp_store": 1}]  # 1 == FILE
     finally:
         reader.close()
 
@@ -153,11 +155,11 @@ def test_reused_connection_sees_data_committed_after_first_handout(tmp_path: Pat
     writer = open_catalog(path)
     reader = thread_read_connections.connection()
     try:
-        assert reader.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 1
+        assert rows(reader, _FILE_COUNT) == [{"file_count": 1}]
         insert_file(writer, _HASH_B, 20)
         reused = thread_read_connections.connection()
         assert reused is reader
-        assert reused.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 2
+        assert rows(reused, _FILE_COUNT) == [{"file_count": 2}]
     finally:
         writer.close()
         reader.close()
