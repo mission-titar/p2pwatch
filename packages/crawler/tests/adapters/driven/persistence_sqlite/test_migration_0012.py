@@ -4,7 +4,9 @@ import re
 import sqlite3
 from importlib import resources
 from pathlib import Path
+from typing import Any
 
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
     insert_v11_observation,
     insert_v11_source_point,
@@ -22,18 +24,18 @@ _RENAMED = {
 _RENAME = re.compile(r"ALTER TABLE (\w+) RENAME COLUMN (\w+) TO (\w+)")
 
 
-def _schema(connection: sqlite3.Connection) -> list[tuple[str, str, str | None]]:
-    return connection.execute(
-        "SELECT type, name, sql FROM sqlite_schema ORDER BY type, name"
-    ).fetchall()
+def _schema(connection: sqlite3.Connection) -> list[dict[str, Any]]:
+    return rows(connection, "SELECT type, name, sql FROM sqlite_schema ORDER BY type, name")
 
 
-def _rows(connection: sqlite3.Connection) -> dict[str, list[tuple[object, ...]]]:
-    tables = [name for kind, name, _ in _schema(connection) if kind == "table"]
-    return {
-        table: connection.execute(f"SELECT * FROM {table} ORDER BY 1, 2").fetchall()
-        for table in tables
-    }
+def _table_rows(connection: sqlite3.Connection) -> dict[str, list[dict[str, Any]]]:
+    tables = [row["name"] for row in _schema(connection) if row["type"] == "table"]
+    return {table: rows(connection, f"SELECT * FROM {table} ORDER BY 1, 2") for table in tables}
+
+
+def _renamed_columns(row: dict[str, Any]) -> dict[str, Any]:
+    new_name_by_old = {old: new for _, old, new in _RENAMED}
+    return {new_name_by_old.get(name, name): value for name, value in row.items()}
 
 
 def _renamed(sql: str | None) -> str | None:
@@ -52,16 +54,18 @@ def test_0012_renames_the_three_columns_in_the_schema_and_keeps_every_value(
     insert_v14_decision(connection, _A)
     insert_source(connection, _USER)
     insert_v11_source_point(connection, _A, _USER, directly_reachable=True, transfer_counter=7)
-    schema, rows = _schema(connection), _rows(connection)
+    schema, table_rows = _schema(connection), _table_rows(connection)
     connection.close()
 
     connection = open_catalog_at(path, 12)
     try:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 12
-        assert _schema(connection) == [(kind, name, _renamed(sql)) for kind, name, sql in schema]
-        assert _rows(connection) == rows
-        assert all(rows[table] for table, _, _ in _RENAMED)
-        assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+        assert rows(connection, "PRAGMA user_version") == [{"user_version": 12}]
+        assert _schema(connection) == [{**row, "sql": _renamed(row["sql"])} for row in schema]
+        assert _table_rows(connection) == {
+            table: [_renamed_columns(row) for row in kept] for table, kept in table_rows.items()
+        }
+        assert all(table_rows[table] for table, _, _ in _RENAMED)
+        assert rows(connection, "PRAGMA integrity_check") == [{"integrity_check": "ok"}]
     finally:
         connection.close()
 
