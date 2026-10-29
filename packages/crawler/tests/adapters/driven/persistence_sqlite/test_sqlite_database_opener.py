@@ -67,6 +67,13 @@ def test_open_local_creates_the_tables_and_versions_the_schema(tmp_path: Path) -
         connection.close()
 
 
+def test_open_catalog_returns_rows_read_by_column_name(tmp_path: Path) -> None:
+    with closing(database_opener().open_catalog(tmp_path / "catalog.db")) as connection:
+        row = connection.execute("SELECT 1 AS file_id").fetchone()
+    assert isinstance(row, NamedRow)
+    assert row == {"file_id": 1}
+
+
 def test_open_local_returns_rows_read_by_column_name(tmp_path: Path) -> None:
     with closing(database_opener().open_local(tmp_path / "local.db")) as connection:
         row = connection.execute("SELECT 1 AS node_id").fetchone()

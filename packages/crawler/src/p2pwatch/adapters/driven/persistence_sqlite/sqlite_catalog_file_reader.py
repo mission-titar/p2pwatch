@@ -112,7 +112,7 @@ _JOIN_LATEST_OBSERVATION = "LEFT JOIN latest_observation AS obs ON obs.file_id =
 _JOIN_DECISIONS = "LEFT JOIN dec_agg AS dec ON dec.file_id = f.file_id\n"
 
 # Explorer: files + latest joins, driven by files; read_catalog_entries() adds the filters.
-# The latest observation's columns first, in the order ``observation_from_row`` maps them.
+# The latest observation's columns under the names ``observation_from_row`` reads.
 _SQL_LIST_FILES_BASE = (
     _SQL_CTES
     + """\

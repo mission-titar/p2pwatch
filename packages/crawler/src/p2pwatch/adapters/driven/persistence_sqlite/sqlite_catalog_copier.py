@@ -154,7 +154,7 @@ def _copy_catalogs(
     try:
         # The current schema version = whatever open_catalog stamped on the output; we read
         # it back rather than hardcode it, so this tracks the migration set automatically.
-        expected_version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+        expected_version = int(connection.execute("PRAGMA user_version").fetchone()["user_version"])
         for source_catalog in source_catalogs:
             _copy_catalog(connection, source_catalog, expected_version)
             _logger.info("%s merged", source_catalog)
@@ -179,7 +179,9 @@ def _copy_catalog(
     except sqlite3.Error as error:
         raise CatalogCopyError(f"cannot attach source catalog {source_catalog}: {error}") from error
     try:
-        source_version = int(connection.execute(f"PRAGMA {_SRC}.user_version").fetchone()[0])
+        source_version = int(
+            connection.execute(f"PRAGMA {_SRC}.user_version").fetchone()["user_version"]
+        )
         if source_version != expected_version:
             raise CatalogCopyError(
                 f"source catalog {source_catalog} has schema version {source_version}, "

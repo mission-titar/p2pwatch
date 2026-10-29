@@ -55,10 +55,8 @@ class SqliteDatabaseOpener:
         return self.open(path, load_scripts(_MIGRATIONS / "catalog"))
 
     def open_local(self, path: Path) -> sqlite3.Connection:
-        """Opens/migrates ``local.db``, its rows read by column name."""
-        connection = self.open(path, load_scripts(_MIGRATIONS / "local"))
-        connection.row_factory = named_row
-        return connection
+        """Opens/migrates ``local.db``."""
+        return self.open(path, load_scripts(_MIGRATIONS / "local"))
 
     def open(self, path: Path, scripts: tuple[Migration, ...]) -> sqlite3.Connection:
         """Opens ``path`` and applies the ``scripts`` above its version, after its pre-migration
@@ -78,9 +76,11 @@ class SqliteDatabaseOpener:
 
 
 def _connect(path: Path) -> sqlite3.Connection:
-    """A connection to ``path`` in WAL, its pragmas set and the SQL functions registered."""
+    """A connection to ``path`` in WAL, its rows read by column name, its pragmas set and the SQL
+    functions registered."""
     with wrap_sqlite_errors():
         connection = sqlite3.connect(path, autocommit=True)
+    connection.row_factory = named_row
     try:
         with wrap_sqlite_errors():
             _configure(connection)
@@ -93,7 +93,7 @@ def _connect(path: Path) -> sqlite3.Connection:
 
 
 def _configure(connection: sqlite3.Connection) -> None:
-    journal_mode = connection.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+    journal_mode = connection.execute("PRAGMA journal_mode=WAL").fetchone()["journal_mode"]
     if journal_mode != "wal":
         raise PersistenceError(
             f"journal_mode={journal_mode!r}: WAL required (spec §3), file-backed db only"
@@ -108,7 +108,7 @@ def _pending_migrations(
     """The scripts above the database's ``user_version``; a database newer than the code raises
     ``MigrationError``."""
     with wrap_sqlite_errors():
-        current_version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+        current_version = int(connection.execute("PRAGMA user_version").fetchone()["user_version"])
     latest = scripts[-1].version if scripts else 0
     if current_version > latest:
         raise MigrationError(
@@ -133,8 +133,8 @@ def _apply_migrations(connection: sqlite3.Connection, pending: PendingMigrations
 
 
 def _run_restoring_pragmas(connection: sqlite3.Connection, migration: Migration) -> None:
-    secure_delete = int(connection.execute("PRAGMA secure_delete").fetchone()[0])
-    cache_size = int(connection.execute("PRAGMA cache_size").fetchone()[0])
+    secure_delete = int(connection.execute("PRAGMA secure_delete").fetchone()["secure_delete"])
+    cache_size = int(connection.execute("PRAGMA cache_size").fetchone()["cache_size"])
     if migration.transactional:
         _run_in_transaction(connection, migration)
     else:

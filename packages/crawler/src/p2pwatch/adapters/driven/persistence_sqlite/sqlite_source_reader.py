@@ -11,6 +11,7 @@ import sqlite3
 from datetime import timedelta
 
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros, micros_to_instant
+from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
 from p2pwatch.adapters.driven.persistence_sqlite.observation_read import best_observation
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadReadConnections,
@@ -185,7 +186,7 @@ def _sources_search(search_text: str | None) -> tuple[str, list[str]]:
     return _SQL_SOURCES_SEARCH, [f"{search_text}%", f"%{search_text}%"]
 
 
-def _sharing_period(row: sqlite3.Row) -> SharingPeriod:
+def _sharing_period(row: NamedRow) -> SharingPeriod:
     """A row of ``_SQL_PERIODS`` as a period; only a sending one received its growth (D6)."""
     network, connectable = row["network"], row["connectable"]
     role = SourceRole(row["role"])
@@ -205,7 +206,7 @@ def _sharing_period(row: sqlite3.Row) -> SharingPeriod:
 
 def _period_rows(
     connection: sqlite3.Connection, where: str, key: bytes | str, window: PeriodWindow
-) -> list[sqlite3.Row]:
+) -> list[NamedRow]:
     params = {
         "key": key,
         "since": instant_to_micros(window.since),

@@ -1,7 +1,7 @@
 """Tests for ``ThreadReadConnections`` (monolith-consolidation spec §7).
 
 Folds the assertions of the deleted webui ``test_webui_db.py`` (RO-refuses-writes,
-``temp_store``, ``row_factory`` dict access, reads rows) plus its
+``temp_store``, rows read by column name) plus its
 per-thread reuse and thread affinity.
 """
 
@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadLocalConnection,
     ThreadReadConnections,
@@ -40,15 +41,14 @@ def _seed(path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_open_reader_reads_seeded_row_with_dict_access(tmp_path: Path) -> None:
-    """A seeded row is readable and ``row_factory`` gives dict access (``row["col"]``)."""
+def test_open_reader_reads_seeded_row_by_column_name(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
     _seed(path)
     reader = open_reader(path)
     try:
         row = reader.execute("SELECT native_id, size_bytes FROM files").fetchone()
-        assert row["native_id"] == _HASH_A
-        assert row["size_bytes"] == 10
+        assert isinstance(row, NamedRow)
+        assert row == {"native_id": _HASH_A, "size_bytes": 10}
     finally:
         reader.close()
 

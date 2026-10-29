@@ -10,8 +10,8 @@ sets ``PRAGMA query_only=ON``: a DOUBLE guard, a write is impossible even if the
 otherwise. It NEVER sets ``journal_mode=WAL``/``foreign_keys``/migrations: those are the
 writer's job (``SqliteDatabaseOpener``); the reader inherits WAL from the single writer, and an
 autocommit read holds no persistent read lock, so a long-lived reader does not block the
-writer's WAL checkpointing. ``row_factory = sqlite3.Row`` gives the read adapters access by
-column name. ``temp_store=FILE``, as the opener sets it to migrate (stage 1, D8): the temp
+writer's WAL checkpointing. Its rows are ``NamedRow``s, read by column name as the writer's
+are. ``temp_store=FILE``, as the opener sets it to migrate (stage 1, D8): the temp
 b-trees the reads materialize (sorts, ``group_concat``) spill to disk, since an in-memory sort is
 unbounded.
 The ``MEMORY`` hotfix (461b135) answered a tmpfs ``/tmp`` and ``read_only``, gone since 2026-09-16.
@@ -27,12 +27,14 @@ import threading
 from pathlib import Path
 from typing import Self
 
+from p2pwatch.adapters.driven.persistence_sqlite.named_row import named_row
+
 
 def open_reader(path: Path | str) -> sqlite3.Connection:
-    """Open ``path`` read-only: ``mode=ro`` + ``query_only`` (double guard), ``Row`` factory,
-    ``temp_store=FILE``. See the module docstring for the full rationale."""
+    """Open ``path`` read-only: ``mode=ro`` + ``query_only`` (double guard), rows read by column
+    name, ``temp_store=FILE``. See the module docstring for the full rationale."""
     connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-    connection.row_factory = sqlite3.Row
+    connection.row_factory = named_row
     connection.execute("PRAGMA query_only=ON")
     connection.execute("PRAGMA temp_store=FILE")
     return connection

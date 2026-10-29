@@ -8,7 +8,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_error
 from p2pwatch.application.ports.driven.catalog_scan_reader import CatalogScanReader
 from p2pwatch.domain.observation import FileObservation
 
-_COUNT_FILES = "SELECT COUNT(*) FROM files"
+_COUNT_FILES = "SELECT COUNT(*) AS file_count FROM files"
 
 
 class SqliteCatalogScanReader(CatalogScanReader):
@@ -21,7 +21,7 @@ class SqliteCatalogScanReader(CatalogScanReader):
         """Number of catalogued files, the re-evaluation progress total (read)."""
         with wrap_sqlite_errors():
             row = self._connection.execute(_COUNT_FILES).fetchone()
-        return int(row[0])
+        return int(row["file_count"])
 
     def iter_latest_observations(self) -> Iterator[FileObservation]:
         """Every seen file's latest observation, streamed (spec re-evaluation §6)."""
