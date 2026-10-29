@@ -6,7 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch_amule.adapters.driven.s6_service_supervisor import S6ServiceSupervisor
+from p2pwatch_amule.adapters.driven.s6_service_supervisor import (
+    CommandRunner,
+    S6ServiceSupervisor,
+)
 from tests.fakes.adapters.driven.fake_command_runner import FakeCommandRunner
 
 AMULED_SERVICE_DIRECTORY = Path("/run/service/amuled")
@@ -112,3 +115,9 @@ def test_a_start_that_fails_is_logged_under_the_module_s_name(
     assert _logged_lines(caplog) == [
         (LOGGER_NAME, logging.ERROR, "s6-svc -u exited 111: timed out")
     ]
+
+
+def test_mypy_refuses_a_command_runner_text_false() -> None:
+    run_command: CommandRunner = FakeCommandRunner().run_command
+    # The ignore is the test: strict mypy reports it unused if CommandRunner admits text=False.
+    run_command(["s6-svc", "-u"], capture_output=True, text=False)  # type: ignore[arg-type]

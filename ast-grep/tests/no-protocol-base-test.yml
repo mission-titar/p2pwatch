@@ -4,8 +4,35 @@ valid:
   - "class AsyncioWaker(Waker): ..."
   - "class Settings: ..."
   - "from typing import Protocol"
+  # A callback Protocol: its only member is `__call__`.
+  - |
+    class CommandRunner(Protocol):
+        def __call__(self, args: list[str], /, *, text: Literal[True]) -> str: ...
+  - |
+    class OwnerChanger(typing.Protocol):
+        def __call__(
+            self, *, path: Path, uid: Uid, gid: Gid
+        ) -> None: ...
 invalid:
   - "class Waker(Protocol): ..."
   - "class Reader(Protocol[T]): ..."
   - "class Waker(typing.Protocol): ..."
   - "class Both(Base, Protocol): ..."
+  # A port written as a Protocol.
+  - |
+    class Waker(Protocol):
+        def wake(self) -> None: ...
+  - |
+    class Runner(Protocol):
+        def __call__(self) -> None: ...
+        def stop(self) -> None: ...
+  - |
+    class Runner(Protocol):
+        name: str
+        def __call__(self) -> None: ...
+  - |
+    class Runner(Protocol):
+        def __call__(self) -> None: ...
+
+        @property
+        def name(self) -> str: ...

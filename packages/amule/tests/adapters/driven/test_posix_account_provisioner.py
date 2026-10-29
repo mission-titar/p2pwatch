@@ -3,7 +3,10 @@
 from collections.abc import Callable
 from pathlib import Path
 
-from p2pwatch_amule.adapters.driven.posix_account_provisioner import PosixAccountProvisioner
+from p2pwatch_amule.adapters.driven.posix_account_provisioner import (
+    CommandRunner,
+    PosixAccountProvisioner,
+)
 from p2pwatch_amule.domain.identifiers import Gid, Uid
 from tests.fakes.adapters.driven.fake_command_runner import FakeCommandRunner
 
@@ -68,3 +71,9 @@ def test_an_existing_account_is_not_recreated() -> None:
     ).find_or_create_amule_account(Uid(1000), Gid(1001))
 
     assert command_runner.commands == []
+
+
+def test_mypy_refuses_a_command_runner_text_false() -> None:
+    run_command: CommandRunner = FakeCommandRunner().run_command
+    # The ignore is the test: strict mypy reports it unused if CommandRunner admits text=False.
+    run_command(GROUPADD, check=True, text=False)  # type: ignore[arg-type]

@@ -1,7 +1,8 @@
 """Leaf matchers of the matching engine (cf. spec §8.2)."""
 
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
+from typing import Protocol
 
 from rapidfuzz import fuzz
 
@@ -104,8 +105,12 @@ class CoverageMatcher(Matcher):
         return self.coverage(candidate) >= self._min_coverage
 
 
+class AttributeExtractor(Protocol):
+    def __call__(self, candidate: FileCandidate, /) -> float | None: ...
+
+
 # The closed set of FileCandidate numeric attributes attr_between reads (cf. spec §8.2).
-READERS_BY_ATTR: Mapping[str, Callable[[FileCandidate], float | None]] = {
+READERS_BY_ATTR: Mapping[str, AttributeExtractor] = {
     "size_mib": lambda candidate: candidate.size_mib,
     "duration_seconds": lambda candidate: candidate.duration_seconds,
     "bitrate_kbps": lambda candidate: candidate.bitrate_kbps,

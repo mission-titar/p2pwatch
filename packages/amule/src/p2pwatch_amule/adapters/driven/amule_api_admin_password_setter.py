@@ -1,9 +1,25 @@
 import subprocess
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Literal, Protocol
 
 from p2pwatch_amule.application.ports.driven.admin_password_setter import AdminPasswordSetter
 from p2pwatch_amule.domain.identifiers import Gid, Uid
+
+
+class CommandRunner(Protocol):
+    def __call__(
+        self,
+        args: list[str],
+        /,
+        *,
+        user: Uid,
+        group: Gid,
+        extra_groups: Sequence[Gid],
+        env: Mapping[str, str],
+        check: bool,
+        text: Literal[True],
+    ) -> subprocess.CompletedProcess[str]: ...
 
 
 class AmuleApiAdminPasswordSetter(AdminPasswordSetter):
@@ -15,7 +31,7 @@ class AmuleApiAdminPasswordSetter(AdminPasswordSetter):
         config_directory: Path,
         home_directory: Path,
         env: Mapping[str, str],
-        run_command: Callable[..., subprocess.CompletedProcess[str]],
+        run_command: CommandRunner,
     ) -> None:
         self._config_directory = config_directory
         self._home_directory = home_directory
