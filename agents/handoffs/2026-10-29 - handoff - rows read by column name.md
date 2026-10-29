@@ -88,8 +88,8 @@ Budgets against each parent: block 10, 286 lines and 17 files; block 15, 124 and
 4; block 60, 14 and 1 (`BACKLOG.md`; the handoff outside the count).
 
 Continuous integration, `gh pr checks <n> --required` (2026-10-29): `validate / gate` passes on #548, #549, #551,
-#552, #553 and #554, each on its first run. #555's was still running when block 60 read it (`validate / lint` and
-`vex-checks` passed, `validate / test` pending, run 40854481618).
+#552, #553, #554, #555 (run 40854481618) and #556 (run 40855061815), each on its first attempt. #556's run after
+its fix-back (Counts) is the lead's to read.
 
 Acceptance, at block 50's tip (`cd9fc28b`):
 
@@ -193,8 +193,10 @@ documents.
 
 ## Counts
 
-No fix-back and no cascaded rebase. No CI run re-triggered. Eight blocks against six planned, the closing one
-included: block 10 split into 10 and 15, block 55 cut from the holistic review. No body called unreadable so far.
+One fix-back, of the closing block: its handoff's CI line, written while #555's run was pending, updated once
+#555 and #556 passed; the push re-triggered #556's run only. No cascaded rebase. Eight blocks against six planned,
+the closing one included: block 10 split into 10 and 15, block 55 cut from the holistic review. No body called
+unreadable so far.
 
 ## Pitfalls
 
