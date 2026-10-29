@@ -1,7 +1,7 @@
 """TDD tests for ``SqliteSqlExecutor``, the read-only SQL console's execution adapter (spec §11).
 
 The tests seed a real ``catalog.db`` via the writer (``open_catalog``) so ``open_reader`` has a
-real ``mode=ro`` file to open, exactly like the ``test_reader.py`` persistence tests.
+real ``mode=ro`` file to open.
 """
 
 from datetime import timedelta
@@ -12,7 +12,10 @@ from p2pwatch.domain.console_query import QueryAnswer, QueryFailure
 from p2pwatch.domain.file_key import FileKey, Network
 from tests.fakes.adapters.driven.fake_ticking_monotonic_clock import FakeTickingMonotonicClock
 from tests.fakes.adapters.driven.fake_time import FakeTime
-from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
+    open_catalog,
+    open_reader,
+)
 from tests.support.catalog_rows import insert_file
 
 _HASH_A = "a" * 32
@@ -46,6 +49,7 @@ def test_select_returns_columns_and_rows(tmp_path: Path) -> None:
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
         path,
+        open_reader,
         FakeTickingMonotonicClock(FakeTime()),
         budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
     ).execute(
@@ -63,6 +67,7 @@ def test_a_column_name_repeated_keeps_both_columns_in_order(tmp_path: Path) -> N
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
         path,
+        open_reader,
         FakeTickingMonotonicClock(FakeTime()),
         budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
     ).execute("SELECT 1 AS a, 2 AS a", row_cap=1000, time_limit=_TIME_LIMIT)
@@ -76,7 +81,10 @@ def test_renders_none_cell_as_null_literal(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
-        path, FakeTime().monotonic, budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS
+        path,
+        open_reader,
+        FakeTime().monotonic,
+        budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
     ).execute(
         "SELECT NULL AS missing FROM files",
         row_cap=1000,
@@ -91,7 +99,10 @@ def test_renders_a_blob_cell_as_lowercase_hex(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
-        path, FakeTime().monotonic, budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS
+        path,
+        open_reader,
+        FakeTime().monotonic,
+        budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
     ).execute(
         "SELECT file_id FROM files",
         row_cap=1000,
@@ -106,7 +117,10 @@ def test_write_is_rejected_read_only(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
-        path, FakeTime().monotonic, budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS
+        path,
+        open_reader,
+        FakeTime().monotonic,
+        budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
     ).execute(
         "INSERT INTO files (native_id, size_bytes) VALUES ('b', 1)",
         row_cap=1000,
@@ -122,7 +136,10 @@ def test_multi_statement_is_rejected(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
-        path, FakeTime().monotonic, budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS
+        path,
+        open_reader,
+        FakeTime().monotonic,
+        budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
     ).execute(
         "SELECT 1; SELECT 2",
         row_cap=1000,
@@ -136,7 +153,10 @@ def test_row_cap_truncates_and_flags(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
-        path, FakeTime().monotonic, budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS
+        path,
+        open_reader,
+        FakeTime().monotonic,
+        budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
     ).execute(
         "WITH RECURSIVE r(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM r WHERE x < 5)"
         " SELECT x FROM r",
@@ -155,6 +175,7 @@ def test_runaway_is_aborted_by_timeout(tmp_path: Path) -> None:
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
         path,
+        open_reader,
         FakeTickingMonotonicClock(FakeTime()),
         budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
     ).execute(
@@ -170,7 +191,7 @@ def test_the_budget_is_checked_only_at_its_step_of_instructions(tmp_path: Path) 
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
-        path, FakeTickingMonotonicClock(FakeTime()), budget_check_instructions=10**9
+        path, open_reader, FakeTickingMonotonicClock(FakeTime()), budget_check_instructions=10**9
     ).execute(_PAST_BUDGET_SQL, row_cap=1000, time_limit=_TIME_LIMIT)
     assert query_answer == QueryAnswer(
         ("count(*)",), (("100001",),), timedelta(seconds=1), truncated=False
@@ -183,7 +204,10 @@ def test_malformed_sql_yields_error_not_exception(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
-        path, FakeTime().monotonic, budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS
+        path,
+        open_reader,
+        FakeTime().monotonic,
+        budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
     ).execute(
         "SELECT FROM",
         row_cap=1000,
@@ -198,7 +222,10 @@ def test_other_sqlite_error_is_absorbed(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
-        path, FakeTime().monotonic, budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS
+        path,
+        open_reader,
+        FakeTime().monotonic,
+        budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
     ).execute(
         "SELECT length(zeroblob(1000000000000))",
         row_cap=1000,
@@ -213,7 +240,10 @@ def test_statement_without_result_columns_is_safe(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
-        path, FakeTime().monotonic, budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS
+        path,
+        open_reader,
+        FakeTime().monotonic,
+        budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
     ).execute(
         "-- just a comment",
         row_cap=1000,

@@ -22,6 +22,7 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_reader
 
 _STARTED_AT_MICROS = 1_781_258_400_000_000  # 2026-06-12T10:00:00Z
 _QUEUED_AT_MICROS = 1_782_122_400_000_000  # 2026-06-22T10:00:00Z
@@ -33,7 +34,7 @@ _QUEUED_AT_MICROS = 1_782_122_400_000_000  # 2026-06-22T10:00:00Z
 
 def _read_node_state(path: Path) -> NodeState:
     """Read local.db through the webui's read-only connection."""
-    with ThreadReadConnections(path) as thread_read_connections:
+    with ThreadReadConnections(path, open_reader) as thread_read_connections:
         return SqliteNodeStateReader(thread_read_connections).read_node_state()
 
 

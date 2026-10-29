@@ -17,6 +17,7 @@ import sqlite3
 from contextlib import suppress
 from importlib import resources
 from pathlib import Path
+from urllib.parse import quote
 
 from p2pwatch.adapters.driven.persistence_sqlite.errors import (
     MigrationError,
@@ -72,6 +73,17 @@ class SqliteDatabaseOpener:
             # Unconditional close: whatever fails, the connection must not leak.
             connection.close()
             raise
+        return connection
+
+    def open_reader(self, path: Path) -> sqlite3.Connection:
+        """Opens ``path`` read-only, ``mode=ro`` and ``query_only``, its rows read by column name,
+        its temporary b-trees on disk (``temp_store=FILE``): an in-memory sort is unbounded.
+        Only the thread that opens it may use or close it."""
+        # Not as_uri(), which refuses a relative path.
+        connection = sqlite3.connect(f"file:{quote(str(path))}?mode=ro", uri=True)
+        connection.row_factory = named_row
+        connection.execute("PRAGMA query_only=ON")
+        connection.execute("PRAGMA temp_store=FILE")
         return connection
 
 

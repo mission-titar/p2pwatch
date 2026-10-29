@@ -26,7 +26,6 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_file_reader impo
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadReadConnections,
-    open_reader,
 )
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_history import FileHistory
@@ -40,6 +39,7 @@ from tests.support.adapters.driven.persistence_sqlite.catalog_seeds import (
     seed_whole_episode,
 )
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_reader
 from tests.support.catalog_rows import (
     SEEN_AT,
     file_id,
@@ -69,7 +69,7 @@ def _entries(
     direction: SortDirection = SortDirection.DESC,
     offset: int = 0,
 ) -> tuple[CatalogEntry, ...]:
-    with ThreadReadConnections(catalog_db) as thread_read_connections:
+    with ThreadReadConnections(catalog_db, open_reader) as thread_read_connections:
         return SqliteCatalogFileReader(thread_read_connections).read_catalog_entries(
             target_id=target_id,
             tier=tier,
@@ -89,7 +89,7 @@ def _counts(
     tier: DecisionTier | None = None,
     search_text: str | None = None,
 ) -> tuple[int, int]:
-    with ThreadReadConnections(catalog_db) as thread_read_connections:
+    with ThreadReadConnections(catalog_db, open_reader) as thread_read_connections:
         return SqliteCatalogFileReader(thread_read_connections).read_matched_and_total_file_counts(
             target_id=target_id, tier=tier, search_text=search_text
         )
@@ -98,7 +98,7 @@ def _counts(
 def _read_file_count_by_tier(
     catalog_db: Path, *, search_text: str | None = None
 ) -> Mapping[DecisionTier, int]:
-    with ThreadReadConnections(catalog_db) as thread_read_connections:
+    with ThreadReadConnections(catalog_db, open_reader) as thread_read_connections:
         return SqliteCatalogFileReader(thread_read_connections).read_file_count_by_tier(
             target_id=None, search_text=search_text
         )
@@ -217,7 +217,7 @@ def test_read_matched_and_total_file_counts_whole_episode_counts_as_one_file(
 def _history(
     catalog_db: Path, native_id: str, *, since: datetime = _EPOCH, until: datetime = _YEAR_3000
 ) -> FileHistory | None:
-    with ThreadReadConnections(catalog_db) as thread_read_connections:
+    with ThreadReadConnections(catalog_db, open_reader) as thread_read_connections:
         reader = SqliteCatalogFileReader(thread_read_connections)
         return reader.read_file_history(file_id(native_id), since=since, until=until)
 
@@ -263,7 +263,7 @@ def test_file_history_reads_its_observations_in_the_window_and_its_latest_in_any
 def test_file_history_of_an_unknown_file_id_is_none(catalog_db: Path) -> None:
     seed(catalog_db)
     assert _history(catalog_db, "f" * 32) is None
-    with ThreadReadConnections(catalog_db) as thread_read_connections:
+    with ThreadReadConnections(catalog_db, open_reader) as thread_read_connections:
         reader = SqliteCatalogFileReader(thread_read_connections)
         by_native_id = reader.read_file_history(
             FileId(bytes.fromhex("a" * 32)), since=_EPOCH, until=_YEAR_3000
@@ -799,7 +799,7 @@ def test_counters_read_observations_only_for_a_name_filter(
             tables.add(table)
         return sqlite3.SQLITE_OK
 
-    with ThreadReadConnections(catalog_db) as thread_read_connections:
+    with ThreadReadConnections(catalog_db, open_reader) as thread_read_connections:
         thread_read_connections.connection().set_authorizer(record)
         _COUNTERS[counter](SqliteCatalogFileReader(thread_read_connections), search_text)
     assert ("observations" in tables) is (search_text is not None)

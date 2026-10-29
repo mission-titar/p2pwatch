@@ -1,5 +1,5 @@
-"""A migrated ``catalog.db`` or ``local.db`` through ``SqliteDatabaseOpener``, for a test that
-only needs an open database."""
+"""A migrated ``catalog.db`` or ``local.db``, or a read-only connection, through
+``SqliteDatabaseOpener``, for a test that only needs an open database."""
 
 import sqlite3
 from pathlib import Path
@@ -53,3 +53,8 @@ def open_catalog(path: Path) -> sqlite3.Connection:
 def open_local(path: Path) -> sqlite3.Connection:
     """Opens/migrates ``local.db``."""
     return database_opener().open_local(path)
+
+
+def open_reader(path: Path) -> sqlite3.Connection:
+    """Opens ``path`` read-only."""
+    return database_opener().open_reader(path)

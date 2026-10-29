@@ -13,9 +13,10 @@ readers. The connection is always closed in a ``finally``.
 Three guardrails make this structurally safe against a hostile / clumsy operator (writes are
 already impossible, so these are the real risks, spec §11/§12):
 
-- **Read-only** is doubly enforced by ``open_reader`` (OS-level ``mode=ro`` PLUS
-  ``PRAGMA query_only=ON``): a write raises ``sqlite3.OperationalError`` ("attempt to write a
-  readonly database"), mapped to a clear read-only error.
+- **Read-only** is doubly enforced by the ``open_reader`` it is given,
+  ``SqliteDatabaseOpener.open_reader`` (OS-level ``mode=ro`` PLUS ``PRAGMA query_only=ON``): a
+  write raises ``sqlite3.OperationalError`` ("attempt to write a readonly database"), mapped to a
+  clear read-only error.
 - **Single statement**: ``Cursor.execute`` runs exactly one statement and rejects a second
   ("SELECT 1; SELECT 2") with ``sqlite3.ProgrammingError`` ("You can only execute one statement at
   a time"), mapped to a single-statement error.
@@ -37,10 +38,10 @@ an internal bug (which would still surface: a bug in this module's own logic is 
 """
 
 import sqlite3
+from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
 
-from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import open_reader
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.sql_executor import SqlExecutor
 from p2pwatch.domain.console_query import QueryAnswer, QueryFailure
@@ -55,13 +56,19 @@ def _stringify(cell: object) -> str:
 
 
 class SqliteSqlExecutor(SqlExecutor):
-    """Runs the console's SQL on the SQLite database at ``db_path``, its budget measured on
-    ``monotonic_clock`` every ``budget_check_instructions`` VM steps."""
+    """Runs the console's SQL on the SQLite database at ``db_path``, opened by ``open_reader``, its
+    budget measured on ``monotonic_clock`` every ``budget_check_instructions`` VM steps."""
 
     def __init__(
-        self, db_path: Path, monotonic_clock: MonotonicClock, *, budget_check_instructions: int
+        self,
+        db_path: Path,
+        open_reader: Callable[[Path], sqlite3.Connection],
+        monotonic_clock: MonotonicClock,
+        *,
+        budget_check_instructions: int,
     ) -> None:
         self._db_path = db_path
+        self._open_reader = open_reader
         self._monotonic_clock = monotonic_clock
         self._budget_check_instructions = budget_check_instructions
 
@@ -69,7 +76,7 @@ class SqliteSqlExecutor(SqlExecutor):
         self, sql: str, *, row_cap: int, time_limit: timedelta
     ) -> QueryAnswer | QueryFailure:
         return _run_query(
-            db_path=self._db_path,
+            connection=self._open_reader(self._db_path),
             sql=sql,
             row_cap=row_cap,
             budget=time_limit,
@@ -80,19 +87,18 @@ class SqliteSqlExecutor(SqlExecutor):
 
 def _run_query(
     *,
-    db_path: Path,
+    connection: sqlite3.Connection,
     sql: str,
     row_cap: int,
     budget: timedelta,
     monotonic_clock: MonotonicClock,
     budget_check_instructions: int,
 ) -> QueryAnswer | QueryFailure:
-    """Run ``sql`` read-only against ``db_path``.
+    """Run ``sql`` on the read-only ``connection``, which it closes.
 
     See the module docstring for the read-only / single-statement / timeout / row-cap guardrails
     and the deliberate absorption of ``sqlite3.Error`` into a ``QueryFailure``.
     """
-    connection = open_reader(db_path)
     try:
         start = monotonic_clock.now()
         aborted = [False]

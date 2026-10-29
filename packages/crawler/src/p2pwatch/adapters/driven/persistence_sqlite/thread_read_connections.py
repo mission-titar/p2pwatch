@@ -1,43 +1,16 @@
-"""Centralized read-only connection management (monolith-consolidation spec §7).
+"""Reuses one read-only connection per thread (monolith-consolidation spec §7), warming the SQLite
+page cache instead of paying a cold open per request.
 
-This is the READER side of the persistence adapter, sitting beside the writer's
-``SqliteDatabaseOpener``. The crawler is the single writer (WAL, migrations, ``foreign_keys``);
-the webui is strictly read-only. This module owns every read open policy so there is ONE
-place that decides how a reader is opened and reused.
-
-``open_reader`` opens a single connection in ``mode=ro`` (an OS-level read-only handle) and
-sets ``PRAGMA query_only=ON``: a DOUBLE guard, a write is impossible even if the SQL says
-otherwise. It NEVER sets ``journal_mode=WAL``/``foreign_keys``/migrations: those are the
-writer's job (``SqliteDatabaseOpener``); the reader inherits WAL from the single writer, and an
-autocommit read holds no persistent read lock, so a long-lived reader does not block the
-writer's WAL checkpointing. Its rows are ``NamedRow``s, read by column name as the writer's
-are. ``temp_store=FILE``, as the opener sets it to migrate (stage 1, D8): the temp
-b-trees the reads materialize (sorts, ``group_concat``) spill to disk, since an in-memory sort is
-unbounded.
-The ``MEMORY`` hotfix (461b135) answered a tmpfs ``/tmp`` and ``read_only``, gone since 2026-09-16.
-
-A reader keeps sqlite3's same-thread check: only the thread that opened it may use or close it.
-
-``ThreadReadConnections`` reuses one connection per thread, warming the SQLite page cache instead of
-paying a cold open per request.
+The webui is strictly read-only: each connection comes from the ``open_reader`` it is given,
+``SqliteDatabaseOpener.open_reader``. An autocommit read holds no persistent read lock, so a
+long-lived reader does not block the writer's WAL checkpointing.
 """
 
 import sqlite3
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Self
-
-from p2pwatch.adapters.driven.persistence_sqlite.named_row import named_row
-
-
-def open_reader(path: Path | str) -> sqlite3.Connection:
-    """Open ``path`` read-only: ``mode=ro`` + ``query_only`` (double guard), rows read by column
-    name, ``temp_store=FILE``. See the module docstring for the full rationale."""
-    connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-    connection.row_factory = named_row
-    connection.execute("PRAGMA query_only=ON")
-    connection.execute("PRAGMA temp_store=FILE")
-    return connection
 
 
 class ThreadLocalConnection(threading.local):
@@ -49,10 +22,11 @@ class ThreadLocalConnection(threading.local):
 
 class ThreadReadConnections:
     """A reused, thread-affine read-only connection source: each calling thread gets its OWN
-    connection, opened on first use and reused thereafter (warm page cache)."""
+    connection to ``path``, opened by ``open_reader`` on first use and reused thereafter."""
 
-    def __init__(self, path: Path | str) -> None:
+    def __init__(self, path: Path, open_reader: Callable[[Path], sqlite3.Connection]) -> None:
         self._path = path
+        self._open_reader = open_reader
         self._local = ThreadLocalConnection()
 
     def connection(self) -> sqlite3.Connection:
@@ -60,7 +34,7 @@ class ThreadReadConnections:
         existing = self._local.connection
         if existing is not None:
             return existing
-        connection = open_reader(self._path)
+        connection = self._open_reader(self._path)
         self._local.connection = connection
         return connection
 

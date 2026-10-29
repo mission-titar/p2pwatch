@@ -1,6 +1,7 @@
 import gc
 import sqlite3
 import warnings
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path
 from typing import Any
@@ -79,6 +80,55 @@ def test_open_local_returns_rows_read_by_column_name(tmp_path: Path) -> None:
         row = connection.execute("SELECT 1 AS node_id").fetchone()
     assert isinstance(row, NamedRow)
     assert row == {"node_id": 1}
+
+
+def _seeded_catalog(path: Path) -> Path:
+    with closing(open_catalog(path)) as writer:
+        insert_file(writer, _CANONICAL_HASH, 10)
+    return path
+
+
+def test_open_reader_returns_rows_read_by_column_name(tmp_path: Path) -> None:
+    path = _seeded_catalog(tmp_path / "catalog.db")
+    with closing(database_opener().open_reader(path)) as reader:
+        row = reader.execute("SELECT native_id, size_bytes FROM files").fetchone()
+    assert isinstance(row, NamedRow)
+    assert row == {"native_id": _CANONICAL_HASH, "size_bytes": 10}
+
+
+def test_open_reader_refuses_writes(tmp_path: Path) -> None:
+    """``mode=ro`` + ``query_only`` is a double guard: an INSERT raises ``OperationalError``."""
+    path = _seeded_catalog(tmp_path / "catalog.db")
+    with (
+        closing(database_opener().open_reader(path)) as reader,
+        pytest.raises(sqlite3.OperationalError),
+    ):
+        insert_file(reader, _HASH, 1)
+
+
+def test_open_reader_sorts_through_temporary_files(tmp_path: Path) -> None:
+    """``temp_store=FILE`` (1), as the opener sets it to migrate: an in-memory sort is unbounded
+    (stage 1, D8)."""
+    path = _seeded_catalog(tmp_path / "catalog.db")
+    with closing(database_opener().open_reader(path)) as reader:
+        assert rows(reader, "PRAGMA temp_store") == [{"temp_store": 1}]
+
+
+def test_open_reader_refuses_use_from_another_thread(tmp_path: Path) -> None:
+    path = _seeded_catalog(tmp_path / "catalog.db")
+    with closing(database_opener().open_reader(path)) as reader:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            query = executor.submit(reader.execute, "SELECT 1")
+        with pytest.raises(sqlite3.ProgrammingError, match="same thread"):
+            query.result()
+
+
+def test_open_reader_opens_a_path_holding_characters_a_uri_escapes(tmp_path: Path) -> None:
+    directory = tmp_path / "data #%?"
+    directory.mkdir()
+    path = _seeded_catalog(directory / "catalog.db")
+    with closing(database_opener().open_reader(path)) as reader:
+        assert rows(reader, "SELECT native_id FROM files") == [{"native_id": _CANONICAL_HASH}]
 
 
 def test_a_refused_open_closes_its_connection(tmp_path: Path) -> None:
