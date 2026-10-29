@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.domain.file_key import FileKey, Network
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_local_at
 
 _A = FileKey(Network.ED2K, "a" * 32)
@@ -47,32 +48,38 @@ def _migrated(tmp_path: Path) -> sqlite3.Connection:
 def test_0014_converts_each_download_stamp_to_micros_and_keeps_a_null(tmp_path: Path) -> None:
     connection = _migrated(tmp_path)
     try:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 14
-        assert connection.execute(
-            "SELECT file_id, network, native_id, target_id, state, queued_at_micros,"
-            " completed_at_micros, size_bytes, latest_seen_at_micros, bytes_done,"
-            " latest_progress_at_micros, waiting_reason, failure_reason"
-            " FROM downloads ORDER BY native_id"
-        ).fetchall() == [
-            (
-                _A.file_id,
-                "ed2k",
-                _A.native_id,
-                "062A",
-                "completed",
-                1_781_179_200_123_456,
-                1_781_265_600_000_000,
-                100,
-                1_781_182_800_000_001,
-                40,
-                1_781_173_800_000_000,
-                None,
-                "error",
-            ),
-            (_B.file_id, "ed2k", _B.native_id, "062A", "queued", 1_781_179_200_000_000)
-            + (None, 100, None, None, None, None, None),
+        assert rows(connection, "PRAGMA user_version") == [{"user_version": 14}]
+        completed = {
+            "file_id": _A.file_id,
+            "network": "ed2k",
+            "native_id": _A.native_id,
+            "target_id": "062A",
+            "state": "completed",
+            "queued_at_micros": 1_781_179_200_123_456,
+            "completed_at_micros": 1_781_265_600_000_000,
+            "size_bytes": 100,
+            "latest_seen_at_micros": 1_781_182_800_000_001,
+            "bytes_done": 40,
+            "latest_progress_at_micros": 1_781_173_800_000_000,
+            "waiting_reason": None,
+            "failure_reason": "error",
+        }
+        queued = completed | {
+            "file_id": _B.file_id,
+            "native_id": _B.native_id,
+            "state": "queued",
+            "queued_at_micros": 1_781_179_200_000_000,
+            "completed_at_micros": None,
+            "latest_seen_at_micros": None,
+            "bytes_done": None,
+            "latest_progress_at_micros": None,
+            "failure_reason": None,
+        }
+        assert rows(connection, "SELECT * FROM downloads ORDER BY native_id") == [
+            completed,
+            queued,
         ]
-        assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+        assert rows(connection, "PRAGMA integrity_check") == [{"integrity_check": "ok"}]
     finally:
         connection.close()
 
@@ -80,17 +87,18 @@ def test_0014_converts_each_download_stamp_to_micros_and_keeps_a_null(tmp_path: 
 def test_0014_rebuilds_downloads_strict_with_its_stamps_typed(tmp_path: Path) -> None:
     connection = _migrated(tmp_path)
     try:
-        assert connection.execute(
-            "SELECT strict FROM pragma_table_list WHERE name = 'downloads'"
-        ).fetchone() == (1,)
-        assert connection.execute(
+        assert rows(
+            connection, "SELECT strict FROM pragma_table_list WHERE name = 'downloads'"
+        ) == [{"strict": 1}]
+        assert rows(
+            connection,
             "SELECT name, type, \"notnull\" FROM pragma_table_info('downloads')"
-            " WHERE name GLOB '*_at*' ORDER BY cid"
-        ).fetchall() == [
-            ("queued_at_micros", "INTEGER", 1),
-            ("completed_at_micros", "INTEGER", 0),
-            ("latest_seen_at_micros", "INTEGER", 0),
-            ("latest_progress_at_micros", "INTEGER", 0),
+            " WHERE name GLOB '*_at*' ORDER BY cid",
+        ) == [
+            {"name": "queued_at_micros", "type": "INTEGER", "notnull": 1},
+            {"name": "completed_at_micros", "type": "INTEGER", "notnull": 0},
+            {"name": "latest_seen_at_micros", "type": "INTEGER", "notnull": 0},
+            {"name": "latest_progress_at_micros", "type": "INTEGER", "notnull": 0},
         ]
         with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
             connection.execute(

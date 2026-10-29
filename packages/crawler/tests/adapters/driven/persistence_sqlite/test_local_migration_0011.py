@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_local_at
 
 _INSERT = "INSERT INTO backoff_states VALUES (?, ?, ?, ?, ?)"
@@ -21,12 +22,13 @@ def connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 def test_0011_creates_a_strict_backoff_states_and_drops_scheduler_state(
     connection: sqlite3.Connection,
 ) -> None:
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 11
-    tables = connection.execute(
+    assert rows(connection, "PRAGMA user_version") == [{"user_version": 11}]
+    tables = rows(
+        connection,
         "SELECT name, strict FROM pragma_table_list"
-        " WHERE name IN ('backoff_states', 'scheduler_state')"
-    ).fetchall()
-    assert tables == [("backoff_states", 1)]
+        " WHERE name IN ('backoff_states', 'scheduler_state')",
+    )
+    assert tables == [{"name": "backoff_states", "strict": 1}]
 
 
 @pytest.mark.parametrize(
@@ -65,6 +67,6 @@ def test_0011_drops_the_backoff_pending_at_the_upgrade(tmp_path: Path) -> None:
 
     connection = open_local_at(path, 11)
     try:
-        assert connection.execute("SELECT * FROM backoff_states").fetchall() == []
+        assert rows(connection, "SELECT * FROM backoff_states") == []
     finally:
         connection.close()

@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from p2pwatch.domain.file_key import FileKey, Network
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_local_at
 
 _A = FileKey(Network.ED2K, "a" * 32)
@@ -20,12 +21,22 @@ def test_0008_adds_the_lifecycle_columns_unknown_on_existing_rows(tmp_path: Path
 
     connection = open_local_at(path, 8)
     try:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
-        row = connection.execute(
+        assert rows(connection, "PRAGMA user_version") == [{"user_version": 8}]
+        read = rows(
+            connection,
             "SELECT native_id, state, bytes_done, last_progress_at, waiting_reason,"
-            " failure_reason FROM downloads"
-        ).fetchone()
+            " failure_reason FROM downloads",
+        )
     finally:
         connection.close()
     # bytes_done NULL: what the client held before 0008 is unknown, so no progress is invented.
-    assert row == (_A.native_id, "downloading", None, None, None, None)
+    assert read == [
+        {
+            "native_id": _A.native_id,
+            "state": "downloading",
+            "bytes_done": None,
+            "last_progress_at": None,
+            "waiting_reason": None,
+            "failure_reason": None,
+        }
+    ]
