@@ -3,25 +3,30 @@
 import logging
 import os
 import sqlite3
-from collections.abc import Callable
 from contextlib import closing
 from datetime import UTC
 from glob import escape
 from pathlib import Path
+from typing import Protocol
 
 from p2pwatch.adapters.driven.persistence_sqlite.database_digest import database_digest
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError, wrap_sqlite_errors
 from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import PendingMigrations
+from p2pwatch.adapters.driven.persistence_sqlite.reader_opener import ReaderOpener
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 
 _logger = logging.getLogger(__name__)
+
+
+class FreeBytesMeter(Protocol):
+    def __call__(self, path: Path, /) -> int: ...
 
 
 class SqlitePreMigrationCopier:
     """Makes the pre-migration copy of a database, ``<file>.pre-<NNNN>.<stamp>_UTC``, ``NNNN``
     its first pending version, and never deletes one."""
 
-    def __init__(self, wall_clock: WallClock, free_bytes: Callable[[Path], int]) -> None:
+    def __init__(self, wall_clock: WallClock, free_bytes: FreeBytesMeter) -> None:
         self._wall_clock = wall_clock
         self._free_bytes = free_bytes
 
@@ -30,7 +35,7 @@ class SqlitePreMigrationCopier:
         connection: sqlite3.Connection,
         path: Path,
         pending: PendingMigrations,
-        open_reader: Callable[[Path], sqlite3.Connection],
+        open_reader: ReaderOpener,
     ) -> None:
         """On return, a pre-migration copy matching ``path``'s content exists, reused or made, or
         none was needed: no pending migration is marked ``copy-before``, or the database is new.
@@ -76,7 +81,7 @@ def _matches_its_latest_copy(
     connection: sqlite3.Connection,
     path: Path,
     prefix: str,
-    open_reader: Callable[[Path], sqlite3.Connection],
+    open_reader: ReaderOpener,
 ) -> bool:
     """Whether the most recent ``<prefix>.*_UTC`` holds the database's content; one that cannot
     be read matches nothing and is left alone."""

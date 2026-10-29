@@ -38,10 +38,10 @@ an internal bug (which would still surface: a bug in this module's own logic is 
 """
 
 import sqlite3
-from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
 
+from p2pwatch.adapters.driven.persistence_sqlite.reader_opener import ReaderOpener
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.sql_executor import SqlExecutor
 from p2pwatch.domain.console_query import QueryAnswer, QueryFailure
@@ -62,7 +62,7 @@ class SqliteSqlExecutor(SqlExecutor):
     def __init__(
         self,
         db_path: Path,
-        open_reader: Callable[[Path], sqlite3.Connection],
+        open_reader: ReaderOpener,
         monotonic_clock: MonotonicClock,
         *,
         budget_check_instructions: int,

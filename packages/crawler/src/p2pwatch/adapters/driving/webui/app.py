@@ -7,11 +7,11 @@ closures capturing the dependencies: no ``app.state``.
 import csv
 import io
 import re
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Iterable, Mapping
 from datetime import datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, assert_never
+from typing import Any, Protocol, assert_never
 from urllib.parse import parse_qs, urlencode
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
@@ -126,7 +126,11 @@ _NAV_DESTINATIONS: tuple[tuple[str, str], ...] = (
 )
 
 
-def _make_nav_context(amule_url: str) -> Callable[[Request], dict[str, Any]]:
+class ContextProcessor(Protocol):
+    def __call__(self, request: Request, /) -> dict[str, Any]: ...
+
+
+def _make_nav_context(amule_url: str) -> ContextProcessor:
     """Build the context processor that gives EVERY TemplateResponse its ``nav_items`` (no
     handler has to pass them). The entry whose path matches the request exactly loses its link,
     which base.html then renders as the bold current page: that is what replaces the per-page

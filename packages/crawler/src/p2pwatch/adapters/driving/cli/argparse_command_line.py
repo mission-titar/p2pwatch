@@ -4,8 +4,9 @@ import argparse
 import asyncio
 import logging
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from pathlib import PurePath
+from typing import Protocol
 
 from p2pwatch.application.ports.driving.catalog_merger import (
     CatalogMerger,
@@ -26,9 +27,11 @@ from p2pwatch.domain.merge_error import MergeError, OutputIsSourceError
 _LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 
 
-def _add_config_options(
-    parser: argparse.ArgumentParser, under_cwd: Callable[[str | PurePath], PurePath]
-) -> None:
+class CwdResolver(Protocol):
+    def __call__(self, path: str | PurePath, /) -> PurePath: ...
+
+
+def _add_config_options(parser: argparse.ArgumentParser, under_cwd: CwdResolver) -> None:
     parser.add_argument("--config", type=under_cwd, default=under_cwd(DEFAULT_CONFIG_PATH))
     parser.add_argument("--targets", type=under_cwd, default=under_cwd(DEFAULT_TARGETS_PATH))
     parser.add_argument("--matcher", type=under_cwd, default=under_cwd(DEFAULT_MATCHER_PATH))
@@ -44,9 +47,7 @@ def _configure_logging(root_logger: logging.Logger) -> None:
     root_logger.setLevel(logging.INFO)
 
 
-def _add_merge_options(
-    parser: argparse.ArgumentParser, under_cwd: Callable[[str], PurePath]
-) -> None:
+def _add_merge_options(parser: argparse.ArgumentParser, under_cwd: CwdResolver) -> None:
     parser.add_argument(
         "source_catalogs",
         metavar="CATALOG",

@@ -19,7 +19,7 @@ the loops (no worker can write anymore), all within ``shutdown_deadline_seconds`
 import asyncio
 import logging
 import sys
-from collections.abc import AsyncIterator, Callable, Coroutine, Mapping
+from collections.abc import AsyncIterator, Mapping
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from datetime import timedelta
 from importlib.metadata import version
@@ -85,7 +85,7 @@ from p2pwatch.adapters.driven.uuid4_node_id_generator import Uuid4NodeIdGenerato
 from p2pwatch.adapters.driving.process.posix_process import PosixProcess
 from p2pwatch.adapters.driving.webui.app import build_app as build_webui_app
 from p2pwatch.adapters.driving.webui.uvicorn_server_thread import UvicornServerThread
-from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle
+from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle, NodeLoop
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
@@ -120,7 +120,7 @@ from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
-from p2pwatch.domain.identifiers import ClientName, NodeId
+from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.matching_read import MatchingExplainer
 
 _logger = logging.getLogger(__name__)
@@ -429,7 +429,7 @@ class CrawlerComposition(CrawlerRunner):
                 monotonic_clock=monotonic_clock,
                 logger=StdlibLogger(SearchTaskRunner.__module__),
             )
-            loops: list[Callable[[NodeId], Coroutine[object, object, None]]] = [
+            loops: list[NodeLoop] = [
                 search_task_runner.run,
                 status_loop.run,
             ]

@@ -1,9 +1,18 @@
 """Runs the crawler's loops until the shutdown is requested, then cancels them all."""
 
 import asyncio
-from collections.abc import Callable, Coroutine, Sequence
+from collections.abc import Sequence
+from typing import Protocol
 
 from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
+
+
+class SupervisedLoop(Protocol):
+    async def __call__(self) -> None: ...
+
+
+class ShutdownBoundArmer(Protocol):
+    def __call__(self) -> None: ...
 
 
 class LoopSupervisor:
@@ -14,9 +23,9 @@ class LoopSupervisor:
 
     async def supervise(
         self,
-        loops: Sequence[Callable[[], Coroutine[object, object, None]]],
+        loops: Sequence[SupervisedLoop],
         *,
-        arm_shutdown_bound: Callable[[], None],
+        arm_shutdown_bound: ShutdownBoundArmer,
     ) -> None:
         """Runs each loop until the shutdown is requested, arms the bound, then cancels them all.
 
