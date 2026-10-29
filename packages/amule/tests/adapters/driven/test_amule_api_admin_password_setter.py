@@ -4,6 +4,7 @@ from pathlib import Path
 
 from p2pwatch_amule.adapters.driven.amule_api_admin_password_setter import (
     AmuleApiAdminPasswordSetter,
+    CommandRunner,
 )
 from p2pwatch_amule.domain.identifiers import Gid, Uid
 from tests.fakes.adapters.driven.fake_command_runner import FakeCommandRunner
@@ -41,3 +42,17 @@ def test_amuleapi_sets_the_password_as_the_uid_and_gid_alone() -> None:
             },
         )
     ]
+
+
+def test_mypy_refuses_a_command_runner_text_false() -> None:
+    run_command: CommandRunner = FakeCommandRunner().run_command
+    # The ignore is the test: strict mypy reports it unused if CommandRunner admits text=False.
+    run_command(
+        ["amuleapi"],
+        user=Uid(1000),
+        group=Gid(1001),
+        extra_groups=[],
+        env=ENV,
+        check=True,
+        text=False,  # type: ignore[arg-type]
+    )

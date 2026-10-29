@@ -1,10 +1,15 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Protocol
 
 from p2pwatch_amule.application.ports.driven.amuled_directory_preparer import (
     AmuledDirectoryPreparer,
 )
 from p2pwatch_amule.domain.identifiers import Gid, Uid
+
+
+class OwnerChanger(Protocol):
+    def __call__(self, *, path: Path, uid: Uid, gid: Gid) -> None: ...
 
 
 class PosixAmuledDirectoryPreparer(AmuledDirectoryPreparer):
@@ -14,7 +19,7 @@ class PosixAmuledDirectoryPreparer(AmuledDirectoryPreparer):
         self,
         *,
         owned_directories: Sequence[Path],
-        change_owner: Callable[[Path, Uid, Gid], None],
+        change_owner: OwnerChanger,
     ) -> None:
         self._owned_directories = owned_directories
         self._change_owner = change_owner
@@ -24,4 +29,4 @@ class PosixAmuledDirectoryPreparer(AmuledDirectoryPreparer):
             directory.mkdir(parents=True, exist_ok=True)
         # Not recursive: the mounts can hold hundreds of gigabytes of part files the operator owns.
         for directory in self._owned_directories:
-            self._change_owner(directory, uid, gid)
+            self._change_owner(path=directory, uid=uid, gid=gid)

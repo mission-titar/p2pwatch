@@ -1,12 +1,18 @@
 import logging
 import subprocess
-from collections.abc import Callable
 from pathlib import Path
+from typing import Literal, Protocol
 
 from p2pwatch_amule.application.ports.driven.service_supervisor import ServiceSupervisor
 
 # Under its module's name, so no wiring can give it another (docs/migration-4x.md cites it).
 _logger = logging.getLogger(__name__)
+
+
+class CommandRunner(Protocol):
+    def __call__(
+        self, args: list[str], /, *, capture_output: bool, text: Literal[True]
+    ) -> subprocess.CompletedProcess[str]: ...
 
 
 class S6ServiceSupervisor(ServiceSupervisor):
@@ -19,7 +25,7 @@ class S6ServiceSupervisor(ServiceSupervisor):
         port_sync_service_directory: Path,
         amuled_service_directory: Path,
         stop_timeout_seconds: int,
-        run_command: Callable[..., subprocess.CompletedProcess[str]],
+        run_command: CommandRunner,
     ) -> None:
         self._port_sync_down_file = port_sync_service_directory / "down"
         self._amuled_service_directory = amuled_service_directory

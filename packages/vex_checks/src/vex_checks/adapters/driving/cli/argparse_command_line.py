@@ -2,8 +2,9 @@
 
 import argparse
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from pathlib import PurePath
+from typing import Protocol
 
 from vex_checks.application.ports.driving.applied_claims_checker import AppliedClaimsChecker
 from vex_checks.application.ports.driving.claim_coverage_checker import ClaimCoverageChecker
@@ -12,9 +13,11 @@ from vex_checks.domain.broken_input_error import BrokenInputError
 from vex_checks.domain.claim_problem import ClaimProblem
 
 
-def _add_image_options(
-    parser: argparse.ArgumentParser, under_cwd: Callable[[str], PurePath]
-) -> None:
+class CwdResolver(Protocol):
+    def __call__(self, path: str, /) -> PurePath: ...
+
+
+def _add_image_options(parser: argparse.ArgumentParser, under_cwd: CwdResolver) -> None:
     parser.add_argument(
         "--sbom", type=under_cwd, required=True, help="Syft JSON SBOM of the built image"
     )

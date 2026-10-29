@@ -10,3 +10,12 @@ rule:
     field: superclasses
     # A base `Protocol`, `typing.Protocol` or `Protocol[T]`.
     has: { regex: '^(typing\.)?Protocol(\[.*\])?$' }
+  # A callback Protocol, whose only member is `__call__`, is no port.
+  not:
+    has:
+      field: body
+      all:
+        - has: { kind: function_definition, has: { field: name, regex: '^__call__$' } }
+        - not:
+            has:
+              not: { kind: function_definition, has: { field: name, regex: '^__call__$' } }

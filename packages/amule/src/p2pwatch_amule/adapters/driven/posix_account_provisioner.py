@@ -1,9 +1,19 @@
 import subprocess
-from collections.abc import Callable
 from pathlib import Path
+from typing import Literal, Protocol
 
 from p2pwatch_amule.application.ports.driven.account_provisioner import AccountProvisioner
 from p2pwatch_amule.domain.identifiers import Gid, Uid
+
+
+class CommandRunner(Protocol):
+    def __call__(
+        self, args: list[str], /, *, check: bool, text: Literal[True]
+    ) -> subprocess.CompletedProcess[str]: ...
+
+
+class AccountFinder(Protocol):
+    def __call__(self, name: str, /) -> object: ...
 
 
 class PosixAccountProvisioner(AccountProvisioner):
@@ -13,9 +23,9 @@ class PosixAccountProvisioner(AccountProvisioner):
         self,
         *,
         home_directory: Path,
-        run_command: Callable[..., subprocess.CompletedProcess[str]],
-        find_group: Callable[[str], object],
-        find_user: Callable[[str], object],
+        run_command: CommandRunner,
+        find_group: AccountFinder,
+        find_user: AccountFinder,
     ) -> None:
         self._home_directory = home_directory
         self._run_command = run_command
@@ -42,7 +52,7 @@ class PosixAccountProvisioner(AccountProvisioner):
             self._run_command([*useradd, "-s", "/usr/sbin/nologin", "amule"], check=True, text=True)
 
 
-def _is_missing(find: Callable[[str], object]) -> bool:
+def _is_missing(find: AccountFinder) -> bool:
     try:
         find("amule")
     except KeyError:
