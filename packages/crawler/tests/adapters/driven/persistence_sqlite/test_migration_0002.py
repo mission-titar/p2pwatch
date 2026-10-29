@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_local
 
 
@@ -15,10 +16,9 @@ def connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 
 def test_downloads_has_size_bytes_column(connection: sqlite3.Connection) -> None:
-    columns = {row[1] for row in connection.execute("PRAGMA table_info(downloads)")}
+    columns = {column["name"] for column in rows(connection, "PRAGMA table_info(downloads)")}
     assert "size_bytes" in columns
 
 
 def test_user_version_is_at_least_two(connection: sqlite3.Connection) -> None:
-    version = connection.execute("PRAGMA user_version").fetchone()[0]
-    assert version >= 2
+    assert rows(connection, "PRAGMA user_version")[0]["user_version"] >= 2

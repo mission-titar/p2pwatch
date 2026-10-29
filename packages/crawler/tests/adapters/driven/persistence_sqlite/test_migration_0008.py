@@ -14,6 +14,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Keyword, NodeId
 from p2pwatch.domain.observation import FileObservation, ReportedFile
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
     open_catalog_at,
     open_catalog_forcing_secure_delete_at,
@@ -34,9 +35,24 @@ _DECISIONS = (
     (_A, "062A", "", "retracted", "2026-06-11T12:00:02.000000+00:00", "n2"),
 )
 _ED2K_COLUMNS = """
-SELECT m.name, p.name FROM sqlite_schema AS m, pragma_table_info(m.name) AS p
+SELECT m.name AS table_name, p.name AS column_name
+FROM sqlite_schema AS m, pragma_table_info(m.name) AS p
 WHERE m.type = 'table' AND (p.name LIKE '%ed2k%' OR p.name LIKE 'aich%')
 """
+_VARIANT_COLUMNS = (
+    "variant_id",
+    "file_id",
+    "filename",
+    "size_bytes",
+    "media_length_sec",
+    "bitrate_kbps",
+    "raw_meta",
+    "keyword",
+    "node_id",
+    "content_hash",
+)
+_OBSERVATION_COLUMNS = ("variant_id", "observed_at", "source_count")
+_DECISION_COLUMNS = ("id", "file_id", "target_id", "rule_name", "tier", "decided_at", "node_id")
 
 
 def _catalog_at_7(path: Path) -> None:
@@ -72,42 +88,53 @@ def migrated(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 def test_files_are_keyed_by_the_file_id_of_their_network_and_native_id(
     migrated: sqlite3.Connection,
 ) -> None:
-    assert migrated.execute("PRAGMA user_version").fetchone()[0] == 8
-    assert migrated.execute("SELECT * FROM files ORDER BY native_id").fetchall() == [
-        (_ID_A, "ed2k", _A, 100),
-        (_ID_B, "ed2k", _B, 200),
+    assert rows(migrated, "PRAGMA user_version") == [{"user_version": 8}]
+    assert rows(migrated, "SELECT * FROM files ORDER BY native_id") == [
+        {"file_id": _ID_A, "network": "ed2k", "native_id": _A, "size_bytes": 100},
+        {"file_id": _ID_B, "network": "ed2k", "native_id": _B, "size_bytes": 200},
     ]
 
 
 def test_variants_keep_their_id_and_hash_the_file_id(migrated: sqlite3.Connection) -> None:
     file_ids = {_A: _ID_A, _B: _ID_B}
     expected = [
-        (n, file_ids[v[0]], *v[1:], content_hash(file_ids[v[0]], *v[1:]))
+        dict(
+            zip(
+                _VARIANT_COLUMNS,
+                (n, file_ids[v[0]], *v[1:], content_hash(file_ids[v[0]], *v[1:])),
+                strict=True,
+            )
+        )
         for n, v in enumerate(_VARIANTS, start=1)
     ]
-    assert migrated.execute("SELECT * FROM observation_variants ORDER BY 1").fetchall() == expected
-    assert migrated.execute("SELECT * FROM observations ORDER BY 1, 2").fetchall() == list(
-        _OBSERVATIONS
-    )
+    assert rows(migrated, "SELECT * FROM observation_variants ORDER BY 1") == expected
+    assert rows(migrated, "SELECT * FROM observations ORDER BY 1, 2") == [
+        dict(zip(_OBSERVATION_COLUMNS, observation, strict=True)) for observation in _OBSERVATIONS
+    ]
 
 
 def test_decisions_keep_their_id_and_name_the_file_id(migrated: sqlite3.Connection) -> None:
     file_ids = {_A: _ID_A, _B: _ID_B}
-    expected = [(n, file_ids[d[0]], *d[1:]) for n, d in enumerate(_DECISIONS, start=1)]
-    assert migrated.execute("SELECT * FROM match_decisions ORDER BY id").fetchall() == expected
+    expected = [
+        dict(zip(_DECISION_COLUMNS, (n, file_ids[d[0]], *d[1:]), strict=True))
+        for n, d in enumerate(_DECISIONS, start=1)
+    ]
+    assert rows(migrated, "SELECT * FROM match_decisions ORDER BY id") == expected
 
 
 def test_no_ed2k_identity_or_old_table_is_left(migrated: sqlite3.Connection) -> None:
-    assert migrated.execute(_ED2K_COLUMNS).fetchall() == []
-    tables = {row[0] for row in migrated.execute("SELECT name FROM sqlite_schema")}
+    assert rows(migrated, _ED2K_COLUMNS) == []
+    tables = {row["name"] for row in rows(migrated, "SELECT name FROM sqlite_schema")}
     assert not {name for name in tables if name.endswith("_old")}
-    indexes = migrated.execute(
+    indexes = rows(
+        migrated,
         "SELECT name, tbl_name FROM sqlite_schema WHERE type = 'index' AND sql IS NOT NULL"
+        " ORDER BY name",
     )
     # The index on file_id alone would be a prefix of the decision index: not carried.
-    assert sorted(indexes.fetchall()) == [
-        ("idx_match_decisions_file_target_decided", "match_decisions"),
-        ("idx_observation_variants_file_id", "observation_variants"),
+    assert indexes == [
+        {"name": "idx_match_decisions_file_target_decided", "tbl_name": "match_decisions"},
+        {"name": "idx_observation_variants_file_id", "tbl_name": "observation_variants"},
     ]
 
 
@@ -136,8 +163,12 @@ def test_a_new_observation_reuses_the_variant_0008_rekeyed(tmp_path: Path) -> No
         SqliteObservationStore(migrated).record_observation(
             FileObservation(reported_file, datetime(2026, 6, 12, tzinfo=UTC), NodeId("n1"))
         )
-        assert migrated.execute("SELECT count(*) FROM observation_variants").fetchone()[0] == 3
-        assert migrated.execute("SELECT count(*) FROM observations").fetchone()[0] == 5
+        assert rows(migrated, "SELECT count(*) AS variant_count FROM observation_variants") == [
+            {"variant_count": 3}
+        ]
+        assert rows(migrated, "SELECT count(*) AS observation_count FROM observations") == [
+            {"observation_count": 5}
+        ]
     finally:
         migrated.close()
 
@@ -146,8 +177,8 @@ def test_migrating_restores_the_pragmas_0008_sets(tmp_path: Path) -> None:
     _catalog_at_7(tmp_path / "catalog.db")
     connection = open_catalog_forcing_secure_delete_at(tmp_path / "catalog.db", 8)
     try:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
-        assert connection.execute("PRAGMA secure_delete").fetchone()[0] == 1
-        assert connection.execute("PRAGMA cache_size").fetchone()[0] == -2000
+        assert rows(connection, "PRAGMA user_version") == [{"user_version": 8}]
+        assert rows(connection, "PRAGMA secure_delete") == [{"secure_delete": 1}]
+        assert rows(connection, "PRAGMA cache_size") == [{"cache_size": -2000}]
     finally:
         connection.close()

@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_catalog_at
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 
@@ -34,8 +35,8 @@ def _write_catalog_at_5(path: Path, *, with_range: bool) -> None:
 
 
 def _schema_names(connection: sqlite3.Connection) -> set[str]:
-    rows = connection.execute("SELECT name, tbl_name FROM sqlite_schema")
-    return {str(name) for row in rows for name in row}
+    schema = rows(connection, "SELECT name, tbl_name FROM sqlite_schema")
+    return {str(name) for row in schema for name in row.values()}
 
 
 def test_a_catalog_holding_ranges_refuses_to_migrate(tmp_path: Path) -> None:
@@ -47,8 +48,10 @@ def test_a_catalog_holding_ranges_refuses_to_migrate(tmp_path: Path) -> None:
 
     raw = sqlite3.connect(path)
     try:
-        assert raw.execute("PRAGMA user_version").fetchone()[0] == 5
-        assert raw.execute("SELECT count(*) FROM file_observation_ranges").fetchone()[0] == 1
+        assert rows(raw, "PRAGMA user_version") == [{"user_version": 5}]
+        assert rows(raw, "SELECT count(*) AS range_count FROM file_observation_ranges") == [
+            {"range_count": 1}
+        ]
     finally:
         raw.close()
 
@@ -61,8 +64,8 @@ def test_a_catalog_without_ranges_drops_the_dead_tables_and_keeps_its_files(
 
     connection = open_catalog_at(path, 6)
     try:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert rows(connection, "PRAGMA user_version") == [{"user_version": 6}]
         assert not _schema_names(connection) & {*_DEAD_TABLES, "migration_0006_guard"}
-        assert connection.execute("SELECT ed2k_hash FROM files").fetchall() == [(_HASH,)]
+        assert rows(connection, "SELECT ed2k_hash FROM files") == [{"ed2k_hash": _HASH}]
     finally:
         connection.close()
