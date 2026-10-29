@@ -8,12 +8,10 @@ from contextlib import closing
 from datetime import UTC
 from glob import escape
 from pathlib import Path
-from urllib.parse import quote
 
 from p2pwatch.adapters.driven.persistence_sqlite.database_digest import database_digest
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError, wrap_sqlite_errors
 from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import PendingMigrations
-from p2pwatch.adapters.driven.persistence_sqlite.named_row import named_row
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 
 _logger = logging.getLogger(__name__)
@@ -28,11 +26,16 @@ class SqlitePreMigrationCopier:
         self._free_bytes = free_bytes
 
     def ensure_copy(
-        self, connection: sqlite3.Connection, path: Path, pending: PendingMigrations
+        self,
+        connection: sqlite3.Connection,
+        path: Path,
+        pending: PendingMigrations,
+        open_reader: Callable[[Path], sqlite3.Connection],
     ) -> None:
         """On return, a pre-migration copy matching ``path``'s content exists, reused or made, or
         none was needed: no pending migration is marked ``copy-before``, or the database is new.
-        Short of free space, it raises ``MigrationError`` before writing anything."""
+        The latest copy is read through ``open_reader``. Short of free space, it raises
+        ``MigrationError`` before writing anything."""
         _delete_leftovers(path)
         if pending.current_version == 0 or not any(
             migration.copy_before for migration in pending.migrations
@@ -40,7 +43,7 @@ class SqlitePreMigrationCopier:
             return
         prefix = f"{path.name}.pre-{pending.migrations[0].version:04d}"
         with wrap_sqlite_errors():
-            if _matches_its_latest_copy(connection, path, prefix):
+            if _matches_its_latest_copy(connection, path, prefix, open_reader):
                 return
             self._check_free_space(connection, path)
             partial = path.with_name(f"{prefix}.partial")
@@ -69,7 +72,12 @@ class SqlitePreMigrationCopier:
             )
 
 
-def _matches_its_latest_copy(connection: sqlite3.Connection, path: Path, prefix: str) -> bool:
+def _matches_its_latest_copy(
+    connection: sqlite3.Connection,
+    path: Path,
+    prefix: str,
+    open_reader: Callable[[Path], sqlite3.Connection],
+) -> bool:
     """Whether the most recent ``<prefix>.*_UTC`` holds the database's content; one that cannot
     be read matches nothing and is left alone."""
     candidates = sorted(path.parent.glob(escape(prefix) + ".*_UTC"))
@@ -78,10 +86,7 @@ def _matches_its_latest_copy(connection: sqlite3.Connection, path: Path, prefix:
     latest = candidates[-1]
     _logger.info("pre-migration copy of %s: comparing with %s", path, latest)
     try:
-        # Not as_uri(), which refuses a relative path.
-        uri = f"file:{quote(str(latest))}?mode=ro"
-        with closing(sqlite3.connect(uri, uri=True)) as candidate:
-            candidate.row_factory = named_row
+        with closing(open_reader(latest)) as candidate:
             candidate_digest = database_digest(candidate)
     except sqlite3.Error as error:
         _logger.warning("pre-migration copy: %s cannot be read (%s)", latest, error)

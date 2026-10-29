@@ -1,4 +1,5 @@
-"""Opens ``catalog.db`` and ``local.db``, each migrated to the code's version.
+"""Opens every SQLite connection: ``catalog.db`` and ``local.db``, each migrated to the code's
+version, and the read-only readers; each reads its rows by column name, the factory private here.
 
 Each connection is opened in REAL autocommit (``autocommit=True``, Python ≥ 3.12):
 transactions are EXPLICIT (``BEGIN``/``COMMIT``/``ROLLBACK`` written by the
@@ -17,6 +18,7 @@ import sqlite3
 from contextlib import suppress
 from importlib import resources
 from pathlib import Path
+from typing import Any
 from urllib.parse import quote
 
 from p2pwatch.adapters.driven.persistence_sqlite.errors import (
@@ -29,7 +31,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import (
     PendingMigrations,
     load_scripts,
 )
-from p2pwatch.adapters.driven.persistence_sqlite.named_row import named_row
+from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier import (
     SqlitePreMigrationCopier,
 )
@@ -46,7 +48,8 @@ _SECURE_DELETE_MODES = ("OFF", "ON", "FAST")
 
 
 class SqliteDatabaseOpener:
-    """Opens a database and applies its pending migrations, the one way the code migrates one."""
+    """Opens a database and applies its pending migrations, the one way the code migrates one, or
+    opens a reader of it."""
 
     def __init__(self, pre_migration_copier: SqlitePreMigrationCopier) -> None:
         self._pre_migration_copier = pre_migration_copier
@@ -65,7 +68,7 @@ class SqliteDatabaseOpener:
         connection = _connect(path)
         try:
             pending = _pending_migrations(connection, scripts)
-            self._pre_migration_copier.ensure_copy(connection, path, pending)
+            self._pre_migration_copier.ensure_copy(connection, path, pending, self.open_reader)
             _apply_migrations(connection, pending)
             with wrap_sqlite_errors():
                 remove_migration_sql_functions(connection)
@@ -81,7 +84,7 @@ class SqliteDatabaseOpener:
         Only the thread that opens it may use or close it."""
         # Not as_uri(), which refuses a relative path.
         connection = sqlite3.connect(f"file:{quote(str(path))}?mode=ro", uri=True)
-        connection.row_factory = named_row
+        connection.row_factory = _build_named_row
         connection.execute("PRAGMA query_only=ON")
         connection.execute("PRAGMA temp_store=FILE")
         return connection
@@ -92,7 +95,7 @@ def _connect(path: Path) -> sqlite3.Connection:
     functions registered."""
     with wrap_sqlite_errors():
         connection = sqlite3.connect(path, autocommit=True)
-    connection.row_factory = named_row
+    connection.row_factory = _build_named_row
     try:
         with wrap_sqlite_errors():
             _configure(connection)
@@ -102,6 +105,15 @@ def _connect(path: Path) -> sqlite3.Connection:
         connection.close()
         raise
     return connection
+
+
+def _build_named_row(cursor: sqlite3.Cursor, values: tuple[Any, ...]) -> NamedRow:
+    """The row factory: refuses a column name that appears twice, which a dict would keep once."""
+    names = [column[0] for column in cursor.description]
+    for name in names:
+        if names.count(name) > 1:
+            raise ValueError(f"the column {name!r} appears twice")
+    return NamedRow(zip(names, values, strict=True))
 
 
 def _configure(connection: sqlite3.Connection) -> None:

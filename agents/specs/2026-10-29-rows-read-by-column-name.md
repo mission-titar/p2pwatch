@@ -23,23 +23,33 @@ Nothing: no page, metric, notification, config key or schema changes. The SQL co
   gate's 100 % coverage runs every read. A plain `dict` would hand an unpacking its keys silently, and keep one of two
   equal names silently. `row["a"]`, `row == {...}`, `dict(row)` and `.items()` still work (probed by
   `rows-by-name-spec-review`). An ast-grep rule on `row[<int>]` would not see unpacking (operator: enforce by design,
-  2026-10-29).*
+  2026-10-29).* *(Corrected: `SqliteDatabaseOpener` is the one place that opens a connection, and it owns the
+  factory privately, `_build_named_row` in its module, since setting it at each connection site was a footgun;
+  `named_row.py` keeps the `NamedRow` type alone, and `code-pattern-check` refuses `sqlite3.connect` in every
+  package's `src` outside the opener's module (operator, 2026-10-29; blocks 57 and 58).)*
 - **D2. A `PRAGMA` is read by its column name** (`["user_version"]`). *D1 leaves no index read.*
 - **D3. The SQL console keeps positional rows through its own cursor**: `cursor = connection.cursor()`,
-  `cursor.row_factory = None`, on the connection `open_reader` gives it. *An arbitrary query may repeat a name
+  `cursor.row_factory = None`, on the connection `open_reader` gives it. *(Corrected: that `open_reader` is
+  `SqliteDatabaseOpener.open_reader`, which the console receives from the composition; block 57.)* *An arbitrary query may repeat a name
   (`SELECT 1 AS a, 2 AS a`) and the console shows columns in order; the console needs `open_reader`'s read-only
   guards more than any reader, so it keeps them (operator, 2026-10-29). Probed on Python 3.13: such a cursor returns
   `[(1, 2)]` while the connection returns dicts.*
 - **D4. `database_digest` reads through its own cursor carrying D1's factory.** *It digests whatever connection it is
   given, the pre-migration copier's raw candidate and the tests' raw connections included; it is also the factory's
-  first production caller, so block 10 can land `named_row.py` without `dead-code-check` refusing it.*
+  first production caller, so block 10 can land `named_row.py` without `dead-code-check` refusing it.* *(Corrected:
+  it reads through the connection it is given, which the opener opened, its factory included: the copier's
+  candidate comes from the `open_reader` the opener hands `ensure_copy`, and the digest's tests open through the
+  opener; block 58.)*
 - **D5. Tests read rows through one support helper**, `rows(connection, sql, parameters)` in
   `tests/support/adapters/driven/persistence_sqlite/named_row.py`, which runs the query on its own cursor carrying
   D1's factory and returns plain `dict`s. *A cursor's factory overrides its connection's, so the tests move to names
   in blocks under 20 files each before any connection changes (`rows-by-name-estimates`). Once every connection
   carries the factory, the helper keeps two roles: it reads a test's own raw connection (a migration test's, the
   digest's) the same way, and its plain `dict`s keep pytest's diff on a failing comparison, which a `NamedRow` loses
-  ("faulty `__repr__`", probed): pytest's representation iterates the row.*
+  ("faulty `__repr__`", probed): pytest's representation iterates the row.* *(Corrected: the helper reads tuples
+  on its own cursor, `row_factory = None`, and builds its `dict`s from `cursor.description`, refusing a duplicate
+  name itself, since the factory is now private to the opener; it keeps its module's name, `named_row.py`; block
+  58.)*
 - **D6. The round-trip tests leave this lot** (operator, 2026-10-29). *Of about 110 column swaps tried on `main`, the
   tests already catch all but one (`rows-by-name-spec-review`): drawn values in new contracts would add almost no
   detection. Their value is each port's promise written as a contract, which deserves its own Discuss and its own
@@ -71,6 +81,8 @@ Estimates by `rows-by-name-estimates` (Sonnet, 2026-10-29), within about 25 %; t
 | 30 | `test/rows-helper-steps` | the tests of `observation_store`, `pre_migration_copier`, `source_point_store_writer`, `tracked_download_store`, `thread_read_connections`, the five of `tests/application/steps`, and `tests/support`'s `helpers`, `older_catalog`, `catalog_rows` | 110, 15 |
 | 40 | `refactor/local-rows-by-name` | `open_local` sets the factory; local.db's stores (`NodeId`, `PolicyFingerprint`, `BackoffState`, `TrackedDownload`) read by name | 100, 8 |
 | 50 | `refactor/rows-by-name` | the factory moves into `_connect`, set before `_configure` reads `journal_mode`, and onto `open_reader` and the pre-migration copier's candidate; the catalog's stores, `observation_read` and every `PRAGMA` by name (D2); the console's cursor (D3); `AGENTS.md`; drafts the handoff | 220, 14 |
+| 57 | `refactor/opener-owns-connections` | the readers' open moves into `SqliteDatabaseOpener.open_reader`, its path quoted; `ThreadReadConnections` and the console receive it (operator, 2026-10-29) | 289, 12 (measured) |
+| 58 | `refactor/opener-owns-row-factory` | the pre-migration copier receives `open_reader` at call time; the factory private to the opener, its tests with the opener's; `database_digest` without a factory; the tests' `rows()` without the factory; the ast-grep rule `no-sqlite-connect`; `AGENTS.md` | 214, 15 (measured) |
 | 60 | `docs/rows-by-name-wrap` | closing: the holistic findings, `BACKLOG.md`, the handoff | |
 
 The order: the tests first, on the helper, so blocks 40 and 50 change the connections and the `src` alone; local.db,
@@ -119,7 +131,9 @@ From the surveys `rows-by-name-inventory`, `rows-by-name-estimates` and the revi
 
 - **Connections.** `SqliteDatabaseOpener._connect` sets no row factory; `open_reader`
   (`thread_read_connections.py`) sets `sqlite3.Row`; `SqlitePreMigrationCopier` opens a raw candidate connection
-  (line 80) and digests it. `Connection.iterdump` resets its cursor's factory (CPython 3.13 `dump.py`).
+  (line 80) and digests it. *(Corrected: the lot's starting state. Since blocks 57 and 58,
+  `SqliteDatabaseOpener` opens every connection, `_connect`'s and `open_reader`'s, both carrying its private
+  factory, and the copier opens its candidate through the `open_reader` it is given.)* `Connection.iterdump` resets its cursor's factory (CPython 3.13 `dump.py`).
   `crawler_composition.py` gives local.db's connection to the `NodeId`, `PolicyFingerprint`, `BackoffState` and
   `TrackedDownload` stores, the catalog's to the `Observation`, `Decision`, `SourcePoint` stores and
   `CatalogScanReader`.

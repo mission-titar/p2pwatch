@@ -82,6 +82,14 @@ def test_open_local_returns_rows_read_by_column_name(tmp_path: Path) -> None:
     assert row == {"node_id": 1}
 
 
+def test_open_local_refuses_a_column_name_that_appears_twice(tmp_path: Path) -> None:
+    with (
+        closing(database_opener().open_local(tmp_path / "local.db")) as connection,
+        pytest.raises(ValueError, match="'a' appears twice"),
+    ):
+        connection.execute("SELECT 1 AS a, 2 AS b, 3 AS a").fetchone()
+
+
 def _seeded_catalog(path: Path) -> Path:
     with closing(open_catalog(path)) as writer:
         insert_file(writer, _CANONICAL_HASH, 10)
@@ -94,6 +102,15 @@ def test_open_reader_returns_rows_read_by_column_name(tmp_path: Path) -> None:
         row = reader.execute("SELECT native_id, size_bytes FROM files").fetchone()
     assert isinstance(row, NamedRow)
     assert row == {"native_id": _CANONICAL_HASH, "size_bytes": 10}
+
+
+def test_open_reader_refuses_a_column_name_that_appears_twice(tmp_path: Path) -> None:
+    path = _seeded_catalog(tmp_path / "catalog.db")
+    with (
+        closing(database_opener().open_reader(path)) as reader,
+        pytest.raises(ValueError, match="'a' appears twice"),
+    ):
+        reader.execute("SELECT 1 AS a, 2 AS a").fetchone()
 
 
 def test_open_reader_refuses_writes(tmp_path: Path) -> None:

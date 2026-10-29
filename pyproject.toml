@@ -102,7 +102,7 @@ lint           = { cmd = "ruff check .", help = "Lint Python with ruff" }
 format-check   = { cmd = "ruff format --check .", help = "Check Python formatting with ruff" }
 sql-lint       = { cmd = "sqlfluff lint packages/crawler/src", help = "Lint the embedded SQLite migrations" }
 # The rule tests check each case's verdict, without snapshots of the messages.
-code-pattern-check = { help = "Ban dynamic attribute access, module patching, Protocol ports, literal logger names and option defaults, Readers' and Writers' other verbs, and the core's other imports and I/O builtins (ast-grep, sgconfig.yml), rules tested first", sequence = [{ cmd = "ast-grep test --skip-snapshot-tests" }, { cmd = "ast-grep scan" }] }
+code-pattern-check = { help = "Ban dynamic attribute access, module patching, Protocol ports, SQLite connections opened outside the opener, literal logger names and option defaults, Readers' and Writers' other verbs, and the core's other imports and I/O builtins (ast-grep, sgconfig.yml), rules tested first", sequence = [{ cmd = "ast-grep test --skip-snapshot-tests" }, { cmd = "ast-grep scan" }] }
 architecture-check = { help = "Check the imports between rings, adapters and hexagons (tach, tach.toml)", sequence = [{ cmd = "tach check" }, { cmd = "tach check-external" }] }
 template-check = { cmd = "python -m template_checks logic-free packages/crawler/src/p2pwatch/adapters/driving/webui/templates", help = "Assert webui templates carry no logic" }
 _template-attributes = { cmd = "python -m template_checks template-attributes packages/crawler/src/p2pwatch/adapters/driving/webui/templates" }

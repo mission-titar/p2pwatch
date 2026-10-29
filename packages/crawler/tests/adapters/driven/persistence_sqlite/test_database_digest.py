@@ -6,16 +6,23 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.database_digest import database_digest
-from p2pwatch.adapters.driven.persistence_sqlite.named_row import named_row
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_reader
 
+_DATABASE = "digest.db"
 _ROWS = [(1, "a"), (2, "b"), (3, None), (4, b"\x00")]
+
+
+def _digest(path: Path) -> bytes:
+    """The digest of ``path``, read through the opener, as the copier reads its candidate."""
+    with closing(open_reader(path)) as reader:
+        return database_digest(reader)
 
 
 @pytest.fixture
 def database(tmp_path: Path) -> Iterator[sqlite3.Connection]:
     """Two tables of the same shape, ``a`` holding the rows, ``b`` empty, and an AUTOINCREMENT
     table that fills ``sqlite_sequence``."""
-    with closing(sqlite3.connect(tmp_path / "digest.db", autocommit=True)) as connection:
+    with closing(sqlite3.connect(tmp_path / _DATABASE, autocommit=True)) as connection:
         connection.executescript(
             "PRAGMA user_version = 3;"
             "CREATE TABLE a (x INTEGER, y);"
@@ -32,14 +39,14 @@ def test_a_vacuum_into_copy_has_the_same_digest(
 ) -> None:
     copy_path = tmp_path / "copy.db"
     database.execute("VACUUM INTO ?", (str(copy_path),))
-    with closing(sqlite3.connect(copy_path)) as copy:
-        assert database_digest(copy) == database_digest(database)
+    assert _digest(copy_path) == _digest(tmp_path / _DATABASE)
 
 
 def test_the_same_rows_inserted_in_another_order_have_the_same_digest(
     database: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    with closing(sqlite3.connect(tmp_path / "reversed.db", autocommit=True)) as reversed_rows:
+    reversed_path = tmp_path / "reversed.db"
+    with closing(sqlite3.connect(reversed_path, autocommit=True)) as reversed_rows:
         reversed_rows.executescript(
             "PRAGMA user_version = 3;"
             "CREATE TABLE a (x INTEGER, y);"
@@ -48,15 +55,7 @@ def test_the_same_rows_inserted_in_another_order_have_the_same_digest(
             "INSERT INTO c DEFAULT VALUES;"
         )
         reversed_rows.executemany("INSERT INTO a VALUES (?, ?)", reversed(_ROWS))
-        assert database_digest(reversed_rows) == database_digest(database)
-
-
-def test_a_connection_carrying_the_row_factory_has_the_digest_of_a_raw_one(
-    database: sqlite3.Connection,
-) -> None:
-    before = database_digest(database)
-    database.row_factory = named_row
-    assert database_digest(database) == before
+    assert _digest(reversed_path) == _digest(tmp_path / _DATABASE)
 
 
 @pytest.mark.parametrize(
@@ -71,7 +70,9 @@ def test_a_connection_carrying_the_row_factory_has_the_digest_of_a_raw_one(
     ],
     ids=["a row", "a value's type", "a row's table", "sqlite_sequence", "the schema", "version"],
 )
-def test_a_change_changes_the_digest(database: sqlite3.Connection, change: str) -> None:
-    before = database_digest(database)
+def test_a_change_changes_the_digest(
+    database: sqlite3.Connection, tmp_path: Path, change: str
+) -> None:
+    before = _digest(tmp_path / _DATABASE)
     database.executescript(change)
-    assert database_digest(database) != before
+    assert _digest(tmp_path / _DATABASE) != before
