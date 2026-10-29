@@ -19,6 +19,7 @@ from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory, SourceNaming
 from tests.support.adapters.driven.persistence_sqlite.catalog_seeds import seed
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_reader
 from tests.support.catalog_rows import (
     insert_file,
     insert_observation,
@@ -69,7 +70,7 @@ def _seed_points(db: Path, points: _Points) -> None:
 
 def _periods(db: Path, window: PeriodWindow = _WINDOW) -> list[tuple[str, int, int, int]]:
     """``(role, first_seen_at, last_seen_at, received_bytes)`` of file a's periods, in micros."""
-    with ThreadReadConnections(db) as thread_read_connections:
+    with ThreadReadConnections(db, open_reader) as thread_read_connections:
         reader = SqliteSourceReader(thread_read_connections)
         periods = reader.read_sharing_periods(FileKey(Network.ED2K, "a" * 32), window)
     return [
@@ -155,7 +156,7 @@ def test_sharing_periods_join_each_identity_on_each_node_newest_first(catalog_db
             connection, insert_source_variant(connection, "b" * 32, _USER), 200 * _S
         )
     a = FileKey(Network.ED2K, "a" * 32)
-    with ThreadReadConnections(catalog_db) as thread_read_connections:
+    with ThreadReadConnections(catalog_db, open_reader) as thread_read_connections:
         periods = SqliteSourceReader(thread_read_connections).read_sharing_periods(a, _WINDOW)
     key, queued_role = SourceKey(Network.ED2K, _USER), SourceRole.QUEUED
     at_30, at_45 = _at(30 * _S), _at(45 * _S)
@@ -182,7 +183,7 @@ def test_sharing_periods_join_each_identity_on_each_node_newest_first(catalog_db
 
 def test_sharing_periods_of_a_file_never_read_are_empty(catalog_db: Path) -> None:
     seed(catalog_db)
-    with ThreadReadConnections(catalog_db) as thread_read_connections:
+    with ThreadReadConnections(catalog_db, open_reader) as thread_read_connections:
         reader = SqliteSourceReader(thread_read_connections)
         assert reader.read_sharing_periods(FileKey(Network.ED2K, "a" * 32), _WINDOW) == ()
 
@@ -214,7 +215,7 @@ def _seed_sources(db: Path) -> None:
 
 
 def _known_sources(db: Path, *, search_text: str | None, offset: int) -> tuple[KnownSource, ...]:
-    with ThreadReadConnections(db) as thread_read_connections:
+    with ThreadReadConnections(db, open_reader) as thread_read_connections:
         reader = SqliteSourceReader(thread_read_connections)
         return reader.read_known_sources(search_text=search_text, limit=_LIMIT, offset=offset)
 
@@ -251,7 +252,7 @@ def test_known_sources_match_a_hash_prefix_or_any_name_the_source_carried(
     _seed_sources(catalog_db)
     known_sources = _known_sources(catalog_db, search_text=search_text, offset=0)
     assert [known.source.native_id for known in known_sources] == expected
-    with ThreadReadConnections(catalog_db) as thread_read_connections:
+    with ThreadReadConnections(catalog_db, open_reader) as thread_read_connections:
         reader = SqliteSourceReader(thread_read_connections)
         assert reader.read_source_count(search_text=search_text) == len(expected)
 
@@ -268,7 +269,7 @@ def test_known_sources_read_at_most_their_limit_from_their_offset(catalog_db: Pa
     second = _known_sources(catalog_db, search_text=None, offset=_LIMIT)
     assert (len(first), first[0].latest_seen_at) == (_LIMIT, _at(_LIMIT))
     assert [known.latest_seen_at for known in second] == [_at(0)]
-    with ThreadReadConnections(catalog_db) as thread_read_connections:
+    with ThreadReadConnections(catalog_db, open_reader) as thread_read_connections:
         reader = SqliteSourceReader(thread_read_connections)
         assert reader.read_source_count(search_text=None) == _LIMIT + 1
 
@@ -315,7 +316,7 @@ def _period(
 def _source_history(
     db: Path, user: str, *, limit: int = _LIMIT, offset: int = 0, window: PeriodWindow = _WINDOW
 ) -> SourceHistory | None:
-    with ThreadReadConnections(db) as thread_read_connections:
+    with ThreadReadConnections(db, open_reader) as thread_read_connections:
         reader = SqliteSourceReader(thread_read_connections)
         return reader.read_source_history(
             source_id(user), limit=limit, offset=offset, window=window
@@ -375,7 +376,7 @@ def _source_name_history(
     offset: int = 0,
     window: PeriodWindow = _WINDOW,
 ) -> SourceNameHistory | None:
-    with ThreadReadConnections(db) as thread_read_connections:
+    with ThreadReadConnections(db, open_reader) as thread_read_connections:
         reader = SqliteSourceReader(thread_read_connections)
         return reader.read_source_name_history(
             source_name, limit=limit, offset=offset, window=window

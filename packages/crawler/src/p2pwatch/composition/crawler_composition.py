@@ -216,18 +216,24 @@ class CrawlerComposition(CrawlerRunner):
         engine: MatchingEngine,
         wall_clock: WallClock,
         monotonic_clock: MonotonicClock,
+        database_opener: SqliteDatabaseOpener,
     ) -> None:
         """Start the read-only webui on its OWN thread + loop (spec §5). It shares with the crawler
         the parsed config (immutable), the engine and the clocks (no state after their
         construction), the status reading and node metric stores (whole snapshots swapped, never
         mutated) and the run state (every change scheduled on the crawler's loop).
-        It reads through its OWN ``ThreadReadConnections``, one connection per thread. Its stop is
-        registered on ``stack`` so it runs during the normal LIFO unwind, AFTER the loops stop."""
+        It reads through its OWN ``ThreadReadConnections``, one connection per thread, each opened
+        by ``database_opener``. Its stop is registered on ``stack`` so it runs during the normal
+        LIFO unwind, AFTER the loops stop."""
         crawler_config = config.crawler_config
         webui_package_directory = Path(p2pwatch.adapters.driving.webui.__file__).parent
-        local_read_connections = ThreadReadConnections(crawler_config.local_db_path)
+        local_db_path = Path(crawler_config.local_db_path)
+        catalog_db_path = Path(crawler_config.catalog_db_path)
+        local_read_connections = ThreadReadConnections(local_db_path, database_opener.open_reader)
         node_state_reader = SqliteNodeStateReader(local_read_connections)
-        catalog_read_connections = ThreadReadConnections(crawler_config.catalog_db_path)
+        catalog_read_connections = ThreadReadConnections(
+            catalog_db_path, database_opener.open_reader
+        )
         catalog_file_reader = SqliteCatalogFileReader(catalog_read_connections)
         source_reader = SqliteSourceReader(catalog_read_connections)
         app = build_webui_app(
@@ -268,12 +274,14 @@ class CrawlerComposition(CrawlerRunner):
             console_query_runner=RunConsoleQuery(
                 {
                     ConsoleDatabase.CATALOG: SqliteSqlExecutor(
-                        Path(crawler_config.catalog_db_path),
+                        catalog_db_path,
+                        database_opener.open_reader,
                         monotonic_clock,
                         budget_check_instructions=_CONSOLE_BUDGET_CHECK_INSTRUCTIONS,
                     ),
                     ConsoleDatabase.LOCAL: SqliteSqlExecutor(
-                        Path(crawler_config.local_db_path),
+                        local_db_path,
+                        database_opener.open_reader,
                         monotonic_clock,
                         budget_check_instructions=_CONSOLE_BUDGET_CHECK_INSTRUCTIONS,
                     ),
@@ -361,6 +369,7 @@ class CrawlerComposition(CrawlerRunner):
                 engine=engine,
                 wall_clock=wall_clock,
                 monotonic_clock=monotonic_clock,
+                database_opener=database_opener,
             )
             # SHARED backoff registry: built ONCE, resumes its waits at the lifecycle's start
             # (backoff survives restart, spec §3/§7), injected into ALL workers + passed to the

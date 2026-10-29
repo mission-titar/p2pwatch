@@ -1,25 +1,21 @@
-"""Tests for ``ThreadReadConnections`` (monolith-consolidation spec §7).
-
-Folds the assertions of the deleted webui ``test_webui_db.py`` (RO-refuses-writes,
-``temp_store``, rows read by column name) plus its
-per-thread reuse and thread affinity.
-"""
+"""Tests for ``ThreadReadConnections`` (monolith-consolidation spec §7): per-thread reuse and
+thread affinity."""
 
 import sqlite3
 import threading
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadLocalConnection,
     ThreadReadConnections,
-    open_reader,
 )
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
-from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
+    open_catalog,
+    open_reader,
+)
 from tests.support.catalog_rows import insert_file
 
 _HASH_A = "a" * 32
@@ -34,61 +30,6 @@ def _seed(path: Path) -> None:
         insert_file(writer, _HASH_A, 10)
     finally:
         writer.close()
-
-
-# ---------------------------------------------------------------------------
-# open_reader (low-level single connection)
-# ---------------------------------------------------------------------------
-
-
-def test_open_reader_reads_seeded_row_by_column_name(tmp_path: Path) -> None:
-    path = tmp_path / "catalog.db"
-    _seed(path)
-    reader = open_reader(path)
-    try:
-        row = reader.execute("SELECT native_id, size_bytes FROM files").fetchone()
-        assert isinstance(row, NamedRow)
-        assert row == {"native_id": _HASH_A, "size_bytes": 10}
-    finally:
-        reader.close()
-
-
-def test_open_reader_refuses_writes(tmp_path: Path) -> None:
-    """``mode=ro`` + ``query_only`` is a double guard: an INSERT raises ``OperationalError``."""
-    path = tmp_path / "catalog.db"
-    _seed(path)
-    reader = open_reader(path)
-    try:
-        with pytest.raises(sqlite3.OperationalError):
-            insert_file(reader, _HASH_B, 1)
-    finally:
-        reader.close()
-
-
-def test_open_reader_sorts_through_temporary_files(tmp_path: Path) -> None:
-    """``temp_store=FILE`` (1), as the opener sets it to migrate: an in-memory sort is unbounded
-    (stage 1, D8)."""
-    path = tmp_path / "catalog.db"
-    _seed(path)
-    reader = open_reader(path)
-    try:
-        assert rows(reader, "PRAGMA temp_store") == [{"temp_store": 1}]  # 1 == FILE
-    finally:
-        reader.close()
-
-
-def test_open_reader_refuses_use_from_another_thread(tmp_path: Path) -> None:
-    """A reader belongs to the thread that opened it: a query from another thread raises."""
-    path = tmp_path / "catalog.db"
-    _seed(path)
-    reader = open_reader(path)
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        query = executor.submit(reader.execute, "SELECT 1")
-    try:
-        with pytest.raises(sqlite3.ProgrammingError, match="same thread"):
-            query.result()
-    finally:
-        reader.close()
 
 
 # ---------------------------------------------------------------------------
@@ -112,11 +53,23 @@ def test_thread_local_connection_is_none_in_a_thread_that_never_set_it() -> None
         connection.close()
 
 
+def test_a_connection_is_opened_by_the_open_reader_it_is_given(tmp_path: Path) -> None:
+    opened: list[Path] = []
+
+    def open_in_memory(path: Path) -> sqlite3.Connection:
+        opened.append(path)
+        return sqlite3.connect(":memory:")
+
+    with ThreadReadConnections(tmp_path / "catalog.db", open_in_memory) as thread_read_connections:
+        thread_read_connections.connection()
+    assert opened == [tmp_path / "catalog.db"]
+
+
 def test_the_same_connection_is_reused_within_one_thread(tmp_path: Path) -> None:
     """Repeated ``connection()`` calls from one thread return the SAME object (warm cache)."""
     path = tmp_path / "catalog.db"
     _seed(path)
-    thread_read_connections = ThreadReadConnections(path)
+    thread_read_connections = ThreadReadConnections(path, open_reader)
     first = thread_read_connections.connection()
     try:
         assert thread_read_connections.connection() is first
@@ -128,7 +81,7 @@ def test_each_thread_gets_a_distinct_connection(tmp_path: Path) -> None:
     """Two different threads each get their OWN connection (thread affinity)."""
     path = tmp_path / "catalog.db"
     _seed(path)
-    thread_read_connections = ThreadReadConnections(path)
+    thread_read_connections = ThreadReadConnections(path, open_reader)
     connections: dict[str, sqlite3.Connection] = {}
 
     def worker(name: str) -> None:
@@ -151,7 +104,7 @@ def test_reused_connection_sees_data_committed_after_first_handout(tmp_path: Pat
     see the current committed snapshot, proving reuse is correct, not a stale snapshot."""
     path = tmp_path / "catalog.db"
     _seed(path)  # one row so far
-    thread_read_connections = ThreadReadConnections(path)
+    thread_read_connections = ThreadReadConnections(path, open_reader)
     writer = open_catalog(path)
     reader = thread_read_connections.connection()
     try:
@@ -168,7 +121,7 @@ def test_reused_connection_sees_data_committed_after_first_handout(tmp_path: Pat
 def test_leaving_the_context_closes_the_calling_threads_connection(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
     _seed(path)
-    with ThreadReadConnections(path) as thread_read_connections:
+    with ThreadReadConnections(path, open_reader) as thread_read_connections:
         first = thread_read_connections.connection()
     with pytest.raises(sqlite3.ProgrammingError, match="closed"):
         first.execute("SELECT 1")
@@ -180,6 +133,6 @@ def test_leaving_the_context_closes_the_calling_threads_connection(tmp_path: Pat
 
 
 def test_leaving_the_context_unused_opens_nothing(tmp_path: Path) -> None:
-    with ThreadReadConnections(tmp_path / "never-opened.db"):
+    with ThreadReadConnections(tmp_path / "never-opened.db", open_reader):
         pass
     assert not (tmp_path / "never-opened.db").exists()

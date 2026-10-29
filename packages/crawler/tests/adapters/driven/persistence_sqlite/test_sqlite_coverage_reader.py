@@ -16,6 +16,7 @@ from tests.support.adapters.driven.persistence_sqlite.catalog_seeds import (
     seed_retracted,
     seed_whole_episode,
 )
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_reader
 from tests.support.catalog_rows import insert_decision, insert_file
 
 # ---------------------------------------------------------------------------
@@ -24,7 +25,7 @@ from tests.support.catalog_rows import insert_decision, insert_file
 
 
 def _read_target_coverage(catalog_db: Path) -> Mapping[TargetId, tuple[DecisionTier, ...]]:
-    with ThreadReadConnections(catalog_db) as thread_read_connections:
+    with ThreadReadConnections(catalog_db, open_reader) as thread_read_connections:
         return SqliteCoverageReader(thread_read_connections).read_target_coverage()
 
 
