@@ -4,6 +4,7 @@ import sqlite3
 from importlib import resources
 from pathlib import Path
 
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_local_at
 
 _LOCAL_MIGRATIONS = (
@@ -36,7 +37,7 @@ def test_0006_deletes_the_cycle_state_and_the_backoff_map(tmp_path: Path) -> Non
 
     connection = open_local_at(path, 6)
     try:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
-        assert connection.execute("SELECT key FROM scheduler_state").fetchall() == []
+        assert rows(connection, "PRAGMA user_version") == [{"user_version": 6}]
+        assert rows(connection, "SELECT key FROM scheduler_state") == []
     finally:
         connection.close()

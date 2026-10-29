@@ -7,14 +7,15 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_local_at
 
 _NODE_ID = "0c9d6b5e-2f4a-4e1b-9a7d-3c2b1a0f9e8d"
 
 
-def _local_at_14(path: Path, rows: list[tuple[str, str]]) -> None:
+def _local_at_14(path: Path, node_runtime: list[tuple[str, str]]) -> None:
     with closing(open_local_at(path, 14)) as connection:
-        connection.executemany("INSERT INTO node_runtime (key, value) VALUES (?, ?)", rows)
+        connection.executemany("INSERT INTO node_runtime (key, value) VALUES (?, ?)", node_runtime)
         connection.execute(
             "INSERT INTO reevaluation_state (id, policy_fingerprint) VALUES (1, 'sha256:abc')"
         )
@@ -28,20 +29,15 @@ def test_0015_moves_the_node_identity_into_one_typed_row(tmp_path: Path) -> None
     )
 
     with closing(open_local_at(path, 15)) as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 15
-        assert connection.execute("SELECT * FROM node_identity").fetchall() == [
-            (1, _NODE_ID, 1_781_179_200_123_456)
+        assert rows(connection, "PRAGMA user_version") == [{"user_version": 15}]
+        assert rows(connection, "SELECT * FROM node_identity") == [
+            {"id": 1, "node_id": _NODE_ID, "created_at_micros": 1_781_179_200_123_456}
         ]
-        assert connection.execute("SELECT * FROM reevaluation_state").fetchall() == [
-            (1, "sha256:abc")
+        assert rows(connection, "SELECT * FROM reevaluation_state") == [
+            {"id": 1, "policy_fingerprint": "sha256:abc"}
         ]
-        assert (
-            connection.execute(
-                "SELECT name FROM sqlite_master WHERE name = 'node_runtime'"
-            ).fetchone()
-            is None
-        )
-        assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+        assert rows(connection, "SELECT name FROM sqlite_master WHERE name = 'node_runtime'") == []
+        assert rows(connection, "PRAGMA integrity_check") == [{"integrity_check": "ok"}]
 
 
 def test_0015_leaves_every_table_strict(tmp_path: Path) -> None:
@@ -50,10 +46,11 @@ def test_0015_leaves_every_table_strict(tmp_path: Path) -> None:
 
     with closing(open_local_at(path, 15)) as connection:
         assert (
-            connection.execute(
+            rows(
+                connection,
                 "SELECT name FROM pragma_table_list WHERE schema = 'main' AND type = 'table'"
-                " AND NOT strict AND name NOT LIKE 'sqlite_%'"
-            ).fetchall()
+                " AND NOT strict AND name NOT LIKE 'sqlite_%'",
+            )
             == []
         )
         with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
@@ -72,7 +69,7 @@ def test_0015_refuses_a_node_id_without_its_created_at(tmp_path: Path) -> None:
         open_local_at(path, 15)
 
     with closing(sqlite3.connect(path)) as raw:
-        assert raw.execute("PRAGMA user_version").fetchone()[0] == 14
-        assert raw.execute("SELECT key, value FROM node_runtime").fetchall() == [
-            ("node_id", _NODE_ID)
+        assert rows(raw, "PRAGMA user_version") == [{"user_version": 14}]
+        assert rows(raw, "SELECT key, value FROM node_runtime") == [
+            {"key": "node_id", "value": _NODE_ID}
         ]

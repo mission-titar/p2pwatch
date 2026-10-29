@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from p2pwatch.domain.file_key import FileKey, Network
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_local_at
 
 _A = FileKey(Network.ED2K, "a" * 32)
@@ -20,9 +21,9 @@ def test_0010_renames_the_backoff_key_and_keeps_its_states(tmp_path: Path) -> No
 
     connection = open_local_at(path, 10)
     try:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 10
-        assert connection.execute("SELECT key, value FROM scheduler_state").fetchall() == [
-            ("backoff_states", _BACKOFF_ROW)
+        assert rows(connection, "PRAGMA user_version") == [{"user_version": 10}]
+        assert rows(connection, "SELECT key, value FROM scheduler_state") == [
+            {"key": "backoff_states", "value": _BACKOFF_ROW}
         ]
     finally:
         connection.close()
@@ -41,9 +42,12 @@ def test_0010_renames_the_local_waiting_reason_only(tmp_path: Path) -> None:
 
     connection = open_local_at(path, 10)
     try:
-        rows = connection.execute(
-            "SELECT native_id, waiting_reason FROM downloads ORDER BY native_id"
-        ).fetchall()
+        read = rows(
+            connection, "SELECT native_id, waiting_reason FROM downloads ORDER BY native_id"
+        )
     finally:
         connection.close()
-    assert rows == [(_A.native_id, "local_processing"), (_B.native_id, "no_source")]
+    assert read == [
+        {"native_id": _A.native_id, "waiting_reason": "local_processing"},
+        {"native_id": _B.native_id, "waiting_reason": "no_source"},
+    ]

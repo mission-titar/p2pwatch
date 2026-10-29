@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.domain.file_key import FileKey, Network
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_local_at
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_local
 
@@ -13,6 +14,15 @@ _A, _B = "a" * 32, "0123456789abcdef" * 2
 _ROWS = (
     (_A, "062A", "downloading", "2026-10-01T00:00:00.000000+00:00", None, 100, "2026-10-09"),
     (_B, "063B", "completed", "2026-10-02T00:00:00.000000+00:00", "2026-10-03", 200, None),
+)
+_KEPT_COLUMNS = (
+    "native_id",
+    "target_id",
+    "state",
+    "queued_at",
+    "completed_at",
+    "size_bytes",
+    "last_seen_at",
 )
 
 
@@ -32,11 +42,15 @@ def test_0007_keys_each_download_by_the_catalog_file_id(tmp_path: Path) -> None:
 
     connection = open_local_at(path, 7)
     try:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 7
-        rows = connection.execute("SELECT * FROM downloads ORDER BY native_id").fetchall()
+        assert rows(connection, "PRAGMA user_version") == [{"user_version": 7}]
+        read = rows(connection, "SELECT * FROM downloads ORDER BY native_id")
     finally:
         connection.close()
-    assert rows == [(FileKey(Network.ED2K, row[0]).file_id, "ed2k", *row) for row in sorted(_ROWS)]
+    assert read == [
+        {"file_id": FileKey(Network.ED2K, native_id).file_id, "network": "ed2k"}
+        | dict(zip(_KEPT_COLUMNS, (native_id, *kept), strict=True))
+        for native_id, *kept in sorted(_ROWS)
+    ]
 
 
 @pytest.mark.parametrize(

@@ -5,6 +5,7 @@ from pathlib import Path
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_policy_fingerprint_store import (
     SqlitePolicyFingerprintStore,
 )
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_local_at
 
 
@@ -16,7 +17,7 @@ def test_0009_renames_the_marker_and_keeps_its_fingerprint(tmp_path: Path) -> No
 
     connection = open_local_at(path, 9)
     try:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 9
+        assert rows(connection, "PRAGMA user_version") == [{"user_version": 9}]
         policy_fingerprint_store = SqlitePolicyFingerprintStore(connection)
         assert policy_fingerprint_store.read_policy_fingerprint() == "abc"
     finally:
