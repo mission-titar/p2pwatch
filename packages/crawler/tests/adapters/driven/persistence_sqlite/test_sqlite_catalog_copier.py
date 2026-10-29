@@ -19,6 +19,7 @@ from tests.support.adapters.driven.persistence_sqlite.helpers import (
     hash_for,
     make_catalog,
     rows_without_id,
+    sorted_by_values,
     stamp_user_version,
     variant_ids,
 )
@@ -115,12 +116,12 @@ def test_t1_merge_two_distinct_catalogs(tmp_path: Path) -> None:
     # COMMIT would have raised). All rows from the 3 sources are present in the output.
     for table in _ALL_TABLES:
         assert count(destination, table) == 3
-        expected = sorted(
+        expected = sorted_by_values(
             rows_without_id(src_a, table)
             + rows_without_id(src_b, table)
             + rows_without_id(src_c, table)
         )
-        assert sorted(rows_without_id(destination, table)) == expected
+        assert rows_without_id(destination, table) == expected
 
 
 def test_t2_merge_overlapping_identity_files_or_ignore(tmp_path: Path) -> None:
@@ -258,7 +259,7 @@ def test_t5_variant_ids_are_reassigned(tmp_path: Path) -> None:
     # The output numbers its own variants, and each observation follows its variant.
     assert variant_ids(destination) == [1, 2]
     expected = rows_without_id(src_a, "observations") + rows_without_id(src_b, "observations")
-    assert rows_without_id(destination, "observations") == sorted(expected)
+    assert rows_without_id(destination, "observations") == sorted_by_values(expected)
 
 
 def test_t6_fk_order_inserts_identity_first(tmp_path: Path) -> None:
@@ -281,7 +282,7 @@ def test_t14_files_first_sight_wins(tmp_path: Path) -> None:
 
     _copy_catalogs(destination, [src_b, src_a])
 
-    assert rows_without_id(destination, "files") == [(HASH_A, 200)]
+    assert rows_without_id(destination, "files") == [{"native_id": HASH_A, "size_bytes": 200}]
 
 
 def test_t15_append_only_triggers_present_on_output(tmp_path: Path) -> None:
@@ -326,7 +327,7 @@ def test_t16_merger_wraps_source_copy_in_a_transaction(tmp_path: Path) -> None:
 
     # files (1st table) may have been copied BEFORE the failure on observation_variants (missing
     # table); the ROLLBACK must have undone it → the output still has ONLY the content of `good`.
-    assert rows_without_id(destination, "files") == [(HASH_A, 100)]
+    assert rows_without_id(destination, "files") == [{"native_id": HASH_A, "size_bytes": 100}]
 
 
 def test_t16_unattachable_source_errors(tmp_path: Path) -> None:
@@ -418,7 +419,9 @@ def test_guard_checks_every_source_not_just_the_first(tmp_path: Path) -> None:
 
     # The good source merged first (own transaction, committed); only its row is present.
     assert count(destination, "files") == 1
-    assert rows_without_id(destination, "files") == [(hash_for("a"), 100)]
+    assert rows_without_id(destination, "files") == [
+        {"native_id": hash_for("a"), "size_bytes": 100}
+    ]
 
 
 def test_an_output_open_catalog_refuses_raises_a_merge_error(tmp_path: Path) -> None:

@@ -15,6 +15,7 @@ from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision, Retraction
 from p2pwatch.domain.identifiers import NodeId
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import insert_file
 
@@ -60,28 +61,29 @@ def test_record_decision_round_trip(
     decision_store: SqliteDecisionStore, connection: sqlite3.Connection
 ) -> None:
     decision_store.record_decision(_decision(_KEY))
-    row = connection.execute(
-        "SELECT file_id, target_id, rule_name, tier, typeof(decided_at_micros), decided_at_micros,"
-        " node_id FROM match_decisions"
-    ).fetchone()
-    assert row == (
-        _KEY.file_id,
-        "062A",
-        "exact_062a",
-        "download",
-        "integer",
-        instant_to_micros(_T0),
-        _NODE_ID,
-    )
+    assert rows(
+        connection,
+        "SELECT file_id, target_id, rule_name, tier,"
+        " typeof(decided_at_micros) AS decided_at_type, decided_at_micros, node_id"
+        " FROM match_decisions",
+    ) == [
+        {
+            "file_id": _KEY.file_id,
+            "target_id": "062A",
+            "rule_name": "exact_062a",
+            "tier": "download",
+            "decided_at_type": "integer",
+            "decided_at_micros": instant_to_micros(_T0),
+            "node_id": _NODE_ID,
+        }
+    ]
 
 
 def test_explanation_is_never_persisted(
     decision_store: SqliteDecisionStore, connection: sqlite3.Connection
 ) -> None:
     decision_store.record_decision(_decision(_KEY))
-    columns = {
-        row[1] for row in connection.execute("PRAGMA table_info(match_decisions)").fetchall()
-    }
+    columns = {column["name"] for column in rows(connection, "PRAGMA table_info(match_decisions)")}
     assert columns == {
         "id",
         "file_id",
@@ -108,18 +110,29 @@ def test_record_decision_rejects_non_canonical_hash(
     # with a clear message, no row is written.
     with pytest.raises(PersistenceError, match="non-canonical eD2k hash"):
         decision_store.record_decision(_decision(FileKey(Network.ED2K, _HASH.upper())))
-    assert connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 0
+    assert rows(connection, "SELECT count(*) AS decision_count FROM match_decisions") == [
+        {"decision_count": 0}
+    ]
 
 
 def test_record_retraction_round_trip(
     decision_store: SqliteDecisionStore, connection: sqlite3.Connection
 ) -> None:
     decision_store.record_decision(_retraction(_KEY))
-    row = connection.execute(
+    assert rows(
+        connection,
         "SELECT file_id, target_id, rule_name, tier, decided_at_micros, node_id"
-        " FROM match_decisions"
-    ).fetchone()
-    assert row == (_KEY.file_id, "062A", "", "retracted", instant_to_micros(_T0), _NODE_ID)
+        " FROM match_decisions",
+    ) == [
+        {
+            "file_id": _KEY.file_id,
+            "target_id": "062A",
+            "rule_name": "",
+            "tier": "retracted",
+            "decided_at_micros": instant_to_micros(_T0),
+            "node_id": _NODE_ID,
+        }
+    ]
     assert decision_store.read_latest_decisions(_KEY) == {
         TargetId("062A"): Retraction(TargetId("062A"))
     }
@@ -130,8 +143,10 @@ def test_each_decision_stores_its_own_node_id(
 ) -> None:
     decision_store.record_decision(_decision(_KEY, node_id=NodeId("n2")))
     decision_store.record_decision(_retraction(_KEY, node_id=NodeId("n3")))
-    decisions = connection.execute("SELECT node_id FROM match_decisions ORDER BY id")
-    assert decisions.fetchall() == [("n2",), ("n3",)]
+    assert rows(connection, "SELECT node_id FROM match_decisions ORDER BY id") == [
+        {"node_id": "n2"},
+        {"node_id": "n3"},
+    ]
 
 
 def test_record_retraction_row_is_append_only(
