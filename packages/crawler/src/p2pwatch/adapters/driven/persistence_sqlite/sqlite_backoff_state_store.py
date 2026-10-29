@@ -31,13 +31,14 @@ class SqliteBackoffStateStore(BackoffStateReader, BackoffStateWriter):
             rows = self._connection.execute(_SELECT).fetchall()
         return {
             BackoffKey(
-                ClientName(client_name), None if channel is None else Channel(channel)
+                ClientName(row["client_name"]),
+                None if row["channel"] is None else Channel(row["channel"]),
             ): BackoffState(
-                attempts,
-                micros_to_instant(started_at_micros),
-                timedelta(seconds=delay_seconds),
+                row["attempts"],
+                micros_to_instant(row["started_at_micros"]),
+                timedelta(seconds=row["delay_seconds"]),
             )
-            for client_name, channel, attempts, started_at_micros, delay_seconds in rows
+            for row in rows
         }
 
     def set_backoff_states(self, backoff_state_by_key: dict[BackoffKey, BackoffState]) -> None:
