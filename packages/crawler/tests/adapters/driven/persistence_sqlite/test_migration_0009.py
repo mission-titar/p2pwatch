@@ -3,6 +3,7 @@
 import sqlite3
 from pathlib import Path
 
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_catalog_at
 from tests.support.catalog_rows import insert_file
 
@@ -18,7 +19,7 @@ def _catalog_at_8_with_free_pages(path: Path) -> None:
         " WHERE i < 64) SELECT randomblob(4096) FROM n"
     )
     connection.execute("DROP TABLE dropped")
-    assert connection.execute("PRAGMA freelist_count").fetchone()[0] > 0
+    assert rows(connection, "PRAGMA freelist_count")[0]["freelist_count"] > 0
     connection.close()
 
 
@@ -28,9 +29,9 @@ def test_0009_vacuums_the_free_pages_away_and_keeps_the_rows(tmp_path: Path) -> 
 
     connection = open_catalog_at(path, 9)
     try:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 9
-        assert connection.execute("PRAGMA freelist_count").fetchone()[0] == 0
-        assert connection.execute("SELECT native_id FROM files").fetchall() == [(_HASH,)]
+        assert rows(connection, "PRAGMA user_version") == [{"user_version": 9}]
+        assert rows(connection, "PRAGMA freelist_count") == [{"freelist_count": 0}]
+        assert rows(connection, "SELECT native_id FROM files") == [{"native_id": _HASH}]
     finally:
         connection.close()
 
@@ -45,7 +46,7 @@ def test_0009_is_safe_to_replay(tmp_path: Path) -> None:
 
     connection = open_catalog_at(path, 9)
     try:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 9
+        assert rows(connection, "PRAGMA user_version") == [{"user_version": 9}]
     finally:
         connection.close()
 
@@ -57,7 +58,7 @@ def test_0009_leaves_the_wal_truncated(tmp_path: Path) -> None:
 
     connection = open_catalog_at(path, 9)
     try:
-        page_size = connection.execute("PRAGMA page_size").fetchone()[0]
+        page_size = rows(connection, "PRAGMA page_size")[0]["page_size"]
         # The WAL header, then the one frame of the user_version stamp that follows 0009.
         assert Path(f"{path}-wal").stat().st_size <= 32 + 24 + page_size
     finally:
