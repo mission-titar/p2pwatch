@@ -1,0 +1,43 @@
+id: dataclass-kw-only
+valid:
+  - |
+    @dataclass(frozen=True, kw_only=True)
+    class Interval: ...
+  - |
+    @dataclass(kw_only=True)
+    class Interval: ...
+  - |
+    @dataclasses.dataclass(frozen=True, kw_only=True)
+    class Interval: ...
+  - |
+    @dataclass(
+        frozen=True,
+        kw_only=True,
+    )
+    class Interval: ...
+  - |
+    @pytest.fixture
+    def interval() -> Interval: ...
+  - "field(default=None, kw_only=True)"
+invalid:
+  - |
+    @dataclass
+    class Interval: ...
+  - |
+    @dataclass(frozen=True)
+    class Interval: ...
+  - |
+    @dataclass(kw_only=False)
+    class Interval: ...
+  - |
+    @dataclasses.dataclass(frozen=True)
+    class Interval: ...
+  - |
+    @dataclasses.dataclass
+    class Interval: ...
+  - |
+    @dataclass(
+        frozen=True,
+        order=True,
+    )
+    class Interval: ...

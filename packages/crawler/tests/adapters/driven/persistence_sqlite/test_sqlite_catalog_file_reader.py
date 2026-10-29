@@ -794,7 +794,7 @@ def test_counters_read_observations_only_for_a_name_filter(
     """The default /files page counts without a per-file latest observation (D18)."""
     tables: set[str] = set()
 
-    def record(action: int, table: str | None, *_: str | None) -> int:
+    def record(action: int, table: str | None, *_: str | None) -> int:  # noqa: PLR0917
         if action == sqlite3.SQLITE_READ and table is not None:
             tables.add(table)
         return sqlite3.SQLITE_OK

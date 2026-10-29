@@ -244,7 +244,7 @@ def test_the_timeline_seeks_its_interval_by_primary_key(connection: sqlite3.Conn
 def test_known_names_read_the_variants_alone(connection: sqlite3.Connection) -> None:
     tables: set[str] = set()
 
-    def record(action: int, table: str | None, *_: str | None) -> int:
+    def record(action: int, table: str | None, *_: str | None) -> int:  # noqa: PLR0917
         if action == sqlite3.SQLITE_READ and table is not None:
             tables.add(table)
         return sqlite3.SQLITE_OK

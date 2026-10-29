@@ -43,7 +43,7 @@ class FakeAmuleApiServer:
         with self._served:
             return self._served.wait_for(lambda: predicate(self.api), timeout_seconds)
 
-    async def _serve_http(
+    async def _serve_http(  # noqa: PLR0917
         self,
         scope: dict[str, Any],
         receive: Callable[[], Awaitable[dict[str, Any]]],

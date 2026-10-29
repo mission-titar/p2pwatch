@@ -15,7 +15,7 @@ from p2pwatch.domain.identifiers import FileId
 from p2pwatch.domain.observation import fold_raw_metadata
 
 
-def content_hash(
+def content_hash(  # noqa: PLR0917
     file_ref: str | bytes,
     filename: str,
     size_bytes: int,
@@ -40,7 +40,7 @@ def content_hash(
     return hashlib.blake2b(canonical.encode(), digest_size=16).digest()
 
 
-def file_id(network: str, native_id: str) -> FileId:
+def file_id(network: str, native_id: str) -> FileId:  # noqa: PLR0917
     """``FileKey.file_id`` for the SQL function; an unknown network raises."""
     return FileKey(Network(network), native_id).file_id
 
@@ -49,7 +49,7 @@ def register_sql_functions(connection: sqlite3.Connection) -> None:
     """Registers ``content_hash``, ``file_id``, ``fold_raw_meta`` and ``iso_to_micros``."""
 
     # A stored raw_metadata, folded and serialized as record_observation serializes it.
-    def fold_stored(
+    def fold_stored(  # noqa: PLR0917
         raw_metadata: str, codec: str | None, file_type: str | None, complete: int
     ) -> str:
         return json.dumps(

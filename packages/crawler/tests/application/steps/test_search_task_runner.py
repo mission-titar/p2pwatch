@@ -113,7 +113,12 @@ class _Tasks:
         ).run(_NODE_ID)
 
     def run_for(
-        self, seconds: float, client: Any, keywords: list[str], *beside: Coroutine[Any, Any, None]
+        self,
+        seconds: float,
+        *,
+        client: Any,
+        keywords: list[str],
+        beside: tuple[Coroutine[Any, Any, None], ...] = (),
     ) -> None:
         async def bounded() -> None:
             with suppress(TimeoutError):
@@ -136,7 +141,7 @@ def tasks(
 def test_each_channel_and_keyword_searches_in_its_own_task(tasks: _Tasks) -> None:
     # A channel named `x` needs no code: the tasks never test a channel's name.
     client = FakeTimedSearchClient({Channel("x"): 30.0, Channel("y"): 30.0})
-    tasks.run_for(100.0, client, ["keroro", "titar", "keroro", ""])
+    tasks.run_for(100.0, client=client, keywords=["keroro", "titar", "keroro", ""])
     assert sorted(client.searches) == sorted(
         (start, keyword, channel)
         for start in (0.0, 30.0, 60.0, 90.0)
@@ -153,15 +158,15 @@ def test_a_task_records_its_observations_under_the_node_id_the_tasks_run_with(
     )
     tasks.run_for(
         40.0,
-        FakeTimedSearchClient({Channel("x"): 30.0}, reported_files=(reported_file,)),
-        ["keroro"],
+        client=FakeTimedSearchClient({Channel("x"): 30.0}, reported_files=(reported_file,)),
+        keywords=["keroro"],
     )
     assert observation_node_ids(catalog_connection) == {_NODE_ID}
 
 
 def test_channels_do_not_wait_for_each_other(tasks: _Tasks) -> None:
     client = FakeTimedSearchClient({Channel("ed2k"): 6.0, Channel("kad"): 60.0})
-    tasks.run_for(_HOUR, client, ["keroro"])
+    tasks.run_for(_HOUR, client=client, keywords=["keroro"])
     counts = {name: sum(1 for *_, c in client.searches if c == name) for name in client.channels()}
     assert counts[Channel("ed2k")] >= 5 * counts[Channel("kad")]
 
@@ -177,7 +182,7 @@ def test_a_paused_task_waits_before_its_next_search_and_finishes_the_one_in_flig
         await asyncio.sleep(990.0)
         tasks.run_state.set_paused(False)
 
-    tasks.run_for(1040.0, client, ["keroro"], pause_then_resume())
+    tasks.run_for(1040.0, client=client, keywords=["keroro"], beside=(pause_then_resume(),))
     assert [start for start, *_ in client.searches] == [0.0, 1000.0, 1030.0]
 
 
@@ -185,7 +190,7 @@ def test_a_failed_channel_sleeps_until_its_backoff_ends(tasks: _Tasks) -> None:
     client = FakeTimedSearchClient(
         {Channel("kad"): 30.0}, search_failures=[SearchFailedError("refused")]
     )
-    tasks.run_for(100.0, client, ["keroro"])
+    tasks.run_for(100.0, client=client, keywords=["keroro"])
     assert [start for start, *_ in client.searches] == [0.0, 60.0, 90.0]
 
 
@@ -193,7 +198,7 @@ def test_an_unreachable_client_sleeps_until_its_backoff_ends(tasks: _Tasks) -> N
     client = FakeTimedSearchClient(
         {Channel("ed2k"): 30.0, Channel("kad"): 30.0}, search_failures=[make_unreachable()]
     )
-    tasks.run_for(100.0, client, ["keroro"])
+    tasks.run_for(100.0, client=client, keywords=["keroro"])
     # The first search fails; the other channel's task meets the backoff it set.
     assert [start for start, *_ in client.searches] == [0.0, 60.0, 60.0, 90.0, 90.0]
 
@@ -202,7 +207,7 @@ def test_the_backoff_is_saved_at_each_change(tasks: _Tasks) -> None:
     client = FakeTimedSearchClient(
         {Channel("kad"): 30.0}, search_failures=[SearchFailedError("refused")]
     )
-    tasks.run_for(_HOUR, client, ["keroro"])
+    tasks.run_for(_HOUR, client=client, keywords=["keroro"])
     assert [set(saved) for saved in tasks.state.saved] == [
         {BackoffKey(ClientName("amuled"), Channel("kad"))},
         set(),
@@ -235,7 +240,7 @@ def test_a_failed_save_is_logged_and_retried_after_the_next_search(tasks: _Tasks
     tasks.state.failures = 1
     refused: list[Exception] = [SearchFailedError("refused"), SearchFailedError("refused")]
     client = FakeTimedSearchClient({Channel("kad"): 30.0}, search_failures=refused)
-    tasks.run_for(100.0, client, ["keroro"])
+    tasks.run_for(100.0, client=client, keywords=["keroro"])
     assert tasks.logger.lines == [
         LoggedLine("error", "backoff not saved (database is locked): retried after the next search")
     ]
