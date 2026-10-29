@@ -1,7 +1,7 @@
 # Handoff: rows read by column name
 
 Drafted by block 50 from the lot's block reports (#548, #549, #551 to #553) and its own, corrected by the closing
-block 60 with the holistic review and block 55's report (#555).
+block 60 with the holistic review and the reports of blocks 55, 57 and 58 (#555, #557, #558).
 
 ## State
 
@@ -26,11 +26,16 @@ How the spec was made, all on 2026-10-29:
   caller, the helper returning plain `dict`s, the catalog's switch split from local.db's into blocks 40 and 50,
   appendix B's values a draw must avoid).
 
-One stack cut from `main` at `6c6bed0e`, which had not moved when block 60 was written (`git fetch`, 2026-10-29).
-Eight blocks against the spec's six, the closing one included: block 10 passed 20 files (22: the estimate missed
-`test_database_digest.py` and `pyproject.toml`), so the lead approved its split, the catalog migrations 0002 to 0009
-moving to a new block 15; block 55 was cut from the holistic review's three code findings, so it is not in the spec's
-table.
+After the holistic review, reading the stack, the operator asked (2026-10-29) that setting the factory at each
+connection site, a footgun, end: `SqliteDatabaseOpener` becomes the one place that opens a connection, and owns the
+factory privately. The lead inserted blocks 57 and 58 for it under the closing one, split at the 20-file bound; block
+58 adds their rows to the spec's table and corrects D1, D3, D4 and D5.
+
+One stack cut from `main` at `6c6bed0e`, which had not moved when block 60 was last written (`git fetch`,
+2026-10-29); GitHub stack #559 since the insertion (#550 before). Ten blocks against the spec's six, the closing one
+included: block 10 passed 20 files (22: the estimate missed `test_database_digest.py` and `pyproject.toml`), so the
+lead approved its split, the catalog migrations 0002 to 0009 moving to a new block 15; block 55 was cut from the
+holistic review's three code findings, outside the spec's table; blocks 57 and 58 came from the operator's request.
 
 | Block | Pull request | Branch |
 |---|---|---|
@@ -41,6 +46,8 @@ table.
 | 40 | #553 | `refactor/local-rows-by-name` |
 | 50 | #554 | `refactor/rows-by-name` |
 | 55 | #555 | `refactor/rows-by-name-findings` |
+| 57 | #557 | `refactor/opener-owns-connections` |
+| 58 | #558 | `refactor/opener-owns-row-factory` |
 | 60 | this block's pull request | `docs/rows-by-name-wrap` |
 
 Not merged at writing. Nothing the operator sees changes (spec section 2): no page, metric, notification, config key
@@ -48,15 +55,16 @@ or schema. The image changes in how the persistence adapter reads its rows.
 
 ## What was built
 
-- **`NamedRow` and `named_row`** (block 10, D1), in `persistence_sqlite/named_row.py`: a `dict` subclass whose
-  `__iter__` raises `TypeError` ("a row is read by column name"), and the row factory that builds it from
-  `cursor.description`, refusing a column name that appears twice with `ValueError`. `row[0]` raises `KeyError`.
-- **`database_digest`** (block 10, D4) reads `user_version` through a cursor of its own carrying the factory: the
-  factory's first production caller, and it digests any connection, the pre-migration copier's candidate and the
-  tests' raw connections included.
+- **`NamedRow`** (block 10, D1), in `persistence_sqlite/named_row.py`: a `dict` subclass whose `__iter__` raises
+  `TypeError` ("a row is read by column name"); `row[0]` raises `KeyError`. Block 10 put the row factory beside it as
+  `named_row`, building a row from `cursor.description` and refusing a column name that appears twice with
+  `ValueError`; block 58 made it the opener's private `_build_named_row`.
+- **`database_digest`** (D4) read `user_version` through a cursor of its own carrying the factory (block 10), the
+  factory's first production caller; since block 58 it reads the connection it is given, which the opener opened.
 - **The tests' helper** (block 10, D5): `rows(connection, sql, parameters)` in
-  `tests/support/adapters/driven/persistence_sqlite/named_row.py`, which reads a query on its own cursor carrying the
-  factory and returns plain `dict`s, keeping pytest's diff of a failing comparison.
+  `tests/support/adapters/driven/persistence_sqlite/named_row.py`, which returns plain `dict`s, keeping pytest's diff
+  of a failing comparison. Since block 58 it reads tuples on its own cursor (`row_factory = None`) and builds the
+  `dict`s from `cursor.description`, refusing a duplicate name itself.
 - **The tests read by name** (blocks 10 to 30, 55): the local migration tests (10), the catalog migrations 0002 to
   0009 (15), 0010 to 0015, `last_seen_at`, `drop_verification` and the stores' tests (20), the remaining stores', the
   pre-migration copier's, the read connections', five steps' and `tests/support`'s `catalog_rows` and `older_catalog`
@@ -74,22 +82,33 @@ or schema. The image changes in how the persistence adapter reads its rows.
   `has_points`. `sqlite_source_reader.py`'s rows and `observation_from_row` are typed `NamedRow`. The SQL console
   (D3) reads on a cursor of its own whose `row_factory` is `None`. `AGENTS.md`'s Persistence row says rows are read by
   column name; `thread_read_connections.py`'s docstrings follow.
+- **The opener opens every connection** (blocks 57, 58, the operator's request):
+  `SqliteDatabaseOpener.open_reader(path)` takes over the read-only open (`mode=ro`, `query_only`,
+  `temp_store=FILE`, the factory), its path now quoted in the URI; `ThreadReadConnections` and the console's
+  `SqliteSqlExecutor` receive it from the composition as a `Callable[[Path], sqlite3.Connection]` (57). The
+  pre-migration copier receives it at call time, `ensure_copy(connection, path, pending, open_reader)`, since the
+  opener is built over the copier, and imports neither `sqlite3.connect` nor the factory (58). The ast-grep rule
+  `no-sqlite-connect` refuses `sqlite3.connect`, called or passed, and `from sqlite3 import connect` in every
+  package's `src` outside the opener's module (58). `AGENTS.md`'s Persistence row says the opener opens every
+  connection (58).
 - **The compose smoke's read script** (block 55), run by the image's own Python where the tests' helper is not
   importable: it sets `sqlite3.Row` and reads `state` and an aliased `completed`.
-- **`BACKLOG.md`** (block 60): spec section 7's three changes.
+- **`BACKLOG.md`** (block 60): spec section 7's three changes, and "A rule test naming no rule fails the gate"
+  under Technical improvements (operator, 2026-10-29; Pitfalls).
 
 ## Evidence
 
-Every block's `uv run poe check` exit 0 at its tip (crawler: 1724 passed at block 40, 1726 at blocks 50 to 60, 15
-deselected; 100 % branch coverage; `_unit-coverage-check` clean).
+Every block's `uv run poe check` exit 0 at its tip (crawler: 1724 passed at block 40, 1726 at blocks 50 and 55, 1730
+at blocks 58 and 60, 15 deselected; 100 % branch coverage; `_unit-coverage-check` clean).
 
 Budgets against each parent: block 10, 286 lines and 17 files; block 15, 124 and 5; block 20, 337 and 17; block 30,
 311 and 12; block 40, 39 and 7; block 50, 104 and 16 (the handoff and the spec outside the count); block 55, 33 and
-4; block 60, 14 and 1 (`BACKLOG.md`; the handoff outside the count).
+4; block 57, 289 and 12; block 58, 214 and 15; block 60, 17 and 1 (`BACKLOG.md`; the handoff outside the count).
 
 Continuous integration, `gh pr checks <n> --required` (2026-10-29): `validate / gate` passes on #548, #549, #551,
-#552, #553, #554, #555 (run 40854481618) and #556 (run 40855061815), each on its first attempt. #556's run after
-its fix-back (Counts) is the lead's to read.
+#552, #553, #554, #555 (run 40854481618), #557 (run 40882675880), #558 (run 40882687548) and #556 (runs 40855061815
+and 40882701427, the latter after the closing block's cascaded rebase onto block 58), each on its first attempt.
+#556's run after its second fix-back (Counts) is the lead's to read.
 
 Acceptance, at block 50's tip (`cd9fc28b`):
 
@@ -108,6 +127,11 @@ Acceptance, at block 50's tip (`cd9fc28b`):
 - 4: the corrected command (named_row.py left out, spec section 4) prints nothing, exit 1; under the second trial it
   prints `sqlite_node_id_store.py:30:        return NodeId(row[0]) if row is not None else None`, so it can fail.
   The holistic review re-ran it at block 50's top: nothing, exit 1.
+
+Block 58 re-ran the four at its tip: 1, `test_named_row.py` and the opener's two duplicate-name tests, on `open_local`
+and `open_reader`, pass; 2 passes, and fails without D3's cursor on `ValueError: the column 'a' appears twice`; 3,
+the backoff store's unpacking `TypeError: a row is read by column name` and the node id store's `row[0]`
+`KeyError: 0`, each 6 failed, 1724 passed, both restored; 4 prints nothing, exit 1.
 
 Tests watched failing, and probes, from the block reports:
 
@@ -135,6 +159,20 @@ Tests watched failing, and probes, from the block reports:
   `downloading False`; the `compose_integration` suite itself runs in CI only. At its tip, criterion 4's regex over
   `packages/crawler/**/*.py`, tests included, prints only `named_row.py`'s docstring, `test_named_row.py`'s two tests
   that a positional read raises, and `**row` dict spreads (five migration tests, `helpers.py`).
+- Block 57: the five `open_reader` tests of `test_sqlite_database_opener.py`, `AttributeError: 'SqliteDatabaseOpener'
+  object has no attribute 'open_reader'`; without the quote,
+  `test_open_reader_opens_a_path_holding_characters_a_uri_escapes`, `sqlite3.OperationalError: no such table: files`;
+  the `ThreadReadConnections` tests, `TypeError: ... takes 2 positional arguments but 3 were given`.
+- Block 58: `test_the_latest_copy_is_read_through_the_open_reader_given`, `TypeError:
+  SqlitePreMigrationCopier.ensure_copy() takes 4 positional arguments but 5 were given`. The rule: before it existed,
+  `ast-grep test` printed `Configuration not found! no-sqlite-connect`; with its `connect` regex broken, `[Missing]
+  Expect rule no-sqlite-connect to report issues`; with the copier unchanged, `ast-grep scan` failed on
+  `sqlite_pre_migration_copier.py:83:22`; a planted `sqlite3.connect(":memory:")` in `thread_read_connections.py` and
+  `from sqlite3 import connect` in `p2pwatch_amule/__main__.py` gave `Error: 2 error(s) found in code.`, exit 1, both
+  removed. `test_rows_of_a_connection_reading_by_column_name_are_plain_dicts` guards the helper: it passes before and
+  after, and fails on `TypeError: a row is read by column name` with the helper's `cursor.row_factory = None` removed.
+  The tests moved with the factory, and the digest's through the opener, assert behaviour that already held: green
+  before and after.
 - The holistic review: a pytest plugin wrapping `NamedRow.__getitem__` over the crawler's suite (1726 passed) saw
   every one of the 109 `row["..."]` sites under `persistence_sqlite` read at least once, so each by-name read meets a
   test. The factory costs 2.6 µs a row against 1.06 for `sqlite3.Row` and 1.0 for tuples (100,000 rows of 11
@@ -159,6 +197,12 @@ Tests watched failing, and probes, from the block reports:
   its pathspec leaves `named_row.py` out, whose docstring matched forever (found by block 40).
 - Block 55: not in the spec's table (State); `test_variants.py`'s function-list test sorts by an `ORDER BY name`, as
   blocks 10 to 30 did.
+- Blocks 57 and 58: outside the spec's first table, added at the operator's request; block 58 adds their rows and
+  corrects D1, D3, D4, D5 and appendix A's Connections line (`(Corrected: ...)` beside each).
+- Block 58: the tests' helper keeps its module name, `named_row.py`, which still twins the `src` module of that name:
+  a rename would touch its 46 importers, past the bound (a judgement call of the block's).
+  `test_a_connection_carrying_the_row_factory_has_the_digest_of_a_raw_one` deleted, since no raw connection is
+  digested any more.
 
 ## Class 1 fixes
 
@@ -172,6 +216,9 @@ Tests watched failing, and probes, from the block reports:
 - Block 50: the console module's docstring named `Connection.execute` as the single-statement guard; it now names
   `Cursor.execute`, which refuses a second statement the same way.
 - Block 55: none.
+- Block 57: the reader's path quoted in the URI, as the copier already did: a data directory whose name holds `#`, `%`
+  or `?` opened the wrong file, or none, through `f"file:{path}?mode=ro"`.
+- Block 58: none.
 
 No class 2 question.
 
@@ -184,19 +231,31 @@ documents.
 
 | Finding | Exit |
 |---|---|
-| The pre-migration copier's candidate was the one connection without the factory, against D1 and row 50, with no `(Corrected: ...)` | fixed, block 55: the candidate carries the factory; no test discriminates the line (Evidence) |
+| The pre-migration copier's candidate was the one connection without the factory, against D1 and row 50, with no `(Corrected: ...)` | fixed, block 55: the candidate carries the factory, no test discriminating the line; superseded by block 58, where the candidate comes from the opener's `open_reader`, which a test watched failing pins |
 | Seven positional reads left in `test_variants.py` and `test_micros.py`, on raw connections testing the SQL functions, which the inventory's probe never saw | fixed, block 55: read through `rows()`, each expression aliased |
 | `test_compose_smoke.py`'s `_READ_ROW` script read `row[0], bool(row[1])` | fixed, block 55: `sqlite3.Row`, `state` and an aliased `completed` |
 | The draft's test counts at block 40 (1725, "the same counts") contradicted block 40's report (1718 passed in each trial) | fixed, block 60: Evidence |
 | The draft said "Blocks 30 to 50: none" under Class 1 fixes, losing block 50's docstring fix | fixed, block 60: Class 1 fixes |
 | The draft lost five notes of the reports: (a) the dict keys of a migration test across a column rename, (b) block 10's probe, (c) block 15's `test_migration_0002.py`, (d) `test_sqlite_catalog_file_reader.py`'s locals named `rows`, (e) block 30's unchanged step tests and `decision_tiers` | fixed, block 60: (a) and (d) in Pitfalls, (b) in Evidence, (c) and (e) in Departures |
 
+Blocks 55, 57 and 58 came after the review and were not read by it.
+
+## The operator's review
+
+- On #548, `named_row.py:14` (2026-10-29): the function `named_row` was named so it is confused with the type
+  `NamedRow`. Answered by #558, which makes the factory the opener's private `_build_named_row` and leaves
+  `named_row.py` the type alone; the lead replied on the thread.
+- The request that the opener alone open a connection and own the factory (2026-10-29): blocks 57 and 58 (State).
+
 ## Counts
 
-One fix-back, of the closing block: its handoff's CI line, written while #555's run was pending, updated once
-#555 and #556 passed; the push re-triggered #556's run only. No cascaded rebase. Eight blocks against six planned,
-the closing one included: block 10 split into 10 and 15, block 55 cut from the holistic review. No body called
-unreadable so far.
+Two fix-backs, both of the closing block: its handoff's CI line, written while #555's run was pending, updated once
+#555 and #556 passed, which re-triggered #556's run only; then blocks 57 and 58 recorded here, with a `BACKLOG.md`
+entry, which re-triggers #556's run only. Two blocks, 57 and 58, inserted on the operator's request, which took one
+GitHub unstack and re-init (stack #550 became #559) and one cascaded rebase, the closing block's onto block 58,
+without conflict, which re-triggered #556's run. Ten blocks against six planned, the closing one included: block 10
+split into 10 and 15, block 55 cut from the holistic review, blocks 57 and 58 on the operator's request. No body
+called unreadable so far.
 
 ## Pitfalls
 
@@ -209,8 +268,8 @@ unreadable so far.
 - `PRAGMA foreign_key_check` compared with `[]` holds under any factory, since it returns no row (block 20).
 - `test_sqlite_catalog_file_reader.py` keeps many locals named `rows` holding `CatalogEntry` tuples, in functions that
   never call the helper: a name beside `rows()` that a later edit can trip on (block 20).
-- A cursor's factory overrides its connection's: the helper `rows()`, `database_digest` and the console's cursor rely
-  on it; `iterdump` resets its cursor's factory (spec appendix A).
+- A cursor's factory overrides its connection's: the helper `rows()` and the console's cursor rely on it; `iterdump`
+  resets its cursor's factory (spec appendix A).
 - `iter_latest_observations` returns a lazy `map` over the cursor, so a test's `list()` drives `src`'s mapper: a probe
   telling a test's read from `src`'s takes that one for the test's (block 30).
 - `INSERT ... RETURNING` reads through `rows()` like a `SELECT`; `content_hash(*variant.values())` needs the expected
@@ -219,13 +278,15 @@ unreadable so far.
   its own cursor (block 50).
 - Criterion 4's regex matches `**row`, a dict spread, too: run over the tests, its output is no count of positional
   reads (block 55).
+- `ast-grep test --skip-snapshot-tests` exits 0 when a rule test names a rule that does not exist (`Configuration not
+  found!`), so deleting a rule of `ast-grep/rules/` leaves `code-pattern-check` green (block 58). The `BACKLOG.md`
+  entry "A rule test naming no rule fails the gate" carries it.
 
 ## Not validated
 
 - A column written in the wrong order, or aliased under another's name, is still caught only by a test giving both
   columns distinct values (spec section 7): `duration_seconds` and `bitrate_kbps` swapped by alias in
   `_SQL_LIST_FILES_BASE` passed on `main`. The "Round-trip contracts" entry carries it.
-- No test fails without the pre-migration copier's candidate factory (block 55): it guards a read not yet written.
 - The integration suites run only in CI's `validate / gate`; the smoke's read script ran locally only on a scratch
   `local.db`.
 - No real node has run the factory: the reads of a large catalog by name, and the console on it. The holistic review's
