@@ -33,8 +33,9 @@ from tests.fakes.adapters.driven.fake_policy_fingerprint_store import FakePolicy
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.fakes.adapters.driven.fake_wall_clock import FakeWallClock
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
-from tests.support.catalog_rows import decision_node_ids, decision_tiers
+from tests.support.catalog_rows import count_decisions, decision_node_ids, decision_tiers
 
 _NODE_ID = NodeId("n1")
 _FINGERPRINT = "policy-2"
@@ -202,10 +203,9 @@ async def test_two_changed_rows_are_all_evaluated_and_written(
     tiers = dict(decision_tiers(catalog_connection))
     assert tiers == {_HASH_DL: "download", _HASH_CAT: "catalog"}
     assert decision_node_ids(catalog_connection) == {_NODE_ID}
-    decided_at_micros = catalog_connection.execute(
-        "SELECT DISTINCT decided_at_micros FROM match_decisions"
-    )
-    assert decided_at_micros.fetchall() == [(instant_to_micros(wall_clock.now()),)]
+    assert rows(catalog_connection, "SELECT DISTINCT decided_at_micros FROM match_decisions") == [
+        {"decided_at_micros": instant_to_micros(wall_clock.now())}
+    ]
     # Iteration is ORDER BY native_id: "31d6..." sorts before "aaaa..." (ASCII '3' < 'a').
     assert [line.message for line in reevaluation.observability.logger.lines] == [
         f"decisions for {_DL_NAME} ({_HASH_DL}): 062A none → download",
@@ -244,7 +244,7 @@ async def test_unchanged_row_is_evaluated_but_not_written(
     assert reevaluation.logger.lines == [
         LoggedLine("info", "catalogue re-evaluated: 1 files, 0 rows written")
     ]
-    assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 1
+    assert count_decisions(catalog_connection) == 1
     assert reevaluation.observability.logger.lines == []
     assert reevaluation.waker.woken_subjects == []
 
@@ -361,12 +361,10 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
         "062A",
         "062B",
     }
-    assert (
-        catalog_connection.execute(
-            "SELECT count(*) FROM match_decisions WHERE target_id = ''"
-        ).fetchone()[0]
-        == 1
-    )
+    assert rows(
+        catalog_connection,
+        "SELECT count(*) AS decision_count FROM match_decisions WHERE target_id = ''",
+    ) == [{"decision_count": 1}]
 
 
 @pytest.mark.asyncio

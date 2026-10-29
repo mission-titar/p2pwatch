@@ -22,8 +22,10 @@ from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.fakes.adapters.driven.fake_wall_clock import FakeWallClock
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 from tests.support.catalog_rows import (
+    count_decisions,
     count_observations,
     decision_node_ids,
     observation_node_ids,
@@ -99,7 +101,7 @@ async def test_observation_is_always_recorded_even_when_discarded(
     )
     assert changed == 0
     assert count_observations(catalog_connection) == 1
-    assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 0
+    assert count_decisions(catalog_connection) == 0
     assert waker.woken_subjects == []
 
 
@@ -122,10 +124,9 @@ async def test_the_observation_carries_the_clocks_instant(
     ).catalog(
         _reported_file(_HASH_DISCARD, "random.txt"), ClientName("amuled"), Channel("ed2k"), _NODE_ID
     )
-    observed_at_micros = catalog_connection.execute(
-        "SELECT observed_at_micros FROM observations"
-    ).fetchone()
-    assert observed_at_micros == (instant_to_micros(wall_clock.now()),)
+    assert rows(catalog_connection, "SELECT observed_at_micros FROM observations") == [
+        {"observed_at_micros": instant_to_micros(wall_clock.now())}
+    ]
 
 
 @pytest.mark.asyncio
@@ -148,9 +149,7 @@ async def test_new_verdict_is_persisted_and_nudged(
         FakeLogger(),
     ).catalog(_reported_file(_HASH_DL, _DL_NAME), ClientName("amuled"), Channel("ed2k"), _NODE_ID)
     assert changed == 1
-    assert catalog_connection.execute("SELECT tier FROM match_decisions").fetchone() == (
-        "download",
-    )
+    assert rows(catalog_connection, "SELECT tier FROM match_decisions") == [{"tier": "download"}]
     assert observation_node_ids(catalog_connection) == decision_node_ids(catalog_connection)
     assert decision_node_ids(catalog_connection) == {_NODE_ID}
     assert observability.notifier.node_ids == [_NODE_ID]
@@ -195,7 +194,7 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
         ).catalog(reported_file, ClientName("amuled"), Channel("ed2k"), _NODE_ID)
         == 0
     )
-    assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 1
+    assert count_decisions(catalog_connection) == 1
     # But the observation itself is re-persisted (periodic re-observation = the goal).
     assert count_observations(catalog_connection) == 2
     assert waker.woken_subjects == []
@@ -234,10 +233,8 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
     ).catalog(_reported_file(_HASH_DL, _DL_NAME), ClientName("amuled"), Channel("ed2k"), _NODE_ID)
     assert changed == 1
     tiers = [
-        row[0]
-        for row in catalog_connection.execute(
-            "SELECT tier FROM match_decisions ORDER BY id"
-        ).fetchall()
+        decision["tier"]
+        for decision in rows(catalog_connection, "SELECT tier FROM match_decisions ORDER BY id")
     ]
     assert tiers == ["notify", "download"]
     assert waker.woken_subjects == [WakeSubject.DOWNLOAD]
@@ -432,6 +429,7 @@ async def test_multi_segment_observation_records_two_rows(
         _NODE_ID,
     )
     assert changed == 2
-    assert catalog_connection.execute(
-        "SELECT target_id FROM match_decisions ORDER BY id"
-    ).fetchall() == [("062A",), ("062B",)]
+    assert rows(catalog_connection, "SELECT target_id FROM match_decisions ORDER BY id") == [
+        {"target_id": "062A"},
+        {"target_id": "062B"},
+    ]

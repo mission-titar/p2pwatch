@@ -33,8 +33,10 @@ from tests.fakes.adapters.driven.fake_search_client import (
 )
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 from tests.support.catalog_rows import (
+    count_decisions,
     count_observations,
     decision_node_ids,
     observation_node_ids,
@@ -183,11 +185,10 @@ async def test_successful_task_records_observation(
     )
     await worker.run_task(SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")), _NODE_ID)
     assert client.searches == [("keroro", "ed2k")]
-    assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 1
-    observed_at_micros = catalog_connection.execute(
-        "SELECT observed_at_micros FROM observations"
-    ).fetchone()
-    assert observed_at_micros == (instant_to_micros(fake_time.wall.now()),)
+    assert count_decisions(catalog_connection) == 1
+    assert rows(catalog_connection, "SELECT observed_at_micros FROM observations") == [
+        {"observed_at_micros": instant_to_micros(fake_time.wall.now())}
+    ]
     assert observation_node_ids(catalog_connection) == decision_node_ids(catalog_connection)
     assert decision_node_ids(catalog_connection) == {_NODE_ID}
 
@@ -215,7 +216,7 @@ async def test_multiple_observations_some_unchanged_are_all_processed(
     )
     await worker.run_task(SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")), _NODE_ID)
     assert count_observations(catalog_connection) == 2
-    assert catalog_connection.execute("SELECT count(*) FROM match_decisions").fetchone()[0] == 1
+    assert count_decisions(catalog_connection) == 1
 
 
 @pytest.mark.asyncio

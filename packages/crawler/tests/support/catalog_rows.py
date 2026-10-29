@@ -9,6 +9,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import FileId, SourceId
 from p2pwatch.domain.source import SourceKey
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 
 SEEN_AT = "2026-06-22T10:00:00.000000+00:00"
 
@@ -111,13 +112,14 @@ def insert_source_variant(
     sid = source_id(user_hash) if user_hash is not None else None
     columns = (name, role, contact_point, connectable)
     key = hashlib.blake2b(repr((native_id, user_hash, *columns, node_id)).encode(), digest_size=16)
-    row = connection.execute(
+    [variant] = rows(
+        connection,
         "INSERT INTO source_variants (file_id, source_id, name, role, contact_point,"
         " connectable, raw_metadata, node_id, content_hash)"
         " VALUES (?, ?, ?, ?, ?, ?, '{}', ?, ?) RETURNING variant_id",
         (file_id(native_id), sid, *columns, node_id, key.digest()),
-    ).fetchone()
-    variant_id: int = row[0]
+    )
+    variant_id: int = variant["variant_id"]
     return variant_id
 
 
@@ -136,26 +138,39 @@ def insert_source_point(
 
 
 def count_observations(connection: sqlite3.Connection) -> int:
-    count: int = connection.execute("SELECT count(*) FROM observations").fetchone()[0]
-    return count
+    [count] = rows(connection, "SELECT count(*) AS observation_count FROM observations")
+    observation_count: int = count["observation_count"]
+    return observation_count
+
+
+def count_decisions(connection: sqlite3.Connection) -> int:
+    [count] = rows(connection, "SELECT count(*) AS decision_count FROM match_decisions")
+    decision_count: int = count["decision_count"]
+    return decision_count
 
 
 def observation_node_ids(connection: sqlite3.Connection) -> set[str]:
-    return {row[0] for row in connection.execute("SELECT node_id FROM observation_variants")}
+    variants = rows(connection, "SELECT node_id FROM observation_variants")
+    return {variant["node_id"] for variant in variants}
 
 
 def decision_node_ids(connection: sqlite3.Connection) -> set[str]:
-    return {row[0] for row in connection.execute("SELECT node_id FROM match_decisions")}
+    return {
+        decision["node_id"] for decision in rows(connection, "SELECT node_id FROM match_decisions")
+    }
 
 
 def source_variant_node_ids(connection: sqlite3.Connection) -> set[str]:
-    return {row[0] for row in connection.execute("SELECT node_id FROM source_variants")}
+    return {
+        variant["node_id"] for variant in rows(connection, "SELECT node_id FROM source_variants")
+    }
 
 
 def decision_tiers(connection: sqlite3.Connection) -> list[tuple[str, str]]:
     """``(native_id, tier)`` of every decision, oldest first."""
-    rows = connection.execute(
+    decisions = rows(
+        connection,
         "SELECT f.native_id, d.tier FROM match_decisions AS d"
-        " JOIN files AS f USING (file_id) ORDER BY d.id"
-    ).fetchall()
-    return [(row[0], row[1]) for row in rows]
+        " JOIN files AS f USING (file_id) ORDER BY d.id",
+    )
+    return [(decision["native_id"], decision["tier"]) for decision in decisions]

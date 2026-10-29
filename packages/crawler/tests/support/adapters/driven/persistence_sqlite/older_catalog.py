@@ -7,6 +7,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import Migrat
 from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceKey
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     database_opener,
     database_opener_setting,
@@ -47,12 +48,13 @@ def insert_stage4_variant(
     """A ``source_variants`` row of version 10, which has no ``node_id``; its ``variant_id``."""
     sid = None if user_hash is None else SourceKey(Network.ED2K, user_hash).source_id
     key = hashlib.blake2b(repr((native_id, user_hash, name, role)).encode(), digest_size=16)
-    row = connection.execute(
+    [variant] = rows(
+        connection,
         "INSERT INTO source_variants (file_id, source_id, name, role, raw_meta, content_hash)"
         " VALUES (?, ?, ?, ?, '{}', ?) RETURNING variant_id",
         (FileKey(Network.ED2K, native_id).file_id, sid, name, role, key.digest()),
-    ).fetchone()
-    variant_id: int = row[0]
+    )
+    variant_id: int = variant["variant_id"]
     return variant_id
 
 
@@ -107,7 +109,8 @@ def insert_v11_source_point(
 ) -> None:
     """A ``source_variants`` row of version 11 and one point of it, before 0012's renames."""
     key = hashlib.blake2b(repr((native_id, user_hash)).encode(), digest_size=16).digest()
-    row = connection.execute(
+    [variant] = rows(
+        connection,
         "INSERT INTO source_variants (file_id, source_id, name, role, directly_reachable,"
         " raw_meta, node_id, content_hash)"
         " VALUES (?, ?, 'AnimuseeFMR', 'sending', ?, '{}', 'n1', ?) RETURNING variant_id",
@@ -117,11 +120,11 @@ def insert_v11_source_point(
             directly_reachable,
             key,
         ),
-    ).fetchone()
+    )
     connection.execute(
         "INSERT INTO source_observations (variant_id, observed_at, transfer_counter)"
         " VALUES (?, 20, ?)",
-        (row[0], transfer_counter),
+        (variant["variant_id"], transfer_counter),
     )
 
 
@@ -147,7 +150,8 @@ def insert_v12_observation(
 def insert_v12_source_point(connection: sqlite3.Connection, native_id: str, user_hash: str) -> None:
     """A ``source_variants`` row of version 12 and one point of it, before 0013's rename."""
     key = hashlib.blake2b(repr((native_id, user_hash)).encode(), digest_size=16).digest()
-    row = connection.execute(
+    [variant] = rows(
+        connection,
         "INSERT INTO source_variants (file_id, source_id, name, role, connectable,"
         " raw_meta, node_id, content_hash)"
         " VALUES (?, ?, 'AnimuseeFMR', 'sending', 1, '{\"version\": \"2.3.3\"}', 'n1', ?)"
@@ -157,11 +161,11 @@ def insert_v12_source_point(connection: sqlite3.Connection, native_id: str, user
             SourceKey(Network.ED2K, user_hash).source_id,
             key,
         ),
-    ).fetchone()
+    )
     connection.execute(
         "INSERT INTO source_observations (variant_id, observed_at, session_received_bytes)"
         " VALUES (?, 20, 7)",
-        (row[0],),
+        (variant["variant_id"],),
     )
 
 

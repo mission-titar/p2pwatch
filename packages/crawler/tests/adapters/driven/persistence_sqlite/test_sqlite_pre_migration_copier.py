@@ -20,6 +20,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier imp
 )
 from tests.fakes.adapters.driven.fake_free_bytes import FakeFreeBytes
 from tests.fakes.adapters.driven.fake_time import FakeTime
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     database_opener,
 )
@@ -77,8 +78,8 @@ def test_a_marked_migration_second_among_the_pending_copies_before_the_first(
         _copier().ensure_copy(connection, path, _pending(scripts))
     assert _copy_names(path.parent) == [_COPY_NAME]
     with closing(sqlite3.connect(f"file:{path.parent / _COPY_NAME}?mode=ro", uri=True)) as copy:
-        assert copy.execute("PRAGMA user_version").fetchone()[0] == 2
-        assert copy.execute("SELECT x FROM t ORDER BY x").fetchall() == [(1,), (2,)]
+        assert rows(copy, "PRAGMA user_version") == [{"user_version": 2}]
+        assert rows(copy, "SELECT x FROM t ORDER BY x") == [{"x": 1}, {"x": 2}]
 
 
 def test_a_new_database_is_not_copied(tmp_path: Path) -> None:
@@ -104,13 +105,18 @@ def _keep_a_wal_with_free_pages(path: Path) -> sqlite3.Connection:
 
 def _need_bytes(connection: sqlite3.Connection, path: Path) -> int:
     """The copy's live pages and ``-wal``, then the migrations' file and ``-wal``."""
-    page_size = int(connection.execute("PRAGMA page_size").fetchone()[0])
-    page_count = int(connection.execute("PRAGMA page_count").fetchone()[0])
-    freelist_count = int(connection.execute("PRAGMA freelist_count").fetchone()[0])
+    page_size = _pragma(connection, "page_size")
+    page_count = _pragma(connection, "page_count")
+    freelist_count = _pragma(connection, "freelist_count")
     assert freelist_count > 0
     wal_bytes = Path(f"{path}-wal").stat().st_size
     assert wal_bytes > 0
     return (page_count - freelist_count) * page_size + wal_bytes + path.stat().st_size + wal_bytes
+
+
+def _pragma(connection: sqlite3.Connection, name: str) -> int:
+    [pragma] = rows(connection, f"PRAGMA {name}")
+    return int(pragma[name])
 
 
 def test_one_byte_short_refuses_before_any_write(tmp_path: Path) -> None:
@@ -124,7 +130,7 @@ def test_one_byte_short_refuses_before_any_write(tmp_path: Path) -> None:
         free_bytes = FakeFreeBytes(need_bytes - 1)
         with pytest.raises(MigrationError, match=rf"\b{need_bytes}\b.*\b{need_bytes - 1}\b"):
             _copier(free_bytes).ensure_copy(connection, path, _pending(scripts))
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert rows(connection, "PRAGMA user_version") == [{"user_version": 2}]
     assert _copy_names(path.parent) == []
     assert free_bytes.directories == [path.parent]
 
@@ -152,7 +158,7 @@ def test_a_leftover_is_deleted_before_the_copy(tmp_path: Path) -> None:
         _copier().ensure_copy(connection, path, _pending(scripts))
     assert _copy_names(path.parent) == [_COPY_NAME, other_database_leftover.name]
     with closing(sqlite3.connect(f"file:{path.parent / _COPY_NAME}?mode=ro", uri=True)) as copy:
-        assert copy.execute("PRAGMA integrity_check").fetchall() == [("ok",)]
+        assert rows(copy, "PRAGMA integrity_check") == [{"integrity_check": "ok"}]
 
 
 def test_a_taken_name_refuses_and_leaves_its_file(tmp_path: Path) -> None:

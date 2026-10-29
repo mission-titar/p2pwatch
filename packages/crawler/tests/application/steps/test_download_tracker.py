@@ -21,6 +21,7 @@ from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationR
 from tests.fakes.adapters.driven.fake_ticking_wall_clock import FakeTickingWallClock
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_local
 from tests.support.application.steps.download_cycle import (
     HASH_A,
@@ -350,8 +351,9 @@ async def test_waiting_for_sources_is_not_failing_for_a_simulated_year(tmp_path:
     for _ in range(12):
         fake_time.advance(timedelta(days=30))
         await cycle.run(NODE_ID)
-    row = connection.execute("SELECT state, waiting_reason, failure_reason FROM downloads")
-    assert row.fetchall() == [("downloading", "no_source", None)]
+    assert rows(connection, "SELECT state, waiting_reason, failure_reason FROM downloads") == [
+        {"state": "downloading", "waiting_reason": "no_source", "failure_reason": None}
+    ]
     connection.close()
 
 

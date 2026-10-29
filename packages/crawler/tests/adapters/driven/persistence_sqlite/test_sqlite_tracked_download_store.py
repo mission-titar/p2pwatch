@@ -2,6 +2,7 @@ import sqlite3
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -17,6 +18,7 @@ from p2pwatch.domain.file_key import FileKey, Network
 from tests.contracts.application.ports.driven.tracked_download_store_contract import (
     TrackedDownloadStoreContract,
 )
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_local
 
 _A = FileKey(Network.ED2K, "a" * 32)
@@ -28,14 +30,28 @@ def _status(file: FileKey, done: int = 0, waiting: WaitingReason | None = None) 
     return DownloadStatus(file, done, 100, False, waiting, None)
 
 
-def _lifecycle(connection: sqlite3.Connection, file: FileKey) -> tuple[object, ...]:
-    return tuple(
-        connection.execute(
-            "SELECT bytes_done, latest_progress_at_micros, waiting_reason, failure_reason"
-            " FROM downloads WHERE file_id = ?",
-            (file.file_id,),
-        ).fetchone()
+def _lifecycle(connection: sqlite3.Connection, file: FileKey) -> dict[str, Any]:
+    [lifecycle] = rows(
+        connection,
+        "SELECT bytes_done, latest_progress_at_micros, waiting_reason, failure_reason"
+        " FROM downloads WHERE file_id = ?",
+        (file.file_id,),
     )
+    return lifecycle
+
+
+def _lifecycle_row(
+    bytes_done: int,
+    latest_progress_at_micros: int | None,
+    waiting_reason: str | None,
+    failure_reason: str | None,
+) -> dict[str, Any]:
+    return {
+        "bytes_done": bytes_done,
+        "latest_progress_at_micros": latest_progress_at_micros,
+        "waiting_reason": waiting_reason,
+        "failure_reason": failure_reason,
+    }
 
 
 @pytest.fixture
@@ -60,8 +76,8 @@ def test_record_queued_keys_the_row_by_file_id_and_keeps_the_file_key(
     tracked_download_store: SqliteTrackedDownloadStore, connection: sqlite3.Connection
 ) -> None:
     tracked_download_store.record_queued(_A, TargetId("062A"), 100, _T0)
-    assert connection.execute("SELECT file_id, network, native_id FROM downloads").fetchall() == [
-        (_A.file_id, "ed2k", _A.native_id)
+    assert rows(connection, "SELECT file_id, network, native_id FROM downloads") == [
+        {"file_id": _A.file_id, "network": "ed2k", "native_id": _A.native_id}
     ]
 
 
@@ -70,9 +86,9 @@ def test_record_queued_is_dedup_safe(
 ) -> None:
     tracked_download_store.record_queued(_A, TargetId("062A"), 100, _T0)
     tracked_download_store.record_queued(_A, TargetId("063A"), 200, _T0 + _DAY)  # duplicate ignored
-    assert connection.execute(
-        "SELECT target_id, size_bytes, queued_at_micros FROM downloads"
-    ).fetchall() == [("062A", 100, instant_to_micros(_T0))]
+    assert rows(connection, "SELECT target_id, size_bytes, queued_at_micros FROM downloads") == [
+        {"target_id": "062A", "size_bytes": 100, "queued_at_micros": instant_to_micros(_T0)}
+    ]
 
 
 def test_set_completed_stamps_the_completed_at_it_is_given(
@@ -80,11 +96,12 @@ def test_set_completed_stamps_the_completed_at_it_is_given(
 ) -> None:
     tracked_download_store.record_queued(_A, TargetId("062A"), 100, _T0)
     tracked_download_store.set_completed(_A, _T0 + _DAY)
-    stamped = connection.execute(
-        "SELECT typeof(completed_at_micros), completed_at_micros FROM downloads WHERE file_id = ?",
+    assert rows(
+        connection,
+        "SELECT typeof(completed_at_micros) AS completed_at_type, completed_at_micros"
+        " FROM downloads WHERE file_id = ?",
         (_A.file_id,),
-    ).fetchone()
-    assert stamped == ("integer", instant_to_micros(_T0 + _DAY))
+    ) == [{"completed_at_type": "integer", "completed_at_micros": instant_to_micros(_T0 + _DAY)}]
 
 
 def test_set_state_non_completed_leaves_completed_at_null(
@@ -92,10 +109,9 @@ def test_set_state_non_completed_leaves_completed_at_null(
 ) -> None:
     tracked_download_store.record_queued(_A, TargetId("062A"), 100, _T0)
     tracked_download_store.set_state(_A, DownloadState.DOWNLOADING)
-    stamped = connection.execute(
-        "SELECT completed_at_micros FROM downloads WHERE file_id = ?", (_A.file_id,)
-    ).fetchone()[0]
-    assert stamped is None
+    assert rows(
+        connection, "SELECT completed_at_micros FROM downloads WHERE file_id = ?", (_A.file_id,)
+    ) == [{"completed_at_micros": None}]
 
 
 def test_set_state_on_unknown_hash_raises(
@@ -125,12 +141,13 @@ def test_record_queued_is_atomic_on_injected_failure(
 
 
 def _latest_seen(connection: sqlite3.Connection, file: FileKey) -> tuple[str, int]:
-    row = connection.execute(
-        "SELECT typeof(latest_seen_at_micros), latest_seen_at_micros FROM downloads"
-        " WHERE file_id = ?",
+    [latest_seen] = rows(
+        connection,
+        "SELECT typeof(latest_seen_at_micros) AS latest_seen_at_type, latest_seen_at_micros"
+        " FROM downloads WHERE file_id = ?",
         (file.file_id,),
-    ).fetchone()
-    return row[0], row[1]
+    )
+    return latest_seen["latest_seen_at_type"], latest_seen["latest_seen_at_micros"]
 
 
 def test_record_queued_stamps_latest_seen_at_with_queued_at(
@@ -138,10 +155,13 @@ def test_record_queued_stamps_latest_seen_at_with_queued_at(
 ) -> None:
     # A row amuled never picks up must still age out, from its queuing.
     tracked_download_store.record_queued(_A, TargetId("062A"), 100, _T0)
-    queued_at = connection.execute(
-        "SELECT typeof(queued_at_micros), queued_at_micros FROM downloads WHERE file_id = ?",
+    [queued] = rows(
+        connection,
+        "SELECT typeof(queued_at_micros) AS queued_at_type, queued_at_micros"
+        " FROM downloads WHERE file_id = ?",
         (_A.file_id,),
-    ).fetchone()
+    )
+    queued_at = (queued["queued_at_type"], queued["queued_at_micros"])
     assert queued_at == _latest_seen(connection, _A) == ("integer", instant_to_micros(_T0))
 
 
@@ -158,7 +178,7 @@ def test_a_queued_download_starts_at_zero_bytes_with_no_progress(
     tracked_download_store: SqliteTrackedDownloadStore, connection: sqlite3.Connection
 ) -> None:
     tracked_download_store.record_queued(_A, TargetId("062A"), 100, _T0)
-    assert _lifecycle(connection, _A) == (0, None, None, None)
+    assert _lifecycle(connection, _A) == _lifecycle_row(0, None, None, None)
 
 
 def test_set_seen_stamps_progress_only_when_the_bytes_grow(
@@ -166,14 +186,16 @@ def test_set_seen_stamps_progress_only_when_the_bytes_grow(
 ) -> None:
     tracked_download_store.record_queued(_A, TargetId("062A"), 100, _T0)
     tracked_download_store.set_seen([_status(_A, 0, WaitingReason.NO_SOURCE)], _T0)
-    assert _lifecycle(connection, _A) == (0, None, "no_source", None)
+    assert _lifecycle(connection, _A) == _lifecycle_row(0, None, "no_source", None)
     grown_at = _T0 + timedelta(hours=1)
     tracked_download_store.set_seen([_status(_A, 40, WaitingReason.REMOTE_QUEUE)], grown_at)
     tracked_download_store.set_seen([_status(_A, 40)], grown_at + 3 * _DAY)
-    assert _lifecycle(connection, _A) == (40, instant_to_micros(grown_at), None, None)
+    assert _lifecycle(connection, _A) == _lifecycle_row(40, instant_to_micros(grown_at), None, None)
     assert _latest_seen(connection, _A) == ("integer", instant_to_micros(grown_at + 3 * _DAY))
-    progress_type = connection.execute("SELECT typeof(latest_progress_at_micros) FROM downloads")
-    assert progress_type.fetchone() == ("integer",)
+    assert rows(
+        connection,
+        "SELECT typeof(latest_progress_at_micros) AS latest_progress_at_type FROM downloads",
+    ) == [{"latest_progress_at_type": "integer"}]
 
 
 def test_set_seen_stores_the_client_hashing_or_allocating_as_local_processing(
@@ -181,7 +203,7 @@ def test_set_seen_stores_the_client_hashing_or_allocating_as_local_processing(
 ) -> None:
     tracked_download_store.record_queued(_A, TargetId("062A"), 100, _T0)
     tracked_download_store.set_seen([_status(_A, 0, WaitingReason.LOCAL_PROCESSING)], _T0)
-    assert _lifecycle(connection, _A) == (0, None, "local_processing", None)
+    assert _lifecycle(connection, _A) == _lifecycle_row(0, None, "local_processing", None)
 
 
 def test_a_download_migrated_without_bytes_does_not_invent_progress(
@@ -190,7 +212,7 @@ def test_a_download_migrated_without_bytes_does_not_invent_progress(
     tracked_download_store.record_queued(_A, TargetId("062A"), 100, _T0)
     connection.execute("UPDATE downloads SET bytes_done = NULL")  # a row from before local 0008
     tracked_download_store.set_seen([_status(_A, 40)], _T0)
-    assert _lifecycle(connection, _A) == (40, None, None, None)
+    assert _lifecycle(connection, _A) == _lifecycle_row(40, None, None, None)
 
 
 def test_set_state_records_a_failure_reason_and_any_other_state_clears_it(
@@ -198,9 +220,9 @@ def test_set_state_records_a_failure_reason_and_any_other_state_clears_it(
 ) -> None:
     tracked_download_store.record_queued(_A, TargetId("062A"), 100, _T0)
     tracked_download_store.set_state(_A, DownloadState.FAILED, FailureReason.ERROR)
-    assert _lifecycle(connection, _A)[3] == "error"
+    assert _lifecycle(connection, _A)["failure_reason"] == "error"
     tracked_download_store.set_state(_A, DownloadState.DOWNLOADING)
-    assert _lifecycle(connection, _A)[3] is None
+    assert _lifecycle(connection, _A)["failure_reason"] is None
     tracked_download_store.set_state(_A, DownloadState.FAILED, FailureReason.ERROR)
     tracked_download_store.set_completed(_A, _T0)  # a failed download can still complete
-    assert _lifecycle(connection, _A)[3] is None
+    assert _lifecycle(connection, _A)["failure_reason"] is None

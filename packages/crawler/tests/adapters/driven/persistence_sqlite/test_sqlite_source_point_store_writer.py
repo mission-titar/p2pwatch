@@ -7,6 +7,7 @@ import sqlite3
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -23,6 +24,7 @@ from p2pwatch.domain.source import (
     SourceReading,
     SourceRole,
 )
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import insert_file
 
@@ -68,18 +70,34 @@ def source_point_store(catalog: sqlite3.Connection) -> SqliteSourcePointStore:
     return SqliteSourcePointStore(catalog)
 
 
-def _points(catalog: sqlite3.Connection) -> list[tuple[object, ...]]:
-    """``(role, observed_at_micros, session_received_bytes)`` in time order."""
-    return catalog.execute(
+def _points(catalog: sqlite3.Connection) -> list[dict[str, Any]]:
+    """``role``, ``observed_at_micros`` and ``session_received_bytes`` in time order."""
+    return rows(
+        catalog,
         "SELECT v.role, o.observed_at_micros, o.session_received_bytes"
         " FROM source_observations AS o JOIN source_variants AS v USING (variant_id)"
-        " ORDER BY o.observed_at_micros, v.node_id"
-    ).fetchall()
+        " ORDER BY o.observed_at_micros, v.node_id",
+    )
+
+
+def _point_row(role: str, observed_at_micros: int, session_received_bytes: int) -> dict[str, Any]:
+    return {
+        "role": role,
+        "observed_at_micros": observed_at_micros,
+        "session_received_bytes": session_received_bytes,
+    }
 
 
 def _variants(catalog: sqlite3.Connection) -> int:
-    count: int = catalog.execute("SELECT COUNT(*) FROM source_variants").fetchone()[0]
-    return count
+    [count] = rows(catalog, "SELECT COUNT(*) AS variant_count FROM source_variants")
+    variant_count: int = count["variant_count"]
+    return variant_count
+
+
+def _source_count(catalog: sqlite3.Connection) -> int:
+    [count] = rows(catalog, "SELECT COUNT(*) AS source_count FROM sources")
+    source_count: int = count["source_count"]
+    return source_count
 
 
 def _seconds(seconds: float) -> int:
@@ -93,9 +111,9 @@ def test_three_reads_of_one_source_leave_one_variant_and_three_points(
     source_point_store.record_points(points)
     assert _variants(catalog) == 1
     assert _points(catalog) == [
-        ("queued", _T0_US, 5),
-        ("queued", _seconds(30), 5),
-        ("queued", _seconds(60), 9),
+        _point_row("queued", _T0_US, 5),
+        _point_row("queued", _seconds(30), 5),
+        _point_row("queued", _seconds(60), 9),
     ]
 
 
@@ -104,14 +122,14 @@ def test_a_change_of_role_leaves_two_variants(
 ) -> None:
     source_point_store.record_points([_point(), _point(_S, index=1), _point(index=2)])
     assert _variants(catalog) == 2
-    assert [row[0] for row in _points(catalog)] == ["queued", "sending", "queued"]
+    assert [point["role"] for point in _points(catalog)] == ["queued", "sending", "queued"]
 
 
 def test_a_point_is_written_with_its_role_a_carried_one_included(
     source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
     source_point_store.record_points([SourcePoint(_FILE, _reading(None), _Q, _T0, NodeId("n1"))])
-    assert _points(catalog) == [("queued", _T0_US, 0)]
+    assert _points(catalog) == [_point_row("queued", _T0_US, 0)]
 
 
 def test_a_point_without_identity_writes_its_variant_and_no_source(
@@ -119,9 +137,9 @@ def test_a_point_without_identity_writes_its_variant_and_no_source(
 ) -> None:
     reading = dataclasses.replace(_reading(), source=None)
     source_point_store.record_points([SourcePoint(_FILE, reading, _Q, _T0, NodeId("n1"))])
-    variants = catalog.execute("SELECT source_id, name FROM source_variants").fetchall()
-    assert variants == [(None, "AnimuseeFMR")]
-    assert catalog.execute("SELECT COUNT(*) FROM sources").fetchone() == (0,)
+    variants = rows(catalog, "SELECT source_id, name FROM source_variants")
+    assert variants == [{"source_id": None, "name": "AnimuseeFMR"}]
+    assert _source_count(catalog) == 0
 
 
 def test_the_same_read_written_twice_leaves_the_points_unchanged(
@@ -147,8 +165,10 @@ def test_another_nodes_identical_reading_is_its_own_variant(
     source_point_store.record_points([_point(node_id=NodeId("n2")), _point()])
     assert _variants(catalog) == 2
     assert len(_points(catalog)) == 2
-    node_ids = catalog.execute("SELECT node_id FROM source_variants ORDER BY variant_id")
-    assert node_ids.fetchall() == [("n2",), ("n1",)]
+    assert rows(catalog, "SELECT node_id FROM source_variants ORDER BY variant_id") == [
+        {"node_id": "n2"},
+        {"node_id": "n1"},
+    ]
 
 
 def test_the_variant_and_the_source_are_written_as_d2_states(
@@ -165,25 +185,26 @@ def test_the_variant_and_the_source_are_written_as_d2_states(
     columns: list[object] = [_FILE.file_id.hex(), _KEY.source_id.hex(), "AnimuseeFMR"]
     columns += ["emule 0.50a", "queued", "176.103.48.36:4184", True, raw_metadata, "n1"]
     canonical = json.dumps(columns, ensure_ascii=False, separators=(",", ":")).encode()
-    assert catalog.execute(
+    assert rows(
+        catalog,
         "SELECT file_id, source_id, name, software, role, contact_point, connectable,"
-        " raw_metadata, node_id, content_hash FROM source_variants"
-    ).fetchall() == [
-        (
-            _FILE.file_id,
-            _KEY.source_id,
-            "AnimuseeFMR",
-            "emule 0.50a",
-            "queued",
-            "176.103.48.36:4184",
-            1,
-            raw_metadata,
-            "n1",
-            hashlib.blake2b(canonical, digest_size=16).digest(),
-        )
+        " raw_metadata, node_id, content_hash FROM source_variants",
+    ) == [
+        {
+            "file_id": _FILE.file_id,
+            "source_id": _KEY.source_id,
+            "name": "AnimuseeFMR",
+            "software": "emule 0.50a",
+            "role": "queued",
+            "contact_point": "176.103.48.36:4184",
+            "connectable": 1,
+            "raw_metadata": raw_metadata,
+            "node_id": "n1",
+            "content_hash": hashlib.blake2b(canonical, digest_size=16).digest(),
+        }
     ]
-    assert catalog.execute("SELECT * FROM sources").fetchall() == [
-        (_KEY.source_id, "ed2k", _KEY.native_id)
+    assert rows(catalog, "SELECT * FROM sources") == [
+        {"source_id": _KEY.source_id, "network": "ed2k", "native_id": _KEY.native_id}
     ]
 
 
@@ -193,5 +214,5 @@ def test_a_failed_write_rolls_back_the_whole_call(
     unknown = FileKey(Network.ED2K, "d" * 32)
     with pytest.raises(PersistenceError, match="FOREIGN KEY"):
         source_point_store.record_points([SourcePoint(unknown, _reading(), _Q, _T0, NodeId("n1"))])
-    assert catalog.execute("SELECT COUNT(*) FROM sources").fetchone() == (0,)
+    assert _source_count(catalog) == 0
     assert not catalog.in_transaction
