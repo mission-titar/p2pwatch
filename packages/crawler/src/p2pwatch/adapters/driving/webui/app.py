@@ -544,7 +544,7 @@ def _search_bar(*, search_text: str | None, kept_params: dict[str, str]) -> Sear
     return SearchBarDisplay(search_text=search_text or "", hidden=hidden)
 
 
-async def _add_security_headers(request: Request, call_next: RequestResponseEndpoint) -> Response:
+async def _add_security_headers(request: Request, call_next: RequestResponseEndpoint) -> Response:  # noqa: PLR0917
     """Defense-in-depth security headers (webui-security#3).
 
     The webui has no built-in auth and binds 0.0.0.0 in-container, so exposure is governed by

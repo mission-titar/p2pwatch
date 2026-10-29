@@ -41,7 +41,11 @@ src = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "TID251"]
+select = ["E", "F", "I", "UP", "B", "SIM", "TID251", "PLR0917"]
+
+# A value past the first is named at the call, so two of one type cannot swap unseen.
+[tool.ruff.lint.pylint]
+max-positional-args = 1
 
 # Named, not found on disk: else a module not yet written sorts third-party, and the cache keeps it.
 [tool.ruff.lint.isort]
@@ -73,6 +77,9 @@ known-first-party = [
 "time.clock_gettime_ns".msg = "Inject the WallClock or the MonotonicClock port."
 "asyncio.sleep".msg = "Sleep through the MonotonicClock port."
 "time.sleep".msg = "Sleep through the MonotonicClock port."
+# ruff exempts an `@override` method from PLR0917.
+"typing.override".msg = "A signature takes one positional parameter at most, overriding or not."
+"typing_extensions.override".msg = "A signature takes one positional parameter at most, overriding or not."
 
 [tool.ruff.lint.per-file-ignores]
 "packages/crawler/src/p2pwatch/adapters/driven/system_wall_clock.py" = ["TID251"]
@@ -80,6 +87,18 @@ known-first-party = [
 "packages/amule/src/p2pwatch_amule/adapters/driven/system_monotonic_clock.py" = ["TID251"]
 "**/tests/**" = ["TID251"]
 "vulture_whitelist.py" = ["B018", "F821"]
+# The zones not yet keyword-only: each line goes with the block that converts its zone. Its globs
+# never use `*` for a file name, which ruff lets cross a `/`.
+"packages/{matching,template_checks,coverage_checks}/**" = ["PLR0917"]  # M1
+"packages/{amule,amule_bump}/**" = ["PLR0917"]  # M2
+"packages/vex_checks/**" = ["PLR0917"]  # M3
+"packages/crawler/src/p2pwatch/domain/**" = ["PLR0917"]  # C1a
+"packages/crawler/src/p2pwatch/application/**" = ["PLR0917"]  # C2
+"packages/crawler/src/p2pwatch/adapters/driven/persistence_sqlite/**" = ["PLR0917"]  # C3
+"packages/crawler/src/p2pwatch/{adapters/driven/[!p]*,adapters/driving/**,composition/**}" = ["PLR0917"]  # C4, `[!p]` skips C3
+"packages/crawler/tests/{conftest.py,test_*.py,fakes/**,support/**,contracts/**,integration/**}" = ["PLR0917"]  # C5
+"packages/crawler/tests/adapters/**" = ["PLR0917"]  # C6
+"packages/crawler/tests/{application,domain,composition}/**" = ["PLR0917"]  # C7
 
 [tool.mypy]
 python_version = "3.13"
@@ -102,7 +121,7 @@ lint           = { cmd = "ruff check .", help = "Lint Python with ruff" }
 format-check   = { cmd = "ruff format --check .", help = "Check Python formatting with ruff" }
 sql-lint       = { cmd = "sqlfluff lint packages/crawler/src", help = "Lint the embedded SQLite migrations" }
 # The rule tests check each case's verdict, without snapshots of the messages.
-code-pattern-check = { help = "Ban dynamic attribute access, module patching, Protocol ports, SQLite connections opened outside the opener, literal logger names and option defaults, Readers' and Writers' other verbs, and the core's other imports and I/O builtins (ast-grep, sgconfig.yml), rules tested first", sequence = [{ cmd = "ast-grep test --skip-snapshot-tests" }, { cmd = "ast-grep scan" }] }
+code-pattern-check = { help = "Ban dynamic attribute access, module patching, Protocol ports, dataclasses not keyword-only, SQLite connections opened outside the opener, literal logger names and option defaults, Readers' and Writers' other verbs, and the core's other imports and I/O builtins (ast-grep, sgconfig.yml), rules tested first", sequence = [{ cmd = "ast-grep test --skip-snapshot-tests" }, { cmd = "ast-grep scan" }] }
 architecture-check = { help = "Check the imports between rings, adapters and hexagons (tach, tach.toml)", sequence = [{ cmd = "tach check" }, { cmd = "tach check-external" }] }
 template-check = { cmd = "python -m template_checks logic-free packages/crawler/src/p2pwatch/adapters/driving/webui/templates", help = "Assert webui templates carry no logic" }
 _template-attributes = { cmd = "python -m template_checks template-attributes packages/crawler/src/p2pwatch/adapters/driving/webui/templates" }

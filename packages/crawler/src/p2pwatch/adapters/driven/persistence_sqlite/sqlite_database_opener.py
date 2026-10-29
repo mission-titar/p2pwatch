@@ -107,7 +107,7 @@ def _connect(path: Path) -> sqlite3.Connection:
     return connection
 
 
-def _build_named_row(cursor: sqlite3.Cursor, values: tuple[Any, ...]) -> NamedRow:
+def _build_named_row(cursor: sqlite3.Cursor, values: tuple[Any, ...]) -> NamedRow:  # noqa: PLR0917
     """The row factory: refuses a column name that appears twice, which a dict would keep once."""
     names = [column[0] for column in cursor.description]
     for name in names:

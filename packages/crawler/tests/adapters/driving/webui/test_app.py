@@ -1132,7 +1132,7 @@ class _TemplateRecorder:
         self._app = app
         self.rendered: list[dict[str, Any]] = []
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:  # noqa: PLR0917
         async def record(message: Message) -> None:
             if message["type"] == "http.response.debug":
                 self.rendered.append(message["info"])
