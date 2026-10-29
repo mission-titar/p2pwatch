@@ -55,10 +55,10 @@ An agent adds an entry only after the operator has agreed to it.
 - **A generic way to write the tests' stubs and spies**: one typed mechanism for all of them, where a call no stub
   expects fails the test, in place of a class per port. Candidates measured in `agents/reference/2026-10-25-stub-and-spy-libraries.md`.
 
-- **A rule test naming no rule fails the gate**: `ast-grep test --skip-snapshot-tests` exits 0 on `Configuration not
-  found!`, so deleting a rule of `ast-grep/rules/` leaves `code-pattern-check` green. Pitfalls of `agents/handoffs/2026-10-29 - handoff - rows read by column name.md`.
-
 ## Postponed
 
 - **Adopt ty**, first as the gate's type checker in mypy's place, then as Serena's language server, once it reaches
   parity. Section "ty: the parity conditions" of `agents/specs/2026-10-17-serena-and-the-language-servers.md`.
+
+- **A rule test naming no rule fails the gate**: raise the `ast-grep-cli` floor once `ast-grep test` fails on a test
+  whose rule id no rule declares, as asked by https://github.com/ast-grep/ast-grep/issues/2994 (its PR #3000 unmerged).
