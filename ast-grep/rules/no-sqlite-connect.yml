@@ -1,0 +1,20 @@
+id: no-sqlite-connect
+language: python
+severity: error
+message: Only `SqliteDatabaseOpener` opens an SQLite connection, so every connection reads its rows by column name.
+note: "Receive a connection the opener opened, or its `open_reader`."
+files: ["packages/*/src/**/*.py"]
+ignores: ["packages/crawler/src/p2pwatch/adapters/driven/persistence_sqlite/sqlite_database_opener.py"]
+rule:
+  any:
+    # `sqlite3.connect`, called or passed.
+    - kind: attribute
+      all:
+        - has: { field: object, regex: ^sqlite3$ }
+        - has: { field: attribute, regex: ^connect$ }
+    # `from sqlite3 import connect`, aliased or not.
+    - kind: import_from_statement
+      all:
+        - has: { field: module_name, regex: ^sqlite3$ }
+        # No `field: name`: it reaches only the first imported name.
+        - has: { regex: '^connect( as \w+)?$' }

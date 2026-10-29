@@ -1,0 +1,11 @@
+id: no-sqlite-connect
+valid:
+  - "connection = database_opener.open_reader(path)"
+  - "def digest(connection: sqlite3.Connection) -> bytes: ..."
+  - "from sqlite3 import Connection"
+  - "client.connect(address)"
+invalid:
+  - "connection = sqlite3.connect(path, autocommit=True)"
+  - "open_database = sqlite3.connect"
+  - "from sqlite3 import connect"
+  - "from sqlite3 import Row, connect as open_database"

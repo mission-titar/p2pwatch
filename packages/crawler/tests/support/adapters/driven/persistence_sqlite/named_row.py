@@ -4,13 +4,18 @@ import sqlite3
 from collections.abc import Sequence
 from typing import Any
 
-from p2pwatch.adapters.driven.persistence_sqlite.named_row import named_row
-
 
 def rows(
     connection: sqlite3.Connection, sql: str, parameters: Sequence[object] = ()
 ) -> list[dict[str, Any]]:
-    """Plain dicts, since pytest's diff of a failing comparison iterates a ``NamedRow``."""
+    """Plain dicts, since pytest's diff of a failing comparison iterates a ``NamedRow``; a column
+    name that appears twice is refused, as the opener refuses it."""
     cursor = connection.cursor()
-    cursor.row_factory = named_row
-    return [dict(row) for row in cursor.execute(sql, parameters)]
+    # Tuples: a cursor's factory overrides its connection's.
+    cursor.row_factory = None
+    cursor.execute(sql, parameters)
+    names = [column[0] for column in cursor.description]
+    for name in names:
+        if names.count(name) > 1:
+            raise ValueError(f"the column {name!r} appears twice")
+    return [dict(zip(names, values, strict=True)) for values in cursor]
