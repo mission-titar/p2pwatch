@@ -8,9 +8,10 @@ long-lived reader does not block the writer's WAL checkpointing.
 
 import sqlite3
 import threading
-from collections.abc import Callable
 from pathlib import Path
 from typing import Self
+
+from p2pwatch.adapters.driven.persistence_sqlite.reader_opener import ReaderOpener
 
 
 class ThreadLocalConnection(threading.local):
@@ -24,7 +25,7 @@ class ThreadReadConnections:
     """A reused, thread-affine read-only connection source: each calling thread gets its OWN
     connection to ``path``, opened by ``open_reader`` on first use and reused thereafter."""
 
-    def __init__(self, path: Path, open_reader: Callable[[Path], sqlite3.Connection]) -> None:
+    def __init__(self, path: Path, open_reader: ReaderOpener) -> None:
         self._path = path
         self._open_reader = open_reader
         self._local = ThreadLocalConnection()

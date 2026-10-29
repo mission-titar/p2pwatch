@@ -1,15 +1,24 @@
 """``CrawlerLifecycle``: the root of the crawler's graph, which the composition runs once built."""
 
-from collections.abc import Callable, Coroutine, Sequence
+from collections.abc import Sequence
+from typing import Protocol
 
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.steps.backoff_registry import BackoffRegistry
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
-from p2pwatch.application.steps.loop_supervisor import LoopSupervisor
+from p2pwatch.application.steps.loop_supervisor import (
+    LoopSupervisor,
+    ShutdownBoundArmer,
+    SupervisedLoop,
+)
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import CrawlerStarted
+
+
+class NodeLoop(Protocol):
+    async def __call__(self, node_id: NodeId, /) -> None: ...
 
 
 class CrawlerLifecycle:
@@ -23,7 +32,7 @@ class CrawlerLifecycle:
         observability_dispatcher: ObservabilityDispatcher,
         catalog_reevaluator: CatalogReevaluator,
         backoff: BackoffRegistry,
-        loops: Sequence[Callable[[NodeId], Coroutine[object, object, None]]],
+        loops: Sequence[NodeLoop],
         download_enabled: bool,
         loop_supervisor: LoopSupervisor,
         logger: Logger,
@@ -37,7 +46,7 @@ class CrawlerLifecycle:
         self._loop_supervisor = loop_supervisor
         self._logger = logger
 
-    async def run(self, *, arm_shutdown_bound: Callable[[], None]) -> None:
+    async def run(self, *, arm_shutdown_bound: ShutdownBoundArmer) -> None:
         """Runs until the shutdown is requested, arming the bound before the loops unwind."""
         node_id = self._node_id_resolver.resolve()
         self._backoff.resume_waits()
@@ -56,7 +65,5 @@ class CrawlerLifecycle:
         )
 
 
-def _with_node_id(
-    loop: Callable[[NodeId], Coroutine[object, object, None]], node_id: NodeId
-) -> Callable[[], Coroutine[object, object, None]]:
+def _with_node_id(loop: NodeLoop, node_id: NodeId) -> SupervisedLoop:
     return lambda: loop(node_id)

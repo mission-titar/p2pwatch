@@ -19,9 +19,9 @@ their host's IP to Slack, not their P2P traffic). This is a DELIBERATE choice, n
 
 No apprise stubs → targeted ``# type: ignore`` (mypy override, Task 9)."""
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from datetime import timedelta
-from typing import assert_never
+from typing import Protocol, assert_never
 
 import apprise
 
@@ -123,10 +123,14 @@ def _message(notification: Notification) -> tuple[str, str, object]:
 _NO_MENTION = "@\u200b"
 
 
+class AppriseFactory(Protocol):
+    def __call__(self, *, asset: apprise.AppriseAsset) -> object: ...
+
+
 class AppriseNotifier(Notifier):
     """``Notifier`` adapter: one apprise tag per audience, in a prefixed group and a bare one."""
 
-    def __init__(self, targets: AppriseTargets, *, apprise_factory: Callable[..., object]) -> None:
+    def __init__(self, targets: AppriseTargets, *, apprise_factory: AppriseFactory) -> None:
         self._targets = targets
         self._apprise_factory = apprise_factory
         self._groups_by_node_id: dict[NodeId, tuple[object, object]] = {}

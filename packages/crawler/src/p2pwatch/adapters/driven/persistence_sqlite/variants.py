@@ -6,8 +6,8 @@ Changing the serialization changes every stored ``content_hash``: it needs a mig
 import hashlib
 import json
 import sqlite3
-from collections.abc import Callable
 from functools import cache
+from typing import Any, Protocol
 
 from p2pwatch.adapters.driven.persistence_sqlite import micros
 from p2pwatch.domain.file_key import FileKey, Network
@@ -74,11 +74,15 @@ def remove_migration_sql_functions(connection: sqlite3.Connection) -> None:
     connection.create_window_function("iso_to_micros", 1, None)
 
 
+class SqlFunction(Protocol):
+    def __call__(self, *arguments: Any, **keywords: Any) -> str | bytes: ...
+
+
 def create_memoized_function(
     connection: sqlite3.Connection,
     name: str,
     argument_count: int,
-    function: Callable[..., str | bytes],
+    function: SqlFunction,
 ) -> None:
     """Registers ``function`` as the SQL function ``name``, called once per distinct arguments."""
     connection.create_function(name, argument_count, cache(function), deterministic=True)

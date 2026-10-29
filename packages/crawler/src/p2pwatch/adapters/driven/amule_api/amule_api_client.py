@@ -10,10 +10,10 @@ import asyncio
 import json
 import logging
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from datetime import timedelta
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 
@@ -70,6 +70,10 @@ _KAD_WORD_HELD = "already on search list"
 _logger = logging.getLogger(__name__)
 
 
+class TransportFactory(Protocol):
+    def __call__(self) -> httpx.AsyncBaseTransport: ...
+
+
 class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
     def __init__(
         self,
@@ -81,7 +85,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         page_size: int,
         progress_poll_interval: timedelta,
         monotonic_clock: MonotonicClock,
-        transport_factory: Callable[[], httpx.AsyncBaseTransport],
+        transport_factory: TransportFactory,
     ) -> None:
         self._base_url = f"http://{host}:{port}/api/v1"
         self._password = password
