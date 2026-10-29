@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.database_digest import database_digest
+from p2pwatch.adapters.driven.persistence_sqlite.named_row import named_row
 
 _ROWS = [(1, "a"), (2, "b"), (3, None), (4, b"\x00")]
 
@@ -48,6 +49,14 @@ def test_the_same_rows_inserted_in_another_order_have_the_same_digest(
         )
         reversed_rows.executemany("INSERT INTO a VALUES (?, ?)", reversed(_ROWS))
         assert database_digest(reversed_rows) == database_digest(database)
+
+
+def test_a_connection_carrying_the_row_factory_has_the_digest_of_a_raw_one(
+    database: sqlite3.Connection,
+) -> None:
+    before = database_digest(database)
+    database.row_factory = named_row
+    assert database_digest(database) == before
 
 
 @pytest.mark.parametrize(
