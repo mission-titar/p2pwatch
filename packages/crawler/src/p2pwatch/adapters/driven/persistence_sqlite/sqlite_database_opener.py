@@ -28,6 +28,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import (
     PendingMigrations,
     load_scripts,
 )
+from p2pwatch.adapters.driven.persistence_sqlite.named_row import named_row
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier import (
     SqlitePreMigrationCopier,
 )
@@ -54,8 +55,10 @@ class SqliteDatabaseOpener:
         return self.open(path, load_scripts(_MIGRATIONS / "catalog"))
 
     def open_local(self, path: Path) -> sqlite3.Connection:
-        """Opens/migrates ``local.db``."""
-        return self.open(path, load_scripts(_MIGRATIONS / "local"))
+        """Opens/migrates ``local.db``, its rows read by column name."""
+        connection = self.open(path, load_scripts(_MIGRATIONS / "local"))
+        connection.row_factory = named_row
+        return connection
 
     def open(self, path: Path, scripts: tuple[Migration, ...]) -> sqlite3.Connection:
         """Opens ``path`` and applies the ``scripts`` above its version, after its pre-migration

@@ -4,6 +4,7 @@ from importlib import resources
 from pathlib import Path
 
 from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import Migration, load_scripts
+from p2pwatch.adapters.driven.persistence_sqlite.named_row import named_row
 from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.source import SourceKey
@@ -28,8 +29,10 @@ def open_catalog_forcing_secure_delete_at(path: Path, version: int) -> sqlite3.C
 
 
 def open_local_at(path: Path, version: int) -> sqlite3.Connection:
-    """The same for a local.db."""
-    return database_opener().open(path, _scripts_up_to("local", version))
+    """A local.db migrated up to ``version`` only, its rows read by name as ``open_local``'s."""
+    connection = database_opener().open(path, _scripts_up_to("local", version))
+    connection.row_factory = named_row
+    return connection
 
 
 def _scripts_up_to(database: str, version: int) -> tuple[Migration, ...]:

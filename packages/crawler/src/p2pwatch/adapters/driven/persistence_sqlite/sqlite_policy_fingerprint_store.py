@@ -25,7 +25,7 @@ class SqlitePolicyFingerprintStore(PolicyFingerprintReader, PolicyFingerprintWri
         """The stored policy fingerprint, or ``None`` if no re-evaluation ever ran."""
         with wrap_sqlite_errors():
             row = self._connection.execute(_SELECT_POLICY_FINGERPRINT).fetchone()
-        return str(row[0]) if row is not None else None
+        return str(row["policy_fingerprint"]) if row is not None else None
 
     def set_policy_fingerprint(self, fingerprint: str) -> None:
         """Upserts the single-row marker (called only AFTER a full re-evaluation pass)."""

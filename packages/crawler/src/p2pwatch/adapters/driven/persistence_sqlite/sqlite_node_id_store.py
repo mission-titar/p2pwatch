@@ -27,7 +27,7 @@ class SqliteNodeIdStore(NodeIdReader, NodeIdWriter):
         """The stored node id, ``None`` before one is recorded."""
         with wrap_sqlite_errors():
             row = self._connection.execute(_SELECT_NODE_ID).fetchone()
-        return NodeId(row[0]) if row is not None else None
+        return NodeId(row["node_id"]) if row is not None else None
 
     def record_node_id(self, node_id: NodeId, created_at: datetime) -> None:
         """Persists ``node_id`` with ``created_at``, in one row."""

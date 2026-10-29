@@ -9,6 +9,7 @@ import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError, PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import Migration, load_scripts
+from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
     open_catalog_at,
@@ -64,6 +65,13 @@ def test_open_local_creates_the_tables_and_versions_the_schema(tmp_path: Path) -
         assert rows(connection, "PRAGMA user_version") == [{"user_version": 15}]
     finally:
         connection.close()
+
+
+def test_open_local_returns_rows_read_by_column_name(tmp_path: Path) -> None:
+    with closing(database_opener().open_local(tmp_path / "local.db")) as connection:
+        row = connection.execute("SELECT 1 AS node_id").fetchone()
+    assert isinstance(row, NamedRow)
+    assert row == {"node_id": 1}
 
 
 def test_a_refused_open_closes_its_connection(tmp_path: Path) -> None:

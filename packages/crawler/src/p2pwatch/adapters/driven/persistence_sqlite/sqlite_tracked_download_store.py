@@ -62,7 +62,8 @@ WHERE file_id = :file_id
 
 # The non-terminal states listed here MUST stay synchronized with _TERMINAL_STATES (states.py).
 _LATEST_SEEN_AT_BY_FILE = """
-SELECT network, native_id, COALESCE(latest_seen_at_micros, queued_at_micros) FROM downloads
+SELECT network, native_id, COALESCE(latest_seen_at_micros, queued_at_micros) AS seen_at_micros
+FROM downloads
 WHERE state IN ('queued', 'downloading')
 """
 
@@ -162,13 +163,21 @@ class SqliteTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
         listed it, else when it was queued."""
         with wrap_sqlite_errors():
             rows = self._connection.execute(_LATEST_SEEN_AT_BY_FILE).fetchall()
-        return {FileKey(Network(row[0]), row[1]): micros_to_instant(row[2]) for row in rows}
+        return {
+            FileKey(Network(row["network"]), row["native_id"]): micros_to_instant(
+                row["seen_at_micros"]
+            )
+            for row in rows
+        }
 
     def read_tracked_states(self) -> dict[FileKey, DownloadState]:
         """File→state map of ALL tracked downloads, whatever their state."""
         with wrap_sqlite_errors():
             rows = self._connection.execute(_TRACKED_STATES).fetchall()
-        return {FileKey(Network(row[0]), row[1]): DownloadState(row[2]) for row in rows}
+        return {
+            FileKey(Network(row["network"]), row["native_id"]): DownloadState(row["state"])
+            for row in rows
+        }
 
     def read_queued_target_id(self, file: FileKey) -> TargetId | None:
         """``target_id`` the file was queued for, or ``None`` (never queued).
@@ -180,4 +189,4 @@ class SqliteTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
             row = self._connection.execute(_QUEUED_TARGET_ID, (file.file_id,)).fetchone()
         if row is None:
             return None
-        return TargetId(row[0])
+        return TargetId(row["target_id"])
