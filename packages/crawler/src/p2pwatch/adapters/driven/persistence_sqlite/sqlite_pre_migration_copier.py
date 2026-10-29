@@ -13,6 +13,7 @@ from urllib.parse import quote
 from p2pwatch.adapters.driven.persistence_sqlite.database_digest import database_digest
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError, wrap_sqlite_errors
 from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import PendingMigrations
+from p2pwatch.adapters.driven.persistence_sqlite.named_row import named_row
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 
 _logger = logging.getLogger(__name__)
@@ -80,6 +81,7 @@ def _matches_its_latest_copy(connection: sqlite3.Connection, path: Path, prefix:
         # Not as_uri(), which refuses a relative path.
         uri = f"file:{quote(str(latest))}?mode=ro"
         with closing(sqlite3.connect(uri, uri=True)) as candidate:
+            candidate.row_factory = named_row
             candidate_digest = database_digest(candidate)
     except sqlite3.Error as error:
         _logger.warning("pre-migration copy: %s cannot be read (%s)", latest, error)

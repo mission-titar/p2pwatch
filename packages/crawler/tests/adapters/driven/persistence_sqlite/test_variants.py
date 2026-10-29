@@ -13,6 +13,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.variants import (
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import fold_raw_metadata
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 
@@ -50,11 +51,13 @@ def test_content_hash_keeps_the_boundary_between_columns() -> None:
 
 
 def test_content_hash_sql_function_matches_the_python_one(connection: sqlite3.Connection) -> None:
-    row = connection.execute(
-        "SELECT content_hash(?, 'Kéroro 062A.avi', 123, NULL, 1100, '[]', 'keroro', 'node-1')",
+    [row] = rows(
+        connection,
+        "SELECT content_hash(?, 'Kéroro 062A.avi', 123, NULL, 1100, '[]', 'keroro', 'node-1')"
+        " AS content_hash",
         (_HASH,),
-    ).fetchone()
-    assert row[0] == _hash()
+    )
+    assert row["content_hash"] == _hash()
 
 
 def test_fold_raw_meta_sql_function_folds_the_stored_text_as_the_domain_does(
@@ -62,8 +65,9 @@ def test_fold_raw_meta_sql_function_folds_the_stored_text_as_the_domain_does(
 ) -> None:
     pairs = (("0x0308", "0"), ("media.title", "Kéroro"))
     stored = json.dumps(pairs, ensure_ascii=False)
-    row = connection.execute("SELECT fold_raw_meta(?, 'xvid', NULL, 2)", (stored,)).fetchone()
-    assert row[0] == json.dumps(fold_raw_metadata(pairs, "xvid", None, 2), ensure_ascii=False)
+    [row] = rows(connection, "SELECT fold_raw_meta(?, 'xvid', NULL, 2) AS raw_meta", (stored,))
+    folded = fold_raw_metadata(pairs, "xvid", None, 2)
+    assert row["raw_meta"] == json.dumps(folded, ensure_ascii=False)
 
 
 def test_a_memoized_sql_function_calls_its_function_once_per_distinct_arguments() -> None:
@@ -75,17 +79,19 @@ def test_a_memoized_sql_function_calls_its_function_once_per_distinct_arguments(
 
     connection = sqlite3.connect(":memory:", autocommit=True)
     create_memoized_function(connection, "repeat", 2, counting)
-    rows = connection.execute(
-        "SELECT repeat(c, 2) FROM (SELECT 'a' AS c UNION ALL SELECT 'a' UNION ALL SELECT 'b')"
-    ).fetchall()
+    repeated = rows(
+        connection,
+        "SELECT repeat(c, 2) AS repeated"
+        " FROM (SELECT 'a' AS c UNION ALL SELECT 'a' UNION ALL SELECT 'b')",
+    )
     connection.close()
-    assert rows == [("aa",), ("aa",), ("bb",)]
+    assert repeated == [{"repeated": "aa"}, {"repeated": "aa"}, {"repeated": "bb"}]
     assert calls == [("a", 2), ("b", 2)]
 
 
 def test_iso_to_micros_sql_function_matches_the_python_one(connection: sqlite3.Connection) -> None:
-    row = connection.execute("SELECT iso_to_micros('1970-01-01T00:00:00.000001+00:00')").fetchone()
-    assert row[0] == 1
+    [row] = rows(connection, "SELECT iso_to_micros('1970-01-01T00:00:00.000001+00:00') AS micros")
+    assert row["micros"] == 1
 
 
 def test_removing_the_migration_functions_removes_iso_to_micros_alone(
@@ -94,16 +100,18 @@ def test_removing_the_migration_functions_removes_iso_to_micros_alone(
     remove_migration_sql_functions(connection)
     with pytest.raises(sqlite3.OperationalError, match="no such function: iso_to_micros"):
         connection.execute("SELECT iso_to_micros('1970-01-01T00:00:00.000001+00:00')")
-    names = connection.execute(
+    names = rows(
+        connection,
         "SELECT name FROM pragma_function_list"
         " WHERE name IN ('content_hash', 'file_id', 'fold_raw_meta', 'iso_to_micros')"
-    ).fetchall()
-    assert sorted(names) == [("content_hash",), ("file_id",), ("fold_raw_meta",)]
+        " ORDER BY name",
+    )
+    assert names == [{"name": "content_hash"}, {"name": "file_id"}, {"name": "fold_raw_meta"}]
 
 
 def test_file_id_sql_function_is_the_file_key_file_id(connection: sqlite3.Connection) -> None:
-    row = connection.execute("SELECT file_id('ed2k', ?)", (_HASH,)).fetchone()
-    assert row[0] == FileKey(Network.ED2K, _HASH).file_id
+    [row] = rows(connection, "SELECT file_id('ed2k', ?) AS file_id", (_HASH,))
+    assert row["file_id"] == FileKey(Network.ED2K, _HASH).file_id
 
 
 def test_file_id_sql_function_refuses_an_unknown_network(connection: sqlite3.Connection) -> None:
