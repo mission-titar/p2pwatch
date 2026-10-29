@@ -9,6 +9,7 @@ from datetime import datetime
 
 from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros, micros_to_instant
+from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
 from p2pwatch.application.ports.driven.source_point_reader import SourcePointReader
 from p2pwatch.application.ports.driven.source_point_writer import SourcePointWriter
 from p2pwatch.domain.file_key import FileKey
@@ -75,7 +76,7 @@ SELECT EXISTS (
     SELECT 1 FROM source_variants AS v
     INNER JOIN source_observations AS o ON v.variant_id = o.variant_id
     WHERE v.node_id = ? AND o.observed_at_micros < ?
-)
+) AS has_points
 """
 
 
@@ -139,7 +140,7 @@ class SqliteSourcePointStore(SourcePointWriter, SourcePointReader):
                     "before": instant_to_micros(before),
                 },
             ).fetchone()
-        return None if row is None else _latest_point(*row)
+        return None if row is None else _latest_point(row)
 
     def read_earlier_points(
         self, source: SourceKey, before: datetime, node_id: NodeId
@@ -154,7 +155,7 @@ class SqliteSourcePointStore(SourcePointWriter, SourcePointReader):
                     "before": instant_to_micros(before),
                 },
             ).fetchall()
-        return tuple(_latest_point(*row) for row in rows)
+        return tuple(_latest_point(row) for row in rows)
 
     def has_points_before(self, before: datetime, node_id: NodeId) -> bool:
         """Whether ``node_id`` has a point observed before ``before``."""
@@ -162,12 +163,14 @@ class SqliteSourcePointStore(SourcePointWriter, SourcePointReader):
             row = self._connection.execute(
                 _HAS_POINTS_BEFORE, (node_id, instant_to_micros(before))
             ).fetchone()
-        return bool(row[0])
+        return bool(row["has_points"])
 
 
-def _latest_point(role: str, observed_at_micros: int, session_received_bytes: int) -> LatestPoint:
+def _latest_point(row: NamedRow) -> LatestPoint:
     return LatestPoint(
-        SourceRole(role), micros_to_instant(observed_at_micros), session_received_bytes
+        SourceRole(row["role"]),
+        micros_to_instant(row["observed_at_micros"]),
+        row["session_received_bytes"],
     )
 
 

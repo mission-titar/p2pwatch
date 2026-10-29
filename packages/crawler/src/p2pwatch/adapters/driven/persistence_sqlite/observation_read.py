@@ -3,9 +3,9 @@
 import json
 import sqlite3
 from collections.abc import Iterator
-from typing import Any
 
 from p2pwatch.adapters.driven.persistence_sqlite.micros import micros_to_instant
+from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Keyword, NodeId
 from p2pwatch.domain.observation import FileObservation, ReportedFile
@@ -45,7 +45,7 @@ LATEST_OBSERVATION_CTE = """latest_observation AS (
     )
 )"""
 
-# Every query below returns these columns in this order, for ``observation_from_row``.
+# Every query below returns these columns, which ``observation_from_row`` reads by name.
 _COLUMNS = (
     "network, native_id, filename, size_bytes, source_count, keyword, duration_seconds,"
     " bitrate_kbps, raw_metadata, observed_at_micros, node_id"
@@ -92,18 +92,20 @@ LIMIT 1
 )
 
 
-def observation_from_row(row: Any) -> FileObservation:
+def observation_from_row(row: NamedRow) -> FileObservation:
     reported_file = ReportedFile(
-        file=FileKey(Network(row[0]), row[1]),
-        filename=row[2],
-        size_bytes=row[3],
-        source_count=row[4],
-        keyword=Keyword(row[5]),
-        duration_seconds=row[6],
-        bitrate_kbps=row[7],
-        raw_metadata=tuple((name, rendered) for name, rendered in json.loads(row[8])),
+        file=FileKey(Network(row["network"]), row["native_id"]),
+        filename=row["filename"],
+        size_bytes=row["size_bytes"],
+        source_count=row["source_count"],
+        keyword=Keyword(row["keyword"]),
+        duration_seconds=row["duration_seconds"],
+        bitrate_kbps=row["bitrate_kbps"],
+        raw_metadata=tuple((name, rendered) for name, rendered in json.loads(row["raw_metadata"])),
     )
-    return FileObservation(reported_file, micros_to_instant(row[9]), NodeId(row[10]))
+    return FileObservation(
+        reported_file, micros_to_instant(row["observed_at_micros"]), NodeId(row["node_id"])
+    )
 
 
 def latest_observation(connection: sqlite3.Connection, file: FileKey) -> FileObservation | None:
@@ -120,7 +122,7 @@ def iter_latest_observations(connection: sqlite3.Connection) -> Iterator[FileObs
 def known_filenames(connection: sqlite3.Connection, file: FileKey) -> tuple[str, ...]:
     """Every distinct filename of the file, sorted."""
     rows = connection.execute(_SELECT_KNOWN_FILENAMES, (file.file_id,)).fetchall()
-    return tuple(row[0] for row in rows)
+    return tuple(row["filename"] for row in rows)
 
 
 def best_observation(connection: sqlite3.Connection, file: FileKey) -> FileObservation | None:

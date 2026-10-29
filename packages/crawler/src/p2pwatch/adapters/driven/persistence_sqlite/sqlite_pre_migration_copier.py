@@ -51,9 +51,11 @@ class SqlitePreMigrationCopier:
 
     def _check_free_space(self, connection: sqlite3.Connection, path: Path) -> None:
         # The copy holds the live pages only; the migrations need the file's size again.
-        page_size = int(connection.execute("PRAGMA page_size").fetchone()[0])
-        page_count = int(connection.execute("PRAGMA page_count").fetchone()[0])
-        freelist_count = int(connection.execute("PRAGMA freelist_count").fetchone()[0])
+        page_size = int(connection.execute("PRAGMA page_size").fetchone()["page_size"])
+        page_count = int(connection.execute("PRAGMA page_count").fetchone()["page_count"])
+        freelist_count = int(
+            connection.execute("PRAGMA freelist_count").fetchone()["freelist_count"]
+        )
         # A connection in WAL mode keeps its -wal while it is open.
         wal_bytes = Path(f"{path}-wal").stat().st_size
         copy_bytes = (page_count - freelist_count) * page_size + wal_bytes

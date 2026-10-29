@@ -58,6 +58,19 @@ def test_select_returns_columns_and_rows(tmp_path: Path) -> None:
     )
 
 
+def test_a_column_name_repeated_keeps_both_columns_in_order(tmp_path: Path) -> None:
+    path = tmp_path / "catalog.db"
+    _seed_catalog(path)
+    query_answer = SqliteSqlExecutor(
+        path,
+        FakeTickingMonotonicClock(FakeTime()),
+        budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
+    ).execute("SELECT 1 AS a, 2 AS a", row_cap=1000, time_limit=_TIME_LIMIT)
+    assert query_answer == QueryAnswer(
+        ("a", "a"), (("1", "2"),), timedelta(seconds=1), truncated=False
+    )
+
+
 def test_renders_none_cell_as_null_literal(tmp_path: Path) -> None:
     """A NULL cell is rendered as the literal string ``NULL`` (not an empty cell)."""
     path = tmp_path / "catalog.db"

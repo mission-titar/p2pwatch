@@ -93,7 +93,10 @@ class SqliteDecisionStore(DecisionWriter, DecisionReader):
         """
         with wrap_sqlite_errors():
             rows = self._connection.execute(_SELECT_LATEST_DECISIONS, (file.file_id,)).fetchall()
-        decisions = [_file_target_decision(TargetId(row[0]), row[1], row[2]) for row in rows]
+        decisions = [
+            _file_target_decision(TargetId(row["target_id"]), row["rule_name"], row["tier"])
+            for row in rows
+        ]
         return {decision.target_id: decision for decision in decisions}
 
     def read_download_candidates(self) -> tuple[DownloadCandidate, ...]:
@@ -105,7 +108,10 @@ class SqliteDecisionStore(DecisionWriter, DecisionReader):
         with wrap_sqlite_errors():
             rows = self._connection.execute(_SELECT_DOWNLOAD_DECISIONS).fetchall()
         return tuple(
-            DownloadCandidate(file=FileKey(Network(row[0]), row[1]), target_id=TargetId(row[2]))
+            DownloadCandidate(
+                file=FileKey(Network(row["network"]), row["native_id"]),
+                target_id=TargetId(row["target_id"]),
+            )
             for row in rows
         )
 

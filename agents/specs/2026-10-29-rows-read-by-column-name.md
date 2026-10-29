@@ -54,8 +54,10 @@ Nothing: no page, metric, notification, config key or schema changes. The SQL co
 3. Two trials, each applied alone at block 50's tip, fail `uv run poe test` in the crawler, the failure line recorded
    in its report: `sqlite_backoff_state_store.py`'s read put back as tuple unpacking (`for client_name, channel, ...
    in rows`); `sqlite_node_id_store.py`'s read put back as `row[0]`.
-4. `git grep -nE 'row\[[0-9]+\]|fetchone\(\)\[[0-9]+\]|\*row\b' -- 'packages/crawler/src/**/*.py'` prints nothing.
-   It sees only an index read on a name `row` or on `fetchone()`, and `*row`; criterion 1 covers the rest.
+4. `git grep -nE 'row\[[0-9]+\]|fetchone\(\)\[[0-9]+\]|\*row\b' -- 'packages/crawler/src/**/*.py'
+   ':!packages/crawler/src/**/named_row.py'` prints nothing. It sees only an index read on a name `row` or on
+   `fetchone()`, and `*row`; criterion 1 covers the rest. *(Corrected: `named_row.py` left out of the pathspec, since
+   its docstring's ``row[0]`` raises would match forever.)*
 
 ## 5. Blocks
 

@@ -16,7 +16,7 @@ already impossible, so these are the real risks, spec §11/§12):
 - **Read-only** is doubly enforced by ``open_reader`` (OS-level ``mode=ro`` PLUS
   ``PRAGMA query_only=ON``): a write raises ``sqlite3.OperationalError`` ("attempt to write a
   readonly database"), mapped to a clear read-only error.
-- **Single statement**: ``Connection.execute`` runs exactly one statement and rejects a second
+- **Single statement**: ``Cursor.execute`` runs exactly one statement and rejects a second
   ("SELECT 1; SELECT 2") with ``sqlite3.ProgrammingError`` ("You can only execute one statement at
   a time"), mapped to a single-statement error.
 - **Monotonic timeout**: a ``set_progress_handler`` callback fires every
@@ -107,7 +107,10 @@ def _run_query(
 
         connection.set_progress_handler(_progress, budget_check_instructions)
         try:
-            cursor = connection.execute(sql)
+            # Positional rows: a query may repeat a column name, and the console keeps the order.
+            cursor = connection.cursor()
+            cursor.row_factory = None
+            cursor.execute(sql)
             fetched = cursor.fetchmany(row_cap + 1)
             elapsed = monotonic_clock.now() - start
             truncated = len(fetched) > row_cap
