@@ -21,7 +21,7 @@ Seven blocks against the spec's six: block 10 passed 20 files (22: the estimate 
 | 20 | #551 | `test/rows-helper-stores` |
 | 30 | #552 | `test/rows-helper-steps` |
 | 40 | #553 | `refactor/local-rows-by-name` |
-| 50 | #TBD | `refactor/rows-by-name` |
+| 50 | #554 | `refactor/rows-by-name` |
 | 60 | the closing block's pull request | `docs/rows-by-name-wrap` |
 
 Not merged at writing. Nothing the operator sees changes (spec section 2): no page, metric, notification, config key
