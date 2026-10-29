@@ -15,10 +15,6 @@ An agent adds an entry only after the operator has agreed to it.
 - **Test quality** (lot 3 of the gate tooling umbrella): every unit test keeps unique coverage of its unit, the others are
   pruned, mutmut proving no detected mutant is lost. D3 to D5 and D13 to D15 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`, lot order in D12.
 
-- **Rows read by column name**: every reader of `persistence_sqlite` reads a column by its name,
-  not its index, and every round-trip test seeds distinct values in fields of one type, so a shifted or swapped
-  column fails the gate. Section 7 of `agents/specs/2026-10-28-typed-identifiers.md`.
-
 ## Must be done before the next release
 
 - **The Grype scan back on p2pwatch at the v5 release**: one leg per image, `p2pwatch` and `p2pwatch-amule`, each with
@@ -52,10 +48,14 @@ An agent adds an entry only after the operator has agreed to it.
 - **Every catalog table STRICT**, as `local.db`'s are: all of them rebuilt at once, so SQLite refuses a value of the
   wrong type; it costs a rebuild of the catalog's largest tables. D2 of `agents/specs/2026-10-28-micros-stamps.md`.
 
+- **Round-trip contracts**: a contract for each Writer/Reader pair and reader-only port of `persistence_sqlite`
+  without one, seeded through the Writers with drawn values, so each port's promise is written once for any
+  implementation. Appendix B of `agents/specs/2026-10-29-rows-read-by-column-name.md`.
+
+- **A generic way to write the tests' stubs and spies**: one typed mechanism for all of them, where a call no stub
+  expects fails the test, in place of a class per port. Candidates measured in `agents/reference/2026-10-25-stub-and-spy-libraries.md`.
+
 ## Postponed
 
 - **Adopt ty**, first as the gate's type checker in mypy's place, then as Serena's language server, once it reaches
   parity. Section "ty: the parity conditions" of `agents/specs/2026-10-17-serena-and-the-language-servers.md`.
-
-- **A generic way to write the tests' stubs and spies**: one typed mechanism for all of them, where a call no stub
-  expects fails the test, in place of a class per port. Candidates measured in `agents/reference/2026-10-25-stub-and-spy-libraries.md`.
