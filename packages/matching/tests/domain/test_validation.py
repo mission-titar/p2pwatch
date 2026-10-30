@@ -453,6 +453,41 @@ def test_parse_targets_rejects_a_status_outside_the_closed_set(status: str) -> N
         )
 
 
+# Cc: the C0 controls, DEL and the C1 controls.
+@pytest.mark.parametrize("letter", ["a\x1fb", "\x85", "\x00", "\x7f", "a\tb"])
+def test_parse_targets_refuses_a_control_character_in_a_letter_and_names_it(letter: str) -> None:
+    with pytest.raises(MatchingConfigError) as raised:
+        parse_targets(
+            {
+                "episodes": [
+                    {
+                        "season": 1,
+                        "seasonal_number": 5,
+                        "absolute_number": 5,
+                        "segments": [{"letter": letter, "title": "x"}],
+                    }
+                ]
+            }
+        )
+    assert str(raised.value) == f"segment letter {letter!r} holds a control character"
+
+
+def test_parse_targets_accepts_a_letter_beyond_ascii_that_is_no_control_character() -> None:
+    targets = parse_targets(
+        {
+            "episodes": [
+                {
+                    "season": 1,
+                    "seasonal_number": 5,
+                    "absolute_number": 5,
+                    "segments": [{"letter": "\xe9\xa0", "title": "x"}],
+                }
+            ]
+        }
+    )
+    assert targets[0].letter == "\xe9\xa0"
+
+
 def test_parse_targets_episode_without_segments() -> None:
     targets = parse_targets(
         {"episodes": [{"season": 1, "seasonal_number": 1, "absolute_number": 1}]}
@@ -584,6 +619,32 @@ def test_rule_without_name_raises() -> None:
                 "rules": [{"tier": "catalog", "scope": "unattributed", "any": ["keroro"]}],
             }
         )
+
+
+@pytest.mark.parametrize("name", ["a\tb", "\x1f", "\x85", "\x7f"])
+def test_a_rule_name_holding_a_control_character_is_refused_and_named(name: str) -> None:
+    with pytest.raises(MatchingConfigError) as raised:
+        parse_matcher_config(
+            {
+                "tokens": {"keroro": {"keyword": "keroro"}},
+                "rules": [
+                    {"name": name, "tier": "catalog", "scope": "unattributed", "any": ["keroro"]}
+                ],
+            }
+        )
+    assert str(raised.value) == f"rule name {name!r} holds a control character"
+
+
+def test_a_rule_name_beyond_ascii_that_is_no_control_character_is_accepted() -> None:
+    config = parse_matcher_config(
+        {
+            "tokens": {"keroro": {"keyword": "keroro"}},
+            "rules": [
+                {"name": "\xe9\xa0", "tier": "catalog", "scope": "unattributed", "any": ["keroro"]}
+            ],
+        }
+    )
+    assert config.rules[0].name == "\xe9\xa0"
 
 
 def test_rules_non_list_raises() -> None:
