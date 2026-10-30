@@ -130,7 +130,7 @@ async def test_the_observation_carries_the_clocks_instant(
         channel=Channel("ed2k"),
         node_id=_NODE_ID,
     )
-    assert rows(catalog_connection, "SELECT observed_at_micros FROM observations") == [
+    assert rows(catalog_connection, sql="SELECT observed_at_micros FROM observations") == [
         {"observed_at_micros": instant_to_micros(wall_clock.now())}
     ]
 
@@ -160,7 +160,9 @@ async def test_new_verdict_is_persisted_and_nudged(
         node_id=_NODE_ID,
     )
     assert changed == 1
-    assert rows(catalog_connection, "SELECT tier FROM match_decisions") == [{"tier": "download"}]
+    assert rows(catalog_connection, sql="SELECT tier FROM match_decisions") == [
+        {"tier": "download"}
+    ]
     assert observation_node_ids(catalog_connection) == decision_node_ids(catalog_connection)
     assert decision_node_ids(catalog_connection) == {_NODE_ID}
     assert observability.notifier.node_ids == [_NODE_ID]
@@ -263,7 +265,7 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
     assert changed == 1
     tiers = [
         decision["tier"]
-        for decision in rows(catalog_connection, "SELECT tier FROM match_decisions ORDER BY id")
+        for decision in rows(catalog_connection, sql="SELECT tier FROM match_decisions ORDER BY id")
     ]
     assert tiers == ["notify", "download"]
     assert waker.woken_subjects == [WakeSubject.DOWNLOAD]
@@ -303,8 +305,8 @@ async def test_persistence_error_is_absorbed_and_cycle_continues(
     assert waker.woken_subjects == []
     assert logger.lines == [  # file= as key=value, like the download side's
         LoggedLine(
-            "error",
-            f"persistence failed on file=ed2k:{_HASH_DL} (injected failure):"
+            level="error",
+            message=f"persistence failed on file=ed2k:{_HASH_DL} (injected failure):"
             " observation skipped, cycle continues",
         )
     ]
@@ -420,8 +422,10 @@ async def test_emits_observation_then_decision_on_change(
         reported_file, client_name=ClientName("amuled"), channel=Channel("ed2k"), node_id=_NODE_ID
     )
     assert observability.logger.lines == [
-        LoggedLine("debug", "observation recorded (ed2k)"),
-        LoggedLine("info", f"decisions for {_DL_NAME} ({_HASH_DL}): 062A none → download"),
+        LoggedLine(level="debug", message="observation recorded (ed2k)"),
+        LoggedLine(
+            level="info", message=f"decisions for {_DL_NAME} ({_HASH_DL}): 062A none → download"
+        ),
     ]
     assert (
         NodeMetricSample(
@@ -453,7 +457,9 @@ async def test_emits_only_observation_when_discarded(
     ).catalog(
         reported_file, client_name=ClientName("amuled"), channel=Channel("kad"), node_id=_NODE_ID
     )
-    assert observability.logger.lines == [LoggedLine("debug", "observation recorded (kad)")]
+    assert observability.logger.lines == [
+        LoggedLine(level="debug", message="observation recorded (kad)")
+    ]
 
 
 @pytest.mark.asyncio
@@ -481,7 +487,7 @@ async def test_multi_segment_observation_records_two_rows(
         node_id=_NODE_ID,
     )
     assert changed == 2
-    assert rows(catalog_connection, "SELECT target_id FROM match_decisions ORDER BY id") == [
+    assert rows(catalog_connection, sql="SELECT target_id FROM match_decisions ORDER BY id") == [
         {"target_id": "062A"},
         {"target_id": "062B"},
     ]

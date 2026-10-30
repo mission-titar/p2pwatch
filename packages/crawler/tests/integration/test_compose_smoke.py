@@ -161,7 +161,7 @@ def _down(files: tuple[Path, ...]) -> None:
     _run("down", "-v", "--remove-orphans", files=files, timeout=180)
 
 
-def _ps_field(service: str, field: str, files: tuple[Path, ...]) -> str:
+def _ps_field(service: str, *, field: str, files: tuple[Path, ...]) -> str:
     """One field of the service's `ps -a --format json` entry (one JSON object per line)."""
     compose_run = _run("ps", "-a", "--format", "json", service, files=files, timeout=60)
     for line in compose_run.stdout.splitlines():
@@ -192,10 +192,10 @@ class ReadinessProbe(Protocol):
 
 def _wait_for(
     label: str,
+    *,
     probe: ReadinessProbe,
     target: str,
     files: tuple[Path, ...],
-    *,
     attempts: int = 30,
     delay: float = 2.0,
 ) -> None:
@@ -307,41 +307,48 @@ def _up_until_ed2k_is_healthy(files: tuple[Path, ...]) -> None:
     assert compose_run.returncode == 0, compose_run.stderr
     # The healthcheck tests s6-svstat's OUTPUT, not its exit code (it exits 0 for a stopped
     # service too). `healthy` therefore means amuled really is up under s6.
-    _wait_for("health", lambda: _ps_field(_AMULE, "Health", files), "healthy", files)
+    _wait_for(
+        "health",
+        probe=lambda: _ps_field(_AMULE, field="Health", files=files),
+        target="healthy",
+        files=files,
+    )
 
 
 def test_the_two_containers_work_together(project_files: tuple[Path, ...]) -> None:
     """Both run, the core reads amuled at `ed2k:4711`, and writes data/ as PUID."""
     _up_until_ed2k_is_healthy(project_files)
     for service in (_CORE, _AMULE):
-        state = partial(_ps_field, service, "State", project_files)
-        _wait_for(f"{service} state", state, "running", project_files)
+        state = partial(_ps_field, service, field="State", files=project_files)
+        _wait_for(f"{service} state", probe=state, target="running", files=project_files)
     # The core serves the read-only webui in-process, on a bind fixed at 0.0.0.0:8080 in code.
     # Polled from the other container, so no host port is needed.
     _wait_for(
         "webui /health from ed2k",
-        lambda: _exec(_AMULE, "python3", "-c", _WEBUI_HEALTH_FROM_ED2K, files=project_files),
-        "200",
-        project_files,
+        probe=lambda: _exec(_AMULE, "python3", "-c", _WEBUI_HEALTH_FROM_ED2K, files=project_files),
+        target="200",
+        files=project_files,
     )
     _wait_for(
         "node metrics on 8080",
-        lambda: _exec(_CORE, "python", "-c", _METRICS_SHOW_THE_CRAWLER_UP, files=project_files),
-        "200 True",
-        project_files,
+        probe=lambda: _exec(
+            _CORE, "python", "-c", _METRICS_SHOW_THE_CRAWLER_UP, files=project_files
+        ),
+        target="200 True",
+        files=project_files,
     )
     assert _exec(_CORE, "python", "-c", _NO_METRICS_SERVER_ON_9090, files=project_files) == "True"
     _wait_for(
         "amuleapi /health",
-        lambda: _exec(_CORE, "python", "-c", _AMULEAPI_HEALTH, files=project_files),
-        "200",
-        project_files,
+        probe=lambda: _exec(_CORE, "python", "-c", _AMULEAPI_HEALTH, files=project_files),
+        target="200",
+        files=project_files,
     )
     _wait_for(
         "dashboard reading of amuled",
-        lambda: _exec(_CORE, "python", "-c", _DASHBOARD_READS_AMULED, files=project_files),
-        "True",
-        project_files,
+        probe=lambda: _exec(_CORE, "python", "-c", _DASHBOARD_READS_AMULED, files=project_files),
+        target="True",
+        files=project_files,
         attempts=60,
     )
     # Read in the container: Docker Desktop's file sharing shows every file as the host user's.
@@ -381,7 +388,7 @@ print(parser.get("eMule", "Port", fallback=None), parser.get("eMule", "UDPPort",
 """
 
 
-def _serve_forwarded_port(port: int, files: tuple[Path, ...]) -> None:
+def _serve_forwarded_port(port: int, *, files: tuple[Path, ...]) -> None:
     """Have the stand-in answer `{"port": <port>}`, its file replaced whole."""
     answer = f"{_GLUETUN_STAND_IN_ROOT}/v1/portforward"
     script = (
@@ -416,7 +423,7 @@ def test_port_sync_restarts_amuled_on_the_forwarded_port_only_when_it_moved(
     port, _ = ports_before.split()
     up, pid_before = _amuled_up_and_pid(project_files).split()
     assert up == "true"
-    _serve_forwarded_port(int(port), project_files)
+    _serve_forwarded_port(int(port), files=project_files)
     serve = f"exec python3 -u -m http.server 8000 -d {_GLUETUN_STAND_IN_ROOT}"
     stand_in = _run(
         "exec",
@@ -435,26 +442,31 @@ def test_port_sync_restarts_amuled_on_the_forwarded_port_only_when_it_moved(
     # One round runs at a time: a second request means the first round has finished.
     _wait_for(
         "two rounds of port-sync",
-        lambda: str(_forwarded_port_requests(project_files) >= 2),
-        "True",
-        project_files,
+        probe=lambda: str(_forwarded_port_requests(project_files) >= 2),
+        target="True",
+        files=project_files,
     )
     assert _listen_ports(project_files) == ports_before
     assert _amuled_up_and_pid(project_files) == f"true {pid_before}"
 
-    _serve_forwarded_port(_FORWARDED_PORT, project_files)
+    _serve_forwarded_port(_FORWARDED_PORT, files=project_files)
     moved = f"{_FORWARDED_PORT} {_FORWARDED_PORT}"
-    _wait_for("amule.conf's ports", partial(_listen_ports, project_files), moved, project_files)
+    _wait_for(
+        "amule.conf's ports",
+        probe=partial(_listen_ports, project_files),
+        target=moved,
+        files=project_files,
+    )
     # Written only while amuled is down: up again, it is the process port-sync started.
     amuled_up = partial(
         _exec, _AMULE, "s6-svstat", "-o", "up", _AMULED_SERVICE, files=project_files
     )
-    _wait_for("amuled up again", amuled_up, "true", project_files)
+    _wait_for("amuled up again", probe=amuled_up, target="true", files=project_files)
     up, pid_after = _amuled_up_and_pid(project_files).split()
     assert (up, pid_after != pid_before) == ("true", True)
 
 
-def _render(variant: str, tmp_path: Path) -> Any:
+def _render(variant: str, *, tmp_path: Path) -> Any:
     """`docker compose config` of a copy of deploy/'s compose files, switched to `variant`.
 
     Copied, so the `.env` it needs never lands in deploy/, where a developer's secrets live. No
@@ -495,9 +507,9 @@ def _ports(service: Any) -> set[tuple[int, str]]:
 
 
 @pytest.mark.parametrize("variant", _VARIANTS)
-def test_the_deploy_layout_renders(variant: str, tmp_path: Path) -> None:
+def test_the_deploy_layout_renders(*, variant: str, tmp_path: Path) -> None:
     """The core and `ed2k` render from deploy/compose.yml, `ed2k` from its own directory."""
-    services = _render(variant, tmp_path)
+    services = _render(variant, tmp_path=tmp_path)
     ed2k_directory = tmp_path / "ed2k"
     core, ed2k = services[_CORE], services[_AMULE]
 
@@ -613,7 +625,7 @@ def _shared_hashes(files: tuple[Path, ...]) -> frozenset[str] | None:
 
 
 def _wait_new_shared_hash(
-    before: frozenset[str], files: tuple[Path, ...], *, attempts: int = 20, delay: float = 2.0
+    before: frozenset[str], *, files: tuple[Path, ...], attempts: int = 20, delay: float = 2.0
 ) -> str:
     """Poll until exactly one hash appeared in amuled's shared list, and return it.
 
@@ -647,9 +659,9 @@ def test_a_file_amuled_shares_is_recorded_completed(project_files: tuple[Path, .
     _up_until_ed2k_is_healthy(project_files)
     _wait_for(
         "webui /health",
-        lambda: _exec(_CORE, "python", "-c", _WEBUI_HEALTH, files=project_files),
-        "200",
-        project_files,
+        probe=lambda: _exec(_CORE, "python", "-c", _WEBUI_HEALTH, files=project_files),
+        target="200",
+        files=project_files,
     )
 
     before = _shared_hashes(project_files)
@@ -677,15 +689,15 @@ def test_a_file_amuled_shares_is_recorded_completed(project_files: tuple[Path, .
         timeout=60,
     )
     assert restart.returncode == 0, f"{restart.stdout}{restart.stderr}"
-    native_id = _wait_new_shared_hash(before, project_files)
+    native_id = _wait_new_shared_hash(before, files=project_files)
 
     # The file is shared and was never in the download queue: the completion signal is complete.
     _exec_python(_SEED_ROW, native_id, files=project_files)
     _wait_for(
         f"download {native_id}",
-        lambda: _exec(_CORE, "python", "-c", _READ_ROW, native_id, files=project_files),
-        "completed True",
-        project_files,
+        probe=lambda: _exec(_CORE, "python", "-c", _READ_ROW, native_id, files=project_files),
+        target="completed True",
+        files=project_files,
     )
 
     # The completion also reached the observability pipeline (the notification, target-labelled).

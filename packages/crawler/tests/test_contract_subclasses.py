@@ -50,7 +50,9 @@ def _package_ports(package: Path) -> list[ClassDefinition]:
     ]
 
 
-def _implementations(package: Path, covered_ports: set[ClassDefinition]) -> list[ClassDefinition]:
+def _implementations(
+    package: Path, *, covered_ports: set[ClassDefinition]
+) -> list[ClassDefinition]:
     """The classes of `src` and `tests/fakes` implementing one of `covered_ports`."""
     files = [
         *(file for file in package.glob("src/**/*.py") if source_ring(file) != PORTS_RING),
@@ -75,7 +77,7 @@ def _implementations_by_suite() -> dict[ClassDefinition, list[ClassDefinition]]:
         covered_ports = {
             port for port in _package_ports(package) if port.name in _covered_port_names(suite)
         }
-        implementations_by_suite[suite] = _implementations(package, covered_ports)
+        implementations_by_suite[suite] = _implementations(package, covered_ports=covered_ports)
     return implementations_by_suite
 
 
@@ -84,7 +86,7 @@ def _subclasses(suite: ClassDefinition) -> list[ClassDefinition]:
         definition
         for file in sorted(package_dir(suite.file).glob("tests/**/test_*.py"))
         for definition in class_definitions(file)
-        if suite in first_party_bases(file, class_def(definition))
+        if suite in first_party_bases(file, class_node=class_def(definition))
     ]
 
 

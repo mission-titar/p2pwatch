@@ -46,8 +46,8 @@ def _raw(
 ) -> None:
     insert_observation(
         connection,
-        native_id,
-        name,
+        native_id=native_id,
+        filename=name,
         observed_at=at,
         source_count=sources,
         duration_seconds=media,
@@ -80,7 +80,7 @@ def _observation(
 
 
 def test_every_read_carries_the_node_of_its_observation(connection: sqlite3.Connection) -> None:
-    insert_file(connection, _A)
+    insert_file(connection, native_id=_A)
     _raw(connection, _A, "keroro.avi", _TIE, node_id="n2")
     observation = _observation("keroro.avi", _TIE, node_id=NodeId("n2"))
     assert observation_read.latest_observation(connection, file=_key(_A)) == observation
@@ -92,7 +92,7 @@ def test_every_read_carries_the_node_of_its_observation(connection: sqlite3.Conn
 
 
 def test_latest_observation_is_the_latest_raw_observation(connection: sqlite3.Connection) -> None:
-    insert_file(connection, _A)
+    insert_file(connection, native_id=_A)
     _raw(connection, _A, "old.avi", "2026-06-01T10:00:00.000000+00:00")
     _raw(connection, _A, "new.avi", "2026-06-02T10:00:00.000000+00:00", media=60)
     _raw(connection, _A, "older.avi", "2026-05-01T10:00:00.000000+00:00")
@@ -103,7 +103,7 @@ def test_latest_observation_is_the_latest_raw_observation(connection: sqlite3.Co
 def test_latest_observation_breaks_an_observed_at_tie_on_the_newest_variant_then_the_sources(
     connection: sqlite3.Connection,
 ) -> None:
-    insert_file(connection, _A)
+    insert_file(connection, native_id=_A)
     _raw(connection, _A, "first.avi", _TIE, sources=9)
     _raw(connection, _A, "second.avi", _TIE, sources=1)
     _raw(connection, _A, "second.avi", _TIE, sources=4)
@@ -114,7 +114,7 @@ def test_latest_observation_breaks_an_observed_at_tie_on_the_newest_variant_then
 def test_latest_observation_of_a_file_never_seen_or_unknown_is_none(
     connection: sqlite3.Connection,
 ) -> None:
-    insert_file(connection, _A)
+    insert_file(connection, native_id=_A)
     assert observation_read.latest_observation(connection, file=_key(_A)) is None
     assert observation_read.latest_observation(connection, file=_key(_B)) is None
 
@@ -123,7 +123,7 @@ def test_iter_latest_observations_yields_one_per_seen_file_sorted_by_hash(
     connection: sqlite3.Connection,
 ) -> None:
     for native_id in (_C, _B, _A):
-        insert_file(connection, native_id)
+        insert_file(connection, native_id=native_id)
     _raw(connection, _C, "c.avi", "2026-05-01T10:00:00.000000+00:00")
     _raw(connection, _A, "old.avi", "2026-06-01T10:00:00.000000+00:00")
     _raw(connection, _A, "new.avi", "2026-06-02T10:00:00.000000+00:00")
@@ -136,8 +136,8 @@ def test_iter_latest_observations_yields_one_per_seen_file_sorted_by_hash(
 def test_known_names_are_every_distinct_name_of_the_file_sorted(
     connection: sqlite3.Connection,
 ) -> None:
-    insert_file(connection, _A)
-    insert_file(connection, _B)
+    insert_file(connection, native_id=_A)
+    insert_file(connection, native_id=_B)
     _raw(connection, _A, "raw.avi", "2026-06-01T10:00:00.000000+00:00")
     _raw(connection, _A, "raw.avi", "2026-06-02T10:00:00.000000+00:00")
     _raw(connection, _A, "old [ES].avi", "2026-05-01T10:00:00.000000+00:00")
@@ -150,7 +150,7 @@ def test_known_names_are_every_distinct_name_of_the_file_sorted(
 
 
 def test_best_observation_is_the_most_sourced(connection: sqlite3.Connection) -> None:
-    insert_file(connection, _A)
+    insert_file(connection, native_id=_A)
     _raw(connection, _A, "clean.avi", "2026-06-01T10:00:00.000000+00:00", sources=8)
     _raw(connection, _A, "mojibake.avi", "2026-06-02T10:00:00.000000+00:00", sources=3)
     best = _observation("clean.avi", "2026-06-01T10:00:00.000000+00:00", sources=8)
@@ -160,7 +160,7 @@ def test_best_observation_is_the_most_sourced(connection: sqlite3.Connection) ->
 def test_best_observation_takes_the_latest_seen_on_a_source_tie(
     connection: sqlite3.Connection,
 ) -> None:
-    insert_file(connection, _A)
+    insert_file(connection, native_id=_A)
     _raw(connection, _A, "later.avi", "2026-06-02T10:00:00.000000+00:00")
     _raw(connection, _A, "earlier.avi", "2026-06-01T10:00:00.000000+00:00")
     best = _observation("later.avi", "2026-06-02T10:00:00.000000+00:00")
@@ -168,13 +168,13 @@ def test_best_observation_takes_the_latest_seen_on_a_source_tie(
 
 
 def test_best_observation_of_a_file_never_seen_is_none(connection: sqlite3.Connection) -> None:
-    insert_file(connection, _A)
+    insert_file(connection, native_id=_A)
     assert observation_read.best_observation(connection, file=_key(_A)) is None
 
 
 def test_observations_between_are_the_timeline_oldest_first(connection: sqlite3.Connection) -> None:
-    insert_file(connection, _A)
-    insert_file(connection, _B)
+    insert_file(connection, native_id=_A)
+    insert_file(connection, native_id=_B)
     _raw(connection, _A, "late.avi", "2026-06-02T10:00:00.000000+00:00")
     _raw(connection, _A, "early.avi", "2026-05-01T10:00:00.000000+00:00")
     _raw(connection, _A, "tie 1.avi", "2026-05-15T10:00:00.000000+00:00")
@@ -195,7 +195,7 @@ def test_observations_between_are_the_timeline_oldest_first(connection: sqlite3.
 
 
 def test_the_timeline_reads_its_interval_only(connection: sqlite3.Connection) -> None:
-    insert_file(connection, _A)
+    insert_file(connection, native_id=_A)
     ats = [
         "2026-10-06T19:59:59.999999+00:00",
         "2026-10-06T20:00:00.000000+00:00",
@@ -230,7 +230,9 @@ def test_observation_reads_seek_a_variant_s_observations_by_primary_key(
     # Asserts the PLAN, not a duration: a scan of observations is 11.6M rows on the node.
     plan = [
         str(step["detail"])
-        for step in rows(connection, "EXPLAIN QUERY PLAN " + sql, (_A,) * sql.count("?"))
+        for step in rows(
+            connection, sql="EXPLAIN QUERY PLAN " + sql, parameters=(_A,) * sql.count("?")
+        )
     ]
     assert any(re.match(r"SEARCH o\w* USING PRIMARY KEY \(variant_id=\?", step) for step in plan), (
         plan
@@ -243,8 +245,8 @@ def test_the_timeline_seeks_its_interval_by_primary_key(connection: sqlite3.Conn
         str(step["detail"])
         for step in rows(
             connection,
-            "EXPLAIN QUERY PLAN " + observation_read._SELECT_OBSERVATIONS_BETWEEN,
-            (_A, 0, 1),
+            sql="EXPLAIN QUERY PLAN " + observation_read._SELECT_OBSERVATIONS_BETWEEN,
+            parameters=(_A, 0, 1),
         )
     ]
     assert (

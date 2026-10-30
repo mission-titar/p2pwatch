@@ -5,7 +5,7 @@ from p2pwatch.application.ports.driving.file_describer import FileDescriber, Fil
 from p2pwatch.domain.identifiers import FileId
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class DescribeFileCall:
     """The arguments of one ``describe_file`` call."""
 
@@ -28,5 +28,9 @@ class FakeFileDescriber(FileDescriber):
         requested_since: datetime | None,
         requested_until: datetime | None,
     ) -> FileDescription | None:
-        self.calls.append(DescribeFileCall(file_id, requested_since, requested_until))
+        self.calls.append(
+            DescribeFileCall(
+                file_id=file_id, requested_since=requested_since, requested_until=requested_until
+            )
+        )
         return self._file_description

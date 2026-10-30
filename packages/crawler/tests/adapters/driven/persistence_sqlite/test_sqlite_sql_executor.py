@@ -32,7 +32,7 @@ def _seed_catalog(path: Path) -> None:
     """Create + seed a real catalog.db via the writer."""
     writer = open_catalog(path)
     try:
-        insert_file(writer, _HASH_A, 10)
+        insert_file(writer, native_id=_HASH_A, size_bytes=10)
     finally:
         writer.close()
 

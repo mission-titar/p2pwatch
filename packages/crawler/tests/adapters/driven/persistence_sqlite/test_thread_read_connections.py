@@ -27,7 +27,7 @@ def _seed(path: Path) -> None:
     """Create + seed a real catalog.db via the writer (readers need a real file, mode=ro)."""
     writer = open_catalog(path)
     try:
-        insert_file(writer, _HASH_A, 10)
+        insert_file(writer, native_id=_HASH_A, size_bytes=10)
     finally:
         writer.close()
 
@@ -110,11 +110,11 @@ def test_reused_connection_sees_data_committed_after_first_handout(tmp_path: Pat
     writer = open_catalog(path)
     reader = thread_read_connections.connection()
     try:
-        assert rows(reader, _FILE_COUNT) == [{"file_count": 1}]
-        insert_file(writer, _HASH_B, 20)
+        assert rows(reader, sql=_FILE_COUNT) == [{"file_count": 1}]
+        insert_file(writer, native_id=_HASH_B, size_bytes=20)
         reused = thread_read_connections.connection()
         assert reused is reader
-        assert rows(reused, _FILE_COUNT) == [{"file_count": 2}]
+        assert rows(reused, sql=_FILE_COUNT) == [{"file_count": 2}]
     finally:
         writer.close()
         reader.close()

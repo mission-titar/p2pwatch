@@ -32,7 +32,7 @@ class FakeSearchClient(SearchClient):
         return self._channels
 
     async def search(
-        self, keyword: Keyword, channel: Channel, budget_seconds: float
+        self, keyword: Keyword, *, channel: Channel, budget_seconds: float
     ) -> SearchAnswer:
         self.searches.append((keyword, channel))
         self.budgets.append(budget_seconds)

@@ -217,10 +217,13 @@ async def test_a_completion_names_the_clean_file_and_every_download_target_of_th
         client=FakeDownloadClient(listed=[(status(HASH_A, completed=True),)]),
         tracked_download_store=tracked_download_store,
         decision_reader=FakeDecisionReader(
-            candidates=(candidate(HASH_A, TargetId("062A")), candidate(HASH_A, TargetId("063A")))
+            candidates=(
+                candidate(HASH_A, target_id=TargetId("062A")),
+                candidate(HASH_A, target_id=TargetId("063A")),
+            )
         ),
         observation_reader=FakeObservationReader(
-            best={HASH_A: observation(HASH_A, "Keroro é.avi", 100)}
+            best={HASH_A: observation(HASH_A, filename="Keroro é.avi", size_bytes=100)}
         ),
         observability_dispatcher=observability.dispatcher,
     )
@@ -270,8 +273,12 @@ async def test_a_download_amuled_no_longer_knows_becomes_failed() -> None:
     client, fake_time = FakeDownloadClient(listed=[(status(HASH_A),), ()]), FakeTime()
     logger = FakeLogger()
     tracked_download_store = FakeTrackedDownloadStore()
-    tracked_download_store.record_queued(key(HASH_A), TargetId("062A"), 1, fake_time.wall.now())
-    observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "a", 1)})
+    tracked_download_store.record_queued(
+        key(HASH_A), target_id=TargetId("062A"), size_bytes=1, queued_at=fake_time.wall.now()
+    )
+    observation_reader = FakeObservationReader(
+        observations={HASH_A: observation(HASH_A, filename="a", size_bytes=1)}
+    )
     cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
@@ -287,7 +294,10 @@ async def test_a_download_amuled_no_longer_knows_becomes_failed() -> None:
     assert tracked_download_store.failures[HASH_A] is FailureReason.LOST
     assert client.started == []  # failed by the TTL: never started again
     assert (
-        LoggedLine("warning", f"file={HASH_A} unseen by the client for 3600.0s: marked failed")
+        LoggedLine(
+            level="warning",
+            message=f"file={HASH_A} unseen by the client for 3600.0s: marked failed",
+        )
         in logger.lines
     )
 
@@ -299,9 +309,11 @@ async def test_each_download_write_carries_the_instant_read_right_before_it() ->
     client = FakeDownloadClient(listed=[(status(HASH_A, completed=True),)])
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.states[HASH_A] = DownloadState.DOWNLOADING
-    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_B, TargetId("062A")),))
+    decision_reader = FakeDecisionReader(
+        candidates=(candidate(HASH_B, target_id=TargetId("062A")),)
+    )
     observation_reader = FakeObservationReader(
-        observations={HASH_B: observation(HASH_B, "b.avi", 100)}
+        observations={HASH_B: observation(HASH_B, filename="b.avi", size_bytes=100)}
     )
     cycle = build_cycle(
         client=client,
@@ -356,7 +368,7 @@ async def test_waiting_for_sources_is_not_failing_for_a_simulated_year(tmp_path:
     for _ in range(12):
         fake_time.advance(timedelta(days=30))
         await cycle.run(NODE_ID)
-    assert rows(connection, "SELECT state, waiting_reason, failure_reason FROM downloads") == [
+    assert rows(connection, sql="SELECT state, waiting_reason, failure_reason FROM downloads") == [
         {"state": "downloading", "waiting_reason": "no_source", "failure_reason": None}
     ]
     connection.close()
@@ -447,9 +459,11 @@ async def test_a_download_the_node_queued_is_lost_after_lost_after_of_monotonic_
     cycle = build_cycle(
         client=FakeDownloadClient(),  # never lists it
         tracked_download_store=real_tracked_download_store,
-        decision_reader=FakeDecisionReader(candidates=(candidate(HASH_A, TargetId("062A")),)),
+        decision_reader=FakeDecisionReader(
+            candidates=(candidate(HASH_A, target_id=TargetId("062A")),)
+        ),
         observation_reader=FakeObservationReader(
-            observations={HASH_A: observation(HASH_A, "a.avi", 10)}
+            observations={HASH_A: observation(HASH_A, filename="a.avi", size_bytes=10)}
         ),
         lost_after=timedelta(days=1),
         fake_time=fake_time,
@@ -467,7 +481,9 @@ async def test_a_download_the_node_queued_is_lost_after_lost_after_of_monotonic_
 async def test_a_row_the_operator_deleted_then_queued_again_waits_lost_after_anew() -> None:
     fake_time = FakeTime()
     tracked_download_store = FakeTrackedDownloadStore()
-    tracked_download_store.record_queued(key(HASH_A), TargetId("062A"), 10, fake_time.wall.now())
+    tracked_download_store.record_queued(
+        key(HASH_A), target_id=TargetId("062A"), size_bytes=10, queued_at=fake_time.wall.now()
+    )
     cycle = build_cycle(
         client=FakeDownloadClient(listed=[(status(HASH_A),)]),
         tracked_download_store=tracked_download_store,
@@ -477,7 +493,9 @@ async def test_a_row_the_operator_deleted_then_queued_again_waits_lost_after_ane
     del tracked_download_store.states[HASH_A]  # for a manual retry
     await cycle.run(NODE_ID)
     fake_time.advance(timedelta(hours=12))
-    tracked_download_store.record_queued(key(HASH_A), TargetId("062A"), 10, fake_time.wall.now())
+    tracked_download_store.record_queued(
+        key(HASH_A), target_id=TargetId("062A"), size_bytes=10, queued_at=fake_time.wall.now()
+    )
     fake_time.advance(timedelta(hours=12))
     await cycle.run(NODE_ID)
     assert tracked_download_store.states[HASH_A] is DownloadState.QUEUED
@@ -528,8 +546,12 @@ async def test_tracked_states_store_failure_is_absorbed_at_step_2() -> None:
 async def test_presence_store_failure_is_absorbed_and_candidates_still_run() -> None:
     client = FakeDownloadClient()
     tracked_download_store = FakeTrackedDownloadStore(fail_set_seen=True)
-    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, TargetId("062A")),))
-    observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "x", 100)})
+    decision_reader = FakeDecisionReader(
+        candidates=(candidate(HASH_A, target_id=TargetId("062A")),)
+    )
+    observation_reader = FakeObservationReader(
+        observations={HASH_A: observation(HASH_A, filename="x", size_bytes=100)}
+    )
     cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,

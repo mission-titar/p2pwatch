@@ -65,7 +65,7 @@ class FakeSourceReader(SourceReader):
         return self._source_name_history
 
     def read_sharing_periods(
-        self, file: FileKey, window: PeriodWindow
+        self, file: FileKey, *, window: PeriodWindow
     ) -> tuple[SharingPeriod, ...]:
         self.calls.append(("read_sharing_periods", {"file": file, "window": window}))
         return self._sharing_periods

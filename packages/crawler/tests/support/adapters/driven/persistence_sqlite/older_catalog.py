@@ -16,32 +16,32 @@ from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener imp
 _MIGRATIONS = resources.files("p2pwatch.adapters.driven.persistence_sqlite") / "migrations"
 
 
-def open_catalog_at(path: Path, version: int) -> sqlite3.Connection:
+def open_catalog_at(path: Path, *, version: int) -> sqlite3.Connection:
     """A catalog.db migrated up to ``version`` only, as an older release left it."""
-    return database_opener().open(path, scripts=_scripts_up_to("catalog", version))
+    return database_opener().open(path, scripts=_scripts_up_to("catalog", version=version))
 
 
-def open_catalog_forcing_secure_delete_at(path: Path, version: int) -> sqlite3.Connection:
+def open_catalog_forcing_secure_delete_at(path: Path, *, version: int) -> sqlite3.Connection:
     """The same, ``secure_delete`` ON: stands for the image's SQLite, which compiles it in."""
     opener = database_opener_setting("PRAGMA secure_delete = ON")
-    return opener.open(path, scripts=_scripts_up_to("catalog", version))
+    return opener.open(path, scripts=_scripts_up_to("catalog", version=version))
 
 
-def open_local_at(path: Path, version: int) -> sqlite3.Connection:
+def open_local_at(path: Path, *, version: int) -> sqlite3.Connection:
     """The same for a local.db."""
-    return database_opener().open(path, scripts=_scripts_up_to("local", version))
+    return database_opener().open(path, scripts=_scripts_up_to("local", version=version))
 
 
-def _scripts_up_to(database: str, version: int) -> tuple[Migration, ...]:
+def _scripts_up_to(database: str, *, version: int) -> tuple[Migration, ...]:
     scripts = load_scripts(_MIGRATIONS / database)
     return tuple(script for script in scripts if script.version <= version)
 
 
 def insert_stage4_variant(
     connection: sqlite3.Connection,
+    *,
     native_id: str,
     user_hash: str | None,
-    *,
     name: str | None = "AnimuseeFMR",
     role: str = "queued",
 ) -> int:
@@ -54,9 +54,15 @@ def insert_stage4_variant(
     key = hashlib.blake2b(repr((native_id, user_hash, name, role)).encode(), digest_size=16)
     [variant] = rows(
         connection,
-        "INSERT INTO source_variants (file_id, source_id, name, role, raw_meta, content_hash)"
+        sql="INSERT INTO source_variants (file_id, source_id, name, role, raw_meta, content_hash)"
         " VALUES (?, ?, ?, ?, '{}', ?) RETURNING variant_id",
-        (FileKey(network=Network.ED2K, native_id=native_id).file_id, sid, name, role, key.digest()),
+        parameters=(
+            FileKey(network=Network.ED2K, native_id=native_id).file_id,
+            sid,
+            name,
+            role,
+            key.digest(),
+        ),
     )
     variant_id: int = variant["variant_id"]
     return variant_id
@@ -64,10 +70,10 @@ def insert_stage4_variant(
 
 def insert_stage4_range(
     connection: sqlite3.Connection,
+    *,
     variant_id: int,
     first_seen_at: int,
     last_seen_at: int,
-    *,
     node_id: str = "n1",
     received_bytes: int = 0,
     transfer_counter: int = 0,
@@ -82,9 +88,9 @@ def insert_stage4_range(
 
 def insert_v11_observation(
     connection: sqlite3.Connection,
+    *,
     native_id: str,
     filename: str,
-    *,
     observed_at: int = 10,
     media_length_sec: int | None = None,
 ) -> None:
@@ -110,9 +116,9 @@ def insert_v11_observation(
 
 def insert_v11_source_point(
     connection: sqlite3.Connection,
+    *,
     native_id: str,
     user_hash: str,
-    *,
     directly_reachable: bool,
     transfer_counter: int,
 ) -> None:
@@ -120,10 +126,10 @@ def insert_v11_source_point(
     key = hashlib.blake2b(repr((native_id, user_hash)).encode(), digest_size=16).digest()
     [variant] = rows(
         connection,
-        "INSERT INTO source_variants (file_id, source_id, name, role, directly_reachable,"
+        sql="INSERT INTO source_variants (file_id, source_id, name, role, directly_reachable,"
         " raw_meta, node_id, content_hash)"
         " VALUES (?, ?, 'AnimuseeFMR', 'sending', ?, '{}', 'n1', ?) RETURNING variant_id",
-        (
+        parameters=(
             FileKey(network=Network.ED2K, native_id=native_id).file_id,
             SourceKey(network=Network.ED2K, native_id=user_hash).source_id,
             directly_reachable,
@@ -138,7 +144,7 @@ def insert_v11_source_point(
 
 
 def insert_v12_observation(
-    connection: sqlite3.Connection, native_id: str, filename: str, *, observed_at: int = 10
+    connection: sqlite3.Connection, *, native_id: str, filename: str, observed_at: int = 10
 ) -> None:
     """An observation of version 12, before 0013 renamed ``raw_meta``."""
     variant = (FileKey(network=Network.ED2K, native_id=native_id).file_id, filename, 100, None)
@@ -156,16 +162,18 @@ def insert_v12_observation(
     )
 
 
-def insert_v12_source_point(connection: sqlite3.Connection, native_id: str, user_hash: str) -> None:
+def insert_v12_source_point(
+    connection: sqlite3.Connection, *, native_id: str, user_hash: str
+) -> None:
     """A ``source_variants`` row of version 12 and one point of it, before 0013's rename."""
     key = hashlib.blake2b(repr((native_id, user_hash)).encode(), digest_size=16).digest()
     [variant] = rows(
         connection,
-        "INSERT INTO source_variants (file_id, source_id, name, role, connectable,"
+        sql="INSERT INTO source_variants (file_id, source_id, name, role, connectable,"
         " raw_meta, node_id, content_hash)"
         " VALUES (?, ?, 'AnimuseeFMR', 'sending', 1, '{\"version\": \"2.3.3\"}', 'n1', ?)"
         " RETURNING variant_id",
-        (
+        parameters=(
             FileKey(network=Network.ED2K, native_id=native_id).file_id,
             SourceKey(network=Network.ED2K, native_id=user_hash).source_id,
             key,
@@ -178,7 +186,9 @@ def insert_v12_source_point(connection: sqlite3.Connection, native_id: str, user
     )
 
 
-def insert_v13_observation(connection: sqlite3.Connection, native_id: str, filename: str) -> None:
+def insert_v13_observation(
+    connection: sqlite3.Connection, *, native_id: str, filename: str
+) -> None:
     """An observation of version 13, before 0014 renamed ``observed_at``."""
     variant = (FileKey(network=Network.ED2K, native_id=native_id).file_id, filename, 100, None)
     key = content_hash(*variant, None, "[]", "keroro", "n1")
@@ -196,7 +206,7 @@ def insert_v13_observation(connection: sqlite3.Connection, native_id: str, filen
     )
 
 
-def insert_v13_source_point(connection: sqlite3.Connection, variant_id: int) -> None:
+def insert_v13_source_point(connection: sqlite3.Connection, *, variant_id: int) -> None:
     """A point of version 13 on ``variant_id``, before 0014 renamed ``observed_at``."""
     connection.execute(
         "INSERT INTO source_observations (variant_id, observed_at, session_received_bytes)"
@@ -207,8 +217,8 @@ def insert_v13_source_point(connection: sqlite3.Connection, variant_id: int) -> 
 
 def insert_v14_decision(
     connection: sqlite3.Connection,
-    native_id: str,
     *,
+    native_id: str,
     decision_id: int | None = None,
     decided_at: str = "2026-06-22T10:00:00.000000+00:00",
 ) -> None:

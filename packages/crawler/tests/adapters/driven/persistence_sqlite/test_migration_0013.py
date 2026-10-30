@@ -24,12 +24,12 @@ _RENAME = re.compile(r"ALTER TABLE (\w+) RENAME COLUMN (\w+) TO (\w+)")
 
 
 def _schema(connection: sqlite3.Connection) -> list[dict[str, Any]]:
-    return rows(connection, "SELECT type, name, sql FROM sqlite_schema ORDER BY type, name")
+    return rows(connection, sql="SELECT type, name, sql FROM sqlite_schema ORDER BY type, name")
 
 
 def _table_rows(connection: sqlite3.Connection) -> dict[str, list[dict[str, Any]]]:
     tables = [row["name"] for row in _schema(connection) if row["type"] == "table"]
-    return {table: rows(connection, f"SELECT * FROM {table} ORDER BY 1, 2") for table in tables}
+    return {table: rows(connection, sql=f"SELECT * FROM {table} ORDER BY 1, 2") for table in tables}
 
 
 def _renamed_columns(row: dict[str, Any]) -> dict[str, Any]:
@@ -43,24 +43,24 @@ def _renamed(sql: str | None) -> str | None:
 
 def test_0013_renames_raw_meta_in_the_schema_and_keeps_every_value(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
-    connection = open_catalog_at(path, 12)
-    insert_file(connection, _A)
-    insert_v12_observation(connection, _A, "Keroro 062.avi")
-    insert_v14_decision(connection, _A)
-    insert_source(connection, _USER)
-    insert_v12_source_point(connection, _A, _USER)
+    connection = open_catalog_at(path, version=12)
+    insert_file(connection, native_id=_A)
+    insert_v12_observation(connection, native_id=_A, filename="Keroro 062.avi")
+    insert_v14_decision(connection, native_id=_A)
+    insert_source(connection, user_hash=_USER)
+    insert_v12_source_point(connection, native_id=_A, user_hash=_USER)
     schema, table_rows = _schema(connection), _table_rows(connection)
     connection.close()
 
-    connection = open_catalog_at(path, 13)
+    connection = open_catalog_at(path, version=13)
     try:
-        assert rows(connection, "PRAGMA user_version") == [{"user_version": 13}]
+        assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 13}]
         assert _schema(connection) == [{**row, "sql": _renamed(row["sql"])} for row in schema]
         assert _table_rows(connection) == {
             table: [_renamed_columns(row) for row in kept] for table, kept in table_rows.items()
         }
         assert all(table_rows[table] for table, _, _ in _RENAMED)
-        assert rows(connection, "PRAGMA integrity_check") == [{"integrity_check": "ok"}]
+        assert rows(connection, sql="PRAGMA integrity_check") == [{"integrity_check": "ok"}]
     finally:
         connection.close()
 

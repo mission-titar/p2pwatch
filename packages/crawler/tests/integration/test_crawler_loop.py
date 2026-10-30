@@ -49,7 +49,7 @@ class _SearchRecordedHandler(logging.Handler):
 
 
 @pytest.mark.asyncio
-async def test_real_loop_runs_one_search_and_stops(amuled: ApiEndpoint, tmp_path: Path) -> None:
+async def test_real_loop_runs_one_search_and_stops(*, amuled: ApiEndpoint, tmp_path: Path) -> None:
     config_path = tmp_path / "crawler.yml"
     config_path.write_text(_CONFIG.format(data=tmp_path), encoding="utf-8")
     crawler_composition = CrawlerComposition(

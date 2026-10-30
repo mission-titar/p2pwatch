@@ -49,7 +49,8 @@ def test_a_recorded_node_id_keeps_its_created_at_as_micros(
 
     assert rows(
         connection,
-        "SELECT typeof(created_at_micros) AS created_at_type, created_at_micros FROM node_identity",
+        sql="SELECT typeof(created_at_micros) AS created_at_type, created_at_micros"
+        " FROM node_identity",
     ) == [{"created_at_type": "integer", "created_at_micros": instant_to_micros(_START)}]
 
 

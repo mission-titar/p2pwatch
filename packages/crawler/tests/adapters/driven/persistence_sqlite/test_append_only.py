@@ -41,11 +41,15 @@ _UPDATES = {
 @pytest.fixture
 def seeded_catalog(tmp_path: Path) -> Iterator[sqlite3.Connection]:
     connection = open_catalog(tmp_path / "catalog.db")
-    insert_file(connection, _HASH, 1)
-    insert_observation(connection, _HASH, "f")
-    insert_decision(connection, _HASH, "062A", "download")
-    insert_source(connection, _HASH)
-    insert_source_point(connection, insert_source_variant(connection, _HASH, _HASH), 1)
+    insert_file(connection, native_id=_HASH, size_bytes=1)
+    insert_observation(connection, native_id=_HASH, filename="f")
+    insert_decision(connection, native_id=_HASH, target_id="062A", tier="download")
+    insert_source(connection, user_hash=_HASH)
+    insert_source_point(
+        connection,
+        variant_id=insert_source_variant(connection, native_id=_HASH, user_hash=_HASH),
+        observed_at_micros=1,
+    )
     yield connection
     connection.close()
 
@@ -69,5 +73,7 @@ def test_direct_delete_is_rejected_by_the_database(
 def test_insert_remains_allowed_on_every_table(seeded_catalog: sqlite3.Connection) -> None:
     # Append-only = you can ALWAYS add (the seed INSERT already succeeded);
     # here we prove a SECOND insert passes too (the triggers only block U/D).
-    insert_file(seeded_catalog, "b" * 32, 2)
-    assert rows(seeded_catalog, "SELECT count(*) AS file_count FROM files") == [{"file_count": 2}]
+    insert_file(seeded_catalog, native_id="b" * 32, size_bytes=2)
+    assert rows(seeded_catalog, sql="SELECT count(*) AS file_count FROM files") == [
+        {"file_count": 2}
+    ]

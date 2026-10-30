@@ -175,7 +175,7 @@ async def _crawl_until_a_search_is_read(config_path: Path, targets_path: Path) -
     with FakeAmuleApiServer(FakeAmuleApi()) as server:
         run = _crawl(server, config_path, targets_path)
         assert await asyncio.to_thread(
-            server.wait_for, lambda seen: _searches_read(seen) >= 1, _WAIT_SECONDS
+            server.wait_for, lambda seen: _searches_read(seen) >= 1, timeout_seconds=_WAIT_SECONDS
         )
         _send_sigterm(default_sigterm)
         await asyncio.wait_for(run, _WAIT_SECONDS)
@@ -206,7 +206,7 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
     with FakeAmuleApiServer(api) as server, caplog.at_level(logging.INFO):
         run = _crawl(server, config_path, targets_path)
         assert await asyncio.to_thread(
-            server.wait_for, lambda seen: bool(seen.added_links), _WAIT_SECONDS
+            server.wait_for, lambda seen: bool(seen.added_links), timeout_seconds=_WAIT_SECONDS
         )
         host, port = _webui_bound_address(caplog.messages)
         async with httpx.AsyncClient() as http:
@@ -288,7 +288,7 @@ async def test_the_download_loop_records_a_tracked_downloads_sources_under_the_n
     tmp_path: Path,
 ) -> None:
     catalog = open_catalog(tmp_path / "catalog.db")
-    insert_file(catalog, _HASH)
+    insert_file(catalog, native_id=_HASH)
     catalog.close()
     local = open_local(tmp_path / "local.db")
     SqliteTrackedDownloadStore(local).record_queued(
@@ -316,7 +316,7 @@ async def test_the_download_loop_records_a_tracked_downloads_sources_under_the_n
     with FakeAmuleApiServer(api) as server:
         run = _crawl(server, config_path)
         assert await asyncio.to_thread(
-            server.wait_for, _has_read_the_sources_then_listed_again, _WAIT_SECONDS
+            server.wait_for, _has_read_the_sources_then_listed_again, timeout_seconds=_WAIT_SECONDS
         )
         _send_sigterm(default_sigterm)
         await asyncio.wait_for(run, _WAIT_SECONDS)
@@ -342,7 +342,7 @@ async def test_the_nodes_notifications_carry_its_id_in_their_username_and_title(
     with FakeAmuleApiServer(FakeAmuleApi()) as server:
         run = _crawl(server, config_path)
         assert await asyncio.to_thread(
-            server.wait_for, lambda seen: _searches_read(seen) >= 1, _WAIT_SECONDS
+            server.wait_for, lambda seen: _searches_read(seen) >= 1, timeout_seconds=_WAIT_SECONDS
         )
         _send_sigterm(default_sigterm)
         await asyncio.wait_for(run, _WAIT_SECONDS)
@@ -374,7 +374,7 @@ async def test_observer_mode_crawls_its_config_files_with_one_ed2k_search_until_
         run = _crawl(server, config_path, root_logger=root_logger)
         # The first ed2k search and both Kad ones, each read to its end.
         assert await asyncio.to_thread(
-            server.wait_for, lambda seen: _searches_read(seen) >= 3, _WAIT_SECONDS
+            server.wait_for, lambda seen: _searches_read(seen) >= 3, timeout_seconds=_WAIT_SECONDS
         )
         _send_sigterm(default_sigterm)
         await asyncio.wait_for(run, _WAIT_SECONDS)
@@ -410,7 +410,9 @@ def test_the_shutdown_deadline_spares_the_run_then_cuts_a_logout_amuled_never_an
         with FakeAmuleApiServer(api) as server:
             run = _crawl(server, config_path)
             assert await asyncio.to_thread(
-                server.wait_for, lambda seen: _searches_read(seen) >= 1, _WAIT_SECONDS
+                server.wait_for,
+                lambda seen: _searches_read(seen) >= 1,
+                timeout_seconds=_WAIT_SECONDS,
             )
             # Only time shows an absence: armed from the start, the deadline would end the run.
             await asyncio.sleep(2 * deadline_seconds)  # noqa: TID251
@@ -453,7 +455,7 @@ async def test_a_backoff_the_previous_run_saved_holds_the_ed2k_search(
         run = _crawl(server, config_path)
         # Unheld, the ed2k start goes out with Kad's, well before Kad's search is read to its end.
         assert await asyncio.to_thread(
-            server.wait_for, lambda seen: _searches_read(seen) >= 1, _WAIT_SECONDS
+            server.wait_for, lambda seen: _searches_read(seen) >= 1, timeout_seconds=_WAIT_SECONDS
         )
         _send_sigterm(default_sigterm)
         await asyncio.wait_for(run, _WAIT_SECONDS)
@@ -487,12 +489,16 @@ async def test_a_pause_from_the_webui_holds_the_searches_until_its_resume(
             await webui.post("/controls/pause")
             paused.set()
             # The status loop reads on while paused; only time shows that no search starts.
-            assert await asyncio.to_thread(server.wait_for, _has_read_the_status, _WAIT_SECONDS)
+            assert await asyncio.to_thread(
+                server.wait_for, _has_read_the_status, timeout_seconds=_WAIT_SECONDS
+            )
             await asyncio.sleep(0.5)  # noqa: TID251
             searches_while_paused = _search_types(api)
             await webui.post("/controls/resume")
             assert await asyncio.to_thread(
-                server.wait_for, lambda seen: _searches_read(seen) >= 1, _WAIT_SECONDS
+                server.wait_for,
+                lambda seen: _searches_read(seen) >= 1,
+                timeout_seconds=_WAIT_SECONDS,
             )
             await webui.post("/controls/restart")
         await asyncio.wait_for(run, _WAIT_SECONDS)
@@ -533,8 +539,8 @@ async def test_a_re_evaluation_logs_its_progress_under_its_module_s_name(
     catalog = open_catalog(tmp_path / "catalog.db")
     for index in range(200):  # the composition's progress interval
         native_id = f"{index:032x}"
-        insert_file(catalog, native_id)
-        insert_observation(catalog, native_id, f"unrelated_{index}.avi")
+        insert_file(catalog, native_id=native_id)
+        insert_observation(catalog, native_id=native_id, filename=f"unrelated_{index}.avi")
     catalog.close()
     config_path = _write(tmp_path / "crawler.yml", _config(tmp_path))
     targets_path = tmp_path / "targets.yml"
@@ -551,7 +557,7 @@ async def test_a_re_evaluation_logs_its_progress_under_its_module_s_name(
 
 @pytest.mark.asyncio
 async def test_a_version_5_catalog_is_copied_before_its_migrations(tmp_path: Path) -> None:
-    open_catalog_at(tmp_path / "catalog.db", 5).close()
+    open_catalog_at(tmp_path / "catalog.db", version=5).close()
     config_path = _write(tmp_path / "crawler.yml", _config(tmp_path))
     before = datetime.now(UTC).replace(microsecond=0)  # noqa: TID251
 

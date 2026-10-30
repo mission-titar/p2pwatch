@@ -57,7 +57,7 @@ def hash_for(letter: str) -> str:
     return letter * 32
 
 
-def make_catalog(path: Path, content: Mapping[str, Sequence[Mapping[str, Any]]]) -> Path:
+def make_catalog(path: Path, *, content: Mapping[str, Sequence[Mapping[str, Any]]]) -> Path:
     """Create a real ``catalog.db`` at ``path`` and insert ``content`` (per table, FK order).
 
     ``content`` maps a table name → rows, each holding its ``catalog_rows`` builder's arguments.
@@ -71,14 +71,14 @@ def make_catalog(path: Path, content: Mapping[str, Sequence[Mapping[str, Any]]])
             insert_observation(connection, **row)
         for row in content.get("match_decisions", ()):
             insert_decision(connection, **row)
-        _insert_source_points(connection, content.get("source_observations", ()))
+        _insert_source_points(connection, source_points=content.get("source_observations", ()))
     finally:
         connection.close()
     return path
 
 
 def _insert_source_points(
-    connection: sqlite3.Connection, source_points: Sequence[Mapping[str, Any]]
+    connection: sqlite3.Connection, *, source_points: Sequence[Mapping[str, Any]]
 ) -> None:
     """Each row: its variant's ``native_id``, ``user_hash`` and ``node_id``, then its point's
     arguments."""
@@ -88,17 +88,17 @@ def _insert_source_points(
         if variant not in variants:
             user_hash = variant[1]
             if user_hash is not None and user_hash not in {key[1] for key in variants}:
-                insert_source(connection, user_hash)
+                insert_source(connection, user_hash=user_hash)
             variants[variant] = insert_source_variant(
-                connection, variant[0], user_hash, node_id=variant[2]
+                connection, native_id=variant[0], user_hash=user_hash, node_id=variant[2]
             )
         point_args = {
             k: v for k, v in row.items() if k not in ("native_id", "user_hash", "node_id")
         }
-        insert_source_point(connection, variants[variant], **point_args)
+        insert_source_point(connection, variant_id=variants[variant], **point_args)
 
 
-def stamp_user_version(path: Path, version: int) -> None:
+def stamp_user_version(path: Path, *, version: int) -> None:
     """Force ``path``'s ``PRAGMA user_version`` to ``version`` (simulate an off-schema DB).
 
     Uses a RAW ``sqlite3`` connection on purpose: ``open_catalog`` would refuse a DB newer
@@ -114,21 +114,21 @@ def stamp_user_version(path: Path, version: int) -> None:
         connection.close()
 
 
-def count(path: Path, table: str) -> int:
+def count(path: Path, *, table: str) -> int:
     """Number of rows of ``table`` in the catalog ``path``."""
     connection = open_catalog(path)
     try:
-        (row,) = rows(connection, f"SELECT count(*) AS row_count FROM {table}")
+        (row,) = rows(connection, sql=f"SELECT count(*) AS row_count FROM {table}")
         return int(row["row_count"])
     finally:
         connection.close()
 
 
-def rows_without_id(path: Path, table: str) -> list[dict[str, Any]]:
+def rows_without_id(path: Path, *, table: str) -> list[dict[str, Any]]:
     """All rows of ``table`` by their natural key (no local id), sorted."""
     connection = open_catalog(path)
     try:
-        return sorted_by_values(rows(connection, _ROWS_BY_TABLE[table]))
+        return sorted_by_values(rows(connection, sql=_ROWS_BY_TABLE[table]))
     finally:
         connection.close()
 
@@ -142,7 +142,7 @@ def variant_ids(path: Path) -> list[int]:
     """The (reassigned) ``variant_id`` values, sorted ascending."""
     connection = open_catalog(path)
     try:
-        variants = rows(connection, "SELECT variant_id FROM observation_variants ORDER BY 1")
+        variants = rows(connection, sql="SELECT variant_id FROM observation_variants ORDER BY 1")
         return [int(row["variant_id"]) for row in variants]
     finally:
         connection.close()

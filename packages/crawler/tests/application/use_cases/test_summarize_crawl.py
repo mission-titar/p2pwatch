@@ -79,9 +79,11 @@ def test_a_reading_is_fresh_until_it_is_older_than_its_freshness() -> None:
     status_reading_store = FakeStatusReadingStore(
         (ClientName("never"), ClientName("fresh"), ClientName("stale"))
     )
-    status_reading_store.set_reading(ClientName("fresh"), _READING, published_at)
     status_reading_store.set_reading(
-        ClientName("stale"), _READING, published_at - READING_FRESH_FOR / 2
+        ClientName("fresh"), reading=_READING, published_at=published_at
+    )
+    status_reading_store.set_reading(
+        ClientName("stale"), reading=_READING, published_at=published_at - READING_FRESH_FOR / 2
     )
 
     summary = _summarize(status_reading_store=status_reading_store, fake_time=fake_time)

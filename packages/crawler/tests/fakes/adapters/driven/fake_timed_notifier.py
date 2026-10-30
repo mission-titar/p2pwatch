@@ -12,6 +12,6 @@ class FakeTimedNotifier(Notifier):
         self._start = fake_time.monotonic.now()
         self.notifications: list[tuple[float, Notification]] = []
 
-    async def notify(self, audience: Audience, notification: Notification) -> None:
+    async def notify(self, audience: Audience, *, notification: Notification) -> None:
         elapsed = self._fake_time.monotonic.now() - self._start
         self.notifications.append((elapsed.total_seconds(), notification))

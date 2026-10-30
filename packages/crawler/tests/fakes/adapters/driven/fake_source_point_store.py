@@ -45,6 +45,7 @@ class FakeSourcePointStore(SourcePointWriter, SourcePointReader):
     def read_latest_point(
         self,
         file: FileKey,
+        *,
         reading: SourceReading,
         since: datetime,
         before: datetime,
@@ -55,13 +56,13 @@ class FakeSourcePointStore(SourcePointWriter, SourcePointReader):
         return self._latest
 
     def read_earlier_points(
-        self, source: SourceKey, before: datetime, node_id: NodeId
+        self, source: SourceKey, *, before: datetime, node_id: NodeId
     ) -> tuple[LatestPoint, ...]:
         self.node_ids.add(node_id)
         self.asked.append((source, before))
         return self._history.get(source, ())
 
-    def has_points_before(self, before: datetime, node_id: NodeId) -> bool:
+    def has_points_before(self, before: datetime, *, node_id: NodeId) -> bool:
         self.node_ids.add(node_id)
         self.baselines.append(before)
         if len(self.baselines) <= self._baseline_failures:

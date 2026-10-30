@@ -12,5 +12,5 @@ class FakeNotifier(Notifier):
     def node_ids(self) -> list[NodeId]:
         return [notification.node_id for _, notification in self.calls]
 
-    async def notify(self, audience: Audience, notification: Notification) -> None:
+    async def notify(self, audience: Audience, *, notification: Notification) -> None:
         self.calls.append((audience, notification))

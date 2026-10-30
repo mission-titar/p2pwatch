@@ -5,7 +5,7 @@ from p2pwatch.application.ports.driven.sql_executor import SqlExecutor
 from p2pwatch.domain.console_query import QueryAnswer, QueryFailure
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ExecuteCall:
     sql: str
     row_cap: int
@@ -22,5 +22,5 @@ class FakeSqlExecutor(SqlExecutor):
     def execute(
         self, sql: str, *, row_cap: int, time_limit: timedelta
     ) -> QueryAnswer | QueryFailure:
-        self.calls.append(ExecuteCall(sql, row_cap, time_limit))
+        self.calls.append(ExecuteCall(sql=sql, row_cap=row_cap, time_limit=time_limit))
         return self._query_answer

@@ -30,9 +30,9 @@ _RANGE_COLUMNS = (
 
 @pytest.fixture
 def catalog(tmp_path: Path) -> Iterator[sqlite3.Connection]:
-    connection = open_catalog_at(tmp_path / "catalog.db", 10)
-    insert_file(connection, _FILE)
-    insert_source(connection, _USER)
+    connection = open_catalog_at(tmp_path / "catalog.db", version=10)
+    insert_file(connection, native_id=_FILE)
+    insert_source(connection, user_hash=_USER)
     yield connection
     connection.close()
 
@@ -40,16 +40,23 @@ def catalog(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 @pytest.fixture
 def ranged(catalog: sqlite3.Connection) -> sqlite3.Connection:
     """Variant 1 (``queued``) with one range on ``n1``, 10 to 20; variant 2 (``sending``)."""
-    insert_stage4_variant(catalog, _FILE, _USER)
-    insert_stage4_variant(catalog, _FILE, _USER, role="sending")
-    insert_stage4_range(catalog, 1, 10, 20, received_bytes=5, transfer_counter=7)
+    insert_stage4_variant(catalog, native_id=_FILE, user_hash=_USER)
+    insert_stage4_variant(catalog, native_id=_FILE, user_hash=_USER, role="sending")
+    insert_stage4_range(
+        catalog,
+        variant_id=1,
+        first_seen_at=10,
+        last_seen_at=20,
+        received_bytes=5,
+        transfer_counter=7,
+    )
     return catalog
 
 
 def _ranges(connection: sqlite3.Connection) -> list[dict[str, Any]]:
     return rows(
         connection,
-        f"SELECT {', '.join(_RANGE_COLUMNS)} FROM source_ranges"
+        sql=f"SELECT {', '.join(_RANGE_COLUMNS)} FROM source_ranges"
         " ORDER BY variant_id, node_id, first_seen_at",
     )
 
@@ -74,20 +81,20 @@ def test_a_source_of_an_unknown_network_or_not_32_lowercase_hex_on_ed2k_is_refus
 
 def test_every_role_of_the_domain_is_accepted(catalog: sqlite3.Connection) -> None:
     for role in SourceRole:
-        insert_stage4_variant(catalog, _FILE, _USER, role=role)
-    assert rows(catalog, "SELECT count(*) AS variant_count FROM source_variants") == [
+        insert_stage4_variant(catalog, native_id=_FILE, user_hash=_USER, role=role)
+    assert rows(catalog, sql="SELECT count(*) AS variant_count FROM source_variants") == [
         {"variant_count": len(SourceRole)}
     ]
 
 
 def test_a_variant_of_an_unknown_role_is_refused(catalog: sqlite3.Connection) -> None:
     with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
-        insert_stage4_variant(catalog, _FILE, _USER, role="downloading")
+        insert_stage4_variant(catalog, native_id=_FILE, user_hash=_USER, role="downloading")
 
 
 def test_a_variant_without_identity_is_kept(catalog: sqlite3.Connection) -> None:
-    insert_stage4_variant(catalog, _FILE, None)
-    assert rows(catalog, "SELECT file_id, source_id FROM source_variants") == [
+    insert_stage4_variant(catalog, native_id=_FILE, user_hash=None)
+    assert rows(catalog, sql="SELECT file_id, source_id FROM source_variants") == [
         {"file_id": file_id(_FILE), "source_id": None}
     ]
 
@@ -98,9 +105,15 @@ def test_a_variant_without_identity_is_kept(catalog: sqlite3.Connection) -> None
 def test_a_range_ending_before_it_starts_or_with_negative_bytes_is_refused(
     catalog: sqlite3.Connection, last_seen_at: int, received_bytes: int
 ) -> None:
-    insert_stage4_variant(catalog, _FILE, _USER)
+    insert_stage4_variant(catalog, native_id=_FILE, user_hash=_USER)
     with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
-        insert_stage4_range(catalog, 1, 10, last_seen_at, received_bytes=received_bytes)
+        insert_stage4_range(
+            catalog,
+            variant_id=1,
+            first_seen_at=10,
+            last_seen_at=last_seen_at,
+            received_bytes=received_bytes,
+        )
 
 
 # --- Stage 4's D5 rule for source_ranges ---
@@ -139,7 +152,7 @@ def test_an_update_that_moves_a_key_or_lowers_a_value_is_refused(
 def test_a_range_that_a_later_one_follows_does_not_grow(
     ranged: sqlite3.Connection, assignment: str
 ) -> None:
-    insert_stage4_range(ranged, 1, 30, 40)
+    insert_stage4_range(ranged, variant_id=1, first_seen_at=30, last_seen_at=40)
     with pytest.raises(sqlite3.IntegrityError, match=_GROWS):
         ranged.execute(f"UPDATE source_ranges SET {assignment} WHERE first_seen_at = 10")
 
@@ -147,8 +160,8 @@ def test_a_range_that_a_later_one_follows_does_not_grow(
 def test_a_later_range_of_another_node_or_variant_does_not_stop_growth(
     ranged: sqlite3.Connection,
 ) -> None:
-    insert_stage4_range(ranged, 1, 30, 40, node_id="n2")
-    insert_stage4_range(ranged, 2, 30, 40)
+    insert_stage4_range(ranged, variant_id=1, first_seen_at=30, last_seen_at=40, node_id="n2")
+    insert_stage4_range(ranged, variant_id=2, first_seen_at=30, last_seen_at=40)
     ranged.execute(
         "UPDATE source_ranges SET last_seen_at = 25 WHERE variant_id = 1 AND node_id = 'n1'"
     )
@@ -158,7 +171,7 @@ def test_a_later_range_of_another_node_or_variant_does_not_stop_growth(
 def test_an_update_to_the_same_values_passes_even_when_a_later_range_follows(
     ranged: sqlite3.Connection,
 ) -> None:
-    insert_stage4_range(ranged, 1, 30, 40)
+    insert_stage4_range(ranged, variant_id=1, first_seen_at=30, last_seen_at=40)
     ranged.execute(
         "UPDATE source_ranges SET variant_id = variant_id, node_id = node_id,"
         " first_seen_at = first_seen_at, last_seen_at = last_seen_at,"

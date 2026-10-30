@@ -281,7 +281,7 @@ def test_a_kad_target_held_elsewhere_is_retried_each_poll_until_it_frees(
     virtual_loop: VirtualLoop,
 ) -> None:
     api = _api(virtual_loop, search_seconds={"keroro": 30})
-    refusals = [error(400, "amuled_rejected", _ALREADY_SEARCHING)] * 2
+    refusals = [error(400, code="amuled_rejected", message=_ALREADY_SEARCHING)] * 2
     api.overrides[("POST", "/api/v1/search")] = lambda request: (
         refusals.pop(0) if refusals else api._start_search(request)
     )
@@ -301,7 +301,7 @@ def test_a_kad_target_held_past_one_budget_fails_the_channel_at_that_budget(
 ) -> None:
     api = _api(virtual_loop)
     api.overrides[("POST", "/api/v1/search")] = lambda _: error(
-        400, "amuled_rejected", _ALREADY_SEARCHING
+        400, code="amuled_rejected", message=_ALREADY_SEARCHING
     )
     failed_at: list[float] = []
 
@@ -320,7 +320,7 @@ def test_a_kad_target_held_past_one_budget_fails_the_channel_at_that_budget(
 def test_any_other_kad_refusal_fails_the_channel_at_once(virtual_loop: VirtualLoop) -> None:
     api = _api(virtual_loop)
     api.overrides[("POST", "/api/v1/search")] = lambda _: error(
-        400, "amuled_rejected", "Kad is not running"
+        400, code="amuled_rejected", message="Kad is not running"
     )
 
     async def main() -> None:

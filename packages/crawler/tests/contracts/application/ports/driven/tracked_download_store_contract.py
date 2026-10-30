@@ -33,19 +33,20 @@ class TrackedDownloadStore(Protocol):
     """Both ports of the pair, which one store implements."""
 
     def record_queued(
-        self, file: FileKey, target_id: str, size_bytes: int, queued_at: datetime
+        self, file: FileKey, *, target_id: str, size_bytes: int, queued_at: datetime
     ) -> None: ...
 
-    def set_completed(self, file: FileKey, completed_at: datetime) -> None: ...
+    def set_completed(self, file: FileKey, *, completed_at: datetime) -> None: ...
 
     def set_state(
         self,
         file: FileKey,
+        *,
         state: Literal[DownloadState.DOWNLOADING, DownloadState.FAILED],
         failure_reason: FailureReason | None = None,
     ) -> None: ...
 
-    def set_seen(self, statuses: Iterable[DownloadStatus], seen_at: datetime) -> None: ...
+    def set_seen(self, statuses: Iterable[DownloadStatus], *, seen_at: datetime) -> None: ...
 
     def is_tracked(self, file: FileKey) -> bool: ...
 

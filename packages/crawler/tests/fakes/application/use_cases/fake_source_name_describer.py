@@ -7,7 +7,7 @@ from p2pwatch.application.ports.driving.source_name_describer import (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class DescribeSourceNameCall:
     """The arguments of one ``describe_source_name`` call."""
 
@@ -32,6 +32,11 @@ class FakeSourceNameDescriber(SourceNameDescriber):
         requested_since: datetime | None,
         requested_until: datetime | None,
     ) -> SourceNameDescription | None:
-        call = DescribeSourceNameCall(source_name, page, requested_since, requested_until)
+        call = DescribeSourceNameCall(
+            source_name=source_name,
+            page=page,
+            requested_since=requested_since,
+            requested_until=requested_until,
+        )
         self.calls.append(call)
         return self._source_name_description

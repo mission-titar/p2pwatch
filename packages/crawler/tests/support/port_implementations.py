@@ -12,7 +12,7 @@ _SOURCE_DIRS_BY_MODULE = {
 PORTS_RING = ("application", "ports")
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ClassDefinition:
     file: Path
     name: str
@@ -27,7 +27,7 @@ def package_dir(file: Path) -> Path:
     return PACKAGES_DIR / file.relative_to(PACKAGES_DIR).parts[0]
 
 
-def _module_file(module: str, importer_package_dir: Path) -> Path | None:
+def _module_file(module: str, *, importer_package_dir: Path) -> Path | None:
     """The first-party file of `module`, `tests` being the importing package's."""
     top_module, *submodules = module.split(".")
     root = (
@@ -61,7 +61,7 @@ def class_def(definition: ClassDefinition) -> ast.ClassDef:
     )
 
 
-def first_party_bases(file: Path, class_node: ast.ClassDef) -> list[ClassDefinition]:
+def first_party_bases(file: Path, *, class_node: ast.ClassDef) -> list[ClassDefinition]:
     module = parsed(file)
     imported_by_name = {
         alias.asname or alias.name: (node.module, alias.name)
@@ -76,29 +76,29 @@ def first_party_bases(file: Path, class_node: ast.ClassDef) -> list[ClassDefinit
         if not isinstance(base_name, ast.Name):
             continue
         if base_name.id in class_names:
-            bases.append(ClassDefinition(file, base_name.id))
+            bases.append(ClassDefinition(file=file, name=base_name.id))
         elif base_name.id in imported_by_name:
             module_name, class_name = imported_by_name[base_name.id]
-            base_file = _module_file(module_name, package_dir(file))
+            base_file = _module_file(module_name, importer_package_dir=package_dir(file))
             if base_file is not None:
-                bases.append(ClassDefinition(base_file, class_name))
+                bases.append(ClassDefinition(file=base_file, name=class_name))
     return bases
 
 
-def implemented_ports(file: Path, class_node: ast.ClassDef) -> set[ClassDefinition]:
+def implemented_ports(file: Path, *, class_node: ast.ClassDef) -> set[ClassDefinition]:
     """The ports the class implements, through any first-party base."""
-    return {port for base in first_party_bases(file, class_node) for port in ports(base)}
+    return {port for base in first_party_bases(file, class_node=class_node) for port in ports(base)}
 
 
 def ports(definition: ClassDefinition) -> set[ClassDefinition]:
     if _is_port(definition):
         return {definition}
-    return implemented_ports(definition.file, class_def(definition))
+    return implemented_ports(definition.file, class_node=class_def(definition))
 
 
 def class_definitions(file: Path) -> list[ClassDefinition]:
     return [
-        ClassDefinition(file, node.name)
+        ClassDefinition(file=file, name=node.name)
         for node in parsed(file).body
         if isinstance(node, ast.ClassDef)
     ]

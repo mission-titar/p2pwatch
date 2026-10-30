@@ -35,7 +35,7 @@ def connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 @pytest.fixture
 def decision_store(connection: sqlite3.Connection) -> SqliteDecisionStore:
-    insert_file(connection, _A.native_id)
+    insert_file(connection, native_id=_A.native_id)
     return SqliteDecisionStore(connection)
 
 

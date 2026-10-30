@@ -18,7 +18,7 @@ def file_id(native_id: str) -> FileId:
     return FileKey(network=Network.ED2K, native_id=native_id).file_id
 
 
-def insert_file(connection: sqlite3.Connection, native_id: str, size_bytes: int = 100) -> None:
+def insert_file(connection: sqlite3.Connection, *, native_id: str, size_bytes: int = 100) -> None:
     connection.execute(
         "INSERT INTO files (file_id, network, native_id, size_bytes) VALUES (?, 'ed2k', ?, ?)",
         (file_id(native_id), native_id, size_bytes),
@@ -27,9 +27,9 @@ def insert_file(connection: sqlite3.Connection, native_id: str, size_bytes: int 
 
 def insert_observation(
     connection: sqlite3.Connection,
+    *,
     native_id: str,
     filename: str,
-    *,
     observed_at: str = SEEN_AT,
     size_bytes: int = 100,
     source_count: int = 1,
@@ -63,10 +63,10 @@ def insert_observation(
 
 def insert_decision(
     connection: sqlite3.Connection,
+    *,
     native_id: str,
     target_id: str,
     tier: str,
-    *,
     rule_name: str = "rule",
     decided_at: str = SEEN_AT,
     node_id: str = "n1",
@@ -90,7 +90,7 @@ def source_id(user_hash: str) -> SourceId:
     return SourceKey(network=Network.ED2K, native_id=user_hash).source_id
 
 
-def insert_source(connection: sqlite3.Connection, user_hash: str) -> None:
+def insert_source(connection: sqlite3.Connection, *, user_hash: str) -> None:
     connection.execute(
         "INSERT INTO sources (source_id, network, native_id) VALUES (?, 'ed2k', ?)",
         (source_id(user_hash), user_hash),
@@ -99,9 +99,9 @@ def insert_source(connection: sqlite3.Connection, user_hash: str) -> None:
 
 def insert_source_variant(
     connection: sqlite3.Connection,
+    *,
     native_id: str,
     user_hash: str | None,
-    *,
     name: str | None = "AnimuseeFMR",
     role: str = "queued",
     contact_point: str | None = None,
@@ -114,10 +114,10 @@ def insert_source_variant(
     key = hashlib.blake2b(repr((native_id, user_hash, *columns, node_id)).encode(), digest_size=16)
     [variant] = rows(
         connection,
-        "INSERT INTO source_variants (file_id, source_id, name, role, contact_point,"
+        sql="INSERT INTO source_variants (file_id, source_id, name, role, contact_point,"
         " connectable, raw_metadata, node_id, content_hash)"
         " VALUES (?, ?, ?, ?, ?, ?, '{}', ?, ?) RETURNING variant_id",
-        (file_id(native_id), sid, *columns, node_id, key.digest()),
+        parameters=(file_id(native_id), sid, *columns, node_id, key.digest()),
     )
     variant_id: int = variant["variant_id"]
     return variant_id
@@ -125,9 +125,9 @@ def insert_source_variant(
 
 def insert_source_point(
     connection: sqlite3.Connection,
+    *,
     variant_id: int,
     observed_at_micros: int,
-    *,
     session_received_bytes: int = 0,
 ) -> None:
     connection.execute(
@@ -138,31 +138,33 @@ def insert_source_point(
 
 
 def count_observations(connection: sqlite3.Connection) -> int:
-    [count] = rows(connection, "SELECT count(*) AS observation_count FROM observations")
+    [count] = rows(connection, sql="SELECT count(*) AS observation_count FROM observations")
     observation_count: int = count["observation_count"]
     return observation_count
 
 
 def count_decisions(connection: sqlite3.Connection) -> int:
-    [count] = rows(connection, "SELECT count(*) AS decision_count FROM match_decisions")
+    [count] = rows(connection, sql="SELECT count(*) AS decision_count FROM match_decisions")
     decision_count: int = count["decision_count"]
     return decision_count
 
 
 def observation_node_ids(connection: sqlite3.Connection) -> set[str]:
-    variants = rows(connection, "SELECT node_id FROM observation_variants")
+    variants = rows(connection, sql="SELECT node_id FROM observation_variants")
     return {variant["node_id"] for variant in variants}
 
 
 def decision_node_ids(connection: sqlite3.Connection) -> set[str]:
     return {
-        decision["node_id"] for decision in rows(connection, "SELECT node_id FROM match_decisions")
+        decision["node_id"]
+        for decision in rows(connection, sql="SELECT node_id FROM match_decisions")
     }
 
 
 def source_variant_node_ids(connection: sqlite3.Connection) -> set[str]:
     return {
-        variant["node_id"] for variant in rows(connection, "SELECT node_id FROM source_variants")
+        variant["node_id"]
+        for variant in rows(connection, sql="SELECT node_id FROM source_variants")
     }
 
 
@@ -170,7 +172,7 @@ def decision_tiers(connection: sqlite3.Connection) -> list[tuple[str, str]]:
     """``(native_id, tier)`` of every decision, oldest first."""
     decisions = rows(
         connection,
-        "SELECT f.native_id, d.tier FROM match_decisions AS d"
+        sql="SELECT f.native_id, d.tier FROM match_decisions AS d"
         " JOIN files AS f USING (file_id) ORDER BY d.id",
     )
     return [(decision["native_id"], decision["tier"]) for decision in decisions]

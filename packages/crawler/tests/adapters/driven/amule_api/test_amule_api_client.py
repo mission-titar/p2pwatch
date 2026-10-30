@@ -189,7 +189,7 @@ async def test_a_login_reply_without_a_token_is_a_config_error() -> None:
 async def test_login_disabled_is_a_daemon_that_is_not_ready() -> None:
     api = FakeAmuleApi()
     api.overrides[("POST", "/api/v1/auth/login")] = lambda _: error(
-        503, "login_disabled", "no password configured"
+        503, code="login_disabled", message="no password configured"
     )
     client = _client(api)
 
@@ -214,7 +214,7 @@ async def test_a_dead_transport_is_an_unreachable_daemon() -> None:
 async def test_close_logs_out_once_and_tolerates_a_failure() -> None:
     api = FakeAmuleApi()
     client = await _connected(api)
-    api.overrides[("POST", "/api/v1/auth/logout")] = lambda _: error(401, "unauthorized")
+    api.overrides[("POST", "/api/v1/auth/logout")] = lambda _: error(401, code="unauthorized")
 
     await client.close()
     await client.close()  # a second close is a no-op, not a second request
@@ -275,7 +275,7 @@ async def test_a_401_answered_during_close_logs_in_no_more() -> None:
         if request.url.path == "/api/v1/status":
             status_reached.set()
             await status_released.wait()
-            return error(401, "unauthorized")
+            return error(401, code="unauthorized")
         if request.url.path == "/api/v1/auth/logout":
             logout_reached.set()
             await logout_released.wait()
@@ -391,7 +391,7 @@ async def test_a_stale_token_is_renewed_once() -> None:
     def once(request: httpx.Request) -> httpx.Response:
         stale["count"] += 1
         if stale["count"] == 1:
-            return error(401, "unauthorized", "credentials changed")
+            return error(401, code="unauthorized", message="credentials changed")
         return httpx.Response(200, json=api.status)
 
     api.overrides[("GET", "/api/v1/status")] = once
@@ -406,7 +406,7 @@ async def test_a_stale_token_is_renewed_once() -> None:
 async def test_a_second_401_ends_the_session_instead_of_looping() -> None:
     api = FakeAmuleApi()
     client = await _connected(api)
-    api.overrides[("GET", "/api/v1/status")] = lambda _: error(401, "unauthorized")
+    api.overrides[("GET", "/api/v1/status")] = lambda _: error(401, code="unauthorized")
 
     with pytest.raises(ApiUnreachableError):
         await client.status()
@@ -426,7 +426,7 @@ async def test_calls_rejected_together_renew_the_token_once() -> None:
     def stale_twice(request: httpx.Request) -> httpx.Response:
         rejected["count"] += 1
         if rejected["count"] <= 2:
-            return error(401, "unauthorized", "amuleapi restarted")
+            return error(401, code="unauthorized", message="amuleapi restarted")
         return httpx.Response(200, json=api.status)
 
     api.overrides[("GET", "/api/v1/status")] = stale_twice
@@ -533,7 +533,7 @@ async def test_search_never_stops_nor_frees_its_search() -> None:
 @pytest.mark.asyncio
 async def test_a_kad_search_is_widened_from_its_second_poll_until_kad_refuses() -> None:
     api = FakeAmuleApi(progress={"state": "running"})
-    answers = [httpx.Response(202)] * 4 + [error(409, "kad_more_exhausted")]
+    answers = [httpx.Response(202)] * 4 + [error(409, code="kad_more_exhausted")]
     api.overrides[("POST", "/api/v1/search/42/more")] = lambda _: answers.pop(0)
     client = await _connected(api)
 
@@ -558,7 +558,7 @@ async def test_an_ed2k_search_is_never_widened() -> None:
 async def test_a_failed_widening_leaves_the_search_standing() -> None:
     """A reask on a search already finished answers 400 bad_request, an unreachable daemon."""
     api = FakeAmuleApi(progress={"state": "running"}, results=[_result()])
-    api.overrides[("POST", "/api/v1/search/42/more")] = lambda _: error(400, "bad_request")
+    api.overrides[("POST", "/api/v1/search/42/more")] = lambda _: error(400, code="bad_request")
     client = await _connected(api)
 
     answer = await client.search(Keyword("keroro"), channel=Channel("kad"), budget_seconds=120)
@@ -572,7 +572,7 @@ async def test_a_failed_widening_leaves_the_search_standing() -> None:
 async def test_a_search_the_daemon_refuses_fails_its_channel() -> None:
     api = FakeAmuleApi()
     api.overrides[("POST", "/api/v1/search")] = lambda _: error(
-        400, "amuled_rejected", "not connected to any server"
+        400, code="amuled_rejected", message="not connected to any server"
     )
     client = await _connected(api)
 
@@ -637,7 +637,9 @@ async def test_status_without_amuled_behind_amuleapi_is_unreachable(
 async def test_a_status_the_daemon_refuses_is_a_refused_read() -> None:
     # A route a weekly aMule bump renamed: /version answers 404 not_found.
     api = FakeAmuleApi(status={"ec_connected": True})
-    api.overrides[("GET", "/api/v1/version")] = lambda _: error(404, "not_found", "no route")
+    api.overrides[("GET", "/api/v1/version")] = lambda _: error(
+        404, code="not_found", message="no route"
+    )
     client = await _connected(api)
 
     with pytest.raises(ReadRejectedError, match="no route") as raised:
@@ -742,7 +744,7 @@ async def test_a_page_whose_last_row_has_no_anchor_stops_the_sweep() -> None:
 @pytest.mark.parametrize("path", ["/api/v1/downloads", "/api/v1/shared"])
 async def test_a_list_the_daemon_refuses_is_a_refused_read(path: str) -> None:
     api = FakeAmuleApi()
-    api.overrides[("GET", path)] = lambda _: error(500, "amuled_rejected", "busy")
+    api.overrides[("GET", path)] = lambda _: error(500, code="amuled_rejected", message="busy")
     client = await _connected(api)
 
     with pytest.raises(ReadRejectedError, match="busy") as raised:
@@ -942,7 +944,7 @@ async def test_a_client_gone_between_the_list_and_its_detail_is_dropped() -> Non
     """D7: a `404` on the detail drops that row only."""
     api = FakeAmuleApi(clients={_HASH: [_source(1), _source(2), _source(3)]})
     api.overrides[("GET", "/api/v1/clients/2")] = lambda _: error(
-        404, "not_found", "no client with that ECID in the current snapshot"
+        404, code="not_found", message="no client with that ECID in the current snapshot"
     )
     client = await _connected(api)
 
@@ -961,7 +963,7 @@ async def test_any_other_failure_of_a_detail_fails_the_read(
     status: int, code: str, raised: type[Exception]
 ) -> None:
     api = FakeAmuleApi(clients={_HASH: [_source(1)]})
-    api.overrides[("GET", "/api/v1/clients/1")] = lambda _: error(status, code)
+    api.overrides[("GET", "/api/v1/clients/1")] = lambda _: error(status, code=code)
     client = await _connected(api)
 
     with pytest.raises(raised):
@@ -998,7 +1000,7 @@ async def test_a_refusal_other_than_a_missing_download_still_fails_the_read() ->
     """`not_found` and `amuled_rejected` map to one class: the read tells them apart."""
     api = FakeAmuleApi(clients={_HASH: []})
     api.overrides[("GET", f"/api/v1/downloads/{_HASH}/clients")] = lambda _: error(
-        500, "amuled_rejected"
+        500, code="amuled_rejected"
     )
     client = await _connected(api)
 

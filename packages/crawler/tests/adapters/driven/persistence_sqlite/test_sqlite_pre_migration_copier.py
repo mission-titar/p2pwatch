@@ -83,8 +83,8 @@ def test_a_marked_migration_second_among_the_pending_copies_before_the_first(
         )
     assert _copy_names(path.parent) == [_COPY_NAME]
     with closing(sqlite3.connect(f"file:{path.parent / _COPY_NAME}?mode=ro", uri=True)) as copy:
-        assert rows(copy, "PRAGMA user_version") == [{"user_version": 2}]
-        assert rows(copy, "SELECT x FROM t ORDER BY x") == [{"x": 1}, {"x": 2}]
+        assert rows(copy, sql="PRAGMA user_version") == [{"user_version": 2}]
+        assert rows(copy, sql="SELECT x FROM t ORDER BY x") == [{"x": 1}, {"x": 2}]
 
 
 def test_a_new_database_is_not_copied(tmp_path: Path) -> None:
@@ -125,7 +125,7 @@ def _need_bytes(connection: sqlite3.Connection, path: Path) -> int:
 
 
 def _pragma(connection: sqlite3.Connection, name: str) -> int:
-    [pragma] = rows(connection, f"PRAGMA {name}")
+    [pragma] = rows(connection, sql=f"PRAGMA {name}")
     return int(pragma[name])
 
 
@@ -142,7 +142,7 @@ def test_one_byte_short_refuses_before_any_write(tmp_path: Path) -> None:
             _copier(free_bytes).ensure_copy(
                 connection, path=path, pending=_pending(scripts), open_reader=open_reader
             )
-        assert rows(connection, "PRAGMA user_version") == [{"user_version": 2}]
+        assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 2}]
     assert _copy_names(path.parent) == []
     assert free_bytes.directories == [path.parent]
 
@@ -174,7 +174,7 @@ def test_a_leftover_is_deleted_before_the_copy(tmp_path: Path) -> None:
         )
     assert _copy_names(path.parent) == [_COPY_NAME, other_database_leftover.name]
     with closing(sqlite3.connect(f"file:{path.parent / _COPY_NAME}?mode=ro", uri=True)) as copy:
-        assert rows(copy, "PRAGMA integrity_check") == [{"integrity_check": "ok"}]
+        assert rows(copy, sql="PRAGMA integrity_check") == [{"integrity_check": "ok"}]
 
 
 def test_a_taken_name_refuses_and_leaves_its_file(tmp_path: Path) -> None:

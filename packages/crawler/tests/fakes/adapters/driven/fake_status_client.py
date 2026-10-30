@@ -8,7 +8,7 @@ class FakeStatusClient(StatusClient):
     """One scripted reading per call; the last one asks for shutdown."""
 
     def __init__(
-        self, readings: list[ClientStatus | ClientError], run_state: RunStateWriter
+        self, readings: list[ClientStatus | ClientError], *, run_state: RunStateWriter
     ) -> None:
         self._readings = readings
         self._run_state = run_state

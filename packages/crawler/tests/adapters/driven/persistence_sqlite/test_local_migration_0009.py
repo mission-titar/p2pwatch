@@ -11,13 +11,13 @@ from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_
 
 def test_0009_renames_the_marker_and_keeps_its_fingerprint(tmp_path: Path) -> None:
     path = tmp_path / "local.db"
-    connection = open_local_at(path, 8)
+    connection = open_local_at(path, version=8)
     connection.execute("INSERT INTO backfill_state (id, policy_sha256) VALUES (1, 'abc')")
     connection.close()
 
-    connection = open_local_at(path, 9)
+    connection = open_local_at(path, version=9)
     try:
-        assert rows(connection, "PRAGMA user_version") == [{"user_version": 9}]
+        assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 9}]
         policy_fingerprint_store = SqlitePolicyFingerprintStore(connection)
         assert policy_fingerprint_store.read_policy_fingerprint() == "abc"
     finally:

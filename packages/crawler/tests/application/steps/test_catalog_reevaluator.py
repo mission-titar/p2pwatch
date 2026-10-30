@@ -125,7 +125,7 @@ async def test_an_unchanged_policy_skips_the_re_evaluation(
     await reevaluation.run()
 
     assert reevaluation.logger.lines == [
-        LoggedLine("info", "policy unchanged: catalogue re-evaluation skipped")
+        LoggedLine(level="info", message="policy unchanged: catalogue re-evaluation skipped")
     ]
     assert decision_tiers(catalog_connection) == []
     assert reevaluation.fingerprints.set_calls == []
@@ -151,7 +151,7 @@ async def test_without_a_stored_fingerprint_the_catalog_is_re_evaluated_then_it_
     await reevaluation.run()
 
     assert reevaluation.logger.lines == [
-        LoggedLine("info", "catalogue re-evaluated: 0 files, 0 rows written")
+        LoggedLine(level="info", message="catalogue re-evaluated: 0 files, 0 rows written")
     ]
     assert reevaluation.fingerprints.set_calls == [_FINGERPRINT]
     assert reevaluation.observability.logger.lines == []
@@ -209,15 +209,15 @@ async def test_two_changed_rows_are_all_evaluated_and_written(
     await reevaluation.run()
 
     assert reevaluation.logger.lines == [
-        LoggedLine("info", "catalogue re-evaluated: 2 files, 2 rows written")
+        LoggedLine(level="info", message="catalogue re-evaluated: 2 files, 2 rows written")
     ]
     assert reevaluation.fingerprints.set_calls == [_FINGERPRINT]
     tiers = dict(decision_tiers(catalog_connection))
     assert tiers == {_HASH_DL: "download", _HASH_CAT: "catalog"}
     assert decision_node_ids(catalog_connection) == {_NODE_ID}
-    assert rows(catalog_connection, "SELECT DISTINCT decided_at_micros FROM match_decisions") == [
-        {"decided_at_micros": instant_to_micros(wall_clock.now())}
-    ]
+    assert rows(
+        catalog_connection, sql="SELECT DISTINCT decided_at_micros FROM match_decisions"
+    ) == [{"decided_at_micros": instant_to_micros(wall_clock.now())}]
     # Iteration is ORDER BY native_id: "31d6..." sorts before "aaaa..." (ASCII '3' < 'a').
     assert [line.message for line in reevaluation.observability.logger.lines] == [
         f"decisions for {_DL_NAME} ({_HASH_DL}): 062A none → download",
@@ -261,7 +261,7 @@ async def test_unchanged_row_is_evaluated_but_not_written(
     await reevaluation.run()
 
     assert reevaluation.logger.lines == [
-        LoggedLine("info", "catalogue re-evaluated: 1 files, 0 rows written")
+        LoggedLine(level="info", message="catalogue re-evaluated: 1 files, 0 rows written")
     ]
     assert count_decisions(catalog_connection) == 1
     assert reevaluation.observability.logger.lines == []
@@ -311,11 +311,11 @@ async def test_store_error_on_one_row_is_absorbed_and_sweep_continues(
     )
     assert reevaluation.logger.lines == [
         LoggedLine(
-            "error",
-            f"persistence failed on file=ed2k:{_HASH_DL} (injected failure):"
+            level="error",
+            message=f"persistence failed on file=ed2k:{_HASH_DL} (injected failure):"
             " re-evaluation skipped, sweep continues",
         ),
-        LoggedLine("info", "catalogue re-evaluated: 2 files, 1 rows written"),
+        LoggedLine(level="info", message="catalogue re-evaluated: 2 files, 1 rows written"),
     ]
 
 
@@ -353,7 +353,7 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
     await reevaluation.run()
 
     assert reevaluation.logger.lines == [  # 062A + 062B + retract 001A
-        LoggedLine("info", "catalogue re-evaluated: 1 files, 3 rows written")
+        LoggedLine(level="info", message="catalogue re-evaluated: 1 files, 3 rows written")
     ]
     assert decision_store.read_latest_decisions(
         FileKey(network=Network.ED2K, native_id=_HASH_MULTI)
@@ -400,7 +400,7 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
     await reevaluation.run()
 
     assert reevaluation.logger.lines == [  # only 062A + 062B; "" untouched
-        LoggedLine("info", "catalogue re-evaluated: 1 files, 2 rows written")
+        LoggedLine(level="info", message="catalogue re-evaluated: 1 files, 2 rows written")
     ]
     assert set(
         decision_store.read_latest_decisions(FileKey(network=Network.ED2K, native_id=_HASH_MULTI))
@@ -410,7 +410,7 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
     }
     assert rows(
         catalog_connection,
-        "SELECT count(*) AS decision_count FROM match_decisions WHERE target_id = ''",
+        sql="SELECT count(*) AS decision_count FROM match_decisions WHERE target_id = ''",
     ) == [{"decision_count": 1}]
 
 
@@ -445,7 +445,7 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
     await reevaluation.run()
 
     assert reevaluation.logger.lines == [
-        LoggedLine("info", "catalogue re-evaluated: 1 files, 1 rows written")
+        LoggedLine(level="info", message="catalogue re-evaluated: 1 files, 1 rows written")
     ]
     assert decision_store.read_latest_decisions(
         FileKey(network=Network.ED2K, native_id=_HASH_DL)
@@ -497,6 +497,6 @@ async def test_progress_is_logged_at_each_multiple_of_the_cadence_only(
     await reevaluation.run()
 
     assert reevaluation.logger.lines == [
-        LoggedLine("info", "catalogue re-evaluation: 2/3 files, 2 rows written"),
-        LoggedLine("info", "catalogue re-evaluated: 3 files, 2 rows written"),
+        LoggedLine(level="info", message="catalogue re-evaluation: 2/3 files, 2 rows written"),
+        LoggedLine(level="info", message="catalogue re-evaluated: 3 files, 2 rows written"),
     ]

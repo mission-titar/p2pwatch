@@ -11,6 +11,7 @@ class FakeNoSetStateTrackedDownloadStore(FakeTrackedDownloadStore):
     def set_state(
         self,
         file: FileKey,
+        *,
         state: Literal[DownloadState.DOWNLOADING, DownloadState.FAILED],
         failure_reason: FailureReason | None = None,
     ) -> None:

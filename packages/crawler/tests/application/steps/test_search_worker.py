@@ -192,7 +192,7 @@ async def test_successful_task_records_observation(
     )
     assert client.searches == [("keroro", "ed2k")]
     assert count_decisions(catalog_connection) == 1
-    assert rows(catalog_connection, "SELECT observed_at_micros FROM observations") == [
+    assert rows(catalog_connection, sql="SELECT observed_at_micros FROM observations") == [
         {"observed_at_micros": instant_to_micros(fake_time.wall.now())}
     ]
     assert observation_node_ids(catalog_connection) == decision_node_ids(catalog_connection)
@@ -355,9 +355,11 @@ async def test_successful_search_emits_search_executed_with_network_and_counts(
         SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")), node_id=_NODE_ID
     )
     assert observability.logger.lines == [
-        LoggedLine("debug", "search ed2k: 1 observation(s)"),
-        LoggedLine("debug", "observation recorded (ed2k)"),
-        LoggedLine("info", f"decisions for {_DL_NAME} ({_HASH}): 062A none → download"),
+        LoggedLine(level="debug", message="search ed2k: 1 observation(s)"),
+        LoggedLine(level="debug", message="observation recorded (ed2k)"),
+        LoggedLine(
+            level="info", message=f"decisions for {_DL_NAME} ({_HASH}): 062A none → download"
+        ),
     ]
     labels = (("client", "amule-1"), ("channel", "ed2k"))
     assert set(observability.node_metric_store.read_samples()) == {
@@ -394,7 +396,9 @@ async def test_search_failure_dispatches_search_failed(
     await worker.run_task(
         SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")), node_id=_NODE_ID
     )
-    assert observability.logger.lines == [LoggedLine("warning", "search failed on ed2k")]
+    assert observability.logger.lines == [
+        LoggedLine(level="warning", message="search failed on ed2k")
+    ]
     assert observability.node_metric_store.read_samples() == (
         NodeMetricSample(
             node_metric=NodeCounter.SEARCH_FAILURES,
@@ -426,7 +430,9 @@ async def test_transport_failure_during_search_dispatches_client_unreachable(
     await worker.run_task(
         SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")), node_id=_NODE_ID
     )
-    assert observability.logger.lines == [LoggedLine("warning", "amule-1 unreachable")]
+    assert observability.logger.lines == [
+        LoggedLine(level="warning", message="amule-1 unreachable")
+    ]
     assert observability.node_metric_store.read_samples() == (
         NodeMetricSample(
             node_metric=NodeCounter.CLIENT_UNREACHABLE, labels=(("client", "amule-1"),), value=1.0
@@ -464,6 +470,6 @@ async def test_a_search_logs_on_the_worker_logger_and_a_failed_observation_on_it
     )
 
     assert logger.lines == [
-        LoggedLine("info", "client amule-1: 'keroro'/ed2k → 0 verdict(s) changed"),
+        LoggedLine(level="info", message="client amule-1: 'keroro'/ed2k → 0 verdict(s) changed"),
     ]
     assert [line.level for line in cataloguer_logger.lines] == ["error"]

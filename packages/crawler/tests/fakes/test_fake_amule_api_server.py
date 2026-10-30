@@ -53,10 +53,10 @@ def test_wait_for_returns_once_a_request_makes_the_predicate_hold() -> None:
             kwargs={"json": {"password": PASSWORD}},
         )
         login.start()
-        assert server.wait_for(lambda seen: seen.logins == 1, 5.0)
+        assert server.wait_for(lambda seen: seen.logins == 1, timeout_seconds=5.0)
         login.join()
 
 
 def test_wait_for_gives_up_after_its_timeout() -> None:
     with FakeAmuleApiServer(FakeAmuleApi()) as server:
-        assert not server.wait_for(lambda seen: seen.logins == 1, 0.01)
+        assert not server.wait_for(lambda seen: seen.logins == 1, timeout_seconds=0.01)

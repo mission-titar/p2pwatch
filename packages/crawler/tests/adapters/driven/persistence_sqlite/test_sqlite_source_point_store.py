@@ -49,11 +49,14 @@ def _points(
     session_received_bytes: int = 0,
 ) -> None:
     variant_id = insert_source_variant(
-        catalog, native_id, user_hash, name=name, role=role, node_id=node_id
+        catalog, native_id=native_id, user_hash=user_hash, name=name, role=role, node_id=node_id
     )
     for moment in moments:
         insert_source_point(
-            catalog, variant_id, _us(moment), session_received_bytes=session_received_bytes
+            catalog,
+            variant_id=variant_id,
+            observed_at_micros=_us(moment),
+            session_received_bytes=session_received_bytes,
         )
 
 
@@ -61,9 +64,9 @@ def _points(
 def catalog(tmp_path: Path) -> Iterator[sqlite3.Connection]:
     connection = open_catalog(tmp_path / "catalog.db")
     for native_id in (_FILE, _OTHER_FILE):
-        insert_file(connection, native_id)
+        insert_file(connection, native_id=native_id)
     for user_hash in (_USER, _OTHER_USER):
-        insert_source(connection, user_hash)
+        insert_source(connection, user_hash=user_hash)
     yield connection
     connection.close()
 
@@ -234,7 +237,7 @@ def test_earlier_points_seek_once_per_variant_whatever_the_history(
     before = _T0 + timedelta(days=400)
     for user, count in ((_USER, 1_000), (_OTHER_USER, 100_000)):
         for role in ("queued", "nothing_new"):
-            variant_id = insert_source_variant(catalog, _FILE, user, role=role)
+            variant_id = insert_source_variant(catalog, native_id=_FILE, user_hash=user, role=role)
             catalog.executemany(
                 "INSERT INTO source_observations VALUES (?, ?, 0)",
                 ((variant_id, _us(_T0) + n * 300_000_000) for n in range(count // 2)),

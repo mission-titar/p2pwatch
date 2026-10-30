@@ -25,7 +25,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 
 def _iso_to_micros(connection: sqlite3.Connection, stamp: str) -> int:
     """``iso_to_micros`` as the migrations call it, the one way it is called."""
-    [row] = rows(connection, "SELECT iso_to_micros(?) AS micros", (stamp,))
+    [row] = rows(connection, sql="SELECT iso_to_micros(?) AS micros", parameters=(stamp,))
     micros: int = row["micros"]
     return micros
 

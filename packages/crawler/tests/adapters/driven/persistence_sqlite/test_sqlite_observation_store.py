@@ -66,13 +66,13 @@ def observation_store(connection: sqlite3.Connection) -> SqliteObservationStore:
 
 
 def _file_count(connection: sqlite3.Connection) -> int:
-    [count] = rows(connection, "SELECT count(*) AS file_count FROM files")
+    [count] = rows(connection, sql="SELECT count(*) AS file_count FROM files")
     file_count: int = count["file_count"]
     return file_count
 
 
 def _variant_count(connection: sqlite3.Connection) -> int:
-    [count] = rows(connection, "SELECT count(*) AS variant_count FROM observation_variants")
+    [count] = rows(connection, sql="SELECT count(*) AS variant_count FROM observation_variants")
     variant_count: int = count["variant_count"]
     return variant_count
 
@@ -83,7 +83,7 @@ def test_record_observation_round_trip(
     observation_store.record_observation(
         FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=_NODE_ID)
     )
-    assert rows(connection, "SELECT * FROM files") == [
+    assert rows(connection, sql="SELECT * FROM files") == [
         {"file_id": _KEY.file_id, "network": "ed2k", "native_id": _HASH, "size_bytes": 234567890}
     ]
     variant: dict[str, Any] = {
@@ -99,10 +99,10 @@ def test_record_observation_round_trip(
     }
     assert rows(
         connection,
-        "SELECT file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_metadata,"
+        sql="SELECT file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_metadata,"
         " keyword, node_id, content_hash FROM observation_variants",
     ) == [{**variant, "content_hash": content_hash(*variant.values())}]
-    assert rows(connection, "SELECT observed_at_micros, source_count FROM observations") == [
+    assert rows(connection, sql="SELECT observed_at_micros, source_count FROM observations") == [
         {"observed_at_micros": instant_to_micros(_T0), "source_count": 5}
     ]
 
@@ -113,7 +113,7 @@ def test_raw_metadata_preserves_order_duplicates_and_non_ascii(
     observation_store.record_observation(
         FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=_NODE_ID)
     )
-    [variant] = rows(connection, "SELECT raw_metadata FROM observation_variants")
+    [variant] = rows(connection, sql="SELECT raw_metadata FROM observation_variants")
     stored = variant["raw_metadata"]
     assert "mystère" in stored  # ensure_ascii=False: the accent is stored AS IS
     assert json.loads(stored)[:3] == [["0x0308", "0"], ["0x0308", "0"], ["0x0999", "mystère"]]
@@ -133,9 +133,9 @@ def test_record_observation_twice_first_seen_wins_in_files(
             node_id=_NODE_ID,
         )
     )
-    assert rows(connection, "SELECT size_bytes FROM files") == [{"size_bytes": 234567890}]
+    assert rows(connection, sql="SELECT size_bytes FROM files") == [{"size_bytes": 234567890}]
     observed_sizes = rows(
-        connection, "SELECT size_bytes FROM observation_variants ORDER BY variant_id"
+        connection, sql="SELECT size_bytes FROM observation_variants ORDER BY variant_id"
     )
     # The anomaly stays VISIBLE.
     assert observed_sizes == [{"size_bytes": 234567890}, {"size_bytes": 999}]
@@ -178,9 +178,9 @@ def test_record_observation_with_media_metadata(
             node_id=_NODE_ID,
         )
     )
-    assert rows(connection, "SELECT duration_seconds, bitrate_kbps FROM observation_variants") == [
-        {"duration_seconds": 1474, "bitrate_kbps": 1200}
-    ]
+    assert rows(
+        connection, sql="SELECT duration_seconds, bitrate_kbps FROM observation_variants"
+    ) == [{"duration_seconds": 1474, "bitrate_kbps": 1200}]
 
 
 def test_record_observation_is_one_transaction(
@@ -256,7 +256,7 @@ def test_outer_transaction_survives_record_observation_failure(
     # transaction within a transaction") BEFORE the try → NO rollback is attempted,
     # the OUTER transaction and its pending rows SURVIVE.
     connection.execute("BEGIN")
-    insert_file(connection, _HASH, 1)
+    insert_file(connection, native_id=_HASH, size_bytes=1)
     with pytest.raises(PersistenceError, match="cannot start a transaction within a transaction"):
         observation_store.record_observation(
             FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=_NODE_ID)
@@ -276,7 +276,7 @@ def test_each_observation_stores_its_own_node_id(
     observation_store.record_observation(
         FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=NodeId("n2"))
     )
-    assert rows(connection, "SELECT node_id FROM observation_variants ORDER BY variant_id") == [
+    assert rows(connection, sql="SELECT node_id FROM observation_variants ORDER BY variant_id") == [
         {"node_id": "n1"},
         {"node_id": "n2"},
     ]
@@ -285,5 +285,5 @@ def test_each_observation_stores_its_own_node_id(
 def test_read_latest_observation_of_a_file_never_observed_is_none(
     observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
-    insert_file(connection, _HASH, 1)
+    insert_file(connection, native_id=_HASH, size_bytes=1)
     assert observation_store.read_latest_observation(_KEY) is None

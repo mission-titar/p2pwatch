@@ -21,7 +21,7 @@ _INSERT_V13_DOWNLOAD = (
 def _migrated(tmp_path: Path) -> sqlite3.Connection:
     """A local.db at 14 from one at 13 holding a completed download and a fresh one."""
     path = tmp_path / "local.db"
-    connection = open_local_at(path, 13)
+    connection = open_local_at(path, version=13)
     connection.execute(
         _INSERT_V13_DOWNLOAD,
         (
@@ -42,13 +42,13 @@ def _migrated(tmp_path: Path) -> sqlite3.Connection:
         (_B.file_id, _B.native_id, "queued", "2026-06-11T12:00:00+00:00", *[None] * 6),
     )
     connection.close()
-    return open_local_at(path, 14)
+    return open_local_at(path, version=14)
 
 
 def test_0014_converts_each_download_stamp_to_micros_and_keeps_a_null(tmp_path: Path) -> None:
     connection = _migrated(tmp_path)
     try:
-        assert rows(connection, "PRAGMA user_version") == [{"user_version": 14}]
+        assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 14}]
         completed = {
             "file_id": _A.file_id,
             "network": "ed2k",
@@ -75,11 +75,11 @@ def test_0014_converts_each_download_stamp_to_micros_and_keeps_a_null(tmp_path: 
             "latest_progress_at_micros": None,
             "failure_reason": None,
         }
-        assert rows(connection, "SELECT * FROM downloads ORDER BY native_id") == [
+        assert rows(connection, sql="SELECT * FROM downloads ORDER BY native_id") == [
             completed,
             queued,
         ]
-        assert rows(connection, "PRAGMA integrity_check") == [{"integrity_check": "ok"}]
+        assert rows(connection, sql="PRAGMA integrity_check") == [{"integrity_check": "ok"}]
     finally:
         connection.close()
 
@@ -88,11 +88,11 @@ def test_0014_rebuilds_downloads_strict_with_its_stamps_typed(tmp_path: Path) ->
     connection = _migrated(tmp_path)
     try:
         assert rows(
-            connection, "SELECT strict FROM pragma_table_list WHERE name = 'downloads'"
+            connection, sql="SELECT strict FROM pragma_table_list WHERE name = 'downloads'"
         ) == [{"strict": 1}]
         assert rows(
             connection,
-            "SELECT name, type, \"notnull\" FROM pragma_table_info('downloads')"
+            sql="SELECT name, type, \"notnull\" FROM pragma_table_info('downloads')"
             " WHERE name GLOB '*_at*' ORDER BY cid",
         ) == [
             {"name": "queued_at_micros", "type": "INTEGER", "notnull": 1},

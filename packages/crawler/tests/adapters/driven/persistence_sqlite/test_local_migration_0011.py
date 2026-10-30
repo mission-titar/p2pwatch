@@ -14,7 +14,7 @@ _INSERT = "INSERT INTO backoff_states VALUES (?, ?, ?, ?, ?)"
 
 @pytest.fixture
 def connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
-    local = open_local_at(tmp_path / "local.db", 11)
+    local = open_local_at(tmp_path / "local.db", version=11)
     yield local
     local.close()
 
@@ -22,10 +22,10 @@ def connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 def test_0011_creates_a_strict_backoff_states_and_drops_scheduler_state(
     connection: sqlite3.Connection,
 ) -> None:
-    assert rows(connection, "PRAGMA user_version") == [{"user_version": 11}]
+    assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 11}]
     tables = rows(
         connection,
-        "SELECT name, strict FROM pragma_table_list"
+        sql="SELECT name, strict FROM pragma_table_list"
         " WHERE name IN ('backoff_states', 'scheduler_state')",
     )
     assert tables == [{"name": "backoff_states", "strict": 1}]
@@ -58,15 +58,15 @@ def test_0011_holds_one_row_per_client_and_channel_a_null_channel_included(
 
 def test_0011_drops_the_backoff_pending_at_the_upgrade(tmp_path: Path) -> None:
     path = tmp_path / "local.db"
-    connection = open_local_at(path, 10)
+    connection = open_local_at(path, version=10)
     connection.execute(
         "INSERT INTO scheduler_state (key, value) VALUES ('backoff_states', ?)",
         ('{"amuled:kad": {"attempts": 2, "retry_after": "2026-10-13T00:03:00.000000+00:00"}}',),
     )
     connection.close()
 
-    connection = open_local_at(path, 11)
+    connection = open_local_at(path, version=11)
     try:
-        assert rows(connection, "SELECT * FROM backoff_states") == []
+        assert rows(connection, sql="SELECT * FROM backoff_states") == []
     finally:
         connection.close()

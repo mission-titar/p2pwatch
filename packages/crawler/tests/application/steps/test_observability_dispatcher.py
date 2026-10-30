@@ -180,7 +180,9 @@ async def test_notification_failure_is_absorbed() -> None:
     logger, node_metric_store = FakeLogger(), FakeNodeMetricStore()
     await _dispatcher(node_metric_store, FakeRaisingNotifier(), logger).dispatch(_COMPLETED)
     assert node_metric_store.read_samples()  # written despite the notification failure
-    assert logger.lines[-1] == LoggedLine("warning", "notification community failed (canal mort)")
+    assert logger.lines[-1] == LoggedLine(
+        level="warning", message="notification community failed (canal mort)"
+    )
 
 
 @pytest.mark.asyncio

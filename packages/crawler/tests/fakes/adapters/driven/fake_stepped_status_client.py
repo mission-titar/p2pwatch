@@ -13,10 +13,11 @@ class FakeSteppedStatusClient(FakeStatusClient):
     def __init__(
         self,
         readings: list[ClientStatus | ClientError],
+        *,
         run_state: RunStateWriter,
         fake_time: FakeTime,
     ) -> None:
-        super().__init__(readings, run_state)
+        super().__init__(readings, run_state=run_state)
         self._fake_time = fake_time
         self._calls = 0
 

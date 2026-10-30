@@ -147,5 +147,5 @@ def test_read_file_count_counts_catalogued_hashes_not_observations(
 def test_iter_latest_observations_skips_a_file_never_observed(
     catalog_scan_reader: SqliteCatalogScanReader, connection: sqlite3.Connection
 ) -> None:
-    insert_file(connection, _HASH, 1)
+    insert_file(connection, native_id=_HASH, size_bytes=1)
     assert list(catalog_scan_reader.iter_latest_observations()) == []
