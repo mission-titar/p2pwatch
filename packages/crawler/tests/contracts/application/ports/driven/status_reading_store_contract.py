@@ -44,7 +44,7 @@ class StatusReadingStoreContract(ABC):
         self, status_reading_store: StatusReadingStore
     ) -> None:
         status_reading_store.set_reading(
-            ClientName("amuled"), _READING, MonotonicInstant(nanoseconds=7)
+            ClientName("amuled"), reading=_READING, published_at=MonotonicInstant(nanoseconds=7)
         )
         assert status_reading_store.read_readings() == {
             "amuled": PublishedReading(
@@ -57,10 +57,12 @@ class StatusReadingStoreContract(ABC):
         self, status_reading_store: StatusReadingStore
     ) -> None:
         status_reading_store.set_reading(
-            ClientName("amuled"), _READING, MonotonicInstant(nanoseconds=7)
+            ClientName("amuled"), reading=_READING, published_at=MonotonicInstant(nanoseconds=7)
         )
         status_reading_store.set_reading(
-            ClientName("amuled"), _SILENT_READING, MonotonicInstant(nanoseconds=8)
+            ClientName("amuled"),
+            reading=_SILENT_READING,
+            published_at=MonotonicInstant(nanoseconds=8),
         )
         assert status_reading_store.read_readings()["amuled"] == PublishedReading(
             reading=_SILENT_READING, published_at=MonotonicInstant(nanoseconds=8)
@@ -70,7 +72,7 @@ class StatusReadingStoreContract(ABC):
         self, status_reading_store: StatusReadingStore
     ) -> None:
         status_reading_store.set_reading(
-            ClientName("amuled"), _READING, MonotonicInstant(nanoseconds=7)
+            ClientName("amuled"), reading=_READING, published_at=MonotonicInstant(nanoseconds=7)
         )
         with ThreadPoolExecutor(max_workers=1) as executor:
             published_readings = executor.submit(status_reading_store.read_readings).result()
