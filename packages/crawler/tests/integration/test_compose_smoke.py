@@ -568,7 +568,7 @@ import datetime, sqlite3, sys
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.domain.file_key import FileKey, Network
 now_micros = instant_to_micros(datetime.datetime.now(datetime.UTC))
-file = FileKey(Network.ED2K, sys.argv[1])
+file = FileKey(network=Network.ED2K, native_id=sys.argv[1])
 connection = sqlite3.connect("/data/local.db", timeout=30)
 connection.execute(
     "INSERT INTO downloads (file_id, network, native_id, target_id, state, queued_at_micros,"
