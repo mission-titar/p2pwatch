@@ -53,7 +53,12 @@ def register_sql_functions(connection: sqlite3.Connection) -> None:
         raw_metadata: str, codec: str | None, file_type: str | None, complete: int
     ) -> str:
         return json.dumps(
-            fold_raw_metadata(json.loads(raw_metadata), codec, file_type, complete),
+            fold_raw_metadata(
+                json.loads(raw_metadata),
+                codec=codec,
+                file_type=file_type,
+                complete_source_count=complete,
+            ),
             ensure_ascii=False,
         )
 

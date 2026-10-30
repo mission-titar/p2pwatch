@@ -40,7 +40,7 @@ def _interpolate_text(text: str, env: Mapping[str, str], key_path: str) -> str:
         name = match.group(1)
         if name not in env:
             raise InvalidConfigError(
-                key_path, f"environment variable {name!r} referenced but not set"
+                key_path, message=f"environment variable {name!r} referenced but not set"
             )
         return env[name]
 

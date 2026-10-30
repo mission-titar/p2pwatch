@@ -27,7 +27,7 @@ class TargetCoverage:
     file_count: int
 
 
-def coverage_of(target_id: TargetId, tiers: Sequence[DecisionTier]) -> TargetCoverage:
+def coverage_of(target_id: TargetId, *, tiers: Sequence[DecisionTier]) -> TargetCoverage:
     """``tiers``: the tier of each file's latest decision for this target.
 
     Catalog-tier decisions are the ``keroro_large`` catch-all: any keroro file with no numeric

@@ -46,7 +46,9 @@ def test_the_three_files_load_with_the_fingerprint_of_the_policy(tmp_path: Path)
         crawler_config=parse_crawler_config(interpolate_document(load_yaml(config_path), _env())),
         targets=parse_targets(load_yaml(targets_path)),
         matcher_config=parse_matcher_config(load_yaml(matcher_path)),
-        policy_fingerprint=policy_fingerprint(matcher_path.read_bytes(), targets_path.read_bytes()),
+        policy_fingerprint=policy_fingerprint(
+            matcher_path.read_bytes(), targets_bytes=targets_path.read_bytes()
+        ),
     )
 
 

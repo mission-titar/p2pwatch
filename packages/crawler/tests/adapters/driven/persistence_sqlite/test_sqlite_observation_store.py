@@ -45,7 +45,10 @@ def _reported_file(
         duration_seconds=duration_seconds,
         bitrate_kbps=bitrate_kbps,
         raw_metadata=fold_raw_metadata(
-            (("0x0308", "0"), ("0x0308", "0"), ("0x0999", "mystère")), None, None, 2
+            (("0x0308", "0"), ("0x0308", "0"), ("0x0999", "mystère")),
+            codec=None,
+            file_type=None,
+            complete_source_count=2,
         ),
     )
 

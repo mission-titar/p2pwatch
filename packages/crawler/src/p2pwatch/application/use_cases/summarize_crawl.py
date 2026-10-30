@@ -52,7 +52,7 @@ class SummarizeCrawl(CrawlSummarizer):
             is_paused=self._run_state_reader.is_paused(),
             node_state=self._node_state_reader.read_node_state(),
             target_coverages=tuple(
-                coverage_of(target_id, tiers_by_target.get(target_id, ()))
+                coverage_of(target_id, tiers=tiers_by_target.get(target_id, ()))
                 for target_id in self._target_ids
             ),
         )

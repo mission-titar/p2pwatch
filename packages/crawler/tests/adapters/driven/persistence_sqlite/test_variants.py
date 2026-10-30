@@ -66,7 +66,7 @@ def test_fold_raw_meta_sql_function_folds_the_stored_text_as_the_domain_does(
     pairs = (("0x0308", "0"), ("media.title", "Kéroro"))
     stored = json.dumps(pairs, ensure_ascii=False)
     [row] = rows(connection, "SELECT fold_raw_meta(?, 'xvid', NULL, 2) AS raw_meta", (stored,))
-    folded = fold_raw_metadata(pairs, "xvid", None, 2)
+    folded = fold_raw_metadata(pairs, codec="xvid", file_type=None, complete_source_count=2)
     assert row["raw_meta"] == json.dumps(folded, ensure_ascii=False)
 
 

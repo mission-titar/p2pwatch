@@ -20,6 +20,7 @@ class Reappeared:
 
 def source_alert(
     role: SourceRole,
+    *,
     earlier_points: EarlierPoints,
     round_started_at: datetime,
     reappeared_after: timedelta,

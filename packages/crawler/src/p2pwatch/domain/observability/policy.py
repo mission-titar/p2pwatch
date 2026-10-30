@@ -143,7 +143,7 @@ def _decision_labels(decision: FileTargetDecision) -> DecisionLabels:
 
 
 def _channel_gauge(
-    gauge: NodeGauge, event: ChannelStatusSampled, state: bool | None
+    gauge: NodeGauge, *, event: ChannelStatusSampled, state: bool | None
 ) -> GaugeSetting:
     if state is None:  # an unknown state has no series, never a stale one
         return GaugeSetting(gauge, _channel_labels(event), None)
@@ -152,6 +152,7 @@ def _channel_gauge(
 
 def _relayed(
     severity: Severity,
+    *,
     message: str,
     node_id: NodeId,
     node_metrics: tuple[CounterIncrement | GaugeSetting, ...] = (),
@@ -163,9 +164,13 @@ def _relayed(
 
 
 def _channel_alert(
-    severity: Severity, event: ChannelDegraded | ChannelRecovered, state_phrase: str
+    severity: Severity, *, event: ChannelDegraded | ChannelRecovered, state_phrase: str
 ) -> ObservabilityPlan:
-    return _relayed(severity, f"{event.client_name} {event.channel}: {state_phrase}", event.node_id)
+    return _relayed(
+        severity,
+        message=f"{event.client_name} {event.channel}: {state_phrase}",
+        node_id=event.node_id,
+    )
 
 
 def _plan_decisions(event: DecisionsRecorded) -> ObservabilityPlan:
@@ -203,6 +208,7 @@ def _plan_decisions(event: DecisionsRecorded) -> ObservabilityPlan:
 
 def _plan_source(
     event: SourceFirstUseful | SourceReappeared,
+    *,
     kind: SourceAlertKind,
     absent_for: timedelta | None,
     state_phrase: str,
@@ -290,27 +296,34 @@ def plan_observability(event: Event) -> ObservabilityPlan:
                 f"status {event.client_name} {event.channel}: "
                 f"connected {_yes_no(event.connected)}, connectable {_yes_no(event.connectable)}",
                 (
-                    _channel_gauge(NodeGauge.CHANNEL_CONNECTED, event, event.connected),
-                    _channel_gauge(NodeGauge.CHANNEL_CONNECTABLE, event, event.connectable),
+                    _channel_gauge(NodeGauge.CHANNEL_CONNECTED, event=event, state=event.connected),
+                    _channel_gauge(
+                        NodeGauge.CHANNEL_CONNECTABLE, event=event, state=event.connectable
+                    ),
                 ),
             )
         case ChannelDegraded():
             return _channel_alert(
                 Severity.WARNING,
-                event,
-                f"{_DEGRADED_PHRASE_BY_FIELD[event.field]} "
+                event=event,
+                state_phrase=f"{_DEGRADED_PHRASE_BY_FIELD[event.field]} "
                 f"for {event.degraded_for_seconds / 60:.0f} min",
             )
         case ChannelRecovered():
-            return _channel_alert(Severity.INFO, event, _RECOVERED_PHRASE_BY_FIELD[event.field])
+            return _channel_alert(
+                Severity.INFO, event=event, state_phrase=_RECOVERED_PHRASE_BY_FIELD[event.field]
+            )
         case ClientUnreachableLasting():
             return _relayed(
                 Severity.WARNING,
-                f"{event.client_name} unreachable for {event.unreachable_for_seconds / 60:.0f} min",
-                event.node_id,
+                message=f"{event.client_name} unreachable "
+                f"for {event.unreachable_for_seconds / 60:.0f} min",
+                node_id=event.node_id,
             )
         case ClientReachableAgain():
-            return _relayed(Severity.INFO, f"{event.client_name} reachable again", event.node_id)
+            return _relayed(
+                Severity.INFO, message=f"{event.client_name} reachable again", node_id=event.node_id
+            )
         case FreeSpaceSampled():
             return ObservabilityPlan(
                 Severity.DEBUG,
@@ -320,27 +333,30 @@ def plan_observability(event: Event) -> ObservabilityPlan:
         case DiskSpaceLow():
             return _relayed(
                 Severity.WARNING,
-                f"download disk low: {event.free_bytes / 2**30:.1f} GiB free, "
+                message=f"download disk low: {event.free_bytes / 2**30:.1f} GiB free, "
                 f"under the {event.min_free_bytes / 2**30:.1f} GiB floor (no new download)",
-                event.node_id,
+                node_id=event.node_id,
             )
         case SourceFirstUseful():
             return _plan_source(
-                event, SourceAlertKind.FIRST_USEFUL, None, "useful for the first time"
+                event,
+                kind=SourceAlertKind.FIRST_USEFUL,
+                absent_for=None,
+                state_phrase="useful for the first time",
             )
         case SourceReappeared():
             return _plan_source(
                 event,
-                SourceAlertKind.REAPPEARED,
-                timedelta(seconds=event.absent_for_seconds),
-                f"reappeared after {event.absent_for_seconds / 3600:.0f} h",
+                kind=SourceAlertKind.REAPPEARED,
+                absent_for=timedelta(seconds=event.absent_for_seconds),
+                state_phrase=f"reappeared after {event.absent_for_seconds / 3600:.0f} h",
             )
         case CrawlerStarted():
             return _relayed(
                 Severity.INFO,
-                f"🟢 node online (download {'on' if event.download_enabled else 'off'})",
-                event.node_id,
-                (GaugeSetting(NodeGauge.CRAWLER_UP, None, 1.0),),
+                message=f"🟢 node online (download {'on' if event.download_enabled else 'off'})",
+                node_id=event.node_id,
+                node_metrics=(GaugeSetting(NodeGauge.CRAWLER_UP, None, 1.0),),
             )
         case _:  # pragma: no cover
             assert_never(event)

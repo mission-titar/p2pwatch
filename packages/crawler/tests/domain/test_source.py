@@ -105,11 +105,11 @@ def _passing(session_received_bytes: int) -> SourceReading:
 def test_a_passing_state_carries_the_group_of_the_latest_point(
     previous: SourceRole, carried: SourceRole
 ) -> None:
-    assert carried_role(LatestPoint(previous, _T0, 5), _passing(5)) is carried
+    assert carried_role(LatestPoint(previous, _T0, 5), reading=_passing(5)) is carried
 
 
 def test_a_passing_state_without_a_latest_point_is_undetermined() -> None:
-    assert carried_role(None, _passing(0)) is SourceRole.UNDETERMINED
+    assert carried_role(None, reading=_passing(0)) is SourceRole.UNDETERMINED
 
 
 @pytest.mark.parametrize(
@@ -122,7 +122,7 @@ def test_a_passing_state_carries_nothing_once_its_client_was_recreated(
 ) -> None:
     # aMule recreating the client restarts its session's received bytes.
     latest = LatestPoint(SourceRole.QUEUED, _T0, 5)
-    assert carried_role(latest, _passing(session_received_bytes)) is carried
+    assert carried_role(latest, reading=_passing(session_received_bytes)) is carried
 
 
 def test_the_tolerance_lets_one_read_be_missed() -> None:
@@ -155,7 +155,7 @@ def test_earlier_points_tell_a_useful_point_and_the_latest_known_one() -> None:
 
 @pytest.mark.parametrize("server", ["176.103.48.36:4184", "0.0.0.0:1", "1.2.3.4:65535"])
 def test_an_ed2k_contact_point_is_an_ipv4_address_and_a_port(server: str) -> None:
-    assert parse_contact_point(Network.ED2K, server) == ContactPoint(Network.ED2K, server)
+    assert parse_contact_point(Network.ED2K, server=server) == ContactPoint(Network.ED2K, server)
 
 
 @pytest.mark.parametrize(
@@ -176,6 +176,6 @@ def test_an_ed2k_contact_point_is_an_ipv4_address_and_a_port(server: str) -> Non
     ],
 )
 def test_anything_else_is_not_an_ed2k_contact_point(server: str) -> None:
-    assert parse_contact_point(Network.ED2K, server) is None
+    assert parse_contact_point(Network.ED2K, server=server) is None
     with pytest.raises(ValueError, match="a ed2k contact point is an IPv4 address and a port"):
         ContactPoint(Network.ED2K, server)

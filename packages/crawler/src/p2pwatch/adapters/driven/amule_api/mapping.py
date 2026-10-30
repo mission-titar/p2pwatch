@@ -230,7 +230,7 @@ def _contact_point(detail: dict[str, Any]) -> ContactPoint | None:
     """The eD2k server the source connects through (D3); ``None`` when ``ip:port`` names none, an
     unknown server's ``null`` included."""
     return parse_contact_point(
-        Network.ED2K, f"{detail.get('server_ip')}:{detail.get('server_port')}"
+        Network.ED2K, server=f"{detail.get('server_ip')}:{detail.get('server_port')}"
     )
 
 
@@ -294,7 +294,9 @@ def _map_result(search_result: object, keyword: Keyword) -> list[ReportedFile]:
                 keyword=keyword,
                 duration_seconds=_optional_int(media.get("duration_seconds")),
                 bitrate_kbps=_optional_int(media.get("bitrate_kilobits_per_second")),
-                raw_metadata=fold_raw_metadata(raw_metadata, codec, file_type, complete),
+                raw_metadata=fold_raw_metadata(
+                    raw_metadata, codec=codec, file_type=file_type, complete_source_count=complete
+                ),
             )
         )
     return reported_files

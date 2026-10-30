@@ -32,12 +32,14 @@ def load_config(
         targets = read_targets(targets_path)
         matcher_config = read_matcher_config(matcher_path)
     except BrokenInputError as error:
-        raise InvalidConfigError(None, str(error)) from error
+        raise InvalidConfigError(None, message=str(error)) from error
     return LoadedConfig(
         crawler_config=crawler_config,
         targets=targets,
         matcher_config=matcher_config,
-        policy_fingerprint=policy_fingerprint(matcher_path.read_bytes(), targets_path.read_bytes()),
+        policy_fingerprint=policy_fingerprint(
+            matcher_path.read_bytes(), targets_bytes=targets_path.read_bytes()
+        ),
     )
 
 
@@ -52,7 +54,7 @@ def read_targets(targets_path: Path) -> tuple[TargetSegment, ...]:
     try:
         return parse_targets(load_yaml(targets_path))
     except MatchingConfigError as error:
-        raise InvalidConfigError(None, str(error)) from error
+        raise InvalidConfigError(None, message=str(error)) from error
 
 
 def read_matcher_config(matcher_path: Path) -> MatcherConfig:
@@ -60,4 +62,4 @@ def read_matcher_config(matcher_path: Path) -> MatcherConfig:
     try:
         return parse_matcher_config(load_yaml(matcher_path))
     except MatchingConfigError as error:
-        raise InvalidConfigError(None, str(error)) from error
+        raise InvalidConfigError(None, message=str(error)) from error

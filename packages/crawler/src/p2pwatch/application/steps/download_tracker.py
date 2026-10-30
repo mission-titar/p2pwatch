@@ -168,7 +168,9 @@ class DownloadTracker:
             if file in listed_files:
                 deadlines[file] = monotonic_now + self._lost_after
             elif file not in deadlines:
-                left = remaining_wait(latest_seen_at, self._lost_after, self._wall_clock.now())
+                left = remaining_wait(
+                    latest_seen_at, duration=self._lost_after, now=self._wall_clock.now()
+                )
                 deadlines[file] = monotonic_now + left
 
     def _fail_lost(self, listed_files: frozenset[FileKey]) -> None:

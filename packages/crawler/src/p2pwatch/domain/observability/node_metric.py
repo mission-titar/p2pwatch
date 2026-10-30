@@ -135,7 +135,7 @@ def _pairs(labels: NodeMetricLabels | None) -> tuple[tuple[str, str], ...]:
     return () if labels is None else labels.pairs()
 
 
-def _refuse_unless_it_fits(node_metric: NodeMetric, labels: NodeMetricLabels | None) -> None:
+def _refuse_unless_it_fits(node_metric: NodeMetric, *, labels: NodeMetricLabels | None) -> None:
     given = None if labels is None else type(labels)
     if given is not node_metric.label_class:
         raise ValueError(
@@ -154,7 +154,7 @@ class CounterIncrement:
     amount: float = 1.0
 
     def __post_init__(self) -> None:
-        _refuse_unless_it_fits(self.counter, self.labels)
+        _refuse_unless_it_fits(self.counter, labels=self.labels)
         if self.amount < 0:
             raise ValueError(
                 f"{self.counter.exposed_name} takes an amount of 0 or more, not {self.amount}"
@@ -175,7 +175,7 @@ class GaugeSetting:
     value: float | None
 
     def __post_init__(self) -> None:
-        _refuse_unless_it_fits(self.gauge, self.labels)
+        _refuse_unless_it_fits(self.gauge, labels=self.labels)
 
     def label_pairs(self) -> tuple[tuple[str, str], ...]:
         """Its labels' ``(name, text)`` pairs, none when it has no labels."""

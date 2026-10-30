@@ -137,7 +137,7 @@ class SourceWatcher:
         if reading.role is not None:
             return reading.role
         latest = self._source_point_reader.read_latest_point(file, reading, since, read_at, node_id)
-        return carried_role(latest, reading)
+        return carried_role(latest, reading=reading)
 
     async def _alert_sources(
         self,
@@ -165,7 +165,10 @@ class SourceWatcher:
                 self._source_point_reader.read_earlier_points(source, round_.started_at, node_id)
             )
             alert = source_alert(
-                point.role, earlier_points, round_.started_at, self._reappeared_after
+                point.role,
+                earlier_points=earlier_points,
+                round_started_at=round_.started_at,
+                reappeared_after=self._reappeared_after,
             )
             round_.decided.add(source)
             if alert is None:

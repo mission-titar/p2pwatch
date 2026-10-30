@@ -18,6 +18,7 @@ _BYTES_PER_MIB = 1024 * 1024
 
 def candidate_from_fields(
     filename: str,
+    *,
     size_bytes: int,
     duration_seconds: int | None,
     bitrate_kbps: int | None,
@@ -39,6 +40,7 @@ def candidate_from_fields(
 
 def fold_raw_metadata(
     raw_metadata: tuple[tuple[str, str], ...],
+    *,
     codec: str | None,
     file_type: str | None,
     complete_source_count: int,
@@ -70,7 +72,10 @@ class ReportedFile:
     def to_candidate(self) -> FileCandidate:
         """Bridge to the matching engine (delegates to ``candidate_from_fields``)."""
         return candidate_from_fields(
-            self.filename, self.size_bytes, self.duration_seconds, self.bitrate_kbps
+            self.filename,
+            size_bytes=self.size_bytes,
+            duration_seconds=self.duration_seconds,
+            bitrate_kbps=self.bitrate_kbps,
         )
 
 

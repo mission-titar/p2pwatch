@@ -66,7 +66,7 @@ class FileJudge:
         persisted = self._decision_reader.read_latest_decisions(file)
         changes: list[DecisionChange] = []
         for new_decision in records_to_write(
-            [to_record(decision) for decision in fresh], persisted
+            [to_record(decision) for decision in fresh], persisted=persisted
         ):
             target_id = new_decision.target_id
             self._decision_writer.record_decision(
