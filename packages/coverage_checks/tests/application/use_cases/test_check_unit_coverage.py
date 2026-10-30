@@ -34,7 +34,7 @@ def _test_coverage(*, statements_run_by_own_tests: set[int]) -> TestCoverage:
 
 
 def _checker(
-    test_files: tuple[PurePath, ...], test_coverage_reader: FakeTestCoverageReader
+    test_files: tuple[PurePath, ...], *, test_coverage_reader: FakeTestCoverageReader
 ) -> CheckUnitCoverage:
     return CheckUnitCoverage(
         package_tree_reader=FakePackageTreeReader(
@@ -43,7 +43,7 @@ def _checker(
                 test_files=test_files,
                 tests_without_unit={MIGRATION_TESTS.as_posix(): "its subject is SQL"},
             ),
-            dict.fromkeys((LONELY, OTHER, SIZES), FUNCTION_SOURCE),
+            sources_by_module=dict.fromkeys((LONELY, OTHER, SIZES), FUNCTION_SOURCE),
         ),
         test_coverage_reader=test_coverage_reader,
     )
@@ -64,14 +64,17 @@ def test_the_report_holds_the_tree_s_problems_then_each_short_module_s_with_the_
         MIGRATION_TESTS,
     )
 
-    report = _checker(test_files, test_coverage_reader).check_unit_coverage()
+    report = _checker(test_files, test_coverage_reader=test_coverage_reader).check_unit_coverage()
 
     assert report == UnitCoverageReport(
         problems=(
-            UnmappedTestFile(PurePath("tests/test_nothing.py")),
-            Shortfall(LONELY, own_test_files=(), unrun_statements=(2,), unrun_branches=()),
+            UnmappedTestFile(test_file=PurePath("tests/test_nothing.py")),
+            Shortfall(module=LONELY, own_test_files=(), unrun_statements=(2,), unrun_branches=()),
             Shortfall(
-                OTHER, own_test_files=(OTHER_TESTS,), unrun_statements=(2,), unrun_branches=()
+                module=OTHER,
+                own_test_files=(OTHER_TESTS,),
+                unrun_statements=(2,),
+                unrun_branches=(),
             ),
         ),
         module_count=3,
@@ -92,7 +95,9 @@ def test_a_package_whose_modules_their_own_tests_run_whole_has_no_problem() -> N
         dict.fromkeys((LONELY, OTHER, SIZES), _test_coverage(statements_run_by_own_tests={2}))
     )
 
-    report = _checker((SIZES_TESTS, MIGRATION_TESTS), test_coverage_reader).check_unit_coverage()
+    report = _checker(
+        (SIZES_TESTS, MIGRATION_TESTS), test_coverage_reader=test_coverage_reader
+    ).check_unit_coverage()
 
     assert report == UnitCoverageReport(
         problems=(),
@@ -108,7 +113,7 @@ def test_a_package_without_a_module_still_reads_its_run_s_coverage() -> None:
     test_coverage_reader = FakeTestCoverageReader({})
     checker = CheckUnitCoverage(
         package_tree_reader=FakePackageTreeReader(
-            PackageTree(modules=(), test_files=(), tests_without_unit={}), {}
+            PackageTree(modules=(), test_files=(), tests_without_unit={}), sources_by_module={}
         ),
         test_coverage_reader=test_coverage_reader,
     )

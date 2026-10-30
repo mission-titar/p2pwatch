@@ -20,7 +20,7 @@ from catalog_matching.domain.models import FileCandidate, TargetSegment
 from catalog_matching.domain.resolver import MatcherResolver, ResolvedTarget
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class Explanation:
     """Why this decision (cf. spec §8.5): fired rules, tokens and vetoes, coverage values.
 
@@ -37,7 +37,7 @@ class Explanation:
     vetoes_fired: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class MatchDecision:
     """File decision (cf. spec §8.5). Carries the 3 match_decisions columns (§11).
 
@@ -53,7 +53,7 @@ class MatchDecision:
     explanation: Explanation
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class DecisionRecord:
     """The 3 COMPARABLE columns of a persisted decision, without the runtime explainability.
 
@@ -93,6 +93,7 @@ class _RuleHit:
 
 def _first_matching_rule(
     config: MatcherConfig,
+    *,
     resolved: ResolvedTarget,
     candidate: FileCandidate,
 ) -> tuple[int, str, DecisionTier] | None:
@@ -110,6 +111,7 @@ def _first_matching_rule(
 
 def _explain(
     config: MatcherConfig,
+    *,
     resolved: ResolvedTarget,
     candidates: Sequence[FileCandidate],
 ) -> Explanation:
@@ -157,8 +159,8 @@ class MatchingEngine:
     def __init__(
         self,
         config: MatcherConfig,
-        targets: Sequence[TargetSegment],
         *,
+        targets: Sequence[TargetSegment],
         max_filename_length: int,
     ) -> None:
         self._config = config
@@ -177,7 +179,7 @@ class MatchingEngine:
         return None if resolved is None else resolved.target
 
     def explain(
-        self, candidates: Iterable[FileCandidate], target_id: TargetId
+        self, candidates: Iterable[FileCandidate], *, target_id: TargetId
     ) -> Explanation | None:
         """Explains target ``target_id`` over every candidate of one file; ``None`` if unknown.
 
@@ -186,7 +188,9 @@ class MatchingEngine:
         resolved = self._resolved_by_target.get(target_id)
         if resolved is None:
             return None
-        return _explain(self._config, resolved, self._matchable_candidates(candidates))
+        return _explain(
+            self._config, resolved=resolved, candidates=self._matchable_candidates(candidates)
+        )
 
     def evaluate_file(self, candidates: Iterable[FileCandidate]) -> list[MatchDecision]:
         """All decisions for ONE file, one candidate per filename; ``[]`` = discard.
@@ -201,10 +205,10 @@ class MatchingEngine:
         matchable_candidates = self._matchable_candidates(candidates)
         best_by_target_id: dict[TargetId, _RuleHit] = {}
         for resolved in self._resolved:
-            if self._vetoed(resolved, matchable_candidates):
+            if self._vetoed(resolved, candidates=matchable_candidates):
                 continue
             for candidate in matchable_candidates:
-                outcome = _first_matching_rule(self._config, resolved, candidate)
+                outcome = _first_matching_rule(self._config, resolved=resolved, candidate=candidate)
                 if outcome is None:
                     continue
                 index, rule_name, tier = outcome
@@ -234,7 +238,7 @@ class MatchingEngine:
             if len(candidate.filename) <= self._max_filename_length
         ]
 
-    def _vetoed(self, resolved: ResolvedTarget, candidates: Sequence[FileCandidate]) -> bool:
+    def _vetoed(self, resolved: ResolvedTarget, *, candidates: Sequence[FileCandidate]) -> bool:
         """True when any veto matches any candidate: the target is out for the whole file."""
         return any(
             resolved.matcher_by_token_name[veto].matches(candidate)
@@ -279,5 +283,5 @@ class MatchingEngine:
             target_id=hit.resolved.target.target_id,
             rule_name=hit.rule_name,
             tier=hit.tier,
-            explanation=_explain(self._config, hit.resolved, (hit.candidate,)),
+            explanation=_explain(self._config, resolved=hit.resolved, candidates=(hit.candidate,)),
         )

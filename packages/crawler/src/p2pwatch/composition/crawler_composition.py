@@ -351,7 +351,9 @@ class CrawlerComposition(CrawlerRunner):
             decision_store = SqliteDecisionStore(catalog_connection)
             backoff_state_store = SqliteBackoffStateStore(local_connection)
             engine = MatchingEngine(
-                config.matcher_config, config.targets, max_filename_length=_MAX_FILENAME_LENGTH
+                config.matcher_config,
+                targets=config.targets,
+                max_filename_length=_MAX_FILENAME_LENGTH,
             )
             status_reading_store = InMemoryStatusReadingStore((_AMULE_CLIENT_NAME,))
             # In-process webui (spec §5): own thread + loop, started EARLY (before the daemon client

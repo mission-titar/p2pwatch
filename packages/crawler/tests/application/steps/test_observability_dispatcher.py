@@ -110,7 +110,9 @@ async def test_relays_the_log_line_under_the_events_node() -> None:
 @pytest.mark.asyncio
 async def test_logs_the_message_but_notifies_the_plans_notification() -> None:
     logger, notifier = FakeLogger(), FakeNotifier()
-    download = DecisionRecord(TargetId("062A"), "rule", DecisionTier.DOWNLOAD)
+    download = DecisionRecord(
+        target_id=TargetId("062A"), rule_name="rule", tier=DecisionTier.DOWNLOAD
+    )
     change = ev.DecisionChange(TargetId("062A"), "Les demoiselles cambrioleuses", None, download)
     await _dispatcher(FakeNodeMetricStore(), notifier, logger).dispatch(
         ev.DecisionsRecorded(

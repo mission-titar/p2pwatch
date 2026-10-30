@@ -9,7 +9,7 @@ from coverage_checks.domain.shortfall import Shortfall
 type UnitCoverageProblem = TreeProblem | Shortfall
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class UnitCoverageReport:
     """What is wrong, the tree's problems first, and the counts of the package's summary."""
 

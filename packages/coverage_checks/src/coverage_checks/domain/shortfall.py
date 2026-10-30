@@ -8,7 +8,7 @@ from coverage_checks.domain.function_bodies import find_function_body_lines
 from coverage_checks.domain.test_coverage import Branch, TestCoverage
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class Shortfall:
     """What of a module its own tests leave unrun, in line order, and those own tests."""
 
@@ -20,6 +20,7 @@ class Shortfall:
 
 def find_shortfall(
     module: PurePath,
+    *,
     own_test_files: Sequence[PurePath],
     test_coverage: TestCoverage,
     source: str,
@@ -42,4 +43,9 @@ def find_shortfall(
     )
     if not unrun_statements and not unrun_branches:
         return None
-    return Shortfall(module, tuple(own_test_files), unrun_statements, unrun_branches)
+    return Shortfall(
+        module=module,
+        own_test_files=tuple(own_test_files),
+        unrun_statements=unrun_statements,
+        unrun_branches=unrun_branches,
+    )

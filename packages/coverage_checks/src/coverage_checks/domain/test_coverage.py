@@ -3,7 +3,7 @@ from dataclasses import dataclass
 type Branch = tuple[int, int]
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class TestCoverage:
     """A module's statements and branches, those the test run ran and those its own tests ran.
 

@@ -19,7 +19,7 @@ from catalog_matching.domain.normalization import fold, normalize, split_words
         ("Cæsar", "caesar"),  # ligature æ -> ae
     ],
 )
-def test_normalize(raw: str, expected: str) -> None:
+def test_normalize(*, raw: str, expected: str) -> None:
     assert normalize(raw) == expected
 
 
@@ -34,7 +34,7 @@ def test_normalize(raw: str, expected: str) -> None:
         ("21/09/2008", "21/09/2008"),  # date separators kept
     ],
 )
-def test_fold_preserves_punctuation_and_digits(raw: str, expected: str) -> None:
+def test_fold_preserves_punctuation_and_digits(*, raw: str, expected: str) -> None:
     assert fold(raw) == expected
 
 

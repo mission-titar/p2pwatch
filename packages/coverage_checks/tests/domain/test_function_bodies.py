@@ -47,7 +47,7 @@ from coverage_checks.domain.function_bodies import find_function_body_lines
     ],
     ids=["function", "decorated-multi-line-signature", "class"],
 )
-def test_a_body_is_in_and_what_import_runs_is_not(source: str, body_lines: set[int]) -> None:
+def test_a_body_is_in_and_what_import_runs_is_not(*, source: str, body_lines: set[int]) -> None:
     assert find_function_body_lines(dedent(source)) == body_lines
 
 

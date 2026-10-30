@@ -5,7 +5,7 @@ from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction,
 
 
 def _record(target_id: TargetId, tier: DecisionTier = DecisionTier.DOWNLOAD) -> DecisionRecord:
-    return DecisionRecord(target_id, "id_segment_exact", tier)
+    return DecisionRecord(target_id=target_id, rule_name="id_segment_exact", tier=tier)
 
 
 def test_retractions_are_equal_when_their_targets_are() -> None:

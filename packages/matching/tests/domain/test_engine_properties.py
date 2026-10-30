@@ -101,7 +101,7 @@ def test_property_decision_invariant_under_target_reordering() -> None:
     rng = random.Random(_SEED)
     base_targets = _targets()
     reference_engine = MatchingEngine(
-        config, base_targets, max_filename_length=_MAX_FILENAME_LENGTH
+        config, targets=base_targets, max_filename_length=_MAX_FILENAME_LENGTH
     )
     for filename in _FILENAMES:
         candidate = FileCandidate(filename=filename)
@@ -110,7 +110,7 @@ def test_property_decision_invariant_under_target_reordering() -> None:
             shuffled = base_targets[:]
             rng.shuffle(shuffled)
             got = MatchingEngine(
-                config, shuffled, max_filename_length=_MAX_FILENAME_LENGTH
+                config, targets=shuffled, max_filename_length=_MAX_FILENAME_LENGTH
             ).evaluate_file((candidate,))
             assert got == expected, f"decision depends on target order for {filename!r}"
 
@@ -137,9 +137,11 @@ def test_property_higher_priority_rule_never_lowers_tier() -> None:
     }
     config_boosted = parse_matcher_config(raw_boosted)
     targets = _targets()
-    engine_base = MatchingEngine(config_base, targets, max_filename_length=_MAX_FILENAME_LENGTH)
+    engine_base = MatchingEngine(
+        config_base, targets=targets, max_filename_length=_MAX_FILENAME_LENGTH
+    )
     engine_boosted = MatchingEngine(
-        config_boosted, targets, max_filename_length=_MAX_FILENAME_LENGTH
+        config_boosted, targets=targets, max_filename_length=_MAX_FILENAME_LENGTH
     )
     for filename in _FILENAMES:
         candidate = FileCandidate(filename=filename)

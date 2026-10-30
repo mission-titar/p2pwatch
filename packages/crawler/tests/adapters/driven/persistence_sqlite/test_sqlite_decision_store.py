@@ -36,7 +36,12 @@ def _decision(
     decided_at: datetime = _T0,
     node_id: NodeId = _NODE_ID,
 ) -> DatedDecision[DecisionRecord]:
-    return DatedDecision(file, DecisionRecord(target_id, "exact_062a", tier), decided_at, node_id)
+    return DatedDecision(
+        file,
+        DecisionRecord(target_id=target_id, rule_name="exact_062a", tier=tier),
+        decided_at,
+        node_id,
+    )
 
 
 def _retraction(file: FileKey, node_id: NodeId = _NODE_ID) -> DatedDecision[Retraction]:

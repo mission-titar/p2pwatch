@@ -8,7 +8,7 @@ from template_checks.composition.command_line import build_command_line
 
 
 def test_logic_free_runs_the_logic_check(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    *, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "bad.html").write_text("{% if x %}oops{% endif %}")
 
@@ -18,7 +18,7 @@ def test_logic_free_runs_the_logic_check(
 
 
 def test_template_attributes_prints_the_attributes_of_the_templates_under_the_cwd(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    *, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "templates").mkdir()
     (tmp_path / "templates" / "page.html").write_text("{{ row.size_mib }}{{ row.filename }}")
@@ -30,7 +30,7 @@ def test_template_attributes_prints_the_attributes_of_the_templates_under_the_cw
 
 @pytest.mark.parametrize("command", ["logic-free", "template-attributes"])
 def test_a_template_jinja_cannot_parse_ends_in_one_error_line_naming_it(
-    command: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    *, command: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "templates").mkdir()
     (tmp_path / "templates" / "page.html").write_text("<p>\n{% if %}")
@@ -45,7 +45,7 @@ def test_a_template_jinja_cannot_parse_ends_in_one_error_line_naming_it(
 
 
 def test_an_absent_templates_directory_ends_in_one_error_line_naming_it(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    *, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     assert build_command_line(cwd=tmp_path).run(["template-attributes", "absent"]) == 1
 

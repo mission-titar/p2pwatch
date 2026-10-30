@@ -34,7 +34,7 @@ def engine() -> MatchingEngine:
     """REAL engine: deployment matcher + golden-corpus targets (shared fixtures)."""
     config = parse_matcher_config(load_yaml(_MATCHER))
     targets = parse_targets(load_yaml(_FIXTURES / "golden_targets.yaml"))
-    return MatchingEngine(config, targets, max_filename_length=_MAX_FILENAME_LENGTH)
+    return MatchingEngine(config, targets=targets, max_filename_length=_MAX_FILENAME_LENGTH)
 
 
 @pytest.fixture

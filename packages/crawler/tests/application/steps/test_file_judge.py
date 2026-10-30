@@ -51,7 +51,9 @@ _MULTI_NAME = "Keroro 062 teletoon.avi"  # bare number + source marker → 062A 
 _NOTIFY_NAME = "Keroro Les demoiselles cambrioleuses.avi"
 _TITLE_A, _TITLE_B = "Les demoiselles cambrioleuses", "Le grand combat sous-marin"
 _SIZE = 234_000_000
-_ID_SEGMENT_DOWNLOAD = DecisionRecord(TargetId("062A"), "id_segment_exact", DecisionTier.DOWNLOAD)
+_ID_SEGMENT_DOWNLOAD = DecisionRecord(
+    target_id=TargetId("062A"), rule_name="id_segment_exact", tier=DecisionTier.DOWNLOAD
+)
 
 
 def _key(native_id: str) -> FileKey:
@@ -83,7 +85,7 @@ def _seed_decision(
     decision_store.record_decision(
         DatedDecision(
             _key(native_id),
-            DecisionRecord(target_id, "title_review", DecisionTier.NOTIFY),
+            DecisionRecord(target_id=target_id, rule_name="title_review", tier=DecisionTier.NOTIFY),
             decided_at,
             node_id,
         )

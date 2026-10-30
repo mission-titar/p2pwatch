@@ -91,7 +91,6 @@ known-first-party = [
 "vulture_whitelist.py" = ["B018", "F821"]
 # The zones not yet keyword-only: each line goes with the block that converts its zone. Its globs
 # never use `*` for a file name, which ruff lets cross a `/`.
-"packages/{matching,template_checks,coverage_checks}/**" = ["PLR0917"]  # M1
 "packages/{amule,amule_bump}/**" = ["PLR0917"]  # M2
 "packages/vex_checks/**" = ["PLR0917"]  # M3
 "packages/crawler/src/p2pwatch/domain/**" = ["PLR0917"]  # C1a

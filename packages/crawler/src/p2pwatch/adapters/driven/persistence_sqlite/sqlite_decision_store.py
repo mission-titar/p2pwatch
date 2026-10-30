@@ -125,4 +125,4 @@ def _decision_columns(decision: FileTargetDecision) -> tuple[str, str, str]:
 def _file_target_decision(target_id: TargetId, rule_name: str, tier: str) -> FileTargetDecision:
     if tier == _RETRACTED_TIER:
         return Retraction(target_id)
-    return DecisionRecord(target_id, rule_name, DecisionTier(tier))
+    return DecisionRecord(target_id=target_id, rule_name=rule_name, tier=DecisionTier(tier))

@@ -281,7 +281,7 @@ def test_coverage_override_min_out_of_unit_range_is_rejected() -> None:
     ],
 )
 def test_a_coverage_tokens_4x_key_is_refused_with_its_new_name(
-    coverage_token: dict[str, object], old_key: str, new_key: str
+    *, coverage_token: dict[str, object], old_key: str, new_key: str
 ) -> None:
     message = (
         f"token 'title_hit': key '{old_key}' was renamed '{new_key}', rename it in matcher.yml"
@@ -294,7 +294,7 @@ def test_a_coverage_tokens_4x_key_is_refused_with_its_new_name(
     ("old_key", "new_key"), [("min", "min_coverage"), ("fuzz", "min_similarity")]
 )
 def test_a_token_references_4x_override_is_refused_with_its_new_name(
-    old_key: str, new_key: str
+    *, old_key: str, new_key: str
 ) -> None:
     message = (
         f"operand {{token: 'cov'}}: key '{old_key}' was renamed '{new_key}', "
@@ -320,7 +320,7 @@ def test_a_token_references_4x_override_is_refused_with_its_new_name(
     ("old_attr", "new_attr"), [("size_mb", "size_mib"), ("duration_sec", "duration_seconds")]
 )
 def test_a_4x_attr_between_attribute_is_refused_with_its_new_name(
-    old_attr: str, new_attr: str
+    *, old_attr: str, new_attr: str
 ) -> None:
     message = f"attr_between '{old_attr}' was renamed '{new_attr}', rename it in matcher.yml"
     with pytest.raises(MatchingConfigError, match=re.escape(message)):
@@ -865,7 +865,7 @@ def test_vetoes_section_must_be_a_list() -> None:
     ids=["min_coverage", "min_similarity", "min", "max"],
 )
 def test_a_token_number_that_is_no_number_raises_and_names_its_key(
-    token: dict[str, object], message: str
+    *, token: dict[str, object], message: str
 ) -> None:
     with pytest.raises(MatchingConfigError) as raised:
         parse_matcher_config({"tokens": {"t": token}, "rules": []})
@@ -896,7 +896,7 @@ def test_an_override_that_is_no_number_raises_and_names_it(override_key: str) ->
     ],
 )
 def test_an_episode_number_that_is_no_integer_raises_and_names_its_key(
-    key: str, number: object, shown: str
+    *, key: str, number: object, shown: str
 ) -> None:
     episode = {"season": 1, "seasonal_number": 1, "absolute_number": 1} | {key: number}
     with pytest.raises(MatchingConfigError) as raised:

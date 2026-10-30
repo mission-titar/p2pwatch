@@ -31,9 +31,9 @@ class CheckUnitCoverage(UnitCoverageChecker):
             if (
                 shortfall := find_shortfall(
                     module,
-                    test_files,
-                    test_coverage_by_module[module],
-                    self._package_tree_reader.read_module_source(module),
+                    own_test_files=test_files,
+                    test_coverage=test_coverage_by_module[module],
+                    source=self._package_tree_reader.read_module_source(module),
                 )
             )
         ]

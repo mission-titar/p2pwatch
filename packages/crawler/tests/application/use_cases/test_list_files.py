@@ -15,7 +15,9 @@ _ENTRY = CatalogEntry(
     file=FileKey(Network.ED2K, "a" * 32),
     size_bytes=100,
     latest_observation=None,
-    decisions=(DecisionRecord(TargetId("062A"), "rule", DecisionTier.DOWNLOAD),),
+    decisions=(
+        DecisionRecord(target_id=TargetId("062A"), rule_name="rule", tier=DecisionTier.DOWNLOAD),
+    ),
 )
 
 

@@ -74,7 +74,7 @@ def test_a_dunder_module_drops_its_underscores() -> None:
 )
 def test_a_test_file_mapping_to_no_module_fails(test_file: str) -> None:
     own_tests = find_own_tests(_tree("src/pkg/a/b.py", test_file))
-    assert own_tests.problems == (UnmappedTestFile(PurePath(test_file)),)
+    assert own_tests.problems == (UnmappedTestFile(test_file=PurePath(test_file)),)
     assert own_tests.mapped_test_count == 0
 
 
@@ -109,7 +109,7 @@ def test_a_listed_test_file_that_tests_a_module_fails() -> None:
         _tree("src/pkg/b.py", "tests/test_b.py", tests_without_unit={"tests/test_b.py": "listed"})
     )
     assert own_tests.problems == (
-        ListedTestOfModule(PurePath("tests/test_b.py"), PurePath("src/pkg/b.py")),
+        ListedTestOfModule(test_file=PurePath("tests/test_b.py"), module=PurePath("src/pkg/b.py")),
     )
     assert own_tests.test_files_by_module == {PurePath("src/pkg/b.py"): ()}
 
@@ -119,7 +119,7 @@ def test_an_entry_listing_no_test_file_fails(listed_path: str) -> None:
     own_tests = find_own_tests(
         _tree("src/pkg/b.py", "tests/test_b.py", tests_without_unit={listed_path: "deleted"})
     )
-    assert own_tests.problems == (StaleListing(listed_path),)
+    assert own_tests.problems == (StaleListing(listed_path=listed_path),)
 
 
 @pytest.mark.parametrize("reason", ["", "  ", 3])
@@ -130,13 +130,13 @@ def test_an_entry_without_its_reason_fails(reason: object) -> None:
             tests_without_unit={"tests/test_migration_0002.py": reason},
         )
     )
-    assert own_tests.problems == (ListingWithoutReason("tests/test_migration_0002.py"),)
+    assert own_tests.problems == (ListingWithoutReason(listed_path="tests/test_migration_0002.py"),)
 
 
 @pytest.mark.parametrize("stem", ["main", "init"])
 def test_a_module_named_like_a_dunder_beside_it_fails(stem: str) -> None:
     assert find_own_tests(_tree(f"src/pkg/__{stem}__.py", f"src/pkg/{stem}.py")).problems == (
-        UnitNameCollision(PurePath(f"src/pkg/{stem}.py")),
+        UnitNameCollision(module=PurePath(f"src/pkg/{stem}.py")),
     )
 
 

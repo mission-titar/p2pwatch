@@ -305,7 +305,9 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
     decision_store.record_decision(
         DatedDecision(
             FileKey(Network.ED2K, _HASH_MULTI),
-            DecisionRecord(TargetId("001A"), "keroro_large", DecisionTier.CATALOG),
+            DecisionRecord(
+                target_id=TargetId("001A"), rule_name="keroro_large", tier=DecisionTier.CATALOG
+            ),
             wall_clock.now(),
             _NODE_ID,
         )

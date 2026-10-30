@@ -280,7 +280,7 @@ def _decision(target_id: TargetId, label: str) -> FileTargetDecision:
     """The decision a log line names ``label``: a tier, or ``retracted``."""
     if label == "retracted":
         return Retraction(target_id)
-    return DecisionRecord(target_id, "rule", DecisionTier(label))
+    return DecisionRecord(target_id=target_id, rule_name="rule", tier=DecisionTier(label))
 
 
 def _change(target_id: TargetId, before: str | None, after: str) -> ev.DecisionChange:

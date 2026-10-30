@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from pathlib import PurePath
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class PackageTree:
     """A package's modules and test files, relative to its directory, and its `tests_without_unit`.
 
