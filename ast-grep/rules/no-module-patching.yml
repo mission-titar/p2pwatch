@@ -2,7 +2,7 @@ id: no-module-patching
 language: python
 severity: error
 message: A test sets what it tunes through a parameter, never by patching a module (`monkeypatch`, `pytest.MonkeyPatch`, `unittest.mock`'s `patch`).
-note: "Pass process state from a `__main__.py`, a tuned constant as a parameter, a replaced function as a port or a typed `Callable`."
+note: "Pass process state from a `__main__.py`, a tuned constant as a parameter, a replaced function as a port or a callback `Protocol`."
 rule:
   any:
     # The fixture, its class and its module, under any name or attribute.

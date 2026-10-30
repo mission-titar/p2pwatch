@@ -80,6 +80,12 @@ known-first-party = [
 # ruff exempts an `@override` method from PLR0917.
 "typing.override".msg = "A signature takes one positional parameter at most, overriding or not."
 "typing_extensions.override".msg = "A signature takes one positional parameter at most, overriding or not."
+"typing.Callable".msg = "Declare a callback Protocol: a Callable cannot name its parameters."
+"typing_extensions.Callable".msg = "Declare a callback Protocol: a Callable cannot name its parameters."
+"collections.abc.Callable".msg = "Declare a callback Protocol: a Callable cannot name its parameters."
+"typing.NamedTuple".msg = "Declare a kw_only dataclass: a tuple's constructor is positional."
+"typing_extensions.NamedTuple".msg = "Declare a kw_only dataclass: a tuple's constructor is positional."
+"collections.namedtuple".msg = "Declare a kw_only dataclass: a tuple's constructor is positional."
 
 [tool.ruff.lint.per-file-ignores]
 "vulture_whitelist.py" = ["B018", "F821"]

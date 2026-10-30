@@ -5,7 +5,7 @@ testcontainers' own bridge network is unusable on some hosts. See docs/contribut
 """
 
 import os
-from typing import NamedTuple
+from dataclasses import dataclass
 
 import pytest
 
@@ -25,7 +25,8 @@ _SKIP_REASON = (
 )
 
 
-class ApiEndpoint(NamedTuple):
+@dataclass(frozen=True, kw_only=True)
+class ApiEndpoint:
     host: str
     port: int
     password: str
