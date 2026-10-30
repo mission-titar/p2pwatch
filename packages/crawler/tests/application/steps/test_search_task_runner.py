@@ -59,6 +59,7 @@ class _Tasks:
     def __init__(
         self,
         observation_store: SqliteObservationStore,
+        *,
         decision_store: SqliteDecisionStore,
         engine: MatchingEngine,
         loop: VirtualLoop,
@@ -80,7 +81,7 @@ class _Tasks:
         self.run_state = FakeRunStateStore()
         self.logger = FakeLogger()
 
-    def searching(self, client: Any, keywords: list[str]) -> Coroutine[Any, Any, None]:
+    def searching(self, client: Any, *, keywords: list[str]) -> Coroutine[Any, Any, None]:
         dispatcher = ObservabilityOverFakes().dispatcher
         file_judge = FileJudge(
             observation_reader=self.observation_store,
@@ -127,19 +128,22 @@ class _Tasks:
         async def bounded() -> None:
             with suppress(TimeoutError):
                 async with asyncio.timeout(seconds):
-                    await asyncio.gather(self.searching(client, keywords), *beside)
+                    await asyncio.gather(self.searching(client, keywords=keywords), *beside)
 
         self.loop.run_until_complete(bounded())
 
 
 @pytest.fixture
 def tasks(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     virtual_loop: VirtualLoop,
 ) -> _Tasks:
-    return _Tasks(observation_store, decision_store, engine, virtual_loop)
+    return _Tasks(
+        observation_store, decision_store=decision_store, engine=engine, loop=virtual_loop
+    )
 
 
 def test_each_channel_and_keyword_searches_in_its_own_task(tasks: _Tasks) -> None:
@@ -155,7 +159,7 @@ def test_each_channel_and_keyword_searches_in_its_own_task(tasks: _Tasks) -> Non
 
 
 def test_a_task_records_its_observations_under_the_node_id_the_tasks_run_with(
-    tasks: _Tasks, catalog_connection: sqlite3.Connection
+    *, tasks: _Tasks, catalog_connection: sqlite3.Connection
 ) -> None:
     reported_file = ReportedFile(
         file=FileKey(network=Network.ED2K, native_id="a" * 32),
@@ -234,7 +238,9 @@ def test_the_backoff_resumed_after_the_tasks_were_built_is_not_saved_again(
     tasks.state.set_backoff_states(resumed)  # the previous run's save
 
     async def resume_once_built() -> None:
-        searching = tasks.searching(FakeTimedSearchClient({Channel("kad"): 30.0}), ["keroro"])
+        searching = tasks.searching(
+            FakeTimedSearchClient({Channel("kad"): 30.0}), keywords=["keroro"]
+        )
         tasks.backoff.resume_waits()
         with suppress(TimeoutError):
             async with asyncio.timeout(100.0):
@@ -267,7 +273,7 @@ def test_a_search_that_never_suspends_does_not_starve_the_loop(tasks: _Tasks) ->
     client = FakeNeverSuspendingSearchClient()
 
     async def main() -> None:
-        searching = asyncio.ensure_future(tasks.searching(client, ["keroro"]))
+        searching = asyncio.ensure_future(tasks.searching(client, keywords=["keroro"]))
         while not searching.done():
             client.ticks += 1
             if client.calls >= 100:

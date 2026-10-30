@@ -50,7 +50,10 @@ _NODE_ID = NodeId("titar-node-1")
 
 
 def _relayed(
-    severity: Severity, message: str, node_metrics: tuple[CounterIncrement | GaugeSetting, ...] = ()
+    severity: Severity,
+    *,
+    message: str,
+    node_metrics: tuple[CounterIncrement | GaugeSetting, ...] = (),
 ) -> ObservabilityPlan:
     """An operations plan: its log line relayed under the event's node."""
     return ObservabilityPlan(
@@ -159,7 +162,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
             degraded_for_seconds=300.0,
             node_id=_NODE_ID,
         ),
-        _relayed(Severity.WARNING, "amuled ed2k: off its network for 5 min"),
+        _relayed(Severity.WARNING, message="amuled ed2k: off its network for 5 min"),
     ),
     (
         ev.ChannelDegraded(
@@ -169,7 +172,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
             degraded_for_seconds=300.0,
             node_id=_NODE_ID,
         ),
-        _relayed(Severity.WARNING, "amuled kad: not connectable for 5 min"),
+        _relayed(Severity.WARNING, message="amuled kad: not connectable for 5 min"),
     ),
     (
         ev.ChannelRecovered(
@@ -178,7 +181,7 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
             field="connected",
             node_id=_NODE_ID,
         ),
-        _relayed(Severity.INFO, "amuled ed2k: back on its network"),
+        _relayed(Severity.INFO, message="amuled ed2k: back on its network"),
     ),
     (
         ev.ChannelRecovered(
@@ -187,17 +190,17 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
             field="connectable",
             node_id=_NODE_ID,
         ),
-        _relayed(Severity.INFO, "amuled kad: connectable again"),
+        _relayed(Severity.INFO, message="amuled kad: connectable again"),
     ),
     (
         ev.ClientUnreachableLasting(
             client_name=ClientName("amuled"), unreachable_for_seconds=120.0, node_id=_NODE_ID
         ),
-        _relayed(Severity.WARNING, "amuled unreachable for 2 min"),
+        _relayed(Severity.WARNING, message="amuled unreachable for 2 min"),
     ),
     (
         ev.ClientReachableAgain(client_name=ClientName("amuled"), node_id=_NODE_ID),
-        _relayed(Severity.INFO, "amuled reachable again"),
+        _relayed(Severity.INFO, message="amuled reachable again"),
     ),
     (
         ev.FreeSpaceSampled(free_bytes=5_000),
@@ -213,23 +216,23 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ev.DiskSpaceLow(free_bytes=3 * 2**29, min_free_bytes=10 * 2**30, node_id=_NODE_ID),
         _relayed(
             Severity.WARNING,
-            "download disk low: 1.5 GiB free, under the 10.0 GiB floor (no new download)",
+            message="download disk low: 1.5 GiB free, under the 10.0 GiB floor (no new download)",
         ),
     ),
     (
         ev.CrawlerStarted(download_enabled=True, node_id=_NODE_ID),
         _relayed(
             Severity.INFO,
-            "🟢 node online (download on)",
-            (GaugeSetting(gauge=NodeGauge.CRAWLER_UP, labels=None, value=1.0),),
+            message="🟢 node online (download on)",
+            node_metrics=(GaugeSetting(gauge=NodeGauge.CRAWLER_UP, labels=None, value=1.0),),
         ),
     ),
     (
         ev.CrawlerStarted(download_enabled=False, node_id=_NODE_ID),
         _relayed(
             Severity.INFO,
-            "🟢 node online (download off)",
-            (GaugeSetting(gauge=NodeGauge.CRAWLER_UP, labels=None, value=1.0),),
+            message="🟢 node online (download off)",
+            node_metrics=(GaugeSetting(gauge=NodeGauge.CRAWLER_UP, labels=None, value=1.0),),
         ),
     ),
     (
@@ -307,21 +310,21 @@ def _decisions(*changes: ev.DecisionChange) -> ev.DecisionsRecorded:
     )
 
 
-def _decision(target_id: TargetId, label: str) -> FileTargetDecision:
+def _decision(target_id: TargetId, *, label: str) -> FileTargetDecision:
     """The decision a log line names ``label``: a tier, or ``retracted``."""
     if label == "retracted":
         return Retraction(target_id=target_id)
     return DecisionRecord(target_id=target_id, rule_name="rule", tier=DecisionTier(label))
 
 
-def _change(target_id: TargetId, before: str | None, after: str) -> ev.DecisionChange:
+def _change(target_id: TargetId, *, before: str | None, after: str) -> ev.DecisionChange:
     title = {"062A": "Les demoiselles cambrioleuses", "062B": "Le grand combat sous-marin"}
-    previous = None if before is None else _decision(target_id, before)
+    previous = None if before is None else _decision(target_id, label=before)
     return ev.DecisionChange(
         target_id=target_id,
         title=title[target_id],
         previous_decision=previous,
-        new_decision=_decision(target_id, after),
+        new_decision=_decision(target_id, label=after),
     )
 
 
@@ -343,9 +346,9 @@ def _change(target_id: TargetId, before: str | None, after: str) -> ev.DecisionC
     ],
 )
 def test_only_a_rise_to_notify_or_download_reaches_the_community(
-    before: str | None, after: str, notified: bool
+    *, before: str | None, after: str, notified: bool
 ) -> None:
-    plan = plan_observability(_decisions(_change(TargetId("062A"), before, after)))
+    plan = plan_observability(_decisions(_change(TargetId("062A"), before=before, after=after)))
     assert (plan.notification is not None) == notified
     assert plan.node_metrics == (
         CounterIncrement(
@@ -366,7 +369,8 @@ _062A_062B = (
 def test_a_file_with_risen_targets_is_one_rise_naming_the_file_and_targets() -> None:
     plan = plan_observability(
         _decisions(
-            _change(TargetId("062A"), None, "download"), _change(TargetId("062B"), None, "notify")
+            _change(TargetId("062A"), before=None, after="download"),
+            _change(TargetId("062B"), before=None, after="notify"),
         )
     )
     assert plan.notification == TierRise(
@@ -390,8 +394,8 @@ def test_a_file_with_risen_targets_is_one_rise_naming_the_file_and_targets() -> 
 def test_the_rise_lists_only_the_risen_targets_under_their_highest_tier() -> None:
     plan = plan_observability(
         _decisions(
-            _change(TargetId("062A"), "catalog", "notify"),
-            _change(TargetId("062B"), "notify", "retracted"),
+            _change(TargetId("062A"), before="catalog", after="notify"),
+            _change(TargetId("062B"), before="notify", after="retracted"),
         )
     )
     assert isinstance(plan.notification, TierRise)
@@ -404,8 +408,8 @@ def test_the_rise_lists_only_the_risen_targets_under_their_highest_tier() -> Non
 def test_decisions_log_one_line_listing_every_change() -> None:
     plan = plan_observability(
         _decisions(
-            _change(TargetId("062A"), None, "download"),
-            _change(TargetId("062B"), "notify", "retracted"),
+            _change(TargetId("062A"), before=None, after="download"),
+            _change(TargetId("062B"), before="notify", after="retracted"),
         )
     )
     assert plan.severity == Severity.INFO
@@ -415,7 +419,9 @@ def test_decisions_log_one_line_listing_every_change() -> None:
 
 
 def test_a_change_without_a_rise_has_no_notification() -> None:
-    plan = plan_observability(_decisions(_change(TargetId("062A"), "download", "notify")))
+    plan = plan_observability(
+        _decisions(_change(TargetId("062A"), before="download", after="notify"))
+    )
     assert plan.notification is None
 
 
@@ -484,7 +490,7 @@ def test_a_completed_download_without_a_target_logs_unknown() -> None:
     ],
 )
 def test_a_notification_goes_to_the_audience_its_kind_names(
-    notification: Notification, audience: str
+    *, notification: Notification, audience: str
 ) -> None:
     assert audience_of(notification) is Audience(audience)
 

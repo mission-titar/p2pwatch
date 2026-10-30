@@ -43,6 +43,7 @@ _NOTIFY_NAME = "Keroro Les demoiselles cambrioleuses.avi"
 
 def _cataloguer(
     observation_store: SqliteObservationStore,
+    *,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
@@ -68,7 +69,7 @@ def _cataloguer(
     )
 
 
-def _reported_file(native_id: str, filename: str) -> ReportedFile:
+def _reported_file(native_id: str, *, filename: str) -> ReportedFile:
     return ReportedFile(
         file=FileKey(network=Network.ED2K, native_id=native_id),
         filename=filename,
@@ -80,6 +81,7 @@ def _reported_file(native_id: str, filename: str) -> ReportedFile:
 
 @pytest.mark.asyncio
 async def test_observation_is_always_recorded_even_when_discarded(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
@@ -90,14 +92,14 @@ async def test_observation_is_always_recorded_even_when_discarded(
     waker = FakeWaker()
     changed = await _cataloguer(
         observation_store,
-        decision_store,
-        engine,
-        wall_clock,
-        waker,
-        observability.dispatcher,
-        FakeLogger(),
+        decision_store=decision_store,
+        engine=engine,
+        wall_clock=wall_clock,
+        waker=waker,
+        observability_dispatcher=observability.dispatcher,
+        logger=FakeLogger(),
     ).catalog(
-        _reported_file(_HASH_DISCARD, "random.txt"),
+        _reported_file(_HASH_DISCARD, filename="random.txt"),
         client_name=ClientName("amuled"),
         channel=Channel("ed2k"),
         node_id=_NODE_ID,
@@ -110,6 +112,7 @@ async def test_observation_is_always_recorded_even_when_discarded(
 
 @pytest.mark.asyncio
 async def test_the_observation_carries_the_clocks_instant(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
@@ -118,14 +121,14 @@ async def test_the_observation_carries_the_clocks_instant(
 ) -> None:
     await _cataloguer(
         observation_store,
-        decision_store,
-        engine,
-        wall_clock,
-        FakeWaker(),
-        ObservabilityOverFakes().dispatcher,
-        FakeLogger(),
+        decision_store=decision_store,
+        engine=engine,
+        wall_clock=wall_clock,
+        waker=FakeWaker(),
+        observability_dispatcher=ObservabilityOverFakes().dispatcher,
+        logger=FakeLogger(),
     ).catalog(
-        _reported_file(_HASH_DISCARD, "random.txt"),
+        _reported_file(_HASH_DISCARD, filename="random.txt"),
         client_name=ClientName("amuled"),
         channel=Channel("ed2k"),
         node_id=_NODE_ID,
@@ -137,6 +140,7 @@ async def test_the_observation_carries_the_clocks_instant(
 
 @pytest.mark.asyncio
 async def test_new_verdict_is_persisted_and_nudged(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
@@ -147,14 +151,14 @@ async def test_new_verdict_is_persisted_and_nudged(
     waker = FakeWaker()
     changed = await _cataloguer(
         observation_store,
-        decision_store,
-        engine,
-        wall_clock,
-        waker,
-        observability.dispatcher,
-        FakeLogger(),
+        decision_store=decision_store,
+        engine=engine,
+        wall_clock=wall_clock,
+        waker=waker,
+        observability_dispatcher=observability.dispatcher,
+        logger=FakeLogger(),
     ).catalog(
-        _reported_file(_HASH_DL, _DL_NAME),
+        _reported_file(_HASH_DL, filename=_DL_NAME),
         client_name=ClientName("amuled"),
         channel=Channel("ed2k"),
         node_id=_NODE_ID,
@@ -171,6 +175,7 @@ async def test_new_verdict_is_persisted_and_nudged(
 
 @pytest.mark.asyncio
 async def test_unchanged_verdict_is_not_reappended_or_nudged(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
@@ -180,16 +185,16 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
 ) -> None:
     observability = ObservabilityOverFakes()
     waker = FakeWaker()
-    reported_file = _reported_file(_HASH_CAT, "keroro something.avi")
+    reported_file = _reported_file(_HASH_CAT, filename="keroro something.avi")
     assert (
         await _cataloguer(
             observation_store,
-            decision_store,
-            engine,
-            wall_clock,
-            waker,
-            observability.dispatcher,
-            FakeLogger(),
+            decision_store=decision_store,
+            engine=engine,
+            wall_clock=wall_clock,
+            waker=waker,
+            observability_dispatcher=observability.dispatcher,
+            logger=FakeLogger(),
         ).catalog(
             reported_file,
             client_name=ClientName("amuled"),
@@ -203,12 +208,12 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
     assert (
         await _cataloguer(
             observation_store,
-            decision_store,
-            engine,
-            wall_clock,
-            waker,
-            observability.dispatcher,
-            FakeLogger(),
+            decision_store=decision_store,
+            engine=engine,
+            wall_clock=wall_clock,
+            waker=waker,
+            observability_dispatcher=observability.dispatcher,
+            logger=FakeLogger(),
         ).catalog(
             reported_file,
             client_name=ClientName("amuled"),
@@ -225,6 +230,7 @@ async def test_unchanged_verdict_is_not_reappended_or_nudged(
 
 @pytest.mark.asyncio
 async def test_changed_verdict_is_reappended_and_nudged_again(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
@@ -235,14 +241,14 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
     waker = FakeWaker()
     await _cataloguer(
         observation_store,
-        decision_store,
-        engine,
-        wall_clock,
-        waker,
-        observability.dispatcher,
-        FakeLogger(),
+        decision_store=decision_store,
+        engine=engine,
+        wall_clock=wall_clock,
+        waker=waker,
+        observability_dispatcher=observability.dispatcher,
+        logger=FakeLogger(),
     ).catalog(
-        _reported_file(_HASH_DL, _NOTIFY_NAME),
+        _reported_file(_HASH_DL, filename=_NOTIFY_NAME),
         client_name=ClientName("amuled"),
         channel=Channel("ed2k"),
         node_id=_NODE_ID,
@@ -250,14 +256,14 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
     # 2nd view of the SAME hash, DOWNLOAD name → verdict changes → re-append + wake.
     changed = await _cataloguer(
         observation_store,
-        decision_store,
-        engine,
-        wall_clock,
-        waker,
-        observability.dispatcher,
-        FakeLogger(),
+        decision_store=decision_store,
+        engine=engine,
+        wall_clock=wall_clock,
+        waker=waker,
+        observability_dispatcher=observability.dispatcher,
+        logger=FakeLogger(),
     ).catalog(
-        _reported_file(_HASH_DL, _DL_NAME),
+        _reported_file(_HASH_DL, filename=_DL_NAME),
         client_name=ClientName("amuled"),
         channel=Channel("ed2k"),
         node_id=_NODE_ID,
@@ -273,6 +279,7 @@ async def test_changed_verdict_is_reappended_and_nudged_again(
 
 @pytest.mark.asyncio
 async def test_persistence_error_is_absorbed_and_cycle_continues(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
@@ -289,14 +296,14 @@ async def test_persistence_error_is_absorbed_and_cycle_continues(
     logger = FakeLogger()
     changed = await _cataloguer(
         observation_store,
-        decision_store,
-        engine,
-        wall_clock,
-        waker,
-        observability.dispatcher,
-        logger,
+        decision_store=decision_store,
+        engine=engine,
+        wall_clock=wall_clock,
+        waker=waker,
+        observability_dispatcher=observability.dispatcher,
+        logger=logger,
     ).catalog(
-        _reported_file(_HASH_DL, _DL_NAME),
+        _reported_file(_HASH_DL, filename=_DL_NAME),
         client_name=ClientName("amuled"),
         channel=Channel("ed2k"),
         node_id=_NODE_ID,
@@ -314,6 +321,7 @@ async def test_persistence_error_is_absorbed_and_cycle_continues(
 
 @pytest.mark.asyncio
 async def test_signal_consumer_awaits_the_nudge(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
@@ -328,14 +336,14 @@ async def test_signal_consumer_awaits_the_nudge(
     assert not waiter.done()
     await _cataloguer(
         observation_store,
-        decision_store,
-        engine,
-        wall_clock,
-        waker,
-        observability.dispatcher,
-        FakeLogger(),
+        decision_store=decision_store,
+        engine=engine,
+        wall_clock=wall_clock,
+        waker=waker,
+        observability_dispatcher=observability.dispatcher,
+        logger=FakeLogger(),
     ).catalog(
-        _reported_file(_HASH_DL, _DL_NAME),
+        _reported_file(_HASH_DL, filename=_DL_NAME),
         client_name=ClientName("amuled"),
         channel=Channel("ed2k"),
         node_id=_NODE_ID,
@@ -346,6 +354,7 @@ async def test_signal_consumer_awaits_the_nudge(
 
 @pytest.mark.asyncio
 async def test_download_tier_verdict_also_nudges_the_download_subject(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
@@ -356,14 +365,14 @@ async def test_download_tier_verdict_also_nudges_the_download_subject(
     waker = FakeWaker()
     changed = await _cataloguer(
         observation_store,
-        decision_store,
-        engine,
-        wall_clock,
-        waker,
-        observability.dispatcher,
-        FakeLogger(),
+        decision_store=decision_store,
+        engine=engine,
+        wall_clock=wall_clock,
+        waker=waker,
+        observability_dispatcher=observability.dispatcher,
+        logger=FakeLogger(),
     ).catalog(
-        _reported_file(_HASH_DL, _DL_NAME),
+        _reported_file(_HASH_DL, filename=_DL_NAME),
         client_name=ClientName("amuled"),
         channel=Channel("ed2k"),
         node_id=_NODE_ID,
@@ -374,6 +383,7 @@ async def test_download_tier_verdict_also_nudges_the_download_subject(
 
 @pytest.mark.asyncio
 async def test_non_download_tier_verdict_does_not_nudge_the_download_subject(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
@@ -384,14 +394,14 @@ async def test_non_download_tier_verdict_does_not_nudge_the_download_subject(
     waker = FakeWaker()
     changed = await _cataloguer(
         observation_store,
-        decision_store,
-        engine,
-        wall_clock,
-        waker,
-        observability.dispatcher,
-        FakeLogger(),
+        decision_store=decision_store,
+        engine=engine,
+        wall_clock=wall_clock,
+        waker=waker,
+        observability_dispatcher=observability.dispatcher,
+        logger=FakeLogger(),
     ).catalog(
-        _reported_file(_HASH_CAT, "keroro something.avi"),
+        _reported_file(_HASH_CAT, filename="keroro something.avi"),
         client_name=ClientName("amuled"),
         channel=Channel("ed2k"),
         node_id=_NODE_ID,
@@ -402,6 +412,7 @@ async def test_non_download_tier_verdict_does_not_nudge_the_download_subject(
 
 @pytest.mark.asyncio
 async def test_emits_observation_then_decision_on_change(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
@@ -409,15 +420,15 @@ async def test_emits_observation_then_decision_on_change(
 ) -> None:
     observability = ObservabilityOverFakes()
     waker = FakeWaker()
-    reported_file = _reported_file(_HASH_DL, _DL_NAME)  # matches at tier=download
+    reported_file = _reported_file(_HASH_DL, filename=_DL_NAME)  # matches at tier=download
     await _cataloguer(
         observation_store,
-        decision_store,
-        engine,
-        wall_clock,
-        waker,
-        observability.dispatcher,
-        FakeLogger(),
+        decision_store=decision_store,
+        engine=engine,
+        wall_clock=wall_clock,
+        waker=waker,
+        observability_dispatcher=observability.dispatcher,
+        logger=FakeLogger(),
     ).catalog(
         reported_file, client_name=ClientName("amuled"), channel=Channel("ed2k"), node_id=_NODE_ID
     )
@@ -439,21 +450,22 @@ async def test_emits_observation_then_decision_on_change(
 
 @pytest.mark.asyncio
 async def test_emits_only_observation_when_discarded(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
     observability = ObservabilityOverFakes()
-    reported_file = _reported_file(_HASH_DISCARD, "random.txt")  # discarded by the engine
+    reported_file = _reported_file(_HASH_DISCARD, filename="random.txt")  # discarded by the engine
     await _cataloguer(
         observation_store,
-        decision_store,
-        engine,
-        wall_clock,
-        FakeWaker(),
-        observability.dispatcher,
-        FakeLogger(),
+        decision_store=decision_store,
+        engine=engine,
+        wall_clock=wall_clock,
+        waker=FakeWaker(),
+        observability_dispatcher=observability.dispatcher,
+        logger=FakeLogger(),
     ).catalog(
         reported_file, client_name=ClientName("amuled"), channel=Channel("kad"), node_id=_NODE_ID
     )
@@ -464,6 +476,7 @@ async def test_emits_only_observation_when_discarded(
 
 @pytest.mark.asyncio
 async def test_multi_segment_observation_records_two_rows(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
@@ -474,14 +487,14 @@ async def test_multi_segment_observation_records_two_rows(
     waker = FakeWaker()
     changed = await _cataloguer(
         observation_store,
-        decision_store,
-        engine,
-        wall_clock,
-        waker,
-        observability.dispatcher,
-        FakeLogger(),
+        decision_store=decision_store,
+        engine=engine,
+        wall_clock=wall_clock,
+        waker=waker,
+        observability_dispatcher=observability.dispatcher,
+        logger=FakeLogger(),
     ).catalog(
-        _reported_file(_HASH_DL, "Keroro 062 teletoon.avi"),
+        _reported_file(_HASH_DL, filename="Keroro 062 teletoon.avi"),
         client_name=ClientName("amuled"),
         channel=Channel("ed2k"),
         node_id=_NODE_ID,

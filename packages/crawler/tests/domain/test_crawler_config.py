@@ -58,14 +58,14 @@ def _default_webui() -> WebuiConfig:
     )
 
 
-def _section(raw: dict[str, Any], path: str | None) -> dict[str, Any]:
+def _section(raw: dict[str, Any], *, path: str | None) -> dict[str, Any]:
     """The mapping at the dotted ``path`` of ``raw``, ``raw`` itself for ``None``."""
     for name in path.split(".") if path else ():
         raw = raw[name]
     return raw
 
 
-def _printed_path(section: str | None, key: str) -> str:
+def _printed_path(section: str | None, *, key: str) -> str:
     """The pattern of ``key``'s path in an error: a root key prints bare."""
     return re.escape(f"{section}.{key}" if section else key)
 
@@ -145,22 +145,22 @@ def test_bool_is_not_accepted_as_a_number() -> None:
     ],
 )
 def test_a_number_that_is_not_finite_is_refused_by_name(
-    section: str | None, key: str, number: float
+    *, section: str | None, key: str, number: float
 ) -> None:
     # .inf would make a sleep endless and .nan passes every comparison.
     raw = _minimal_raw() | {"download": _full_download_section(), "observability": {}}
-    _section(raw, section)[key] = number
+    _section(raw, path=section)[key] = number
     with pytest.raises(
-        InvalidConfigError, match=rf"^{_printed_path(section, key)}: finite number expected"
+        InvalidConfigError, match=rf"^{_printed_path(section, key=key)}: finite number expected"
     ):
         parse_crawler_config(raw)
 
 
-def _with_seconds(section: str | None, key: str, seconds: int) -> dict[str, Any]:
+def _with_seconds(section: str | None, *, key: str, seconds: int) -> dict[str, Any]:
     """A full config whose ``key`` holds ``seconds``, the backoff's cap above any floor."""
     raw = _minimal_raw() | {"download": _full_download_section(), "observability": {}, "webui": {}}
     raw["search"]["backoff"]["cap_seconds"] = 86_400
-    _section(raw, section)[key] = seconds
+    _section(raw, path=section)[key] = seconds
     return raw
 
 
@@ -176,22 +176,22 @@ def _with_seconds(section: str | None, key: str, seconds: int) -> dict[str, Any]
         (None, "shutdown_deadline_seconds"),
     ],
 )
-def test_a_duration_is_at_most_a_day(section: str | None, key: str) -> None:
-    parse_crawler_config(_with_seconds(section, key, 86_400))
+def test_a_duration_is_at_most_a_day(*, section: str | None, key: str) -> None:
+    parse_crawler_config(_with_seconds(section, key=key, seconds=86_400))
     with pytest.raises(
         InvalidConfigError,
-        match=rf"^{_printed_path(section, key)}: at most 86400 seconds expected, got 86401",
+        match=rf"^{_printed_path(section, key=key)}: at most 86400 seconds expected, got 86401",
     ):
-        parse_crawler_config(_with_seconds(section, key, 86_401))
+        parse_crawler_config(_with_seconds(section, key=key, seconds=86_401))
 
 
 @pytest.mark.parametrize("key", ["lost_after_seconds", "reappeared_after_seconds"])
 def test_an_absence_is_at_most_thirty_days(key: str) -> None:
-    parse_crawler_config(_with_seconds("download", key, 2_592_000))
+    parse_crawler_config(_with_seconds("download", key=key, seconds=2_592_000))
     with pytest.raises(
         InvalidConfigError, match=rf"download\.{key}: at most 2592000 seconds expected, got 2592001"
     ):
-        parse_crawler_config(_with_seconds("download", key, 2_592_001))
+        parse_crawler_config(_with_seconds("download", key=key, seconds=2_592_001))
 
 
 def test_non_positive_value_is_fatal() -> None:
@@ -232,7 +232,7 @@ def test_a_removed_key_is_refused_by_name(key: str) -> None:
     ],
 )
 def test_a_removed_key_of_a_section_is_refused_by_its_path(
-    section: dict[str, Any], key_path: str
+    *, section: dict[str, Any], key_path: str
 ) -> None:
     raw = _minimal_raw() | section
     with pytest.raises(InvalidConfigError) as raised:

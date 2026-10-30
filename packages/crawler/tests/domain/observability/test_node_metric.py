@@ -68,7 +68,7 @@ def test_a_node_metric_has_its_exposed_name_and_describes_itself() -> None:
     ],
 )
 def test_labels_write_their_pairs_in_the_order_of_their_names(
-    labels: NodeMetricLabels, pairs: tuple[tuple[str, str], ...]
+    *, labels: NodeMetricLabels, pairs: tuple[tuple[str, str], ...]
 ) -> None:
     assert labels.pairs() == pairs
     assert tuple(name for name, _ in pairs) == labels.names
@@ -108,7 +108,7 @@ def test_a_setting_of_none_names_a_gauge_series_to_remove() -> None:
     ids=["other labels", "missing labels", "labels on an unlabelled counter"],
 )
 def test_an_increment_whose_labels_are_not_its_counters_cannot_be_built(
-    counter: NodeCounter, labels: NodeMetricLabels | None, message: str
+    *, counter: NodeCounter, labels: NodeMetricLabels | None, message: str
 ) -> None:
     with pytest.raises(ValueError, match=message):
         CounterIncrement(counter=counter, labels=labels)

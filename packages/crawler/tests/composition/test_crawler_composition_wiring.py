@@ -100,20 +100,21 @@ def _config(tmp_path: Path, **sections: object) -> dict[str, Any]:
     } | sections
 
 
-def _record_node_id(tmp_path: Path, node_id: NodeId) -> None:
+def _record_node_id(tmp_path: Path, *, node_id: NodeId) -> None:
     """``local.db`` holding ``node_id``, as a node started before."""
     local = open_local(tmp_path / "local.db")
     SqliteNodeIdStore(local).record_node_id(node_id, created_at=SystemWallClock().now())
     local.close()
 
 
-def _write(path: Path, config: dict[str, Any]) -> Path:
+def _write(path: Path, *, config: dict[str, Any]) -> Path:
     path.write_text(yaml.safe_dump(config, allow_unicode=True), encoding="utf-8")
     return path
 
 
 def _crawl(
     server: FakeAmuleApiServer,
+    *,
     config_path: Path,
     targets_path: Path = _SHIPPED_TARGETS,
     root_logger: logging.Logger | None = None,
@@ -170,10 +171,10 @@ def _has_read_the_status(api: FakeAmuleApi) -> bool:
     return any(request.url.path == "/api/v1/status" for request in api.requests)
 
 
-async def _crawl_until_a_search_is_read(config_path: Path, targets_path: Path) -> None:
+async def _crawl_until_a_search_is_read(config_path: Path, *, targets_path: Path) -> None:
     default_sigterm = signal.getsignal(signal.SIGTERM)
     with FakeAmuleApiServer(FakeAmuleApi()) as server:
-        run = _crawl(server, config_path, targets_path)
+        run = _crawl(server, config_path=config_path, targets_path=targets_path)
         assert await asyncio.to_thread(
             server.wait_for, lambda seen: _searches_read(seen) >= 1, timeout_seconds=_WAIT_SECONDS
         )
@@ -183,7 +184,7 @@ async def _crawl_until_a_search_is_read(config_path: Path, targets_path: Path) -
 
 @pytest.mark.asyncio
 async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stops_on_restart(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
+    *, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     download = {
         "enabled": True,
@@ -194,17 +195,17 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
         "reappeared_after_seconds": 43200,
         "sources_interval_seconds": 300,
     }
-    _record_node_id(tmp_path, NodeId("wired-node"))
+    _record_node_id(tmp_path, node_id=NodeId("wired-node"))
     config_path = _write(
         tmp_path / "crawler.yml",
-        _config(tmp_path, observability={"log_level": "INFO"}, download=download),
+        config=_config(tmp_path, observability={"log_level": "INFO"}, download=download),
     )
     targets_path = tmp_path / "targets.yml"
     targets_path.write_text(_TARGET_062A, encoding="utf-8")
     api = FakeAmuleApi(results=[_RESULT])
 
     with FakeAmuleApiServer(api) as server, caplog.at_level(logging.INFO):
-        run = _crawl(server, config_path, targets_path)
+        run = _crawl(server, config_path=config_path, targets_path=targets_path)
         assert await asyncio.to_thread(
             server.wait_for, lambda seen: bool(seen.added_links), timeout_seconds=_WAIT_SECONDS
         )
@@ -306,15 +307,15 @@ async def test_the_download_loop_records_a_tracked_downloads_sources_under_the_n
         "output_dir": str(tmp_path),
         "reappeared_after_seconds": 43200,
     }
-    _record_node_id(tmp_path, NodeId("wired-node"))
-    config_path = _write(tmp_path / "crawler.yml", _config(tmp_path, download=download))
+    _record_node_id(tmp_path, node_id=NodeId("wired-node"))
+    config_path = _write(tmp_path / "crawler.yml", config=_config(tmp_path, download=download))
     listed = {"hash": _HASH, "size_bytes": 10, "completed_bytes": 4, "status": "downloading"}
     source = {"ecid": 1, "name": "peer", "user_hash": "1f" * 16, "role": "downloading_from"}
     api = FakeAmuleApi(downloads=[listed], clients={_HASH: [source]})
     default_sigterm = signal.getsignal(signal.SIGTERM)
 
     with FakeAmuleApiServer(api) as server:
-        run = _crawl(server, config_path)
+        run = _crawl(server, config_path=config_path)
         assert await asyncio.to_thread(
             server.wait_for, _has_read_the_sources_then_listed_again, timeout_seconds=_WAIT_SECONDS
         )
@@ -335,12 +336,14 @@ async def test_the_nodes_notifications_carry_its_id_in_their_username_and_title(
     threading.Thread(target=sink.serve_forever, daemon=True).start()
     notification = {"url": f"json://127.0.0.1:{sink.server_port}/", "audience": "operations"}
     observability = {"log_level": "INFO", "notifications": [notification]}
-    _record_node_id(tmp_path, NodeId("wired-node"))
-    config_path = _write(tmp_path / "crawler.yml", _config(tmp_path, observability=observability))
+    _record_node_id(tmp_path, node_id=NodeId("wired-node"))
+    config_path = _write(
+        tmp_path / "crawler.yml", config=_config(tmp_path, observability=observability)
+    )
     default_sigterm = signal.getsignal(signal.SIGTERM)
 
     with FakeAmuleApiServer(FakeAmuleApi()) as server:
-        run = _crawl(server, config_path)
+        run = _crawl(server, config_path=config_path)
         assert await asyncio.to_thread(
             server.wait_for, lambda seen: _searches_read(seen) >= 1, timeout_seconds=_WAIT_SECONDS
         )
@@ -354,13 +357,13 @@ async def test_the_nodes_notifications_carry_its_id_in_their_username_and_title(
 
 @pytest.mark.asyncio
 async def test_observer_mode_crawls_its_config_files_with_one_ed2k_search_until_a_sigterm(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
+    *, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     # Both keywords' ed2k searches share one client, which spaces their starts by a minute: two
     # clients would start both at once and break the network's pacing.
     config_path = _write(
         tmp_path / "crawler.yml",
-        _config(
+        config=_config(
             tmp_path,
             search=_config(tmp_path)["search"] | {"keywords": ["keroro", "titar"]},
             observability={"log_level": "DEBUG"},
@@ -371,7 +374,7 @@ async def test_observer_mode_crawls_its_config_files_with_one_ed2k_search_until_
     root_logger = logging.Logger("root")
 
     with FakeAmuleApiServer(api) as server, caplog.at_level(logging.INFO):
-        run = _crawl(server, config_path, root_logger=root_logger)
+        run = _crawl(server, config_path=config_path, root_logger=root_logger)
         # The first ed2k search and both Kad ones, each read to its end.
         assert await asyncio.to_thread(
             server.wait_for, lambda seen: _searches_read(seen) >= 3, timeout_seconds=_WAIT_SECONDS
@@ -389,11 +392,12 @@ async def test_observer_mode_crawls_its_config_files_with_one_ed2k_search_until_
 # The cut close may leave the client's sockets open, as the process exit closes them in production.
 @pytest.mark.filterwarnings("ignore:unclosed:ResourceWarning")
 def test_the_shutdown_deadline_spares_the_run_then_cuts_a_logout_amuled_never_answers(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
+    *, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     deadline_seconds = 0.2
     config_path = _write(
-        tmp_path / "crawler.yml", _config(tmp_path, shutdown_deadline_seconds=deadline_seconds)
+        tmp_path / "crawler.yml",
+        config=_config(tmp_path, shutdown_deadline_seconds=deadline_seconds),
     )
     api = FakeAmuleApi()
     released = threading.Event()
@@ -408,7 +412,7 @@ def test_the_shutdown_deadline_spares_the_run_then_cuts_a_logout_amuled_never_an
     async def stop_during_the_logout() -> tuple[bool, bool, float]:
         loop = asyncio.get_running_loop()
         with FakeAmuleApiServer(api) as server:
-            run = _crawl(server, config_path)
+            run = _crawl(server, config_path=config_path)
             assert await asyncio.to_thread(
                 server.wait_for,
                 lambda seen: _searches_read(seen) >= 1,
@@ -436,7 +440,7 @@ def test_the_shutdown_deadline_spares_the_run_then_cuts_a_logout_amuled_never_an
 
 @pytest.mark.asyncio
 async def test_a_backoff_the_previous_run_saved_holds_the_ed2k_search(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
+    *, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     local = open_local(tmp_path / "local.db")
     SqliteBackoffStateStore(local).set_backoff_states(
@@ -447,12 +451,12 @@ async def test_a_backoff_the_previous_run_saved_holds_the_ed2k_search(
         }
     )
     local.close()
-    config_path = _write(tmp_path / "crawler.yml", _config(tmp_path))
+    config_path = _write(tmp_path / "crawler.yml", config=_config(tmp_path))
     api = FakeAmuleApi()
     default_sigterm = signal.getsignal(signal.SIGTERM)
 
     with FakeAmuleApiServer(api) as server, caplog.at_level(logging.INFO):
-        run = _crawl(server, config_path)
+        run = _crawl(server, config_path=config_path)
         # Unheld, the ed2k start goes out with Kad's, well before Kad's search is read to its end.
         assert await asyncio.to_thread(
             server.wait_for, lambda seen: _searches_read(seen) >= 1, timeout_seconds=_WAIT_SECONDS
@@ -465,9 +469,9 @@ async def test_a_backoff_the_previous_run_saved_holds_the_ed2k_search(
 
 @pytest.mark.asyncio
 async def test_a_pause_from_the_webui_holds_the_searches_until_its_resume(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
+    *, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    config_path = _write(tmp_path / "crawler.yml", _config(tmp_path))
+    config_path = _write(tmp_path / "crawler.yml", config=_config(tmp_path))
     api = FakeAmuleApi()
     login_arrived = threading.Event()
     paused = threading.Event()
@@ -482,7 +486,7 @@ async def test_a_pause_from_the_webui_holds_the_searches_until_its_resume(
     api.overrides[_LOGIN] = login_once_paused
 
     with FakeAmuleApiServer(api) as server, caplog.at_level(logging.INFO):
-        run = _crawl(server, config_path)
+        run = _crawl(server, config_path=config_path)
         assert await asyncio.to_thread(login_arrived.wait, _WAIT_SECONDS)
         host, port = _webui_bound_address(caplog.messages)
         async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as webui:
@@ -508,17 +512,17 @@ async def test_a_pause_from_the_webui_holds_the_searches_until_its_resume(
 
 @pytest.mark.asyncio
 async def test_a_restart_re_evaluates_the_catalogue_only_once_a_policy_file_changed(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
+    *, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    config_path = _write(tmp_path / "crawler.yml", _config(tmp_path))
+    config_path = _write(tmp_path / "crawler.yml", config=_config(tmp_path))
     targets_path = tmp_path / "targets.yml"
     targets_path.write_text(_TARGET_062A, encoding="utf-8")
 
     with caplog.at_level(logging.INFO):
-        await _crawl_until_a_search_is_read(config_path, targets_path)
-        await _crawl_until_a_search_is_read(config_path, targets_path)
+        await _crawl_until_a_search_is_read(config_path, targets_path=targets_path)
+        await _crawl_until_a_search_is_read(config_path, targets_path=targets_path)
         targets_path.write_text(f"{_TARGET_062A}# edited\n", encoding="utf-8")
-        await _crawl_until_a_search_is_read(config_path, targets_path)
+        await _crawl_until_a_search_is_read(config_path, targets_path=targets_path)
 
     reevaluations = [
         message
@@ -534,7 +538,7 @@ async def test_a_restart_re_evaluates_the_catalogue_only_once_a_policy_file_chan
 
 @pytest.mark.asyncio
 async def test_a_re_evaluation_logs_its_progress_under_its_module_s_name(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
+    *, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     catalog = open_catalog(tmp_path / "catalog.db")
     for index in range(200):  # the composition's progress interval
@@ -542,12 +546,12 @@ async def test_a_re_evaluation_logs_its_progress_under_its_module_s_name(
         insert_file(catalog, native_id=native_id)
         insert_observation(catalog, native_id=native_id, filename=f"unrelated_{index}.avi")
     catalog.close()
-    config_path = _write(tmp_path / "crawler.yml", _config(tmp_path))
+    config_path = _write(tmp_path / "crawler.yml", config=_config(tmp_path))
     targets_path = tmp_path / "targets.yml"
     targets_path.write_text(_TARGET_062A, encoding="utf-8")
 
     with caplog.at_level(logging.INFO):
-        await _crawl_until_a_search_is_read(config_path, targets_path)
+        await _crawl_until_a_search_is_read(config_path, targets_path=targets_path)
 
     assert (
         "p2pwatch.application.steps.catalog_reevaluator",
@@ -558,10 +562,10 @@ async def test_a_re_evaluation_logs_its_progress_under_its_module_s_name(
 @pytest.mark.asyncio
 async def test_a_version_5_catalog_is_copied_before_its_migrations(tmp_path: Path) -> None:
     open_catalog_at(tmp_path / "catalog.db", version=5).close()
-    config_path = _write(tmp_path / "crawler.yml", _config(tmp_path))
+    config_path = _write(tmp_path / "crawler.yml", config=_config(tmp_path))
     before = datetime.now(UTC).replace(microsecond=0)  # noqa: TID251
 
-    await _crawl_until_a_search_is_read(config_path, _SHIPPED_TARGETS)
+    await _crawl_until_a_search_is_read(config_path, targets_path=_SHIPPED_TARGETS)
 
     after = datetime.now(UTC)  # noqa: TID251
     [(prefix, instant)] = pre_migration_copies(tmp_path)

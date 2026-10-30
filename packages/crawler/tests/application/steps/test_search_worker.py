@@ -80,12 +80,12 @@ def _registry(fake_time: FakeTime) -> BackoffRegistry:
 
 def _worker(
     client: FakeSearchClient,
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
     backoff: BackoffRegistry,
     fake_time: FakeTime,
-    *,
     observability_dispatcher: ObservabilityDispatcher | None = None,
     logger: FakeLogger | None = None,
     cataloguer_logger: FakeLogger | None = None,
@@ -118,6 +118,7 @@ def _worker(
 
 
 def test_a_worker_declares_the_channels_of_its_client(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
@@ -125,7 +126,12 @@ def test_a_worker_declares_the_channels_of_its_client(
     fake_time = FakeTime()
     client = FakeSearchClient(channels=(Channel("kad"),))
     worker = _worker(
-        client, observation_store, decision_store, engine, _registry(fake_time), fake_time
+        client,
+        observation_store=observation_store,
+        decision_store=decision_store,
+        engine=engine,
+        backoff=_registry(fake_time),
+        fake_time=fake_time,
     )
     assert worker.channels == ("kad",)
 
@@ -135,6 +141,7 @@ def test_a_worker_declares_the_channels_of_its_client(
     [((), 0), ((_CLIENT,), 2), ((_KAD,), 2), ((_ED2K,), 0)],
 )
 def test_a_worker_is_ready_for_a_channel_when_neither_it_nor_the_channel_is_backed_off(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
@@ -146,7 +153,12 @@ def test_a_worker_is_ready_for_a_channel_when_neither_it_nor_the_channel_is_back
     for key in failed:
         registry.record_failure(key)
     worker = _worker(
-        FakeSearchClient(), observation_store, decision_store, engine, registry, fake_time
+        FakeSearchClient(),
+        observation_store=observation_store,
+        decision_store=decision_store,
+        engine=engine,
+        backoff=registry,
+        fake_time=fake_time,
     )
     assert worker.time_until_ready(Channel("kad")) == timedelta(seconds=ready_in_seconds)
     fake_time.advance(timedelta(seconds=3.0))
@@ -154,6 +166,7 @@ def test_a_worker_is_ready_for_a_channel_when_neither_it_nor_the_channel_is_back
 
 
 def test_a_worker_waits_for_the_later_of_its_two_backoffs(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
@@ -164,7 +177,12 @@ def test_a_worker_waits_for_the_later_of_its_two_backoffs(
     fake_time.advance(timedelta(seconds=1.0))
     registry.record_failure(_CLIENT)
     worker = _worker(
-        FakeSearchClient(), observation_store, decision_store, engine, registry, fake_time
+        FakeSearchClient(),
+        observation_store=observation_store,
+        decision_store=decision_store,
+        engine=engine,
+        backoff=registry,
+        fake_time=fake_time,
     )
     assert worker.time_until_ready(Channel("kad")) == timedelta(seconds=2)
     fake_time.advance(timedelta(seconds=1.5))
@@ -177,6 +195,7 @@ def test_a_worker_waits_for_the_later_of_its_two_backoffs(
 
 @pytest.mark.asyncio
 async def test_successful_task_records_observation(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
@@ -185,7 +204,12 @@ async def test_successful_task_records_observation(
     fake_time = FakeTime()
     client = FakeSearchClient(results=[(_reported_file(),)])
     worker = _worker(
-        client, observation_store, decision_store, engine, _registry(fake_time), fake_time
+        client,
+        observation_store=observation_store,
+        decision_store=decision_store,
+        engine=engine,
+        backoff=_registry(fake_time),
+        fake_time=fake_time,
     )
     await worker.run_task(
         SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")), node_id=_NODE_ID
@@ -201,6 +225,7 @@ async def test_successful_task_records_observation(
 
 @pytest.mark.asyncio
 async def test_multiple_observations_some_unchanged_are_all_processed(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
@@ -218,7 +243,12 @@ async def test_multiple_observations_some_unchanged_are_all_processed(
     # changes a verdict. Covers the "if False → next observation" edge.
     client = FakeSearchClient(results=[(discarded, _reported_file())])
     worker = _worker(
-        client, observation_store, decision_store, engine, _registry(fake_time), fake_time
+        client,
+        observation_store=observation_store,
+        decision_store=decision_store,
+        engine=engine,
+        backoff=_registry(fake_time),
+        fake_time=fake_time,
     )
     await worker.run_task(
         SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")), node_id=_NODE_ID
@@ -229,6 +259,7 @@ async def test_multiple_observations_some_unchanged_are_all_processed(
 
 @pytest.mark.asyncio
 async def test_backoff_expires_and_item_runs_again(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
@@ -237,7 +268,14 @@ async def test_backoff_expires_and_item_runs_again(
     registry = _registry(fake_time)
     registry.record_failure(_KAD)  # 2.0s
     client = FakeSearchClient(results=[(_reported_file(),)])
-    worker = _worker(client, observation_store, decision_store, engine, registry, fake_time)
+    worker = _worker(
+        client,
+        observation_store=observation_store,
+        decision_store=decision_store,
+        engine=engine,
+        backoff=registry,
+        fake_time=fake_time,
+    )
     fake_time.advance(timedelta(seconds=3.0))  # the channel is no longer in backoff
     await worker.run_task(
         SearchTask(keyword=Keyword("k"), channel=Channel("kad")), node_id=_NODE_ID
@@ -247,6 +285,7 @@ async def test_backoff_expires_and_item_runs_again(
 
 @pytest.mark.asyncio
 async def test_search_failure_arms_channel_backoff(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
@@ -254,7 +293,14 @@ async def test_search_failure_arms_channel_backoff(
     fake_time = FakeTime()
     registry = _registry(fake_time)
     client = FakeSearchClient(search_failures=[make_search_failed()])
-    worker = _worker(client, observation_store, decision_store, engine, registry, fake_time)
+    worker = _worker(
+        client,
+        observation_store=observation_store,
+        decision_store=decision_store,
+        engine=engine,
+        backoff=registry,
+        fake_time=fake_time,
+    )
     await worker.run_task(
         SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")), node_id=_NODE_ID
     )
@@ -264,6 +310,7 @@ async def test_search_failure_arms_channel_backoff(
 
 @pytest.mark.asyncio
 async def test_transport_failure_marks_instance_down(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
@@ -272,7 +319,14 @@ async def test_transport_failure_marks_instance_down(
     registry = _registry(fake_time)
     # search raises a transport failure (dead stream) → client down + client backoff.
     client = FakeSearchClient(search_failures=[make_unreachable()], results=[(_reported_file(),)])
-    worker = _worker(client, observation_store, decision_store, engine, registry, fake_time)
+    worker = _worker(
+        client,
+        observation_store=observation_store,
+        decision_store=decision_store,
+        engine=engine,
+        backoff=registry,
+        fake_time=fake_time,
+    )
     await worker.run_task(
         SearchTask(keyword=Keyword("k1"), channel=Channel("ed2k")), node_id=_NODE_ID
     )
@@ -286,6 +340,7 @@ async def test_transport_failure_marks_instance_down(
 
 @pytest.mark.asyncio
 async def test_the_client_backoff_grows_until_a_search_succeeds(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
@@ -295,7 +350,14 @@ async def test_the_client_backoff_grows_until_a_search_succeeds(
     client = FakeSearchClient(
         search_failures=[make_unreachable()] * 4, results=[(_reported_file(),)]
     )
-    worker = _worker(client, observation_store, decision_store, engine, registry, fake_time)
+    worker = _worker(
+        client,
+        observation_store=observation_store,
+        decision_store=decision_store,
+        engine=engine,
+        backoff=registry,
+        fake_time=fake_time,
+    )
     delays = []
     for _ in range(4):
         await worker.run_task(
@@ -312,6 +374,7 @@ async def test_the_client_backoff_grows_until_a_search_succeeds(
 
 @pytest.mark.asyncio
 async def test_a_task_is_one_search_given_the_cores_budget(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
@@ -319,7 +382,12 @@ async def test_a_task_is_one_search_given_the_cores_budget(
     fake_time = FakeTime()
     client = FakeSearchClient(results=[(_reported_file(),)])
     worker = _worker(
-        client, observation_store, decision_store, engine, _registry(fake_time), fake_time
+        client,
+        observation_store=observation_store,
+        decision_store=decision_store,
+        engine=engine,
+        backoff=_registry(fake_time),
+        fake_time=fake_time,
     )
     await worker.run_task(
         SearchTask(keyword=Keyword("keroro"), channel=Channel("kad")), node_id=_NODE_ID
@@ -333,6 +401,7 @@ async def test_a_task_is_one_search_given_the_cores_budget(
 
 @pytest.mark.asyncio
 async def test_successful_search_emits_search_executed_with_network_and_counts(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
@@ -344,11 +413,11 @@ async def test_successful_search_emits_search_executed_with_network_and_counts(
     client = FakeSearchClient(results=[(_reported_file(),)], skipped_result_count=2)
     worker = _worker(
         client,
-        observation_store,
-        decision_store,
-        engine,
-        _registry(fake_time),
-        fake_time,
+        observation_store=observation_store,
+        decision_store=decision_store,
+        engine=engine,
+        backoff=_registry(fake_time),
+        fake_time=fake_time,
         observability_dispatcher=observability.dispatcher,
     )
     await worker.run_task(
@@ -375,6 +444,7 @@ async def test_successful_search_emits_search_executed_with_network_and_counts(
 
 @pytest.mark.asyncio
 async def test_search_failure_dispatches_search_failed(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
@@ -386,11 +456,11 @@ async def test_search_failure_dispatches_search_failed(
     client = FakeSearchClient(search_failures=[make_search_failed()])
     worker = _worker(
         client,
-        observation_store,
-        decision_store,
-        engine,
-        _registry(fake_time),
-        fake_time,
+        observation_store=observation_store,
+        decision_store=decision_store,
+        engine=engine,
+        backoff=_registry(fake_time),
+        fake_time=fake_time,
         observability_dispatcher=observability.dispatcher,
     )
     await worker.run_task(
@@ -410,6 +480,7 @@ async def test_search_failure_dispatches_search_failed(
 
 @pytest.mark.asyncio
 async def test_transport_failure_during_search_dispatches_client_unreachable(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     engine: MatchingEngine,
@@ -420,11 +491,11 @@ async def test_transport_failure_during_search_dispatches_client_unreachable(
     client = FakeSearchClient(search_failures=[make_unreachable()], results=[(_reported_file(),)])
     worker = _worker(
         client,
-        observation_store,
-        decision_store,
-        engine,
-        _registry(fake_time),
-        fake_time,
+        observation_store=observation_store,
+        decision_store=decision_store,
+        engine=engine,
+        backoff=_registry(fake_time),
+        fake_time=fake_time,
         observability_dispatcher=observability.dispatcher,
     )
     await worker.run_task(
@@ -442,6 +513,7 @@ async def test_transport_failure_during_search_dispatches_client_unreachable(
 
 @pytest.mark.asyncio
 async def test_a_search_logs_on_the_worker_logger_and_a_failed_observation_on_its_own(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_connection: sqlite3.Connection,
@@ -456,11 +528,11 @@ async def test_a_search_logs_on_the_worker_logger_and_a_failed_observation_on_it
     client = FakeSearchClient(results=[(_reported_file(),)])
     worker = _worker(
         client,
-        observation_store,
-        decision_store,
-        engine,
-        _registry(fake_time),
-        fake_time,
+        observation_store=observation_store,
+        decision_store=decision_store,
+        engine=engine,
+        backoff=_registry(fake_time),
+        fake_time=fake_time,
         logger=logger,
         cataloguer_logger=cataloguer_logger,
     )

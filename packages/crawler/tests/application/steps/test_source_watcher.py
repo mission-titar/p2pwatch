@@ -45,7 +45,7 @@ from tests.support.application.steps.observability_dispatcher import Observabili
 from tests.support.catalog_rows import insert_file, source_variant_node_ids
 
 
-def _reading(name: str, role: SourceRole | None = SourceRole.QUEUED) -> SourceReading:
+def _reading(name: str, *, role: SourceRole | None = SourceRole.QUEUED) -> SourceReading:
     return SourceReading(
         source=SourceKey(network=Network.ED2K, native_id="1f" * 16),
         source_name=name,
@@ -65,7 +65,7 @@ async def test_the_sources_of_each_tracked_download_the_client_lists_are_recorde
     start = fake_time.wall.now()
     readings: dict[str, tuple[SourceReading, ...]] = {
         HASH_A: (_reading("peer A"),),
-        HASH_B: (_reading("peer B", None),),
+        HASH_B: (_reading("peer B", role=None),),
     }
     listed = (status(HASH_A), status(HASH_C), status(HASH_B))
     client = FakeDownloadClient(listed=[listed])
@@ -106,7 +106,7 @@ async def test_a_passing_reading_carries_its_latest_points_role_from_the_window_
     # The window spans three times between reads (source points spec, D4).
     fake_time = FakeTime()
     start = fake_time.wall.now()
-    passing = _reading("peer", None)
+    passing = _reading("peer", role=None)
     readings: dict[str, tuple[SourceReading, ...]] = {HASH_A: (_reading("peer"), passing)}
     sources = FakeSourcePointStore(
         latest=LatestPoint(role=SourceRole.SENDING, observed_at=start, session_received_bytes=0)
@@ -254,7 +254,7 @@ _PEER, _OTHER_PEER = (
 
 
 def _read(
-    source: SourceKey | None, source_name: str | None, role: SourceRole = SourceRole.QUEUED
+    source: SourceKey | None, *, source_name: str | None, role: SourceRole = SourceRole.QUEUED
 ) -> SourceReading:
     return SourceReading(
         source=source,
@@ -278,7 +278,7 @@ def _tracking(*hashes: str) -> FakeTrackedDownloadStore:
 @pytest.mark.asyncio
 async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
     # Stage 4, D9: the first file's event, named after its decision and best name.
-    queued = (_read(_PEER, "AnimuseeFMR"),)
+    queued = (_read(_PEER, source_name="AnimuseeFMR"),)
     source_client = FakeSourceClient(readings={HASH_A: queued, HASH_B: queued})
     decision_reader = FakeDecisionReader(
         candidates=(candidate(HASH_A, target_id=TargetId("062A")),)
@@ -300,10 +300,10 @@ async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
     assert _alerts(observability) == [
         _alert(
             _PEER,
-            "AnimuseeFMR",
-            None,
-            "Keroro 062.avi",
-            (TargetTitle(target_id=TargetId("062A"), title="t"),),
+            source_name="AnimuseeFMR",
+            absent_for=None,
+            filename="Keroro 062.avi",
+            target_titles=(TargetTitle(target_id=TargetId("062A"), title="t"),),
         )
     ]
     assert observability.notifier.node_ids == [NODE_ID]
@@ -331,8 +331,8 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
         ),
     }
     readings: dict[str, tuple[SourceReading, ...]] = {
-        HASH_A: (_read(_OTHER_PEER, None),),
-        HASH_B: (_read(_PEER, "AnimuseeFMR", SourceRole.SENDING),),
+        HASH_A: (_read(_OTHER_PEER, source_name=None),),
+        HASH_B: (_read(_PEER, source_name="AnimuseeFMR", role=SourceRole.SENDING),),
     }
     sources = FakeSourcePointStore(history=history)
     tracked_download_store = FakeTrackedDownloadStore()
@@ -358,10 +358,10 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
     assert _alerts(observability) == [
         _alert(
             _PEER,
-            "AnimuseeFMR",
-            timedelta(hours=13),
-            HASH_B,
-            (TargetTitle(target_id=TargetId("063A"), title="t2"),),
+            source_name="AnimuseeFMR",
+            absent_for=timedelta(hours=13),
+            filename=HASH_B,
+            target_titles=(TargetTitle(target_id=TargetId("063A"), title="t2"),),
         )
     ]
 
@@ -373,7 +373,7 @@ async def test_a_reading_without_a_source_id_raises_nothing() -> None:
     client = FakeDownloadClient(listed=[(status(HASH_A),)])
     cycle = build_cycle(
         client=client,
-        source_client=FakeSourceClient(readings={HASH_A: (_read(None, "peer"),)}),
+        source_client=FakeSourceClient(readings={HASH_A: (_read(None, source_name="peer"),)}),
         tracked_download_store=_tracking(HASH_A),
         sources=sources,
         observability_dispatcher=observability.dispatcher,
@@ -388,8 +388,8 @@ async def test_a_reading_without_a_source_id_raises_nothing() -> None:
     "readings",
     [
         (),
-        (_read(None, "peer"),),
-        (_read(_PEER, "peer", SourceRole.NOTHING_NEW),),
+        (_read(None, source_name="peer"),),
+        (_read(_PEER, source_name="peer", role=SourceRole.NOTHING_NEW),),
     ],
     ids=["none", "no-source-id", "not-useful"],
 )
@@ -413,9 +413,9 @@ async def test_the_baseline_is_asked_once_per_round_against_its_start() -> None:
     fake_time = FakeTime()
     start = fake_time.wall.now()
     readings: dict[str, tuple[SourceReading, ...]] = {
-        HASH_A: (_read(None, "peer"),),
-        HASH_B: (_read(_PEER, "AnimuseeFMR"),),
-        HASH_C: (_read(_OTHER_PEER, None, SourceRole.SENDING),),
+        HASH_A: (_read(None, source_name="peer"),),
+        HASH_B: (_read(_PEER, source_name="AnimuseeFMR"),),
+        HASH_C: (_read(_OTHER_PEER, source_name=None, role=SourceRole.SENDING),),
     }
     sources = FakeSourcePointStore()
     client = FakeDownloadClient(listed=[(status(HASH_A), status(HASH_B), status(HASH_C))])
@@ -432,7 +432,7 @@ async def test_the_baseline_is_asked_once_per_round_against_its_start() -> None:
 
 @pytest.mark.asyncio
 async def test_a_store_failure_asking_the_baseline_skips_that_downloads_alerts_only() -> None:
-    queued = (_read(_PEER, "AnimuseeFMR"),)
+    queued = (_read(_PEER, source_name="AnimuseeFMR"),)
     sources = FakeSourcePointStore(baseline_failures=1)
     observability = ObservabilityOverFakes()
     client = FakeDownloadClient(listed=[(status(HASH_A), status(HASH_B))])
@@ -446,13 +446,15 @@ async def test_a_store_failure_asking_the_baseline_skips_that_downloads_alerts_o
     await cycle.run(NODE_ID)
     assert [point.file.native_id for point in sources.recorded] == [HASH_A, HASH_B]
     assert len(sources.baselines) == 2
-    assert _alerts(observability) == [_alert(_PEER, "AnimuseeFMR", None, HASH_B)]
+    assert _alerts(observability) == [
+        _alert(_PEER, source_name="AnimuseeFMR", absent_for=None, filename=HASH_B)
+    ]
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("order", [(HASH_A, HASH_B), (HASH_B, HASH_A)], ids=["a-first", "b-first"])
 async def test_the_first_recording_round_is_a_baseline(
-    tmp_path: Path, order: tuple[str, str]
+    *, tmp_path: Path, order: tuple[str, str]
 ) -> None:
     # On a real catalog: two queued sources in the node's first round, a third in the next.
     catalog = open_catalog(tmp_path / "catalog.db")
@@ -481,11 +483,13 @@ async def test_the_first_recording_round_is_a_baseline(
     third = SourceKey(network=Network.ED2K, native_id="d" * 32)
     readings[HASH_A] = (_peer(_PEER), _peer(third))
     await cycle.run(NODE_ID)
-    assert _alerts(observability) == [_alert(third, "peer", None, HASH_A)]
+    assert _alerts(observability) == [
+        _alert(third, source_name="peer", absent_for=None, filename=HASH_A)
+    ]
     catalog.close()
 
 
-def _peer(key: SourceKey, role: SourceRole = SourceRole.QUEUED) -> SourceReading:
+def _peer(key: SourceKey, *, role: SourceRole = SourceRole.QUEUED) -> SourceReading:
     return SourceReading(
         source=key,
         source_name="peer",
@@ -508,6 +512,7 @@ def real_catalog(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 def _real_cycle(
     catalog: sqlite3.Connection,
+    *,
     client: FakeDownloadClient,
     source_client: FakeSourceClient,
     observability: ObservabilityOverFakes,
@@ -536,6 +541,7 @@ def _alerts(observability: ObservabilityOverFakes) -> list[SourceAlert]:
 
 def _alert(
     source: SourceKey,
+    *,
     source_name: str,
     absent_for: timedelta | None,
     filename: str,
@@ -563,13 +569,21 @@ async def test_a_source_useful_at_three_consecutive_reads_is_new_once(
     fake_time, observability = FakeTime(), ObservabilityOverFakes()
     client = FakeDownloadClient(listed=[(status(HASH_A),)] * 4)
     source_client = FakeSourceClient(readings=readings, fake_time=fake_time)
-    cycle = _real_cycle(real_catalog, client, source_client, observability, fake_time)
+    cycle = _real_cycle(
+        real_catalog,
+        client=client,
+        source_client=source_client,
+        observability=observability,
+        fake_time=fake_time,
+    )
     await cycle.run(NODE_ID)  # the node's first round, a baseline
     readings[HASH_A] = (_peer(_OTHER_PEER), _peer(_PEER))
     for _ in range(3):
         fake_time.advance(timedelta(seconds=30))
         await cycle.run(NODE_ID)
-    assert _alerts(observability) == [_alert(_PEER, "peer", None, HASH_A)]
+    assert _alerts(observability) == [
+        _alert(_PEER, source_name="peer", absent_for=None, filename=HASH_A)
+    ]
 
 
 @pytest.mark.asyncio
@@ -581,15 +595,23 @@ async def test_a_source_back_after_13_hours_through_an_undetermined_read_reappea
     fake_time, observability = FakeTime(), ObservabilityOverFakes()
     client = FakeDownloadClient(listed=[(status(HASH_A),)] * 3)
     source_client = FakeSourceClient(readings=readings, fake_time=fake_time)
-    cycle = _real_cycle(real_catalog, client, source_client, observability, fake_time)
+    cycle = _real_cycle(
+        real_catalog,
+        client=client,
+        source_client=source_client,
+        observability=observability,
+        fake_time=fake_time,
+    )
     await cycle.run(NODE_ID)
     fake_time.advance(timedelta(hours=13))
-    readings[HASH_A] = (_peer(_PEER, SourceRole.UNDETERMINED),)
+    readings[HASH_A] = (_peer(_PEER, role=SourceRole.UNDETERMINED),)
     await cycle.run(NODE_ID)
     fake_time.advance(timedelta(seconds=30))
     readings[HASH_A] = (_peer(_PEER),)
     await cycle.run(NODE_ID)
     # The third round starts 13 h 30 s after the first, plus the 1 s each earlier read took.
     assert _alerts(observability) == [
-        _alert(_PEER, "peer", timedelta(hours=13, seconds=32), HASH_A)
+        _alert(
+            _PEER, source_name="peer", absent_for=timedelta(hours=13, seconds=32), filename=HASH_A
+        )
     ]

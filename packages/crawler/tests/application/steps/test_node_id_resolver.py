@@ -9,7 +9,7 @@ from tests.fakes.adapters.driven.fake_node_id_store import FakeNodeIdStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 
 
-def _resolve(store: FakeNodeIdStore, fake_time: FakeTime | None = None) -> NodeId:
+def _resolve(store: FakeNodeIdStore, *, fake_time: FakeTime | None = None) -> NodeId:
     return NodeIdResolver(
         node_id_reader=store,
         node_id_writer=store,
@@ -29,5 +29,5 @@ def test_without_a_stored_one_a_new_node_id_is_recorded_at_the_wall_clock_now() 
     store = FakeNodeIdStore(stored_node_id=None)
     fake_time = FakeTime(datetime(2026, 10, 18, 9, 30, tzinfo=UTC))
 
-    assert _resolve(store, fake_time) == "new-node"
+    assert _resolve(store, fake_time=fake_time) == "new-node"
     assert store.recorded == [("new-node", datetime(2026, 10, 18, 9, 30, tzinfo=UTC))]

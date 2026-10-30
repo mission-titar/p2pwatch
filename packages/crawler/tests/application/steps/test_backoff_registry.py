@@ -23,7 +23,7 @@ _POLICY = BackoffPolicy(
 
 
 def _registry(
-    fake_time: FakeTime, saved: dict[BackoffKey, BackoffState] | None = None
+    fake_time: FakeTime, *, saved: dict[BackoffKey, BackoffState] | None = None
 ) -> BackoffRegistry:
     backoff_state_store = FakeBackoffStateStore()
     backoff_state_store.set_backoff_states(saved or {})
@@ -133,7 +133,7 @@ def test_a_resumed_backoff_waits_what_is_left_of_its_delay() -> None:
     fake_time = FakeTime()
     started_at = fake_time.wall.now() - timedelta(seconds=100)
     saved = {_KAD: BackoffState(attempts=1, started_at=started_at, delay=timedelta(seconds=300))}
-    registry = _registry(fake_time, saved)
+    registry = _registry(fake_time, saved=saved)
     registry.resume_waits()
     assert registry.snapshot() == saved
     assert registry.time_until_retry(_KAD) == timedelta(seconds=200)
@@ -144,7 +144,7 @@ def test_a_resumed_backoff_started_in_the_future_waits_its_delay_at_most() -> No
     started_at = fake_time.wall.now() + timedelta(hours=1)
     registry = _registry(
         fake_time,
-        {_KAD: BackoffState(attempts=1, started_at=started_at, delay=timedelta(seconds=300))},
+        saved={_KAD: BackoffState(attempts=1, started_at=started_at, delay=timedelta(seconds=300))},
     )
     registry.resume_waits()
     fake_time.advance(timedelta(seconds=299))
@@ -158,7 +158,7 @@ def test_a_resumed_backoff_keeps_its_attempts() -> None:
     started_at = fake_time.wall.now() - timedelta(hours=1)
     registry = _registry(
         fake_time,
-        {_KAD: BackoffState(attempts=2, started_at=started_at, delay=timedelta(seconds=4))},
+        saved={_KAD: BackoffState(attempts=2, started_at=started_at, delay=timedelta(seconds=4))},
     )
     registry.resume_waits()
     assert registry.is_in_backoff(_KAD) is False
