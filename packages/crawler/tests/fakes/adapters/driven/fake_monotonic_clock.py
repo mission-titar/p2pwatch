@@ -21,4 +21,4 @@ class FakeMonotonicClock(MonotonicClock):
     async def sleep(self, duration: timedelta) -> None:
         self._fake_time.sleeps.append(duration)
         self._fake_time.advance(duration)
-        await asyncio.sleep(0)  # yield control without a real wait
+        await asyncio.sleep(0)  # yield control without a real wait  # noqa: TID251

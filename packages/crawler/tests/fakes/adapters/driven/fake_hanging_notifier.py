@@ -6,5 +6,7 @@ from p2pwatch.domain.observability.policy import Audience
 
 
 class FakeHangingNotifier(Notifier):
+    """Its ``notify`` sleeps past the short timeout of the test that uses it."""
+
     async def notify(self, audience: Audience, notification: Notification) -> None:
-        await asyncio.sleep(10)  # exceeds the test's short timeout
+        await asyncio.sleep(10)  # noqa: TID251

@@ -15,8 +15,8 @@ class TestSystemMonotonicClock(MonotonicClockContract):
 
 
 def test_now_reads_the_system_monotonic_clock() -> None:
-    before = time.monotonic_ns()
+    before = time.monotonic_ns()  # noqa: TID251
 
     instant = SystemMonotonicClock().now()
 
-    assert before <= instant.nanoseconds <= time.monotonic_ns()
+    assert before <= instant.nanoseconds <= time.monotonic_ns()  # noqa: TID251

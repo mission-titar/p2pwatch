@@ -210,7 +210,7 @@ def _wait_for(
         last = probe()
         if last == target:
             return
-        time.sleep(delay)
+        time.sleep(delay)  # noqa: TID251
     logs = _run("logs", "--no-color", "--tail", "80", files=files, timeout=60)
     raise AssertionError(
         f"{label}: expected {target!r}, last was {last!r}\n--- logs ---\n{logs.stdout}{logs.stderr}"
@@ -355,7 +355,7 @@ _AMULED_SERVICE = "/etc/services.d/amuled"
 
 def test_port_sync_stays_down_with_port_sync_unset(project_files: tuple[Path, ...]) -> None:
     _up_until_ed2k_is_healthy(project_files)
-    time.sleep(30)
+    time.sleep(30)  # noqa: TID251
 
     # A run script respawned every second would read `true` wanted up and an updownfor under 2.
     fields = "up,wantedup,normallyup,updownfor"
@@ -631,7 +631,7 @@ def _wait_new_shared_hash(
             appeared = current - before
             if len(appeared) == 1:
                 return next(iter(appeared))
-        time.sleep(delay)
+        time.sleep(delay)  # noqa: TID251
     raise AssertionError(f"expected exactly one new shared hash, got {sorted(appeared)}")
 
 

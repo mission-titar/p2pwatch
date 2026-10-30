@@ -288,7 +288,7 @@ async def test_signal_consumer_awaits_the_nudge(
     observability = ObservabilityOverFakes()
     waker = FakeWaker()
     waiter = asyncio.create_task(waker.wait(WakeSubject.DOWNLOAD))
-    await asyncio.sleep(0)
+    await asyncio.sleep(0)  # noqa: TID251
     assert not waiter.done()
     await _cataloguer(
         observation_store,

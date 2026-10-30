@@ -7,4 +7,4 @@ from p2pwatch.application.ports.driven.wall_clock import WallClock
 
 class SystemWallClock(WallClock):
     def now(self) -> datetime:
-        return datetime.now(UTC)
+        return datetime.now(UTC)  # noqa: TID251

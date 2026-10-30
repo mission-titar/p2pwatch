@@ -90,11 +90,11 @@ def test_merge_of_two_catalogs_named_under_cwd_into_a_new_one_holds_both(
 def test_merge_copies_a_version_5_destination(tmp_path: Path, argv: list[str]) -> None:
     open_catalog_at(tmp_path / "a.db", 5).close()
     make_catalog(tmp_path / "b.db", {"files": [{"native_id": HASH_B, "size_bytes": 100}]})
-    before = datetime.now(UTC).replace(microsecond=0)
+    before = datetime.now(UTC).replace(microsecond=0)  # noqa: TID251
 
     assert _run(argv, tmp_path) == 0
 
-    after = datetime.now(UTC)
+    after = datetime.now(UTC)  # noqa: TID251
     [(prefix, instant)] = pre_migration_copies(tmp_path)
     assert prefix == "a.db.pre-0006"
     assert before <= instant <= after

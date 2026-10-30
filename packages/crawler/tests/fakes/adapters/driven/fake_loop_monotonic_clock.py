@@ -16,4 +16,4 @@ class FakeLoopMonotonicClock(MonotonicClock):
         return MONOTONIC_EPOCH + timedelta(seconds=self._loop.time())
 
     async def sleep(self, duration: timedelta) -> None:
-        await asyncio.sleep(duration.total_seconds())
+        await asyncio.sleep(duration.total_seconds())  # noqa: TID251
