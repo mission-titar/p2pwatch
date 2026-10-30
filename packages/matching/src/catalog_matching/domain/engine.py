@@ -10,7 +10,6 @@ later plan.
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import NamedTuple
 
 from catalog_matching.domain.combinators import Matcher
 from catalog_matching.domain.config import MatcherConfig
@@ -81,7 +80,8 @@ def to_record(decision: MatchDecision) -> DecisionRecord:
     )
 
 
-class _RuleHit(NamedTuple):
+@dataclass(frozen=True, kw_only=True)
+class _RuleHit:
     """The first rule ``candidate`` fires for one resolved target."""
 
     resolved: ResolvedTarget
@@ -215,7 +215,11 @@ class MatchingEngine:
                     current.rule_index,
                 ):
                     best_by_target_id[target_id] = _RuleHit(
-                        resolved, index, rule_name, tier, candidate
+                        resolved=resolved,
+                        rule_index=index,
+                        rule_name=rule_name,
+                        tier=tier,
+                        candidate=candidate,
                     )
         hits = list(best_by_target_id.values())
         attributable = self._fan_out(hits)
