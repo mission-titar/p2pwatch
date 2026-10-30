@@ -10,5 +10,5 @@ class Notifier(ABC):
     """Notifies an audience of an event."""
 
     @abstractmethod
-    async def notify(self, audience: Audience, notification: Notification) -> None:
+    async def notify(self, audience: Audience, *, notification: Notification) -> None:
         """Sends one notification, titled for the node it carries."""

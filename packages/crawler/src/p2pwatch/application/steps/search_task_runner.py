@@ -53,11 +53,15 @@ class SearchTaskRunner:
                 for channel in worker.channels:
                     for keyword in keywords:
                         group.create_task(
-                            self._search_forever(worker, SearchTask(keyword, channel), node_id)
+                            self._search_forever(
+                                worker,
+                                task=SearchTask(keyword=keyword, channel=channel),
+                                node_id=node_id,
+                            )
                         )
 
     async def _search_forever(
-        self, worker: SearchWorker, task: SearchTask, node_id: NodeId
+        self, worker: SearchWorker, *, task: SearchTask, node_id: NodeId
     ) -> None:
         while True:
             await self._run_state_reader.wait_until_resumed()
@@ -65,7 +69,7 @@ class SearchTaskRunner:
             if wait > timedelta(0):
                 await self._monotonic_clock.sleep(wait)
                 continue
-            await worker.run_task(task, node_id)
+            await worker.run_task(task, node_id=node_id)
             self._save()
             # A yield that reads no clock: a search that never suspends must not starve the loop.
             await asyncio.sleep(0)  # noqa: TID251

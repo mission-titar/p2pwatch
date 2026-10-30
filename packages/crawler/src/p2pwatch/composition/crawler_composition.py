@@ -378,10 +378,12 @@ class CrawlerComposition(CrawlerRunner):
             # search tasks that persist it. Single writer on the event loop.
             backoff = BackoffRegistry(
                 _backoff_policy(crawler_config),
-                wall_clock,
-                monotonic_clock,
-                RandomJitterGenerator(jitter_seed=None),  # seeded by the system's entropy
-                backoff_state_store,
+                wall_clock=wall_clock,
+                monotonic_clock=monotonic_clock,
+                jitter_generator=RandomJitterGenerator(
+                    jitter_seed=None
+                ),  # seeded by the system's entropy
+                backoff_state_reader=backoff_state_store,
             )
             file_judge = FileJudge(
                 observation_reader=observation_store,

@@ -92,10 +92,10 @@ class DownloadCycle:
             max(status.size_bytes - status.bytes_done, 0) for status in listed_statuses
         )
         # Steps 1, 2 and 2b - STATES, COMPLETIONS, PRESENCE + LOSS: only StoreError, isolated.
-        await self._download_tracker.track(listed_statuses, node_id)
+        await self._download_tracker.track(listed_statuses, node_id=node_id)
         # Step 3 - CANDIDATES: NO client I/O → a StoreError or the disk's OSError, isolated (I2).
         try:
-            await self._download_decider.queue_new_candidates(outstanding_bytes, node_id)
+            await self._download_decider.queue_new_candidates(outstanding_bytes, node_id=node_id)
         except StoreError as error:
             self._logger.error(
                 "download candidates store failure (%s): step skipped, continues", error
@@ -119,7 +119,7 @@ class DownloadCycle:
             self._logger.error("download start store failure (%s): step skipped, retry", error)
         # Step 5 - SOURCES: last, since it only observes; its failure must not skip a start (D8).
         try:
-            await self._source_watcher.record_sources(listed_statuses, node_id)
+            await self._source_watcher.record_sources(listed_statuses, node_id=node_id)
         except _UNAVAILABLE as error:
             self._logger.warning("download daemon unreachable (%s): sources skipped, retry", error)
         except StoreError as error:

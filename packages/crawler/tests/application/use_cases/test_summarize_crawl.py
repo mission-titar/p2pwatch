@@ -87,7 +87,7 @@ def test_a_reading_is_fresh_until_it_is_older_than_its_freshness() -> None:
     summary = _summarize(status_reading_store=status_reading_store, fake_time=fake_time)
 
     assert summary.client_summaries == (
-        ClientSummary(ClientName("never"), reading=None, is_fresh=False),
-        ClientSummary(ClientName("fresh"), reading=_READING, is_fresh=True),
-        ClientSummary(ClientName("stale"), reading=_READING, is_fresh=False),
+        ClientSummary(client_name=ClientName("never"), reading=None, is_fresh=False),
+        ClientSummary(client_name=ClientName("fresh"), reading=_READING, is_fresh=True),
+        ClientSummary(client_name=ClientName("stale"), reading=_READING, is_fresh=False),
     )

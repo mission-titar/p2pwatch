@@ -9,5 +9,5 @@ class CatalogCopier(ABC):
     """Copies every row a destination lacks, never writing to a source."""
 
     @abstractmethod
-    def copy_catalogs(self, destination: PurePath, source_catalogs: Sequence[PurePath]) -> None:
+    def copy_catalogs(self, destination: PurePath, *, source_catalogs: Sequence[PurePath]) -> None:
         """Copies each source into ``destination``; raises ``CatalogCopyError``."""

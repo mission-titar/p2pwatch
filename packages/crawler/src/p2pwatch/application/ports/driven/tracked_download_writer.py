@@ -16,24 +16,25 @@ class TrackedDownloadWriter(ABC):
 
     @abstractmethod
     def record_queued(
-        self, file: FileKey, target_id: TargetId, size_bytes: int, queued_at: datetime
+        self, file: FileKey, *, target_id: TargetId, size_bytes: int, queued_at: datetime
     ) -> None:
         """Tracks ``file`` as queued; a file already tracked keeps its row."""
 
     @abstractmethod
-    def set_completed(self, file: FileKey, completed_at: datetime) -> None:
+    def set_completed(self, file: FileKey, *, completed_at: datetime) -> None:
         """Marks ``file`` completed."""
 
     @abstractmethod
     def set_state(
         self,
         file: FileKey,
+        *,
         state: Literal[DownloadState.DOWNLOADING, DownloadState.FAILED],
         failure_reason: FailureReason | None = None,
     ) -> None:
         """Moves ``file`` to ``state``, with its failure reason."""
 
     @abstractmethod
-    def set_seen(self, statuses: Iterable[DownloadStatus], seen_at: datetime) -> None:
+    def set_seen(self, statuses: Iterable[DownloadStatus], *, seen_at: datetime) -> None:
         """Stamps each listed download ``seen_at``, with its waiting reason; a file listed but not
         tracked stays untracked, without error."""

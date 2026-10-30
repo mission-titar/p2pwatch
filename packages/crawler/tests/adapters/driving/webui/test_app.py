@@ -130,8 +130,16 @@ _CRAWL_SUMMARY = CrawlSummary(
     ),
 )
 _SUMMARIZER = FakeCrawlSummarizer(_CRAWL_SUMMARY)
-_DESCRIBER = FakeNodeDescriber(NodeDescription(_NODE_STATE))
-_NO_FILE_LISTER = FakeFileLister(FileListing((), False, 0, 0, {}))
+_DESCRIBER = FakeNodeDescriber(NodeDescription(node_state=_NODE_STATE))
+_NO_FILE_LISTER = FakeFileLister(
+    FileListing(
+        catalog_entries=(),
+        has_next_page=False,
+        matched_file_count=0,
+        total_file_count=0,
+        file_count_by_tier={},
+    )
+)
 # What /files asks for with no parameter.
 _DEFAULT_CALL = ListFilesCall(
     target_id=None,
@@ -143,12 +151,16 @@ _DEFAULT_CALL = ListFilesCall(
     page=1,
 )
 _NO_FILE_DESCRIBER = FakeFileDescriber(None)
-_NO_SOURCE_LISTER = FakeSourceLister(SourceListing((), has_next_page=False, source_count=0))
+_NO_SOURCE_LISTER = FakeSourceLister(
+    SourceListing(known_sources=(), has_next_page=False, source_count=0)
+)
 _NO_SOURCE_DESCRIBER = FakeSourceDescriber(None)
 _NO_SOURCE_NAME_DESCRIBER = FakeSourceNameDescriber(None)
 # These tests run no console query: ``test_app_console.py`` does.
-_NO_CONSOLE_QUERY_RUNNER = FakeConsoleQueryRunner(ConsoleQueryRun(QueryFailure(message=""), 1000))
-_NO_NODE_METRIC_LISTER = FakeNodeMetricLister(NodeMetricListing({}))
+_NO_CONSOLE_QUERY_RUNNER = FakeConsoleQueryRunner(
+    ConsoleQueryRun(query_answer=QueryFailure(message=""), row_cap=1000)
+)
+_NO_NODE_METRIC_LISTER = FakeNodeMetricLister(NodeMetricListing(samples_by_node_metric={}))
 _FILE = FileKey(network=Network.ED2K, native_id=TEST_HASH)
 _OBSERVATION = FileObservation(
     reported_file=ReportedFile(
@@ -172,7 +184,7 @@ _DECISION = DatedDecision(
 _WEEK = Interval(since=_WALL_CLOCK.now() - timedelta(days=7), until=_WALL_CLOCK.now())
 # One file seen once under one name, decided on 062A, with no source and no explanation.
 _FILE_DESCRIPTION = FileDescription(
-    FileHistory(
+    file_history=FileHistory(
         file=_FILE,
         size_bytes=100_000_000,
         observations=(_OBSERVATION,),
@@ -212,7 +224,7 @@ def _app_on_fakes(
         crawl_resumer=controls.resumer,
         shutdown_requester=controls.shutdown_requester,
         crawl_summarizer=FakeCrawlSummarizer(crawl_summary),
-        node_describer=FakeNodeDescriber(NodeDescription(node_state)),
+        node_describer=FakeNodeDescriber(NodeDescription(node_state=node_state)),
         file_lister=file_lister,
         file_describer=file_describer,
         source_lister=source_lister,
@@ -232,7 +244,13 @@ async def _page(app: Starlette, url: str) -> str:
 
 
 def _listing(*catalog_entries: CatalogEntry) -> FileListing:
-    return FileListing(catalog_entries, False, 0, 0, {})
+    return FileListing(
+        catalog_entries=catalog_entries,
+        has_next_page=False,
+        matched_file_count=0,
+        total_file_count=0,
+        file_count_by_tier={},
+    )
 
 
 def _one_file(*decisions: DecisionRecord) -> FileListing:
@@ -330,7 +348,7 @@ async def test_health_returns_200(populated_app: tuple[Starlette, str]) -> None:
 @pytest.mark.asyncio
 async def test_metrics_serve_the_listing_as_prometheus_text_whatever_the_accept_header() -> None:
     node_metric_listing = NodeMetricListing(
-        {
+        samples_by_node_metric={
             NodeGauge.CRAWLER_UP: (
                 NodeMetricSample(node_metric=NodeGauge.CRAWLER_UP, labels=(), value=1.0),
             )
@@ -663,7 +681,7 @@ _KNOWN_SOURCE = KnownSource(
     file_count=1,
 )
 # One source on a list counting two.
-_TWO_SOURCES = SourceListing((_KNOWN_SOURCE,), has_next_page=False, source_count=2)
+_TWO_SOURCES = SourceListing(known_sources=(_KNOWN_SOURCE,), has_next_page=False, source_count=2)
 
 
 async def _sources_page(app: Starlette, url: str) -> str:
@@ -698,7 +716,7 @@ async def test_sources_lists_each_source_with_its_links_latest_seen_and_files() 
 
 @pytest.mark.asyncio
 async def test_sources_search_keeps_its_text_and_counts_its_matches() -> None:
-    listing = SourceListing((_KNOWN_SOURCE,), has_next_page=False, source_count=1)
+    listing = SourceListing(known_sources=(_KNOWN_SOURCE,), has_next_page=False, source_count=1)
     page, call = await _source_listing_page("/sources?search=+shinob+", listing)
     assert call == ListSourcesCall(search_text="shinob", page=1)
     assert "Sources matching the search: 1." in page
@@ -715,7 +733,7 @@ async def test_sources_ignore_the_4x_search_key() -> None:
 @pytest.mark.asyncio
 async def test_sources_without_a_source_says_so() -> None:
     page, call = await _source_listing_page(
-        "/sources?page=nope", SourceListing((), has_next_page=False, source_count=0)
+        "/sources?page=nope", SourceListing(known_sources=(), has_next_page=False, source_count=0)
     )
     assert call == ListSourcesCall(search_text=None, page=1)
     assert '<td colspan="4">No source found.</td>' in page
@@ -724,7 +742,7 @@ async def test_sources_without_a_source_says_so() -> None:
 
 @pytest.mark.asyncio
 async def test_sources_pages_keep_the_search() -> None:
-    full = SourceListing((_KNOWN_SOURCE,), has_next_page=True, source_count=51)
+    full = SourceListing(known_sources=(_KNOWN_SOURCE,), has_next_page=True, source_count=51)
     first, _ = await _source_listing_page("/sources?search=FMR", full)
     second, call = await _source_listing_page("/sources?search=FMR&page=2")
     assert call == ListSourcesCall(search_text="FMR", page=2)
@@ -736,7 +754,11 @@ async def test_sources_pages_keep_the_search() -> None:
 
 @pytest.mark.asyncio
 async def test_sources_list_a_source_without_a_name_as_unknown_unlinked() -> None:
-    listing = SourceListing((replace(_KNOWN_SOURCE, source_name=None),), False, 1)
+    listing = SourceListing(
+        known_sources=(replace(_KNOWN_SOURCE, source_name=None),),
+        has_next_page=False,
+        source_count=1,
+    )
     page, _ = await _source_listing_page("/sources", listing)
     assert _row("unknown", _SOURCE_LINK, "2026-10-13 20:00:30Z", "1") in page
 
@@ -758,7 +780,7 @@ _NAMING = SourceNaming(
 )
 # _USER as AnimuseeFMR, on a file seen under a filename, then on a file never seen.
 _SOURCE_DESCRIPTION = SourceDescription(
-    SourceHistory(
+    source_history=SourceHistory(
         source=_SOURCE,
         source_namings=(_NAMING,),
         sharing_periods=(
@@ -795,7 +817,7 @@ _SOURCE_DESCRIPTION = SourceDescription(
 )
 # AnimuseeFMR on _USER and on _OTHER, and once without a user hash on a file never seen.
 _SOURCE_NAME_DESCRIPTION = SourceNameDescription(
-    SourceNameHistory(
+    source_name_history=SourceNameHistory(
         source_name="AnimuseeFMR",
         source_namings=(
             _NAMING,
@@ -1739,7 +1761,9 @@ _CHANNELS = (
 
 
 async def _clients_section(reading: StatusReading | None, *, is_fresh: bool = True) -> str:
-    client_summary = ClientSummary(ClientName("amuled"), reading, is_fresh=is_fresh)
+    client_summary = ClientSummary(
+        client_name=ClientName("amuled"), reading=reading, is_fresh=is_fresh
+    )
     summary = replace(_CRAWL_SUMMARY, client_summaries=(client_summary,))
     text = await _page(_app_on_fakes(crawl_summary=summary), "/")
     return text[text.index("<h2>Clients</h2>") : text.index("<h2>Crawl</h2>")]

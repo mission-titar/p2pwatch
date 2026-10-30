@@ -60,7 +60,9 @@ def test_the_history_is_read_over_the_last_7_days_ending_now_to_the_second() -> 
     description = _describe(reader)
 
     week = Interval(since=_SECOND_NOW - timedelta(days=7), until=_SECOND_NOW)
-    assert description == SourceDescription(_history(), False, week, _SECOND_NOW)
+    assert description == SourceDescription(
+        source_history=_history(), has_next_page=False, interval=week, now=_SECOND_NOW
+    )
     window = PeriodWindow(since=week.since, until=week.until, gap=_GAP)
     assert reader.calls == [
         (

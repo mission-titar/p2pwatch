@@ -31,7 +31,7 @@ from p2pwatch.domain.source_alerts import FirstUseful, source_alert
 from p2pwatch.domain.store_error import StoreError
 
 
-@dataclass
+@dataclass(kw_only=True)
 class _AlertRound:
     """A round's alert state: the baseline is asked once, at the first useful reading with an id.
     A source decided once is decided for the round, since "earlier" excludes its points."""
@@ -76,7 +76,7 @@ class SourceWatcher:
         self._sources_read_at: MonotonicInstant | None = None
 
     async def record_sources(
-        self, listed_statuses: tuple[DownloadStatus, ...], node_id: NodeId
+        self, listed_statuses: tuple[DownloadStatus, ...], *, node_id: NodeId
     ) -> None:
         """Records the sources of each of our downloads the client lists, completed ones aside,
         then alerts on them (stage 4, D8; source points, D5). A store failure skips that
@@ -90,16 +90,20 @@ class SourceWatcher:
             return
         self._sources_read_at = started_at
         tracked = self._tracked_download_reader.read_tracked_states()
-        round_ = _AlertRound(self._wall_clock.now())
+        round_ = _AlertRound(started_at=self._wall_clock.now())
         for status in listed_statuses:
             if status.completed or status.file not in tracked:
                 continue
             read_at = self._wall_clock.now()
             readings = await self._source_client.sources(status.file)
             try:
-                points = self._source_points(status.file, readings, read_at, node_id)
+                points = self._source_points(
+                    status.file, readings=readings, read_at=read_at, node_id=node_id
+                )
                 self._source_point_writer.record_points(points)
-                await self._alert_sources(status.file, points, round_, node_id)
+                await self._alert_sources(
+                    status.file, points=points, round_=round_, node_id=node_id
+                )
             except StoreError as error:
                 self._logger.error(
                     "sources file=%s store failure (%s): file skipped, continues",
@@ -110,6 +114,7 @@ class SourceWatcher:
     def _source_points(
         self,
         file: FileKey,
+        *,
         readings: tuple[SourceReading, ...],
         read_at: datetime,
         node_id: NodeId,
@@ -122,7 +127,9 @@ class SourceWatcher:
             SourcePoint(
                 file=file,
                 reading=reading,
-                role=self._role(file, reading, since, read_at, node_id),
+                role=self._role(
+                    file, reading=reading, since=since, read_at=read_at, node_id=node_id
+                ),
                 observed_at=read_at,
                 node_id=node_id,
             )
@@ -133,6 +140,7 @@ class SourceWatcher:
     def _role(
         self,
         file: FileKey,
+        *,
         reading: SourceReading,
         since: datetime,
         read_at: datetime,
@@ -140,12 +148,15 @@ class SourceWatcher:
     ) -> SourceRole:
         if reading.role is not None:
             return reading.role
-        latest = self._source_point_reader.read_latest_point(file, reading, since, read_at, node_id)
+        latest = self._source_point_reader.read_latest_point(
+            file, reading=reading, since=since, before=read_at, node_id=node_id
+        )
         return carried_role(latest, reading=reading)
 
     async def _alert_sources(
         self,
         file: FileKey,
+        *,
         points: tuple[SourcePoint, ...],
         round_: _AlertRound,
         node_id: NodeId,
@@ -161,12 +172,14 @@ class SourceWatcher:
             if round_.alerts_allowed is None:
                 # The same answer at any point of the round: "before" excludes the round's writes.
                 round_.alerts_allowed = self._source_point_reader.has_points_before(
-                    round_.started_at, node_id
+                    round_.started_at, node_id=node_id
                 )
             if not round_.alerts_allowed:
                 return  # the node's first recording round is a baseline, not news
             earlier_points = EarlierPoints.of(
-                self._source_point_reader.read_earlier_points(source, round_.started_at, node_id)
+                self._source_point_reader.read_earlier_points(
+                    source, before=round_.started_at, node_id=node_id
+                )
             )
             alert = source_alert(
                 point.role,

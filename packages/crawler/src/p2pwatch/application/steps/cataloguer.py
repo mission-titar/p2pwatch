@@ -49,6 +49,7 @@ class Cataloguer:
     async def catalog(
         self,
         reported_file: ReportedFile,
+        *,
         client_name: ClientName,
         channel: Channel,
         node_id: NodeId,
@@ -67,7 +68,7 @@ class Cataloguer:
                 ObservationRecorded(client_name=client_name, channel=channel)
             )
             return await self._file_judge.rejudge(
-                reported_file.file, reported_file.to_candidate(), node_id
+                reported_file.file, base_candidate=reported_file.to_candidate(), node_id=node_id
             )
         except StoreError as error:
             self._logger.error(

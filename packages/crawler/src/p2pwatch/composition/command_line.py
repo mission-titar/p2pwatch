@@ -43,14 +43,14 @@ def build_command_line(
         config_validator=ValidateConfig(FilesystemConfigChecker(env)),
         catalog_merger=MergeCatalogs(
             FilesystemCatalogFinder(),
-            SqliteCatalogCopier(
+            catalog_copier=SqliteCatalogCopier(
                 SqliteDatabaseOpener(
                     SqlitePreMigrationCopier(
                         SystemWallClock(), lambda directory: disk_usage(directory).free
                     )
                 )
             ),
-            StdlibLogger(MergeCatalogs.__module__),
+            logger=StdlibLogger(MergeCatalogs.__module__),
         ),
         root_logger=root_logger,
         cwd=cwd,

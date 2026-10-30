@@ -9,7 +9,7 @@ from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.source_history import SourceHistory
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SourceDescription:
     source_history: SourceHistory  # its names on the page asked for
     has_next_page: bool  # the page of names is full, so the next one may hold more

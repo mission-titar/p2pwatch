@@ -60,10 +60,10 @@ class CrawlerLifecycle:
         # current policy. A comment-only edit of matcher.yml or targets.yml still runs one pass.
         await self._catalog_reevaluator.reevaluate_if_policy_changed(node_id)
         await self._loop_supervisor.supervise(
-            [_with_node_id(loop, node_id) for loop in self._loops],
+            [_with_node_id(loop, node_id=node_id) for loop in self._loops],
             arm_shutdown_bound=arm_shutdown_bound,
         )
 
 
-def _with_node_id(loop: NodeLoop, node_id: NodeId) -> SupervisedLoop:
+def _with_node_id(loop: NodeLoop, *, node_id: NodeId) -> SupervisedLoop:
     return lambda: loop(node_id)

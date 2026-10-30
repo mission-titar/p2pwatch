@@ -60,7 +60,9 @@ class DescribeFile(FileDescriber):
             )
         return FileDescription(
             file_history=file_history,
-            sharing_periods=self._source_reader.read_sharing_periods(file_history.file, window),
+            sharing_periods=self._source_reader.read_sharing_periods(
+                file_history.file, window=window
+            ),
             explanation=explanation,
             interval=interval,
             now=now,

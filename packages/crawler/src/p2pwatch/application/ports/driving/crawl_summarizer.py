@@ -9,7 +9,7 @@ from p2pwatch.domain.node_state import NodeState
 from p2pwatch.domain.status_reading import StatusReading
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ClientSummary:
     """A client's latest status reading, ``None`` before its first; stale, it is not fresh."""
 
@@ -18,7 +18,7 @@ class ClientSummary:
     is_fresh: bool
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class CrawlSummary:
     client_summaries: tuple[ClientSummary, ...]
     is_paused: bool

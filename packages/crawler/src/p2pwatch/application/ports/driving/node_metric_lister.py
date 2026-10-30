@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from p2pwatch.domain.observability.node_metric import NodeCounter, NodeGauge, NodeMetricSample
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class NodeMetricListing:
     samples_by_node_metric: Mapping[NodeCounter | NodeGauge, tuple[NodeMetricSample, ...]]
 

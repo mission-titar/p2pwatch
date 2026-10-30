@@ -46,13 +46,13 @@ class DownloadTracker:
         # Each queued or downloading download's instant from which it counts as lost.
         self._loss_deadline_by_file: dict[FileKey, MonotonicInstant] = {}
 
-    async def track(self, listed_statuses: tuple[DownloadStatus, ...], node_id: NodeId) -> None:
+    async def track(self, listed_statuses: tuple[DownloadStatus, ...], *, node_id: NodeId) -> None:
         """Follows ``listed_statuses``: a store failure in one step skips that step only."""
         # Step 1 - RECONCILE: NO client I/O left (the list came from step 0) → only StoreError.
         # Every step shares that ONE snapshot: a second read could only contradict the first.
         try:
             states = self._tracked_download_reader.read_tracked_states()
-            self._reconcile_states(states, listed_statuses)
+            self._reconcile_states(states, listed_statuses=listed_statuses)
         except StoreError as error:
             self._logger.error(
                 "download reconciliation store failure (%s): step skipped, continues", error
@@ -65,7 +65,9 @@ class DownloadTracker:
         # downstream.
         try:
             fresh_states = self._tracked_download_reader.read_tracked_states()
-            await self._handle_completions(fresh_states, listed_statuses, node_id)
+            await self._handle_completions(
+                fresh_states, listed_statuses=listed_statuses, node_id=node_id
+            )
         except StoreError as error:
             self._logger.error(
                 "download completions store failure (%s): step skipped, continues", error
@@ -73,7 +75,7 @@ class DownloadTracker:
         # Step 2b - PRESENCE + LOSS: ``latest_seen_at`` is for the next start; loss is measured
         # here.
         try:
-            self._tracked_download_writer.set_seen(listed_statuses, self._wall_clock.now())
+            self._tracked_download_writer.set_seen(listed_statuses, seen_at=self._wall_clock.now())
             self._fail_lost(frozenset(status.file for status in listed_statuses))
         except StoreError as error:
             self._logger.error(
@@ -85,7 +87,7 @@ class DownloadTracker:
         self._loss_deadline_by_file[file] = self._monotonic_clock.now() + self._lost_after
 
     def _reconcile_states(
-        self, states: dict[FileKey, DownloadState], listed_statuses: tuple[DownloadStatus, ...]
+        self, states: dict[FileKey, DownloadState], *, listed_statuses: tuple[DownloadStatus, ...]
     ) -> None:
         """Reconciles ``downloads`` with the client's list: a failure it reports, else DOWNLOADING.
 
@@ -104,11 +106,13 @@ class DownloadTracker:
                 DownloadState.FAILED if failed else DownloadState.DOWNLOADING
             )
             if current is not wanted_state:
-                self._tracked_download_writer.set_state(file, wanted_state, status.failure_reason)
+                self._tracked_download_writer.set_state(
+                    file, state=wanted_state, failure_reason=status.failure_reason
+                )
                 states[file] = wanted_state
 
     async def _record_completion(
-        self, file: FileKey, states: dict[FileKey, DownloadState], node_id: NodeId
+        self, file: FileKey, *, states: dict[FileKey, DownloadState], node_id: NodeId
     ) -> None:
         """Marks ``completed`` (stamps completed_at) and notifies (step 2, §5).
 
@@ -116,7 +120,7 @@ class DownloadTracker:
         nothing opens it. The caller skips files already ``completed``, so the notification fires
         exactly once per download.
         """
-        self._tracked_download_writer.set_completed(file, self._wall_clock.now())
+        self._tracked_download_writer.set_completed(file, completed_at=self._wall_clock.now())
         states[file] = DownloadState.COMPLETED
         await self._observability_dispatcher.dispatch(
             DownloadCompleted(
@@ -131,6 +135,7 @@ class DownloadTracker:
     async def _handle_completions(
         self,
         states: dict[FileKey, DownloadState],
+        *,
         listed_statuses: tuple[DownloadStatus, ...],
         node_id: NodeId,
     ) -> None:
@@ -147,7 +152,7 @@ class DownloadTracker:
             if current is DownloadState.COMPLETED:
                 continue  # already completed: the notification fired once
             try:
-                await self._record_completion(file, states, node_id)
+                await self._record_completion(file, states=states, node_id=node_id)
             except StoreError as error:
                 self._logger.error(
                     "completion file=%s store failure (%s): file skipped, continues",
@@ -156,7 +161,7 @@ class DownloadTracker:
                 )
 
     def _reconcile_loss_deadlines(
-        self, listed_files: frozenset[FileKey], monotonic_now: MonotonicInstant
+        self, listed_files: frozenset[FileKey], *, monotonic_now: MonotonicInstant
     ) -> None:
         """Gives each queued or downloading download its loss deadline: ``lost_after`` from now if
         listed, else the one held, else what its ``latest_seen_at`` leaves."""
@@ -181,11 +186,13 @@ class DownloadTracker:
         the manual retry is deleting the row.
         """
         monotonic_now = self._monotonic_clock.now()
-        self._reconcile_loss_deadlines(listed_files, monotonic_now)
+        self._reconcile_loss_deadlines(listed_files, monotonic_now=monotonic_now)
         # A failed download's deadline goes at the next reconciliation, with every terminal one.
         deadlines = self._loss_deadline_by_file
         for file in [file for file, deadline in deadlines.items() if deadline <= monotonic_now]:
-            self._tracked_download_writer.set_state(file, DownloadState.FAILED, FailureReason.LOST)
+            self._tracked_download_writer.set_state(
+                file, state=DownloadState.FAILED, failure_reason=FailureReason.LOST
+            )
             self._logger.warning(
                 "file=%s unseen by the client for %ss: marked failed",
                 file.native_id,

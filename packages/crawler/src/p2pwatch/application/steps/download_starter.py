@@ -58,7 +58,7 @@ class DownloadStarter:
                 )
             except DownloadRejectedError as error:
                 self._tracked_download_writer.set_state(
-                    file, DownloadState.FAILED, FailureReason.REJECTED
+                    file, state=DownloadState.FAILED, failure_reason=FailureReason.REJECTED
                 )
                 self._logger.warning(
                     "start rejected by the client for file=%s (%s): marked failed",

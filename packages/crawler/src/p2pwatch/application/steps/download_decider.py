@@ -20,7 +20,7 @@ from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import DiskSpaceLow, DownloadQueued, FreeSpaceSampled
 
 
-def _target_status(targets: Sequence[TargetSegment], target_id: TargetId) -> str:
+def _target_status(targets: Sequence[TargetSegment], *, target_id: TargetId) -> str:
     """Target status (lookup ``target_id → status``); ``complete`` by default if the target
     has vanished from the config (conservative: do not download for an unknown target)."""
     for target in targets:
@@ -60,7 +60,7 @@ class DownloadDecider:
         self._logger = logger
         self._disk_low_edge = EdgeState()
 
-    async def queue_new_candidates(self, outstanding_bytes: int, node_id: NodeId) -> None:
+    async def queue_new_candidates(self, outstanding_bytes: int, *, node_id: NodeId) -> None:
         """Replays tier=download decisions missing from ``downloads`` (step 3, spec §5).
 
         ``outstanding_bytes`` is what the client still has to transfer, measured from the cycle's
@@ -89,7 +89,7 @@ class DownloadDecider:
             size_bytes = observation.reported_file.size_bytes
             verdict = decide_download(
                 tier=DecisionTier.DOWNLOAD,
-                target_status=_target_status(self._targets, candidate.target_id),
+                target_status=_target_status(self._targets, target_id=candidate.target_id),
                 already_tracked=False,
                 free_bytes=free_bytes,
                 outstanding_bytes=outstanding_bytes,
@@ -106,7 +106,10 @@ class DownloadDecider:
             # record_queued ONLY here (sync DB write); start_unlisted sends it (network I/O): the
             # write precedes the network, and a start that raises leaves it 'queued' for next round.
             self._tracked_download_writer.record_queued(
-                candidate.file, candidate.target_id, size_bytes, self._wall_clock.now()
+                candidate.file,
+                target_id=candidate.target_id,
+                size_bytes=size_bytes,
+                queued_at=self._wall_clock.now(),
             )
             self._download_tracker.reset_loss_deadline(candidate.file)
             outstanding_bytes += size_bytes  # the client does not list it yet

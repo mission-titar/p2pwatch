@@ -28,7 +28,11 @@ def _registry(
     backoff_state_store = FakeBackoffStateStore()
     backoff_state_store.set_backoff_states(saved or {})
     return BackoffRegistry(
-        _POLICY, fake_time.wall, fake_time.monotonic, FakeJitterGenerator(), backoff_state_store
+        _POLICY,
+        wall_clock=fake_time.wall,
+        monotonic_clock=fake_time.monotonic,
+        jitter_generator=FakeJitterGenerator(),
+        backoff_state_reader=backoff_state_store,
     )
 
 
@@ -103,7 +107,11 @@ def test_backoff_registry_jitter_extends_the_delay() -> None:
     policy = dataclasses.replace(_POLICY, jitter_ratio=0.5)  # jitter in [0, 0.5*delay)
     jitter_generator = FakeJitterGenerator(jitter_value=1.0)  # constant 1.0s jitter
     registry = BackoffRegistry(
-        policy, fake_time.wall, fake_time.monotonic, jitter_generator, FakeBackoffStateStore()
+        policy,
+        wall_clock=fake_time.wall,
+        monotonic_clock=fake_time.monotonic,
+        jitter_generator=jitter_generator,
+        backoff_state_reader=FakeBackoffStateStore(),
     )
     delay = registry.record_failure(_KAD)
     assert delay == timedelta(seconds=3)  # base 2.0 + jitter 1.0

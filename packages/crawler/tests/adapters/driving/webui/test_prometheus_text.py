@@ -8,7 +8,9 @@ _SEARCHES = NodeCounter.SEARCHES
 def _lines(
     samples_by_node_metric: dict[NodeCounter | NodeGauge, tuple[NodeMetricSample, ...]],
 ) -> list[str]:
-    return prometheus_text(NodeMetricListing(samples_by_node_metric)).splitlines(keepends=True)
+    return prometheus_text(
+        NodeMetricListing(samples_by_node_metric=samples_by_node_metric)
+    ).splitlines(keepends=True)
 
 
 def test_a_counter_takes_total_on_every_line_and_writes_its_labels() -> None:

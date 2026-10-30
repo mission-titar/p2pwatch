@@ -21,14 +21,14 @@ class MergeCatalogs(CatalogMerger):
     must be a source, which receives the others."""
 
     def __init__(
-        self, catalog_finder: CatalogFinder, catalog_copier: CatalogCopier, logger: Logger
+        self, catalog_finder: CatalogFinder, *, catalog_copier: CatalogCopier, logger: Logger
     ) -> None:
         self._catalog_finder = catalog_finder
         self._catalog_copier = catalog_copier
         self._logger = logger
 
     def merge_catalogs(
-        self, source_catalogs: Sequence[PurePath], destination: NewCatalog | ListedSourceCatalog
+        self, source_catalogs: Sequence[PurePath], *, destination: NewCatalog | ListedSourceCatalog
     ) -> None:
         found_sources = [self._find_source(source_catalog) for source_catalog in source_catalogs]
         found_destination = self._catalog_finder.find_catalog(destination.path)
@@ -53,7 +53,7 @@ class MergeCatalogs(CatalogMerger):
             else:
                 catalogs_to_copy.append(source_catalog)
         try:
-            self._catalog_copier.copy_catalogs(path, catalogs_to_copy)
+            self._catalog_copier.copy_catalogs(path, source_catalogs=catalogs_to_copy)
         except CatalogCopyError as error:
             raise MergeError(str(error)) from error
         self._logger.info("merge done: %s", path)

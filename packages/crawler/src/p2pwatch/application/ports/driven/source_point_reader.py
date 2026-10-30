@@ -16,6 +16,7 @@ class SourcePointReader(ABC):
     def read_latest_point(
         self,
         file: FileKey,
+        *,
         reading: SourceReading,
         since: datetime,
         before: datetime,
@@ -26,10 +27,10 @@ class SourcePointReader(ABC):
 
     @abstractmethod
     def read_earlier_points(
-        self, source: SourceKey, before: datetime, node_id: NodeId
+        self, source: SourceKey, *, before: datetime, node_id: NodeId
     ) -> tuple[LatestPoint, ...]:
         """The latest point of each of ``source``'s variants that has one before ``before``."""
 
     @abstractmethod
-    def has_points_before(self, before: datetime, node_id: NodeId) -> bool:
+    def has_points_before(self, before: datetime, *, node_id: NodeId) -> bool:
         """Whether any point was observed before ``before``."""

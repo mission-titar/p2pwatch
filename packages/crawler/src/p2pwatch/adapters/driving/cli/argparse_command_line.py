@@ -172,14 +172,14 @@ class ArgparseCommandLine:
     def _merge(self, args: argparse.Namespace) -> int:
         destination: NewCatalog | ListedSourceCatalog
         if args.into is None:
-            destination = NewCatalog(args.output, force=args.force)
+            destination = NewCatalog(path=args.output, force=args.force)
         elif args.force:
             print("Merge failed: --force makes no sense with --into", file=sys.stderr, flush=True)
             return 2
         else:
-            destination = ListedSourceCatalog(args.into)
+            destination = ListedSourceCatalog(path=args.into)
         try:
-            self._catalog_merger.merge_catalogs(args.source_catalogs, destination)
+            self._catalog_merger.merge_catalogs(args.source_catalogs, destination=destination)
         except OutputIsSourceError as error:
             print(
                 f"Merge failed: output is one of the source catalogs: {error.output}"

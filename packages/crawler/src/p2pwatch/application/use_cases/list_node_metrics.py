@@ -19,7 +19,7 @@ class ListNodeMetrics(NodeMetricLister):
     def list_node_metrics(self) -> NodeMetricListing:
         samples = self._node_metric_reader.read_samples()
         return NodeMetricListing(
-            {
+            samples_by_node_metric={
                 node_metric: tuple(
                     sample for sample in samples if sample.node_metric is node_metric
                 )

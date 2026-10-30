@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import PurePath
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ConfigProblem:
     """What a config file holds wrong: ``key`` is the key path it names, ``None`` for none."""
 
@@ -14,7 +14,7 @@ class ConfigProblem:
     message: str
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ConfigReport:
     """The problems of a config: at most one, the parse stopping at the first."""
 
