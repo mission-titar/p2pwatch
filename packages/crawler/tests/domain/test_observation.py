@@ -1,4 +1,5 @@
 import dataclasses
+from typing import Any
 
 import pytest
 
@@ -6,6 +7,12 @@ from catalog_matching.domain.models import FileCandidate
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Keyword
 from p2pwatch.domain.observation import ReportedFile, candidate_from_fields, fold_raw_metadata
+from tests.support.domain.value_bounds import (
+    MALFORMED_TEXTS,
+    NOT_QUANTITIES,
+    QUANTITIES,
+    WELL_FORMED_TEXTS,
+)
 
 _KEY = FileKey(network=Network.ED2K, native_id="31d6cfe0d16ae931b73c59d7e0c089c0")
 
@@ -50,6 +57,55 @@ def test_media_fields_and_raw_metadata_default_to_absent() -> None:
     assert reported_file.duration_seconds is None
     assert reported_file.bitrate_kbps is None
     assert reported_file.raw_metadata == ()
+
+
+_TEXT_POSITIONS = ("filename", "keyword", "raw_metadata key", "raw_metadata text")
+
+_QUANTITY_FIELDS = ("size_bytes", "source_count", "duration_seconds", "bitrate_kbps")
+
+
+def _holding_text(position: str, *, text: str) -> dict[str, Any]:
+    """The fields that put ``text`` at ``position`` of a reported file."""
+    fields_by_position: dict[str, dict[str, Any]] = {
+        "filename": {"filename": text},
+        "keyword": {"keyword": Keyword(text)},
+        "raw_metadata key": {"raw_metadata": ((text, "0"),)},
+        "raw_metadata text": {"raw_metadata": (("0x0308", text),)},
+    }
+    return fields_by_position[position]
+
+
+@pytest.mark.parametrize("text", MALFORMED_TEXTS)
+@pytest.mark.parametrize("position", _TEXT_POSITIONS)
+def test_a_reported_file_refuses_text_that_is_not_valid_utf8(*, position: str, text: str) -> None:
+    with pytest.raises(ValueError, match=r"^a reported file's \w+ is not valid UTF-8$"):
+        dataclasses.replace(_full_reported_file(), **_holding_text(position, text=text))
+
+
+@pytest.mark.parametrize("text", WELL_FORMED_TEXTS)
+@pytest.mark.parametrize("position", _TEXT_POSITIONS)
+def test_a_reported_file_holds_valid_non_ascii_text(*, position: str, text: str) -> None:
+    fields = _holding_text(position, text=text)
+    reported_file = dataclasses.replace(_full_reported_file(), **fields)
+    assert fields.items() <= dataclasses.asdict(reported_file).items()
+
+
+@pytest.mark.parametrize("quantity", NOT_QUANTITIES)
+@pytest.mark.parametrize("field", _QUANTITY_FIELDS)
+def test_a_reported_file_refuses_an_integer_that_is_not_a_quantity(
+    *, field: str, quantity: int
+) -> None:
+    fields: dict[str, Any] = {field: quantity}
+    with pytest.raises(ValueError, match=f"^a reported file's {field} is not a quantity"):
+        dataclasses.replace(_full_reported_file(), **fields)
+
+
+@pytest.mark.parametrize("quantity", QUANTITIES)
+@pytest.mark.parametrize("field", _QUANTITY_FIELDS)
+def test_a_reported_file_holds_the_limits_of_a_quantity(*, field: str, quantity: int) -> None:
+    fields: dict[str, Any] = {field: quantity}
+    reported_file = dataclasses.replace(_full_reported_file(), **fields)
+    assert dataclasses.asdict(reported_file)[field] == quantity
 
 
 def test_to_candidate_converts_units_with_media_metadata() -> None:

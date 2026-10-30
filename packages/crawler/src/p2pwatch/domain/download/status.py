@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from p2pwatch.domain.download.states import FailureReason, WaitingReason
 from p2pwatch.domain.file_key import FileKey
+from p2pwatch.domain.value_bounds import require_quantity
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -16,3 +17,7 @@ class DownloadStatus:
     completed: bool
     waiting_reason: WaitingReason | None
     failure_reason: FailureReason | None
+
+    def __post_init__(self) -> None:
+        require_quantity(self.bytes_done, error_label="a download status's bytes_done")
+        require_quantity(self.size_bytes, error_label="a download status's size_bytes")

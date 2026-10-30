@@ -1,6 +1,7 @@
 import dataclasses
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 
@@ -16,6 +17,12 @@ from p2pwatch.domain.source import (
     carried_role,
     carried_role_max_age,
     parse_contact_point,
+)
+from tests.support.domain.value_bounds import (
+    MALFORMED_TEXTS,
+    NOT_QUANTITIES,
+    QUANTITIES,
+    WELL_FORMED_TEXTS,
 )
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
@@ -82,6 +89,77 @@ def test_a_reading_in_a_passing_state_has_no_role_and_may_have_no_identity() -> 
     assert reading.role is None
     with pytest.raises(dataclasses.FrozenInstanceError):
         reading.role = SourceRole.QUEUED  # type: ignore[misc]
+
+
+_TEXT_POSITIONS = (
+    "source_name",
+    "software",
+    "raw_metadata key",
+    "raw_metadata text",
+    "raw_metadata tuple element",
+)
+
+
+def _reading() -> SourceReading:
+    return SourceReading(
+        source=SourceKey(network=Network.ED2K, native_id=_HASH),
+        source_name="AnimuseeFMR",
+        software="emule 0.50a",
+        role=SourceRole.QUEUED,
+        contact_point=None,
+        connectable=True,
+        raw_metadata=(
+            ("protocol_extensions", ("a",)),
+            ("source_origin", "kad"),
+            ("shared_files_browsable", True),
+        ),
+        session_received_bytes=5,
+    )
+
+
+def _holding_text(position: str, *, text: str) -> dict[str, Any]:
+    """The fields that put ``text`` at ``position`` of a reading."""
+    fields_by_position: dict[str, dict[str, Any]] = {
+        "source_name": {"source_name": text},
+        "software": {"software": text},
+        "raw_metadata key": {"raw_metadata": ((text, "kad"),)},
+        "raw_metadata text": {"raw_metadata": (("source_origin", text),)},
+        "raw_metadata tuple element": {"raw_metadata": (("protocol_extensions", ("a", text)),)},
+    }
+    return fields_by_position[position]
+
+
+@pytest.mark.parametrize("text", MALFORMED_TEXTS)
+@pytest.mark.parametrize("position", _TEXT_POSITIONS)
+def test_a_reading_refuses_text_that_is_not_valid_utf8(*, position: str, text: str) -> None:
+    with pytest.raises(ValueError, match=r"^a source reading's \w+ is not valid UTF-8$"):
+        dataclasses.replace(_reading(), **_holding_text(position, text=text))
+
+
+@pytest.mark.parametrize("text", WELL_FORMED_TEXTS)
+@pytest.mark.parametrize("position", _TEXT_POSITIONS)
+def test_a_reading_holds_valid_non_ascii_text(*, position: str, text: str) -> None:
+    fields = _holding_text(position, text=text)
+    reading = dataclasses.replace(_reading(), **fields)
+    assert fields.items() <= dataclasses.asdict(reading).items()
+
+
+@pytest.mark.parametrize("field", ["source_name", "software"])
+def test_a_reading_may_have_no_name_or_software(field: str) -> None:
+    fields: dict[str, Any] = {field: None}
+    assert dataclasses.asdict(dataclasses.replace(_reading(), **fields))[field] is None
+
+
+@pytest.mark.parametrize("quantity", NOT_QUANTITIES)
+def test_a_reading_refuses_received_bytes_that_are_not_a_quantity(quantity: int) -> None:
+    with pytest.raises(ValueError, match="^a source reading's session_received_bytes is not"):
+        dataclasses.replace(_reading(), session_received_bytes=quantity)
+
+
+@pytest.mark.parametrize("quantity", QUANTITIES)
+def test_a_reading_holds_the_limits_of_a_quantity(quantity: int) -> None:
+    reading = dataclasses.replace(_reading(), session_received_bytes=quantity)
+    assert reading.session_received_bytes == quantity
 
 
 def test_each_role_belongs_to_its_group() -> None:

@@ -13,9 +13,8 @@ transaction: ``INSERT OR IGNORE`` silently swallows a CHECK violation (documente
 SQLite behavior): without this guard, a non-canonical hash would only be stopped
 by the ``foreign_keys`` pragma (opaque diagnostic), and a connection without that
 pragma would commit an ORPHAN observation. The rollback catches ``BaseException``
-(same discipline as ``connection._open``): a NON-sqlite failure at binding (e.g.
-``UnicodeEncodeError`` on a lone surrogate) must not leave the connection
-``in_transaction``, otherwise the store would be permanently broken.
+(same discipline as ``connection._open``): a NON-sqlite failure at binding must not
+leave the connection ``in_transaction``, otherwise the store would be permanently broken.
 """
 
 import json

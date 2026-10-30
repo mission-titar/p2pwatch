@@ -1,9 +1,9 @@
-"""Append-only ENFORCED BY THE DATABASE (spec data-model §3): a SCHEMA property, not the code's.
+"""The catalog's guarantees ENFORCED IN SQL (spec data-model §3): SCHEMA properties, not the code's.
 
 Every table in ``catalog.db`` carries a ``BEFORE UPDATE`` and a ``BEFORE DELETE`` trigger →
-``RAISE(ABORT, '<table> is append-only')``. Verified here by DIRECT UPDATE/DELETE on the
-connection (as a third-party tool would): the violation surfaces as ``sqlite3.IntegrityError``
-(the REAL class observed, SQLite 3.47.1).
+``RAISE(ABORT, '<table> is append-only')``, and ``session_received_bytes`` a sign ``CHECK``.
+Verified here by DIRECT statements on the connection (as a third-party tool would): a violation
+surfaces as ``sqlite3.IntegrityError`` (the REAL class observed, SQLite 3.47.1).
 """
 
 import sqlite3
@@ -77,3 +77,15 @@ def test_insert_remains_allowed_on_every_table(seeded_catalog: sqlite3.Connectio
     assert rows(seeded_catalog, sql="SELECT count(*) AS file_count FROM files") == [
         {"file_count": 2}
     ]
+
+
+def test_a_negative_session_received_bytes_is_refused_by_the_database(
+    seeded_catalog: sqlite3.Connection,
+) -> None:
+    variant_id = insert_source_variant(
+        seeded_catalog, native_id=_HASH, user_hash=_HASH, node_id="n2"
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
+        insert_source_point(
+            seeded_catalog, variant_id=variant_id, observed_at_micros=1, session_received_bytes=-1
+        )

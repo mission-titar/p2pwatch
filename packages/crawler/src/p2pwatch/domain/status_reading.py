@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 from p2pwatch.domain.identifiers import Channel
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
+from p2pwatch.domain.value_bounds import require_well_formed_text
 
 STATUS_PERIOD = timedelta(minutes=1)
 READING_FRESH_FOR = 2 * STATUS_PERIOD
@@ -28,6 +29,9 @@ class ChannelStatus:
 class ClientStatus:
     version: str | None
     channels: tuple[ChannelStatus, ...]
+
+    def __post_init__(self) -> None:
+        require_well_formed_text(self.version, error_label="a client status's version")
 
 
 @dataclass(kw_only=True, frozen=True)
