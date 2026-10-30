@@ -23,7 +23,7 @@ class StatusReadingStore(Protocol):
     """Both ports of the pair, which one store implements."""
 
     def set_reading(
-        self, client_name: ClientName, reading: StatusReading, published_at: MonotonicInstant
+        self, client_name: ClientName, *, reading: StatusReading, published_at: MonotonicInstant
     ) -> None: ...
 
     def read_readings(self) -> Mapping[str, PublishedReading | None]: ...

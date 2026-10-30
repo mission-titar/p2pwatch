@@ -27,7 +27,7 @@ _KEPT_COLUMNS = (
 
 
 def _write_local_db_at_version_6(path: Path) -> None:
-    connection = open_local_at(path, 6)
+    connection = open_local_at(path, version=6)
     connection.executemany(
         "INSERT INTO downloads (ed2k_hash, target_id, state, queued_at, completed_at,"
         " size_bytes, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -40,10 +40,10 @@ def test_0007_keys_each_download_by_the_catalog_file_id(tmp_path: Path) -> None:
     path = tmp_path / "local.db"
     _write_local_db_at_version_6(path)
 
-    connection = open_local_at(path, 7)
+    connection = open_local_at(path, version=7)
     try:
-        assert rows(connection, "PRAGMA user_version") == [{"user_version": 7}]
-        read = rows(connection, "SELECT * FROM downloads ORDER BY native_id")
+        assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 7}]
+        read = rows(connection, sql="SELECT * FROM downloads ORDER BY native_id")
     finally:
         connection.close()
     assert read == [

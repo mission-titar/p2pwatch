@@ -43,7 +43,7 @@ class FakeTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
         return self._target_ids.get(file.native_id)
 
     def record_queued(
-        self, file: FileKey, target_id: TargetId, size_bytes: int, queued_at: datetime
+        self, file: FileKey, *, target_id: TargetId, size_bytes: int, queued_at: datetime
     ) -> None:
         if self._fail_record:
             raise StoreError("downloads write failed")
@@ -55,7 +55,7 @@ class FakeTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
         self.queued_at[file.native_id] = queued_at
         self.latest_seen_at[file.native_id] = queued_at
 
-    def set_completed(self, file: FileKey, completed_at: datetime) -> None:
+    def set_completed(self, file: FileKey, *, completed_at: datetime) -> None:
         if file.native_id in self._fail_set_completed_for:
             raise StoreError(f"set_completed({file.native_id}) failed")
         self.states[file.native_id] = DownloadState.COMPLETED
@@ -65,6 +65,7 @@ class FakeTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
     def set_state(
         self,
         file: FileKey,
+        *,
         state: Literal[DownloadState.DOWNLOADING, DownloadState.FAILED],
         failure_reason: FailureReason | None = None,
     ) -> None:
@@ -76,7 +77,7 @@ class FakeTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
     def is_tracked(self, file: FileKey) -> bool:
         return file.native_id in self.states
 
-    def set_seen(self, statuses: Iterable[DownloadStatus], seen_at: datetime) -> None:
+    def set_seen(self, statuses: Iterable[DownloadStatus], *, seen_at: datetime) -> None:
         if self._fail_set_seen:
             raise StoreError("set_seen failed")
         statuses = tuple(statuses)

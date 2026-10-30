@@ -5,7 +5,7 @@ from p2pwatch.application.ports.driving.file_lister import FileLister, FileListi
 from p2pwatch.domain.catalog_entry import CatalogEntrySort, SortDirection
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ListFilesCall:
     """The arguments of one ``list_files`` call."""
 
@@ -36,6 +36,14 @@ class FakeFileLister(FileLister):
         direction: SortDirection,
         page: int,
     ) -> FileListing:
-        call = ListFilesCall(target_id, tier, search_text, matched_only, sort, direction, page)
+        call = ListFilesCall(
+            target_id=target_id,
+            tier=tier,
+            search_text=search_text,
+            matched_only=matched_only,
+            sort=sort,
+            direction=direction,
+            page=page,
+        )
         self.calls.append(call)
         return self._file_listing

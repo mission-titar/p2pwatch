@@ -39,7 +39,7 @@ _CLIENT_ROUTE = re.compile(r"^/api/v1/clients/(\d+)$")
 _FILE_RELATION_KEYS = ("role", "a4af")
 
 
-def error(status: int, code: str, message: str = "nope", **headers: str) -> httpx.Response:
+def error(status: int, *, code: str, message: str = "nope", **headers: str) -> httpx.Response:
     """A response in the surface's error envelope."""
     return httpx.Response(
         status, json={"error": {"code": code, "message": message}}, headers=headers
@@ -119,7 +119,7 @@ class FakeAmuleApi:
     def _login(self, request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
         if body.get("password") != self.password:
-            return error(401, "invalid_credentials", "no role matched")
+            return error(401, code="invalid_credentials", message="no role matched")
         assert request.url.params.get("include_token") == "true", "login without include_token"
         self.logins += 1
         return httpx.Response(
@@ -139,7 +139,7 @@ class FakeAmuleApi:
 
     def _search_results(self, request: httpx.Request) -> httpx.Response:
         search_id = _search_id(request)
-        window = _page(request, self.results)
+        window = _page(request, rows=self.results)
         return httpx.Response(
             200,
             json={"results": window, "search_id": search_id, "progress": self._progress(search_id)},
@@ -168,11 +168,11 @@ class FakeAmuleApi:
         return httpx.Response(202, json={"results": [{"id": link, "ok": True} for link in links]})
 
     def _get_downloads(self, request: httpx.Request) -> httpx.Response:
-        window = _page(request, self.downloads)
+        window = _page(request, rows=self.downloads)
         return httpx.Response(200, json={"downloads": window, "total": len(self.downloads)})
 
     def _get_shared(self, request: httpx.Request) -> httpx.Response:
-        window = _page(request, self.shared)
+        window = _page(request, rows=self.shared)
         return httpx.Response(200, json={"shared": window, "total": len(self.shared)})
 
     def _get_clients(self, request: httpx.Request) -> httpx.Response:
@@ -180,8 +180,8 @@ class FakeAmuleApi:
         assert match is not None
         rows = self.clients.get(match.group(1))
         if rows is None:
-            return error(404, "not_found", "no download with that hash")
-        window = _page(request, rows, identity="ecid")
+            return error(404, code="not_found", message="no download with that hash")
+        window = _page(request, rows=rows, identity="ecid")
         return httpx.Response(200, json={"clients": window, "total": len(rows)})
 
     def _get_client(self, request: httpx.Request) -> httpx.Response:
@@ -200,7 +200,7 @@ def _search_id(request: httpx.Request) -> int:
 
 
 def _page(
-    request: httpx.Request, rows: list[dict[str, Any]], *, identity: str = "hash"
+    request: httpx.Request, *, rows: list[dict[str, Any]], identity: str = "hash"
 ) -> list[dict[str, Any]]:
     """Keyset paging on the route's identity column, with the surface's own 100-row default for
     ``limit``. The rows are given in that column's order; ``ecid`` compares as a number."""

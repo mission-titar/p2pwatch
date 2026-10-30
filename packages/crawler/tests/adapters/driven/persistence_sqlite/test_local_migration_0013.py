@@ -13,7 +13,7 @@ _RENAME = re.compile(r"ALTER TABLE (\w+) RENAME COLUMN (\w+) TO (\w+)")
 
 
 def _schema(connection: sqlite3.Connection) -> list[dict[str, Any]]:
-    return rows(connection, "SELECT type, name, sql FROM sqlite_schema ORDER BY type, name")
+    return rows(connection, sql="SELECT type, name, sql FROM sqlite_schema ORDER BY type, name")
 
 
 def _renamed(sql: str | None) -> str | None:
@@ -22,32 +22,32 @@ def _renamed(sql: str | None) -> str | None:
 
 def test_0013_renames_started_at_in_the_schema_and_keeps_every_value(tmp_path: Path) -> None:
     path = tmp_path / "local.db"
-    connection = open_local_at(path, 12)
+    connection = open_local_at(path, version=12)
     connection.execute(
         "INSERT INTO backoff_states VALUES ('amule-1', 'kad', 2, 1781258400123456, 300.0)"
     )
     schema = _schema(connection)
-    backoff_states = rows(connection, "SELECT * FROM backoff_states")
+    backoff_states = rows(connection, sql="SELECT * FROM backoff_states")
     connection.close()
 
-    connection = open_local_at(path, 13)
+    connection = open_local_at(path, version=13)
     try:
-        assert rows(connection, "PRAGMA user_version") == [{"user_version": 13}]
+        assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 13}]
         assert _schema(connection) == [{**row, "sql": _renamed(row["sql"])} for row in schema]
-        assert rows(connection, "SELECT * FROM backoff_states") == [
+        assert rows(connection, sql="SELECT * FROM backoff_states") == [
             {
                 "started_at_micros" if name == "started_at" else name: value
                 for name, value in backoff_state.items()
             }
             for backoff_state in backoff_states
         ]
-        assert rows(connection, "SELECT started_at_micros FROM backoff_states") == [
+        assert rows(connection, sql="SELECT started_at_micros FROM backoff_states") == [
             {"started_at_micros": 1_781_258_400_123_456}
         ]
         assert (
             rows(
                 connection,
-                "SELECT m.name AS table_name FROM sqlite_schema AS m,"
+                sql="SELECT m.name AS table_name FROM sqlite_schema AS m,"
                 " pragma_table_xinfo(m.name) AS c"
                 " WHERE m.type = 'table' AND c.name = 'started_at'",
             )

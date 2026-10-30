@@ -40,9 +40,9 @@ def _status(file: FileKey, done: int = 0, waiting: WaitingReason | None = None) 
 def _lifecycle(connection: sqlite3.Connection, file: FileKey) -> dict[str, Any]:
     [lifecycle] = rows(
         connection,
-        "SELECT bytes_done, latest_progress_at_micros, waiting_reason, failure_reason"
+        sql="SELECT bytes_done, latest_progress_at_micros, waiting_reason, failure_reason"
         " FROM downloads WHERE file_id = ?",
-        (file.file_id,),
+        parameters=(file.file_id,),
     )
     return lifecycle
 
@@ -85,7 +85,7 @@ def test_record_queued_keys_the_row_by_file_id_and_keeps_the_file_key(
     tracked_download_store.record_queued(
         _A, target_id=TargetId("062A"), size_bytes=100, queued_at=_T0
     )
-    assert rows(connection, "SELECT file_id, network, native_id FROM downloads") == [
+    assert rows(connection, sql="SELECT file_id, network, native_id FROM downloads") == [
         {"file_id": _A.file_id, "network": "ed2k", "native_id": _A.native_id}
     ]
 
@@ -99,9 +99,9 @@ def test_record_queued_is_dedup_safe(
     tracked_download_store.record_queued(
         _A, target_id=TargetId("063A"), size_bytes=200, queued_at=_T0 + _DAY
     )  # duplicate ignored
-    assert rows(connection, "SELECT target_id, size_bytes, queued_at_micros FROM downloads") == [
-        {"target_id": "062A", "size_bytes": 100, "queued_at_micros": instant_to_micros(_T0)}
-    ]
+    assert rows(
+        connection, sql="SELECT target_id, size_bytes, queued_at_micros FROM downloads"
+    ) == [{"target_id": "062A", "size_bytes": 100, "queued_at_micros": instant_to_micros(_T0)}]
 
 
 def test_set_completed_stamps_the_completed_at_it_is_given(
@@ -113,9 +113,9 @@ def test_set_completed_stamps_the_completed_at_it_is_given(
     tracked_download_store.set_completed(_A, completed_at=_T0 + _DAY)
     assert rows(
         connection,
-        "SELECT typeof(completed_at_micros) AS completed_at_type, completed_at_micros"
+        sql="SELECT typeof(completed_at_micros) AS completed_at_type, completed_at_micros"
         " FROM downloads WHERE file_id = ?",
-        (_A.file_id,),
+        parameters=(_A.file_id,),
     ) == [{"completed_at_type": "integer", "completed_at_micros": instant_to_micros(_T0 + _DAY)}]
 
 
@@ -127,7 +127,9 @@ def test_set_state_non_completed_leaves_completed_at_null(
     )
     tracked_download_store.set_state(_A, state=DownloadState.DOWNLOADING)
     assert rows(
-        connection, "SELECT completed_at_micros FROM downloads WHERE file_id = ?", (_A.file_id,)
+        connection,
+        sql="SELECT completed_at_micros FROM downloads WHERE file_id = ?",
+        parameters=(_A.file_id,),
     ) == [{"completed_at_micros": None}]
 
 
@@ -162,9 +164,9 @@ def test_record_queued_is_atomic_on_injected_failure(
 def _latest_seen(connection: sqlite3.Connection, file: FileKey) -> tuple[str, int]:
     [latest_seen] = rows(
         connection,
-        "SELECT typeof(latest_seen_at_micros) AS latest_seen_at_type, latest_seen_at_micros"
+        sql="SELECT typeof(latest_seen_at_micros) AS latest_seen_at_type, latest_seen_at_micros"
         " FROM downloads WHERE file_id = ?",
-        (file.file_id,),
+        parameters=(file.file_id,),
     )
     return latest_seen["latest_seen_at_type"], latest_seen["latest_seen_at_micros"]
 
@@ -178,9 +180,9 @@ def test_record_queued_stamps_latest_seen_at_with_queued_at(
     )
     [queued] = rows(
         connection,
-        "SELECT typeof(queued_at_micros) AS queued_at_type, queued_at_micros"
+        sql="SELECT typeof(queued_at_micros) AS queued_at_type, queued_at_micros"
         " FROM downloads WHERE file_id = ?",
-        (_A.file_id,),
+        parameters=(_A.file_id,),
     )
     queued_at = (queued["queued_at_type"], queued["queued_at_micros"])
     assert queued_at == _latest_seen(connection, _A) == ("integer", instant_to_micros(_T0))
@@ -221,7 +223,7 @@ def test_set_seen_stamps_progress_only_when_the_bytes_grow(
     assert _latest_seen(connection, _A) == ("integer", instant_to_micros(grown_at + 3 * _DAY))
     assert rows(
         connection,
-        "SELECT typeof(latest_progress_at_micros) AS latest_progress_at_type FROM downloads",
+        sql="SELECT typeof(latest_progress_at_micros) AS latest_progress_at_type FROM downloads",
     ) == [{"latest_progress_at_type": "integer"}]
 
 

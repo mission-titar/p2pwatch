@@ -158,6 +158,7 @@ def test_no_class_under_tests_outside_its_fakes_implements_a_port() -> None:
         if not file.is_relative_to(package_dir(file) / "tests" / "fakes")
         or file.name.startswith("test_")
         for node in ast.walk(parsed(file))
-        if isinstance(node, ast.ClassDef) and (class_ports := implemented_ports(file, node))
+        if isinstance(node, ast.ClassDef)
+        and (class_ports := implemented_ports(file, class_node=node))
     }
     assert port_names_by_stray_class == {}

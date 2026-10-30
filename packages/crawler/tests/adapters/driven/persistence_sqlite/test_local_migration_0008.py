@@ -11,7 +11,7 @@ _A = FileKey(network=Network.ED2K, native_id="a" * 32)
 
 def test_0008_adds_the_lifecycle_columns_unknown_on_existing_rows(tmp_path: Path) -> None:
     path = tmp_path / "local.db"
-    connection = open_local_at(path, 7)
+    connection = open_local_at(path, version=7)
     connection.execute(
         "INSERT INTO downloads (file_id, network, native_id, target_id, state, queued_at)"
         " VALUES (?, 'ed2k', ?, '062A', 'downloading', '2026-10-01')",
@@ -19,12 +19,12 @@ def test_0008_adds_the_lifecycle_columns_unknown_on_existing_rows(tmp_path: Path
     )
     connection.close()
 
-    connection = open_local_at(path, 8)
+    connection = open_local_at(path, version=8)
     try:
-        assert rows(connection, "PRAGMA user_version") == [{"user_version": 8}]
+        assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 8}]
         read = rows(
             connection,
-            "SELECT native_id, state, bytes_done, last_progress_at, waiting_reason,"
+            sql="SELECT native_id, state, bytes_done, last_progress_at, waiting_reason,"
             " failure_reason FROM downloads",
         )
     finally:

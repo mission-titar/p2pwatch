@@ -40,8 +40,8 @@ def _labeler(
 
 def test_the_best_filename_is_the_clean_one() -> None:
     observation_reader = FakeObservationReader(
-        observations={HASH_A: observation(HASH_A, "Keroro Ã©.avi", 100)},
-        best={HASH_A: observation(HASH_A, "Keroro é.avi", 100)},
+        observations={HASH_A: observation(HASH_A, filename="Keroro Ã©.avi", size_bytes=100)},
+        best={HASH_A: observation(HASH_A, filename="Keroro é.avi", size_bytes=100)},
     )
     labeler = _labeler(observation_reader=observation_reader)
     assert labeler.best_filename(key(HASH_A)) == "Keroro é.avi"
@@ -54,9 +54,9 @@ def test_a_file_whose_observations_are_gone_is_named_by_its_native_id() -> None:
 def test_the_titles_are_every_download_target_of_the_file() -> None:
     decision_reader = FakeDecisionReader(
         candidates=(
-            candidate(HASH_A, TargetId("062A")),
-            candidate(HASH_A, TargetId("062B")),
-            candidate(HASH_B, TargetId("063A")),
+            candidate(HASH_A, target_id=TargetId("062A")),
+            candidate(HASH_A, target_id=TargetId("062B")),
+            candidate(HASH_B, target_id=TargetId("063A")),
         )
     )
     labeler = _labeler(decision_reader=decision_reader)
@@ -68,7 +68,9 @@ def test_the_titles_are_every_download_target_of_the_file() -> None:
 
 def test_a_file_without_a_download_decision_has_the_target_it_was_queued_for() -> None:
     tracked_download_store = FakeTrackedDownloadStore()
-    tracked_download_store.record_queued(key(HASH_A), TargetId("062B"), 100, FakeTime().wall.now())
+    tracked_download_store.record_queued(
+        key(HASH_A), target_id=TargetId("062B"), size_bytes=100, queued_at=FakeTime().wall.now()
+    )
     labeler = _labeler(tracked_download_store=tracked_download_store)
     assert labeler.target_titles(key(HASH_A)) == (
         TargetTitle(target_id=TargetId("062B"), title="tb"),
@@ -76,7 +78,9 @@ def test_a_file_without_a_download_decision_has_the_target_it_was_queued_for() -
 
 
 def test_a_target_the_targets_no_longer_list_has_an_empty_title() -> None:
-    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, TargetId("063A")),))
+    decision_reader = FakeDecisionReader(
+        candidates=(candidate(HASH_A, target_id=TargetId("063A")),)
+    )
     labeler = _labeler(decision_reader=decision_reader)
     assert labeler.target_titles(key(HASH_A)) == (
         TargetTitle(target_id=TargetId("063A"), title=""),

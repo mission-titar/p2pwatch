@@ -4,5 +4,5 @@ from p2pwatch.domain.observability.policy import Audience
 
 
 class FakeRaisingNotifier(Notifier):
-    async def notify(self, audience: Audience, notification: Notification) -> None:
+    async def notify(self, audience: Audience, *, notification: Notification) -> None:
         raise RuntimeError("canal mort")

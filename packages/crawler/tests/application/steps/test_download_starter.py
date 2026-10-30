@@ -44,8 +44,12 @@ async def test_start_rejected_marks_failed_and_does_not_crash() -> None:
     # THIS hash is marked FAILED (spec §9 "failed + log"), the loop continues, does not raise.
     client = FakeDownloadClient(start_failures=[DownloadRejectedError("rejected")])
     tracked_download_store = FakeTrackedDownloadStore()
-    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, TargetId("062A")),))
-    observation_reader = FakeObservationReader(observations={HASH_A: observation(HASH_A, "x", 1)})
+    decision_reader = FakeDecisionReader(
+        candidates=(candidate(HASH_A, target_id=TargetId("062A")),)
+    )
+    observation_reader = FakeObservationReader(
+        observations={HASH_A: observation(HASH_A, filename="x", size_bytes=1)}
+    )
     cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
@@ -67,12 +71,15 @@ async def test_start_rejected_for_one_file_does_not_block_the_next() -> None:
     client = FakeDownloadClient(start_failures=[DownloadRejectedError("rejected")])
     tracked_download_store = FakeTrackedDownloadStore()
     decision_reader = FakeDecisionReader(
-        candidates=(candidate(HASH_A, TargetId("062A")), candidate(HASH_B, TargetId("062A")))
+        candidates=(
+            candidate(HASH_A, target_id=TargetId("062A")),
+            candidate(HASH_B, target_id=TargetId("062A")),
+        )
     )
     observation_reader = FakeObservationReader(
         observations={
-            HASH_A: observation(HASH_A, "a", 1),
-            HASH_B: observation(HASH_B, "b", 1),
+            HASH_A: observation(HASH_A, filename="a", size_bytes=1),
+            HASH_B: observation(HASH_B, filename="b", size_bytes=1),
         }
     )
     cycle = build_cycle(
@@ -95,7 +102,7 @@ async def test_a_download_the_client_forgot_is_started_once_per_round_until_list
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.states[HASH_A] = DownloadState.DOWNLOADING
     observation_reader = FakeObservationReader(
-        observations={HASH_A: observation(HASH_A, "a.avi", 9)}
+        observations={HASH_A: observation(HASH_A, filename="a.avi", size_bytes=9)}
     )
     cycle = build_cycle(
         client=client,
@@ -118,7 +125,10 @@ async def test_a_failed_or_completed_download_the_client_forgot_is_not_started()
     tracked_download_store.states[HASH_A] = DownloadState.FAILED
     tracked_download_store.states[HASH_B] = DownloadState.COMPLETED
     observation_reader = FakeObservationReader(
-        observations={HASH_A: observation(HASH_A, "x", 1), HASH_B: observation(HASH_B, "x", 1)}
+        observations={
+            HASH_A: observation(HASH_A, filename="x", size_bytes=1),
+            HASH_B: observation(HASH_B, filename="x", size_bytes=1),
+        }
     )
     await build_cycle(
         client=client,

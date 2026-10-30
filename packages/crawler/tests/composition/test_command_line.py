@@ -67,14 +67,16 @@ def test_merge_of_two_catalogs_named_under_cwd_into_a_new_one_holds_both(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     for letter, ed2k in (("a", HASH_A), ("b", HASH_B)):
-        make_catalog(tmp_path / f"{letter}.db", {"files": [{"native_id": ed2k, "size_bytes": 100}]})
+        make_catalog(
+            tmp_path / f"{letter}.db", content={"files": [{"native_id": ed2k, "size_bytes": 100}]}
+        )
     merged = tmp_path / "merged.db"
 
     with caplog.at_level(logging.INFO):
         # Relative names, under a ``cwd`` that is not the process's own.
         assert _run(["merge", "--output", "merged.db", "a.db", "b.db"], tmp_path) == 0
 
-    assert count(merged, "files") == 2
+    assert count(merged, table="files") == 2
     done = next(record for record in caplog.records if record.getMessage().startswith("merge done"))
     # An operator's filters keep its module's name.
     assert done.name == "p2pwatch.application.use_cases.merge_catalogs"
@@ -88,8 +90,8 @@ def test_merge_of_two_catalogs_named_under_cwd_into_a_new_one_holds_both(
     ],
 )
 def test_merge_copies_a_version_5_destination(tmp_path: Path, argv: list[str]) -> None:
-    open_catalog_at(tmp_path / "a.db", 5).close()
-    make_catalog(tmp_path / "b.db", {"files": [{"native_id": HASH_B, "size_bytes": 100}]})
+    open_catalog_at(tmp_path / "a.db", version=5).close()
+    make_catalog(tmp_path / "b.db", content={"files": [{"native_id": HASH_B, "size_bytes": 100}]})
     before = datetime.now(UTC).replace(microsecond=0)  # noqa: TID251
 
     assert _run(argv, tmp_path) == 0

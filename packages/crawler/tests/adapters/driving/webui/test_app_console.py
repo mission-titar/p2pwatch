@@ -176,7 +176,7 @@ async def test_post_console_runs_the_sql_on_the_chosen_database(database: Consol
     """The query runs on the database the form names, which stays selected, its SQL echoed."""
     resp, calls = await _post("/console", {"sql": _SQL, "db": database})
     assert resp.status_code == 200
-    assert calls == [RunConsoleQueryCall(database, _SQL)]
+    assert calls == [RunConsoleQueryCall(database=database, sql=_SQL)]
     assert f'<option value="{database}" selected>' in resp.text
     assert f">{_SQL}</textarea>" in resp.text
 
@@ -249,7 +249,7 @@ async def test_post_console_csv_valid_select() -> None:
     """POST a valid SELECT to /console.csv -> text/csv attachment with the CSV body."""
     resp, calls = await _post("/console.csv", {"sql": _SQL, "db": "local"})
     assert resp.status_code == 200
-    assert calls == [RunConsoleQueryCall(ConsoleDatabase.LOCAL, _SQL)]
+    assert calls == [RunConsoleQueryCall(database=ConsoleDatabase.LOCAL, sql=_SQL)]
     assert resp.headers["content-type"].startswith("text/csv")
     assert resp.headers["content-disposition"] == 'attachment; filename="query.csv"'
     assert resp.text == f"native_id\r\n{_HASH_A}\r\n"

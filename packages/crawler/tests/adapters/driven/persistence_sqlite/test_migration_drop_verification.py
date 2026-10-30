@@ -30,7 +30,9 @@ _LOCAL_MIGRATIONS = (
 
 
 def _names(connection: sqlite3.Connection, kind: str) -> set[str]:
-    schema_rows = rows(connection, "SELECT name FROM sqlite_master WHERE type = ?", (kind,))
+    schema_rows = rows(
+        connection, sql="SELECT name FROM sqlite_master WHERE type = ?", parameters=(kind,)
+    )
     return {str(row["name"]) for row in schema_rows}
 
 

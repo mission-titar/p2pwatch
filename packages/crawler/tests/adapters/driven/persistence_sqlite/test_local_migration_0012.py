@@ -19,7 +19,7 @@ _RENAME = re.compile(r"ALTER TABLE (\w+) RENAME COLUMN (\w+) TO (\w+)")
 
 
 def _schema(connection: sqlite3.Connection) -> list[dict[str, Any]]:
-    return rows(connection, "SELECT type, name, sql FROM sqlite_schema ORDER BY type, name")
+    return rows(connection, sql="SELECT type, name, sql FROM sqlite_schema ORDER BY type, name")
 
 
 def _renamed(sql: str | None) -> str | None:
@@ -32,7 +32,7 @@ def test_0012_renames_the_two_columns_in_the_schema_and_keeps_every_value(
     tmp_path: Path,
 ) -> None:
     path = tmp_path / "local.db"
-    connection = open_local_at(path, 11)
+    connection = open_local_at(path, version=11)
     connection.execute(
         "INSERT INTO downloads (file_id, network, native_id, target_id, state, queued_at,"
         " last_seen_at, bytes_done, last_progress_at)"
@@ -41,19 +41,19 @@ def test_0012_renames_the_two_columns_in_the_schema_and_keeps_every_value(
         (_A.file_id, _A.native_id),
     )
     schema = _schema(connection)
-    downloads = rows(connection, "SELECT * FROM downloads")
+    downloads = rows(connection, sql="SELECT * FROM downloads")
     connection.close()
 
     new_name_by_old = {old: new for _, old, new in _RENAMED}
-    connection = open_local_at(path, 12)
+    connection = open_local_at(path, version=12)
     try:
-        assert rows(connection, "PRAGMA user_version") == [{"user_version": 12}]
+        assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 12}]
         assert _schema(connection) == [{**row, "sql": _renamed(row["sql"])} for row in schema]
-        assert rows(connection, "SELECT * FROM downloads") == [
+        assert rows(connection, sql="SELECT * FROM downloads") == [
             {new_name_by_old.get(name, name): value for name, value in download.items()}
             for download in downloads
         ]
-        assert rows(connection, "SELECT latest_seen_at, latest_progress_at FROM downloads") == [
+        assert rows(connection, sql="SELECT latest_seen_at, latest_progress_at FROM downloads") == [
             {"latest_seen_at": "2026-10-02", "latest_progress_at": "2026-10-03"}
         ]
     finally:

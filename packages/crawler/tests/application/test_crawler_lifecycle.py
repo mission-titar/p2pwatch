@@ -141,7 +141,9 @@ async def test_the_crawler_starts_under_the_stored_node_id_and_runs_each_loop_wi
 
     await crawl.run_until_both_loops_start_then_stop()
 
-    assert crawl.logger.lines == [LoggedLine("info", "crawler started: node_id=stored-node")]
+    assert crawl.logger.lines == [
+        LoggedLine(level="info", message="crawler started: node_id=stored-node")
+    ]
     assert crawl.observability.notifier.calls == [
         (
             Audience.OPERATIONS,
@@ -158,7 +160,7 @@ async def test_the_crawler_starts_under_the_stored_node_id_and_runs_each_loop_wi
         "bound armed",
     ]
     assert crawl.catalog_reevaluator_logger.lines == [
-        LoggedLine("info", "policy unchanged: catalogue re-evaluation skipped")
+        LoggedLine(level="info", message="policy unchanged: catalogue re-evaluation skipped")
     ]
 
 
@@ -180,8 +182,8 @@ async def test_the_download_loop_shows_in_the_start(
     await crawl.run_until_both_loops_start_then_stop()
 
     assert crawl.logger.lines == [
-        LoggedLine("info", "crawler started: node_id=stored-node"),
-        LoggedLine("info", "download enabled: download loop armed"),
+        LoggedLine(level="info", message="crawler started: node_id=stored-node"),
+        LoggedLine(level="info", message="download enabled: download loop armed"),
     ]
     assert crawl.observability.notifier.calls == [
         (
@@ -237,7 +239,7 @@ async def test_a_changed_policy_is_re_evaluated_under_the_node_id_after_the_star
     ]
     assert crawl.fingerprints.stored_fingerprint == _FINGERPRINT
     assert crawl.catalog_reevaluator_logger.lines == [
-        LoggedLine("info", "catalogue re-evaluated: 1 files, 1 rows written")
+        LoggedLine(level="info", message="catalogue re-evaluated: 1 files, 1 rows written")
     ]
 
 

@@ -50,8 +50,8 @@ def test_target_coverage_multiple_files_same_target(catalog_db: Path) -> None:
     """Two files matching the same target_id → two tiers."""
     with closing(sqlite3.connect(catalog_db)) as connection, connection:
         for suffix in ("a", "b"):
-            insert_file(connection, suffix * 32)
-            insert_decision(connection, suffix * 32, "062A", "download")
+            insert_file(connection, native_id=suffix * 32)
+            insert_decision(connection, native_id=suffix * 32, target_id="062A", tier="download")
     coverage = _read_target_coverage(catalog_db)
     assert len(coverage[TargetId("062A")]) == 2
 
@@ -66,20 +66,20 @@ def test_target_coverage_whole_episode_contributes_to_both_targets(catalog_db: P
 def test_target_coverage_ignores_legacy_empty_target_sentinel(catalog_db: Path) -> None:
     h = "e" * 32
     with closing(sqlite3.connect(catalog_db)) as connection, connection:
-        insert_file(connection, h)
+        insert_file(connection, native_id=h)
         insert_decision(
             connection,
-            h,
-            "090A",
-            "download",
+            native_id=h,
+            target_id="090A",
+            tier="download",
             rule_name="id_segment_exact",
             decided_at="2026-07-05T10:00:00.000000+00:00",
         )
         insert_decision(
             connection,
-            h,
-            "",
-            "retracted",
+            native_id=h,
+            target_id="",
+            tier="retracted",
             rule_name="",
             decided_at="2026-07-05T11:00:00.000000+00:00",
         )
@@ -97,10 +97,14 @@ def test_target_coverage_uses_latest_decision_per_hash(catalog_db: Path) -> None
     """Same hash with two decisions (T1 < T2) → the coverage reads T2's tier."""
     h = "a" * 32
     with closing(sqlite3.connect(catalog_db)) as connection, connection:
-        insert_file(connection, h)
-        insert_decision(connection, h, "062A", "catalog")
+        insert_file(connection, native_id=h)
+        insert_decision(connection, native_id=h, target_id="062A", tier="catalog")
         insert_decision(
-            connection, h, "062A", "download", decided_at="2026-06-22T11:00:00.000000+00:00"
+            connection,
+            native_id=h,
+            target_id="062A",
+            tier="download",
+            decided_at="2026-06-22T11:00:00.000000+00:00",
         )
     coverage = _read_target_coverage(catalog_db)
     assert coverage[TargetId("062A")] == (DecisionTier.DOWNLOAD,)
@@ -119,8 +123,8 @@ def test_coverage_tie_break_on_id(catalog_db: Path) -> None:
     """Same hash, same decided_at, two different tiers → the larger id wins."""
     h = "b" * 32
     with closing(sqlite3.connect(catalog_db)) as connection, connection:
-        insert_file(connection, h, 200)
-        insert_decision(connection, h, "062A", "catalog")
-        insert_decision(connection, h, "062A", "download")
+        insert_file(connection, native_id=h, size_bytes=200)
+        insert_decision(connection, native_id=h, target_id="062A", tier="catalog")
+        insert_decision(connection, native_id=h, target_id="062A", tier="download")
     coverage = _read_target_coverage(catalog_db)
     assert coverage[TargetId("062A")] == (DecisionTier.DOWNLOAD,)

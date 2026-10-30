@@ -7,7 +7,7 @@ from p2pwatch.application.ports.driving.console_query_runner import (
 from p2pwatch.domain.console_query import ConsoleDatabase
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class RunConsoleQueryCall:
     """The arguments of one ``run_console_query`` call."""
 
@@ -22,6 +22,6 @@ class FakeConsoleQueryRunner(ConsoleQueryRunner):
         self._console_query_run = console_query_run
         self.calls: list[RunConsoleQueryCall] = []
 
-    def run_console_query(self, database: ConsoleDatabase, sql: str) -> ConsoleQueryRun:
-        self.calls.append(RunConsoleQueryCall(database, sql))
+    def run_console_query(self, database: ConsoleDatabase, *, sql: str) -> ConsoleQueryRun:
+        self.calls.append(RunConsoleQueryCall(database=database, sql=sql))
         return self._console_query_run

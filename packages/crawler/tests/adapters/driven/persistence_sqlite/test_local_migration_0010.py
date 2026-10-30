@@ -13,16 +13,16 @@ _BACKOFF_ROW = '{"amuled:kad": {"attempts": 2, "retry_after": "2026-10-13T00:03:
 
 def test_0010_renames_the_backoff_key_and_keeps_its_states(tmp_path: Path) -> None:
     path = tmp_path / "local.db"
-    connection = open_local_at(path, 9)
+    connection = open_local_at(path, version=9)
     connection.execute(
         "INSERT INTO scheduler_state (key, value) VALUES ('channel_backoff', ?)", (_BACKOFF_ROW,)
     )
     connection.close()
 
-    connection = open_local_at(path, 10)
+    connection = open_local_at(path, version=10)
     try:
-        assert rows(connection, "PRAGMA user_version") == [{"user_version": 10}]
-        assert rows(connection, "SELECT key, value FROM scheduler_state") == [
+        assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 10}]
+        assert rows(connection, sql="SELECT key, value FROM scheduler_state") == [
             {"key": "backoff_states", "value": _BACKOFF_ROW}
         ]
     finally:
@@ -31,7 +31,7 @@ def test_0010_renames_the_backoff_key_and_keeps_its_states(tmp_path: Path) -> No
 
 def test_0010_renames_the_local_waiting_reason_only(tmp_path: Path) -> None:
     path = tmp_path / "local.db"
-    connection = open_local_at(path, 9)
+    connection = open_local_at(path, version=9)
     for file, waiting_reason in ((_A, "local"), (_B, "no_source")):
         connection.execute(
             "INSERT INTO downloads (file_id, network, native_id, target_id, state, queued_at,"
@@ -40,10 +40,10 @@ def test_0010_renames_the_local_waiting_reason_only(tmp_path: Path) -> None:
         )
     connection.close()
 
-    connection = open_local_at(path, 10)
+    connection = open_local_at(path, version=10)
     try:
         read = rows(
-            connection, "SELECT native_id, waiting_reason FROM downloads ORDER BY native_id"
+            connection, sql="SELECT native_id, waiting_reason FROM downloads ORDER BY native_id"
         )
     finally:
         connection.close()

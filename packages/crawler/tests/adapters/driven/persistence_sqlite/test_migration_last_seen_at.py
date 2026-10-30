@@ -38,10 +38,10 @@ def _write_local_db_at_version_4(path: Path) -> None:
 def test_backfills_last_seen_at_with_queued_at(tmp_path: Path) -> None:
     path = tmp_path / "local.db"
     _write_local_db_at_version_4(path)
-    connection = open_local_at(path, 5)
+    connection = open_local_at(path, version=5)
     try:
-        assert rows(connection, "SELECT last_seen_at FROM downloads WHERE ed2k_hash = 'a1'") == [
-            {"last_seen_at": _QUEUED_AT}
-        ]
+        assert rows(
+            connection, sql="SELECT last_seen_at FROM downloads WHERE ed2k_hash = 'a1'"
+        ) == [{"last_seen_at": _QUEUED_AT}]
     finally:
         connection.close()

@@ -12,7 +12,7 @@ class FakeCatalogCopier(CatalogCopier):
         self.copies: list[tuple[PurePath, list[PurePath]]] = []
         self._failure = failure
 
-    def copy_catalogs(self, destination: PurePath, source_catalogs: Sequence[PurePath]) -> None:
+    def copy_catalogs(self, destination: PurePath, *, source_catalogs: Sequence[PurePath]) -> None:
         self.copies.append((destination, list(source_catalogs)))
         if self._failure is not None:
             raise self._failure

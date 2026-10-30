@@ -29,6 +29,7 @@ class _PragmaSettingCopier(SqlitePreMigrationCopier):
     def ensure_copy(
         self,
         connection: sqlite3.Connection,
+        *,
         path: Path,
         pending: PendingMigrations,
         open_reader: ReaderOpener,

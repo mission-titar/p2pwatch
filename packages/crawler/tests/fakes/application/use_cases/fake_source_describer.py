@@ -5,7 +5,7 @@ from p2pwatch.application.ports.driving.source_describer import SourceDescriber,
 from p2pwatch.domain.identifiers import SourceId
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class DescribeSourceCall:
     """The arguments of one ``describe_source`` call."""
 
@@ -30,5 +30,12 @@ class FakeSourceDescriber(SourceDescriber):
         requested_since: datetime | None,
         requested_until: datetime | None,
     ) -> SourceDescription | None:
-        self.calls.append(DescribeSourceCall(source_id, page, requested_since, requested_until))
+        self.calls.append(
+            DescribeSourceCall(
+                source_id=source_id,
+                page=page,
+                requested_since=requested_since,
+                requested_until=requested_until,
+            )
+        )
         return self._source_description

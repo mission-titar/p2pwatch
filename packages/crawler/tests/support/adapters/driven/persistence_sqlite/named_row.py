@@ -6,7 +6,7 @@ from typing import Any
 
 
 def rows(
-    connection: sqlite3.Connection, sql: str, parameters: Sequence[object] = ()
+    connection: sqlite3.Connection, *, sql: str, parameters: Sequence[object] = ()
 ) -> list[dict[str, Any]]:
     """Plain dicts, since pytest's diff of a failing comparison iterates a ``NamedRow``; a column
     name that appears twice is refused, as the opener refuses it."""

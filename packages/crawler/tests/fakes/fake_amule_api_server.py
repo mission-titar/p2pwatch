@@ -42,7 +42,7 @@ class FakeAmuleApiServer:
         if self.failures:
             raise self.failures[0]
 
-    def wait_for(self, predicate: ApiPredicate, timeout_seconds: float) -> bool:
+    def wait_for(self, predicate: ApiPredicate, *, timeout_seconds: float) -> bool:
         """Blocks until ``predicate`` holds after a request, as ``Condition.wait_for`` does."""
         with self._served:
             return self._served.wait_for(lambda: predicate(self.api), timeout_seconds)

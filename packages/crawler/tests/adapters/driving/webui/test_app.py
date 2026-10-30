@@ -517,7 +517,11 @@ async def test_file_page_asks_for_its_file_over_the_ends_its_query_names(
     # The use case resolves the interval: an inverted or a malformed end reaches it as read.
     response, calls = await _file_response(f"{_detail_url(TEST_HASH)}?{query}")
     assert response.status_code == 200
-    assert calls == [DescribeFileCall(_FILE.file_id, requested_since, requested_until)]
+    assert calls == [
+        DescribeFileCall(
+            file_id=_FILE.file_id, requested_since=requested_since, requested_until=requested_until
+        )
+    ]
 
 
 @pytest.mark.asyncio
@@ -526,7 +530,11 @@ async def test_file_page_of_a_file_the_catalog_does_not_hold_is_a_styled_404() -
     response, calls = await _file_response(f"/files/{TEST_HASH}", None)
     assert response.status_code == 404
     assert "not found" in response.text.lower()
-    assert calls == [DescribeFileCall(FileId(bytes.fromhex(TEST_HASH)), None, None)]
+    assert calls == [
+        DescribeFileCall(
+            file_id=FileId(bytes.fromhex(TEST_HASH)), requested_since=None, requested_until=None
+        )
+    ]
 
 
 @pytest.mark.asyncio
@@ -925,7 +933,14 @@ async def test_source_page_asks_for_its_source_on_the_page_and_the_ends_its_quer
     # The use case resolves the interval: an inverted or a malformed end reaches it as read.
     response, calls = await _source_response(f"{_USER_PAGE}?{query}")
     assert response.status_code == 200
-    assert calls == [DescribeSourceCall(_SOURCE.source_id, page, requested_since, requested_until)]
+    assert calls == [
+        DescribeSourceCall(
+            source_id=_SOURCE.source_id,
+            page=page,
+            requested_since=requested_since,
+            requested_until=requested_until,
+        )
+    ]
 
 
 @_PAGE_AND_ENDS
@@ -935,7 +950,14 @@ async def test_name_page_asks_for_its_name_on_the_page_and_the_ends_its_query_na
 ) -> None:
     response, calls = await _source_name_response(f"{_NAME_PAGE}&{query}")
     assert response.status_code == 200
-    assert calls == [DescribeSourceNameCall("AnimuseeFMR", page, requested_since, requested_until)]
+    assert calls == [
+        DescribeSourceNameCall(
+            source_name="AnimuseeFMR",
+            page=page,
+            requested_since=requested_since,
+            requested_until=requested_until,
+        )
+    ]
 
 
 @pytest.mark.asyncio
@@ -943,7 +965,14 @@ async def test_name_page_asks_for_its_name_as_the_query_encodes_it() -> None:
     _, calls = await _source_name_response(
         "/sources/name?source_name=http%3A%2F%2Femule-project.net+%26+co"
     )
-    assert calls == [DescribeSourceNameCall("http://emule-project.net & co", 1, None, None)]
+    assert calls == [
+        DescribeSourceNameCall(
+            source_name="http://emule-project.net & co",
+            page=1,
+            requested_since=None,
+            requested_until=None,
+        )
+    ]
 
 
 @pytest.mark.asyncio
@@ -951,7 +980,11 @@ async def test_source_page_of_a_source_never_recorded_is_a_styled_404() -> None:
     response, calls = await _source_response(f"/sources/{'0' * 32}", None)
     assert response.status_code == 404
     assert "not found" in response.text.lower()
-    assert calls == [DescribeSourceCall(SourceId(bytes(16)), 1, None, None)]
+    assert calls == [
+        DescribeSourceCall(
+            source_id=SourceId(bytes(16)), page=1, requested_since=None, requested_until=None
+        )
+    ]
 
 
 @pytest.mark.asyncio
@@ -972,7 +1005,11 @@ async def test_name_page_of_a_name_never_recorded_is_a_styled_404() -> None:
     response, calls = await _source_name_response("/sources/name?source_name=nobody", None)
     assert response.status_code == 404
     assert "not found" in response.text.lower()
-    assert calls == [DescribeSourceNameCall("nobody", 1, None, None)]
+    assert calls == [
+        DescribeSourceNameCall(
+            source_name="nobody", page=1, requested_since=None, requested_until=None
+        )
+    ]
 
 
 @pytest.mark.asyncio

@@ -10,8 +10,10 @@ def test_a_logged_line_keeps_its_level_and_its_formatted_message() -> None:
     logger.error("100% lost")
 
     assert logger.lines == [
-        LoggedLine("debug", "read 3 downloads"),
-        LoggedLine("info", "searched 'keroro'"),
-        LoggedLine("warning", "backoff 2.0s"),
-        LoggedLine("error", "100% lost"),  # no argument: kept as written, as logging does
+        LoggedLine(level="debug", message="read 3 downloads"),
+        LoggedLine(level="info", message="searched 'keroro'"),
+        LoggedLine(level="warning", message="backoff 2.0s"),
+        LoggedLine(
+            level="error", message="100% lost"
+        ),  # no argument: kept as written, as logging does
     ]

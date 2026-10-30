@@ -35,9 +35,9 @@ def test_0006_deletes_the_cycle_state_and_the_backoff_map(tmp_path: Path) -> Non
     path = tmp_path / "local.db"
     _write_local_db_at_version_5(path)
 
-    connection = open_local_at(path, 6)
+    connection = open_local_at(path, version=6)
     try:
-        assert rows(connection, "PRAGMA user_version") == [{"user_version": 6}]
-        assert rows(connection, "SELECT key FROM scheduler_state") == []
+        assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 6}]
+        assert rows(connection, sql="SELECT key FROM scheduler_state") == []
     finally:
         connection.close()

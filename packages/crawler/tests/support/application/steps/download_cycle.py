@@ -62,7 +62,7 @@ def key(hash_hex: str) -> FileKey:
     return FileKey(network=Network.ED2K, native_id=hash_hex)
 
 
-def observation(hash_hex: str, filename: str, size_bytes: int) -> FileObservation:
+def observation(hash_hex: str, *, filename: str, size_bytes: int) -> FileObservation:
     reported_file = ReportedFile(
         file=key(hash_hex),
         filename=filename,
@@ -73,7 +73,7 @@ def observation(hash_hex: str, filename: str, size_bytes: int) -> FileObservatio
     return FileObservation(reported_file=reported_file, observed_at=SEEN_AT, node_id=NODE_ID)
 
 
-def candidate(hash_hex: str, target_id: TargetId) -> DownloadCandidate:
+def candidate(hash_hex: str, *, target_id: TargetId) -> DownloadCandidate:
     return DownloadCandidate(file=key(hash_hex), target_id=target_id)
 
 

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from p2pwatch.application.ports.driving.source_lister import SourceLister, SourceListing
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ListSourcesCall:
     """The arguments of one ``list_sources`` call."""
 
@@ -19,5 +19,5 @@ class FakeSourceLister(SourceLister):
         self.calls: list[ListSourcesCall] = []
 
     def list_sources(self, *, search_text: str | None, page: int) -> SourceListing:
-        self.calls.append(ListSourcesCall(search_text, page))
+        self.calls.append(ListSourcesCall(search_text=search_text, page=page))
         return self._source_listing

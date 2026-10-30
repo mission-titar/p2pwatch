@@ -259,7 +259,10 @@ def test_file_history_reads_its_observations_in_the_window_and_its_latest_in_any
     seed(catalog_db)
     with closing(sqlite3.connect(catalog_db)) as connection, connection:
         insert_observation(
-            connection, "a" * 32, "older.avi", observed_at="2026-06-21T10:00:00+00:00"
+            connection,
+            native_id="a" * 32,
+            filename="older.avi",
+            observed_at="2026-06-21T10:00:00+00:00",
         )
     since, until = datetime(2026, 6, 1, tzinfo=UTC), datetime.fromisoformat(SEEN_AT)
     file_history = _history(catalog_db, "a" * 32, since=since, until=until)
@@ -290,7 +293,7 @@ def test_file_history_reads_a_recorded_decision_back_to_the_microsecond(catalog_
         node_id=NodeId("n1"),
     )
     with closing(sqlite3.connect(catalog_db)) as connection, connection:
-        insert_file(connection, "a" * 32)
+        insert_file(connection, native_id="a" * 32)
         SqliteDecisionStore(connection).record_decision(decided)
     file_history = _history(catalog_db, "a" * 32)
     assert file_history is not None
@@ -310,11 +313,11 @@ def test_file_history_retracted_target_is_no_decision(catalog_db: Path) -> None:
 def test_file_history_no_decision(catalog_db: Path) -> None:
     """Detail works even without a decision (unmatched file)."""
     with closing(sqlite3.connect(catalog_db)) as connection, connection:
-        insert_file(connection, "b" * 32, 200)
+        insert_file(connection, native_id="b" * 32, size_bytes=200)
         insert_observation(
             connection,
-            "b" * 32,
-            "unknown.avi",
+            native_id="b" * 32,
+            filename="unknown.avi",
             observed_at="2026-06-22T09:00:00.000000+00:00",
             size_bytes=200,
         )
@@ -347,7 +350,7 @@ def test_read_catalog_entries_combined_target_and_tier_filters(catalog_db: Path)
 def test_read_catalog_entries_reads_at_most_its_limit_from_its_offset(catalog_db: Path) -> None:
     with closing(sqlite3.connect(catalog_db)) as connection, connection:
         for n in range(_LIMIT + 2):
-            insert_file(connection, f"{n:032x}", size_bytes=n)
+            insert_file(connection, native_id=f"{n:032x}", size_bytes=n)
     first = _entries(catalog_db, sort=CatalogEntrySort.SIZE, direction=SortDirection.ASC)
     second = _entries(
         catalog_db, sort=CatalogEntrySort.SIZE, direction=SortDirection.ASC, offset=_LIMIT
@@ -371,11 +374,11 @@ def test_file_history_observations_include_media_fields_present(catalog_db: Path
     """An observation's duration_seconds and bitrate_kbps are filled when present."""
     h = "d" * 32
     with closing(sqlite3.connect(catalog_db)) as connection, connection:
-        insert_file(connection, h, 150)
+        insert_file(connection, native_id=h, size_bytes=150)
         insert_observation(
             connection,
-            h,
-            "keroro_media.avi",
+            native_id=h,
+            filename="keroro_media.avi",
             size_bytes=150,
             source_count=3,
             duration_seconds=1320,
@@ -392,11 +395,11 @@ def test_file_history_observations_include_media_fields_present(catalog_db: Path
 def _seed_unmatched(db: Path) -> None:
     """Add a second file (b*32) with an observation but NO match decision."""
     with closing(sqlite3.connect(db)) as connection, connection:
-        insert_file(connection, "b" * 32, 200)
+        insert_file(connection, native_id="b" * 32, size_bytes=200)
         insert_observation(
             connection,
-            "b" * 32,
-            "gallego_ep021.ogm",
+            native_id="b" * 32,
+            filename="gallego_ep021.ogm",
             observed_at="2026-06-22T09:00:00.000000+00:00",
             size_bytes=200,
         )
@@ -438,18 +441,18 @@ def test_read_catalog_entries_shows_latest_observation(catalog_db: Path) -> None
     """Same hash with two observations → read_catalog_entries returns the most recent filename."""
     h = "c" * 32
     with closing(sqlite3.connect(catalog_db)) as connection, connection:
-        insert_file(connection, h, 300)
+        insert_file(connection, native_id=h, size_bytes=300)
         insert_observation(
             connection,
-            h,
-            "old_name.avi",
+            native_id=h,
+            filename="old_name.avi",
             observed_at="2026-06-22T09:00:00.000000+00:00",
             size_bytes=300,
         )
         insert_observation(
             connection,
-            h,
-            "new_name.avi",
+            native_id=h,
+            filename="new_name.avi",
             observed_at="2026-06-22T12:00:00.000000+00:00",
             size_bytes=300,
             source_count=2,
@@ -506,19 +509,19 @@ def test_read_matched_and_total_file_counts_empty_catalogue_matched_is_zero_not_
 def _seed_catalog_tier_on_001a(db: Path) -> None:
     """A keroro_large catch-all file: its only decision is tier 'catalog' pinned to 001A."""
     with closing(sqlite3.connect(db)) as connection, connection:
-        insert_file(connection, "b" * 32, 50)
+        insert_file(connection, native_id="b" * 32, size_bytes=50)
         insert_observation(
             connection,
-            "b" * 32,
-            "keroro manga.zip",
+            native_id="b" * 32,
+            filename="keroro manga.zip",
             observed_at="2026-07-01T10:00:00.000000+00:00",
             size_bytes=50,
         )
         insert_decision(
             connection,
-            "b" * 32,
-            "001A",
-            "catalog",
+            native_id="b" * 32,
+            target_id="001A",
+            tier="catalog",
             rule_name="keroro_large",
             decided_at="2026-07-01T10:00:01.000000+00:00",
         )
@@ -565,11 +568,22 @@ def _seed_sortable(db: Path) -> None:
     ]
     with closing(sqlite3.connect(db)) as connection, connection:
         for h, name, size, sources, seen, tid, tier in rows:
-            insert_file(connection, h, size)
+            insert_file(connection, native_id=h, size_bytes=size)
             insert_observation(
-                connection, h, name, observed_at=seen, size_bytes=size, source_count=sources
+                connection,
+                native_id=h,
+                filename=name,
+                observed_at=seen,
+                size_bytes=size,
+                source_count=sources,
             )
-            insert_decision(connection, h, tid, tier, decided_at="2026-01-04T10:00:00.000000+00:00")
+            insert_decision(
+                connection,
+                native_id=h,
+                target_id=tid,
+                tier=tier,
+                decided_at="2026-01-04T10:00:00.000000+00:00",
+            )
 
 
 def _hashes(rows: tuple[CatalogEntry, ...]) -> list[str]:
@@ -603,9 +617,12 @@ def test_read_catalog_entries_sort_tiebreak_is_file_id(catalog_db: Path) -> None
     """Two files with the same sort key keep a deterministic order via the file_id tiebreak."""
     with closing(sqlite3.connect(catalog_db)) as connection, connection:
         for h in ("a" * 32, "e" * 32):  # inserted a-first on purpose
-            insert_file(connection, h)
+            insert_file(connection, native_id=h)
             insert_observation(
-                connection, h, "same.avi", observed_at="2026-01-01T10:00:00.000000+00:00"
+                connection,
+                native_id=h,
+                filename="same.avi",
+                observed_at="2026-01-01T10:00:00.000000+00:00",
             )
     rows = _entries(catalog_db, sort=CatalogEntrySort.SIZE, direction=SortDirection.ASC)
     assert _hashes(rows) == ["e" * 32, "a" * 32]  # e's file_id sorts first
@@ -632,12 +649,21 @@ def _seed_mixed_tier_file(db: Path) -> None:
     under both facets."""
     h = "d" * 32
     with closing(sqlite3.connect(db)) as connection, connection:
-        insert_file(connection, h)
+        insert_file(connection, native_id=h)
         insert_observation(
-            connection, h, "mixed.avi", observed_at="2026-01-01T10:00:00.000000+00:00"
+            connection,
+            native_id=h,
+            filename="mixed.avi",
+            observed_at="2026-01-01T10:00:00.000000+00:00",
         )
         for tid, tier in (("062A", "download"), ("062B", "notify")):
-            insert_decision(connection, h, tid, tier, decided_at="2026-01-02T10:00:00.000000+00:00")
+            insert_decision(
+                connection,
+                native_id=h,
+                target_id=tid,
+                tier=tier,
+                decided_at="2026-01-02T10:00:00.000000+00:00",
+            )
 
 
 def test_read_file_count_by_tier_groups_by_tier(catalog_db: Path) -> None:
@@ -679,7 +705,7 @@ def _seed_file_without_observation(db: Path) -> str:
     recorded). Returns its hash."""
     h = "d" * 32
     with closing(sqlite3.connect(db)) as connection, connection:
-        insert_file(connection, h, 42)
+        insert_file(connection, native_id=h, size_bytes=42)
     return h
 
 
@@ -719,9 +745,14 @@ def test_read_catalog_entries_observation_tie_break_on_the_newest_variant(catalo
     """Two observations at the SAME ``observed_at``: the higher ``variant_id`` wins (D4)."""
     h = "a" * 32
     with closing(sqlite3.connect(catalog_db)) as connection, connection:
-        insert_file(connection, h)
+        insert_file(connection, native_id=h)
         for name in ("first.avi", "second.avi"):  # same instant, ascending variant ids
-            insert_observation(connection, h, name, observed_at="2026-07-03T10:00:00.000000+00:00")
+            insert_observation(
+                connection,
+                native_id=h,
+                filename=name,
+                observed_at="2026-07-03T10:00:00.000000+00:00",
+            )
     rows = _entries(catalog_db)
     assert _latest_filename(rows[0]) == "second.avi"
 
@@ -777,7 +808,7 @@ def test_latest_obs_seeks_per_file_instead_of_scanning_observations(
     primary key, never walks ``observations`` (11.6M rows on the node). Asserts the PLAN, not a
     duration, so it stays deterministic; each real query is checked, not the CTE alone."""
     with closing(open_reader(catalog_db)) as reader:
-        plan = [str(step["detail"]) for step in rows(reader, "EXPLAIN QUERY PLAN " + sql)]
+        plan = [str(step["detail"]) for step in rows(reader, sql="EXPLAIN QUERY PLAN " + sql)]
 
     assert any(re.match(r"SEARCH o\w* USING PRIMARY KEY \(variant_id=\?", step) for step in plan), (
         f"{label} does not seek observations by key: {plan}"

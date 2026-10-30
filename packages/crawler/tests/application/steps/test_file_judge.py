@@ -62,7 +62,7 @@ def _key(native_id: str) -> FileKey:
 
 def _decisions_line(native_id: str, filename: str, changes: str) -> LoggedLine:
     """The line the dispatch step logs for the file's ``DecisionsRecorded``."""
-    return LoggedLine("info", f"decisions for {filename} ({native_id}): {changes}")
+    return LoggedLine(level="info", message=f"decisions for {filename} ({native_id}): {changes}")
 
 
 def _reported_file(native_id: str, filename: str, sources: int = 3) -> ReportedFile:
@@ -158,7 +158,7 @@ async def test_new_decision_is_recorded_emitted_and_nudged(
         wall_clock,
     )
     assert written == 1
-    assert rows(catalog_connection, "SELECT target_id, tier FROM match_decisions") == [
+    assert rows(catalog_connection, sql="SELECT target_id, tier FROM match_decisions") == [
         {"target_id": "062A", "tier": "download"}
     ]
     assert decision_node_ids(catalog_connection) == {_NODE_ID}
@@ -190,7 +190,7 @@ async def test_multi_segment_file_records_both_segments_then_is_idempotent(
     )
     assert written == 2
     assert rows(
-        catalog_connection, "SELECT target_id, rule_name, tier FROM match_decisions ORDER BY id"
+        catalog_connection, sql="SELECT target_id, rule_name, tier FROM match_decisions ORDER BY id"
     ) == [
         {"target_id": "062A", "rule_name": "numero_nu_confirmed", "tier": "download"},
         {"target_id": "062B", "rule_name": "numero_nu_confirmed", "tier": "download"},
@@ -254,7 +254,7 @@ async def test_changed_decision_is_reappended_emitted_and_nudged(
     assert written == 1
     tiers = [
         decision["tier"]
-        for decision in rows(catalog_connection, "SELECT tier FROM match_decisions ORDER BY id")
+        for decision in rows(catalog_connection, sql="SELECT tier FROM match_decisions ORDER BY id")
     ]
     assert tiers == ["notify", "download"]
     assert observability.logger.lines == [
@@ -588,7 +588,7 @@ async def test_a_file_with_no_name_left_is_named_by_the_candidate(
     wall_clock: FakeWallClock,
 ) -> None:
     # Only a retraction can be written then, and it is never notified: the size is unknown.
-    insert_file(catalog_connection, _HASH_CAT, 1)
+    insert_file(catalog_connection, native_id=_HASH_CAT, size_bytes=1)
     _seed_decision(decision_store, _HASH_CAT, TargetId("062A"), wall_clock.now())
     observability, waker = ObservabilityOverFakes(), FakeWaker()
     judge = _file_judge(observation_store, decision_store, engine, waker, observability, wall_clock)
@@ -634,7 +634,7 @@ async def test_each_row_carries_the_instant_read_right_before_its_write(
     )
     assert rows(
         catalog_connection,
-        "SELECT target_id, tier, decided_at_micros FROM match_decisions ORDER BY id",
+        sql="SELECT target_id, tier, decided_at_micros FROM match_decisions ORDER BY id",
     ) == [
         {"target_id": "001A", "tier": "notify", "decided_at_micros": instant_to_micros(seeded_at)},
         {"target_id": "062A", "tier": "download", "decided_at_micros": instant_to_micros(start)},

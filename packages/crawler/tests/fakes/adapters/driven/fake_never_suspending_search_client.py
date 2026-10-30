@@ -16,7 +16,7 @@ class FakeNeverSuspendingSearchClient(SearchClient):
         return (Channel("x"),)
 
     async def search(
-        self, keyword: Keyword, channel: Channel, budget_seconds: float
+        self, keyword: Keyword, *, channel: Channel, budget_seconds: float
     ) -> SearchAnswer:
         self.calls += 1
         assert self.ticks > self._ticks_seen, "the loop is starved"

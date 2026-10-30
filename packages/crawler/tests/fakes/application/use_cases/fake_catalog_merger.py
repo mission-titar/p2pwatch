@@ -17,7 +17,7 @@ class FakeCatalogMerger(CatalogMerger):
         self._refusal = refusal
 
     def merge_catalogs(
-        self, source_catalogs: Sequence[PurePath], destination: NewCatalog | ListedSourceCatalog
+        self, source_catalogs: Sequence[PurePath], *, destination: NewCatalog | ListedSourceCatalog
     ) -> None:
         self.merges.append((list(source_catalogs), destination))
         if self._refusal is not None:

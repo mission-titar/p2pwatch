@@ -86,7 +86,7 @@ def _status_loop(
 async def _run(*readings: _Reading, client: ClientName = _AMULED) -> _Observability:
     fake_time, run_state = FakeTime(), FakeRunStateStore()
     observability = _Observability(fake_time)
-    scripted = FakeStatusClient(list(readings), run_state)
+    scripted = FakeStatusClient(list(readings), run_state=run_state)
     await asyncio.wait_for(
         _status_loop(client, scripted, fake_time, observability, run_state).run(_NODE_ID),
         timeout=1.0,
@@ -170,7 +170,10 @@ async def test_unreachable_alerts_at_two_minutes_and_recovers_when_it_answers() 
         (120.0, _warning("amuled unreachable for 2 min")),
         (180.0, _info("amuled reachable again")),
     ]
-    assert observability.logger.lines.count(LoggedLine("warning", "amuled unreachable")) == 3
+    assert (
+        observability.logger.lines.count(LoggedLine(level="warning", message="amuled unreachable"))
+        == 3
+    )
 
 
 @pytest.mark.asyncio
@@ -207,12 +210,16 @@ async def test_while_unreachable_only_the_api_alerts_and_channel_clocks_restart(
 async def test_each_reading_samples_every_channel_and_unreachable_makes_them_unknown() -> None:
     observability = await _run(_DOWN, _status(ed2k=_UP, kad=(False, None)), _DOWN)
     assert observability.logger.lines == [
-        LoggedLine("warning", "amuled unreachable"),
-        LoggedLine("debug", "status amuled ed2k: connected yes, connectable yes"),
-        LoggedLine("debug", "status amuled kad: connected no, connectable unknown"),
-        LoggedLine("warning", "amuled unreachable"),
-        LoggedLine("debug", "status amuled ed2k: connected unknown, connectable unknown"),
-        LoggedLine("debug", "status amuled kad: connected unknown, connectable unknown"),
+        LoggedLine(level="warning", message="amuled unreachable"),
+        LoggedLine(level="debug", message="status amuled ed2k: connected yes, connectable yes"),
+        LoggedLine(level="debug", message="status amuled kad: connected no, connectable unknown"),
+        LoggedLine(level="warning", message="amuled unreachable"),
+        LoggedLine(
+            level="debug", message="status amuled ed2k: connected unknown, connectable unknown"
+        ),
+        LoggedLine(
+            level="debug", message="status amuled kad: connected unknown, connectable unknown"
+        ),
     ]
 
 
@@ -226,7 +233,7 @@ async def test_each_reading_is_published_with_its_wall_and_monotonic_instants(
     fake_time, run_state = FakeTime(), FakeRunStateStore()
     fake_time.step_wall(timedelta(hours=1))  # the two clocks part: each instant shows its clock
     status_reading_store = FakeStatusReadingStore((ClientName("amuled"),))
-    client = FakeStatusClient([_status(kad=_UP), reading], run_state)
+    client = FakeStatusClient([_status(kad=_UP), reading], run_state=run_state)
     status_loop = _status_loop(
         ClientName("amuled"),
         client,
@@ -250,7 +257,9 @@ async def test_a_wall_clock_step_forward_raises_no_alert_before_its_delay() -> N
     # Degraded for four minutes of monotonic time, an hour and four minutes of wall clock.
     fake_time, run_state = FakeTime(), FakeRunStateStore()
     observability = _Observability(fake_time)
-    client = FakeSteppedStatusClient([_status(ed2k=_LOW_ID)] * 5, run_state, fake_time)
+    client = FakeSteppedStatusClient(
+        [_status(ed2k=_LOW_ID)] * 5, run_state=run_state, fake_time=fake_time
+    )
     await asyncio.wait_for(
         _status_loop(ClientName("amuled"), client, fake_time, observability, run_state).run(
             _NODE_ID

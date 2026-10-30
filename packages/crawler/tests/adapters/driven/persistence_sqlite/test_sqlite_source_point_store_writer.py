@@ -66,7 +66,7 @@ def _point(
 @pytest.fixture
 def catalog(tmp_path: Path) -> Iterator[sqlite3.Connection]:
     connection = open_catalog(tmp_path / "catalog.db")
-    insert_file(connection, _FILE.native_id)
+    insert_file(connection, native_id=_FILE.native_id)
     yield connection
     connection.close()
 
@@ -80,7 +80,7 @@ def _points(catalog: sqlite3.Connection) -> list[dict[str, Any]]:
     """``role``, ``observed_at_micros`` and ``session_received_bytes`` in time order."""
     return rows(
         catalog,
-        "SELECT v.role, o.observed_at_micros, o.session_received_bytes"
+        sql="SELECT v.role, o.observed_at_micros, o.session_received_bytes"
         " FROM source_observations AS o JOIN source_variants AS v USING (variant_id)"
         " ORDER BY o.observed_at_micros, v.node_id",
     )
@@ -95,13 +95,13 @@ def _point_row(role: str, observed_at_micros: int, session_received_bytes: int) 
 
 
 def _variants(catalog: sqlite3.Connection) -> int:
-    [count] = rows(catalog, "SELECT COUNT(*) AS variant_count FROM source_variants")
+    [count] = rows(catalog, sql="SELECT COUNT(*) AS variant_count FROM source_variants")
     variant_count: int = count["variant_count"]
     return variant_count
 
 
 def _source_count(catalog: sqlite3.Connection) -> int:
-    [count] = rows(catalog, "SELECT COUNT(*) AS source_count FROM sources")
+    [count] = rows(catalog, sql="SELECT COUNT(*) AS source_count FROM sources")
     source_count: int = count["source_count"]
     return source_count
 
@@ -151,7 +151,7 @@ def test_a_point_without_identity_writes_its_variant_and_no_source(
     source_point_store.record_points(
         [SourcePoint(file=_FILE, reading=reading, role=_Q, observed_at=_T0, node_id=NodeId("n1"))]
     )
-    variants = rows(catalog, "SELECT source_id, name FROM source_variants")
+    variants = rows(catalog, sql="SELECT source_id, name FROM source_variants")
     assert variants == [{"source_id": None, "name": "AnimuseeFMR"}]
     assert _source_count(catalog) == 0
 
@@ -179,7 +179,7 @@ def test_another_nodes_identical_reading_is_its_own_variant(
     source_point_store.record_points([_point(node_id=NodeId("n2")), _point()])
     assert _variants(catalog) == 2
     assert len(_points(catalog)) == 2
-    assert rows(catalog, "SELECT node_id FROM source_variants ORDER BY variant_id") == [
+    assert rows(catalog, sql="SELECT node_id FROM source_variants ORDER BY variant_id") == [
         {"node_id": "n2"},
         {"node_id": "n1"},
     ]
@@ -203,7 +203,7 @@ def test_the_variant_and_the_source_are_written_as_d2_states(
     canonical = json.dumps(columns, ensure_ascii=False, separators=(",", ":")).encode()
     assert rows(
         catalog,
-        "SELECT file_id, source_id, name, software, role, contact_point, connectable,"
+        sql="SELECT file_id, source_id, name, software, role, contact_point, connectable,"
         " raw_metadata, node_id, content_hash FROM source_variants",
     ) == [
         {
@@ -219,7 +219,7 @@ def test_the_variant_and_the_source_are_written_as_d2_states(
             "content_hash": hashlib.blake2b(canonical, digest_size=16).digest(),
         }
     ]
-    assert rows(catalog, "SELECT * FROM sources") == [
+    assert rows(catalog, sql="SELECT * FROM sources") == [
         {"source_id": _KEY.source_id, "network": "ed2k", "native_id": _KEY.native_id}
     ]
 

@@ -54,7 +54,7 @@ def _retraction(file: FileKey, node_id: NodeId = _NODE_ID) -> DatedDecision[Retr
 def connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
     catalog = open_catalog(tmp_path / "catalog.db")
     for file in (_KEY, _A, _B):
-        insert_file(catalog, file.native_id)
+        insert_file(catalog, native_id=file.native_id)
     yield catalog
     catalog.close()
 
@@ -70,7 +70,7 @@ def test_record_decision_round_trip(
     decision_store.record_decision(_decision(_KEY))
     assert rows(
         connection,
-        "SELECT file_id, target_id, rule_name, tier,"
+        sql="SELECT file_id, target_id, rule_name, tier,"
         " typeof(decided_at_micros) AS decided_at_type, decided_at_micros, node_id"
         " FROM match_decisions",
     ) == [
@@ -90,7 +90,9 @@ def test_explanation_is_never_persisted(
     decision_store: SqliteDecisionStore, connection: sqlite3.Connection
 ) -> None:
     decision_store.record_decision(_decision(_KEY))
-    columns = {column["name"] for column in rows(connection, "PRAGMA table_info(match_decisions)")}
+    columns = {
+        column["name"] for column in rows(connection, sql="PRAGMA table_info(match_decisions)")
+    }
     assert columns == {
         "id",
         "file_id",
@@ -119,7 +121,7 @@ def test_record_decision_rejects_non_canonical_hash(
         decision_store.record_decision(
             _decision(FileKey(network=Network.ED2K, native_id=_HASH.upper()))
         )
-    assert rows(connection, "SELECT count(*) AS decision_count FROM match_decisions") == [
+    assert rows(connection, sql="SELECT count(*) AS decision_count FROM match_decisions") == [
         {"decision_count": 0}
     ]
 
@@ -130,7 +132,7 @@ def test_record_retraction_round_trip(
     decision_store.record_decision(_retraction(_KEY))
     assert rows(
         connection,
-        "SELECT file_id, target_id, rule_name, tier, decided_at_micros, node_id"
+        sql="SELECT file_id, target_id, rule_name, tier, decided_at_micros, node_id"
         " FROM match_decisions",
     ) == [
         {
@@ -152,7 +154,7 @@ def test_each_decision_stores_its_own_node_id(
 ) -> None:
     decision_store.record_decision(_decision(_KEY, node_id=NodeId("n2")))
     decision_store.record_decision(_retraction(_KEY, node_id=NodeId("n3")))
-    assert rows(connection, "SELECT node_id FROM match_decisions ORDER BY id") == [
+    assert rows(connection, sql="SELECT node_id FROM match_decisions ORDER BY id") == [
         {"node_id": "n2"},
         {"node_id": "n3"},
     ]

@@ -250,7 +250,10 @@ def test_a_failed_save_is_logged_and_retried_after_the_next_search(tasks: _Tasks
     client = FakeTimedSearchClient({Channel("kad"): 30.0}, search_failures=refused)
     tasks.run_for(100.0, client=client, keywords=["keroro"])
     assert tasks.logger.lines == [
-        LoggedLine("error", "backoff not saved (database is locked): retried after the next search")
+        LoggedLine(
+            level="error",
+            message="backoff not saved (database is locked): retried after the next search",
+        )
     ]
     second_failure = BackoffState(
         attempts=2, started_at=EPOCH + timedelta(seconds=60), delay=timedelta(seconds=120)

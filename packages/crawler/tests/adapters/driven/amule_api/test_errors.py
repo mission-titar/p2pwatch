@@ -53,17 +53,19 @@ def test_auth_error_is_not_a_loop_error() -> None:
 def test_a_refused_operation_maps_to_its_rejection(
     status: int, code: str, mapped: type[ApiError]
 ) -> None:
-    assert type(error_from_response(_sent(error(status, code)))) is mapped
+    assert type(error_from_response(_sent(error(status, code=code)))) is mapped
 
 
 def test_a_broken_ec_link_is_an_unreachable_daemon() -> None:
     """503 ec_unavailable: amuleapi is up, its link to amuled is not (a NEW state)."""
-    response = _sent(error(503, "ec_unavailable", "cold"))
+    response = _sent(error(503, code="ec_unavailable", message="cold"))
     assert type(error_from_response(response)) is ApiUnreachableError
 
 
 def test_a_rate_limited_answer_carries_its_retry_delay() -> None:
-    response = _sent(error(429, "rate_limited", "locked out", **{"Retry-After": "300"}))
+    response = _sent(
+        error(429, code="rate_limited", message="locked out", **{"Retry-After": "300"})
+    )
     mapped = error_from_response(response)
     assert type(mapped) is ApiUnreachableError
     assert str(mapped) == "GET /api/v1/status: 429 rate_limited: locked out (retry after 300s)"

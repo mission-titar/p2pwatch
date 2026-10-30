@@ -53,9 +53,9 @@ def test_content_hash_keeps_the_boundary_between_columns() -> None:
 def test_content_hash_sql_function_matches_the_python_one(connection: sqlite3.Connection) -> None:
     [row] = rows(
         connection,
-        "SELECT content_hash(?, 'Kéroro 062A.avi', 123, NULL, 1100, '[]', 'keroro', 'node-1')"
+        sql="SELECT content_hash(?, 'Kéroro 062A.avi', 123, NULL, 1100, '[]', 'keroro', 'node-1')"
         " AS content_hash",
-        (_HASH,),
+        parameters=(_HASH,),
     )
     assert row["content_hash"] == _hash()
 
@@ -65,7 +65,9 @@ def test_fold_raw_meta_sql_function_folds_the_stored_text_as_the_domain_does(
 ) -> None:
     pairs = (("0x0308", "0"), ("media.title", "Kéroro"))
     stored = json.dumps(pairs, ensure_ascii=False)
-    [row] = rows(connection, "SELECT fold_raw_meta(?, 'xvid', NULL, 2) AS raw_meta", (stored,))
+    [row] = rows(
+        connection, sql="SELECT fold_raw_meta(?, 'xvid', NULL, 2) AS raw_meta", parameters=(stored,)
+    )
     folded = fold_raw_metadata(pairs, codec="xvid", file_type=None, complete_source_count=2)
     assert row["raw_meta"] == json.dumps(folded, ensure_ascii=False)
 
@@ -81,7 +83,7 @@ def test_a_memoized_sql_function_calls_its_function_once_per_distinct_arguments(
     create_memoized_function(connection, name="repeat", argument_count=2, function=counting)
     repeated = rows(
         connection,
-        "SELECT repeat(c, 2) AS repeated"
+        sql="SELECT repeat(c, 2) AS repeated"
         " FROM (SELECT 'a' AS c UNION ALL SELECT 'a' UNION ALL SELECT 'b')",
     )
     connection.close()
@@ -90,7 +92,9 @@ def test_a_memoized_sql_function_calls_its_function_once_per_distinct_arguments(
 
 
 def test_iso_to_micros_sql_function_matches_the_python_one(connection: sqlite3.Connection) -> None:
-    [row] = rows(connection, "SELECT iso_to_micros('1970-01-01T00:00:00.000001+00:00') AS micros")
+    [row] = rows(
+        connection, sql="SELECT iso_to_micros('1970-01-01T00:00:00.000001+00:00') AS micros"
+    )
     assert row["micros"] == 1
 
 
@@ -102,7 +106,7 @@ def test_removing_the_migration_functions_removes_iso_to_micros_alone(
         connection.execute("SELECT iso_to_micros('1970-01-01T00:00:00.000001+00:00')")
     names = rows(
         connection,
-        "SELECT name FROM pragma_function_list"
+        sql="SELECT name FROM pragma_function_list"
         " WHERE name IN ('content_hash', 'file_id', 'fold_raw_meta', 'iso_to_micros')"
         " ORDER BY name",
     )
@@ -110,7 +114,7 @@ def test_removing_the_migration_functions_removes_iso_to_micros_alone(
 
 
 def test_file_id_sql_function_is_the_file_key_file_id(connection: sqlite3.Connection) -> None:
-    [row] = rows(connection, "SELECT file_id('ed2k', ?) AS file_id", (_HASH,))
+    [row] = rows(connection, sql="SELECT file_id('ed2k', ?) AS file_id", parameters=(_HASH,))
     assert row["file_id"] == FileKey(network=Network.ED2K, native_id=_HASH).file_id
 
 

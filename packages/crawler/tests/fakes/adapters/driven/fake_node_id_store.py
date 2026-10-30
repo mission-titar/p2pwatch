@@ -16,7 +16,7 @@ class FakeNodeIdStore(NodeIdReader, NodeIdWriter):
     def read_node_id(self) -> NodeId | None:
         return self._stored_node_id
 
-    def record_node_id(self, node_id: NodeId, created_at: datetime) -> None:
+    def record_node_id(self, node_id: NodeId, *, created_at: datetime) -> None:
         if self._stored_node_id is not None:
             raise StoreError(f"a node id is already recorded: {self._stored_node_id}")
         self.recorded.append((node_id, created_at))

@@ -26,7 +26,7 @@ class FakeTimedSearchClient(SearchClient):
         return self._channels
 
     async def search(
-        self, keyword: Keyword, channel: Channel, budget_seconds: float
+        self, keyword: Keyword, *, channel: Channel, budget_seconds: float
     ) -> SearchAnswer:
         self.searches.append((asyncio.get_running_loop().time(), keyword, channel))
         if self._search_failures:

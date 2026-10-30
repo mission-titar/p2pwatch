@@ -27,7 +27,7 @@ _RANGE = (
 
 
 def _write_catalog_at_5(path: Path, *, with_range: bool) -> None:
-    connection = open_catalog_at(path, 5)
+    connection = open_catalog_at(path, version=5)
     connection.execute(f"INSERT INTO files (ed2k_hash, size_bytes) VALUES ('{_HASH}', 1)")
     if with_range:
         connection.execute(_RANGE)
@@ -35,7 +35,7 @@ def _write_catalog_at_5(path: Path, *, with_range: bool) -> None:
 
 
 def _schema_names(connection: sqlite3.Connection) -> set[str]:
-    schema = rows(connection, "SELECT name, tbl_name FROM sqlite_schema")
+    schema = rows(connection, sql="SELECT name, tbl_name FROM sqlite_schema")
     return {str(name) for row in schema for name in row.values()}
 
 
@@ -48,8 +48,8 @@ def test_a_catalog_holding_ranges_refuses_to_migrate(tmp_path: Path) -> None:
 
     raw = sqlite3.connect(path)
     try:
-        assert rows(raw, "PRAGMA user_version") == [{"user_version": 5}]
-        assert rows(raw, "SELECT count(*) AS range_count FROM file_observation_ranges") == [
+        assert rows(raw, sql="PRAGMA user_version") == [{"user_version": 5}]
+        assert rows(raw, sql="SELECT count(*) AS range_count FROM file_observation_ranges") == [
             {"range_count": 1}
         ]
     finally:
@@ -62,10 +62,10 @@ def test_a_catalog_without_ranges_drops_the_dead_tables_and_keeps_its_files(
     path = tmp_path / "catalog.db"
     _write_catalog_at_5(path, with_range=False)
 
-    connection = open_catalog_at(path, 6)
+    connection = open_catalog_at(path, version=6)
     try:
-        assert rows(connection, "PRAGMA user_version") == [{"user_version": 6}]
+        assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 6}]
         assert not _schema_names(connection) & {*_DEAD_TABLES, "migration_0006_guard"}
-        assert rows(connection, "SELECT ed2k_hash FROM files") == [{"ed2k_hash": _HASH}]
+        assert rows(connection, sql="SELECT ed2k_hash FROM files") == [{"ed2k_hash": _HASH}]
     finally:
         connection.close()

@@ -59,7 +59,7 @@ _DECISION_COLUMNS = ("id", "file_id", "target_id", "rule_name", "tier", "decided
 
 
 def _catalog_at_7(path: Path) -> None:
-    connection = open_catalog_at(path, 7)
+    connection = open_catalog_at(path, version=7)
     for native_id, size in ((_A, 100), (_B, 200)):
         connection.execute(
             "INSERT INTO files (ed2k_hash, size_bytes) VALUES (?, ?)", (native_id, size)
@@ -83,7 +83,7 @@ def _catalog_at_7(path: Path) -> None:
 @pytest.fixture
 def migrated(tmp_path: Path) -> Iterator[sqlite3.Connection]:
     _catalog_at_7(tmp_path / "catalog.db")
-    connection = open_catalog_at(tmp_path / "catalog.db", 8)
+    connection = open_catalog_at(tmp_path / "catalog.db", version=8)
     yield connection
     connection.close()
 
@@ -91,8 +91,8 @@ def migrated(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 def test_files_are_keyed_by_the_file_id_of_their_network_and_native_id(
     migrated: sqlite3.Connection,
 ) -> None:
-    assert rows(migrated, "PRAGMA user_version") == [{"user_version": 8}]
-    assert rows(migrated, "SELECT * FROM files ORDER BY native_id") == [
+    assert rows(migrated, sql="PRAGMA user_version") == [{"user_version": 8}]
+    assert rows(migrated, sql="SELECT * FROM files ORDER BY native_id") == [
         {"file_id": _ID_A, "network": "ed2k", "native_id": _A, "size_bytes": 100},
         {"file_id": _ID_B, "network": "ed2k", "native_id": _B, "size_bytes": 200},
     ]
@@ -110,8 +110,8 @@ def test_variants_keep_their_id_and_hash_the_file_id(migrated: sqlite3.Connectio
         )
         for n, v in enumerate(_VARIANTS, start=1)
     ]
-    assert rows(migrated, "SELECT * FROM observation_variants ORDER BY 1") == expected
-    assert rows(migrated, "SELECT * FROM observations ORDER BY 1, 2") == [
+    assert rows(migrated, sql="SELECT * FROM observation_variants ORDER BY 1") == expected
+    assert rows(migrated, sql="SELECT * FROM observations ORDER BY 1, 2") == [
         dict(zip(_OBSERVATION_COLUMNS, observation, strict=True)) for observation in _OBSERVATIONS
     ]
 
@@ -122,16 +122,16 @@ def test_decisions_keep_their_id_and_name_the_file_id(migrated: sqlite3.Connecti
         dict(zip(_DECISION_COLUMNS, (n, file_ids[d[0]], *d[1:]), strict=True))
         for n, d in enumerate(_DECISIONS, start=1)
     ]
-    assert rows(migrated, "SELECT * FROM match_decisions ORDER BY id") == expected
+    assert rows(migrated, sql="SELECT * FROM match_decisions ORDER BY id") == expected
 
 
 def test_no_ed2k_identity_or_old_table_is_left(migrated: sqlite3.Connection) -> None:
-    assert rows(migrated, _ED2K_COLUMNS) == []
-    tables = {row["name"] for row in rows(migrated, "SELECT name FROM sqlite_schema")}
+    assert rows(migrated, sql=_ED2K_COLUMNS) == []
+    tables = {row["name"] for row in rows(migrated, sql="SELECT name FROM sqlite_schema")}
     assert not {name for name in tables if name.endswith("_old")}
     indexes = rows(
         migrated,
-        "SELECT name, tbl_name FROM sqlite_schema WHERE type = 'index' AND sql IS NOT NULL"
+        sql="SELECT name, tbl_name FROM sqlite_schema WHERE type = 'index' AND sql IS NOT NULL"
         " ORDER BY name",
     )
     # The index on file_id alone would be a prefix of the decision index: not carried.
@@ -170,10 +170,10 @@ def test_a_new_observation_reuses_the_variant_0008_rekeyed(tmp_path: Path) -> No
                 node_id=NodeId("n1"),
             )
         )
-        assert rows(migrated, "SELECT count(*) AS variant_count FROM observation_variants") == [
+        assert rows(migrated, sql="SELECT count(*) AS variant_count FROM observation_variants") == [
             {"variant_count": 3}
         ]
-        assert rows(migrated, "SELECT count(*) AS observation_count FROM observations") == [
+        assert rows(migrated, sql="SELECT count(*) AS observation_count FROM observations") == [
             {"observation_count": 5}
         ]
     finally:
@@ -182,10 +182,10 @@ def test_a_new_observation_reuses_the_variant_0008_rekeyed(tmp_path: Path) -> No
 
 def test_migrating_restores_the_pragmas_0008_sets(tmp_path: Path) -> None:
     _catalog_at_7(tmp_path / "catalog.db")
-    connection = open_catalog_forcing_secure_delete_at(tmp_path / "catalog.db", 8)
+    connection = open_catalog_forcing_secure_delete_at(tmp_path / "catalog.db", version=8)
     try:
-        assert rows(connection, "PRAGMA user_version") == [{"user_version": 8}]
-        assert rows(connection, "PRAGMA secure_delete") == [{"secure_delete": 1}]
-        assert rows(connection, "PRAGMA cache_size") == [{"cache_size": -2000}]
+        assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 8}]
+        assert rows(connection, sql="PRAGMA secure_delete") == [{"secure_delete": 1}]
+        assert rows(connection, sql="PRAGMA cache_size") == [{"cache_size": -2000}]
     finally:
         connection.close()

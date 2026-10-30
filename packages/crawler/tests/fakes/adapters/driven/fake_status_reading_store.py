@@ -16,7 +16,7 @@ class FakeStatusReadingStore(StatusReadingWriter, StatusReadingReader):
         )
 
     def set_reading(
-        self, client_name: ClientName, reading: StatusReading, published_at: MonotonicInstant
+        self, client_name: ClientName, *, reading: StatusReading, published_at: MonotonicInstant
     ) -> None:
         self._published_readings[client_name] = PublishedReading(
             reading=reading, published_at=published_at

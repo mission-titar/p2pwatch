@@ -133,8 +133,8 @@ def test_the_merge_logs_its_destination_before_and_after_the_copy() -> None:
     ).merge_catalogs([_A, _B], destination=NewCatalog(path=_OUT, force=False))
 
     assert logger.lines == [
-        LoggedLine("info", f"merge → {_OUT} (2 source catalog(s))"),
-        LoggedLine("info", f"merge done: {_OUT}"),
+        LoggedLine(level="info", message=f"merge → {_OUT} (2 source catalog(s))"),
+        LoggedLine(level="info", message=f"merge done: {_OUT}"),
     ]
 
 
@@ -146,7 +146,7 @@ def test_a_listed_source_is_logged_as_skipped_before_the_copy() -> None:
     ).merge_catalogs([_A, _B], destination=ListedSourceCatalog(path=_A))
 
     assert logger.lines == [
-        LoggedLine("info", f"merge → {_A} (2 source catalog(s))"),
-        LoggedLine("info", f"{_A} skipped: it is the output"),
-        LoggedLine("info", f"merge done: {_A}"),
+        LoggedLine(level="info", message=f"merge → {_A} (2 source catalog(s))"),
+        LoggedLine(level="info", message=f"{_A} skipped: it is the output"),
+        LoggedLine(level="info", message=f"merge done: {_A}"),
     ]

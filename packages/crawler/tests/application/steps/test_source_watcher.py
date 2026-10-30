@@ -280,9 +280,11 @@ async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
     # Stage 4, D9: the first file's event, named after its decision and best name.
     queued = (_read(_PEER, "AnimuseeFMR"),)
     source_client = FakeSourceClient(readings={HASH_A: queued, HASH_B: queued})
-    decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, TargetId("062A")),))
+    decision_reader = FakeDecisionReader(
+        candidates=(candidate(HASH_A, target_id=TargetId("062A")),)
+    )
     observation_reader = FakeObservationReader(
-        best={HASH_A: observation(HASH_A, "Keroro 062.avi", 1)}
+        best={HASH_A: observation(HASH_A, filename="Keroro 062.avi", size_bytes=1)}
     )
     observability = ObservabilityOverFakes()
     client = FakeDownloadClient(listed=[(status(HASH_A), status(HASH_B))])
@@ -335,7 +337,7 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
     sources = FakeSourcePointStore(history=history)
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.record_queued(
-        key(HASH_B), TargetId("063A"), 100, start
+        key(HASH_B), target_id=TargetId("063A"), size_bytes=100, queued_at=start
     )  # queued for it, no decision left
     tracked_download_store.states.update(
         {HASH_A: DownloadState.DOWNLOADING, HASH_B: DownloadState.DOWNLOADING}
@@ -455,7 +457,7 @@ async def test_the_first_recording_round_is_a_baseline(
     # On a real catalog: two queued sources in the node's first round, a third in the next.
     catalog = open_catalog(tmp_path / "catalog.db")
     for native_id in order:
-        insert_file(catalog, native_id)
+        insert_file(catalog, native_id=native_id)
     readings: dict[str, tuple[SourceReading, ...]] = {
         HASH_A: (_peer(_PEER),),
         HASH_B: (_peer(_OTHER_PEER),),
@@ -499,7 +501,7 @@ def _peer(key: SourceKey, role: SourceRole = SourceRole.QUEUED) -> SourceReading
 @pytest.fixture
 def real_catalog(tmp_path: Path) -> Iterator[sqlite3.Connection]:
     catalog = open_catalog(tmp_path / "catalog.db")
-    insert_file(catalog, HASH_A)
+    insert_file(catalog, native_id=HASH_A)
     yield catalog
     catalog.close()
 
