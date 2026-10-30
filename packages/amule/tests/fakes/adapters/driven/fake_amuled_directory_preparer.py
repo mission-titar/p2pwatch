@@ -10,5 +10,5 @@ class FakeAmuledDirectoryPreparer(AmuledDirectoryPreparer):
     def __init__(self, actions: list[str]) -> None:
         self.actions = actions
 
-    def prepare_amuled_directories(self, uid: Uid, gid: Gid) -> None:
+    def prepare_amuled_directories(self, uid: Uid, *, gid: Gid) -> None:
         self.actions.append(f"directories {uid}:{gid}")

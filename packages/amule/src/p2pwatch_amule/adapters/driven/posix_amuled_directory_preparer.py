@@ -24,7 +24,7 @@ class PosixAmuledDirectoryPreparer(AmuledDirectoryPreparer):
         self._owned_directories = owned_directories
         self._change_owner = change_owner
 
-    def prepare_amuled_directories(self, uid: Uid, gid: Gid) -> None:
+    def prepare_amuled_directories(self, uid: Uid, *, gid: Gid) -> None:
         for directory in self._owned_directories:
             directory.mkdir(parents=True, exist_ok=True)
         # Not recursive: the mounts can hold hundreds of gigabytes of part files the operator owns.

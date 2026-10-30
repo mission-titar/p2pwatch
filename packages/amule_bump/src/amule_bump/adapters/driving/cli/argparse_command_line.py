@@ -51,7 +51,7 @@ class ArgparseCommandLine:
         args = parser.parse_args(argv)
         try:
             outcome = self._amule_bumper.bump_amule(
-                args.dockerfile, args.body_file, dry_run=args.dry_run
+                args.dockerfile, body_path=args.body_file, dry_run=args.dry_run
             )
         except (BumpError, OSError) as error:  # OSError covers urllib errors and a missing file
             print(f"error: {error}", file=sys.stderr)

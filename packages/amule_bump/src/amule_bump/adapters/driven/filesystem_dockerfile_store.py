@@ -10,5 +10,5 @@ class FilesystemDockerfileStore(DockerfileReader, DockerfileWriter):
     def read_dockerfile(self, dockerfile_path: PurePath) -> str:
         return Path(dockerfile_path).read_text()
 
-    def set_dockerfile(self, dockerfile_path: PurePath, dockerfile_text: str) -> None:
+    def set_dockerfile(self, dockerfile_path: PurePath, *, dockerfile_text: str) -> None:
         Path(dockerfile_path).write_text(dockerfile_text)

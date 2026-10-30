@@ -19,24 +19,28 @@ def github() -> Iterator[FakeGithubServer]:
         yield github
 
 
-def upstream_client(github: FakeGithubServer, token: str | None = None) -> GithubUpstreamClient:
+def upstream_client(github: FakeGithubServer, *, token: str | None = None) -> GithubUpstreamClient:
     return GithubUpstreamClient(
-        github.api_url, "amule-org/amule", token, github.url_opener, timeout_seconds=0.2
+        github.api_url,
+        full_name="amule-org/amule",
+        token=token,
+        url_opener=github.url_opener,
+        timeout_seconds=0.2,
     )
 
 
 def test_latest_release_tag_is_read_from_the_api_url_with_the_token(
     github: FakeGithubServer,
 ) -> None:
-    github.answer_json(f"{REPO}/releases/latest", {"tag_name": "3.1.0", "draft": False})
-    assert upstream_client(github, "secret").read_latest_release_tag() == "3.1.0"
+    github.answer_json(f"{REPO}/releases/latest", document={"tag_name": "3.1.0", "draft": False})
+    assert upstream_client(github, token="secret").read_latest_release_tag() == "3.1.0"
     [(_, headers)] = github.requests
     assert headers["Authorization"] == "Bearer secret"
     assert headers["X-GitHub-Api-Version"] == "2022-11-28"
 
 
 def test_requests_go_anonymous_without_a_token(github: FakeGithubServer) -> None:
-    github.answer_json(f"{REPO}/releases/latest", {"tag_name": "3.1.0"})
+    github.answer_json(f"{REPO}/releases/latest", document={"tag_name": "3.1.0"})
     upstream_client(github).read_latest_release_tag()
     [(_, headers)] = github.requests
     assert "Authorization" not in headers
@@ -45,10 +49,10 @@ def test_requests_go_anonymous_without_a_token(github: FakeGithubServer) -> None
 def test_tag_target_is_the_object_the_tag_ref_names(github: FakeGithubServer) -> None:
     github.answer_json(
         f"{REPO}/git/ref/tags/3.1.0",
-        {"ref": "refs/tags/3.1.0", "object": {"type": "tag", "sha": TAG_OBJECT}},
+        document={"ref": "refs/tags/3.1.0", "object": {"type": "tag", "sha": TAG_OBJECT}},
     )
     assert upstream_client(github).read_tag_target("3.1.0") == GitObject(
-        GitObjectKind.TAG, TAG_OBJECT
+        kind=GitObjectKind.TAG, object_id=TAG_OBJECT
     )
 
 
@@ -57,29 +61,34 @@ def test_annotated_tag_target_is_the_object_the_tag_object_names(
 ) -> None:
     github.answer_json(
         f"{REPO}/git/tags/{TAG_OBJECT}",
-        {"tag": "3.1.0", "object": {"type": "commit", "sha": COMMIT}},
+        document={"tag": "3.1.0", "object": {"type": "commit", "sha": COMMIT}},
     )
     assert upstream_client(github).read_annotated_tag_target(TAG_OBJECT) == GitObject(
-        GitObjectKind.COMMIT, COMMIT
+        kind=GitObjectKind.COMMIT, object_id=COMMIT
     )
 
 
 def test_file_is_the_raw_content_at_a_ref(github: FakeGithubServer) -> None:
     github.answer_raw(
-        f"{REPO}/contents/docs/CHANGELOG.md?ref=3.1.0", 200, "## Version 3.1.0 é\n".encode()
+        f"{REPO}/contents/docs/CHANGELOG.md?ref=3.1.0",
+        status=200,
+        body="## Version 3.1.0 é\n".encode(),
     )
-    assert upstream_client(github).read_file("3.1.0", "docs/CHANGELOG.md") == "## Version 3.1.0 é\n"
+    assert (
+        upstream_client(github).read_file("3.1.0", path="docs/CHANGELOG.md")
+        == "## Version 3.1.0 é\n"
+    )
 
 
 def test_file_absent_at_the_ref_reads_as_empty(github: FakeGithubServer) -> None:
-    github.answer_raw(f"{REPO}/contents/docs/api/REFERENCE.md?ref=3.0.1", 404, b"{}")
-    assert upstream_client(github).read_file("3.0.1", "docs/api/REFERENCE.md") == ""
+    github.answer_raw(f"{REPO}/contents/docs/api/REFERENCE.md?ref=3.0.1", status=404, body=b"{}")
+    assert upstream_client(github).read_file("3.0.1", path="docs/api/REFERENCE.md") == ""
 
 
 def test_file_lets_any_other_http_error_through(github: FakeGithubServer) -> None:
-    github.answer_raw(f"{REPO}/contents/docs/CHANGELOG.md?ref=3.1.0", 403, b"{}")
+    github.answer_raw(f"{REPO}/contents/docs/CHANGELOG.md?ref=3.1.0", status=403, body=b"{}")
     with pytest.raises(HTTPError, match="403"):
-        upstream_client(github).read_file("3.1.0", "docs/CHANGELOG.md")
+        upstream_client(github).read_file("3.1.0", path="docs/CHANGELOG.md")
 
 
 def test_a_request_unanswered_within_the_timeout_fails(github: FakeGithubServer) -> None:

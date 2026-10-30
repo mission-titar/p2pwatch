@@ -60,7 +60,7 @@ class Node:
         # The first restart wrote 51820; gluetun moving again must wait for the window.
         self.forwarded_port_client.forwarded_port = 51821
 
-    def run_loop(self, port_sync_settings: PortSyncSettings = SETTINGS, rounds: int = 1) -> None:
+    def run_loop(self, port_sync_settings: PortSyncSettings = SETTINGS, *, rounds: int = 1) -> None:
         """Runs the loop until its ``rounds``-th sleep."""
 
         def stop_after_the_last_round() -> None:
@@ -89,10 +89,13 @@ def node() -> Node:
 def test_a_new_port_stops_amuled_writes_both_ports_and_starts_it(node: Node) -> None:
     node.run_loop()
     assert node.actions == [UP, READ, DOWN, READ, WRITE, UP]
-    assert node.conf == with_listen_port(CONF, 51820)
+    assert node.conf == with_listen_port(CONF, port=51820)
     assert node.logger.lines == [
-        LoggedLine("info", "gluetun forwards 51820, amuled listens on 4662: restarting amuled"),
-        LoggedLine("info", "amule.conf now sets Port and UDPPort to 51820"),
+        LoggedLine(
+            level="info",
+            message="gluetun forwards 51820, amuled listens on 4662: restarting amuled",
+        ),
+        LoggedLine(level="info", message="amule.conf now sets Port and UDPPort to 51820"),
     ]
 
 
@@ -103,7 +106,7 @@ def test_the_write_keeps_what_amuled_flushed_on_exit(node: Node) -> None:
     node.service_supervisor.on_stop_amuled = flush
     node.run_loop()
     assert node.conf == with_listen_port(
-        CONF.replace("MaxUpload=42", "MaxUpload=42\nNick=flushed"), 51820
+        CONF.replace("MaxUpload=42", "MaxUpload=42\nNick=flushed"), port=51820
     )
 
 
@@ -120,7 +123,7 @@ def test_a_write_that_raises_still_starts_amuled_and_is_logged(node: Node) -> No
     node.run_loop()
     assert node.actions == [UP, READ, DOWN, READ, UP]
     assert node.logger.lines[1:] == [
-        LoggedLine("error", "amule.conf was not written (No space left on device)")
+        LoggedLine(level="error", message="amule.conf was not written (No space left on device)")
     ]
 
 
@@ -134,7 +137,10 @@ def test_an_amule_conf_gone_once_amuled_stopped_writes_nothing_and_still_starts_
     node.run_loop()
     assert node.actions == [UP, READ, DOWN, READ, UP]
     assert node.logger.lines[1:] == [
-        LoggedLine("error", "amule.conf no longer exists once amuled stopped, nothing written")
+        LoggedLine(
+            level="error",
+            message="amule.conf no longer exists once amuled stopped, nothing written",
+        )
     ]
 
 
@@ -180,7 +186,7 @@ def test_the_poll_interval_is_the_settings(node: Node) -> None:
 
 @pytest.mark.parametrize("conf", ["[eMule]\nPort=4662x\n", "Port=4662\n"])
 def test_an_unreadable_amule_conf_asks_the_supervisor_nothing_and_is_logged(
-    node: Node, conf: str
+    *, node: Node, conf: str
 ) -> None:
     node.amule_conf.conf = conf
     node.run_loop()
@@ -198,7 +204,9 @@ def test_an_amule_conf_that_cannot_be_read_asks_the_supervisor_nothing_and_is_lo
     node.run_loop()
     assert node.actions == [UP]
     assert node.logger.lines == [
-        LoggedLine("error", "amule.conf's port is unreadable, amuled left as is (denied)")
+        LoggedLine(
+            level="error", message="amule.conf's port is unreadable, amuled left as is (denied)"
+        )
     ]
 
 
@@ -207,5 +215,5 @@ def test_a_missing_amule_conf_asks_the_supervisor_nothing_and_is_logged(node: No
     node.run_loop()
     assert node.actions == [UP, READ]
     assert node.logger.lines == [
-        LoggedLine("error", "amule.conf does not exist, amuled left as is")
+        LoggedLine(level="error", message="amule.conf does not exist, amuled left as is")
     ]

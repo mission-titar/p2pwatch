@@ -11,7 +11,7 @@ class FakeOwnership:
         self.chowns: list[tuple[Path, Uid, Gid]] = []
         self.error: OSError | None = None
 
-    def change_owner(self, path: Path, uid: Uid, gid: Gid) -> None:
+    def change_owner(self, path: Path, *, uid: Uid, gid: Gid) -> None:
         if self.error is not None:
             raise self.error
         self.chowns.append((path, uid, gid))

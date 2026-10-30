@@ -24,7 +24,7 @@ class PosixAmuleConfStore(AmuleConfReader, AmuleConfWriter):
         except FileNotFoundError:
             return None
 
-    def set_amule_conf(self, conf: str, uid: Uid, gid: Gid) -> None:
+    def set_amule_conf(self, conf: str, *, uid: Uid, gid: Gid) -> None:
         # Replaced, not rewritten in place: a failed write must not leave amuled a truncated file.
         temporary_path = self._amule_conf_path.with_name(self._amule_conf_path.name + ".tmp")
         # Created afresh: the 0600 applies only on creation, a leftover's mode would carry over.

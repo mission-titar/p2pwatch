@@ -38,7 +38,7 @@ class AmuleApiAdminPasswordSetter(AdminPasswordSetter):
         self._env = env
         self._run_command = run_command
 
-    def set_admin_password(self, api_password: str, uid: Uid, gid: Gid) -> None:
+    def set_admin_password(self, api_password: str, *, uid: Uid, gid: Gid) -> None:
         # Run as amule so amuleapi-passwords (0600) lands owned as amuled's amuleapi expects.
         self._run_command(
             [

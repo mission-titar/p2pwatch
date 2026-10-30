@@ -45,43 +45,43 @@ class BumpAmule(AmuleBumper):
         self._changelog_width_characters = changelog_width_characters
 
     def bump_amule(
-        self, dockerfile_path: PurePath, body_path: PurePath, *, dry_run: bool
+        self, dockerfile_path: PurePath, *, body_path: PurePath, dry_run: bool
     ) -> AmuleBump | PinIsLatest | PinAheadOfLatest:
         dockerfile_text = self._dockerfile_reader.read_dockerfile(dockerfile_path)
         old = read_pin(dockerfile_text)
         latest = self._upstream_client.read_latest_release_tag()
         check_release_tag(latest)
         if latest == old.version:
-            return PinIsLatest(old.version)
-        if not is_newer(latest, old.version):
+            return PinIsLatest(version=old.version)
+        if not is_newer(latest, pinned=old.version):
             return PinAheadOfLatest(pinned_version=old.version, latest_version=latest)
 
-        new = Pin(latest, self._peeled_commit(latest))
+        new = Pin(version=latest, commit=self._peeled_commit(latest))
         body = build_pull_request_body(
             old,
-            new,
-            self._upstream_client.read_file(new.version, CHANGELOG_PATH),
-            [self._watched_file(old, new, path) for path in WATCHED_FILES],
-            self._changelog_width_characters,
+            new=new,
+            changelog=self._upstream_client.read_file(new.version, path=CHANGELOG_PATH),
+            watched_files=[self._watched_file(old, new=new, path=path) for path in WATCHED_FILES],
+            changelog_width_characters=self._changelog_width_characters,
         )
         if not dry_run:
             self._dockerfile_writer.set_dockerfile(
-                dockerfile_path, rewrite_pin(dockerfile_text, new)
+                dockerfile_path, dockerfile_text=rewrite_pin(dockerfile_text, pin=new)
             )
-            self._pull_request_drafter.draft_pull_request_body(body_path, body)
-            self._bump_announcer.announce_bump(new.version, body_path)
-        return AmuleBump(new, body)
+            self._pull_request_drafter.draft_pull_request_body(body_path, body=body)
+            self._bump_announcer.announce_bump(new.version, body_path=body_path)
+        return AmuleBump(new_pin=new, body=body)
 
     def _peeled_commit(self, tag: str) -> str:
         """The tag's commit, never its annotated tag object: BuildKit's --checksum wants it."""
         git_object = self._upstream_client.read_tag_target(tag)
         while git_object.kind == GitObjectKind.TAG:
             git_object = self._upstream_client.read_annotated_tag_target(git_object.object_id)
-        return tagged_commit_id(tag, git_object)
+        return tagged_commit_id(tag, git_object=git_object)
 
-    def _watched_file(self, old: Pin, new: Pin, path: str) -> WatchedFile:
+    def _watched_file(self, old: Pin, *, new: Pin, path: str) -> WatchedFile:
         return WatchedFile(
-            path,
-            old_text=self._upstream_client.read_file(old.version, path),
-            new_text=self._upstream_client.read_file(new.version, path),
+            path=path,
+            old_text=self._upstream_client.read_file(old.version, path=path),
+            new_text=self._upstream_client.read_file(new.version, path=path),
         )

@@ -64,7 +64,7 @@ def test_first_boot_writes_the_minimal_conf() -> None:
 
     booter.container_booter.boot_container()
 
-    assert booter.amule_conf.conf == reconcile_conf(None, DIGEST)
+    assert booter.amule_conf.conf == reconcile_conf(None, ec_digest=DIGEST)
 
 
 def test_an_existing_conf_is_reconciled_not_replaced() -> None:
@@ -74,7 +74,7 @@ def test_an_existing_conf_is_reconciled_not_replaced() -> None:
 
     booter.container_booter.boot_container()
 
-    assert booter.amule_conf.conf == reconcile_conf(existing_conf, DIGEST)
+    assert booter.amule_conf.conf == reconcile_conf(existing_conf, ec_digest=DIGEST)
 
 
 @pytest.mark.parametrize("api_password", ["s3cret", "mot de passé"])

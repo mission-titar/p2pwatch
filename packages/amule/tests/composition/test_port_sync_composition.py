@@ -26,7 +26,7 @@ class _Stop(Exception):
 
 
 def _port_sync_composition(
-    env: dict[str, str], actions: list[str], monotonic_clock: FakeMonotonicClock
+    env: dict[str, str], *, actions: list[str], monotonic_clock: FakeMonotonicClock
 ) -> tuple[PortSyncComposition, FakeAmuleConfStore]:
     amule_conf = FakeAmuleConfStore(actions)
     amule_conf.conf = CONF
@@ -62,7 +62,9 @@ def test_port_sync_restarts_amuled_on_gluetuns_port_under_its_modules_logger_nam
             "GLUETUN_CONTROL_URL": gluetun.control_url,
             "PORT_SYNC_POLL_SECONDS": "5",
         }
-        port_sync_composition, amule_conf = _port_sync_composition(env, actions, monotonic_clock)
+        port_sync_composition, amule_conf = _port_sync_composition(
+            env, actions=actions, monotonic_clock=monotonic_clock
+        )
         with caplog.at_level(logging.INFO), pytest.raises(_Stop):
             port_sync_composition.run_port_sync_loop()
 
@@ -76,7 +78,7 @@ def test_port_sync_restarts_amuled_on_gluetuns_port_under_its_modules_logger_nam
         "write amule.conf as 1000:1001",
         "start amuled",
     ]
-    assert amule_conf.conf == with_listen_port(CONF, 51820)
+    assert amule_conf.conf == with_listen_port(CONF, port=51820)
     lifecycle = PortSyncLifecycle.__module__
     assert [(record.name, record.getMessage()) for record in caplog.records] == [
         (GluetunForwardedPortClient.__module__, "gluetun reports no forwarded port (b'{}')"),
@@ -88,7 +90,9 @@ def test_port_sync_restarts_amuled_on_gluetuns_port_under_its_modules_logger_nam
 def test_a_refused_variable_raises_before_amuled_is_started() -> None:
     actions: list[str] = []
     env = {"PUID": "1000", "PGID": "1001", "GLUETUN_CONTROL_URL": "ftp://gluetun"}
-    port_sync_composition, _ = _port_sync_composition(env, actions, FakeMonotonicClock())
+    port_sync_composition, _ = _port_sync_composition(
+        env, actions=actions, monotonic_clock=FakeMonotonicClock()
+    )
 
     with pytest.raises(SettingsError, match="^GLUETUN_CONTROL_URL must be an http or https URL"):
         port_sync_composition.run_port_sync_loop()

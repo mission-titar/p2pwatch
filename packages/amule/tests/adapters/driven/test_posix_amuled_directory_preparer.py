@@ -16,7 +16,7 @@ def test_missing_directories_are_created_then_owned(tmp_path: Path) -> None:
         owned_directories=owned_directories, change_owner=ownership.change_owner
     )
 
-    preparer.prepare_amuled_directories(Uid(1000), Gid(1001))
+    preparer.prepare_amuled_directories(Uid(1000), gid=Gid(1001))
 
     assert all(directory.is_dir() for directory in owned_directories)
     assert ownership.chowns == [
@@ -33,7 +33,7 @@ def test_what_a_directory_holds_is_left_alone(tmp_path: Path) -> None:
         owned_directories=[incoming], change_owner=ownership.change_owner
     )
 
-    preparer.prepare_amuled_directories(Uid(1000), Gid(1001))
+    preparer.prepare_amuled_directories(Uid(1000), gid=Gid(1001))
 
     assert (incoming / "episode.avi").read_text() == "frames"
     assert ownership.chowns == [(incoming, Uid(1000), Gid(1001))]

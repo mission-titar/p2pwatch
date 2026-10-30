@@ -42,12 +42,12 @@ class PortSyncLifecycle:
         latest_restart = None
         while True:
             latest_restart = self._sync_listen_port_once(
-                latest_restart, self._monotonic_clock.now()
+                latest_restart, now=self._monotonic_clock.now()
             )
             self._monotonic_clock.sleep(self._port_sync_settings.poll_interval)
 
     def _sync_listen_port_once(
-        self, latest_restart: MonotonicInstant | None, now: MonotonicInstant
+        self, latest_restart: MonotonicInstant | None, *, now: MonotonicInstant
     ) -> MonotonicInstant | None:
         """Run one round; return amuled's latest restart, `now` if this round restarted it."""
         forwarded_port = self._forwarded_port_client.read_forwarded_port()
@@ -95,8 +95,8 @@ class PortSyncLifecycle:
             self._logger.error("amule.conf no longer exists once amuled stopped, nothing written")
             return
         self._amule_conf_writer.set_amule_conf(
-            with_listen_port(amule_conf, forwarded_port),
-            self._port_sync_settings.uid,
-            self._port_sync_settings.gid,
+            with_listen_port(amule_conf, port=forwarded_port),
+            uid=self._port_sync_settings.uid,
+            gid=self._port_sync_settings.gid,
         )
         self._logger.info("amule.conf now sets Port and UDPPort to %d", forwarded_port)

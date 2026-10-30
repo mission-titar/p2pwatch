@@ -8,5 +8,5 @@ from amule_bump.adapters.driven.terminal_bump_announcer import TerminalBumpAnnou
 def test_announce_bump_prints_the_version_and_the_body_s_path(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    TerminalBumpAnnouncer().announce_bump("3.1.0", PurePath("/tmp/body.md"))
+    TerminalBumpAnnouncer().announce_bump("3.1.0", body_path=PurePath("/tmp/body.md"))
     assert capsys.readouterr().out == "version=3.1.0\nbody-path=/tmp/body.md\n"

@@ -48,7 +48,7 @@ def test_port_sync_on_is_carried_by_the_boot_settings() -> None:
     ],
 )
 def test_the_boot_refuses_port_syncs_variables_when_it_is_on(
-    variables: dict[str, str], message: str
+    *, variables: dict[str, str], message: str
 ) -> None:
     with pytest.raises(SettingsError, match=f"^{re.escape(message)}"):
         parse_boot_settings({**BOOT_ENV, **variables})
@@ -63,7 +63,7 @@ def test_port_sync_off_leaves_its_other_variables_unread() -> None:
 @pytest.mark.parametrize("name", list(BOOT_ENV))
 @pytest.mark.parametrize("setting", [None, ""])
 def test_a_missing_or_empty_boot_variable_is_refused_naming_it(
-    name: str, setting: str | None
+    *, name: str, setting: str | None
 ) -> None:
     env = {key: setting for key, setting in BOOT_ENV.items() if key != name}
     if setting is not None:
@@ -79,7 +79,7 @@ def test_the_first_missing_boot_variable_is_the_one_named() -> None:
 
 @pytest.mark.parametrize("name", ["PUID", "PGID"])
 @pytest.mark.parametrize("setting", ["amule", "-1", "1 000", "1_000", "+1000", "١٠٠٠"])
-def test_a_non_numeric_id_is_refused_naming_it(name: str, setting: str) -> None:
+def test_a_non_numeric_id_is_refused_naming_it(*, name: str, setting: str) -> None:
     message = f"{name} must be a numeric id, got {setting!r}"
     with pytest.raises(SettingsError, match=f"^{re.escape(message)}$"):
         parse_boot_settings({**BOOT_ENV, name: setting})
@@ -89,7 +89,9 @@ def test_a_non_numeric_id_is_refused_naming_it(name: str, setting: str) -> None:
 @pytest.mark.parametrize(
     "password", ["hunter2\n", "hun\tter2", "\rhunter2", "hunter2\x7f", "hunter2\x85"]
 )
-def test_a_password_with_a_control_character_is_refused_naming_it(name: str, password: str) -> None:
+def test_a_password_with_a_control_character_is_refused_naming_it(
+    *, name: str, password: str
+) -> None:
     with pytest.raises(SettingsError, match=f"^{name} must not contain a control character$"):
         parse_boot_settings({**BOOT_ENV, name: password})
 
@@ -167,7 +169,7 @@ def test_port_sync_refuses_a_missing_id_naming_it(name: str) -> None:
 @pytest.mark.parametrize("name", ["PORT_SYNC_POLL_SECONDS", "PORT_SYNC_RESTART_MIN_SECONDS"])
 @pytest.mark.parametrize("setting", ["0", "-1", "1.5", "60s", "1_000", " 60", "١٠"])
 def test_a_number_that_is_not_a_positive_integer_is_refused_naming_it(
-    name: str, setting: str
+    *, name: str, setting: str
 ) -> None:
     message = f"{name} must be a positive integer, got {setting!r}"
     with pytest.raises(SettingsError, match=f"^{re.escape(message)}$"):

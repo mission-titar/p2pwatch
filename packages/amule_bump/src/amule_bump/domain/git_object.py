@@ -11,7 +11,7 @@ class GitObjectKind(StrEnum):
     BLOB = "blob"
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class GitObject:
     """An object of a git repository, as a ref or an annotated tag names it."""
 
@@ -19,7 +19,7 @@ class GitObject:
     object_id: str
 
 
-def tagged_commit_id(tag: str, git_object: GitObject) -> str:
+def tagged_commit_id(tag: str, *, git_object: GitObject) -> str:
     """The commit's id ``tag`` names once peeled; raises ``BumpError`` when it names no commit."""
     if git_object.kind != GitObjectKind.COMMIT:
         raise BumpError(f"tag {tag} points at a {git_object.kind}, not a commit")

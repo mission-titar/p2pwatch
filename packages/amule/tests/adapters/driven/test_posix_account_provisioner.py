@@ -45,7 +45,7 @@ def test_a_missing_account_is_created_group_first() -> None:
 
     _account_provisioner(
         command_runner, has_group=False, has_user=False
-    ).find_or_create_amule_account(Uid(1000), Gid(1001))
+    ).find_or_create_amule_account(Uid(1000), gid=Gid(1001))
 
     assert command_runner.commands == [
         (GROUPADD, CHECKED),
@@ -58,7 +58,7 @@ def test_an_existing_group_is_kept_and_the_missing_user_created() -> None:
 
     _account_provisioner(
         command_runner, has_group=True, has_user=False
-    ).find_or_create_amule_account(Uid(1000), Gid(1001))
+    ).find_or_create_amule_account(Uid(1000), gid=Gid(1001))
 
     assert command_runner.commands == [(USERADD_NOLOGIN, CHECKED)]
 
@@ -68,7 +68,7 @@ def test_an_existing_account_is_not_recreated() -> None:
 
     _account_provisioner(
         command_runner, has_group=True, has_user=True
-    ).find_or_create_amule_account(Uid(1000), Gid(1001))
+    ).find_or_create_amule_account(Uid(1000), gid=Gid(1001))
 
     assert command_runner.commands == []
 

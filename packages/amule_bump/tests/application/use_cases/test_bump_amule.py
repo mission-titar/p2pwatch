@@ -20,7 +20,7 @@ from tests.fakes.adapters.driven.fake_upstream_client import FakeUpstreamClient
 OLD_COMMIT = "02db0d7faecfc377694ff6242bc23346185990ed"
 NEW_COMMIT = "909d304d993ee07df6c6f6acf501a6d791d53666"
 TAG_OBJECT = "6ccbfdf785390c25c8b01652684f5b06fb18e034"
-NEW_COMMIT_OBJECT = GitObject(GitObjectKind.COMMIT, NEW_COMMIT)
+NEW_COMMIT_OBJECT = GitObject(kind=GitObjectKind.COMMIT, object_id=NEW_COMMIT)
 DOCKERFILE = f"FROM debian\nARG AMULE_VERSION=3.0.1\nARG AMULE_COMMIT={OLD_COMMIT}\n"
 DOCKERFILE_PATH = PurePath("/repo/packages/amule/Dockerfile")
 BODY_PATH = PurePath("/tmp/body.md")
@@ -45,7 +45,7 @@ def upstream(
     )
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Bump:
     """The bump's driven ports, the Dockerfile at ``DOCKERFILE_PATH`` holding ``DOCKERFILE``."""
 
@@ -66,7 +66,7 @@ class Bump:
             bump_announcer=self.bump_announcer,
             changelog_width_characters=30,
         )
-        return bump_amule.bump_amule(DOCKERFILE_PATH, BODY_PATH, dry_run=dry_run)
+        return bump_amule.bump_amule(DOCKERFILE_PATH, body_path=BODY_PATH, dry_run=dry_run)
 
     def wrote_nothing(self, dockerfile_text: str) -> bool:
         return (
@@ -79,7 +79,7 @@ class Bump:
 def test_same_version_is_the_pin_is_latest() -> None:
     pinned = DOCKERFILE.replace("3.0.1", "3.1.0")
     bump = Bump(dockerfile=FakeDockerfileStore({DOCKERFILE_PATH: pinned}))
-    assert bump.run(upstream("3.1.0"), dry_run=False) == PinIsLatest("3.1.0")
+    assert bump.run(upstream("3.1.0"), dry_run=False) == PinIsLatest(version="3.1.0")
     assert bump.wrote_nothing(pinned)
 
 
@@ -98,7 +98,8 @@ def test_a_new_release_rewrites_the_pin_and_writes_the_body_it_returns() -> None
         DOCKERFILE_PATH: f"FROM debian\nARG AMULE_VERSION=3.1.0\nARG AMULE_COMMIT={NEW_COMMIT}\n"
     }
     assert amule_bump == AmuleBump(
-        Pin("3.1.0", NEW_COMMIT), bump.pull_request_drafter.bodies_by_path[BODY_PATH]
+        new_pin=Pin(version="3.1.0", commit=NEW_COMMIT),
+        body=bump.pull_request_drafter.bodies_by_path[BODY_PATH],
     )
     assert amule_bump.body.startswith("Bumps aMule from 3.0.1 to [3.1.0]")
 
@@ -131,18 +132,20 @@ def test_the_body_carries_each_watched_file_s_diff_between_the_two_tags() -> Non
 def test_an_annotated_tag_is_peeled_to_its_commit() -> None:
     upstream_client = upstream(
         "3.1.0",
-        tag_target=GitObject(GitObjectKind.TAG, TAG_OBJECT),
+        tag_target=GitObject(kind=GitObjectKind.TAG, object_id=TAG_OBJECT),
         annotated_tag_targets_by_object_id={
-            TAG_OBJECT: GitObject(GitObjectKind.COMMIT, NEW_COMMIT)
+            TAG_OBJECT: GitObject(kind=GitObjectKind.COMMIT, object_id=NEW_COMMIT)
         },
     )
     amule_bump = Bump().run(upstream_client, dry_run=True)
     assert isinstance(amule_bump, AmuleBump)
-    assert amule_bump.new_pin == Pin("3.1.0", NEW_COMMIT)
+    assert amule_bump.new_pin == Pin(version="3.1.0", commit=NEW_COMMIT)
 
 
 def test_a_tag_naming_no_commit_raises_and_writes_nothing() -> None:
-    upstream_client = upstream("3.1.0", tag_target=GitObject(GitObjectKind.TREE, NEW_COMMIT))
+    upstream_client = upstream(
+        "3.1.0", tag_target=GitObject(kind=GitObjectKind.TREE, object_id=NEW_COMMIT)
+    )
     bump = Bump()
     with pytest.raises(BumpError, match="tag 3.1.0 points at a tree, not a commit"):
         bump.run(upstream_client, dry_run=False)
@@ -160,7 +163,7 @@ def test_a_dry_run_returns_the_new_pin_and_body_and_writes_nothing() -> None:
     bump = Bump()
     amule_bump = bump.run(upstream("3.1.0"), dry_run=True)
     assert isinstance(amule_bump, AmuleBump)
-    assert amule_bump.new_pin == Pin("3.1.0", NEW_COMMIT)
+    assert amule_bump.new_pin == Pin(version="3.1.0", commit=NEW_COMMIT)
     assert amule_bump.body.startswith("Bumps aMule from 3.0.1 to [3.1.0]")
     assert bump.wrote_nothing(DOCKERFILE)
 

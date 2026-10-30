@@ -9,7 +9,7 @@ class SystemMonotonicClock(MonotonicClock):
     """The system's monotonic clock, and a sleep that blocks the calling thread."""
 
     def now(self) -> MonotonicInstant:
-        return MonotonicInstant(time.monotonic_ns())  # noqa: TID251
+        return MonotonicInstant(nanoseconds=time.monotonic_ns())  # noqa: TID251
 
     def sleep(self, duration: timedelta) -> None:
         time.sleep(duration.total_seconds())  # noqa: TID251

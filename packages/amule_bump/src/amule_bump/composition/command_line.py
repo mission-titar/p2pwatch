@@ -45,9 +45,9 @@ def build_amule_bumper(
     return BumpAmule(
         upstream_client=GithubUpstreamClient(
             github_api_url,
-            UPSTREAM,
-            env.get("GH_TOKEN"),
-            url_opener,
+            full_name=UPSTREAM,
+            token=env.get("GH_TOKEN"),
+            url_opener=url_opener,
             timeout_seconds=_GITHUB_TIMEOUT_SECONDS,
         ),
         dockerfile_reader=dockerfile_store,

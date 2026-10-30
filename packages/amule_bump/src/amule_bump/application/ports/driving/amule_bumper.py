@@ -7,7 +7,7 @@ from pathlib import PurePath
 from amule_bump.domain.dockerfile import Pin
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class AmuleBump:
     """The new pin and the pull request body, written unless the bump was a dry run."""
 
@@ -15,14 +15,14 @@ class AmuleBump:
     body: str
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class PinIsLatest:
     """The pin is upstream's latest release: nothing to do."""
 
     version: str
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class PinAheadOfLatest:
     """Upstream's latest release is older than the pin: nothing to do."""
 
@@ -35,6 +35,6 @@ class AmuleBumper(ABC):
 
     @abstractmethod
     def bump_amule(
-        self, dockerfile_path: PurePath, body_path: PurePath, *, dry_run: bool
+        self, dockerfile_path: PurePath, *, body_path: PurePath, dry_run: bool
     ) -> AmuleBump | PinIsLatest | PinAheadOfLatest:
         """Writes nothing on a dry run; raises ``BumpError``, or ``OSError`` when I/O fails."""
