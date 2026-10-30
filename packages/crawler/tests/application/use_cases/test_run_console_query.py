@@ -18,8 +18,8 @@ def test_a_query_runs_on_the_chosen_database_only_capped_at_1000_rows_and_5_seco
         {ConsoleDatabase.CATALOG: catalog, ConsoleDatabase.LOCAL: local}
     ).run_console_query
 
-    console_query_run = run_console_query(ConsoleDatabase.LOCAL, "SELECT 1")
+    console_query_run = run_console_query(ConsoleDatabase.LOCAL, sql="SELECT 1")
 
     assert local.calls == [ExecuteCall("SELECT 1", 1000, timedelta(seconds=5))]
     assert catalog.calls == []
-    assert console_query_run == ConsoleQueryRun(_ANSWER, row_cap=1000)
+    assert console_query_run == ConsoleQueryRun(query_answer=_ANSWER, row_cap=1000)

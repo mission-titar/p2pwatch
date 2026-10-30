@@ -40,7 +40,11 @@ def test_a_wrong_key_is_reported_with_its_file_and_its_key() -> None:
 
     assert config_report == ConfigReport(
         problems=(
-            ConfigProblem(_CONFIG_PATH, "search.keywords", "non-empty list of strings expected"),
+            ConfigProblem(
+                file_path=_CONFIG_PATH,
+                key="search.keywords",
+                message="non-empty list of strings expected",
+            ),
         )
     )
 
@@ -52,7 +56,11 @@ def test_the_first_wrong_file_is_the_only_one_reported_and_checked_last() -> Non
     config_report = _validate(config_checker)
 
     assert config_report == ConfigReport(
-        problems=(ConfigProblem(_TARGETS_PATH, None, "'episodes' section: list expected"),)
+        problems=(
+            ConfigProblem(
+                file_path=_TARGETS_PATH, key=None, message="'episodes' section: list expected"
+            ),
+        )
     )
     assert [path for _, path in config_checker.checked_files] == [_CONFIG_PATH, _TARGETS_PATH]
 

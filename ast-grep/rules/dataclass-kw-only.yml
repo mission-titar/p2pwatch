@@ -6,7 +6,6 @@ note: "Two fields of one type passed by position swap unseen; ruff's PLR0917 see
 files: ["packages/*/src/**/*.py", "packages/*/tests/**/*.py"]
 # The zones not yet keyword-only: each line goes with the block that converts its zone.
 ignores:
-  - "packages/crawler/src/p2pwatch/application/**" # C2
   - "packages/crawler/src/p2pwatch/adapters/driven/persistence_sqlite/**" # C3
   - "packages/crawler/src/p2pwatch/{adapters/driven/[!p]*,adapters/driving/**,composition/**}" # C4
   - "packages/crawler/tests/{conftest.py,test_*.py,fakes/**,support/**,contracts/**,integration/**}" # C5

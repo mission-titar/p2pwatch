@@ -9,7 +9,7 @@ from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class FileListing:
     catalog_entries: tuple[CatalogEntry, ...]  # the page asked for
     has_next_page: bool  # the page is full, so the next one may hold more

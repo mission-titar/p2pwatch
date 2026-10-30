@@ -71,7 +71,11 @@ class _Tasks:
         self.state = FakeBackoffStateStore()
         self.monotonic_clock = FakeLoopMonotonicClock(loop)
         self.backoff = BackoffRegistry(
-            _POLICY, self.wall_clock, self.monotonic_clock, FakeJitterGenerator(), self.state
+            _POLICY,
+            wall_clock=self.wall_clock,
+            monotonic_clock=self.monotonic_clock,
+            jitter_generator=FakeJitterGenerator(),
+            backoff_state_reader=self.state,
         )
         self.run_state = FakeRunStateStore()
         self.logger = FakeLogger()

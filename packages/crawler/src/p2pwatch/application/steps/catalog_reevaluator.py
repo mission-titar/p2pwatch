@@ -11,7 +11,7 @@ from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.store_error import StoreError
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ReevaluationSummary:
     """One pass: the files judged (one per catalogued hash) and the rows ``FileJudge`` wrote, a
     retraction counting as one."""
@@ -68,7 +68,7 @@ class CatalogReevaluator:
             reported_file = observation.reported_file
             try:
                 rows_written += await self._file_judge.rejudge(
-                    reported_file.file, reported_file.to_candidate(), node_id
+                    reported_file.file, base_candidate=reported_file.to_candidate(), node_id=node_id
                 )
             except StoreError as error:
                 self._logger.error(

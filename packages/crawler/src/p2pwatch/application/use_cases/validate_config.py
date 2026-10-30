@@ -29,5 +29,9 @@ class ValidateConfig(ConfigValidator):
             try:
                 check(file_path)
             except InvalidConfigError as error:
-                return ConfigReport(problems=(ConfigProblem(file_path, error.key, error.message),))
+                return ConfigReport(
+                    problems=(
+                        ConfigProblem(file_path=file_path, key=error.key, message=error.message),
+                    )
+                )
         return ConfigReport(problems=())

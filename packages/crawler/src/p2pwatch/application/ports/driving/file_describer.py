@@ -11,7 +11,7 @@ from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.sharing_period import SharingPeriod
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class FileDescription:
     file_history: FileHistory
     sharing_periods: tuple[SharingPeriod, ...]  # newest first

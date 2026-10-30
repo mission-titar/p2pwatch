@@ -31,7 +31,7 @@ class ObservabilityDispatcher:
 
     async def dispatch(self, event: Event) -> None:
         plan = plan_observability(event)
-        self._log_at_severity(plan.severity, plan.message)
+        self._log_at_severity(plan.severity, message=plan.message)
         for instruction in plan.node_metrics:
             if isinstance(instruction, CounterIncrement):
                 self._node_metric_writer.record_increment(instruction)
@@ -42,13 +42,13 @@ class ObservabilityDispatcher:
         audience = audience_of(plan.notification)
         try:
             await asyncio.wait_for(
-                self._notifier.notify(audience, plan.notification),
+                self._notifier.notify(audience, notification=plan.notification),
                 timeout=self._notification_timeout_seconds,
             )
         except Exception as error:  # noqa: BLE001 (notifications NEVER break the crawl, E-D13)
             self._logger.warning("notification %s failed (%s)", audience.value, error)
 
-    def _log_at_severity(self, severity: Severity, message: str) -> None:
+    def _log_at_severity(self, severity: Severity, *, message: str) -> None:
         """Writes ``message`` at the level ``severity`` maps to, a success being an info."""
         match severity:
             case Severity.DEBUG:

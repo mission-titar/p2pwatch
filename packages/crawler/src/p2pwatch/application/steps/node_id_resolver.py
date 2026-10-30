@@ -29,5 +29,5 @@ class NodeIdResolver:
         if stored_node_id is not None:
             return stored_node_id
         node_id = self._node_id_generator.new_node_id()
-        self._node_id_writer.record_node_id(node_id, self._wall_clock.now())
+        self._node_id_writer.record_node_id(node_id, created_at=self._wall_clock.now())
         return node_id

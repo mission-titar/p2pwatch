@@ -18,7 +18,7 @@ class RunConsoleQuery(ConsoleQueryRunner):
     def __init__(self, sql_executor_by_database: Mapping[ConsoleDatabase, SqlExecutor]) -> None:
         self._sql_executor_by_database = sql_executor_by_database
 
-    def run_console_query(self, database: ConsoleDatabase, sql: str) -> ConsoleQueryRun:
+    def run_console_query(self, database: ConsoleDatabase, *, sql: str) -> ConsoleQueryRun:
         sql_executor = self._sql_executor_by_database[database]
         query_answer = sql_executor.execute(sql, row_cap=_ROW_CAP, time_limit=_TIME_LIMIT)
-        return ConsoleQueryRun(query_answer, row_cap=_ROW_CAP)
+        return ConsoleQueryRun(query_answer=query_answer, row_cap=_ROW_CAP)

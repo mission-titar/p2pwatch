@@ -1171,7 +1171,7 @@ def build_app(
                 },
             )
         console_query_run = await run_in_threadpool(
-            console_query_runner.run_console_query, database, sql
+            console_query_runner.run_console_query, database, sql=sql
         )
         query_answer = console_query_run.query_answer
         if isinstance(query_answer, QueryFailure):
@@ -1204,7 +1204,7 @@ def build_app(
         if database is None:
             return Response(_CONSOLE_UNKNOWN_DB, status_code=400, media_type="text/plain")
         console_query_run = await run_in_threadpool(
-            console_query_runner.run_console_query, database, sql
+            console_query_runner.run_console_query, database, sql=sql
         )
         query_answer = console_query_run.query_answer
         if isinstance(query_answer, QueryFailure):

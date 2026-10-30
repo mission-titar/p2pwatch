@@ -70,7 +70,11 @@ def _reported_file() -> ReportedFile:
 
 def _registry(fake_time: FakeTime) -> BackoffRegistry:
     return BackoffRegistry(
-        _POLICY, fake_time.wall, fake_time.monotonic, FakeJitterGenerator(), FakeBackoffStateStore()
+        _POLICY,
+        wall_clock=fake_time.wall,
+        monotonic_clock=fake_time.monotonic,
+        jitter_generator=FakeJitterGenerator(),
+        backoff_state_reader=FakeBackoffStateStore(),
     )
 
 
@@ -183,7 +187,9 @@ async def test_successful_task_records_observation(
     worker = _worker(
         client, observation_store, decision_store, engine, _registry(fake_time), fake_time
     )
-    await worker.run_task(SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")), _NODE_ID)
+    await worker.run_task(
+        SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")), node_id=_NODE_ID
+    )
     assert client.searches == [("keroro", "ed2k")]
     assert count_decisions(catalog_connection) == 1
     assert rows(catalog_connection, "SELECT observed_at_micros FROM observations") == [
@@ -214,7 +220,9 @@ async def test_multiple_observations_some_unchanged_are_all_processed(
     worker = _worker(
         client, observation_store, decision_store, engine, _registry(fake_time), fake_time
     )
-    await worker.run_task(SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")), _NODE_ID)
+    await worker.run_task(
+        SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")), node_id=_NODE_ID
+    )
     assert count_observations(catalog_connection) == 2
     assert count_decisions(catalog_connection) == 1
 
@@ -231,7 +239,9 @@ async def test_backoff_expires_and_item_runs_again(
     client = FakeSearchClient(results=[(_reported_file(),)])
     worker = _worker(client, observation_store, decision_store, engine, registry, fake_time)
     fake_time.advance(timedelta(seconds=3.0))  # the channel is no longer in backoff
-    await worker.run_task(SearchTask(keyword=Keyword("k"), channel=Channel("kad")), _NODE_ID)
+    await worker.run_task(
+        SearchTask(keyword=Keyword("k"), channel=Channel("kad")), node_id=_NODE_ID
+    )
     assert client.searches == [("k", "kad")]
 
 
@@ -245,7 +255,9 @@ async def test_search_failure_arms_channel_backoff(
     registry = _registry(fake_time)
     client = FakeSearchClient(search_failures=[make_search_failed()])
     worker = _worker(client, observation_store, decision_store, engine, registry, fake_time)
-    await worker.run_task(SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")), _NODE_ID)
+    await worker.run_task(
+        SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")), node_id=_NODE_ID
+    )
     assert registry.is_in_backoff(_ED2K) is True  # channel in backoff
     assert registry.is_in_backoff(_CLIENT) is False  # but not the whole client
 
@@ -261,10 +273,14 @@ async def test_transport_failure_marks_instance_down(
     # search raises a transport failure (dead stream) → client down + client backoff.
     client = FakeSearchClient(search_failures=[make_unreachable()], results=[(_reported_file(),)])
     worker = _worker(client, observation_store, decision_store, engine, registry, fake_time)
-    await worker.run_task(SearchTask(keyword=Keyword("k1"), channel=Channel("ed2k")), _NODE_ID)
+    await worker.run_task(
+        SearchTask(keyword=Keyword("k1"), channel=Channel("ed2k")), node_id=_NODE_ID
+    )
     assert registry.is_in_backoff(_CLIENT) is True
     fake_time.advance(timedelta(seconds=3.0))
-    await worker.run_task(SearchTask(keyword=Keyword("k2"), channel=Channel("ed2k")), _NODE_ID)
+    await worker.run_task(
+        SearchTask(keyword=Keyword("k2"), channel=Channel("ed2k")), node_id=_NODE_ID
+    )
     assert client.searches == [("k1", "ed2k"), ("k2", "ed2k")]  # searched again once it expires
 
 
@@ -282,11 +298,15 @@ async def test_the_client_backoff_grows_until_a_search_succeeds(
     worker = _worker(client, observation_store, decision_store, engine, registry, fake_time)
     delays = []
     for _ in range(4):
-        await worker.run_task(SearchTask(keyword=Keyword("k"), channel=Channel("ed2k")), _NODE_ID)
+        await worker.run_task(
+            SearchTask(keyword=Keyword("k"), channel=Channel("ed2k")), node_id=_NODE_ID
+        )
         delays.append(registry.time_until_retry(_CLIENT))
         fake_time.advance(registry.time_until_retry(_CLIENT))
     assert delays == [timedelta(seconds=seconds) for seconds in (2, 4, 8, 16)]
-    await worker.run_task(SearchTask(keyword=Keyword("k"), channel=Channel("ed2k")), _NODE_ID)
+    await worker.run_task(
+        SearchTask(keyword=Keyword("k"), channel=Channel("ed2k")), node_id=_NODE_ID
+    )
     assert _CLIENT not in registry.snapshot()
 
 
@@ -301,7 +321,9 @@ async def test_a_task_is_one_search_given_the_cores_budget(
     worker = _worker(
         client, observation_store, decision_store, engine, _registry(fake_time), fake_time
     )
-    await worker.run_task(SearchTask(keyword=Keyword("keroro"), channel=Channel("kad")), _NODE_ID)
+    await worker.run_task(
+        SearchTask(keyword=Keyword("keroro"), channel=Channel("kad")), node_id=_NODE_ID
+    )
     assert client.searches == [("keroro", "kad")]
     assert client.budgets == [SEARCH_BUDGET_SECONDS] == [120.0]
 
@@ -329,7 +351,9 @@ async def test_successful_search_emits_search_executed_with_network_and_counts(
         fake_time,
         observability_dispatcher=observability.dispatcher,
     )
-    await worker.run_task(SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")), _NODE_ID)
+    await worker.run_task(
+        SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")), node_id=_NODE_ID
+    )
     assert observability.logger.lines == [
         LoggedLine("debug", "search ed2k: 1 observation(s)"),
         LoggedLine("debug", "observation recorded (ed2k)"),
@@ -367,7 +391,9 @@ async def test_search_failure_dispatches_search_failed(
         fake_time,
         observability_dispatcher=observability.dispatcher,
     )
-    await worker.run_task(SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")), _NODE_ID)
+    await worker.run_task(
+        SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")), node_id=_NODE_ID
+    )
     assert observability.logger.lines == [LoggedLine("warning", "search failed on ed2k")]
     assert observability.node_metric_store.read_samples() == (
         NodeMetricSample(
@@ -397,7 +423,9 @@ async def test_transport_failure_during_search_dispatches_client_unreachable(
         fake_time,
         observability_dispatcher=observability.dispatcher,
     )
-    await worker.run_task(SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")), _NODE_ID)
+    await worker.run_task(
+        SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")), node_id=_NODE_ID
+    )
     assert observability.logger.lines == [LoggedLine("warning", "amule-1 unreachable")]
     assert observability.node_metric_store.read_samples() == (
         NodeMetricSample(
@@ -431,7 +459,9 @@ async def test_a_search_logs_on_the_worker_logger_and_a_failed_observation_on_it
         cataloguer_logger=cataloguer_logger,
     )
 
-    await worker.run_task(SearchTask(Keyword("keroro"), Channel("ed2k")), _NODE_ID)
+    await worker.run_task(
+        SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")), node_id=_NODE_ID
+    )
 
     assert logger.lines == [
         LoggedLine("info", "client amule-1: 'keroro'/ed2k → 0 verdict(s) changed"),

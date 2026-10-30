@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from p2pwatch.domain.node_state import NodeState
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class NodeDescription:
     node_state: NodeState
 

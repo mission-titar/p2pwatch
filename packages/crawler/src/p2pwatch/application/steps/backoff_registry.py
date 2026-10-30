@@ -12,7 +12,7 @@ from p2pwatch.domain.persisted_wait import remaining_wait
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState, backoff_delay
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class BackoffPolicy:
     """The backoff's parameters, as PRIMITIVES (spec §5; injected by composition).
 
@@ -33,6 +33,7 @@ class BackoffRegistry:
     def __init__(
         self,
         policy: BackoffPolicy,
+        *,
         wall_clock: WallClock,
         monotonic_clock: MonotonicClock,
         jitter_generator: JitterGenerator,

@@ -42,7 +42,7 @@ class _AlertTimer:
         self._alerted = False
 
     def observe(
-        self, healthy: bool | None, now: MonotonicInstant
+        self, healthy: bool | None, *, now: MonotonicInstant
     ) -> Literal["alert", "recovery"] | None:
         if healthy is None:  # unknown stops the timer; a recovery stays due until a healthy reading
             self._since = None
@@ -106,13 +106,13 @@ class StatusLoop:
                 reachable = True
             await self._observe(
                 self._api_timer,
-                reachable,
-                ClientUnreachableLasting(
+                healthy=reachable,
+                alert=ClientUnreachableLasting(
                     client_name=self._client_name,
                     unreachable_for_seconds=UNREACHABLE_ALERT_AFTER.total_seconds(),
                     node_id=node_id,
                 ),
-                ClientReachableAgain(client_name=self._client_name, node_id=node_id),
+                recovery=ClientReachableAgain(client_name=self._client_name, node_id=node_id),
             )
             for channel, connected, connectable in readings:
                 await self._observability_dispatcher.dispatch(
@@ -132,15 +132,15 @@ class StatusLoop:
                         self._channel_timers.setdefault(
                             (channel, field), _AlertTimer(CHANNEL_ALERT_AFTER)
                         ),
-                        healthy,
-                        ChannelDegraded(
+                        healthy=healthy,
+                        alert=ChannelDegraded(
                             client_name=self._client_name,
                             channel=channel,
                             field=field,
                             degraded_for_seconds=CHANNEL_ALERT_AFTER.total_seconds(),
                             node_id=node_id,
                         ),
-                        ChannelRecovered(
+                        recovery=ChannelRecovered(
                             client_name=self._client_name,
                             channel=channel,
                             field=field,
@@ -152,12 +152,12 @@ class StatusLoop:
     def _publish(self, status: ClientStatus | None) -> None:
         reading = StatusReading(read_at=self._wall_clock.now(), status=status)
         self._status_reading_writer.set_reading(
-            self._client_name, reading, self._monotonic_clock.now()
+            self._client_name, reading=reading, published_at=self._monotonic_clock.now()
         )
 
     async def _observe(
-        self, timer: _AlertTimer, healthy: bool | None, alert: Event, recovery: Event
+        self, timer: _AlertTimer, *, healthy: bool | None, alert: Event, recovery: Event
     ) -> None:
-        change = timer.observe(healthy, self._monotonic_clock.now())
+        change = timer.observe(healthy, now=self._monotonic_clock.now())
         if change is not None:
             await self._observability_dispatcher.dispatch(alert if change == "alert" else recovery)

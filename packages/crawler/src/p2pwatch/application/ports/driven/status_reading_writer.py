@@ -12,6 +12,6 @@ class StatusReadingWriter(ABC):
 
     @abstractmethod
     def set_reading(
-        self, client_name: ClientName, reading: StatusReading, published_at: MonotonicInstant
+        self, client_name: ClientName, *, reading: StatusReading, published_at: MonotonicInstant
     ) -> None:
         """Replaces the client's reading."""

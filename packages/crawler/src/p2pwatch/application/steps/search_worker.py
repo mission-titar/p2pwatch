@@ -23,7 +23,7 @@ from p2pwatch.domain.search.backoff import BackoffKey
 SEARCH_BUDGET_SECONDS = 120.0
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SearchTask:
     """A unit of work: a keyword on a channel (spec §4)."""
 
@@ -70,7 +70,7 @@ class SearchWorker:
         )
 
     async def _record_observations(
-        self, channel: Channel, answer: SearchAnswer, node_id: NodeId
+        self, channel: Channel, *, answer: SearchAnswer, node_id: NodeId
     ) -> int:
         """Per-obs pipeline; returns the number of CHANGED verdicts (logging). A
         ``StoreError`` per obs is ABSORBED inside ``Cataloguer.catalog`` (spec §7)."""
@@ -84,15 +84,19 @@ class SearchWorker:
         )
         changed = 0
         for reported_file in answer.reported_files:
-            if await self._cataloguer.catalog(reported_file, self._client_name, channel, node_id):
+            if await self._cataloguer.catalog(
+                reported_file, client_name=self._client_name, channel=channel, node_id=node_id
+            ):
                 changed += 1
         return changed
 
-    async def run_task(self, task: SearchTask, node_id: NodeId) -> None:
+    async def run_task(self, task: SearchTask, *, node_id: NodeId) -> None:
         """One search, run once ``time_until_ready`` is zero. Never raises: backs off and logs."""
         channel_backoff_key = BackoffKey(client_name=self._client_name, channel=task.channel)
         try:
-            answer = await self._client.search(task.keyword, task.channel, SEARCH_BUDGET_SECONDS)
+            answer = await self._client.search(
+                task.keyword, channel=task.channel, budget_seconds=SEARCH_BUDGET_SECONDS
+            )
         except SearchFailedError as error:
             delay = self._backoff.record_failure(channel_backoff_key)
             self._logger.warning(
@@ -118,7 +122,7 @@ class SearchWorker:
                 ClientUnreachable(client_name=self._client_name)
             )
             return
-        changed = await self._record_observations(task.channel, answer, node_id)
+        changed = await self._record_observations(task.channel, answer=answer, node_id=node_id)
         self._backoff.reset(channel_backoff_key)
         self._backoff.reset(self._client_backoff_key)
         self._logger.info(

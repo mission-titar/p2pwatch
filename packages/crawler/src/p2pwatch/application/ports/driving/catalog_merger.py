@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import PurePath
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class NewCatalog:
     """A destination outside the sources, refused if it exists unless ``force``."""
 
@@ -14,7 +14,7 @@ class NewCatalog:
     force: bool
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ListedSourceCatalog:
     """A destination that is one of the sources: the others are merged into it."""
 
@@ -26,6 +26,6 @@ class CatalogMerger(ABC):
 
     @abstractmethod
     def merge_catalogs(
-        self, source_catalogs: Sequence[PurePath], destination: NewCatalog | ListedSourceCatalog
+        self, source_catalogs: Sequence[PurePath], *, destination: NewCatalog | ListedSourceCatalog
     ) -> None:
         """Returns once every source is in ``destination``; raises ``MergeError`` otherwise."""

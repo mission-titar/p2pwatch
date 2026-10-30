@@ -69,10 +69,10 @@ class _Crawl:
         self.backoff_state_store = FakeBackoffStateStore()
         self.backoff = BackoffRegistry(
             _POLICY,
-            self.fake_time.wall,
-            self.fake_time.monotonic,
-            FakeJitterGenerator(),
-            self.backoff_state_store,
+            wall_clock=self.fake_time.wall,
+            monotonic_clock=self.fake_time.monotonic,
+            jitter_generator=FakeJitterGenerator(),
+            backoff_state_reader=self.backoff_state_store,
         )
         self._loops_started = 0
         self._both_loops_started = asyncio.Event()

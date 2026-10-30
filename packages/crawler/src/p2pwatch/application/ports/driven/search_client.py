@@ -15,7 +15,7 @@ class SearchClient(ABC):
 
     @abstractmethod
     async def search(
-        self, keyword: Keyword, channel: Channel, budget_seconds: float
+        self, keyword: Keyword, *, channel: Channel, budget_seconds: float
     ) -> SearchAnswer:
         """Returns once the client signals the end, or ``budget_seconds`` after the search's
         network start at the latest."""

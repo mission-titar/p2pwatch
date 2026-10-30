@@ -39,6 +39,6 @@ class SourceReader(ABC):
 
     @abstractmethod
     def read_sharing_periods(
-        self, file: FileKey, window: PeriodWindow
+        self, file: FileKey, *, window: PeriodWindow
     ) -> tuple[SharingPeriod, ...]:
         """The file's sharing periods in ``window``, newest first; cut at its edges."""

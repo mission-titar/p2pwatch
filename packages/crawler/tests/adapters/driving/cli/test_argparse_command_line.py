@@ -120,7 +120,9 @@ def test_validate_config_words_the_problem_of_a_wrong_config(
     capsys: pytest.CaptureFixture[str], key: str | None, line: str
 ) -> None:
     config_report = ConfigReport(
-        problems=(ConfigProblem(PurePath("/srv/c.yml"), key, "list expected"),)
+        problems=(
+            ConfigProblem(file_path=PurePath("/srv/c.yml"), key=key, message="list expected"),
+        )
     )
     config_validator = FakeConfigValidator(config_report)
 
@@ -200,9 +202,9 @@ _B = PurePath("/data/b.db")
 @pytest.mark.parametrize(
     ("options", "destination"),
     [
-        (["--output", "out.db"], NewCatalog(_CWD / "out.db", force=False)),
-        (["-o", "/data/out.db", "--force"], NewCatalog(PurePath("/data/out.db"), force=True)),
-        (["--into", "a.db"], ListedSourceCatalog(_A)),
+        (["--output", "out.db"], NewCatalog(path=_CWD / "out.db", force=False)),
+        (["-o", "/data/out.db", "--force"], NewCatalog(path=PurePath("/data/out.db"), force=True)),
+        (["--into", "a.db"], ListedSourceCatalog(path=_A)),
     ],
 )
 def test_merge_merges_the_catalogs_given_into_the_destination_given_relative_ones_under_cwd(

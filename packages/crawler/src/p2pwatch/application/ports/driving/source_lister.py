@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from p2pwatch.domain.known_source import KnownSource
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SourceListing:
     known_sources: tuple[KnownSource, ...]  # the page asked for
     has_next_page: bool  # the page is full, so the next one may hold more

@@ -42,7 +42,7 @@ class SummarizeCrawl(CrawlSummarizer):
         return CrawlSummary(
             client_summaries=tuple(
                 ClientSummary(
-                    client_name,
+                    client_name=client_name,
                     reading=None if published is None else published.reading,
                     is_fresh=published is not None
                     and is_reading_fresh(now - published.published_at),

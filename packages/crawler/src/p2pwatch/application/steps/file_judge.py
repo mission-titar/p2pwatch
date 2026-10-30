@@ -53,7 +53,9 @@ class FileJudge:
         self._observability_dispatcher = observability_dispatcher
         self._wall_clock = wall_clock
 
-    async def rejudge(self, file: FileKey, base_candidate: FileCandidate, node_id: NodeId) -> int:
+    async def rejudge(
+        self, file: FileKey, *, base_candidate: FileCandidate, node_id: NodeId
+    ) -> int:
         """Judge the file on all its known filenames for every target, then record what changed
         (``base_candidate`` gives the fields other than the filename).
 

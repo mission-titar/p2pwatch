@@ -42,7 +42,7 @@ _SQL = "SELECT native_id FROM files"
 _ANSWER = QueryAnswer(
     columns=("native_id",), rows=((_HASH_A,),), elapsed=timedelta(milliseconds=3), truncated=False
 )
-_CONSOLE_QUERY_RUN = ConsoleQueryRun(_ANSWER, row_cap=1000)
+_CONSOLE_QUERY_RUN = ConsoleQueryRun(query_answer=_ANSWER, row_cap=1000)
 _UNKNOWN_DB = "Unknown database. Choose catalog.db or local.db."
 
 # ---------------------------------------------------------------------------
@@ -79,15 +79,29 @@ def _build(console_query_runner: FakeConsoleQueryRunner) -> Starlette:
         crawl_pauser=FakeCrawlPauser(),  # the console routes never call the controls
         crawl_resumer=FakeCrawlResumer(),
         shutdown_requester=FakeShutdownRequester(),
-        crawl_summarizer=FakeCrawlSummarizer(CrawlSummary((), False, node_state, ())),
-        node_describer=FakeNodeDescriber(NodeDescription(node_state)),
-        file_lister=FakeFileLister(FileListing((), False, 0, 0, {})),
+        crawl_summarizer=FakeCrawlSummarizer(
+            CrawlSummary(
+                client_summaries=(), is_paused=False, node_state=node_state, target_coverages=()
+            )
+        ),
+        node_describer=FakeNodeDescriber(NodeDescription(node_state=node_state)),
+        file_lister=FakeFileLister(
+            FileListing(
+                catalog_entries=(),
+                has_next_page=False,
+                matched_file_count=0,
+                total_file_count=0,
+                file_count_by_tier={},
+            )
+        ),
         file_describer=FakeFileDescriber(None),
-        source_lister=FakeSourceLister(SourceListing((), has_next_page=False, source_count=0)),
+        source_lister=FakeSourceLister(
+            SourceListing(known_sources=(), has_next_page=False, source_count=0)
+        ),
         source_describer=FakeSourceDescriber(None),
         source_name_describer=FakeSourceNameDescriber(None),
         console_query_runner=console_query_runner,
-        node_metric_lister=FakeNodeMetricLister(NodeMetricListing({})),
+        node_metric_lister=FakeNodeMetricLister(NodeMetricListing(samples_by_node_metric={})),
         amule_url="http://localhost:4711",
     )
 
@@ -216,7 +230,7 @@ async def test_post_console_query_failure_shows_error_banner() -> None:
 @pytest.mark.asyncio
 async def test_post_console_truncation_banner_names_the_row_cap() -> None:
     """A truncated answer renders the banner with the cap the run carries."""
-    console_query_run = ConsoleQueryRun(replace(_ANSWER, truncated=True), row_cap=1000)
+    console_query_run = ConsoleQueryRun(query_answer=replace(_ANSWER, truncated=True), row_cap=1000)
     resp, _ = await _post("/console", {"sql": _SQL, "db": "catalog"}, console_query_run)
     assert resp.status_code == 200
     assert (

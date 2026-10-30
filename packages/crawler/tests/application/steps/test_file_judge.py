@@ -132,7 +132,9 @@ async def _record(
     )
     judge = _file_judge(observation_store, decision_store, engine, waker, observability, wall_clock)
     return await judge.rejudge(
-        _key(native_id), _reported_file(native_id, filename).to_candidate(), _NODE_ID
+        _key(native_id),
+        base_candidate=_reported_file(native_id, filename).to_candidate(),
+        node_id=_NODE_ID,
     )
 
 
@@ -591,7 +593,9 @@ async def test_a_file_with_no_name_left_is_named_by_the_candidate(
     observability, waker = ObservabilityOverFakes(), FakeWaker()
     judge = _file_judge(observation_store, decision_store, engine, waker, observability, wall_clock)
     await judge.rejudge(
-        _key(_HASH_CAT), _reported_file(_HASH_CAT, _DISCARD_NAME).to_candidate(), _NODE_ID
+        _key(_HASH_CAT),
+        base_candidate=_reported_file(_HASH_CAT, _DISCARD_NAME).to_candidate(),
+        node_id=_NODE_ID,
     )
     assert observability.logger.lines == [
         _decisions_line(_HASH_CAT, _DISCARD_NAME, "062A notify → retracted")
@@ -624,7 +628,9 @@ async def test_each_row_carries_the_instant_read_right_before_its_write(
         FakeTickingWallClock(FakeTime(start)),
     )
     await judge.rejudge(
-        _key(_HASH_MULTI), _reported_file(_HASH_MULTI, _MULTI_NAME).to_candidate(), _NODE_ID
+        _key(_HASH_MULTI),
+        base_candidate=_reported_file(_HASH_MULTI, _MULTI_NAME).to_candidate(),
+        node_id=_NODE_ID,
     )
     assert rows(
         catalog_connection,
