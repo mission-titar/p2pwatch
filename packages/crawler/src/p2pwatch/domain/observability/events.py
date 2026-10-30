@@ -16,7 +16,7 @@ from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.source import SourceKey
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SearchExecuted:
     client_name: ClientName
     channel: Channel
@@ -24,24 +24,24 @@ class SearchExecuted:
     skipped_result_count: int  # results the client could not read: a drift of its protocol
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ClientUnreachable:
     client_name: ClientName
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SearchFailed:
     client_name: ClientName
     channel: Channel
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ObservationRecorded:
     client_name: ClientName
     channel: Channel
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class DecisionChange:
     target_id: TargetId
     title: str
@@ -49,13 +49,13 @@ class DecisionChange:
     new_decision: FileTargetDecision
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class TargetTitle:
     target_id: TargetId
     title: str
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class DecisionsRecorded:
     # What one evaluation of a file changed in its judgement, all its targets together.
     file: FileKey
@@ -65,12 +65,12 @@ class DecisionsRecorded:
     node_id: NodeId
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class DownloadQueued:
     target_id: TargetId
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class DownloadCompleted:
     file: FileKey
     filename: str  # the clean name, the most sourced
@@ -81,7 +81,7 @@ class DownloadCompleted:
 type ChannelField = Literal["connected", "connectable"]
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ChannelStatusSampled:
     # One status reading of a channel; None is unknown (the client's API did not answer).
     client_name: ClientName
@@ -90,7 +90,7 @@ class ChannelStatusSampled:
     connectable: bool | None
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ChannelDegraded:
     # A channel's field has read False for ``degraded_for_seconds``: emitted once until it recovers.
     client_name: ClientName
@@ -100,7 +100,7 @@ class ChannelDegraded:
     node_id: NodeId
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ChannelRecovered:
     client_name: ClientName
     channel: Channel
@@ -108,7 +108,7 @@ class ChannelRecovered:
     node_id: NodeId
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ClientUnreachableLasting:
     # No answer from the client's API for ``unreachable_for_seconds``: emitted once until one comes.
     client_name: ClientName
@@ -116,18 +116,18 @@ class ClientUnreachableLasting:
     node_id: NodeId
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ClientReachableAgain:
     client_name: ClientName
     node_id: NodeId
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class FreeSpaceSampled:
     free_bytes: int  # the download cycle's statvfs on the output directory
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class DiskSpaceLow:
     # Emitted only on the crossing below the floor: the download loop owns the edge.
     free_bytes: int
@@ -135,7 +135,7 @@ class DiskSpaceLow:
     node_id: NodeId
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SourceFirstUseful:
     # A source read useful for the first time on this node (source points spec, D5).
     source: SourceKey
@@ -146,7 +146,7 @@ class SourceFirstUseful:
     node_id: NodeId
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SourceReappeared:
     # A source useful after ``absent_for_seconds`` with no point, useful or not useful (D9).
     source: SourceKey
@@ -158,7 +158,7 @@ class SourceReappeared:
     node_id: NodeId
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class CrawlerStarted:
     download_enabled: bool
     node_id: NodeId

@@ -55,7 +55,7 @@ def fold_raw_metadata(
     )
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ReportedFile:
     """A file a search reported, whose result names no source; ``keyword`` is its provenance.
     Media fields are ``None`` when the network did not report them (self-declared, unreliable)."""
@@ -79,7 +79,7 @@ class ReportedFile:
         )
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class FileObservation:
     """A reported file and the instant the crawler learned of it, which the network never dates,
     by the node ``node_id``."""

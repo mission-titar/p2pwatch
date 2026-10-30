@@ -38,7 +38,7 @@ from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
 _FINGERPRINT = "policy-2"
-_KAD = BackoffKey(ClientName("amuled"), Channel("kad"))
+_KAD = BackoffKey(client_name=ClientName("amuled"), channel=Channel("kad"))
 _POLICY = BackoffPolicy(base_seconds=2.0, cap_seconds=600.0, factor=2.0, jitter_ratio=0.0)
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _FILENAME = "Keroro N°062A Les demoiselles cambrioleuses.avi"
@@ -145,7 +145,11 @@ async def test_the_crawler_starts_under_the_stored_node_id_and_runs_each_loop_wi
     assert crawl.observability.notifier.calls == [
         (
             Audience.OPERATIONS,
-            RelayedLogLine("🟢 node online (download off)", Severity.INFO, NodeId("stored-node")),
+            RelayedLogLine(
+                message="🟢 node online (download off)",
+                severity=Severity.INFO,
+                node_id=NodeId("stored-node"),
+            ),
         )
     ]
     assert crawl.steps == [
@@ -182,7 +186,11 @@ async def test_the_download_loop_shows_in_the_start(
     assert crawl.observability.notifier.calls == [
         (
             Audience.OPERATIONS,
-            RelayedLogLine("🟢 node online (download on)", Severity.INFO, NodeId("stored-node")),
+            RelayedLogLine(
+                message="🟢 node online (download on)",
+                severity=Severity.INFO,
+                node_id=NodeId("stored-node"),
+            ),
         )
     ]
 
@@ -202,10 +210,18 @@ async def test_a_changed_policy_is_re_evaluated_under_the_node_id_after_the_star
         stored_fingerprint="policy-1",
     )
     reported_file = ReportedFile(
-        FileKey(Network.ED2K, _HASH), _FILENAME, 234_000_000, 3, Keyword("keroro")
+        file=FileKey(network=Network.ED2K, native_id=_HASH),
+        filename=_FILENAME,
+        size_bytes=234_000_000,
+        source_count=3,
+        keyword=Keyword("keroro"),
     )
     observation_store.record_observation(
-        FileObservation(reported_file, crawl.fake_time.wall.now(), NodeId("stored-node"))
+        FileObservation(
+            reported_file=reported_file,
+            observed_at=crawl.fake_time.wall.now(),
+            node_id=NodeId("stored-node"),
+        )
     )
 
     await crawl.run_until_both_loops_start_then_stop()
@@ -234,7 +250,7 @@ async def test_the_backoff_waits_the_previous_run_saved_are_resumed_before_the_l
 ) -> None:
     crawl = _Crawl(observation_store, decision_store, catalog_scan_reader, engine)
     started_at = crawl.fake_time.wall.now() - timedelta(seconds=100)
-    saved = {_KAD: BackoffState(1, started_at, timedelta(seconds=300))}
+    saved = {_KAD: BackoffState(attempts=1, started_at=started_at, delay=timedelta(seconds=300))}
     crawl.backoff_state_store.set_backoff_states(saved)
 
     await crawl.run_until_both_loops_start_then_stop()

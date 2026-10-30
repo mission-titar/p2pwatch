@@ -15,7 +15,7 @@ def is_reading_fresh(age: timedelta) -> bool:
     return age <= READING_FRESH_FOR
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ChannelStatus:
     """``connectable``: peers can connect to us; ``None`` when the client cannot tell."""
 
@@ -24,19 +24,19 @@ class ChannelStatus:
     connectable: bool | None
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ClientStatus:
     version: str | None
     channels: tuple[ChannelStatus, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class StatusReading:
     read_at: datetime  # for display: a reading's age is measured on the monotonic clock
     status: ClientStatus | None  # None: the client's API did not answer
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class PublishedReading:
     reading: StatusReading
     published_at: MonotonicInstant

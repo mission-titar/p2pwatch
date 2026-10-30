@@ -28,8 +28,8 @@ from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import insert_file
 
-_FILE = FileKey(Network.ED2K, "a" * 32)
-_KEY = SourceKey(Network.ED2K, "1f2e" * 8)
+_FILE = FileKey(network=Network.ED2K, native_id="a" * 32)
+_KEY = SourceKey(network=Network.ED2K, native_id="1f2e" * 8)
 _T0 = datetime(2026, 10, 13, 20, 0, tzinfo=UTC)
 _T0_US = int(_T0.timestamp()) * 1_000_000
 _POLL = timedelta(seconds=30)
@@ -54,7 +54,13 @@ def _point(
     role: SourceRole = _Q, *, counter: int = 0, index: int = 0, node_id: NodeId = _NODE_ID
 ) -> SourcePoint:
     """A point of ``_FILE`` with its reading's role, ``index`` reads after ``_T0``."""
-    return SourcePoint(_FILE, _reading(role, counter=counter), role, _T0 + index * _POLL, node_id)
+    return SourcePoint(
+        file=_FILE,
+        reading=_reading(role, counter=counter),
+        role=role,
+        observed_at=_T0 + index * _POLL,
+        node_id=node_id,
+    )
 
 
 @pytest.fixture
@@ -128,7 +134,13 @@ def test_a_change_of_role_leaves_two_variants(
 def test_a_point_is_written_with_its_role_a_carried_one_included(
     source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
-    source_point_store.record_points([SourcePoint(_FILE, _reading(None), _Q, _T0, NodeId("n1"))])
+    source_point_store.record_points(
+        [
+            SourcePoint(
+                file=_FILE, reading=_reading(None), role=_Q, observed_at=_T0, node_id=NodeId("n1")
+            )
+        ]
+    )
     assert _points(catalog) == [_point_row("queued", _T0_US, 0)]
 
 
@@ -136,7 +148,9 @@ def test_a_point_without_identity_writes_its_variant_and_no_source(
     source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
     reading = dataclasses.replace(_reading(), source=None)
-    source_point_store.record_points([SourcePoint(_FILE, reading, _Q, _T0, NodeId("n1"))])
+    source_point_store.record_points(
+        [SourcePoint(file=_FILE, reading=reading, role=_Q, observed_at=_T0, node_id=NodeId("n1"))]
+    )
     variants = rows(catalog, "SELECT source_id, name FROM source_variants")
     assert variants == [{"source_id": None, "name": "AnimuseeFMR"}]
     assert _source_count(catalog) == 0
@@ -176,11 +190,13 @@ def test_the_variant_and_the_source_are_written_as_d2_states(
 ) -> None:
     reading = dataclasses.replace(
         _reading(),
-        contact_point=ContactPoint(Network.ED2K, "176.103.48.36:4184"),
+        contact_point=ContactPoint(network=Network.ED2K, server="176.103.48.36:4184"),
         connectable=True,
         raw_metadata=(("source_origin", "kad"), ("protocol_extensions", ("a", "b"))),
     )
-    source_point_store.record_points([SourcePoint(_FILE, reading, _Q, _T0, NodeId("n1"))])
+    source_point_store.record_points(
+        [SourcePoint(file=_FILE, reading=reading, role=_Q, observed_at=_T0, node_id=NodeId("n1"))]
+    )
     raw_metadata = '{"protocol_extensions": ["a", "b"], "source_origin": "kad"}'
     columns: list[object] = [_FILE.file_id.hex(), _KEY.source_id.hex(), "AnimuseeFMR"]
     columns += ["emule 0.50a", "queued", "176.103.48.36:4184", True, raw_metadata, "n1"]
@@ -211,8 +227,14 @@ def test_the_variant_and_the_source_are_written_as_d2_states(
 def test_a_failed_write_rolls_back_the_whole_call(
     source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
-    unknown = FileKey(Network.ED2K, "d" * 32)
+    unknown = FileKey(network=Network.ED2K, native_id="d" * 32)
     with pytest.raises(PersistenceError, match="FOREIGN KEY"):
-        source_point_store.record_points([SourcePoint(unknown, _reading(), _Q, _T0, NodeId("n1"))])
+        source_point_store.record_points(
+            [
+                SourcePoint(
+                    file=unknown, reading=_reading(), role=_Q, observed_at=_T0, node_id=NodeId("n1")
+                )
+            ]
+        )
     assert _source_count(catalog) == 0
     assert not catalog.in_transaction

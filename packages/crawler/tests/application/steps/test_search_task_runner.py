@@ -154,7 +154,11 @@ def test_a_task_records_its_observations_under_the_node_id_the_tasks_run_with(
     tasks: _Tasks, catalog_connection: sqlite3.Connection
 ) -> None:
     reported_file = ReportedFile(
-        FileKey(Network.ED2K, "a" * 32), "keroro.avi", 1, 1, Keyword("keroro")
+        file=FileKey(network=Network.ED2K, native_id="a" * 32),
+        filename="keroro.avi",
+        size_bytes=1,
+        source_count=1,
+        keyword=Keyword("keroro"),
     )
     tasks.run_for(
         40.0,
@@ -209,7 +213,7 @@ def test_the_backoff_is_saved_at_each_change(tasks: _Tasks) -> None:
     )
     tasks.run_for(_HOUR, client=client, keywords=["keroro"])
     assert [set(saved) for saved in tasks.state.saved] == [
-        {BackoffKey(ClientName("amuled"), Channel("kad"))},
+        {BackoffKey(client_name=ClientName("amuled"), channel=Channel("kad"))},
         set(),
     ]
     assert tasks.state.read_backoff_states() == {}
@@ -219,8 +223,8 @@ def test_the_backoff_resumed_after_the_tasks_were_built_is_not_saved_again(
     tasks: _Tasks,
 ) -> None:
     resumed = {
-        BackoffKey(ClientName("amuled"), Channel("ed2k")): BackoffState(
-            1, EPOCH, timedelta(seconds=60)
+        BackoffKey(client_name=ClientName("amuled"), channel=Channel("ed2k")): BackoffState(
+            attempts=1, started_at=EPOCH, delay=timedelta(seconds=60)
         )
     }
     tasks.state.set_backoff_states(resumed)  # the previous run's save
@@ -244,8 +248,12 @@ def test_a_failed_save_is_logged_and_retried_after_the_next_search(tasks: _Tasks
     assert tasks.logger.lines == [
         LoggedLine("error", "backoff not saved (database is locked): retried after the next search")
     ]
-    second_failure = BackoffState(2, EPOCH + timedelta(seconds=60), timedelta(seconds=120))
-    assert tasks.state.saved == [{BackoffKey(ClientName("amuled"), Channel("kad")): second_failure}]
+    second_failure = BackoffState(
+        attempts=2, started_at=EPOCH + timedelta(seconds=60), delay=timedelta(seconds=120)
+    )
+    assert tasks.state.saved == [
+        {BackoffKey(client_name=ClientName("amuled"), channel=Channel("kad")): second_failure}
+    ]
 
 
 def test_a_search_that_never_suspends_does_not_starve_the_loop(tasks: _Tasks) -> None:

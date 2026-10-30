@@ -43,6 +43,6 @@ class DownloadLabeler:
         ):
             target_ids = [queued]
         return tuple(
-            TargetTitle(target_id, self._title_by_target_id.get(target_id, ""))
+            TargetTitle(target_id=target_id, title=self._title_by_target_id.get(target_id, ""))
             for target_id in target_ids
         )

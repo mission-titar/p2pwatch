@@ -18,7 +18,7 @@ class Network(StrEnum):
     ED2K = "ed2k"
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class FileKey:
     """A file as its network names it: for ``ED2K``, the 32 lowercase hex of its MD4."""
 

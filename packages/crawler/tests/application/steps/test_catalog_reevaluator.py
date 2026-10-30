@@ -89,7 +89,7 @@ class _Reevaluation:
 
 def _reported_file(native_id: str, filename: str) -> ReportedFile:
     return ReportedFile(
-        file=FileKey(Network.ED2K, native_id),
+        file=FileKey(network=Network.ED2K, native_id=native_id),
         filename=filename,
         size_bytes=234_000_000,
         source_count=3,
@@ -107,7 +107,11 @@ async def test_an_unchanged_policy_skips_the_re_evaluation(
     wall_clock: FakeWallClock,
 ) -> None:
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now(), _NODE_ID)
+        FileObservation(
+            reported_file=_reported_file(_HASH_DL, _DL_NAME),
+            observed_at=wall_clock.now(),
+            node_id=_NODE_ID,
+        )
     )
     reevaluation = _Reevaluation(
         observation_store,
@@ -185,10 +189,18 @@ async def test_two_changed_rows_are_all_evaluated_and_written(
 ) -> None:
     # Never decided: both will change.
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now(), _NODE_ID)
+        FileObservation(
+            reported_file=_reported_file(_HASH_DL, _DL_NAME),
+            observed_at=wall_clock.now(),
+            node_id=_NODE_ID,
+        )
     )
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now(), _NODE_ID)
+        FileObservation(
+            reported_file=_reported_file(_HASH_CAT, _CAT_NAME),
+            observed_at=wall_clock.now(),
+            node_id=_NODE_ID,
+        )
     )
     reevaluation = _Reevaluation(
         observation_store, decision_store, catalog_scan_reader, engine, wall_clock
@@ -224,7 +236,11 @@ async def test_unchanged_row_is_evaluated_but_not_written(
     wall_clock: FakeWallClock,
 ) -> None:
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now(), _NODE_ID)
+        FileObservation(
+            reported_file=_reported_file(_HASH_CAT, _CAT_NAME),
+            observed_at=wall_clock.now(),
+            node_id=_NODE_ID,
+        )
     )
     candidate = _reported_file(_HASH_CAT, _CAT_NAME).to_candidate()
     decisions = engine.evaluate_file((candidate,))
@@ -232,7 +248,10 @@ async def test_unchanged_row_is_evaluated_but_not_written(
     # pre-seed the "already correct" verdict
     decision_store.record_decision(
         DatedDecision(
-            FileKey(Network.ED2K, _HASH_CAT), to_record(decisions[0]), wall_clock.now(), _NODE_ID
+            file=FileKey(network=Network.ED2K, native_id=_HASH_CAT),
+            decision=to_record(decisions[0]),
+            decided_at=wall_clock.now(),
+            node_id=_NODE_ID,
         )
     )
     reevaluation = _Reevaluation(
@@ -259,16 +278,24 @@ async def test_store_error_on_one_row_is_absorbed_and_sweep_continues(
     wall_clock: FakeWallClock,
 ) -> None:
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now(), _NODE_ID)
+        FileObservation(
+            reported_file=_reported_file(_HASH_DL, _DL_NAME),
+            observed_at=wall_clock.now(),
+            node_id=_NODE_ID,
+        )
     )
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now(), _NODE_ID)
+        FileObservation(
+            reported_file=_reported_file(_HASH_CAT, _CAT_NAME),
+            observed_at=wall_clock.now(),
+            node_id=_NODE_ID,
+        )
     )
     # TEST trigger: makes the match_decisions INSERT fail for ONE hash only -> that row's
     # helper call raises StoreError, the other row must still be processed.
     catalog_connection.execute(
         "CREATE TRIGGER boom BEFORE INSERT ON match_decisions"
-        f" WHEN NEW.file_id = x'{FileKey(Network.ED2K, _HASH_DL).file_id.hex()}'"
+        f" WHEN NEW.file_id = x'{FileKey(network=Network.ED2K, native_id=_HASH_DL).file_id.hex()}'"
         " BEGIN SELECT RAISE(ABORT, 'injected failure'); END"
     )
     reevaluation = _Reevaluation(
@@ -278,7 +305,10 @@ async def test_store_error_on_one_row_is_absorbed_and_sweep_continues(
     await reevaluation.run()
 
     assert decision_tiers(catalog_connection) == [(_HASH_CAT, "catalog")]
-    assert decision_store.read_latest_decisions(FileKey(Network.ED2K, _HASH_DL)) == {}
+    assert (
+        decision_store.read_latest_decisions(FileKey(network=Network.ED2K, native_id=_HASH_DL))
+        == {}
+    )
     assert reevaluation.logger.lines == [
         LoggedLine(
             "error",
@@ -300,16 +330,20 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
     # §10: an old "unidentified" row under an arbitrary target_id (001A/catalog) is retracted
     # by the set-diff when the file becomes identified (062A + 062B) on the re-evaluation pass.
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_MULTI, _MULTI_NAME), wall_clock.now(), _NODE_ID)
+        FileObservation(
+            reported_file=_reported_file(_HASH_MULTI, _MULTI_NAME),
+            observed_at=wall_clock.now(),
+            node_id=_NODE_ID,
+        )
     )
     decision_store.record_decision(
         DatedDecision(
-            FileKey(Network.ED2K, _HASH_MULTI),
-            DecisionRecord(
+            file=FileKey(network=Network.ED2K, native_id=_HASH_MULTI),
+            decision=DecisionRecord(
                 target_id=TargetId("001A"), rule_name="keroro_large", tier=DecisionTier.CATALOG
             ),
-            wall_clock.now(),
-            _NODE_ID,
+            decided_at=wall_clock.now(),
+            node_id=_NODE_ID,
         )
     )
     reevaluation = _Reevaluation(
@@ -321,14 +355,16 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
     assert reevaluation.logger.lines == [  # 062A + 062B + retract 001A
         LoggedLine("info", "catalogue re-evaluated: 1 files, 3 rows written")
     ]
-    assert decision_store.read_latest_decisions(FileKey(Network.ED2K, _HASH_MULTI)) == {
+    assert decision_store.read_latest_decisions(
+        FileKey(network=Network.ED2K, native_id=_HASH_MULTI)
+    ) == {
         "062A": DecisionRecord(
             target_id=TargetId("062A"), rule_name="numero_nu_confirmed", tier=DecisionTier.DOWNLOAD
         ),
         "062B": DecisionRecord(
             target_id=TargetId("062B"), rule_name="numero_nu_confirmed", tier=DecisionTier.DOWNLOAD
         ),
-        TargetId("001A"): Retraction(TargetId("001A")),
+        TargetId("001A"): Retraction(target_id=TargetId("001A")),
     }
 
 
@@ -343,11 +379,18 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
 ) -> None:
     # §10: the old whole-file retraction sentinel (target_id="") is invisible to the set-diff.
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_MULTI, _MULTI_NAME), wall_clock.now(), _NODE_ID)
+        FileObservation(
+            reported_file=_reported_file(_HASH_MULTI, _MULTI_NAME),
+            observed_at=wall_clock.now(),
+            node_id=_NODE_ID,
+        )
     )
     decision_store.record_decision(
         DatedDecision(
-            FileKey(Network.ED2K, _HASH_MULTI), Retraction(TargetId("")), wall_clock.now(), _NODE_ID
+            file=FileKey(network=Network.ED2K, native_id=_HASH_MULTI),
+            decision=Retraction(target_id=TargetId("")),
+            decided_at=wall_clock.now(),
+            node_id=_NODE_ID,
         )
     )
     reevaluation = _Reevaluation(
@@ -359,7 +402,9 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
     assert reevaluation.logger.lines == [  # only 062A + 062B; "" untouched
         LoggedLine("info", "catalogue re-evaluated: 1 files, 2 rows written")
     ]
-    assert set(decision_store.read_latest_decisions(FileKey(Network.ED2K, _HASH_MULTI))) == {
+    assert set(
+        decision_store.read_latest_decisions(FileKey(network=Network.ED2K, native_id=_HASH_MULTI))
+    ) == {
         "062A",
         "062B",
     }
@@ -379,11 +424,19 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
     wall_clock: FakeWallClock,
 ) -> None:
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now(), _NODE_ID)
+        FileObservation(
+            reported_file=_reported_file(_HASH_DL, _DL_NAME),
+            observed_at=wall_clock.now(),
+            node_id=_NODE_ID,
+        )
     )
     fake_time.advance(timedelta(minutes=1))  # the latest name matches nothing
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_DL, "random.txt"), wall_clock.now(), _NODE_ID)
+        FileObservation(
+            reported_file=_reported_file(_HASH_DL, "random.txt"),
+            observed_at=wall_clock.now(),
+            node_id=_NODE_ID,
+        )
     )
     reevaluation = _Reevaluation(
         observation_store, decision_store, catalog_scan_reader, engine, wall_clock
@@ -394,7 +447,9 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
     assert reevaluation.logger.lines == [
         LoggedLine("info", "catalogue re-evaluated: 1 files, 1 rows written")
     ]
-    assert decision_store.read_latest_decisions(FileKey(Network.ED2K, _HASH_DL)) == {
+    assert decision_store.read_latest_decisions(
+        FileKey(network=Network.ED2K, native_id=_HASH_DL)
+    ) == {
         "062A": DecisionRecord(
             target_id=TargetId("062A"), rule_name="id_segment_exact", tier=DecisionTier.DOWNLOAD
         )
@@ -410,13 +465,25 @@ async def test_progress_is_logged_at_each_multiple_of_the_cadence_only(
     wall_clock: FakeWallClock,
 ) -> None:
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_DL, _DL_NAME), wall_clock.now(), _NODE_ID)
+        FileObservation(
+            reported_file=_reported_file(_HASH_DL, _DL_NAME),
+            observed_at=wall_clock.now(),
+            node_id=_NODE_ID,
+        )
     )
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_CAT, _CAT_NAME), wall_clock.now(), _NODE_ID)
+        FileObservation(
+            reported_file=_reported_file(_HASH_CAT, _CAT_NAME),
+            observed_at=wall_clock.now(),
+            node_id=_NODE_ID,
+        )
     )
     observation_store.record_observation(
-        FileObservation(_reported_file(_HASH_MULTI, "random.txt"), wall_clock.now(), _NODE_ID)
+        FileObservation(
+            reported_file=_reported_file(_HASH_MULTI, "random.txt"),
+            observed_at=wall_clock.now(),
+            node_id=_NODE_ID,
+        )
     )
     reevaluation = _Reevaluation(
         observation_store,

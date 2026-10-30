@@ -39,7 +39,9 @@ class FakeSearchClient(SearchClient):
         if self._search_failures:
             raise self._search_failures.pop(0)
         reported_files = self._results.pop(0) if self._results else ()
-        return SearchAnswer(reported_files, self._skipped_result_count)
+        return SearchAnswer(
+            reported_files=reported_files, skipped_result_count=self._skipped_result_count
+        )
 
 
 def make_unreachable(message: str = "down") -> ClientUnreachableError:

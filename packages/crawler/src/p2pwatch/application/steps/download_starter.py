@@ -50,7 +50,11 @@ class DownloadStarter:
             reported_file = observation.reported_file
             try:
                 await self._download_client.start(
-                    DownloadRequest(file, reported_file.filename, reported_file.size_bytes)
+                    DownloadRequest(
+                        file=file,
+                        filename=reported_file.filename,
+                        size_bytes=reported_file.size_bytes,
+                    )
                 )
             except DownloadRejectedError as error:
                 self._tracked_download_writer.set_state(

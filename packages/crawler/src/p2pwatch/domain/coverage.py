@@ -19,7 +19,7 @@ class TargetCoverageStatus(StrEnum):
     NONE = "none"
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class TargetCoverage:
     target_id: TargetId
     status: TargetCoverageStatus
@@ -37,7 +37,7 @@ def coverage_of(target_id: TargetId, *, tiers: Sequence[DecisionTier]) -> Target
     identified = [tier for tier in tiers if tier.identifies_target]
     if not identified:
         return TargetCoverage(
-            target_id, status=TargetCoverageStatus.NONE, best_tier=None, file_count=0
+            target_id=target_id, status=TargetCoverageStatus.NONE, best_tier=None, file_count=0
         )
     best = max(identified, key=lambda tier: tier.rank)
     status = (
@@ -45,4 +45,6 @@ def coverage_of(target_id: TargetId, *, tiers: Sequence[DecisionTier]) -> Target
         if best is DecisionTier.DOWNLOAD
         else TargetCoverageStatus.PARTIAL
     )
-    return TargetCoverage(target_id, status=status, best_tier=best, file_count=len(identified))
+    return TargetCoverage(
+        target_id=target_id, status=status, best_tier=best, file_count=len(identified)
+    )

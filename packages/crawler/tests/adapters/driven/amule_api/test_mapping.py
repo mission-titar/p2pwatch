@@ -24,7 +24,7 @@ from p2pwatch.domain.source import ContactPoint, SourceKey, SourceReading, Sourc
 from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus
 
 _HASH = "8b54a3c20fae9e4b9f7e0c2c8c01b6b1"
-_KEY = FileKey(Network.ED2K, _HASH)
+_KEY = FileKey(network=Network.ED2K, native_id=_HASH)
 
 
 def _result(**overrides: Any) -> dict[str, Any]:
@@ -464,11 +464,11 @@ def _client_detail(**overrides: Any) -> dict[str, Any]:
 
 def test_a_source_maps_to_a_reading_of_its_row_and_its_detail() -> None:
     assert map_source(_client_row(), _client_detail()) == SourceReading(
-        source=SourceKey(Network.ED2K, "1f2e3a4b5c6d7e8f90a1b2c3d4e5f607"),
+        source=SourceKey(network=Network.ED2K, native_id="1f2e3a4b5c6d7e8f90a1b2c3d4e5f607"),
         source_name="AnimuseeFMR",
         software="emule 0.50a",
         role=SourceRole.QUEUED,
-        contact_point=ContactPoint(Network.ED2K, "176.103.48.36:4184"),
+        contact_point=ContactPoint(network=Network.ED2K, server="176.103.48.36:4184"),
         connectable=True,
         raw_metadata=(
             ("ident_state", "identified"),
@@ -643,7 +643,7 @@ def test_a_meta_value_is_kept_in_a_shape_the_catalog_stores(
 @pytest.mark.parametrize(
     ("server_ip", "server_port", "contact_point"),
     [
-        ("176.103.48.36", 4184, ContactPoint(Network.ED2K, "176.103.48.36:4184")),
+        ("176.103.48.36", 4184, ContactPoint(network=Network.ED2K, server="176.103.48.36:4184")),
         (None, None, None),
         ("176.103.48.36", None, None),
         (None, 4184, None),
@@ -690,8 +690,17 @@ def test_a_source_is_directly_reachable_when_its_ed2k_id_is_a_high_id(
 def _reading(
     role: SourceRole | None, counter: int = 0, *, native_id: str | None = "1f" * 16, name: str = "x"
 ) -> SourceReading:
-    key = SourceKey(Network.ED2K, native_id) if native_id is not None else None
-    return SourceReading(key, name, None, role, None, None, (), counter)
+    key = SourceKey(network=Network.ED2K, native_id=native_id) if native_id is not None else None
+    return SourceReading(
+        source=key,
+        source_name=name,
+        software=None,
+        role=role,
+        contact_point=None,
+        connectable=None,
+        raw_metadata=(),
+        session_received_bytes=counter,
+    )
 
 
 # D7's order, the most informative first: a passing state (None) above `undetermined`.
@@ -732,6 +741,15 @@ def test_two_rows_without_a_hash_are_one_source_by_name_only() -> None:
 
 
 def test_rows_with_neither_hash_nor_name_are_never_merged() -> None:
-    nameless = SourceReading(None, None, None, SourceRole.QUEUED, None, None, (), 0)
+    nameless = SourceReading(
+        source=None,
+        source_name=None,
+        software=None,
+        role=SourceRole.QUEUED,
+        contact_point=None,
+        connectable=None,
+        raw_metadata=(),
+        session_received_bytes=0,
+    )
 
     assert merge_duplicate_sources([nameless, nameless]) == (nameless, nameless)

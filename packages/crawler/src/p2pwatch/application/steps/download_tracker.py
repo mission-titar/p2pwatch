@@ -120,10 +120,10 @@ class DownloadTracker:
         states[file] = DownloadState.COMPLETED
         await self._observability_dispatcher.dispatch(
             DownloadCompleted(
-                file,
-                self._download_labeler.best_filename(file),
-                self._download_labeler.target_titles(file),
-                node_id,
+                file=file,
+                filename=self._download_labeler.best_filename(file),
+                target_titles=self._download_labeler.target_titles(file),
+                node_id=node_id,
             )
         )
         self._logger.info("file=%s completed", file.native_id)

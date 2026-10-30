@@ -15,15 +15,15 @@ from p2pwatch.domain.identifiers import NodeId
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import insert_file
 
-_A = FileKey(Network.ED2K, "a" * 32)
-_NEVER_STORED = FileKey(Network.ED2K, "b" * 32)
+_A = FileKey(network=Network.ED2K, native_id="a" * 32)
+_NEVER_STORED = FileKey(network=Network.ED2K, native_id="b" * 32)
 _NODE_ID = NodeId("11111111-2222-3333-4444-555555555555")
 _T0 = datetime(2026, 6, 12, tzinfo=UTC)
 _T1 = _T0 + timedelta(minutes=1)
 
 
 def _dated(decision: FileTargetDecision, decided_at: datetime) -> DatedDecision[FileTargetDecision]:
-    return DatedDecision(_A, decision, decided_at, _NODE_ID)
+    return DatedDecision(file=_A, decision=decision, decided_at=decided_at, node_id=_NODE_ID)
 
 
 @pytest.fixture
@@ -109,9 +109,9 @@ def test_latest_decisions_includes_a_target_whose_latest_tier_is_retracted(
             _T0,
         )
     )
-    decision_store.record_decision(_dated(Retraction(TargetId("062A")), _T1))
+    decision_store.record_decision(_dated(Retraction(target_id=TargetId("062A")), _T1))
     assert decision_store.read_latest_decisions(_A) == {
-        TargetId("062A"): Retraction(TargetId("062A"))
+        TargetId("062A"): Retraction(target_id=TargetId("062A"))
     }
 
 
@@ -126,7 +126,9 @@ def test_latest_decisions_excludes_the_legacy_empty_sentinel(
             _T0,
         )
     )
-    decision_store.record_decision(_dated(Retraction(TargetId("")), _T1))  # legacy target_id=""
+    decision_store.record_decision(
+        _dated(Retraction(target_id=TargetId("")), _T1)
+    )  # legacy target_id=""
     assert decision_store.read_latest_decisions(_A) == {
         TargetId("062A"): DecisionRecord(
             target_id=TargetId("062A"), rule_name="numero_nu", tier=DecisionTier.NOTIFY

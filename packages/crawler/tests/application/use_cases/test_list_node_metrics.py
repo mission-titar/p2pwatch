@@ -22,19 +22,21 @@ def test_lists_every_node_metric_once_in_the_catalogs_order() -> None:
 def test_an_unlabelled_metric_never_written_has_one_sample_at_zero() -> None:
     node_metric_listing = ListNodeMetrics(FakeNodeMetricStore()).list_node_metrics()
     assert node_metric_listing.samples_by_node_metric[NodeCounter.DOWNLOADS_QUEUED] == (
-        NodeMetricSample(NodeCounter.DOWNLOADS_QUEUED, (), 0.0),
+        NodeMetricSample(node_metric=NodeCounter.DOWNLOADS_QUEUED, labels=(), value=0.0),
     )
 
 
 def test_a_labelled_metric_lists_the_samples_written_and_none_before() -> None:
     node_metric_store = FakeNodeMetricStore()
     node_metric_store.record_increment(
-        CounterIncrement(NodeCounter.DECISIONS, DecisionLabels(DecisionTier.DOWNLOAD))
+        CounterIncrement(
+            counter=NodeCounter.DECISIONS, labels=DecisionLabels(tier=DecisionTier.DOWNLOAD)
+        )
     )
     samples_by_node_metric = (
         ListNodeMetrics(node_metric_store).list_node_metrics().samples_by_node_metric
     )
     assert samples_by_node_metric[NodeCounter.DECISIONS] == (
-        NodeMetricSample(NodeCounter.DECISIONS, _DOWNLOAD_TIER, 1.0),
+        NodeMetricSample(node_metric=NodeCounter.DECISIONS, labels=_DOWNLOAD_TIER, value=1.0),
     )
     assert samples_by_node_metric[NodeCounter.SEARCHES] == ()

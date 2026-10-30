@@ -48,7 +48,7 @@ class SearchWorker:
         logger: Logger,
     ) -> None:
         self._client_name = client_name
-        self._client_backoff_key = BackoffKey(client_name, None)
+        self._client_backoff_key = BackoffKey(client_name=client_name, channel=None)
         self._client = client
         self._backoff = backoff
         self._cataloguer = cataloguer
@@ -64,7 +64,9 @@ class SearchWorker:
         """How long until neither the client nor ``channel`` is backed off."""
         return max(
             self._backoff.time_until_retry(self._client_backoff_key),
-            self._backoff.time_until_retry(BackoffKey(self._client_name, channel)),
+            self._backoff.time_until_retry(
+                BackoffKey(client_name=self._client_name, channel=channel)
+            ),
         )
 
     async def _record_observations(
@@ -74,7 +76,10 @@ class SearchWorker:
         ``StoreError`` per obs is ABSORBED inside ``Cataloguer.catalog`` (spec §7)."""
         await self._observability_dispatcher.dispatch(
             SearchExecuted(
-                self._client_name, channel, len(answer.reported_files), answer.skipped_result_count
+                client_name=self._client_name,
+                channel=channel,
+                observation_count=len(answer.reported_files),
+                skipped_result_count=answer.skipped_result_count,
             )
         )
         changed = 0
@@ -85,7 +90,7 @@ class SearchWorker:
 
     async def run_task(self, task: SearchTask, node_id: NodeId) -> None:
         """One search, run once ``time_until_ready`` is zero. Never raises: backs off and logs."""
-        channel_backoff_key = BackoffKey(self._client_name, task.channel)
+        channel_backoff_key = BackoffKey(client_name=self._client_name, channel=task.channel)
         try:
             answer = await self._client.search(task.keyword, task.channel, SEARCH_BUDGET_SECONDS)
         except SearchFailedError as error:
@@ -98,7 +103,7 @@ class SearchWorker:
                 delay.total_seconds(),
             )
             await self._observability_dispatcher.dispatch(
-                SearchFailed(self._client_name, task.channel)
+                SearchFailed(client_name=self._client_name, channel=task.channel)
             )
             return
         except ClientUnreachableError as error:
@@ -109,7 +114,9 @@ class SearchWorker:
                 error,
                 delay.total_seconds(),
             )
-            await self._observability_dispatcher.dispatch(ClientUnreachable(self._client_name))
+            await self._observability_dispatcher.dispatch(
+                ClientUnreachable(client_name=self._client_name)
+            )
             return
         changed = await self._record_observations(task.channel, answer, node_id)
         self._backoff.reset(channel_backoff_key)

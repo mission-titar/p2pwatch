@@ -28,7 +28,7 @@ class NodeMetricLabels(ABC):
         return tuple(zip(self.names, self.texts(), strict=True))
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ChannelLabels(NodeMetricLabels):
     names = ("client", "channel")
     client_name: ClientName
@@ -38,7 +38,7 @@ class ChannelLabels(NodeMetricLabels):
         return (self.client_name, self.channel)
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ClientLabels(NodeMetricLabels):
     names = ("client",)
     client_name: ClientName
@@ -47,7 +47,7 @@ class ClientLabels(NodeMetricLabels):
         return (self.client_name,)
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class DecisionLabels(NodeMetricLabels):
     names = ("tier",)
     tier: DecisionTier | Literal["retracted"]
@@ -56,7 +56,7 @@ class DecisionLabels(NodeMetricLabels):
         return (str(self.tier),)
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SourceAlertLabels(NodeMetricLabels):
     names = ("network", "kind")
     network: Network
@@ -66,7 +66,7 @@ class SourceAlertLabels(NodeMetricLabels):
         return (self.network.value, self.kind.value)
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class _Declaration:
     exposed_name: str
     description: str
@@ -97,33 +97,69 @@ class NodeMetric(Enum):
 
 
 class NodeCounter(NodeMetric):
-    SEARCHES = _Declaration("p2pwatch_searches", "Searches performed", ChannelLabels)
+    SEARCHES = _Declaration(
+        exposed_name="p2pwatch_searches",
+        description="Searches performed",
+        label_class=ChannelLabels,
+    )
     SEARCH_RESULTS_SKIPPED = _Declaration(
-        "p2pwatch_search_results_skipped", "Search results the client could not read", ChannelLabels
+        exposed_name="p2pwatch_search_results_skipped",
+        description="Search results the client could not read",
+        label_class=ChannelLabels,
     )
-    OBSERVATIONS = _Declaration("p2pwatch_observations", "Observations recorded", ChannelLabels)
-    SEARCH_FAILURES = _Declaration("p2pwatch_search_failures", "Failed searches", ChannelLabels)
+    OBSERVATIONS = _Declaration(
+        exposed_name="p2pwatch_observations",
+        description="Observations recorded",
+        label_class=ChannelLabels,
+    )
+    SEARCH_FAILURES = _Declaration(
+        exposed_name="p2pwatch_search_failures",
+        description="Failed searches",
+        label_class=ChannelLabels,
+    )
     CLIENT_UNREACHABLE = _Declaration(
-        "p2pwatch_client_unreachable", "Client unreachable", ClientLabels
+        exposed_name="p2pwatch_client_unreachable",
+        description="Client unreachable",
+        label_class=ClientLabels,
     )
-    DECISIONS = _Declaration("p2pwatch_decisions", "Match decisions recorded", DecisionLabels)
-    DOWNLOADS_QUEUED = _Declaration("p2pwatch_downloads_queued", "Downloads queued", None)
-    DOWNLOADS_COMPLETED = _Declaration("p2pwatch_downloads_completed", "Downloads completed", None)
+    DECISIONS = _Declaration(
+        exposed_name="p2pwatch_decisions",
+        description="Match decisions recorded",
+        label_class=DecisionLabels,
+    )
+    DOWNLOADS_QUEUED = _Declaration(
+        exposed_name="p2pwatch_downloads_queued", description="Downloads queued", label_class=None
+    )
+    DOWNLOADS_COMPLETED = _Declaration(
+        exposed_name="p2pwatch_downloads_completed",
+        description="Downloads completed",
+        label_class=None,
+    )
     SOURCE_ALERTS = _Declaration(
-        "p2pwatch_source_alerts", "Sources first useful or reappeared", SourceAlertLabels
+        exposed_name="p2pwatch_source_alerts",
+        description="Sources first useful or reappeared",
+        label_class=SourceAlertLabels,
     )
 
 
 class NodeGauge(NodeMetric):
-    CRAWLER_UP = _Declaration("p2pwatch_crawler_up", "Crawler running (1)", None)
+    CRAWLER_UP = _Declaration(
+        exposed_name="p2pwatch_crawler_up", description="Crawler running (1)", label_class=None
+    )
     DISK_FREE_BYTES = _Declaration(
-        "p2pwatch_download_disk_free_bytes", "Free bytes on the download filesystem", None
+        exposed_name="p2pwatch_download_disk_free_bytes",
+        description="Free bytes on the download filesystem",
+        label_class=None,
     )
     CHANNEL_CONNECTED = _Declaration(
-        "p2pwatch_channel_connected", "Channel joined its network (1)", ChannelLabels
+        exposed_name="p2pwatch_channel_connected",
+        description="Channel joined its network (1)",
+        label_class=ChannelLabels,
     )
     CHANNEL_CONNECTABLE = _Declaration(
-        "p2pwatch_channel_connectable", "Peers can connect to the channel (1)", ChannelLabels
+        exposed_name="p2pwatch_channel_connectable",
+        description="Peers can connect to the channel (1)",
+        label_class=ChannelLabels,
     )
 
 
@@ -144,7 +180,7 @@ def _refuse_unless_it_fits(node_metric: NodeMetric, *, labels: NodeMetricLabels 
         )
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class CounterIncrement:
     """Adds ``amount`` to the series of ``counter`` that ``labels`` names; labels of another class
     than the counter's, or a negative amount, raise ``ValueError``."""
@@ -165,7 +201,7 @@ class CounterIncrement:
         return _pairs(self.labels)
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class GaugeSetting:
     """Sets the series of ``gauge`` that ``labels`` names to ``value``, or removes it when
     ``value`` is ``None``; labels of another class than the gauge's raise ``ValueError``."""
@@ -182,7 +218,7 @@ class GaugeSetting:
         return _pairs(self.labels)
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class NodeMetricSample:
     """One series of ``node_metric``, its labels' ``(name, text)`` pairs in the catalog's order, and
     its value."""

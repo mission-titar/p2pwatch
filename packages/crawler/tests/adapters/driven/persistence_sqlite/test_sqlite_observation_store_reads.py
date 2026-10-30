@@ -13,8 +13,8 @@ from p2pwatch.domain.identifiers import Keyword, NodeId
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 
-_A = FileKey(Network.ED2K, "a" * 32)
-_B = FileKey(Network.ED2K, "b" * 32)
+_A = FileKey(network=Network.ED2K, native_id="a" * 32)
+_B = FileKey(network=Network.ED2K, native_id="b" * 32)
 _NODE_ID = NodeId("11111111-2222-3333-4444-555555555555")
 _T0 = datetime(2026, 6, 12, tzinfo=UTC)
 _T1 = _T0 + timedelta(minutes=1)
@@ -46,7 +46,9 @@ def test_latest_observation_returns_the_observation_whole(
     observation_store: SqliteObservationStore,
 ) -> None:
     observation = FileObservation(
-        _reported_file(_A, name="Keroro 062A.avi", size=4242), _T0, _NODE_ID
+        reported_file=_reported_file(_A, name="Keroro 062A.avi", size=4242),
+        observed_at=_T0,
+        node_id=_NODE_ID,
     )
     observation_store.record_observation(observation)
     assert observation_store.read_latest_observation(_A) == observation
@@ -56,9 +58,15 @@ def test_latest_observation_returns_the_most_recent(
     observation_store: SqliteObservationStore,
 ) -> None:
     observation_store.record_observation(
-        FileObservation(_reported_file(_A, name="old.avi", size=1), _T0, _NODE_ID)
+        FileObservation(
+            reported_file=_reported_file(_A, name="old.avi", size=1),
+            observed_at=_T0,
+            node_id=_NODE_ID,
+        )
     )
-    newest = FileObservation(_reported_file(_A, name="new.avi", size=2), _T1, _NODE_ID)
+    newest = FileObservation(
+        reported_file=_reported_file(_A, name="new.avi", size=2), observed_at=_T1, node_id=_NODE_ID
+    )
     observation_store.record_observation(newest)
     assert observation_store.read_latest_observation(_A) == newest
 
@@ -70,7 +78,11 @@ def test_latest_observation_unknown_hash_is_none(observation_store: SqliteObserv
 def test_best_observation_is_the_observation_of_the_clean_name(
     observation_store: SqliteObservationStore,
 ) -> None:
-    observation = FileObservation(_reported_file(_A, name="clean.avi", size=7), _T0, _NODE_ID)
+    observation = FileObservation(
+        reported_file=_reported_file(_A, name="clean.avi", size=7),
+        observed_at=_T0,
+        node_id=_NODE_ID,
+    )
     observation_store.record_observation(observation)
     assert observation_store.read_best_observation(_A) == observation
     assert observation_store.read_best_observation(_B) is None
@@ -80,16 +92,32 @@ def test_known_filenames_are_the_distinct_sorted_names_of_that_hash_only(
     observation_store: SqliteObservationStore,
 ) -> None:
     observation_store.record_observation(
-        FileObservation(_reported_file(_A, name="b.avi", size=1), _T0, _NODE_ID)
+        FileObservation(
+            reported_file=_reported_file(_A, name="b.avi", size=1),
+            observed_at=_T0,
+            node_id=_NODE_ID,
+        )
     )
     observation_store.record_observation(
-        FileObservation(_reported_file(_A, name="a.avi", size=1), _T0, _NODE_ID)
+        FileObservation(
+            reported_file=_reported_file(_A, name="a.avi", size=1),
+            observed_at=_T0,
+            node_id=_NODE_ID,
+        )
     )
     observation_store.record_observation(
-        FileObservation(_reported_file(_A, name="b.avi", size=1), _T0, _NODE_ID)
+        FileObservation(
+            reported_file=_reported_file(_A, name="b.avi", size=1),
+            observed_at=_T0,
+            node_id=_NODE_ID,
+        )
     )
     observation_store.record_observation(
-        FileObservation(_reported_file(_B, name="other.avi", size=1), _T0, _NODE_ID)
+        FileObservation(
+            reported_file=_reported_file(_B, name="other.avi", size=1),
+            observed_at=_T0,
+            node_id=_NODE_ID,
+        )
     )
     assert observation_store.read_known_filenames(_A) == ("a.avi", "b.avi")
 

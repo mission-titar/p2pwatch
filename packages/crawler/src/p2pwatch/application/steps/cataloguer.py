@@ -59,9 +59,13 @@ class Cataloguer:
         written. A ``StoreError`` is absorbed (log + ``0``), the cycle continues (spec §7)."""
         try:
             self._observation_writer.record_observation(
-                FileObservation(reported_file, self._wall_clock.now(), node_id)
+                FileObservation(
+                    reported_file=reported_file, observed_at=self._wall_clock.now(), node_id=node_id
+                )
             )
-            await self._observability_dispatcher.dispatch(ObservationRecorded(client_name, channel))
+            await self._observability_dispatcher.dispatch(
+                ObservationRecorded(client_name=client_name, channel=channel)
+            )
             return await self._file_judge.rejudge(
                 reported_file.file, reported_file.to_candidate(), node_id
             )

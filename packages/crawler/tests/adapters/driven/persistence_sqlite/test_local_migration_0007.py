@@ -47,7 +47,7 @@ def test_0007_keys_each_download_by_the_catalog_file_id(tmp_path: Path) -> None:
     finally:
         connection.close()
     assert read == [
-        {"file_id": FileKey(Network.ED2K, native_id).file_id, "network": "ed2k"}
+        {"file_id": FileKey(network=Network.ED2K, native_id=native_id).file_id, "network": "ed2k"}
         | dict(zip(_KEPT_COLUMNS, (native_id, *kept), strict=True))
         for native_id, *kept in sorted(_ROWS)
     ]

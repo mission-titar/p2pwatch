@@ -10,7 +10,7 @@ from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.identifiers import NodeId
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class Retraction:
     """The file no longer matches ``target_id``: the append-only catalog appends this instead
     of deleting the record. The engine never produces it, so it is no tier."""
@@ -21,7 +21,7 @@ class Retraction:
 type FileTargetDecision = DecisionRecord | Retraction
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class DatedDecision[Decision: FileTargetDecision]:
     """A file's decision, the instant it was made and the node that made it; apart from the
     decision, whose equality the anti-redundancy compares."""
@@ -41,7 +41,7 @@ def records_to_write(
     return (
         *(record for record in fresh if persisted.get(record.target_id) != record),
         *(
-            Retraction(target_id)
+            Retraction(target_id=target_id)
             for target_id in sorted(persisted)
             if target_id not in fresh_target_ids
             and not isinstance(persisted[target_id], Retraction)

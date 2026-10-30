@@ -70,7 +70,7 @@ def _cataloguer(
 
 def _reported_file(native_id: str, filename: str) -> ReportedFile:
     return ReportedFile(
-        file=FileKey(Network.ED2K, native_id),
+        file=FileKey(network=Network.ED2K, native_id=native_id),
         filename=filename,
         size_bytes=234_000_000,
         source_count=3,
@@ -378,7 +378,11 @@ async def test_emits_observation_then_decision_on_change(
         LoggedLine("info", f"decisions for {_DL_NAME} ({_HASH_DL}): 062A none → download"),
     ]
     assert (
-        NodeMetricSample(NodeCounter.OBSERVATIONS, (("client", "amuled"), ("channel", "ed2k")), 1.0)
+        NodeMetricSample(
+            node_metric=NodeCounter.OBSERVATIONS,
+            labels=(("client", "amuled"), ("channel", "ed2k")),
+            value=1.0,
+        )
         in observability.node_metric_store.read_samples()
     )
 

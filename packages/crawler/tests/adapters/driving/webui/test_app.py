@@ -122,7 +122,10 @@ _CRAWL_SUMMARY = CrawlSummary(
     node_state=_NODE_STATE,
     target_coverages=(
         TargetCoverage(
-            TargetId("062A"), status=TargetCoverageStatus.NONE, best_tier=None, file_count=0
+            target_id=TargetId("062A"),
+            status=TargetCoverageStatus.NONE,
+            best_tier=None,
+            file_count=0,
         ),
     ),
 )
@@ -144,24 +147,39 @@ _NO_SOURCE_LISTER = FakeSourceLister(SourceListing((), has_next_page=False, sour
 _NO_SOURCE_DESCRIBER = FakeSourceDescriber(None)
 _NO_SOURCE_NAME_DESCRIBER = FakeSourceNameDescriber(None)
 # These tests run no console query: ``test_app_console.py`` does.
-_NO_CONSOLE_QUERY_RUNNER = FakeConsoleQueryRunner(ConsoleQueryRun(QueryFailure(""), 1000))
+_NO_CONSOLE_QUERY_RUNNER = FakeConsoleQueryRunner(ConsoleQueryRun(QueryFailure(message=""), 1000))
 _NO_NODE_METRIC_LISTER = FakeNodeMetricLister(NodeMetricListing({}))
-_FILE = FileKey(Network.ED2K, TEST_HASH)
+_FILE = FileKey(network=Network.ED2K, native_id=TEST_HASH)
 _OBSERVATION = FileObservation(
-    ReportedFile(_FILE, "keroro_s2e62a_vf.avi", 100_000_000, 5, Keyword("keroro")),
-    datetime.fromisoformat(SEEN_AT),
-    NodeId("n1"),
+    reported_file=ReportedFile(
+        file=_FILE,
+        filename="keroro_s2e62a_vf.avi",
+        size_bytes=100_000_000,
+        source_count=5,
+        keyword=Keyword("keroro"),
+    ),
+    observed_at=datetime.fromisoformat(SEEN_AT),
+    node_id=NodeId("n1"),
 )
 _DECISION = DatedDecision(
-    _FILE,
-    DecisionRecord(target_id=TargetId("062A"), rule_name="catalog", tier=DecisionTier.CATALOG),
-    datetime.fromisoformat(SEEN_AT),
-    NodeId("n1"),
+    file=_FILE,
+    decision=DecisionRecord(
+        target_id=TargetId("062A"), rule_name="catalog", tier=DecisionTier.CATALOG
+    ),
+    decided_at=datetime.fromisoformat(SEEN_AT),
+    node_id=NodeId("n1"),
 )
-_WEEK = Interval(_WALL_CLOCK.now() - timedelta(days=7), _WALL_CLOCK.now())
+_WEEK = Interval(since=_WALL_CLOCK.now() - timedelta(days=7), until=_WALL_CLOCK.now())
 # One file seen once under one name, decided on 062A, with no source and no explanation.
 _FILE_DESCRIPTION = FileDescription(
-    FileHistory(_FILE, 100_000_000, (_OBSERVATION,), _OBSERVATION, (_DECISION,), ()),
+    FileHistory(
+        file=_FILE,
+        size_bytes=100_000_000,
+        observations=(_OBSERVATION,),
+        latest_observation=_OBSERVATION,
+        decisions=(_DECISION,),
+        known_filenames=(),
+    ),
     sharing_periods=(),
     explanation=None,
     interval=_WEEK,
@@ -237,7 +255,7 @@ async def _files_page(
 
 
 def _detail_url(native_id: str) -> str:
-    return f"/files/{FileKey(Network.ED2K, native_id).file_id.hex()}"
+    return f"/files/{FileKey(network=Network.ED2K, native_id=native_id).file_id.hex()}"
 
 
 async def _file_response(
@@ -312,7 +330,11 @@ async def test_health_returns_200(populated_app: tuple[Starlette, str]) -> None:
 @pytest.mark.asyncio
 async def test_metrics_serve_the_listing_as_prometheus_text_whatever_the_accept_header() -> None:
     node_metric_listing = NodeMetricListing(
-        {NodeGauge.CRAWLER_UP: (NodeMetricSample(NodeGauge.CRAWLER_UP, (), 1.0),)}
+        {
+            NodeGauge.CRAWLER_UP: (
+                NodeMetricSample(node_metric=NodeGauge.CRAWLER_UP, labels=(), value=1.0),
+            )
+        }
     )
     app = _app_on_fakes(node_metric_lister=FakeNodeMetricLister(node_metric_listing))
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -331,7 +353,7 @@ async def _coverage_cells(coverage: TargetCoverage) -> list[str]:
 @pytest.mark.asyncio
 async def test_dashboard_shows_each_target_coverage_with_its_title() -> None:
     coverage = TargetCoverage(
-        TargetId("062A"),
+        target_id=TargetId("062A"),
         status=TargetCoverageStatus.FOUND,
         best_tier=DecisionTier.DOWNLOAD,
         file_count=2,
@@ -345,7 +367,7 @@ async def test_dashboard_shows_each_target_coverage_with_its_title() -> None:
 @pytest.mark.asyncio
 async def test_dashboard_shows_a_target_without_a_best_tier_as_a_dot() -> None:
     coverage = TargetCoverage(
-        TargetId("062A"), status=TargetCoverageStatus.NONE, best_tier=None, file_count=0
+        target_id=TargetId("062A"), status=TargetCoverageStatus.NONE, best_tier=None, file_count=0
     )
     assert (await _coverage_cells(coverage))[2:] == ["none", "·", "0"]
 
@@ -427,12 +449,12 @@ async def test_file_page_shows_the_network_the_native_id_and_the_ed2k_link() -> 
 async def test_file_page_shows_each_decision_with_its_rule_tier_and_instant() -> None:
     decisions = tuple(
         DatedDecision(
-            _FILE,
-            DecisionRecord(
+            file=_FILE,
+            decision=DecisionRecord(
                 target_id=target_id, rule_name="numero_nu_confirmed", tier=DecisionTier.DOWNLOAD
             ),
-            at,
-            NodeId("n1"),
+            decided_at=at,
+            node_id=NodeId("n1"),
         )
         for target_id, at in (
             (TargetId("072A"), _OBSERVATION.observed_at),
@@ -537,7 +559,7 @@ async def test_file_page_timeline_shows_each_observation_as_one_plain_line() -> 
 
 
 _USER = "1f2e" * 8
-_SOURCE = SourceKey(Network.ED2K, _USER)
+_SOURCE = SourceKey(network=Network.ED2K, native_id=_USER)
 _SOURCE_LINK = f'<a href="/sources/{_SOURCE.source_id.hex()}">1f2e1f2e…</a>'
 
 
@@ -548,16 +570,29 @@ def _row(*cells: str) -> str:
 @pytest.mark.asyncio
 async def test_file_page_shows_its_source_history_in_the_order_read() -> None:
     sending = SharingPeriod(
-        _FILE, _SOURCE, "AnimuseeFMR", SourceRole.SENDING, None, None,
-        datetime(2026, 10, 13, 20, 1, 30, tzinfo=UTC),
-        datetime(2026, 10, 13, 22, 52, 10, tzinfo=UTC),
-        10_485_760, NodeId("n1"),
-    )  # fmt: skip
+        file=_FILE,
+        source=_SOURCE,
+        source_name="AnimuseeFMR",
+        role=SourceRole.SENDING,
+        contact_point=None,
+        connectable=None,
+        first_seen_at=datetime(2026, 10, 13, 20, 1, 30, tzinfo=UTC),
+        last_seen_at=datetime(2026, 10, 13, 22, 52, 10, tzinfo=UTC),
+        received_bytes=10_485_760,
+        node_id=NodeId("n1"),
+    )
     queued = SharingPeriod(
-        _FILE, _SOURCE, "AnimuseeFMR", SourceRole.QUEUED, "198.51.100.7:4661", False,
-        datetime(2026, 10, 13, 20, 0, 30, tzinfo=UTC), datetime(2026, 10, 13, 20, 1, tzinfo=UTC),
-        0, NodeId("n2"),
-    )  # fmt: skip
+        file=_FILE,
+        source=_SOURCE,
+        source_name="AnimuseeFMR",
+        role=SourceRole.QUEUED,
+        contact_point="198.51.100.7:4661",
+        connectable=False,
+        first_seen_at=datetime(2026, 10, 13, 20, 0, 30, tzinfo=UTC),
+        last_seen_at=datetime(2026, 10, 13, 20, 1, tzinfo=UTC),
+        received_bytes=0,
+        node_id=NodeId("n2"),
+    )
     page = await _file_page(replace(_FILE_DESCRIPTION, sharing_periods=(sending, queued)))
     name = '<a href="/sources/name?source_name=AnimuseeFMR">AnimuseeFMR</a>'
     sending_line = _row(
@@ -577,9 +612,29 @@ async def test_file_page_shows_its_source_history_in_the_order_read() -> None:
 @pytest.mark.asyncio
 async def test_file_page_links_only_the_name_or_the_hash_a_period_has() -> None:
     at, queued = datetime(2026, 10, 13, 20, tzinfo=UTC), SourceRole.QUEUED
-    unnamed = SharingPeriod(_FILE, _SOURCE, None, queued, None, True, at, at, 0, NodeId("n1"))
+    unnamed = SharingPeriod(
+        file=_FILE,
+        source=_SOURCE,
+        source_name=None,
+        role=queued,
+        contact_point=None,
+        connectable=True,
+        first_seen_at=at,
+        last_seen_at=at,
+        received_bytes=0,
+        node_id=NodeId("n1"),
+    )
     hashless = SharingPeriod(
-        _FILE, None, "http://emule-project.net", queued, None, None, at, at, 0, NodeId("n1")
+        file=_FILE,
+        source=None,
+        source_name="http://emule-project.net",
+        role=queued,
+        contact_point=None,
+        connectable=None,
+        first_seen_at=at,
+        last_seen_at=at,
+        received_bytes=0,
+        node_id=NodeId("n1"),
     )
     page = await _file_page(replace(_FILE_DESCRIPTION, sharing_periods=(unnamed, hashless)))
     name = '<a href="/sources/name?source_name=http%3A%2F%2Femule-project.net">http://emule-project.net</a>'
@@ -602,7 +657,10 @@ async def test_file_page_without_a_source_in_its_interval_says_so() -> None:
 
 _OTHER = "9c0d" * 8
 _KNOWN_SOURCE = KnownSource(
-    _SOURCE, "AnimuseeFMR", datetime(2026, 10, 13, 20, 0, 30, tzinfo=UTC), 1
+    source=_SOURCE,
+    source_name="AnimuseeFMR",
+    latest_seen_at=datetime(2026, 10, 13, 20, 0, 30, tzinfo=UTC),
+    file_count=1,
 )
 # One source on a list counting two.
 _TWO_SOURCES = SourceListing((_KNOWN_SOURCE,), has_next_page=False, source_count=2)
@@ -690,44 +748,46 @@ async def test_sources_list_a_source_without_a_name_as_unknown_unlinked() -> Non
 _USER_PAGE = f"/sources/{_SOURCE.source_id.hex()}"
 _NAME_PAGE = "/sources/name?source_name=AnimuseeFMR"
 _NAME_LINK = '<a href="/sources/name?source_name=AnimuseeFMR">AnimuseeFMR</a>'
-_OTHER_SOURCE = SourceKey(Network.ED2K, _OTHER)
-_UNSEEN = FileKey(Network.ED2K, "c" * 32)
+_OTHER_SOURCE = SourceKey(network=Network.ED2K, native_id=_OTHER)
+_UNSEEN = FileKey(network=Network.ED2K, native_id="c" * 32)
 _UNSEEN_LINK = f'<a href="/files/{_UNSEEN.file_id.hex()}">cccccccc…</a>'
 _8PM = datetime(2026, 10, 13, 20, tzinfo=UTC)
 _8PM_30 = _8PM + timedelta(seconds=30)
-_NAMING = SourceNaming(_SOURCE, "AnimuseeFMR", _8PM_30, 2)
+_NAMING = SourceNaming(
+    source=_SOURCE, source_name="AnimuseeFMR", latest_seen_at=_8PM_30, file_count=2
+)
 # _USER as AnimuseeFMR, on a file seen under a filename, then on a file never seen.
 _SOURCE_DESCRIPTION = SourceDescription(
     SourceHistory(
-        _SOURCE,
-        (_NAMING,),
-        (
+        source=_SOURCE,
+        source_namings=(_NAMING,),
+        sharing_periods=(
             SharingPeriod(
-                _FILE,
-                _SOURCE,
-                "AnimuseeFMR",
-                SourceRole.QUEUED,
-                None,
-                None,
-                _8PM,
-                _8PM_30,
-                0,
-                NodeId("n1"),
+                file=_FILE,
+                source=_SOURCE,
+                source_name="AnimuseeFMR",
+                role=SourceRole.QUEUED,
+                contact_point=None,
+                connectable=None,
+                first_seen_at=_8PM,
+                last_seen_at=_8PM_30,
+                received_bytes=0,
+                node_id=NodeId("n1"),
             ),
             SharingPeriod(
-                _UNSEEN,
-                _SOURCE,
-                "AnimuseeFMR",
-                SourceRole.STANDBY,
-                None,
-                None,
-                _8PM,
-                _8PM,
-                0,
-                NodeId("n1"),
+                file=_UNSEEN,
+                source=_SOURCE,
+                source_name="AnimuseeFMR",
+                role=SourceRole.STANDBY,
+                contact_point=None,
+                connectable=None,
+                first_seen_at=_8PM,
+                last_seen_at=_8PM,
+                received_bytes=0,
+                node_id=NodeId("n1"),
             ),
         ),
-        {_FILE: "keroro_s2e62a_vf.avi"},
+        best_filename_by_file={_FILE: "keroro_s2e62a_vf.avi"},
     ),
     has_next_page=False,
     interval=_WEEK,
@@ -736,23 +796,28 @@ _SOURCE_DESCRIPTION = SourceDescription(
 # AnimuseeFMR on _USER and on _OTHER, and once without a user hash on a file never seen.
 _SOURCE_NAME_DESCRIPTION = SourceNameDescription(
     SourceNameHistory(
-        "AnimuseeFMR",
-        (_NAMING, SourceNaming(_OTHER_SOURCE, "AnimuseeFMR", _8PM, 1)),
-        (
-            SharingPeriod(
-                _UNSEEN,
-                None,
-                "AnimuseeFMR",
-                SourceRole.STANDBY,
-                None,
-                None,
-                _8PM,
-                _8PM,
-                0,
-                NodeId("n1"),
+        source_name="AnimuseeFMR",
+        source_namings=(
+            _NAMING,
+            SourceNaming(
+                source=_OTHER_SOURCE, source_name="AnimuseeFMR", latest_seen_at=_8PM, file_count=1
             ),
         ),
-        {},
+        sharing_periods=(
+            SharingPeriod(
+                file=_UNSEEN,
+                source=None,
+                source_name="AnimuseeFMR",
+                role=SourceRole.STANDBY,
+                contact_point=None,
+                connectable=None,
+                first_seen_at=_8PM,
+                last_seen_at=_8PM,
+                received_bytes=0,
+                node_id=NodeId("n1"),
+            ),
+        ),
+        best_filename_by_file={},
     ),
     has_next_page=False,
     interval=_WEEK,
@@ -918,9 +983,23 @@ async def test_source_page_shows_its_hash_its_names_and_its_periods() -> None:
 @pytest.mark.asyncio
 async def test_a_source_without_a_name_reads_unknown_unlinked_on_its_page() -> None:
     period = SharingPeriod(
-        _FILE, _SOURCE, None, SourceRole.QUEUED, None, None, _8PM, _8PM, 0, NodeId("n1")
+        file=_FILE,
+        source=_SOURCE,
+        source_name=None,
+        role=SourceRole.QUEUED,
+        contact_point=None,
+        connectable=None,
+        first_seen_at=_8PM,
+        last_seen_at=_8PM,
+        received_bytes=0,
+        node_id=NodeId("n1"),
     )
-    history = SourceHistory(_SOURCE, (), (period,), {_FILE: "keroro_s2e62a_vf.avi"})
+    history = SourceHistory(
+        source=_SOURCE,
+        source_namings=(),
+        sharing_periods=(period,),
+        best_filename_by_file={_FILE: "keroro_s2e62a_vf.avi"},
+    )
     page = await _source_page(replace(_SOURCE_DESCRIPTION, source_history=history))
     file = f'<a href="/files/{_FILE.file_id.hex()}">keroro_s2e62a_vf.avi</a>'
     stamp = "2026-10-13 20:00:00Z"
@@ -942,12 +1021,22 @@ async def test_name_page_lists_the_hashes_that_carried_it_and_its_periods_withou
 @pytest.mark.asyncio
 async def test_source_and_name_pages_with_nothing_read_say_so() -> None:
     source_page = await _source_page(
-        replace(_SOURCE_DESCRIPTION, source_history=SourceHistory(_SOURCE, (), (), {}))
+        replace(
+            _SOURCE_DESCRIPTION,
+            source_history=SourceHistory(
+                source=_SOURCE, source_namings=(), sharing_periods=(), best_filename_by_file={}
+            ),
+        )
     )
     name_page = await _source_name_page(
         replace(
             _SOURCE_NAME_DESCRIPTION,
-            source_name_history=SourceNameHistory("AnimuseeFMR", (), (), {}),
+            source_name_history=SourceNameHistory(
+                source_name="AnimuseeFMR",
+                source_namings=(),
+                sharing_periods=(),
+                best_filename_by_file={},
+            ),
         )
     )
     assert '<td colspan="3">No name on this page.</td>' in source_page
@@ -1028,7 +1117,7 @@ async def test_base_nav_uses_singular_node_href(
 
 
 _DOWNLOAD = TrackedDownload(
-    file=FileKey(Network.ED2K, TEST_HASH),
+    file=FileKey(network=Network.ED2K, native_id=TEST_HASH),
     target_id=TargetId("062A"),
     state=DownloadState.DOWNLOADING,
     queued_at=datetime(2026, 10, 10, tzinfo=UTC),
@@ -1047,9 +1136,11 @@ async def _node_page(node_state: NodeState) -> str:
 async def test_node_page_shows_each_backoff_and_its_planned_retry_in_utc() -> None:
     started_at = datetime(2026, 6, 12, 10, tzinfo=UTC)
     backoff_state_by_key = {
-        BackoffKey(ClientName("amuled"), None): BackoffState(3, started_at, timedelta(seconds=120)),
-        BackoffKey(ClientName("amuled"), Channel("kad")): BackoffState(
-            1, started_at, timedelta(seconds=2.5)
+        BackoffKey(client_name=ClientName("amuled"), channel=None): BackoffState(
+            attempts=3, started_at=started_at, delay=timedelta(seconds=120)
+        ),
+        BackoffKey(client_name=ClientName("amuled"), channel=Channel("kad")): BackoffState(
+            attempts=1, started_at=started_at, delay=timedelta(seconds=2.5)
         ),
     }
     before = await _node_page(_NODE_STATE)
@@ -1287,12 +1378,18 @@ def _catalog_entry(
     observed_at: datetime = datetime(2024, 1, 1, tzinfo=UTC),
 ) -> CatalogEntry:
     reported_file = ReportedFile(
-        FileKey(Network.ED2K, TEST_HASH), "f.avi", 1024, 1, Keyword("keroro")
+        file=FileKey(network=Network.ED2K, native_id=TEST_HASH),
+        filename="f.avi",
+        size_bytes=1024,
+        source_count=1,
+        keyword=Keyword("keroro"),
     )
     return CatalogEntry(
         file=reported_file.file,
         size_bytes=1024,
-        latest_observation=FileObservation(reported_file, observed_at, NodeId("n1")),
+        latest_observation=FileObservation(
+            reported_file=reported_file, observed_at=observed_at, node_id=NodeId("n1")
+        ),
         decisions=decisions,
     )
 
@@ -1635,7 +1732,10 @@ async def test_each_control_followed_lands_on_its_dashboard_banner(
     assert len(controls.calls) == 1
 
 
-_CHANNELS = (ChannelStatus(Channel("ed2k"), True, False), ChannelStatus(Channel("x"), False, None))
+_CHANNELS = (
+    ChannelStatus(channel=Channel("ed2k"), connected=True, connectable=False),
+    ChannelStatus(channel=Channel("x"), connected=False, connectable=None),
+)
 
 
 async def _clients_section(reading: StatusReading | None, *, is_fresh: bool = True) -> str:
@@ -1646,12 +1746,12 @@ async def _clients_section(reading: StatusReading | None, *, is_fresh: bool = Tr
 
 
 def _read_now(status: ClientStatus | None) -> StatusReading:
-    return StatusReading(FakeTime().wall.now(), status)
+    return StatusReading(read_at=FakeTime().wall.now(), status=status)
 
 
 @pytest.mark.asyncio
 async def test_dashboard_shows_each_client_and_channel_of_a_current_reading() -> None:
-    section = await _clients_section(_read_now(ClientStatus("2.3.3", _CHANNELS)))
+    section = await _clients_section(_read_now(ClientStatus(version="2.3.3", channels=_CHANNELS)))
     assert "<h3>amuled</h3>" in section
     assert "<th>Connected</th>" in section
     assert "<dd>2.3.3</dd>" in section
@@ -1663,7 +1763,7 @@ async def test_dashboard_shows_each_client_and_channel_of_a_current_reading() ->
 
 @pytest.mark.asyncio
 async def test_dashboard_shows_an_unknown_version() -> None:
-    section = await _clients_section(_read_now(ClientStatus(None, ())))
+    section = await _clients_section(_read_now(ClientStatus(version=None, channels=())))
     assert "<dt>Version</dt><dd>unknown</dd>" in section
     assert "No current channel reading." in section
 
@@ -1677,7 +1777,9 @@ async def test_dashboard_shows_an_unreachable_client() -> None:
 
 @pytest.mark.asyncio
 async def test_dashboard_never_shows_a_stale_reading_as_current() -> None:
-    section = await _clients_section(_read_now(ClientStatus("2.3.3", _CHANNELS)), is_fresh=False)
+    section = await _clients_section(
+        _read_now(ClientStatus(version="2.3.3", channels=_CHANNELS)), is_fresh=False
+    )
     assert "<dd>Out of date: last reading at 2026-06-12 00:00Z.</dd>" in section
     assert "2.3.3" not in section
     assert "<dt>API reachable</dt><dd>unknown</dd>" in section
@@ -1742,7 +1844,8 @@ def test_sort_headers_active_column_flips_and_preserves_filters() -> None:
 @pytest.mark.asyncio
 async def test_files_sort_by_size_renders_the_rows_in_the_order_listed() -> None:
     first, second = (
-        replace(_catalog_entry(decisions=()), file=FileKey(Network.ED2K, h * 32)) for h in "ca"
+        replace(_catalog_entry(decisions=()), file=FileKey(network=Network.ED2K, native_id=h * 32))
+        for h in "ca"
     )
     text, call = await _files_page("/files?sort=size&direction=asc", _listing(first, second))
     _, old_key = await _files_page("/files?sort=size&dir=asc")
@@ -1981,7 +2084,9 @@ _EDGES = "<p>Periods are cut at the interval's edges.</p>"
 
 @pytest.mark.asyncio
 async def test_an_interval_of_3_days_shows_those_days_and_moves_by_3_days() -> None:
-    page = await _file_page(replace(_FILE_DESCRIPTION, interval=Interval(_OCT_8, _OCT_11)))
+    page = await _file_page(
+        replace(_FILE_DESCRIPTION, interval=Interval(since=_OCT_8, until=_OCT_11))
+    )
     path, days = _detail_url(TEST_HASH), timedelta(days=3)
     assert f"<a {_href(path, _OCT_8 - days, _OCT_8)}>← Previous</a>" in page
     assert f"<a {_href(path, _OCT_11, _OCT_11 + days)}>Next →</a>" in page
@@ -1991,7 +2096,7 @@ async def test_an_interval_of_3_days_shows_those_days_and_moves_by_3_days() -> N
 
 @pytest.mark.asyncio
 async def test_a_clamped_interval_says_so_and_shows_its_ends_in_the_inputs() -> None:
-    clamped = Interval(_OCT_11 - timedelta(days=7), _OCT_11, clamped=True)
+    clamped = Interval(since=_OCT_11 - timedelta(days=7), until=_OCT_11, clamped=True)
     page = await _file_page(replace(_FILE_DESCRIPTION, interval=clamped))
     notice = "The interval requested is longer than 7 days: showing the 7 days ending at its end."
     assert f"<p>{notice}</p>" in page
@@ -2011,7 +2116,9 @@ async def test_an_interval_ending_now_shows_no_next() -> None:
 @pytest.mark.asyncio
 async def test_the_presets_end_at_the_now_the_use_case_read() -> None:
     now = datetime(2026, 10, 12, 6, tzinfo=UTC)  # not the wall clock's
-    page = await _file_page(replace(_FILE_DESCRIPTION, interval=Interval(_OCT_8, _OCT_11), now=now))
+    page = await _file_page(
+        replace(_FILE_DESCRIPTION, interval=Interval(since=_OCT_8, until=_OCT_11), now=now)
+    )
     path, hours = _detail_url(TEST_HASH), {"hour": 1, "6 hours": 6, "24 hours": 24, "7 days": 168}
     for label, span in hours.items():
         assert f"<a {_href(path, now - timedelta(hours=span), now)}>Last {label}</a>" in page
@@ -2026,7 +2133,10 @@ async def test_the_presets_end_at_the_now_the_use_case_read() -> None:
 async def test_the_source_and_name_pages_keep_their_parameters_and_their_interval(
     path: str, kept: dict[str, str]
 ) -> None:
-    shown: dict[str, Any] = {"has_next_page": True, "interval": Interval(_OCT_8, _OCT_11)}
+    shown: dict[str, Any] = {
+        "has_next_page": True,
+        "interval": Interval(since=_OCT_8, until=_OCT_11),
+    }
     app = _app_on_fakes(
         source_describer=FakeSourceDescriber(replace(_SOURCE_DESCRIPTION, **shown)),
         source_name_describer=FakeSourceNameDescriber(replace(_SOURCE_NAME_DESCRIPTION, **shown)),

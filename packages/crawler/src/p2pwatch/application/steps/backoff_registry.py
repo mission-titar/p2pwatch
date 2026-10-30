@@ -88,7 +88,9 @@ class BackoffRegistry:
         )
         delay_seconds += self._jitter_generator.jitter(self._policy.jitter_ratio * delay_seconds)
         delay = timedelta(seconds=delay_seconds)
-        self._state_by_key[backoff_key] = BackoffState(attempts, self._wall_clock.now(), delay)
+        self._state_by_key[backoff_key] = BackoffState(
+            attempts=attempts, started_at=self._wall_clock.now(), delay=delay
+        )
         self._deadline_by_key[backoff_key] = self._monotonic_clock.now() + delay
         return delay
 

@@ -6,7 +6,7 @@ from p2pwatch.domain.download.states import FailureReason, WaitingReason
 from p2pwatch.domain.file_key import FileKey
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class DownloadStatus:
     """``completed`` is the client's own positive signal, never a byte count."""
 

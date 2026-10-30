@@ -21,13 +21,20 @@ from tests.contracts.application.ports.driven.tracked_download_store_contract im
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_local
 
-_A = FileKey(Network.ED2K, "a" * 32)
+_A = FileKey(network=Network.ED2K, native_id="a" * 32)
 _T0 = datetime(2026, 6, 12, 0, 0, 0, 123456, tzinfo=UTC)
 _DAY = timedelta(days=1)
 
 
 def _status(file: FileKey, done: int = 0, waiting: WaitingReason | None = None) -> DownloadStatus:
-    return DownloadStatus(file, done, 100, False, waiting, None)
+    return DownloadStatus(
+        file=file,
+        bytes_done=done,
+        size_bytes=100,
+        completed=False,
+        waiting_reason=waiting,
+        failure_reason=None,
+    )
 
 
 def _lifecycle(connection: sqlite3.Connection, file: FileKey) -> dict[str, Any]:

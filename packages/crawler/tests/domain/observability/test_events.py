@@ -21,9 +21,9 @@ def test_observation_recorded_carries_client_and_network() -> None:
 
 def test_event_is_frozen() -> None:
     event = DownloadCompleted(
-        file=FileKey(Network.ED2K, "a" * 32),
+        file=FileKey(network=Network.ED2K, native_id="a" * 32),
         filename="x.avi",
-        target_titles=(TargetTitle(TargetId("062A"), "t"),),
+        target_titles=(TargetTitle(target_id=TargetId("062A"), title="t"),),
         node_id=NodeId("titar-node-1"),
     )
     with pytest.raises(dataclasses.FrozenInstanceError):

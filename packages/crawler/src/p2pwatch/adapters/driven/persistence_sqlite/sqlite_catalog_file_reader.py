@@ -324,7 +324,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
         rows = self._thread_read_connections.connection().execute(sql, params).fetchall()
         return tuple(
             CatalogEntry(
-                file=FileKey(Network(row["network"]), row["native_id"]),
+                file=FileKey(network=Network(row["network"]), native_id=row["native_id"]),
                 size_bytes=row["file_size_bytes"],
                 # A file with no observation LEFT JOINs to NULLs.
                 latest_observation=None if row["filename"] is None else observation_from_row(row),
@@ -349,13 +349,13 @@ class SqliteCatalogFileReader(CatalogFileReader):
         if file_row is None:
             return None
 
-        file = FileKey(Network(file_row["network"]), file_row["native_id"])
+        file = FileKey(network=Network(file_row["network"]), native_id=file_row["native_id"])
         dec_rows = connection.execute(_SQL_FILE_DECISIONS, (file_id,)).fetchall()
 
         decisions = tuple(
             DatedDecision(
-                file,
-                DecisionRecord(
+                file=file,
+                decision=DecisionRecord(
                     target_id=TargetId(row["target_id"]),
                     rule_name=row["rule_name"],
                     tier=DecisionTier(row["tier"]),

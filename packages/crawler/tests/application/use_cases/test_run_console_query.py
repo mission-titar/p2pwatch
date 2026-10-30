@@ -7,7 +7,9 @@ from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.domain.console_query import ConsoleDatabase, QueryAnswer
 from tests.fakes.adapters.driven.fake_sql_executor import ExecuteCall, FakeSqlExecutor
 
-_ANSWER = QueryAnswer(("x",), (("1",),), timedelta(milliseconds=3), truncated=False)
+_ANSWER = QueryAnswer(
+    columns=("x",), rows=(("1",),), elapsed=timedelta(milliseconds=3), truncated=False
+)
 
 
 def test_a_query_runs_on_the_chosen_database_only_capped_at_1000_rows_and_5_seconds() -> None:

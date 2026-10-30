@@ -24,7 +24,7 @@ _NODE_ID = NodeId("n1")
 
 
 def _key(native_id: str) -> FileKey:
-    return FileKey(Network.ED2K, native_id)
+    return FileKey(network=Network.ED2K, native_id=native_id)
 
 
 @pytest.fixture
@@ -74,7 +74,9 @@ def _observation(
         duration_seconds=media,
         bitrate_kbps=None if media is None else 900,
     )
-    return FileObservation(reported_file, datetime.fromisoformat(at), node_id)
+    return FileObservation(
+        reported_file=reported_file, observed_at=datetime.fromisoformat(at), node_id=node_id
+    )
 
 
 def test_every_read_carries_the_node_of_its_observation(connection: sqlite3.Connection) -> None:

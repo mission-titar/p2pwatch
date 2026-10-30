@@ -10,5 +10,5 @@ from tests.fakes.adapters.driven.fake_no_set_state_tracked_download_store import
 def test_the_store_refuses_the_state_change_a_cycle_never_makes() -> None:
     with pytest.raises(AssertionError, match="set_state"):
         FakeNoSetStateTrackedDownloadStore().set_state(
-            FileKey(Network.ED2K, "a" * 32), DownloadState.FAILED
+            FileKey(network=Network.ED2K, native_id="a" * 32), DownloadState.FAILED
         )

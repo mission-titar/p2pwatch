@@ -34,7 +34,9 @@ class DescribeSource(SourceDescriber):
             source_id,
             limit=PAGE_SIZE,
             offset=(page - 1) * PAGE_SIZE,
-            window=PeriodWindow(interval.since, interval.until, self._source_period_gap),
+            window=PeriodWindow(
+                since=interval.since, until=interval.until, gap=self._source_period_gap
+            ),
         )
         if source_history is None:
             return None

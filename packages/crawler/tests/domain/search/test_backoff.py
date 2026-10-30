@@ -36,8 +36,10 @@ def test_attempt_zero_or_negative_is_treated_as_the_first() -> None:
 def test_a_backoff_key_names_a_channel_or_the_whole_client() -> None:
     channel_key = BackoffKey(client_name=ClientName("amule-1"), channel=Channel("kad"))
     assert (channel_key.client_name, channel_key.channel) == ("amule-1", "kad")
-    assert BackoffKey(ClientName("amule-1"), None) != channel_key
-    assert {channel_key: 1}[BackoffKey(ClientName("amule-1"), Channel("kad"))] == 1
+    assert BackoffKey(client_name=ClientName("amule-1"), channel=None) != channel_key
+    assert {channel_key: 1}[
+        BackoffKey(client_name=ClientName("amule-1"), channel=Channel("kad"))
+    ] == 1
     with pytest.raises(dataclasses.FrozenInstanceError):
         channel_key.channel = Channel("ed2k")  # type: ignore[misc]
 

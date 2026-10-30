@@ -13,7 +13,7 @@ from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.source import SourceKey
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class TierRise:
     """A file's targets risen to ``tier``, the highest of them, ``ed2k_link`` fetching it."""
 
@@ -32,7 +32,7 @@ class SourceAlertKind(StrEnum):
     REAPPEARED = "reappeared"
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SourceAlert:
     """A source useful on a file, ``absent_for`` that long before, ``None`` for a first one."""
 
@@ -45,7 +45,7 @@ class SourceAlert:
     node_id: NodeId
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class CompletedDownload:
     """A file the client finished downloading, with every download target it holds."""
 
@@ -54,7 +54,7 @@ class CompletedDownload:
     node_id: NodeId
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class RelayedLogLine:
     """An event's log line, relayed unchanged: it has no text of its own."""
 

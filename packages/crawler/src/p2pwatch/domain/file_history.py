@@ -8,7 +8,7 @@ from p2pwatch.domain.file_target_decision import DatedDecision
 from p2pwatch.domain.observation import FileObservation
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class FileHistory:
     """A file's observations over an interval, oldest first, its latest one over any, its
     current decisions, one per target in target order, and every filename it was seen under."""

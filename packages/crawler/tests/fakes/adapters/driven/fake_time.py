@@ -11,7 +11,7 @@ class FakeTime:
 
     def __init__(self, start: datetime | None = None) -> None:
         self._wall_now = start or datetime(2026, 6, 12, tzinfo=UTC)
-        self._monotonic_now = MonotonicInstant(0)
+        self._monotonic_now = MonotonicInstant(nanoseconds=0)
         self.sleeps: list[timedelta] = []
         self.wall = FakeWallClock(self)
         self.monotonic = FakeMonotonicClock(self)

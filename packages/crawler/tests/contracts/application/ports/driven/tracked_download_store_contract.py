@@ -11,15 +11,22 @@ from p2pwatch.domain.download.states import DownloadState, FailureReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
 
-_A = FileKey(Network.ED2K, "a" * 32)
-_B = FileKey(Network.ED2K, "b" * 32)
-_C = FileKey(Network.ED2K, "c" * 32)
+_A = FileKey(network=Network.ED2K, native_id="a" * 32)
+_B = FileKey(network=Network.ED2K, native_id="b" * 32)
+_C = FileKey(network=Network.ED2K, native_id="c" * 32)
 _QUEUED_AT = datetime(2026, 6, 12, 10, 0, 0, 123456, tzinfo=UTC)
 _SEEN_AT = _QUEUED_AT + timedelta(hours=1)
 
 
 def _status(file: FileKey) -> DownloadStatus:
-    return DownloadStatus(file, 0, 100, False, None, None)
+    return DownloadStatus(
+        file=file,
+        bytes_done=0,
+        size_bytes=100,
+        completed=False,
+        waiting_reason=None,
+        failure_reason=None,
+    )
 
 
 class TrackedDownloadStore(Protocol):

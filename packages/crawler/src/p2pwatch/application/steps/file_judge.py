@@ -70,7 +70,12 @@ class FileJudge:
         ):
             target_id = new_decision.target_id
             self._decision_writer.record_decision(
-                DatedDecision(file, new_decision, self._wall_clock.now(), node_id)
+                DatedDecision(
+                    file=file,
+                    decision=new_decision,
+                    decided_at=self._wall_clock.now(),
+                    node_id=node_id,
+                )
             )
             if (
                 isinstance(new_decision, DecisionRecord)
@@ -80,10 +85,10 @@ class FileJudge:
             target = self._engine.target(target_id)
             changes.append(
                 DecisionChange(
-                    target_id,
-                    "" if target is None else target.title,
-                    persisted.get(target_id),
-                    new_decision,
+                    target_id=target_id,
+                    title="" if target is None else target.title,
+                    previous_decision=persisted.get(target_id),
+                    new_decision=new_decision,
                 )
             )
         if changes:
@@ -94,6 +99,12 @@ class FileJudge:
             else:
                 filename, size_bytes = best.reported_file.filename, best.reported_file.size_bytes
             await self._observability_dispatcher.dispatch(
-                DecisionsRecorded(file, filename, size_bytes, tuple(changes), node_id)
+                DecisionsRecorded(
+                    file=file,
+                    filename=filename,
+                    size_bytes=size_bytes,
+                    changes=tuple(changes),
+                    node_id=node_id,
+                )
             )
         return len(changes)

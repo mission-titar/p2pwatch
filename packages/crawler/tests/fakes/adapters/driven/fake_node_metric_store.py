@@ -30,6 +30,6 @@ class FakeNodeMetricStore(NodeMetricWriter, NodeMetricReader):
 
     def read_samples(self) -> tuple[NodeMetricSample, ...]:
         return tuple(
-            NodeMetricSample(node_metric, labels, series_value)
+            NodeMetricSample(node_metric=node_metric, labels=labels, value=series_value)
             for (node_metric, labels), series_value in self._value_by_series.items()
         )

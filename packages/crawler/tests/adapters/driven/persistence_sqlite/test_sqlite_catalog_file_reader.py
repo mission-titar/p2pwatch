@@ -120,14 +120,14 @@ def test_read_catalog_entries_no_filter_returns_all(catalog_db: Path) -> None:
     rows = _entries(catalog_db)
     assert rows == (
         CatalogEntry(
-            file=FileKey(Network.ED2K, "a" * 32),
+            file=FileKey(network=Network.ED2K, native_id="a" * 32),
             size_bytes=100,
             latest_observation=FileObservation(
-                ReportedFile(
-                    FileKey(Network.ED2K, "a" * 32),
-                    "keroro_062.avi",
-                    100,
-                    5,
+                reported_file=ReportedFile(
+                    file=FileKey(network=Network.ED2K, native_id="a" * 32),
+                    filename="keroro_062.avi",
+                    size_bytes=100,
+                    source_count=5,
                     keyword=Keyword("keroro"),
                 ),
                 observed_at=datetime(2026, 6, 22, 10, tzinfo=UTC),
@@ -235,12 +235,12 @@ def test_file_history_carries_observations_and_dated_decisions(catalog_db: Path)
     seed(catalog_db)
     file_history = _history(catalog_db, "a" * 32)
     assert file_history is not None
-    assert file_history.file == FileKey(Network.ED2K, "a" * 32)
+    assert file_history.file == FileKey(network=Network.ED2K, native_id="a" * 32)
     assert file_history.size_bytes == 100
     assert file_history.decisions == (
         DatedDecision(
-            FileKey(Network.ED2K, "a" * 32),
-            DecisionRecord(
+            file=FileKey(network=Network.ED2K, native_id="a" * 32),
+            decision=DecisionRecord(
                 target_id=TargetId("062A"), rule_name="id_segment_exact", tier=DecisionTier.DOWNLOAD
             ),
             decided_at=datetime(2026, 6, 22, 10, 0, 1, tzinfo=UTC),
@@ -282,12 +282,12 @@ def test_file_history_of_an_unknown_file_id_is_none(catalog_db: Path) -> None:
 
 def test_file_history_reads_a_recorded_decision_back_to_the_microsecond(catalog_db: Path) -> None:
     decided = DatedDecision(
-        FileKey(Network.ED2K, "a" * 32),
-        DecisionRecord(
+        file=FileKey(network=Network.ED2K, native_id="a" * 32),
+        decision=DecisionRecord(
             target_id=TargetId("062A"), rule_name="id_segment_exact", tier=DecisionTier.DOWNLOAD
         ),
-        datetime(2026, 6, 22, 10, 0, 1, 123456, tzinfo=UTC),
-        NodeId("n1"),
+        decided_at=datetime(2026, 6, 22, 10, 0, 1, 123456, tzinfo=UTC),
+        node_id=NodeId("n1"),
     )
     with closing(sqlite3.connect(catalog_db)) as connection, connection:
         insert_file(connection, "a" * 32)

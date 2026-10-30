@@ -162,7 +162,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
             if search_type == "kad":
                 search_id = await self._start_kad(keyword, budget_seconds)
                 if search_id is None:
-                    return SearchAnswer((), 0)
+                    return SearchAnswer(reported_files=(), skipped_result_count=0)
                 await self._await_end(search_id, budget_seconds, widen=True)
             else:
                 async with self._ed2k_lock:
@@ -173,7 +173,9 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
                     await self._await_end(search_id, budget_seconds, widen=False)
             rows = await self._collect(f"/search/{search_id}/results", "results")
             reported_files, skipped_result_count = map_search_results(rows, keyword)
-            return SearchAnswer(reported_files, skipped_result_count)
+            return SearchAnswer(
+                reported_files=reported_files, skipped_result_count=skipped_result_count
+            )
 
     async def _start_kad(self, keyword: Keyword, budget_seconds: float) -> int | None:
         """Starts in the Kad word's next free slot, reserved before sleeping; ``None`` without a

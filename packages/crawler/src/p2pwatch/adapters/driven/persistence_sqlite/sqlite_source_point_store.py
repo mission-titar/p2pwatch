@@ -168,9 +168,9 @@ class SqliteSourcePointStore(SourcePointWriter, SourcePointReader):
 
 def _latest_point(row: NamedRow) -> LatestPoint:
     return LatestPoint(
-        SourceRole(row["role"]),
-        micros_to_instant(row["observed_at_micros"]),
-        row["session_received_bytes"],
+        role=SourceRole(row["role"]),
+        observed_at=micros_to_instant(row["observed_at_micros"]),
+        session_received_bytes=row["session_received_bytes"],
     )
 
 

@@ -79,7 +79,7 @@ class SqliteNodeStateReader(NodeStateReader):
 
         downloads = tuple(
             TrackedDownload(
-                file=FileKey(Network(row["network"]), row["native_id"]),
+                file=FileKey(network=Network(row["network"]), native_id=row["native_id"]),
                 target_id=TargetId(row["target_id"]),
                 state=DownloadState(row["state"]),
                 queued_at=micros_to_instant(row["queued_at_micros"]),
@@ -93,12 +93,12 @@ class SqliteNodeStateReader(NodeStateReader):
 
         backoff_state_by_key = {
             BackoffKey(
-                ClientName(row["client_name"]),
-                None if row["channel"] is None else Channel(row["channel"]),
+                client_name=ClientName(row["client_name"]),
+                channel=None if row["channel"] is None else Channel(row["channel"]),
             ): BackoffState(
-                row["attempts"],
-                micros_to_instant(row["started_at_micros"]),
-                timedelta(seconds=row["delay_seconds"]),
+                attempts=row["attempts"],
+                started_at=micros_to_instant(row["started_at_micros"]),
+                delay=timedelta(seconds=row["delay_seconds"]),
             )
             for row in connection.execute(_SQL_BACKOFF)
         }

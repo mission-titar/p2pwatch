@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from p2pwatch.domain.identifiers import Channel, ClientName
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class BackoffKey:
     """What a backoff holds back: one channel of a client, or the whole client (``None``)."""
 
@@ -21,7 +21,7 @@ class BackoffKey:
     channel: Channel | None
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class BackoffState:
     """A persisted wait: ``attempts`` consecutive failures, the latest of which started a wait of
     ``delay`` at ``started_at`` on the wall clock."""

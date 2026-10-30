@@ -43,7 +43,9 @@ class DescribeFile(FileDescriber):
         )
         if file_history is None:
             return None
-        window = PeriodWindow(interval.since, interval.until, self._source_period_gap)
+        window = PeriodWindow(
+            since=interval.since, until=interval.until, gap=self._source_period_gap
+        )
         explanation = None
         latest = file_history.latest_observation
         if file_history.decisions and latest is not None:

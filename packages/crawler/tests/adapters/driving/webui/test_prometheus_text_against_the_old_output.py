@@ -25,42 +25,55 @@ from p2pwatch.domain.observability.node_metric import (
 from p2pwatch.domain.observability.notification import SourceAlertKind
 
 _FIXTURES = Path(__file__).parents[3] / "fixtures"
-_AMULED_ED2K = ChannelLabels(ClientName("amuled"), Channel("ed2k"))
-_AMULED_KAD = ChannelLabels(ClientName("amuled"), Channel("kad"))
+_AMULED_ED2K = ChannelLabels(client_name=ClientName("amuled"), channel=Channel("ed2k"))
+_AMULED_KAD = ChannelLabels(client_name=ClientName("amuled"), channel=Channel("kad"))
 
 # Every node metric, and each instruction test_policy's cases write: increments that add up, an
 # increment of 0, a gauge replaced, a series removed, an absent one removed, a label to escape.
 INSTRUCTIONS: tuple[CounterIncrement | GaugeSetting, ...] = (
-    CounterIncrement(NodeCounter.SEARCHES, _AMULED_ED2K),
-    CounterIncrement(NodeCounter.SEARCH_RESULTS_SKIPPED, _AMULED_ED2K, 2.0),
-    CounterIncrement(NodeCounter.SEARCHES, _AMULED_KAD),
-    CounterIncrement(NodeCounter.SEARCH_RESULTS_SKIPPED, _AMULED_KAD, 0.0),
-    CounterIncrement(NodeCounter.SEARCHES, _AMULED_ED2K),
-    CounterIncrement(NodeCounter.CLIENT_UNREACHABLE, ClientLabels(ClientName("slskd"))),
-    CounterIncrement(NodeCounter.CLIENT_UNREACHABLE, ClientLabels(ClientName('a\\b"c\nd'))),
-    CounterIncrement(NodeCounter.SEARCH_FAILURES, _AMULED_KAD),
-    CounterIncrement(NodeCounter.OBSERVATIONS, _AMULED_KAD),
-    CounterIncrement(NodeCounter.DECISIONS, DecisionLabels(DecisionTier.DOWNLOAD)),
-    CounterIncrement(NodeCounter.DECISIONS, DecisionLabels(DecisionTier.NOTIFY)),
-    CounterIncrement(NodeCounter.DOWNLOADS_QUEUED),
-    CounterIncrement(NodeCounter.DOWNLOADS_COMPLETED),
-    GaugeSetting(NodeGauge.CHANNEL_CONNECTED, _AMULED_KAD, 1.0),
-    GaugeSetting(NodeGauge.CHANNEL_CONNECTABLE, _AMULED_KAD, 0.0),
-    GaugeSetting(NodeGauge.CHANNEL_CONNECTED, _AMULED_ED2K, 1.0),
-    GaugeSetting(NodeGauge.CHANNEL_CONNECTABLE, _AMULED_ED2K, 1.0),
-    GaugeSetting(NodeGauge.CHANNEL_CONNECTED, _AMULED_KAD, None),
-    GaugeSetting(NodeGauge.CHANNEL_CONNECTABLE, _AMULED_KAD, None),
+    CounterIncrement(counter=NodeCounter.SEARCHES, labels=_AMULED_ED2K),
+    CounterIncrement(counter=NodeCounter.SEARCH_RESULTS_SKIPPED, labels=_AMULED_ED2K, amount=2.0),
+    CounterIncrement(counter=NodeCounter.SEARCHES, labels=_AMULED_KAD),
+    CounterIncrement(counter=NodeCounter.SEARCH_RESULTS_SKIPPED, labels=_AMULED_KAD, amount=0.0),
+    CounterIncrement(counter=NodeCounter.SEARCHES, labels=_AMULED_ED2K),
+    CounterIncrement(
+        counter=NodeCounter.CLIENT_UNREACHABLE, labels=ClientLabels(client_name=ClientName("slskd"))
+    ),
+    CounterIncrement(
+        counter=NodeCounter.CLIENT_UNREACHABLE,
+        labels=ClientLabels(client_name=ClientName('a\\b"c\nd')),
+    ),
+    CounterIncrement(counter=NodeCounter.SEARCH_FAILURES, labels=_AMULED_KAD),
+    CounterIncrement(counter=NodeCounter.OBSERVATIONS, labels=_AMULED_KAD),
+    CounterIncrement(
+        counter=NodeCounter.DECISIONS, labels=DecisionLabels(tier=DecisionTier.DOWNLOAD)
+    ),
+    CounterIncrement(
+        counter=NodeCounter.DECISIONS, labels=DecisionLabels(tier=DecisionTier.NOTIFY)
+    ),
+    CounterIncrement(counter=NodeCounter.DOWNLOADS_QUEUED),
+    CounterIncrement(counter=NodeCounter.DOWNLOADS_COMPLETED),
+    GaugeSetting(gauge=NodeGauge.CHANNEL_CONNECTED, labels=_AMULED_KAD, value=1.0),
+    GaugeSetting(gauge=NodeGauge.CHANNEL_CONNECTABLE, labels=_AMULED_KAD, value=0.0),
+    GaugeSetting(gauge=NodeGauge.CHANNEL_CONNECTED, labels=_AMULED_ED2K, value=1.0),
+    GaugeSetting(gauge=NodeGauge.CHANNEL_CONNECTABLE, labels=_AMULED_ED2K, value=1.0),
+    GaugeSetting(gauge=NodeGauge.CHANNEL_CONNECTED, labels=_AMULED_KAD, value=None),
+    GaugeSetting(gauge=NodeGauge.CHANNEL_CONNECTABLE, labels=_AMULED_KAD, value=None),
     GaugeSetting(
-        NodeGauge.CHANNEL_CONNECTED, ChannelLabels(ClientName("slskd"), Channel("ed2k")), None
+        gauge=NodeGauge.CHANNEL_CONNECTED,
+        labels=ChannelLabels(client_name=ClientName("slskd"), channel=Channel("ed2k")),
+        value=None,
     ),
-    GaugeSetting(NodeGauge.DISK_FREE_BYTES, None, 5_000.0),
-    GaugeSetting(NodeGauge.DISK_FREE_BYTES, None, 500_000_000_000.0),
-    GaugeSetting(NodeGauge.CRAWLER_UP, None, 1.0),
+    GaugeSetting(gauge=NodeGauge.DISK_FREE_BYTES, labels=None, value=5_000.0),
+    GaugeSetting(gauge=NodeGauge.DISK_FREE_BYTES, labels=None, value=500_000_000_000.0),
+    GaugeSetting(gauge=NodeGauge.CRAWLER_UP, labels=None, value=1.0),
     CounterIncrement(
-        NodeCounter.SOURCE_ALERTS, SourceAlertLabels(Network.ED2K, SourceAlertKind.FIRST_USEFUL)
+        counter=NodeCounter.SOURCE_ALERTS,
+        labels=SourceAlertLabels(network=Network.ED2K, kind=SourceAlertKind.FIRST_USEFUL),
     ),
     CounterIncrement(
-        NodeCounter.SOURCE_ALERTS, SourceAlertLabels(Network.ED2K, SourceAlertKind.REAPPEARED)
+        counter=NodeCounter.SOURCE_ALERTS,
+        labels=SourceAlertLabels(network=Network.ED2K, kind=SourceAlertKind.REAPPEARED),
     ),
 )
 

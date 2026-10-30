@@ -42,7 +42,7 @@ def content_hash(  # noqa: PLR0917
 
 def file_id(network: str, native_id: str) -> FileId:  # noqa: PLR0917
     """``FileKey.file_id`` for the SQL function; an unknown network raises."""
-    return FileKey(Network(network), native_id).file_id
+    return FileKey(network=Network(network), native_id=native_id).file_id
 
 
 def register_sql_functions(connection: sqlite3.Connection) -> None:

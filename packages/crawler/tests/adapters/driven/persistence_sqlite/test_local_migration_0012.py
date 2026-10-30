@@ -10,7 +10,7 @@ from p2pwatch.domain.file_key import FileKey, Network
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_local_at
 
-_A = FileKey(Network.ED2K, "a" * 32)
+_A = FileKey(network=Network.ED2K, native_id="a" * 32)
 _RENAMED = {
     ("downloads", "last_seen_at", "latest_seen_at"),
     ("downloads", "last_progress_at", "latest_progress_at"),

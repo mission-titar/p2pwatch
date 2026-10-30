@@ -20,9 +20,9 @@ from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener imp
 from tests.support.catalog_rows import insert_file
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
-_KEY = FileKey(Network.ED2K, _HASH)
-_A = FileKey(Network.ED2K, "a" * 32)
-_B = FileKey(Network.ED2K, "b" * 32)
+_KEY = FileKey(network=Network.ED2K, native_id=_HASH)
+_A = FileKey(network=Network.ED2K, native_id="a" * 32)
+_B = FileKey(network=Network.ED2K, native_id="b" * 32)
 _NODE_ID = NodeId("11111111-2222-3333-4444-555555555555")
 _T0 = datetime(2026, 6, 11, 12, 0, 0, 123456, tzinfo=UTC)
 _T1 = _T0 + timedelta(minutes=1)
@@ -37,15 +37,17 @@ def _decision(
     node_id: NodeId = _NODE_ID,
 ) -> DatedDecision[DecisionRecord]:
     return DatedDecision(
-        file,
-        DecisionRecord(target_id=target_id, rule_name="exact_062a", tier=tier),
-        decided_at,
-        node_id,
+        file=file,
+        decision=DecisionRecord(target_id=target_id, rule_name="exact_062a", tier=tier),
+        decided_at=decided_at,
+        node_id=node_id,
     )
 
 
 def _retraction(file: FileKey, node_id: NodeId = _NODE_ID) -> DatedDecision[Retraction]:
-    return DatedDecision(file, Retraction(TargetId("062A")), _T0, node_id)
+    return DatedDecision(
+        file=file, decision=Retraction(target_id=TargetId("062A")), decided_at=_T0, node_id=node_id
+    )
 
 
 @pytest.fixture
@@ -105,7 +107,7 @@ def test_record_decision_for_unknown_file_raises_persistence_error(
 ) -> None:
     # FK violated (file never observed): sqlite3.IntegrityError WRAPPED, never bare.
     with pytest.raises(PersistenceError, match="FOREIGN KEY"):
-        decision_store.record_decision(_decision(FileKey(Network.ED2K, "0" * 32)))
+        decision_store.record_decision(_decision(FileKey(network=Network.ED2K, native_id="0" * 32)))
 
 
 def test_record_decision_rejects_non_canonical_hash(
@@ -114,7 +116,9 @@ def test_record_decision_rejects_non_canonical_hash(
     # Python validation BEFORE any transaction: an uppercase hash is rejected
     # with a clear message, no row is written.
     with pytest.raises(PersistenceError, match="non-canonical eD2k hash"):
-        decision_store.record_decision(_decision(FileKey(Network.ED2K, _HASH.upper())))
+        decision_store.record_decision(
+            _decision(FileKey(network=Network.ED2K, native_id=_HASH.upper()))
+        )
     assert rows(connection, "SELECT count(*) AS decision_count FROM match_decisions") == [
         {"decision_count": 0}
     ]
@@ -139,7 +143,7 @@ def test_record_retraction_round_trip(
         }
     ]
     assert decision_store.read_latest_decisions(_KEY) == {
-        TargetId("062A"): Retraction(TargetId("062A"))
+        TargetId("062A"): Retraction(target_id=TargetId("062A"))
     }
 
 
@@ -164,7 +168,7 @@ def test_record_retraction_row_is_append_only(
         connection.execute("DELETE FROM match_decisions")
     # The retracted row SURVIVED both attempts, untouched.
     assert decision_store.read_latest_decisions(_KEY) == {
-        TargetId("062A"): Retraction(TargetId("062A"))
+        TargetId("062A"): Retraction(target_id=TargetId("062A"))
     }
 
 

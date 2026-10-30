@@ -9,8 +9,8 @@ def _record(target_id: TargetId, tier: DecisionTier = DecisionTier.DOWNLOAD) -> 
 
 
 def test_retractions_are_equal_when_their_targets_are() -> None:
-    assert Retraction(TargetId("062A")) == Retraction(TargetId("062A"))
-    assert Retraction(TargetId("062A")) != Retraction(TargetId("062B"))
+    assert Retraction(target_id=TargetId("062A")) == Retraction(target_id=TargetId("062A"))
+    assert Retraction(target_id=TargetId("062A")) != Retraction(target_id=TargetId("062B"))
 
 
 def test_a_fresh_record_equal_to_the_persisted_one_is_not_written() -> None:
@@ -30,7 +30,7 @@ def test_a_fresh_record_is_written_when_new_changed_or_over_a_retraction() -> No
     ]
     persisted: dict[TargetId, FileTargetDecision] = {
         TargetId("062B"): _record(TargetId("062B")),
-        TargetId("062C"): Retraction(TargetId("062C")),
+        TargetId("062C"): Retraction(target_id=TargetId("062C")),
     }
     assert records_to_write(fresh, persisted=persisted) == tuple(fresh)
 
@@ -39,11 +39,11 @@ def test_a_persisted_target_out_of_the_fresh_ones_is_retracted_once() -> None:
     persisted: dict[TargetId, FileTargetDecision] = {
         TargetId("063B"): _record(TargetId("063B")),
         TargetId("063A"): _record(TargetId("063A")),
-        TargetId("063C"): Retraction(TargetId("063C")),
+        TargetId("063C"): Retraction(target_id=TargetId("063C")),
     }
     assert records_to_write([], persisted=persisted) == (
-        Retraction(TargetId("063A")),
-        Retraction(TargetId("063B")),
+        Retraction(target_id=TargetId("063A")),
+        Retraction(target_id=TargetId("063B")),
     )
 
 
@@ -51,4 +51,4 @@ def test_the_fresh_records_come_before_the_retractions() -> None:
     written = records_to_write(
         [_record(TargetId("062A"))], persisted={TargetId("001A"): _record(TargetId("001A"))}
     )
-    assert written == (_record(TargetId("062A")), Retraction(TargetId("001A")))
+    assert written == (_record(TargetId("062A")), Retraction(target_id=TargetId("001A")))

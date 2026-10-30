@@ -21,4 +21,4 @@ class FakeNeverSuspendingSearchClient(SearchClient):
         self.calls += 1
         assert self.ticks > self._ticks_seen, "the loop is starved"
         self._ticks_seen = self.ticks
-        return SearchAnswer((), 0)
+        return SearchAnswer(reported_files=(), skipped_result_count=0)

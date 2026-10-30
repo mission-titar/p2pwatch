@@ -55,14 +55,14 @@ def test_a_node_metric_has_its_exposed_name_and_describes_itself() -> None:
     ("labels", "pairs"),
     [
         (
-            ChannelLabels(ClientName("amuled"), Channel("kad")),
+            ChannelLabels(client_name=ClientName("amuled"), channel=Channel("kad")),
             (("client", "amuled"), ("channel", "kad")),
         ),
-        (ClientLabels(ClientName("amuled")), (("client", "amuled"),)),
-        (DecisionLabels(DecisionTier.NOTIFY), (("tier", "notify"),)),
-        (DecisionLabels("retracted"), (("tier", "retracted"),)),
+        (ClientLabels(client_name=ClientName("amuled")), (("client", "amuled"),)),
+        (DecisionLabels(tier=DecisionTier.NOTIFY), (("tier", "notify"),)),
+        (DecisionLabels(tier="retracted"), (("tier", "retracted"),)),
         (
-            SourceAlertLabels(Network.ED2K, SourceAlertKind.FIRST_USEFUL),
+            SourceAlertLabels(network=Network.ED2K, kind=SourceAlertKind.FIRST_USEFUL),
             (("network", "ed2k"), ("kind", "first_useful")),
         ),
     ],
@@ -75,13 +75,17 @@ def test_labels_write_their_pairs_in_the_order_of_their_names(
 
 
 def test_an_increment_names_a_counter_its_labels_and_its_amount() -> None:
-    increment = CounterIncrement(NodeCounter.DECISIONS, DecisionLabels(DecisionTier.NOTIFY), 2.0)
-    assert (increment.labels, increment.amount) == (DecisionLabels(DecisionTier.NOTIFY), 2.0)
+    increment = CounterIncrement(
+        counter=NodeCounter.DECISIONS, labels=DecisionLabels(tier=DecisionTier.NOTIFY), amount=2.0
+    )
+    assert (increment.labels, increment.amount) == (DecisionLabels(tier=DecisionTier.NOTIFY), 2.0)
 
 
 def test_a_setting_of_none_names_a_gauge_series_to_remove() -> None:
     setting = GaugeSetting(
-        NodeGauge.CHANNEL_CONNECTED, ChannelLabels(ClientName("amuled"), Channel("kad")), None
+        gauge=NodeGauge.CHANNEL_CONNECTED,
+        labels=ChannelLabels(client_name=ClientName("amuled"), channel=Channel("kad")),
+        value=None,
     )
     assert setting.value is None
 
@@ -91,13 +95,13 @@ def test_a_setting_of_none_names_a_gauge_series_to_remove() -> None:
     [
         (
             NodeCounter.SEARCHES,
-            ClientLabels(ClientName("amuled")),
+            ClientLabels(client_name=ClientName("amuled")),
             "p2pwatch_searches takes ChannelLabels, given ClientLabels",
         ),
         (NodeCounter.SEARCHES, None, "p2pwatch_searches takes ChannelLabels, given no labels"),
         (
             NodeCounter.DOWNLOADS_COMPLETED,
-            ClientLabels(ClientName("amuled")),
+            ClientLabels(client_name=ClientName("amuled")),
             "p2pwatch_downloads_completed takes no labels, given ClientLabels",
         ),
     ],
@@ -107,21 +111,27 @@ def test_an_increment_whose_labels_are_not_its_counters_cannot_be_built(
     counter: NodeCounter, labels: NodeMetricLabels | None, message: str
 ) -> None:
     with pytest.raises(ValueError, match=message):
-        CounterIncrement(counter, labels)
+        CounterIncrement(counter=counter, labels=labels)
 
 
 def test_a_setting_whose_labels_are_not_its_gauges_cannot_be_built() -> None:
     with pytest.raises(
         ValueError, match="p2pwatch_crawler_up takes no labels, given ChannelLabels"
     ):
-        GaugeSetting(NodeGauge.CRAWLER_UP, ChannelLabels(ClientName("amuled"), Channel("kad")), 1.0)
+        GaugeSetting(
+            gauge=NodeGauge.CRAWLER_UP,
+            labels=ChannelLabels(client_name=ClientName("amuled"), channel=Channel("kad")),
+            value=1.0,
+        )
 
 
 def test_an_instruction_gives_the_pairs_of_its_labels_or_none_unlabelled() -> None:
     labelled = GaugeSetting(
-        NodeGauge.CHANNEL_CONNECTED, ChannelLabels(ClientName("amuled"), Channel("kad")), 1.0
+        gauge=NodeGauge.CHANNEL_CONNECTED,
+        labels=ChannelLabels(client_name=ClientName("amuled"), channel=Channel("kad")),
+        value=1.0,
     )
-    unlabelled = CounterIncrement(NodeCounter.DOWNLOADS_QUEUED)
+    unlabelled = CounterIncrement(counter=NodeCounter.DOWNLOADS_QUEUED)
     assert labelled.label_pairs() == (("client", "amuled"), ("channel", "kad"))
     assert unlabelled.label_pairs() == ()
 
@@ -131,5 +141,7 @@ def test_an_increment_of_a_negative_amount_cannot_be_built() -> None:
         ValueError, match="p2pwatch_searches takes an amount of 0 or more, not -1.0"
     ):
         CounterIncrement(
-            NodeCounter.SEARCHES, ChannelLabels(ClientName("amuled"), Channel("kad")), -1.0
+            counter=NodeCounter.SEARCHES,
+            labels=ChannelLabels(client_name=ClientName("amuled"), channel=Channel("kad")),
+            amount=-1.0,
         )

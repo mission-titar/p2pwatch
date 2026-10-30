@@ -72,7 +72,9 @@ def _periods(db: Path, window: PeriodWindow = _WINDOW) -> list[tuple[str, int, i
     """``(role, first_seen_at, last_seen_at, received_bytes)`` of file a's periods, in micros."""
     with ThreadReadConnections(db, open_reader) as thread_read_connections:
         reader = SqliteSourceReader(thread_read_connections)
-        periods = reader.read_sharing_periods(FileKey(Network.ED2K, "a" * 32), window)
+        periods = reader.read_sharing_periods(
+            FileKey(network=Network.ED2K, native_id="a" * 32), window
+        )
     return [
         (p.role.value, _micros(p.first_seen_at), _micros(p.last_seen_at), p.received_bytes)
         for p in periods
@@ -155,28 +157,59 @@ def test_sharing_periods_join_each_identity_on_each_node_newest_first(catalog_db
         insert_source_point(
             connection, insert_source_variant(connection, "b" * 32, _USER), 200 * _S
         )
-    a = FileKey(Network.ED2K, "a" * 32)
+    a = FileKey(network=Network.ED2K, native_id="a" * 32)
     with ThreadReadConnections(catalog_db, open_reader) as thread_read_connections:
         periods = SqliteSourceReader(thread_read_connections).read_sharing_periods(a, _WINDOW)
-    key, queued_role = SourceKey(Network.ED2K, _USER), SourceRole.QUEUED
+    key, queued_role = SourceKey(network=Network.ED2K, native_id=_USER), SourceRole.QUEUED
     at_30, at_45 = _at(30 * _S), _at(45 * _S)
     assert periods == (
-        SharingPeriod(a, None, "Teammate", queued_role, None, None, at_45, at_45, 0, NodeId("n1")),
-        SharingPeriod(a, None, None, queued_role, None, True, at_30, at_30, 0, NodeId("n1")),
         SharingPeriod(
-            a, key, "AnimuseeFMR", queued_role, None, None, at_30, at_30, 0, NodeId("n2")
+            file=a,
+            source=None,
+            source_name="Teammate",
+            role=queued_role,
+            contact_point=None,
+            connectable=None,
+            first_seen_at=at_45,
+            last_seen_at=at_45,
+            received_bytes=0,
+            node_id=NodeId("n1"),
         ),
         SharingPeriod(
-            a,
-            key,
-            "AnimuseeFMR",
-            queued_role,
-            "198.51.100.7:4661",
-            False,
-            _at(0),
-            _at(60 * _S),
-            0,
-            NodeId("n1"),
+            file=a,
+            source=None,
+            source_name=None,
+            role=queued_role,
+            contact_point=None,
+            connectable=True,
+            first_seen_at=at_30,
+            last_seen_at=at_30,
+            received_bytes=0,
+            node_id=NodeId("n1"),
+        ),
+        SharingPeriod(
+            file=a,
+            source=key,
+            source_name="AnimuseeFMR",
+            role=queued_role,
+            contact_point=None,
+            connectable=None,
+            first_seen_at=at_30,
+            last_seen_at=at_30,
+            received_bytes=0,
+            node_id=NodeId("n2"),
+        ),
+        SharingPeriod(
+            file=a,
+            source=key,
+            source_name="AnimuseeFMR",
+            role=queued_role,
+            contact_point="198.51.100.7:4661",
+            connectable=False,
+            first_seen_at=_at(0),
+            last_seen_at=_at(60 * _S),
+            received_bytes=0,
+            node_id=NodeId("n1"),
         ),
     )
 
@@ -185,7 +218,10 @@ def test_sharing_periods_of_a_file_never_read_are_empty(catalog_db: Path) -> Non
     seed(catalog_db)
     with ThreadReadConnections(catalog_db, open_reader) as thread_read_connections:
         reader = SqliteSourceReader(thread_read_connections)
-        assert reader.read_sharing_periods(FileKey(Network.ED2K, "a" * 32), _WINDOW) == ()
+        assert (
+            reader.read_sharing_periods(FileKey(network=Network.ED2K, native_id="a" * 32), _WINDOW)
+            == ()
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -225,8 +261,18 @@ def test_known_sources_are_each_source_once_by_latest_seen_with_its_latest_name(
 ) -> None:
     _seed_sources(catalog_db)
     assert _known_sources(catalog_db, search_text=None, offset=0) == (
-        KnownSource(SourceKey(Network.ED2K, _USER), "AnimuseeFMR", _at(60), 2),
-        KnownSource(SourceKey(Network.ED2K, _OTHER), "AnimuseeFMR", _at(5), 1),
+        KnownSource(
+            source=SourceKey(network=Network.ED2K, native_id=_USER),
+            source_name="AnimuseeFMR",
+            latest_seen_at=_at(60),
+            file_count=2,
+        ),
+        KnownSource(
+            source=SourceKey(network=Network.ED2K, native_id=_OTHER),
+            source_name="AnimuseeFMR",
+            latest_seen_at=_at(5),
+            file_count=1,
+        ),
     )
 
 
@@ -238,7 +284,12 @@ def test_a_source_never_named_is_known_without_a_source_name(catalog_db: Path) -
             connection, insert_source_variant(connection, "a" * 32, _USER, name=None), 7
         )
     assert _known_sources(catalog_db, search_text=None, offset=0) == (
-        KnownSource(SourceKey(Network.ED2K, _USER), None, _at(7), 1),
+        KnownSource(
+            source=SourceKey(network=Network.ED2K, native_id=_USER),
+            source_name=None,
+            latest_seen_at=_at(7),
+            file_count=1,
+        ),
     )
 
 
@@ -300,16 +351,16 @@ def _period(
     file: FileKey, source: SourceKey | None, source_name: str | None, first: int, last: int
 ) -> SharingPeriod:
     return SharingPeriod(
-        file,
-        source,
-        source_name,
-        SourceRole.QUEUED,
-        None,
-        None,
-        _at(first),
-        _at(last),
-        0,
-        NodeId("n1"),
+        file=file,
+        source=source,
+        source_name=source_name,
+        role=SourceRole.QUEUED,
+        contact_point=None,
+        connectable=None,
+        first_seen_at=_at(first),
+        last_seen_at=_at(last),
+        received_bytes=0,
+        node_id=NodeId("n1"),
     )
 
 
@@ -328,18 +379,29 @@ def test_a_source_history_holds_its_names_its_periods_over_every_file_and_their_
 ) -> None:
     _seed_pages(catalog_db)
     key, a, b = (
-        SourceKey(Network.ED2K, _USER),
-        FileKey(Network.ED2K, "a" * 32),
-        FileKey(Network.ED2K, "b" * 32),
+        SourceKey(network=Network.ED2K, native_id=_USER),
+        FileKey(network=Network.ED2K, native_id="a" * 32),
+        FileKey(network=Network.ED2K, native_id="b" * 32),
     )
     sending = SharingPeriod(
-        b, key, None, SourceRole.SENDING, None, None, _at(50), _at(60), 0, NodeId("n1")
+        file=b,
+        source=key,
+        source_name=None,
+        role=SourceRole.SENDING,
+        contact_point=None,
+        connectable=None,
+        first_seen_at=_at(50),
+        last_seen_at=_at(60),
+        received_bytes=0,
+        node_id=NodeId("n1"),
     )
     assert _source_history(catalog_db, _USER) == SourceHistory(
         source=key,
         source_namings=(
-            SourceNaming(key, "AnimuseeFMR", _at(40), 1),
-            SourceNaming(key, "Shinobu", _at(20), 1),
+            SourceNaming(
+                source=key, source_name="AnimuseeFMR", latest_seen_at=_at(40), file_count=1
+            ),
+            SourceNaming(source=key, source_name="Shinobu", latest_seen_at=_at(20), file_count=1),
         ),
         sharing_periods=(
             sending,
@@ -387,16 +449,32 @@ def test_a_source_name_history_holds_its_hashes_and_its_periods_without_one(
     catalog_db: Path,
 ) -> None:
     _seed_pages(catalog_db)
-    user, other = SourceKey(Network.ED2K, _USER), SourceKey(Network.ED2K, _OTHER)
-    b = FileKey(Network.ED2K, "b" * 32)
+    user, other = (
+        SourceKey(network=Network.ED2K, native_id=_USER),
+        SourceKey(network=Network.ED2K, native_id=_OTHER),
+    )
+    b = FileKey(network=Network.ED2K, native_id="b" * 32)
     hashless = SharingPeriod(
-        b, None, "AnimuseeFMR", SourceRole.STANDBY, None, None, _at(95), _at(95), 0, NodeId("n1")
+        file=b,
+        source=None,
+        source_name="AnimuseeFMR",
+        role=SourceRole.STANDBY,
+        contact_point=None,
+        connectable=None,
+        first_seen_at=_at(95),
+        last_seen_at=_at(95),
+        received_bytes=0,
+        node_id=NodeId("n1"),
     )
     assert _source_name_history(catalog_db, "AnimuseeFMR") == SourceNameHistory(
         source_name="AnimuseeFMR",
         source_namings=(
-            SourceNaming(user, "AnimuseeFMR", _at(40), 1),
-            SourceNaming(other, "AnimuseeFMR", _at(5), 1),
+            SourceNaming(
+                source=user, source_name="AnimuseeFMR", latest_seen_at=_at(40), file_count=1
+            ),
+            SourceNaming(
+                source=other, source_name="AnimuseeFMR", latest_seen_at=_at(5), file_count=1
+            ),
         ),
         sharing_periods=(hashless,),
         best_filename_by_file={},
@@ -425,7 +503,7 @@ def test_a_source_name_history_reads_at_most_its_limit_of_hashes_from_their_offs
     ]
     assert len(source_name_history.sharing_periods) == 3
     assert source_name_history.best_filename_by_file == {
-        FileKey(Network.ED2K, "a" * 32): "keroro_062a.avi"
+        FileKey(network=Network.ED2K, native_id="a" * 32): "keroro_062a.avi"
     }
 
 

@@ -45,9 +45,9 @@ from tests.support.catalog_rows import (
 _NODE_ID = NodeId("n1")
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _DL_NAME = "Keroro N°062A Les demoiselles cambrioleuses.avi"
-_CLIENT = BackoffKey(ClientName("amule-1"), None)
-_KAD = BackoffKey(ClientName("amule-1"), Channel("kad"))
-_ED2K = BackoffKey(ClientName("amule-1"), Channel("ed2k"))
+_CLIENT = BackoffKey(client_name=ClientName("amule-1"), channel=None)
+_KAD = BackoffKey(client_name=ClientName("amule-1"), channel=Channel("kad"))
+_ED2K = BackoffKey(client_name=ClientName("amule-1"), channel=Channel("ed2k"))
 
 # jitter_ratio 0.0 + FakeJitterGenerator(jitter_value=0.0) → backoff = exact NOMINAL delay.
 _POLICY = BackoffPolicy(
@@ -60,7 +60,7 @@ _POLICY = BackoffPolicy(
 
 def _reported_file() -> ReportedFile:
     return ReportedFile(
-        file=FileKey(Network.ED2K, _HASH),
+        file=FileKey(network=Network.ED2K, native_id=_HASH),
         filename=_DL_NAME,
         size_bytes=234_000_000,
         source_count=3,
@@ -202,7 +202,7 @@ async def test_multiple_observations_some_unchanged_are_all_processed(
 ) -> None:
     fake_time = FakeTime()
     discarded = ReportedFile(
-        file=FileKey(Network.ED2K, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+        file=FileKey(network=Network.ED2K, native_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
         filename="random.txt",  # discarded by the engine → catalog returns 0
         size_bytes=10,
         source_count=1,
@@ -337,10 +337,12 @@ async def test_successful_search_emits_search_executed_with_network_and_counts(
     ]
     labels = (("client", "amule-1"), ("channel", "ed2k"))
     assert set(observability.node_metric_store.read_samples()) == {
-        NodeMetricSample(NodeCounter.SEARCHES, labels, 1.0),
-        NodeMetricSample(NodeCounter.SEARCH_RESULTS_SKIPPED, labels, 2.0),
-        NodeMetricSample(NodeCounter.OBSERVATIONS, labels, 1.0),
-        NodeMetricSample(NodeCounter.DECISIONS, (("tier", "download"),), 1.0),
+        NodeMetricSample(node_metric=NodeCounter.SEARCHES, labels=labels, value=1.0),
+        NodeMetricSample(node_metric=NodeCounter.SEARCH_RESULTS_SKIPPED, labels=labels, value=2.0),
+        NodeMetricSample(node_metric=NodeCounter.OBSERVATIONS, labels=labels, value=1.0),
+        NodeMetricSample(
+            node_metric=NodeCounter.DECISIONS, labels=(("tier", "download"),), value=1.0
+        ),
     }
     assert observability.notifier.node_ids == [_NODE_ID]
 
@@ -369,7 +371,9 @@ async def test_search_failure_dispatches_search_failed(
     assert observability.logger.lines == [LoggedLine("warning", "search failed on ed2k")]
     assert observability.node_metric_store.read_samples() == (
         NodeMetricSample(
-            NodeCounter.SEARCH_FAILURES, (("client", "amule-1"), ("channel", "ed2k")), 1.0
+            node_metric=NodeCounter.SEARCH_FAILURES,
+            labels=(("client", "amule-1"), ("channel", "ed2k")),
+            value=1.0,
         ),
     )
 
@@ -396,7 +400,9 @@ async def test_transport_failure_during_search_dispatches_client_unreachable(
     await worker.run_task(SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")), _NODE_ID)
     assert observability.logger.lines == [LoggedLine("warning", "amule-1 unreachable")]
     assert observability.node_metric_store.read_samples() == (
-        NodeMetricSample(NodeCounter.CLIENT_UNREACHABLE, (("client", "amule-1"),), 1.0),
+        NodeMetricSample(
+            node_metric=NodeCounter.CLIENT_UNREACHABLE, labels=(("client", "amule-1"),), value=1.0
+        ),
     )
 
 

@@ -8,7 +8,7 @@ from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.source import SourceKey, SourceRole
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class PeriodWindow:
     """The readings a page reads, ``since`` included to ``until`` excluded, and the longest gap
     within one period."""
@@ -18,7 +18,7 @@ class PeriodWindow:
     gap: timedelta
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SharingPeriod:
     """One source's consecutive readings on one file by one node; only a sending period received
     bytes."""

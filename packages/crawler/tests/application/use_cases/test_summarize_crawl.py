@@ -52,10 +52,13 @@ def test_each_configured_target_has_its_coverage_in_their_order() -> None:
 
     assert summary.target_coverages == (
         TargetCoverage(
-            TargetId("062B"), status=TargetCoverageStatus.NONE, best_tier=None, file_count=0
+            target_id=TargetId("062B"),
+            status=TargetCoverageStatus.NONE,
+            best_tier=None,
+            file_count=0,
         ),
         TargetCoverage(
-            TargetId("062A"),
+            target_id=TargetId("062A"),
             status=TargetCoverageStatus.FOUND,
             best_tier=DecisionTier.DOWNLOAD,
             file_count=1,

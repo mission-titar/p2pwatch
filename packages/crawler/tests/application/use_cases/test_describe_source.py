@@ -19,12 +19,17 @@ from tests.fakes.adapters.driven.fake_time import FakeTime
 _NOW = datetime(2026, 10, 14, 20, 0, 0, 654321, tzinfo=UTC)
 _SECOND_NOW = _NOW.replace(microsecond=0)
 _GAP = timedelta(seconds=90)
-_SOURCE = SourceKey(Network.ED2K, "1f2e" * 8)
-_NAMING = SourceNaming(_SOURCE, "AnimuseeFMR", _NOW, 1)
+_SOURCE = SourceKey(network=Network.ED2K, native_id="1f2e" * 8)
+_NAMING = SourceNaming(source=_SOURCE, source_name="AnimuseeFMR", latest_seen_at=_NOW, file_count=1)
 
 
 def _history(naming_count: int = 1) -> SourceHistory:
-    return SourceHistory(_SOURCE, (_NAMING,) * naming_count, (), {})
+    return SourceHistory(
+        source=_SOURCE,
+        source_namings=(_NAMING,) * naming_count,
+        sharing_periods=(),
+        best_filename_by_file={},
+    )
 
 
 def _describe(
@@ -54,9 +59,9 @@ def test_the_history_is_read_over_the_last_7_days_ending_now_to_the_second() -> 
 
     description = _describe(reader)
 
-    week = Interval(_SECOND_NOW - timedelta(days=7), _SECOND_NOW)
+    week = Interval(since=_SECOND_NOW - timedelta(days=7), until=_SECOND_NOW)
     assert description == SourceDescription(_history(), False, week, _SECOND_NOW)
-    window = PeriodWindow(week.since, week.until, _GAP)
+    window = PeriodWindow(since=week.since, until=week.until, gap=_GAP)
     assert reader.calls == [
         (
             "read_source_history",
@@ -72,30 +77,30 @@ def test_the_periods_are_read_over_the_requested_interval_with_the_gap() -> None
     description = _describe(reader, requested_since=since, requested_until=until)
 
     assert description is not None
-    assert description.interval == Interval(since, until)
-    assert reader.calls[0][1]["window"] == PeriodWindow(since, until, _GAP)
+    assert description.interval == Interval(since=since, until=until)
+    assert reader.calls[0][1]["window"] == PeriodWindow(since=since, until=until, gap=_GAP)
 
 
 def test_a_request_past_7_days_reads_the_7_ending_at_its_until() -> None:
     reader = FakeSourceReader(source_history=_history())
     since, until = datetime(2026, 9, 1, tzinfo=UTC), datetime(2026, 10, 1, tzinfo=UTC)
-    week = Interval(until - timedelta(days=7), until, clamped=True)
+    week = Interval(since=until - timedelta(days=7), until=until, clamped=True)
 
     description = _describe(reader, requested_since=since, requested_until=until)
 
     assert description is not None and description.interval == week
-    assert reader.calls[0][1]["window"] == PeriodWindow(week.since, until, _GAP)
+    assert reader.calls[0][1]["window"] == PeriodWindow(since=week.since, until=until, gap=_GAP)
 
 
 def test_an_inverted_request_reads_the_7_days_ending_at_its_until() -> None:
     reader = FakeSourceReader(source_history=_history())
     since, until = datetime(2026, 10, 12, tzinfo=UTC), datetime(2026, 10, 10, tzinfo=UTC)
-    week = Interval(until - timedelta(days=7), until)
+    week = Interval(since=until - timedelta(days=7), until=until)
 
     description = _describe(reader, requested_since=since, requested_until=until)
 
     assert description is not None and description.interval == week
-    assert reader.calls[0][1]["window"] == PeriodWindow(week.since, until, _GAP)
+    assert reader.calls[0][1]["window"] == PeriodWindow(since=week.since, until=until, gap=_GAP)
 
 
 def test_a_page_starts_after_the_names_of_the_pages_before_it() -> None:
@@ -115,10 +120,23 @@ def test_only_a_full_page_of_names_offers_a_next_one() -> None:
 
 def test_every_period_read_is_described_on_every_page() -> None:
     period = SharingPeriod(
-        FileKey(Network.ED2K, "a" * 32), _SOURCE, "AnimuseeFMR", SourceRole.QUEUED,
-        None, None, _NOW, _NOW, 0, NodeId("n1"),
-    )  # fmt: skip
-    history = SourceHistory(_SOURCE, (_NAMING,), (period,) * (PAGE_SIZE + 1), {})
+        file=FileKey(network=Network.ED2K, native_id="a" * 32),
+        source=_SOURCE,
+        source_name="AnimuseeFMR",
+        role=SourceRole.QUEUED,
+        contact_point=None,
+        connectable=None,
+        first_seen_at=_NOW,
+        last_seen_at=_NOW,
+        received_bytes=0,
+        node_id=NodeId("n1"),
+    )
+    history = SourceHistory(
+        source=_SOURCE,
+        source_namings=(_NAMING,),
+        sharing_periods=(period,) * (PAGE_SIZE + 1),
+        best_filename_by_file={},
+    )
 
     description = _describe(FakeSourceReader(source_history=history), page=2)
 

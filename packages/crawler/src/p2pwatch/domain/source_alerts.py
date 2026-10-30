@@ -6,12 +6,12 @@ from datetime import datetime, timedelta
 from p2pwatch.domain.source import EarlierPoints, SourceRole, SourceUsefulness
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class FirstUseful:
     """The source never had a useful point on this node."""
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class Reappeared:
     """The source had no useful or not-useful point on this node for ``absent_for``."""
 
@@ -33,4 +33,4 @@ def source_alert(
     latest = earlier_points.latest_known_at
     if latest is None or round_started_at - latest <= reappeared_after:
         return None
-    return Reappeared(round_started_at - latest)
+    return Reappeared(absent_for=round_started_at - latest)

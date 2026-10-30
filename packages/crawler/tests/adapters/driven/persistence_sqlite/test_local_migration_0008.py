@@ -6,7 +6,7 @@ from p2pwatch.domain.file_key import FileKey, Network
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_local_at
 
-_A = FileKey(Network.ED2K, "a" * 32)
+_A = FileKey(network=Network.ED2K, native_id="a" * 32)
 
 
 def test_0008_adds_the_lifecycle_columns_unknown_on_existing_rows(tmp_path: Path) -> None:

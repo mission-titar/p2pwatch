@@ -25,7 +25,10 @@ from tests.support.catalog_rows import (
 
 _FILE, _OTHER_FILE = "a" * 32, "b" * 32
 _USER, _OTHER_USER = "1f2e" * 8, "c" * 32
-_KEY, _OTHER_KEY = SourceKey(Network.ED2K, _USER), SourceKey(Network.ED2K, _OTHER_USER)
+_KEY, _OTHER_KEY = (
+    SourceKey(network=Network.ED2K, native_id=_USER),
+    SourceKey(network=Network.ED2K, native_id=_OTHER_USER),
+)
 _T0 = datetime(2026, 10, 13, 20, 0, tzinfo=UTC)
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _NODE_ID = NodeId("n1")
@@ -71,7 +74,16 @@ def source_point_store(catalog: sqlite3.Connection) -> SqliteSourcePointStore:
 
 
 def _passing(key: SourceKey | None = _KEY, name: str = "AnimuseeFMR") -> SourceReading:
-    return SourceReading(key, name, None, None, None, None, (), 0)
+    return SourceReading(
+        source=key,
+        source_name=name,
+        software=None,
+        role=None,
+        contact_point=None,
+        connectable=None,
+        raw_metadata=(),
+        session_received_bytes=0,
+    )
 
 
 def _latest(
@@ -83,7 +95,7 @@ def _latest(
     native_id: str = _FILE,
     node_id: NodeId = _NODE_ID,
 ) -> LatestPoint | None:
-    file = FileKey(Network.ED2K, native_id)
+    file = FileKey(network=Network.ED2K, native_id=native_id)
     return source_point_store.read_latest_point(file, reading, since, before, node_id)
 
 
@@ -94,11 +106,11 @@ def test_the_latest_point_is_the_latest_since_the_window_opens_before_it_closes(
     _points(catalog, _T0, role="nothing_new", session_received_bytes=5)
     _points(catalog, later, role="sending", session_received_bytes=7)
     assert _latest(source_point_store, _passing(), _T0, later) == LatestPoint(
-        SourceRole.NOTHING_NEW, _T0, 5
+        role=SourceRole.NOTHING_NEW, observed_at=_T0, session_received_bytes=5
     )
     assert _latest(source_point_store, _passing(), _T0 + timedelta(microseconds=1), later) is None
     assert _latest(source_point_store, _passing(), _T0, later + timedelta(seconds=1)) == (
-        LatestPoint(SourceRole.SENDING, later, 7)
+        LatestPoint(role=SourceRole.SENDING, observed_at=later, session_received_bytes=7)
     )
 
 
@@ -110,10 +122,10 @@ def test_a_reading_without_identity_reads_only_its_name_without_identity(
     _points(catalog, _T0, role="sending", user_hash=None)
     _points(catalog, _T0, role="standby", user_hash=None, name="Teammate")
     assert _latest(source_point_store, _passing(_KEY, "Renamed"), _T0, before) == LatestPoint(
-        SourceRole.NOTHING_NEW, _T0, 0
+        role=SourceRole.NOTHING_NEW, observed_at=_T0, session_received_bytes=0
     )
     assert _latest(source_point_store, _passing(None), _T0, before) == LatestPoint(
-        SourceRole.SENDING, _T0, 0
+        role=SourceRole.SENDING, observed_at=_T0, session_received_bytes=0
     )
     assert _latest(source_point_store, _passing(None, "Nobody"), _T0, before) is None
 
@@ -127,7 +139,7 @@ def test_the_latest_point_reads_this_file_on_the_given_node_only(
     assert _latest(source_point_store, _passing(), _T0, before) is None
     assert _latest(
         source_point_store, _passing(), _T0, before, node_id=NodeId("n2")
-    ) == LatestPoint(SourceRole.NOTHING_NEW, _T0, 0)
+    ) == LatestPoint(role=SourceRole.NOTHING_NEW, observed_at=_T0, session_received_bytes=0)
 
 
 def test_earlier_points_are_each_variants_latest_point_before_the_round(
@@ -138,8 +150,16 @@ def test_earlier_points_are_each_variants_latest_point_before_the_round(
     _points(catalog, _T0 + timedelta(hours=1), role="standby", session_received_bytes=9_728)
     _points(catalog, round_started_at, round_started_at + timedelta(seconds=30))
     assert set(source_point_store.read_earlier_points(_KEY, round_started_at, NodeId("n1"))) == {
-        LatestPoint(SourceRole.NOTHING_NEW, _T0 + timedelta(seconds=30), 0),
-        LatestPoint(SourceRole.STANDBY, _T0 + timedelta(hours=1), 9_728),
+        LatestPoint(
+            role=SourceRole.NOTHING_NEW,
+            observed_at=_T0 + timedelta(seconds=30),
+            session_received_bytes=0,
+        ),
+        LatestPoint(
+            role=SourceRole.STANDBY,
+            observed_at=_T0 + timedelta(hours=1),
+            session_received_bytes=9_728,
+        ),
     }
 
 
@@ -152,11 +172,11 @@ def test_earlier_points_read_this_sources_points_on_every_file_of_the_given_node
     _points(catalog, later, node_id="n2")
     assert source_point_store.read_earlier_points(
         _KEY, later + timedelta(seconds=30), NodeId("n1")
-    ) == (LatestPoint(SourceRole.SENDING, _T0, 0),)
+    ) == (LatestPoint(role=SourceRole.SENDING, observed_at=_T0, session_received_bytes=0),)
     assert source_point_store.read_earlier_points(_OTHER_KEY, later, NodeId("n1")) == ()
     assert source_point_store.read_earlier_points(
         _KEY, later + timedelta(seconds=30), NodeId("n2")
-    ) == (LatestPoint(SourceRole.QUEUED, later, 0),)
+    ) == (LatestPoint(role=SourceRole.QUEUED, observed_at=later, session_received_bytes=0),)
 
 
 def test_has_points_before_reads_only_the_given_nodes_points_before(

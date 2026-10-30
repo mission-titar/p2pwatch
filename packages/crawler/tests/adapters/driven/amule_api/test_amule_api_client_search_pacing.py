@@ -249,7 +249,9 @@ def test_a_keyword_without_a_kad_target_neither_spins_nor_searches(
         client = await _connected(api)
         loop = asyncio.get_running_loop()
         while loop.time() < _HOUR and len(returned_at) <= 60:  # bounded, should it spin
-            assert await client.search(keyword, Channel("kad"), _BUDGET) == SearchAnswer((), 0)
+            assert await client.search(keyword, Channel("kad"), _BUDGET) == SearchAnswer(
+                reported_files=(), skipped_result_count=0
+            )
             returned_at.append(loop.time())
             await asyncio.sleep(0)  # noqa: TID251
 
