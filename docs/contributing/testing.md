@@ -53,8 +53,10 @@ Le projet a **deux niveaux** :
    `<Port>Contract` (ou `<Chose>StoreContract` pour une paire `Writer`/`Reader`), dans
    `tests/contracts/` au miroir du port. Sa fixture abstraite construit l'implémentation testée, et
    ses tests énoncent les docstrings du port : le port fait référence, jamais l'adaptateur réel.
-   Le contrat d'une paire type sa fixture par un `Protocol` de la paire, nommé `<Chose>Store`,
-   dans le module du contrat (tests seulement : mypy y tient la fixture de chaque sous-classe).
+   Le contrat d'une paire reçoit un `<Chose>Ports` de ses deux ports, une dataclass du module du
+   contrat dont les champs `writer` et `reader` sont typés par les ports : mypy vérifie ainsi chaque
+   appel du contrat, ce qu'une copie des signatures des ports ne permettrait pas, `pytest.fixture`
+   effaçant le type d'une fixture. Chaque sous-classe le construit de sa fixture concrète.
    Chaque implémentation lance le contrat par une sous-classe `Test<Implémentation>` qui définit
    cette fixture, dans son propre module de test (celui de l'adaptateur, ou le
    `test_<module du fake>.py` à côté du fake). `packages/crawler/tests/test_contract_subclasses.py`

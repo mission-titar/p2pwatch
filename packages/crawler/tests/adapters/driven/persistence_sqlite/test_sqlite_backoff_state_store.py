@@ -12,6 +12,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_backoff_state_store impo
 from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.contracts.application.ports.driven.backoff_state_store_contract import (
+    BackoffStatePorts,
     BackoffStateStoreContract,
 )
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
@@ -44,6 +45,12 @@ class TestSqliteBackoffStateStore(BackoffStateStoreContract):
     @pytest.fixture
     def backoff_state_store(self, connection: sqlite3.Connection) -> SqliteBackoffStateStore:
         return SqliteBackoffStateStore(connection)
+
+    @pytest.fixture
+    def backoff_state_ports(
+        self, backoff_state_store: SqliteBackoffStateStore
+    ) -> BackoffStatePorts:
+        return BackoffStatePorts(writer=backoff_state_store, reader=backoff_state_store)
 
 
 def test_the_backoff_states_saved_are_read_back_by_any_later_instance(
