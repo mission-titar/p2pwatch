@@ -19,6 +19,7 @@ valid:
     @pytest.fixture
     def interval() -> Interval: ...
   - "field(default=None, kw_only=True)"
+  - "field(default=None)"
 invalid:
   - |
     @dataclass
@@ -41,3 +42,5 @@ invalid:
         order=True,
     )
     class Interval: ...
+  - "field(default=None, kw_only=False)"
+  - "dataclasses.field(kw_only=False)"
