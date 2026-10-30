@@ -27,7 +27,16 @@ def connection() -> Iterator[sqlite3.Connection]:
 
 
 def _hash(keyword: str = "keroro", *, node_id: str = "node-1", bitrate: int | None = 1100) -> bytes:
-    return content_hash(_HASH, "Kéroro 062A.avi", 123, None, bitrate, "[]", keyword, node_id)
+    return content_hash(
+        file_ref=_HASH,
+        filename="Kéroro 062A.avi",
+        size_bytes=123,
+        duration_seconds=None,
+        bitrate_kbps=bitrate,
+        raw_metadata="[]",
+        keyword=keyword,
+        node_id=node_id,
+    )
 
 
 def test_content_hash_is_blake2b_128_of_the_compact_json_of_the_columns() -> None:
@@ -37,7 +46,14 @@ def test_content_hash_is_blake2b_128_of_the_compact_json_of_the_columns() -> Non
 
 def test_content_hash_writes_a_blob_as_lowercase_hex() -> None:
     blob = content_hash(
-        bytes.fromhex(_HASH), "Kéroro 062A.avi", 123, None, 1100, "[]", "keroro", "node-1"
+        file_ref=bytes.fromhex(_HASH),
+        filename="Kéroro 062A.avi",
+        size_bytes=123,
+        duration_seconds=None,
+        bitrate_kbps=1100,
+        raw_metadata="[]",
+        keyword="keroro",
+        node_id="node-1",
     )
     assert blob == _hash()
 

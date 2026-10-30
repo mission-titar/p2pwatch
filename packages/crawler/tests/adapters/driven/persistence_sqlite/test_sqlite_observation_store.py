@@ -97,11 +97,12 @@ def test_record_observation_round_trip(
         "keyword": "keroro",
         "node_id": _NODE_ID,
     }
+    columns = {name: value for name, value in variant.items() if name != "file_id"}
     assert rows(
         connection,
         sql="SELECT file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_metadata,"
         " keyword, node_id, content_hash FROM observation_variants",
-    ) == [{**variant, "content_hash": content_hash(*variant.values())}]
+    ) == [{**variant, "content_hash": content_hash(file_ref=_KEY.file_id, **columns)}]
     assert rows(connection, sql="SELECT observed_at_micros, source_count FROM observations") == [
         {"observed_at_micros": instant_to_micros(_T0), "source_count": 5}
     ]

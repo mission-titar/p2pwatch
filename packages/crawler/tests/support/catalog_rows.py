@@ -37,22 +37,22 @@ def insert_observation(
     bitrate_kbps: int | None = None,
     node_id: str = "n1",
 ) -> None:
-    variant = (
-        file_id(native_id),
-        filename,
-        size_bytes,
-        duration_seconds,
-        bitrate_kbps,
-        "[]",
-        "keroro",
-        node_id,
+    variant_file_id = file_id(native_id)
+    key = content_hash(
+        file_ref=variant_file_id,
+        filename=filename,
+        size_bytes=size_bytes,
+        duration_seconds=duration_seconds,
+        bitrate_kbps=bitrate_kbps,
+        raw_metadata="[]",
+        keyword="keroro",
+        node_id=node_id,
     )
-    key = content_hash(*variant)
     connection.execute(
         "INSERT OR IGNORE INTO observation_variants"
         " (file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_metadata, keyword,"
-        " node_id, content_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (*variant, key),
+        " node_id, content_hash) VALUES (?, ?, ?, ?, ?, '[]', 'keroro', ?, ?)",
+        (variant_file_id, filename, size_bytes, duration_seconds, bitrate_kbps, node_id, key),
     )
     connection.execute(
         "INSERT INTO observations (variant_id, observed_at_micros, source_count)"

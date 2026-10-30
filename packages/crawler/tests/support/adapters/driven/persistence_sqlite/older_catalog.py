@@ -95,17 +95,21 @@ def insert_v11_observation(
     media_length_sec: int | None = None,
 ) -> None:
     """An observation of versions 8 to 11, before 0012 renamed ``media_length_sec``."""
-    variant = (
-        FileKey(network=Network.ED2K, native_id=native_id).file_id,
-        filename,
-        100,
-        media_length_sec,
+    file_id = FileKey(network=Network.ED2K, native_id=native_id).file_id
+    key = content_hash(
+        file_ref=file_id,
+        filename=filename,
+        size_bytes=100,
+        duration_seconds=media_length_sec,
+        bitrate_kbps=None,
+        raw_metadata="[]",
+        keyword="keroro",
+        node_id="n1",
     )
-    key = content_hash(*variant, None, "[]", "keroro", "n1")
     connection.execute(
         "INSERT INTO observation_variants (file_id, filename, size_bytes, media_length_sec,"
         " raw_meta, keyword, node_id, content_hash) VALUES (?, ?, ?, ?, '[]', 'keroro', 'n1', ?)",
-        (*variant, key),
+        (file_id, filename, 100, media_length_sec, key),
     )
     connection.execute(
         "INSERT INTO observations (variant_id, observed_at, source_count)"
@@ -147,13 +151,22 @@ def insert_v12_observation(
     connection: sqlite3.Connection, *, native_id: str, filename: str, observed_at: int = 10
 ) -> None:
     """An observation of version 12, before 0013 renamed ``raw_meta``."""
-    variant = (FileKey(network=Network.ED2K, native_id=native_id).file_id, filename, 100, None)
-    key = content_hash(*variant, None, '[["codec", "xvid"]]', "keroro", "n1")
+    file_id = FileKey(network=Network.ED2K, native_id=native_id).file_id
+    key = content_hash(
+        file_ref=file_id,
+        filename=filename,
+        size_bytes=100,
+        duration_seconds=None,
+        bitrate_kbps=None,
+        raw_metadata='[["codec", "xvid"]]',
+        keyword="keroro",
+        node_id="n1",
+    )
     connection.execute(
         "INSERT INTO observation_variants (file_id, filename, size_bytes, duration_seconds,"
         " raw_meta, keyword, node_id, content_hash)"
         " VALUES (?, ?, ?, ?, '[[\"codec\", \"xvid\"]]', 'keroro', 'n1', ?)",
-        (*variant, key),
+        (file_id, filename, 100, None, key),
     )
     connection.execute(
         "INSERT INTO observations (variant_id, observed_at, source_count)"
@@ -190,13 +203,22 @@ def insert_v13_observation(
     connection: sqlite3.Connection, *, native_id: str, filename: str
 ) -> None:
     """An observation of version 13, before 0014 renamed ``observed_at``."""
-    variant = (FileKey(network=Network.ED2K, native_id=native_id).file_id, filename, 100, None)
-    key = content_hash(*variant, None, "[]", "keroro", "n1")
+    file_id = FileKey(network=Network.ED2K, native_id=native_id).file_id
+    key = content_hash(
+        file_ref=file_id,
+        filename=filename,
+        size_bytes=100,
+        duration_seconds=None,
+        bitrate_kbps=None,
+        raw_metadata="[]",
+        keyword="keroro",
+        node_id="n1",
+    )
     connection.execute(
         "INSERT INTO observation_variants (file_id, filename, size_bytes, duration_seconds,"
         " raw_metadata, keyword, node_id, content_hash)"
         " VALUES (?, ?, ?, ?, '[]', 'keroro', 'n1', ?)",
-        (*variant, key),
+        (file_id, filename, 100, None, key),
     )
     connection.execute(
         "INSERT INTO observations (variant_id, observed_at, source_count)"
