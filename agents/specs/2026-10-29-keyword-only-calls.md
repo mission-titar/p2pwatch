@@ -214,6 +214,7 @@ zone's two exclusions.
   `grp.getgrnam` or a lambda would not fit.
 - A callable of any signature (`SqlFunction`): `__call__(self, *arguments: Any, **keywords: Any)`, which mypy
   treats like `Callable[..., X]`.
+- A callable returning a coroutine declares `async def __call__` (operator, 2026-10-30).
 - A type a library already names stays: `starlette.types.Receive` and `Send`.
 - A test's unbound method (`Callable[[FilesystemConfigChecker, PurePath], None]`): the instance positional-only, the
   rest by keyword, which an unbound method `(self, path)` fits.
