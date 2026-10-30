@@ -53,11 +53,11 @@ class _Reevaluation:
     def __init__(
         self,
         observation_store: SqliteObservationStore,
+        *,
         decision_store: SqliteDecisionStore,
         catalog_scan_reader: SqliteCatalogScanReader,
         engine: MatchingEngine,
         wall_clock: FakeWallClock,
-        *,
         stored_fingerprint: str | None = "policy-1",
         progress_every_files: int = 200,
     ) -> None:
@@ -87,7 +87,7 @@ class _Reevaluation:
         await self.catalog_reevaluator.reevaluate_if_policy_changed(_NODE_ID)
 
 
-def _reported_file(native_id: str, filename: str) -> ReportedFile:
+def _reported_file(native_id: str, *, filename: str) -> ReportedFile:
     return ReportedFile(
         file=FileKey(network=Network.ED2K, native_id=native_id),
         filename=filename,
@@ -99,6 +99,7 @@ def _reported_file(native_id: str, filename: str) -> ReportedFile:
 
 @pytest.mark.asyncio
 async def test_an_unchanged_policy_skips_the_re_evaluation(
+    *,
     observation_store: SqliteObservationStore,
     catalog_scan_reader: SqliteCatalogScanReader,
     decision_store: SqliteDecisionStore,
@@ -108,17 +109,17 @@ async def test_an_unchanged_policy_skips_the_re_evaluation(
 ) -> None:
     observation_store.record_observation(
         FileObservation(
-            reported_file=_reported_file(_HASH_DL, _DL_NAME),
+            reported_file=_reported_file(_HASH_DL, filename=_DL_NAME),
             observed_at=wall_clock.now(),
             node_id=_NODE_ID,
         )
     )
     reevaluation = _Reevaluation(
         observation_store,
-        decision_store,
-        catalog_scan_reader,
-        engine,
-        wall_clock,
+        decision_store=decision_store,
+        catalog_scan_reader=catalog_scan_reader,
+        engine=engine,
+        wall_clock=wall_clock,
         stored_fingerprint=_FINGERPRINT,
     )
 
@@ -133,6 +134,7 @@ async def test_an_unchanged_policy_skips_the_re_evaluation(
 
 @pytest.mark.asyncio
 async def test_without_a_stored_fingerprint_the_catalog_is_re_evaluated_then_it_is_stored(
+    *,
     observation_store: SqliteObservationStore,
     catalog_scan_reader: SqliteCatalogScanReader,
     decision_store: SqliteDecisionStore,
@@ -141,10 +143,10 @@ async def test_without_a_stored_fingerprint_the_catalog_is_re_evaluated_then_it_
 ) -> None:
     reevaluation = _Reevaluation(
         observation_store,
-        decision_store,
-        catalog_scan_reader,
-        engine,
-        wall_clock,
+        decision_store=decision_store,
+        catalog_scan_reader=catalog_scan_reader,
+        engine=engine,
+        wall_clock=wall_clock,
         stored_fingerprint=None,
     )
 
@@ -160,6 +162,7 @@ async def test_without_a_stored_fingerprint_the_catalog_is_re_evaluated_then_it_
 
 @pytest.mark.asyncio
 async def test_a_failing_scan_propagates_and_leaves_the_fingerprint_unstored(
+    *,
     observation_store: SqliteObservationStore,
     catalog_scan_reader: SqliteCatalogScanReader,
     decision_store: SqliteDecisionStore,
@@ -168,7 +171,11 @@ async def test_a_failing_scan_propagates_and_leaves_the_fingerprint_unstored(
     wall_clock: FakeWallClock,
 ) -> None:
     reevaluation = _Reevaluation(
-        observation_store, decision_store, catalog_scan_reader, engine, wall_clock
+        observation_store,
+        decision_store=decision_store,
+        catalog_scan_reader=catalog_scan_reader,
+        engine=engine,
+        wall_clock=wall_clock,
     )
     catalog_connection.close()  # the next start sees the old fingerprint and retries the pass
 
@@ -180,6 +187,7 @@ async def test_a_failing_scan_propagates_and_leaves_the_fingerprint_unstored(
 
 @pytest.mark.asyncio
 async def test_two_changed_rows_are_all_evaluated_and_written(
+    *,
     observation_store: SqliteObservationStore,
     catalog_scan_reader: SqliteCatalogScanReader,
     decision_store: SqliteDecisionStore,
@@ -190,20 +198,24 @@ async def test_two_changed_rows_are_all_evaluated_and_written(
     # Never decided: both will change.
     observation_store.record_observation(
         FileObservation(
-            reported_file=_reported_file(_HASH_DL, _DL_NAME),
+            reported_file=_reported_file(_HASH_DL, filename=_DL_NAME),
             observed_at=wall_clock.now(),
             node_id=_NODE_ID,
         )
     )
     observation_store.record_observation(
         FileObservation(
-            reported_file=_reported_file(_HASH_CAT, _CAT_NAME),
+            reported_file=_reported_file(_HASH_CAT, filename=_CAT_NAME),
             observed_at=wall_clock.now(),
             node_id=_NODE_ID,
         )
     )
     reevaluation = _Reevaluation(
-        observation_store, decision_store, catalog_scan_reader, engine, wall_clock
+        observation_store,
+        decision_store=decision_store,
+        catalog_scan_reader=catalog_scan_reader,
+        engine=engine,
+        wall_clock=wall_clock,
     )
 
     await reevaluation.run()
@@ -228,6 +240,7 @@ async def test_two_changed_rows_are_all_evaluated_and_written(
 
 @pytest.mark.asyncio
 async def test_unchanged_row_is_evaluated_but_not_written(
+    *,
     observation_store: SqliteObservationStore,
     catalog_scan_reader: SqliteCatalogScanReader,
     decision_store: SqliteDecisionStore,
@@ -237,12 +250,12 @@ async def test_unchanged_row_is_evaluated_but_not_written(
 ) -> None:
     observation_store.record_observation(
         FileObservation(
-            reported_file=_reported_file(_HASH_CAT, _CAT_NAME),
+            reported_file=_reported_file(_HASH_CAT, filename=_CAT_NAME),
             observed_at=wall_clock.now(),
             node_id=_NODE_ID,
         )
     )
-    candidate = _reported_file(_HASH_CAT, _CAT_NAME).to_candidate()
+    candidate = _reported_file(_HASH_CAT, filename=_CAT_NAME).to_candidate()
     decisions = engine.evaluate_file((candidate,))
     assert decisions  # non-empty
     # pre-seed the "already correct" verdict
@@ -255,7 +268,11 @@ async def test_unchanged_row_is_evaluated_but_not_written(
         )
     )
     reevaluation = _Reevaluation(
-        observation_store, decision_store, catalog_scan_reader, engine, wall_clock
+        observation_store,
+        decision_store=decision_store,
+        catalog_scan_reader=catalog_scan_reader,
+        engine=engine,
+        wall_clock=wall_clock,
     )
 
     await reevaluation.run()
@@ -270,6 +287,7 @@ async def test_unchanged_row_is_evaluated_but_not_written(
 
 @pytest.mark.asyncio
 async def test_store_error_on_one_row_is_absorbed_and_sweep_continues(
+    *,
     observation_store: SqliteObservationStore,
     catalog_scan_reader: SqliteCatalogScanReader,
     decision_store: SqliteDecisionStore,
@@ -279,14 +297,14 @@ async def test_store_error_on_one_row_is_absorbed_and_sweep_continues(
 ) -> None:
     observation_store.record_observation(
         FileObservation(
-            reported_file=_reported_file(_HASH_DL, _DL_NAME),
+            reported_file=_reported_file(_HASH_DL, filename=_DL_NAME),
             observed_at=wall_clock.now(),
             node_id=_NODE_ID,
         )
     )
     observation_store.record_observation(
         FileObservation(
-            reported_file=_reported_file(_HASH_CAT, _CAT_NAME),
+            reported_file=_reported_file(_HASH_CAT, filename=_CAT_NAME),
             observed_at=wall_clock.now(),
             node_id=_NODE_ID,
         )
@@ -299,7 +317,11 @@ async def test_store_error_on_one_row_is_absorbed_and_sweep_continues(
         " BEGIN SELECT RAISE(ABORT, 'injected failure'); END"
     )
     reevaluation = _Reevaluation(
-        observation_store, decision_store, catalog_scan_reader, engine, wall_clock
+        observation_store,
+        decision_store=decision_store,
+        catalog_scan_reader=catalog_scan_reader,
+        engine=engine,
+        wall_clock=wall_clock,
     )
 
     await reevaluation.run()
@@ -321,6 +343,7 @@ async def test_store_error_on_one_row_is_absorbed_and_sweep_continues(
 
 @pytest.mark.asyncio
 async def test_backfill_retracts_a_legacy_arbitrary_target_row(
+    *,
     observation_store: SqliteObservationStore,
     catalog_scan_reader: SqliteCatalogScanReader,
     decision_store: SqliteDecisionStore,
@@ -331,7 +354,7 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
     # by the set-diff when the file becomes identified (062A + 062B) on the re-evaluation pass.
     observation_store.record_observation(
         FileObservation(
-            reported_file=_reported_file(_HASH_MULTI, _MULTI_NAME),
+            reported_file=_reported_file(_HASH_MULTI, filename=_MULTI_NAME),
             observed_at=wall_clock.now(),
             node_id=_NODE_ID,
         )
@@ -347,7 +370,11 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
         )
     )
     reevaluation = _Reevaluation(
-        observation_store, decision_store, catalog_scan_reader, engine, wall_clock
+        observation_store,
+        decision_store=decision_store,
+        catalog_scan_reader=catalog_scan_reader,
+        engine=engine,
+        wall_clock=wall_clock,
     )
 
     await reevaluation.run()
@@ -370,6 +397,7 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
 
 @pytest.mark.asyncio
 async def test_backfill_ignores_the_legacy_empty_sentinel(
+    *,
     observation_store: SqliteObservationStore,
     catalog_scan_reader: SqliteCatalogScanReader,
     decision_store: SqliteDecisionStore,
@@ -380,7 +408,7 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
     # §10: the old whole-file retraction sentinel (target_id="") is invisible to the set-diff.
     observation_store.record_observation(
         FileObservation(
-            reported_file=_reported_file(_HASH_MULTI, _MULTI_NAME),
+            reported_file=_reported_file(_HASH_MULTI, filename=_MULTI_NAME),
             observed_at=wall_clock.now(),
             node_id=_NODE_ID,
         )
@@ -394,7 +422,11 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
         )
     )
     reevaluation = _Reevaluation(
-        observation_store, decision_store, catalog_scan_reader, engine, wall_clock
+        observation_store,
+        decision_store=decision_store,
+        catalog_scan_reader=catalog_scan_reader,
+        engine=engine,
+        wall_clock=wall_clock,
     )
 
     await reevaluation.run()
@@ -416,6 +448,7 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
 
 @pytest.mark.asyncio
 async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
+    *,
     observation_store: SqliteObservationStore,
     catalog_scan_reader: SqliteCatalogScanReader,
     decision_store: SqliteDecisionStore,
@@ -425,7 +458,7 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
 ) -> None:
     observation_store.record_observation(
         FileObservation(
-            reported_file=_reported_file(_HASH_DL, _DL_NAME),
+            reported_file=_reported_file(_HASH_DL, filename=_DL_NAME),
             observed_at=wall_clock.now(),
             node_id=_NODE_ID,
         )
@@ -433,13 +466,17 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
     fake_time.advance(timedelta(minutes=1))  # the latest name matches nothing
     observation_store.record_observation(
         FileObservation(
-            reported_file=_reported_file(_HASH_DL, "random.txt"),
+            reported_file=_reported_file(_HASH_DL, filename="random.txt"),
             observed_at=wall_clock.now(),
             node_id=_NODE_ID,
         )
     )
     reevaluation = _Reevaluation(
-        observation_store, decision_store, catalog_scan_reader, engine, wall_clock
+        observation_store,
+        decision_store=decision_store,
+        catalog_scan_reader=catalog_scan_reader,
+        engine=engine,
+        wall_clock=wall_clock,
     )
 
     await reevaluation.run()
@@ -458,6 +495,7 @@ async def test_backfill_judges_a_hash_on_all_its_names_not_only_the_latest(
 
 @pytest.mark.asyncio
 async def test_progress_is_logged_at_each_multiple_of_the_cadence_only(
+    *,
     observation_store: SqliteObservationStore,
     catalog_scan_reader: SqliteCatalogScanReader,
     decision_store: SqliteDecisionStore,
@@ -466,31 +504,31 @@ async def test_progress_is_logged_at_each_multiple_of_the_cadence_only(
 ) -> None:
     observation_store.record_observation(
         FileObservation(
-            reported_file=_reported_file(_HASH_DL, _DL_NAME),
+            reported_file=_reported_file(_HASH_DL, filename=_DL_NAME),
             observed_at=wall_clock.now(),
             node_id=_NODE_ID,
         )
     )
     observation_store.record_observation(
         FileObservation(
-            reported_file=_reported_file(_HASH_CAT, _CAT_NAME),
+            reported_file=_reported_file(_HASH_CAT, filename=_CAT_NAME),
             observed_at=wall_clock.now(),
             node_id=_NODE_ID,
         )
     )
     observation_store.record_observation(
         FileObservation(
-            reported_file=_reported_file(_HASH_MULTI, "random.txt"),
+            reported_file=_reported_file(_HASH_MULTI, filename="random.txt"),
             observed_at=wall_clock.now(),
             node_id=_NODE_ID,
         )
     )
     reevaluation = _Reevaluation(
         observation_store,
-        decision_store,
-        catalog_scan_reader,
-        engine,
-        wall_clock,
+        decision_store=decision_store,
+        catalog_scan_reader=catalog_scan_reader,
+        engine=engine,
+        wall_clock=wall_clock,
         progress_every_files=2,
     )
 

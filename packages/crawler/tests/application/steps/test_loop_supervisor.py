@@ -11,7 +11,7 @@ from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 class _BlockedLoop:
     """A loop that never ends on its own, and records its cancellation."""
 
-    def __init__(self, name: str, events: list[str]) -> None:
+    def __init__(self, name: str, *, events: list[str]) -> None:
         self._name = name
         self._events = events
         self.started = asyncio.Event()
@@ -33,7 +33,7 @@ async def _fails() -> None:
 async def test_a_stop_without_a_signal_arms_the_bound_before_cancelling_every_loop() -> None:
     events: list[str] = []
     run_state = FakeRunStateStore()
-    search, status = _BlockedLoop("search", events), _BlockedLoop("status", events)
+    search, status = _BlockedLoop("search", events=events), _BlockedLoop("status", events=events)
     supervision = asyncio.create_task(
         LoopSupervisor(run_state_reader=run_state).supervise(
             [search.run, status.run], arm_shutdown_bound=lambda: events.append("armed")
@@ -53,7 +53,7 @@ async def test_a_stop_without_a_signal_arms_the_bound_before_cancelling_every_lo
 async def test_a_loop_that_ends_neither_stops_the_others_nor_arms_the_bound() -> None:
     events: list[str] = []
     run_state = FakeRunStateStore()
-    status = _BlockedLoop("status", events)
+    status = _BlockedLoop("status", events=events)
     ended = asyncio.Event()
 
     async def end_at_once() -> None:
@@ -77,7 +77,7 @@ async def test_a_loop_that_ends_neither_stops_the_others_nor_arms_the_bound() ->
 @pytest.mark.asyncio
 async def test_a_failing_loop_escapes_as_an_exception_group_without_arming_the_bound() -> None:
     events: list[str] = []
-    status = _BlockedLoop("status", events)
+    status = _BlockedLoop("status", events=events)
 
     with pytest.RaisesGroup(pytest.RaisesExc(ValueError, match="a worker crashed")):
         await LoopSupervisor(run_state_reader=FakeRunStateStore()).supervise(

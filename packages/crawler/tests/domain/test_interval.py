@@ -10,7 +10,7 @@ _NOW = datetime(2026, 10, 14, 20, 0, tzinfo=UTC)
 _DAY = timedelta(days=1)
 
 
-def _day(day: int, month: int = 10) -> datetime:
+def _day(day: int, *, month: int = 10) -> datetime:
     return datetime(2026, month, day, tzinfo=UTC)
 
 

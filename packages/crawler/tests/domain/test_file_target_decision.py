@@ -4,7 +4,7 @@ from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction, records_to_write
 
 
-def _record(target_id: TargetId, tier: DecisionTier = DecisionTier.DOWNLOAD) -> DecisionRecord:
+def _record(target_id: TargetId, *, tier: DecisionTier = DecisionTier.DOWNLOAD) -> DecisionRecord:
     return DecisionRecord(target_id=target_id, rule_name="id_segment_exact", tier=tier)
 
 
@@ -25,7 +25,7 @@ def test_a_fresh_record_equal_to_the_persisted_one_is_not_written() -> None:
 def test_a_fresh_record_is_written_when_new_changed_or_over_a_retraction() -> None:
     fresh = [
         _record(TargetId("062A")),
-        _record(TargetId("062B"), DecisionTier.NOTIFY),
+        _record(TargetId("062B"), tier=DecisionTier.NOTIFY),
         _record(TargetId("062C")),
     ]
     persisted: dict[TargetId, FileTargetDecision] = {

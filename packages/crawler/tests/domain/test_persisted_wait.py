@@ -17,7 +17,7 @@ _DURATION = timedelta(seconds=300)
     ],
 )
 def test_the_wait_left_is_the_duration_less_the_time_elapsed(
-    elapsed: timedelta, remaining: timedelta
+    *, elapsed: timedelta, remaining: timedelta
 ) -> None:
     assert remaining_wait(_STARTED_AT, duration=_DURATION, now=_STARTED_AT + elapsed) == remaining
 

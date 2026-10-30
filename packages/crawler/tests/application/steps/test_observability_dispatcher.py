@@ -37,6 +37,7 @@ _COMPLETED = ev.DownloadCompleted(
 
 def _dispatcher(
     node_metric_store: FakeNodeMetricStore,
+    *,
     notifier: Notifier,
     logger: FakeLogger | None = None,
     timeout: float = 5.0,
@@ -52,7 +53,7 @@ def _dispatcher(
 @pytest.mark.asyncio
 async def test_logs_and_writes_node_metrics_no_audience() -> None:
     node_metric_store, notifier = FakeNodeMetricStore(), FakeNotifier()
-    await _dispatcher(node_metric_store, notifier).dispatch(
+    await _dispatcher(node_metric_store, notifier=notifier).dispatch(
         ev.ObservationRecorded(client_name=ClientName("amuled"), channel=Channel("ed2k"))
     )
     assert node_metric_store.read_samples() == (
@@ -68,7 +69,7 @@ async def test_logs_and_writes_node_metrics_no_audience() -> None:
 @pytest.mark.asyncio
 async def test_two_node_metrics_one_event() -> None:
     node_metric_store = FakeNodeMetricStore()
-    await _dispatcher(node_metric_store, FakeNotifier()).dispatch(
+    await _dispatcher(node_metric_store, notifier=FakeNotifier()).dispatch(
         ev.ChannelStatusSampled(
             client_name=ClientName("amuled"),
             channel=Channel("kad"),
@@ -86,7 +87,7 @@ async def test_two_node_metrics_one_event() -> None:
 @pytest.mark.asyncio
 async def test_writes_each_counter_increment_and_gauge_setting_to_the_node_metric_store() -> None:
     node_metric_store = FakeNodeMetricStore()
-    dispatcher = _dispatcher(node_metric_store, FakeNotifier())
+    dispatcher = _dispatcher(node_metric_store, notifier=FakeNotifier())
     await dispatcher.dispatch(ev.ClientUnreachable(client_name=ClientName("amuled")))
     await dispatcher.dispatch(ev.CrawlerStarted(download_enabled=True, node_id=_NODE_ID))
     assert set(node_metric_store.read_samples()) == {
@@ -100,7 +101,7 @@ async def test_writes_each_counter_increment_and_gauge_setting_to_the_node_metri
 @pytest.mark.asyncio
 async def test_relays_the_log_line_under_the_events_node() -> None:
     notifier = FakeNotifier()
-    await _dispatcher(FakeNodeMetricStore(), notifier).dispatch(
+    await _dispatcher(FakeNodeMetricStore(), notifier=notifier).dispatch(
         ev.CrawlerStarted(download_enabled=True, node_id=_NODE_ID)
     )
     assert notifier.calls == [
@@ -125,7 +126,7 @@ async def test_logs_the_message_but_notifies_the_plans_notification() -> None:
         previous_decision=None,
         new_decision=download,
     )
-    await _dispatcher(FakeNodeMetricStore(), notifier, logger).dispatch(
+    await _dispatcher(FakeNodeMetricStore(), notifier=notifier, logger=logger).dispatch(
         ev.DecisionsRecorded(
             file=FileKey(network=Network.ED2K, native_id="a" * 32),
             filename="Keroro 062.avi",
@@ -168,17 +169,19 @@ async def test_logs_the_message_but_notifies_the_plans_notification() -> None:
     ],
 )
 async def test_each_severity_logs_at_its_level(
-    event: ev.Event, level: Literal["debug", "info", "warning"]
+    *, event: ev.Event, level: Literal["debug", "info", "warning"]
 ) -> None:
     logger = FakeLogger()
-    await _dispatcher(FakeNodeMetricStore(), FakeNotifier(), logger).dispatch(event)
+    await _dispatcher(FakeNodeMetricStore(), notifier=FakeNotifier(), logger=logger).dispatch(event)
     assert [line.level for line in logger.lines] == [level]
 
 
 @pytest.mark.asyncio
 async def test_notification_failure_is_absorbed() -> None:
     logger, node_metric_store = FakeLogger(), FakeNodeMetricStore()
-    await _dispatcher(node_metric_store, FakeRaisingNotifier(), logger).dispatch(_COMPLETED)
+    await _dispatcher(node_metric_store, notifier=FakeRaisingNotifier(), logger=logger).dispatch(
+        _COMPLETED
+    )
     assert node_metric_store.read_samples()  # written despite the notification failure
     assert logger.lines[-1] == LoggedLine(
         level="warning", message="notification community failed (canal mort)"
@@ -189,5 +192,7 @@ async def test_notification_failure_is_absorbed() -> None:
 async def test_notification_timeout_is_absorbed() -> None:
     node_metric_store = FakeNodeMetricStore()
     # short timeout + hanging notifier → wait_for raises TimeoutError, absorbed.
-    await _dispatcher(node_metric_store, FakeHangingNotifier(), timeout=0.01).dispatch(_COMPLETED)
+    await _dispatcher(node_metric_store, notifier=FakeHangingNotifier(), timeout=0.01).dispatch(
+        _COMPLETED
+    )
     assert node_metric_store.read_samples()

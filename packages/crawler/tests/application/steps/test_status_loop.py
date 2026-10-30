@@ -66,6 +66,7 @@ def _status(**channels: tuple[bool, bool | None]) -> ClientStatus:
 
 def _status_loop(
     client_name: ClientName,
+    *,
     client: StatusClient,
     fake_time: FakeTime,
     observability: _Observability,
@@ -88,7 +89,13 @@ async def _run(*readings: _Reading, client: ClientName = _AMULED) -> _Observabil
     observability = _Observability(fake_time)
     scripted = FakeStatusClient(list(readings), run_state=run_state)
     await asyncio.wait_for(
-        _status_loop(client, scripted, fake_time, observability, run_state).run(_NODE_ID),
+        _status_loop(
+            client,
+            client=scripted,
+            fake_time=fake_time,
+            observability=observability,
+            run_state=run_state,
+        ).run(_NODE_ID),
         timeout=1.0,
     )
     return observability
@@ -228,7 +235,7 @@ async def test_each_reading_samples_every_channel_and_unreachable_makes_them_unk
     ("reading", "published"), [(_status(ed2k=_UP), _status(ed2k=_UP)), (_DOWN, None)]
 )
 async def test_each_reading_is_published_with_its_wall_and_monotonic_instants(
-    reading: _Reading, published: ClientStatus | None
+    *, reading: _Reading, published: ClientStatus | None
 ) -> None:
     fake_time, run_state = FakeTime(), FakeRunStateStore()
     fake_time.step_wall(timedelta(hours=1))  # the two clocks part: each instant shows its clock
@@ -236,11 +243,11 @@ async def test_each_reading_is_published_with_its_wall_and_monotonic_instants(
     client = FakeStatusClient([_status(kad=_UP), reading], run_state=run_state)
     status_loop = _status_loop(
         ClientName("amuled"),
-        client,
-        fake_time,
-        _Observability(fake_time),
-        run_state,
-        status_reading_store,
+        client=client,
+        fake_time=fake_time,
+        observability=_Observability(fake_time),
+        run_state=run_state,
+        status_reading_writer=status_reading_store,
     )
     await asyncio.wait_for(status_loop.run(_NODE_ID), timeout=1.0)
     read_at = fake_time.wall.now() - timedelta(seconds=60)  # the loop slept one period after it
@@ -261,9 +268,13 @@ async def test_a_wall_clock_step_forward_raises_no_alert_before_its_delay() -> N
         [_status(ed2k=_LOW_ID)] * 5, run_state=run_state, fake_time=fake_time
     )
     await asyncio.wait_for(
-        _status_loop(ClientName("amuled"), client, fake_time, observability, run_state).run(
-            _NODE_ID
-        ),
+        _status_loop(
+            ClientName("amuled"),
+            client=client,
+            fake_time=fake_time,
+            observability=observability,
+            run_state=run_state,
+        ).run(_NODE_ID),
         timeout=1.0,
     )
     assert observability.notifier.notifications == []

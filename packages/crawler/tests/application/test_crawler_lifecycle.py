@@ -51,10 +51,10 @@ class _Crawl:
     def __init__(
         self,
         observation_store: SqliteObservationStore,
+        *,
         decision_store: SqliteDecisionStore,
         catalog_scan_reader: SqliteCatalogScanReader,
         engine: MatchingEngine,
-        *,
         stored_fingerprint: str | None = _FINGERPRINT,
         download_enabled: bool = False,
     ) -> None:
@@ -132,12 +132,18 @@ class _Crawl:
 
 @pytest.mark.asyncio
 async def test_the_crawler_starts_under_the_stored_node_id_and_runs_each_loop_with_it(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_scan_reader: SqliteCatalogScanReader,
     engine: MatchingEngine,
 ) -> None:
-    crawl = _Crawl(observation_store, decision_store, catalog_scan_reader, engine)
+    crawl = _Crawl(
+        observation_store,
+        decision_store=decision_store,
+        catalog_scan_reader=catalog_scan_reader,
+        engine=engine,
+    )
 
     await crawl.run_until_both_loops_start_then_stop()
 
@@ -166,6 +172,7 @@ async def test_the_crawler_starts_under_the_stored_node_id_and_runs_each_loop_wi
 
 @pytest.mark.asyncio
 async def test_the_download_loop_shows_in_the_start(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_scan_reader: SqliteCatalogScanReader,
@@ -173,9 +180,9 @@ async def test_the_download_loop_shows_in_the_start(
 ) -> None:
     crawl = _Crawl(
         observation_store,
-        decision_store,
-        catalog_scan_reader,
-        engine,
+        decision_store=decision_store,
+        catalog_scan_reader=catalog_scan_reader,
+        engine=engine,
         download_enabled=True,
     )
 
@@ -199,6 +206,7 @@ async def test_the_download_loop_shows_in_the_start(
 
 @pytest.mark.asyncio
 async def test_a_changed_policy_is_re_evaluated_under_the_node_id_after_the_start(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_scan_reader: SqliteCatalogScanReader,
@@ -206,9 +214,9 @@ async def test_a_changed_policy_is_re_evaluated_under_the_node_id_after_the_star
 ) -> None:
     crawl = _Crawl(
         observation_store,
-        decision_store,
-        catalog_scan_reader,
-        engine,
+        decision_store=decision_store,
+        catalog_scan_reader=catalog_scan_reader,
+        engine=engine,
         stored_fingerprint="policy-1",
     )
     reported_file = ReportedFile(
@@ -245,12 +253,18 @@ async def test_a_changed_policy_is_re_evaluated_under_the_node_id_after_the_star
 
 @pytest.mark.asyncio
 async def test_the_backoff_waits_the_previous_run_saved_are_resumed_before_the_loops(
+    *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
     catalog_scan_reader: SqliteCatalogScanReader,
     engine: MatchingEngine,
 ) -> None:
-    crawl = _Crawl(observation_store, decision_store, catalog_scan_reader, engine)
+    crawl = _Crawl(
+        observation_store,
+        decision_store=decision_store,
+        catalog_scan_reader=catalog_scan_reader,
+        engine=engine,
+    )
     started_at = crawl.fake_time.wall.now() - timedelta(seconds=100)
     saved = {_KAD: BackoffState(attempts=1, started_at=started_at, delay=timedelta(seconds=300))}
     crawl.backoff_state_store.set_backoff_states(saved)

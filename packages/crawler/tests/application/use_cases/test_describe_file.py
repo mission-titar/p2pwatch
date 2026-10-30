@@ -107,8 +107,8 @@ def _readers() -> tuple[FakeCatalogFileReader, FakeSourceReader]:
 
 def _describe(
     catalog_file_reader: CatalogFileReader,
-    source_reader: SourceReader | None = None,
     *,
+    source_reader: SourceReader | None = None,
     requested_since: datetime | None = None,
     requested_until: datetime | None = None,
     matcher_config: MatcherConfig = _MATCHER,
@@ -135,7 +135,7 @@ def test_a_file_the_catalog_does_not_hold_has_no_description() -> None:
 
 def test_the_history_is_read_over_the_last_7_days_ending_now_to_the_second() -> None:
     reader, source_reader = _readers()
-    description = _describe(reader, source_reader)
+    description = _describe(reader, source_reader=source_reader)
     week = Interval(since=_SECOND_NOW - timedelta(days=7), until=_SECOND_NOW)
     assert reader.calls == [
         ("read_file_history", {"file_id": b"\x01" * 16, "since": week.since, "until": week.until})
@@ -153,7 +153,9 @@ def test_the_history_is_read_over_the_last_7_days_ending_now_to_the_second() -> 
 def test_the_sharing_periods_are_read_over_the_requested_interval_with_the_gap() -> None:
     since, until = datetime(2026, 10, 10, tzinfo=UTC), datetime(2026, 10, 12, tzinfo=UTC)
     reader, source_reader = _readers()
-    description = _describe(reader, source_reader, requested_since=since, requested_until=until)
+    description = _describe(
+        reader, source_reader=source_reader, requested_since=since, requested_until=until
+    )
     assert reader.calls == [
         ("read_file_history", {"file_id": b"\x01" * 16, "since": since, "until": until})
     ]
@@ -172,7 +174,9 @@ def test_a_request_past_7_days_reads_the_7_ending_at_its_until() -> None:
     since, until = datetime(2026, 9, 1, tzinfo=UTC), datetime(2026, 10, 1, tzinfo=UTC)
     week = Interval(since=until - timedelta(days=7), until=until, clamped=True)
     reader, source_reader = _readers()
-    description = _describe(reader, source_reader, requested_since=since, requested_until=until)
+    description = _describe(
+        reader, source_reader=source_reader, requested_since=since, requested_until=until
+    )
     assert reader.calls == [
         ("read_file_history", {"file_id": b"\x01" * 16, "since": week.since, "until": until})
     ]
@@ -189,7 +193,9 @@ def test_an_inverted_request_reads_the_7_days_ending_at_its_until() -> None:
     since, until = datetime(2026, 10, 12, tzinfo=UTC), datetime(2026, 10, 10, tzinfo=UTC)
     week = Interval(since=until - timedelta(days=7), until=until)
     reader, source_reader = _readers()
-    description = _describe(reader, source_reader, requested_since=since, requested_until=until)
+    description = _describe(
+        reader, source_reader=source_reader, requested_since=since, requested_until=until
+    )
     assert reader.calls == [
         ("read_file_history", {"file_id": b"\x01" * 16, "since": week.since, "until": until})
     ]
