@@ -229,10 +229,12 @@ class CrawlerComposition(CrawlerRunner):
         webui_package_directory = Path(p2pwatch.adapters.driving.webui.__file__).parent
         local_db_path = Path(crawler_config.local_db_path)
         catalog_db_path = Path(crawler_config.catalog_db_path)
-        local_read_connections = ThreadReadConnections(local_db_path, database_opener.open_reader)
+        local_read_connections = ThreadReadConnections(
+            local_db_path, open_reader=database_opener.open_reader
+        )
         node_state_reader = SqliteNodeStateReader(local_read_connections)
         catalog_read_connections = ThreadReadConnections(
-            catalog_db_path, database_opener.open_reader
+            catalog_db_path, open_reader=database_opener.open_reader
         )
         catalog_file_reader = SqliteCatalogFileReader(catalog_read_connections)
         source_reader = SqliteSourceReader(catalog_read_connections)
@@ -275,14 +277,14 @@ class CrawlerComposition(CrawlerRunner):
                 {
                     ConsoleDatabase.CATALOG: SqliteSqlExecutor(
                         catalog_db_path,
-                        database_opener.open_reader,
-                        monotonic_clock,
+                        open_reader=database_opener.open_reader,
+                        monotonic_clock=monotonic_clock,
                         budget_check_instructions=_CONSOLE_BUDGET_CHECK_INSTRUCTIONS,
                     ),
                     ConsoleDatabase.LOCAL: SqliteSqlExecutor(
                         local_db_path,
-                        database_opener.open_reader,
-                        monotonic_clock,
+                        open_reader=database_opener.open_reader,
+                        monotonic_clock=monotonic_clock,
                         budget_check_instructions=_CONSOLE_BUDGET_CHECK_INSTRUCTIONS,
                     ),
                 }
@@ -325,7 +327,9 @@ class CrawlerComposition(CrawlerRunner):
         # The last context exits first: the resources close, then the signal handlers go.
         async with PosixProcess(shutdown_requester), resource_stack() as stack:
             database_opener = SqliteDatabaseOpener(
-                SqlitePreMigrationCopier(wall_clock, lambda directory: disk_usage(directory).free)
+                SqlitePreMigrationCopier(
+                    wall_clock, free_bytes=lambda directory: disk_usage(directory).free
+                )
             )
             catalog_connection = database_opener.open_catalog(Path(crawler_config.catalog_db_path))
             stack.callback(catalog_connection.close)

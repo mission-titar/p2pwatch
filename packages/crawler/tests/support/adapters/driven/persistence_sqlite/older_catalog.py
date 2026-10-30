@@ -18,18 +18,18 @@ _MIGRATIONS = resources.files("p2pwatch.adapters.driven.persistence_sqlite") / "
 
 def open_catalog_at(path: Path, version: int) -> sqlite3.Connection:
     """A catalog.db migrated up to ``version`` only, as an older release left it."""
-    return database_opener().open(path, _scripts_up_to("catalog", version))
+    return database_opener().open(path, scripts=_scripts_up_to("catalog", version))
 
 
 def open_catalog_forcing_secure_delete_at(path: Path, version: int) -> sqlite3.Connection:
     """The same, ``secure_delete`` ON: stands for the image's SQLite, which compiles it in."""
     opener = database_opener_setting("PRAGMA secure_delete = ON")
-    return opener.open(path, _scripts_up_to("catalog", version))
+    return opener.open(path, scripts=_scripts_up_to("catalog", version))
 
 
 def open_local_at(path: Path, version: int) -> sqlite3.Connection:
     """The same for a local.db."""
-    return database_opener().open(path, _scripts_up_to("local", version))
+    return database_opener().open(path, scripts=_scripts_up_to("local", version))
 
 
 def _scripts_up_to(database: str, version: int) -> tuple[Migration, ...]:

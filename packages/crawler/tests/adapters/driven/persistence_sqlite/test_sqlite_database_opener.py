@@ -364,7 +364,7 @@ _NO_TRANSACTION = "-- migration: no-transaction\n"
 
 
 def _open(path: Path, scripts: tuple[Migration, ...]) -> sqlite3.Connection:
-    return database_opener().open(path, scripts)
+    return database_opener().open(path, scripts=scripts)
 
 
 def _version_and_tables(path: Path) -> tuple[int, set[str]]:
@@ -376,7 +376,9 @@ def _version_and_tables(path: Path) -> tuple[int, set[str]]:
 
 def test_open_registers_the_variant_functions_before_migrating(tmp_path: Path) -> None:
     probe = "CREATE TABLE probe AS SELECT iso_to_micros('1970-01-01T00:00:00.000001+00:00') AS us;"
-    with closing(_open(tmp_path / "catalog.db", (Migration(1, probe),))) as connection:
+    with closing(
+        _open(tmp_path / "catalog.db", (Migration(version=1, script=probe),))
+    ) as connection:
         assert rows(connection, "SELECT us FROM probe") == [{"us": 1}]
 
 
@@ -404,9 +406,9 @@ def test_open_applies_the_scripts_above_the_version_only(tmp_path: Path) -> None
     with closing(sqlite3.connect(path, autocommit=True)) as raw:
         raw.execute("PRAGMA user_version = 1")
     scripts = (
-        Migration(1, "CREATE TABLE a (x INTEGER);"),
-        Migration(2, "CREATE TABLE b (x INTEGER);"),
-        Migration(3, "CREATE TABLE c (x INTEGER);"),
+        Migration(version=1, script="CREATE TABLE a (x INTEGER);"),
+        Migration(version=2, script="CREATE TABLE b (x INTEGER);"),
+        Migration(version=3, script="CREATE TABLE c (x INTEGER);"),
     )
     _open(path, scripts).close()
     assert _version_and_tables(path) == (3, {"b", "c"})
@@ -417,7 +419,7 @@ def test_open_refuses_a_database_newer_than_its_scripts(tmp_path: Path) -> None:
     with closing(sqlite3.connect(path, autocommit=True)) as raw:
         raw.execute("PRAGMA user_version = 99")
     with pytest.raises(MigrationError, match="99"):
-        _open(path, (Migration(1, "A"),))
+        _open(path, (Migration(version=1, script="A"),))
 
 
 def test_open_with_no_scripts_migrates_nothing(tmp_path: Path) -> None:
@@ -432,14 +434,16 @@ def test_migrations_sort_through_temporary_files(tmp_path: Path) -> None:
         "CREATE TABLE probe (temp_store INTEGER);\n"
         "INSERT INTO probe SELECT temp_store FROM pragma_temp_store();"
     )
-    with closing(_open(tmp_path / "probe.db", (Migration(1, script),))) as connection:
+    with closing(
+        _open(tmp_path / "probe.db", (Migration(version=1, script=script),))
+    ) as connection:
         assert rows(connection, "SELECT temp_store FROM probe") == [
             {"temp_store": _TEMP_STORE_FILE}
         ]
 
 
 def test_temp_store_is_restored_after_migrations(tmp_path: Path) -> None:
-    scripts = (Migration(1, "CREATE TABLE t (x INTEGER);"),)
+    scripts = (Migration(version=1, script="CREATE TABLE t (x INTEGER);"),)
     with closing(_open(tmp_path / "restore.db", scripts)) as connection:
         assert rows(connection, "PRAGMA temp_store") == [{"temp_store": _TEMP_STORE_DEFAULT}]
 
@@ -448,7 +452,13 @@ def test_failed_script_is_rolled_back_and_version_unchanged(tmp_path: Path) -> N
     path = tmp_path / "echec.db"
     bad_script = "CREATE TABLE disparait (x INTEGER);\nINSERT INTO inexistante VALUES (1);"
     with pytest.raises(MigrationError, match="migration 2"):
-        _open(path, (Migration(1, "CREATE TABLE survit (x INTEGER);"), Migration(2, bad_script)))
+        _open(
+            path,
+            (
+                Migration(version=1, script="CREATE TABLE survit (x INTEGER);"),
+                Migration(version=2, script=bad_script),
+            ),
+        )
     # Migration 1 has ITS OWN transaction (applied); migration 2 is ENTIRELY rolled back.
     assert _version_and_tables(path) == (1, {"survit"})
 
@@ -459,8 +469,8 @@ def test_each_applied_script_logs_one_line_before_it_runs(
     """A long first boot shows which script runs, so a silent wait is not taken for a hang."""
     path = tmp_path / "log.db"
     scripts = (
-        Migration(1, "CREATE TABLE a (x INTEGER);"),
-        Migration(2, "CREATE TABLE b (x INTEGER);"),
+        Migration(version=1, script="CREATE TABLE a (x INTEGER);"),
+        Migration(version=2, script="CREATE TABLE b (x INTEGER);"),
     )
     _open(path, scripts[:1]).close()
     caplog.clear()
@@ -476,7 +486,13 @@ def test_stray_commit_in_a_script_is_detected_before_stamping(tmp_path: Path) ->
     with pytest.raises(
         MigrationError, match=r"^migration 2: the script closed its migration's transaction"
     ):
-        _open(path, (Migration(1, "CREATE TABLE survit (x INTEGER);"), Migration(2, "COMMIT;")))
+        _open(
+            path,
+            (
+                Migration(version=1, script="CREATE TABLE survit (x INTEGER);"),
+                Migration(version=2, script="COMMIT;"),
+            ),
+        )
     assert _version_and_tables(path) == (1, {"survit"})
 
 
@@ -487,7 +503,7 @@ def test_stray_commit_followed_by_a_failure_keeps_the_version_unstamped(tmp_path
     path = tmp_path / "commit2.db"
     script = "CREATE TABLE t (x INTEGER);\nCOMMIT;\nINSERT INTO inexistante VALUES (1);"
     with pytest.raises(MigrationError, match="migration 1"):
-        _open(path, (Migration(1, script),))
+        _open(path, (Migration(version=1, script=script),))
     assert _version_and_tables(path)[0] == 0
 
 
@@ -546,14 +562,14 @@ def test_a_script_pragmas_are_restored_after_it(tmp_path: Path, transactional: b
     """``secure_delete = 1`` stands for the image's build, which compiles ``SECURE_DELETE`` in."""
     opener = database_opener_setting("PRAGMA secure_delete = ON")
     script = _LARGE_REWRITE_PRAGMAS + "CREATE TABLE t (x INTEGER);"
-    scripts = (Migration(1, script, transactional),)
-    with closing(opener.open(tmp_path / "pragmas.db", scripts)) as connection:
+    scripts = (Migration(version=1, script=script, transactional=transactional),)
+    with closing(opener.open(tmp_path / "pragmas.db", scripts=scripts)) as connection:
         assert rows(connection, "PRAGMA secure_delete") == [{"secure_delete": 1}]
         assert rows(connection, "PRAGMA cache_size") == [{"cache_size": -2000}]
 
 
 def test_a_fast_secure_delete_is_restored_as_fast(tmp_path: Path) -> None:
     opener = database_opener_setting("PRAGMA secure_delete = FAST")
-    scripts = (Migration(1, _LARGE_REWRITE_PRAGMAS),)
-    with closing(opener.open(tmp_path / "fast.db", scripts)) as connection:
+    scripts = (Migration(version=1, script=_LARGE_REWRITE_PRAGMAS),)
+    with closing(opener.open(tmp_path / "fast.db", scripts=scripts)) as connection:
         assert rows(connection, "PRAGMA secure_delete") == [{"secure_delete": 2}]

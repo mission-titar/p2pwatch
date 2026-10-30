@@ -62,9 +62,9 @@ class SqliteSqlExecutor(SqlExecutor):
     def __init__(
         self,
         db_path: Path,
+        *,
         open_reader: ReaderOpener,
         monotonic_clock: MonotonicClock,
-        *,
         budget_check_instructions: int,
     ) -> None:
         self._db_path = db_path

@@ -56,7 +56,7 @@ def _instant(micros: int | None) -> datetime | None:
     return None if micros is None else micros_to_instant(micros)
 
 
-def _optional[Reason: StrEnum](reason_type: type[Reason], stored: str | None) -> Reason | None:
+def _optional[Reason: StrEnum](reason_type: type[Reason], *, stored: str | None) -> Reason | None:
     return None if stored is None else reason_type(stored)
 
 
@@ -85,8 +85,8 @@ class SqliteNodeStateReader(NodeStateReader):
                 queued_at=micros_to_instant(row["queued_at_micros"]),
                 completed_at=_instant(row["completed_at_micros"]),
                 latest_progress_at=_instant(row["latest_progress_at_micros"]),
-                waiting_reason=_optional(WaitingReason, row["waiting_reason"]),
-                failure_reason=_optional(FailureReason, row["failure_reason"]),
+                waiting_reason=_optional(WaitingReason, stored=row["waiting_reason"]),
+                failure_reason=_optional(FailureReason, stored=row["failure_reason"]),
             )
             for row in dl_rows
         )

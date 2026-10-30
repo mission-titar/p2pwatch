@@ -95,14 +95,14 @@ class SqliteObservationStore(ObservationWriter, ObservationReader):
     def read_latest_observation(self, file: FileKey) -> FileObservation | None:
         """The file's latest observation, or ``None`` (read)."""
         with wrap_sqlite_errors():
-            return observation_read.latest_observation(self._connection, file)
+            return observation_read.latest_observation(self._connection, file=file)
 
     def read_best_observation(self, file: FileKey) -> FileObservation | None:
         """The observation of the clean filename (most sources, then latest), or ``None``."""
         with wrap_sqlite_errors():
-            return observation_read.best_observation(self._connection, file)
+            return observation_read.best_observation(self._connection, file=file)
 
     def read_known_filenames(self, file: FileKey) -> tuple[str, ...]:
         """Every distinct filename this file was observed under, sorted (read)."""
         with wrap_sqlite_errors():
-            return observation_read.known_filenames(self._connection, file)
+            return observation_read.known_filenames(self._connection, file=file)

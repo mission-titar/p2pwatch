@@ -49,8 +49,8 @@ def test_select_returns_columns_and_rows(tmp_path: Path) -> None:
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
         path,
-        open_reader,
-        FakeTickingMonotonicClock(FakeTime()),
+        open_reader=open_reader,
+        monotonic_clock=FakeTickingMonotonicClock(FakeTime()),
         budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
     ).execute(
         "SELECT native_id, size_bytes FROM files",
@@ -70,8 +70,8 @@ def test_a_column_name_repeated_keeps_both_columns_in_order(tmp_path: Path) -> N
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
         path,
-        open_reader,
-        FakeTickingMonotonicClock(FakeTime()),
+        open_reader=open_reader,
+        monotonic_clock=FakeTickingMonotonicClock(FakeTime()),
         budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
     ).execute("SELECT 1 AS a, 2 AS a", row_cap=1000, time_limit=_TIME_LIMIT)
     assert query_answer == QueryAnswer(
@@ -85,8 +85,8 @@ def test_renders_none_cell_as_null_literal(tmp_path: Path) -> None:
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
         path,
-        open_reader,
-        FakeTime().monotonic,
+        open_reader=open_reader,
+        monotonic_clock=FakeTime().monotonic,
         budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
     ).execute(
         "SELECT NULL AS missing FROM files",
@@ -103,8 +103,8 @@ def test_renders_a_blob_cell_as_lowercase_hex(tmp_path: Path) -> None:
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
         path,
-        open_reader,
-        FakeTime().monotonic,
+        open_reader=open_reader,
+        monotonic_clock=FakeTime().monotonic,
         budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
     ).execute(
         "SELECT file_id FROM files",
@@ -121,8 +121,8 @@ def test_write_is_rejected_read_only(tmp_path: Path) -> None:
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
         path,
-        open_reader,
-        FakeTime().monotonic,
+        open_reader=open_reader,
+        monotonic_clock=FakeTime().monotonic,
         budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
     ).execute(
         "INSERT INTO files (native_id, size_bytes) VALUES ('b', 1)",
@@ -140,8 +140,8 @@ def test_multi_statement_is_rejected(tmp_path: Path) -> None:
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
         path,
-        open_reader,
-        FakeTime().monotonic,
+        open_reader=open_reader,
+        monotonic_clock=FakeTime().monotonic,
         budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
     ).execute(
         "SELECT 1; SELECT 2",
@@ -157,8 +157,8 @@ def test_row_cap_truncates_and_flags(tmp_path: Path) -> None:
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
         path,
-        open_reader,
-        FakeTime().monotonic,
+        open_reader=open_reader,
+        monotonic_clock=FakeTime().monotonic,
         budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
     ).execute(
         "WITH RECURSIVE r(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM r WHERE x < 5)"
@@ -178,8 +178,8 @@ def test_runaway_is_aborted_by_timeout(tmp_path: Path) -> None:
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
         path,
-        open_reader,
-        FakeTickingMonotonicClock(FakeTime()),
+        open_reader=open_reader,
+        monotonic_clock=FakeTickingMonotonicClock(FakeTime()),
         budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
     ).execute(
         _PAST_BUDGET_SQL,
@@ -196,7 +196,10 @@ def test_the_budget_is_checked_only_at_its_step_of_instructions(tmp_path: Path) 
     path = tmp_path / "catalog.db"
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
-        path, open_reader, FakeTickingMonotonicClock(FakeTime()), budget_check_instructions=10**9
+        path,
+        open_reader=open_reader,
+        monotonic_clock=FakeTickingMonotonicClock(FakeTime()),
+        budget_check_instructions=10**9,
     ).execute(_PAST_BUDGET_SQL, row_cap=1000, time_limit=_TIME_LIMIT)
     assert query_answer == QueryAnswer(
         columns=("count(*)",), rows=(("100001",),), elapsed=timedelta(seconds=1), truncated=False
@@ -210,8 +213,8 @@ def test_malformed_sql_yields_error_not_exception(tmp_path: Path) -> None:
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
         path,
-        open_reader,
-        FakeTime().monotonic,
+        open_reader=open_reader,
+        monotonic_clock=FakeTime().monotonic,
         budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
     ).execute(
         "SELECT FROM",
@@ -228,8 +231,8 @@ def test_other_sqlite_error_is_absorbed(tmp_path: Path) -> None:
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
         path,
-        open_reader,
-        FakeTime().monotonic,
+        open_reader=open_reader,
+        monotonic_clock=FakeTime().monotonic,
         budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
     ).execute(
         "SELECT length(zeroblob(1000000000000))",
@@ -246,8 +249,8 @@ def test_statement_without_result_columns_is_safe(tmp_path: Path) -> None:
     _seed_catalog(path)
     query_answer = SqliteSqlExecutor(
         path,
-        open_reader,
-        FakeTime().monotonic,
+        open_reader=open_reader,
+        monotonic_clock=FakeTime().monotonic,
         budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
     ).execute(
         "-- just a comment",

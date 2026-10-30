@@ -25,7 +25,7 @@ class ThreadReadConnections:
     """A reused, thread-affine read-only connection source: each calling thread gets its OWN
     connection to ``path``, opened by ``open_reader`` on first use and reused thereafter."""
 
-    def __init__(self, path: Path, open_reader: ReaderOpener) -> None:
+    def __init__(self, path: Path, *, open_reader: ReaderOpener) -> None:
         self._path = path
         self._open_reader = open_reader
         self._local = ThreadLocalConnection()

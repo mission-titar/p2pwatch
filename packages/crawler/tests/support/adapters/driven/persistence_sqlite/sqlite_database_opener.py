@@ -23,7 +23,7 @@ class _PragmaSettingCopier(SqlitePreMigrationCopier):
     the migrations."""
 
     def __init__(self, pragma: str) -> None:
-        super().__init__(FakeTime().wall, FakeFreeBytes(_AMPLE_BYTES).free_bytes)
+        super().__init__(FakeTime().wall, free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes)
         self._pragma = pragma
 
     def ensure_copy(
@@ -34,14 +34,14 @@ class _PragmaSettingCopier(SqlitePreMigrationCopier):
         open_reader: ReaderOpener,
     ) -> None:
         connection.execute(self._pragma)
-        super().ensure_copy(connection, path, pending, open_reader)
+        super().ensure_copy(connection, path=path, pending=pending, open_reader=open_reader)
 
 
 def database_opener() -> SqliteDatabaseOpener:
     """An opener whose pre-migration copies are named from a ``FakeTime`` and never short of
     space."""
     return SqliteDatabaseOpener(
-        SqlitePreMigrationCopier(FakeTime().wall, FakeFreeBytes(_AMPLE_BYTES).free_bytes)
+        SqlitePreMigrationCopier(FakeTime().wall, free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes)
     )
 
 

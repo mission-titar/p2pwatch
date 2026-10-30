@@ -37,7 +37,9 @@ _COPIER_LOGGER = "p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_cop
 
 
 def _copy_catalogs(destination: Path, source_catalogs: list[Path]) -> None:
-    SqliteCatalogCopier(database_opener()).copy_catalogs(destination, source_catalogs)
+    SqliteCatalogCopier(database_opener()).copy_catalogs(
+        destination, source_catalogs=source_catalogs
+    )
 
 
 def _file_observation(native_id: str, *, node_id: str, observed_at: str) -> dict[str, object]:

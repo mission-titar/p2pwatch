@@ -103,7 +103,7 @@ def _config(tmp_path: Path, **sections: object) -> dict[str, Any]:
 def _record_node_id(tmp_path: Path, node_id: NodeId) -> None:
     """``local.db`` holding ``node_id``, as a node started before."""
     local = open_local(tmp_path / "local.db")
-    SqliteNodeIdStore(local).record_node_id(node_id, SystemWallClock().now())
+    SqliteNodeIdStore(local).record_node_id(node_id, created_at=SystemWallClock().now())
     local.close()
 
 
@@ -293,9 +293,9 @@ async def test_the_download_loop_records_a_tracked_downloads_sources_under_the_n
     local = open_local(tmp_path / "local.db")
     SqliteTrackedDownloadStore(local).record_queued(
         FileKey(network=Network.ED2K, native_id=_HASH),
-        TargetId("062A"),
-        10,
-        SystemWallClock().now(),
+        target_id=TargetId("062A"),
+        size_bytes=10,
+        queued_at=SystemWallClock().now(),
     )
     local.close()
     download = {

@@ -11,7 +11,7 @@ _NO_TRANSACTION = "-- migration: no-transaction"
 _COPY_BEFORE = "-- migration: copy-before"
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class Migration:
     version: int
     script: str
@@ -19,7 +19,7 @@ class Migration:
     copy_before: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class PendingMigrations:
     """The migrations above a database's version. By a convention the type makes visible, only
     ``SqliteDatabaseOpener`` builds one, once it has read that version."""
@@ -39,7 +39,7 @@ def load_scripts(directory: Traversable) -> tuple[Migration, ...]:
         if not prefix.isdigit():
             raise MigrationError(f"invalid script name (NNNN_*.sql expected): {script_file.name}")
         script = script_file.read_text(encoding="utf-8")
-        scripts.append(_read_directive(int(prefix), script_file.name, script))
+        scripts.append(_read_directive(int(prefix), name=script_file.name, script=script))
     for left, right in pairwise(script.version for script in scripts):
         if right <= left:
             raise MigrationError(
@@ -49,15 +49,15 @@ def load_scripts(directory: Traversable) -> tuple[Migration, ...]:
     return tuple(scripts)
 
 
-def _read_directive(version: int, name: str, script: str) -> Migration:
+def _read_directive(version: int, *, name: str, script: str) -> Migration:
     first_line = script.partition("\n")[0]
     if first_line == _NO_TRANSACTION:
-        return Migration(version, script, transactional=False)
+        return Migration(version=version, script=script, transactional=False)
     if first_line == _COPY_BEFORE:
-        return Migration(version, script, copy_before=True)
+        return Migration(version=version, script=script, copy_before=True)
     if first_line.startswith(_DIRECTIVE):
         raise MigrationError(
             f"{name}: unknown directive {first_line!r}, "
             f"only {_NO_TRANSACTION!r} or {_COPY_BEFORE!r}"
         )
-    return Migration(version, script)
+    return Migration(version=version, script=script)

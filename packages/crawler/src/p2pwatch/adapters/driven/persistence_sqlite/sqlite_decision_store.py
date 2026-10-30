@@ -94,7 +94,9 @@ class SqliteDecisionStore(DecisionWriter, DecisionReader):
         with wrap_sqlite_errors():
             rows = self._connection.execute(_SELECT_LATEST_DECISIONS, (file.file_id,)).fetchall()
         decisions = [
-            _file_target_decision(TargetId(row["target_id"]), row["rule_name"], row["tier"])
+            _file_target_decision(
+                TargetId(row["target_id"]), rule_name=row["rule_name"], tier=row["tier"]
+            )
             for row in rows
         ]
         return {decision.target_id: decision for decision in decisions}
@@ -122,7 +124,7 @@ def _decision_columns(decision: FileTargetDecision) -> tuple[str, str, str]:
     return decision.target_id, decision.rule_name, decision.tier.value
 
 
-def _file_target_decision(target_id: TargetId, rule_name: str, tier: str) -> FileTargetDecision:
+def _file_target_decision(target_id: TargetId, *, rule_name: str, tier: str) -> FileTargetDecision:
     if tier == _RETRACTED_TIER:
         return Retraction(target_id=target_id)
     return DecisionRecord(target_id=target_id, rule_name=rule_name, tier=DecisionTier(tier))

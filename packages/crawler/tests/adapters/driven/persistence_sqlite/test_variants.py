@@ -78,7 +78,7 @@ def test_a_memoized_sql_function_calls_its_function_once_per_distinct_arguments(
         return text * number
 
     connection = sqlite3.connect(":memory:", autocommit=True)
-    create_memoized_function(connection, "repeat", 2, counting)
+    create_memoized_function(connection, name="repeat", argument_count=2, function=counting)
     repeated = rows(
         connection,
         "SELECT repeat(c, 2) AS repeated"

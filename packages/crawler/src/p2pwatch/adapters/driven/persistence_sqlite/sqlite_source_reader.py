@@ -207,7 +207,7 @@ def _sharing_period(row: NamedRow) -> SharingPeriod:
 
 
 def _period_rows(
-    connection: sqlite3.Connection, where: str, key: bytes | str, window: PeriodWindow
+    connection: sqlite3.Connection, *, where: str, key: bytes | str, window: PeriodWindow
 ) -> list[NamedRow]:
     params = {
         "key": key,
@@ -219,7 +219,7 @@ def _period_rows(
 
 
 def _source_namings(
-    connection: sqlite3.Connection, where: str, key: bytes | str, limit: int, offset: int
+    connection: sqlite3.Connection, *, where: str, key: bytes | str, limit: int, offset: int
 ) -> tuple[SourceNaming, ...]:
     params = {"key": key, "limit": limit, "offset": offset}
     return tuple(
@@ -234,12 +234,12 @@ def _source_namings(
 
 
 def _best_filename_by_file(
-    connection: sqlite3.Connection, sharing_periods: tuple[SharingPeriod, ...]
+    connection: sqlite3.Connection, *, sharing_periods: tuple[SharingPeriod, ...]
 ) -> dict[FileKey, str]:
     """The best filename of each file of ``sharing_periods`` ever seen."""
     best_filename_by_file = {}
     for file in {period.file for period in sharing_periods}:
-        best = best_observation(connection, file)
+        best = best_observation(connection, file=file)
         if best is not None:
             best_filename_by_file[file] = best.reported_file.filename
     return best_filename_by_file
@@ -286,15 +286,20 @@ class SqliteSourceReader(SourceReader):
         if row is None:
             return None
         sharing_periods = tuple(
-            map(_sharing_period, _period_rows(connection, _WHERE_SOURCE, source_id, window))
+            map(
+                _sharing_period,
+                _period_rows(connection, where=_WHERE_SOURCE, key=source_id, window=window),
+            )
         )
         return SourceHistory(
             source=SourceKey(network=Network(row["network"]), native_id=row["native_id"]),
             source_namings=_source_namings(
-                connection, _WHERE_SOURCE_NAMED, source_id, limit, offset
+                connection, where=_WHERE_SOURCE_NAMED, key=source_id, limit=limit, offset=offset
             ),
             sharing_periods=sharing_periods,
-            best_filename_by_file=_best_filename_by_file(connection, sharing_periods),
+            best_filename_by_file=_best_filename_by_file(
+                connection, sharing_periods=sharing_periods
+            ),
         )
 
     def read_source_name_history(
@@ -306,20 +311,29 @@ class SqliteSourceReader(SourceReader):
         sharing_periods = tuple(
             map(
                 _sharing_period,
-                _period_rows(connection, _WHERE_NAME_HASHLESS, source_name, window),
+                _period_rows(
+                    connection, where=_WHERE_NAME_HASHLESS, key=source_name, window=window
+                ),
             )
         )
         return SourceNameHistory(
             source_name=source_name,
-            source_namings=_source_namings(connection, _WHERE_NAME, source_name, limit, offset),
+            source_namings=_source_namings(
+                connection, where=_WHERE_NAME, key=source_name, limit=limit, offset=offset
+            ),
             sharing_periods=sharing_periods,
-            best_filename_by_file=_best_filename_by_file(connection, sharing_periods),
+            best_filename_by_file=_best_filename_by_file(
+                connection, sharing_periods=sharing_periods
+            ),
         )
 
     def read_sharing_periods(
-        self, file: FileKey, window: PeriodWindow
+        self, file: FileKey, *, window: PeriodWindow
     ) -> tuple[SharingPeriod, ...]:
         connection = self._thread_read_connections.connection()
         return tuple(
-            map(_sharing_period, _period_rows(connection, _WHERE_FILE, file.file_id, window))
+            map(
+                _sharing_period,
+                _period_rows(connection, where=_WHERE_FILE, key=file.file_id, window=window),
+            )
         )
