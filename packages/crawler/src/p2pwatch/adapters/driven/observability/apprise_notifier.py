@@ -15,9 +15,7 @@ DECISION (audit 2026-06-23 / security-network#2): the apprise egress (Slack, Dis
 etc. webhooks) traverses the crawler's HOST network, not the VPN. The packaging spec accepts this
 tradeoff: the P2P kill-switch stays effective (eD2k blocked outside the VPN, anonymity preserved);
 only the notification IP↔webhook CORRELATION remains (an operator who notifies on Slack exposes
-their host's IP to Slack, not their P2P traffic). This is a DELIBERATE choice, not a flaw.
-
-No apprise stubs → targeted ``# type: ignore`` (mypy override, Task 9)."""
+their host's IP to Slack, not their P2P traffic). This is a DELIBERATE choice, not a flaw."""
 
 from collections.abc import Sequence
 from datetime import timedelta
@@ -124,7 +122,7 @@ _NO_MENTION = "@\u200b"
 
 
 class AppriseFactory(Protocol):
-    def __call__(self, *, asset: apprise.AppriseAsset) -> object: ...
+    def __call__(self, *, asset: apprise.AppriseAsset) -> apprise.Apprise: ...
 
 
 class AppriseNotifier(Notifier):
@@ -133,9 +131,9 @@ class AppriseNotifier(Notifier):
     def __init__(self, targets: AppriseTargets, *, apprise_factory: AppriseFactory) -> None:
         self._targets = targets
         self._apprise_factory = apprise_factory
-        self._groups_by_node_id: dict[NodeId, tuple[object, object]] = {}
+        self._groups_by_node_id: dict[NodeId, tuple[apprise.Apprise, apprise.Apprise]] = {}
 
-    def _groups(self, node_id: NodeId) -> tuple[object, object]:
+    def _groups(self, node_id: NodeId) -> tuple[apprise.Apprise, apprise.Apprise]:
         """The node's prefixed and bare groups, built on its first notification."""
         # Per node: apprise hands the asset, its username, to each URL when it is added.
         if node_id in self._groups_by_node_id:
@@ -147,13 +145,11 @@ class AppriseNotifier(Notifier):
             image_url_mask="",
             image_url_logo="",
         )
-        # Typed ``object`` on purpose: the adapter does not depend on apprise's (untyped)
-        # surface; ``.add``/``.async_notify`` carry a ``# type: ignore[attr-defined]``.
-        prefixed_group: object = self._apprise_factory(asset=asset)
-        bare_group: object = self._apprise_factory(asset=asset)
+        prefixed_group = self._apprise_factory(asset=asset)
+        bare_group = self._apprise_factory(asset=asset)
         for url, audience, node_prefix in self._targets:
             group = prefixed_group if node_prefix else bare_group
-            group.add(url, tag=audience.value)  # type: ignore[attr-defined]
+            group.add(url, tag=audience.value)
         self._groups_by_node_id[node_id] = (prefixed_group, bare_group)
         return prefixed_group, bare_group
 
@@ -163,7 +159,7 @@ class AppriseNotifier(Notifier):
         prefixed_group, bare_group = self._groups(node_id)
         prefixed = f"[{node_id}] {title}".rstrip()
         for group, heading in ((prefixed_group, prefixed), (bare_group, title)):
-            await group.async_notify(  # type: ignore[attr-defined]
+            await group.async_notify(
                 title=heading.replace("@", _NO_MENTION),
                 body=body.replace("@", _NO_MENTION),
                 body_format=apprise.NotifyFormat.MARKDOWN,

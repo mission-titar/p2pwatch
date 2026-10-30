@@ -1,16 +1,19 @@
 import apprise
 
 
-class FakeApprise:
-    def __init__(self, asset: apprise.AppriseAsset) -> None:
-        self.asset = asset
-        self.added: list[tuple[str, str]] = []
+class FakeApprise(apprise.Apprise):
+    """An ``apprise.Apprise`` that records the URLs added and the notifications, and sends none."""
+
+    def __init__(self, *, asset: apprise.AppriseAsset) -> None:
+        super().__init__(asset=asset)
+        self.added: list[tuple[object, object]] = []
         self.sent: list[dict[str, object]] = []
 
-    def add(self, url: str, tag: str) -> bool:
-        self.added.append((url, tag))
+    def add(self, *args: object, **kwargs: object) -> bool:
+        """Records ``add(url, tag=...)``, the notifier's call."""
+        self.added.append((args[0], kwargs["tag"]))
         return True
 
-    async def async_notify(self, **kwargs: object) -> bool:
+    async def async_notify(self, *args: object, **kwargs: object) -> apprise.AppriseResult:
         self.sent.append(kwargs)
-        return True
+        return apprise.AppriseResult()
