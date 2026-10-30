@@ -199,7 +199,11 @@ zone's two exclusions.
 - D3's `noqa`s, written before their zone is converted (ruff does not select `RUF100`, so a `noqa` on an excluded
   line fails nothing). The callers a library makes by position, which the teammate checks against the tree:
   - the SQL functions `persistence_sqlite/variants.py` registers with `create_function`, those taking two
-    arguments or more; mypy cannot see these calls (typeshed types `create_function` with `Callable[..., Any]`);
+    arguments or more; mypy cannot see these calls (typeshed types `create_function` with `Callable[..., Any]`)
+    (Corrected: `content_hash` is keyword-only, since our code calls it too; SQLite receives
+    `content_hash_by_position`, which carries the `noqa` and names the columns, holistic review, block 180);
+  - `test_variants.py`'s `counting(text, number)`, the SQL function its memoization test registers (Corrected:
+    added by block 160, the operator's option A);
   - the row factory `_build_named_row(cursor, row)`, set on sqlite3 connections by the opener;
   - the webui's `_add_security_headers(request, call_next)`, Starlette's `dispatch=` middleware;
   - `test_app.py`'s `_TemplateRecorder.__call__(scope, receive, send)`, an ASGI app;
@@ -223,7 +227,8 @@ zone's two exclusions.
 - A callable returning a coroutine declares `async def __call__` (operator, 2026-10-30).
 - A type a library already names stays: `starlette.types.Receive` and `Send`.
 - A test's unbound method (`Callable[[FilesystemConfigChecker, PurePath], None]`): the instance positional-only, the
-  rest by keyword, which an unbound method `(self, path)` fits.
+  rest by keyword, which an unbound method `(self, path)` fits. (Corrected: where the methods' parameters are named
+  differently, block 40 passes the bound methods, typed by a `ConfigCheck` `(path, /)`.)
 - A double keeps its name (`FakeCommandRunner`) and fits its `Protocol` structurally.
 - vulture (D10): `vulture_whitelist.py` gains `_.__call__` and a line per parameter vulture reports, each with its
   reason.
@@ -274,15 +279,18 @@ No Jinja template calls a method with two arguments, so mypy's blindness to temp
 
 1. `pyproject.toml`'s `select` holds `PLR0917` and `max-positional-args = 1`, with no per-file ignore of it; a probe
    holding `def f(a, b)` fails `uv run ruff check <probe>` with no `--select` (watched in block 10); `uv run poe lint`
-   passes; `git grep -n "noqa: PLR0917"` prints only block 10's list.
+   passes; `git grep -n "noqa: PLR0917"` prints only block 10's list. (Corrected: and `counting`, block 160: 10 lines.)
 2. The dataclass rule's tests refuse `@dataclass`, `@dataclass(frozen=True)` and `@dataclass(kw_only=False)` and admit
    `@dataclass(frozen=True, kw_only=True)`, watched failing first; the rule holds no `ignores:`;
-   `uv run poe code-pattern-check` passes.
+   `uv run poe code-pattern-check` passes. (Corrected: they also refuse `field(kw_only=False)`, holistic review,
+   block 180.)
 3. `git grep -nE "import .*\b(Callable|NamedTuple|namedtuple|override)\b|(typing|typing_extensions|abc)\.(Callable|NamedTuple|override)|collections\.namedtuple" packages`
    prints nothing; `pyproject.toml` bans the eight names of blocks 10 and 60.
 4. `no-protocol-base`'s tests admit a class whose only member is `__call__` and refuse a port written as a `Protocol`.
 5. `pyproject.toml` holds no per-file ignore of `TID251`; `uv run ruff check packages --select TID251,RUF100 --config
-   <banned-api holding only the clock names>` passes (`RUF100` reports a `noqa` that silences nothing).
+   <banned-api holding only the clock names> --config 'lint.external = ["PLR0917"]'` passes (`RUF100` reports a
+   `noqa` that silences nothing). (Corrected: `lint.external` added, since `RUF100` also reports a `noqa` naming a
+   rule the command does not select, block 50; block 180 removed the two stale ones, `BLE001` and `N802`.)
 6. `AGENTS.md` no longer says mypy cannot check `text=True`; appendix B's `# type: ignore[arg-type]` test stands for
    each `CommandRunner`.
 
