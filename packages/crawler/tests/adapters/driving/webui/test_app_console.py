@@ -39,7 +39,9 @@ from tests.fakes.application.use_cases.fake_source_name_describer import FakeSou
 
 _HASH_A = "a" * 32
 _SQL = "SELECT native_id FROM files"
-_ANSWER = QueryAnswer(("native_id",), ((_HASH_A,),), timedelta(milliseconds=3), truncated=False)
+_ANSWER = QueryAnswer(
+    columns=("native_id",), rows=((_HASH_A,),), elapsed=timedelta(milliseconds=3), truncated=False
+)
 _CONSOLE_QUERY_RUN = ConsoleQueryRun(_ANSWER, row_cap=1000)
 _UNKNOWN_DB = "Unknown database. Choose catalog.db or local.db."
 
@@ -203,7 +205,7 @@ async def test_post_console_bogus_db_shows_error_no_query() -> None:
 async def test_post_console_query_failure_shows_error_banner() -> None:
     """A failed query renders its message in the error banner, still HTTP 200."""
     console_query_run = replace(
-        _CONSOLE_QUERY_RUN, query_answer=QueryFailure("SQL error: near FROM")
+        _CONSOLE_QUERY_RUN, query_answer=QueryFailure(message="SQL error: near FROM")
     )
     resp, _ = await _post("/console", {"sql": "SELECT FROM", "db": "catalog"}, console_query_run)
     assert resp.status_code == 200
@@ -253,7 +255,7 @@ async def test_post_console_csv_bad_db_returns_400() -> None:
 async def test_post_console_csv_query_failure_returns_400() -> None:
     """POST /console.csv with a failed query -> 400 plain text with its message."""
     console_query_run = replace(
-        _CONSOLE_QUERY_RUN, query_answer=QueryFailure("SQL error: near FROM")
+        _CONSOLE_QUERY_RUN, query_answer=QueryFailure(message="SQL error: near FROM")
     )
     resp, _ = await _post(
         "/console.csv", {"sql": "SELECT FROM", "db": "catalog"}, console_query_run

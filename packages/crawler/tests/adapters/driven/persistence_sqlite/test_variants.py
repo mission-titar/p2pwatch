@@ -111,7 +111,7 @@ def test_removing_the_migration_functions_removes_iso_to_micros_alone(
 
 def test_file_id_sql_function_is_the_file_key_file_id(connection: sqlite3.Connection) -> None:
     [row] = rows(connection, "SELECT file_id('ed2k', ?) AS file_id", (_HASH,))
-    assert row["file_id"] == FileKey(Network.ED2K, _HASH).file_id
+    assert row["file_id"] == FileKey(network=Network.ED2K, native_id=_HASH).file_id
 
 
 def test_file_id_sql_function_refuses_an_unknown_network(connection: sqlite3.Connection) -> None:

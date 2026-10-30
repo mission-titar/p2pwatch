@@ -58,7 +58,10 @@ def test_select_returns_columns_and_rows(tmp_path: Path) -> None:
         time_limit=_TIME_LIMIT,
     )
     assert query_answer == QueryAnswer(
-        ("native_id", "size_bytes"), ((_HASH_A, "10"),), timedelta(seconds=1), truncated=False
+        columns=("native_id", "size_bytes"),
+        rows=((_HASH_A, "10"),),
+        elapsed=timedelta(seconds=1),
+        truncated=False,
     )
 
 
@@ -72,7 +75,7 @@ def test_a_column_name_repeated_keeps_both_columns_in_order(tmp_path: Path) -> N
         budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
     ).execute("SELECT 1 AS a, 2 AS a", row_cap=1000, time_limit=_TIME_LIMIT)
     assert query_answer == QueryAnswer(
-        ("a", "a"), (("1", "2"),), timedelta(seconds=1), truncated=False
+        columns=("a", "a"), rows=(("1", "2"),), elapsed=timedelta(seconds=1), truncated=False
     )
 
 
@@ -109,7 +112,7 @@ def test_renders_a_blob_cell_as_lowercase_hex(tmp_path: Path) -> None:
         time_limit=_TIME_LIMIT,
     )
     assert isinstance(query_answer, QueryAnswer)
-    assert query_answer.rows == ((FileKey(Network.ED2K, _HASH_A).file_id.hex(),),)
+    assert query_answer.rows == ((FileKey(network=Network.ED2K, native_id=_HASH_A).file_id.hex(),),)
 
 
 def test_write_is_rejected_read_only(tmp_path: Path) -> None:
@@ -127,7 +130,7 @@ def test_write_is_rejected_read_only(tmp_path: Path) -> None:
         time_limit=_TIME_LIMIT,
     )
     assert query_answer == QueryFailure(
-        "The database is read-only. Only read queries (SELECT) are allowed."
+        message="The database is read-only. Only read queries (SELECT) are allowed."
     )
 
 
@@ -145,7 +148,7 @@ def test_multi_statement_is_rejected(tmp_path: Path) -> None:
         row_cap=1000,
         time_limit=_TIME_LIMIT,
     )
-    assert query_answer == QueryFailure("Only a single SQL statement is allowed per query.")
+    assert query_answer == QueryFailure(message="Only a single SQL statement is allowed per query.")
 
 
 def test_row_cap_truncates_and_flags(tmp_path: Path) -> None:
@@ -183,7 +186,9 @@ def test_runaway_is_aborted_by_timeout(tmp_path: Path) -> None:
         row_cap=1000,
         time_limit=_TIME_LIMIT,
     )
-    assert query_answer == QueryFailure("Query aborted: it exceeded the 5 second time limit.")
+    assert query_answer == QueryFailure(
+        message="Query aborted: it exceeded the 5 second time limit."
+    )
 
 
 def test_the_budget_is_checked_only_at_its_step_of_instructions(tmp_path: Path) -> None:
@@ -194,7 +199,7 @@ def test_the_budget_is_checked_only_at_its_step_of_instructions(tmp_path: Path) 
         path, open_reader, FakeTickingMonotonicClock(FakeTime()), budget_check_instructions=10**9
     ).execute(_PAST_BUDGET_SQL, row_cap=1000, time_limit=_TIME_LIMIT)
     assert query_answer == QueryAnswer(
-        ("count(*)",), (("100001",),), timedelta(seconds=1), truncated=False
+        columns=("count(*)",), rows=(("100001",),), elapsed=timedelta(seconds=1), truncated=False
     )
 
 
@@ -213,7 +218,7 @@ def test_malformed_sql_yields_error_not_exception(tmp_path: Path) -> None:
         row_cap=1000,
         time_limit=_TIME_LIMIT,
     )
-    assert query_answer == QueryFailure('SQL error: near "FROM": syntax error')
+    assert query_answer == QueryFailure(message='SQL error: near "FROM": syntax error')
 
 
 def test_other_sqlite_error_is_absorbed(tmp_path: Path) -> None:
@@ -231,7 +236,7 @@ def test_other_sqlite_error_is_absorbed(tmp_path: Path) -> None:
         row_cap=1000,
         time_limit=_TIME_LIMIT,
     )
-    assert query_answer == QueryFailure("SQL error: string or blob too big")
+    assert query_answer == QueryFailure(message="SQL error: string or blob too big")
 
 
 def test_statement_without_result_columns_is_safe(tmp_path: Path) -> None:

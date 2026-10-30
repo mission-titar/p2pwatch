@@ -15,7 +15,7 @@ SEEN_AT = "2026-06-22T10:00:00.000000+00:00"
 
 
 def file_id(native_id: str) -> FileId:
-    return FileKey(Network.ED2K, native_id).file_id
+    return FileKey(network=Network.ED2K, native_id=native_id).file_id
 
 
 def insert_file(connection: sqlite3.Connection, native_id: str, size_bytes: int = 100) -> None:
@@ -87,7 +87,7 @@ def insert_decision(
 
 
 def source_id(user_hash: str) -> SourceId:
-    return SourceKey(Network.ED2K, user_hash).source_id
+    return SourceKey(network=Network.ED2K, native_id=user_hash).source_id
 
 
 def insert_source(connection: sqlite3.Connection, user_hash: str) -> None:

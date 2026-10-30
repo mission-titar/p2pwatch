@@ -6,8 +6,8 @@ from p2pwatch.domain.file_key import FileKey, Network
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_local_at
 
-_A = FileKey(Network.ED2K, "a" * 32)
-_B = FileKey(Network.ED2K, "b" * 32)
+_A = FileKey(network=Network.ED2K, native_id="a" * 32)
+_B = FileKey(network=Network.ED2K, native_id="b" * 32)
 _BACKOFF_ROW = '{"amuled:kad": {"attempts": 2, "retry_after": "2026-10-13T00:03:00.000000+00:00"}}'
 
 

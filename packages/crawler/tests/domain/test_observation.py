@@ -7,7 +7,7 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Keyword
 from p2pwatch.domain.observation import ReportedFile, candidate_from_fields, fold_raw_metadata
 
-_KEY = FileKey(Network.ED2K, "31d6cfe0d16ae931b73c59d7e0c089c0")
+_KEY = FileKey(network=Network.ED2K, native_id="31d6cfe0d16ae931b73c59d7e0c089c0")
 
 
 def _full_reported_file() -> ReportedFile:

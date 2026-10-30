@@ -23,7 +23,7 @@ _T0 = datetime(2026, 10, 13, 20, 0, tzinfo=UTC)
 
 
 def test_source_key_is_frozen() -> None:
-    key = SourceKey(Network.ED2K, _HASH)
+    key = SourceKey(network=Network.ED2K, native_id=_HASH)
     with pytest.raises(dataclasses.FrozenInstanceError):
         key.native_id = "autre"  # type: ignore[misc]
 
@@ -31,16 +31,22 @@ def test_source_key_is_frozen() -> None:
 def test_source_id_is_the_uuid5_of_network_and_native_id_in_the_source_namespace() -> None:
     namespace = uuid.uuid5(uuid.NAMESPACE_URL, "https://mission-titar.github.io/p2pwatch/source")
     expected = uuid.uuid5(namespace, f"ed2k:{_HASH}").bytes
-    assert SourceKey(Network.ED2K, _HASH).source_id == expected
+    assert SourceKey(network=Network.ED2K, native_id=_HASH).source_id == expected
     assert len(expected) == 16
 
 
 def test_source_id_never_equals_the_file_id_of_the_same_native_id() -> None:
-    assert bytes(SourceKey(Network.ED2K, _HASH).source_id) != FileKey(Network.ED2K, _HASH).file_id
+    assert (
+        bytes(SourceKey(network=Network.ED2K, native_id=_HASH).source_id)
+        != FileKey(network=Network.ED2K, native_id=_HASH).file_id
+    )
 
 
 def test_source_id_differs_per_native_id() -> None:
-    assert SourceKey(Network.ED2K, _HASH).source_id != SourceKey(Network.ED2K, "0" * 32).source_id
+    assert (
+        SourceKey(network=Network.ED2K, native_id=_HASH).source_id
+        != SourceKey(network=Network.ED2K, native_id="0" * 32).source_id
+    )
 
 
 @pytest.mark.parametrize("native_id", [_HASH.upper(), _HASH[:31], _HASH + "0", "g" * 32, ""])
@@ -48,7 +54,7 @@ def test_source_key_refuses_an_ed2k_native_id_that_is_not_32_lowercase_hex(
     native_id: str,
 ) -> None:
     with pytest.raises(ValueError, match="32 lowercase hex"):
-        SourceKey(Network.ED2K, native_id)
+        SourceKey(network=Network.ED2K, native_id=native_id)
 
 
 def test_source_roles_are_the_five_values_the_catalog_accepts() -> None:
@@ -89,7 +95,16 @@ def test_each_role_belongs_to_its_group() -> None:
 
 
 def _passing(session_received_bytes: int) -> SourceReading:
-    return SourceReading(None, "AnimuseeFMR", None, None, None, None, (), session_received_bytes)
+    return SourceReading(
+        source=None,
+        source_name="AnimuseeFMR",
+        software=None,
+        role=None,
+        contact_point=None,
+        connectable=None,
+        raw_metadata=(),
+        session_received_bytes=session_received_bytes,
+    )
 
 
 @pytest.mark.parametrize(
@@ -105,7 +120,13 @@ def _passing(session_received_bytes: int) -> SourceReading:
 def test_a_passing_state_carries_the_group_of_the_latest_point(
     previous: SourceRole, carried: SourceRole
 ) -> None:
-    assert carried_role(LatestPoint(previous, _T0, 5), reading=_passing(5)) is carried
+    assert (
+        carried_role(
+            LatestPoint(role=previous, observed_at=_T0, session_received_bytes=5),
+            reading=_passing(5),
+        )
+        is carried
+    )
 
 
 def test_a_passing_state_without_a_latest_point_is_undetermined() -> None:
@@ -121,7 +142,7 @@ def test_a_passing_state_carries_nothing_once_its_client_was_recreated(
     session_received_bytes: int, carried: SourceRole
 ) -> None:
     # aMule recreating the client restarts its session's received bytes.
-    latest = LatestPoint(SourceRole.QUEUED, _T0, 5)
+    latest = LatestPoint(role=SourceRole.QUEUED, observed_at=_T0, session_received_bytes=5)
     assert carried_role(latest, reading=_passing(session_received_bytes)) is carried
 
 
@@ -135,18 +156,28 @@ def test_earlier_points_of_no_point_tell_nothing() -> None:
 
 def test_earlier_points_leave_unknown_points_out_of_the_latest_known_one() -> None:
     points = (
-        LatestPoint(SourceRole.NOTHING_NEW, _T0, 0),
-        LatestPoint(SourceRole.STANDBY, _T0 + timedelta(hours=1), 0),
-        LatestPoint(SourceRole.UNDETERMINED, _T0 + timedelta(hours=2), 0),
+        LatestPoint(role=SourceRole.NOTHING_NEW, observed_at=_T0, session_received_bytes=0),
+        LatestPoint(
+            role=SourceRole.STANDBY, observed_at=_T0 + timedelta(hours=1), session_received_bytes=0
+        ),
+        LatestPoint(
+            role=SourceRole.UNDETERMINED,
+            observed_at=_T0 + timedelta(hours=2),
+            session_received_bytes=0,
+        ),
     )
     assert EarlierPoints.of(points) == EarlierPoints(has_useful_point=False, latest_known_at=_T0)
 
 
 def test_earlier_points_tell_a_useful_point_and_the_latest_known_one() -> None:
     points = (
-        LatestPoint(SourceRole.QUEUED, _T0 + timedelta(hours=1), 0),
-        LatestPoint(SourceRole.NOTHING_NEW, _T0, 0),
-        LatestPoint(SourceRole.STANDBY, _T0 + timedelta(hours=2), 0),
+        LatestPoint(
+            role=SourceRole.QUEUED, observed_at=_T0 + timedelta(hours=1), session_received_bytes=0
+        ),
+        LatestPoint(role=SourceRole.NOTHING_NEW, observed_at=_T0, session_received_bytes=0),
+        LatestPoint(
+            role=SourceRole.STANDBY, observed_at=_T0 + timedelta(hours=2), session_received_bytes=0
+        ),
     )
     assert EarlierPoints.of(points) == EarlierPoints(
         has_useful_point=True, latest_known_at=_T0 + timedelta(hours=1)
@@ -155,7 +186,9 @@ def test_earlier_points_tell_a_useful_point_and_the_latest_known_one() -> None:
 
 @pytest.mark.parametrize("server", ["176.103.48.36:4184", "0.0.0.0:1", "1.2.3.4:65535"])
 def test_an_ed2k_contact_point_is_an_ipv4_address_and_a_port(server: str) -> None:
-    assert parse_contact_point(Network.ED2K, server=server) == ContactPoint(Network.ED2K, server)
+    assert parse_contact_point(Network.ED2K, server=server) == ContactPoint(
+        network=Network.ED2K, server=server
+    )
 
 
 @pytest.mark.parametrize(
@@ -178,4 +211,4 @@ def test_an_ed2k_contact_point_is_an_ipv4_address_and_a_port(server: str) -> Non
 def test_anything_else_is_not_an_ed2k_contact_point(server: str) -> None:
     assert parse_contact_point(Network.ED2K, server=server) is None
     with pytest.raises(ValueError, match="a ed2k contact point is an IPv4 address and a port"):
-        ContactPoint(Network.ED2K, server)
+        ContactPoint(network=Network.ED2K, server=server)

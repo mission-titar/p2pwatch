@@ -19,10 +19,12 @@ from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener imp
 
 _STARTED_AT = datetime(2026, 6, 12, 10, 0, 0, 123456, tzinfo=UTC)
 _BACKOFF = {
-    BackoffKey(ClientName("amule-1"), Channel("kad")): BackoffState(
-        2, _STARTED_AT, timedelta(seconds=300)
+    BackoffKey(client_name=ClientName("amule-1"), channel=Channel("kad")): BackoffState(
+        attempts=2, started_at=_STARTED_AT, delay=timedelta(seconds=300)
     ),
-    BackoffKey(ClientName("amule-1"), None): BackoffState(1, _STARTED_AT, timedelta(seconds=2.75)),
+    BackoffKey(client_name=ClientName("amule-1"), channel=None): BackoffState(
+        attempts=1, started_at=_STARTED_AT, delay=timedelta(seconds=2.75)
+    ),
 }
 
 
@@ -92,9 +94,11 @@ def test_set_backoff_states_is_atomic_on_injected_failure(
         " BEGIN SELECT RAISE(ABORT, 'injected failure'); END"
     )
     later = {
-        BackoffKey(ClientName("amule-1"), None): BackoffState(2, _STARTED_AT, timedelta(seconds=4)),
-        BackoffKey(ClientName("amule-1"), Channel("ed2k")): BackoffState(
-            1, _STARTED_AT, timedelta(seconds=2)
+        BackoffKey(client_name=ClientName("amule-1"), channel=None): BackoffState(
+            attempts=2, started_at=_STARTED_AT, delay=timedelta(seconds=4)
+        ),
+        BackoffKey(client_name=ClientName("amule-1"), channel=Channel("ed2k")): BackoffState(
+            attempts=1, started_at=_STARTED_AT, delay=timedelta(seconds=2)
         ),
     }
     with pytest.raises(PersistenceError, match="injected failure"):

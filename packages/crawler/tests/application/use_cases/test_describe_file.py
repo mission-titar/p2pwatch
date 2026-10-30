@@ -29,24 +29,49 @@ from tests.fakes.adapters.driven.fake_time import FakeTime
 
 _NOW = datetime(2026, 10, 14, 20, 0, 0, 654321, tzinfo=UTC)
 _SECOND_NOW = _NOW.replace(microsecond=0)
-_FILE = FileKey(Network.ED2K, "a" * 32)
+_FILE = FileKey(network=Network.ED2K, native_id="a" * 32)
 _GAP = timedelta(seconds=90)
 _OBSERVATION = FileObservation(
-    ReportedFile(_FILE, "keroro_062a.avi", 100, 5, Keyword("keroro"), 1300, 900, ()),
-    _NOW - timedelta(hours=1),
-    NodeId("n1"),
+    reported_file=ReportedFile(
+        file=_FILE,
+        filename="keroro_062a.avi",
+        size_bytes=100,
+        source_count=5,
+        keyword=Keyword("keroro"),
+        duration_seconds=1300,
+        bitrate_kbps=900,
+        raw_metadata=(),
+    ),
+    observed_at=_NOW - timedelta(hours=1),
+    node_id=NodeId("n1"),
 )
 _DECISION = DatedDecision(
-    _FILE,
-    DecisionRecord(target_id=TargetId("062A"), rule_name="catalog", tier=DecisionTier.CATALOG),
-    _NOW,
-    NodeId("n1"),
+    file=_FILE,
+    decision=DecisionRecord(
+        target_id=TargetId("062A"), rule_name="catalog", tier=DecisionTier.CATALOG
+    ),
+    decided_at=_NOW,
+    node_id=NodeId("n1"),
 )
 _HISTORY = FileHistory(
-    _FILE, 100, (_OBSERVATION,), _OBSERVATION, (_DECISION,), ("Keroro 62a ITA.avi", "keroro.avi")
+    file=_FILE,
+    size_bytes=100,
+    observations=(_OBSERVATION,),
+    latest_observation=_OBSERVATION,
+    decisions=(_DECISION,),
+    known_filenames=("Keroro 62a ITA.avi", "keroro.avi"),
 )
 _PERIOD = SharingPeriod(
-    _FILE, None, "Teammate", SourceRole.QUEUED, None, None, _NOW, _NOW, 0, NodeId("n1")
+    file=_FILE,
+    source=None,
+    source_name="Teammate",
+    role=SourceRole.QUEUED,
+    contact_point=None,
+    connectable=None,
+    first_seen_at=_NOW,
+    last_seen_at=_NOW,
+    received_bytes=0,
+    node_id=NodeId("n1"),
 )
 _TARGETS = parse_targets(
     yaml.safe_load(
@@ -111,14 +136,14 @@ def test_a_file_the_catalog_does_not_hold_has_no_description() -> None:
 def test_the_history_is_read_over_the_last_7_days_ending_now_to_the_second() -> None:
     reader, source_reader = _readers()
     description = _describe(reader, source_reader)
-    week = Interval(_SECOND_NOW - timedelta(days=7), _SECOND_NOW)
+    week = Interval(since=_SECOND_NOW - timedelta(days=7), until=_SECOND_NOW)
     assert reader.calls == [
         ("read_file_history", {"file_id": b"\x01" * 16, "since": week.since, "until": week.until})
     ]
     assert source_reader.calls == [
         (
             "read_sharing_periods",
-            {"file": _FILE, "window": PeriodWindow(week.since, week.until, _GAP)},
+            {"file": _FILE, "window": PeriodWindow(since=week.since, until=week.until, gap=_GAP)},
         )
     ]
     assert description is not None
@@ -133,37 +158,46 @@ def test_the_sharing_periods_are_read_over_the_requested_interval_with_the_gap()
         ("read_file_history", {"file_id": b"\x01" * 16, "since": since, "until": until})
     ]
     assert source_reader.calls == [
-        ("read_sharing_periods", {"file": _FILE, "window": PeriodWindow(since, until, _GAP)})
+        (
+            "read_sharing_periods",
+            {"file": _FILE, "window": PeriodWindow(since=since, until=until, gap=_GAP)},
+        )
     ]
     assert description is not None
     assert (description.file_history, description.sharing_periods) == (_HISTORY, (_PERIOD,))
-    assert description.interval == Interval(since, until)
+    assert description.interval == Interval(since=since, until=until)
 
 
 def test_a_request_past_7_days_reads_the_7_ending_at_its_until() -> None:
     since, until = datetime(2026, 9, 1, tzinfo=UTC), datetime(2026, 10, 1, tzinfo=UTC)
-    week = Interval(until - timedelta(days=7), until, clamped=True)
+    week = Interval(since=until - timedelta(days=7), until=until, clamped=True)
     reader, source_reader = _readers()
     description = _describe(reader, source_reader, requested_since=since, requested_until=until)
     assert reader.calls == [
         ("read_file_history", {"file_id": b"\x01" * 16, "since": week.since, "until": until})
     ]
     assert source_reader.calls == [
-        ("read_sharing_periods", {"file": _FILE, "window": PeriodWindow(week.since, until, _GAP)})
+        (
+            "read_sharing_periods",
+            {"file": _FILE, "window": PeriodWindow(since=week.since, until=until, gap=_GAP)},
+        )
     ]
     assert description is not None and description.interval == week
 
 
 def test_an_inverted_request_reads_the_7_days_ending_at_its_until() -> None:
     since, until = datetime(2026, 10, 12, tzinfo=UTC), datetime(2026, 10, 10, tzinfo=UTC)
-    week = Interval(until - timedelta(days=7), until)
+    week = Interval(since=until - timedelta(days=7), until=until)
     reader, source_reader = _readers()
     description = _describe(reader, source_reader, requested_since=since, requested_until=until)
     assert reader.calls == [
         ("read_file_history", {"file_id": b"\x01" * 16, "since": week.since, "until": until})
     ]
     assert source_reader.calls == [
-        ("read_sharing_periods", {"file": _FILE, "window": PeriodWindow(week.since, until, _GAP)})
+        (
+            "read_sharing_periods",
+            {"file": _FILE, "window": PeriodWindow(since=week.since, until=until, gap=_GAP)},
+        )
     ]
     assert description is not None and description.interval == week
 
@@ -204,8 +238,22 @@ def test_the_explanation_judges_the_latest_observations_duration_and_bitrate() -
 
 def test_a_file_without_a_decision_or_never_seen_has_no_explanation() -> None:
     for file_history in (
-        FileHistory(_FILE, 100, (_OBSERVATION,), _OBSERVATION, (), ("keroro.avi",)),
-        FileHistory(_FILE, 100, (), None, (_DECISION,), ()),
+        FileHistory(
+            file=_FILE,
+            size_bytes=100,
+            observations=(_OBSERVATION,),
+            latest_observation=_OBSERVATION,
+            decisions=(),
+            known_filenames=("keroro.avi",),
+        ),
+        FileHistory(
+            file=_FILE,
+            size_bytes=100,
+            observations=(),
+            latest_observation=None,
+            decisions=(_DECISION,),
+            known_filenames=(),
+        ),
     ):
         description = _describe(FakeCatalogFileReader(file_history=file_history))
         assert description is not None

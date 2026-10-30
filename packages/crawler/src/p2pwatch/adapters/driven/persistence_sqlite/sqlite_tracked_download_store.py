@@ -164,7 +164,7 @@ class SqliteTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
         with wrap_sqlite_errors():
             rows = self._connection.execute(_LATEST_SEEN_AT_BY_FILE).fetchall()
         return {
-            FileKey(Network(row["network"]), row["native_id"]): micros_to_instant(
+            FileKey(network=Network(row["network"]), native_id=row["native_id"]): micros_to_instant(
                 row["seen_at_micros"]
             )
             for row in rows
@@ -175,7 +175,9 @@ class SqliteTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
         with wrap_sqlite_errors():
             rows = self._connection.execute(_TRACKED_STATES).fetchall()
         return {
-            FileKey(Network(row["network"]), row["native_id"]): DownloadState(row["state"])
+            FileKey(network=Network(row["network"]), native_id=row["native_id"]): DownloadState(
+                row["state"]
+            )
             for row in rows
         }
 

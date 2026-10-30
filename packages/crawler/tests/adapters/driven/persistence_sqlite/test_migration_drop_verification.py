@@ -90,7 +90,7 @@ def test_local_rewrites_a_legacy_quarantined_download_as_completed(tmp_path: Pat
     try:
         tracked_download_store = SqliteTrackedDownloadStore(connection)
         assert tracked_download_store.read_tracked_states() == {
-            FileKey(Network.ED2K, "a1" * 16): DownloadState.COMPLETED
+            FileKey(network=Network.ED2K, native_id="a1" * 16): DownloadState.COMPLETED
         }
     finally:
         connection.close()

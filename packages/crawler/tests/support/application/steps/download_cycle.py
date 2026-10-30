@@ -59,12 +59,18 @@ TARGETS = (
 
 
 def key(hash_hex: str) -> FileKey:
-    return FileKey(Network.ED2K, hash_hex)
+    return FileKey(network=Network.ED2K, native_id=hash_hex)
 
 
 def observation(hash_hex: str, filename: str, size_bytes: int) -> FileObservation:
-    reported_file = ReportedFile(key(hash_hex), filename, size_bytes, 1, Keyword("keroro"))
-    return FileObservation(reported_file, SEEN_AT, NODE_ID)
+    reported_file = ReportedFile(
+        file=key(hash_hex),
+        filename=filename,
+        size_bytes=size_bytes,
+        source_count=1,
+        keyword=Keyword("keroro"),
+    )
+    return FileObservation(reported_file=reported_file, observed_at=SEEN_AT, node_id=NODE_ID)
 
 
 def candidate(hash_hex: str, target_id: TargetId) -> DownloadCandidate:
@@ -80,7 +86,14 @@ def status(
     waiting: WaitingReason | None = None,
     failure: FailureReason | None = None,
 ) -> DownloadStatus:
-    return DownloadStatus(key(hash_hex), done, total, completed, waiting, failure)
+    return DownloadStatus(
+        file=key(hash_hex),
+        bytes_done=done,
+        size_bytes=total,
+        completed=completed,
+        waiting_reason=waiting,
+        failure_reason=failure,
+    )
 
 
 def started(client: FakeDownloadClient) -> list[str]:

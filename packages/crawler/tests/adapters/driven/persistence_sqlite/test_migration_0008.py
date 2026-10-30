@@ -22,7 +22,10 @@ from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 
 _A, _B = "a" * 32, "b" * 32
-_ID_A, _ID_B = FileKey(Network.ED2K, _A).file_id, FileKey(Network.ED2K, _B).file_id
+_ID_A, _ID_B = (
+    FileKey(network=Network.ED2K, native_id=_A).file_id,
+    FileKey(network=Network.ED2K, native_id=_B).file_id,
+)
 _VARIANTS = (
     (_A, "a.avi", 100, 1474, 1200, '[["codec", "xvid"]]', "keroro", "n1"),
     (_A, "a [VF].avi", 100, None, None, "[]", "titar", "n2"),
@@ -153,7 +156,7 @@ def test_a_new_observation_reuses_the_variant_0008_rekeyed(tmp_path: Path) -> No
     _catalog_at_7(tmp_path / "catalog.db")
     migrated = open_catalog(tmp_path / "catalog.db")  # the store writes today's columns
     reported_file = ReportedFile(
-        file=FileKey(Network.ED2K, _B),
+        file=FileKey(network=Network.ED2K, native_id=_B),
         filename="b.avi",
         size_bytes=200,
         source_count=4,
@@ -161,7 +164,11 @@ def test_a_new_observation_reuses_the_variant_0008_rekeyed(tmp_path: Path) -> No
     )
     try:
         SqliteObservationStore(migrated).record_observation(
-            FileObservation(reported_file, datetime(2026, 6, 12, tzinfo=UTC), NodeId("n1"))
+            FileObservation(
+                reported_file=reported_file,
+                observed_at=datetime(2026, 6, 12, tzinfo=UTC),
+                node_id=NodeId("n1"),
+            )
         )
         assert rows(migrated, "SELECT count(*) AS variant_count FROM observation_variants") == [
             {"variant_count": 3}

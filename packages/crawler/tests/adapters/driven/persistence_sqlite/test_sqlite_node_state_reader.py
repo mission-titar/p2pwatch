@@ -75,7 +75,7 @@ def test_node_state_populated(local_db: Path) -> None:
     # downloads
     assert state.downloads == (
         TrackedDownload(
-            file=FileKey(Network.ED2K, "aabbccdd" * 4),
+            file=FileKey(network=Network.ED2K, native_id="aabbccdd" * 4),
             target_id=TargetId("062A"),
             state=DownloadState.FAILED,
             queued_at=datetime(2026, 6, 22, 10, tzinfo=UTC),
@@ -93,12 +93,20 @@ def test_node_state_populated(local_db: Path) -> None:
     # backoff, the whole client first, each with its start and its delay
     assert list(state.backoff_state_by_key.items()) == [
         (
-            BackoffKey(ClientName("amuled"), None),
-            BackoffState(3, datetime(1970, 1, 1, tzinfo=UTC), timedelta(seconds=120)),
+            BackoffKey(client_name=ClientName("amuled"), channel=None),
+            BackoffState(
+                attempts=3,
+                started_at=datetime(1970, 1, 1, tzinfo=UTC),
+                delay=timedelta(seconds=120),
+            ),
         ),
         (
-            BackoffKey(ClientName("amuled"), Channel("kad")),
-            BackoffState(1, datetime(2026, 6, 12, 10, tzinfo=UTC), timedelta(seconds=2.5)),
+            BackoffKey(client_name=ClientName("amuled"), channel=Channel("kad")),
+            BackoffState(
+                attempts=1,
+                started_at=datetime(2026, 6, 12, 10, tzinfo=UTC),
+                delay=timedelta(seconds=2.5),
+            ),
         ),
     ]
 
@@ -124,7 +132,7 @@ def test_a_completed_download_reads_its_completion(local_db: Path) -> None:
 
 
 def test_a_download_reads_back_each_instant_its_store_wrote(local_db: Path) -> None:
-    file = FileKey(Network.ED2K, "aabbccdd" * 4)
+    file = FileKey(network=Network.ED2K, native_id="aabbccdd" * 4)
     queued_at = datetime(2026, 6, 22, 10, 0, 0, 123456, tzinfo=UTC)
     progressed_at = queued_at + timedelta(hours=1, microseconds=1)
     completed_at = queued_at + timedelta(days=1, microseconds=7)
@@ -132,7 +140,17 @@ def test_a_download_reads_back_each_instant_its_store_wrote(local_db: Path) -> N
         tracked_download_store = SqliteTrackedDownloadStore(connection)
         tracked_download_store.record_queued(file, TargetId("062A"), 100, queued_at)
         tracked_download_store.set_seen(
-            [DownloadStatus(file, 40, 100, False, None, None)], progressed_at
+            [
+                DownloadStatus(
+                    file=file,
+                    bytes_done=40,
+                    size_bytes=100,
+                    completed=False,
+                    waiting_reason=None,
+                    failure_reason=None,
+                )
+            ],
+            progressed_at,
         )
         tracked_download_store.set_completed(file, completed_at)
 

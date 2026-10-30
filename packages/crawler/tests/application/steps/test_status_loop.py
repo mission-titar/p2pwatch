@@ -56,9 +56,9 @@ class _Observability:
 
 def _status(**channels: tuple[bool, bool | None]) -> ClientStatus:
     return ClientStatus(
-        "3.0.1",
-        tuple(
-            ChannelStatus(Channel(name), on, connectable)
+        version="3.0.1",
+        channels=tuple(
+            ChannelStatus(channel=Channel(name), connected=on, connectable=connectable)
             for name, (on, connectable) in channels.items()
         ),
     )
@@ -107,11 +107,11 @@ async def _alerts(*readings: _Reading) -> list[tuple[float, Notification]]:
 
 
 def _warning(message: str) -> RelayedLogLine:
-    return RelayedLogLine(message, Severity.WARNING, _NODE_ID)
+    return RelayedLogLine(message=message, severity=Severity.WARNING, node_id=_NODE_ID)
 
 
 def _info(message: str) -> RelayedLogLine:
-    return RelayedLogLine(message, Severity.INFO, _NODE_ID)
+    return RelayedLogLine(message=message, severity=Severity.INFO, node_id=_NODE_ID)
 
 
 _NOT_CONNECTABLE = "not connectable for 5 min"
@@ -239,7 +239,9 @@ async def test_each_reading_is_published_with_its_wall_and_monotonic_instants(
     read_at = fake_time.wall.now() - timedelta(seconds=60)  # the loop slept one period after it
     published_at = fake_time.monotonic.now() - timedelta(seconds=60)
     assert status_reading_store.read_readings() == {
-        "amuled": PublishedReading(StatusReading(read_at, published), published_at)
+        "amuled": PublishedReading(
+            reading=StatusReading(read_at=read_at, status=published), published_at=published_at
+        )
     }
 
 

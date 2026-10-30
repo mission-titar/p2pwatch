@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 MAX_INTERVAL_SPAN = timedelta(days=7)
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class Interval:
     """From ``since`` included to ``until`` excluded, in UTC; ``clamped`` when the request was
     longer than ``MAX_INTERVAL_SPAN``."""
@@ -19,7 +19,7 @@ class Interval:
     def shifted(self, steps: int) -> "Interval":
         """The interval moved by ``steps`` times its own length: Previous is -1, Next is 1."""
         span = self.until - self.since
-        return Interval(self.since + steps * span, self.until + steps * span)
+        return Interval(since=self.since + steps * span, until=self.until + steps * span)
 
 
 def requested_interval(
@@ -33,10 +33,10 @@ def requested_interval(
     if since is None or since >= until:
         return interval_ending(until, span=MAX_INTERVAL_SPAN)
     if until - since > MAX_INTERVAL_SPAN:
-        return Interval(until - MAX_INTERVAL_SPAN, until, clamped=True)
-    return Interval(since, until)
+        return Interval(since=until - MAX_INTERVAL_SPAN, until=until, clamped=True)
+    return Interval(since=since, until=until)
 
 
 def interval_ending(now: datetime, *, span: timedelta) -> Interval:
     """The ``span`` ending ``now``, a preset's interval."""
-    return Interval(now - span, now)
+    return Interval(since=now - span, until=now)

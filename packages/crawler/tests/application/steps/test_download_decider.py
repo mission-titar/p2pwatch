@@ -44,7 +44,9 @@ async def test_new_candidate_is_queued_and_link_added() -> None:
     )
     await cycle.run(NODE_ID)
     assert tracked_download_store.states[HASH_A] is DownloadState.QUEUED
-    assert client.started == [DownloadRequest(key(HASH_A), "Keroro.avi", 100)]
+    assert client.started == [
+        DownloadRequest(file=key(HASH_A), filename="Keroro.avi", size_bytes=100)
+    ]
 
 
 @pytest.mark.asyncio
@@ -277,7 +279,7 @@ async def test_dispatches_download_queued() -> None:
     )
     await cycle.run(NODE_ID)
     assert LoggedLine("info", "download queued: 062A") in observability.logger.lines
-    assert NodeMetricSample(NodeCounter.DOWNLOADS_QUEUED, (), 1.0) in (
+    assert NodeMetricSample(node_metric=NodeCounter.DOWNLOADS_QUEUED, labels=(), value=1.0) in (
         observability.node_metric_store.read_samples()
     )
 
@@ -293,7 +295,7 @@ async def test_each_cycle_reports_the_measured_free_space() -> None:
     )
     await cycle.run(NODE_ID)
     assert observability.node_metric_store.read_samples() == (
-        NodeMetricSample(NodeGauge.DISK_FREE_BYTES, (), 4_242.0),
+        NodeMetricSample(node_metric=NodeGauge.DISK_FREE_BYTES, labels=(), value=4_242.0),
     )
 
 
@@ -316,5 +318,8 @@ async def test_low_disk_warns_once_per_crossing_and_rearms_at_the_floor() -> Non
         warnings_per_cycle.append(len(observability.notifier.calls) - before)
     assert warnings_per_cycle == [1, 0, 0, 1]
     low = "download disk low: 0.0 GiB free, under the 0.0 GiB floor (no new download)"
-    relayed = (Audience.OPERATIONS, RelayedLogLine(low, Severity.WARNING, NODE_ID))
+    relayed = (
+        Audience.OPERATIONS,
+        RelayedLogLine(message=low, severity=Severity.WARNING, node_id=NODE_ID),
+    )
     assert observability.notifier.calls == [relayed, relayed]

@@ -28,10 +28,10 @@ from tests.fakes.adapters.driven.fake_raising_notifier import FakeRaisingNotifie
 
 _NODE_ID = NodeId("titar-node-1")
 _COMPLETED = ev.DownloadCompleted(
-    FileKey(Network.ED2K, "a" * 32),
-    "Keroro 062.avi",
-    (ev.TargetTitle(TargetId("062A"), "t"),),
-    _NODE_ID,
+    file=FileKey(network=Network.ED2K, native_id="a" * 32),
+    filename="Keroro 062.avi",
+    target_titles=(ev.TargetTitle(target_id=TargetId("062A"), title="t"),),
+    node_id=_NODE_ID,
 )
 
 
@@ -57,7 +57,9 @@ async def test_logs_and_writes_node_metrics_no_audience() -> None:
     )
     assert node_metric_store.read_samples() == (
         NodeMetricSample(
-            NodeCounter.OBSERVATIONS, (("client", "amuled"), ("channel", "ed2k")), 1.0
+            node_metric=NodeCounter.OBSERVATIONS,
+            labels=(("client", "amuled"), ("channel", "ed2k")),
+            value=1.0,
         ),
     )
     assert notifier.calls == []  # ObservationRecorded has no audience
@@ -76,8 +78,8 @@ async def test_two_node_metrics_one_event() -> None:
     )
     labels = (("client", "amuled"), ("channel", "kad"))
     assert set(node_metric_store.read_samples()) == {
-        NodeMetricSample(NodeGauge.CHANNEL_CONNECTED, labels, 1.0),
-        NodeMetricSample(NodeGauge.CHANNEL_CONNECTABLE, labels, 1.0),
+        NodeMetricSample(node_metric=NodeGauge.CHANNEL_CONNECTED, labels=labels, value=1.0),
+        NodeMetricSample(node_metric=NodeGauge.CHANNEL_CONNECTABLE, labels=labels, value=1.0),
     }
 
 
@@ -85,11 +87,13 @@ async def test_two_node_metrics_one_event() -> None:
 async def test_writes_each_counter_increment_and_gauge_setting_to_the_node_metric_store() -> None:
     node_metric_store = FakeNodeMetricStore()
     dispatcher = _dispatcher(node_metric_store, FakeNotifier())
-    await dispatcher.dispatch(ev.ClientUnreachable(ClientName("amuled")))
+    await dispatcher.dispatch(ev.ClientUnreachable(client_name=ClientName("amuled")))
     await dispatcher.dispatch(ev.CrawlerStarted(download_enabled=True, node_id=_NODE_ID))
     assert set(node_metric_store.read_samples()) == {
-        NodeMetricSample(NodeCounter.CLIENT_UNREACHABLE, (("client", "amuled"),), 1.0),
-        NodeMetricSample(NodeGauge.CRAWLER_UP, (), 1.0),
+        NodeMetricSample(
+            node_metric=NodeCounter.CLIENT_UNREACHABLE, labels=(("client", "amuled"),), value=1.0
+        ),
+        NodeMetricSample(node_metric=NodeGauge.CRAWLER_UP, labels=(), value=1.0),
     }
 
 
@@ -102,7 +106,9 @@ async def test_relays_the_log_line_under_the_events_node() -> None:
     assert notifier.calls == [
         (
             Audience.OPERATIONS,
-            RelayedLogLine("🟢 node online (download on)", Severity.INFO, _NODE_ID),
+            RelayedLogLine(
+                message="🟢 node online (download on)", severity=Severity.INFO, node_id=_NODE_ID
+            ),
         )
     ]
 
@@ -113,10 +119,19 @@ async def test_logs_the_message_but_notifies_the_plans_notification() -> None:
     download = DecisionRecord(
         target_id=TargetId("062A"), rule_name="rule", tier=DecisionTier.DOWNLOAD
     )
-    change = ev.DecisionChange(TargetId("062A"), "Les demoiselles cambrioleuses", None, download)
+    change = ev.DecisionChange(
+        target_id=TargetId("062A"),
+        title="Les demoiselles cambrioleuses",
+        previous_decision=None,
+        new_decision=download,
+    )
     await _dispatcher(FakeNodeMetricStore(), notifier, logger).dispatch(
         ev.DecisionsRecorded(
-            FileKey(Network.ED2K, "a" * 32), "Keroro 062.avi", 1024, (change,), _NODE_ID
+            file=FileKey(network=Network.ED2K, native_id="a" * 32),
+            filename="Keroro 062.avi",
+            size_bytes=1024,
+            changes=(change,),
+            node_id=_NODE_ID,
         )
     )
     assert logger.lines[-1].message.startswith("decisions for Keroro 062.avi")
@@ -124,12 +139,16 @@ async def test_logs_the_message_but_notifies_the_plans_notification() -> None:
         (
             Audience.COMMUNITY,
             TierRise(
-                DecisionTier.DOWNLOAD,
-                (ev.TargetTitle(TargetId("062A"), "Les demoiselles cambrioleuses"),),
-                "Keroro 062.avi",
-                1024,
-                f"ed2k://|file|Keroro%20062.avi|1024|{'a' * 32}|/",
-                _NODE_ID,
+                tier=DecisionTier.DOWNLOAD,
+                target_titles=(
+                    ev.TargetTitle(
+                        target_id=TargetId("062A"), title="Les demoiselles cambrioleuses"
+                    ),
+                ),
+                filename="Keroro 062.avi",
+                size_bytes=1024,
+                ed2k_link=f"ed2k://|file|Keroro%20062.avi|1024|{'a' * 32}|/",
+                node_id=_NODE_ID,
             ),
         )
     ]
@@ -145,7 +164,7 @@ async def test_logs_the_message_but_notifies_the_plans_notification() -> None:
         ),
         (ev.CrawlerStarted(download_enabled=True, node_id=_NODE_ID), "info"),
         (_COMPLETED, "info"),  # a success
-        (ev.ClientUnreachable(ClientName("amuled")), "warning"),
+        (ev.ClientUnreachable(client_name=ClientName("amuled")), "warning"),
     ],
 )
 async def test_each_severity_logs_at_its_level(

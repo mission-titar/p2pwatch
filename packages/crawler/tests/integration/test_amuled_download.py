@@ -40,9 +40,11 @@ async def test_start_then_appears_in_downloads(amuled: ApiEndpoint) -> None:
         transport_factory=httpx.AsyncHTTPTransport,
     )
     try:
-        file = FileKey(Network.ED2K, _HASH)
+        file = FileKey(network=Network.ED2K, native_id=_HASH)
         try:
-            await client.start(DownloadRequest(file, "probe-download.bin", _SIZE))
+            await client.start(
+                DownloadRequest(file=file, filename="probe-download.bin", size_bytes=_SIZE)
+            )
         except DownloadRejectedError as exc:
             # The daemon refused the link cleanly, per item in the bulk envelope: the
             # request/response cycle IS validated, with its message. Tolerable here.

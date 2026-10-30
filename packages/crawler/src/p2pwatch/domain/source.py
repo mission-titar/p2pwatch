@@ -24,7 +24,7 @@ _PORT = re.compile("[1-9][0-9]{0,4}")
 SourceMetadata = tuple[tuple[str, str | int | bool | tuple[str, ...] | None], ...]
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SourceKey:
     """A source as its network names it: for ``ED2K``, its user hash in 32 lowercase hex."""
 
@@ -89,7 +89,7 @@ def carried_role_max_age(time_between_reads: timedelta) -> timedelta:
     return _TOLERATED_READS * time_between_reads
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ContactPoint:
     """The server a source connects through, as its network names one: for ``ED2K``, ``ip:port``."""
 
@@ -105,7 +105,7 @@ class ContactPoint:
 def parse_contact_point(network: Network, *, server: str) -> ContactPoint | None:
     """``server`` as ``network``'s contact point, ``None`` when it names none."""
     is_server, _ = _CONTACT_POINTS[network]
-    return ContactPoint(network, server) if is_server(server) else None
+    return ContactPoint(network=network, server=server) if is_server(server) else None
 
 
 def _is_ed2k_server(server: str) -> bool:
@@ -120,7 +120,7 @@ def _is_ed2k_server(server: str) -> bool:
 _CONTACT_POINTS = {Network.ED2K: (_is_ed2k_server, "an IPv4 address and a port")}
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SourceReading:
     """One source of one download at one read. ``role`` is ``None`` in a passing state, whose
     role ``carried_role`` carries from the source's latest point (D3)."""
@@ -135,7 +135,7 @@ class SourceReading:
     session_received_bytes: int
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class LatestPoint:
     """A source's latest point under one of its variants: its role, its instant, its session's
     received bytes."""
@@ -153,7 +153,7 @@ def carried_role(latest: LatestPoint | None, *, reading: SourceReading) -> Sourc
     return _CARRIED[latest.role.usefulness]
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SourcePoint:
     """One reading of one of our downloads' sources, with its role, a carried one included, by the
     node ``node_id``."""
@@ -165,7 +165,7 @@ class SourcePoint:
     node_id: NodeId
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class EarlierPoints:
     """D5's two answers: a useful point exists, and when the latest useful or not-useful one was."""
 

@@ -120,7 +120,11 @@ class SourceWatcher:
         since = read_at - carried_role_max_age(self._time_between_source_reads)
         return tuple(
             SourcePoint(
-                file, reading, self._role(file, reading, since, read_at, node_id), read_at, node_id
+                file=file,
+                reading=reading,
+                role=self._role(file, reading, since, read_at, node_id),
+                observed_at=read_at,
+                node_id=node_id,
             )
             for reading in readings
             if reading.source is not None or reading.source_name is not None
@@ -177,16 +181,23 @@ class SourceWatcher:
             filename = self._download_labeler.best_filename(file)
             titles = self._download_labeler.target_titles(file)
             event: SourceFirstUseful | SourceReappeared = (
-                SourceFirstUseful(source, source_name, file, filename, titles, node_id)
+                SourceFirstUseful(
+                    source=source,
+                    source_name=source_name,
+                    file=file,
+                    filename=filename,
+                    target_titles=titles,
+                    node_id=node_id,
+                )
                 if isinstance(alert, FirstUseful)
                 else SourceReappeared(
-                    source,
-                    source_name,
-                    file,
-                    filename,
-                    titles,
-                    alert.absent_for.total_seconds(),
-                    node_id,
+                    source=source,
+                    source_name=source_name,
+                    file=file,
+                    filename=filename,
+                    target_titles=titles,
+                    absent_for_seconds=alert.absent_for.total_seconds(),
+                    node_id=node_id,
                 )
             )
             await self._observability_dispatcher.dispatch(event)

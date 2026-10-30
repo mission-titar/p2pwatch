@@ -124,25 +124,25 @@ def _run_query(
             description = cursor.description
             columns = tuple(col[0] for col in description) if description is not None else ()
             rows = tuple(tuple(_stringify(cell) for cell in row) for row in kept)
-            return QueryAnswer(columns, rows, elapsed, truncated)
+            return QueryAnswer(columns=columns, rows=rows, elapsed=elapsed, truncated=truncated)
         except sqlite3.OperationalError as exc:
             if aborted[0]:
                 seconds = budget.total_seconds()
                 return QueryFailure(
-                    f"Query aborted: it exceeded the {seconds:g} second time limit."
+                    message=f"Query aborted: it exceeded the {seconds:g} second time limit."
                 )
             if "readonly" in str(exc):
                 return QueryFailure(
-                    "The database is read-only. Only read queries (SELECT) are allowed."
+                    message="The database is read-only. Only read queries (SELECT) are allowed."
                 )
-            return QueryFailure(f"SQL error: {exc}")
+            return QueryFailure(message=f"SQL error: {exc}")
         except sqlite3.ProgrammingError:
             # In this console (no parameter binding) the sole realistic ProgrammingError is the
             # multi-statement guard ("You can only execute one statement at a time").
-            return QueryFailure("Only a single SQL statement is allowed per query.")
+            return QueryFailure(message="Only a single SQL statement is allowed per query.")
         except sqlite3.Error as exc:
             # Catch-all for any other sqlite3 failure (e.g. a DataError: blob too big). Absorbed
             # into a failure, per the boundary discipline in the module docstring.
-            return QueryFailure(f"SQL error: {exc}")
+            return QueryFailure(message=f"SQL error: {exc}")
     finally:
         connection.close()

@@ -86,7 +86,7 @@ class FakeTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
 
     def read_latest_seen_at_by_file(self) -> dict[FileKey, datetime]:
         return {
-            FileKey(Network.ED2K, h): latest_seen_at
+            FileKey(network=Network.ED2K, native_id=h): latest_seen_at
             for h, latest_seen_at in self.latest_seen_at.items()
             if self.states.get(h) in {DownloadState.QUEUED, DownloadState.DOWNLOADING}
         }
@@ -94,4 +94,6 @@ class FakeTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
     def read_tracked_states(self) -> dict[FileKey, DownloadState]:
         if self._fail_tracked_states:
             raise StoreError("read_tracked_states failed")
-        return {FileKey(Network.ED2K, h): state for h, state in self.states.items()}
+        return {
+            FileKey(network=Network.ED2K, native_id=h): state for h, state in self.states.items()
+        }

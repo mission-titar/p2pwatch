@@ -17,8 +17,8 @@ from p2pwatch.domain.observability.node_metric import (
     NodeMetricSample,
 )
 
-_ED2K = ChannelLabels(ClientName("amuled"), Channel("ed2k"))
-_KAD = ChannelLabels(ClientName("amuled"), Channel("kad"))
+_ED2K = ChannelLabels(client_name=ClientName("amuled"), channel=Channel("ed2k"))
+_KAD = ChannelLabels(client_name=ClientName("amuled"), channel=Channel("kad"))
 _ED2K_PAIRS = (("client", "amuled"), ("channel", "ed2k"))
 _KAD_PAIRS = (("client", "amuled"), ("channel", "kad"))
 
@@ -47,52 +47,84 @@ class NodeMetricStoreContract(ABC):
     def test_an_increment_adds_its_amount_to_its_series(
         self, node_metric_store: NodeMetricStore
     ) -> None:
-        node_metric_store.record_increment(CounterIncrement(NodeCounter.SEARCHES, _ED2K))
-        node_metric_store.record_increment(CounterIncrement(NodeCounter.SEARCHES, _ED2K, 2.0))
+        node_metric_store.record_increment(
+            CounterIncrement(counter=NodeCounter.SEARCHES, labels=_ED2K)
+        )
+        node_metric_store.record_increment(
+            CounterIncrement(counter=NodeCounter.SEARCHES, labels=_ED2K, amount=2.0)
+        )
         assert node_metric_store.read_samples() == (
-            NodeMetricSample(NodeCounter.SEARCHES, _ED2K_PAIRS, 3.0),
+            NodeMetricSample(node_metric=NodeCounter.SEARCHES, labels=_ED2K_PAIRS, value=3.0),
         )
 
     def test_an_increment_of_zero_creates_its_series_at_zero(
         self, node_metric_store: NodeMetricStore
     ) -> None:
-        node_metric_store.record_increment(CounterIncrement(NodeCounter.SEARCHES, _ED2K, 0.0))
+        node_metric_store.record_increment(
+            CounterIncrement(counter=NodeCounter.SEARCHES, labels=_ED2K, amount=0.0)
+        )
         assert node_metric_store.read_samples() == (
-            NodeMetricSample(NodeCounter.SEARCHES, _ED2K_PAIRS, 0.0),
+            NodeMetricSample(node_metric=NodeCounter.SEARCHES, labels=_ED2K_PAIRS, value=0.0),
         )
 
     def test_a_setting_replaces_its_series(self, node_metric_store: NodeMetricStore) -> None:
-        node_metric_store.set_gauge(GaugeSetting(NodeGauge.CHANNEL_CONNECTED, _ED2K, 1.0))
-        node_metric_store.set_gauge(GaugeSetting(NodeGauge.CHANNEL_CONNECTED, _ED2K, 0.0))
+        node_metric_store.set_gauge(
+            GaugeSetting(gauge=NodeGauge.CHANNEL_CONNECTED, labels=_ED2K, value=1.0)
+        )
+        node_metric_store.set_gauge(
+            GaugeSetting(gauge=NodeGauge.CHANNEL_CONNECTED, labels=_ED2K, value=0.0)
+        )
         assert node_metric_store.read_samples() == (
-            NodeMetricSample(NodeGauge.CHANNEL_CONNECTED, _ED2K_PAIRS, 0.0),
+            NodeMetricSample(
+                node_metric=NodeGauge.CHANNEL_CONNECTED, labels=_ED2K_PAIRS, value=0.0
+            ),
         )
 
     def test_a_setting_of_none_removes_its_series(self, node_metric_store: NodeMetricStore) -> None:
-        node_metric_store.set_gauge(GaugeSetting(NodeGauge.CHANNEL_CONNECTED, _ED2K, 1.0))
-        node_metric_store.set_gauge(GaugeSetting(NodeGauge.CHANNEL_CONNECTED, _ED2K, None))
+        node_metric_store.set_gauge(
+            GaugeSetting(gauge=NodeGauge.CHANNEL_CONNECTED, labels=_ED2K, value=1.0)
+        )
+        node_metric_store.set_gauge(
+            GaugeSetting(gauge=NodeGauge.CHANNEL_CONNECTED, labels=_ED2K, value=None)
+        )
         assert node_metric_store.read_samples() == ()
 
     def test_a_setting_of_none_leaves_the_store_as_it_was_when_its_series_is_absent(
         self, node_metric_store: NodeMetricStore
     ) -> None:
-        node_metric_store.set_gauge(GaugeSetting(NodeGauge.CHANNEL_CONNECTED, _ED2K, 1.0))
-        node_metric_store.set_gauge(GaugeSetting(NodeGauge.CHANNEL_CONNECTED, _KAD, None))
+        node_metric_store.set_gauge(
+            GaugeSetting(gauge=NodeGauge.CHANNEL_CONNECTED, labels=_ED2K, value=1.0)
+        )
+        node_metric_store.set_gauge(
+            GaugeSetting(gauge=NodeGauge.CHANNEL_CONNECTED, labels=_KAD, value=None)
+        )
         assert node_metric_store.read_samples() == (
-            NodeMetricSample(NodeGauge.CHANNEL_CONNECTED, _ED2K_PAIRS, 1.0),
+            NodeMetricSample(
+                node_metric=NodeGauge.CHANNEL_CONNECTED, labels=_ED2K_PAIRS, value=1.0
+            ),
         )
 
     def test_series_of_one_node_metric_are_apart_by_their_labels(
         self, node_metric_store: NodeMetricStore
     ) -> None:
-        node_metric_store.record_increment(CounterIncrement(NodeCounter.SEARCHES, _ED2K))
-        node_metric_store.record_increment(CounterIncrement(NodeCounter.SEARCHES, _KAD, 2.0))
-        node_metric_store.set_gauge(GaugeSetting(NodeGauge.CHANNEL_CONNECTED, _ED2K, 1.0))
-        node_metric_store.set_gauge(GaugeSetting(NodeGauge.CHANNEL_CONNECTED, _KAD, None))
+        node_metric_store.record_increment(
+            CounterIncrement(counter=NodeCounter.SEARCHES, labels=_ED2K)
+        )
+        node_metric_store.record_increment(
+            CounterIncrement(counter=NodeCounter.SEARCHES, labels=_KAD, amount=2.0)
+        )
+        node_metric_store.set_gauge(
+            GaugeSetting(gauge=NodeGauge.CHANNEL_CONNECTED, labels=_ED2K, value=1.0)
+        )
+        node_metric_store.set_gauge(
+            GaugeSetting(gauge=NodeGauge.CHANNEL_CONNECTED, labels=_KAD, value=None)
+        )
         assert Counter(node_metric_store.read_samples()) == Counter(
             [
-                NodeMetricSample(NodeCounter.SEARCHES, _ED2K_PAIRS, 1.0),
-                NodeMetricSample(NodeCounter.SEARCHES, _KAD_PAIRS, 2.0),
-                NodeMetricSample(NodeGauge.CHANNEL_CONNECTED, _ED2K_PAIRS, 1.0),
+                NodeMetricSample(node_metric=NodeCounter.SEARCHES, labels=_ED2K_PAIRS, value=1.0),
+                NodeMetricSample(node_metric=NodeCounter.SEARCHES, labels=_KAD_PAIRS, value=2.0),
+                NodeMetricSample(
+                    node_metric=NodeGauge.CHANNEL_CONNECTED, labels=_ED2K_PAIRS, value=1.0
+                ),
             ]
         )

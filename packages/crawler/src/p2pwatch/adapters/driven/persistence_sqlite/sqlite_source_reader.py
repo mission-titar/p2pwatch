@@ -191,8 +191,10 @@ def _sharing_period(row: NamedRow) -> SharingPeriod:
     network, connectable = row["network"], row["connectable"]
     role = SourceRole(row["role"])
     return SharingPeriod(
-        file=FileKey(Network(row["file_network"]), row["file_native_id"]),
-        source=None if network is None else SourceKey(Network(network), row["native_id"]),
+        file=FileKey(network=Network(row["file_network"]), native_id=row["file_native_id"]),
+        source=None
+        if network is None
+        else SourceKey(network=Network(network), native_id=row["native_id"]),
         source_name=row["name"],
         role=role,
         contact_point=row["contact_point"],
@@ -222,7 +224,7 @@ def _source_namings(
     params = {"key": key, "limit": limit, "offset": offset}
     return tuple(
         SourceNaming(
-            source=SourceKey(Network(row["network"]), row["native_id"]),
+            source=SourceKey(network=Network(row["network"]), native_id=row["native_id"]),
             source_name=row["name"],
             latest_seen_at=micros_to_instant(row["latest_seen_at_micros"]),
             file_count=row["file_count"],
@@ -262,7 +264,7 @@ class SqliteSourceReader(SourceReader):
         rows = self._thread_read_connections.connection().execute(sql, [*params, limit, offset])
         return tuple(
             KnownSource(
-                source=SourceKey(Network(row["network"]), row["native_id"]),
+                source=SourceKey(network=Network(row["network"]), native_id=row["native_id"]),
                 source_name=row["name"],
                 latest_seen_at=micros_to_instant(row["latest_seen_at_micros"]),
                 file_count=row["file_count"],
@@ -287,7 +289,7 @@ class SqliteSourceReader(SourceReader):
             map(_sharing_period, _period_rows(connection, _WHERE_SOURCE, source_id, window))
         )
         return SourceHistory(
-            source=SourceKey(Network(row["network"]), row["native_id"]),
+            source=SourceKey(network=Network(row["network"]), native_id=row["native_id"]),
             source_namings=_source_namings(
                 connection, _WHERE_SOURCE_NAMED, source_id, limit, offset
             ),

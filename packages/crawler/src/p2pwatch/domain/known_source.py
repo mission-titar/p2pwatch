@@ -6,7 +6,7 @@ from datetime import datetime
 from p2pwatch.domain.source import SourceKey
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class KnownSource:
     """A source with a user hash, the latest name it carried, its latest reading and its files."""
 

@@ -21,7 +21,7 @@ class SortDirection(StrEnum):
     DESC = "desc"
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class CatalogEntry:
     """A file, its latest observation (``None`` before its first) and its current decisions,
     one per target, in target order; a retracted target has none."""

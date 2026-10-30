@@ -46,7 +46,16 @@ from tests.support.catalog_rows import insert_file, source_variant_node_ids
 
 
 def _reading(name: str, role: SourceRole | None = SourceRole.QUEUED) -> SourceReading:
-    return SourceReading(SourceKey(Network.ED2K, "1f" * 16), name, None, role, None, None, (), 0)
+    return SourceReading(
+        source=SourceKey(network=Network.ED2K, native_id="1f" * 16),
+        source_name=name,
+        software=None,
+        role=role,
+        contact_point=None,
+        connectable=None,
+        raw_metadata=(),
+        session_received_bytes=0,
+    )
 
 
 @pytest.mark.asyncio
@@ -75,13 +84,19 @@ async def test_the_sources_of_each_tracked_download_the_client_lists_are_recorde
     await cycle.run(NODE_ID)
     assert source_client.source_reads == [HASH_A, HASH_B]
     assert sources.recorded == [
-        SourcePoint(key(HASH_A), readings[HASH_A][0], SourceRole.QUEUED, start, NODE_ID),
         SourcePoint(
-            key(HASH_B),
-            readings[HASH_B][0],
-            SourceRole.UNDETERMINED,
-            start + timedelta(seconds=1),
-            NODE_ID,
+            file=key(HASH_A),
+            reading=readings[HASH_A][0],
+            role=SourceRole.QUEUED,
+            observed_at=start,
+            node_id=NODE_ID,
+        ),
+        SourcePoint(
+            file=key(HASH_B),
+            reading=readings[HASH_B][0],
+            role=SourceRole.UNDETERMINED,
+            observed_at=start + timedelta(seconds=1),
+            node_id=NODE_ID,
         ),
     ]
 
@@ -93,7 +108,9 @@ async def test_a_passing_reading_carries_its_latest_points_role_from_the_window_
     start = fake_time.wall.now()
     passing = _reading("peer", None)
     readings: dict[str, tuple[SourceReading, ...]] = {HASH_A: (_reading("peer"), passing)}
-    sources = FakeSourcePointStore(latest=LatestPoint(SourceRole.SENDING, start, 0))
+    sources = FakeSourcePointStore(
+        latest=LatestPoint(role=SourceRole.SENDING, observed_at=start, session_received_bytes=0)
+    )
     cycle = build_cycle(
         client=FakeDownloadClient(listed=[(status(HASH_A),)]),
         source_client=FakeSourceClient(readings=readings),
@@ -110,7 +127,16 @@ async def test_a_passing_reading_carries_its_latest_points_role_from_the_window_
 @pytest.mark.asyncio
 async def test_a_reading_with_neither_source_nor_name_is_dropped() -> None:
     # Nothing could tell it from the next one (source points spec, D4).
-    nameless = SourceReading(None, None, None, None, None, None, (), 0)
+    nameless = SourceReading(
+        source=None,
+        source_name=None,
+        software=None,
+        role=None,
+        contact_point=None,
+        connectable=None,
+        raw_metadata=(),
+        session_received_bytes=0,
+    )
     readings: dict[str, tuple[SourceReading, ...]] = {HASH_A: (nameless, _reading("peer"))}
     sources = FakeSourcePointStore()
     cycle = build_cycle(
@@ -221,13 +247,25 @@ async def test_a_wall_clock_step_back_delays_no_sources_read() -> None:
     assert source_client.source_reads == [HASH_A, HASH_A]
 
 
-_PEER, _OTHER_PEER = SourceKey(Network.ED2K, "1f2e3d4c" * 4), SourceKey(Network.ED2K, "c" * 32)
+_PEER, _OTHER_PEER = (
+    SourceKey(network=Network.ED2K, native_id="1f2e3d4c" * 4),
+    SourceKey(network=Network.ED2K, native_id="c" * 32),
+)
 
 
 def _read(
     source: SourceKey | None, source_name: str | None, role: SourceRole = SourceRole.QUEUED
 ) -> SourceReading:
-    return SourceReading(source, source_name, None, role, None, None, (), 0)
+    return SourceReading(
+        source=source,
+        source_name=source_name,
+        software=None,
+        role=role,
+        contact_point=None,
+        connectable=None,
+        raw_metadata=(),
+        session_received_bytes=0,
+    )
 
 
 def _tracking(*hashes: str) -> FakeTrackedDownloadStore:
@@ -258,7 +296,13 @@ async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
     )
     await cycle.run(NODE_ID)
     assert _alerts(observability) == [
-        _alert(_PEER, "AnimuseeFMR", None, "Keroro 062.avi", (TargetTitle(TargetId("062A"), "t"),))
+        _alert(
+            _PEER,
+            "AnimuseeFMR",
+            None,
+            "Keroro 062.avi",
+            (TargetTitle(target_id=TargetId("062A"), title="t"),),
+        )
     ]
     assert observability.notifier.node_ids == [NODE_ID]
 
@@ -269,8 +313,20 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
     fake_time = FakeTime()
     start = fake_time.wall.now()
     history: dict[SourceKey, tuple[LatestPoint, ...]] = {
-        _PEER: (LatestPoint(SourceRole.QUEUED, start - timedelta(hours=13), 0),),
-        _OTHER_PEER: (LatestPoint(SourceRole.QUEUED, start - timedelta(seconds=30), 0),),
+        _PEER: (
+            LatestPoint(
+                role=SourceRole.QUEUED,
+                observed_at=start - timedelta(hours=13),
+                session_received_bytes=0,
+            ),
+        ),
+        _OTHER_PEER: (
+            LatestPoint(
+                role=SourceRole.QUEUED,
+                observed_at=start - timedelta(seconds=30),
+                session_received_bytes=0,
+            ),
+        ),
     }
     readings: dict[str, tuple[SourceReading, ...]] = {
         HASH_A: (_read(_OTHER_PEER, None),),
@@ -303,7 +359,7 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
             "AnimuseeFMR",
             timedelta(hours=13),
             HASH_B,
-            (TargetTitle(TargetId("063A"), "t2"),),
+            (TargetTitle(target_id=TargetId("063A"), title="t2"),),
         )
     ]
 
@@ -420,7 +476,7 @@ async def test_the_first_recording_round_is_a_baseline(
     assert _alerts(observability) == []
     assert source_variant_node_ids(catalog) == {NODE_ID}
     fake_time.advance(timedelta(seconds=30))
-    third = SourceKey(Network.ED2K, "d" * 32)
+    third = SourceKey(network=Network.ED2K, native_id="d" * 32)
     readings[HASH_A] = (_peer(_PEER), _peer(third))
     await cycle.run(NODE_ID)
     assert _alerts(observability) == [_alert(third, "peer", None, HASH_A)]
@@ -428,7 +484,16 @@ async def test_the_first_recording_round_is_a_baseline(
 
 
 def _peer(key: SourceKey, role: SourceRole = SourceRole.QUEUED) -> SourceReading:
-    return SourceReading(key, "peer", None, role, None, None, (), 0)
+    return SourceReading(
+        source=key,
+        source_name="peer",
+        software=None,
+        role=role,
+        contact_point=None,
+        connectable=None,
+        raw_metadata=(),
+        session_received_bytes=0,
+    )
 
 
 @pytest.fixture
@@ -476,7 +541,15 @@ def _alert(
 ) -> SourceAlert:
     """The cycle's node's alert: a first useful source, or one ``absent_for`` that long."""
     kind = SourceAlertKind.FIRST_USEFUL if absent_for is None else SourceAlertKind.REAPPEARED
-    return SourceAlert(kind, source, source_name, absent_for, target_titles, filename, NODE_ID)
+    return SourceAlert(
+        kind=kind,
+        source=source,
+        source_name=source_name,
+        absent_for=absent_for,
+        target_titles=target_titles,
+        filename=filename,
+        node_id=NODE_ID,
+    )
 
 
 @pytest.mark.asyncio

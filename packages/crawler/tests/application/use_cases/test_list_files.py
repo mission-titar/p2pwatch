@@ -12,7 +12,7 @@ from p2pwatch.domain.file_key import FileKey, Network
 from tests.fakes.adapters.driven.fake_catalog_file_reader import FakeCatalogFileReader
 
 _ENTRY = CatalogEntry(
-    file=FileKey(Network.ED2K, "a" * 32),
+    file=FileKey(network=Network.ED2K, native_id="a" * 32),
     size_bytes=100,
     latest_observation=None,
     decisions=(

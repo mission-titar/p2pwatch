@@ -311,7 +311,7 @@ def test_t16_merger_wraps_source_copy_in_a_transaction(tmp_path: Path) -> None:
     raw.execute("CREATE TABLE files (file_id BLOB, network TEXT, native_id TEXT, size_bytes INT)")
     raw.execute(
         "INSERT INTO files VALUES (?, 'ed2k', ?, 200)",
-        (FileKey(Network.ED2K, HASH_B).file_id, HASH_B),
+        (FileKey(network=Network.ED2K, native_id=HASH_B).file_id, HASH_B),
     )
     raw.commit()
     raw.close()

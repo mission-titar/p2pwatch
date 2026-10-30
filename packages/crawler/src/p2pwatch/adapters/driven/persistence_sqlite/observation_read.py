@@ -94,7 +94,7 @@ LIMIT 1
 
 def observation_from_row(row: NamedRow) -> FileObservation:
     reported_file = ReportedFile(
-        file=FileKey(Network(row["network"]), row["native_id"]),
+        file=FileKey(network=Network(row["network"]), native_id=row["native_id"]),
         filename=row["filename"],
         size_bytes=row["size_bytes"],
         source_count=row["source_count"],
@@ -104,7 +104,9 @@ def observation_from_row(row: NamedRow) -> FileObservation:
         raw_metadata=tuple((name, rendered) for name, rendered in json.loads(row["raw_metadata"])),
     )
     return FileObservation(
-        reported_file, micros_to_instant(row["observed_at_micros"]), NodeId(row["node_id"])
+        reported_file=reported_file,
+        observed_at=micros_to_instant(row["observed_at_micros"]),
+        node_id=NodeId(row["node_id"]),
     )
 
 

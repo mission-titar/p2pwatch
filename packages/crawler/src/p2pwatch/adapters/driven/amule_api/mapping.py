@@ -125,7 +125,7 @@ def map_download_status(row: object) -> DownloadStatus | None:
     failure = FailureReason.ERROR if status == "erroneous" else None
     waiting = None if completed or failure else _waiting_reason(status, row.get("sources"))
     return DownloadStatus(
-        file=FileKey(Network.ED2K, native_id),
+        file=FileKey(network=Network.ED2K, native_id=native_id),
         bytes_done=_int_or_zero(row.get("completed_bytes")),
         size_bytes=_int_or_zero(row.get("size_bytes")),
         completed=completed,
@@ -144,7 +144,7 @@ def map_shared_download(row: object) -> DownloadStatus | None:
         return None
     size = _int_or_zero(row.get("size_bytes"))
     return DownloadStatus(
-        file=FileKey(Network.ED2K, native_id),
+        file=FileKey(network=Network.ED2K, native_id=native_id),
         bytes_done=size,
         size_bytes=size,
         completed=True,
@@ -214,7 +214,7 @@ def _source_key(user_hash: object) -> SourceKey | None:
     native_id = _hash_hex(user_hash)
     if native_id is None or native_id == _NO_USER_HASH:
         return None
-    return SourceKey(Network.ED2K, native_id)
+    return SourceKey(network=Network.ED2K, native_id=native_id)
 
 
 def _source_role(state: object) -> SourceRole | None:
@@ -262,7 +262,9 @@ def _channel(
 ) -> ChannelStatus:
     """Off the network the flag tells nothing: there ``high_id`` false means "no id yet"."""
     connected = channel_json.get("state") == "connected"
-    return ChannelStatus(channel, connected, connectable if connected else None)
+    return ChannelStatus(
+        channel=channel, connected=connected, connectable=connectable if connected else None
+    )
 
 
 def _map_result(search_result: object, keyword: Keyword) -> list[ReportedFile]:
@@ -287,7 +289,7 @@ def _map_result(search_result: object, keyword: Keyword) -> list[ReportedFile]:
         total, complete = _source_counts(fields.get("sources"))
         reported_files.append(
             ReportedFile(
-                file=FileKey(Network.ED2K, native_id),
+                file=FileKey(network=Network.ED2K, native_id=native_id),
                 filename=name,
                 size_bytes=size_bytes,
                 source_count=total,

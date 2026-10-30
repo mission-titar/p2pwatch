@@ -163,7 +163,11 @@ def test_a_mapped_result_reuses_the_variant_0007_migrated_from_its_old_row(
     connection = open_catalog(path)
     try:
         SqliteObservationStore(connection).record_observation(
-            FileObservation(reported_file, datetime(2026, 6, 12, tzinfo=UTC), NodeId("n1"))
+            FileObservation(
+                reported_file=reported_file,
+                observed_at=datetime(2026, 6, 12, tzinfo=UTC),
+                node_id=NodeId("n1"),
+            )
         )
         assert rows(connection, "SELECT count(*) AS variant_count FROM observation_variants") == [
             {"variant_count": 1}

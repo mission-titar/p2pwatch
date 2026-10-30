@@ -11,7 +11,7 @@ from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class TrackedDownload:
     """A download with a row in ``downloads``, whatever its state."""
 
@@ -25,7 +25,7 @@ class TrackedDownload:
     failure_reason: FailureReason | None
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class NodeState:
     """``node_id`` and ``created_at`` are ``None`` until the node first records its id."""
 

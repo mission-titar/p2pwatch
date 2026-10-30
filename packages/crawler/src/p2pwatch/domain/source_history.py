@@ -10,7 +10,7 @@ from p2pwatch.domain.sharing_period import SharingPeriod
 from p2pwatch.domain.source import SourceKey
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SourceNaming:
     """A source under one name it carried: its latest reading and its files under that name."""
 
@@ -20,7 +20,7 @@ class SourceNaming:
     file_count: int
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SourceHistory:
     """A source, the names read of it, last seen first, its sharing periods over every file,
     newest first, and the best filename of each of their files ever seen."""
@@ -31,7 +31,7 @@ class SourceHistory:
     best_filename_by_file: Mapping[FileKey, str]
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SourceNameHistory:
     """A name, the sources read under it, last seen first, its sharing periods without a user
     hash, newest first, and the best filename of each of their files ever seen."""

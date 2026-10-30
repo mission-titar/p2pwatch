@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from p2pwatch.domain.file_key import FileKey
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class DownloadRequest:
     file: FileKey
     filename: str

@@ -24,7 +24,7 @@ class InMemoryStatusReadingStore(StatusReadingWriter, StatusReadingReader):
         # A new map, never a mutation: the other thread reads whole snapshots, no lock needed.
         self._published_readings = {
             **self._published_readings,
-            client_name: PublishedReading(reading, published_at),
+            client_name: PublishedReading(reading=reading, published_at=published_at),
         }
 
     def read_readings(self) -> Mapping[ClientName, PublishedReading | None]:

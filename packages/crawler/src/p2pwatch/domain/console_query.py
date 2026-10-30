@@ -10,7 +10,7 @@ class ConsoleDatabase(StrEnum):
     LOCAL = "local"
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class QueryAnswer:
     """A query's columns and first rows, each cell as text: ``NULL``, a blob in lowercase hex."""
 
@@ -20,7 +20,7 @@ class QueryAnswer:
     truncated: bool  # more rows than the cap, which were dropped
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class QueryFailure:
     """Why a query gave no answer, as the operator reads it."""
 

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from p2pwatch.domain.observation import ReportedFile
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SearchAnswer:
     """What one search found, and how many of its results the client could not read."""
 

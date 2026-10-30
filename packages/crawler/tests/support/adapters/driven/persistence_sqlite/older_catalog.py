@@ -46,13 +46,17 @@ def insert_stage4_variant(
     role: str = "queued",
 ) -> int:
     """A ``source_variants`` row of version 10, which has no ``node_id``; its ``variant_id``."""
-    sid = None if user_hash is None else SourceKey(Network.ED2K, user_hash).source_id
+    sid = (
+        None
+        if user_hash is None
+        else SourceKey(network=Network.ED2K, native_id=user_hash).source_id
+    )
     key = hashlib.blake2b(repr((native_id, user_hash, name, role)).encode(), digest_size=16)
     [variant] = rows(
         connection,
         "INSERT INTO source_variants (file_id, source_id, name, role, raw_meta, content_hash)"
         " VALUES (?, ?, ?, ?, '{}', ?) RETURNING variant_id",
-        (FileKey(Network.ED2K, native_id).file_id, sid, name, role, key.digest()),
+        (FileKey(network=Network.ED2K, native_id=native_id).file_id, sid, name, role, key.digest()),
     )
     variant_id: int = variant["variant_id"]
     return variant_id
@@ -85,7 +89,12 @@ def insert_v11_observation(
     media_length_sec: int | None = None,
 ) -> None:
     """An observation of versions 8 to 11, before 0012 renamed ``media_length_sec``."""
-    variant = (FileKey(Network.ED2K, native_id).file_id, filename, 100, media_length_sec)
+    variant = (
+        FileKey(network=Network.ED2K, native_id=native_id).file_id,
+        filename,
+        100,
+        media_length_sec,
+    )
     key = content_hash(*variant, None, "[]", "keroro", "n1")
     connection.execute(
         "INSERT INTO observation_variants (file_id, filename, size_bytes, media_length_sec,"
@@ -115,8 +124,8 @@ def insert_v11_source_point(
         " raw_meta, node_id, content_hash)"
         " VALUES (?, ?, 'AnimuseeFMR', 'sending', ?, '{}', 'n1', ?) RETURNING variant_id",
         (
-            FileKey(Network.ED2K, native_id).file_id,
-            SourceKey(Network.ED2K, user_hash).source_id,
+            FileKey(network=Network.ED2K, native_id=native_id).file_id,
+            SourceKey(network=Network.ED2K, native_id=user_hash).source_id,
             directly_reachable,
             key,
         ),
@@ -132,7 +141,7 @@ def insert_v12_observation(
     connection: sqlite3.Connection, native_id: str, filename: str, *, observed_at: int = 10
 ) -> None:
     """An observation of version 12, before 0013 renamed ``raw_meta``."""
-    variant = (FileKey(Network.ED2K, native_id).file_id, filename, 100, None)
+    variant = (FileKey(network=Network.ED2K, native_id=native_id).file_id, filename, 100, None)
     key = content_hash(*variant, None, '[["codec", "xvid"]]', "keroro", "n1")
     connection.execute(
         "INSERT INTO observation_variants (file_id, filename, size_bytes, duration_seconds,"
@@ -157,8 +166,8 @@ def insert_v12_source_point(connection: sqlite3.Connection, native_id: str, user
         " VALUES (?, ?, 'AnimuseeFMR', 'sending', 1, '{\"version\": \"2.3.3\"}', 'n1', ?)"
         " RETURNING variant_id",
         (
-            FileKey(Network.ED2K, native_id).file_id,
-            SourceKey(Network.ED2K, user_hash).source_id,
+            FileKey(network=Network.ED2K, native_id=native_id).file_id,
+            SourceKey(network=Network.ED2K, native_id=user_hash).source_id,
             key,
         ),
     )
@@ -171,7 +180,7 @@ def insert_v12_source_point(connection: sqlite3.Connection, native_id: str, user
 
 def insert_v13_observation(connection: sqlite3.Connection, native_id: str, filename: str) -> None:
     """An observation of version 13, before 0014 renamed ``observed_at``."""
-    variant = (FileKey(Network.ED2K, native_id).file_id, filename, 100, None)
+    variant = (FileKey(network=Network.ED2K, native_id=native_id).file_id, filename, 100, None)
     key = content_hash(*variant, None, "[]", "keroro", "n1")
     connection.execute(
         "INSERT INTO observation_variants (file_id, filename, size_bytes, duration_seconds,"
@@ -207,5 +216,5 @@ def insert_v14_decision(
     connection.execute(
         "INSERT INTO match_decisions (id, file_id, target_id, rule_name, tier, decided_at, node_id)"
         " VALUES (?, ?, '062A', 'exact_062a', 'download', ?, 'n1')",
-        (decision_id, FileKey(Network.ED2K, native_id).file_id, decided_at),
+        (decision_id, FileKey(network=Network.ED2K, native_id=native_id).file_id, decided_at),
     )

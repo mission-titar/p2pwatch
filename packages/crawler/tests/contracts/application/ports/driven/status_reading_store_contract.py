@@ -13,8 +13,10 @@ from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.status_reading import ClientStatus, PublishedReading, StatusReading
 
 CLIENT_NAMES = (ClientName("amuled"), ClientName("emule"))
-_READING = StatusReading(datetime(2026, 6, 12, tzinfo=UTC), ClientStatus("3.0.1", ()))
-_SILENT_READING = StatusReading(datetime(2026, 6, 12, 0, 1, tzinfo=UTC), None)
+_READING = StatusReading(
+    read_at=datetime(2026, 6, 12, tzinfo=UTC), status=ClientStatus(version="3.0.1", channels=())
+)
+_SILENT_READING = StatusReading(read_at=datetime(2026, 6, 12, 0, 1, tzinfo=UTC), status=None)
 
 
 class StatusReadingStore(Protocol):
@@ -41,25 +43,37 @@ class StatusReadingStoreContract(ABC):
     def test_a_reading_is_read_with_its_instant(
         self, status_reading_store: StatusReadingStore
     ) -> None:
-        status_reading_store.set_reading(ClientName("amuled"), _READING, MonotonicInstant(7))
+        status_reading_store.set_reading(
+            ClientName("amuled"), _READING, MonotonicInstant(nanoseconds=7)
+        )
         assert status_reading_store.read_readings() == {
-            "amuled": PublishedReading(_READING, MonotonicInstant(7)),
+            "amuled": PublishedReading(
+                reading=_READING, published_at=MonotonicInstant(nanoseconds=7)
+            ),
             "emule": None,
         }
 
     def test_a_reading_replaces_the_clients_previous_one(
         self, status_reading_store: StatusReadingStore
     ) -> None:
-        status_reading_store.set_reading(ClientName("amuled"), _READING, MonotonicInstant(7))
-        status_reading_store.set_reading(ClientName("amuled"), _SILENT_READING, MonotonicInstant(8))
+        status_reading_store.set_reading(
+            ClientName("amuled"), _READING, MonotonicInstant(nanoseconds=7)
+        )
+        status_reading_store.set_reading(
+            ClientName("amuled"), _SILENT_READING, MonotonicInstant(nanoseconds=8)
+        )
         assert status_reading_store.read_readings()["amuled"] == PublishedReading(
-            _SILENT_READING, MonotonicInstant(8)
+            reading=_SILENT_READING, published_at=MonotonicInstant(nanoseconds=8)
         )
 
     def test_a_reading_is_read_from_another_thread(
         self, status_reading_store: StatusReadingStore
     ) -> None:
-        status_reading_store.set_reading(ClientName("amuled"), _READING, MonotonicInstant(7))
+        status_reading_store.set_reading(
+            ClientName("amuled"), _READING, MonotonicInstant(nanoseconds=7)
+        )
         with ThreadPoolExecutor(max_workers=1) as executor:
             published_readings = executor.submit(status_reading_store.read_readings).result()
-        assert published_readings["amuled"] == PublishedReading(_READING, MonotonicInstant(7))
+        assert published_readings["amuled"] == PublishedReading(
+            reading=_READING, published_at=MonotonicInstant(nanoseconds=7)
+        )

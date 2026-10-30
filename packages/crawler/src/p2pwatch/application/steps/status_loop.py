@@ -91,7 +91,9 @@ class StatusLoop:
                 raise  # a wrong password is config, not an outage
             except ClientError:  # a refused route too: a renamed /version must not end the crawler
                 self._publish(None)
-                await self._observability_dispatcher.dispatch(ClientUnreachable(self._client_name))
+                await self._observability_dispatcher.dispatch(
+                    ClientUnreachable(client_name=self._client_name)
+                )
                 # Every channel is unknown while the API is: only the API's own alert can fire.
                 readings: list[tuple[Channel, bool | None, bool | None]] = [
                     (channel, None, None)
@@ -106,13 +108,20 @@ class StatusLoop:
                 self._api_timer,
                 reachable,
                 ClientUnreachableLasting(
-                    self._client_name, UNREACHABLE_ALERT_AFTER.total_seconds(), node_id
+                    client_name=self._client_name,
+                    unreachable_for_seconds=UNREACHABLE_ALERT_AFTER.total_seconds(),
+                    node_id=node_id,
                 ),
-                ClientReachableAgain(self._client_name, node_id),
+                ClientReachableAgain(client_name=self._client_name, node_id=node_id),
             )
             for channel, connected, connectable in readings:
                 await self._observability_dispatcher.dispatch(
-                    ChannelStatusSampled(self._client_name, channel, connected, connectable)
+                    ChannelStatusSampled(
+                        client_name=self._client_name,
+                        channel=channel,
+                        connected=connected,
+                        connectable=connectable,
+                    )
                 )
                 fields: tuple[tuple[ChannelField, bool | None], ...] = (
                     ("connected", connected),
@@ -125,18 +134,23 @@ class StatusLoop:
                         ),
                         healthy,
                         ChannelDegraded(
-                            self._client_name,
-                            channel,
-                            field,
-                            CHANNEL_ALERT_AFTER.total_seconds(),
-                            node_id,
+                            client_name=self._client_name,
+                            channel=channel,
+                            field=field,
+                            degraded_for_seconds=CHANNEL_ALERT_AFTER.total_seconds(),
+                            node_id=node_id,
                         ),
-                        ChannelRecovered(self._client_name, channel, field, node_id),
+                        ChannelRecovered(
+                            client_name=self._client_name,
+                            channel=channel,
+                            field=field,
+                            node_id=node_id,
+                        ),
                     )
             await self._monotonic_clock.sleep(STATUS_PERIOD)
 
     def _publish(self, status: ClientStatus | None) -> None:
-        reading = StatusReading(self._wall_clock.now(), status)
+        reading = StatusReading(read_at=self._wall_clock.now(), status=status)
         self._status_reading_writer.set_reading(
             self._client_name, reading, self._monotonic_clock.now()
         )

@@ -29,7 +29,7 @@ from p2pwatch.domain.status_reading import ChannelStatus
 from tests.fakes.fake_amule_api import PASSWORD, TOKEN, FakeAmuleApi, error
 
 _HASH = "8b54a3c20fae9e4b9f7e0c2c8c01b6b1"
-_KEY = FileKey(Network.ED2K, _HASH)
+_KEY = FileKey(network=Network.ED2K, native_id=_HASH)
 
 
 _PAGE_SIZE = 500
@@ -767,7 +767,7 @@ async def test_a_list_without_its_envelope_is_unreachable_not_empty() -> None:
 async def test_start_refuses_a_file_of_another_network_without_asking() -> None:
     api = FakeAmuleApi()
     client = await _connected(api)
-    other = FileKey(cast(Network, "soulseek"), "Keroro/095.avi")
+    other = FileKey(network=cast(Network, "soulseek"), native_id="Keroro/095.avi")
 
     with pytest.raises(DownloadRejectedError, match="soulseek"):
         await client.start(DownloadRequest(file=other, filename="095.avi", size_bytes=10))
@@ -840,7 +840,7 @@ async def test_downloads_reads_the_whole_queue_before_the_shared_files() -> None
 
 @pytest.mark.asyncio
 async def test_a_shared_file_the_queue_no_longer_lists_is_completed() -> None:
-    cleared = FileKey(Network.ED2K, f"{1:032x}")
+    cleared = FileKey(network=Network.ED2K, native_id=f"{1:032x}")
     api = FakeAmuleApi(shared=[{"hash": cleared.native_id, "size_bytes": 10}])
     client = await _connected(api)
 
@@ -925,7 +925,12 @@ async def test_sources_ask_the_detail_of_only_the_rows_that_offer_us_the_file() 
         (reading.source_name, reading.role, reading.contact_point, reading.connectable)
         for reading in readings
     ] == [
-        ("peer 1", SourceRole.QUEUED, ContactPoint(Network.ED2K, "176.103.48.36:4184"), False),
+        (
+            "peer 1",
+            SourceRole.QUEUED,
+            ContactPoint(network=Network.ED2K, server="176.103.48.36:4184"),
+            False,
+        ),
         ("peer 3", SourceRole.STANDBY, None, None),
     ]
     asked = [r.url.path for r in api.requests if r.url.path.startswith("/api/v1/clients/")]
@@ -1008,7 +1013,10 @@ async def test_sources_of_a_file_of_another_network_are_none_without_asking() ->
     api = FakeAmuleApi()
     client = await _connected(api)
 
-    assert await client.sources(FileKey(cast(Network, "soulseek"), "Keroro/095.avi")) == ()
+    assert (
+        await client.sources(FileKey(network=cast(Network, "soulseek"), native_id="Keroro/095.avi"))
+        == ()
+    )
     await client.close()
 
     assert [request.url.path for request in api.requests if "clients" in request.url.path] == []

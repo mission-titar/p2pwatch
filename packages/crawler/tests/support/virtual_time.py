@@ -12,7 +12,7 @@ from p2pwatch.domain.monotonic_instant import MonotonicInstant
 
 # The instants the loop's time zero reads on each clock.
 EPOCH = datetime(2026, 10, 9, tzinfo=UTC)
-MONOTONIC_EPOCH = MonotonicInstant(0)
+MONOTONIC_EPOCH = MonotonicInstant(nanoseconds=0)
 
 
 class _VirtualSelector(selectors.DefaultSelector):

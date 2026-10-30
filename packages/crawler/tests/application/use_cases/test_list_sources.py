@@ -12,7 +12,7 @@ from p2pwatch.domain.source import SourceKey
 from tests.fakes.adapters.driven.fake_source_reader import FakeSourceReader
 
 _KNOWN_SOURCE = KnownSource(
-    source=SourceKey(Network.ED2K, "1f2e" * 8),
+    source=SourceKey(network=Network.ED2K, native_id="1f2e" * 8),
     source_name="AnimuseeFMR",
     latest_seen_at=datetime(2026, 10, 13, 20, tzinfo=UTC),
     file_count=2,

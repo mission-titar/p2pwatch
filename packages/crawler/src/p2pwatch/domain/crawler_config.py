@@ -36,7 +36,7 @@ from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.observability.policy import Audience
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class BackoffConfig:
     """Exponential backoff + jitter per (client, channel) (spec §3/§5).
 
@@ -50,7 +50,7 @@ class BackoffConfig:
     jitter_ratio: float
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SearchConfig:
     """The ``search`` section: the keywords every search queries, and the backoff of a failure."""
 
@@ -58,7 +58,7 @@ class SearchConfig:
     backoff: BackoffConfig
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class NotificationTarget:
     """An apprise target (secret via ``${...}``), notified for one ``audience`` (E-D7).
     ``node_prefix: false`` drops the ``[node-id]`` prefix, for a service with its own identity."""
@@ -68,7 +68,7 @@ class NotificationTarget:
     node_prefix: bool
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class DownloadConfig:
     """Download policy and wiring, present ⟺ ``enabled``. ``output_directory`` is measured with
     ``statvfs`` and never opened: amuled writes the finished file, nothing here touches it."""
@@ -87,7 +87,7 @@ class DownloadConfig:
         return self.sources_interval + timedelta(seconds=self.poll_interval_seconds)
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class WebuiConfig:
     """In-process read-only webui HTTP surface (monolith-consolidation spec §8), always served.
 
@@ -127,7 +127,7 @@ _REMOVED_KEYS = (
 _MOVED_KEYS = {"backoff": "search.backoff"}
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ObservabilityConfig:
     """Observability settings (``crawler.yml``). ``log_level`` drives the global logging
     (bootstrap → setLevel); ``notifications`` = apprise targets (interpolated URLs, E-D2/E-D7)."""
@@ -137,7 +137,7 @@ class ObservabilityConfig:
     notifications: tuple[NotificationTarget, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class CrawlerConfig:
     """Unified crawler config (policy + wiring). All durations in SECONDS.
 
@@ -471,7 +471,7 @@ def parse_crawler_config(document: dict[str, Any]) -> CrawlerConfig:
     )
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class LoadedConfig:
     """The three config files, parsed, and the fingerprint of the two that make the policy."""
 

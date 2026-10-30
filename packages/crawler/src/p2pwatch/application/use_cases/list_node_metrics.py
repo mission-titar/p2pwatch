@@ -31,4 +31,8 @@ class ListNodeMetrics(NodeMetricLister):
 
 def _unwritten_samples(node_metric: NodeCounter | NodeGauge) -> tuple[NodeMetricSample, ...]:
     """An unlabelled node metric has its one series before any write; a labelled one has none."""
-    return () if node_metric.label_names else (NodeMetricSample(node_metric, (), 0.0),)
+    return (
+        ()
+        if node_metric.label_names
+        else (NodeMetricSample(node_metric=node_metric, labels=(), value=0.0),)
+    )

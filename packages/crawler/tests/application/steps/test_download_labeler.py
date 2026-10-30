@@ -61,8 +61,8 @@ def test_the_titles_are_every_download_target_of_the_file() -> None:
     )
     labeler = _labeler(decision_reader=decision_reader)
     assert labeler.target_titles(key(HASH_A)) == (
-        TargetTitle(TargetId("062A"), "ta"),
-        TargetTitle(TargetId("062B"), "tb"),
+        TargetTitle(target_id=TargetId("062A"), title="ta"),
+        TargetTitle(target_id=TargetId("062B"), title="tb"),
     )
 
 
@@ -70,13 +70,17 @@ def test_a_file_without_a_download_decision_has_the_target_it_was_queued_for() -
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.record_queued(key(HASH_A), TargetId("062B"), 100, FakeTime().wall.now())
     labeler = _labeler(tracked_download_store=tracked_download_store)
-    assert labeler.target_titles(key(HASH_A)) == (TargetTitle(TargetId("062B"), "tb"),)
+    assert labeler.target_titles(key(HASH_A)) == (
+        TargetTitle(target_id=TargetId("062B"), title="tb"),
+    )
 
 
 def test_a_target_the_targets_no_longer_list_has_an_empty_title() -> None:
     decision_reader = FakeDecisionReader(candidates=(candidate(HASH_A, TargetId("063A")),))
     labeler = _labeler(decision_reader=decision_reader)
-    assert labeler.target_titles(key(HASH_A)) == (TargetTitle(TargetId("063A"), ""),)
+    assert labeler.target_titles(key(HASH_A)) == (
+        TargetTitle(target_id=TargetId("063A"), title=""),
+    )
 
 
 def test_a_file_neither_decided_nor_queued_has_no_title() -> None:

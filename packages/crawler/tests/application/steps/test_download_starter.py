@@ -107,7 +107,7 @@ async def test_a_download_the_client_forgot_is_started_once_per_round_until_list
         await cycle.run(NODE_ID)
         rounds.append(len(client.started))
     assert rounds == [1, 2, 2, 3]
-    assert client.started[0] == DownloadRequest(key(HASH_A), "a.avi", 9)
+    assert client.started[0] == DownloadRequest(file=key(HASH_A), filename="a.avi", size_bytes=9)
     assert tracked_download_store.states[HASH_A] is DownloadState.DOWNLOADING
 
 

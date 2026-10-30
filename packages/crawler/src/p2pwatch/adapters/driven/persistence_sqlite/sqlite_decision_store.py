@@ -109,7 +109,7 @@ class SqliteDecisionStore(DecisionWriter, DecisionReader):
             rows = self._connection.execute(_SELECT_DOWNLOAD_DECISIONS).fetchall()
         return tuple(
             DownloadCandidate(
-                file=FileKey(Network(row["network"]), row["native_id"]),
+                file=FileKey(network=Network(row["network"]), native_id=row["native_id"]),
                 target_id=TargetId(row["target_id"]),
             )
             for row in rows
@@ -124,5 +124,5 @@ def _decision_columns(decision: FileTargetDecision) -> tuple[str, str, str]:
 
 def _file_target_decision(target_id: TargetId, rule_name: str, tier: str) -> FileTargetDecision:
     if tier == _RETRACTED_TIER:
-        return Retraction(target_id)
+        return Retraction(target_id=target_id)
     return DecisionRecord(target_id=target_id, rule_name=rule_name, tier=DecisionTier(tier))

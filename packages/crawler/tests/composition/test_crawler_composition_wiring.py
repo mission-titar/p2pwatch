@@ -292,7 +292,10 @@ async def test_the_download_loop_records_a_tracked_downloads_sources_under_the_n
     catalog.close()
     local = open_local(tmp_path / "local.db")
     SqliteTrackedDownloadStore(local).record_queued(
-        FileKey(Network.ED2K, _HASH), TargetId("062A"), 10, SystemWallClock().now()
+        FileKey(network=Network.ED2K, native_id=_HASH),
+        TargetId("062A"),
+        10,
+        SystemWallClock().now(),
     )
     local.close()
     download = {
@@ -436,8 +439,8 @@ async def test_a_backoff_the_previous_run_saved_holds_the_ed2k_search(
     local = open_local(tmp_path / "local.db")
     SqliteBackoffStateStore(local).set_backoff_states(
         {
-            BackoffKey(ClientName("amuled"), Channel("ed2k")): BackoffState(
-                1, SystemWallClock().now(), timedelta(hours=1)
+            BackoffKey(client_name=ClientName("amuled"), channel=Channel("ed2k")): BackoffState(
+                attempts=1, started_at=SystemWallClock().now(), delay=timedelta(hours=1)
             )
         }
     )

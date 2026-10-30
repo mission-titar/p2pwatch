@@ -23,7 +23,7 @@ from tests.support.catalog_rows import count_observations, insert_file
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _HASH_B = "b" * 32
-_KEY = FileKey(Network.ED2K, _HASH)
+_KEY = FileKey(network=Network.ED2K, native_id=_HASH)
 _NODE_ID = NodeId("11111111-2222-3333-4444-555555555555")
 _T0 = datetime(2026, 6, 11, 12, 0, 0, tzinfo=UTC)
 
@@ -80,7 +80,9 @@ def _variant_count(connection: sqlite3.Connection) -> int:
 def test_record_observation_round_trip(
     observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
-    observation_store.record_observation(FileObservation(_reported_file(), _T0, _NODE_ID))
+    observation_store.record_observation(
+        FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=_NODE_ID)
+    )
     assert rows(connection, "SELECT * FROM files") == [
         {"file_id": _KEY.file_id, "network": "ed2k", "native_id": _HASH, "size_bytes": 234567890}
     ]
@@ -108,7 +110,9 @@ def test_record_observation_round_trip(
 def test_raw_metadata_preserves_order_duplicates_and_non_ascii(
     observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
-    observation_store.record_observation(FileObservation(_reported_file(), _T0, _NODE_ID))
+    observation_store.record_observation(
+        FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=_NODE_ID)
+    )
     [variant] = rows(connection, "SELECT raw_metadata FROM observation_variants")
     stored = variant["raw_metadata"]
     assert "mystère" in stored  # ensure_ascii=False: the accent is stored AS IS
@@ -118,10 +122,16 @@ def test_raw_metadata_preserves_order_duplicates_and_non_ascii(
 def test_record_observation_twice_first_seen_wins_in_files(
     observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
-    observation_store.record_observation(FileObservation(_reported_file(), _T0, _NODE_ID))
+    observation_store.record_observation(
+        FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=_NODE_ID)
+    )
     # Same hash, DIFFERENT size and name (hostile input, deviation 1 spec §5).
     observation_store.record_observation(
-        FileObservation(_reported_file(filename="leurre.avi", size_bytes=999), _T0, _NODE_ID)
+        FileObservation(
+            reported_file=_reported_file(filename="leurre.avi", size_bytes=999),
+            observed_at=_T0,
+            node_id=_NODE_ID,
+        )
     )
     assert rows(connection, "SELECT size_bytes FROM files") == [{"size_bytes": 234567890}]
     observed_sizes = rows(
@@ -134,9 +144,13 @@ def test_record_observation_twice_first_seen_wins_in_files(
 def test_a_variant_seen_again_is_stored_once_with_both_timestamps(
     observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
-    observation_store.record_observation(FileObservation(_reported_file(), _T0, _NODE_ID))
     observation_store.record_observation(
-        FileObservation(_reported_file(), _T0 + timedelta(minutes=1), _NODE_ID)
+        FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=_NODE_ID)
+    )
+    observation_store.record_observation(
+        FileObservation(
+            reported_file=_reported_file(), observed_at=_T0 + timedelta(minutes=1), node_id=_NODE_ID
+        )
     )
     assert _variant_count(connection) == 1
     assert count_observations(connection) == 2
@@ -145,8 +159,12 @@ def test_a_variant_seen_again_is_stored_once_with_both_timestamps(
 def test_an_observation_equal_in_every_column_is_stored_once(
     observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
-    observation_store.record_observation(FileObservation(_reported_file(), _T0, _NODE_ID))
-    observation_store.record_observation(FileObservation(_reported_file(), _T0, _NODE_ID))
+    observation_store.record_observation(
+        FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=_NODE_ID)
+    )
+    observation_store.record_observation(
+        FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=_NODE_ID)
+    )
     assert count_observations(connection) == 1
 
 
@@ -154,7 +172,11 @@ def test_record_observation_with_media_metadata(
     observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
     observation_store.record_observation(
-        FileObservation(_reported_file(duration_seconds=1474, bitrate_kbps=1200), _T0, _NODE_ID)
+        FileObservation(
+            reported_file=_reported_file(duration_seconds=1474, bitrate_kbps=1200),
+            observed_at=_T0,
+            node_id=_NODE_ID,
+        )
     )
     assert rows(connection, "SELECT duration_seconds, bitrate_kbps FROM observation_variants") == [
         {"duration_seconds": 1474, "bitrate_kbps": 1200}
@@ -172,14 +194,20 @@ def test_record_observation_is_one_transaction(
     )
     with pytest.raises(PersistenceError, match="injected failure"):
         observation_store.record_observation(
-            FileObservation(dataclasses.replace(_reported_file(), source_count=404), _T0, _NODE_ID)
+            FileObservation(
+                reported_file=dataclasses.replace(_reported_file(), source_count=404),
+                observed_at=_T0,
+                node_id=_NODE_ID,
+            )
         )
     # ATOMICITY: the file and its variant were rolled back with the transaction.
     assert _file_count(connection) == 0
     assert _variant_count(connection) == 0
     # The store stays USABLE: rollback done, connection out of transaction.
     assert not connection.in_transaction
-    observation_store.record_observation(FileObservation(_reported_file(), _T0, _NODE_ID))
+    observation_store.record_observation(
+        FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=_NODE_ID)
+    )
     assert count_observations(connection) == 1
 
 
@@ -190,9 +218,13 @@ def test_record_observation_rejects_non_canonical_hash(
     # behavior): without Python validation BEFORE the transaction, a non-canonical hash
     # would only survive thanks to the foreign_keys pragma (opaque diagnostic), and a connection
     # without that pragma would commit an ORPHAN observation.
-    upper = dataclasses.replace(_reported_file(), file=FileKey(Network.ED2K, _HASH.upper()))
+    upper = dataclasses.replace(
+        _reported_file(), file=FileKey(network=Network.ED2K, native_id=_HASH.upper())
+    )
     with pytest.raises(PersistenceError, match="non-canonical eD2k hash"):
-        observation_store.record_observation(FileObservation(upper, _T0, _NODE_ID))
+        observation_store.record_observation(
+            FileObservation(reported_file=upper, observed_at=_T0, node_id=_NODE_ID)
+        )
     assert _file_count(connection) == 0
     assert count_observations(connection) == 0
 
@@ -206,10 +238,14 @@ def test_rollback_on_non_sqlite_error_keeps_connection_usable(
     # ("cannot start a transaction within a transaction").
     with pytest.raises(UnicodeEncodeError):
         observation_store.record_observation(
-            FileObservation(_reported_file(filename="a\ud800"), _T0, _NODE_ID)
+            FileObservation(
+                reported_file=_reported_file(filename="a\ud800"), observed_at=_T0, node_id=_NODE_ID
+            )
         )
     assert not connection.in_transaction
-    observation_store.record_observation(FileObservation(_reported_file(), _T0, _NODE_ID))
+    observation_store.record_observation(
+        FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=_NODE_ID)
+    )
     assert count_observations(connection) == 1
 
 
@@ -222,7 +258,9 @@ def test_outer_transaction_survives_record_observation_failure(
     connection.execute("BEGIN")
     insert_file(connection, _HASH, 1)
     with pytest.raises(PersistenceError, match="cannot start a transaction within a transaction"):
-        observation_store.record_observation(FileObservation(_reported_file(), _T0, _NODE_ID))
+        observation_store.record_observation(
+            FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=_NODE_ID)
+        )
     assert connection.in_transaction  # the outer transaction is INTACT
     assert _file_count(connection) == 1
     connection.execute("ROLLBACK")
@@ -232,8 +270,12 @@ def test_outer_transaction_survives_record_observation_failure(
 def test_each_observation_stores_its_own_node_id(
     observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
-    observation_store.record_observation(FileObservation(_reported_file(), _T0, NodeId("n1")))
-    observation_store.record_observation(FileObservation(_reported_file(), _T0, NodeId("n2")))
+    observation_store.record_observation(
+        FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=NodeId("n1"))
+    )
+    observation_store.record_observation(
+        FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=NodeId("n2"))
+    )
     assert rows(connection, "SELECT node_id FROM observation_variants ORDER BY variant_id") == [
         {"node_id": "n1"},
         {"node_id": "n2"},

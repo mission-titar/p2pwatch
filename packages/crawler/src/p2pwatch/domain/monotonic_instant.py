@@ -5,7 +5,7 @@ from datetime import timedelta
 from typing import overload
 
 
-@dataclass(frozen=True, order=True)
+@dataclass(kw_only=True, frozen=True, order=True)
 class MonotonicInstant:
     """Never persisted nor displayed: its origin changes with each process. Its arithmetic and its
     ordering refuse a ``datetime``, for mypy and at run time."""
@@ -13,7 +13,7 @@ class MonotonicInstant:
     nanoseconds: int
 
     def __add__(self, duration: timedelta) -> "MonotonicInstant":
-        return MonotonicInstant(self.nanoseconds + _nanoseconds(duration))
+        return MonotonicInstant(nanoseconds=self.nanoseconds + _nanoseconds(duration))
 
     @overload
     def __sub__(self, other: "MonotonicInstant") -> timedelta: ...
@@ -22,7 +22,7 @@ class MonotonicInstant:
     def __sub__(self, other: "MonotonicInstant | timedelta") -> "timedelta | MonotonicInstant":
         if isinstance(other, MonotonicInstant):
             return timedelta(microseconds=(self.nanoseconds - other.nanoseconds) / 1000)
-        return MonotonicInstant(self.nanoseconds - _nanoseconds(other))
+        return MonotonicInstant(nanoseconds=self.nanoseconds - _nanoseconds(other))
 
 
 def _nanoseconds(duration: timedelta) -> int:

@@ -9,8 +9,8 @@ from p2pwatch.domain.file_key import FileKey, Network
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_local_at
 
-_A = FileKey(Network.ED2K, "a" * 32)
-_B = FileKey(Network.ED2K, "b" * 32)
+_A = FileKey(network=Network.ED2K, native_id="a" * 32)
+_B = FileKey(network=Network.ED2K, native_id="b" * 32)
 _INSERT_V13_DOWNLOAD = (
     "INSERT INTO downloads (file_id, network, native_id, target_id, state, queued_at,"
     " completed_at, size_bytes, latest_seen_at, bytes_done, latest_progress_at, waiting_reason,"
