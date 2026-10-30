@@ -20,6 +20,14 @@ An agent adds an entry only after the operator has agreed to it.
 - **The Grype scan back on p2pwatch at the v5 release**: one leg per image, `p2pwatch` and `p2pwatch-amule`, each with
   its versioned VEX and signed by `mission-titar/p2pwatch`, in place of v4's `mulewatch` leg. `.github/workflows/grype-scan.yml`.
 
+- **aMule 3.2.0 pinned**: `ARG AMULE_VERSION` and `ARG AMULE_COMMIT` moved from 3.1.0 to 3.2.0, which fixes 15
+  advisories, by the weekly bump or by hand. `packages/amule/Dockerfile`, `.github/workflows/amule-bump.yml`.
+
+- **Round-trip contracts**: a contract for each Writer/Reader pair and reader-only port of `persistence_sqlite`
+  without one, seeded through the Writers with drawn values, so each port's promise is written once for any
+  implementation. Appendix B of `agents/specs/2026-10-29-rows-read-by-column-name.md`, amended by Appendix B of
+  `agents/specs/2026-10-30-values-checked-at-the-boundary.md`.
+
 ## Features
 
 - **Multi network**: a generic core driving one container per P2P client, renamed p2pwatch.
@@ -43,10 +51,6 @@ An agent adds an entry only after the operator has agreed to it.
 
 - **Every catalog table STRICT**, as `local.db`'s are: all of them rebuilt at once, so SQLite refuses a value of the
   wrong type; it costs a rebuild of the catalog's largest tables. D2 of `agents/specs/2026-10-28-micros-stamps.md`.
-
-- **Round-trip contracts**: a contract for each Writer/Reader pair and reader-only port of `persistence_sqlite`
-  without one, seeded through the Writers with drawn values, so each port's promise is written once for any
-  implementation. Appendix B of `agents/specs/2026-10-29-rows-read-by-column-name.md`.
 
 - **A generic way to write the tests' stubs and spies**: one typed mechanism for all of them, where a call no stub
   expects fails the test, in place of a class per port. Candidates measured in `agents/reference/2026-10-25-stub-and-spy-libraries.md`.
