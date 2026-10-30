@@ -49,13 +49,28 @@ def test_latest_decisions_returns_the_latest_record_per_target(
     decision_store: SqliteDecisionStore,
 ) -> None:
     decision_store.record_decision(
-        _dated(DecisionRecord(TargetId("062A"), "keroro_large", DecisionTier.CATALOG), _T0)
+        _dated(
+            DecisionRecord(
+                target_id=TargetId("062A"), rule_name="keroro_large", tier=DecisionTier.CATALOG
+            ),
+            _T0,
+        )
     )
     decision_store.record_decision(
-        _dated(DecisionRecord(TargetId("062A"), "id_segment_exact", DecisionTier.DOWNLOAD), _T1)
+        _dated(
+            DecisionRecord(
+                target_id=TargetId("062A"), rule_name="id_segment_exact", tier=DecisionTier.DOWNLOAD
+            ),
+            _T1,
+        )
     )  # newer
     decision_store.record_decision(
-        _dated(DecisionRecord(TargetId("062B"), "numero_nu", DecisionTier.NOTIFY), _T0)
+        _dated(
+            DecisionRecord(
+                target_id=TargetId("062B"), rule_name="numero_nu", tier=DecisionTier.NOTIFY
+            ),
+            _T0,
+        )
     )
     assert decision_store.read_latest_decisions(_A) == {
         "062A": DecisionRecord(
@@ -71,7 +86,12 @@ def test_latest_decisions_reads_each_tier_as_the_type(
     decision_store: SqliteDecisionStore,
 ) -> None:
     decision_store.record_decision(
-        _dated(DecisionRecord(TargetId("062A"), "numero_nu", DecisionTier.NOTIFY), _T0)
+        _dated(
+            DecisionRecord(
+                target_id=TargetId("062A"), rule_name="numero_nu", tier=DecisionTier.NOTIFY
+            ),
+            _T0,
+        )
     )
     latest = decision_store.read_latest_decisions(_A)[TargetId("062A")]
     assert isinstance(latest, DecisionRecord)
@@ -82,7 +102,12 @@ def test_latest_decisions_includes_a_target_whose_latest_tier_is_retracted(
     decision_store: SqliteDecisionStore,
 ) -> None:
     decision_store.record_decision(
-        _dated(DecisionRecord(TargetId("062A"), "id_segment_exact", DecisionTier.DOWNLOAD), _T0)
+        _dated(
+            DecisionRecord(
+                target_id=TargetId("062A"), rule_name="id_segment_exact", tier=DecisionTier.DOWNLOAD
+            ),
+            _T0,
+        )
     )
     decision_store.record_decision(_dated(Retraction(TargetId("062A")), _T1))
     assert decision_store.read_latest_decisions(_A) == {
@@ -94,7 +119,12 @@ def test_latest_decisions_excludes_the_legacy_empty_sentinel(
     decision_store: SqliteDecisionStore,
 ) -> None:
     decision_store.record_decision(
-        _dated(DecisionRecord(TargetId("062A"), "numero_nu", DecisionTier.NOTIFY), _T0)
+        _dated(
+            DecisionRecord(
+                target_id=TargetId("062A"), rule_name="numero_nu", tier=DecisionTier.NOTIFY
+            ),
+            _T0,
+        )
     )
     decision_store.record_decision(_dated(Retraction(TargetId("")), _T1))  # legacy target_id=""
     assert decision_store.read_latest_decisions(_A) == {

@@ -8,7 +8,7 @@ class FakeTemplateReader(TemplateReader):
     """Holds the templates of one directory, by their path relative to it."""
 
     def __init__(
-        self, templates_directory: PurePath, templates_by_path: Mapping[PurePath, str]
+        self, templates_directory: PurePath, *, templates_by_path: Mapping[PurePath, str]
     ) -> None:
         self._templates_directory = templates_directory
         self._templates_by_path = templates_by_path

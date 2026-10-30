@@ -17,7 +17,7 @@ class InterpolationError(Exception):
     """Interpolation error: unknown placeholder."""
 
 
-def interpolate(pattern: str, target: TargetSegment) -> str:
+def interpolate(pattern: str, *, target: TargetSegment) -> str:
     """Substitutes the whitelist ``{season} {seasonal_number} {absolute_number} {letter}
     {title}``.
 

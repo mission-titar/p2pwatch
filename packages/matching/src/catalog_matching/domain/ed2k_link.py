@@ -23,7 +23,7 @@ from urllib.parse import quote
 _SAFE_NAME_CHARS = ".()[]-_"
 
 
-def build_ed2k_link(filename: str, size_bytes: int, native_id: str) -> str:
+def build_ed2k_link(filename: str, *, size_bytes: int, native_id: str) -> str:
     """ed2k link for a file. The name is escaped (``|`` → ``%7C``, etc.)."""
     safe_name = quote(filename, safe=_SAFE_NAME_CHARS)
     return f"ed2k://|file|{safe_name}|{size_bytes}|{native_id}|/"

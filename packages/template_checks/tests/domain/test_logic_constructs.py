@@ -54,22 +54,26 @@ def test_a_logic_free_template_holds_no_logic_construct(template_text: str) -> N
         ("{% include ['a.html', 'b.html'] %}", "List"),
     ],
 )
-def test_each_refused_node_is_found_first_with_its_line(template_text: str, node_type: str) -> None:
+def test_each_refused_node_is_found_first_with_its_line(
+    *, template_text: str, node_type: str
+) -> None:
     logic_constructs = find_logic_constructs({_PAGE: f"<p>\n{template_text}"})
 
-    assert logic_constructs[0] == RefusedNode(_PAGE, 2, node_type)
+    assert logic_constructs[0] == RefusedNode(
+        template_path=_PAGE, line_number=2, node_type=node_type
+    )
 
 
 def test_a_loop_with_an_if_filter_is_found_with_its_line() -> None:
     logic_constructs = find_logic_constructs({_PAGE: "<p>\n{% for f in files if f %}{% endfor %}"})
 
-    assert logic_constructs == (FilteredLoop(_PAGE, 2),)
+    assert logic_constructs == (FilteredLoop(template_path=_PAGE, line_number=2),)
 
 
 def test_a_construct_inside_another_is_found_too() -> None:
     assert find_logic_constructs({_PAGE: "{% if x %}{{ a|upper }}{% endif %}"}) == (
-        RefusedNode(_PAGE, 1, "If"),
-        RefusedNode(_PAGE, 1, "Filter"),
+        RefusedNode(template_path=_PAGE, line_number=1, node_type="If"),
+        RefusedNode(template_path=_PAGE, line_number=1, node_type="Filter"),
     )
 
 
@@ -81,8 +85,8 @@ def test_the_constructs_of_every_template_are_found_under_their_relative_paths()
     }
 
     assert find_logic_constructs(templates_by_path) == (
-        RefusedNode(PurePath("base.html"), 1, "Or"),
-        RefusedNode(PurePath("pages/node.html"), 1, "Neg"),
+        RefusedNode(template_path=PurePath("base.html"), line_number=1, node_type="Or"),
+        RefusedNode(template_path=PurePath("pages/node.html"), line_number=1, node_type="Neg"),
     )
 
 

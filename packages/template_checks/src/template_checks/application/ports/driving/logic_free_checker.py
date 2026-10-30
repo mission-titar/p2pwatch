@@ -7,7 +7,7 @@ from pathlib import PurePath
 from template_checks.domain.logic_constructs import LogicConstruct
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class LogicFreeReport:
     """Each logic construct a directory's templates hold."""
 

@@ -1013,7 +1013,9 @@ def build_app(
             match file_history.file.network:
                 case Network.ED2K:
                     ed2k_link = build_ed2k_link(
-                        latest.filename, latest.size_bytes, file_history.file.native_id
+                        latest.filename,
+                        size_bytes=latest.size_bytes,
+                        native_id=file_history.file.native_id,
                     )
                 case _:  # pragma: no cover
                     assert_never(file_history.file.network)

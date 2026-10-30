@@ -7,7 +7,7 @@ from jinja2 import Environment, TemplateSyntaxError, nodes
 from template_checks.domain.broken_input_error import BrokenInputError
 
 
-def parse_template(template_path: PurePath, template_text: str) -> nodes.Template:
+def parse_template(template_path: PurePath, *, template_text: str) -> nodes.Template:
     """The syntax tree of *template_text*, read at *template_path*."""
     try:
         return Environment().parse(template_text)

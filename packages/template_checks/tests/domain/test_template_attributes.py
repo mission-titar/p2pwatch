@@ -19,7 +19,7 @@ _PAGE = PurePath("page.html")
     ],
 )
 def test_each_attribute_a_template_reads_is_found(
-    template_text: str, template_attributes: set[str]
+    *, template_text: str, template_attributes: set[str]
 ) -> None:
     assert find_template_attributes({_PAGE: template_text}) == template_attributes
 

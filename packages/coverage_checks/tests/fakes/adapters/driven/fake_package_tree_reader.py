@@ -9,7 +9,7 @@ class FakePackageTreeReader(PackageTreeReader):
     """Reads the tree it is given, and each module's source from ``sources_by_module``."""
 
     def __init__(
-        self, package_tree: PackageTree, sources_by_module: Mapping[PurePath, str]
+        self, package_tree: PackageTree, *, sources_by_module: Mapping[PurePath, str]
     ) -> None:
         self._package_tree = package_tree
         self._sources_by_module = sources_by_module

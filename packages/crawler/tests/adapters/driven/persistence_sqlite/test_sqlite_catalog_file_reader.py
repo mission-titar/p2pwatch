@@ -134,7 +134,11 @@ def test_read_catalog_entries_no_filter_returns_all(catalog_db: Path) -> None:
                 node_id=NodeId("n1"),
             ),
             decisions=(
-                DecisionRecord(TargetId("062A"), "id_segment_exact", DecisionTier.DOWNLOAD),
+                DecisionRecord(
+                    target_id=TargetId("062A"),
+                    rule_name="id_segment_exact",
+                    tier=DecisionTier.DOWNLOAD,
+                ),
             ),
         ),
     )
@@ -180,8 +184,12 @@ def test_read_catalog_entries_whole_episode_is_one_row_with_two_decisions(catalo
     rows = _entries(catalog_db)
     assert len(rows) == 1
     assert rows[0].decisions == (
-        DecisionRecord(TargetId("072A"), "numero_nu_confirmed", DecisionTier.DOWNLOAD),
-        DecisionRecord(TargetId("072B"), "numero_nu_confirmed", DecisionTier.DOWNLOAD),
+        DecisionRecord(
+            target_id=TargetId("072A"), rule_name="numero_nu_confirmed", tier=DecisionTier.DOWNLOAD
+        ),
+        DecisionRecord(
+            target_id=TargetId("072B"), rule_name="numero_nu_confirmed", tier=DecisionTier.DOWNLOAD
+        ),
     )
     assert rows[0].decisions[0].tier is DecisionTier.DOWNLOAD
 
@@ -275,7 +283,9 @@ def test_file_history_of_an_unknown_file_id_is_none(catalog_db: Path) -> None:
 def test_file_history_reads_a_recorded_decision_back_to_the_microsecond(catalog_db: Path) -> None:
     decided = DatedDecision(
         FileKey(Network.ED2K, "a" * 32),
-        DecisionRecord(TargetId("062A"), "id_segment_exact", DecisionTier.DOWNLOAD),
+        DecisionRecord(
+            target_id=TargetId("062A"), rule_name="id_segment_exact", tier=DecisionTier.DOWNLOAD
+        ),
         datetime(2026, 6, 22, 10, 0, 1, 123456, tzinfo=UTC),
         NodeId("n1"),
     )

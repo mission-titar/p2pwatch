@@ -40,9 +40,9 @@ def _no_per_test_coverage_message(package_directory: Path) -> str:
 
 def _measure(
     package_directory: Path,
+    *,
     source_by_module: Mapping[str, str],
     calls_by_context: Mapping[str, MeasuredCall],
-    *,
     branch: bool = True,
 ) -> None:
     """Import the modules, then run each call under its context, as pytest-cov's per-test contexts.
@@ -75,7 +75,7 @@ def _measure(
     coverage.save()
 
 
-def _reader(package_directory: Path, pyproject: str = "") -> CoveragePyTestCoverageReader:
+def _reader(package_directory: Path, *, pyproject: str = "") -> CoveragePyTestCoverageReader:
     (package_directory / "pyproject.toml").write_text(pyproject)
     report_directory = package_directory / "report"
     report_directory.mkdir()
@@ -89,8 +89,8 @@ def _reader(package_directory: Path, pyproject: str = "") -> CoveragePyTestCover
 def test_read_test_coverage_reads_what_the_run_and_the_own_tests_ran(tmp_path: Path) -> None:
     _measure(
         tmp_path,
-        {"src/pkg/sizes.py": SIZES},
-        {
+        source_by_module={"src/pkg/sizes.py": SIZES},
+        calls_by_context={
             "tests/test_sizes.py::test_short|run": lambda modules: modules["sizes"].is_short(3),
             "tests/test_sizes_long.py::test_long|run": lambda modules: modules["sizes"].is_short(
                 30
@@ -111,8 +111,10 @@ def test_read_test_coverage_reads_what_the_run_and_the_own_tests_ran(tmp_path: P
 def test_a_module_without_own_test_files_has_nothing_run_by_them(tmp_path: Path) -> None:
     _measure(
         tmp_path,
-        {"src/pkg/sizes.py": SIZES},
-        {"tests/test_other.py::test_short|run": lambda modules: modules["sizes"].is_short(3)},
+        source_by_module={"src/pkg/sizes.py": SIZES},
+        calls_by_context={
+            "tests/test_other.py::test_short|run": lambda modules: modules["sizes"].is_short(3)
+        },
     )
 
     test_coverage = _reader(tmp_path).read_test_coverage_by_module(
@@ -137,10 +139,12 @@ def first(names):
 """
     _measure(
         tmp_path,
-        {"src/pkg/guarded.py": guarded},
-        {"tests/test_guarded.py::test_first|run": lambda modules: modules["guarded"].first("a")},
+        source_by_module={"src/pkg/guarded.py": guarded},
+        calls_by_context={
+            "tests/test_guarded.py::test_first|run": lambda modules: modules["guarded"].first("a")
+        },
     )
-    reader = _reader(tmp_path, '[tool.coverage.report]\nexclude_also = ["if DEBUG:"]\n')
+    reader = _reader(tmp_path, pyproject='[tool.coverage.report]\nexclude_also = ["if DEBUG:"]\n')
 
     test_coverage = reader.read_test_coverage_by_module(
         {PurePath("src/pkg/guarded.py"): (PurePath("tests/test_guarded.py"),)}
@@ -155,12 +159,14 @@ def first(names):
     ids=["no-test-context", "no-branch"],
 )
 def test_a_run_without_per_test_branches_is_a_broken_input_naming_the_data_file(
-    tmp_path: Path, branch: bool, contexts: list[str]
+    *, tmp_path: Path, branch: bool, contexts: list[str]
 ) -> None:
     _measure(
         tmp_path,
-        {"src/pkg/sizes.py": SIZES},
-        {context: lambda modules: modules["sizes"].is_short(3) for context in contexts},
+        source_by_module={"src/pkg/sizes.py": SIZES},
+        calls_by_context={
+            context: lambda modules: modules["sizes"].is_short(3) for context in contexts
+        },
         branch=branch,
     )
 
@@ -195,8 +201,8 @@ def test_a_data_file_that_is_no_coverage_database_is_a_broken_input_naming_it(
 def test_a_coverage_config_coverage_py_refuses_is_a_broken_input_naming_the_pyproject(
     tmp_path: Path,
 ) -> None:
-    _measure(tmp_path, {"src/pkg/sizes.py": SIZES}, {})
-    reader = _reader(tmp_path, '[tool.coverage.run]\nbranch = "sometimes"\n')
+    _measure(tmp_path, source_by_module={"src/pkg/sizes.py": SIZES}, calls_by_context={})
+    reader = _reader(tmp_path, pyproject='[tool.coverage.run]\nbranch = "sometimes"\n')
     pyproject = re.escape(str(tmp_path / "pyproject.toml"))
 
     with pytest.raises(BrokenInputError, match=f"^Couldn't read config file {pyproject}: "):
@@ -206,8 +212,10 @@ def test_a_coverage_config_coverage_py_refuses_is_a_broken_input_naming_the_pypr
 def test_a_module_that_is_not_python_is_a_broken_input_naming_it(tmp_path: Path) -> None:
     _measure(
         tmp_path,
-        {"src/pkg/sizes.py": SIZES},
-        {"tests/test_sizes.py::test_short|run": lambda modules: modules["sizes"].is_short(3)},
+        source_by_module={"src/pkg/sizes.py": SIZES},
+        calls_by_context={
+            "tests/test_sizes.py::test_short|run": lambda modules: modules["sizes"].is_short(3)
+        },
     )
     (tmp_path / "src/pkg/broken.py").write_text("def is_short(:\n")
     module = re.escape(repr(str(tmp_path / "src/pkg/broken.py")))

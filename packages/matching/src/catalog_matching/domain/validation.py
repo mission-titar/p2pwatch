@@ -58,13 +58,13 @@ class DepthExceededError(MatchingConfigError):
     """The resolution depth exceeds the bound (default 32)."""
 
 
-def _require_mapping(node: Any, error_label: str) -> dict[str, Any]:
+def _require_mapping(node: Any, *, error_label: str) -> dict[str, Any]:
     if not isinstance(node, dict):
         raise MatchingConfigError(f"{error_label}: mapping expected, got {type(node).__name__}")
     return node
 
 
-def _require_key(mapping: dict[str, Any], key: str, error_label: str) -> Any:
+def _require_key(mapping: dict[str, Any], *, key: str, error_label: str) -> Any:
     if key not in mapping:
         raise MatchingConfigError(f"{error_label}: key {key!r} missing")
     return mapping[key]
@@ -83,21 +83,21 @@ def _parse_operand(raw: Any) -> Operand:
     raise MatchingConfigError(f"operand of invalid type: {type(raw).__name__} ({raw!r})")
 
 
-def _number(raw: Any, error_label: str) -> float:
+def _number(raw: Any, *, error_label: str) -> float:
     try:
         return float(raw)
     except (TypeError, ValueError) as error:
         raise MatchingConfigError(f"{error_label}: number expected, got {raw!r}") from error
 
 
-def _integer(raw: Any, error_label: str) -> int:
+def _integer(raw: Any, *, error_label: str) -> int:
     try:
         return int(raw)
     except (TypeError, ValueError) as error:
         raise MatchingConfigError(f"{error_label}: integer expected, got {raw!r}") from error
 
 
-def _require_unit_fraction(fraction: float, error_label: str) -> float:
+def _require_unit_fraction(fraction: float, *, error_label: str) -> float:
     """Validates that a fraction (min_coverage, min_similarity) is in [0, 1] (fail-fast §8.4).
 
     Outside [0, 1], the rule is silently inert (threshold never reached): that is a config
@@ -108,7 +108,7 @@ def _require_unit_fraction(fraction: float, error_label: str) -> float:
     return fraction
 
 
-def _refuse_renamed_coverage_keys(mapping: dict[str, Any], error_label: str) -> None:
+def _refuse_renamed_coverage_keys(mapping: dict[str, Any], *, error_label: str) -> None:
     for old_key, new_key in _RENAMED_COVERAGE_KEYS.items():
         if old_key in mapping:
             raise MatchingConfigError(
@@ -120,7 +120,7 @@ def _parse_token_reference(raw: dict[str, Any]) -> TokenReference:
     name = raw.get("token")
     if not isinstance(name, str):
         raise MatchingConfigError(f"operand {{token: …}} without a valid token name: {raw!r}")
-    _refuse_renamed_coverage_keys(raw, f"operand {{token: {name!r}}}")
+    _refuse_renamed_coverage_keys(raw, error_label=f"operand {{token: {name!r}}}")
     min_coverage = raw.get("min_coverage")
     min_similarity = raw.get("min_similarity")
     # The legality of an override (coverage-only, cf. EBNF §8.3) is checked at the
@@ -133,16 +133,16 @@ def _parse_token_reference(raw: dict[str, Any]) -> TokenReference:
             None
             if min_coverage is None
             else _require_unit_fraction(
-                _number(min_coverage, f"'min_coverage' override of {name!r}"),
-                f"'min_coverage' override of {name!r}",
+                _number(min_coverage, error_label=f"'min_coverage' override of {name!r}"),
+                error_label=f"'min_coverage' override of {name!r}",
             )
         ),
         min_similarity=(
             None
             if min_similarity is None
             else _require_unit_fraction(
-                _number(min_similarity, f"'min_similarity' override of {name!r}"),
-                f"'min_similarity' override of {name!r}",
+                _number(min_similarity, error_label=f"'min_similarity' override of {name!r}"),
+                error_label=f"'min_similarity' override of {name!r}",
             )
         ),
     )
@@ -171,16 +171,17 @@ def _parse_condition(raw: dict[str, Any]) -> Condition:
     return AnyDefinition(operands=operands)
 
 
-def _optional_float(mapping: dict[str, Any], key: str, error_label: str) -> float | None:
+def _optional_float(mapping: dict[str, Any], *, key: str, error_label: str) -> float | None:
     """Reads an optional float bound (``None`` if absent)."""
     bound = mapping.get(key)
-    return None if bound is None else _number(bound, f"{error_label}: key {key!r}")
+    return None if bound is None else _number(bound, error_label=f"{error_label}: key {key!r}")
 
 
 def _parse_fragments(raw: Any) -> dict[str, str]:
     """``fragments:`` name -> raw regex text; one level only (no fragment in a fragment)."""
     fragments = {
-        str(name): str(text) for name, text in _require_mapping(raw, "'fragments' section").items()
+        str(name): str(text)
+        for name, text in _require_mapping(raw, error_label="'fragments' section").items()
     }
     for name, text in fragments.items():
         if name in TARGET_PLACEHOLDERS:
@@ -193,13 +194,13 @@ def _parse_fragments(raw: Any) -> dict[str, str]:
     return fragments
 
 
-def _expand_fragments(pattern: str, fragments: dict[str, str]) -> str:
+def _expand_fragments(pattern: str, *, fragments: dict[str, str]) -> str:
     """Substitutes ``{fragment}``; target placeholders are left for per-target interpolation."""
     return PLACEHOLDER.sub(lambda m: fragments.get(m.group(1), m.group(0)), pattern)
 
 
 def _parse_token_definition(
-    token_name: str, raw: Any, fragments: dict[str, str]
+    token_name: str, *, raw: Any, fragments: dict[str, str]
 ) -> TokenDefinition:
     """Dispatch of a token definition: composite (all/any/not) or leaf (4 types).
 
@@ -207,7 +208,7 @@ def _parse_token_definition(
     ``min_coverage``/``min_similarity`` of coverage, ``min``/``max`` of attr_between), not only
     the type-key.
     """
-    mapping = _require_mapping(raw, "token definition")
+    mapping = _require_mapping(raw, error_label="token definition")
     if any(key in mapping for key in _CONDITION_KEYS):
         return _parse_condition(mapping)
     leaf_keys = [k for k in ("keyword", "regex", "coverage", "attr_between") if k in mapping]
@@ -217,21 +218,27 @@ def _parse_token_definition(
         return KeywordDefinition(phrase=str(mapping["keyword"]))
     if "regex" in mapping:
         flags = mapping.get("flags", "i")
-        pattern = _expand_fragments(str(mapping["regex"]), fragments)
+        pattern = _expand_fragments(str(mapping["regex"]), fragments=fragments)
         return RegexDefinition(pattern=pattern, flags=str(flags))
     if "coverage" in mapping:
-        _refuse_renamed_coverage_keys(mapping, f"token {token_name!r}")
-        min_coverage = _optional_float(mapping, "min_coverage", f"token {token_name!r}")
+        _refuse_renamed_coverage_keys(mapping, error_label=f"token {token_name!r}")
+        min_coverage = _optional_float(
+            mapping, key="min_coverage", error_label=f"token {token_name!r}"
+        )
         if min_coverage is None:
             raise MatchingConfigError("a coverage token must declare 'min_coverage'")
-        min_similarity = _optional_float(mapping, "min_similarity", f"token {token_name!r}")
+        min_similarity = _optional_float(
+            mapping, key="min_similarity", error_label=f"token {token_name!r}"
+        )
         return CoverageDefinition(
             reference=str(mapping["coverage"]),
-            min_coverage=_require_unit_fraction(min_coverage, "coverage 'min_coverage'"),
+            min_coverage=_require_unit_fraction(
+                min_coverage, error_label="coverage 'min_coverage'"
+            ),
             min_similarity=(
                 0.85
                 if min_similarity is None
-                else _require_unit_fraction(min_similarity, "coverage 'min_similarity'")
+                else _require_unit_fraction(min_similarity, error_label="coverage 'min_similarity'")
             ),
         )
     if "attr_between" in mapping:
@@ -245,8 +252,8 @@ def _parse_token_definition(
             raise MatchingConfigError(
                 f"unknown attr_between: {attr!r} (expected one of {sorted(READERS_BY_ATTR)})"
             )
-        min_bound = _optional_float(mapping, "min", f"token {token_name!r}")
-        max_bound = _optional_float(mapping, "max", f"token {token_name!r}")
+        min_bound = _optional_float(mapping, key="min", error_label=f"token {token_name!r}")
+        max_bound = _optional_float(mapping, key="max", error_label=f"token {token_name!r}")
         # Open bounds (min only / max only / none) are legitimate; only an explicit inverted
         # range min > max is an EMPTY range (rule mute forever) → fail-fast §8.4.
         if min_bound is not None and max_bound is not None and min_bound > max_bound:
@@ -258,7 +265,7 @@ def _parse_token_definition(
 
 
 def _parse_rule(raw: Any) -> Rule:
-    mapping = _require_mapping(raw, "rule")
+    mapping = _require_mapping(raw, error_label="rule")
     name = str(mapping.get("name", ""))
     if not name:
         raise MatchingConfigError(f"rule without 'name': {raw!r}")
@@ -293,10 +300,12 @@ def _parse_rule(raw: Any) -> Rule:
 def parse_matcher_config(raw: dict[str, Any]) -> MatcherConfig:
     """Builds a validated (schema) :class:`MatcherConfig` from a parsed YAML dict."""
     fragments = _parse_fragments(raw.get("fragments", {}))
-    tokens_raw = _require_mapping(raw.get("tokens", {}), "'tokens' section")
+    tokens_raw = _require_mapping(raw.get("tokens", {}), error_label="'tokens' section")
     tokens: dict[str, TokenDefinition] = {}
     for token_name, token_raw in tokens_raw.items():
-        tokens[str(token_name)] = _parse_token_definition(str(token_name), token_raw, fragments)
+        tokens[str(token_name)] = _parse_token_definition(
+            str(token_name), raw=token_raw, fragments=fragments
+        )
     rules_raw = raw.get("rules", [])
     if not isinstance(rules_raw, list):
         raise MatchingConfigError(f"'rules' section: list expected, got {type(rules_raw).__name__}")
@@ -425,7 +434,7 @@ def _check_vetoes(config: MatcherConfig) -> None:
         seen.add(name)
 
 
-def _check_acyclic(config: MatcherConfig, max_depth: int) -> None:
+def _check_acyclic(config: MatcherConfig, *, max_depth: int) -> None:
     """Detects a cycle in the token->token graph and NAMES it (cf. spec §8.4).
 
     The ``len(stack) >= max_depth`` guard also bounds the recursion: a path deeper than
@@ -495,7 +504,7 @@ def _check_regexes_compile(config: MatcherConfig) -> None:
                 "rename it in matcher.yml"
             )
         try:
-            pattern = interpolate(token_definition.pattern, _PROBE_TARGET)
+            pattern = interpolate(token_definition.pattern, target=_PROBE_TARGET)
         except InterpolationError as exc:
             raise MatchingConfigError(f"token {name!r}: invalid interpolation: {exc}") from exc
         if "i" in token_definition.flags:
@@ -515,7 +524,7 @@ def validate_config(config: MatcherConfig, *, max_depth: int = _DEFAULT_MAX_DEPT
     _check_references_exist(config)
     _check_vetoes(config)
     _check_overrides_only_on_coverage(config)
-    _check_acyclic(config, max_depth)
+    _check_acyclic(config, max_depth=max_depth)
     depth = _max_resolution_depth(config)
     if depth > max_depth:
         raise DepthExceededError(
@@ -531,14 +540,17 @@ def parse_targets(raw: dict[str, Any]) -> tuple[TargetSegment, ...]:
         raise MatchingConfigError("'episodes' section: list expected")
     segments: list[TargetSegment] = []
     for episode in episodes:
-        episode_mapping = _require_mapping(episode, "episode")
+        episode_mapping = _require_mapping(episode, error_label="episode")
         season, seasonal_number, absolute_number = (
-            _integer(_require_key(episode_mapping, key, "episode"), f"episode: key {key!r}")
+            _integer(
+                _require_key(episode_mapping, key=key, error_label="episode"),
+                error_label=f"episode: key {key!r}",
+            )
             for key in ("season", "seasonal_number", "absolute_number")
         )
         segment_entries = episode_mapping.get("segments", [])
         for segment_entry in segment_entries:
-            segment_mapping = _require_mapping(segment_entry, "segment")
+            segment_mapping = _require_mapping(segment_entry, error_label="segment")
             status = str(segment_mapping.get("status", LOST))
             if status not in TARGET_STATUSES:
                 raise MatchingConfigError(
@@ -549,8 +561,8 @@ def parse_targets(raw: dict[str, Any]) -> tuple[TargetSegment, ...]:
                     season=season,
                     seasonal_number=seasonal_number,
                     absolute_number=absolute_number,
-                    letter=str(_require_key(segment_mapping, "letter", "segment")),
-                    title=str(_require_key(segment_mapping, "title", "segment")),
+                    letter=str(_require_key(segment_mapping, key="letter", error_label="segment")),
+                    title=str(_require_key(segment_mapping, key="title", error_label="segment")),
                     status=status,
                 )
             )

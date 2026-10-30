@@ -61,24 +61,24 @@ class ArgparseCommandLine:
 def _problem_line(problem: UnitCoverageProblem) -> str:
     """The line naming *problem*'s file and what is wrong with it."""
     match problem:
-        case ListingWithoutReason(listed_path):
+        case ListingWithoutReason(listed_path=listed_path):
             return f"{listed_path}: listed in tests_without_unit without its reason"
-        case UnitNameCollision(module):
+        case UnitNameCollision(module=module):
             return (
                 f"{module.as_posix()}: its tests would be named like those of"
                 f" __{module.stem}__.py beside it; rename it"
             )
-        case ListedTestOfModule(test_file, module):
+        case ListedTestOfModule(test_file=test_file, module=module):
             return (
                 f"{test_file.as_posix()}: listed in tests_without_unit, but tests"
                 f" {module.as_posix()}"
             )
-        case UnmappedTestFile(test_file):
+        case UnmappedTestFile(test_file=test_file):
             return (
                 f"{test_file.as_posix()}: tests no module of src; name it after the module it"
                 " tests, or list it in [tool.coverage_checks] tests_without_unit with its reason"
             )
-        case StaleListing(listed_path):
+        case StaleListing(listed_path=listed_path):
             return f"{listed_path}: listed in tests_without_unit, but names no test file"
         case Shortfall():
             return _shortfall_line(problem)

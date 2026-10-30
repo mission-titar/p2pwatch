@@ -23,7 +23,7 @@ _ALLOWED_NODE_TYPES: frozenset[type[nodes.Node]] = frozenset(
 )
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class RefusedNode:
     """A node of a type a logic-free template refuses, by the name of its type."""
 
@@ -32,7 +32,7 @@ class RefusedNode:
     node_type: str
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class FilteredLoop:
     """A `for` with an `if` filter, refused though a bare `for` is allowed."""
 
@@ -51,26 +51,28 @@ def find_logic_constructs(
         logic_construct
         for template_path, template_text in templates_by_path.items()
         for logic_construct in _find_logic_constructs_under(
-            template_path, parse_template(template_path, template_text)
+            template_path, node=parse_template(template_path, template_text=template_text)
         )
     )
 
 
 def _find_logic_constructs_under(
-    template_path: PurePath, node: nodes.Node
+    template_path: PurePath, *, node: nodes.Node
 ) -> Iterator[LogicConstruct]:
     """Each logic construct under *node*, *node* included."""
     if isinstance(node, nodes.For):
         if node.test is not None:
-            yield FilteredLoop(template_path, node.lineno)
+            yield FilteredLoop(template_path=template_path, line_number=node.lineno)
     elif type(node) not in _ALLOWED_NODE_TYPES:
-        yield RefusedNode(template_path, node.lineno, type(node).__name__)
+        yield RefusedNode(
+            template_path=template_path, line_number=node.lineno, node_type=type(node).__name__
+        )
     for child in node.iter_child_nodes():
-        if not _is_template_name(node, child):
-            yield from _find_logic_constructs_under(template_path, child)
+        if not _is_template_name(node, child=child):
+            yield from _find_logic_constructs_under(template_path, node=child)
 
 
-def _is_template_name(node: nodes.Node, child: nodes.Node) -> bool:
+def _is_template_name(node: nodes.Node, *, child: nodes.Node) -> bool:
     """Whether *child* is the constant name of the template *node* extends or includes."""
     return (
         isinstance(node, nodes.Extends | nodes.Include)

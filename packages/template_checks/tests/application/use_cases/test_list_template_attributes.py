@@ -10,7 +10,10 @@ from tests.fakes.adapters.driven.fake_template_reader import FakeTemplateReader
 def test_list_template_attributes_lists_what_the_directory_s_templates_read() -> None:
     template_reader = FakeTemplateReader(
         PurePath("/templates"),
-        {PurePath("files.html"): "{{ nav.prev_url }}", PurePath("row.html"): "{{ row.filename }}"},
+        templates_by_path={
+            PurePath("files.html"): "{{ nav.prev_url }}",
+            PurePath("row.html"): "{{ row.filename }}",
+        },
     )
 
     template_attribute_listing = ListTemplateAttributes(

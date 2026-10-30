@@ -24,7 +24,7 @@ def _engine() -> MatchingEngine:
     targets = parse_targets(
         yaml.safe_load((_FIXTURES / "golden_targets.yaml").read_text(encoding="utf-8"))
     )
-    return MatchingEngine(config, targets, max_filename_length=_MAX_FILENAME_LENGTH)
+    return MatchingEngine(config, targets=targets, max_filename_length=_MAX_FILENAME_LENGTH)
 
 
 def _corpus_cases() -> list[dict[str, Any]]:
@@ -97,7 +97,7 @@ def _is_archive_matcher() -> RegexMatcher:
     config = parse_matcher_config(yaml.safe_load(_MATCHER.read_text(encoding="utf-8")))
     token = config.tokens["is_archive"]
     assert isinstance(token, RegexDefinition)  # the shipped is_archive is a plain regex token
-    return RegexMatcher(token.pattern, token.flags)
+    return RegexMatcher(token.pattern, flags=token.flags)
 
 
 @pytest.mark.parametrize("filename", ["x.zip", "x.7z", "x.rar", "x.r01", "x.z01", "x.part1.rar"])
@@ -146,7 +146,7 @@ def _episode_number_matcher() -> RegexMatcher:
     config = parse_matcher_config(yaml.safe_load(_MATCHER.read_text(encoding="utf-8")))
     token = config.tokens["episode_number"]
     assert isinstance(token, RegexDefinition)
-    return RegexMatcher(token.pattern, token.flags)
+    return RegexMatcher(token.pattern, flags=token.flags)
 
 
 @pytest.mark.parametrize("filename", ["[Keroro].104.avi", "Keroro 155 rediffusion.mkv"])
@@ -176,7 +176,7 @@ def _shipped_token(name: str) -> RegexMatcher:
     config = parse_matcher_config(yaml.safe_load(_MATCHER.read_text(encoding="utf-8")))
     token = config.tokens[name]
     assert isinstance(token, RegexDefinition)
-    return RegexMatcher(token.pattern, token.flags)
+    return RegexMatcher(token.pattern, flags=token.flags)
 
 
 @pytest.mark.parametrize(
@@ -231,9 +231,9 @@ def test_explicit_id_ignores_unmarked_numbers_and_nxnn(filename: str) -> None:
     ],
 )
 def test_other_episode_vetoes_only_another_explicit_number(
-    filename: str, vetoes: tuple[str, ...]
+    *, filename: str, vetoes: tuple[str, ...]
 ) -> None:
-    explanation = _engine().explain([FileCandidate(filename=filename)], TargetId("062A"))
+    explanation = _engine().explain([FileCandidate(filename=filename)], target_id=TargetId("062A"))
     assert explanation is not None
     assert explanation.vetoes_fired == vetoes
 
@@ -253,6 +253,6 @@ def test_unmarked_or_long_numbers_veto_no_target(filename: str) -> None:
     # A false other_episode would drop a real VF file for every target.
     engine = _engine()
     for target_id in engine._resolved_by_target:
-        explanation = engine.explain([FileCandidate(filename=filename)], target_id)
+        explanation = engine.explain([FileCandidate(filename=filename)], target_id=target_id)
         assert explanation is not None
         assert "other_episode" not in explanation.vetoes_fired, target_id

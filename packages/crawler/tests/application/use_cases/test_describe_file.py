@@ -37,7 +37,10 @@ _OBSERVATION = FileObservation(
     NodeId("n1"),
 )
 _DECISION = DatedDecision(
-    _FILE, DecisionRecord(TargetId("062A"), "catalog", DecisionTier.CATALOG), _NOW, NodeId("n1")
+    _FILE,
+    DecisionRecord(target_id=TargetId("062A"), rule_name="catalog", tier=DecisionTier.CATALOG),
+    _NOW,
+    NodeId("n1"),
 )
 _HISTORY = FileHistory(
     _FILE, 100, (_OBSERVATION,), _OBSERVATION, (_DECISION,), ("Keroro 62a ITA.avi", "keroro.avi")
@@ -90,7 +93,7 @@ def _describe(
         source_reader=source_reader or FakeSourceReader(),
         explainer=MatchingExplainer(
             engine=MatchingEngine(
-                matcher_config, _TARGETS, max_filename_length=_MAX_FILENAME_LENGTH
+                matcher_config, targets=_TARGETS, max_filename_length=_MAX_FILENAME_LENGTH
             )
         ),
         wall_clock=FakeTime(_NOW).wall,

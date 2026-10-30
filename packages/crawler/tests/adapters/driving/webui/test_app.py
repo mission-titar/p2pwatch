@@ -154,7 +154,7 @@ _OBSERVATION = FileObservation(
 )
 _DECISION = DatedDecision(
     _FILE,
-    DecisionRecord(TargetId("062A"), "catalog", DecisionTier.CATALOG),
+    DecisionRecord(target_id=TargetId("062A"), rule_name="catalog", tier=DecisionTier.CATALOG),
     datetime.fromisoformat(SEEN_AT),
     NodeId("n1"),
 )
@@ -428,7 +428,9 @@ async def test_file_page_shows_each_decision_with_its_rule_tier_and_instant() ->
     decisions = tuple(
         DatedDecision(
             _FILE,
-            DecisionRecord(target_id, "numero_nu_confirmed", DecisionTier.DOWNLOAD),
+            DecisionRecord(
+                target_id=target_id, rule_name="numero_nu_confirmed", tier=DecisionTier.DOWNLOAD
+            ),
             at,
             NodeId("n1"),
         )
@@ -966,7 +968,10 @@ async def test_file_page_without_a_decision_says_so() -> None:
 async def test_file_page_with_a_decision_but_no_explanation_says_so() -> None:
     # The explainer has none for a target the current config does not know.
     unknown = replace(
-        _DECISION, decision=DecisionRecord(TargetId("S9E999Z"), "catalog", DecisionTier.CATALOG)
+        _DECISION,
+        decision=DecisionRecord(
+            target_id=TargetId("S9E999Z"), rule_name="catalog", tier=DecisionTier.CATALOG
+        ),
     )
     page = await _file_page(replace(_FILE_DESCRIPTION, file_history=_history(decisions=(unknown,))))
     assert "<dt>Target</dt><dd>S9E999Z</dd>" in page
@@ -1293,7 +1298,7 @@ def _catalog_entry(
 
 
 def _decision(target_id: TargetId, tier: str) -> DecisionRecord:
-    return DecisionRecord(target_id, "rule", DecisionTier(tier))
+    return DecisionRecord(target_id=target_id, rule_name="rule", tier=DecisionTier(tier))
 
 
 def test_resolve_target_display_empty_decisions_is_empty_list() -> None:

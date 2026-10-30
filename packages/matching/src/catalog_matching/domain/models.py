@@ -10,7 +10,7 @@ FOUND = "found"
 TARGET_STATUSES: frozenset[str] = frozenset({LOST, FOUND})
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class FileCandidate:
     """A file observed on the network, candidate for matching.
 
@@ -25,7 +25,7 @@ class FileCandidate:
     bitrate_kbps: float | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class TargetSegment:
     """A target episode segment (segment granularity, cf. spec §7).
 

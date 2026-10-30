@@ -60,7 +60,7 @@ def test_explainer_returns_explanation_on_matching_filename() -> None:
     """Filename containing 'keroro' → Explanation with non-empty rules_fired."""
     explainer = MatchingExplainer(
         engine=MatchingEngine(
-            _minimal_matcher(), _minimal_targets(), max_filename_length=_MAX_FILENAME_LENGTH
+            _minimal_matcher(), targets=_minimal_targets(), max_filename_length=_MAX_FILENAME_LENGTH
         )
     )
     explanation = explainer.explain(
@@ -79,7 +79,7 @@ def test_explainer_returns_none_for_unknown_target() -> None:
     """target_id unknown to the config → None."""
     explainer = MatchingExplainer(
         engine=MatchingEngine(
-            _minimal_matcher(), _minimal_targets(), max_filename_length=_MAX_FILENAME_LENGTH
+            _minimal_matcher(), targets=_minimal_targets(), max_filename_length=_MAX_FILENAME_LENGTH
         )
     )
     explanation = explainer.explain(
@@ -122,7 +122,7 @@ rules:
 
     explainer = MatchingExplainer(
         engine=MatchingEngine(
-            matcher_config, _minimal_targets(), max_filename_length=_MAX_FILENAME_LENGTH
+            matcher_config, targets=_minimal_targets(), max_filename_length=_MAX_FILENAME_LENGTH
         )
     )
     # 100 * 1024 * 1024 = 104857600 bytes = exactly 100.0 MiB
@@ -168,7 +168,7 @@ rules:
 
     explainer = MatchingExplainer(
         engine=MatchingEngine(
-            matcher_config, _minimal_targets(), max_filename_length=_MAX_FILENAME_LENGTH
+            matcher_config, targets=_minimal_targets(), max_filename_length=_MAX_FILENAME_LENGTH
         )
     )
     explanation = explainer.explain(
@@ -206,7 +206,7 @@ rules:
     )
     explainer = MatchingExplainer(
         engine=MatchingEngine(
-            matcher_config, _minimal_targets(), max_filename_length=_MAX_FILENAME_LENGTH
+            matcher_config, targets=_minimal_targets(), max_filename_length=_MAX_FILENAME_LENGTH
         )
     )
     explanation = explainer.explain(

@@ -19,7 +19,9 @@ class FilesystemPackageTreeReader(PackageTreeReader):
         except tomllib.TOMLDecodeError as error:
             raise BrokenInputError(f"{pyproject_path}: {error}") from error
         tests_without_unit = _read_table(
-            pyproject_path, pyproject, ("tool", "coverage_checks", "tests_without_unit")
+            pyproject_path,
+            pyproject=pyproject,
+            keys=("tool", "coverage_checks", "tests_without_unit"),
         )
         return PackageTree(
             modules=self._list("src/*/**/*.py"),
@@ -48,7 +50,7 @@ def _read_text(path: Path) -> str:
 
 
 def _read_table(
-    pyproject_path: Path, pyproject: dict[str, object], keys: tuple[str, ...]
+    pyproject_path: Path, *, pyproject: dict[str, object], keys: tuple[str, ...]
 ) -> dict[str, object]:
     """The table at *keys*, empty when absent, or a broken input naming the key that is no table."""
     table = pyproject

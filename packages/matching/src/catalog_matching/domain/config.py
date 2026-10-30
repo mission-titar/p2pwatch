@@ -13,14 +13,14 @@ from catalog_matching.domain.decision_tier import DecisionTier
 # --- LEAF token definitions (4 types, cf. spec §8.2) ---
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class KeywordDefinition:
     """``{ keyword: "mission titar" }``: phrase searched as a contiguous subsequence."""
 
     phrase: str
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class RegexDefinition:
     """``{ regex: "...", flags: "i" }``: fragments expanded at parse, interpolated per target."""
 
@@ -28,7 +28,7 @@ class RegexDefinition:
     flags: str = "i"
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class CoverageDefinition:
     """``{ coverage: title, min_coverage: 0.6, min_similarity: 0.85 }``: fuzzy word coverage.
 
@@ -42,7 +42,7 @@ class CoverageDefinition:
     min_similarity: float = 0.85
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class AttributeBetweenDefinition:
     """``{ attr_between: size_mib, min: 30, max: 600 }``: bound on a numeric attribute."""
 
@@ -61,28 +61,28 @@ class AttributeBetweenDefinition:
 type Operand = str | TokenReference | AllDefinition | AnyDefinition | NotDefinition
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class AllDefinition:
     """``all: [operand, ...]``: conjunction."""
 
     operands: tuple[Operand, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class AnyDefinition:
     """``any: [operand, ...]``: disjunction."""
 
     operands: tuple[Operand, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class NotDefinition:
     """``not: operand``: negation of a single operand."""
 
     operand: Operand
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class TokenReference:
     """Operand at point of use ``{ token: name, min_coverage?, min_similarity? }`` (EBNF §8.3).
 
@@ -113,7 +113,7 @@ Condition = AllDefinition | AnyDefinition | NotDefinition
 SCOPES: frozenset[str] = frozenset({"segment", "episode", "unattributed"})
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class Rule:
     """Ordered rule: ``{ name, tier, scope, <condition> }`` (cf. spec §8.3)."""
 
@@ -123,7 +123,7 @@ class Rule:
     condition: Condition
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class MatcherConfig:
     """Validated matcher config: named tokens, file-level vetoes (token names), ordered rules."""
 

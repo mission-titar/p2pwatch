@@ -22,7 +22,7 @@ class MeasuredCall(Protocol):
     def __call__(self, module: ModuleType, /) -> object: ...
 
 
-def _measure_sizes(package_directory: Path, calls_by_context: dict[str, MeasuredCall]) -> None:
+def _measure_sizes(package_directory: Path, *, calls_by_context: dict[str, MeasuredCall]) -> None:
     """Writes `src/pkg/sizes.py` and records its run as pytest-cov's per-test contexts do."""
     module = package_directory / "src" / "pkg" / "sizes.py"
     module.parent.mkdir(parents=True)
@@ -49,14 +49,14 @@ def _measure_sizes(package_directory: Path, calls_by_context: dict[str, Measured
 
 
 def test_unit_coverage_checks_the_package_in_the_cwd_and_names_it_in_the_summary(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    *, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     cwd, temporary_directory = tmp_path / "pkg", tmp_path / "tmp"
     (cwd / "tests").mkdir(parents=True)
     (cwd / "tests" / "test_sizes.py").write_text("")
     _measure_sizes(
         cwd,
-        {
+        calls_by_context={
             "tests/test_sizes.py::test_short|run": lambda sizes: sizes.is_short(3),
             "tests/test_sizes.py::test_long|run": lambda sizes: sizes.is_short(30),
         },
@@ -74,7 +74,7 @@ def test_unit_coverage_checks_the_package_in_the_cwd_and_names_it_in_the_summary
 
 
 def test_unit_coverage_without_recorded_coverage_ends_in_one_error_line_naming_the_data_file(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    *, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "src" / "pkg").mkdir(parents=True)
     (tmp_path / "src" / "pkg" / "sizes.py").write_text(SIZES)
@@ -91,7 +91,7 @@ def test_unit_coverage_without_recorded_coverage_ends_in_one_error_line_naming_t
 
 
 def test_unit_coverage_outside_a_package_ends_in_one_error_line_naming_its_pyproject(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    *, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     command_line = build_command_line(cwd=tmp_path, temporary_directory=tmp_path)
 

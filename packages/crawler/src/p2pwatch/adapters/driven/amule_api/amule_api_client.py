@@ -235,7 +235,9 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
                 raise DownloadRejectedError(
                     f"aMule downloads ed2k files only, not {request.file.network}"
                 )
-            link = build_ed2k_link(request.filename, request.size_bytes, request.file.native_id)
+            link = build_ed2k_link(
+                request.filename, size_bytes=request.size_bytes, native_id=request.file.native_id
+            )
             envelope = await self._call("POST", "/downloads", body={"links": [link]})
             outcomes = envelope.get("results")
             outcome = outcomes[0] if isinstance(outcomes, list) and outcomes else None

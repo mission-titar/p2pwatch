@@ -114,7 +114,7 @@ def test_read_module_source_of_an_absent_module_raises_a_broken_input_naming_it(
     ids=["tool", "coverage_checks", "tests_without_unit"],
 )
 def test_read_package_tree_of_a_pyproject_key_not_a_table_raises_a_broken_input_naming_it(
-    pyproject_text: str, key: str, tmp_path: Path
+    *, pyproject_text: str, key: str, tmp_path: Path
 ) -> None:
     (tmp_path / "pyproject.toml").write_text(pyproject_text)
     pyproject = re.escape(str(tmp_path / "pyproject.toml"))

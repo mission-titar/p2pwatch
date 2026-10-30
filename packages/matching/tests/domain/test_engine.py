@@ -81,29 +81,39 @@ _TWO_RULE_RAW: dict[str, object] = {
 }
 
 
-def _resolve(raw: dict[str, object], target: TargetSegment) -> tuple[MatcherConfig, ResolvedTarget]:
+def _resolve(
+    raw: dict[str, object], *, target: TargetSegment
+) -> tuple[MatcherConfig, ResolvedTarget]:
     config = parse_matcher_config(raw)
     resolved = MatcherResolver(config).resolve_target(target)
     return config, resolved
 
 
 def test_first_matching_rule_returns_index_zero_when_first_rule_true() -> None:
-    config, resolved = _resolve(_TWO_RULE_RAW, _TARGET_62A)
+    config, resolved = _resolve(_TWO_RULE_RAW, target=_TARGET_62A)
     candidate = FileCandidate(filename="Keroro N°062A.avi")
-    assert _first_matching_rule(config, resolved, candidate) == (0, "exact", "download")
+    assert _first_matching_rule(config, resolved=resolved, candidate=candidate) == (
+        0,
+        "exact",
+        "download",
+    )
 
 
 def test_first_matching_rule_skips_to_later_rule_when_first_false() -> None:
-    config, resolved = _resolve(_TWO_RULE_RAW, _TARGET_62A)
+    config, resolved = _resolve(_TWO_RULE_RAW, target=_TARGET_62A)
     # Not video + no 062A segment -> "exact" false; "keroro" true -> 2nd rule.
     candidate = FileCandidate(filename="keroro autre chose.txt")
-    assert _first_matching_rule(config, resolved, candidate) == (1, "large", "catalog")
+    assert _first_matching_rule(config, resolved=resolved, candidate=candidate) == (
+        1,
+        "large",
+        "catalog",
+    )
 
 
 def test_first_matching_rule_returns_none_when_no_rule_true() -> None:
-    config, resolved = _resolve(_TWO_RULE_RAW, _TARGET_62A)
+    config, resolved = _resolve(_TWO_RULE_RAW, target=_TARGET_62A)
     candidate = FileCandidate(filename="naruto 062.txt")
-    assert _first_matching_rule(config, resolved, candidate) is None
+    assert _first_matching_rule(config, resolved=resolved, candidate=candidate) is None
 
 
 # --- Canonical config §8.3 (reused by several tests) ---
@@ -130,7 +140,7 @@ _REAL_62A_FILENAME = (
 def _canonical_engine() -> MatchingEngine:
     config = parse_matcher_config(_CANONICAL_RAW)
     return MatchingEngine(
-        config, (_TARGET_62A, _TARGET_62B), max_filename_length=_MAX_FILENAME_LENGTH
+        config, targets=(_TARGET_62A, _TARGET_62B), max_filename_length=_MAX_FILENAME_LENGTH
     )
 
 
@@ -231,7 +241,7 @@ def test_evaluate_tiebreak_same_tier_lowest_rule_index_wins_over_target_id() -> 
         title="Les demoiselles cambrioleuses",
     )
     engine = MatchingEngine(
-        config, (target_low, target_high), max_filename_length=_MAX_FILENAME_LENGTH
+        config, targets=(target_low, target_high), max_filename_length=_MAX_FILENAME_LENGTH
     )
     candidate = FileCandidate(filename="N°099Z Les demoiselles cambrioleuses.avi")
     # by_segment / by_title are NOT attributable rule names -> single-winner fallback.
@@ -245,13 +255,13 @@ def test_evaluate_tiebreak_same_tier_lowest_rule_index_wins_over_target_id() -> 
 
 def test_evaluate_rejects_filename_over_max_length() -> None:
     config = parse_matcher_config(_CANONICAL_RAW)
-    engine = MatchingEngine(config, (_TARGET_62A,), max_filename_length=16)
+    engine = MatchingEngine(config, targets=(_TARGET_62A,), max_filename_length=16)
     assert engine.evaluate_file((FileCandidate(filename="Keroro N°062A.avi"),)) == []
 
 
 def test_evaluate_accepts_filename_at_or_below_max_length() -> None:
     config = parse_matcher_config(_CANONICAL_RAW)
-    engine = MatchingEngine(config, (_TARGET_62A,), max_filename_length=4096)
+    engine = MatchingEngine(config, targets=(_TARGET_62A,), max_filename_length=4096)
     decisions = engine.evaluate_file((FileCandidate(filename="Keroro N°062A.avi"),))
     assert len(decisions) == 1
     assert decisions[0].tier is DecisionTier.DOWNLOAD
@@ -261,7 +271,7 @@ def test_engine_resolves_each_target_once_at_construction() -> None:
     # Pre-resolution happens at construction: evaluate_file does not rebuild a tree.
     config = parse_matcher_config(_CANONICAL_RAW)
     engine = MatchingEngine(
-        config, (_TARGET_62A, _TARGET_62B), max_filename_length=_MAX_FILENAME_LENGTH
+        config, targets=(_TARGET_62A, _TARGET_62B), max_filename_length=_MAX_FILENAME_LENGTH
     )
     assert len(engine._resolved) == 2
     assert {rt.target.target_id for rt in engine._resolved} == {"062A", "062B"}
@@ -315,7 +325,7 @@ def test_explanation_single_rule_fired_and_no_coverage_token() -> None:
         ],
     }
     engine = MatchingEngine(
-        parse_matcher_config(raw), (_TARGET_62A,), max_filename_length=_MAX_FILENAME_LENGTH
+        parse_matcher_config(raw), targets=(_TARGET_62A,), max_filename_length=_MAX_FILENAME_LENGTH
     )
     decisions = engine.evaluate_file((FileCandidate(filename="N°062A.avi"),))
     assert len(decisions) == 1
@@ -339,7 +349,9 @@ def _fanout_engine() -> MatchingEngine:
     # enough to exercise every §3/§11 fan-out branch against the shipped matcher.yml.
     config = parse_matcher_config(_CANONICAL_RAW)
     return MatchingEngine(
-        config, (_TARGET_62A, _TARGET_62B, _TARGET_94A), max_filename_length=_MAX_FILENAME_LENGTH
+        config,
+        targets=(_TARGET_62A, _TARGET_62B, _TARGET_94A),
+        max_filename_length=_MAX_FILENAME_LENGTH,
     )
 
 
@@ -455,7 +467,7 @@ def test_evaluate_all_segment_signal_of_one_name_cuts_the_fan_out_of_another() -
 
 def test_evaluate_all_skips_an_over_long_name_but_keeps_the_others() -> None:
     config = parse_matcher_config(_CANONICAL_RAW)
-    engine = MatchingEngine(config, (_TARGET_62A,), max_filename_length=20)
+    engine = MatchingEngine(config, targets=(_TARGET_62A,), max_filename_length=20)
     decisions = engine.evaluate_file(
         [FileCandidate(filename="Keroro N°062A.avi"), FileCandidate(filename="x" * 21)]
     )
@@ -467,7 +479,9 @@ def test_evaluate_all_explains_with_the_winning_name() -> None:
     decisions = _fanout_engine().evaluate_file(
         [FileCandidate(filename="Keroro rediffusion.mkv"), winner]
     )
-    assert decisions[0].explanation == _fanout_engine().explain([winner], TargetId("062A"))
+    assert decisions[0].explanation == _fanout_engine().explain(
+        [winner], target_id=TargetId("062A")
+    )
 
 
 def test_evaluate_all_of_no_name_is_a_discard() -> None:
@@ -493,7 +507,7 @@ _SCOPE_RAW: dict[str, object] = {
 def _scope_triples(filename: str) -> list[tuple[str, str, str]]:
     engine = MatchingEngine(
         parse_matcher_config(_SCOPE_RAW),
-        (_TARGET_62A, _TARGET_62B),
+        targets=(_TARGET_62A, _TARGET_62B),
         max_filename_length=_MAX_FILENAME_LENGTH,
     )
     return _triples(engine.evaluate_file((FileCandidate(filename=filename),)))
@@ -540,7 +554,7 @@ _VETO_RAW: dict[str, object] = {
 def _veto_targets(*names: str, max_filename_length: int = 4096) -> list[str]:
     engine = MatchingEngine(
         parse_matcher_config(_VETO_RAW),
-        (_TARGET_62A, _TARGET_62B, _TARGET_94A),
+        targets=(_TARGET_62A, _TARGET_62B, _TARGET_94A),
         max_filename_length=max_filename_length,
     )
     decisions = engine.evaluate_file([FileCandidate(filename=name) for name in names])

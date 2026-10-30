@@ -187,7 +187,9 @@ def _plan_decisions(event: DecisionsRecorded) -> ObservabilityPlan:
     top = max((tier for _, tier in risen), key=lambda tier: tier.rank)
     match event.file.network:
         case Network.ED2K:
-            link = build_ed2k_link(event.filename, event.size_bytes, event.file.native_id)
+            link = build_ed2k_link(
+                event.filename, size_bytes=event.size_bytes, native_id=event.file.native_id
+            )
         case _:  # pragma: no cover
             assert_never(event.file.network)
     target_titles = tuple(TargetTitle(c.target_id, c.title) for c, _ in risen)

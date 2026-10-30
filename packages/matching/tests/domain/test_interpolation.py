@@ -14,39 +14,39 @@ def _target() -> TargetSegment:
 
 def test_interpolate_substitutes_absolute_number_and_segment_escaped() -> None:
     pattern = r"n[°o]?\s*0*{absolute_number}\s*{letter}"
-    assert interpolate(pattern, _target()) == r"n[°o]?\s*0*62\s*A"
+    assert interpolate(pattern, target=_target()) == r"n[°o]?\s*0*62\s*A"
 
 
 def test_interpolate_substitutes_season_and_seasonal_number() -> None:
-    assert interpolate(r"s0*{season}\s*e0*{seasonal_number}", _target()) == r"s0*2\s*e0*11"
+    assert interpolate(r"s0*{season}\s*e0*{seasonal_number}", target=_target()) == r"s0*2\s*e0*11"
 
 
 def test_interpolate_escapes_regex_special_title() -> None:
     target = TargetSegment(
         season=1, seasonal_number=1, absolute_number=1, letter="a", title="C++ (demo)"
     )
-    pattern = interpolate(r"prefix {title} suffix", target)
+    pattern = interpolate(r"prefix {title} suffix", target=target)
     assert pattern == r"prefix " + re.escape("C++ (demo)") + r" suffix"
     assert re.compile(pattern, re.ASCII).search("prefix C++ (demo) suffix") is not None
 
 
 def test_interpolate_unknown_placeholder_raises() -> None:
     with pytest.raises(InterpolationError, match="bogus"):
-        interpolate(r"a {bogus} b", _target())
+        interpolate(r"a {bogus} b", target=_target())
 
 
 def test_interpolate_former_number_placeholder_is_now_unknown() -> None:
     # {number} was renamed {absolute_number}: now unknown (fail-fast).
     with pytest.raises(InterpolationError, match="number"):
-        interpolate(r"{number}", _target())
+        interpolate(r"{number}", target=_target())
 
 
 def test_interpolate_leaves_regex_quantifier_braces_untouched() -> None:
     # An RE2 quantifier {2,4} is NOT a placeholder and stays intact.
-    assert interpolate(r"keroro\d{2,4}{absolute_number}", _target()) == r"keroro\d{2,4}62"
+    assert interpolate(r"keroro\d{2,4}{absolute_number}", target=_target()) == r"keroro\d{2,4}62"
 
 
 def test_interpolate_mono_gate_is_now_unknown() -> None:
     # {mono_gate} was retired with the multi-target fan-out: now an unknown placeholder.
     with pytest.raises(InterpolationError, match="mono_gate"):
-        interpolate(r"{mono_gate}KEROW", _target())
+        interpolate(r"{mono_gate}KEROW", target=_target())

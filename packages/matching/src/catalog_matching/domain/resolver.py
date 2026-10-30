@@ -44,7 +44,7 @@ from catalog_matching.domain.models import TargetSegment
 _TITLE_KEYWORD = "title"
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ResolvedTarget:
     """Matcher trees built for a target: named tokens + rules, by name."""
 
@@ -62,23 +62,29 @@ class MatcherResolver:
     def resolve_token(
         self,
         name: str,
+        *,
         target: TargetSegment,
         min_coverage_override: float | None = None,
         min_similarity_override: float | None = None,
     ) -> Matcher:
         """Builds the matcher of token ``name`` for ``target`` (coverage overrides)."""
         return self._build_definition(
-            self.config.tokens[name], target, min_coverage_override, min_similarity_override
+            self.config.tokens[name],
+            target=target,
+            min_coverage_override=min_coverage_override,
+            min_similarity_override=min_similarity_override,
         )
 
-    def resolve_rule(self, rule: Rule, target: TargetSegment) -> Matcher:
+    def resolve_rule(self, rule: Rule, *, target: TargetSegment) -> Matcher:
         """Builds the matcher of a rule's condition for ``target``."""
-        return self._build_definition(rule.condition, target, None, None)
+        return self._build_definition(
+            rule.condition, target=target, min_coverage_override=None, min_similarity_override=None
+        )
 
     def resolve_target(self, target: TargetSegment) -> ResolvedTarget:
         """Builds all the trees (tokens + rules) for ``target``."""
-        tokens = {name: self.resolve_token(name, target) for name in self.config.tokens}
-        rules = {rule.name: self.resolve_rule(rule, target) for rule in self.config.rules}
+        tokens = {name: self.resolve_token(name, target=target) for name in self.config.tokens}
+        rules = {rule.name: self.resolve_rule(rule, target=target) for rule in self.config.rules}
         return ResolvedTarget(
             target=target, matcher_by_token_name=tokens, matcher_by_rule_name=rules
         )
@@ -86,19 +92,26 @@ class MatcherResolver:
     def _build_operand(
         self,
         operand: Operand,
+        *,
         target: TargetSegment,
     ) -> Matcher:
         if isinstance(operand, str):
-            return self.resolve_token(operand, target)
+            return self.resolve_token(operand, target=target)
         if isinstance(operand, TokenReference):
             return self.resolve_token(
-                operand.name, target, operand.min_coverage, operand.min_similarity
+                operand.name,
+                target=target,
+                min_coverage_override=operand.min_coverage,
+                min_similarity_override=operand.min_similarity,
             )
-        return self._build_definition(operand, target, None, None)
+        return self._build_definition(
+            operand, target=target, min_coverage_override=None, min_similarity_override=None
+        )
 
     def _build_definition(
         self,
         token_definition: TokenDefinition,
+        *,
         target: TargetSegment,
         min_coverage_override: float | None,
         min_similarity_override: float | None,
@@ -107,7 +120,7 @@ class MatcherResolver:
             case KeywordDefinition(phrase=phrase):
                 return KeywordMatcher(phrase)
             case RegexDefinition(pattern=pattern, flags=flags):
-                return RegexMatcher(interpolate(pattern, target), flags=flags)
+                return RegexMatcher(interpolate(pattern, target=target), flags=flags)
             case CoverageDefinition(
                 reference=reference, min_coverage=min_coverage, min_similarity=min_similarity
             ):
@@ -126,10 +139,10 @@ class MatcherResolver:
             case AttributeBetweenDefinition(attr=attr, min_bound=min_bound, max_bound=max_bound):
                 return AttributeBetweenMatcher(attr, min_bound=min_bound, max_bound=max_bound)
             case AllDefinition(operands=operands):
-                return AllMatcher(tuple(self._build_operand(op, target) for op in operands))
+                return AllMatcher(tuple(self._build_operand(op, target=target) for op in operands))
             case AnyDefinition(operands=operands):
-                return AnyMatcher(tuple(self._build_operand(op, target) for op in operands))
+                return AnyMatcher(tuple(self._build_operand(op, target=target) for op in operands))
             case NotDefinition(operand=operand):
-                return NotMatcher(self._build_operand(operand, target))
+                return NotMatcher(self._build_operand(operand, target=target))
             case _:  # pragma: no cover - exhaustive (mypy proves it via assert_never)
                 assert_never(token_definition)

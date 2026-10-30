@@ -42,4 +42,4 @@ class MatchingExplainer:
         else:
             base_candidate = candidate_from_fields("", size_bytes, duration_seconds, bitrate_kbps)
         candidates = [replace(base_candidate, filename=filename) for filename in filenames]
-        return self._engine.explain(candidates, target_id)
+        return self._engine.explain(candidates, target_id=target_id)

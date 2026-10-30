@@ -12,7 +12,7 @@ from coverage_checks.domain.broken_input_error import BrokenInputError
 from coverage_checks.domain.test_coverage import Branch, TestCoverage
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class _Analysis:
     """A module's statements and branches, and those the selected tests ran."""
 
@@ -22,7 +22,12 @@ class _Analysis:
     branches_run: frozenset[Branch]
 
 
-_NOTHING_RUN = _Analysis(frozenset(), frozenset(), frozenset(), frozenset())
+_NOTHING_RUN = _Analysis(
+    statements=frozenset(),
+    branches=frozenset(),
+    statements_run=frozenset(),
+    branches_run=frozenset(),
+)
 
 
 class CoveragePyTestCoverageReader(TestCoverageReader):
@@ -39,18 +44,20 @@ class CoveragePyTestCoverageReader(TestCoverageReader):
     ) -> dict[PurePath, TestCoverage]:
         coverage = self._load()
         return {
-            module: self._read_test_coverage(coverage, module, own_test_files)
+            module: self._read_test_coverage(coverage, module=module, own_test_files=own_test_files)
             for module, own_test_files in own_test_files_by_module.items()
         }
 
     def _read_test_coverage(
-        self, coverage: Coverage, module: PurePath, own_test_files: Sequence[PurePath]
+        self, coverage: Coverage, *, module: PurePath, own_test_files: Sequence[PurePath]
     ) -> TestCoverage:
-        run = self._analyze(coverage, module, contexts=None)
+        run = self._analyze(coverage, module=module, contexts=None)
         own_contexts = [f"^{re.escape(test_file.as_posix())}::" for test_file in own_test_files]
         # An empty list of contexts would select every test.
         run_by_own_tests = (
-            self._analyze(coverage, module, own_contexts) if own_contexts else _NOTHING_RUN
+            self._analyze(coverage, module=module, contexts=own_contexts)
+            if own_contexts
+            else _NOTHING_RUN
         )
         return TestCoverage(
             statements=run.statements,
@@ -85,7 +92,7 @@ class CoveragePyTestCoverageReader(TestCoverageReader):
         return coverage
 
     def _analyze(
-        self, coverage: Coverage, module: PurePath, contexts: list[str] | None
+        self, coverage: Coverage, *, module: PurePath, contexts: list[str] | None
     ) -> _Analysis:
         """coverage.py's own analysis of *module*, restricted to the tests matching *contexts*."""
         try:

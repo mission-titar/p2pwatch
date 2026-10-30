@@ -44,7 +44,7 @@ class RegexMatcher(Matcher):
     raises ``re.error`` at construction (config validation delegated to Plan 2b).
     """
 
-    def __init__(self, pattern: str, flags: str = "i") -> None:
+    def __init__(self, pattern: str, *, flags: str = "i") -> None:
         if "i" in flags:
             pattern = "(?i)" + pattern
         self._compiled = re.compile(pattern, re.ASCII)
@@ -81,7 +81,9 @@ STOPWORDS_FR: frozenset[str] = frozenset(
 class CoverageMatcher(Matcher):
     """Fuzzy fraction of ``reference``'s significant words that are covered (cf. spec §8.2)."""
 
-    def __init__(self, reference: str, min_coverage: float, min_similarity: float = 0.85) -> None:
+    def __init__(
+        self, reference: str, *, min_coverage: float, min_similarity: float = 0.85
+    ) -> None:
         self._reference_words = [t for t in split_words(reference) if t not in STOPWORDS_FR]
         self._min_coverage = min_coverage
         self._min_similarity = min_similarity
@@ -126,6 +128,7 @@ class AttributeBetweenMatcher(Matcher):
     def __init__(
         self,
         attr: str,
+        *,
         min_bound: float | None = None,
         max_bound: float | None = None,
     ) -> None:

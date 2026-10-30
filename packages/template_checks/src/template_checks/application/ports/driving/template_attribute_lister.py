@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import PurePath
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class TemplateAttributeListing:
     """The attribute names a directory's templates read."""
 

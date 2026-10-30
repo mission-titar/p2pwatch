@@ -42,7 +42,9 @@ def test_unit_coverage_prints_each_problem_then_the_package_s_summary_and_fails(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     unit_coverage_checker = FakeUnitCoverageChecker(
-        _report(StaleListing("tests/gone/"), StaleListing("tests/test_gone.py"))
+        _report(
+            StaleListing(listed_path="tests/gone/"), StaleListing(listed_path="tests/test_gone.py")
+        )
     )
 
     assert _command_line(unit_coverage_checker).run(["unit-coverage"]) == 1
@@ -60,30 +62,30 @@ def test_unit_coverage_prints_each_problem_then_the_package_s_summary_and_fails(
     ("problem", "problem_line"),
     [
         (
-            ListingWithoutReason("tests/test_sql.py"),
+            ListingWithoutReason(listed_path="tests/test_sql.py"),
             "tests/test_sql.py: listed in tests_without_unit without its reason",
         ),
         (
-            UnitNameCollision(PurePath("src/pkg/main.py")),
+            UnitNameCollision(module=PurePath("src/pkg/main.py")),
             "src/pkg/main.py: its tests would be named like those of __main__.py beside it;"
             " rename it",
         ),
         (
-            ListedTestOfModule(PurePath("tests/test_sizes.py"), SIZES),
+            ListedTestOfModule(test_file=PurePath("tests/test_sizes.py"), module=SIZES),
             "tests/test_sizes.py: listed in tests_without_unit, but tests src/pkg/sizes.py",
         ),
         (
-            UnmappedTestFile(PurePath("tests/test_nothing.py")),
+            UnmappedTestFile(test_file=PurePath("tests/test_nothing.py")),
             "tests/test_nothing.py: tests no module of src; name it after the module it tests,"
             " or list it in [tool.coverage_checks] tests_without_unit with its reason",
         ),
         (
-            StaleListing("tests/test_gone.py"),
+            StaleListing(listed_path="tests/test_gone.py"),
             "tests/test_gone.py: listed in tests_without_unit, but names no test file",
         ),
         (
             Shortfall(
-                SIZES,
+                module=SIZES,
                 own_test_files=(PurePath("tests/test_sizes.py"), PurePath("tests/test_sizes_x.py")),
                 unrun_statements=(5, 6, 7),
                 unrun_branches=((5, 6), (5, 7)),
@@ -92,12 +94,12 @@ def test_unit_coverage_prints_each_problem_then_the_package_s_summary_and_fails(
             " tests (tests/test_sizes.py, tests/test_sizes_x.py)",
         ),
         (
-            Shortfall(SIZES, own_test_files=(), unrun_statements=(7,), unrun_branches=()),
+            Shortfall(module=SIZES, own_test_files=(), unrun_statements=(7,), unrun_branches=()),
             "src/pkg/sizes.py: statements 7 run by none of its own tests (it has none)",
         ),
         (
             Shortfall(
-                SIZES,
+                module=SIZES,
                 own_test_files=(PurePath("tests/test_sizes.py"),),
                 unrun_statements=(),
                 unrun_branches=((2, -1),),
@@ -107,7 +109,7 @@ def test_unit_coverage_prints_each_problem_then_the_package_s_summary_and_fails(
     ],
 )
 def test_unit_coverage_words_each_kind_of_problem_on_a_line_of_its_own(
-    problem: UnitCoverageProblem, problem_line: str, capsys: pytest.CaptureFixture[str]
+    *, problem: UnitCoverageProblem, problem_line: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     assert _command_line(FakeUnitCoverageChecker(_report(problem))).run(["unit-coverage"]) == 1
 
