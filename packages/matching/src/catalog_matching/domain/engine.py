@@ -80,7 +80,7 @@ def to_record(decision: MatchDecision) -> DecisionRecord:
     )
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(kw_only=True, frozen=True)
 class _RuleHit:
     """The first rule ``candidate`` fires for one resolved target."""
 

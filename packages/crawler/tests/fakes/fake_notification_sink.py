@@ -7,7 +7,7 @@ class FakeNotificationSink(BaseHTTPRequestHandler):
 
     received: list[tuple[str, str]] = []
 
-    def do_POST(self) -> None:  # noqa: N802 (http.server's name)
+    def do_POST(self) -> None:  # http.server's name
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         self.received.append((self.headers["User-Agent"], body["title"]))
         self.send_response(200)
