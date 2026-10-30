@@ -43,10 +43,10 @@ import subprocess
 import tempfile
 import time
 import uuid
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Iterator, Mapping
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import pytest
 
@@ -186,9 +186,13 @@ def _exec(service: str, *command: str, files: tuple[Path, ...]) -> str:
     return compose_run.stdout.strip()
 
 
+class ReadinessProbe(Protocol):
+    def __call__(self) -> str: ...
+
+
 def _wait_for(
     label: str,
-    probe: Callable[[], str],
+    probe: ReadinessProbe,
     target: str,
     files: tuple[Path, ...],
     *,

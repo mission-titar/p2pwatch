@@ -1,13 +1,17 @@
 import json
 import re
-from collections.abc import Callable
 from pathlib import Path, PurePath
+from typing import Protocol
 
 import pytest
 
 from vex_checks.adapters.driven.syft_sbom_reader import SyftSbomReader
 from vex_checks.domain.broken_input_error import BrokenInputError
 from vex_checks.domain.sbom_components import DeclaredComponent, DpkgPackage
+
+
+class SbomRead(Protocol):
+    def __call__(self, sbom_path: PurePath, /) -> object: ...
 
 
 def _write_sbom(tmp_path: Path, artifacts: list[dict[str, str]]) -> Path:
@@ -62,7 +66,7 @@ def test_read_declared_components_keeps_only_generic_purl_artifacts(tmp_path: Pa
     ids=["dpkg-packages", "declared-components"],
 )
 def test_reading_an_absent_sbom_raises_a_broken_input_naming_it(
-    read: Callable[[PurePath], object], tmp_path: Path
+    read: SbomRead, tmp_path: Path
 ) -> None:
     sbom_path = tmp_path / "absent.syft.json"
 
@@ -79,7 +83,7 @@ _READS = pytest.mark.parametrize(
 
 @_READS
 def test_reading_a_directory_raises_a_broken_input_naming_it(
-    read: Callable[[PurePath], object], tmp_path: Path
+    read: SbomRead, tmp_path: Path
 ) -> None:
     with pytest.raises(BrokenInputError, match=f"^{re.escape(str(tmp_path))}: Is a directory$"):
         read(tmp_path)
@@ -87,7 +91,7 @@ def test_reading_a_directory_raises_a_broken_input_naming_it(
 
 @_READS
 def test_reading_an_sbom_not_in_utf_8_raises_a_broken_input_naming_it(
-    read: Callable[[PurePath], object], tmp_path: Path
+    read: SbomRead, tmp_path: Path
 ) -> None:
     sbom_path = tmp_path / "sbom.syft.json"
     sbom_path.write_bytes(b'{"artifacts": "\xe9"}')
@@ -98,7 +102,7 @@ def test_reading_an_sbom_not_in_utf_8_raises_a_broken_input_naming_it(
 
 @_READS
 def test_reading_an_sbom_not_in_json_raises_a_broken_input_naming_it(
-    read: Callable[[PurePath], object], tmp_path: Path
+    read: SbomRead, tmp_path: Path
 ) -> None:
     sbom_path = tmp_path / "sbom.syft.json"
     sbom_path.write_text("{")
@@ -120,7 +124,7 @@ def test_reading_an_sbom_not_in_json_raises_a_broken_input_naming_it(
     ids=["no-artifacts", "artifacts-not-a-list", "artifact-not-an-object", "no-version", "purl"],
 )
 def test_reading_a_json_not_a_syft_sbom_raises_a_broken_input_naming_it(
-    read: Callable[[PurePath], object], document: object, tmp_path: Path
+    read: SbomRead, document: object, tmp_path: Path
 ) -> None:
     sbom_path = tmp_path / "sbom.syft.json"
     sbom_path.write_text(json.dumps(document))

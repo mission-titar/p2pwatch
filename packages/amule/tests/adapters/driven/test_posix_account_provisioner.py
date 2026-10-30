@@ -1,9 +1,9 @@
 """PosixAccountProvisioner: groupadd then useradd, each only when its own lookup misses."""
 
-from collections.abc import Callable
 from pathlib import Path
 
 from p2pwatch_amule.adapters.driven.posix_account_provisioner import (
+    AccountFinder,
     CommandRunner,
     PosixAccountProvisioner,
 )
@@ -17,7 +17,7 @@ USERADD_NOLOGIN = [*USERADD, "-s", "/usr/sbin/nologin", "amule"]
 CHECKED = {"check": True, "text": True}
 
 
-def _lookup(*, is_present: bool) -> Callable[[str], object]:
+def _lookup(*, is_present: bool) -> AccountFinder:
     """A ``getgrnam`` or ``getpwnam`` that finds ``amule`` or raises ``KeyError``."""
 
     def find(name: str) -> object:

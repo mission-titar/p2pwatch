@@ -1,9 +1,10 @@
 """D4's and D5's reads of a source's history on a real catalog (source points spec, section 7)."""
 
 import sqlite3
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Protocol
 
 import pytest
 
@@ -170,7 +171,11 @@ def test_has_points_before_reads_only_the_given_nodes_points_before(
     assert source_point_store.has_points_before(_T0 + timedelta(microseconds=1), NodeId("n1"))
 
 
-def _steps(connection: sqlite3.Connection, read: Callable[[], object]) -> int:
+class MeasuredRead(Protocol):
+    def __call__(self) -> object: ...
+
+
+def _steps(connection: sqlite3.Connection, read: MeasuredRead) -> int:
     """The SQLite VM instructions ``read`` runs."""
     steps = 0
 

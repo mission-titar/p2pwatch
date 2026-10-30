@@ -2,10 +2,10 @@
 ``SqliteDatabaseOpener``, for a test that only needs an open database."""
 
 import sqlite3
-from collections.abc import Callable
 from pathlib import Path
 
 from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import PendingMigrations
+from p2pwatch.adapters.driven.persistence_sqlite.reader_opener import ReaderOpener
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     SqliteDatabaseOpener,
 )
@@ -31,7 +31,7 @@ class _PragmaSettingCopier(SqlitePreMigrationCopier):
         connection: sqlite3.Connection,
         path: Path,
         pending: PendingMigrations,
-        open_reader: Callable[[Path], sqlite3.Connection],
+        open_reader: ReaderOpener,
     ) -> None:
         connection.execute(self._pragma)
         super().ensure_copy(connection, path, pending, open_reader)

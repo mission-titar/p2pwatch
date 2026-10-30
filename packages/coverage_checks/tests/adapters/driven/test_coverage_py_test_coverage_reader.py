@@ -3,9 +3,10 @@
 import gc
 import importlib.util
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from pathlib import Path, PurePath
 from types import ModuleType
+from typing import Protocol
 
 import pytest
 from coverage import Coverage
@@ -25,7 +26,9 @@ def is_short(size):
     return False
 """
 
-type Call = Callable[[Mapping[str, ModuleType]], object]
+
+class MeasuredCall(Protocol):
+    def __call__(self, modules: Mapping[str, ModuleType], /) -> object: ...
 
 
 def _no_per_test_coverage_message(package_directory: Path) -> str:
@@ -38,7 +41,7 @@ def _no_per_test_coverage_message(package_directory: Path) -> str:
 def _measure(
     package_directory: Path,
     source_by_module: Mapping[str, str],
-    calls_by_context: Mapping[str, Call],
+    calls_by_context: Mapping[str, MeasuredCall],
     *,
     branch: bool = True,
 ) -> None:

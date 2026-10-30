@@ -1,6 +1,10 @@
-from collections.abc import Callable
+from typing import Protocol
 
 from p2pwatch_amule.application.ports.driven.forwarded_port_client import ForwardedPortClient
+
+
+class ReadCallback(Protocol):
+    def __call__(self) -> None: ...
 
 
 class FakeForwardedPortClient(ForwardedPortClient):
@@ -8,7 +12,7 @@ class FakeForwardedPortClient(ForwardedPortClient):
 
     def __init__(self) -> None:
         self.forwarded_port: int | None = 51820
-        self.on_read: Callable[[], None] = lambda: None
+        self.on_read: ReadCallback = lambda: None
 
     def read_forwarded_port(self) -> int | None:
         self.on_read()

@@ -1,6 +1,10 @@
-from collections.abc import Callable
+from typing import Protocol
 
 from p2pwatch_amule.application.ports.driven.service_supervisor import ServiceSupervisor
+
+
+class StopCallback(Protocol):
+    def __call__(self) -> None: ...
 
 
 class FakeServiceSupervisor(ServiceSupervisor):
@@ -10,7 +14,7 @@ class FakeServiceSupervisor(ServiceSupervisor):
     def __init__(self, actions: list[str]) -> None:
         self.actions = actions
         self.is_amuled_stopped = True
-        self.on_stop_amuled: Callable[[], None] = lambda: None
+        self.on_stop_amuled: StopCallback = lambda: None
 
     def enable_port_sync(self) -> None:
         self.actions.append("enable port-sync")

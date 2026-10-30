@@ -2,10 +2,11 @@
 
 import re
 import sqlite3
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Protocol
 
 import pytest
 
@@ -774,7 +775,13 @@ def test_latest_obs_seeks_per_file_instead_of_scanning_observations(
     assert not any(step.startswith("SCAN o") for step in plan), f"{label} scans: {plan}"
 
 
-_COUNTERS: dict[str, Callable[[SqliteCatalogFileReader, str | None], object]] = {
+class FileCounter(Protocol):
+    def __call__(
+        self, reader: SqliteCatalogFileReader, /, *, search_text: str | None
+    ) -> object: ...
+
+
+_COUNTERS: dict[str, FileCounter] = {
     "read_matched_and_total_file_counts": lambda reader, search_text: (
         reader.read_matched_and_total_file_counts(
             target_id=None, tier=None, search_text=search_text
@@ -801,5 +808,7 @@ def test_counters_read_observations_only_for_a_name_filter(
 
     with ThreadReadConnections(catalog_db, open_reader) as thread_read_connections:
         thread_read_connections.connection().set_authorizer(record)
-        _COUNTERS[counter](SqliteCatalogFileReader(thread_read_connections), search_text)
+        _COUNTERS[counter](
+            SqliteCatalogFileReader(thread_read_connections), search_text=search_text
+        )
     assert ("observations" in tables) is (search_text is not None)
