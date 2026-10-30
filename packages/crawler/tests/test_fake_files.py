@@ -4,6 +4,8 @@ import ast
 from collections import defaultdict
 from pathlib import Path
 
+import pytest
+
 from tests.support.port_implementations import (
     PACKAGES_DIR,
     PORTS_RING,
@@ -34,13 +36,13 @@ def _is_record(definition: ClassDefinition) -> bool:
     )
 
 
-def _is_callback_protocol(definition: ClassDefinition) -> bool:
+def _is_callback_protocol(class_node: ast.ClassDef) -> bool:
     """A `Protocol` whose only member is `__call__`, which the double receives in its file."""
-    class_node = class_def(definition)
     bases = [ast.unparse(base) for base in class_node.bases]
     members = [node for node in class_node.body if not isinstance(node, ast.Expr)]
-    return bases == ["Protocol"] and [
-        isinstance(member, ast.FunctionDef) and member.name for member in members
+    return bases in (["Protocol"], ["typing.Protocol"]) and [
+        isinstance(member, ast.FunctionDef | ast.AsyncFunctionDef) and member.name
+        for member in members
     ] == ["__call__"]
 
 
@@ -55,7 +57,7 @@ def _doubles_by_file() -> dict[Path, list[ClassDefinition]]:
         file: [
             definition
             for definition in class_definitions(file)
-            if not _is_record(definition) and not _is_callback_protocol(definition)
+            if not _is_record(definition) and not _is_callback_protocol(class_def(definition))
         ]
         for file in fakes_files
     }
@@ -82,6 +84,35 @@ def _writer_reader_pair(reader_name: str) -> list[str]:
     """The sorted names of the pair whose reader is `reader_name`, which one store implements."""
     thing = reader_name.removesuffix("Reader")
     return [f"{thing}Reader", f"{thing}Writer"]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "class Runner(Protocol):\n    def __call__(self) -> None: ...",
+        "class Loop(Protocol):\n    async def __call__(self) -> None: ...",
+        "class Runner(typing.Protocol):\n    def __call__(self) -> None: ...",
+    ],
+)
+def test_a_protocol_whose_only_member_is_call_is_a_callback_protocol(*, source: str) -> None:
+    [class_node] = ast.parse(source).body
+    assert isinstance(class_node, ast.ClassDef)
+    assert _is_callback_protocol(class_node)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "class Runner(Protocol):\n    def __call__(self) -> None: ...\n"
+        "    def stop(self) -> None: ...",
+        "class Runner(Protocol):\n    def run(self) -> None: ...",
+        "class Runner(Port):\n    def __call__(self) -> None: ...",
+    ],
+)
+def test_another_class_is_no_callback_protocol(*, source: str) -> None:
+    [class_node] = ast.parse(source).body
+    assert isinstance(class_node, ast.ClassDef)
+    assert not _is_callback_protocol(class_node)
 
 
 def test_each_fakes_file_holds_one_double_named_after_it() -> None:
