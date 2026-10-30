@@ -7,6 +7,7 @@ validation (DAG/depth) and the regex compile-check are added in Task 6.
 """
 
 import re
+import unicodedata
 from typing import Any
 
 from catalog_matching.domain.config import (
@@ -68,6 +69,14 @@ def _require_key(mapping: dict[str, Any], *, key: str, error_label: str) -> Any:
     if key not in mapping:
         raise MatchingConfigError(f"{error_label}: key {key!r} missing")
     return mapping[key]
+
+
+def _refuse_control_characters(text: str, *, error_label: str) -> str:
+    """``text``, unless it holds a control character (``Cc``: C0, DEL, C1), which no identifier
+    holds: the files page splits target ids and rule names on U+001F."""
+    if any(unicodedata.category(char) == "Cc" for char in text):
+        raise MatchingConfigError(f"{error_label} {text!r} holds a control character")
+    return text
 
 
 def _parse_operand(raw: Any) -> Operand:
@@ -269,6 +278,7 @@ def _parse_rule(raw: Any) -> Rule:
     name = str(mapping.get("name", ""))
     if not name:
         raise MatchingConfigError(f"rule without 'name': {raw!r}")
+    _refuse_control_characters(name, error_label="rule name")
     tier = mapping.get("tier")
     if tier not in DecisionTier:
         known_tiers = sorted(member.value for member in DecisionTier)
@@ -561,7 +571,10 @@ def parse_targets(raw: dict[str, Any]) -> tuple[TargetSegment, ...]:
                     season=season,
                     seasonal_number=seasonal_number,
                     absolute_number=absolute_number,
-                    letter=str(_require_key(segment_mapping, key="letter", error_label="segment")),
+                    letter=_refuse_control_characters(
+                        str(_require_key(segment_mapping, key="letter", error_label="segment")),
+                        error_label="segment letter",
+                    ),
                     title=str(_require_key(segment_mapping, key="title", error_label="segment")),
                     status=status,
                 )

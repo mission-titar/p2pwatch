@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from p2pwatch.domain.invalid_config import InvalidConfigError
+from p2pwatch.domain.value_bounds import require_well_formed_text
 
 _ENV_REFERENCE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
@@ -44,6 +45,10 @@ def _interpolate_text(text: str, *, env: Mapping[str, str], key_path: str) -> st
             raise InvalidConfigError(
                 key_path, message=f"environment variable {name!r} referenced but not set"
             )
+        try:
+            require_well_formed_text(env[name], error_label=f"environment variable {name!r}")
+        except ValueError as error:
+            raise InvalidConfigError(key_path, message=str(error)) from error
         return env[name]
 
     return _ENV_REFERENCE.sub(_replace, text)

@@ -70,3 +70,17 @@ def test_an_unset_variable_is_refused_under_its_key_path(
         interpolate_document(document, env={"SET": "x"})
     assert error.value.key == key_path
     assert error.value.message == "environment variable 'UNSET' referenced but not set"
+
+
+# ``os.environ`` decodes a byte that is not UTF-8 as a lone surrogate (``surrogateescape``).
+@pytest.mark.parametrize("value", ["\udcff", "keroro\ud800"])
+def test_a_variable_that_is_not_utf8_is_refused_under_its_key_path_naming_it(value: str) -> None:
+    with pytest.raises(InvalidConfigError) as error:
+        interpolate_document({"search": {"keywords": ["${KEYWORD}"]}}, env={"KEYWORD": value})
+    assert error.value.key == "search.keywords[0]"
+    assert error.value.message == "environment variable 'KEYWORD' is not valid UTF-8"
+
+
+def test_a_variable_no_value_references_is_never_checked() -> None:
+    document = {"url": "${SET}"}
+    assert interpolate_document(document, env={"SET": "x", "OTHER": "\udcff"}) == {"url": "x"}
