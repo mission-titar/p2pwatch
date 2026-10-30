@@ -137,15 +137,25 @@ def test_utc_timestamp_keeps_the_seconds_of_a_period_end() -> None:
 
 def test_average_rate_is_the_bytes_over_the_range_length() -> None:
     ten_240_seconds_later = _TUESDAY_8PM + timedelta(seconds=10_240)
-    assert average_rate(10 * 1024 * 1024, _TUESDAY_8PM, ten_240_seconds_later) == "1 KB/s"
+    assert (
+        average_rate(
+            10 * 1024 * 1024, first_seen_at=_TUESDAY_8PM, last_seen_at=ten_240_seconds_later
+        )
+        == "1 KB/s"
+    )
 
 
 def test_average_rate_of_a_range_without_bytes_is_empty() -> None:
-    assert average_rate(0, _TUESDAY_8PM, _TUESDAY_8PM + timedelta(seconds=30)) == ""
+    assert (
+        average_rate(
+            0, first_seen_at=_TUESDAY_8PM, last_seen_at=_TUESDAY_8PM + timedelta(seconds=30)
+        )
+        == ""
+    )
 
 
 def test_average_rate_of_a_single_read_is_empty() -> None:
-    assert average_rate(1024, _TUESDAY_8PM, _TUESDAY_8PM) == ""
+    assert average_rate(1024, first_seen_at=_TUESDAY_8PM, last_seen_at=_TUESDAY_8PM) == ""
 
 
 def test_an_interval_end_shows_in_the_webui_format_and_in_a_datetime_local_input() -> None:

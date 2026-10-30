@@ -19,7 +19,7 @@ from p2pwatch.domain.policy_fingerprint import policy_fingerprint
 
 
 def load_config(
-    config_path: Path, targets_path: Path, matcher_path: Path, env: Mapping[str, str]
+    config_path: Path, *, targets_path: Path, matcher_path: Path, env: Mapping[str, str]
 ) -> LoadedConfig:
     """Loads ``crawler.yml``, ``targets.yml`` and ``matcher.yml``; any of them invalid or
     broken raises ``InvalidConfigError``, which refuses the crawl.
@@ -28,7 +28,7 @@ def load_config(
     comment-only edit still triggers one harmless re-evaluation at the next start.
     """
     try:
-        crawler_config = read_crawler_config(config_path, env)
+        crawler_config = read_crawler_config(config_path, env=env)
         targets = read_targets(targets_path)
         matcher_config = read_matcher_config(matcher_path)
     except BrokenInputError as error:
@@ -43,10 +43,10 @@ def load_config(
     )
 
 
-def read_crawler_config(config_path: Path, env: Mapping[str, str]) -> CrawlerConfig:
+def read_crawler_config(config_path: Path, *, env: Mapping[str, str]) -> CrawlerConfig:
     """``crawler.yml`` parsed, its ``${NAME}`` resolved from ``env``; ``InvalidConfigError`` on a
     wrong content, ``BrokenInputError`` on a file it cannot read."""
-    return parse_crawler_config(interpolate_document(load_yaml(config_path), env))
+    return parse_crawler_config(interpolate_document(load_yaml(config_path), env=env))
 
 
 def read_targets(targets_path: Path) -> tuple[TargetSegment, ...]:

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class NavItemDisplay:
     """One entry of the shared top nav, precomputed (W-D8: no template logic).
 
@@ -28,7 +28,7 @@ class NavItemDisplay:
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class TargetCoverageDisplay:
     """Dashboard row: a target's coverage."""
 
@@ -39,7 +39,7 @@ class TargetCoverageDisplay:
     file_count: int
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ChannelLineDisplay:
     """Dashboard row: one channel of a client, each field "yes", "no" or "unknown"."""
 
@@ -48,7 +48,7 @@ class ChannelLineDisplay:
     connectable: str
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ClientLineDisplay:
     """Dashboard block: one client; an old or missing reading has no channel line."""
 
@@ -64,7 +64,7 @@ class ClientLineDisplay:
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ObservationDisplay:
     """One observation of a file's timeline, precomputed."""
 
@@ -75,7 +75,7 @@ class ObservationDisplay:
     observed_at: str
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class DecisionDisplay:
     """A current decision of a file, its instant in ISO-8601 to the microsecond."""
 
@@ -90,7 +90,7 @@ class DecisionDisplay:
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class TrackedDownloadDisplay:
     """One line of /node's downloads, its instants in ISO-8601 to the microsecond, an unknown
     one blank."""
@@ -105,7 +105,7 @@ class TrackedDownloadDisplay:
     failure_reason: str
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class BackoffStateDisplay:
     """One line of /node's backoff section (precomputed for the template)."""
 
@@ -115,7 +115,7 @@ class BackoffStateDisplay:
     retry_at_display: str
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class NodeStateDisplay:
     """The node's identity and downloads, as the dashboard and /node show them, blank until
     the node records its id."""
@@ -130,7 +130,7 @@ class NodeStateDisplay:
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class DecisionCellDisplay:
     """One current decision, resolved for display: the target locator and its episode title.
 
@@ -142,7 +142,7 @@ class DecisionCellDisplay:
     title: str
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class CatalogEntryDisplay:
     """Row of the paginated file list: all fields precomputed (webui spec W-D8, Task 3/9).
 
@@ -175,7 +175,7 @@ class CatalogEntryDisplay:
     tier_display: str  # shared tier, or "target_id: tier" per decision joined with " · "
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class PageNavDisplay:
     """Paginated navigation of a list: ``prev_urls`` and ``next_urls`` hold 0 or 1 element, none
     at the list's end."""
@@ -185,7 +185,7 @@ class PageNavDisplay:
     next_urls: tuple[str, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class FilesSummaryDisplay:
     """Precomputed summary line for the /files explorer (spec W-D8: no template logic).
 
@@ -198,7 +198,7 @@ class FilesSummaryDisplay:
     toggle_url: str
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SortHeaderDisplay:
     """A sortable column header, fully precomputed (W-D8). ``url`` re-sorts by this column
     (flipping direction when it is the active one, else a per-column default direction),
@@ -210,7 +210,7 @@ class SortHeaderDisplay:
     indicator: str  # "" | "asc" | "desc"
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SortHeadersDisplay:
     """The five sortable headers of the /files table, one attribute per column so the fixed
     thead can interpolate ``{{ headers.name.url }}`` etc. with no template logic (W-D8)."""
@@ -222,7 +222,7 @@ class SortHeadersDisplay:
     tier: SortHeaderDisplay
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class TierFacetDisplay:
     """One tier-filter option with its live count, precomputed (W-D8). ``label`` is the display
     tier (``catalog`` masked to ``"unidentified"``, or the literal ``"all"`` reset);
@@ -236,7 +236,7 @@ class TierFacetDisplay:
     selected_flag: str
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class HiddenInputDisplay:
     """One hidden form field carried by a GET form (name/value already stringified)."""
 
@@ -244,7 +244,7 @@ class HiddenInputDisplay:
     value: str
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SearchBarDisplay:
     """The filename search form, precomputed (W-D8): ``search_text`` prefills the text input,
     ``hidden`` carries every active param except ``search`` and ``page``, which a search keeps."""
@@ -253,7 +253,7 @@ class SearchBarDisplay:
     hidden: tuple[HiddenInputDisplay, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class IntervalLinkDisplay:
     """A preset of the interval selector: its label and its href."""
 
@@ -261,7 +261,7 @@ class IntervalLinkDisplay:
     url: str
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class IntervalSelectorDisplay:
     """A page's interval selector (source points spec, D6), precomputed (W-D8): ``hidden`` carries
     the page's other params, ``notices`` and ``next_urls`` hold 0 or 1 element."""
@@ -276,7 +276,7 @@ class IntervalSelectorDisplay:
     next_urls: tuple[str, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class FilterBarDisplay:
     """The /files filter bar: the search form + the tier facet. Passed as a 0-or-1-element tuple
     so ``handle_target`` can reuse ``files.html`` with an empty bar (like ``summaries``)."""
@@ -290,14 +290,14 @@ class FilterBarDisplay:
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class QueryRowDisplay:
     """One row of a query's answer: its cells already text (NULL as the literal "NULL")."""
 
     cells: tuple[str, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class QueryAnswerDisplay:
     """A query's answer, all fields precomputed for the template (W-D8).
 
@@ -312,7 +312,7 @@ class QueryAnswerDisplay:
     truncated: tuple[str, ...]  # 0 or 1 message: the truncation banner text
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class DbOptionDisplay:
     """One ``<select>`` option for the console DB picker. ``selected_attr`` is precomputed as the
     literal ``"selected"`` or ``""`` so the template renders ``{{ o.selected_attr }}`` with no
@@ -323,7 +323,7 @@ class DbOptionDisplay:
     selected_attr: str  # "selected" or ""
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SharingPeriodDisplay:
     """One line of a file's "Source history" (stage 4 spec, D12), precomputed for the template.
 
@@ -345,7 +345,7 @@ class SharingPeriodDisplay:
     node: str
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SourceKeyDisplay:
     """The source a source's page describes: its network and its user hash."""
 
@@ -353,7 +353,7 @@ class SourceKeyDisplay:
     native_id: str
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class SourceDisplay:
     """One line of ``/sources`` (stage 4 spec, D13), its links as ``SharingPeriodDisplay``'s."""
 
@@ -365,7 +365,7 @@ class SourceDisplay:
     files: str
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class FileSharingPeriodDisplay:
     """One period of a source's or a name's page (D13): the file it was read on, then the period."""
 
@@ -374,7 +374,7 @@ class FileSharingPeriodDisplay:
     sharing_period: SharingPeriodDisplay
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class TokenCoverageDisplay:
     """One coverage token of an explanation and its best value over the file's names."""
 
@@ -382,7 +382,7 @@ class TokenCoverageDisplay:
     value_display: str  # two decimals, on the scale of the policy's min_coverage
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class FileHistoryDisplay:
     """Full view of a file: all fields precomputed for the template.
 

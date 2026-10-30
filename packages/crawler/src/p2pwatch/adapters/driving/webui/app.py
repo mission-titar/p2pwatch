@@ -159,7 +159,7 @@ def _make_nav_context(amule_url: str) -> ContextProcessor:
 
 
 def _resolve_target_display(
-    catalog_entry: CatalogEntry, segment_by_id: Mapping[TargetId, TargetSegment]
+    catalog_entry: CatalogEntry, *, segment_by_id: Mapping[TargetId, TargetSegment]
 ) -> list[tuple[str, str]]:
     """Per-decision ``(target, title)`` pairs for a catalog entry, in the entry's
     decision order (by target_id). Empty when the file has no current decision. The
@@ -182,7 +182,7 @@ def _resolve_target_display(
 
 
 def _catalog_entry_displays(
-    catalog_entries: Iterable[CatalogEntry], segment_by_id: Mapping[TargetId, TargetSegment]
+    catalog_entries: Iterable[CatalogEntry], *, segment_by_id: Mapping[TargetId, TargetSegment]
 ) -> list[CatalogEntryDisplay]:
     """Convert catalog entries into ``CatalogEntryDisplay`` view-models: one row per file, the
     file's (usually two) segment decisions surfaced as one ``DecisionCellDisplay`` each in
@@ -191,7 +191,7 @@ def _catalog_entry_displays(
     rows = []
     for catalog_entry in catalog_entries:
         if catalog_entry.decisions:
-            pairs = _resolve_target_display(catalog_entry, segment_by_id)
+            pairs = _resolve_target_display(catalog_entry, segment_by_id=segment_by_id)
             decisions_display = tuple(
                 DecisionCellDisplay(target=target, title=title) for target, title in pairs
             )
@@ -264,7 +264,11 @@ def _sharing_period_display(period: SharingPeriod) -> SharingPeriodDisplay:
         first_seen=utc_timestamp(period.first_seen_at),
         last_seen=utc_timestamp(period.last_seen_at),
         received=human_size(period.received_bytes) if period.received_bytes else "",
-        rate=average_rate(period.received_bytes, period.first_seen_at, period.last_seen_at),
+        rate=average_rate(
+            period.received_bytes,
+            first_seen_at=period.first_seen_at,
+            last_seen_at=period.last_seen_at,
+        ),
         node=period.node_id,
     )
 
@@ -287,7 +291,7 @@ def _page_param(page: int) -> dict[str, str]:
 
 
 def _interval_selector(
-    interval: Interval, now: datetime, path: str, kept_params: dict[str, str]
+    interval: Interval, *, now: datetime, path: str, kept_params: dict[str, str]
 ) -> IntervalSelectorDisplay:
     """The selector of the page at ``path``, whose other params are ``kept_params`` (D6): the
     presets end ``now``, and Next is offered until the interval reaches it."""
@@ -303,7 +307,7 @@ def _interval_selector(
         shown=f"{utc_timestamp(interval.since)} to {utc_timestamp(interval.until)}",
         notices=(_CLAMPED_NOTICE,) if interval.clamped else (),
         presets=tuple(
-            IntervalLinkDisplay(label, url(interval_ending(now, span=span)))
+            IntervalLinkDisplay(label=label, url=url(interval_ending(now, span=span)))
             for label, span in _INTERVAL_PRESETS
         ),
         from_value=input_timestamp(interval.since),
@@ -339,7 +343,7 @@ def _source_naming_display(source_naming: SourceNaming) -> SourceDisplay:
 
 
 def _file_sharing_period_display(
-    period: SharingPeriod, best_filename: str | None
+    period: SharingPeriod, *, best_filename: str | None
 ) -> FileSharingPeriodDisplay:
     """A period of a source's or a name's page, with the file it was read on."""
     return FileSharingPeriodDisplay(
@@ -370,7 +374,7 @@ def _page_number(raw: str | None) -> int:
 
 
 def _page_nav(
-    page: int, has_next_page: bool, base_path: str, kept_params: dict[str, str]
+    page: int, *, has_next_page: bool, base_path: str, kept_params: dict[str, str]
 ) -> PageNavDisplay:
     """Precompute the prev/next links for a page (W-D8: view-model, no template logic)."""
     prev_urls: tuple[str, ...] = ()
@@ -387,7 +391,7 @@ def _page_nav(
 
 
 def _files_summary(
-    matched_count: int, total_count: int, show_unmatched: bool, kept_params: dict[str, str]
+    matched_count: int, *, total_count: int, show_unmatched: bool, kept_params: dict[str, str]
 ) -> FilesSummaryDisplay:
     """Precompute the /files summary line + matched/all toggle (W-D8: no template logic).
 
@@ -458,6 +462,7 @@ def _normalize_direction(raw: str | None) -> SortDirection:
 
 def _sort_header(
     column_key: str,
+    *,
     label: str,
     active_sort: str,
     active_direction: str,
@@ -489,7 +494,13 @@ def _sort_headers(
 ) -> SortHeadersDisplay:
     """Precompute all five sortable headers (W-D8)."""
     built = {
-        column_key: _sort_header(column_key, label, active_sort, active_direction, kept_params)
+        column_key: _sort_header(
+            column_key,
+            label=label,
+            active_sort=active_sort,
+            active_direction=active_direction,
+            kept_params=kept_params,
+        )
         for column_key, label in _SORTABLE_COLUMNS
     }
     return SortHeadersDisplay(
@@ -589,24 +600,56 @@ def _client_lines(client_summaries: tuple[ClientSummary, ...]) -> tuple[ClientLi
         client_name, reading = client_summary.client_name, client_summary.reading
         if reading is None:
             lines.append(
-                ClientLineDisplay(client_name, "No reading yet.", "unknown", "unknown", ())
+                ClientLineDisplay(
+                    client_name=client_name,
+                    reading="No reading yet.",
+                    version="unknown",
+                    api_reachable="unknown",
+                    channels=(),
+                )
             )
             continue
         read_at = short_timestamp(reading.read_at.isoformat())
         client_status = reading.status
         if not client_summary.is_fresh:
             text = f"Out of date: last reading at {read_at}."
-            lines.append(ClientLineDisplay(client_name, text, "unknown", "unknown", ()))
+            lines.append(
+                ClientLineDisplay(
+                    client_name=client_name,
+                    reading=text,
+                    version="unknown",
+                    api_reachable="unknown",
+                    channels=(),
+                )
+            )
         elif client_status is None:
-            lines.append(ClientLineDisplay(client_name, f"Read at {read_at}.", "unknown", "no", ()))
+            lines.append(
+                ClientLineDisplay(
+                    client_name=client_name,
+                    reading=f"Read at {read_at}.",
+                    version="unknown",
+                    api_reachable="no",
+                    channels=(),
+                )
+            )
         else:
             channels = tuple(
-                ChannelLineDisplay(c.channel, _YES_NO[c.connected], _YES_NO[c.connectable])
+                ChannelLineDisplay(
+                    channel=c.channel,
+                    connected=_YES_NO[c.connected],
+                    connectable=_YES_NO[c.connectable],
+                )
                 for c in client_status.channels
             )
             version = client_status.version or "unknown"
             lines.append(
-                ClientLineDisplay(client_name, f"Read at {read_at}.", version, "yes", channels)
+                ClientLineDisplay(
+                    client_name=client_name,
+                    reading=f"Read at {read_at}.",
+                    version=version,
+                    api_reachable="yes",
+                    channels=channels,
+                )
             )
     return tuple(lines)
 
@@ -694,7 +737,7 @@ def _console_database(db_key: str) -> ConsoleDatabase | None:
     return ConsoleDatabase(db_key) if db_key in ConsoleDatabase else None
 
 
-def _to_query_answer_display(query_answer: QueryAnswer, row_cap: int) -> QueryAnswerDisplay:
+def _to_query_answer_display(query_answer: QueryAnswer, *, row_cap: int) -> QueryAnswerDisplay:
     """Build the query answer display from a query's answer. ``truncated`` becomes a 0-or-1
     message tuple for the logic-free banner."""
     truncated = (
@@ -815,7 +858,9 @@ def build_app(
             page=page,
         )
 
-        display_rows = _catalog_entry_displays(file_listing.catalog_entries, _segment_by_id)
+        display_rows = _catalog_entry_displays(
+            file_listing.catalog_entries, segment_by_id=_segment_by_id
+        )
         # Active, non-default params (page excluded). Every URL derives from these two ordered
         # dicts, so param order is deterministic. ``filter_params`` is what a re-sort keeps;
         # ``sort_params`` is what a filter/toggle/page keeps.
@@ -843,9 +888,9 @@ def build_app(
         summary_kept_params.update(sort_params)
         summary = _files_summary(
             file_listing.matched_file_count,
-            file_listing.total_file_count,
-            show_unmatched,
-            summary_kept_params,
+            total_count=file_listing.total_file_count,
+            show_unmatched=show_unmatched,
+            kept_params=summary_kept_params,
         )
 
         # Tier facet (facet-lite: never filtered by its own tier) + filename search form. The
@@ -867,7 +912,10 @@ def build_app(
         filter_bar = FilterBarDisplay(searchbar=searchbar, facets=facets)
 
         nav = _page_nav(
-            page, file_listing.has_next_page, "/files", {**filter_params, **sort_params}
+            page,
+            has_next_page=file_listing.has_next_page,
+            base_path="/files",
+            kept_params={**filter_params, **sort_params},
         )
         return templates.TemplateResponse(
             request,
@@ -893,7 +941,12 @@ def build_app(
             "sources.html",
             {
                 "rows": tuple(map(_known_source_display, source_listing.known_sources)),
-                "nav": _page_nav(page, source_listing.has_next_page, "/sources", kept_params),
+                "nav": _page_nav(
+                    page,
+                    has_next_page=source_listing.has_next_page,
+                    base_path="/sources",
+                    kept_params=kept_params,
+                ),
                 "summary": (
                     f"Sources recorded: {count:,}."
                     if search_text is None
@@ -926,16 +979,27 @@ def build_app(
             "source_history.html",
             {
                 "source": SourceKeyDisplay(
-                    str(source_history.source.network), source_history.source.native_id
+                    network=str(source_history.source.network),
+                    native_id=source_history.source.native_id,
                 ),
                 "names": tuple(map(_source_naming_display, source_history.source_namings)),
                 "periods": tuple(
-                    _file_sharing_period_display(period, best_filename_by_file.get(period.file))
+                    _file_sharing_period_display(
+                        period, best_filename=best_filename_by_file.get(period.file)
+                    )
                     for period in source_history.sharing_periods
                 ),
-                "nav": _page_nav(page, description.has_next_page, path, _interval_params(request)),
+                "nav": _page_nav(
+                    page,
+                    has_next_page=description.has_next_page,
+                    base_path=path,
+                    kept_params=_interval_params(request),
+                ),
                 "interval": _interval_selector(
-                    description.interval, description.now, path, _page_param(page)
+                    description.interval,
+                    now=description.now,
+                    path=path,
+                    kept_params=_page_param(page),
                 ),
             },
         )
@@ -967,20 +1031,22 @@ def build_app(
                 "source_name": source_name_history.source_name,
                 "sources": tuple(map(_source_naming_display, source_name_history.source_namings)),
                 "periods": tuple(
-                    _file_sharing_period_display(period, best_filename_by_file.get(period.file))
+                    _file_sharing_period_display(
+                        period, best_filename=best_filename_by_file.get(period.file)
+                    )
                     for period in source_name_history.sharing_periods
                 ),
                 "nav": _page_nav(
                     page,
-                    description.has_next_page,
-                    path,
-                    {**source_name_params, **_interval_params(request)},
+                    has_next_page=description.has_next_page,
+                    base_path=path,
+                    kept_params={**source_name_params, **_interval_params(request)},
                 ),
                 "interval": _interval_selector(
                     description.interval,
-                    description.now,
-                    path,
-                    {**source_name_params, **_page_param(page)},
+                    now=description.now,
+                    path=path,
+                    kept_params={**source_name_params, **_page_param(page)},
                 ),
             },
         )
@@ -1071,7 +1137,10 @@ def build_app(
             {
                 "file": display,
                 "interval": _interval_selector(
-                    description.interval, description.now, f"/files/{file_id_hex}", {}
+                    description.interval,
+                    now=description.now,
+                    path=f"/files/{file_id_hex}",
+                    kept_params={},
                 ),
             },
         )
@@ -1088,7 +1157,9 @@ def build_app(
             page=1,
         )
 
-        display_rows = _catalog_entry_displays(file_listing.catalog_entries, _segment_by_id)
+        display_rows = _catalog_entry_displays(
+            file_listing.catalog_entries, segment_by_id=_segment_by_id
+        )
         # No pagination here (target view: we expect few). Empty nav.
         nav = PageNavDisplay(page=1, prev_urls=(), next_urls=())
         # files.html is shared with /files, whose matched/all summary line and filter bar are
@@ -1192,7 +1263,7 @@ def build_app(
                 "sql": sql,
                 "db_options": db_options,
                 "query_answers": (
-                    _to_query_answer_display(query_answer, console_query_run.row_cap),
+                    _to_query_answer_display(query_answer, row_cap=console_query_run.row_cap),
                 ),
                 "errors": (),
             },

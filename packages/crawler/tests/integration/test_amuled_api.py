@@ -23,8 +23,8 @@ pytestmark = pytest.mark.api_integration
 async def test_real_login_succeeds(amuled: ApiEndpoint) -> None:
     client = AmuleApiClient(
         amuled.host,
-        amuled.port,
-        amuled.password,
+        port=amuled.port,
+        password=amuled.password,
         timeout_seconds=30.0,
         page_size=500,
         progress_poll_interval=timedelta(seconds=5),
@@ -39,8 +39,8 @@ async def test_real_login_succeeds(amuled: ApiEndpoint) -> None:
 async def test_real_login_fails_with_wrong_password(amuled: ApiEndpoint) -> None:
     client = AmuleApiClient(
         amuled.host,
-        amuled.port,
-        "wrong-password",
+        port=amuled.port,
+        password="wrong-password",
         timeout_seconds=30.0,
         page_size=500,
         progress_poll_interval=timedelta(seconds=5),
@@ -55,8 +55,8 @@ async def test_real_login_fails_with_wrong_password(amuled: ApiEndpoint) -> None
 async def test_real_status(amuled: ApiEndpoint) -> None:
     client = AmuleApiClient(
         amuled.host,
-        amuled.port,
-        amuled.password,
+        port=amuled.port,
+        password=amuled.password,
         timeout_seconds=30.0,
         page_size=500,
         progress_poll_interval=timedelta(seconds=5),
@@ -74,8 +74,8 @@ async def test_real_status(amuled: ApiEndpoint) -> None:
 async def test_real_search(amuled: ApiEndpoint) -> None:
     client = AmuleApiClient(
         amuled.host,
-        amuled.port,
-        amuled.password,
+        port=amuled.port,
+        password=amuled.password,
         timeout_seconds=30.0,
         page_size=500,
         progress_poll_interval=timedelta(seconds=5),
@@ -84,7 +84,9 @@ async def test_real_search(amuled: ApiEndpoint) -> None:
     )
     try:
         try:
-            answer = await client.search(Keyword("keroro"), Channel("ed2k"), 30.0)
+            answer = await client.search(
+                Keyword("keroro"), channel=Channel("ed2k"), budget_seconds=30.0
+            )
         except SearchFailedError as exc:
             # The daemon refused the search cleanly (no eD2k server reachable from the
             # container): the request/response cycle IS validated, with its own message.

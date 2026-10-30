@@ -153,7 +153,7 @@ class AppriseNotifier(Notifier):
         self._groups_by_node_id[node_id] = (prefixed_group, bare_group)
         return prefixed_group, bare_group
 
-    async def notify(self, audience: Audience, notification: Notification) -> None:
+    async def notify(self, audience: Audience, *, notification: Notification) -> None:
         title, body, notify_type = _message(notification)
         node_id = notification.node_id
         prefixed_group, bare_group = self._groups(node_id)

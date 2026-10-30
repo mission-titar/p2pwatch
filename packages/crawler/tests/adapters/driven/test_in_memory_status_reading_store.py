@@ -26,6 +26,6 @@ def test_publishing_replaces_the_snapshot_and_never_changes_one_already_read() -
     status_reading_store = InMemoryStatusReadingStore((ClientName("amuled"),))
     before = status_reading_store.read_readings()
     status_reading_store.set_reading(
-        ClientName("amuled"), _READING, MonotonicInstant(nanoseconds=7)
+        ClientName("amuled"), reading=_READING, published_at=MonotonicInstant(nanoseconds=7)
     )
     assert before == {"amuled": None}

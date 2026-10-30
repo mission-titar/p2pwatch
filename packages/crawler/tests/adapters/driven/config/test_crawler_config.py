@@ -33,17 +33,26 @@ def _write_crawler_config(tmp_path: Path, keywords: str = "[keroro]", extra: str
 
 
 def _load_with_the_shipped_policy(config_path: Path, env: dict[str, str]) -> LoadedConfig:
-    return load_config(config_path, _DEPLOY / "targets.yml", _DEPLOY / "matcher.yml", env)
+    return load_config(
+        config_path,
+        targets_path=_DEPLOY / "targets.yml",
+        matcher_path=_DEPLOY / "matcher.yml",
+        env=env,
+    )
 
 
 def test_the_three_files_load_with_the_fingerprint_of_the_policy(tmp_path: Path) -> None:
     config_path = _write_crawler_config(tmp_path)
     targets_path, matcher_path = _DEPLOY / "targets.yml", _DEPLOY / "matcher.yml"
 
-    loaded = load_config(config_path, targets_path, matcher_path, _env())
+    loaded = load_config(
+        config_path, targets_path=targets_path, matcher_path=matcher_path, env=_env()
+    )
 
     assert loaded == LoadedConfig(
-        crawler_config=parse_crawler_config(interpolate_document(load_yaml(config_path), _env())),
+        crawler_config=parse_crawler_config(
+            interpolate_document(load_yaml(config_path), env=_env())
+        ),
         targets=parse_targets(load_yaml(targets_path)),
         matcher_config=parse_matcher_config(load_yaml(matcher_path)),
         policy_fingerprint=policy_fingerprint(
@@ -103,7 +112,12 @@ def test_an_invalid_file_is_an_invalid_config(
     paths[broken_file].write_text(text, encoding="utf-8")
 
     with pytest.raises(InvalidConfigError) as raised:
-        load_config(paths["crawler.yml"], paths["targets.yml"], paths["matcher.yml"], _env())
+        load_config(
+            paths["crawler.yml"],
+            targets_path=paths["targets.yml"],
+            matcher_path=paths["matcher.yml"],
+            env=_env(),
+        )
 
     assert raised.value.key == key
     assert raised.value.message.startswith(message.format(path=paths[broken_file]))

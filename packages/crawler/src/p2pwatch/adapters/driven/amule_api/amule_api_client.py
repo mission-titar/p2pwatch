@@ -78,9 +78,9 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
     def __init__(
         self,
         host: str,
+        *,
         port: int,
         password: str,
-        *,
         timeout_seconds: float,
         page_size: int,
         progress_poll_interval: timedelta,
@@ -149,35 +149,35 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         if http is None:
             return
         with suppress(ApiUnreachableError):
-            await _send(http, "POST", "/auth/logout")
+            await _send(http, method="POST", path="/auth/logout")
         await http.aclose()
 
     async def search(
-        self, keyword: Keyword, channel: Channel, budget_seconds: float
+        self, keyword: Keyword, *, channel: Channel, budget_seconds: float
     ) -> SearchAnswer:
         """Waits for the network's next allowed start, then polls until amuled reports the search
         finished or ``budget_seconds`` after its start. Never stops nor frees it: amuled does."""
         with _refusal_as(SearchFailedError):
             search_type = _SEARCH_TYPES[channel]
             if search_type == "kad":
-                search_id = await self._start_kad(keyword, budget_seconds)
+                search_id = await self._start_kad(keyword, budget_seconds=budget_seconds)
                 if search_id is None:
                     return SearchAnswer(reported_files=(), skipped_result_count=0)
-                await self._await_end(search_id, budget_seconds, widen=True)
+                await self._await_end(search_id, budget_seconds=budget_seconds, widen=True)
             else:
                 async with self._ed2k_lock:
                     if self._ed2k_next_start is not None:
                         await self._sleep_until(self._ed2k_next_start)
                     self._ed2k_next_start = self._monotonic_clock.now() + _START_SPACING
-                    search_id = await self._post_search(keyword, search_type)
-                    await self._await_end(search_id, budget_seconds, widen=False)
-            rows = await self._collect(f"/search/{search_id}/results", "results")
-            reported_files, skipped_result_count = map_search_results(rows, keyword)
+                    search_id = await self._post_search(keyword, search_type=search_type)
+                    await self._await_end(search_id, budget_seconds=budget_seconds, widen=False)
+            rows = await self._collect(f"/search/{search_id}/results", list_key="results")
+            reported_files, skipped_result_count = map_search_results(rows, keyword=keyword)
             return SearchAnswer(
                 reported_files=reported_files, skipped_result_count=skipped_result_count
             )
 
-    async def _start_kad(self, keyword: Keyword, budget_seconds: float) -> int | None:
+    async def _start_kad(self, keyword: Keyword, *, budget_seconds: float) -> int | None:
         """Starts in the Kad word's next free slot, reserved before sleeping; ``None`` without a
         Kad word. A held Kad word is retried each poll, for one budget from the first attempt."""
         kad_word = _kad_word(keyword)
@@ -195,7 +195,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         give_up_at = self._monotonic_clock.now() + timedelta(seconds=budget_seconds)
         while True:
             try:
-                return await self._post_search(keyword, "kad")
+                return await self._post_search(keyword, search_type="kad")
             except ApiRejectedError as refusal:
                 remaining = give_up_at - self._monotonic_clock.now()
                 if _KAD_WORD_HELD not in str(refusal) or remaining <= timedelta(0):
@@ -207,7 +207,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         if delay > timedelta(0):
             await self._monotonic_clock.sleep(delay)
 
-    async def _await_end(self, search_id: int, budget_seconds: float, *, widen: bool) -> None:
+    async def _await_end(self, search_id: int, *, budget_seconds: float, widen: bool) -> None:
         """Polls until amuled reports the search finished, or ``budget_seconds`` after now."""
         deadline = self._monotonic_clock.now() + timedelta(seconds=budget_seconds)
         polls = 0
@@ -224,10 +224,10 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         """Raises unreachable unless amuleapi reaches amuled: otherwise it answers from its cache,
         and a dead amuled would read as connected."""
         with _refusal_as(ReadRejectedError):
-            status = await self._call("GET", "/status")
+            status = await self._call("GET", path="/status")
             if status.get("ec_connected") is not True:
                 raise ApiUnreachableError("GET /status: amuleapi does not reach amuled")
-            return map_client_status(status, await self._call("GET", "/version"))
+            return map_client_status(status, version=await self._call("GET", path="/version"))
 
     async def start(self, request: DownloadRequest) -> None:
         """Queues the file by its ed2k link. The route is a bulk one, so a refused link comes back
@@ -240,7 +240,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
             link = build_ed2k_link(
                 request.filename, size_bytes=request.size_bytes, native_id=request.file.native_id
             )
-            envelope = await self._call("POST", "/downloads", body={"links": [link]})
+            envelope = await self._call("POST", path="/downloads", body={"links": [link]})
             outcomes = envelope.get("results")
             outcome = outcomes[0] if isinstance(outcomes, list) and outcomes else None
             if not isinstance(outcome, dict) or outcome.get("ok") is not True:
@@ -252,12 +252,12 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         """The queue with its completed entries, then the shared files it no longer lists. Queue
         first: a file cleared between the two reads is then shared, not missing from both."""
         with _refusal_as(ReadRejectedError):
-            rows = await self._collect("/downloads", "downloads", params={"status": "all"})
+            rows = await self._collect("/downloads", list_key="downloads", params={"status": "all"})
             queue = [status for row in rows if (status := map_download_status(row)) is not None]
             listed = {status.file for status in queue}
             shared = [
                 status
-                for row in await self._collect("/shared", "shared")
+                for row in await self._collect("/shared", list_key="shared")
                 if (status := map_shared_download(row)) is not None and status.file not in listed
             ]
             return (*queue, *shared)
@@ -270,7 +270,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
                 return ()
             try:
                 rows = await self._collect(
-                    f"/downloads/{file.native_id}/clients", "clients", keyset_column="ecid"
+                    f"/downloads/{file.native_id}/clients", list_key="clients", keyset_column="ecid"
                 )
             except ApiNotFoundError:
                 return ()
@@ -280,14 +280,16 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
                 if ecid is None:
                     continue
                 try:
-                    detail = await self._call("GET", f"/clients/{ecid}")
+                    detail = await self._call("GET", path=f"/clients/{ecid}")
                 except ApiNotFoundError:
                     continue  # the client left between the list and its detail
-                readings.append(map_source(row, detail))
+                readings.append(map_source(row, detail=detail))
             return merge_duplicate_sources(readings)
 
-    async def _post_search(self, keyword: Keyword, search_type: str) -> int:
-        envelope = await self._call("POST", "/search", body={"query": keyword, "type": search_type})
+    async def _post_search(self, keyword: Keyword, *, search_type: str) -> int:
+        envelope = await self._call(
+            "POST", path="/search", body={"query": keyword, "type": search_type}
+        )
         search_id = envelope.get("search_id")
         if not isinstance(search_id, int) or isinstance(search_id, bool):
             raise ApiRejectedError("POST /search answered without a search_id")
@@ -295,7 +297,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
 
     async def _search_state(self, search_id: int) -> object:
         """``progress.state``, read with zero rows: the envelope travels with the results."""
-        envelope = await self._call("GET", f"/search/{search_id}/results", params={"limit": 0})
+        envelope = await self._call("GET", path=f"/search/{search_id}/results", params={"limit": 0})
         progress = envelope.get("progress")
         return progress.get("state") if isinstance(progress, dict) else None
 
@@ -303,7 +305,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         """Asks Kad for more; ``False`` once it refuses or fails, the search standing either way.
         A reask on a finished search answers ``400 bad_request``, mapped to unreachable."""
         try:
-            await self._call("POST", f"/search/{search_id}/more")
+            await self._call("POST", path=f"/search/{search_id}/more")
         except ApiKadExhaustedError:
             return False
         except (ApiRejectedError, ApiUnreachableError) as failure:
@@ -316,35 +318,37 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
     async def _call(
         self,
         method: str,
-        path: str,
         *,
+        path: str,
         body: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """One request on the session, opened first if there is none, decoded into a JSON object."""
         http = self._http if self._http is not None else await self._connect()
-        return await self._send_with_relogin(http, method, path, body=body, params=params)
+        return await self._send_with_relogin(
+            http, method=method, path=path, body=body, params=params
+        )
 
     async def _send_with_relogin(
         self,
         http: httpx.AsyncClient,
+        *,
         method: str,
         path: str,
-        *,
         body: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Sends, renewing the token ONCE on a 401. Never twice: amuleapi locks an IP out for
         300 s after 30 rejected tokens, and only a successful login clears that state."""
         login_count = self._login_count
-        response = await _send(http, method, path, body=body, params=params)
+        response = await _send(http, method=method, path=path, body=body, params=params)
         if response.status_code == httpx.codes.UNAUTHORIZED:
             async with self._login_lock:
                 if self._closed:
                     raise ApiUnreachableError("amuleapi client closed")
                 if self._login_count == login_count:  # no other call renewed it meanwhile
                     await self._login(http)
-            response = await _send(http, method, path, body=body, params=params)
+            response = await _send(http, method=method, path=path, body=body, params=params)
         if not response.is_success:
             raise error_from_response(response)
         return _decode(response)
@@ -353,8 +357,8 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         """Mints a token and arms the Authorization header (the bearer wins over the cookie)."""
         response = await _send(
             http,
-            "POST",
-            "/auth/login",
+            method="POST",
+            path="/auth/login",
             body={"password": self._password},
             params={"include_token": "true"},
         )
@@ -371,8 +375,8 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
     async def _collect(
         self,
         path: str,
-        list_key: str,
         *,
+        list_key: str,
         params: dict[str, Any] | None = None,
         keyset_column: str = "hash",
     ) -> list[Any]:
@@ -382,7 +386,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         rows: list[Any] = []
         page_params = {**(params or {}), "sort": keyset_column, "limit": self._page_size}
         while True:
-            envelope = await self._call("GET", path, params=page_params)
+            envelope = await self._call("GET", path=path, params=page_params)
             page = envelope.get(list_key)
             if not isinstance(page, list):  # an under-report would restart what it hides
                 raise ApiUnreachableError(f"GET {path} answered without its {list_key!r} list")
@@ -406,9 +410,9 @@ def _refusal_as(port_error: type[ClientError]) -> Iterator[None]:
 
 async def _send(
     http: httpx.AsyncClient,
+    *,
     method: str,
     path: str,
-    *,
     body: dict[str, Any] | None = None,
     params: dict[str, Any] | None = None,
 ) -> httpx.Response:

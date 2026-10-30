@@ -159,7 +159,7 @@ def test_a_mapped_result_reuses_the_variant_0007_migrated_from_its_old_row(
     old_meta = '[["rating", "0"], ["status", "mystère"]]'
     path = tmp_path / "catalog.db"
     _old_catalog(path, _with(_FULL, raw_meta=old_meta))
-    (reported_file,), _ = map_search_results([search_result], Keyword("keroro"))
+    (reported_file,), _ = map_search_results([search_result], keyword=Keyword("keroro"))
     connection = open_catalog(path)
     try:
         SqliteObservationStore(connection).record_observation(

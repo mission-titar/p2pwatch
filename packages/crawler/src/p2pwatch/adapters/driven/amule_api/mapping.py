@@ -96,7 +96,7 @@ _WAITING_STATUSES = {
 
 
 def map_search_results(
-    search_results: object, keyword: Keyword
+    search_results: object, *, keyword: Keyword
 ) -> tuple[tuple[ReportedFile, ...], int]:
     """The ``results[]`` of a search → ``(reported_files, skipped_result_count)``, counting the
     results that yield no reported file; a nameless name row beside a named one is not counted."""
@@ -105,7 +105,7 @@ def map_search_results(
     if not isinstance(search_results, list):
         return (), 0  # unexpected envelope: tolerated, ignored (not a result set)
     for search_result in search_results:
-        mapped = _map_result(search_result, keyword)
+        mapped = _map_result(search_result, keyword=keyword)
         if not mapped:
             skipped_result_count += 1
         reported_files.extend(mapped)
@@ -123,7 +123,7 @@ def map_download_status(row: object) -> DownloadStatus | None:
     status = _string(row.get("status")) or ""
     completed = status == "completed"
     failure = FailureReason.ERROR if status == "erroneous" else None
-    waiting = None if completed or failure else _waiting_reason(status, row.get("sources"))
+    waiting = None if completed or failure else _waiting_reason(status, sources=row.get("sources"))
     return DownloadStatus(
         file=FileKey(network=Network.ED2K, native_id=native_id),
         bytes_done=_int_or_zero(row.get("completed_bytes")),
@@ -153,14 +153,22 @@ def map_shared_download(row: object) -> DownloadStatus | None:
     )
 
 
-def map_client_status(status: object, version: object) -> ClientStatus:
+def map_client_status(status: object, *, version: object) -> ClientStatus:
     """A /status and a /version body → ``ClientStatus``. Never raises: missing reads unknown."""
     body = _as_dict(status)
     ed2k, kad = _as_dict(body.get("ed2k")), _as_dict(body.get("kad"))
     high_id, firewalled = ed2k.get("high_id"), kad.get("firewalled_tcp")
     channels = (
-        _channel(Channel("ed2k"), ed2k, high_id if isinstance(high_id, bool) else None),
-        _channel(Channel("kad"), kad, not firewalled if isinstance(firewalled, bool) else None),
+        _channel(
+            Channel("ed2k"),
+            channel_json=ed2k,
+            connectable=high_id if isinstance(high_id, bool) else None,
+        ),
+        _channel(
+            Channel("kad"),
+            channel_json=kad,
+            connectable=not firewalled if isinstance(firewalled, bool) else None,
+        ),
     )
     return ClientStatus(version=_string(_as_dict(version).get("daemon_version")), channels=channels)
 
@@ -175,7 +183,7 @@ def offering_source_ecid(row: object) -> int | None:
     return _optional_int(row.get("ecid"))
 
 
-def map_source(row: dict[str, Any], detail: dict[str, Any]) -> SourceReading:
+def map_source(row: dict[str, Any], *, detail: dict[str, Any]) -> SourceReading:
     """A source's row, which alone carries its relation to the file, and its client detail."""
     asked = row.get("role") in _ASKING_RELATIONS
     software = (_string(row.get("software")), _string(row.get("software_version")))
@@ -187,8 +195,8 @@ def map_source(row: dict[str, Any], detail: dict[str, Any]) -> SourceReading:
         contact_point=_contact_point(detail),
         connectable=_connectable(detail),
         raw_metadata=(
-            *_source_metadata(row, _SOURCE_META_KEYS),
-            *_source_metadata(detail, _SOURCE_DETAIL_META_KEYS),
+            *_source_metadata(row, keys=_SOURCE_META_KEYS),
+            *_source_metadata(detail, keys=_SOURCE_DETAIL_META_KEYS),
         ),
         session_received_bytes=_int_or_zero(row.get("downloaded_bytes_session")),
     )
@@ -242,7 +250,7 @@ def _connectable(detail: dict[str, Any]) -> bool | None:
     return high_id
 
 
-def _source_metadata(fields: dict[str, Any], keys: tuple[str, ...]) -> SourceMetadata:
+def _source_metadata(fields: dict[str, Any], *, keys: tuple[str, ...]) -> SourceMetadata:
     """The ``keys`` that ``fields`` holds; an absent one is left out, not read as ``None``."""
     return tuple((key, _meta_value(fields[key])) for key in keys if key in fields)
 
@@ -258,7 +266,7 @@ def _meta_value(field: object) -> str | int | bool | tuple[str, ...] | None:
 
 
 def _channel(
-    channel: Channel, channel_json: dict[str, Any], connectable: bool | None
+    channel: Channel, *, channel_json: dict[str, Any], connectable: bool | None
 ) -> ChannelStatus:
     """Off the network the flag tells nothing: there ``high_id`` false means "no id yet"."""
     connected = channel_json.get("state") == "connected"
@@ -267,7 +275,7 @@ def _channel(
     )
 
 
-def _map_result(search_result: object, keyword: Keyword) -> list[ReportedFile]:
+def _map_result(search_result: object, *, keyword: Keyword) -> list[ReportedFile]:
     """One result row → one reported file PER FILENAME; none when the row is unusable."""
     if not isinstance(search_result, dict):
         return []
@@ -276,7 +284,7 @@ def _map_result(search_result: object, keyword: Keyword) -> list[ReportedFile]:
     if native_id is None or not isinstance(size_bytes, int) or isinstance(size_bytes, bool):
         return []
     media = _as_dict(search_result.get("media"))
-    raw_metadata = _raw_metadata(search_result, media)
+    raw_metadata = _raw_metadata(search_result, media=media)
     codec, file_type = _string(media.get("codec")), _string(search_result.get("file_type"))
     alternates = search_result.get("alternate_names")
     name_rows: list[object] = [search_result, *(alternates if isinstance(alternates, list) else [])]
@@ -305,7 +313,7 @@ def _map_result(search_result: object, keyword: Keyword) -> list[ReportedFile]:
 
 
 def _raw_metadata(
-    search_result: dict[str, Any], media: dict[str, Any]
+    search_result: dict[str, Any], *, media: dict[str, Any]
 ) -> tuple[tuple[str, str], ...]:
     """Every unmapped key → ``(key, rendered_value)``, in wire order."""
     collected = [
@@ -356,7 +364,7 @@ def _source_counts(field: object) -> tuple[int, int]:
     return _int_or_zero(sources.get("total")), _int_or_zero(sources.get("complete"))
 
 
-def _waiting_reason(status: str, sources: object) -> WaitingReason | None:
+def _waiting_reason(status: str, *, sources: object) -> WaitingReason | None:
     """The status's own reason first, then the sources: none at all, or none sending."""
     reason = _WAITING_STATUSES.get(status)
     if reason is not None:
