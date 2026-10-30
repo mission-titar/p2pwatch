@@ -7,11 +7,11 @@ from tests.contracts.application.ports.driven.wall_clock_contract import WallClo
 
 
 def test_now_reads_the_system_clock() -> None:
-    before = datetime.now(UTC)
+    before = datetime.now(UTC)  # noqa: TID251
 
     instant = SystemWallClock().now()
 
-    assert before <= instant <= datetime.now(UTC)
+    assert before <= instant <= datetime.now(UTC)  # noqa: TID251
 
 
 class TestSystemWallClock(WallClockContract):

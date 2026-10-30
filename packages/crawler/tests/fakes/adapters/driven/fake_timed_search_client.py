@@ -31,5 +31,5 @@ class FakeTimedSearchClient(SearchClient):
         self.searches.append((asyncio.get_running_loop().time(), keyword, channel))
         if self._search_failures:
             raise self._search_failures.pop(0)
-        await asyncio.sleep(self._durations[channel])
+        await asyncio.sleep(self._durations[channel])  # noqa: TID251
         return SearchAnswer(self._reported_files, 0)

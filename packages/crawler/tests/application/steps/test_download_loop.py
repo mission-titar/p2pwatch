@@ -135,7 +135,7 @@ async def test_loop_runs_a_cycle_then_sleeps_then_stops() -> None:
     async def stop_after_first_sleep() -> None:
         # let one cycle + the wait entry happen, then request shutdown and wake the loop.
         while not fake_time.sleeps:
-            await asyncio.sleep(0)
+            await asyncio.sleep(0)  # noqa: TID251
         run_state.set_shutdown_requested()
         waker.wake(WakeSubject.DOWNLOAD)
 
@@ -153,7 +153,7 @@ async def test_nudge_wakes_the_loop_before_poll_expires() -> None:
 
     async def wake_then_stop() -> None:
         while WakeSubject.DOWNLOAD not in waker.waited_subjects:
-            await asyncio.sleep(0)
+            await asyncio.sleep(0)  # noqa: TID251
         run_state.set_shutdown_requested()
         waker.wake(WakeSubject.DOWNLOAD)  # wakes the wait before the 999 s poll
 
@@ -192,7 +192,7 @@ async def test_nudge_wins_and_cancels_the_pending_sleep() -> None:
 
     async def stop_when_waited() -> None:
         while WakeSubject.DOWNLOAD not in waker.waited_subjects:
-            await asyncio.sleep(0)
+            await asyncio.sleep(0)  # noqa: TID251
         run_state.set_shutdown_requested()
         waker.wake(WakeSubject.DOWNLOAD)
 
@@ -216,7 +216,7 @@ async def test_loop_cancelled_mid_wait_propagates_cleanly() -> None:
     task = asyncio.ensure_future(download_loop.run(_NODE_ID))
     # wait until the loop is parked in _sleep_or_wake (wake_task has called wait())
     while WakeSubject.DOWNLOAD not in waker.waited_subjects:
-        await asyncio.sleep(0)
+        await asyncio.sleep(0)  # noqa: TID251
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task

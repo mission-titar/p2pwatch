@@ -128,7 +128,7 @@ def _yielding_client(api: FakeAmuleApi) -> AmuleApiClient:
     """A client whose every request suspends like a real one, letting the other callers in."""
 
     async def round_trip(request: httpx.Request) -> httpx.Response:
-        await asyncio.sleep(0)
+        await asyncio.sleep(0)  # noqa: TID251
         return api.handle(request)
 
     transport = httpx.MockTransport(round_trip)
@@ -258,7 +258,7 @@ async def test_a_close_during_a_login_revokes_the_session_it_opened() -> None:
     call = asyncio.create_task(client.status())
     await login_reached.wait()
     closing = asyncio.create_task(client.close())
-    await asyncio.sleep(0)  # close() runs while the login is held
+    await asyncio.sleep(0)  # close() runs while the login is held  # noqa: TID251
     login_released.set()
     outcomes = await asyncio.gather(call, closing, return_exceptions=True)
 

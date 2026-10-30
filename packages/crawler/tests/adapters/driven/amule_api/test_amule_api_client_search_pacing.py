@@ -87,7 +87,7 @@ async def _search_for(api: FakeAmuleApi, keywords: list[Keyword], channels: list
     async def task(keyword: Keyword, channel: Channel) -> None:
         while loop.time() < _HOUR:
             await client.search(keyword, channel, _BUDGET)
-            await asyncio.sleep(0)
+            await asyncio.sleep(0)  # noqa: TID251
 
     await asyncio.gather(*(task(keyword, channel) for keyword in keywords for channel in channels))
     await client.close()
@@ -251,7 +251,7 @@ def test_a_keyword_without_a_kad_target_neither_spins_nor_searches(
         while loop.time() < _HOUR and len(returned_at) <= 60:  # bounded, should it spin
             assert await client.search(keyword, Channel("kad"), _BUDGET) == SearchAnswer((), 0)
             returned_at.append(loop.time())
-            await asyncio.sleep(0)
+            await asyncio.sleep(0)  # noqa: TID251
 
     virtual_loop.run_until_complete(main())
 

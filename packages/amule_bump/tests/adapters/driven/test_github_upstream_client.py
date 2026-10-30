@@ -84,7 +84,8 @@ def test_file_lets_any_other_http_error_through(github: FakeGithubServer) -> Non
 
 def test_a_request_unanswered_within_the_timeout_fails(github: FakeGithubServer) -> None:
     github.is_holding = True
-    started = time.monotonic()
+    started = time.monotonic()  # noqa: TID251
     with pytest.raises(TimeoutError, match="timed out"):
         upstream_client(github).read_latest_release_tag()
-    assert time.monotonic() - started < 5  # the 0.2 s given, not a timeout of its own
+    # The 0.2 s given, not a timeout of its own.
+    assert time.monotonic() - started < 5  # noqa: TID251

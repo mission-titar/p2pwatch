@@ -27,7 +27,7 @@ async def test_a_wait_consumes_the_kept_wake() -> None:
     await asyncio.wait_for(waker.wait(WakeSubject.DOWNLOAD), timeout=1.0)
     # Sleeps again: no wake kept anymore, so the next wait does not return on its own.
     second = asyncio.create_task(waker.wait(WakeSubject.DOWNLOAD))
-    await asyncio.sleep(0)
+    await asyncio.sleep(0)  # noqa: TID251
     assert not second.done()
     waker.wake(WakeSubject.DOWNLOAD)
     await asyncio.wait_for(second, timeout=1.0)

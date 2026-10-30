@@ -82,10 +82,6 @@ known-first-party = [
 "typing_extensions.override".msg = "A signature takes one positional parameter at most, overriding or not."
 
 [tool.ruff.lint.per-file-ignores]
-"packages/crawler/src/p2pwatch/adapters/driven/system_wall_clock.py" = ["TID251"]
-"packages/crawler/src/p2pwatch/adapters/driven/asyncio_monotonic_clock.py" = ["TID251"]
-"packages/amule/src/p2pwatch_amule/adapters/driven/system_monotonic_clock.py" = ["TID251"]
-"**/tests/**" = ["TID251"]
 "vulture_whitelist.py" = ["B018", "F821"]
 # The zones not yet keyword-only: each line goes with the block that converts its zone. Its globs
 # never use `*` for a file name, which ruff lets cross a `/`.

@@ -410,7 +410,7 @@ def test_the_shutdown_deadline_spares_the_run_then_cuts_a_logout_amuled_never_an
                 server.wait_for, lambda seen: _searches_read(seen) >= 1, _WAIT_SECONDS
             )
             # Only time shows an absence: armed from the start, the deadline would end the run.
-            await asyncio.sleep(2 * deadline_seconds)
+            await asyncio.sleep(2 * deadline_seconds)  # noqa: TID251
             logged_out_before_the_stop = _has_logged_out(api)
             _send_sigterm(default_sigterm)
             stopped_at = loop.time()
@@ -485,7 +485,7 @@ async def test_a_pause_from_the_webui_holds_the_searches_until_its_resume(
             paused.set()
             # The status loop reads on while paused; only time shows that no search starts.
             assert await asyncio.to_thread(server.wait_for, _has_read_the_status, _WAIT_SECONDS)
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.5)  # noqa: TID251
             searches_while_paused = _search_types(api)
             await webui.post("/controls/resume")
             assert await asyncio.to_thread(
@@ -550,11 +550,11 @@ async def test_a_re_evaluation_logs_its_progress_under_its_module_s_name(
 async def test_a_version_5_catalog_is_copied_before_its_migrations(tmp_path: Path) -> None:
     open_catalog_at(tmp_path / "catalog.db", 5).close()
     config_path = _write(tmp_path / "crawler.yml", _config(tmp_path))
-    before = datetime.now(UTC).replace(microsecond=0)
+    before = datetime.now(UTC).replace(microsecond=0)  # noqa: TID251
 
     await _crawl_until_a_search_is_read(config_path, _SHIPPED_TARGETS)
 
-    after = datetime.now(UTC)
+    after = datetime.now(UTC)  # noqa: TID251
     [(prefix, instant)] = pre_migration_copies(tmp_path)
     assert prefix == "catalog.db.pre-0006"
     assert before <= instant <= after

@@ -177,9 +177,9 @@ def test_a_paused_task_waits_before_its_next_search_and_finishes_the_one_in_flig
     client = FakeTimedSearchClient({Channel("kad"): 30.0})
 
     async def pause_then_resume() -> None:
-        await asyncio.sleep(10.0)
+        await asyncio.sleep(10.0)  # noqa: TID251
         tasks.run_state.set_paused(True)
-        await asyncio.sleep(990.0)
+        await asyncio.sleep(990.0)  # noqa: TID251
         tasks.run_state.set_paused(False)
 
     tasks.run_for(1040.0, client=client, keywords=["keroro"], beside=(pause_then_resume(),))
@@ -257,7 +257,7 @@ def test_a_search_that_never_suspends_does_not_starve_the_loop(tasks: _Tasks) ->
             client.ticks += 1
             if client.calls >= 100:
                 searching.cancel()
-            await asyncio.sleep(0)
+            await asyncio.sleep(0)  # noqa: TID251
         with suppress(asyncio.CancelledError):
             await searching
 

@@ -45,21 +45,21 @@ class RunStateStoreContract(ABC):
         self, run_state_store: RunStateStore
     ) -> None:
         run_state_store.set_paused(True)
-        await asyncio.sleep(0)
+        await asyncio.sleep(0)  # noqa: TID251
         assert run_state_store.is_paused() is True
         assert run_state_store.is_shutdown_requested() is False
 
     async def test_unpausing_resumes_the_crawler(self, run_state_store: RunStateStore) -> None:
         run_state_store.set_paused(True)
         run_state_store.set_paused(False)
-        await asyncio.sleep(0)
+        await asyncio.sleep(0)  # noqa: TID251
         assert run_state_store.is_paused() is False
 
     async def test_a_shutdown_request_leaves_the_crawler_resumed(
         self, run_state_store: RunStateStore
     ) -> None:
         run_state_store.set_shutdown_requested()
-        await asyncio.sleep(0)
+        await asyncio.sleep(0)  # noqa: TID251
         assert run_state_store.is_shutdown_requested() is True
         assert run_state_store.is_paused() is False
 
@@ -68,7 +68,7 @@ class RunStateStoreContract(ABC):
     ) -> None:
         await asyncio.to_thread(run_state_store.set_paused, True)
         await asyncio.to_thread(run_state_store.set_shutdown_requested)
-        await asyncio.sleep(0)
+        await asyncio.sleep(0)  # noqa: TID251
         assert await asyncio.to_thread(run_state_store.is_paused) is True
         assert await asyncio.to_thread(run_state_store.is_shutdown_requested) is True
 
@@ -76,16 +76,16 @@ class RunStateStoreContract(ABC):
         self, run_state_store: RunStateStore
     ) -> None:
         waiting = asyncio.create_task(run_state_store.wait_until_resumed())
-        await asyncio.sleep(0)
+        await asyncio.sleep(0)  # noqa: TID251
         assert waiting.done()
 
     async def test_waiting_until_resumed_returns_once_the_crawler_resumes(
         self, run_state_store: RunStateStore
     ) -> None:
         run_state_store.set_paused(True)
-        await asyncio.sleep(0)
+        await asyncio.sleep(0)  # noqa: TID251
         waiting = asyncio.create_task(run_state_store.wait_until_resumed())
-        await asyncio.sleep(0)
+        await asyncio.sleep(0)  # noqa: TID251
         assert not waiting.done()
         run_state_store.set_paused(False)
         await asyncio.wait_for(waiting, 1.0)
@@ -94,16 +94,16 @@ class RunStateStoreContract(ABC):
         self, run_state_store: RunStateStore
     ) -> None:
         run_state_store.set_shutdown_requested()
-        await asyncio.sleep(0)
+        await asyncio.sleep(0)  # noqa: TID251
         waiting = asyncio.create_task(run_state_store.wait_until_shutdown_requested())
-        await asyncio.sleep(0)
+        await asyncio.sleep(0)  # noqa: TID251
         assert waiting.done()
 
     async def test_waiting_until_shutdown_requested_returns_once_it_is_requested(
         self, run_state_store: RunStateStore
     ) -> None:
         waiting = asyncio.create_task(run_state_store.wait_until_shutdown_requested())
-        await asyncio.sleep(0)
+        await asyncio.sleep(0)  # noqa: TID251
         assert not waiting.done()
         run_state_store.set_shutdown_requested()
         await asyncio.wait_for(waiting, 1.0)
