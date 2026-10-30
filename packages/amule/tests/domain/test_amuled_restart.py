@@ -9,11 +9,11 @@ RESTART_MIN_INTERVAL = timedelta(seconds=300)
 
 
 def instant_at(seconds: int) -> MonotonicInstant:
-    return MonotonicInstant(seconds * 1_000_000_000)
+    return MonotonicInstant(nanoseconds=seconds * 1_000_000_000)
 
 
 def is_due(
-    forwarded_port: int, latest_restart: MonotonicInstant | None, now: MonotonicInstant
+    forwarded_port: int, *, latest_restart: MonotonicInstant | None, now: MonotonicInstant
 ) -> bool:
     return is_amuled_restart_due(
         forwarded_port=forwarded_port,

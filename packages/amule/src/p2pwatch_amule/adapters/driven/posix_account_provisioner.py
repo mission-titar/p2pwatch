@@ -32,7 +32,7 @@ class PosixAccountProvisioner(AccountProvisioner):
         self._find_group = find_group
         self._find_user = find_user
 
-    def find_or_create_amule_account(self, uid: Uid, gid: Gid) -> None:
+    def find_or_create_amule_account(self, uid: Uid, *, gid: Gid) -> None:
         # -o tolerates a uid/gid a Debian system account already holds: PUID/PGID only have to
         # match the host's ownership of the bind mounts.
         if _is_missing(self._find_group):

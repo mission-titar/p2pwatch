@@ -13,7 +13,7 @@ class FakeMonotonicClock(MonotonicClock):
     """Its ``sleep`` records the duration and advances ``now`` at once, then calls ``on_sleep``."""
 
     def __init__(self) -> None:
-        self.instant = MonotonicInstant(0)
+        self.instant = MonotonicInstant(nanoseconds=0)
         self.sleeps: list[timedelta] = []
         self.on_sleep: SleepCallback = lambda: None
 
@@ -23,5 +23,5 @@ class FakeMonotonicClock(MonotonicClock):
     def sleep(self, duration: timedelta) -> None:
         self.sleeps.append(duration)
         microseconds = duration // timedelta(microseconds=1)
-        self.instant = MonotonicInstant(self.instant.nanoseconds + microseconds * 1000)
+        self.instant = MonotonicInstant(nanoseconds=self.instant.nanoseconds + microseconds * 1000)
         self.on_sleep()

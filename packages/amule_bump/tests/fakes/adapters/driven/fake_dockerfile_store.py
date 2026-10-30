@@ -15,5 +15,5 @@ class FakeDockerfileStore(DockerfileReader, DockerfileWriter):
             raise FileNotFoundError(f"no Dockerfile at {dockerfile_path}")
         return self.dockerfile_texts_by_path[dockerfile_path]
 
-    def set_dockerfile(self, dockerfile_path: PurePath, dockerfile_text: str) -> None:
+    def set_dockerfile(self, dockerfile_path: PurePath, *, dockerfile_text: str) -> None:
         self.dockerfile_texts_by_path[dockerfile_path] = dockerfile_text

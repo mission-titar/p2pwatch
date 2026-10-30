@@ -14,10 +14,10 @@ class GithubUpstreamClient(UpstreamClient):
     def __init__(
         self,
         api_url: str,
+        *,
         full_name: str,
         token: str | None,
         url_opener: OpenerDirector,
-        *,
         timeout_seconds: float,
     ) -> None:
         self._api_url = api_url
@@ -35,9 +35,11 @@ class GithubUpstreamClient(UpstreamClient):
     def read_annotated_tag_target(self, object_id: str) -> GitObject:
         return _git_object(self._get_json(f"git/tags/{object_id}")["object"])
 
-    def read_file(self, ref: str, path: str) -> str:
+    def read_file(self, ref: str, *, path: str) -> str:
         try:
-            content = self._get(f"contents/{path}?ref={ref}", "application/vnd.github.raw+json")
+            content = self._get(
+                f"contents/{path}?ref={ref}", accept="application/vnd.github.raw+json"
+            )
         except HTTPError as error:
             if error.code == 404:  # absent at that ref: reads as empty, so a diff shows it added
                 return ""
@@ -45,9 +47,9 @@ class GithubUpstreamClient(UpstreamClient):
         return content.decode()
 
     def _get_json(self, path: str) -> Any:
-        return json.loads(self._get(path, "application/vnd.github+json"))
+        return json.loads(self._get(path, accept="application/vnd.github+json"))
 
-    def _get(self, path: str, accept: str) -> bytes:
+    def _get(self, path: str, *, accept: str) -> bytes:
         headers = {"Accept": accept, "X-GitHub-Api-Version": "2022-11-28"}
         if self._token:
             headers["Authorization"] = f"Bearer {self._token}"
@@ -67,4 +69,6 @@ _KINDS_BY_GITHUB_TYPE = {
 
 
 def _git_object(github_object: Any) -> GitObject:
-    return GitObject(_KINDS_BY_GITHUB_TYPE[github_object["type"]], str(github_object["sha"]))
+    return GitObject(
+        kind=_KINDS_BY_GITHUB_TYPE[github_object["type"]], object_id=str(github_object["sha"])
+    )

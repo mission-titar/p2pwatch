@@ -22,7 +22,7 @@ def ec_password_digest(ec_password: str) -> str:
     return hashlib.md5(ec_password.encode()).hexdigest()
 
 
-def reconcile_conf(existing_conf: str | None, ec_digest: str) -> str:
+def reconcile_conf(existing_conf: str | None, *, ec_digest: str) -> str:
     """Return `existing_conf` (None when absent) with our keys reconciled, every other key kept."""
     parser = _parser()
     if existing_conf is None:
@@ -55,7 +55,7 @@ def tcp_listen_port(conf: str) -> int:
     return parser.getint("eMule", "Port", fallback=DEFAULT_TCP_PORT)
 
 
-def with_listen_port(conf: str, port: int) -> str:
+def with_listen_port(conf: str, *, port: int) -> str:
     """Return `conf` with `[eMule] Port` and `UDPPort` set to `port`, every other key kept."""
     parser = _parser()
     parser.read_string(conf)

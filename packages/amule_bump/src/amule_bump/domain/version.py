@@ -9,7 +9,7 @@ def check_release_tag(tag: str) -> None:
         raise BumpError(f"unexpected upstream release tag {tag!r}")
 
 
-def is_newer(candidate: str, pinned: str) -> bool:
+def is_newer(candidate: str, *, pinned: str) -> bool:
     return _version(candidate) > _version(pinned)
 
 

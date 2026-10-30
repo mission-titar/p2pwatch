@@ -17,5 +17,5 @@ class TestFilesystemDockerfileStore(DockerfileStoreContract):
 def test_set_dockerfile_replaces_the_file_s_text(tmp_path: Path) -> None:
     dockerfile_path = tmp_path / "Dockerfile"
     dockerfile_path.write_text("FROM debian\nARG A=1\n")
-    FilesystemDockerfileStore().set_dockerfile(dockerfile_path, "FROM debian\n")
+    FilesystemDockerfileStore().set_dockerfile(dockerfile_path, dockerfile_text="FROM debian\n")
     assert dockerfile_path.read_text() == "FROM debian\n"

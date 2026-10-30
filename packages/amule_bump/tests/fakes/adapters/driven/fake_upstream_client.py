@@ -27,5 +27,5 @@ class FakeUpstreamClient(UpstreamClient):
     def read_annotated_tag_target(self, object_id: str) -> GitObject:
         return self._annotated_tag_targets_by_object_id[object_id]
 
-    def read_file(self, ref: str, path: str) -> str:
+    def read_file(self, ref: str, *, path: str) -> str:
         return self._file_texts_by_ref_and_path.get((ref, path), "")

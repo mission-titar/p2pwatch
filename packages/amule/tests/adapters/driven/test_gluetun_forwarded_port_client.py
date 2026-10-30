@@ -22,7 +22,7 @@ def gluetun() -> Iterator[FakeGluetunControlServer]:
 
 
 def reader(
-    gluetun: FakeGluetunControlServer, control_url: str | None = None
+    gluetun: FakeGluetunControlServer, *, control_url: str | None = None
 ) -> GluetunForwardedPortClient:
     return GluetunForwardedPortClient(
         control_url=control_url or gluetun.control_url,
@@ -36,9 +36,9 @@ def _logged_lines(caplog: pytest.LogCaptureFixture) -> list[tuple[str, int, str]
 
 
 def test_the_forwarded_port_is_read_from_gluetuns_control_server(
-    gluetun: FakeGluetunControlServer, caplog: pytest.LogCaptureFixture
+    *, gluetun: FakeGluetunControlServer, caplog: pytest.LogCaptureFixture
 ) -> None:
-    assert reader(gluetun, gluetun.control_url + "/").read_forwarded_port() == 51820
+    assert reader(gluetun, control_url=gluetun.control_url + "/").read_forwarded_port() == 51820
     assert gluetun.request_lines == ["GET /v1/portforward HTTP/1.1"]
     assert _logged_lines(caplog) == []
 
@@ -59,7 +59,7 @@ def test_the_forwarded_port_is_read_from_gluetuns_control_server(
     ],
 )
 def test_a_reply_without_a_positive_integer_port_is_no_port_logged_under_the_module_s_name(
-    gluetun: FakeGluetunControlServer, body: bytes, caplog: pytest.LogCaptureFixture
+    *, gluetun: FakeGluetunControlServer, body: bytes, caplog: pytest.LogCaptureFixture
 ) -> None:
     gluetun.body = body
     assert reader(gluetun).read_forwarded_port() is None
@@ -69,7 +69,7 @@ def test_a_reply_without_a_positive_integer_port_is_no_port_logged_under_the_mod
 
 
 def test_a_reply_is_logged_up_to_its_first_100_bytes(
-    gluetun: FakeGluetunControlServer, caplog: pytest.LogCaptureFixture
+    *, gluetun: FakeGluetunControlServer, caplog: pytest.LogCaptureFixture
 ) -> None:
     gluetun.body = b"x" * 101
     assert reader(gluetun).read_forwarded_port() is None
@@ -88,6 +88,7 @@ def test_a_reply_is_logged_up_to_its_first_100_bytes(
     ],
 )
 def test_a_failed_request_is_no_port_logged_under_the_module_s_name(
+    *,
     gluetun: FakeGluetunControlServer,
     status: int,
     raw_reply: bytes | None,
@@ -104,12 +105,12 @@ def test_a_failed_request_is_no_port_logged_under_the_module_s_name(
 
 
 def test_a_refused_connection_is_no_port(
-    gluetun: FakeGluetunControlServer, caplog: pytest.LogCaptureFixture
+    *, gluetun: FakeGluetunControlServer, caplog: pytest.LogCaptureFixture
 ) -> None:
     with socket.socket() as closed:
         closed.bind(("127.0.0.1", 0))
         port = closed.getsockname()[1]
-    assert reader(gluetun, f"http://127.0.0.1:{port}").read_forwarded_port() is None
+    assert reader(gluetun, control_url=f"http://127.0.0.1:{port}").read_forwarded_port() is None
     [(name, level, message)] = _logged_lines(caplog)
     assert (name, level) == (LOGGER_NAME, logging.WARNING)
     assert message.startswith("gluetun's control server is unavailable (<urlopen")

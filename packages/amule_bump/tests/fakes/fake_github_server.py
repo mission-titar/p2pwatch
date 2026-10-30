@@ -54,11 +54,11 @@ class FakeGithubServer:
         self._thread.join()
         self._server.server_close()
 
-    def answer_json(self, path: str, document: Mapping[str, Any]) -> None:
+    def answer_json(self, path: str, *, document: Mapping[str, Any]) -> None:
         self.answers_by_path_and_accept[(path, "application/vnd.github+json")] = (
             200,
             json.dumps(document).encode(),
         )
 
-    def answer_raw(self, path: str, status: int, body: bytes) -> None:
+    def answer_raw(self, path: str, *, status: int, body: bytes) -> None:
         self.answers_by_path_and_accept[(path, "application/vnd.github.raw+json")] = (status, body)

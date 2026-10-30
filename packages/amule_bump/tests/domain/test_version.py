@@ -24,11 +24,11 @@ def test_check_release_tag_rejects_a_tag_that_is_not_a_plain_version(tag: str) -
     ],
 )
 def test_is_newer_compares_versions_numerically(
-    candidate: str, pinned: str, expected: bool
+    *, candidate: str, pinned: str, expected: bool
 ) -> None:
-    assert is_newer(candidate, pinned) is expected
+    assert is_newer(candidate, pinned=pinned) is expected
 
 
 def test_is_newer_rejects_a_pinned_value_that_is_not_a_plain_version() -> None:
     with pytest.raises(BumpError, match="not a plain X.Y.Z version: 'main'"):
-        is_newer("3.1.0", "main")
+        is_newer("3.1.0", pinned="main")

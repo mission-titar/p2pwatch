@@ -21,7 +21,7 @@ _ON = ("enabled", "yes", "on", "true")
 _OFF = ("disabled", "no", "off", "false")
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class BootSettings:
     uid: Uid
     gid: Gid
@@ -30,7 +30,7 @@ class BootSettings:
     port_sync_enabled: bool
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class PortSyncSettings:
     gluetun_control_url: str
     poll_interval: timedelta
@@ -45,8 +45,8 @@ def parse_boot_settings(env: Mapping[str, str]) -> BootSettings:
     boot_settings = BootSettings(
         uid=_puid(env),
         gid=_pgid(env),
-        ec_password=_password(env, "AMULE_EC_PASSWORD"),
-        api_password=_password(env, "AMULE_API_PASSWORD"),
+        ec_password=_password(env, name="AMULE_EC_PASSWORD"),
+        api_password=_password(env, name="AMULE_API_PASSWORD"),
         port_sync_enabled=is_port_sync_enabled(env),
     )
     if boot_settings.port_sync_enabled:
@@ -82,24 +82,28 @@ def parse_port_sync_settings(env: Mapping[str, str]) -> PortSyncSettings:
         )
     return PortSyncSettings(
         gluetun_control_url=url,
-        poll_interval=_seconds(env, "PORT_SYNC_POLL_SECONDS", DEFAULT_PORT_SYNC_POLL_INTERVAL),
+        poll_interval=_seconds(
+            env, name="PORT_SYNC_POLL_SECONDS", default=DEFAULT_PORT_SYNC_POLL_INTERVAL
+        ),
         restart_min_interval=_seconds(
-            env, "PORT_SYNC_RESTART_MIN_SECONDS", DEFAULT_PORT_SYNC_RESTART_MIN_INTERVAL
+            env,
+            name="PORT_SYNC_RESTART_MIN_SECONDS",
+            default=DEFAULT_PORT_SYNC_RESTART_MIN_INTERVAL,
         ),
         uid=_puid(env),
         gid=_pgid(env),
     )
 
 
-def _required(env: Mapping[str, str], name: str) -> str:
+def _required(env: Mapping[str, str], *, name: str) -> str:
     setting = env.get(name)
     if not setting:
         raise SettingsError(f"{name} is required")
     return setting
 
 
-def _password(env: Mapping[str, str], name: str) -> str:
-    password = _required(env, name)
+def _password(env: Mapping[str, str], *, name: str) -> str:
+    password = _required(env, name=name)
     # Cc: the C0 and C1 controls and DEL, which no typed password holds.
     if any(unicodedata.category(char) == "Cc" for char in password):
         raise SettingsError(f"{name} must not contain a control character")
@@ -107,22 +111,22 @@ def _password(env: Mapping[str, str], name: str) -> str:
 
 
 def _puid(env: Mapping[str, str]) -> Uid:
-    return Uid(_numeric_id(env, "PUID"))
+    return Uid(_numeric_id(env, name="PUID"))
 
 
 def _pgid(env: Mapping[str, str]) -> Gid:
-    return Gid(_numeric_id(env, "PGID"))
+    return Gid(_numeric_id(env, name="PGID"))
 
 
-def _numeric_id(env: Mapping[str, str], name: str) -> int:
-    setting = _required(env, name)
+def _numeric_id(env: Mapping[str, str], *, name: str) -> int:
+    setting = _required(env, name=name)
     # isascii + isdigit: int() would also take "-1", "+1", "1_000", " 1" and non-ASCII digits.
     if not (setting.isascii() and setting.isdigit()):
         raise SettingsError(f"{name} must be a numeric id, got {setting!r}")
     return int(setting)
 
 
-def _seconds(env: Mapping[str, str], name: str, default: timedelta) -> timedelta:
+def _seconds(env: Mapping[str, str], *, name: str, default: timedelta) -> timedelta:
     setting = env.get(name)
     if not setting:
         return default

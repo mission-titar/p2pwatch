@@ -26,7 +26,9 @@ def _admin_password_setter(command_runner: FakeCommandRunner) -> AmuleApiAdminPa
 def test_amuleapi_sets_the_password_as_the_uid_and_gid_alone() -> None:
     command_runner = FakeCommandRunner()
 
-    _admin_password_setter(command_runner).set_admin_password("mot de passé", Uid(1000), Gid(1001))
+    _admin_password_setter(command_runner).set_admin_password(
+        "mot de passé", uid=Uid(1000), gid=Gid(1001)
+    )
 
     argv = ["amuleapi", "--config-dir=/home/amule/.aMule", "--set-admin-pass=mot de passé"]
     assert command_runner.commands == [

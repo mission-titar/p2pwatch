@@ -29,6 +29,7 @@ def port_sync_service_directory(tmp_path: Path) -> Path:
 
 def _supervisor(
     port_sync_service_directory: Path,
+    *,
     command_runner: FakeCommandRunner | None = None,
 ) -> S6ServiceSupervisor:
     return S6ServiceSupervisor(
@@ -45,7 +46,7 @@ def _logged_lines(caplog: pytest.LogCaptureFixture) -> list[tuple[str, int, str]
 
 @pytest.mark.parametrize("is_down_already", [False, True])
 def test_disabling_port_sync_leaves_its_down_file(
-    port_sync_service_directory: Path, is_down_already: bool
+    *, port_sync_service_directory: Path, is_down_already: bool
 ) -> None:
     if is_down_already:
         (port_sync_service_directory / "down").touch()
@@ -57,7 +58,7 @@ def test_disabling_port_sync_leaves_its_down_file(
 
 @pytest.mark.parametrize("is_down_already", [False, True])
 def test_enabling_port_sync_leaves_no_down_file(
-    port_sync_service_directory: Path, is_down_already: bool
+    *, port_sync_service_directory: Path, is_down_already: bool
 ) -> None:
     if is_down_already:
         (port_sync_service_directory / "down").touch()
@@ -68,11 +69,14 @@ def test_enabling_port_sync_leaves_no_down_file(
 
 
 def test_stopping_amuled_waits_until_it_is_down(
-    port_sync_service_directory: Path, caplog: pytest.LogCaptureFixture
+    *, port_sync_service_directory: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     command_runner = FakeCommandRunner()
 
-    assert _supervisor(port_sync_service_directory, command_runner).stop_amuled() is True
+    assert (
+        _supervisor(port_sync_service_directory, command_runner=command_runner).stop_amuled()
+        is True
+    )
 
     assert command_runner.commands == [
         (["s6-svc", "-wD", "-T", "42000", "-d", "/run/service/amuled"], CAPTURED)
@@ -81,12 +85,15 @@ def test_stopping_amuled_waits_until_it_is_down(
 
 
 def test_a_stop_that_fails_is_logged_under_the_module_s_name(
-    port_sync_service_directory: Path, caplog: pytest.LogCaptureFixture
+    *, port_sync_service_directory: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     command_runner = FakeCommandRunner()
     command_runner.exit_code, command_runner.stderr = 99, "timed out\n"
 
-    assert _supervisor(port_sync_service_directory, command_runner).stop_amuled() is False
+    assert (
+        _supervisor(port_sync_service_directory, command_runner=command_runner).stop_amuled()
+        is False
+    )
 
     assert _logged_lines(caplog) == [
         (LOGGER_NAME, logging.ERROR, "s6-svc -wD -T 42000 -d exited 99: timed out")
@@ -94,23 +101,23 @@ def test_a_stop_that_fails_is_logged_under_the_module_s_name(
 
 
 def test_starting_amuled_sends_up(
-    port_sync_service_directory: Path, caplog: pytest.LogCaptureFixture
+    *, port_sync_service_directory: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     command_runner = FakeCommandRunner()
 
-    _supervisor(port_sync_service_directory, command_runner).start_amuled()
+    _supervisor(port_sync_service_directory, command_runner=command_runner).start_amuled()
 
     assert command_runner.commands == [(["s6-svc", "-u", "/run/service/amuled"], CAPTURED)]
     assert _logged_lines(caplog) == []
 
 
 def test_a_start_that_fails_is_logged_under_the_module_s_name(
-    port_sync_service_directory: Path, caplog: pytest.LogCaptureFixture
+    *, port_sync_service_directory: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     command_runner = FakeCommandRunner()
     command_runner.exit_code, command_runner.stderr = 111, "timed out\n"
 
-    _supervisor(port_sync_service_directory, command_runner).start_amuled()
+    _supervisor(port_sync_service_directory, command_runner=command_runner).start_amuled()
 
     assert _logged_lines(caplog) == [
         (LOGGER_NAME, logging.ERROR, "s6-svc -u exited 111: timed out")

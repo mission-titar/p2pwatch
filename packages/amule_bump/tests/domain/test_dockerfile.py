@@ -8,11 +8,13 @@ ARG AMULE_VERSION=3.0.1
 ARG AMULE_COMMIT=02db0d7faecfc377694ff6242bc23346185990ed
 RUN echo "$AMULE_VERSION"
 """
-NEW_PIN = Pin("3.1.0", "909d304d993ee07df6c6f6acf501a6d791d53666")
+NEW_PIN = Pin(version="3.1.0", commit="909d304d993ee07df6c6f6acf501a6d791d53666")
 
 
 def test_read_pin_returns_the_version_and_commit() -> None:
-    assert read_pin(DOCKERFILE) == Pin("3.0.1", "02db0d7faecfc377694ff6242bc23346185990ed")
+    assert read_pin(DOCKERFILE) == Pin(
+        version="3.0.1", commit="02db0d7faecfc377694ff6242bc23346185990ed"
+    )
 
 
 def test_read_pin_fails_on_a_missing_arg() -> None:
@@ -33,7 +35,7 @@ def test_read_pin_ignores_a_mention_that_is_not_the_arg_line() -> None:
 
 
 def test_rewrite_pin_replaces_both_args_and_nothing_else() -> None:
-    assert rewrite_pin(DOCKERFILE, NEW_PIN) == (
+    assert rewrite_pin(DOCKERFILE, pin=NEW_PIN) == (
         "FROM debian AS build\n"
         "ARG AMULE_VERSION=3.1.0\n"
         "ARG AMULE_COMMIT=909d304d993ee07df6c6f6acf501a6d791d53666\n"

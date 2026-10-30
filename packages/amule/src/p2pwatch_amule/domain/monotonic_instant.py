@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class MonotonicInstant:
     """Never persisted nor displayed: its origin changes with each process. Its arithmetic refuses
     a ``datetime``, for mypy and at run time."""

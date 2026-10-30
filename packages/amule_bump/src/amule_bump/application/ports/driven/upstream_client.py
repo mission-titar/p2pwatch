@@ -19,5 +19,5 @@ class UpstreamClient(ABC):
         """The object the annotated tag object ``object_id`` names."""
 
     @abstractmethod
-    def read_file(self, ref: str, path: str) -> str:
+    def read_file(self, ref: str, *, path: str) -> str:
         """The file's text at ``ref``, empty when the file is absent there."""

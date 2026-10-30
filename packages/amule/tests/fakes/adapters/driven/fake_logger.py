@@ -4,7 +4,7 @@ from typing import Literal
 from p2pwatch_amule.application.ports.driven.logger import Logger
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class LoggedLine:
     level: Literal["info", "error"]
     message: str
@@ -17,7 +17,7 @@ class FakeLogger(Logger):
         self.lines: list[LoggedLine] = []
 
     def info(self, message: str, *args: object) -> None:
-        self.lines.append(LoggedLine("info", message % args))
+        self.lines.append(LoggedLine(level="info", message=message % args))
 
     def error(self, message: str, *args: object) -> None:
-        self.lines.append(LoggedLine("error", message % args))
+        self.lines.append(LoggedLine(level="error", message=message % args))

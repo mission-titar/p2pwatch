@@ -9,5 +9,5 @@ class FakePullRequestDrafter(PullRequestDrafter):
     def __init__(self) -> None:
         self.bodies_by_path: dict[PurePath, str] = {}
 
-    def draft_pull_request_body(self, body_path: PurePath, body: str) -> None:
+    def draft_pull_request_body(self, body_path: PurePath, *, body: str) -> None:
         self.bodies_by_path[body_path] = body

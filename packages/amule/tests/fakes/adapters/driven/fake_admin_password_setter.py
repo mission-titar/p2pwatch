@@ -8,5 +8,5 @@ class FakeAdminPasswordSetter(AdminPasswordSetter):
     def __init__(self, actions: list[str]) -> None:
         self.actions = actions
 
-    def set_admin_password(self, api_password: str, uid: Uid, gid: Gid) -> None:
+    def set_admin_password(self, api_password: str, *, uid: Uid, gid: Gid) -> None:
         self.actions.append(f"admin password {api_password} as {uid}:{gid}")

@@ -16,7 +16,7 @@ class FakeAmuleBumper(AmuleBumper):
         self.calls: list[tuple[PurePath, PurePath, bool]] = []
 
     def bump_amule(
-        self, dockerfile_path: PurePath, body_path: PurePath, *, dry_run: bool
+        self, dockerfile_path: PurePath, *, body_path: PurePath, dry_run: bool
     ) -> AmuleBump | PinIsLatest | PinAheadOfLatest:
         self.calls.append((dockerfile_path, body_path, dry_run))
         if isinstance(self._outcome, Exception):

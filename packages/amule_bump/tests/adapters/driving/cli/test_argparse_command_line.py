@@ -20,7 +20,7 @@ from tests.fakes.application.use_cases.fake_amule_bumper import FakeAmuleBumper
 
 CWD = PurePath("/repo")
 TEMPORARY_DIRECTORY = PurePath("/scratch")
-NEW_PIN = Pin("3.1.0", "909d304d993ee07df6c6f6acf501a6d791d53666")
+NEW_PIN = Pin(version="3.1.0", commit="909d304d993ee07df6c6f6acf501a6d791d53666")
 
 
 def command_line(amule_bumper: AmuleBumper) -> ArgparseCommandLine:
@@ -30,7 +30,7 @@ def command_line(amule_bumper: AmuleBumper) -> ArgparseCommandLine:
 
 
 def test_bump_passes_its_options_under_the_working_directory() -> None:
-    amule_bumper = FakeAmuleBumper(PinIsLatest("3.1.0"))
+    amule_bumper = FakeAmuleBumper(PinIsLatest(version="3.1.0"))
     argv = ["bump", "--dockerfile", "Dockerfile", "--body-file", "/abs/body.md", "--dry-run"]
 
     assert command_line(amule_bumper).run(argv) == 0
@@ -39,7 +39,7 @@ def test_bump_passes_its_options_under_the_working_directory() -> None:
 
 
 def test_bump_without_options_takes_the_domains_files_under_cwd_and_temp() -> None:
-    amule_bumper = FakeAmuleBumper(PinIsLatest("3.1.0"))
+    amule_bumper = FakeAmuleBumper(PinIsLatest(version="3.1.0"))
 
     command_line(amule_bumper).run(["bump"])
 
@@ -49,7 +49,7 @@ def test_bump_without_options_takes_the_domains_files_under_cwd_and_temp() -> No
 
 
 def test_the_pin_is_latest_is_nothing_to_do(capsys: pytest.CaptureFixture[str]) -> None:
-    assert command_line(FakeAmuleBumper(PinIsLatest("3.1.0"))).run(["bump"]) == 0
+    assert command_line(FakeAmuleBumper(PinIsLatest(version="3.1.0"))).run(["bump"]) == 0
     assert capsys.readouterr().out == "aMule 3.1.0 is the latest release: nothing to do\n"
 
 
@@ -62,7 +62,7 @@ def test_the_pin_ahead_of_latest_is_nothing_to_do(capsys: pytest.CaptureFixture[
 
 
 def test_a_dry_run_prints_the_new_pin_and_the_body(capsys: pytest.CaptureFixture[str]) -> None:
-    amule_bump = AmuleBump(NEW_PIN, "Bumps aMule\n")
+    amule_bump = AmuleBump(new_pin=NEW_PIN, body="Bumps aMule\n")
     assert command_line(FakeAmuleBumper(amule_bump)).run(["bump", "--dry-run"]) == 0
     assert capsys.readouterr().out == (
         "ARG AMULE_VERSION=3.1.0\n"
@@ -73,7 +73,7 @@ def test_a_dry_run_prints_the_new_pin_and_the_body(capsys: pytest.CaptureFixture
 
 
 def test_a_bump_prints_nothing_of_what_it_wrote(capsys: pytest.CaptureFixture[str]) -> None:
-    amule_bump = AmuleBump(NEW_PIN, "Bumps aMule\n")
+    amule_bump = AmuleBump(new_pin=NEW_PIN, body="Bumps aMule\n")
     assert command_line(FakeAmuleBumper(amule_bump)).run(["bump"]) == 0
     assert capsys.readouterr().out == ""
 
@@ -94,7 +94,7 @@ def test_the_bare_invocation_is_refused_with_a_usage_line(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     with pytest.raises(SystemExit) as exit_info:
-        command_line(FakeAmuleBumper(PinIsLatest("3.1.0"))).run([])
+        command_line(FakeAmuleBumper(PinIsLatest(version="3.1.0"))).run([])
 
     assert exit_info.value.code == 2
     assert capsys.readouterr().err.startswith("usage: amule_bump ")
@@ -102,7 +102,7 @@ def test_the_bare_invocation_is_refused_with_a_usage_line(
 
 def test_the_help_lists_the_subcommands(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as exit_info:
-        command_line(FakeAmuleBumper(PinIsLatest("3.1.0"))).run(["--help"])
+        command_line(FakeAmuleBumper(PinIsLatest(version="3.1.0"))).run(["--help"])
 
     assert exit_info.value.code == 0
     assert "{bump}" in capsys.readouterr().out

@@ -8,5 +8,5 @@ class FakeAccountProvisioner(AccountProvisioner):
     def __init__(self, actions: list[str]) -> None:
         self.actions = actions
 
-    def find_or_create_amule_account(self, uid: Uid, gid: Gid) -> None:
+    def find_or_create_amule_account(self, uid: Uid, *, gid: Gid) -> None:
         self.actions.append(f"account {uid}:{gid}")

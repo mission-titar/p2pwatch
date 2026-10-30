@@ -21,7 +21,7 @@ ENV = {
 }
 
 
-def _boot_composition(env: Mapping[str, str], actions: list[str]) -> BootComposition:
+def _boot_composition(env: Mapping[str, str], *, actions: list[str]) -> BootComposition:
     amule_conf = FakeAmuleConfStore(actions)
     return BootComposition(
         env=env,
@@ -37,7 +37,7 @@ def _boot_composition(env: Mapping[str, str], actions: list[str]) -> BootComposi
 def test_the_boot_runs_on_the_settings_its_variables_give() -> None:
     actions: list[str] = []
 
-    _boot_composition({**ENV, "PORT_SYNC": "on"}, actions).boot_container()
+    _boot_composition({**ENV, "PORT_SYNC": "on"}, actions=actions).boot_container()
 
     assert actions == [
         "account 1000:1001",
@@ -58,10 +58,10 @@ def test_the_boot_runs_on_the_settings_its_variables_give() -> None:
     ],
 )
 def test_a_refused_variable_aborts_the_boot_before_any_change(
-    variables: dict[str, str], message: str
+    *, variables: dict[str, str], message: str
 ) -> None:
     actions: list[str] = []
-    boot_composition = _boot_composition({**ENV, **variables}, actions)
+    boot_composition = _boot_composition({**ENV, **variables}, actions=actions)
 
     with pytest.raises(SettingsError, match=f"^{re.escape(message)}"):
         boot_composition.boot_container()

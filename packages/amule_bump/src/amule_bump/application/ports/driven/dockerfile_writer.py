@@ -6,5 +6,5 @@ class DockerfileWriter(ABC):
     """Writes the Dockerfile that pins aMule."""
 
     @abstractmethod
-    def set_dockerfile(self, dockerfile_path: PurePath, dockerfile_text: str) -> None:
+    def set_dockerfile(self, dockerfile_path: PurePath, *, dockerfile_text: str) -> None:
         """Replaces the Dockerfile's text with ``dockerfile_text``."""
