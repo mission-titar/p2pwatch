@@ -102,7 +102,7 @@ class ContactPoint:
             raise ValueError(f"a {self.network} contact point is {shape}")
 
 
-def parse_contact_point(network: Network, server: str) -> ContactPoint | None:
+def parse_contact_point(network: Network, *, server: str) -> ContactPoint | None:
     """``server`` as ``network``'s contact point, ``None`` when it names none."""
     is_server, _ = _CONTACT_POINTS[network]
     return ContactPoint(network, server) if is_server(server) else None
@@ -145,7 +145,7 @@ class LatestPoint:
     session_received_bytes: int
 
 
-def carried_role(latest: LatestPoint | None, reading: SourceReading) -> SourceRole:
+def carried_role(latest: LatestPoint | None, *, reading: SourceReading) -> SourceRole:
     """The role of ``reading``, in a passing state, from its source's latest point: none once aMule
     recreated the client, which restarts its session's received bytes."""
     if latest is None or latest.session_received_bytes > reading.session_received_bytes:

@@ -112,7 +112,9 @@ def test_candidate_from_fields_maps_absent_media_metadata_to_none() -> None:
 
 
 def test_fold_raw_metadata_appends_the_three_values_after_the_pairs() -> None:
-    folded = fold_raw_metadata((("0x0308", "0"),), "xvid", "Video", 2)
+    folded = fold_raw_metadata(
+        (("0x0308", "0"),), codec="xvid", file_type="Video", complete_source_count=2
+    )
     assert folded == (
         ("0x0308", "0"),
         ("codec", "xvid"),
@@ -122,5 +124,5 @@ def test_fold_raw_metadata_appends_the_three_values_after_the_pairs() -> None:
 
 
 def test_fold_raw_metadata_keeps_an_absent_value_as_none() -> None:
-    folded = fold_raw_metadata((), None, None, 0)
+    folded = fold_raw_metadata((), codec=None, file_type=None, complete_source_count=0)
     assert folded == (("codec", None), ("file_type", None), ("complete_source_count", 0))

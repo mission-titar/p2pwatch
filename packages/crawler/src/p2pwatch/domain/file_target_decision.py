@@ -33,7 +33,7 @@ class DatedDecision[Decision: FileTargetDecision]:
 
 
 def records_to_write(
-    fresh: Sequence[DecisionRecord], persisted: Mapping[TargetId, FileTargetDecision]
+    fresh: Sequence[DecisionRecord], *, persisted: Mapping[TargetId, FileTargetDecision]
 ) -> tuple[FileTargetDecision, ...]:
     """What the file's fresh records change in its persisted decisions, by target: each fresh
     record unlike its persisted one, then a retraction per target the fresh ones dropped."""

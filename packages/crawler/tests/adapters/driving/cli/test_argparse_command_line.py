@@ -66,7 +66,7 @@ def test_crawl_defaults_to_the_deploy_directory_under_the_working_directory_give
 
 
 def test_crawl_refuses_to_start_on_an_invalid_config(capsys: pytest.CaptureFixture[str]) -> None:
-    crawler_runner = FakeCrawlerRunner(InvalidConfigError(None, "search: section missing"))
+    crawler_runner = FakeCrawlerRunner(InvalidConfigError(None, message="search: section missing"))
 
     assert _command_line(crawler_runner=crawler_runner).run(["crawl"]) == 1
 

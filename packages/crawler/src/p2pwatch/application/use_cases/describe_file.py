@@ -37,7 +37,7 @@ class DescribeFile(FileDescriber):
         requested_until: datetime | None,
     ) -> FileDescription | None:
         now = self._wall_clock.now().replace(microsecond=0)
-        interval = requested_interval(requested_since, requested_until, now)
+        interval = requested_interval(requested_since, requested_until=requested_until, now=now)
         file_history = self._catalog_file_reader.read_file_history(
             file_id, since=interval.since, until=interval.until
         )

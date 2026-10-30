@@ -31,7 +31,7 @@ class DescribeSourceName(SourceNameDescriber):
         requested_until: datetime | None,
     ) -> SourceNameDescription | None:
         now = self._wall_clock.now().replace(microsecond=0)
-        interval = requested_interval(requested_since, requested_until, now)
+        interval = requested_interval(requested_since, requested_until=requested_until, now=now)
         source_name_history = self._source_reader.read_source_name_history(
             source_name,
             limit=PAGE_SIZE,

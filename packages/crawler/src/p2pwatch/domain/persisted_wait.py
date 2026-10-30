@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 
 
-def remaining_wait(started_at: datetime, duration: timedelta, now: datetime) -> timedelta:
+def remaining_wait(started_at: datetime, *, duration: timedelta, now: datetime) -> timedelta:
     """What is left of the wait, its elapsed time clamped to [0, ``duration``]: a clock stepped
     back never lengthens a wait past its own duration."""
     elapsed = min(max(now - started_at, timedelta(0)), duration)

@@ -23,7 +23,7 @@ class Interval:
 
 
 def requested_interval(
-    requested_since: datetime | None, requested_until: datetime | None, now: datetime
+    requested_since: datetime | None, *, requested_until: datetime | None, now: datetime
 ) -> Interval:
     """The interval asked for: ``until`` is ``now`` when absent, ``since`` is
     ``MAX_INTERVAL_SPAN`` before ``until`` when absent or not before it, and a longer one keeps
@@ -31,12 +31,12 @@ def requested_interval(
     until = requested_until or now
     since = requested_since
     if since is None or since >= until:
-        return interval_ending(until, MAX_INTERVAL_SPAN)
+        return interval_ending(until, span=MAX_INTERVAL_SPAN)
     if until - since > MAX_INTERVAL_SPAN:
         return Interval(until - MAX_INTERVAL_SPAN, until, clamped=True)
     return Interval(since, until)
 
 
-def interval_ending(now: datetime, span: timedelta) -> Interval:
+def interval_ending(now: datetime, *, span: timedelta) -> Interval:
     """The ``span`` ending ``now``, a preset's interval."""
     return Interval(now - span, now)

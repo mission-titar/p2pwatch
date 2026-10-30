@@ -53,7 +53,8 @@ class BackoffRegistry:
         monotonic_now = self._monotonic_clock.now()
         self._state_by_key = dict(states)
         self._deadline_by_key = {
-            backoff_key: monotonic_now + remaining_wait(state.started_at, state.delay, wall_now)
+            backoff_key: monotonic_now
+            + remaining_wait(state.started_at, duration=state.delay, now=wall_now)
             for backoff_key, state in states.items()
         }
 

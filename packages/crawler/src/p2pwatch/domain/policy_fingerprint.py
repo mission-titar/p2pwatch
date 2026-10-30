@@ -9,7 +9,7 @@ decisions too), so the fingerprint spans both, in a fixed order.
 import hashlib
 
 
-def policy_fingerprint(matcher_bytes: bytes, targets_bytes: bytes) -> str:
+def policy_fingerprint(matcher_bytes: bytes, *, targets_bytes: bytes) -> str:
     """sha256 hex over both policy files' bytes (matcher then targets).
 
     The length of ``matcher_bytes`` is prefixed (8 bytes, big-endian) before the

@@ -22,6 +22,7 @@ class MatchingExplainer:
     def explain(
         self,
         filenames: Iterable[str],
+        *,
         size_bytes: int | None,
         duration_seconds: int | None,
         bitrate_kbps: int | None,
@@ -40,6 +41,11 @@ class MatchingExplainer:
                 bitrate_kbps=float(bitrate_kbps) if bitrate_kbps is not None else None,
             )
         else:
-            base_candidate = candidate_from_fields("", size_bytes, duration_seconds, bitrate_kbps)
+            base_candidate = candidate_from_fields(
+                "",
+                size_bytes=size_bytes,
+                duration_seconds=duration_seconds,
+                bitrate_kbps=bitrate_kbps,
+            )
         candidates = [replace(base_candidate, filename=filename) for filename in filenames]
         return self._engine.explain(candidates, target_id=target_id)

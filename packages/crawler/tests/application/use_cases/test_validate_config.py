@@ -34,7 +34,7 @@ def test_a_valid_config_reports_no_problem_once_each_file_is_checked_in_its_role
 
 
 def test_a_wrong_key_is_reported_with_its_file_and_its_key() -> None:
-    refusal = InvalidConfigError("search.keywords", "non-empty list of strings expected")
+    refusal = InvalidConfigError("search.keywords", message="non-empty list of strings expected")
 
     config_report = _validate(FakeConfigChecker({_CONFIG_PATH: refusal}))
 
@@ -46,7 +46,7 @@ def test_a_wrong_key_is_reported_with_its_file_and_its_key() -> None:
 
 
 def test_the_first_wrong_file_is_the_only_one_reported_and_checked_last() -> None:
-    refusal = InvalidConfigError(None, "'episodes' section: list expected")
+    refusal = InvalidConfigError(None, message="'episodes' section: list expected")
     config_checker = FakeConfigChecker({_TARGETS_PATH: refusal})
 
     config_report = _validate(config_checker)

@@ -303,7 +303,7 @@ def _interval_selector(
         shown=f"{utc_timestamp(interval.since)} to {utc_timestamp(interval.until)}",
         notices=(_CLAMPED_NOTICE,) if interval.clamped else (),
         presets=tuple(
-            IntervalLinkDisplay(label, url(interval_ending(now, span)))
+            IntervalLinkDisplay(label, url(interval_ending(now, span=span)))
             for label, span in _INTERVAL_PRESETS
         ),
         from_value=input_timestamp(interval.since),
