@@ -61,6 +61,10 @@ Nothing: no page, metric, notification, config key or database changes.
   the last one leaves no exclusion.*
 - **D14. The mechanical blocks pass both size bounds, and four non-mechanical ones reach 20 files** (operator).
   *A change of style across the code reads as one pattern; cutting it by file count buys no readability.*
+- **D15. A pair's contract receives its two ports, each typed by its port, in place of a `Protocol` copying them.**
+  *The copy was checked by nothing: `pytest.fixture` erases the fixture's type, so a port changed under it went
+  unseen by mypy (block 130). Typed by the ports themselves, every call the contract makes is checked against them.*
+  (Added after approval: found by the holistic review, operator 2026-10-30.)
 
 ## 4. Acceptance
 
@@ -96,10 +100,12 @@ Estimates by `kwonly-estimates` (Sonnet, 2026-10-29); the zones are in appendix 
 | 150 | `refactor/keyword-only-test-support` | zone C5 | 938, 116 |
 | 160 | `refactor/keyword-only-adapter-tests` | zone C6 | 486, 40 |
 | 170 | `refactor/keyword-only-core-tests` | zone C7; drafts the handoff | 559, 22 |
+| 175 | `refactor/contract-ports-in-place-of-protocols` | D15 | 470, 29 |
 | 180 | `docs/keyword-only-calls-wrap` | closing: the holistic findings, `BACKLOG.md`, the handoff | |
 
 - **Blocks 10 to 60 hold the decisions** and come first. Blocks 20 to 50 reach 20 files (D14).
 - **Blocks 70 to 170 are mechanical** (D14): they apply appendix B's recipe and nothing else.
+- **Block 175 holds D15** and is not mechanical; it passes 20 files, approved by the operator (2026-10-30).
 
 The order: the rules first, so the gate checks every later block; the `Protocol`s and the clock `noqa`s before the
 bans that need them; then the conversion, from the small packages to the crawler, its `src` before its tests.
@@ -236,6 +242,17 @@ zone's two exclusions.
 `typing_extensions.NamedTuple` and `collections.namedtuple` (`typing_extensions` is installed, so its spelling would
 pass otherwise). `engine.py`'s `_RuleHit` and the integration conftest's `ApiEndpoint` become frozen, keyword-only
 dataclasses.
+
+### Contract ports (block 175)
+
+Each of the 9 pair contracts (`packages/*/tests/contracts/application/ports/driven/*_store_contract.py`) replaces
+its `<Thing>Store` `Protocol` by a frozen, keyword-only dataclass `<Thing>Ports` in the contract's module, with
+fields `writer` and `reader` typed by the two ports; the contract's abstract fixture returns it and its tests call
+`ports.writer.<method>(...)` or `ports.reader.<method>(...)`. Each `Test<Implementation>` subclass keeps its
+concrete fixture, which its own tests use, and adds a `<thing>_ports` fixture building
+`<Thing>Ports(writer=store, reader=store)`. `AGENTS.md`'s rule "A pair's contract types its fixture with a
+`Protocol` of the pair, named `<Thing>Store`" becomes "receives a `<Thing>Ports` of its two ports", and
+`docs/contributing/testing.md`'s sentence follows (in French, as all of `docs/`).
 
 ### `AGENTS.md`, block by block
 
