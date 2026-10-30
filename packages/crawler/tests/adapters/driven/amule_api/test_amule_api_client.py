@@ -66,12 +66,12 @@ async def _connected(
     return client
 
 
-def _paths(api: FakeAmuleApi, path: str) -> list[httpx.URL]:
+def _paths(api: FakeAmuleApi, *, path: str) -> list[httpx.URL]:
     """Every request made to one route, in order (close() adds a logout after the assertions)."""
     return [request.url for request in api.requests if request.url.path == path]
 
 
-def _seconds_after_start(api: FakeAmuleApi, method: str, path: str) -> list[float]:
+def _seconds_after_start(api: FakeAmuleApi, *, method: str, path: str) -> list[float]:
     """When each call to one route was made, in seconds after the search's network start."""
     assert api.search_started_at is not None
     start: MonotonicInstant = api.search_started_at
@@ -452,7 +452,7 @@ async def test_a_body_that_is_not_json_is_an_unreachable_daemon() -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("channel", "search_type"), [("ed2k", "global"), ("kad", "kad")])
 async def test_search_starts_the_keyword_on_the_channels_search_type(
-    channel: Channel, search_type: str
+    *, channel: Channel, search_type: str
 ) -> None:
     api = FakeAmuleApi()
     client = await _connected(api)
@@ -526,7 +526,7 @@ async def test_search_never_stops_nor_frees_its_search() -> None:
     await client.search(Keyword("keroro"), channel=Channel("kad"), budget_seconds=120)
     await client.close()
 
-    assert _paths(api, "/api/v1/search/42/stop") == []
+    assert _paths(api, path="/api/v1/search/42/stop") == []
     assert [request for request in api.requests if request.method == "DELETE"] == []
 
 
@@ -540,7 +540,13 @@ async def test_a_kad_search_is_widened_from_its_second_poll_until_kad_refuses() 
     await client.search(Keyword("keroro"), channel=Channel("kad"), budget_seconds=120)
     await client.close()
 
-    assert _seconds_after_start(api, "POST", "/api/v1/search/42/more") == [5, 10, 15, 20, 25]
+    assert _seconds_after_start(api, method="POST", path="/api/v1/search/42/more") == [
+        5,
+        10,
+        15,
+        20,
+        25,
+    ]
 
 
 @pytest.mark.asyncio
@@ -551,7 +557,7 @@ async def test_an_ed2k_search_is_never_widened() -> None:
     await client.search(Keyword("keroro"), channel=Channel("ed2k"), budget_seconds=120)
     await client.close()
 
-    assert _paths(api, "/api/v1/search/42/more") == []
+    assert _paths(api, path="/api/v1/search/42/more") == []
 
 
 @pytest.mark.asyncio
@@ -565,7 +571,7 @@ async def test_a_failed_widening_leaves_the_search_standing() -> None:
     await client.close()
 
     assert len(answer.reported_files) == 1
-    assert len(_paths(api, "/api/v1/search/42/more")) == 1
+    assert len(_paths(api, path="/api/v1/search/42/more")) == 1
 
 
 @pytest.mark.asyncio
@@ -708,7 +714,7 @@ async def test_downloads_pages_the_shared_files_past_the_first_hundred() -> None
     assert len(shared) == 501
     assert shared[-1].file.native_id == f"{500:032x}"
     # Keyset paging, never offset: a row removed mid-sweep must not shift the window (§7.5).
-    sweep = _paths(api, "/api/v1/shared")
+    sweep = _paths(api, path="/api/v1/shared")
     assert all(url.params.get("offset") is None for url in sweep)
     assert sweep[-1].params.get("after") == f"{499:032x}"
 
@@ -723,7 +729,7 @@ async def test_downloads_asks_pages_of_the_size_it_was_given() -> None:
     await client.close()
 
     assert len(shared) == 5
-    sweep = _paths(api, "/api/v1/shared")
+    sweep = _paths(api, path="/api/v1/shared")
     assert [url.params.get("limit") for url in sweep] == ["2", "2", "2"]
 
 
@@ -827,7 +833,7 @@ async def test_downloads_reads_the_whole_queue_before_the_shared_files() -> None
 
     lists = ("/api/v1/downloads", "/api/v1/shared")
     assert [request.url.path for request in api.requests if request.url.path in lists] == [*lists]
-    assert _paths(api, "/api/v1/downloads")[0].params.get("status") == "all"
+    assert _paths(api, path="/api/v1/downloads")[0].params.get("status") == "all"
     assert downloads == (
         DownloadStatus(
             file=_KEY,
@@ -903,7 +909,7 @@ async def test_sources_pages_every_client_of_the_download_past_the_first_hundred
     assert len(readings) == 600
     assert readings[-1].source_name == "peer 600"
     # Keyset paging on the route's identity column, which is an integer here.
-    sweep = _paths(api, f"/api/v1/downloads/{_HASH}/clients")
+    sweep = _paths(api, path=f"/api/v1/downloads/{_HASH}/clients")
     assert [url.params.get("sort") for url in sweep] == ["ecid", "ecid"]
     assert all(url.params.get("offset") is None for url in sweep)
     assert sweep[-1].params.get("after") == "500"
@@ -960,7 +966,7 @@ async def test_a_client_gone_between_the_list_and_its_detail_is_dropped() -> Non
     [(503, "ec_unavailable", ClientUnreachableError), (500, "amuled_rejected", ReadRejectedError)],
 )
 async def test_any_other_failure_of_a_detail_fails_the_read(
-    status: int, code: str, raised: type[Exception]
+    *, status: int, code: str, raised: type[Exception]
 ) -> None:
     api = FakeAmuleApi(clients={_HASH: [_source(1)]})
     api.overrides[("GET", "/api/v1/clients/1")] = lambda _: error(status, code=code)
@@ -992,7 +998,7 @@ async def test_a_download_that_left_has_no_source() -> None:
     assert await client.sources(_KEY) == ()
     await client.close()
 
-    assert len(_paths(api, f"/api/v1/downloads/{_HASH}/clients")) == 1
+    assert len(_paths(api, path=f"/api/v1/downloads/{_HASH}/clients")) == 1
 
 
 @pytest.mark.asyncio

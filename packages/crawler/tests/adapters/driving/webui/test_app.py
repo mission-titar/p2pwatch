@@ -95,7 +95,7 @@ _FAKE_TIME = FakeTime(datetime(2026, 10, 14, 20, 0, tzinfo=UTC))
 _WALL_CLOCK = _FAKE_TIME.wall
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class _Controls:
     """The three run state use cases' fakes, ``calls`` the operations the routes called on them."""
 
@@ -236,7 +236,7 @@ def _app_on_fakes(
     )
 
 
-async def _page(app: Starlette, url: str) -> str:
+async def _page(app: Starlette, *, url: str) -> str:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get(url)
     assert resp.status_code == 200
@@ -259,15 +259,16 @@ def _one_file(*decisions: DecisionRecord) -> FileListing:
 
 async def _files_page(
     url: str,
+    *,
     file_listing: FileListing | None = None,
     target_segments: tuple[TargetSegment, ...] | None = None,
 ) -> tuple[str, ListFilesCall]:
     """The page rendered from ``file_listing`` (one catalog-tier file by default), and its call."""
     if file_listing is None:
-        file_listing = _one_file(_decision(TargetId("062A"), "catalog"))
+        file_listing = _one_file(_decision(TargetId("062A"), tier="catalog"))
     file_lister = FakeFileLister(file_listing)
     app = _app_on_fakes(file_lister=file_lister, target_segments=target_segments)
-    text = await _page(app, url)
+    text = await _page(app, url=url)
     (call,) = file_lister.calls
     return text, call
 
@@ -277,7 +278,7 @@ def _detail_url(native_id: str) -> str:
 
 
 async def _file_response(
-    url: str, file_description: FileDescription | None = _FILE_DESCRIPTION
+    url: str, *, file_description: FileDescription | None = _FILE_DESCRIPTION
 ) -> tuple[Response, list[DescribeFileCall]]:
     """The file page's response, rendered from ``file_description``, and its calls."""
     file_describer = FakeFileDescriber(file_description)
@@ -287,15 +288,15 @@ async def _file_response(
     return response, file_describer.calls
 
 
-def _query(since: datetime, until: datetime, **kept: str) -> str:
+def _query(since: datetime, *, until: datetime, **kept: str) -> str:
     """An interval's query string, in the webui's time format."""
     ends = {"from": f"{since:%Y-%m-%d %H:%M:%S}Z", "to": f"{until:%Y-%m-%d %H:%M:%S}Z"}
     return urlencode({**kept, **ends})
 
 
-def _href(path: str, since: datetime, until: datetime, **kept: str) -> str:
+def _href(path: str, *, since: datetime, until: datetime, **kept: str) -> str:
     """An interval's link as the page escapes it."""
-    return f'href="{path}?{_query(since, until, **kept)}"'.replace("&", "&amp;")
+    return f'href="{path}?{_query(since, until=until, **kept)}"'.replace("&", "&amp;")
 
 
 def _targets() -> tuple[TargetSegment, ...]:
@@ -364,7 +365,7 @@ async def test_metrics_serve_the_listing_as_prometheus_text_whatever_the_accept_
 
 async def _coverage_cells(coverage: TargetCoverage) -> list[str]:
     summary = replace(_CRAWL_SUMMARY, target_coverages=(coverage,))
-    text = await _page(_app_on_fakes(crawl_summary=summary), "/")
+    text = await _page(_app_on_fakes(crawl_summary=summary), url="/")
     return re.findall(r"<td>(.*?)</td>", text[text.index("<h2>Target coverage</h2>") :])
 
 
@@ -400,7 +401,7 @@ async def test_files_asks_for_the_first_page_of_matched_files_by_latest_seen() -
 @pytest.mark.asyncio
 async def test_files_default_summarizes_the_matched_files_and_offers_all() -> None:
     listing = replace(_listing(), matched_file_count=3, total_file_count=1234)
-    text, _ = await _files_page("/files", listing)
+    text, _ = await _files_page("/files", file_listing=listing)
     assert "Showing matched files only: 3 of 1,234 catalogued." in text
     assert 'href="/files?show_unmatched=1">Show all catalogued files' in text
 
@@ -423,7 +424,7 @@ async def test_files_toggle_preserves_active_filter() -> None:
 )
 @pytest.mark.asyncio
 async def test_files_filters_on_its_query_key_and_ignores_the_4x_one(
-    key: str, old_key: str, filtered_call: ListFilesCall
+    *, key: str, old_key: str, filtered_call: ListFilesCall
 ) -> None:
     _, filtered = await _files_page(f"/files?{key}=001A")
     _, unfiltered = await _files_page(f"/files?{old_key}=001A")
@@ -435,7 +436,7 @@ async def test_files_filters_on_its_query_key_and_ignores_the_4x_one(
 async def test_files_show_unmatched_reveals_and_toggles_back() -> None:
     """/files?show_unmatched=1 asks for the whole catalogue; toggle points back to matched-only."""
     listing = replace(_listing(), matched_file_count=0, total_file_count=1)
-    text, call = await _files_page("/files?show_unmatched=1", listing)
+    text, call = await _files_page("/files?show_unmatched=1", file_listing=listing)
     assert call == replace(_DEFAULT_CALL, matched_only=False)
     assert "Showing all catalogued files: 1 catalogued (0 matched)." in text
     assert 'href="/files">Matched only' in text  # toggle drops the param → bare /files
@@ -447,7 +448,7 @@ def _history(**changes: Any) -> FileHistory:
 
 async def _file_page(file_description: FileDescription = _FILE_DESCRIPTION) -> str:
     """The file page rendered from ``file_description``, with no space between tags."""
-    response, _ = await _file_response(_detail_url(TEST_HASH), file_description)
+    response, _ = await _file_response(_detail_url(TEST_HASH), file_description=file_description)
     assert response.status_code == 200
     return re.sub(r">\s+<", "><", response.text)
 
@@ -512,7 +513,7 @@ async def test_file_page_shows_each_decision_with_its_rule_tier_and_instant() ->
 )
 @pytest.mark.asyncio
 async def test_file_page_asks_for_its_file_over_the_ends_its_query_names(
-    query: str, requested_since: datetime | None, requested_until: datetime | None
+    *, query: str, requested_since: datetime | None, requested_until: datetime | None
 ) -> None:
     # The use case resolves the interval: an inverted or a malformed end reaches it as read.
     response, calls = await _file_response(f"{_detail_url(TEST_HASH)}?{query}")
@@ -527,7 +528,7 @@ async def test_file_page_asks_for_its_file_over_the_ends_its_query_names(
 @pytest.mark.asyncio
 async def test_file_page_of_a_file_the_catalog_does_not_hold_is_a_styled_404() -> None:
     # The ed2k hash is a well-formed id, but not a file's.
-    response, calls = await _file_response(f"/files/{TEST_HASH}", None)
+    response, calls = await _file_response(f"/files/{TEST_HASH}", file_description=None)
     assert response.status_code == 404
     assert "not found" in response.text.lower()
     assert calls == [
@@ -692,7 +693,7 @@ _KNOWN_SOURCE = KnownSource(
 _TWO_SOURCES = SourceListing(known_sources=(_KNOWN_SOURCE,), has_next_page=False, source_count=2)
 
 
-async def _sources_page(app: Starlette, url: str) -> str:
+async def _sources_page(app: Starlette, *, url: str) -> str:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get(url)
     assert resp.status_code == 200
@@ -700,11 +701,11 @@ async def _sources_page(app: Starlette, url: str) -> str:
 
 
 async def _source_listing_page(
-    url: str, source_listing: SourceListing = _TWO_SOURCES
+    url: str, *, source_listing: SourceListing = _TWO_SOURCES
 ) -> tuple[str, ListSourcesCall]:
     """The sources page rendered from ``source_listing``, and its call."""
     source_lister = FakeSourceLister(source_listing)
-    page = await _sources_page(_app_on_fakes(source_lister=source_lister), url)
+    page = await _sources_page(_app_on_fakes(source_lister=source_lister), url=url)
     (call,) = source_lister.calls
     return page, call
 
@@ -725,7 +726,7 @@ async def test_sources_lists_each_source_with_its_links_latest_seen_and_files() 
 @pytest.mark.asyncio
 async def test_sources_search_keeps_its_text_and_counts_its_matches() -> None:
     listing = SourceListing(known_sources=(_KNOWN_SOURCE,), has_next_page=False, source_count=1)
-    page, call = await _source_listing_page("/sources?search=+shinob+", listing)
+    page, call = await _source_listing_page("/sources?search=+shinob+", source_listing=listing)
     assert call == ListSourcesCall(search_text="shinob", page=1)
     assert "Sources matching the search: 1." in page
     assert 'name="search" value="shinob"' in page
@@ -741,7 +742,8 @@ async def test_sources_ignore_the_4x_search_key() -> None:
 @pytest.mark.asyncio
 async def test_sources_without_a_source_says_so() -> None:
     page, call = await _source_listing_page(
-        "/sources?page=nope", SourceListing(known_sources=(), has_next_page=False, source_count=0)
+        "/sources?page=nope",
+        source_listing=SourceListing(known_sources=(), has_next_page=False, source_count=0),
     )
     assert call == ListSourcesCall(search_text=None, page=1)
     assert '<td colspan="4">No source found.</td>' in page
@@ -751,7 +753,7 @@ async def test_sources_without_a_source_says_so() -> None:
 @pytest.mark.asyncio
 async def test_sources_pages_keep_the_search() -> None:
     full = SourceListing(known_sources=(_KNOWN_SOURCE,), has_next_page=True, source_count=51)
-    first, _ = await _source_listing_page("/sources?search=FMR", full)
+    first, _ = await _source_listing_page("/sources?search=FMR", source_listing=full)
     second, call = await _source_listing_page("/sources?search=FMR&page=2")
     assert call == ListSourcesCall(search_text="FMR", page=2)
     assert 'href="/sources?search=FMR&amp;page=2"' in first
@@ -767,7 +769,7 @@ async def test_sources_list_a_source_without_a_name_as_unknown_unlinked() -> Non
         has_next_page=False,
         source_count=1,
     )
-    page, _ = await _source_listing_page("/sources", listing)
+    page, _ = await _source_listing_page("/sources", source_listing=listing)
     assert _row("unknown", _SOURCE_LINK, "2026-10-13 20:00:30Z", "1") in page
 
 
@@ -860,7 +862,7 @@ def _hash_link(source: SourceKey) -> str:
 
 
 async def _source_response(
-    url: str, source_description: SourceDescription | None = _SOURCE_DESCRIPTION
+    url: str, *, source_description: SourceDescription | None = _SOURCE_DESCRIPTION
 ) -> tuple[Response, list[DescribeSourceCall]]:
     """The source page's response, rendered from ``source_description``, and its calls."""
     source_describer = FakeSourceDescriber(source_description)
@@ -871,7 +873,7 @@ async def _source_response(
 
 
 async def _source_name_response(
-    url: str, source_name_description: SourceNameDescription | None = _SOURCE_NAME_DESCRIPTION
+    url: str, *, source_name_description: SourceNameDescription | None = _SOURCE_NAME_DESCRIPTION
 ) -> tuple[Response, list[DescribeSourceNameCall]]:
     """The name page's response, rendered from ``source_name_description``, and its calls."""
     source_name_describer = FakeSourceNameDescriber(source_name_description)
@@ -883,14 +885,14 @@ async def _source_name_response(
 
 async def _source_page(source_description: SourceDescription = _SOURCE_DESCRIPTION) -> str:
     app = _app_on_fakes(source_describer=FakeSourceDescriber(source_description))
-    return await _sources_page(app, _USER_PAGE)
+    return await _sources_page(app, url=_USER_PAGE)
 
 
 async def _source_name_page(
     source_name_description: SourceNameDescription = _SOURCE_NAME_DESCRIPTION,
 ) -> str:
     app = _app_on_fakes(source_name_describer=FakeSourceNameDescriber(source_name_description))
-    return await _sources_page(app, _NAME_PAGE)
+    return await _sources_page(app, url=_NAME_PAGE)
 
 
 # A page and an interval's ends as a query names them, then as the route asks for them.
@@ -928,7 +930,7 @@ _PAGE_AND_ENDS = pytest.mark.parametrize(
 @_PAGE_AND_ENDS
 @pytest.mark.asyncio
 async def test_source_page_asks_for_its_source_on_the_page_and_the_ends_its_query_names(
-    query: str, page: int, requested_since: datetime | None, requested_until: datetime | None
+    *, query: str, page: int, requested_since: datetime | None, requested_until: datetime | None
 ) -> None:
     # The use case resolves the interval: an inverted or a malformed end reaches it as read.
     response, calls = await _source_response(f"{_USER_PAGE}?{query}")
@@ -946,7 +948,7 @@ async def test_source_page_asks_for_its_source_on_the_page_and_the_ends_its_quer
 @_PAGE_AND_ENDS
 @pytest.mark.asyncio
 async def test_name_page_asks_for_its_name_on_the_page_and_the_ends_its_query_names(
-    query: str, page: int, requested_since: datetime | None, requested_until: datetime | None
+    *, query: str, page: int, requested_since: datetime | None, requested_until: datetime | None
 ) -> None:
     response, calls = await _source_name_response(f"{_NAME_PAGE}&{query}")
     assert response.status_code == 200
@@ -977,7 +979,7 @@ async def test_name_page_asks_for_its_name_as_the_query_encodes_it() -> None:
 
 @pytest.mark.asyncio
 async def test_source_page_of_a_source_never_recorded_is_a_styled_404() -> None:
-    response, calls = await _source_response(f"/sources/{'0' * 32}", None)
+    response, calls = await _source_response(f"/sources/{'0' * 32}", source_description=None)
     assert response.status_code == 404
     assert "not found" in response.text.lower()
     assert calls == [
@@ -1002,7 +1004,9 @@ async def test_source_page_of_a_malformed_source_id_is_a_404_that_asks_for_nothi
 
 @pytest.mark.asyncio
 async def test_name_page_of_a_name_never_recorded_is_a_styled_404() -> None:
-    response, calls = await _source_name_response("/sources/name?source_name=nobody", None)
+    response, calls = await _source_name_response(
+        "/sources/name?source_name=nobody", source_name_description=None
+    )
     assert response.status_code == 404
     assert "not found" in response.text.lower()
     assert calls == [
@@ -1145,7 +1149,7 @@ async def test_target_page_has_no_summary_line() -> None:
 
 @pytest.mark.asyncio
 async def test_node_page_shows_the_node_id() -> None:
-    assert "<dd>node-test-001</dd>" in await _page(_app_on_fakes(), "/node")
+    assert "<dd>node-test-001</dd>" in await _page(_app_on_fakes(), url="/node")
 
 
 @pytest.mark.asyncio
@@ -1188,7 +1192,7 @@ _DOWNLOAD = TrackedDownload(
 
 
 async def _node_page(node_state: NodeState) -> str:
-    return await _page(_app_on_fakes(node_state=node_state), "/node")
+    return await _page(_app_on_fakes(node_state=node_state), url="/node")
 
 
 @pytest.mark.asyncio
@@ -1248,7 +1252,7 @@ async def test_node_page_shows_an_unrecorded_identity_blank() -> None:
 )
 @pytest.mark.asyncio
 async def test_a_template_reading_what_its_context_lacks_raises(
-    template: str, tmp_path: Path
+    *, template: str, tmp_path: Path
 ) -> None:
     """A renamed context key or field fails the render instead of printing an empty string."""
     import p2pwatch.adapters.driving.webui
@@ -1297,13 +1301,13 @@ class _TemplateRecorder:
         await self._app({**scope, "extensions": {"http.response.debug": {}}}, receive, record)
 
 
-def _template_reads(loader: FileSystemLoader, name: str) -> set[str]:
+def _template_reads(loader: FileSystemLoader, *, name: str) -> set[str]:
     """The context names a template reads, with those of the templates it extends or includes."""
     env = Environment(loader=loader)
     tree = env.parse(loader.get_source(env, name)[0])
     reads = set(meta.find_undeclared_variables(tree))
     for parent in meta.find_referenced_templates(tree):
-        reads |= _template_reads(loader, str(parent))
+        reads |= _template_reads(loader, name=str(parent))
     return reads
 
 
@@ -1324,7 +1328,7 @@ def _template_reads(loader: FileSystemLoader, name: str) -> set[str]:
 )
 @pytest.mark.asyncio
 async def test_each_page_passes_its_template_only_what_it_reads(
-    populated_app: tuple[Starlette, str], url: str
+    *, populated_app: tuple[Starlette, str], url: str
 ) -> None:
     """A context key no template reads is a stale name, which strict templates cannot see."""
     import p2pwatch.adapters.driving.webui
@@ -1336,7 +1340,7 @@ async def test_each_page_passes_its_template_only_what_it_reads(
     (rendered,) = recorder.rendered
     loader = FileSystemLoader(Path(p2pwatch.adapters.driving.webui.__file__).parent / "templates")
     passed = set(rendered["context"]) - {"request"}
-    assert passed == _template_reads(loader, rendered["template"].name)
+    assert passed == _template_reads(loader, name=rendered["template"].name)
 
 
 @pytest.mark.asyncio
@@ -1386,7 +1390,9 @@ async def test_security_headers_are_set_on_every_response(
 @pytest.mark.asyncio
 async def test_files_page_shows_pagination_navigation() -> None:
     # webui-security#1: a "Next →" link when the listing has a next page.
-    first, _ = await _files_page("/files?search=x", replace(_listing(), has_next_page=True))
+    first, _ = await _files_page(
+        "/files?search=x", file_listing=replace(_listing(), has_next_page=True)
+    )
     second, call = await _files_page("/files?search=x&page=2")
     assert call == replace(_DEFAULT_CALL, search_text="x", page=2)
     assert '<a href="/files?search=x&amp;page=2">Next →</a>' in first
@@ -1453,7 +1459,7 @@ def _catalog_entry(
     )
 
 
-def _decision(target_id: TargetId, tier: str) -> DecisionRecord:
+def _decision(target_id: TargetId, *, tier: str) -> DecisionRecord:
     return DecisionRecord(target_id=target_id, rule_name="rule", tier=DecisionTier(tier))
 
 
@@ -1488,7 +1494,10 @@ def test_resolve_target_display_unknown_id_falls_back_to_raw_id() -> None:
 
 def test_resolve_target_display_two_segments_returns_a_pair_each() -> None:
     catalog_entry = _catalog_entry(
-        decisions=(_decision(TargetId("062A"), "download"), _decision(TargetId("062B"), "download"))
+        decisions=(
+            _decision(TargetId("062A"), tier="download"),
+            _decision(TargetId("062B"), tier="download"),
+        )
     )
     assert _resolve_target_display(catalog_entry, segment_by_id=_SEGMENTS_AB) == [
         ("062A / S02E11A", "La Grenouille Cosmique"),
@@ -1504,7 +1513,10 @@ def test_catalog_entry_displays_empty_decisions_all_dashes() -> None:
 
 def test_catalog_entry_displays_two_segments_aggregate_cells_shared_tier() -> None:
     catalog_entry = _catalog_entry(
-        decisions=(_decision(TargetId("062A"), "download"), _decision(TargetId("062B"), "download"))
+        decisions=(
+            _decision(TargetId("062A"), tier="download"),
+            _decision(TargetId("062B"), tier="download"),
+        )
     )
     [display] = _catalog_entry_displays([catalog_entry], segment_by_id=_SEGMENTS_AB)
     assert display.decisions_display == (
@@ -1516,7 +1528,10 @@ def test_catalog_entry_displays_two_segments_aggregate_cells_shared_tier() -> No
 
 def test_catalog_entry_displays_two_segments_differing_tiers_lists_per_target() -> None:
     catalog_entry = _catalog_entry(
-        decisions=(_decision(TargetId("062A"), "download"), _decision(TargetId("062B"), "notify"))
+        decisions=(
+            _decision(TargetId("062A"), tier="download"),
+            _decision(TargetId("062B"), tier="notify"),
+        )
     )
     [display] = _catalog_entry_displays([catalog_entry], segment_by_id=_SEGMENTS_AB)
     assert display.tier_display == "062A: download · 062B: notify"
@@ -1550,7 +1565,9 @@ def test_catalog_entry_displays_shows_a_file_never_seen_with_unknown_sources() -
 async def test_files_catalog_tier_shows_unidentified() -> None:
     """A tier=catalog decision → the /files list must show "unidentified", not the resolved
     id/title."""
-    text, _ = await _files_page("/files", _one_file(_decision(TargetId("062A"), "catalog")))
+    text, _ = await _files_page(
+        "/files", file_listing=_one_file(_decision(TargetId("062A"), tier="catalog"))
+    )
     assert TEST_HASH[:8] in text
     # Scoped to the table cell (not the static tier legend, which also mentions the word).
     assert '<div class="cell-line">unidentified</div>' in text
@@ -1559,7 +1576,9 @@ async def test_files_catalog_tier_shows_unidentified() -> None:
 
 @pytest.mark.asyncio
 async def test_files_resolvable_target_shows_seasonal_locator_and_title() -> None:
-    text, _ = await _files_page("/files", _one_file(_decision(TargetId("062A"), "download")))
+    text, _ = await _files_page(
+        "/files", file_listing=_one_file(_decision(TargetId("062A"), tier="download"))
+    )
     assert "062A / S02E11A" in text
     assert "La Grenouille Cosmique" in text
 
@@ -1575,7 +1594,9 @@ async def test_files_table_is_scroll_wrapped_and_name_has_full_title() -> None:
 
 @pytest.mark.asyncio
 async def test_files_unknown_target_shows_raw_id_and_dash_title() -> None:
-    text, _ = await _files_page("/files", _one_file(_decision(TargetId("999Z"), "download")))
+    text, _ = await _files_page(
+        "/files", file_listing=_one_file(_decision(TargetId("999Z"), tier="download"))
+    )
     assert "999Z" in text
     # The static tier legend also mentions the word "unidentified": scope to the cell.
     assert '<div class="cell-line">unidentified</div>' not in text
@@ -1586,7 +1607,7 @@ async def test_files_unknown_target_shows_raw_id_and_dash_title() -> None:
 async def test_files_no_decision_shows_dashes() -> None:
     """No decision at all → target and title both render as "·" cells, never an
     "unidentified" cell value."""
-    text, _ = await _files_page("/files?show_unmatched=1", _one_file())
+    text, _ = await _files_page("/files?show_unmatched=1", file_listing=_one_file())
     assert TEST_HASH[:8] in text
     # The Target header tooltip also mentions "unidentified": scope to the cell so we
     # assert on the row value, not the static legend text.
@@ -1626,7 +1647,9 @@ async def test_files_nonobvious_columns_have_header_tooltips() -> None:
 async def test_target_page_resolves_title_via_segment_mapping() -> None:
     """/targets/{id} shares _catalog_entry_displays with /files: confirm handle_target ALSO
     threads the segment_by_id mapping (both call sites, per the brief)."""
-    text, _ = await _files_page("/targets/062A", _one_file(_decision(TargetId("062A"), "download")))
+    text, _ = await _files_page(
+        "/targets/062A", file_listing=_one_file(_decision(TargetId("062A"), tier="download"))
+    )
     assert "062A / S02E11A" in text
     assert "La Grenouille Cosmique" in text
 
@@ -1660,9 +1683,9 @@ episodes:
 @pytest.mark.asyncio
 async def test_files_whole_episode_renders_one_row_with_aggregated_targets() -> None:
     listing = _one_file(
-        _decision(TargetId("072A"), "download"), _decision(TargetId("072B"), "download")
+        _decision(TargetId("072A"), tier="download"), _decision(TargetId("072B"), tier="download")
     )
-    text, _ = await _files_page("/files", listing, _targets_ab())
+    text, _ = await _files_page("/files", file_listing=listing, target_segments=_targets_ab())
     assert text.count(TEST_HASH[:8]) == 1
     assert '<div class="cell-line">072A / S03E06A</div>' in text
     assert '<div class="cell-line">072B / S03E06B</div>' in text
@@ -1692,7 +1715,7 @@ async def test_dashboard_renders_the_three_action_forms_and_the_running_crawl(
     controls_app: tuple[Starlette, _Controls],
 ) -> None:
     app, _ = controls_app
-    text = await _page(app, "/")
+    text = await _page(app, url="/")
     assert 'action="/controls/pause"' in text
     assert 'action="/controls/resume"' in text
     assert 'action="/controls/restart"' in text
@@ -1702,7 +1725,7 @@ async def test_dashboard_renders_the_three_action_forms_and_the_running_crawl(
 @pytest.mark.asyncio
 async def test_dashboard_shows_a_paused_crawl() -> None:
     app = _app_on_fakes(crawl_summary=replace(_CRAWL_SUMMARY, is_paused=True))
-    assert "The crawl is paused." in await _page(app, "/")
+    assert "The crawl is paused." in await _page(app, url="/")
 
 
 @pytest.mark.asyncio
@@ -1722,7 +1745,7 @@ async def test_dashboard_without_done_shows_no_banner(
     controls_app: tuple[Starlette, _Controls],
 ) -> None:
     app, _ = controls_app
-    assert "control-banner" not in await _page(app, "/")
+    assert "control-banner" not in await _page(app, url="/")
 
 
 @pytest.mark.asyncio
@@ -1757,7 +1780,7 @@ async def test_there_is_no_force_cycle_control(
     ],
 )
 async def test_each_control_dispatches_and_redirects_to_the_dashboard(
-    controls_app: tuple[Starlette, _Controls], action: str, call: str, done: str
+    *, controls_app: tuple[Starlette, _Controls], action: str, call: str, done: str
 ) -> None:
     app, controls = controls_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -1781,7 +1804,7 @@ async def test_each_control_dispatches_and_redirects_to_the_dashboard(
 )
 @pytest.mark.asyncio
 async def test_each_control_followed_lands_on_its_dashboard_banner(
-    controls_app: tuple[Starlette, _Controls], action: str, banner: str
+    *, controls_app: tuple[Starlette, _Controls], action: str, banner: str
 ) -> None:
     app, controls = controls_app
     async with AsyncClient(
@@ -1804,7 +1827,7 @@ async def _clients_section(reading: StatusReading | None, *, is_fresh: bool = Tr
         client_name=ClientName("amuled"), reading=reading, is_fresh=is_fresh
     )
     summary = replace(_CRAWL_SUMMARY, client_summaries=(client_summary,))
-    text = await _page(_app_on_fakes(crawl_summary=summary), "/")
+    text = await _page(_app_on_fakes(crawl_summary=summary), url="/")
     return text[text.index("<h2>Clients</h2>") : text.index("<h2>Crawl</h2>")]
 
 
@@ -1910,7 +1933,9 @@ async def test_files_sort_by_size_renders_the_rows_in_the_order_listed() -> None
         replace(_catalog_entry(decisions=()), file=FileKey(network=Network.ED2K, native_id=h * 32))
         for h in "ca"
     )
-    text, call = await _files_page("/files?sort=size&direction=asc", _listing(first, second))
+    text, call = await _files_page(
+        "/files?sort=size&direction=asc", file_listing=_listing(first, second)
+    )
     _, old_key = await _files_page("/files?sort=size&dir=asc")
     assert call == replace(_DEFAULT_CALL, sort=CatalogEntrySort.SIZE, direction=SortDirection.ASC)
     assert 0 < text.index("cccccccc") < text.index("aaaaaaaa")
@@ -2005,7 +2030,7 @@ def test_search_bar_no_search_text_is_empty_string() -> None:
 @pytest.mark.asyncio
 async def test_files_renders_search_prefill_and_facet() -> None:
     listing = replace(_listing(), file_count_by_tier={DecisionTier.CATALOG: 1})
-    text, call = await _files_page("/files?search=keroro&show_unmatched=1", listing)
+    text, call = await _files_page("/files?search=keroro&show_unmatched=1", file_listing=listing)
     assert call == replace(_DEFAULT_CALL, search_text="keroro", matched_only=False)
     assert 'name="search"' in text
     assert 'value="keroro"' in text  # prefill
@@ -2063,7 +2088,7 @@ _NAV_ENTRIES: tuple[tuple[str, str], ...] = (
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("path", "label"), _NAV_ENTRIES)
 async def test_nav_marks_only_the_current_page_entry_as_active(
-    populated_app: tuple[Starlette, str], path: str, label: str
+    *, populated_app: tuple[Starlette, str], path: str, label: str
 ) -> None:
     """On each nav destination: its own entry is a non-link marked aria-current="page" (the CSS
     hook that bolds it), its nav link is gone, every other entry stays a link, and exactly one
@@ -2097,7 +2122,7 @@ async def test_nav_amule_link_uses_the_configured_base() -> None:
     """The base is configurable so the link survives a reverse proxy in front of 8080: p2pwatch
     cannot infer from the request how amuleweb is reachable from the operator's browser."""
     app = _app_on_fakes(amule_url="https://mule.example.org/amule")
-    assert '<a href="https://mule.example.org/amule">aMule</a>' in await _page(app, "/")
+    assert '<a href="https://mule.example.org/amule">aMule</a>' in await _page(app, url="/")
 
 
 @pytest.mark.asyncio
@@ -2118,7 +2143,7 @@ async def test_nav_on_a_non_nav_path_renders_every_entry_as_a_link(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("path", [path for path, _ in _NAV_ENTRIES])
 async def test_nav_pages_render_no_page_title(
-    populated_app: tuple[Starlette, str], path: str
+    *, populated_app: tuple[Starlette, str], path: str
 ) -> None:
     """The nav destinations carry no <h1>: the title duplicated the nav, whose bold current
     entry now names the page. Their <h2> section headings stay."""
@@ -2151,8 +2176,8 @@ async def test_an_interval_of_3_days_shows_those_days_and_moves_by_3_days() -> N
         replace(_FILE_DESCRIPTION, interval=Interval(since=_OCT_8, until=_OCT_11))
     )
     path, days = _detail_url(TEST_HASH), timedelta(days=3)
-    assert f"<a {_href(path, _OCT_8 - days, _OCT_8)}>← Previous</a>" in page
-    assert f"<a {_href(path, _OCT_11, _OCT_11 + days)}>Next →</a>" in page
+    assert f"<a {_href(path, since=_OCT_8 - days, until=_OCT_8)}>← Previous</a>" in page
+    assert f"<a {_href(path, since=_OCT_11, until=_OCT_11 + days)}>Next →</a>" in page
     assert "Showing 2026-10-08 00:00:00Z to 2026-10-11 00:00:00Z." in page
     assert _EDGES in page
 
@@ -2171,7 +2196,9 @@ async def test_a_clamped_interval_says_so_and_shows_its_ends_in_the_inputs() -> 
 async def test_an_interval_ending_now_shows_no_next() -> None:
     page, path, now = await _file_page(), _detail_url(TEST_HASH), _WALL_CLOCK.now()
     assert "Showing 2026-10-07 20:00:00Z to 2026-10-14 20:00:00Z." in page
-    assert f"<a {_href(path, now - timedelta(days=14), now - timedelta(days=7))}>" in page
+    assert (
+        f"<a {_href(path, since=now - timedelta(days=14), until=now - timedelta(days=7))}>" in page
+    )
     assert "Next →" not in page
     assert "longer than 7 days" not in page
 
@@ -2184,7 +2211,10 @@ async def test_the_presets_end_at_the_now_the_use_case_read() -> None:
     )
     path, hours = _detail_url(TEST_HASH), {"hour": 1, "6 hours": 6, "24 hours": 24, "7 days": 168}
     for label, span in hours.items():
-        assert f"<a {_href(path, now - timedelta(hours=span), now)}>Last {label}</a>" in page
+        assert (
+            f"<a {_href(path, since=now - timedelta(hours=span), until=now)}>Last {label}</a>"
+            in page
+        )
 
 
 @pytest.mark.parametrize(
@@ -2194,7 +2224,7 @@ async def test_the_presets_end_at_the_now_the_use_case_read() -> None:
 )
 @pytest.mark.asyncio
 async def test_the_source_and_name_pages_keep_their_parameters_and_their_interval(
-    path: str, kept: dict[str, str]
+    *, path: str, kept: dict[str, str]
 ) -> None:
     shown: dict[str, Any] = {
         "has_next_page": True,
@@ -2205,14 +2235,14 @@ async def test_the_source_and_name_pages_keep_their_parameters_and_their_interva
         source_name_describer=FakeSourceNameDescriber(replace(_SOURCE_NAME_DESCRIPTION, **shown)),
     )
     on_page_2 = {**kept, "page": "2"}
-    page = await _sources_page(app, f"{path}?{_query(_OCT_8, _OCT_11, **on_page_2)}")
+    page = await _sources_page(app, url=f"{path}?{_query(_OCT_8, until=_OCT_11, **on_page_2)}")
     hidden = "".join(
         f'<input type="hidden" name="{name}" value="{value}">' for name, value in on_page_2.items()
     )
     assert f'<form method="get">{hidden}<label>' in page
-    previous_interval = _href(path, _OCT_8 - timedelta(days=3), _OCT_8, **on_page_2)
+    previous_interval = _href(path, since=_OCT_8 - timedelta(days=3), until=_OCT_8, **on_page_2)
     assert f"<a {previous_interval}>← Previous</a>" in page
-    same_interval = _href(path, _OCT_8, _OCT_11, **kept).removesuffix('"')
+    same_interval = _href(path, since=_OCT_8, until=_OCT_11, **kept).removesuffix('"')
     assert f'<a {same_interval}&amp;page=1">← Previous</a>' in page
     assert f'<a {same_interval}&amp;page=3">Next →</a>' in page
     assert _EDGES in page

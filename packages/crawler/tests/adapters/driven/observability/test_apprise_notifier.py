@@ -59,7 +59,7 @@ async def _sent_to_the_bare_group(notification: Notification) -> dict[str, objec
     return call
 
 
-def _rise(tier: DecisionTier, filename: str = "Keroro 062.avi") -> TierRise:
+def _rise(tier: DecisionTier, *, filename: str = "Keroro 062.avi") -> TierRise:
     link = f"ed2k://|file|Keroro%20062.avi|367185920|{_HASH}|/"
     return TierRise(
         tier=tier,
@@ -73,6 +73,7 @@ def _rise(tier: DecisionTier, filename: str = "Keroro 062.avi") -> TierRise:
 
 def _source_alert(
     source_name: str | None,
+    *,
     absent_for: timedelta | None,
     target_titles: tuple[TargetTitle, ...] = (_062A,),
     filename: str = "Keroro 062.avi",
@@ -163,7 +164,10 @@ async def test_no_mention_reaches_apprise() -> None:
     hostile = "@everyone @here <@123> <@&456>"
     notifier, groups = _notifier()
     alert = _source_alert(
-        hostile, None, (TargetTitle(target_id=TargetId("062A"), title=hostile),), hostile
+        hostile,
+        absent_for=None,
+        target_titles=(TargetTitle(target_id=TargetId("062A"), title=hostile),),
+        filename=hostile,
     )
     await notifier.notify(Audience.COMMUNITY, notification=alert)
     await notifier.notify(
@@ -186,7 +190,7 @@ async def test_no_mention_reaches_apprise() -> None:
     ],
 )
 async def test_a_relayed_log_lines_severity_maps_to_a_notify_type(
-    severity: Severity, notify_type: apprise.NotifyType
+    *, severity: Severity, notify_type: apprise.NotifyType
 ) -> None:
     notifier, groups = _notifier()
     await notifier.notify(
@@ -201,7 +205,7 @@ async def test_a_relayed_log_lines_severity_maps_to_a_notify_type(
     ("notification", "notify_type"),
     [
         (_rise(DecisionTier.NOTIFY), apprise.NotifyType.INFO),
-        (_source_alert(None, timedelta(hours=26)), apprise.NotifyType.INFO),
+        (_source_alert(None, absent_for=timedelta(hours=26)), apprise.NotifyType.INFO),
         (
             CompletedDownload(target_titles=(_062A,), filename="x.avi", node_id=_NODE_ID),
             apprise.NotifyType.SUCCESS,
@@ -210,7 +214,7 @@ async def test_a_relayed_log_lines_severity_maps_to_a_notify_type(
     ids=["rise", "source-alert", "completed-download"],
 )
 async def test_each_community_kind_has_its_notify_type(
-    notification: Notification, notify_type: apprise.NotifyType
+    *, notification: Notification, notify_type: apprise.NotifyType
 ) -> None:
     assert (await _sent_to_the_bare_group(notification))["notify_type"] == notify_type
 
@@ -240,7 +244,7 @@ async def test_a_rise_to_notify_is_titled_notify() -> None:
 @pytest.mark.asyncio
 async def test_a_backtick_in_the_name_cannot_close_its_code_span() -> None:
     # Discord pings a mention outside code: a name must not escape its span.
-    call = await _sent_to_the_bare_group(_rise(DecisionTier.DOWNLOAD, "a`@everyone`b.avi"))
+    call = await _sent_to_the_bare_group(_rise(DecisionTier.DOWNLOAD, filename="a`@everyone`b.avi"))
     body = call["body"]
     assert isinstance(body, str)
     assert "\n350.2 MiB - `a'@everyone'b.avi`\n".replace("@", "@\u200b") in body
@@ -273,7 +277,7 @@ async def test_a_completed_download_without_a_target_names_none() -> None:
 
 @pytest.mark.asyncio
 async def test_a_first_useful_source_names_itself_its_targets_and_its_file() -> None:
-    call = await _sent_to_the_bare_group(_source_alert("AnimuseeFMR", None))
+    call = await _sent_to_the_bare_group(_source_alert("AnimuseeFMR", absent_for=None))
     assert (call["title"], call["body"]) == (
         "📥 Source useful for the first time",
         "**Source**\n`AnimuseeFMR` 1f2e3d4c…, useful for the first time\n\n"
@@ -284,7 +288,9 @@ async def test_a_first_useful_source_names_itself_its_targets_and_its_file() -> 
 
 @pytest.mark.asyncio
 async def test_a_reappeared_source_says_how_long_it_was_absent() -> None:
-    call = await _sent_to_the_bare_group(_source_alert("AnimuseeFMR", timedelta(hours=26)))
+    call = await _sent_to_the_bare_group(
+        _source_alert("AnimuseeFMR", absent_for=timedelta(hours=26))
+    )
     assert (call["title"], call["body"]) == (
         "🔁 Source reappeared",
         "**Source**\n`AnimuseeFMR` 1f2e3d4c…, reappeared after 26 h\n\n"
@@ -295,7 +301,7 @@ async def test_a_reappeared_source_says_how_long_it_was_absent() -> None:
 
 @pytest.mark.asyncio
 async def test_a_source_without_a_name_or_a_target_names_its_hash_and_its_file() -> None:
-    call = await _sent_to_the_bare_group(_source_alert(None, None, ()))
+    call = await _sent_to_the_bare_group(_source_alert(None, absent_for=None, target_titles=()))
     assert call["body"] == (
         "**Source**\n1f2e3d4c…, useful for the first time\n\n**File**\n`Keroro 062.avi`"
     )
@@ -303,7 +309,12 @@ async def test_a_source_without_a_name_or_a_target_names_its_hash_and_its_file()
 
 @pytest.mark.asyncio
 async def test_a_backtick_in_a_source_name_cannot_close_its_code_span() -> None:
-    alert = _source_alert("a`@everyone`b", timedelta(seconds=43_200.000001), (), "x.avi")
+    alert = _source_alert(
+        "a`@everyone`b",
+        absent_for=timedelta(seconds=43_200.000001),
+        target_titles=(),
+        filename="x.avi",
+    )
     body = (await _sent_to_the_bare_group(alert))["body"]
     assert isinstance(body, str)
     assert body.startswith(

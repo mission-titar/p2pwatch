@@ -41,7 +41,7 @@ def test_0011_creates_a_strict_backoff_states_and_drops_scheduler_state(
     ids=["started_at", "attempts", "delay_seconds"],
 )
 def test_0011_refuses_a_row_of_the_wrong_shape(
-    connection: sqlite3.Connection, row: tuple[object, ...]
+    *, connection: sqlite3.Connection, row: tuple[object, ...]
 ) -> None:
     with pytest.raises(sqlite3.IntegrityError):
         connection.execute(_INSERT, row)

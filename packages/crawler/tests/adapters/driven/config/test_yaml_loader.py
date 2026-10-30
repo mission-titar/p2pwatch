@@ -25,7 +25,7 @@ def test_load_yaml_parses_nested_episode_mapping(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(("text", "root_type"), [("- a\n- list\n", "list"), ("", "NoneType")])
 def test_a_root_that_is_no_mapping_is_a_broken_input_naming_the_file(
-    tmp_path: Path, text: str, root_type: str
+    *, tmp_path: Path, text: str, root_type: str
 ) -> None:
     path = tmp_path / "bad.yaml"
     path.write_text(text, encoding="utf-8")

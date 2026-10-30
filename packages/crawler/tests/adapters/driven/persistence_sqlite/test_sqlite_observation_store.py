@@ -78,7 +78,7 @@ def _variant_count(connection: sqlite3.Connection) -> int:
 
 
 def test_record_observation_round_trip(
-    observation_store: SqliteObservationStore, connection: sqlite3.Connection
+    *, observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
     observation_store.record_observation(
         FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=_NODE_ID)
@@ -108,7 +108,7 @@ def test_record_observation_round_trip(
 
 
 def test_raw_metadata_preserves_order_duplicates_and_non_ascii(
-    observation_store: SqliteObservationStore, connection: sqlite3.Connection
+    *, observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
     observation_store.record_observation(
         FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=_NODE_ID)
@@ -120,7 +120,7 @@ def test_raw_metadata_preserves_order_duplicates_and_non_ascii(
 
 
 def test_record_observation_twice_first_seen_wins_in_files(
-    observation_store: SqliteObservationStore, connection: sqlite3.Connection
+    *, observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
     observation_store.record_observation(
         FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=_NODE_ID)
@@ -142,7 +142,7 @@ def test_record_observation_twice_first_seen_wins_in_files(
 
 
 def test_a_variant_seen_again_is_stored_once_with_both_timestamps(
-    observation_store: SqliteObservationStore, connection: sqlite3.Connection
+    *, observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
     observation_store.record_observation(
         FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=_NODE_ID)
@@ -157,7 +157,7 @@ def test_a_variant_seen_again_is_stored_once_with_both_timestamps(
 
 
 def test_an_observation_equal_in_every_column_is_stored_once(
-    observation_store: SqliteObservationStore, connection: sqlite3.Connection
+    *, observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
     observation_store.record_observation(
         FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=_NODE_ID)
@@ -169,7 +169,7 @@ def test_an_observation_equal_in_every_column_is_stored_once(
 
 
 def test_record_observation_with_media_metadata(
-    observation_store: SqliteObservationStore, connection: sqlite3.Connection
+    *, observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
     observation_store.record_observation(
         FileObservation(
@@ -184,7 +184,7 @@ def test_record_observation_with_media_metadata(
 
 
 def test_record_observation_is_one_transaction(
-    observation_store: SqliteObservationStore, connection: sqlite3.Connection
+    *, observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
     # Failure injected on the last INSERT: a TEST trigger makes the observation fail.
     connection.execute(
@@ -212,7 +212,7 @@ def test_record_observation_is_one_transaction(
 
 
 def test_record_observation_rejects_non_canonical_hash(
-    observation_store: SqliteObservationStore, connection: sqlite3.Connection
+    *, observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
     # INSERT OR IGNORE SILENTLY swallows a CHECK violation (documented SQLite
     # behavior): without Python validation BEFORE the transaction, a non-canonical hash
@@ -230,7 +230,7 @@ def test_record_observation_rejects_non_canonical_hash(
 
 
 def test_rollback_on_non_sqlite_error_keeps_connection_usable(
-    observation_store: SqliteObservationStore, connection: sqlite3.Connection
+    *, observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
     # An isolated surrogate makes the parameter BINDING fail (UnicodeEncodeError, which
     # is NOT a sqlite3.Error): without a rollback on BaseException, the connection
@@ -250,7 +250,7 @@ def test_rollback_on_non_sqlite_error_keeps_connection_usable(
 
 
 def test_outer_transaction_survives_record_observation_failure(
-    observation_store: SqliteObservationStore, connection: sqlite3.Connection
+    *, observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
     # Nested-transaction contract: the store's BEGIN fails ("cannot start a
     # transaction within a transaction") BEFORE the try → NO rollback is attempted,
@@ -268,7 +268,7 @@ def test_outer_transaction_survives_record_observation_failure(
 
 
 def test_each_observation_stores_its_own_node_id(
-    observation_store: SqliteObservationStore, connection: sqlite3.Connection
+    *, observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
     observation_store.record_observation(
         FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=NodeId("n1"))
@@ -283,7 +283,7 @@ def test_each_observation_stores_its_own_node_id(
 
 
 def test_read_latest_observation_of_a_file_never_observed_is_none(
-    observation_store: SqliteObservationStore, connection: sqlite3.Connection
+    *, observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
     insert_file(connection, native_id=_HASH, size_bytes=1)
     assert observation_store.read_latest_observation(_KEY) is None

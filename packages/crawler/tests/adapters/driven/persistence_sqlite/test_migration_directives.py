@@ -14,7 +14,7 @@ _ROW_CHANGING_STATEMENTS = ("delete_statement", "update_statement", "drop_table_
 _TRIGGER = "create_trigger"
 
 
-def _has_keyword(segment: BaseSegment, keyword: str) -> bool:
+def _has_keyword(segment: BaseSegment, *, keyword: str) -> bool:
     return any(
         child.is_type("keyword") and child.raw.upper() == keyword for child in segment.segments
     )
@@ -24,8 +24,11 @@ def _insert_rewrites_rows(insert: BaseSegment) -> bool:
     """``INSERT ... SELECT`` copies rows; ``REPLACE`` and an upsert's ``DO UPDATE`` rewrite them."""
     return (
         next(insert.recursive_crawl("select_statement"), None) is not None
-        or _has_keyword(insert, "REPLACE")
-        or any(_has_keyword(upsert, "UPDATE") for upsert in insert.recursive_crawl("upsert_clause"))
+        or _has_keyword(insert, keyword="REPLACE")
+        or any(
+            _has_keyword(upsert, keyword="UPDATE")
+            for upsert in insert.recursive_crawl("upsert_clause")
+        )
     )
 
 
@@ -44,7 +47,8 @@ def _rewrites_rows(script: str) -> bool:
         return True
     # SQLite's one ALTER TABLE that drops anything is DROP COLUMN.
     return any(
-        _has_keyword(alter, "DROP") for alter in tree.recursive_crawl("alter_table_statement")
+        _has_keyword(alter, keyword="DROP")
+        for alter in tree.recursive_crawl("alter_table_statement")
     )
 
 

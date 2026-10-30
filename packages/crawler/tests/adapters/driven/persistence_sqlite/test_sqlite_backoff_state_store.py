@@ -47,7 +47,7 @@ class TestSqliteBackoffStateStore(BackoffStateStoreContract):
 
 
 def test_the_backoff_states_saved_are_read_back_by_any_later_instance(
-    backoff_state_store: SqliteBackoffStateStore, connection: sqlite3.Connection
+    *, backoff_state_store: SqliteBackoffStateStore, connection: sqlite3.Connection
 ) -> None:
     # A new instance has no in-memory state: what it loads survived a restart.
     backoff_state_store.set_backoff_states(_BACKOFF)
@@ -56,7 +56,7 @@ def test_the_backoff_states_saved_are_read_back_by_any_later_instance(
 
 
 def test_a_backoff_state_is_one_row_its_start_in_micros(
-    backoff_state_store: SqliteBackoffStateStore, connection: sqlite3.Connection
+    *, backoff_state_store: SqliteBackoffStateStore, connection: sqlite3.Connection
 ) -> None:
     backoff_state_store.set_backoff_states(_BACKOFF)
     backoff_states = rows(
@@ -85,7 +85,7 @@ def test_a_backoff_state_is_one_row_its_start_in_micros(
 
 
 def test_set_backoff_states_is_atomic_on_injected_failure(
-    backoff_state_store: SqliteBackoffStateStore, connection: sqlite3.Connection
+    *, backoff_state_store: SqliteBackoffStateStore, connection: sqlite3.Connection
 ) -> None:
     backoff_state_store.set_backoff_states(_BACKOFF)
     connection.execute(

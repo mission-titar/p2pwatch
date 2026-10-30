@@ -35,7 +35,7 @@ class TestSqliteNodeIdStore(NodeIdStoreContract):
 
 
 def test_a_recorded_node_id_is_read_back_by_any_later_instance(
-    node_id_store: SqliteNodeIdStore, connection: sqlite3.Connection
+    *, node_id_store: SqliteNodeIdStore, connection: sqlite3.Connection
 ) -> None:
     node_id_store.record_node_id(_NODE_ID, created_at=_START)
 
@@ -43,7 +43,7 @@ def test_a_recorded_node_id_is_read_back_by_any_later_instance(
 
 
 def test_a_recorded_node_id_keeps_its_created_at_as_micros(
-    node_id_store: SqliteNodeIdStore, connection: sqlite3.Connection
+    *, node_id_store: SqliteNodeIdStore, connection: sqlite3.Connection
 ) -> None:
     node_id_store.record_node_id(_NODE_ID, created_at=_START)
 
@@ -55,7 +55,7 @@ def test_a_recorded_node_id_keeps_its_created_at_as_micros(
 
 
 def test_a_naive_created_at_raises_and_records_nothing(
-    node_id_store: SqliteNodeIdStore, connection: sqlite3.Connection
+    *, node_id_store: SqliteNodeIdStore, connection: sqlite3.Connection
 ) -> None:
     with pytest.raises(ValueError, match="aware"):
         node_id_store.record_node_id(_NODE_ID, created_at=datetime(2026, 6, 11, 12))

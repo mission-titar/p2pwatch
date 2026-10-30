@@ -36,7 +36,7 @@ _T2 = "2026-06-11T13:00:00.000000+00:00"
 _COPIER_LOGGER = "p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier"
 
 
-def _copy_catalogs(destination: Path, source_catalogs: list[Path]) -> None:
+def _copy_catalogs(destination: Path, *, source_catalogs: list[Path]) -> None:
     SqliteCatalogCopier(database_opener()).copy_catalogs(
         destination, source_catalogs=source_catalogs
     )
@@ -112,7 +112,7 @@ def test_t1_merge_two_distinct_catalogs(tmp_path: Path) -> None:
     destination = tmp_path / "out.db"
 
     # N=3 also proves we attach one source at a time (never > 1 attached DB).
-    _copy_catalogs(destination, [src_a, src_b, src_c])
+    _copy_catalogs(destination, source_catalogs=[src_a, src_b, src_c])
 
     # Each table's cardinality = sum (disjoint contents); FKs satisfied (otherwise the
     # COMMIT would have raised). All rows from the 3 sources are present in the output.
@@ -136,7 +136,7 @@ def test_t2_merge_overlapping_identity_files_or_ignore(tmp_path: Path) -> None:
     )
     destination = tmp_path / "out.db"
 
-    _copy_catalogs(destination, [src_a, src_b])
+    _copy_catalogs(destination, source_catalogs=[src_a, src_b])
 
     # INSERT OR IGNORE: the already-present PK is ignored → a single row.
     assert count(destination, table="files") == 1
@@ -147,11 +147,11 @@ def test_t3_re_merge_is_idempotent(tmp_path: Path) -> None:
     src_b = make_catalog(tmp_path / "b.db", content=_full_catalog("b", node_id="node-b"))
     destination = tmp_path / "out.db"
 
-    _copy_catalogs(destination, [src_a, src_b])
+    _copy_catalogs(destination, source_catalogs=[src_a, src_b])
     first_pass = {table: rows_without_id(destination, table=table) for table in _ALL_TABLES}
 
     # Re-merge same sources into same output → WHERE NOT EXISTS false everywhere → no-op.
-    _copy_catalogs(destination, [src_a, src_b])
+    _copy_catalogs(destination, source_catalogs=[src_a, src_b])
 
     for table in _ALL_TABLES:
         assert rows_without_id(destination, table=table) == first_pass[table]
@@ -170,7 +170,7 @@ def test_t4_journal_dedup_identical_rows_including_nulls(tmp_path: Path) -> None
     )
     destination = tmp_path / "out.db"
 
-    _copy_catalogs(destination, [src_a, src_b])
+    _copy_catalogs(destination, source_catalogs=[src_a, src_b])
 
     # The variant is found by its content_hash, NULLs included, and the observation by its key.
     assert count(destination, table="observation_variants") == 1
@@ -196,7 +196,7 @@ def test_t4_journal_distinct_observed_at_keeps_both(tmp_path: Path) -> None:
     )
     destination = tmp_path / "out.db"
 
-    _copy_catalogs(destination, [src_a, src_b])
+    _copy_catalogs(destination, source_catalogs=[src_a, src_b])
 
     assert count(destination, table="observation_variants") == 1
     assert count(destination, table="observations") == 2
@@ -225,7 +225,7 @@ def test_twin_decisions_in_one_source_merge_as_one(tmp_path: Path) -> None:
     src = make_catalog(tmp_path / "a.db", content=twins)
     destination = tmp_path / "out.db"
 
-    _copy_catalogs(destination, [src])
+    _copy_catalogs(destination, source_catalogs=[src])
 
     assert count(src, table="match_decisions") == 2
     assert count(destination, table="match_decisions") == 1
@@ -236,7 +236,7 @@ def test_a_decision_differing_only_by_its_decided_at_is_kept(tmp_path: Path) -> 
     src_b = make_catalog(tmp_path / "b.db", content=_decided(_T2))
     destination = tmp_path / "out.db"
 
-    _copy_catalogs(destination, [src_a, src_b])
+    _copy_catalogs(destination, source_catalogs=[src_a, src_b])
 
     assert count(destination, table="match_decisions") == 2
 
@@ -260,7 +260,7 @@ def test_t5_variant_ids_are_reassigned(tmp_path: Path) -> None:
     assert variant_ids(src_a) == variant_ids(src_b) == [1]
     destination = tmp_path / "out.db"
 
-    _copy_catalogs(destination, [src_a, src_b])
+    _copy_catalogs(destination, source_catalogs=[src_a, src_b])
 
     # The output numbers its own variants, and each observation follows its variant.
     assert variant_ids(destination) == [1, 2]
@@ -276,7 +276,7 @@ def test_t6_fk_order_inserts_identity_first(tmp_path: Path) -> None:
     src = make_catalog(tmp_path / "a.db", content=_full_catalog("a", node_id="node-a"))
     destination = tmp_path / "out.db"
 
-    _copy_catalogs(destination, [src])
+    _copy_catalogs(destination, source_catalogs=[src])
 
     assert count(destination, table="observations") == 1
     assert count(destination, table="match_decisions") == 1
@@ -292,7 +292,7 @@ def test_t14_files_first_sight_wins(tmp_path: Path) -> None:
     )
     destination = tmp_path / "out.db"
 
-    _copy_catalogs(destination, [src_b, src_a])
+    _copy_catalogs(destination, source_catalogs=[src_b, src_a])
 
     assert rows_without_id(destination, table="files") == [{"native_id": HASH_A, "size_bytes": 200}]
 
@@ -302,7 +302,7 @@ def test_t15_append_only_triggers_present_on_output(tmp_path: Path) -> None:
         tmp_path / "a.db", content={"files": [{"native_id": HASH_A, "size_bytes": 100}]}
     )
     destination = tmp_path / "out.db"
-    _copy_catalogs(destination, [src])
+    _copy_catalogs(destination, source_catalogs=[src])
 
     connection = open_catalog(destination)
     try:
@@ -334,10 +334,12 @@ def test_t16_merger_wraps_source_copy_in_a_transaction(tmp_path: Path) -> None:
     stamp_user_version(broken, version=_CURRENT_SCHEMA_VERSION)
 
     destination = tmp_path / "out.db"
-    _copy_catalogs(destination, [good])  # the good source first, in its own successful merge.
+    _copy_catalogs(
+        destination, source_catalogs=[good]
+    )  # the good source first, in its own successful merge.
 
     with pytest.raises(CatalogCopyError, match="copy of .* failed"):
-        _copy_catalogs(destination, [broken])
+        _copy_catalogs(destination, source_catalogs=[broken])
 
     # files (1st table) may have been copied BEFORE the failure on observation_variants (missing
     # table); the ROLLBACK must have undone it → the output still has ONLY the content of `good`.
@@ -352,25 +354,25 @@ def test_t16_unattachable_source_errors(tmp_path: Path) -> None:
     destination = tmp_path / "out.db"
 
     with pytest.raises(CatalogCopyError, match="cannot attach source catalog"):
-        _copy_catalogs(destination, [not_a_db])
+        _copy_catalogs(destination, source_catalogs=[not_a_db])
 
 
 def test_t17_single_source_merge(tmp_path: Path) -> None:
     src = make_catalog(tmp_path / "a.db", content=_full_catalog("a", node_id="node-a"))
     destination = tmp_path / "out.db"
 
-    _copy_catalogs(destination, [src])
+    _copy_catalogs(destination, source_catalogs=[src])
 
     for table in _ALL_TABLES:
         assert rows_without_id(destination, table=table) == rows_without_id(src, table=table)
 
 
-def test_each_source_copied_says_so(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+def test_each_source_copied_says_so(*, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     src_a = make_catalog(tmp_path / "a.db", content=_full_catalog("a", node_id="node-a"))
     src_b = make_catalog(tmp_path / "b.db", content=_full_catalog("b", node_id="node-b"))
     caplog.set_level("INFO", logger=_COPIER_LOGGER)
 
-    _copy_catalogs(tmp_path / "out.db", [src_a, src_b])
+    _copy_catalogs(tmp_path / "out.db", source_catalogs=[src_a, src_b])
 
     copier_messages = [r.getMessage() for r in caplog.records if r.name == _COPIER_LOGGER]
     assert copier_messages == [f"{src_a} merged", f"{src_b} merged"]
@@ -385,7 +387,7 @@ def test_rejects_source_with_older_schema_version(tmp_path: Path) -> None:
     destination = tmp_path / "out.db"
 
     with pytest.raises(CatalogCopyError) as excinfo:
-        _copy_catalogs(destination, [src])
+        _copy_catalogs(destination, source_catalogs=[src])
 
     message = str(excinfo.value)
     assert f"source catalog {src} has schema version" in message
@@ -403,7 +405,7 @@ def test_rejects_source_with_newer_schema_version(tmp_path: Path) -> None:
     destination = tmp_path / "out.db"
 
     with pytest.raises(CatalogCopyError, match="has schema version"):
-        _copy_catalogs(destination, [src])
+        _copy_catalogs(destination, source_catalogs=[src])
 
     assert count(destination, table="files") == 0
 
@@ -415,7 +417,7 @@ def test_source_at_current_schema_version_still_merges(tmp_path: Path) -> None:
     stamp_user_version(src, version=_CURRENT_SCHEMA_VERSION)
     destination = tmp_path / "out.db"
 
-    _copy_catalogs(destination, [src])
+    _copy_catalogs(destination, source_catalogs=[src])
 
     assert count(destination, table="files") == 1
 
@@ -429,7 +431,7 @@ def test_guard_checks_every_source_not_just_the_first(tmp_path: Path) -> None:
     destination = tmp_path / "out.db"
 
     with pytest.raises(CatalogCopyError, match=f"{bad} has schema version"):
-        _copy_catalogs(destination, [good, bad])
+        _copy_catalogs(destination, source_catalogs=[good, bad])
 
     # The good source merged first (own transaction, committed); only its row is present.
     assert count(destination, table="files") == 1
@@ -445,13 +447,13 @@ def test_an_output_open_catalog_refuses_raises_a_merge_error(tmp_path: Path) -> 
     stamp_user_version(destination, version=_CURRENT_SCHEMA_VERSION + 1)
 
     with pytest.raises(CatalogCopyError, match=f"cannot open output {destination}"):
-        _copy_catalogs(destination, [src])
+        _copy_catalogs(destination, source_catalogs=[src])
 
 
 @pytest.mark.parametrize("user_hash", [HASH_B, None])
 @pytest.mark.parametrize("first_first", [True, False])
 def test_two_catalogs_sharing_a_variant_merge_into_the_union_of_their_points(
-    tmp_path: Path, user_hash: str | None, first_first: bool
+    *, tmp_path: Path, user_hash: str | None, first_first: bool
 ) -> None:
     first = make_catalog(tmp_path / "first.db", content=_source_points(10, 20, user_hash=user_hash))
     second = make_catalog(
@@ -462,12 +464,12 @@ def test_two_catalogs_sharing_a_variant_merge_into_the_union_of_their_points(
     )
     destination = tmp_path / "out.db"
 
-    _copy_catalogs(destination, [first, second] if first_first else [second, first])
+    _copy_catalogs(destination, source_catalogs=[first, second] if first_first else [second, first])
 
     merged = {table: rows_without_id(destination, table=table) for table in _SOURCE_TABLES}
     assert merged == {table: rows_without_id(union, table=table) for table in _SOURCE_TABLES}
-    _copy_catalogs(destination, [first])
-    _copy_catalogs(destination, [second])
+    _copy_catalogs(destination, source_catalogs=[first])
+    _copy_catalogs(destination, source_catalogs=[second])
     assert {table: rows_without_id(destination, table=table) for table in _SOURCE_TABLES} == merged
 
 
@@ -480,7 +482,7 @@ def test_a_copy_diverged_from_a_restored_catalog_merges_into_the_union(tmp_path:
     )
     destination = tmp_path / "out.db"
 
-    _copy_catalogs(destination, [restored, copy])
+    _copy_catalogs(destination, source_catalogs=[restored, copy])
 
     observations = rows_without_id(destination, table="source_observations")
     assert observations == rows_without_id(union, table="source_observations")

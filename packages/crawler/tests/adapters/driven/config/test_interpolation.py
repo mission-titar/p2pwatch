@@ -64,7 +64,7 @@ def test_a_value_that_is_no_string_is_unchanged() -> None:
     ],
 )
 def test_an_unset_variable_is_refused_under_its_key_path(
-    document: dict[str, Any], key_path: str
+    *, document: dict[str, Any], key_path: str
 ) -> None:
     with pytest.raises(InvalidConfigError) as error:
         interpolate_document(document, env={"SET": "x"})

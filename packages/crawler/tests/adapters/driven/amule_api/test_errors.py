@@ -51,7 +51,7 @@ def test_auth_error_is_not_a_loop_error() -> None:
     ],
 )
 def test_a_refused_operation_maps_to_its_rejection(
-    status: int, code: str, mapped: type[ApiError]
+    *, status: int, code: str, mapped: type[ApiError]
 ) -> None:
     assert type(error_from_response(_sent(error(status, code=code)))) is mapped
 

@@ -36,6 +36,7 @@ _GIVEN_ARGV = ["--config", "/etc/p2pwatch/c.yml", "--targets", "t.yml", "--match
 
 def _command_line(
     crawler_runner: CrawlerRunner | None = None,
+    *,
     config_validator: ConfigValidator | None = None,
     catalog_merger: CatalogMerger | None = None,
     root_logger: logging.Logger | None = None,
@@ -89,7 +90,7 @@ def test_validate_config_validates_the_paths_given_under_cwd_and_starts_nothing(
 ) -> None:
     crawler_runner = FakeCrawlerRunner()
     config_validator = FakeConfigValidator()
-    command_line = _command_line(crawler_runner, config_validator)
+    command_line = _command_line(crawler_runner, config_validator=config_validator)
 
     assert command_line.run(["validate-config", *_GIVEN_ARGV]) == 0
 
@@ -117,7 +118,7 @@ def test_validate_config_defaults_to_the_deploy_directory_under_the_working_dire
     ids=["key", "no-key"],
 )
 def test_validate_config_words_the_problem_of_a_wrong_config(
-    capsys: pytest.CaptureFixture[str], key: str | None, line: str
+    *, capsys: pytest.CaptureFixture[str], key: str | None, line: str
 ) -> None:
     config_report = ConfigReport(
         problems=(
@@ -208,7 +209,7 @@ _B = PurePath("/data/b.db")
     ],
 )
 def test_merge_merges_the_catalogs_given_into_the_destination_given_relative_ones_under_cwd(
-    options: list[str], destination: NewCatalog | ListedSourceCatalog
+    *, options: list[str], destination: NewCatalog | ListedSourceCatalog
 ) -> None:
     catalog_merger = FakeCatalogMerger()
 

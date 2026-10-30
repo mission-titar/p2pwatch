@@ -13,7 +13,7 @@ from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_
 _NODE_ID = "0c9d6b5e-2f4a-4e1b-9a7d-3c2b1a0f9e8d"
 
 
-def _local_at_14(path: Path, node_runtime: list[tuple[str, str]]) -> None:
+def _local_at_14(path: Path, *, node_runtime: list[tuple[str, str]]) -> None:
     with closing(open_local_at(path, version=14)) as connection:
         connection.executemany("INSERT INTO node_runtime (key, value) VALUES (?, ?)", node_runtime)
         connection.execute(
@@ -25,7 +25,11 @@ def test_0015_moves_the_node_identity_into_one_typed_row(tmp_path: Path) -> None
     path = tmp_path / "local.db"
     _local_at_14(
         path,
-        [("node_id", _NODE_ID), ("created_at", "2026-06-11T12:00:00.123456+00:00"), ("x", "y")],
+        node_runtime=[
+            ("node_id", _NODE_ID),
+            ("created_at", "2026-06-11T12:00:00.123456+00:00"),
+            ("x", "y"),
+        ],
     )
 
     with closing(open_local_at(path, version=15)) as connection:
@@ -44,7 +48,7 @@ def test_0015_moves_the_node_identity_into_one_typed_row(tmp_path: Path) -> None
 
 def test_0015_leaves_every_table_strict(tmp_path: Path) -> None:
     path = tmp_path / "local.db"
-    _local_at_14(path, [])
+    _local_at_14(path, node_runtime=[])
 
     with closing(open_local_at(path, version=15)) as connection:
         assert (
@@ -63,7 +67,7 @@ def test_0015_leaves_every_table_strict(tmp_path: Path) -> None:
 
 def test_0015_refuses_a_node_id_without_its_created_at(tmp_path: Path) -> None:
     path = tmp_path / "local.db"
-    _local_at_14(path, [("node_id", _NODE_ID)])
+    _local_at_14(path, node_runtime=[("node_id", _NODE_ID)])
 
     with pytest.raises(
         MigrationError, match="NOT NULL constraint failed: node_identity.created_at_micros"

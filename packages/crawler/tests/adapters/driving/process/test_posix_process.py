@@ -16,7 +16,7 @@ _REQUESTED = (
 @pytest.mark.asyncio
 @pytest.mark.parametrize("signal_number", [signal.SIGINT, signal.SIGTERM])
 async def test_a_first_signal_requests_the_shutdown_and_says_how_to_force(
-    signal_number: signal.Signals, capsys: pytest.CaptureFixture[str]
+    *, signal_number: signal.Signals, capsys: pytest.CaptureFixture[str]
 ) -> None:
     shutdown_requester = FakeShutdownRequester()
 

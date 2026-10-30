@@ -61,6 +61,7 @@ def catalog_scan_reader(connection: sqlite3.Connection) -> SqliteCatalogScanRead
 
 
 def test_iter_latest_observations_returns_the_latest_per_hash(
+    *,
     observation_store: SqliteObservationStore,
     catalog_scan_reader: SqliteCatalogScanReader,
 ) -> None:
@@ -100,6 +101,7 @@ def test_iter_latest_observations_is_empty_with_an_empty_catalogue(
 
 
 def test_iter_latest_observations_breaks_an_observed_at_tie_on_the_highest_variant(
+    *,
     observation_store: SqliteObservationStore,
     catalog_scan_reader: SqliteCatalogScanReader,
 ) -> None:
@@ -122,6 +124,7 @@ def test_iter_latest_observations_breaks_an_observed_at_tie_on_the_highest_varia
 
 
 def test_read_file_count_counts_catalogued_hashes_not_observations(
+    *,
     observation_store: SqliteObservationStore,
     catalog_scan_reader: SqliteCatalogScanReader,
 ) -> None:
@@ -145,7 +148,7 @@ def test_read_file_count_counts_catalogued_hashes_not_observations(
 
 
 def test_iter_latest_observations_skips_a_file_never_observed(
-    catalog_scan_reader: SqliteCatalogScanReader, connection: sqlite3.Connection
+    *, catalog_scan_reader: SqliteCatalogScanReader, connection: sqlite3.Connection
 ) -> None:
     insert_file(connection, native_id=_HASH, size_bytes=1)
     assert list(catalog_scan_reader.iter_latest_observations()) == []

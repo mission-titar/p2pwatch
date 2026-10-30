@@ -40,7 +40,7 @@ def _scripts(directory: Path, *pending: str) -> tuple[Migration, ...]:
     return load_scripts(directory)
 
 
-def _seeded(path: Path, scripts: tuple[Migration, ...]) -> sqlite3.Connection:
+def _seeded(path: Path, *, scripts: tuple[Migration, ...]) -> sqlite3.Connection:
     """A database at version 2, its two rows in ``t``, the later scripts pending."""
     path.parent.mkdir()
     return database_opener().open(path, scripts=scripts[: len(_SEED)])
@@ -52,7 +52,7 @@ def _pending(scripts: tuple[Migration, ...]) -> PendingMigrations:
 
 
 def _copier(
-    free_bytes: FakeFreeBytes | None = None, time: FakeTime | None = None
+    free_bytes: FakeFreeBytes | None = None, *, time: FakeTime | None = None
 ) -> SqlitePreMigrationCopier:
     free_bytes = free_bytes or FakeFreeBytes(_AMPLE_BYTES)
     return SqlitePreMigrationCopier((time or FakeTime()).wall, free_bytes=free_bytes.free_bytes)
@@ -65,7 +65,7 @@ def _copy_names(directory: Path) -> list[str]:
 def test_no_marked_pending_migration_makes_no_copy(tmp_path: Path) -> None:
     scripts = _scripts(tmp_path / "scripts", "CREATE TABLE u (y);", "CREATE TABLE v (z);")
     path = tmp_path / "data" / "catalog.db"
-    with closing(_seeded(path, scripts)) as connection:
+    with closing(_seeded(path, scripts=scripts)) as connection:
         _copier().ensure_copy(
             connection, path=path, pending=_pending(scripts), open_reader=open_reader
         )
@@ -77,7 +77,7 @@ def test_a_marked_migration_second_among_the_pending_copies_before_the_first(
 ) -> None:
     scripts = _scripts(tmp_path / "scripts", "CREATE TABLE u (y);", _COPY_BEFORE + "DELETE FROM t;")
     path = tmp_path / "data" / "catalog.db"
-    with closing(_seeded(path, scripts)) as connection:
+    with closing(_seeded(path, scripts=scripts)) as connection:
         _copier().ensure_copy(
             connection, path=path, pending=_pending(scripts), open_reader=open_reader
         )
@@ -113,18 +113,18 @@ def _keep_a_wal_with_free_pages(path: Path) -> sqlite3.Connection:
     return writer
 
 
-def _need_bytes(connection: sqlite3.Connection, path: Path) -> int:
+def _need_bytes(connection: sqlite3.Connection, *, path: Path) -> int:
     """The copy's live pages and ``-wal``, then the migrations' file and ``-wal``."""
-    page_size = _pragma(connection, "page_size")
-    page_count = _pragma(connection, "page_count")
-    freelist_count = _pragma(connection, "freelist_count")
+    page_size = _pragma(connection, name="page_size")
+    page_count = _pragma(connection, name="page_count")
+    freelist_count = _pragma(connection, name="freelist_count")
     assert freelist_count > 0
     wal_bytes = Path(f"{path}-wal").stat().st_size
     assert wal_bytes > 0
     return (page_count - freelist_count) * page_size + wal_bytes + path.stat().st_size + wal_bytes
 
 
-def _pragma(connection: sqlite3.Connection, name: str) -> int:
+def _pragma(connection: sqlite3.Connection, *, name: str) -> int:
     [pragma] = rows(connection, sql=f"PRAGMA {name}")
     return int(pragma[name])
 
@@ -133,10 +133,10 @@ def test_one_byte_short_refuses_before_any_write(tmp_path: Path) -> None:
     scripts = _scripts(tmp_path / "scripts", _COPY_BEFORE + "DELETE FROM t;")
     path = tmp_path / "data" / "catalog.db"
     with (
-        closing(_seeded(path, scripts)) as connection,
+        closing(_seeded(path, scripts=scripts)) as connection,
         closing(_keep_a_wal_with_free_pages(path)),
     ):
-        need_bytes = _need_bytes(connection, path)
+        need_bytes = _need_bytes(connection, path=path)
         free_bytes = FakeFreeBytes(need_bytes - 1)
         with pytest.raises(MigrationError, match=rf"\b{need_bytes}\b.*\b{need_bytes - 1}\b"):
             _copier(free_bytes).ensure_copy(
@@ -151,10 +151,10 @@ def test_exactly_the_free_space_needed_copies(tmp_path: Path) -> None:
     scripts = _scripts(tmp_path / "scripts", _COPY_BEFORE + "DELETE FROM t;")
     path = tmp_path / "data" / "catalog.db"
     with (
-        closing(_seeded(path, scripts)) as connection,
+        closing(_seeded(path, scripts=scripts)) as connection,
         closing(_keep_a_wal_with_free_pages(path)),
     ):
-        free_bytes = FakeFreeBytes(_need_bytes(connection, path))
+        free_bytes = FakeFreeBytes(_need_bytes(connection, path=path))
         _copier(free_bytes).ensure_copy(
             connection, path=path, pending=_pending(scripts), open_reader=open_reader
         )
@@ -165,7 +165,7 @@ def test_a_leftover_is_deleted_before_the_copy(tmp_path: Path) -> None:
     scripts = _scripts(tmp_path / "scripts", _COPY_BEFORE + "DELETE FROM t;")
     path = tmp_path / "data" / "catalog.db"
     other_database_leftover = path.parent / "local.db.pre-0003.partial"
-    with closing(_seeded(path, scripts)) as connection:
+    with closing(_seeded(path, scripts=scripts)) as connection:
         connection.execute("VACUUM INTO ?", (str(path.parent / "catalog.db.pre-0003.partial"),))
         (path.parent / "catalog.db.pre-0002.partial-journal").write_bytes(b"\0" * 512)
         other_database_leftover.write_bytes(b"local")
@@ -180,7 +180,7 @@ def test_a_leftover_is_deleted_before_the_copy(tmp_path: Path) -> None:
 def test_a_taken_name_refuses_and_leaves_its_file(tmp_path: Path) -> None:
     scripts = _scripts(tmp_path / "scripts", _COPY_BEFORE + "DELETE FROM t;")
     path = tmp_path / "data" / "catalog.db"
-    with closing(_seeded(path, scripts)) as connection:
+    with closing(_seeded(path, scripts=scripts)) as connection:
         taken = path.parent / _COPY_NAME
         taken.write_bytes(b"taken")
         with pytest.raises(MigrationError, match=_COPY_NAME):
@@ -197,7 +197,7 @@ def test_a_link_the_filesystem_refuses_raises_a_migration_error(tmp_path: Path) 
     path = tmp_path / "data" / ("c" * (255 - len(".pre-0003.partial-journal")))
     final_name = f"{path.name}.pre-0003.2026-06-12_00-00-00_UTC"
     with (
-        closing(_seeded(path, scripts)) as connection,
+        closing(_seeded(path, scripts=scripts)) as connection,
         pytest.raises(MigrationError, match=rf"{final_name}\b.*File name too long"),
     ):
         _copier().ensure_copy(
@@ -210,7 +210,7 @@ def test_a_copy_of_a_database_named_by_a_relative_path_is_reused(tmp_path: Path)
     scripts = _scripts(tmp_path / "scripts", _COPY_BEFORE + "DELETE FROM t;")
     # A URI escapes these characters.
     path = tmp_path / "data #%?" / "catalog.db"
-    _seeded(path, scripts).close()
+    _seeded(path, scripts=scripts).close()
     relative_path = Path(os.path.relpath(path))
     time = FakeTime()
     copier = _copier(time=time)
@@ -237,7 +237,7 @@ def test_the_latest_copy_is_read_through_the_open_reader_given(tmp_path: Path) -
         return open_reader(candidate)
 
     copier = _copier()
-    with closing(_seeded(path, scripts)) as connection:
+    with closing(_seeded(path, scripts=scripts)) as connection:
         copier.ensure_copy(
             connection, path=path, pending=_pending(scripts), open_reader=recording_open_reader
         )
@@ -250,7 +250,7 @@ def test_the_latest_copy_is_read_through_the_open_reader_given(tmp_path: Path) -
 _FAILING = _COPY_BEFORE + "DELETE FROM t;\nINSERT INTO absent VALUES (1);"
 
 
-def _open(path: Path, scripts: tuple[Migration, ...], copier: SqlitePreMigrationCopier) -> None:
+def _open(path: Path, *, scripts: tuple[Migration, ...], copier: SqlitePreMigrationCopier) -> None:
     """An open over the scripts through ``copier``, then the connection closed."""
     SqliteDatabaseOpener(copier).open(path, scripts=scripts).close()
 
@@ -258,16 +258,16 @@ def _open(path: Path, scripts: tuple[Migration, ...], copier: SqlitePreMigration
 def test_a_failed_migration_is_retried_on_the_same_copy(tmp_path: Path) -> None:
     scripts = _scripts(tmp_path / "scripts", _FAILING)
     path = tmp_path / "data" / "catalog.db"
-    _seeded(path, scripts).close()
+    _seeded(path, scripts=scripts).close()
     time = FakeTime()
     copier = _copier(time=time)
     with pytest.raises(MigrationError, match="migration 3"):
-        _open(path, scripts, copier)
+        _open(path, scripts=scripts, copier=copier)
     first = (path.parent / _COPY_NAME).stat()
     time.advance(timedelta(minutes=1))
     (path.parent / "catalog.db.pre-0003.partial").write_bytes(b"a copy a stop interrupted")
     with pytest.raises(MigrationError, match="migration 3"):
-        _open(path, scripts, copier)
+        _open(path, scripts=scripts, copier=copier)
     assert _copy_names(path.parent) == [_COPY_NAME]
     again = (path.parent / _COPY_NAME).stat()
     assert (again.st_ino, again.st_mtime_ns) == (first.st_ino, first.st_mtime_ns)
@@ -276,17 +276,17 @@ def test_a_failed_migration_is_retried_on_the_same_copy(tmp_path: Path) -> None:
 def test_a_changed_database_gets_a_new_copy(tmp_path: Path) -> None:
     scripts = _scripts(tmp_path / "scripts", _FAILING)
     path = tmp_path / "data" / "catalog.db"
-    _seeded(path, scripts).close()
+    _seeded(path, scripts=scripts).close()
     time = FakeTime()
     copier = _copier(time=time)
     with pytest.raises(MigrationError, match="migration 3"):
-        _open(path, scripts, copier)
+        _open(path, scripts=scripts, copier=copier)
     first_bytes = (path.parent / _COPY_NAME).read_bytes()
     with closing(sqlite3.connect(path, autocommit=True)) as writer:
         writer.execute("INSERT INTO t VALUES (3)")
     time.advance(timedelta(minutes=1))
     with pytest.raises(MigrationError, match="migration 3"):
-        _open(path, scripts, copier)
+        _open(path, scripts=scripts, copier=copier)
     second_name = "catalog.db.pre-0003.2026-06-12_00-01-00_UTC"
     assert _copy_names(path.parent) == [_COPY_NAME, second_name]
     assert (path.parent / _COPY_NAME).read_bytes() == first_bytes
@@ -298,7 +298,7 @@ def test_an_unreadable_candidate_is_not_reused(tmp_path: Path) -> None:
     time = FakeTime()
     copier = _copier(time=time)
     junk = path.parent / "catalog.db.pre-0003.2026-06-12_00-01-00_UTC"
-    with closing(_seeded(path, scripts)) as connection:
+    with closing(_seeded(path, scripts=scripts)) as connection:
         copier.ensure_copy(
             connection, path=path, pending=_pending(scripts), open_reader=open_reader
         )

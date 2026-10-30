@@ -29,7 +29,7 @@ _LOCAL_MIGRATIONS = (
 )
 
 
-def _names(connection: sqlite3.Connection, kind: str) -> set[str]:
+def _names(connection: sqlite3.Connection, *, kind: str) -> set[str]:
     schema_rows = rows(
         connection, sql="SELECT name FROM sqlite_master WHERE type = ?", parameters=(kind,)
     )
@@ -57,22 +57,24 @@ def catalog(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 
 def test_catalog_drops_the_file_verifications_table(catalog: sqlite3.Connection) -> None:
-    assert "file_verifications" not in _names(catalog, "table")
+    assert "file_verifications" not in _names(catalog, kind="table")
 
 
 def test_catalog_drops_the_file_verifications_triggers(catalog: sqlite3.Connection) -> None:
-    assert not {name for name in _names(catalog, "trigger") if "file_verifications" in name}
+    assert not {name for name in _names(catalog, kind="trigger") if "file_verifications" in name}
 
 
 def test_catalog_drops_the_file_verifications_index(catalog: sqlite3.Connection) -> None:
-    assert "idx_file_verifications_hash_verified" not in _names(catalog, "index")
+    assert "idx_file_verifications_hash_verified" not in _names(catalog, kind="index")
 
 
 def test_local_drops_the_verification_tasks_table(tmp_path: Path) -> None:
     connection = open_local(tmp_path / "local.db")
     try:
-        assert "verification_tasks" not in _names(connection, "table")
-        assert not {name for name in _names(connection, "index") if "verification_tasks" in name}
+        assert "verification_tasks" not in _names(connection, kind="table")
+        assert not {
+            name for name in _names(connection, kind="index") if "verification_tasks" in name
+        }
     finally:
         connection.close()
 

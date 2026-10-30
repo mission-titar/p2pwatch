@@ -73,7 +73,7 @@ def _range(*values: object) -> dict[str, object]:
     [("kad", "b" * 32), ("ed2k", "B" * 32), ("ed2k", "b" * 31), ("ed2k", "g" * 32)],
 )
 def test_a_source_of_an_unknown_network_or_not_32_lowercase_hex_on_ed2k_is_refused(
-    catalog: sqlite3.Connection, network: str, native_id: str
+    *, catalog: sqlite3.Connection, network: str, native_id: str
 ) -> None:
     with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
         catalog.execute("INSERT INTO sources VALUES (?, ?, ?)", (b"\x01" * 16, network, native_id))
@@ -103,7 +103,7 @@ def test_a_variant_without_identity_is_kept(catalog: sqlite3.Connection) -> None
     ("last_seen_at", "received_bytes"), [(9, 0), (10, -1)], ids=["ends-before", "negative"]
 )
 def test_a_range_ending_before_it_starts_or_with_negative_bytes_is_refused(
-    catalog: sqlite3.Connection, last_seen_at: int, received_bytes: int
+    *, catalog: sqlite3.Connection, last_seen_at: int, received_bytes: int
 ) -> None:
     insert_stage4_variant(catalog, native_id=_FILE, user_hash=_USER)
     with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
@@ -139,7 +139,7 @@ def test_the_latest_range_grows_all_three_columns(ranged: sqlite3.Connection) ->
     ],
 )
 def test_an_update_that_moves_a_key_or_lowers_a_value_is_refused(
-    ranged: sqlite3.Connection, assignment: str
+    *, ranged: sqlite3.Connection, assignment: str
 ) -> None:
     with pytest.raises(sqlite3.IntegrityError, match=_GROWS):
         ranged.execute(f"UPDATE source_ranges SET {assignment}")
@@ -150,7 +150,7 @@ def test_an_update_that_moves_a_key_or_lowers_a_value_is_refused(
     "assignment", ["last_seen_at = 25", "received_bytes = 6", "transfer_counter = 8"]
 )
 def test_a_range_that_a_later_one_follows_does_not_grow(
-    ranged: sqlite3.Connection, assignment: str
+    *, ranged: sqlite3.Connection, assignment: str
 ) -> None:
     insert_stage4_range(ranged, variant_id=1, first_seen_at=30, last_seen_at=40)
     with pytest.raises(sqlite3.IntegrityError, match=_GROWS):

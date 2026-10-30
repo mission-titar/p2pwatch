@@ -4,9 +4,6 @@ severity: error
 message: A dataclass is `kw_only=True`, so its construction names every field.
 note: "Two fields of one type passed by position swap unseen; ruff's PLR0917 sees no dataclass."
 files: ["packages/*/src/**/*.py", "packages/*/tests/**/*.py"]
-# The zones not yet keyword-only: each line goes with the block that converts its zone.
-ignores:
-  - "packages/crawler/tests/adapters/**" # C6
 rule:
   kind: decorator
   any:

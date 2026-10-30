@@ -321,7 +321,7 @@ def test_an_erroneous_download_failed_with_an_error() -> None:
     ],
 )
 def test_a_download_waits_for_the_first_reason_that_applies(
-    status: str, sources: dict[str, int], reason: WaitingReason | None
+    *, status: str, sources: dict[str, int], reason: WaitingReason | None
 ) -> None:
     assert _download(_queued(status, sources=sources)).waiting_reason is reason
 
@@ -527,7 +527,7 @@ def test_no_address_of_the_peer_reaches_the_reading() -> None:
     ],
 )
 def test_a_row_is_a_source_when_we_ask_it_the_file_or_it_is_parked_on_another(
-    relation: str | None, a4af: bool | None, kept: bool
+    *, relation: str | None, a4af: bool | None, kept: bool
 ) -> None:
     """D1: a row that only takes the file from us offers nothing, so its detail is not asked."""
     assert offering_source_ecid(_client_row(role=relation, a4af=a4af)) == (4382 if kept else None)
@@ -548,7 +548,7 @@ def test_a_row_without_an_ecid_to_ask_is_no_source(row: object) -> None:
     ],
 )
 def test_a_source_we_ask_takes_its_state_and_a_parked_one_is_standby(
-    relation: str, a4af: bool, role: SourceRole
+    *, relation: str, a4af: bool, role: SourceRole
 ) -> None:
     reading = map_source(_client_row(role=relation, a4af=a4af), detail=_client_detail())
 
@@ -582,7 +582,7 @@ def test_a_source_we_ask_takes_its_state_and_a_parked_one_is_standby(
     ],
 )
 def test_a_sources_role_is_what_its_download_state_says_of_the_parts_we_lack(
-    state: str | None, role: SourceRole | None
+    *, state: str | None, role: SourceRole | None
 ) -> None:
     """D3: a passing state reads ``None``, for the writer to carry the latest point's group."""
     reading = map_source(_client_row(download_state=state), detail=_client_detail())
@@ -618,7 +618,7 @@ def test_a_source_without_a_user_hash_key_has_no_identity() -> None:
     [("emule", "0.50a", "emule 0.50a"), ("unknown", None, "unknown"), (None, None, None)],
 )
 def test_a_sources_software_joins_its_client_and_version(
-    software: str | None, version: str | None, expected: str | None
+    *, software: str | None, version: str | None, expected: str | None
 ) -> None:
     reading = map_source(_client_row(software=software, software_version=version), detail={})
 
@@ -647,7 +647,7 @@ def test_a_sparse_row_and_detail_keep_the_meta_keys_they_carry_and_read_unknown(
     ],
 )
 def test_a_meta_value_is_kept_in_a_shape_the_catalog_stores(
-    protocol_extensions: object, kept: object
+    *, protocol_extensions: object, kept: object
 ) -> None:
     reading = map_source(
         _client_row(protocol_extensions=protocol_extensions), detail=_client_detail()
@@ -669,7 +669,7 @@ def test_a_meta_value_is_kept_in_a_shape_the_catalog_stores(
     ],
 )
 def test_a_sources_contact_point_is_its_server_as_ip_and_port(
-    server_ip: str | None, server_port: object, contact_point: ContactPoint | None
+    *, server_ip: str | None, server_port: object, contact_point: ContactPoint | None
 ) -> None:
     """D3: anything but an eD2k ``ip:port`` reads unknown."""
     detail = _client_detail(server_ip=server_ip, server_port=server_port)
@@ -695,7 +695,7 @@ def test_the_server_name_is_kept_unknown_when_the_server_is() -> None:
     ],
 )
 def test_a_source_is_directly_reachable_when_its_ed2k_id_is_a_high_id(
-    ed2k_user_id: int | None, high_id: object, connectable: bool | None
+    *, ed2k_user_id: int | None, high_id: object, connectable: bool | None
 ) -> None:
     """D3: without an eD2k id yet (0), ``high_id`` false says nothing."""
     detail = _client_detail(ed2k_user_id=ed2k_user_id, high_id=high_id)
@@ -704,7 +704,7 @@ def test_a_source_is_directly_reachable_when_its_ed2k_id_is_a_high_id(
 
 
 def _reading(
-    role: SourceRole | None, counter: int = 0, *, native_id: str | None = "1f" * 16, name: str = "x"
+    role: SourceRole | None, *, counter: int = 0, native_id: str | None = "1f" * 16, name: str = "x"
 ) -> SourceReading:
     key = SourceKey(network=Network.ED2K, native_id=native_id) if native_id is not None else None
     return SourceReading(
@@ -734,14 +734,14 @@ _INFORMATIVE: list[SourceRole | None] = [
     ("better", "worse"), [pair for pair in zip(_INFORMATIVE, _INFORMATIVE[1:], strict=False)]
 )
 def test_two_rows_of_one_source_keep_the_more_informative_role_and_the_larger_counter(
-    better: SourceRole | None, worse: SourceRole | None
+    *, better: SourceRole | None, worse: SourceRole | None
 ) -> None:
     """D7: a user hash is not unique among a client's simultaneous connections."""
     for rows in (
-        [_reading(better, 5), _reading(worse, 9)],
-        [_reading(worse, 9), _reading(better, 5)],
+        [_reading(better, counter=5), _reading(worse, counter=9)],
+        [_reading(worse, counter=9), _reading(better, counter=5)],
     ):
-        assert merge_duplicate_sources(rows) == (_reading(better, 9),)
+        assert merge_duplicate_sources(rows) == (_reading(better, counter=9),)
 
 
 def test_two_rows_without_a_hash_are_one_source_by_name_only() -> None:

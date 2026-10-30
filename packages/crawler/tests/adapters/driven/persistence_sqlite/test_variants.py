@@ -26,7 +26,7 @@ def connection() -> Iterator[sqlite3.Connection]:
     connection.close()
 
 
-def _hash(keyword: str = "keroro", node_id: str = "node-1", bitrate: int | None = 1100) -> bytes:
+def _hash(keyword: str = "keroro", *, node_id: str = "node-1", bitrate: int | None = 1100) -> bytes:
     return content_hash(_HASH, "Kéroro 062A.avi", 123, None, bitrate, "[]", keyword, node_id)
 
 
@@ -75,7 +75,7 @@ def test_fold_raw_meta_sql_function_folds_the_stored_text_as_the_domain_does(
 def test_a_memoized_sql_function_calls_its_function_once_per_distinct_arguments() -> None:
     calls: list[tuple[str, int]] = []
 
-    def counting(text: str, number: int) -> str:
+    def counting(text: str, number: int) -> str:  # noqa: PLR0917
         calls.append((text, number))
         return text * number
 
