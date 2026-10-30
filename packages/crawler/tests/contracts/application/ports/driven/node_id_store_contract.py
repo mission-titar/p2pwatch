@@ -30,10 +30,10 @@ class NodeIdStoreContract(ABC):
         assert node_id_store.read_node_id() is None
 
     def test_a_recorded_node_id_is_read_back(self, node_id_store: NodeIdStore) -> None:
-        node_id_store.record_node_id(NodeId("first-node"), _CREATED_AT)
+        node_id_store.record_node_id(NodeId("first-node"), created_at=_CREATED_AT)
         assert node_id_store.read_node_id() == "first-node"
 
     def test_a_second_node_id_is_refused(self, node_id_store: NodeIdStore) -> None:
-        node_id_store.record_node_id(NodeId("first-node"), _CREATED_AT)
+        node_id_store.record_node_id(NodeId("first-node"), created_at=_CREATED_AT)
         with pytest.raises(StoreError):
-            node_id_store.record_node_id(NodeId("second-node"), _CREATED_AT)
+            node_id_store.record_node_id(NodeId("second-node"), created_at=_CREATED_AT)
