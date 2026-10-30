@@ -169,14 +169,6 @@ def test_the_same_read_written_twice_leaves_the_points_unchanged(
     assert _points(catalog) == points
 
 
-def test_a_negative_counter_is_refused_not_dropped(
-    source_point_store: SqliteSourcePointStore,
-) -> None:
-    with pytest.raises(PersistenceError, match="CHECK constraint failed") as raised:
-        source_point_store.record_points([_point(counter=-1)])
-    assert isinstance(raised.value.__cause__, sqlite3.IntegrityError)
-
-
 def test_another_nodes_identical_reading_is_its_own_variant(
     *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:

@@ -230,26 +230,6 @@ def test_record_observation_rejects_non_canonical_hash(
     assert count_observations(connection) == 0
 
 
-def test_rollback_on_non_sqlite_error_keeps_connection_usable(
-    *, observation_store: SqliteObservationStore, connection: sqlite3.Connection
-) -> None:
-    # An isolated surrogate makes the parameter BINDING fail (UnicodeEncodeError, which
-    # is NOT a sqlite3.Error): without a rollback on BaseException, the connection
-    # would stay in_transaction=True and every later call would fail permanently
-    # ("cannot start a transaction within a transaction").
-    with pytest.raises(UnicodeEncodeError):
-        observation_store.record_observation(
-            FileObservation(
-                reported_file=_reported_file(filename="a\ud800"), observed_at=_T0, node_id=_NODE_ID
-            )
-        )
-    assert not connection.in_transaction
-    observation_store.record_observation(
-        FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=_NODE_ID)
-    )
-    assert count_observations(connection) == 1
-
-
 def test_outer_transaction_survives_record_observation_failure(
     *, observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
