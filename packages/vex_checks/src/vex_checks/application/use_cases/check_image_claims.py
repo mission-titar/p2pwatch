@@ -36,7 +36,7 @@ class CheckImageClaims(ImageClaimsChecker):
         self._code_scanning_reporter = code_scanning_reporter
 
     def check_image_claims(
-        self, sbom_path: PurePath, vex_path: PurePath, sarif_path: PurePath | None
+        self, sbom_path: PurePath, *, vex_path: PurePath, sarif_path: PurePath | None
     ) -> ImageClaimsReport:
         claims = self._vex_reader.read_claims(vex_path)
         premises = {
@@ -44,16 +44,16 @@ class CheckImageClaims(ImageClaimsChecker):
             for advisory_id, premise in self._premises.items()
             if advisory_id in claims
         }
-        vex_location = locate_vex(vex_path, self._repository_root)
+        vex_location = locate_vex(vex_path, repository_root=self._repository_root)
         problems = tuple(
             evaluate_image_premises(
                 premises,
-                self._sbom_reader.read_dpkg_packages(sbom_path),
-                self._sbom_reader.read_declared_components(sbom_path),
+                packages=self._sbom_reader.read_dpkg_packages(sbom_path),
+                declared_components=self._sbom_reader.read_declared_components(sbom_path),
             )
         )
         if sarif_path is not None:
             self._code_scanning_reporter.report_claim_problems(
-                sarif_path, _RULE_ID, problems, vex_location
+                sarif_path, rule_id=_RULE_ID, claim_problems=problems, vex_location=vex_location
             )
         return ImageClaimsReport(problems=problems, vex_location=vex_location)

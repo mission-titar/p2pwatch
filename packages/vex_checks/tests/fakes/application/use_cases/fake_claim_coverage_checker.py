@@ -15,6 +15,7 @@ class FakeClaimCoverageChecker(ClaimCoverageChecker):
     def __init__(
         self,
         problems: Sequence[ClaimProblem] = (),
+        *,
         broken_input_error: BrokenInputError | None = None,
     ) -> None:
         self._problems = tuple(problems)

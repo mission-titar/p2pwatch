@@ -3,13 +3,13 @@
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class DpkgPackage:
     name: str
     version: str
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class DeclaredComponent:
     name: str
     version: str

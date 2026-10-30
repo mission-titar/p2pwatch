@@ -14,7 +14,7 @@ class SbomRead(Protocol):
     def __call__(self, sbom_path: PurePath, /) -> object: ...
 
 
-def _write_sbom(tmp_path: Path, artifacts: list[dict[str, str]]) -> Path:
+def _write_sbom(tmp_path: Path, *, artifacts: list[dict[str, str]]) -> Path:
     path = tmp_path / "sbom.syft.json"
     path.write_text(json.dumps({"artifacts": artifacts}))
     return path
@@ -24,7 +24,7 @@ def test_read_dpkg_packages_keeps_only_deb_artifacts(tmp_path: Path) -> None:
     # aMule is compiled by us and declared by hand, so Syft types it "UnknownPackage", not "deb".
     path = _write_sbom(
         tmp_path,
-        [
+        artifacts=[
             {"type": "deb", "name": "libcurl4t64", "version": "8.14.1-2"},
             {"type": "deb", "name": "zlib1g", "version": "1:1.3.dfsg+really1.3.1-1"},
             {"type": "UnknownPackage", "name": "amule", "version": "3.1.0"},
@@ -32,8 +32,8 @@ def test_read_dpkg_packages_keeps_only_deb_artifacts(tmp_path: Path) -> None:
         ],
     )
     assert SyftSbomReader().read_dpkg_packages(path) == [
-        DpkgPackage("libcurl4t64", "8.14.1-2"),
-        DpkgPackage("zlib1g", "1:1.3.dfsg+really1.3.1-1"),
+        DpkgPackage(name="libcurl4t64", version="8.14.1-2"),
+        DpkgPackage(name="zlib1g", version="1:1.3.dfsg+really1.3.1-1"),
     ]
 
 
@@ -41,7 +41,7 @@ def test_read_declared_components_keeps_only_generic_purl_artifacts(tmp_path: Pa
     # The real shape of the hand-declared aMule artifact, as Syft 1.52 emits it.
     path = _write_sbom(
         tmp_path,
-        [
+        artifacts=[
             {
                 "type": "UnknownPackage",
                 "name": "amule",
@@ -57,7 +57,9 @@ def test_read_declared_components_keeps_only_generic_purl_artifacts(tmp_path: Pa
             {"type": "python", "name": "packaging", "version": "24.0"},
         ],
     )
-    assert SyftSbomReader().read_declared_components(path) == [DeclaredComponent("amule", "3.1.0")]
+    assert SyftSbomReader().read_declared_components(path) == [
+        DeclaredComponent(name="amule", version="3.1.0")
+    ]
 
 
 @pytest.mark.parametrize(
@@ -66,7 +68,7 @@ def test_read_declared_components_keeps_only_generic_purl_artifacts(tmp_path: Pa
     ids=["dpkg-packages", "declared-components"],
 )
 def test_reading_an_absent_sbom_raises_a_broken_input_naming_it(
-    read: SbomRead, tmp_path: Path
+    *, read: SbomRead, tmp_path: Path
 ) -> None:
     sbom_path = tmp_path / "absent.syft.json"
 
@@ -83,7 +85,7 @@ _READS = pytest.mark.parametrize(
 
 @_READS
 def test_reading_a_directory_raises_a_broken_input_naming_it(
-    read: SbomRead, tmp_path: Path
+    *, read: SbomRead, tmp_path: Path
 ) -> None:
     with pytest.raises(BrokenInputError, match=f"^{re.escape(str(tmp_path))}: Is a directory$"):
         read(tmp_path)
@@ -91,7 +93,7 @@ def test_reading_a_directory_raises_a_broken_input_naming_it(
 
 @_READS
 def test_reading_an_sbom_not_in_utf_8_raises_a_broken_input_naming_it(
-    read: SbomRead, tmp_path: Path
+    *, read: SbomRead, tmp_path: Path
 ) -> None:
     sbom_path = tmp_path / "sbom.syft.json"
     sbom_path.write_bytes(b'{"artifacts": "\xe9"}')
@@ -102,7 +104,7 @@ def test_reading_an_sbom_not_in_utf_8_raises_a_broken_input_naming_it(
 
 @_READS
 def test_reading_an_sbom_not_in_json_raises_a_broken_input_naming_it(
-    read: SbomRead, tmp_path: Path
+    *, read: SbomRead, tmp_path: Path
 ) -> None:
     sbom_path = tmp_path / "sbom.syft.json"
     sbom_path.write_text("{")
@@ -124,7 +126,7 @@ def test_reading_an_sbom_not_in_json_raises_a_broken_input_naming_it(
     ids=["no-artifacts", "artifacts-not-a-list", "artifact-not-an-object", "no-version", "purl"],
 )
 def test_reading_a_json_not_a_syft_sbom_raises_a_broken_input_naming_it(
-    read: SbomRead, document: object, tmp_path: Path
+    *, read: SbomRead, document: object, tmp_path: Path
 ) -> None:
     sbom_path = tmp_path / "sbom.syft.json"
     sbom_path.write_text(json.dumps(document))

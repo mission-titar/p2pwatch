@@ -64,7 +64,7 @@ def test_read_claims_of_a_file_not_in_json_raises_a_broken_input_naming_it(
     ids=["no-statements", "statements-not-a-list", "statement-not-an-object", "no-vulnerability"],
 )
 def test_read_claims_of_a_json_not_an_openvex_document_raises_a_broken_input_naming_it(
-    document: object, tmp_path: Path
+    *, document: object, tmp_path: Path
 ) -> None:
     vex_path = tmp_path / "x.vex.openvex.json"
     vex_path.write_text(json.dumps(document))

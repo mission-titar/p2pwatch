@@ -28,8 +28,10 @@ CLAIMS = {"CVE-A": "vulnerable_code_not_present", "CVE-B": "vulnerable_code_not_
 
 VEX_LOCATION = "security/crawler.vex.openvex.json"
 
-CVE_B_STALE = ClaimProblem("CVE-B", "stale: Grype does not report it")
-CVE_B_NOT_APPLIED = ClaimProblem("CVE-B", "not applied: Grype leaves a match unsuppressed")
+CVE_B_STALE = ClaimProblem(advisory_id="CVE-B", message="stale: Grype does not report it")
+CVE_B_NOT_APPLIED = ClaimProblem(
+    advisory_id="CVE-B", message="not applied: Grype leaves a match unsuppressed"
+)
 
 BOTH_APPLIED = VulnerabilityScan(
     found_advisory_ids=frozenset({"CVE-A", "CVE-B", "CVE-UNCLAIMED"}),
@@ -42,6 +44,7 @@ CVE_B_NOT_FOUND = VulnerabilityScan(
 
 def _checker(
     vulnerability_scanner: FakeVulnerabilityScanner,
+    *,
     code_scanning_reporter: FakeCodeScanningReporter | None = None,
     vex_reader: FakeVexReader | None = None,
 ) -> CheckAppliedClaims:
@@ -58,7 +61,7 @@ def _checker(
 def test_a_claim_grype_does_not_report_is_stale_located_at_the_vex() -> None:
     checker = _checker(FakeVulnerabilityScanner(CVE_B_NOT_FOUND))
 
-    report = checker.check_applied_claims(SBOM_PATH, VEX_PATH, None)
+    report = checker.check_applied_claims(SBOM_PATH, vex_path=VEX_PATH, sarif_path=None)
 
     assert report == AppliedClaimsReport(problems=(CVE_B_STALE,), vex_location=VEX_LOCATION)
 
@@ -71,7 +74,7 @@ def test_a_claim_with_an_unsuppressed_match_is_not_applied_though_others_are_sup
     )
     checker = _checker(FakeVulnerabilityScanner(scan))
 
-    report = checker.check_applied_claims(SBOM_PATH, VEX_PATH, None)
+    report = checker.check_applied_claims(SBOM_PATH, vex_path=VEX_PATH, sarif_path=None)
 
     assert report == AppliedClaimsReport(problems=(CVE_B_NOT_APPLIED,), vex_location=VEX_LOCATION)
 
@@ -79,7 +82,7 @@ def test_a_claim_with_an_unsuppressed_match_is_not_applied_though_others_are_sup
 def test_no_claim_is_a_problem_while_grype_suppresses_every_match_of_each() -> None:
     checker = _checker(FakeVulnerabilityScanner(BOTH_APPLIED))
 
-    report = checker.check_applied_claims(SBOM_PATH, VEX_PATH, None)
+    report = checker.check_applied_claims(SBOM_PATH, vex_path=VEX_PATH, sarif_path=None)
 
     assert report.problems == ()
 
@@ -87,7 +90,9 @@ def test_no_claim_is_a_problem_while_grype_suppresses_every_match_of_each() -> N
 def test_a_vex_outside_the_repository_is_located_at_its_path_as_given() -> None:
     checker = _checker(FakeVulnerabilityScanner(BOTH_APPLIED))
 
-    report = checker.check_applied_claims(SBOM_PATH, PurePath("/tmp/vex.openvex.json"), None)
+    report = checker.check_applied_claims(
+        SBOM_PATH, vex_path=PurePath("/tmp/vex.openvex.json"), sarif_path=None
+    )
 
     assert report.vex_location == "/tmp/vex.openvex.json"
 
@@ -95,9 +100,13 @@ def test_a_vex_outside_the_repository_is_located_at_its_path_as_given() -> None:
 def test_the_scanner_is_given_the_sbom_and_the_vex() -> None:
     vulnerability_scanner = FakeVulnerabilityScanner(BOTH_APPLIED)
 
-    _checker(vulnerability_scanner).check_applied_claims(SBOM_PATH, VEX_PATH, None)
+    _checker(vulnerability_scanner).check_applied_claims(
+        SBOM_PATH, vex_path=VEX_PATH, sarif_path=None
+    )
 
-    assert vulnerability_scanner.scanned_sboms == [ScannedSbom(SBOM_PATH, VEX_PATH)]
+    assert vulnerability_scanner.scanned_sboms == [
+        ScannedSbom(sbom_path=SBOM_PATH, vex_path=VEX_PATH)
+    ]
 
 
 def test_an_unreadable_vex_raises_before_the_scanner_runs() -> None:
@@ -106,38 +115,51 @@ def test_an_unreadable_vex_raises_before_the_scanner_runs() -> None:
     checker = _checker(vulnerability_scanner, vex_reader=vex_reader)
 
     with pytest.raises(BrokenInputError, match=f"^{re.escape(str(VEX_PATH))}: no such file$"):
-        checker.check_applied_claims(SBOM_PATH, VEX_PATH, None)
+        checker.check_applied_claims(SBOM_PATH, vex_path=VEX_PATH, sarif_path=None)
 
     assert vulnerability_scanner.scanned_sboms == []
 
 
 def test_asked_for_sarif_the_problems_are_written_under_the_unapplied_vex_claim_rule() -> None:
     code_scanning_reporter = FakeCodeScanningReporter()
-    checker = _checker(FakeVulnerabilityScanner(CVE_B_NOT_FOUND), code_scanning_reporter)
+    checker = _checker(
+        FakeVulnerabilityScanner(CVE_B_NOT_FOUND), code_scanning_reporter=code_scanning_reporter
+    )
 
-    report = checker.check_applied_claims(SBOM_PATH, VEX_PATH, PurePath("/tmp/out.sarif"))
+    report = checker.check_applied_claims(
+        SBOM_PATH, vex_path=VEX_PATH, sarif_path=PurePath("/tmp/out.sarif")
+    )
 
     assert report == AppliedClaimsReport(problems=(CVE_B_STALE,), vex_location=VEX_LOCATION)
     assert code_scanning_reporter.written_sarifs == [
         WrittenSarif(
-            PurePath("/tmp/out.sarif"), "unapplied-vex-claim", (CVE_B_STALE,), VEX_LOCATION
+            sarif_path=PurePath("/tmp/out.sarif"),
+            rule_id="unapplied-vex-claim",
+            claim_problems=(CVE_B_STALE,),
+            vex_location=VEX_LOCATION,
         )
     ]
 
 
 def test_asked_for_sarif_with_no_problem_an_empty_report_is_written() -> None:
     code_scanning_reporter = FakeCodeScanningReporter()
-    checker = _checker(FakeVulnerabilityScanner(BOTH_APPLIED), code_scanning_reporter)
+    checker = _checker(
+        FakeVulnerabilityScanner(BOTH_APPLIED), code_scanning_reporter=code_scanning_reporter
+    )
 
-    checker.check_applied_claims(SBOM_PATH, VEX_PATH, PurePath("/tmp/out.sarif"))
+    checker.check_applied_claims(
+        SBOM_PATH, vex_path=VEX_PATH, sarif_path=PurePath("/tmp/out.sarif")
+    )
 
     assert [written.claim_problems for written in code_scanning_reporter.written_sarifs] == [()]
 
 
 def test_not_asked_for_sarif_nothing_is_written() -> None:
     code_scanning_reporter = FakeCodeScanningReporter()
-    checker = _checker(FakeVulnerabilityScanner(CVE_B_NOT_FOUND), code_scanning_reporter)
+    checker = _checker(
+        FakeVulnerabilityScanner(CVE_B_NOT_FOUND), code_scanning_reporter=code_scanning_reporter
+    )
 
-    checker.check_applied_claims(SBOM_PATH, VEX_PATH, None)
+    checker.check_applied_claims(SBOM_PATH, vex_path=VEX_PATH, sarif_path=None)
 
     assert code_scanning_reporter.written_sarifs == []

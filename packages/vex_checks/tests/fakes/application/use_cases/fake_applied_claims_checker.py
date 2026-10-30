@@ -9,7 +9,7 @@ from vex_checks.application.ports.driving.applied_claims_checker import (
 from vex_checks.domain.claim_problem import ClaimProblem
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class AppliedClaimsCheck:
     sbom_path: PurePath
     vex_path: PurePath
@@ -19,13 +19,15 @@ class AppliedClaimsCheck:
 class FakeAppliedClaimsChecker(AppliedClaimsChecker):
     """Records each check it is asked for, and answers the same report to each."""
 
-    def __init__(self, problems: Sequence[ClaimProblem] = (), vex_location: str = "") -> None:
+    def __init__(self, problems: Sequence[ClaimProblem] = (), *, vex_location: str = "") -> None:
         self._problems = tuple(problems)
         self._vex_location = vex_location
         self.checks: list[AppliedClaimsCheck] = []
 
     def check_applied_claims(
-        self, sbom_path: PurePath, vex_path: PurePath, sarif_path: PurePath | None
+        self, sbom_path: PurePath, *, vex_path: PurePath, sarif_path: PurePath | None
     ) -> AppliedClaimsReport:
-        self.checks.append(AppliedClaimsCheck(sbom_path, vex_path, sarif_path))
+        self.checks.append(
+            AppliedClaimsCheck(sbom_path=sbom_path, vex_path=vex_path, sarif_path=sarif_path)
+        )
         return AppliedClaimsReport(problems=self._problems, vex_location=self._vex_location)

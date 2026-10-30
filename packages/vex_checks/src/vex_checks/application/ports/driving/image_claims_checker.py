@@ -7,7 +7,7 @@ from pathlib import PurePath
 from vex_checks.domain.claim_problem import ClaimProblem
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ImageClaimsReport:
     problems: tuple[ClaimProblem, ...]
     vex_location: str  # where every problem points, as `locate_vex` names it
@@ -18,6 +18,6 @@ class ImageClaimsChecker(ABC):
 
     @abstractmethod
     def check_image_claims(
-        self, sbom_path: PurePath, vex_path: PurePath, sarif_path: PurePath | None
+        self, sbom_path: PurePath, *, vex_path: PurePath, sarif_path: PurePath | None
     ) -> ImageClaimsReport:
         """The image premises the VEX claims that the SBOM falsifies."""

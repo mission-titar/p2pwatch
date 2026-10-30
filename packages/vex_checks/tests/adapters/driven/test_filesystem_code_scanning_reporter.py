@@ -14,7 +14,9 @@ _VEX_RELPATH = "security/crawler.vex.openvex.json"
 def test_no_claim_problem_yields_valid_sarif_with_no_results(tmp_path: Path) -> None:
     sarif_path = tmp_path / "out.sarif"
 
-    FilesystemCodeScanningReporter().report_claim_problems(sarif_path, _RULE_ID, [], _VEX_RELPATH)
+    FilesystemCodeScanningReporter().report_claim_problems(
+        sarif_path, rule_id=_RULE_ID, claim_problems=[], vex_location=_VEX_RELPATH
+    )
 
     sarif = json.loads(sarif_path.read_text())
     assert sarif["$schema"] == "https://json.schemastore.org/sarif-2.1.0.json"
@@ -38,10 +40,12 @@ def test_one_claim_problem_yields_one_error_result_pointing_at_the_vex_file(
     tmp_path: Path,
 ) -> None:
     sarif_path = tmp_path / "out.sarif"
-    claim_problem = ClaimProblem("CVE-2026-11940", "no longer reported by Grype")
+    claim_problem = ClaimProblem(
+        advisory_id="CVE-2026-11940", message="no longer reported by Grype"
+    )
 
     FilesystemCodeScanningReporter().report_claim_problems(
-        sarif_path, _RULE_ID, [claim_problem], _VEX_RELPATH
+        sarif_path, rule_id=_RULE_ID, claim_problems=[claim_problem], vex_location=_VEX_RELPATH
     )
 
     sarif = json.loads(sarif_path.read_text())

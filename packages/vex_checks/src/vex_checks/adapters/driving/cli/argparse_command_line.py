@@ -17,7 +17,7 @@ class CwdResolver(Protocol):
     def __call__(self, path: str, /) -> PurePath: ...
 
 
-def _add_image_options(parser: argparse.ArgumentParser, under_cwd: CwdResolver) -> None:
+def _add_image_options(parser: argparse.ArgumentParser, *, under_cwd: CwdResolver) -> None:
     parser.add_argument(
         "--sbom", type=under_cwd, required=True, help="Syft JSON SBOM of the built image"
     )
@@ -30,7 +30,7 @@ def _add_image_options(parser: argparse.ArgumentParser, under_cwd: CwdResolver) 
 
 
 def _print_problems(
-    problems: Sequence[ClaimProblem], vex_location: str, sarif_output: PurePath | None
+    problems: Sequence[ClaimProblem], *, vex_location: str, sarif_output: PurePath | None
 ) -> int:
     """Each problem a GitHub ``::error::`` line and exit 1, or, written as SARIF, exit 0."""
     if sarif_output is not None:
@@ -66,11 +66,11 @@ class ArgparseCommandLine:
         image_claims = subparsers.add_parser(
             "image-claims", help="check the image claims against the image's SBOM"
         )
-        _add_image_options(image_claims, self._under_cwd)
+        _add_image_options(image_claims, under_cwd=self._under_cwd)
         applied_claims = subparsers.add_parser(
             "applied-claims", help="flag the claims Grype does not report or apply for the image"
         )
-        _add_image_options(applied_claims, self._under_cwd)
+        _add_image_options(applied_claims, under_cwd=self._under_cwd)
         subparsers.add_parser(
             "claim-coverage",
             help="check that every claim maps to one image premise or source rule, and back",
@@ -78,25 +78,33 @@ class ArgparseCommandLine:
         args = parser.parse_args(argv)
         try:
             if args.command == "image-claims":
-                return self._check_image_claims(args.sbom, args.vex, args.sarif)
+                return self._check_image_claims(args.sbom, vex=args.vex, sarif_output=args.sarif)
             if args.command == "applied-claims":
-                return self._check_applied_claims(args.sbom, args.vex, args.sarif)
+                return self._check_applied_claims(args.sbom, vex=args.vex, sarif_output=args.sarif)
             return self._check_claim_coverage()
         except BrokenInputError as error:
             print(f"error: {error}", file=sys.stderr)
             return 1
 
     def _check_image_claims(
-        self, sbom: PurePath, vex: PurePath, sarif_output: PurePath | None
+        self, sbom: PurePath, *, vex: PurePath, sarif_output: PurePath | None
     ) -> int:
-        report = self._image_claims_checker.check_image_claims(sbom, vex, sarif_output)
-        return _print_problems(report.problems, report.vex_location, sarif_output)
+        report = self._image_claims_checker.check_image_claims(
+            sbom, vex_path=vex, sarif_path=sarif_output
+        )
+        return _print_problems(
+            report.problems, vex_location=report.vex_location, sarif_output=sarif_output
+        )
 
     def _check_applied_claims(
-        self, sbom: PurePath, vex: PurePath, sarif_output: PurePath | None
+        self, sbom: PurePath, *, vex: PurePath, sarif_output: PurePath | None
     ) -> int:
-        report = self._applied_claims_checker.check_applied_claims(sbom, vex, sarif_output)
-        return _print_problems(report.problems, report.vex_location, sarif_output)
+        report = self._applied_claims_checker.check_applied_claims(
+            sbom, vex_path=vex, sarif_path=sarif_output
+        )
+        return _print_problems(
+            report.problems, vex_location=report.vex_location, sarif_output=sarif_output
+        )
 
     def _check_claim_coverage(self) -> int:
         report = self._claim_coverage_checker.check_claim_coverage()

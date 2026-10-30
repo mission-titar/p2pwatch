@@ -23,6 +23,7 @@ def merge_claims(claims_of_each_vex: Iterable[Mapping[str, str]]) -> dict[str, f
 
 def evaluate_claim_coverage(
     justifications_by_advisory_id: Mapping[str, frozenset[str]],
+    *,
     image_premise_ids: Set[str],
     source_rule_ids: Set[str],
 ) -> list[ClaimProblem]:
@@ -36,30 +37,32 @@ def evaluate_claim_coverage(
     }
     problems = [
         *(
-            ClaimProblem(advisory_id, "justified differently across VEX files")
+            ClaimProblem(advisory_id=advisory_id, message="justified differently across VEX files")
             for advisory_id, justifications in justifications_by_advisory_id.items()
             if len(justifications) > 1
         ),
         *(
-            ClaimProblem(advisory_id, "has both an image premise and a source rule")
+            ClaimProblem(
+                advisory_id=advisory_id, message="has both an image premise and a source rule"
+            )
             for advisory_id in backed_twice
         ),
         *(
-            ClaimProblem(advisory_id, "claim has no premise or source rule")
+            ClaimProblem(advisory_id=advisory_id, message="claim has no premise or source rule")
             for advisory_id in claimed_ids - justification_by_backed_id.keys()
         ),
         *(
-            ClaimProblem(advisory_id, "premise has no claim")
+            ClaimProblem(advisory_id=advisory_id, message="premise has no claim")
             for advisory_id in image_premise_ids - claimed_ids
         ),
         *(
-            ClaimProblem(advisory_id, "source rule has no claim")
+            ClaimProblem(advisory_id=advisory_id, message="source rule has no claim")
             for advisory_id in source_rule_ids - claimed_ids
         ),
         *(
             ClaimProblem(
-                advisory_id,
-                f"justification {justification!r}"
+                advisory_id=advisory_id,
+                message=f"justification {justification!r}"
                 f" is not {justification_by_backed_id[advisory_id]!r}",
             )
             for advisory_id in claimed_ids & justification_by_backed_id.keys() - backed_twice

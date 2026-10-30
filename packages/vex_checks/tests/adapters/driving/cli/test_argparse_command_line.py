@@ -26,8 +26,8 @@ _SARIF_OPTIONS = pytest.mark.parametrize(
     ids=["printed-by-default", "sarif-to-its-path"],
 )
 _PROBLEMS = (
-    ClaimProblem("CVE-A", "dpkg package 'nghttp2' is present"),
-    ClaimProblem("CVE-B", "declared amule 2.1.1 is below 2.1.2"),
+    ClaimProblem(advisory_id="CVE-A", message="dpkg package 'nghttp2' is present"),
+    ClaimProblem(advisory_id="CVE-B", message="declared amule 2.1.1 is below 2.1.2"),
 )
 _VEX_LOCATION = "security/crawler.vex.openvex.json"
 
@@ -38,10 +38,11 @@ class _Checks:
     def __init__(
         self,
         problems: Sequence[ClaimProblem] = (),
+        *,
         claim_coverage_problems: Sequence[ClaimProblem] = (),
     ) -> None:
-        self.image_claims_checker = FakeImageClaimsChecker(problems, _VEX_LOCATION)
-        self.applied_claims_checker = FakeAppliedClaimsChecker(problems, _VEX_LOCATION)
+        self.image_claims_checker = FakeImageClaimsChecker(problems, vex_location=_VEX_LOCATION)
+        self.applied_claims_checker = FakeAppliedClaimsChecker(problems, vex_location=_VEX_LOCATION)
         self.claim_coverage_checker = FakeClaimCoverageChecker(claim_coverage_problems)
 
     def command_line(self) -> ArgparseCommandLine:
@@ -62,14 +63,16 @@ class _Checks:
 
 @_SARIF_OPTIONS
 def test_image_claims_checks_the_sbom_the_vex_and_its_sarif_output_under_the_cwd(
-    options: list[str], sarif_output: PurePath | None
+    *, options: list[str], sarif_output: PurePath | None
 ) -> None:
     checks = _Checks()
 
     checks.command_line().run(["image-claims", "--sbom", "s.json", "--vex", "v.json", *options])
 
     assert checks.image_claims_checker.checks == [
-        ImageClaimsCheck(_CWD / "s.json", _CWD / "v.json", sarif_output)
+        ImageClaimsCheck(
+            sbom_path=_CWD / "s.json", vex_path=_CWD / "v.json", sarif_path=sarif_output
+        )
     ]
     assert checks.applied_claims_checker.checks == []
 
@@ -83,7 +86,7 @@ def test_image_claims_checks_the_sbom_the_vex_and_its_sarif_output_under_the_cwd
     ids=["relative-under-the-cwd-unresolved", "absolute-as-given"],
 )
 def test_an_image_check_is_given_the_vex_under_the_cwd_as_written(
-    vex: str, vex_path: PurePath
+    *, vex: str, vex_path: PurePath
 ) -> None:
     checks = _Checks()
 
@@ -91,13 +94,17 @@ def test_an_image_check_is_given_the_vex_under_the_cwd_as_written(
     checks.command_line().run(["applied-claims", "--sbom", "/s.json", "--vex", vex])
 
     sbom_path = PurePath("/s.json")
-    assert checks.image_claims_checker.checks == [ImageClaimsCheck(sbom_path, vex_path, None)]
-    assert checks.applied_claims_checker.checks == [AppliedClaimsCheck(sbom_path, vex_path, None)]
+    assert checks.image_claims_checker.checks == [
+        ImageClaimsCheck(sbom_path=sbom_path, vex_path=vex_path, sarif_path=None)
+    ]
+    assert checks.applied_claims_checker.checks == [
+        AppliedClaimsCheck(sbom_path=sbom_path, vex_path=vex_path, sarif_path=None)
+    ]
 
 
 @pytest.mark.parametrize("command", _IMAGE_COMMANDS)
 def test_an_image_check_prints_each_problem_as_an_error_and_returns_one(
-    command: str, capsys: pytest.CaptureFixture[str]
+    *, command: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     checks = _Checks(_PROBLEMS)
 
@@ -112,7 +119,7 @@ def test_an_image_check_prints_each_problem_as_an_error_and_returns_one(
 
 @pytest.mark.parametrize("command", _IMAGE_COMMANDS)
 def test_an_image_check_with_no_problem_prints_nothing_and_returns_zero(
-    command: str, capsys: pytest.CaptureFixture[str]
+    *, command: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     checks = _Checks()
 
@@ -124,7 +131,7 @@ def test_an_image_check_with_no_problem_prints_nothing_and_returns_zero(
 
 @pytest.mark.parametrize("command", _IMAGE_COMMANDS)
 def test_an_image_check_asked_for_sarif_prints_nothing_and_returns_zero_despite_problems(
-    command: str, capsys: pytest.CaptureFixture[str]
+    *, command: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     checks = _Checks(_PROBLEMS)
 
@@ -138,14 +145,16 @@ def test_an_image_check_asked_for_sarif_prints_nothing_and_returns_zero_despite_
 
 @_SARIF_OPTIONS
 def test_applied_claims_checks_the_sbom_the_vex_and_its_sarif_output_under_the_cwd(
-    options: list[str], sarif_output: PurePath | None
+    *, options: list[str], sarif_output: PurePath | None
 ) -> None:
     checks = _Checks()
 
     checks.command_line().run(["applied-claims", "--sbom", "s.json", "--vex", "v.json", *options])
 
     assert checks.applied_claims_checker.checks == [
-        AppliedClaimsCheck(_CWD / "s.json", _CWD / "v.json", sarif_output)
+        AppliedClaimsCheck(
+            sbom_path=_CWD / "s.json", vex_path=_CWD / "v.json", sarif_path=sarif_output
+        )
     ]
     assert checks.image_claims_checker.checks == []
 
@@ -153,7 +162,7 @@ def test_applied_claims_checks_the_sbom_the_vex_and_its_sarif_output_under_the_c
 @pytest.mark.parametrize("command", _IMAGE_COMMANDS)
 @pytest.mark.parametrize("option", ["--format", "--output"])
 def test_an_image_check_refuses_the_former_format_and_output_options(
-    command: str, option: str, capsys: pytest.CaptureFixture[str]
+    *, command: str, option: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     checks = _Checks()
 
@@ -167,7 +176,7 @@ def test_an_image_check_refuses_the_former_format_and_output_options(
 
 @pytest.mark.parametrize("command", _IMAGE_COMMANDS)
 def test_an_image_check_requires_the_sbom_and_the_vex(
-    command: str, capsys: pytest.CaptureFixture[str]
+    *, command: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     checks = _Checks()
 
@@ -184,8 +193,8 @@ def test_claim_coverage_prints_each_problem_as_an_error_and_returns_one(
 ) -> None:
     checks = _Checks(
         claim_coverage_problems=[
-            ClaimProblem("CVE-A", "claim has no premise or source rule"),
-            ClaimProblem("CVE-B", "premise has no claim"),
+            ClaimProblem(advisory_id="CVE-A", message="claim has no premise or source rule"),
+            ClaimProblem(advisory_id="CVE-B", message="premise has no claim"),
         ]
     )
 
@@ -227,7 +236,9 @@ def test_a_broken_input_is_printed_as_one_error_line_and_returns_one(
 
 
 @pytest.mark.parametrize("command", ["source-claims", "stale-claims"])
-def test_a_former_check_is_no_subcommand(command: str, capsys: pytest.CaptureFixture[str]) -> None:
+def test_a_former_check_is_no_subcommand(
+    *, command: str, capsys: pytest.CaptureFixture[str]
+) -> None:
     checks = _Checks()
 
     with pytest.raises(SystemExit) as exit_info:

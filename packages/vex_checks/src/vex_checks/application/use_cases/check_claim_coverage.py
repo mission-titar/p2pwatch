@@ -36,7 +36,7 @@ class CheckClaimCoverage(ClaimCoverageChecker):
         )
         problems = evaluate_claim_coverage(
             justifications_by_advisory_id,
-            self._premises.keys(),
-            self._source_rule_reader.read_source_rule_ids(),
+            image_premise_ids=self._premises.keys(),
+            source_rule_ids=self._source_rule_reader.read_source_rule_ids(),
         )
         return ClaimCoverageReport(problems=tuple(problems))

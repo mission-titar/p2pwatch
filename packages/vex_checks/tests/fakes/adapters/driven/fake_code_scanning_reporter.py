@@ -6,7 +6,7 @@ from vex_checks.application.ports.driven.code_scanning_reporter import CodeScann
 from vex_checks.domain.claim_problem import ClaimProblem
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class WrittenSarif:
     sarif_path: PurePath
     rule_id: str
@@ -23,10 +23,16 @@ class FakeCodeScanningReporter(CodeScanningReporter):
     def report_claim_problems(
         self,
         sarif_path: PurePath,
+        *,
         rule_id: str,
         claim_problems: Sequence[ClaimProblem],
         vex_location: str,
     ) -> None:
         self.written_sarifs.append(
-            WrittenSarif(sarif_path, rule_id, tuple(claim_problems), vex_location)
+            WrittenSarif(
+                sarif_path=sarif_path,
+                rule_id=rule_id,
+                claim_problems=tuple(claim_problems),
+                vex_location=vex_location,
+            )
         )

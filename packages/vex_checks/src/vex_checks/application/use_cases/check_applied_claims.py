@@ -34,27 +34,32 @@ class CheckAppliedClaims(AppliedClaimsChecker):
         self._code_scanning_reporter = code_scanning_reporter
 
     def check_applied_claims(
-        self, sbom_path: PurePath, vex_path: PurePath, sarif_path: PurePath | None
+        self, sbom_path: PurePath, *, vex_path: PurePath, sarif_path: PurePath | None
     ) -> AppliedClaimsReport:
         # Read first, so that the reader names a broken VEX before Grype fails on it.
         claims = self._vex_reader.read_claims(vex_path)
-        vulnerability_scan = self._vulnerability_scanner.scan_sbom(sbom_path, vex_path)
-        vex_location = locate_vex(vex_path, self._repository_root)
+        vulnerability_scan = self._vulnerability_scanner.scan_sbom(sbom_path, vex_path=vex_path)
+        vex_location = locate_vex(vex_path, repository_root=self._repository_root)
         problems = tuple(
             problem
             for advisory_id in claims
-            if (problem := _claim_problem(advisory_id, vulnerability_scan)) is not None
+            if (problem := _claim_problem(advisory_id, vulnerability_scan=vulnerability_scan))
+            is not None
         )
         if sarif_path is not None:
             self._code_scanning_reporter.report_claim_problems(
-                sarif_path, _RULE_ID, problems, vex_location
+                sarif_path, rule_id=_RULE_ID, claim_problems=problems, vex_location=vex_location
             )
         return AppliedClaimsReport(problems=problems, vex_location=vex_location)
 
 
-def _claim_problem(advisory_id: str, vulnerability_scan: VulnerabilityScan) -> ClaimProblem | None:
+def _claim_problem(
+    advisory_id: str, *, vulnerability_scan: VulnerabilityScan
+) -> ClaimProblem | None:
     if advisory_id not in vulnerability_scan.found_advisory_ids:
-        return ClaimProblem(advisory_id, "stale: Grype does not report it")
+        return ClaimProblem(advisory_id=advisory_id, message="stale: Grype does not report it")
     if advisory_id in vulnerability_scan.unsuppressed_advisory_ids:
-        return ClaimProblem(advisory_id, "not applied: Grype leaves a match unsuppressed")
+        return ClaimProblem(
+            advisory_id=advisory_id, message="not applied: Grype leaves a match unsuppressed"
+        )
     return None
