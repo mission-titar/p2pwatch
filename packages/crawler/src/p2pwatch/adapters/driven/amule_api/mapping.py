@@ -6,6 +6,7 @@ we never persist. A source keeps only D7's keys (stage 4 spec).
 """
 
 import json
+import re
 from collections.abc import Iterable
 from dataclasses import replace
 from typing import Any
@@ -26,6 +27,12 @@ from p2pwatch.domain.source import (
 from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus
 
 _HASH_LENGTH = 32
+
+# SQLite's INTEGER, a signed 64-bit integer: the largest count or size the catalog holds.
+_CATALOG_INTEGER_MAX = 2**63 - 1
+
+# Half of a UTF-16 pair, which no UTF-8 text holds.
+_SURROGATES = re.compile(r"[\ud800-\udfff]")
 
 # What amuleapi reports for a peer that has not sent its hash yet (stage 4 spec, D7).
 _NO_USER_HASH = "0" * _HASH_LENGTH
@@ -258,7 +265,7 @@ def _source_metadata(fields: dict[str, Any], *, keys: tuple[str, ...]) -> Source
 def _meta_value(field: object) -> str | int | bool | tuple[str, ...] | None:
     """A JSON value in a shape ``SourceMetadata`` holds: a list as a tuple of text, anything else
     unforeseen as its JSON text."""
-    if field is None or isinstance(field, str | int | bool):
+    if field is None or isinstance(field, int | bool):
         return field
     if isinstance(field, list):
         return tuple(_render(element) for element in field)
@@ -280,8 +287,9 @@ def _map_result(search_result: object, *, keyword: Keyword) -> list[ReportedFile
     if not isinstance(search_result, dict):
         return []
     native_id = _hash_hex(search_result.get("hash"))
-    size_bytes = search_result.get("size_bytes")
-    if native_id is None or not isinstance(size_bytes, int) or isinstance(size_bytes, bool):
+    # A malformed size drops the result: read as 0, it would catalogue a file aMule cannot fetch.
+    size_bytes = _optional_int(search_result.get("size_bytes"))
+    if native_id is None or size_bytes is None:
         return []
     media = _as_dict(search_result.get("media"))
     raw_metadata = _raw_metadata(search_result, media=media)
@@ -317,10 +325,12 @@ def _raw_metadata(
 ) -> tuple[tuple[str, str], ...]:
     """Every unmapped key → ``(key, rendered_value)``, in wire order."""
     collected = [
-        (key, _render(field)) for key, field in search_result.items() if key not in _MAPPED_KEYS
+        (_replace_surrogates(key), _render(field))
+        for key, field in search_result.items()
+        if key not in _MAPPED_KEYS
     ]
     collected += [
-        (f"media.{key}", _render(field))
+        (_replace_surrogates(f"media.{key}"), _render(field))
         for key, field in media.items()
         if key not in _MAPPED_MEDIA_KEYS
     ]
@@ -328,8 +338,10 @@ def _raw_metadata(
 
 
 def _render(field: object) -> str:
-    """Rendering that NEVER raises: text as-is, anything else as JSON."""
-    return field if isinstance(field, str) else json.dumps(field, ensure_ascii=False)
+    """Rendering that NEVER raises: text as-is, anything else as JSON, surrogates replaced."""
+    return _replace_surrogates(
+        field if isinstance(field, str) else json.dumps(field, ensure_ascii=False)
+    )
 
 
 def _as_dict(field: object) -> dict[str, Any]:
@@ -338,7 +350,13 @@ def _as_dict(field: object) -> dict[str, Any]:
 
 def _string(field: object) -> str | None:
     """A blank string reads as absent: an empty name is as unusable as a missing one."""
-    return field if isinstance(field, str) and field else None
+    return _replace_surrogates(field) if isinstance(field, str) and field else None
+
+
+def _replace_surrogates(text: str) -> str:
+    """Each surrogate, paired or not, as U+FFFD: amuleapi writes none, so one comes from bytes
+    that are not UTF-8, which no store can encode."""
+    return _SURROGATES.sub("\N{REPLACEMENT CHARACTER}", text)
 
 
 def _hash_hex(field: object) -> str | None:
@@ -350,13 +368,17 @@ def _hash_hex(field: object) -> str | None:
 
 
 def _int_or_zero(field: object) -> int:
-    """Absent or malformed reads as 0, and ``bool`` is not a count though it is an ``int``."""
-    return field if isinstance(field, int) and not isinstance(field, bool) else 0
+    """Reads as 0 what ``_optional_int`` reads as ``None``: absent or malformed."""
+    quantity = _optional_int(field)
+    return 0 if quantity is None else quantity
 
 
 def _optional_int(field: object) -> int | None:
-    """Keeps "the daemon reported nothing" distinct from a reported zero."""
-    return field if isinstance(field, int) and not isinstance(field, bool) else None
+    """Keeps "the daemon reported nothing" distinct from a reported zero. A ``bool``, a negative
+    integer or one past what the catalog holds is malformed: every field it reads is unsigned."""
+    if isinstance(field, bool) or not isinstance(field, int):
+        return None
+    return field if 0 <= field <= _CATALOG_INTEGER_MAX else None
 
 
 def _source_counts(field: object) -> tuple[int, int]:

@@ -25,6 +25,9 @@ from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus
 
 _HASH = "8b54a3c20fae9e4b9f7e0c2c8c01b6b1"
 _KEY = FileKey(network=Network.ED2K, native_id=_HASH)
+# Half of a UTF-16 pair, which no UTF-8 text holds: what bytes that are not UTF-8 decode to.
+_SURROGATE = "\ud800"
+_REPLACEMENT = "\N{REPLACEMENT CHARACTER}"
 
 
 def _result(**overrides: Any) -> dict[str, Any]:
@@ -178,9 +181,11 @@ def test_a_result_without_a_usable_hash_is_skipped_and_counted() -> None:
     assert skipped == 1
 
 
-def test_a_result_without_a_usable_size_is_skipped_and_counted() -> None:
+@pytest.mark.parametrize("size_bytes", [True, -1, 2**63])
+def test_a_result_without_a_usable_size_is_skipped_and_counted(size_bytes: int) -> None:
+    """D2: a size read as 0 would catalogue a file aMule refuses to download."""
     reported_files, skipped = map_search_results(
-        [_result(size_bytes=True)], keyword=Keyword("keroro")
+        [_result(size_bytes=size_bytes)], keyword=Keyword("keroro")
     )
 
     assert reported_files == ()
@@ -242,12 +247,63 @@ def test_missing_source_counts_read_as_zero() -> None:
     assert _raw_metadata(reported_file)["complete_source_count"] == 0
 
 
-def test_a_non_integer_source_count_reads_as_zero() -> None:
+@pytest.mark.parametrize("count", ["many", -1, 2**63])
+def test_a_malformed_source_count_reads_as_zero(count: object) -> None:
     (reported_file,), _ = map_search_results(
-        [_result(sources={"total": "many"})], keyword=Keyword("keroro")
+        [_result(sources={"total": count, "complete": count})], keyword=Keyword("keroro")
     )
 
     assert reported_file.source_count == 0
+    assert _raw_metadata(reported_file)["complete_source_count"] == 0
+
+
+@pytest.mark.parametrize(
+    ("reported", "read"), [(0, 0), (2**63 - 1, 2**63 - 1), (-1, None), (2**63, None)]
+)
+def test_a_duration_or_bitrate_the_catalog_cannot_hold_reads_as_absent(
+    *, reported: int, read: int | None
+) -> None:
+    """D2: neither is negative, and the catalog holds at most a signed 64-bit integer."""
+    media = {"duration_seconds": reported, "bitrate_kilobits_per_second": reported}
+    (reported_file,), _ = map_search_results([_result(media=media)], keyword=Keyword("keroro"))
+
+    assert (reported_file.duration_seconds, reported_file.bitrate_kbps) == (read, read)
+
+
+@pytest.mark.parametrize(
+    ("name", "filename"),
+    [
+        (f"Keroro{_SURROGATE}.avi", f"Keroro{_REPLACEMENT}.avi"),
+        # json.loads decodes with surrogatepass: U+1F600 written as CESU-8 stays two halves.
+        (json.loads(b'"Keroro \xed\xa0\xbd\xed\xb8\x80.avi"'), f"Keroro {_REPLACEMENT * 2}.avi"),
+    ],
+)
+def test_a_surrogate_in_a_filename_reads_as_a_replacement_character(
+    *, name: str, filename: str
+) -> None:
+    """D1: amuleapi writes none, so one left comes from bytes that are not UTF-8."""
+    (reported_file,), _ = map_search_results([_result(name=name)], keyword=Keyword("keroro"))
+
+    assert reported_file.filename == filename
+
+
+@pytest.mark.parametrize(
+    ("overrides", "pair"),
+    [
+        ({f"rating{_SURROGATE}": "3"}, (f"rating{_REPLACEMENT}", "3")),
+        ({"rating": f"3{_SURROGATE}"}, ("rating", f"3{_REPLACEMENT}")),
+        ({"comments": [f"nice{_SURROGATE}"]}, ("comments", f'["nice{_REPLACEMENT}"]')),
+        ({"media": {f"title{_SURROGATE}": "Keroro"}}, (f"media.title{_REPLACEMENT}", "Keroro")),
+        ({"media": {"codec": f"H.264{_SURROGATE}"}}, ("codec", f"H.264{_REPLACEMENT}")),
+        ({"file_type": f"video{_SURROGATE}"}, ("file_type", f"video{_REPLACEMENT}")),
+    ],
+)
+def test_a_surrogate_in_a_results_raw_metadata_reads_as_a_replacement_character(
+    *, overrides: dict[str, Any], pair: tuple[str, str]
+) -> None:
+    (reported_file,), _ = map_search_results([_result(**overrides)], keyword=Keyword("keroro"))
+
+    assert pair in reported_file.raw_metadata
 
 
 def test_a_non_string_file_type_is_dropped() -> None:
@@ -288,6 +344,13 @@ def test_maps_a_download_row_to_its_status() -> None:
         waiting_reason=None,
         failure_reason=None,
     )
+
+
+@pytest.mark.parametrize("byte_count", [-1, 2**63])
+def test_a_download_byte_count_the_catalog_cannot_hold_reads_as_zero(byte_count: int) -> None:
+    status = _download(_queued("downloading", completed_bytes=byte_count, size_bytes=byte_count))
+
+    assert (status.bytes_done, status.size_bytes) == (0, 0)
 
 
 def test_only_the_completed_status_completes_a_download() -> None:
@@ -413,6 +476,12 @@ def test_an_empty_version_and_status_degrade_to_unknown() -> None:
     assert [channel.connected for channel in status.channels] == [False, False]
 
 
+def test_a_surrogate_in_amules_version_reads_as_a_replacement_character() -> None:
+    status = map_client_status({}, version={"daemon_version": f"3.1.0{_SURROGATE}"})
+
+    assert status.version == f"3.1.0{_REPLACEMENT}"
+
+
 def _client_row(**overrides: Any) -> dict[str, Any]:
     """A row of GET /downloads/{hash}/clients: the /clients list object plus its file relation."""
     row: dict[str, Any] = {
@@ -533,7 +602,9 @@ def test_a_row_is_a_source_when_we_ask_it_the_file_or_it_is_parked_on_another(
     assert offering_source_ecid(_client_row(role=relation, a4af=a4af)) == (4382 if kept else None)
 
 
-@pytest.mark.parametrize("row", ["nonsense", _client_row(ecid=None), _client_row(ecid=True)])
+@pytest.mark.parametrize(
+    "row", ["nonsense", _client_row(ecid=None), _client_row(ecid=True), _client_row(ecid=-1)]
+)
 def test_a_row_without_an_ecid_to_ask_is_no_source(row: object) -> None:
     assert offering_source_ecid(row) is None
 
@@ -636,6 +707,23 @@ def test_a_sparse_row_and_detail_keep_the_meta_keys_they_carry_and_read_unknown(
     assert reading.session_received_bytes == 0
 
 
+@pytest.mark.parametrize("received", [-1, 2**63])
+def test_a_session_counter_the_catalog_cannot_hold_reads_as_zero(received: int) -> None:
+    reading = map_source(_client_row(downloaded_bytes_session=received), detail=_client_detail())
+
+    assert reading.session_received_bytes == 0
+
+
+def test_a_surrogate_in_a_sources_name_or_software_reads_as_a_replacement_character() -> None:
+    row = _client_row(name=f"Animusee{_SURROGATE}", software_version=f"0.50a{_SURROGATE}")
+    reading = map_source(row, detail=_client_detail())
+
+    assert (reading.source_name, reading.software) == (
+        f"Animusee{_REPLACEMENT}",
+        f"emule 0.50a{_REPLACEMENT}",
+    )
+
+
 @pytest.mark.parametrize(
     ("protocol_extensions", "kept"),
     [
@@ -644,6 +732,9 @@ def test_a_sparse_row_and_detail_keep_the_meta_keys_they_carry_and_read_unknown(
         ({"bits": 3}, '{"bits": 3}'),
         (1.5, "1.5"),
         (None, None),
+        (f"ipv6{_SURROGATE}", f"ipv6{_REPLACEMENT}"),
+        ([f"ipv6{_SURROGATE}"], (f"ipv6{_REPLACEMENT}",)),
+        ({f"bits{_SURROGATE}": 3}, f'{{"bits{_REPLACEMENT}": 3}}'),
     ],
 )
 def test_a_meta_value_is_kept_in_a_shape_the_catalog_stores(
