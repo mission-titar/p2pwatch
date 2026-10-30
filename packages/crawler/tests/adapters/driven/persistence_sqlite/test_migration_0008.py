@@ -58,6 +58,25 @@ _OBSERVATION_COLUMNS = ("variant_id", "observed_at", "source_count")
 _DECISION_COLUMNS = ("id", "file_id", "target_id", "rule_name", "tier", "decided_at", "node_id")
 
 
+def _content_hash(
+    variant: tuple[str, str, int, int | None, int | None, str, str, str], *, file_ref: str | bytes
+) -> bytes:
+    """``variant``'s hash, its file referenced by ``file_ref``."""
+    _, filename, size_bytes, duration_seconds, bitrate_kbps, raw_metadata, keyword, node_id = (
+        variant
+    )
+    return content_hash(
+        file_ref=file_ref,
+        filename=filename,
+        size_bytes=size_bytes,
+        duration_seconds=duration_seconds,
+        bitrate_kbps=bitrate_kbps,
+        raw_metadata=raw_metadata,
+        keyword=keyword,
+        node_id=node_id,
+    )
+
+
 def _catalog_at_7(path: Path) -> None:
     connection = open_catalog_at(path, version=7)
     for native_id, size in ((_A, 100), (_B, 200)):
@@ -69,7 +88,7 @@ def _catalog_at_7(path: Path) -> None:
             "INSERT INTO observation_variants (ed2k_hash, filename, size_bytes, media_length_sec,"
             " bitrate_kbps, raw_meta, keyword, node_id, content_hash)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (*variant, content_hash(*variant)),
+            (*variant, _content_hash(variant, file_ref=variant[0])),
         )
     connection.executemany("INSERT INTO observations VALUES (?, ?, ?)", _OBSERVATIONS)
     connection.executemany(
@@ -104,7 +123,7 @@ def test_variants_keep_their_id_and_hash_the_file_id(migrated: sqlite3.Connectio
         dict(
             zip(
                 _VARIANT_COLUMNS,
-                (n, file_ids[v[0]], *v[1:], content_hash(file_ids[v[0]], *v[1:])),
+                (n, file_ids[v[0]], *v[1:], _content_hash(v, file_ref=file_ids[v[0]])),
                 strict=True,
             )
         )

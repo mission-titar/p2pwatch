@@ -15,7 +15,8 @@ from p2pwatch.domain.identifiers import FileId
 from p2pwatch.domain.observation import fold_raw_metadata
 
 
-def content_hash(  # noqa: PLR0917
+def content_hash(
+    *,
     file_ref: str | bytes,
     filename: str,
     size_bytes: int,
@@ -62,9 +63,31 @@ def register_sql_functions(connection: sqlite3.Connection) -> None:
             ensure_ascii=False,
         )
 
+    # SQLite passes the columns by position.
+    def content_hash_by_position(  # noqa: PLR0917
+        file_ref: str | bytes,
+        filename: str,
+        size_bytes: int,
+        duration_seconds: int | None,
+        bitrate_kbps: int | None,
+        raw_metadata: str,
+        keyword: str,
+        node_id: str,
+    ) -> bytes:
+        return content_hash(
+            file_ref=file_ref,
+            filename=filename,
+            size_bytes=size_bytes,
+            duration_seconds=duration_seconds,
+            bitrate_kbps=bitrate_kbps,
+            raw_metadata=raw_metadata,
+            keyword=keyword,
+            node_id=node_id,
+        )
+
     # Memoized for the connection's life, the crawler's included: one entry per variant 0007 wrote.
     create_memoized_function(
-        connection, name="content_hash", argument_count=8, function=content_hash
+        connection, name="content_hash", argument_count=8, function=content_hash_by_position
     )
     # The SQL name keeps its old spelling: migration catalog/0007, which never changes, calls it.
     create_memoized_function(

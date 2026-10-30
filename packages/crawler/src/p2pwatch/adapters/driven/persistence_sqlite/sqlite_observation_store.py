@@ -62,17 +62,27 @@ class SqliteObservationStore(ObservationWriter, ObservationReader):
         reported_file = observation.reported_file
         file = reported_file.file
         require_canonical_native_id(file)
+        raw_metadata = json.dumps(reported_file.raw_metadata, ensure_ascii=False)
         variant = (
             file.file_id,
             reported_file.filename,
             reported_file.size_bytes,
             reported_file.duration_seconds,
             reported_file.bitrate_kbps,
-            json.dumps(reported_file.raw_metadata, ensure_ascii=False),
+            raw_metadata,
             reported_file.keyword,
             observation.node_id,
         )
-        variant_content_hash = content_hash(*variant)
+        variant_content_hash = content_hash(
+            file_ref=file.file_id,
+            filename=reported_file.filename,
+            size_bytes=reported_file.size_bytes,
+            duration_seconds=reported_file.duration_seconds,
+            bitrate_kbps=reported_file.bitrate_kbps,
+            raw_metadata=raw_metadata,
+            keyword=reported_file.keyword,
+            node_id=observation.node_id,
+        )
         observed_at_micros = instant_to_micros(observation.observed_at)
         with wrap_sqlite_errors():
             self._connection.execute("BEGIN")
