@@ -5,12 +5,13 @@ message: A dataclass is `kw_only=True`, so its construction names every field.
 note: "Two fields of one type passed by position swap unseen; ruff's PLR0917 sees no dataclass."
 files: ["packages/*/src/**/*.py", "packages/*/tests/**/*.py"]
 rule:
-  kind: decorator
   any:
     # `@dataclass` or `@dataclasses.dataclass`, bare.
-    - has: { regex: '^(dataclasses\.)?dataclass$' }
+    - kind: decorator
+      has: { regex: '^(dataclasses\.)?dataclass$' }
     # Called without `kw_only=True`.
-    - has:
+    - kind: decorator
+      has:
         kind: call
         all:
           - has: { field: function, regex: '^(dataclasses\.)?dataclass$' }
@@ -22,3 +23,14 @@ rule:
                   all:
                     - has: { field: name, regex: ^kw_only$ }
                     - has: { field: value, regex: ^True$ }
+    # A field's `kw_only` other than `True` makes it positional again.
+    - kind: call
+      all:
+        - has: { field: function, regex: '^(dataclasses\.)?field$' }
+        - has:
+            field: arguments
+            has:
+              kind: keyword_argument
+              all:
+                - has: { field: name, regex: ^kw_only$ }
+                - not: { has: { field: value, regex: ^True$ } }
