@@ -38,10 +38,6 @@ An agent adds an entry only after the operator has agreed to it.
 - **Mutation testing in the gate**: mutmut run cold on a pull request's impact set, from the per-test coverage, so
   a test that stops detecting a fault fails the gate. D13 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`.
 
-- **Keyword-only calls**: ruff's `PLR0917` at one positional parameter and
-  `kw_only=True` on every dataclass, so no call passes two values by position. Section 7 of
-  `agents/specs/2026-10-28-typed-identifiers.md`.
-
 - **Contract tests for the fakes of outside systems**: each suite run against the real system (amuled, apprise, GitHub,
   Gluetun) under the integration markers, never against a fake server. Section "Backlog" of `agents/specs/2026-10-25-fake-contract-tests.md`.
 
