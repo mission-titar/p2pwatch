@@ -1,7 +1,6 @@
 """The crawler starts under the node's id, re-evaluates a changed policy, then runs its loops."""
 
 import asyncio
-from collections.abc import Callable, Coroutine
 from datetime import timedelta
 
 import pytest
@@ -14,7 +13,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import Sq
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
 )
-from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle
+from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle, NodeLoop
 from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRegistry
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.file_judge import FileJudge
@@ -109,7 +108,7 @@ class _Crawl:
             logger=self.logger,
         )
 
-    def _loop(self, name: str) -> Callable[[NodeId], Coroutine[object, object, None]]:
+    def _loop(self, name: str) -> NodeLoop:
         async def loop(node_id: NodeId) -> None:
             self.steps.append(
                 f"{name} under {node_id}, {len(self.observability.logger.lines)} event(s) out"

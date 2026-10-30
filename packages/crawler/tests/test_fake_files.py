@@ -34,6 +34,16 @@ def _is_record(definition: ClassDefinition) -> bool:
     )
 
 
+def _is_callback_protocol(definition: ClassDefinition) -> bool:
+    """A `Protocol` whose only member is `__call__`, which the double receives in its file."""
+    class_node = class_def(definition)
+    bases = [ast.unparse(base) for base in class_node.bases]
+    members = [node for node in class_node.body if not isinstance(node, ast.Expr)]
+    return bases == ["Protocol"] and [
+        isinstance(member, ast.FunctionDef) and member.name for member in members
+    ] == ["__call__"]
+
+
 def _doubles_by_file() -> dict[Path, list[ClassDefinition]]:
     # A test_*.py beside the doubles tests them and holds none.
     fakes_files = sorted(
@@ -42,7 +52,11 @@ def _doubles_by_file() -> dict[Path, list[ClassDefinition]]:
         if file.name != "__init__.py" and not file.name.startswith("test_")
     )
     return {
-        file: [definition for definition in class_definitions(file) if not _is_record(definition)]
+        file: [
+            definition
+            for definition in class_definitions(file)
+            if not _is_record(definition) and not _is_callback_protocol(definition)
+        ]
         for file in fakes_files
     }
 

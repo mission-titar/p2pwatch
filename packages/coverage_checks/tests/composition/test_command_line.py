@@ -1,9 +1,9 @@
 """The command line, wired to the real check in the given cwd and temporary directory."""
 
 import importlib.util
-from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
+from typing import Protocol
 
 import pytest
 from coverage import Coverage
@@ -18,9 +18,11 @@ def is_short(size):
 """
 
 
-def _measure_sizes(
-    package_directory: Path, calls_by_context: dict[str, Callable[[ModuleType], object]]
-) -> None:
+class MeasuredCall(Protocol):
+    def __call__(self, module: ModuleType, /) -> object: ...
+
+
+def _measure_sizes(package_directory: Path, calls_by_context: dict[str, MeasuredCall]) -> None:
     """Writes `src/pkg/sizes.py` and records its run as pytest-cov's per-test contexts do."""
     module = package_directory / "src" / "pkg" / "sizes.py"
     module.parent.mkdir(parents=True)

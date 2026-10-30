@@ -1,12 +1,16 @@
 import socket
 import threading
-from collections.abc import Awaitable, Callable
-from typing import Any, Self
+from typing import Protocol, Self
 
 import httpx
 import uvicorn
+from starlette.types import Receive, Scope, Send
 
 from tests.fakes.fake_amule_api import FakeAmuleApi
+
+
+class ApiPredicate(Protocol):
+    def __call__(self, api: FakeAmuleApi, /) -> bool: ...
 
 
 class FakeAmuleApiServer:
@@ -38,16 +42,16 @@ class FakeAmuleApiServer:
         if self.failures:
             raise self.failures[0]
 
-    def wait_for(self, predicate: Callable[[FakeAmuleApi], bool], timeout_seconds: float) -> bool:
+    def wait_for(self, predicate: ApiPredicate, timeout_seconds: float) -> bool:
         """Blocks until ``predicate`` holds after a request, as ``Condition.wait_for`` does."""
         with self._served:
             return self._served.wait_for(lambda: predicate(self.api), timeout_seconds)
 
     async def _serve_http(  # noqa: PLR0917
         self,
-        scope: dict[str, Any],
-        receive: Callable[[], Awaitable[dict[str, Any]]],
-        send: Callable[[dict[str, Any]], Awaitable[None]],
+        scope: Scope,
+        receive: Receive,
+        send: Send,
     ) -> None:
         body = b""
         more_body = True

@@ -1,8 +1,8 @@
 """Port-sync's loop: amuled is never left down, and the port is written only while it is down."""
 
 import dataclasses
-from collections.abc import Callable
 from datetime import timedelta
+from typing import Protocol
 
 import pytest
 
@@ -34,6 +34,10 @@ class _Stop(Exception):
     pass
 
 
+class RoundCallback(Protocol):
+    def __call__(self) -> None: ...
+
+
 class Node:
     """amule.conf and the supervisor recording into one action list, gluetun's port, a clock, a
     logger."""
@@ -44,7 +48,7 @@ class Node:
         self.amule_conf.conf = CONF
         self.forwarded_port_client = FakeForwardedPortClient()
         self.service_supervisor = FakeServiceSupervisor(self.actions)
-        self.between_rounds: Callable[[], None] = lambda: None
+        self.between_rounds: RoundCallback = lambda: None
         self.monotonic_clock = FakeMonotonicClock()
         self.logger = FakeLogger()
 

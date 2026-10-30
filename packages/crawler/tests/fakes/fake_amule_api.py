@@ -7,9 +7,8 @@ forgets to ask for more fail here instead of on a node with a hundred shared fil
 
 import json
 import re
-from collections.abc import Callable
 from datetime import timedelta
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 
@@ -45,6 +44,10 @@ def error(status: int, code: str, message: str = "nope", **headers: str) -> http
     return httpx.Response(
         status, json={"error": {"code": code, "message": message}}, headers=headers
     )
+
+
+class RouteOverride(Protocol):
+    def __call__(self, request: httpx.Request, /) -> httpx.Response: ...
 
 
 class FakeAmuleApi:
@@ -90,7 +93,7 @@ class FakeAmuleApi:
         self.logouts = 0
         self.added_links: list[str] = []
         # Per-route overrides: a callable wins over the default behaviour, once per call.
-        self.overrides: dict[tuple[str, str], Callable[[httpx.Request], httpx.Response]] = {}
+        self.overrides: dict[tuple[str, str], RouteOverride] = {}
 
     def transport(self) -> httpx.MockTransport:
         return httpx.MockTransport(self.handle)
@@ -109,7 +112,7 @@ class FakeAmuleApi:
         assert unauthenticated or request.headers.get("Authorization") == f"Bearer {TOKEN}", (
             f"{route}: missing or stale bearer token"
         )
-        return handler(self, request)
+        return handler(self, request=request)
 
     # --- routes ---------------------------------------------------------------------------
 
@@ -212,7 +215,11 @@ def _page(
     return window[:limit]
 
 
-_ROUTES: dict[tuple[str, str], Callable[[FakeAmuleApi, httpx.Request], httpx.Response]] = {
+class RouteHandler(Protocol):
+    def __call__(self, api: FakeAmuleApi, /, *, request: httpx.Request) -> httpx.Response: ...
+
+
+_ROUTES: dict[tuple[str, str], RouteHandler] = {
     ("POST", "/api/v1/auth/login"): FakeAmuleApi._login,
     ("POST", "/api/v1/auth/logout"): FakeAmuleApi._logout,
     ("POST", "/api/v1/search"): FakeAmuleApi._start_search,
