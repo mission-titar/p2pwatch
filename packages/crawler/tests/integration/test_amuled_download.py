@@ -31,8 +31,8 @@ _SIZE = 734003200  # ~700 MiB: a real size, hence an active partfile (never "com
 async def test_start_then_appears_in_downloads(amuled: ApiEndpoint) -> None:
     client = AmuleApiClient(
         amuled.host,
-        amuled.port,
-        amuled.password,
+        port=amuled.port,
+        password=amuled.password,
         timeout_seconds=30.0,
         page_size=500,
         progress_poll_interval=timedelta(seconds=5),

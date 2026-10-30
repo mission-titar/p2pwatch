@@ -1421,21 +1421,23 @@ def _decision(target_id: TargetId, tier: str) -> DecisionRecord:
 
 
 def test_resolve_target_display_empty_decisions_is_empty_list() -> None:
-    assert _resolve_target_display(_catalog_entry(decisions=()), _SEGMENT_BY_ID) == []
+    assert _resolve_target_display(_catalog_entry(decisions=()), segment_by_id=_SEGMENT_BY_ID) == []
 
 
 def test_resolve_target_display_catalog_decision_is_unidentified() -> None:
     catalog_entry = _catalog_entry(
         decisions=(_decision(target_id=TargetId("062A"), tier="catalog"),)
     )
-    assert _resolve_target_display(catalog_entry, _SEGMENT_BY_ID) == [("unidentified", "·")]
+    assert _resolve_target_display(catalog_entry, segment_by_id=_SEGMENT_BY_ID) == [
+        ("unidentified", "·")
+    ]
 
 
 def test_resolve_target_display_resolvable_id_joins_seasonal_locator_and_title() -> None:
     catalog_entry = _catalog_entry(
         decisions=(_decision(target_id=TargetId("062A"), tier="download"),)
     )
-    assert _resolve_target_display(catalog_entry, _SEGMENT_BY_ID) == [
+    assert _resolve_target_display(catalog_entry, segment_by_id=_SEGMENT_BY_ID) == [
         ("062A / S02E11A", "La Grenouille Cosmique")
     ]
 
@@ -1444,21 +1446,21 @@ def test_resolve_target_display_unknown_id_falls_back_to_raw_id() -> None:
     catalog_entry = _catalog_entry(
         decisions=(_decision(target_id=TargetId("999Z"), tier="download"),)
     )
-    assert _resolve_target_display(catalog_entry, _SEGMENT_BY_ID) == [("999Z", "·")]
+    assert _resolve_target_display(catalog_entry, segment_by_id=_SEGMENT_BY_ID) == [("999Z", "·")]
 
 
 def test_resolve_target_display_two_segments_returns_a_pair_each() -> None:
     catalog_entry = _catalog_entry(
         decisions=(_decision(TargetId("062A"), "download"), _decision(TargetId("062B"), "download"))
     )
-    assert _resolve_target_display(catalog_entry, _SEGMENTS_AB) == [
+    assert _resolve_target_display(catalog_entry, segment_by_id=_SEGMENTS_AB) == [
         ("062A / S02E11A", "La Grenouille Cosmique"),
         ("062B / S02E11B", "Duel Contre Giroro"),
     ]
 
 
 def test_catalog_entry_displays_empty_decisions_all_dashes() -> None:
-    [display] = _catalog_entry_displays([_catalog_entry(decisions=())], _SEGMENTS_AB)
+    [display] = _catalog_entry_displays([_catalog_entry(decisions=())], segment_by_id=_SEGMENTS_AB)
     assert display.decisions_display == ()
     assert display.tier_display == "·"
 
@@ -1467,7 +1469,7 @@ def test_catalog_entry_displays_two_segments_aggregate_cells_shared_tier() -> No
     catalog_entry = _catalog_entry(
         decisions=(_decision(TargetId("062A"), "download"), _decision(TargetId("062B"), "download"))
     )
-    [display] = _catalog_entry_displays([catalog_entry], _SEGMENTS_AB)
+    [display] = _catalog_entry_displays([catalog_entry], segment_by_id=_SEGMENTS_AB)
     assert display.decisions_display == (
         DecisionCellDisplay(target="062A / S02E11A", title="La Grenouille Cosmique"),
         DecisionCellDisplay(target="062B / S02E11B", title="Duel Contre Giroro"),
@@ -1479,7 +1481,7 @@ def test_catalog_entry_displays_two_segments_differing_tiers_lists_per_target() 
     catalog_entry = _catalog_entry(
         decisions=(_decision(TargetId("062A"), "download"), _decision(TargetId("062B"), "notify"))
     )
-    [display] = _catalog_entry_displays([catalog_entry], _SEGMENTS_AB)
+    [display] = _catalog_entry_displays([catalog_entry], segment_by_id=_SEGMENTS_AB)
     assert display.tier_display == "062A: download · 062B: notify"
 
 
@@ -1487,14 +1489,14 @@ def test_catalog_entry_displays_computes_size_and_latest_seen_display() -> None:
     catalog_entry = _catalog_entry(
         decisions=(), observed_at=datetime(2026, 7, 3, 23, 45, 24, 104990, tzinfo=UTC)
     )
-    [display] = _catalog_entry_displays([catalog_entry], _SEGMENTS_AB)
+    [display] = _catalog_entry_displays([catalog_entry], segment_by_id=_SEGMENTS_AB)
     assert display.size_display == "1 KB"
     assert display.latest_seen_display == "2026-07-03 23:45Z"
 
 
 def test_catalog_entry_displays_shows_a_file_never_seen_with_unknown_sources() -> None:
     catalog_entry = replace(_catalog_entry(decisions=()), latest_observation=None)
-    [display] = _catalog_entry_displays([catalog_entry], _SEGMENTS_AB)
+    [display] = _catalog_entry_displays([catalog_entry], segment_by_id=_SEGMENTS_AB)
     assert (display.filename, display.sources_display, display.latest_seen_display) == (
         "",
         "unknown",

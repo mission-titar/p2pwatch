@@ -102,7 +102,7 @@ def input_timestamp(at: datetime) -> str:
     return f"{at:%Y-%m-%dT%H:%M:%S}"
 
 
-def average_rate(received_bytes: int, first_seen_at: datetime, last_seen_at: datetime) -> str:
+def average_rate(received_bytes: int, *, first_seen_at: datetime, last_seen_at: datetime) -> str:
     """A sharing period's average rate, e.g. ``1 KB/s``; empty without bytes or over one read."""
     if received_bytes == 0 or last_seen_at == first_seen_at:
         return ""

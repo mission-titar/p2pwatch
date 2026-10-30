@@ -548,8 +548,8 @@ from p2pwatch.adapters.driven.amule_api.amule_api_client import AmuleApiClient
 async def main() -> None:
     client = AmuleApiClient(
         {_API_HOST!r},
-        {_API_PORT},
-        {_API_PASSWORD!r},
+        port={_API_PORT},
+        password={_API_PASSWORD!r},
         timeout_seconds=10.0,
         page_size=500,
         progress_poll_interval=timedelta(seconds=5),

@@ -18,7 +18,7 @@ class FilesystemConfigChecker(ConfigChecker):
         self._env = env
 
     def check_crawler_config(self, config_path: PurePath) -> None:
-        read_crawler_config(Path(config_path), self._env)
+        read_crawler_config(Path(config_path), env=self._env)
 
     def check_targets(self, targets_path: PurePath) -> None:
         read_targets(Path(targets_path))

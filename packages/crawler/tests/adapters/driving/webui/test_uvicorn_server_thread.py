@@ -32,7 +32,7 @@ async def test_start_serves_the_app_on_the_port_bound_and_stop_ends_the_thread(
 ) -> None:
     server_thread = UvicornServerThread(
         Starlette(routes=[Route("/", _ok)]),
-        ("127.0.0.1", 0),
+        address=("127.0.0.1", 0),
         start_timeout_seconds=5.0,
         join_timeout_seconds=5.0,
         serving_resources=(),
@@ -57,7 +57,7 @@ async def test_the_access_log_leaves_out_the_metrics_scrapes(
 ) -> None:
     server_thread = UvicornServerThread(
         Starlette(routes=[Route("/", _ok), Route("/metrics", _ok)]),
-        ("127.0.0.1", 0),
+        address=("127.0.0.1", 0),
         start_timeout_seconds=5.0,
         join_timeout_seconds=5.0,
         serving_resources=(),
@@ -91,7 +91,7 @@ async def test_a_port_already_bound_degrades_the_webui_without_raising(
         holder.listen()
         server_thread = UvicornServerThread(
             Starlette(),
-            holder.getsockname(),
+            address=holder.getsockname(),
             start_timeout_seconds=5.0,
             join_timeout_seconds=5.0,
             serving_resources=(),
@@ -117,7 +117,7 @@ async def test_a_server_that_does_not_start_in_time_degrades_the_webui(
 
     server_thread = UvicornServerThread(
         Starlette(lifespan=held_startup),
-        ("127.0.0.1", 0),
+        address=("127.0.0.1", 0),
         start_timeout_seconds=0.05,
         join_timeout_seconds=5.0,
         serving_resources=(),
@@ -141,7 +141,7 @@ async def test_stop_gives_up_on_a_server_that_does_not_end_within_its_join_timeo
 
     server_thread = UvicornServerThread(
         Starlette(lifespan=held_shutdown),
-        ("127.0.0.1", 0),
+        address=("127.0.0.1", 0),
         start_timeout_seconds=5.0,
         join_timeout_seconds=0.05,
         serving_resources=(),
@@ -166,7 +166,7 @@ async def test_a_failing_lifespan_degrades_the_webui_without_raising(
 
     server_thread = UvicornServerThread(
         Starlette(lifespan=failing_startup),
-        ("127.0.0.1", 0),
+        address=("127.0.0.1", 0),
         start_timeout_seconds=5.0,
         join_timeout_seconds=5.0,
         serving_resources=(),
@@ -183,7 +183,7 @@ async def test_the_serving_resources_are_held_by_the_webui_thread_while_it_serve
     resource = FakeServingResource()
     server_thread = UvicornServerThread(
         Starlette(),
-        ("127.0.0.1", 0),
+        address=("127.0.0.1", 0),
         start_timeout_seconds=5.0,
         join_timeout_seconds=5.0,
         serving_resources=(resource,),
@@ -203,7 +203,7 @@ async def test_the_serving_resources_are_left_when_serving_fails() -> None:
         holder.listen()
         server_thread = UvicornServerThread(
             Starlette(),
-            holder.getsockname(),
+            address=holder.getsockname(),
             start_timeout_seconds=5.0,
             join_timeout_seconds=5.0,
             serving_resources=(resource,),

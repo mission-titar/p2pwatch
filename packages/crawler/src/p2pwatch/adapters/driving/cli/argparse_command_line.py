@@ -31,7 +31,7 @@ class CwdResolver(Protocol):
     def __call__(self, path: str | PurePath, /) -> PurePath: ...
 
 
-def _add_config_options(parser: argparse.ArgumentParser, under_cwd: CwdResolver) -> None:
+def _add_config_options(parser: argparse.ArgumentParser, *, under_cwd: CwdResolver) -> None:
     parser.add_argument("--config", type=under_cwd, default=under_cwd(DEFAULT_CONFIG_PATH))
     parser.add_argument("--targets", type=under_cwd, default=under_cwd(DEFAULT_TARGETS_PATH))
     parser.add_argument("--matcher", type=under_cwd, default=under_cwd(DEFAULT_MATCHER_PATH))
@@ -47,7 +47,7 @@ def _configure_logging(root_logger: logging.Logger) -> None:
     root_logger.setLevel(logging.INFO)
 
 
-def _add_merge_options(parser: argparse.ArgumentParser, under_cwd: CwdResolver) -> None:
+def _add_merge_options(parser: argparse.ArgumentParser, *, under_cwd: CwdResolver) -> None:
     parser.add_argument(
         "source_catalogs",
         metavar="CATALOG",
@@ -107,13 +107,13 @@ class ArgparseCommandLine:
         subparsers = parser.add_subparsers(dest="command", required=True)
         _add_config_options(
             subparsers.add_parser("crawl", help="crawl the eMule network until stopped"),
-            self._under_cwd,
+            under_cwd=self._under_cwd,
         )
         _add_config_options(
             subparsers.add_parser(
                 "validate-config", help="load and check the config, start nothing"
             ),
-            self._under_cwd,
+            under_cwd=self._under_cwd,
         )
         _add_merge_options(
             subparsers.add_parser(
@@ -121,7 +121,7 @@ class ArgparseCommandLine:
                 help="merge catalogs into one",
                 description="Merge N catalog.db into one (idempotent, append-only preserved).",
             ),
-            self._under_cwd,
+            under_cwd=self._under_cwd,
         )
         args = parser.parse_args(argv)
         if args.command == "crawl":

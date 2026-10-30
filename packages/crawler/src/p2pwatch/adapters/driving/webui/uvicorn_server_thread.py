@@ -34,7 +34,7 @@ def _log_config() -> dict[str, Any]:
 class _StartReportingServer(uvicorn.Server):
     """A ``uvicorn.Server`` that sets ``settled`` once its socket is bound."""
 
-    def __init__(self, config: uvicorn.Config, settled: threading.Event) -> None:
+    def __init__(self, config: uvicorn.Config, *, settled: threading.Event) -> None:
         super().__init__(config)
         self._settled = settled
 
@@ -49,8 +49,8 @@ class UvicornServerThread:
     def __init__(
         self,
         app: Starlette,
-        address: tuple[str, int],
         *,
+        address: tuple[str, int],
         start_timeout_seconds: float,
         join_timeout_seconds: float,
         serving_resources: Iterable[AbstractContextManager[object]],
@@ -60,7 +60,7 @@ class UvicornServerThread:
         self._settled = threading.Event()
         self._server = _StartReportingServer(
             uvicorn.Config(app, host=host, port=port, log_config=_log_config(), log_level="info"),
-            self._settled,
+            settled=self._settled,
         )
         self._thread = threading.Thread(target=self._serve, name="webui", daemon=True)
         self._start_timeout_seconds = start_timeout_seconds

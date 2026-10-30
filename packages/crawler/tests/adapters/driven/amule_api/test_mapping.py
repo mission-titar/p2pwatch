@@ -52,7 +52,7 @@ def _raw_metadata(reported_file: ReportedFile) -> dict[str, object]:
 
 
 def test_maps_a_result_to_an_observation() -> None:
-    reported_files, skipped = map_search_results([_result()], Keyword("keroro"))
+    reported_files, skipped = map_search_results([_result()], keyword=Keyword("keroro"))
 
     assert skipped == 0
     (reported_file,) = reported_files
@@ -64,7 +64,9 @@ def test_maps_a_result_to_an_observation() -> None:
 
 
 def test_the_ed2k_only_fields_are_folded_last_into_raw_metadata() -> None:
-    (reported_file,), _ = map_search_results([_result(media={"codec": "H.264"})], Keyword("keroro"))
+    (reported_file,), _ = map_search_results(
+        [_result(media={"codec": "H.264"})], keyword=Keyword("keroro")
+    )
 
     assert reported_file.raw_metadata[-3:] == (
         ("codec", "H.264"),
@@ -74,7 +76,9 @@ def test_the_ed2k_only_fields_are_folded_last_into_raw_metadata() -> None:
 
 
 def test_an_uppercase_hash_is_folded_to_lowercase() -> None:
-    (reported_file,), _ = map_search_results([_result(hash=_HASH.upper())], Keyword("keroro"))
+    (reported_file,), _ = map_search_results(
+        [_result(hash=_HASH.upper())], keyword=Keyword("keroro")
+    )
 
     assert reported_file.file == _KEY
 
@@ -88,7 +92,7 @@ def test_media_fills_the_columns_that_ec_never_could() -> None:
         "album": "",
         "title": "Keroro",
     }
-    (reported_file,), _ = map_search_results([_result(media=media)], Keyword("keroro"))
+    (reported_file,), _ = map_search_results([_result(media=media)], keyword=Keyword("keroro"))
 
     assert reported_file.duration_seconds == 1440
     assert reported_file.bitrate_kbps == 1500
@@ -98,7 +102,7 @@ def test_media_fills_the_columns_that_ec_never_could() -> None:
 
 
 def test_a_null_media_leaves_the_media_columns_empty() -> None:
-    (reported_file,), _ = map_search_results([_result()], Keyword("keroro"))
+    (reported_file,), _ = map_search_results([_result()], keyword=Keyword("keroro"))
 
     assert reported_file.duration_seconds is None
     assert reported_file.bitrate_kbps is None
@@ -106,14 +110,16 @@ def test_a_null_media_leaves_the_media_columns_empty() -> None:
 
 
 def test_a_malformed_media_object_is_tolerated() -> None:
-    (reported_file,), _ = map_search_results([_result(media={"codec": 7})], Keyword("keroro"))
+    (reported_file,), _ = map_search_results(
+        [_result(media={"codec": 7})], keyword=Keyword("keroro")
+    )
 
     assert _raw_metadata(reported_file)["codec"] is None
     assert reported_file.duration_seconds is None
 
 
 def test_unmapped_keys_land_in_raw_metadata() -> None:
-    (reported_file,), _ = map_search_results([_result(rating=3)], Keyword("keroro"))
+    (reported_file,), _ = map_search_results([_result(rating=3)], keyword=Keyword("keroro"))
 
     raw = _raw_metadata(reported_file)
     assert raw["rating"] == "3"
@@ -132,7 +138,7 @@ def test_every_alternate_name_becomes_its_own_observation() -> None:
         {"ecid": 622, "name": "sgt-frog-095.avi", "sources": {"total": 10, "complete": 3}},
     ]
     reported_files, skipped = map_search_results(
-        [_result(alternate_names=alternates)], Keyword("keroro")
+        [_result(alternate_names=alternates)], keyword=Keyword("keroro")
     )
 
     assert skipped == 0
@@ -157,28 +163,32 @@ def test_every_alternate_name_becomes_its_own_observation() -> None:
 def test_an_alternate_never_carries_the_volatile_ecid() -> None:
     alternate = {"ecid": 621, "name": "[Keroro].095.avi", "sources": {"total": 40}}
     reported_files, _ = map_search_results(
-        [_result(alternate_names=[alternate])], Keyword("keroro")
+        [_result(alternate_names=[alternate])], keyword=Keyword("keroro")
     )
 
     assert all("621" not in str(rendered) for _, rendered in reported_files[1].raw_metadata)
 
 
 def test_a_result_without_a_usable_hash_is_skipped_and_counted() -> None:
-    reported_files, skipped = map_search_results([_result(hash="not-a-hash")], Keyword("keroro"))
+    reported_files, skipped = map_search_results(
+        [_result(hash="not-a-hash")], keyword=Keyword("keroro")
+    )
 
     assert reported_files == ()
     assert skipped == 1
 
 
 def test_a_result_without_a_usable_size_is_skipped_and_counted() -> None:
-    reported_files, skipped = map_search_results([_result(size_bytes=True)], Keyword("keroro"))
+    reported_files, skipped = map_search_results(
+        [_result(size_bytes=True)], keyword=Keyword("keroro")
+    )
 
     assert reported_files == ()
     assert skipped == 1
 
 
 def test_a_result_that_is_not_an_object_is_skipped_and_counted() -> None:
-    reported_files, skipped = map_search_results(["nonsense"], Keyword("keroro"))
+    reported_files, skipped = map_search_results(["nonsense"], keyword=Keyword("keroro"))
 
     assert reported_files == ()
     assert skipped == 1
@@ -187,7 +197,7 @@ def test_a_result_that_is_not_an_object_is_skipped_and_counted() -> None:
 def test_an_unusable_name_costs_only_its_own_observation_and_is_not_counted() -> None:
     alternates = [{"name": 7}, "nonsense", {"name": "sgt-frog-095.avi"}]
     reported_files, skipped = map_search_results(
-        [_result(alternate_names=alternates)], Keyword("keroro")
+        [_result(alternate_names=alternates)], keyword=Keyword("keroro")
     )
 
     assert [reported_file.filename for reported_file in reported_files] == [
@@ -200,7 +210,7 @@ def test_an_unusable_name_costs_only_its_own_observation_and_is_not_counted() ->
 def test_a_nameless_parent_does_not_lose_its_alternates() -> None:
     alternates = [{"name": "sgt-frog-095.avi"}]
     reported_files, skipped = map_search_results(
-        [_result(name="", alternate_names=alternates)], Keyword("keroro")
+        [_result(name="", alternate_names=alternates)], keyword=Keyword("keroro")
     )
 
     assert [reported_file.filename for reported_file in reported_files] == ["sgt-frog-095.avi"]
@@ -209,7 +219,7 @@ def test_a_nameless_parent_does_not_lose_its_alternates() -> None:
 
 def test_a_result_without_any_usable_name_is_skipped_and_counted() -> None:
     reported_files, skipped = map_search_results(
-        [_result(name="", alternate_names=[{"name": 7}])], Keyword("keroro")
+        [_result(name="", alternate_names=[{"name": 7}])], keyword=Keyword("keroro")
     )
 
     assert reported_files == ()
@@ -218,7 +228,7 @@ def test_a_result_without_any_usable_name_is_skipped_and_counted() -> None:
 
 def test_a_malformed_alternate_names_list_is_ignored() -> None:
     reported_files, skipped = map_search_results(
-        [_result(alternate_names="nope")], Keyword("keroro")
+        [_result(alternate_names="nope")], keyword=Keyword("keroro")
     )
 
     assert len(reported_files) == 1
@@ -226,7 +236,7 @@ def test_a_malformed_alternate_names_list_is_ignored() -> None:
 
 
 def test_missing_source_counts_read_as_zero() -> None:
-    (reported_file,), _ = map_search_results([_result(sources="nope")], Keyword("keroro"))
+    (reported_file,), _ = map_search_results([_result(sources="nope")], keyword=Keyword("keroro"))
 
     assert reported_file.source_count == 0
     assert _raw_metadata(reported_file)["complete_source_count"] == 0
@@ -234,20 +244,20 @@ def test_missing_source_counts_read_as_zero() -> None:
 
 def test_a_non_integer_source_count_reads_as_zero() -> None:
     (reported_file,), _ = map_search_results(
-        [_result(sources={"total": "many"})], Keyword("keroro")
+        [_result(sources={"total": "many"})], keyword=Keyword("keroro")
     )
 
     assert reported_file.source_count == 0
 
 
 def test_a_non_string_file_type_is_dropped() -> None:
-    (reported_file,), _ = map_search_results([_result(file_type=7)], Keyword("keroro"))
+    (reported_file,), _ = map_search_results([_result(file_type=7)], keyword=Keyword("keroro"))
 
     assert _raw_metadata(reported_file)["file_type"] is None
 
 
 def test_a_results_payload_that_is_not_a_list_yields_nothing() -> None:
-    assert map_search_results("nope", Keyword("keroro")) == ((), 0)
+    assert map_search_results("nope", keyword=Keyword("keroro")) == ((), 0)
 
 
 def _queued(status: str, **overrides: Any) -> dict[str, Any]:
@@ -348,7 +358,7 @@ def test_a_connected_high_id_and_open_kad_are_connectable() -> None:
             "ed2k": {"state": "connected", "high_id": True, "public_ip": "210.2.150.73"},
             "kad": {"state": "connected", "firewalled_tcp": False},
         },
-        {"daemon_version": "3.0.1"},
+        version={"daemon_version": "3.0.1"},
     )
 
     assert status == ClientStatus(
@@ -366,7 +376,7 @@ def test_a_low_id_and_a_firewalled_kad_are_not_connectable() -> None:
             "ed2k": {"state": "connected", "high_id": False},
             "kad": {"state": "connected", "firewalled_tcp": True},
         },
-        {"daemon_version": "3.0.1"},
+        version={"daemon_version": "3.0.1"},
     )
 
     assert [channel.connectable for channel in status.channels] == [False, False]
@@ -379,7 +389,7 @@ def test_connectable_is_unknown_off_the_network() -> None:
             "ed2k": {"state": "connecting", "high_id": False},
             "kad": {"state": "connecting", "firewalled_tcp": None},
         },
-        {"daemon_version": "3.0.1"},
+        version={"daemon_version": "3.0.1"},
     )
 
     assert [channel.connected for channel in status.channels] == [False, False]
@@ -387,14 +397,16 @@ def test_connectable_is_unknown_off_the_network() -> None:
 
 
 def test_a_missing_reachability_flag_on_the_network_is_unknown() -> None:
-    status = map_client_status({"ed2k": {"state": "connected"}, "kad": {"state": "connected"}}, {})
+    status = map_client_status(
+        {"ed2k": {"state": "connected"}, "kad": {"state": "connected"}}, version={}
+    )
 
     assert [channel.connectable for channel in status.channels] == [None, None]
 
 
 def test_an_empty_version_and_status_degrade_to_unknown() -> None:
     # daemon_version is "" while EC is down.
-    status = map_client_status("nonsense", {"daemon_version": ""})
+    status = map_client_status("nonsense", version={"daemon_version": ""})
 
     assert status.version is None
     assert [channel.channel for channel in status.channels] == ["ed2k", "kad"]
@@ -463,7 +475,7 @@ def _client_detail(**overrides: Any) -> dict[str, Any]:
 
 
 def test_a_source_maps_to_a_reading_of_its_row_and_its_detail() -> None:
-    assert map_source(_client_row(), _client_detail()) == SourceReading(
+    assert map_source(_client_row(), detail=_client_detail()) == SourceReading(
         source=SourceKey(network=Network.ED2K, native_id="1f2e3a4b5c6d7e8f90a1b2c3d4e5f607"),
         source_name="AnimuseeFMR",
         software="emule 0.50a",
@@ -495,7 +507,7 @@ def test_no_address_of_the_peer_reaches_the_reading() -> None:
     row = _client_row(**addresses)
     del row["ed2k_user_id"]  # detail-only
 
-    reading = map_source(row, _client_detail(**addresses))
+    reading = map_source(row, detail=_client_detail(**addresses))
 
     serialized = json.dumps(dataclasses.asdict(reading))
     assert [address for address in addresses.values() if str(address) in serialized] == []
@@ -538,7 +550,7 @@ def test_a_row_without_an_ecid_to_ask_is_no_source(row: object) -> None:
 def test_a_source_we_ask_takes_its_state_and_a_parked_one_is_standby(
     relation: str, a4af: bool, role: SourceRole
 ) -> None:
-    reading = map_source(_client_row(role=relation, a4af=a4af), _client_detail())
+    reading = map_source(_client_row(role=relation, a4af=a4af), detail=_client_detail())
 
     assert reading.role == role
 
@@ -573,7 +585,7 @@ def test_a_sources_role_is_what_its_download_state_says_of_the_parts_we_lack(
     state: str | None, role: SourceRole | None
 ) -> None:
     """D3: a passing state reads ``None``, for the writer to carry the latest point's group."""
-    reading = map_source(_client_row(download_state=state), _client_detail())
+    reading = map_source(_client_row(download_state=state), detail=_client_detail())
 
     assert reading.role == role
 
@@ -582,13 +594,13 @@ def test_a_parked_source_is_standby_whatever_it_does_for_another_file() -> None:
     # download_state is the client's, so on an A4AF row it describes the other file.
     row = _client_row(role="none", a4af=True, download_state="downloading")
 
-    assert map_source(row, _client_detail()).role is SourceRole.STANDBY
+    assert map_source(row, detail=_client_detail()).role is SourceRole.STANDBY
 
 
 @pytest.mark.parametrize("user_hash", [None, "", "0" * 32, "8b54a3c2", "zz" * 16])
 def test_a_source_without_a_usable_user_hash_has_no_identity(user_hash: str | None) -> None:
     """D7: amuleapi reports a peer that has not sent its hash yet with 32 zeros."""
-    reading = map_source(_client_row(user_hash=user_hash), _client_detail())
+    reading = map_source(_client_row(user_hash=user_hash), detail=_client_detail())
 
     assert reading.source is None
     assert reading.source_name == "AnimuseeFMR"
@@ -598,7 +610,7 @@ def test_a_source_without_a_user_hash_key_has_no_identity() -> None:
     row = _client_row()
     del row["user_hash"]
 
-    assert map_source(row, _client_detail()).source is None
+    assert map_source(row, detail=_client_detail()).source is None
 
 
 @pytest.mark.parametrize(
@@ -608,13 +620,15 @@ def test_a_source_without_a_user_hash_key_has_no_identity() -> None:
 def test_a_sources_software_joins_its_client_and_version(
     software: str | None, version: str | None, expected: str | None
 ) -> None:
-    reading = map_source(_client_row(software=software, software_version=version), {})
+    reading = map_source(_client_row(software=software, software_version=version), detail={})
 
     assert reading.software == expected
 
 
 def test_a_sparse_row_and_detail_keep_the_meta_keys_they_carry_and_read_unknown() -> None:
-    reading = map_source({"role": "downloading_from", "name": "", "ident_state": "unknown"}, {})
+    reading = map_source(
+        {"role": "downloading_from", "name": "", "ident_state": "unknown"}, detail={}
+    )
 
     assert (reading.source_name, reading.software) == (None, None)
     assert (reading.contact_point, reading.connectable) == (None, None)
@@ -635,7 +649,9 @@ def test_a_sparse_row_and_detail_keep_the_meta_keys_they_carry_and_read_unknown(
 def test_a_meta_value_is_kept_in_a_shape_the_catalog_stores(
     protocol_extensions: object, kept: object
 ) -> None:
-    reading = map_source(_client_row(protocol_extensions=protocol_extensions), _client_detail())
+    reading = map_source(
+        _client_row(protocol_extensions=protocol_extensions), detail=_client_detail()
+    )
 
     assert dict(reading.raw_metadata)["protocol_extensions"] == kept
 
@@ -658,13 +674,13 @@ def test_a_sources_contact_point_is_its_server_as_ip_and_port(
     """D3: anything but an eD2k ``ip:port`` reads unknown."""
     detail = _client_detail(server_ip=server_ip, server_port=server_port)
 
-    assert map_source(_client_row(), detail).contact_point == contact_point
+    assert map_source(_client_row(), detail=detail).contact_point == contact_point
 
 
 def test_the_server_name_is_kept_unknown_when_the_server_is() -> None:
     detail = _client_detail(server_ip=None, server_port=None, server_name=None)
 
-    assert dict(map_source(_client_row(), detail).raw_metadata)["server_name"] is None
+    assert dict(map_source(_client_row(), detail=detail).raw_metadata)["server_name"] is None
 
 
 @pytest.mark.parametrize(
@@ -684,7 +700,7 @@ def test_a_source_is_directly_reachable_when_its_ed2k_id_is_a_high_id(
     """D3: without an eD2k id yet (0), ``high_id`` false says nothing."""
     detail = _client_detail(ed2k_user_id=ed2k_user_id, high_id=high_id)
 
-    assert map_source(_client_row(), detail).connectable is connectable
+    assert map_source(_client_row(), detail=detail).connectable is connectable
 
 
 def _reading(

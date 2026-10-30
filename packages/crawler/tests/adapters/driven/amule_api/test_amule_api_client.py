@@ -45,8 +45,8 @@ def _client(
 ) -> AmuleApiClient:
     return AmuleApiClient(
         "amuled.test",
-        4711,
-        password,
+        port=4711,
+        password=password,
         timeout_seconds=10.0,
         page_size=page_size,
         progress_poll_interval=progress_poll_interval,
@@ -134,8 +134,8 @@ def _yielding_client(api: FakeAmuleApi) -> AmuleApiClient:
     transport = httpx.MockTransport(round_trip)
     return AmuleApiClient(
         "amuled.test",
-        4711,
-        PASSWORD,
+        port=4711,
+        password=PASSWORD,
         timeout_seconds=10.0,
         page_size=_PAGE_SIZE,
         progress_poll_interval=_PROGRESS_POLL_INTERVAL,
@@ -247,8 +247,8 @@ async def test_a_close_during_a_login_revokes_the_session_it_opened() -> None:
     transport = httpx.MockTransport(round_trip)
     client = AmuleApiClient(
         "amuled.test",
-        4711,
-        PASSWORD,
+        port=4711,
+        password=PASSWORD,
         timeout_seconds=10.0,
         page_size=_PAGE_SIZE,
         progress_poll_interval=_PROGRESS_POLL_INTERVAL,
@@ -284,8 +284,8 @@ async def test_a_401_answered_during_close_logs_in_no_more() -> None:
     transport = httpx.MockTransport(round_trip)
     client = AmuleApiClient(
         "amuled.test",
-        4711,
-        PASSWORD,
+        port=4711,
+        password=PASSWORD,
         timeout_seconds=10.0,
         page_size=_PAGE_SIZE,
         progress_poll_interval=_PROGRESS_POLL_INTERVAL,
@@ -356,8 +356,8 @@ async def test_a_session_opened_after_a_failed_login_gets_a_transport_of_its_own
 
     client = AmuleApiClient(
         "amuled.test",
-        4711,
-        PASSWORD,
+        port=4711,
+        password=PASSWORD,
         timeout_seconds=10.0,
         page_size=_PAGE_SIZE,
         progress_poll_interval=_PROGRESS_POLL_INTERVAL,
@@ -457,7 +457,7 @@ async def test_search_starts_the_keyword_on_the_channels_search_type(
     api = FakeAmuleApi()
     client = await _connected(api)
 
-    await client.search(Keyword("keroro"), channel, 120)
+    await client.search(Keyword("keroro"), channel=channel, budget_seconds=120)
     await client.close()
 
     start = api.requests[1]
@@ -475,7 +475,7 @@ async def test_search_answers_the_results_with_their_keyword_and_counts_what_it_
     api = FakeAmuleApi(results=[*rows, {"hash": "nope"}])
     client = await _connected(api)
 
-    answer = await client.search(Keyword("keroro"), Channel("ed2k"), 120)
+    answer = await client.search(Keyword("keroro"), channel=Channel("ed2k"), budget_seconds=120)
     await client.close()
 
     assert len(answer.reported_files) == 501
@@ -488,7 +488,7 @@ async def test_search_returns_as_soon_as_amuled_reports_it_finished() -> None:
     api = FakeAmuleApi(search_seconds={"keroro": 12})
     client = await _connected(api)
 
-    await client.search(Keyword("keroro"), Channel("ed2k"), 120)
+    await client.search(Keyword("keroro"), channel=Channel("ed2k"), budget_seconds=120)
     await client.close()
 
     assert _progress_polls(api) == [0, 5, 10, 15]
@@ -499,7 +499,7 @@ async def test_search_reads_its_progress_at_the_poll_interval_it_was_given() -> 
     api = FakeAmuleApi(search_seconds={"keroro": 7})
     client = await _connected(api, progress_poll_interval=timedelta(seconds=3))
 
-    await client.search(Keyword("keroro"), Channel("ed2k"), 120)
+    await client.search(Keyword("keroro"), channel=Channel("ed2k"), budget_seconds=120)
     await client.close()
 
     assert _progress_polls(api) == [0, 3, 6, 9]
@@ -510,7 +510,7 @@ async def test_search_stops_waiting_at_its_budget_and_returns_what_it_holds() ->
     api = FakeAmuleApi(progress={"state": "running"}, results=[_result()])
     client = await _connected(api)
 
-    answer = await client.search(Keyword("keroro"), Channel("ed2k"), 12)
+    answer = await client.search(Keyword("keroro"), channel=Channel("ed2k"), budget_seconds=12)
     await client.close()
 
     assert _progress_polls(api) == [0, 5, 10, 12]
@@ -523,7 +523,7 @@ async def test_search_never_stops_nor_frees_its_search() -> None:
     api = FakeAmuleApi(progress={"state": "running"})
     client = await _connected(api)
 
-    await client.search(Keyword("keroro"), Channel("kad"), 120)
+    await client.search(Keyword("keroro"), channel=Channel("kad"), budget_seconds=120)
     await client.close()
 
     assert _paths(api, "/api/v1/search/42/stop") == []
@@ -537,7 +537,7 @@ async def test_a_kad_search_is_widened_from_its_second_poll_until_kad_refuses() 
     api.overrides[("POST", "/api/v1/search/42/more")] = lambda _: answers.pop(0)
     client = await _connected(api)
 
-    await client.search(Keyword("keroro"), Channel("kad"), 120)
+    await client.search(Keyword("keroro"), channel=Channel("kad"), budget_seconds=120)
     await client.close()
 
     assert _seconds_after_start(api, "POST", "/api/v1/search/42/more") == [5, 10, 15, 20, 25]
@@ -548,7 +548,7 @@ async def test_an_ed2k_search_is_never_widened() -> None:
     api = FakeAmuleApi(progress={"state": "running"})
     client = await _connected(api)
 
-    await client.search(Keyword("keroro"), Channel("ed2k"), 120)
+    await client.search(Keyword("keroro"), channel=Channel("ed2k"), budget_seconds=120)
     await client.close()
 
     assert _paths(api, "/api/v1/search/42/more") == []
@@ -561,7 +561,7 @@ async def test_a_failed_widening_leaves_the_search_standing() -> None:
     api.overrides[("POST", "/api/v1/search/42/more")] = lambda _: error(400, "bad_request")
     client = await _connected(api)
 
-    answer = await client.search(Keyword("keroro"), Channel("kad"), 120)
+    answer = await client.search(Keyword("keroro"), channel=Channel("kad"), budget_seconds=120)
     await client.close()
 
     assert len(answer.reported_files) == 1
@@ -577,7 +577,7 @@ async def test_a_search_the_daemon_refuses_fails_its_channel() -> None:
     client = await _connected(api)
 
     with pytest.raises(SearchFailedError, match="not connected to any server") as raised:
-        await client.search(Keyword("keroro"), Channel("ed2k"), 120)
+        await client.search(Keyword("keroro"), channel=Channel("ed2k"), budget_seconds=120)
     assert type(raised.value) is SearchFailedError
 
 
@@ -588,7 +588,7 @@ async def test_a_search_reply_without_an_id_fails_its_channel() -> None:
     client = await _connected(api)
 
     with pytest.raises(SearchFailedError):
-        await client.search(Keyword("keroro"), Channel("ed2k"), 120)
+        await client.search(Keyword("keroro"), channel=Channel("ed2k"), budget_seconds=120)
 
 
 # --- status ----------------------------------------------------------------------------------

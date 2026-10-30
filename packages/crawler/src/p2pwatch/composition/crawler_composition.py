@@ -189,14 +189,14 @@ class CrawlerComposition(CrawlerRunner):
         self._root_logger = root_logger
 
     def _amule_api_client(
-        self, crawler_config: CrawlerConfig, monotonic_clock: MonotonicClock
+        self, crawler_config: CrawlerConfig, *, monotonic_clock: MonotonicClock
     ) -> AmuleApiClient:
         """The node's one session on amuled, paced on the composition's monotonic clock."""
         host, port = self._amule_api_address
         return AmuleApiClient(
             host,
-            port,
-            crawler_config.amule_api_password,
+            port=port,
+            password=crawler_config.amule_api_password,
             timeout_seconds=_AMULE_API_TIMEOUT_SECONDS,
             page_size=_AMULE_API_PAGE_SIZE,
             progress_poll_interval=_AMULE_API_PROGRESS_POLL_INTERVAL,
@@ -294,7 +294,7 @@ class CrawlerComposition(CrawlerRunner):
         )
         server_thread = UvicornServerThread(
             app,
-            self._webui_address,
+            address=self._webui_address,
             start_timeout_seconds=_WEBUI_START_TIMEOUT_SECONDS,
             join_timeout_seconds=_WEBUI_JOIN_TIMEOUT_SECONDS,
             serving_resources=(catalog_read_connections, local_read_connections),
@@ -310,7 +310,12 @@ class CrawlerComposition(CrawlerRunner):
         Only the shutdown is bounded: an overrun raises ``TimeoutError``, and the resource stack
         then closes what is left, before ``PosixProcess`` gives the signals back.
         """
-        config = load_config(Path(config_path), Path(targets_path), Path(matcher_path), self._env)
+        config = load_config(
+            Path(config_path),
+            targets_path=Path(targets_path),
+            matcher_path=Path(matcher_path),
+            env=self._env,
+        )
         crawler_config = config.crawler_config
         self._root_logger.setLevel(crawler_config.observability.log_level)
         # Startup version line (spec 2026-07-10-git-driven-versioning): the number baked into the
@@ -405,7 +410,7 @@ class CrawlerComposition(CrawlerRunner):
                 wall_clock=wall_clock,
                 logger=StdlibLogger(Cataloguer.__module__),
             )
-            client = self._amule_api_client(crawler_config, monotonic_clock)
+            client = self._amule_api_client(crawler_config, monotonic_clock=monotonic_clock)
             stack.push_async_callback(client.close)
             await client.open()
             workers = [
