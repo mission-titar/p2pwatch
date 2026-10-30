@@ -25,7 +25,7 @@ An agent adds an entry only after the operator has agreed to it.
 
 - **Round-trip contracts**: a contract for each Writer/Reader pair and reader-only port of `persistence_sqlite`
   without one, seeded through the Writers with drawn values, so each port's promise is written once for any
-  implementation. Appendix B of `agents/specs/2026-10-29-rows-read-by-column-name.md`, amended by Appendix B of
+  implementation. Appendix B of `agents/specs/2026-10-29-rows-read-by-column-name.md`, amended by Appendix D of
   `agents/specs/2026-10-30-values-checked-at-the-boundary.md`.
 
 ## Features
