@@ -34,7 +34,7 @@ _QUEUED_AT_MICROS = 1_782_122_400_000_000  # 2026-06-22T10:00:00Z
 
 def _read_node_state(path: Path) -> NodeState:
     """Read local.db through the webui's read-only connection."""
-    with ThreadReadConnections(path, open_reader) as thread_read_connections:
+    with ThreadReadConnections(path, open_reader=open_reader) as thread_read_connections:
         return SqliteNodeStateReader(thread_read_connections).read_node_state()
 
 
@@ -138,7 +138,9 @@ def test_a_download_reads_back_each_instant_its_store_wrote(local_db: Path) -> N
     completed_at = queued_at + timedelta(days=1, microseconds=7)
     with closing(sqlite3.connect(local_db, autocommit=True)) as connection:
         tracked_download_store = SqliteTrackedDownloadStore(connection)
-        tracked_download_store.record_queued(file, TargetId("062A"), 100, queued_at)
+        tracked_download_store.record_queued(
+            file, target_id=TargetId("062A"), size_bytes=100, queued_at=queued_at
+        )
         tracked_download_store.set_seen(
             [
                 DownloadStatus(
@@ -150,9 +152,9 @@ def test_a_download_reads_back_each_instant_its_store_wrote(local_db: Path) -> N
                     failure_reason=None,
                 )
             ],
-            progressed_at,
+            seen_at=progressed_at,
         )
-        tracked_download_store.set_completed(file, completed_at)
+        tracked_download_store.set_completed(file, completed_at=completed_at)
 
     assert _read_node_state(local_db).downloads == (
         TrackedDownload(
@@ -171,7 +173,7 @@ def test_a_download_reads_back_each_instant_its_store_wrote(local_db: Path) -> N
 def test_the_node_identity_reads_back_the_instant_its_store_wrote(local_db: Path) -> None:
     created_at = datetime(2026, 6, 22, 10, 0, 0, 123456, tzinfo=UTC)
     with closing(sqlite3.connect(local_db, autocommit=True)) as connection:
-        SqliteNodeIdStore(connection).record_node_id(NodeId("test-node-42"), created_at)
+        SqliteNodeIdStore(connection).record_node_id(NodeId("test-node-42"), created_at=created_at)
 
     state = _read_node_state(local_db)
 

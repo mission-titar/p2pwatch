@@ -342,7 +342,9 @@ async def test_waiting_for_sources_is_not_failing_for_a_simulated_year(tmp_path:
     fake_time = FakeTime()
     connection = open_local(tmp_path / "local.db")
     tracked_download_store = SqliteTrackedDownloadStore(connection)
-    tracked_download_store.record_queued(key(HASH_A), TargetId("062A"), 10, fake_time.wall.now())
+    tracked_download_store.record_queued(
+        key(HASH_A), target_id=TargetId("062A"), size_bytes=10, queued_at=fake_time.wall.now()
+    )
     waiting = status(HASH_A, total=10, waiting=WaitingReason.NO_SOURCE)
     client = FakeDownloadClient(listed=[(waiting,)] * 12)
     cycle = build_cycle(
@@ -373,7 +375,7 @@ async def test_a_wall_clock_step_forward_fails_no_download_absent_from_one_poll(
 ) -> None:
     fake_time = FakeTime()
     real_tracked_download_store.record_queued(
-        key(HASH_A), TargetId("062A"), 10, fake_time.wall.now()
+        key(HASH_A), target_id=TargetId("062A"), size_bytes=10, queued_at=fake_time.wall.now()
     )
     cycle = build_cycle(
         client=FakeDownloadClient(listed=[(status(HASH_A, total=10),), ()]),
@@ -396,7 +398,10 @@ async def test_a_latest_seen_at_in_the_future_waits_lost_after_no_more(
     # Stamped before the wall clock stepped back an hour, while the node was down.
     fake_time = FakeTime()
     real_tracked_download_store.record_queued(
-        key(HASH_A), TargetId("062A"), 10, fake_time.wall.now() + timedelta(hours=1)
+        key(HASH_A),
+        target_id=TargetId("062A"),
+        size_bytes=10,
+        queued_at=fake_time.wall.now() + timedelta(hours=1),
     )
     cycle = build_cycle(
         client=FakeDownloadClient(),
@@ -419,7 +424,10 @@ async def test_a_download_last_seen_two_days_ago_fails_at_the_first_cycle(
 ) -> None:
     fake_time = FakeTime()
     real_tracked_download_store.record_queued(
-        key(HASH_A), TargetId("062A"), 10, fake_time.wall.now() - timedelta(days=2)
+        key(HASH_A),
+        target_id=TargetId("062A"),
+        size_bytes=10,
+        queued_at=fake_time.wall.now() - timedelta(days=2),
     )
     cycle = build_cycle(
         client=FakeDownloadClient(),

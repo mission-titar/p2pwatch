@@ -56,20 +56,22 @@ class SqliteDatabaseOpener:
 
     def open_catalog(self, path: Path) -> sqlite3.Connection:
         """Opens/migrates ``catalog.db`` (the append-only triggers are part of the schema)."""
-        return self.open(path, load_scripts(_MIGRATIONS / "catalog"))
+        return self.open(path, scripts=load_scripts(_MIGRATIONS / "catalog"))
 
     def open_local(self, path: Path) -> sqlite3.Connection:
         """Opens/migrates ``local.db``."""
-        return self.open(path, load_scripts(_MIGRATIONS / "local"))
+        return self.open(path, scripts=load_scripts(_MIGRATIONS / "local"))
 
-    def open(self, path: Path, scripts: tuple[Migration, ...]) -> sqlite3.Connection:
+    def open(self, path: Path, *, scripts: tuple[Migration, ...]) -> sqlite3.Connection:
         """Opens ``path`` and applies the ``scripts`` above its version, after its pre-migration
         copy; a database newer than the ``scripts`` raises ``MigrationError``."""
         connection = _connect(path)
         try:
-            pending = _pending_migrations(connection, scripts)
-            self._pre_migration_copier.ensure_copy(connection, path, pending, self.open_reader)
-            _apply_migrations(connection, pending)
+            pending = _pending_migrations(connection, scripts=scripts)
+            self._pre_migration_copier.ensure_copy(
+                connection, path=path, pending=pending, open_reader=self.open_reader
+            )
+            _apply_migrations(connection, pending=pending)
             with wrap_sqlite_errors():
                 remove_migration_sql_functions(connection)
         except BaseException:
@@ -127,7 +129,7 @@ def _configure(connection: sqlite3.Connection) -> None:
 
 
 def _pending_migrations(
-    connection: sqlite3.Connection, scripts: tuple[Migration, ...]
+    connection: sqlite3.Connection, *, scripts: tuple[Migration, ...]
 ) -> PendingMigrations:
     """The scripts above the database's ``user_version``; a database newer than the code raises
     ``MigrationError``."""
@@ -140,10 +142,10 @@ def _pending_migrations(
             "db newer than the code, refusing to start (spec §3)"
         )
     migrations = tuple(migration for migration in scripts if migration.version > current_version)
-    return PendingMigrations(current_version, migrations)
+    return PendingMigrations(current_version=current_version, migrations=migrations)
 
 
-def _apply_migrations(connection: sqlite3.Connection, pending: PendingMigrations) -> None:
+def _apply_migrations(connection: sqlite3.Connection, *, pending: PendingMigrations) -> None:
     """Applies the pending scripts in order, each stamped once it succeeds; the rules for
     writing one: ``docs/contributing/architecture.md``, "Écrire une migration"."""
     with wrap_sqlite_errors():
@@ -152,22 +154,22 @@ def _apply_migrations(connection: sqlite3.Connection, pending: PendingMigrations
         # No finally: a failed migration fails the open, which closes the connection.
         for migration in pending.migrations:
             _logger.info("migration %d: applying", migration.version)
-            _run_restoring_pragmas(connection, migration)
+            _run_restoring_pragmas(connection, migration=migration)
         connection.execute("PRAGMA temp_store=DEFAULT")
 
 
-def _run_restoring_pragmas(connection: sqlite3.Connection, migration: Migration) -> None:
+def _run_restoring_pragmas(connection: sqlite3.Connection, *, migration: Migration) -> None:
     secure_delete = int(connection.execute("PRAGMA secure_delete").fetchone()["secure_delete"])
     cache_size = int(connection.execute("PRAGMA cache_size").fetchone()["cache_size"])
     if migration.transactional:
-        _run_in_transaction(connection, migration)
+        _run_in_transaction(connection, migration=migration)
     else:
-        _run_outside_transaction(connection, migration)
+        _run_outside_transaction(connection, migration=migration)
     connection.execute(f"PRAGMA secure_delete = {_SECURE_DELETE_MODES[secure_delete]}")
     connection.execute(f"PRAGMA cache_size = {cache_size}")
 
 
-def _run_in_transaction(connection: sqlite3.Connection, migration: Migration) -> None:
+def _run_in_transaction(connection: sqlite3.Connection, *, migration: Migration) -> None:
     # Two concurrent opens: the loser fails cleanly, single writer by doctrine.
     try:
         connection.execute("BEGIN")
@@ -185,7 +187,7 @@ def _run_in_transaction(connection: sqlite3.Connection, migration: Migration) ->
         raise MigrationError(f"migration {migration.version} failed: {error}") from error
 
 
-def _run_outside_transaction(connection: sqlite3.Connection, migration: Migration) -> None:
+def _run_outside_transaction(connection: sqlite3.Connection, *, migration: Migration) -> None:
     # A stop between the script and the stamp replays the script: it must be safe to replay.
     try:
         connection.executescript(migration.script)

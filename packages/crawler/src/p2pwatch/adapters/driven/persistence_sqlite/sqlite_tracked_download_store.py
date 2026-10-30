@@ -75,7 +75,7 @@ class SqliteTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
         self._connection = connection
 
     def record_queued(
-        self, file: FileKey, target_id: TargetId, size_bytes: int, queued_at: datetime
+        self, file: FileKey, *, target_id: TargetId, size_bytes: int, queued_at: datetime
     ) -> None:
         """INSERT of a ``queued`` download (dedup-safe: a duplicate is ignored)."""
         queued_at_micros = instant_to_micros(queued_at)
@@ -103,6 +103,7 @@ class SqliteTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
     def set_state(
         self,
         file: FileKey,
+        *,
         state: Literal[DownloadState.DOWNLOADING, DownloadState.FAILED],
         failure_reason: FailureReason | None = None,
     ) -> None:
@@ -118,7 +119,7 @@ class SqliteTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
         if cursor.rowcount != 1:
             raise PersistenceError(f"download {file.native_id} not found (caller bug)")
 
-    def set_completed(self, file: FileKey, completed_at: datetime) -> None:
+    def set_completed(self, file: FileKey, *, completed_at: datetime) -> None:
         """Marks the download ``completed`` at ``completed_at`` and clears its ``failure_reason``.
 
         Requires an existing download (an unknown file → ``PersistenceError``: caller-code bug).
@@ -137,7 +138,7 @@ class SqliteTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
             row = self._connection.execute(_IS_TRACKED, (file.file_id,)).fetchone()
         return row is not None
 
-    def set_seen(self, statuses: Iterable[DownloadStatus], seen_at: datetime) -> None:
+    def set_seen(self, statuses: Iterable[DownloadStatus], *, seen_at: datetime) -> None:
         """Stamps ``latest_seen_at_micros`` and the progress of each download the client lists.
 
         ``latest_progress_at_micros`` moves only when ``bytes_done`` grows. An unknown file updates

@@ -46,7 +46,7 @@ def build_command_line(
             catalog_copier=SqliteCatalogCopier(
                 SqliteDatabaseOpener(
                     SqlitePreMigrationCopier(
-                        SystemWallClock(), lambda directory: disk_usage(directory).free
+                        SystemWallClock(), free_bytes=lambda directory: disk_usage(directory).free
                     )
                 )
             ),

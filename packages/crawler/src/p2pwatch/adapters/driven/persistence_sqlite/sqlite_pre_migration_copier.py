@@ -26,13 +26,14 @@ class SqlitePreMigrationCopier:
     """Makes the pre-migration copy of a database, ``<file>.pre-<NNNN>.<stamp>_UTC``, ``NNNN``
     its first pending version, and never deletes one."""
 
-    def __init__(self, wall_clock: WallClock, free_bytes: FreeBytesMeter) -> None:
+    def __init__(self, wall_clock: WallClock, *, free_bytes: FreeBytesMeter) -> None:
         self._wall_clock = wall_clock
         self._free_bytes = free_bytes
 
     def ensure_copy(
         self,
         connection: sqlite3.Connection,
+        *,
         path: Path,
         pending: PendingMigrations,
         open_reader: ReaderOpener,
@@ -48,17 +49,19 @@ class SqlitePreMigrationCopier:
             return
         prefix = f"{path.name}.pre-{pending.migrations[0].version:04d}"
         with wrap_sqlite_errors():
-            if _matches_its_latest_copy(connection, path, prefix, open_reader):
+            if _matches_its_latest_copy(
+                connection, path=path, prefix=prefix, open_reader=open_reader
+            ):
                 return
-            self._check_free_space(connection, path)
+            self._check_free_space(connection, path=path)
             partial = path.with_name(f"{prefix}.partial")
             _logger.info("pre-migration copy of %s: writing %s", path, partial)
             # Outside any transaction, which VACUUM INTO refuses.
             connection.execute("VACUUM INTO ?", (str(partial),))
         stamp = self._wall_clock.now().astimezone(UTC).strftime("%Y-%m-%d_%H-%M-%S")
-        _rename_without_replacing(partial, path.with_name(f"{prefix}.{stamp}_UTC"))
+        _rename_without_replacing(partial, final=path.with_name(f"{prefix}.{stamp}_UTC"))
 
-    def _check_free_space(self, connection: sqlite3.Connection, path: Path) -> None:
+    def _check_free_space(self, connection: sqlite3.Connection, *, path: Path) -> None:
         # The copy holds the live pages only; the migrations need the file's size again.
         page_size = int(connection.execute("PRAGMA page_size").fetchone()["page_size"])
         page_count = int(connection.execute("PRAGMA page_count").fetchone()["page_count"])
@@ -79,6 +82,7 @@ class SqlitePreMigrationCopier:
 
 def _matches_its_latest_copy(
     connection: sqlite3.Connection,
+    *,
     path: Path,
     prefix: str,
     open_reader: ReaderOpener,
@@ -110,7 +114,7 @@ def _delete_leftovers(path: Path) -> None:
             leftover.unlink()
 
 
-def _rename_without_replacing(partial: Path, final: Path) -> None:
+def _rename_without_replacing(partial: Path, *, final: Path) -> None:
     # os.rename and os.replace would silently replace a file at the final name.
     try:
         os.link(partial, final)

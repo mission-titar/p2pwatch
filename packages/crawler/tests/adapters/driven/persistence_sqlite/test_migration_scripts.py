@@ -13,7 +13,10 @@ def test_load_scripts_orders_by_name_and_skips_non_sql(tmp_path: Path) -> None:
     (tmp_path / "0002_second.sql").write_text("B", encoding="utf-8")
     (tmp_path / "0001_premier.sql").write_text("A", encoding="utf-8")
     (tmp_path / "README.md").write_text("ignored", encoding="utf-8")
-    assert load_scripts(tmp_path) == (Migration(1, "A"), Migration(2, "B"))
+    assert load_scripts(tmp_path) == (
+        Migration(version=1, script="A"),
+        Migration(version=2, script="B"),
+    )
 
 
 def test_load_scripts_rejects_a_non_numeric_prefix(tmp_path: Path) -> None:
@@ -47,8 +50,8 @@ def test_load_scripts_reads_the_no_transaction_directive(tmp_path: Path) -> None
     (tmp_path / "0001_plain.sql").write_text("A", encoding="utf-8")
     (tmp_path / "0002_vacuum.sql").write_text(_NO_TRANSACTION + "VACUUM;", encoding="utf-8")
     assert load_scripts(tmp_path) == (
-        Migration(1, "A", transactional=True),
-        Migration(2, _NO_TRANSACTION + "VACUUM;", transactional=False),
+        Migration(version=1, script="A", transactional=True),
+        Migration(version=2, script=_NO_TRANSACTION + "VACUUM;", transactional=False),
     )
 
 
@@ -56,8 +59,8 @@ def test_load_scripts_reads_the_copy_before_directive(tmp_path: Path) -> None:
     (tmp_path / "0001_plain.sql").write_text("A", encoding="utf-8")
     (tmp_path / "0002_drop.sql").write_text(_COPY_BEFORE + "DROP TABLE t;", encoding="utf-8")
     assert load_scripts(tmp_path) == (
-        Migration(1, "A", copy_before=False),
-        Migration(2, _COPY_BEFORE + "DROP TABLE t;", copy_before=True),
+        Migration(version=1, script="A", copy_before=False),
+        Migration(version=2, script=_COPY_BEFORE + "DROP TABLE t;", copy_before=True),
     )
 
 

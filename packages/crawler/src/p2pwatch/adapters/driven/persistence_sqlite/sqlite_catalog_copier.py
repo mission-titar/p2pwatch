@@ -127,12 +127,14 @@ class SqliteCatalogCopier(CatalogCopier):
     def __init__(self, database_opener: SqliteDatabaseOpener) -> None:
         self._database_opener = database_opener
 
-    def copy_catalogs(self, destination: PurePath, source_catalogs: Sequence[PurePath]) -> None:
-        _copy_catalogs(self._database_opener, Path(destination), source_catalogs)
+    def copy_catalogs(self, destination: PurePath, *, source_catalogs: Sequence[PurePath]) -> None:
+        _copy_catalogs(
+            self._database_opener, destination=Path(destination), source_catalogs=source_catalogs
+        )
 
 
 def _copy_catalogs(
-    database_opener: SqliteDatabaseOpener, destination: Path, source_catalogs: Sequence[PurePath]
+    database_opener: SqliteDatabaseOpener, *, destination: Path, source_catalogs: Sequence[PurePath]
 ) -> None:
     """Copies ``source_catalogs`` into ``destination``, idempotent.
 
@@ -156,14 +158,16 @@ def _copy_catalogs(
         # it back rather than hardcode it, so this tracks the migration set automatically.
         expected_version = int(connection.execute("PRAGMA user_version").fetchone()["user_version"])
         for source_catalog in source_catalogs:
-            _copy_catalog(connection, source_catalog, expected_version)
+            _copy_catalog(
+                connection, source_catalog=source_catalog, expected_version=expected_version
+            )
             _logger.info("%s merged", source_catalog)
     finally:
         connection.close()
 
 
 def _copy_catalog(
-    connection: sqlite3.Connection, source_catalog: PurePath, expected_version: int
+    connection: sqlite3.Connection, *, source_catalog: PurePath, expected_version: int
 ) -> None:
     """Attaches ``source_catalog``, copies its tables in ONE transaction, detaches.
 

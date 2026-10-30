@@ -25,7 +25,7 @@ from tests.support.catalog_rows import insert_decision, insert_file
 
 
 def _read_target_coverage(catalog_db: Path) -> Mapping[TargetId, tuple[DecisionTier, ...]]:
-    with ThreadReadConnections(catalog_db, open_reader) as thread_read_connections:
+    with ThreadReadConnections(catalog_db, open_reader=open_reader) as thread_read_connections:
         return SqliteCoverageReader(thread_read_connections).read_target_coverage()
 
 

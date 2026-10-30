@@ -110,7 +110,7 @@ def observation_from_row(row: NamedRow) -> FileObservation:
     )
 
 
-def latest_observation(connection: sqlite3.Connection, file: FileKey) -> FileObservation | None:
+def latest_observation(connection: sqlite3.Connection, *, file: FileKey) -> FileObservation | None:
     """The latest observation; ``None`` for a file never seen."""
     row = connection.execute(SELECT_LATEST_OBSERVATION, (file.file_id,)).fetchone()
     return None if row is None else observation_from_row(row)
@@ -121,20 +121,20 @@ def iter_latest_observations(connection: sqlite3.Connection) -> Iterator[FileObs
     return map(observation_from_row, connection.execute(SELECT_LATEST_OBSERVATIONS))
 
 
-def known_filenames(connection: sqlite3.Connection, file: FileKey) -> tuple[str, ...]:
+def known_filenames(connection: sqlite3.Connection, *, file: FileKey) -> tuple[str, ...]:
     """Every distinct filename of the file, sorted."""
     rows = connection.execute(_SELECT_KNOWN_FILENAMES, (file.file_id,)).fetchall()
     return tuple(row["filename"] for row in rows)
 
 
-def best_observation(connection: sqlite3.Connection, file: FileKey) -> FileObservation | None:
+def best_observation(connection: sqlite3.Connection, *, file: FileKey) -> FileObservation | None:
     """The observation of the clean filename (most sources, then latest); ``None`` if never seen."""
     row = connection.execute(_SELECT_BEST_OBSERVATION, (file.file_id,)).fetchone()
     return None if row is None else observation_from_row(row)
 
 
 def observations_between(
-    connection: sqlite3.Connection, file: FileKey, since: int, until: int
+    connection: sqlite3.Connection, *, file: FileKey, since: int, until: int
 ) -> tuple[FileObservation, ...]:
     """The file's timeline from ``since`` included to ``until`` excluded, in microseconds, oldest
     first."""

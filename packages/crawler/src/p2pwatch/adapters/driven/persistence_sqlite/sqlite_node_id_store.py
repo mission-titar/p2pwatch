@@ -29,7 +29,7 @@ class SqliteNodeIdStore(NodeIdReader, NodeIdWriter):
             row = self._connection.execute(_SELECT_NODE_ID).fetchone()
         return NodeId(row["node_id"]) if row is not None else None
 
-    def record_node_id(self, node_id: NodeId, created_at: datetime) -> None:
+    def record_node_id(self, node_id: NodeId, *, created_at: datetime) -> None:
         """Persists ``node_id`` with ``created_at``, in one row."""
         created_at_micros = instant_to_micros(created_at)
         with wrap_sqlite_errors():

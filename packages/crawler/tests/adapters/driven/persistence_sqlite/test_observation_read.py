@@ -83,12 +83,12 @@ def test_every_read_carries_the_node_of_its_observation(connection: sqlite3.Conn
     insert_file(connection, _A)
     _raw(connection, _A, "keroro.avi", _TIE, node_id="n2")
     observation = _observation("keroro.avi", _TIE, node_id=NodeId("n2"))
-    assert observation_read.latest_observation(connection, _key(_A)) == observation
+    assert observation_read.latest_observation(connection, file=_key(_A)) == observation
     assert list(observation_read.iter_latest_observations(connection)) == [observation]
-    assert observation_read.best_observation(connection, _key(_A)) == observation
-    assert observation_read.observations_between(connection, _key(_A), 0, _YEAR_3000) == (
-        observation,
-    )
+    assert observation_read.best_observation(connection, file=_key(_A)) == observation
+    assert observation_read.observations_between(
+        connection, file=_key(_A), since=0, until=_YEAR_3000
+    ) == (observation,)
 
 
 def test_latest_observation_is_the_latest_raw_observation(connection: sqlite3.Connection) -> None:
@@ -97,7 +97,7 @@ def test_latest_observation_is_the_latest_raw_observation(connection: sqlite3.Co
     _raw(connection, _A, "new.avi", "2026-06-02T10:00:00.000000+00:00", media=60)
     _raw(connection, _A, "older.avi", "2026-05-01T10:00:00.000000+00:00")
     latest = _observation("new.avi", "2026-06-02T10:00:00.000000+00:00", media=60)
-    assert observation_read.latest_observation(connection, _key(_A)) == latest
+    assert observation_read.latest_observation(connection, file=_key(_A)) == latest
 
 
 def test_latest_observation_breaks_an_observed_at_tie_on_the_newest_variant_then_the_sources(
@@ -107,7 +107,7 @@ def test_latest_observation_breaks_an_observed_at_tie_on_the_newest_variant_then
     _raw(connection, _A, "first.avi", _TIE, sources=9)
     _raw(connection, _A, "second.avi", _TIE, sources=1)
     _raw(connection, _A, "second.avi", _TIE, sources=4)
-    latest = observation_read.latest_observation(connection, _key(_A))
+    latest = observation_read.latest_observation(connection, file=_key(_A))
     assert latest == _observation("second.avi", _TIE, sources=4)
 
 
@@ -115,8 +115,8 @@ def test_latest_observation_of_a_file_never_seen_or_unknown_is_none(
     connection: sqlite3.Connection,
 ) -> None:
     insert_file(connection, _A)
-    assert observation_read.latest_observation(connection, _key(_A)) is None
-    assert observation_read.latest_observation(connection, _key(_B)) is None
+    assert observation_read.latest_observation(connection, file=_key(_A)) is None
+    assert observation_read.latest_observation(connection, file=_key(_B)) is None
 
 
 def test_iter_latest_observations_yields_one_per_seen_file_sorted_by_hash(
@@ -142,8 +142,11 @@ def test_known_names_are_every_distinct_name_of_the_file_sorted(
     _raw(connection, _A, "raw.avi", "2026-06-02T10:00:00.000000+00:00")
     _raw(connection, _A, "old [ES].avi", "2026-05-01T10:00:00.000000+00:00")
     _raw(connection, _B, "other.avi", "2026-05-01T10:00:00.000000+00:00")
-    assert observation_read.known_filenames(connection, _key(_A)) == ("old [ES].avi", "raw.avi")
-    assert observation_read.known_filenames(connection, _key(_C)) == ()
+    assert observation_read.known_filenames(connection, file=_key(_A)) == (
+        "old [ES].avi",
+        "raw.avi",
+    )
+    assert observation_read.known_filenames(connection, file=_key(_C)) == ()
 
 
 def test_best_observation_is_the_most_sourced(connection: sqlite3.Connection) -> None:
@@ -151,7 +154,7 @@ def test_best_observation_is_the_most_sourced(connection: sqlite3.Connection) ->
     _raw(connection, _A, "clean.avi", "2026-06-01T10:00:00.000000+00:00", sources=8)
     _raw(connection, _A, "mojibake.avi", "2026-06-02T10:00:00.000000+00:00", sources=3)
     best = _observation("clean.avi", "2026-06-01T10:00:00.000000+00:00", sources=8)
-    assert observation_read.best_observation(connection, _key(_A)) == best
+    assert observation_read.best_observation(connection, file=_key(_A)) == best
 
 
 def test_best_observation_takes_the_latest_seen_on_a_source_tie(
@@ -161,12 +164,12 @@ def test_best_observation_takes_the_latest_seen_on_a_source_tie(
     _raw(connection, _A, "later.avi", "2026-06-02T10:00:00.000000+00:00")
     _raw(connection, _A, "earlier.avi", "2026-06-01T10:00:00.000000+00:00")
     best = _observation("later.avi", "2026-06-02T10:00:00.000000+00:00")
-    assert observation_read.best_observation(connection, _key(_A)) == best
+    assert observation_read.best_observation(connection, file=_key(_A)) == best
 
 
 def test_best_observation_of_a_file_never_seen_is_none(connection: sqlite3.Connection) -> None:
     insert_file(connection, _A)
-    assert observation_read.best_observation(connection, _key(_A)) is None
+    assert observation_read.best_observation(connection, file=_key(_A)) is None
 
 
 def test_observations_between_are_the_timeline_oldest_first(connection: sqlite3.Connection) -> None:
@@ -177,13 +180,18 @@ def test_observations_between_are_the_timeline_oldest_first(connection: sqlite3.
     _raw(connection, _A, "tie 1.avi", "2026-05-15T10:00:00.000000+00:00")
     _raw(connection, _A, "tie 2.avi", "2026-05-15T10:00:00.000000+00:00")
     _raw(connection, _B, "other.avi", "2026-05-20T10:00:00.000000+00:00")
-    assert observation_read.observations_between(connection, _key(_A), 0, _YEAR_3000) == (
+    assert observation_read.observations_between(
+        connection, file=_key(_A), since=0, until=_YEAR_3000
+    ) == (
         _observation("early.avi", "2026-05-01T10:00:00.000000+00:00"),
         _observation("tie 1.avi", "2026-05-15T10:00:00.000000+00:00"),
         _observation("tie 2.avi", "2026-05-15T10:00:00.000000+00:00"),
         _observation("late.avi", "2026-06-02T10:00:00.000000+00:00"),
     )
-    assert observation_read.observations_between(connection, _key(_C), 0, _YEAR_3000) == ()
+    assert (
+        observation_read.observations_between(connection, file=_key(_C), since=0, until=_YEAR_3000)
+        == ()
+    )
 
 
 def test_the_timeline_reads_its_interval_only(connection: sqlite3.Connection) -> None:
@@ -198,7 +206,9 @@ def test_the_timeline_reads_its_interval_only(connection: sqlite3.Connection) ->
         _raw(connection, _A, f"{n}.avi", at)
     since = instant_to_micros(datetime.fromisoformat(ats[1]))
     until = instant_to_micros(datetime.fromisoformat(ats[3]))
-    assert observation_read.observations_between(connection, _key(_A), since, until) == (
+    assert observation_read.observations_between(
+        connection, file=_key(_A), since=since, until=until
+    ) == (
         _observation("1.avi", ats[1]),
         _observation("2.avi", ats[2]),
     )
@@ -252,5 +262,5 @@ def test_known_names_read_the_variants_alone(connection: sqlite3.Connection) -> 
         return sqlite3.SQLITE_OK
 
     connection.set_authorizer(record)
-    observation_read.known_filenames(connection, _key(_A))
+    observation_read.known_filenames(connection, file=_key(_A))
     assert tables == {"observation_variants"}

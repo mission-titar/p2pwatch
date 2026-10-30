@@ -200,6 +200,7 @@ WHERE file_id = ?
 
 def _filter_clauses(
     target_id: TargetId | None,
+    *,
     tier: DecisionTier | None,
     search_text: str | None,
 ) -> tuple[list[str], list[str]]:
@@ -261,7 +262,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
         search_text: str | None,
     ) -> tuple[int, int]:
         """Not narrowed by the files page's ``matched_only``."""
-        clauses, params = _filter_clauses(target_id, tier, search_text)
+        clauses, params = _filter_clauses(target_id, tier=tier, search_text=search_text)
         sql = _SQL_COUNT_FILES_BASE + _latest_observation_join(search_text) + _JOIN_DECISIONS
         if clauses:
             sql += "WHERE " + " AND ".join(clauses) + "\n"
@@ -278,7 +279,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
     ) -> Mapping[DecisionTier, int]:
         """Never a tier filter: each facet shows the count its choice would give; a multi-tier
         file counts under each of its tiers."""
-        clauses, params = _filter_clauses(target_id, None, search_text)
+        clauses, params = _filter_clauses(target_id, tier=None, search_text=search_text)
         sql = _SQL_TIER_COUNTS_BASE + _latest_observation_join(search_text)
         if clauses:
             sql += "WHERE " + " AND ".join(clauses) + "\n"
@@ -304,7 +305,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
     ) -> tuple[CatalogEntry, ...]:
         """``tier`` sorts on the strongest tier; a file never seen sorts first in ASC (NULLs
         first), and the ``file_id`` tiebreak keeps paging stable."""
-        clauses, str_params = _filter_clauses(target_id, tier, search_text)
+        clauses, str_params = _filter_clauses(target_id, tier=tier, search_text=search_text)
         if matched_only:
             # A file is matched iff it has at least one current (non-retracted) decision;
             # ``dec.target_ids`` is NULL for a file with none.
@@ -370,9 +371,12 @@ class SqliteCatalogFileReader(CatalogFileReader):
             file=file,
             size_bytes=file_row["size_bytes"],
             observations=observations_between(
-                connection, file, instant_to_micros(since), instant_to_micros(until)
+                connection,
+                file=file,
+                since=instant_to_micros(since),
+                until=instant_to_micros(until),
             ),
-            latest_observation=latest_observation(connection, file),
+            latest_observation=latest_observation(connection, file=file),
             decisions=decisions,
-            known_filenames=known_filenames(connection, file),
+            known_filenames=known_filenames(connection, file=file),
         )

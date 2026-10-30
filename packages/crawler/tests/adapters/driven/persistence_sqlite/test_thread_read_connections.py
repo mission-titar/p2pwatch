@@ -60,7 +60,9 @@ def test_a_connection_is_opened_by_the_open_reader_it_is_given(tmp_path: Path) -
         opened.append(path)
         return sqlite3.connect(":memory:")
 
-    with ThreadReadConnections(tmp_path / "catalog.db", open_in_memory) as thread_read_connections:
+    with ThreadReadConnections(
+        tmp_path / "catalog.db", open_reader=open_in_memory
+    ) as thread_read_connections:
         thread_read_connections.connection()
     assert opened == [tmp_path / "catalog.db"]
 
@@ -69,7 +71,7 @@ def test_the_same_connection_is_reused_within_one_thread(tmp_path: Path) -> None
     """Repeated ``connection()`` calls from one thread return the SAME object (warm cache)."""
     path = tmp_path / "catalog.db"
     _seed(path)
-    thread_read_connections = ThreadReadConnections(path, open_reader)
+    thread_read_connections = ThreadReadConnections(path, open_reader=open_reader)
     first = thread_read_connections.connection()
     try:
         assert thread_read_connections.connection() is first
@@ -81,7 +83,7 @@ def test_each_thread_gets_a_distinct_connection(tmp_path: Path) -> None:
     """Two different threads each get their OWN connection (thread affinity)."""
     path = tmp_path / "catalog.db"
     _seed(path)
-    thread_read_connections = ThreadReadConnections(path, open_reader)
+    thread_read_connections = ThreadReadConnections(path, open_reader=open_reader)
     connections: dict[str, sqlite3.Connection] = {}
 
     def worker(name: str) -> None:
@@ -104,7 +106,7 @@ def test_reused_connection_sees_data_committed_after_first_handout(tmp_path: Pat
     see the current committed snapshot, proving reuse is correct, not a stale snapshot."""
     path = tmp_path / "catalog.db"
     _seed(path)  # one row so far
-    thread_read_connections = ThreadReadConnections(path, open_reader)
+    thread_read_connections = ThreadReadConnections(path, open_reader=open_reader)
     writer = open_catalog(path)
     reader = thread_read_connections.connection()
     try:
@@ -121,7 +123,7 @@ def test_reused_connection_sees_data_committed_after_first_handout(tmp_path: Pat
 def test_leaving_the_context_closes_the_calling_threads_connection(tmp_path: Path) -> None:
     path = tmp_path / "catalog.db"
     _seed(path)
-    with ThreadReadConnections(path, open_reader) as thread_read_connections:
+    with ThreadReadConnections(path, open_reader=open_reader) as thread_read_connections:
         first = thread_read_connections.connection()
     with pytest.raises(sqlite3.ProgrammingError, match="closed"):
         first.execute("SELECT 1")
@@ -133,6 +135,6 @@ def test_leaving_the_context_closes_the_calling_threads_connection(tmp_path: Pat
 
 
 def test_leaving_the_context_unused_opens_nothing(tmp_path: Path) -> None:
-    with ThreadReadConnections(tmp_path / "never-opened.db", open_reader):
+    with ThreadReadConnections(tmp_path / "never-opened.db", open_reader=open_reader):
         pass
     assert not (tmp_path / "never-opened.db").exists()
