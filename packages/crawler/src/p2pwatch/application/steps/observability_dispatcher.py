@@ -45,7 +45,7 @@ class ObservabilityDispatcher:
                 self._notifier.notify(audience, notification=plan.notification),
                 timeout=self._notification_timeout_seconds,
             )
-        except Exception as error:  # noqa: BLE001 (notifications NEVER break the crawl, E-D13)
+        except Exception as error:  # Notifications never break the crawl.
             self._logger.warning("notification %s failed (%s)", audience.value, error)
 
     def _log_at_severity(self, severity: Severity, *, message: str) -> None:

@@ -25,7 +25,7 @@ _SKIP_REASON = (
 )
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(kw_only=True, frozen=True)
 class ApiEndpoint:
     host: str
     port: int

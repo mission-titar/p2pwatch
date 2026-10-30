@@ -27,7 +27,7 @@ def is_short(size):
 """
 
 
-class MeasuredCall(Protocol):
+class MeasuredModulesCall(Protocol):
     def __call__(self, modules: Mapping[str, ModuleType], /) -> object: ...
 
 
@@ -42,7 +42,7 @@ def _measure(
     package_directory: Path,
     *,
     source_by_module: Mapping[str, str],
-    calls_by_context: Mapping[str, MeasuredCall],
+    calls_by_context: Mapping[str, MeasuredModulesCall],
     branch: bool = True,
 ) -> None:
     """Import the modules, then run each call under its context, as pytest-cov's per-test contexts.
