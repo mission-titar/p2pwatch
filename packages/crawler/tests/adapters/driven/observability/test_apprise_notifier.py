@@ -44,8 +44,8 @@ def _notifier() -> tuple[AppriseNotifier, list[FakeApprise]]:
     )
     groups: list[FakeApprise] = []
 
-    def factory(asset: apprise.AppriseAsset) -> FakeApprise:
-        groups.append(FakeApprise(asset))
+    def factory(*, asset: apprise.AppriseAsset) -> FakeApprise:
+        groups.append(FakeApprise(asset=asset))
         return groups[-1]
 
     return AppriseNotifier(targets, apprise_factory=factory), groups
