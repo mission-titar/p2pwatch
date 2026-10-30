@@ -2,10 +2,12 @@
 
 import asyncio
 
+import pytest
 import pytest_asyncio
 
 from p2pwatch.adapters.driven.asyncio_run_state_store import AsyncioRunStateStore
 from tests.contracts.application.ports.driven.run_state_store_contract import (
+    RunStatePorts,
     RunStateStoreContract,
 )
 from tests.fakes.adapters.driven.fake_recording_event_loop import FakeRecordingEventLoop
@@ -15,6 +17,10 @@ class TestAsyncioRunStateStore(RunStateStoreContract):
     @pytest_asyncio.fixture
     async def run_state_store(self) -> AsyncioRunStateStore:
         return AsyncioRunStateStore(loop=asyncio.get_running_loop())
+
+    @pytest.fixture
+    def run_state_ports(self, run_state_store: AsyncioRunStateStore) -> RunStatePorts:
+        return RunStatePorts(writer=run_state_store, reader=run_state_store)
 
 
 def test_a_change_is_deferred_to_the_loop_thread_via_call_soon_threadsafe() -> None:
