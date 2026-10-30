@@ -23,7 +23,7 @@ def connection() -> Iterator[sqlite3.Connection]:
     connection.close()
 
 
-def _iso_to_micros(connection: sqlite3.Connection, stamp: str) -> int:
+def _iso_to_micros(connection: sqlite3.Connection, *, stamp: str) -> int:
     """``iso_to_micros`` as the migrations call it, the one way it is called."""
     [row] = rows(connection, sql="SELECT iso_to_micros(?) AS micros", parameters=(stamp,))
     micros: int = row["micros"]
@@ -56,17 +56,17 @@ def test_the_two_conversions_are_inverse() -> None:
 
 
 def test_iso_to_micros_reads_a_stamp_with_a_fraction(connection: sqlite3.Connection) -> None:
-    assert _iso_to_micros(connection, "2026-06-11T12:00:00.123456+00:00") == _MICROS
+    assert _iso_to_micros(connection, stamp="2026-06-11T12:00:00.123456+00:00") == _MICROS
 
 
 def test_iso_to_micros_reads_a_stamp_without_a_fraction(connection: sqlite3.Connection) -> None:
-    assert _iso_to_micros(connection, "2026-06-11T12:00:00+00:00") == _MICROS - 123456
+    assert _iso_to_micros(connection, stamp="2026-06-11T12:00:00+00:00") == _MICROS - 123456
 
 
 def test_iso_to_micros_normalizes_an_offset_to_utc(connection: sqlite3.Connection) -> None:
-    assert _iso_to_micros(connection, "2026-06-11T14:00:00.123456+02:00") == _MICROS
+    assert _iso_to_micros(connection, stamp="2026-06-11T14:00:00.123456+02:00") == _MICROS
 
 
 def test_iso_to_micros_refuses_a_naive_stamp(connection: sqlite3.Connection) -> None:
     with pytest.raises(sqlite3.OperationalError, match="user-defined function raised exception"):
-        _iso_to_micros(connection, "2026-06-11T12:00:00.123456")
+        _iso_to_micros(connection, stamp="2026-06-11T12:00:00.123456")

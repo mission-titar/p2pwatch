@@ -41,6 +41,7 @@ def test_a_variable_missing_from_the_env_given_is_an_invalid_config_naming_its_k
     ids=["targets", "matcher"],
 )
 def test_a_wrong_policy_file_is_an_invalid_config_naming_no_key_apart(
+    *,
     tmp_path: Path,
     check: ConfigCheck,
     text: str,
@@ -65,7 +66,7 @@ def test_a_wrong_policy_file_is_an_invalid_config_naming_no_key_apart(
     ],
     ids=["crawler", "targets", "matcher"],
 )
-def test_an_absent_file_is_a_broken_input_naming_it(tmp_path: Path, check: ConfigCheck) -> None:
+def test_an_absent_file_is_a_broken_input_naming_it(*, tmp_path: Path, check: ConfigCheck) -> None:
     path = PurePath(tmp_path / "absent.yml")
 
     with pytest.raises(BrokenInputError, match=f"^{path}: No such file or directory$"):

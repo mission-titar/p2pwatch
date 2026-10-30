@@ -196,7 +196,7 @@ def test_read_catalog_entries_whole_episode_is_one_row_with_two_decisions(catalo
 
 @pytest.mark.parametrize("target_id", [TargetId("072A"), TargetId("072B")])
 def test_read_catalog_entries_filter_by_one_target_returns_whole_episode(
-    catalog_db: Path, target_id: TargetId
+    *, catalog_db: Path, target_id: TargetId
 ) -> None:
     seed_whole_episode(catalog_db)
     rows = _entries(catalog_db, target_id=target_id)
@@ -224,7 +224,7 @@ def test_read_matched_and_total_file_counts_whole_episode_counts_as_one_file(
 
 
 def _history(
-    catalog_db: Path, native_id: str, *, since: datetime = _EPOCH, until: datetime = _YEAR_3000
+    catalog_db: Path, *, native_id: str, since: datetime = _EPOCH, until: datetime = _YEAR_3000
 ) -> FileHistory | None:
     with ThreadReadConnections(catalog_db, open_reader=open_reader) as thread_read_connections:
         reader = SqliteCatalogFileReader(thread_read_connections)
@@ -233,7 +233,7 @@ def _history(
 
 def test_file_history_carries_observations_and_dated_decisions(catalog_db: Path) -> None:
     seed(catalog_db)
-    file_history = _history(catalog_db, "a" * 32)
+    file_history = _history(catalog_db, native_id="a" * 32)
     assert file_history is not None
     assert file_history.file == FileKey(network=Network.ED2K, native_id="a" * 32)
     assert file_history.size_bytes == 100
@@ -265,7 +265,7 @@ def test_file_history_reads_its_observations_in_the_window_and_its_latest_in_any
             observed_at="2026-06-21T10:00:00+00:00",
         )
     since, until = datetime(2026, 6, 1, tzinfo=UTC), datetime.fromisoformat(SEEN_AT)
-    file_history = _history(catalog_db, "a" * 32, since=since, until=until)
+    file_history = _history(catalog_db, native_id="a" * 32, since=since, until=until)
     assert file_history is not None
     assert [o.reported_file.filename for o in file_history.observations] == ["older.avi"]
     assert file_history.latest_observation is not None
@@ -274,7 +274,7 @@ def test_file_history_reads_its_observations_in_the_window_and_its_latest_in_any
 
 def test_file_history_of_an_unknown_file_id_is_none(catalog_db: Path) -> None:
     seed(catalog_db)
-    assert _history(catalog_db, "f" * 32) is None
+    assert _history(catalog_db, native_id="f" * 32) is None
     with ThreadReadConnections(catalog_db, open_reader=open_reader) as thread_read_connections:
         reader = SqliteCatalogFileReader(thread_read_connections)
         by_native_id = reader.read_file_history(
@@ -295,7 +295,7 @@ def test_file_history_reads_a_recorded_decision_back_to_the_microsecond(catalog_
     with closing(sqlite3.connect(catalog_db)) as connection, connection:
         insert_file(connection, native_id="a" * 32)
         SqliteDecisionStore(connection).record_decision(decided)
-    file_history = _history(catalog_db, "a" * 32)
+    file_history = _history(catalog_db, native_id="a" * 32)
     assert file_history is not None
     assert file_history.decisions == (decided,)
 
@@ -305,7 +305,7 @@ def test_file_history_retracted_target_is_no_decision(catalog_db: Path) -> None:
     from ``read_file_history``, identical to an unmatched file (spec §9). The earlier
     (pre-retraction) real decision must not leak through."""
     seed_retracted(catalog_db)
-    file_history = _history(catalog_db, "c" * 32)
+    file_history = _history(catalog_db, native_id="c" * 32)
     assert file_history is not None
     assert file_history.decisions == ()
 
@@ -321,7 +321,7 @@ def test_file_history_no_decision(catalog_db: Path) -> None:
             observed_at="2026-06-22T09:00:00.000000+00:00",
             size_bytes=200,
         )
-    file_history = _history(catalog_db, "b" * 32)
+    file_history = _history(catalog_db, native_id="b" * 32)
     assert file_history is not None
     assert file_history.decisions == ()
     assert file_history.size_bytes == 200
@@ -329,7 +329,7 @@ def test_file_history_no_decision(catalog_db: Path) -> None:
 
 def test_file_history_whole_episode_lists_both_decisions(catalog_db: Path) -> None:
     seed_whole_episode(catalog_db)
-    file_history = _history(catalog_db, "a" * 32)
+    file_history = _history(catalog_db, native_id="a" * 32)
     assert file_history is not None
     assert [d.decision.target_id for d in file_history.decisions] == ["072A", "072B"]
 
@@ -362,7 +362,7 @@ def test_read_catalog_entries_reads_at_most_its_limit_from_its_offset(catalog_db
 def test_file_history_observations_include_media_fields_none(catalog_db: Path) -> None:
     """An observation's duration_seconds and bitrate_kbps are None when the network gave none."""
     seed(catalog_db)
-    file_history = _history(catalog_db, "a" * 32)
+    file_history = _history(catalog_db, native_id="a" * 32)
     assert file_history is not None
     assert len(file_history.observations) == 1
     obs = file_history.observations[0].reported_file
@@ -384,7 +384,7 @@ def test_file_history_observations_include_media_fields_present(catalog_db: Path
             duration_seconds=1320,
             bitrate_kbps=192,
         )
-    file_history = _history(catalog_db, h)
+    file_history = _history(catalog_db, native_id=h)
     assert file_history is not None
     assert len(file_history.observations) == 1
     obs = file_history.observations[0].reported_file
@@ -606,7 +606,7 @@ def _hashes(rows: tuple[CatalogEntry, ...]) -> list[str]:
     ],
 )
 def test_read_catalog_entries_sort_orders(
-    catalog_db: Path, sort: str, direction: str, expected: list[str]
+    *, catalog_db: Path, sort: str, direction: str, expected: list[str]
 ) -> None:
     _seed_sortable(catalog_db)
     rows = _entries(catalog_db, sort=CatalogEntrySort(sort), direction=SortDirection(direction))
@@ -759,7 +759,7 @@ def test_read_catalog_entries_observation_tie_break_on_the_newest_variant(catalo
 
 def test_file_history_of_a_file_never_seen_has_no_observation(catalog_db: Path) -> None:
     h = _seed_file_without_observation(catalog_db)
-    file_history = _history(catalog_db, h)
+    file_history = _history(catalog_db, native_id=h)
     assert file_history is not None
     assert (
         file_history.observations,
@@ -802,7 +802,7 @@ def test_file_history_of_a_file_never_seen_has_no_observation(catalog_db: Path) 
     ],
 )
 def test_latest_obs_seeks_per_file_instead_of_scanning_observations(
-    catalog_db: Path, label: str, sql: str
+    *, catalog_db: Path, label: str, sql: str
 ) -> None:
     """Every /files query reading the latest observation SEEKS each variant's observations by
     primary key, never walks ``observations`` (11.6M rows on the node). Asserts the PLAN, not a
@@ -837,7 +837,7 @@ _COUNTERS: dict[str, FileCounter] = {
 @pytest.mark.parametrize("counter", sorted(_COUNTERS))
 @pytest.mark.parametrize("search_text", [None, "keroro"])
 def test_counters_read_observations_only_for_a_name_filter(
-    catalog_db: Path, counter: str, search_text: str | None
+    *, catalog_db: Path, counter: str, search_text: str | None
 ) -> None:
     """The default /files page counts without a per-file latest observation (D18)."""
     tables: set[str] = set()

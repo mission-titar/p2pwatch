@@ -58,7 +58,7 @@ def test_0007_keys_each_download_by_the_catalog_file_id(tmp_path: Path) -> None:
     [("gnutella", _A), ("ed2k", "A" * 32), ("ed2k", "a" * 31)],
 )
 def test_0007_refuses_a_native_id_its_network_does_not_define(
-    tmp_path: Path, network: str, native_id: str
+    *, tmp_path: Path, network: str, native_id: str
 ) -> None:
     connection = open_local(tmp_path / "local.db")
     try:

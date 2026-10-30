@@ -35,7 +35,7 @@ def database(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 
 def test_a_vacuum_into_copy_has_the_same_digest(
-    database: sqlite3.Connection, tmp_path: Path
+    *, database: sqlite3.Connection, tmp_path: Path
 ) -> None:
     copy_path = tmp_path / "copy.db"
     database.execute("VACUUM INTO ?", (str(copy_path),))
@@ -43,7 +43,7 @@ def test_a_vacuum_into_copy_has_the_same_digest(
 
 
 def test_the_same_rows_inserted_in_another_order_have_the_same_digest(
-    database: sqlite3.Connection, tmp_path: Path
+    *, database: sqlite3.Connection, tmp_path: Path
 ) -> None:
     reversed_path = tmp_path / "reversed.db"
     with closing(sqlite3.connect(reversed_path, autocommit=True)) as reversed_rows:
@@ -71,7 +71,7 @@ def test_the_same_rows_inserted_in_another_order_have_the_same_digest(
     ids=["a row", "a value's type", "a row's table", "sqlite_sequence", "the schema", "version"],
 )
 def test_a_change_changes_the_digest(
-    database: sqlite3.Connection, tmp_path: Path, change: str
+    *, database: sqlite3.Connection, tmp_path: Path, change: str
 ) -> None:
     before = _digest(tmp_path / _DATABASE)
     database.executescript(change)

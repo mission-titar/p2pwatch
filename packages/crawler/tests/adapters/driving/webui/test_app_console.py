@@ -113,7 +113,7 @@ async def _get(path: str) -> Response:
 
 
 async def _post(
-    path: str, form: dict[str, str], console_query_run: ConsoleQueryRun = _CONSOLE_QUERY_RUN
+    path: str, *, form: dict[str, str], console_query_run: ConsoleQueryRun = _CONSOLE_QUERY_RUN
 ) -> tuple[Response, list[RunConsoleQueryCall]]:
     """The response to ``form`` posted to ``path``, the runner answering ``console_query_run``,
     and the runner's calls."""
@@ -174,7 +174,7 @@ async def test_console_nav_entry_links_from_elsewhere_and_is_active_on_console()
 @pytest.mark.asyncio
 async def test_post_console_runs_the_sql_on_the_chosen_database(database: ConsoleDatabase) -> None:
     """The query runs on the database the form names, which stays selected, its SQL echoed."""
-    resp, calls = await _post("/console", {"sql": _SQL, "db": database})
+    resp, calls = await _post("/console", form={"sql": _SQL, "db": database})
     assert resp.status_code == 200
     assert calls == [RunConsoleQueryCall(database=database, sql=_SQL)]
     assert f'<option value="{database}" selected>' in resp.text
@@ -184,7 +184,7 @@ async def test_post_console_runs_the_sql_on_the_chosen_database(database: Consol
 @pytest.mark.asyncio
 async def test_post_console_renders_the_answer() -> None:
     """An answer renders its count, its time in milliseconds, its columns and its cells."""
-    resp, _ = await _post("/console", {"sql": _SQL, "db": "catalog"})
+    resp, _ = await _post("/console", form={"sql": _SQL, "db": "catalog"})
     assert resp.status_code == 200
     assert '<p class="console-meta">1 rows in 3 ms</p>' in resp.text
     assert "<th>native_id</th>" in resp.text
@@ -198,7 +198,9 @@ async def test_post_console_renders_the_answer() -> None:
 async def test_post_console_answer_without_rows_says_so() -> None:
     answer = replace(_ANSWER, rows=())
     resp, _ = await _post(
-        "/console", {"sql": _SQL, "db": "catalog"}, replace(_CONSOLE_QUERY_RUN, query_answer=answer)
+        "/console",
+        form={"sql": _SQL, "db": "catalog"},
+        console_query_run=replace(_CONSOLE_QUERY_RUN, query_answer=answer),
     )
     assert '<p class="console-meta">0 rows in 3 ms</p>' in resp.text
     assert "<tr><td>No rows.</td></tr>" in resp.text
@@ -207,7 +209,7 @@ async def test_post_console_answer_without_rows_says_so() -> None:
 @pytest.mark.asyncio
 async def test_post_console_bogus_db_shows_error_no_query() -> None:
     """POST db=bogus -> 200 with an error banner, no query run (no query answer table)."""
-    resp, calls = await _post("/console", {"sql": _SQL, "db": "bogus"})
+    resp, calls = await _post("/console", form={"sql": _SQL, "db": "bogus"})
     assert resp.status_code == 200
     assert f'<p class="console-error" role="alert">{_UNKNOWN_DB}</p>' in resp.text
     assert 'class="console-table"' not in resp.text
@@ -221,7 +223,11 @@ async def test_post_console_query_failure_shows_error_banner() -> None:
     console_query_run = replace(
         _CONSOLE_QUERY_RUN, query_answer=QueryFailure(message="SQL error: near FROM")
     )
-    resp, _ = await _post("/console", {"sql": "SELECT FROM", "db": "catalog"}, console_query_run)
+    resp, _ = await _post(
+        "/console",
+        form={"sql": "SELECT FROM", "db": "catalog"},
+        console_query_run=console_query_run,
+    )
     assert resp.status_code == 200
     assert '<p class="console-error" role="alert">SQL error: near FROM</p>' in resp.text
     assert 'class="console-table"' not in resp.text
@@ -231,7 +237,9 @@ async def test_post_console_query_failure_shows_error_banner() -> None:
 async def test_post_console_truncation_banner_names_the_row_cap() -> None:
     """A truncated answer renders the banner with the cap the run carries."""
     console_query_run = ConsoleQueryRun(query_answer=replace(_ANSWER, truncated=True), row_cap=1000)
-    resp, _ = await _post("/console", {"sql": _SQL, "db": "catalog"}, console_query_run)
+    resp, _ = await _post(
+        "/console", form={"sql": _SQL, "db": "catalog"}, console_query_run=console_query_run
+    )
     assert resp.status_code == 200
     assert (
         '<p class="console-truncated" role="status">Results truncated to the first 1,000 rows.</p>'
@@ -247,7 +255,7 @@ async def test_post_console_truncation_banner_names_the_row_cap() -> None:
 @pytest.mark.asyncio
 async def test_post_console_csv_valid_select() -> None:
     """POST a valid SELECT to /console.csv -> text/csv attachment with the CSV body."""
-    resp, calls = await _post("/console.csv", {"sql": _SQL, "db": "local"})
+    resp, calls = await _post("/console.csv", form={"sql": _SQL, "db": "local"})
     assert resp.status_code == 200
     assert calls == [RunConsoleQueryCall(database=ConsoleDatabase.LOCAL, sql=_SQL)]
     assert resp.headers["content-type"].startswith("text/csv")
@@ -258,7 +266,7 @@ async def test_post_console_csv_valid_select() -> None:
 @pytest.mark.asyncio
 async def test_post_console_csv_bad_db_returns_400() -> None:
     """POST /console.csv with an unknown db -> 400 plain text with the error, no query run."""
-    resp, calls = await _post("/console.csv", {"sql": _SQL, "db": "bogus"})
+    resp, calls = await _post("/console.csv", form={"sql": _SQL, "db": "bogus"})
     assert resp.status_code == 400
     assert resp.headers["content-type"].startswith("text/plain")
     assert resp.text == _UNKNOWN_DB
@@ -272,7 +280,9 @@ async def test_post_console_csv_query_failure_returns_400() -> None:
         _CONSOLE_QUERY_RUN, query_answer=QueryFailure(message="SQL error: near FROM")
     )
     resp, _ = await _post(
-        "/console.csv", {"sql": "SELECT FROM", "db": "catalog"}, console_query_run
+        "/console.csv",
+        form={"sql": "SELECT FROM", "db": "catalog"},
+        console_query_run=console_query_run,
     )
     assert resp.status_code == 400
     assert resp.headers["content-type"].startswith("text/plain")

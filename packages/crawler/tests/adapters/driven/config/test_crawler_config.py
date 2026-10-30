@@ -17,7 +17,7 @@ def _env() -> dict[str, str]:
     return {"AMULE_API_PASSWORD": "s3cr3t"}
 
 
-def _write_crawler_config(tmp_path: Path, keywords: str = "[keroro]", extra: str = "") -> Path:
+def _write_crawler_config(tmp_path: Path, *, keywords: str = "[keroro]", extra: str = "") -> Path:
     path = tmp_path / "crawler.yml"
     path.write_text(
         "shutdown_deadline_seconds: 10.0\n"
@@ -32,7 +32,7 @@ def _write_crawler_config(tmp_path: Path, keywords: str = "[keroro]", extra: str
     return path
 
 
-def _load_with_the_shipped_policy(config_path: Path, env: dict[str, str]) -> LoadedConfig:
+def _load_with_the_shipped_policy(config_path: Path, *, env: dict[str, str]) -> LoadedConfig:
     return load_config(
         config_path,
         targets_path=_DEPLOY / "targets.yml",
@@ -63,7 +63,7 @@ def test_the_three_files_load_with_the_fingerprint_of_the_policy(tmp_path: Path)
 
 def test_a_reference_under_any_key_is_resolved_before_the_parse(tmp_path: Path) -> None:
     config_path = _write_crawler_config(tmp_path, keywords="[keroro, '${KEYWORD}']")
-    loaded = _load_with_the_shipped_policy(config_path, _env() | {"KEYWORD": "titar"})
+    loaded = _load_with_the_shipped_policy(config_path, env=_env() | {"KEYWORD": "titar"})
     assert loaded.crawler_config.search.keywords == ("keroro", "titar")
 
 
@@ -81,14 +81,14 @@ def test_a_reference_under_any_key_is_resolved_before_the_parse(tmp_path: Path) 
     ids=["keywords", "disabled-section"],
 )
 def test_an_unset_variable_under_any_key_is_an_invalid_config_naming_its_key_path(
-    tmp_path: Path, keywords: str, extra: str, key_path: str
+    *, tmp_path: Path, keywords: str, extra: str, key_path: str
 ) -> None:
     config_path = _write_crawler_config(tmp_path, keywords=keywords, extra=extra)
     with pytest.raises(
         InvalidConfigError,
         match=rf"^{key_path}: environment variable 'P2PWATCH_UNSET' referenced but not set$",
     ):
-        _load_with_the_shipped_policy(config_path, _env())
+        _load_with_the_shipped_policy(config_path, env=_env())
 
 
 @pytest.mark.parametrize(
@@ -101,7 +101,7 @@ def test_an_unset_variable_under_any_key_is_an_invalid_config_naming_its_key_pat
     ],
 )
 def test_an_invalid_file_is_an_invalid_config(
-    tmp_path: Path, broken_file: str, text: str, key: str | None, message: str
+    *, tmp_path: Path, broken_file: str, text: str, key: str | None, message: str
 ) -> None:
     paths = {
         "crawler.yml": _write_crawler_config(tmp_path),

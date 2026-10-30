@@ -56,7 +56,7 @@ def seeded_catalog(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 @pytest.mark.parametrize("table", sorted(_UPDATES))
 def test_direct_update_is_rejected_by_the_database(
-    seeded_catalog: sqlite3.Connection, table: str
+    *, seeded_catalog: sqlite3.Connection, table: str
 ) -> None:
     with pytest.raises(sqlite3.IntegrityError, match=f"{table} is append-only"):
         seeded_catalog.execute(_UPDATES[table])
@@ -64,7 +64,7 @@ def test_direct_update_is_rejected_by_the_database(
 
 @pytest.mark.parametrize("table", sorted(_UPDATES))
 def test_direct_delete_is_rejected_by_the_database(
-    seeded_catalog: sqlite3.Connection, table: str
+    *, seeded_catalog: sqlite3.Connection, table: str
 ) -> None:
     with pytest.raises(sqlite3.IntegrityError, match=f"{table} is append-only"):
         seeded_catalog.execute(f"DELETE FROM {table}")

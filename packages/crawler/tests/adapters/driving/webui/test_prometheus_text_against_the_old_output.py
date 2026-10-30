@@ -104,7 +104,7 @@ def _samples(text: str) -> frozenset[_Sample]:
     [("old_prometheus_text_unwritten.txt", ()), ("old_prometheus_text_written.txt", INSTRUCTIONS)],
 )
 def test_the_text_holds_the_metadata_and_samples_the_4x_recorder_wrote(
-    fixture: str, instructions: tuple[CounterIncrement | GaugeSetting, ...]
+    *, fixture: str, instructions: tuple[CounterIncrement | GaugeSetting, ...]
 ) -> None:
     store = InMemoryNodeMetricStore()
     for instruction in instructions:

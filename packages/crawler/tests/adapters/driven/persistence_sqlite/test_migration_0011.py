@@ -51,7 +51,7 @@ def _kept_rows(connection: sqlite3.Connection) -> dict[str, list[dict[str, Any]]
     return {table: rows(connection, sql=f"SELECT * FROM {table} ORDER BY 1, 2") for table in _KEPT}
 
 
-def _columns(connection: sqlite3.Connection, table: str) -> list[str]:
+def _columns(connection: sqlite3.Connection, *, table: str) -> list[str]:
     return [column["name"] for column in rows(connection, sql=f"PRAGMA table_info({table})")]
 
 
@@ -64,9 +64,9 @@ def test_0011_drops_the_ranges_and_recreates_the_source_tables_empty(tmp_path: P
     connection = open_catalog_at(path, version=11)
     try:
         assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 11}]
-        assert _columns(connection, "source_ranges") == []
-        assert "node_id" in _columns(connection, "source_variants")
-        assert _columns(connection, "source_observations") == [
+        assert _columns(connection, table="source_ranges") == []
+        assert "node_id" in _columns(connection, table="source_variants")
+        assert _columns(connection, table="source_observations") == [
             "variant_id",
             "observed_at",
             "transfer_counter",

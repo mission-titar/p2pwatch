@@ -55,7 +55,7 @@ _WINDOW = PeriodWindow(since=_EPOCH, until=_at(100_000 * _S), gap=timedelta(seco
 _Points = Sequence[tuple[str, int, int]]
 
 
-def _seed_points(db: Path, points: _Points) -> None:
+def _seed_points(db: Path, *, points: _Points) -> None:
     with closing(sqlite3.connect(db)) as connection, connection:
         insert_file(connection, native_id="a" * 32)
         insert_source(connection, user_hash=_USER)
@@ -73,7 +73,7 @@ def _seed_points(db: Path, points: _Points) -> None:
             )
 
 
-def _periods(db: Path, window: PeriodWindow = _WINDOW) -> list[tuple[str, int, int, int]]:
+def _periods(db: Path, *, window: PeriodWindow = _WINDOW) -> list[tuple[str, int, int, int]]:
     """``(role, first_seen_at, last_seen_at, received_bytes)`` of file a's periods, in micros."""
     with ThreadReadConnections(db, open_reader=open_reader) as thread_read_connections:
         reader = SqliteSourceReader(thread_read_connections)
@@ -95,34 +95,36 @@ def _periods(db: Path, window: PeriodWindow = _WINDOW) -> list[tuple[str, int, i
     ids=["past-the-tolerance", "at-the-tolerance"],
 )
 def test_a_gap_past_the_tolerance_cuts_a_period(
-    catalog_db: Path, seconds: tuple[int, ...], periods: list[tuple[int, int]]
+    *, catalog_db: Path, seconds: tuple[int, ...], periods: list[tuple[int, int]]
 ) -> None:
-    _seed_points(catalog_db, [("queued", at * _S, 0) for at in seconds])
+    _seed_points(catalog_db, points=[("queued", at * _S, 0) for at in seconds])
     assert [(first // _S, last // _S) for _, first, last, _ in _periods(catalog_db)] == periods
 
 
 def test_a_gap_a_microsecond_past_the_tolerance_cuts_a_period(catalog_db: Path) -> None:
-    _seed_points(catalog_db, [("queued", 0, 0), ("queued", 90 * _S + 1, 0)])
+    _seed_points(catalog_db, points=[("queued", 0, 0), ("queued", 90 * _S + 1, 0)])
     assert len(_periods(catalog_db)) == 2
 
 
 def test_a_counter_that_drops_cuts_a_period(catalog_db: Path) -> None:
-    _seed_points(catalog_db, [("sending", 0, 500), ("sending", 30 * _S, 100)])
+    _seed_points(catalog_db, points=[("sending", 0, 500), ("sending", 30 * _S, 100)])
     assert _periods(catalog_db) == [("sending", 30 * _S, 30 * _S, 0), ("sending", 0, 0, 0)]
 
 
 @pytest.mark.parametrize(("role", "received"), [("sending", 500), ("queued", 0)])
 def test_only_a_sending_period_shows_the_counters_growth(
-    catalog_db: Path, role: str, received: int
+    *, catalog_db: Path, role: str, received: int
 ) -> None:
-    _seed_points(catalog_db, [(role, 0, 400), (role, 30 * _S, 650), (role, 60 * _S, 900)])
+    _seed_points(catalog_db, points=[(role, 0, 400), (role, 30 * _S, 650), (role, 60 * _S, 900)])
     assert _periods(catalog_db) == [(role, 0, 60 * _S, received)]
 
 
 def test_a_change_of_variant_cuts_a_period_even_when_the_variant_comes_back(
     catalog_db: Path,
 ) -> None:
-    _seed_points(catalog_db, [("queued", 0, 0), ("sending", 30 * _S, 0), ("queued", 60 * _S, 0)])
+    _seed_points(
+        catalog_db, points=[("queued", 0, 0), ("sending", 30 * _S, 0), ("queued", 60 * _S, 0)]
+    )
     assert [role for role, *_ in _periods(catalog_db)] == ["queued", "sending", "queued"]
 
 
@@ -131,7 +133,7 @@ def test_a_sending_period_never_counts_the_bytes_of_a_standby_one_between(
 ) -> None:
     # The standby counter grows with another file the source sends meanwhile.
     points = [("sending", 0, 100), ("standby", 30 * _S, 600), ("sending", 60 * _S, 700)]
-    _seed_points(catalog_db, points)
+    _seed_points(catalog_db, points=points)
     assert _periods(catalog_db) == [
         ("sending", 60 * _S, 60 * _S, 0),
         ("standby", 30 * _S, 30 * _S, 0),
@@ -140,9 +142,9 @@ def test_a_sending_period_never_counts_the_bytes_of_a_standby_one_between(
 
 
 def test_only_the_windows_points_are_read(catalog_db: Path) -> None:
-    _seed_points(catalog_db, [("queued", at * _S, 0) for at in (0, 30, 60, 90)])
+    _seed_points(catalog_db, points=[("queued", at * _S, 0) for at in (0, 30, 60, 90)])
     window = PeriodWindow(since=_at(30 * _S), until=_at(90 * _S), gap=_WINDOW.gap)
-    assert _periods(catalog_db, window) == [("queued", 30 * _S, 60 * _S, 0)]
+    assert _periods(catalog_db, window=window) == [("queued", 30 * _S, 60 * _S, 0)]
 
 
 def test_sharing_periods_join_each_identity_on_each_node_newest_first(catalog_db: Path) -> None:
@@ -325,7 +327,7 @@ def test_a_source_never_named_is_known_without_a_source_name(catalog_db: Path) -
     [("1F2E1F", [_USER]), ("shinob", [_USER]), ("FMR", [_USER, _OTHER]), ("2e1f", [])],
 )
 def test_known_sources_match_a_hash_prefix_or_any_name_the_source_carried(
-    catalog_db: Path, search_text: str, expected: list[str]
+    *, catalog_db: Path, search_text: str, expected: list[str]
 ) -> None:
     _seed_sources(catalog_db)
     known_sources = _known_sources(catalog_db, search_text=search_text, offset=0)
@@ -381,7 +383,7 @@ def _seed_pages(db: Path) -> None:
 
 
 def _period(
-    file: FileKey, source: SourceKey | None, source_name: str | None, first: int, last: int
+    file: FileKey, *, source: SourceKey | None, source_name: str | None, first: int, last: int
 ) -> SharingPeriod:
     return SharingPeriod(
         file=file,
@@ -398,7 +400,7 @@ def _period(
 
 
 def _source_history(
-    db: Path, user: str, *, limit: int = _LIMIT, offset: int = 0, window: PeriodWindow = _WINDOW
+    db: Path, *, user: str, limit: int = _LIMIT, offset: int = 0, window: PeriodWindow = _WINDOW
 ) -> SourceHistory | None:
     with ThreadReadConnections(db, open_reader=open_reader) as thread_read_connections:
         reader = SqliteSourceReader(thread_read_connections)
@@ -428,7 +430,7 @@ def test_a_source_history_holds_its_names_its_periods_over_every_file_and_their_
         received_bytes=0,
         node_id=NodeId("n1"),
     )
-    assert _source_history(catalog_db, _USER) == SourceHistory(
+    assert _source_history(catalog_db, user=_USER) == SourceHistory(
         source=key,
         source_namings=(
             SourceNaming(
@@ -438,8 +440,8 @@ def test_a_source_history_holds_its_names_its_periods_over_every_file_and_their_
         ),
         sharing_periods=(
             sending,
-            _period(b, key, "AnimuseeFMR", 30, 40),
-            _period(a, key, "Shinobu", 10, 20),
+            _period(b, source=key, source_name="AnimuseeFMR", first=30, last=40),
+            _period(a, source=key, source_name="Shinobu", first=10, last=20),
         ),
         best_filename_by_file={a: "keroro_062a.avi"},
     )
@@ -456,7 +458,7 @@ def test_a_source_history_reads_at_most_its_limit_of_names_from_their_offset_and
                 connection, native_id="a" * 32, user_hash=_USER, name=f"name {n}"
             )
             insert_source_point(connection, variant_id=variant, observed_at_micros=n)
-    source_history = _source_history(catalog_db, _USER, limit=2, offset=1)
+    source_history = _source_history(catalog_db, user=_USER, limit=2, offset=1)
     assert source_history is not None
     assert [naming.source_name for naming in source_history.source_namings] == [
         "name 1",
@@ -467,8 +469,8 @@ def test_a_source_history_reads_at_most_its_limit_of_names_from_their_offset_and
 
 def _source_name_history(
     db: Path,
-    source_name: str,
     *,
+    source_name: str,
     limit: int = _LIMIT,
     offset: int = 0,
     window: PeriodWindow = _WINDOW,
@@ -501,7 +503,7 @@ def test_a_source_name_history_holds_its_hashes_and_its_periods_without_one(
         received_bytes=0,
         node_id=NodeId("n1"),
     )
-    assert _source_name_history(catalog_db, "AnimuseeFMR") == SourceNameHistory(
+    assert _source_name_history(catalog_db, source_name="AnimuseeFMR") == SourceNameHistory(
         source_name="AnimuseeFMR",
         source_namings=(
             SourceNaming(
@@ -538,7 +540,9 @@ def test_a_source_name_history_reads_at_most_its_limit_of_hashes_from_their_offs
                 ),
                 observed_at_micros=n,
             )
-    source_name_history = _source_name_history(catalog_db, "AnimuseeFMR", limit=2, offset=1)
+    source_name_history = _source_name_history(
+        catalog_db, source_name="AnimuseeFMR", limit=2, offset=1
+    )
     assert source_name_history is not None
     assert [naming.source.native_id for naming in source_name_history.source_namings] == [
         f"{1:032x}",
@@ -552,19 +556,19 @@ def test_a_source_name_history_reads_at_most_its_limit_of_hashes_from_their_offs
 
 def test_the_history_of_a_source_never_recorded_is_none(catalog_db: Path) -> None:
     _seed_pages(catalog_db)
-    assert _source_history(catalog_db, "0" * 32) is None
+    assert _source_history(catalog_db, user="0" * 32) is None
 
 
 def test_the_history_of_a_source_name_never_recorded_is_none(catalog_db: Path) -> None:
     _seed_pages(catalog_db)
-    assert _source_name_history(catalog_db, "nobody") is None
+    assert _source_name_history(catalog_db, source_name="nobody") is None
 
 
 def test_the_pages_periods_are_read_in_the_window_only(catalog_db: Path) -> None:
     _seed_pages(catalog_db)
     window = PeriodWindow(since=_at(55), until=_at(1_000), gap=_WINDOW.gap)
-    source = _source_history(catalog_db, _USER, window=window)
-    name = _source_name_history(catalog_db, "AnimuseeFMR", window=window)
+    source = _source_history(catalog_db, user=_USER, window=window)
+    name = _source_name_history(catalog_db, source_name="AnimuseeFMR", window=window)
     assert source is not None and name is not None
     assert [(p.first_seen_at, p.last_seen_at) for p in source.sharing_periods] == [
         (_at(60), _at(60))

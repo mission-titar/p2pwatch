@@ -22,7 +22,9 @@ _T0 = datetime(2026, 6, 12, tzinfo=UTC)
 _T1 = _T0 + timedelta(minutes=1)
 
 
-def _dated(decision: FileTargetDecision, decided_at: datetime) -> DatedDecision[FileTargetDecision]:
+def _dated(
+    decision: FileTargetDecision, *, decided_at: datetime
+) -> DatedDecision[FileTargetDecision]:
     return DatedDecision(file=_A, decision=decision, decided_at=decided_at, node_id=_NODE_ID)
 
 
@@ -53,7 +55,7 @@ def test_latest_decisions_returns_the_latest_record_per_target(
             DecisionRecord(
                 target_id=TargetId("062A"), rule_name="keroro_large", tier=DecisionTier.CATALOG
             ),
-            _T0,
+            decided_at=_T0,
         )
     )
     decision_store.record_decision(
@@ -61,7 +63,7 @@ def test_latest_decisions_returns_the_latest_record_per_target(
             DecisionRecord(
                 target_id=TargetId("062A"), rule_name="id_segment_exact", tier=DecisionTier.DOWNLOAD
             ),
-            _T1,
+            decided_at=_T1,
         )
     )  # newer
     decision_store.record_decision(
@@ -69,7 +71,7 @@ def test_latest_decisions_returns_the_latest_record_per_target(
             DecisionRecord(
                 target_id=TargetId("062B"), rule_name="numero_nu", tier=DecisionTier.NOTIFY
             ),
-            _T0,
+            decided_at=_T0,
         )
     )
     assert decision_store.read_latest_decisions(_A) == {
@@ -90,7 +92,7 @@ def test_latest_decisions_reads_each_tier_as_the_type(
             DecisionRecord(
                 target_id=TargetId("062A"), rule_name="numero_nu", tier=DecisionTier.NOTIFY
             ),
-            _T0,
+            decided_at=_T0,
         )
     )
     latest = decision_store.read_latest_decisions(_A)[TargetId("062A")]
@@ -106,10 +108,10 @@ def test_latest_decisions_includes_a_target_whose_latest_tier_is_retracted(
             DecisionRecord(
                 target_id=TargetId("062A"), rule_name="id_segment_exact", tier=DecisionTier.DOWNLOAD
             ),
-            _T0,
+            decided_at=_T0,
         )
     )
-    decision_store.record_decision(_dated(Retraction(target_id=TargetId("062A")), _T1))
+    decision_store.record_decision(_dated(Retraction(target_id=TargetId("062A")), decided_at=_T1))
     assert decision_store.read_latest_decisions(_A) == {
         TargetId("062A"): Retraction(target_id=TargetId("062A"))
     }
@@ -123,11 +125,11 @@ def test_latest_decisions_excludes_the_legacy_empty_sentinel(
             DecisionRecord(
                 target_id=TargetId("062A"), rule_name="numero_nu", tier=DecisionTier.NOTIFY
             ),
-            _T0,
+            decided_at=_T0,
         )
     )
     decision_store.record_decision(
-        _dated(Retraction(target_id=TargetId("")), _T1)
+        _dated(Retraction(target_id=TargetId("")), decided_at=_T1)
     )  # legacy target_id=""
     assert decision_store.read_latest_decisions(_A) == {
         TargetId("062A"): DecisionRecord(

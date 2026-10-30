@@ -86,7 +86,9 @@ def _points(catalog: sqlite3.Connection) -> list[dict[str, Any]]:
     )
 
 
-def _point_row(role: str, observed_at_micros: int, session_received_bytes: int) -> dict[str, Any]:
+def _point_row(
+    role: str, *, observed_at_micros: int, session_received_bytes: int
+) -> dict[str, Any]:
     return {
         "role": role,
         "observed_at_micros": observed_at_micros,
@@ -111,20 +113,20 @@ def _seconds(seconds: float) -> int:
 
 
 def test_three_reads_of_one_source_leave_one_variant_and_three_points(
-    source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
+    *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
     points = [_point(counter=counter, index=index) for index, counter in enumerate((5, 5, 9))]
     source_point_store.record_points(points)
     assert _variants(catalog) == 1
     assert _points(catalog) == [
-        _point_row("queued", _T0_US, 5),
-        _point_row("queued", _seconds(30), 5),
-        _point_row("queued", _seconds(60), 9),
+        _point_row("queued", observed_at_micros=_T0_US, session_received_bytes=5),
+        _point_row("queued", observed_at_micros=_seconds(30), session_received_bytes=5),
+        _point_row("queued", observed_at_micros=_seconds(60), session_received_bytes=9),
     ]
 
 
 def test_a_change_of_role_leaves_two_variants(
-    source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
+    *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
     source_point_store.record_points([_point(), _point(_S, index=1), _point(index=2)])
     assert _variants(catalog) == 2
@@ -132,7 +134,7 @@ def test_a_change_of_role_leaves_two_variants(
 
 
 def test_a_point_is_written_with_its_role_a_carried_one_included(
-    source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
+    *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
     source_point_store.record_points(
         [
@@ -141,11 +143,13 @@ def test_a_point_is_written_with_its_role_a_carried_one_included(
             )
         ]
     )
-    assert _points(catalog) == [_point_row("queued", _T0_US, 0)]
+    assert _points(catalog) == [
+        _point_row("queued", observed_at_micros=_T0_US, session_received_bytes=0)
+    ]
 
 
 def test_a_point_without_identity_writes_its_variant_and_no_source(
-    source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
+    *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
     reading = dataclasses.replace(_reading(), source=None)
     source_point_store.record_points(
@@ -157,7 +161,7 @@ def test_a_point_without_identity_writes_its_variant_and_no_source(
 
 
 def test_the_same_read_written_twice_leaves_the_points_unchanged(
-    source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
+    *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
     source_point_store.record_points([_point(counter=5), _point(counter=5, index=1)])
     points = _points(catalog)
@@ -174,7 +178,7 @@ def test_a_negative_counter_is_refused_not_dropped(
 
 
 def test_another_nodes_identical_reading_is_its_own_variant(
-    source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
+    *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
     source_point_store.record_points([_point(node_id=NodeId("n2")), _point()])
     assert _variants(catalog) == 2
@@ -186,7 +190,7 @@ def test_another_nodes_identical_reading_is_its_own_variant(
 
 
 def test_the_variant_and_the_source_are_written_as_d2_states(
-    source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
+    *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
     reading = dataclasses.replace(
         _reading(),
@@ -225,7 +229,7 @@ def test_the_variant_and_the_source_are_written_as_d2_states(
 
 
 def test_a_failed_write_rolls_back_the_whole_call(
-    source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
+    *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
     unknown = FileKey(network=Network.ED2K, native_id="d" * 32)
     with pytest.raises(PersistenceError, match="FOREIGN KEY"):

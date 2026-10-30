@@ -76,7 +76,7 @@ def source_point_store(catalog: sqlite3.Connection) -> SqliteSourcePointStore:
     return SqliteSourcePointStore(catalog)
 
 
-def _passing(key: SourceKey | None = _KEY, name: str = "AnimuseeFMR") -> SourceReading:
+def _passing(key: SourceKey | None = _KEY, *, name: str = "AnimuseeFMR") -> SourceReading:
     return SourceReading(
         source=key,
         source_name=name,
@@ -91,10 +91,10 @@ def _passing(key: SourceKey | None = _KEY, name: str = "AnimuseeFMR") -> SourceR
 
 def _latest(
     source_point_store: SqliteSourcePointStore,
+    *,
     reading: SourceReading,
     since: datetime,
     before: datetime,
-    *,
     native_id: str = _FILE,
     node_id: NodeId = _NODE_ID,
 ) -> LatestPoint | None:
@@ -105,50 +105,61 @@ def _latest(
 
 
 def test_the_latest_point_is_the_latest_since_the_window_opens_before_it_closes(
-    source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
+    *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
     later = _T0 + timedelta(seconds=30)
     _points(catalog, _T0, role="nothing_new", session_received_bytes=5)
     _points(catalog, later, role="sending", session_received_bytes=7)
-    assert _latest(source_point_store, _passing(), _T0, later) == LatestPoint(
+    assert _latest(source_point_store, reading=_passing(), since=_T0, before=later) == LatestPoint(
         role=SourceRole.NOTHING_NEW, observed_at=_T0, session_received_bytes=5
     )
-    assert _latest(source_point_store, _passing(), _T0 + timedelta(microseconds=1), later) is None
-    assert _latest(source_point_store, _passing(), _T0, later + timedelta(seconds=1)) == (
-        LatestPoint(role=SourceRole.SENDING, observed_at=later, session_received_bytes=7)
+    assert (
+        _latest(
+            source_point_store,
+            reading=_passing(),
+            since=_T0 + timedelta(microseconds=1),
+            before=later,
+        )
+        is None
     )
+    assert _latest(
+        source_point_store, reading=_passing(), since=_T0, before=later + timedelta(seconds=1)
+    ) == (LatestPoint(role=SourceRole.SENDING, observed_at=later, session_received_bytes=7))
 
 
 def test_a_reading_without_identity_reads_only_its_name_without_identity(
-    source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
+    *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
     before = _T0 + timedelta(seconds=30)
     _points(catalog, _T0, role="nothing_new")
     _points(catalog, _T0, role="sending", user_hash=None)
     _points(catalog, _T0, role="standby", user_hash=None, name="Teammate")
-    assert _latest(source_point_store, _passing(_KEY, "Renamed"), _T0, before) == LatestPoint(
-        role=SourceRole.NOTHING_NEW, observed_at=_T0, session_received_bytes=0
+    assert _latest(
+        source_point_store, reading=_passing(_KEY, name="Renamed"), since=_T0, before=before
+    ) == LatestPoint(role=SourceRole.NOTHING_NEW, observed_at=_T0, session_received_bytes=0)
+    assert _latest(
+        source_point_store, reading=_passing(None), since=_T0, before=before
+    ) == LatestPoint(role=SourceRole.SENDING, observed_at=_T0, session_received_bytes=0)
+    assert (
+        _latest(source_point_store, reading=_passing(None, name="Nobody"), since=_T0, before=before)
+        is None
     )
-    assert _latest(source_point_store, _passing(None), _T0, before) == LatestPoint(
-        role=SourceRole.SENDING, observed_at=_T0, session_received_bytes=0
-    )
-    assert _latest(source_point_store, _passing(None, "Nobody"), _T0, before) is None
 
 
 def test_the_latest_point_reads_this_file_on_the_given_node_only(
-    source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
+    *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
     before = _T0 + timedelta(seconds=30)
     _points(catalog, _T0, role="sending", native_id=_OTHER_FILE)
     _points(catalog, _T0, role="nothing_new", node_id="n2")
-    assert _latest(source_point_store, _passing(), _T0, before) is None
+    assert _latest(source_point_store, reading=_passing(), since=_T0, before=before) is None
     assert _latest(
-        source_point_store, _passing(), _T0, before, node_id=NodeId("n2")
+        source_point_store, reading=_passing(), since=_T0, before=before, node_id=NodeId("n2")
     ) == LatestPoint(role=SourceRole.NOTHING_NEW, observed_at=_T0, session_received_bytes=0)
 
 
 def test_earlier_points_are_each_variants_latest_point_before_the_round(
-    source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
+    *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
     round_started_at = _T0 + timedelta(hours=3)
     _points(catalog, _T0, _T0 + timedelta(seconds=30), role="nothing_new")
@@ -171,7 +182,7 @@ def test_earlier_points_are_each_variants_latest_point_before_the_round(
 
 
 def test_earlier_points_read_this_sources_points_on_every_file_of_the_given_node_only(
-    source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
+    *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
     later = _T0 + timedelta(hours=1)
     _points(catalog, _T0, role="sending", native_id=_OTHER_FILE)
@@ -189,7 +200,7 @@ def test_earlier_points_read_this_sources_points_on_every_file_of_the_given_node
 
 
 def test_has_points_before_reads_only_the_given_nodes_points_before(
-    source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
+    *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
     assert not source_point_store.has_points_before(_T0, node_id=NodeId("n1"))
     _points(catalog, _T0 - timedelta(hours=1), node_id="n2")
@@ -206,7 +217,7 @@ class MeasuredRead(Protocol):
     def __call__(self) -> object: ...
 
 
-def _steps(connection: sqlite3.Connection, read: MeasuredRead) -> int:
+def _steps(connection: sqlite3.Connection, *, read: MeasuredRead) -> int:
     """The SQLite VM instructions ``read`` runs."""
     steps = 0
 
@@ -221,7 +232,7 @@ def _steps(connection: sqlite3.Connection, read: MeasuredRead) -> int:
     return steps
 
 
-def _other_variants(catalog: sqlite3.Connection, numbers: range) -> None:
+def _other_variants(catalog: sqlite3.Connection, *, numbers: range) -> None:
     """Other peers' variants on this node, which an index on ``node_id`` alone would walk."""
     catalog.executemany(
         "INSERT INTO source_variants (file_id, name, role, raw_metadata, node_id, content_hash)"
@@ -248,11 +259,13 @@ def test_earlier_points_seek_once_per_variant_whatever_the_history(
     )  # the first call prepares the statement
     small = _steps(
         catalog,
-        lambda: source_point_store.read_earlier_points(_KEY, before=before, node_id=NodeId("n1")),
+        read=lambda: source_point_store.read_earlier_points(
+            _KEY, before=before, node_id=NodeId("n1")
+        ),
     )
     large = _steps(
         catalog,
-        lambda: source_point_store.read_earlier_points(
+        read=lambda: source_point_store.read_earlier_points(
             _OTHER_KEY, before=before, node_id=NodeId("n1")
         ),
     )
@@ -260,23 +273,23 @@ def test_earlier_points_seek_once_per_variant_whatever_the_history(
 
 
 def test_earlier_points_seek_this_sources_variants_whatever_the_node_holds(
-    source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
+    *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
     _points(catalog, _T0)
-    _other_variants(catalog, range(100))
+    _other_variants(catalog, numbers=range(100))
     source_point_store.read_earlier_points(
         _KEY, before=_T0, node_id=NodeId("n1")
     )  # the first call prepares the statement
     small = _steps(
         catalog,
-        lambda: source_point_store.read_earlier_points(
+        read=lambda: source_point_store.read_earlier_points(
             _KEY, before=_T0 + timedelta(hours=1), node_id=NodeId("n1")
         ),
     )
-    _other_variants(catalog, range(100, 10_000))
+    _other_variants(catalog, numbers=range(100, 10_000))
     large = _steps(
         catalog,
-        lambda: source_point_store.read_earlier_points(
+        read=lambda: source_point_store.read_earlier_points(
             _KEY, before=_T0 + timedelta(hours=1), node_id=NodeId("n1")
         ),
     )
@@ -284,13 +297,21 @@ def test_earlier_points_seek_this_sources_variants_whatever_the_node_holds(
 
 
 def test_the_latest_point_seeks_this_sources_variants_whatever_the_node_holds(
-    source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
+    *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
 ) -> None:
     _points(catalog, _T0)
-    _other_variants(catalog, range(100))
+    _other_variants(catalog, numbers=range(100))
     since, before = _T0, _T0 + timedelta(seconds=30)
-    _latest(source_point_store, _passing(), since, before)  # the first call prepares the statement
-    small = _steps(catalog, lambda: _latest(source_point_store, _passing(), since, before))
-    _other_variants(catalog, range(100, 10_000))
-    large = _steps(catalog, lambda: _latest(source_point_store, _passing(), since, before))
+    _latest(
+        source_point_store, reading=_passing(), since=since, before=before
+    )  # the first call prepares the statement
+    small = _steps(
+        catalog,
+        read=lambda: _latest(source_point_store, reading=_passing(), since=since, before=before),
+    )
+    _other_variants(catalog, numbers=range(100, 10_000))
+    large = _steps(
+        catalog,
+        read=lambda: _latest(source_point_store, reading=_passing(), since=since, before=before),
+    )
     assert abs(large - small) <= small // 10

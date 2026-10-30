@@ -53,7 +53,7 @@ def _elapsed(moment: MonotonicInstant) -> float:
     return (moment - MONOTONIC_EPOCH).total_seconds()
 
 
-def _starts(api: FakeAmuleApi, search_type: str) -> list[tuple[float, str]]:
+def _starts(api: FakeAmuleApi, *, search_type: str) -> list[tuple[float, str]]:
     """Every ``POST /search`` of one type: when, and for which query."""
     starts = []
     for moment, request in api.calls:
@@ -68,7 +68,7 @@ def _gaps(times: list[float]) -> list[float]:
     return [later - earlier for earlier, later in zip(times, times[1:], strict=False)]
 
 
-def _polled_until(api: FakeAmuleApi, search_id: int) -> float:
+def _polled_until(api: FakeAmuleApi, *, search_id: int) -> float:
     """When a search's progress was last read, in seconds after its start."""
     started_at = api.searches[search_id][0]
     path = f"/api/v1/search/{search_id}/results"
@@ -79,17 +79,21 @@ def _polled_until(api: FakeAmuleApi, search_id: int) -> float:
     )
 
 
-async def _search_for(api: FakeAmuleApi, keywords: list[Keyword], channels: list[Channel]) -> None:
+async def _search_for(
+    api: FakeAmuleApi, *, keywords: list[Keyword], channels: list[Channel]
+) -> None:
     """One task per (channel, keyword), each searching again as soon as it returns, for an hour."""
     client = await _connected(api)
     loop = asyncio.get_running_loop()
 
-    async def task(keyword: Keyword, channel: Channel) -> None:
+    async def task(keyword: Keyword, *, channel: Channel) -> None:
         while loop.time() < _HOUR:
             await client.search(keyword, channel=channel, budget_seconds=_BUDGET)
             await asyncio.sleep(0)  # noqa: TID251
 
-    await asyncio.gather(*(task(keyword, channel) for keyword in keywords for channel in channels))
+    await asyncio.gather(
+        *(task(keyword, channel=channel) for keyword in keywords for channel in channels)
+    )
     await client.close()
 
 
@@ -101,7 +105,11 @@ _TARGETS = {"keroro": "keroro", "keroro mission": "keroro", "titar": "titar"}
 def _hour_of_three_keywords(loop: VirtualLoop) -> FakeAmuleApi:
     api = _api(loop, search_seconds=dict(_DURATIONS))
     loop.run_until_complete(
-        _search_for(api, [Keyword(text) for text in _DURATIONS], [Channel("ed2k"), Channel("kad")])
+        _search_for(
+            api,
+            keywords=[Keyword(text) for text in _DURATIONS],
+            channels=[Channel("ed2k"), Channel("kad")],
+        )
     )
     return api
 
@@ -110,7 +118,7 @@ def _hour_of_three_keywords(loop: VirtualLoop) -> FakeAmuleApi:
 @pytest.mark.parametrize("step", [timedelta(hours=-1), timedelta(hours=1)])
 @pytest.mark.asyncio
 async def test_a_wall_clock_step_leaves_two_starts_a_minute_apart(
-    channel: Channel, step: timedelta
+    *, channel: Channel, step: timedelta
 ) -> None:
     fake_time = FakeTime()
     client = await _connected(FakeAmuleApi(monotonic_clock=fake_time.monotonic))
@@ -125,7 +133,7 @@ async def test_a_wall_clock_step_leaves_two_starts_a_minute_apart(
 def test_ed2k_starts_are_a_minute_apart_or_more(virtual_loop: VirtualLoop) -> None:
     api = _hour_of_three_keywords(virtual_loop)
 
-    starts = [moment for moment, _ in _starts(api, "global")]
+    starts = [moment for moment, _ in _starts(api, search_type="global")]
     assert len(starts) > 30
     assert min(_gaps(starts)) >= 60
 
@@ -133,7 +141,7 @@ def test_ed2k_starts_are_a_minute_apart_or_more(virtual_loop: VirtualLoop) -> No
 def test_no_ed2k_start_falls_while_the_previous_search_runs(virtual_loop: VirtualLoop) -> None:
     api = _hour_of_three_keywords(virtual_loop)
 
-    starts = _starts(api, "global")
+    starts = _starts(api, search_type="global")
     for (previous, query), (start, _) in zip(starts, starts[1:], strict=False):
         assert start >= previous + _DURATIONS[query], (previous, query, start)
 
@@ -143,7 +151,7 @@ def test_kad_starts_on_one_target_are_a_minute_apart_whatever_keywords_share_it(
 ) -> None:
     api = _hour_of_three_keywords(virtual_loop)
 
-    starts = _starts(api, "kad")
+    starts = _starts(api, search_type="kad")
     for target in ("keroro", "titar"):
         times = [moment for moment, query in starts if _TARGETS[query] == target]
         assert len(times) > 30
@@ -153,8 +161,8 @@ def test_kad_starts_on_one_target_are_a_minute_apart_whatever_keywords_share_it(
 def test_kad_targets_and_ed2k_start_together(virtual_loop: VirtualLoop) -> None:
     api = _hour_of_three_keywords(virtual_loop)
 
-    assert [moment for moment, _ in _starts(api, "kad")][:2] == [0, 0]
-    assert _starts(api, "global")[0][0] == 0
+    assert [moment for moment, _ in _starts(api, search_type="kad")][:2] == [0, 0]
+    assert _starts(api, search_type="global")[0][0] == 0
 
 
 def test_each_search_gets_its_budget_from_its_network_start(virtual_loop: VirtualLoop) -> None:
@@ -162,7 +170,7 @@ def test_each_search_gets_its_budget_from_its_network_start(virtual_loop: Virtua
     api = _hour_of_three_keywords(virtual_loop)
 
     for search_id, (_, query) in api.searches.items():
-        assert _polled_until(api, search_id) >= _DURATIONS[query], (search_id, query)
+        assert _polled_until(api, search_id=search_id) >= _DURATIONS[query], (search_id, query)
 
 
 def test_an_hour_of_searches_never_stops_nor_frees_one(virtual_loop: VirtualLoop) -> None:
@@ -186,7 +194,7 @@ def test_an_ed2k_search_that_never_finishes_holds_the_next_start_one_budget(
 
     virtual_loop.run_until_complete(main())
 
-    assert [moment for moment, _ in _starts(api, "global")] == [0, _BUDGET]
+    assert [moment for moment, _ in _starts(api, search_type="global")] == [0, _BUDGET]
 
 
 def test_concurrent_callers_of_one_kad_target_each_get_their_own_slot(
@@ -205,7 +213,7 @@ def test_concurrent_callers_of_one_kad_target_each_get_their_own_slot(
 
     virtual_loop.run_until_complete(main())
 
-    assert [moment for moment, _ in _starts(api, "kad")] == [0, 60, 120]
+    assert [moment for moment, _ in _starts(api, search_type="kad")] == [0, 60, 120]
 
 
 @pytest.mark.parametrize(
@@ -222,7 +230,7 @@ def test_concurrent_callers_of_one_kad_target_each_get_their_own_slot(
     ],
 )
 def test_kad_keys_a_keyword_on_its_first_word_of_three_bytes(
-    first: Keyword, second: Keyword, shared: bool, virtual_loop: VirtualLoop
+    *, first: Keyword, second: Keyword, shared: bool, virtual_loop: VirtualLoop
 ) -> None:
     api = _api(virtual_loop)
 
@@ -233,14 +241,14 @@ def test_kad_keys_a_keyword_on_its_first_word_of_three_bytes(
 
     virtual_loop.run_until_complete(main())
 
-    assert [moment for moment, _ in _starts(api, "kad")] == [0, 60 if shared else 0]
+    assert [moment for moment, _ in _starts(api, search_type="kad")] == [0, 60 if shared else 0]
 
 
 @pytest.mark.parametrize(
     "keyword", [Keyword("62"), Keyword("ok"), Keyword("é"), Keyword("62 ok"), Keyword("VF-62")]
 )
 def test_a_keyword_without_a_kad_target_neither_spins_nor_searches(
-    keyword: Keyword, virtual_loop: VirtualLoop
+    *, keyword: Keyword, virtual_loop: VirtualLoop
 ) -> None:
     api = _api(virtual_loop)
     returned_at: list[float] = []
@@ -258,11 +266,11 @@ def test_a_keyword_without_a_kad_target_neither_spins_nor_searches(
     virtual_loop.run_until_complete(main())
 
     assert len([moment for moment in returned_at if moment < _HOUR]) == 60
-    assert _starts(api, "kad") == []
+    assert _starts(api, search_type="kad") == []
 
 
 def test_a_keyword_without_a_kad_target_is_logged_once(
-    caplog: pytest.LogCaptureFixture, virtual_loop: VirtualLoop
+    *, caplog: pytest.LogCaptureFixture, virtual_loop: VirtualLoop
 ) -> None:
     caplog.set_level(logging.INFO, logger="p2pwatch.adapters.driven.amule_api.amule_api_client")
 
@@ -292,8 +300,8 @@ def test_a_kad_target_held_elsewhere_is_retried_each_poll_until_it_frees(
 
     virtual_loop.run_until_complete(main())
 
-    assert [moment for moment, _ in _starts(api, "kad")] == [0, 5, 10]
-    assert _polled_until(api, 42) >= 30  # its budget runs from the start at 10 s
+    assert [moment for moment, _ in _starts(api, search_type="kad")] == [0, 5, 10]
+    assert _polled_until(api, search_id=42) >= 30  # its budget runs from the start at 10 s
 
 
 def test_a_kad_target_held_past_one_budget_fails_the_channel_at_that_budget(
@@ -314,7 +322,7 @@ def test_a_kad_target_held_past_one_budget_fails_the_channel_at_that_budget(
     virtual_loop.run_until_complete(main())
 
     assert failed_at == [_BUDGET]
-    assert [moment for moment, _ in _starts(api, "kad")][-2:] == [_BUDGET - 5, _BUDGET]
+    assert [moment for moment, _ in _starts(api, search_type="kad")][-2:] == [_BUDGET - 5, _BUDGET]
 
 
 def test_any_other_kad_refusal_fails_the_channel_at_once(virtual_loop: VirtualLoop) -> None:
@@ -330,4 +338,4 @@ def test_any_other_kad_refusal_fails_the_channel_at_once(virtual_loop: VirtualLo
 
     virtual_loop.run_until_complete(main())
 
-    assert len(_starts(api, "kad")) == 1
+    assert len(_starts(api, search_type="kad")) == 1
