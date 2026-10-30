@@ -12,6 +12,7 @@ class CodeScanningReporter(ABC):
     def report_claim_problems(
         self,
         sarif_path: PurePath,
+        *,
         rule_id: str,
         claim_problems: Sequence[ClaimProblem],
         vex_location: str,

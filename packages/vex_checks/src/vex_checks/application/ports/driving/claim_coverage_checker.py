@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from vex_checks.domain.claim_problem import ClaimProblem
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ClaimCoverageReport:
     problems: tuple[ClaimProblem, ...]  # in the order of their advisory ids, then messages
 

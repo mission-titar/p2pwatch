@@ -12,15 +12,18 @@ class FilesystemCodeScanningReporter(CodeScanningReporter):
     def report_claim_problems(
         self,
         sarif_path: PurePath,
+        *,
         rule_id: str,
         claim_problems: Sequence[ClaimProblem],
         vex_location: str,
     ) -> None:
-        Path(sarif_path).write_text(json.dumps(_sarif(rule_id, claim_problems, vex_location)))
+        Path(sarif_path).write_text(
+            json.dumps(_sarif(rule_id, claim_problems=claim_problems, vex_location=vex_location))
+        )
 
 
 def _sarif(
-    rule_id: str, claim_problems: Sequence[ClaimProblem], vex_location: str
+    rule_id: str, *, claim_problems: Sequence[ClaimProblem], vex_location: str
 ) -> dict[str, object]:
     return {
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",

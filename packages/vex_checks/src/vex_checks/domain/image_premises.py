@@ -29,6 +29,7 @@ def _upstream(version: str) -> str:
 
 def evaluate_image_premises(
     premises: dict[str, ImagePremise],
+    *,
     packages: list[DpkgPackage],
     declared_components: list[DeclaredComponent],
 ) -> list[ClaimProblem]:
@@ -38,26 +39,29 @@ def evaluate_image_premises(
     problems: list[ClaimProblem] = []
     for advisory_id, premise in premises.items():
         match premise:
-            case DpkgPackageAbsent(package):
+            case DpkgPackageAbsent(package=package):
                 if package in dpkg_packages_by_name:
                     problems.append(
-                        ClaimProblem(advisory_id, f"dpkg package {package!r} is present")
+                        ClaimProblem(
+                            advisory_id=advisory_id, message=f"dpkg package {package!r} is present"
+                        )
                     )
-            case DpkgMinVersion(package, minimum):
+            case DpkgMinVersion(package=package, minimum=minimum):
                 for dpkg_package in dpkg_packages_by_name.get(package, []):
                     if Version(_upstream(dpkg_package.version)) < Version(minimum):
                         problems.append(
                             ClaimProblem(
-                                advisory_id, f"{package} {dpkg_package.version} is below {minimum}"
+                                advisory_id=advisory_id,
+                                message=f"{package} {dpkg_package.version} is below {minimum}",
                             )
                         )
-            case DeclaredMinVersion(component, minimum):
+            case DeclaredMinVersion(component=component, minimum=minimum):
                 for declared_component in (c for c in declared_components if c.name == component):
                     if Version(declared_component.version) < Version(minimum):
                         problems.append(
                             ClaimProblem(
-                                advisory_id,
-                                f"declared {component} {declared_component.version}"
+                                advisory_id=advisory_id,
+                                message=f"declared {component} {declared_component.version}"
                                 f" is below {minimum}",
                             )
                         )

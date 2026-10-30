@@ -4,7 +4,7 @@ SARIF."""
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class ClaimProblem:
     advisory_id: str
     message: str

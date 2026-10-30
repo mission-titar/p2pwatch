@@ -4,18 +4,18 @@ packages of an image (dpkg packages, or components declared by hand like aMule).
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class DpkgPackageAbsent:
     package: str
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class DpkgMinVersion:
     package: str
     minimum: str
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class DeclaredMinVersion:
     component: str
     minimum: str

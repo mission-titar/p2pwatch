@@ -27,7 +27,7 @@ class SyftSbomReader(SbomReader):
         ]
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True)
 class _SyftArtifact:
     type: str
     name: str
